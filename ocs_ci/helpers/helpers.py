@@ -4776,3 +4776,197 @@ def is_rbd_default_storage_class(custom_sc=None):
 
     logger.error("Storageclass {default_rbd_sc} is not a default  RBD StorageClass.")
     return False
+
+
+def get_network_attachment_definitions(
+    nad_name, namespace=config.ENV_DATA["cluster_namespace"]
+):
+    """
+    Get network_attachment_definitions obj
+    Args:
+        nad_name (str) : network_attachment_definition name
+        namespace (str): Namespace of the resource
+    Returns:
+        network_attachment_definitions (obj) : network_attachment_definitions object
+    """
+    return OCP(
+        kind=constants.NETWORK_ATTACHEMENT_DEFINITION,
+        namespace=namespace,
+        resource_name=nad_name,
+    )
+
+
+def add_route_public_nad():
+    """
+    Add route section to network_attachment_definitions object
+
+    """
+    nad_obj = get_network_attachment_definitions(
+        nad_name=config.ENV_DATA.get("multus_public_net_name"),
+        namespace=config.ENV_DATA.get("multus_public_net_namespace"),
+    )
+    nad_config_str = nad_obj.data["spec"]["config"]
+    nad_config_dict = json.loads(nad_config_str)
+    nad_config_dict["ipam"]["routes"] = [
+        {"dst": config.ENV_DATA["multus_destination_route"]}
+    ]
+    nad_config_dict_string = json.dumps(nad_config_dict)
+    logger.info("Creating Multus public network")
+    public_net_data = templating.load_yaml(constants.MULTUS_PUBLIC_NET_YAML)
+    public_net_data["metadata"]["name"] = config.ENV_DATA.get("multus_public_net_name")
+    public_net_data["metadata"]["namespace"] = config.ENV_DATA.get(
+        "multus_public_net_namespace"
+    )
+    public_net_data["spec"]["config"] = nad_config_dict_string
+    public_net_yaml = tempfile.NamedTemporaryFile(
+        mode="w+", prefix="multus_public", delete=False
+    )
+    templating.dump_data_to_temp_yaml(public_net_data, public_net_yaml.name)
+    run_cmd(f"oc apply -f {public_net_yaml.name}")
+
+    # nad_obj = OCP(
+    #     kind=constants.NETWORK_ATTACHEMENT_DEFINITION,
+    #     namespace="default",
+    #     resource_name="public-net",
+    # )
+    # params = f'{{"spec": {{"config": "a"}}}}'
+    # nad_obj.patch(params=params, format_type="merge")
+    # nad_obj = get_network_attachment_definitions(nad_name=nad_name, namespace=namespace)
+    # nad_config_str = nad_obj.data["spec"]["config"]
+    # nad_config_dict = json.loads(nad_config_str)
+    # nad_config_dict["ipam"]["routes"] = [{"dst": config.ENV_DATA["multus_destination_route"]}]
+    # nad_config_dict_string = json.dumps(nad_config_dict)
+    # params = f"""[{{ "op": "replace", "path": "/spec/config",
+    #             "value": {str(nad_config_dict_string)}}}]"""
+    # nad_obj.patch(
+    #     resource_name=nad_name,
+    #     params=params.strip("\n"),
+    #     format_type="json",
+    # )
+
+
+def reset_all_osd_pods():
+    from ocs_ci.ocs.resources.pod import get_osd_pods
+
+    osd_pod_objs = get_osd_pods()
+    for osd_pod_obj in osd_pod_objs:
+        osd_pod_obj.delete()
+
+
+def enable_csi_disable_holder_pods():
+    """
+
+    Returns:
+
+    """
+    configmap_obj = OCP(
+        kind=constants.CONFIGMAP,
+        namespace=config.ENV_DATA["cluster_namespace"],
+        resource_name=constants.ROOK_OPERATOR_CONFIGMAP,
+    )
+    value = "true"
+    params = f'{{"data": {{"CSI_DISABLE_HOLDER_PODS": "{value}"}}}}'
+    configmap_obj.patch(params=params, format_type="merge")
+
+
+def delete_csi_holder_pods():
+    from ocs_ci.ocs.utils import get_pod_name_by_pattern
+    from ocs_ci.ocs.node import drain_nodes, schedule_nodes
+
+    pods_csi_cephfsplugin = get_pod_name_by_pattern("csi-rbdplugin")
+    worker_pods_dict = dict()
+    from ocs_ci.ocs.resources.pod import get_pod_obj
+
+    for pod_name in pods_csi_cephfsplugin:
+        pod_obj = get_pod_obj(
+            name=pod_name, namespace=config.ENV_DATA["cluster_namespace"]
+        )
+        if pod_obj.pod_data["spec"]["nodeName"] in worker_pods_dict:
+            worker_pods_dict[pod_obj.pod_data["spec"]["nodeName"]].append(pod_obj)
+        else:
+            worker_pods_dict[pod_obj.pod_data["spec"]["nodeName"]] = [pod_obj]
+
+    for worker_node_name, csi_pod_objs in worker_pods_dict.items():
+        drain_nodes([worker_node_name])
+        for csi_pod_obj in csi_pod_objs:
+            csi_pod_obj.delete()
+        schedule_nodes([worker_node_name])
+
+
+def configure_node_network_configuration_policy_on_all_worker_nodes():
+    from ocs_ci.ocs.node import get_worker_nodes
+
+    logger.info("Configure NodeNetworkConfigurationPolicy on all worker nodes")
+    worker_node_names = get_worker_nodes()
+    for worker_node_name in worker_node_names:
+        worker_network_configuration = config.ENV_DATA["baremetal"]["servers"][
+            worker_node_name
+        ]
+        node_network_configuration_policy = templating.load_yaml(
+            constants.NODE_NETWORK_CONFIGURATION_POLICY
+        )
+        node_network_configuration_policy["spec"]["nodeSelector"][
+            "kubernetes.io/hostname"
+        ] = worker_node_name
+        node_network_configuration_policy["metadata"][
+            "name"
+        ] = worker_network_configuration["node_network_configuration_policy_name"]
+        node_network_configuration_policy["spec"]["desiredState"]["interfaces"][0][
+            "ipv4"
+        ]["address"][0]["ip"] = worker_network_configuration[
+            "node_network_configuration_policy_ip"
+        ]
+        node_network_configuration_policy["spec"]["desiredState"]["interfaces"][0][
+            "ipv4"
+        ]["address"][0]["prefix-length"] = worker_network_configuration[
+            "node_network_configuration_policy_prefix_length"
+        ]
+        node_network_configuration_policy["spec"]["desiredState"]["routes"]["config"][
+            0
+        ]["destination"] = worker_network_configuration[
+            "node_network_configuration_policy_destination_route"
+        ]
+        public_net_yaml = tempfile.NamedTemporaryFile(
+            mode="w+", prefix="multus_public", delete=False
+        )
+        templating.dump_data_to_temp_yaml(
+            node_network_configuration_policy, public_net_yaml.name
+        )
+        run_cmd(f"oc create -f {public_net_yaml.name}")
+
+
+def get_daemonsets_names(namespace=config.ENV_DATA["cluster_namespace"]):
+    daemonset_names = list()
+    daemonset_objs = OCP(
+        kind=constants.DAEMONSET,
+        namespace=namespace,
+    )
+    for daemonset_obj in daemonset_objs.data.get("items"):
+        daemonset_names.append(daemonset_obj["metadata"]["name"])
+    return daemonset_names
+
+
+def get_daemonsets_obj(name, namespace=config.ENV_DATA["cluster_namespace"]):
+    return OCP(kind=constants.DAEMONSET, namespace=namespace, resource_name=name)
+
+
+def delete_csi_holder_daemonsets():
+    daemonset_names = get_daemonsets_names()
+    for daemonset_name in daemonset_names:
+        if "holder" in daemonset_name:
+            daemonsets_obj = get_daemonsets_obj(daemonset_name)
+            daemonsets_obj.delete()
+
+
+def upgrade_multus_holder_design():
+    add_route_public_nad()
+    from ocs_ci.deployment.nmstate import NMStateInstaller
+
+    logger.info("Install NMState operator and create an instance")
+    nmstate_obj = NMStateInstaller()
+    nmstate_obj.running_nmstate()
+    configure_node_network_configuration_policy_on_all_worker_nodes()
+    reset_all_osd_pods()
+    enable_csi_disable_holder_pods()
+    delete_csi_holder_pods()
+    delete_csi_holder_daemonsets()
