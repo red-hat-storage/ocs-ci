@@ -997,7 +997,7 @@ def create_backup_schedule():
     """
     old_ctx = config.cur_index
     config.switch_ctx(get_active_acm_index())
-    backup_schedule = templating.load_yaml(constants.MDR_BACKUP_SCHEDULE_YAML)
+    backup_schedule = templating.load_yaml(constants.BACKUP_SCHEDULE_YAML)
     backup_schedule_yaml = tempfile.NamedTemporaryFile(
         mode="w+", prefix="bkp", delete=False
     )
