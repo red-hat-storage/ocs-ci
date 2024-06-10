@@ -78,5 +78,6 @@ def get_drpc_name(namespace):
     restore_index = config.cur_index
     config.switch_acm_ctx()
     drpc_obj = OCP(kind=constants.DRPC, namespace=namespace).get()["items"][0]
+    drpc_name = drpc_obj["metadata"]["name"]
     config.switch_ctx(restore_index)
-    return drpc_obj["metadata"]["name"]
+    return drpc_name
