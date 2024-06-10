@@ -425,8 +425,8 @@ class TestAddCapacity(ManageTest):
             schedule = "*/3 * * * *"
             osd_keyrotation.set_keyrotation_schedule(schedule)
 
-            assert (
-                osd_keyrotation.verify_keyrotation()
+            assert osd_keyrotation.verify_keyrotation(
+                osd_keys_before_rotation
             ), "Keyrotation not happend for the OSD."
 
             # Change the keyrotation value to default.
