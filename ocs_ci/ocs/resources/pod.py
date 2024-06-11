@@ -2582,6 +2582,33 @@ def check_toleration_on_pods(toleration_key=constants.TOLERATION_KEY):
             )
 
 
+def check_toleration_on_subscriptions(toleration_key=constants.TOLERATION_KEY):
+    """
+    Function to check toleration on subscriptions
+    Args:
+        toleration_key (str): The toleration key to check
+    """
+
+    sub_list = ocp.get_all_resource_names_of_a_kind(kind=constants.SUBSCRIPTION)
+    for sub in sub_list:
+        sub_obj = ocp.OCP(
+            resource_name=sub,
+            namespace=config.ENV_DATA["cluster_namespace"],
+            kind=constants.SUBSCRIPTION,
+        )
+        resource_name = sub
+        tolerations = sub_obj.get().get("spec").get("tolerations")
+        # Check if the specified toleration key is present in the tolerations
+        toleration_found = any(
+            toleration.get("key") == toleration_key for toleration in tolerations
+        )
+        # Check if the toleration key is not found
+        assert (
+            toleration_found
+        ), f"The {resource_name} does not have toleration {toleration_key}"
+        logger.info(f"The Toleration {toleration_key} exists on {resource_name}")
+
+
 def run_osd_removal_job(osd_ids=None):
     """
     Run the ocs-osd-removal job

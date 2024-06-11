@@ -21,6 +21,7 @@ from ocs_ci.ocs.resources.pod import (
     get_all_pods,
     wait_for_pods_to_be_running,
     check_toleration_on_pods,
+    check_toleration_on_subscriptions,
 )
 from ocs_ci.ocs.node import (
     taint_nodes,
@@ -227,3 +228,104 @@ class TestNonOCSTaintAndTolerations(E2ETest):
                 resource_count=count * replica_count,
             ), "New OSDs failed to reach running state"
             check_ceph_health_after_add_capacity(ceph_rebalance_timeout=2500)
+
+    @skipif_ocs_version("<=4.15")
+    def test_custom_taint_node_operations(self, nodes):
+        """
+        Test runs the following steps
+        1. Add toleration in storagecluster CR and odf-operator subscription.
+        2. Verify toleration applied in ODF subscription is reflecting
+           for other subscriptions, Ceph and nooba components or not(Check all 7 subscriptions).
+        3. Apply custom taint to all nodes.
+        4. Verify the pods in all nodes are running as per taints applied.
+        5. Reboot one of the nodes and check toleration on all odf pods on that node.
+        7.Replace one of the nodes and check all odf pods on that node are running.
+        """
+
+        logger.info("Taint all nodes with custom taint")
+        ocs_nodes = get_worker_nodes()
+        taint_nodes(nodes=ocs_nodes, taint_label="xyz=true:NoSchedule")
+
+        resource_name = constants.DEFAULT_CLUSTERNAME
+        if config.DEPLOYMENT["external_mode"]:
+            resource_name = constants.DEFAULT_CLUSTERNAME_EXTERNAL_MODE
+
+        logger.info("Add tolerations to storagecluster")
+        storagecluster_obj = ocp.OCP(
+            resource_name=resource_name,
+            namespace=config.ENV_DATA["cluster_namespace"],
+            kind=constants.STORAGECLUSTER,
+        )
+
+        tolerations = (
+            '{"tolerations": [{"effect": "NoSchedule", "key": "xyz",'
+            '"operator": "Equal", "value": "true"}, '
+            '{"effect": "NoSchedule", "key": "node.ocs.openshift.io/storage", '
+            '"operator": "Equal", "value": "true"}]}'
+        )
+        if config.ENV_DATA["mcg_only_deployment"]:
+            param = f'{{"spec": {{"placement":{{"noobaa-standalone":{tolerations}}}}}}}'
+        elif config.DEPLOYMENT["external_mode"]:
+            param = (
+                f'{{"spec": {{"placement": {{"all": {tolerations}, '
+                f'"noobaa-core": {tolerations}}}}}}}'
+            )
+        else:
+            param = (
+                f'"all": {tolerations}, "csi-plugin": {tolerations}, "csi-provisioner": {tolerations}, '
+                f'"mds": {tolerations}, "metrics-exporter": {tolerations}, "noobaa-core": {tolerations}, '
+                f'"rgw": {tolerations}, "toolbox": {tolerations}'
+            )
+            param = f'{{"spec": {{"placement": {{{param}}}}}}}'
+
+        storagecluster_obj.patch(params=param, format_type="merge")
+        logger.info(f"Successfully added toleration to {storagecluster_obj.kind}")
+
+        logger.info("Add tolerations to the subscription")
+        sub_list = ocp.get_all_resource_names_of_a_kind(kind=constants.SUBSCRIPTION)
+        param = (
+            '{"spec": {"config":  {"tolerations": '
+            '[{"effect": "NoSchedule", "key": "xyz", "operator": "Equal", '
+            '"value": "true"}]}}}'
+        )
+        # Select one subscription other than constants.ODF_SUBSCRIPTION
+        selected_sub = None
+        for sub in sub_list:
+            if sub != constants.ODF_SUBSCRIPTION:
+                selected_sub = sub
+                break
+
+        if selected_sub:
+            # Patch the selected subscription
+            sub_obj = ocp.OCP(
+                resource_name=selected_sub,
+                namespace=config.ENV_DATA["cluster_namespace"],
+                kind=constants.SUBSCRIPTION,
+            )
+            sub_obj.patch(params=param, format_type="merge")
+            logger.info(f"Successfully added toleration to {selected_sub}")
+
+        logger.info("Check custom toleration on all subscriptions")
+
+        assert not check_toleration_on_subscriptions(toleration_key="xyz")
+
+        if config.ENV_DATA["mcg_only_deployment"]:
+            logger.info("Wait some time after adding toleration for pods respin")
+            waiting_time = 60
+            logger.info(f"Waiting {waiting_time} seconds...")
+            time.sleep(waiting_time)
+            logger.info("Force delete all pods")
+            pod_list = get_all_pods(
+                namespace=config.ENV_DATA["cluster_namespace"],
+                exclude_selector=True,
+            )
+            for pod in pod_list:
+                pod.delete(wait=False)
+
+        logger.info("After edit noticed few pod respins as expected")
+        assert wait_for_pods_to_be_running(timeout=1200, sleep=15)
+
+        logger.info(
+            "Check custom toleration on all newly created pods under openshift-storage"
+        )
+        assert not check_toleration_on_pods(toleration_key="xyz")
