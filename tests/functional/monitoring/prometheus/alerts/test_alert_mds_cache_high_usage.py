@@ -97,6 +97,7 @@ def active_mds_alert_values(threading_lock):
 @magenta_squad
 class TestMdsMemoryAlerts:
     def test_alert_triggered(self, run_metadata_io_with_cephfs, threading_lock):
+        # This function verifies the mds cache alert triggered or not
         log.info(
             "Metadata IO started in the background. Script will sleep for 15 minutes before validating the MDS alert"
         )
@@ -107,7 +108,7 @@ class TestMdsMemoryAlerts:
     def test_mds_cache_alert_with_active_node_drain(
         self, run_metadata_io_with_cephfs, threading_lock
     ):
-
+        # This function verifies the mds cache alert with active mds running node drain
         log.info(
             "Metadata IO started in the background. Lets wait for 15 minutes before validating the MDS alert"
         )
@@ -130,4 +131,76 @@ class TestMdsMemoryAlerts:
         log.info(f"Scheduled the node {node_name}")
         log.info("Script will sleep for 10 minutes before validating the alert")
         time.sleep(600)
+        assert active_mds_alert_values(threading_lock)
+
+    def test_mds_cache_alert_with_active_node_scaledown(
+        self, run_metadata_io_with_cephfs, threading_lock
+    ):
+        # This function verifies the mds cache alert with active mds scale down and up
+        time.sleep(900)
+        assert active_mds_alert_values(threading_lock)
+
+        active_mds = cluster.get_active_mds_info()["mds_daemon"]
+        deployment_name = "rook-ceph-mds-" + active_mds
+        log.info(f"Scale down {deployment_name} to 0")
+        helpers.modify_deployment_replica_count(
+            deployment_name=deployment_name, replica_count=0
+        )
+        time.sleep(100)
+        log.info(f"Scale up {deployment_name} to 1")
+        helpers.modify_deployment_replica_count(
+            deployment_name=deployment_name, replica_count=1
+        )
+
+        time.sleep(900)
+        assert active_mds_alert_values(threading_lock)
+
+    def test_mds_cache_alert_with_sr_node_scaledown(
+        self, run_metadata_io_with_cephfs, threading_lock
+    ):
+        # This function verifies the mds cache alert with standby-replay mds scale down and up
+        time.sleep(900)
+        assert active_mds_alert_values(threading_lock)
+
+        sr_mds = cluster.get_mds_standby_replay_info()["mds_daemon"]
+        deployment_name = "rook-ceph-mds-" + sr_mds
+        helpers.modify_deployment_replica_count(
+            deployment_name=deployment_name, replica_count=0
+        )
+        time.sleep(100)
+        helpers.modify_deployment_replica_count(
+            deployment_name=deployment_name, replica_count=1
+        )
+
+        time.sleep(900)
+        assert active_mds_alert_values(threading_lock)
+
+    def test_mds_cache_alert_with_all_mds_node_scaledown(
+        self, run_metadata_io_with_cephfs, threading_lock
+    ):
+        # This function verifies the mds cache alert with both active and standby-replay mds scale down and up
+        time.sleep(900)
+        assert active_mds_alert_values(threading_lock)
+
+        active_mds = cluster.get_active_mds_info()["mds_daemon"]
+        sr_mds = cluster.get_mds_standby_replay_info()["mds_daemon"]
+
+        active_mds_dc = "rook-ceph-mds-" + active_mds
+        log.info(f"Scale down {active_mds_dc} to 0")
+        helpers.modify_deployment_replica_count(
+            deployment_name=active_mds_dc, replica_count=0
+        )
+        sr_mds_dc = "rook-ceph-mds-" + sr_mds
+        log.info(f"Scale down {sr_mds_dc} to 0")
+        helpers.modify_deployment_replica_count(
+            deployment_name=sr_mds_dc, replica_count=0
+        )
+        time.sleep(100)
+
+        mds = [active_mds_dc, sr_mds_dc]
+        for i in mds:
+            log.info(f"Scale up {i} to 1")
+            helpers.modify_deployment_replica_count(deployment_name=i, replica_count=1)
+
+        time.sleep(900)
         assert active_mds_alert_values(threading_lock)
