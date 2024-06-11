@@ -113,7 +113,6 @@ class TestS3MultipartUpload(ManageTest):
         logger.info(
             "Downloading the completed multipart object from the RGW bucket to the awscli pod"
         )
-        awscli_pod_session.exec_sh_cmd_on_pod(command="apk add s3cmd")
         download_objects_using_s3cmd(
             awscli_pod_session, object_path + "/" + key, res_dir, bucket
         )
