@@ -31,6 +31,7 @@ setup(
         "openshift==0.11.2",
         "boto3==1.24.96",
         "munch==2.5.0",
+        "pytest-progress==1.2.5",
         "pytest==6.2.5",
         "pytest-logger==0.5.1",
         "pytest-html==3.1.1",
