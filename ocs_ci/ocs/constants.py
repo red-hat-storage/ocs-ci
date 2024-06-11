@@ -86,6 +86,9 @@ ROOK_CSI_RBD_DIR = os.path.join(ROOK_EXAMPLES_DIR, "csi", "rbd")
 ROOK_CSI_CEPHFS_DIR = os.path.join(ROOK_EXAMPLES_DIR, "csi", "cephfs")
 CLEANUP_YAML = "cleanup.yaml.j2"
 MANIFESTS_DIR = "manifests"
+PROVIDER_CLIENT_DEPLOYMENT_DIR = os.path.join(
+    TEMPLATE_DIR, "provider-client-deployment"
+)
 
 # OCP Deployment constants
 CHRONY_TEMPLATE = os.path.join(
@@ -138,6 +141,7 @@ LIFECYCLE_INTERVAL_PARAM = CONFIG_JS_PREFIX + "LIFECYCLE_INTERVAL"
 # Resources / Kinds
 CEPHFILESYSTEM = "CephFileSystem"
 CEPHBLOCKPOOL = "CephBlockPool"
+CEPHBLOCKPOOLRADOSNS = "cephblockpoolradosnamespaces"
 CEPHBLOCKPOOL_THICK = "CephBlockPoolThick"
 CEPHBLOCKPOOL_SC = "ocs-storagecluster-ceph-rbd"
 CEPHFILESYSTEM_SC = "ocs-storagecluster-cephfs"
@@ -209,6 +213,7 @@ IP_ADDRESS_POOL = "IPAddressPool"
 L2_ADVERTISEMENT = "L2Advertisement"
 METALLB_INSTANCE = "MetalLB"
 NETWORK_POLICY = "NetworkPolicy"
+INGRESSCONTROLLER = "ingresscontroller"
 
 # Provisioners
 AWS_EFS_PROVISIONER = "openshift.org/aws-efs"
@@ -242,6 +247,8 @@ ROOK_REPOSITORY = "https://github.com/rook/rook.git"
 OPENSHIFT_STORAGE_NAMESPACE = "openshift-storage"
 OPENSHIFT_STORAGE_CLIENT_NAMESPACE = "openshift-storage-client"
 OPENSHIFT_STORAGE_EXTENDED_NAMESPACE = "openshift-storage-extended"
+OPENSHIFT_STORAGE_CLIENT_NAMESPACE = "openshift-storage-client"
+OPENSHIFT_INGRESS_OPERATOR_NAMESPACE = "openshift-ingress-operator"
 MANAGED_FUSION_NAMESPACE = "managed-fusion"
 OPENSHIFT_MACHINE_API_NAMESPACE = "openshift-machine-api"
 OPENSHIFT_API_CLUSTER_OPERATOR = "kube-apiserver"
@@ -297,6 +304,33 @@ PROVIDER_MODE_STORAGE_CLASS_CLAIM_CEPHFS = os.path.join(
 PROVIDER_MODE_STORAGE_CLASS_CLAIM_RBD = os.path.join(
     PROVIDER_MODE_OCS_DEPLOYMENT_PATH, "storage_class_claim_rbd.yaml"
 )
+
+MACHINE_CONFIG_YAML = os.path.join(
+    PROVIDER_MODE_OCS_DEPLOYMENT_PATH,
+    "machineconfig_to_enable_nested_virtualization.yaml",
+)
+OCS_STORAGE_CLUSTER_YAML = os.path.join(
+    PROVIDER_MODE_OCS_DEPLOYMENT_PATH, "ocs_storagecluster.yaml"
+)
+OCS_STORAGE_CLUSTER_UPDATED_YAML = os.path.join(
+    PROVIDER_MODE_OCS_DEPLOYMENT_PATH, "ocs_storagecluster_updated.yaml"
+)
+STORAGE_PROFILE_YAML = os.path.join(
+    PROVIDER_MODE_OCS_DEPLOYMENT_PATH, "storage_profiles.yaml"
+)
+STORAGE_CLASS_CLAIM_YAML = os.path.join(
+    PROVIDER_MODE_OCS_DEPLOYMENT_PATH, "storage_class_claims.yaml"
+)
+STORAGE_CLASS_CLAIM_UPDATED_YAML = os.path.join(
+    PROVIDER_MODE_OCS_DEPLOYMENT_PATH, "storage_class_claims_updated.yaml"
+)
+STORAGE_CLIENT_SUBSCRIPTION_YAML = os.path.join(
+    PROVIDER_CLIENT_DEPLOYMENT_DIR, "storage_client_subscription.yaml"
+)
+NATIVE_STORAGE_CLIENT_YAML = os.path.join(
+    PROVIDER_CLIENT_DEPLOYMENT_DIR, "native_storage_client.yaml"
+)
+
 OCS_CLIENT_OPERATOR_CONTROLLER_MANAGER_PREFIX = "ocs-client-operator-controller-manager"
 OCS_CLIENT_OPERATOR_CONSOLE = "ocs-client-operator-console"
 STORAGE_CLIENT_NAME = "storage-client"
@@ -341,6 +375,8 @@ JENKINS_BUILD = "jax-rs-build"
 JENKINS_BUILD_COMPLETE = "Complete"
 RIPSAW_DROP_CACHE = os.path.join(TEMPLATE_FIO_DIR, "drop_cache_pod.yaml")
 OCP_QE_DEVICEPATH_REPO = "https://github.com/anubhav-here/device-by-id-ocp.git"
+SCHEDULERS_CONFIG = "schedulers.config.openshift.io/cluster"
+CONSOLE_CONFIG = "console.v1.operator.openshift.io/cluster"
 
 # Default pools
 DEFAULT_CEPHBLOCKPOOL = "ocs-storagecluster-cephblockpool"
@@ -486,6 +522,7 @@ MUST_GATHER_HELPER_LABEL = "must-gather-helper-pod="
 MANAGED_FUSION_ALERTMANAGER_LABEL = "alertmanager=managed-fusion-alertmanager"
 MANAGED_FUSION_AWS_DATA_GATHER = "name=aws-data-gather"
 MANAGED_FUSION_PROMETHEUS_LABEL = "prometheus=managed-fusion-prometheus"
+UX_BACKEND_SERVER_LABEL = "app=ux-backend-server"
 
 # Noobaa Deployments and Statefulsets
 NOOBAA_OPERATOR_DEPLOYMENT = "noobaa-operator"
@@ -917,6 +954,7 @@ OPERATOR_SOURCE_NAME = "ocs-operatorsource"
 
 OPERATOR_SOURCE_SECRET_NAME = "ocs-operatorsource-secret"
 
+
 # Openshift-logging clusterlogging operator deployment yamls
 CL_NAMESPACE_YAML = os.path.join(TEMPLATE_DEPLOYMENT_CLO, "cl-namespace.yaml")
 CL_OG_YAML = os.path.join(TEMPLATE_DEPLOYMENT_CLO, "cl-og.yaml")
@@ -1206,6 +1244,7 @@ OPERATOR_CS_QUAY_API_QUERY = (
 )
 OPTIONAL_OPERATORS_SELECTOR = "catalog=optional-operators"
 OCS_OPERATOR_BUNDLE_IMAGE = "quay.io/rhceph-dev/ocs-operator-bundle"
+OCS_CATALOG_SOURCE_NAME = "ocs-catalogsource"
 
 # OCP related constants
 OPENSHIFT_UPGRADE_INFO_API = (
@@ -1623,6 +1662,7 @@ MANAGED_ONBOARDING_SECRET = "onboarding-ticket-key"
 MANAGED_PROVIDER_SERVER_SECRET = "ocs-provider-server"
 MANAGED_MON_SECRET = "rook-ceph-mon"
 ONBOARDING_PRIVATE_KEY = "onboarding-private-key"
+
 
 # JSON Schema
 OSD_TREE_ROOT = {

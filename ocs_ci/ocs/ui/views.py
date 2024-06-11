@@ -1653,6 +1653,12 @@ validation_4_14 = {
         "/ancestor::div[2]//div[@class='ceph-raw-card-legend__text']",
         By.XPATH,
     ),
+    "generate_client_onboarding_token_button": (
+        "//button[text()='Generate client onboarding token']",
+        By.XPATH,
+    ),
+    "copy to clipboard": ("//button[text()='Copy to clipboard']", By.XPATH),
+    "onboarding_token": ("//*[@class='odf-onboarding-modal__text-area']", By.XPATH),
 }
 
 topology = {

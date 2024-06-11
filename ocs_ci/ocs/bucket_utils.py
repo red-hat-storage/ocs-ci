@@ -22,6 +22,7 @@ from ocs_ci.utility.utils import (
     TimeoutSampler,
     run_cmd,
     exec_nb_db_query,
+    exec_cmd,
 )
 from ocs_ci.helpers.helpers import create_resource
 from ocs_ci.utility import version
@@ -1015,10 +1016,50 @@ def check_pv_backingstore_status(
 
     cmd = (
         f"oc get backingstore -n {namespace} {kubeconfig} {backingstore_name} "
-        "-o=jsonpath=`{.status.mode.modeCode}`"
+        "-o=jsonpath='{.status.mode.modeCode}'"
     )
     res = run_cmd(cmd=cmd)
     return True if res in desired_status else False
+
+
+def check_pv_backingstore_type(
+    backingstore_name=constants.DEFAULT_NOOBAA_BACKINGSTORE,
+    namespace=constants.OPENSHIFT_STORAGE_NAMESPACE,
+):
+    """
+    check if existing pv backing store is in READY state
+
+    Args:
+        backingstore_name (str): backingstore name
+        namespace (str): backing store's namespace
+
+    Returns:
+        backingstore_type: type of the backing store
+
+    """
+    kubeconfig = os.getenv("KUBECONFIG")
+    kubeconfig = f"--kubeconfig {kubeconfig}" if kubeconfig else ""
+    namespace = namespace or config.ENV_DATA["cluster_namespace"]
+
+    cmd = (
+        f"oc get backingstore -n {namespace} {kubeconfig} {backingstore_name} "
+        "-o=jsonpath='{.status.phase}'"
+    )
+    res = exec_cmd(cmd=cmd, use_shell=True)
+    if res.returncode != 0:
+        logger.error(f"Failed to fetch backingstore details\n{res.stderr}")
+
+    assert (
+        res.stdout.decode() == constants.STATUS_READY
+    ), f"output is {res.stdout.decode()}, it is not as expected"
+    cmd = (
+        f"oc get backingstore -n {namespace} {kubeconfig} {backingstore_name} "
+        "-o=jsonpath='{.spec.type}'"
+    )
+    res = exec_cmd(cmd=cmd, use_shell=True)
+    if res.returncode != 0:
+        logger.error(f"Failed to fetch backingstore type\n{res.stderr}")
+    return res.stdout.decode()
 
 
 def create_multipart_upload(s3_obj, bucketname, object_key):

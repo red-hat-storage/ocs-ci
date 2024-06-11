@@ -184,7 +184,7 @@ class ValidationUI(PageNavigator):
         refresh_web_console_popup = self.wait_until_expected_text_is_found(
             locator=self.validation_loc["warning-alert"],
             expected_text="Refresh web console",
-            timeout=120,
+            timeout=180,
         )
         if refresh_web_console_popup:
             logger.info(
@@ -642,3 +642,31 @@ class ValidationUI(PageNavigator):
             expected_text="OpenShift Container Storage",
         )
         return odf_operator_presence, ocs_operator_presence
+
+    def verify_storage_clients_page(self):
+        """
+        Verify storage clients page in UI
+
+        Returns:
+        StorageClients: Storage Clients page object
+
+        """
+        self.refresh_web_console()
+        storage_client_obj = self.nav_to_storageclients_page()
+        strings_storage_clients_tab = ["Storage clients", "Name"]
+        self.verify_page_contain_strings(
+            strings_on_page=strings_storage_clients_tab, page_name="storage clients"
+        )
+        self.do_click(
+            self.validation_loc["generate_client_onboarding_token_button"],
+            enable_screenshot=True,
+        )
+        strings_object_service_tab = [
+            "Client onboarding token",
+            "How to use this token",
+        ]
+        self.verify_page_contain_strings(
+            strings_on_page=strings_object_service_tab,
+            page_name="client_onboarding_token_page",
+        )
+        return storage_client_obj

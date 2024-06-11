@@ -1251,7 +1251,7 @@ class BAREMETALAI(BAREMETALBASE):
 
 
 @retry(exceptions.CommandFailed, tries=10, delay=30, backoff=1)
-def clean_disk(worker):
+def clean_disk(worker, namespace=constants.DEFAULT_NAMESPACE):
     """
     Perform disk cleanup
 
@@ -1262,41 +1262,51 @@ def clean_disk(worker):
     ocp_obj = ocp.OCP()
     cmd = """lsblk --all --noheadings --output "KNAME,PKNAME,TYPE,MOUNTPOINT" --json"""
     out = ocp_obj.exec_oc_debug_cmd(
-        node=worker.name, cmd_list=[cmd], namespace=constants.BM_DEBUG_NODE_NS
+        node=worker.name, cmd_list=[cmd], namespace=namespace
     )
     disk_to_ignore_cleanup_raw = json.loads(str(out))
     disk_to_ignore_cleanup_json = disk_to_ignore_cleanup_raw["blockdevices"]
+    selected_disks_to_ignore_cleanup = []
     for disk_to_ignore_cleanup in disk_to_ignore_cleanup_json:
         if disk_to_ignore_cleanup["mountpoint"] == "/boot":
             logger.info(
                 f"Ignorning disk {disk_to_ignore_cleanup['pkname']} for cleanup because it's a root disk "
             )
-            selected_disk_to_ignore_cleanup = disk_to_ignore_cleanup["pkname"]
-            # Adding break when root disk is found
-            break
+            selected_disks_to_ignore_cleanup.append(
+                str(disk_to_ignore_cleanup["pkname"])
+            )
+        elif disk_to_ignore_cleanup["type"] == "rom":
+            logger.info(
+                f"Ignorning disk {disk_to_ignore_cleanup['kname']} for cleanup because it's a rom disk "
+            )
+            selected_disks_to_ignore_cleanup.append(
+                str(disk_to_ignore_cleanup["kname"])
+            )
+
     out = ocp_obj.exec_oc_debug_cmd(
         node=worker.name,
         cmd_list=["lsblk -nd -e252,7 --output NAME --json"],
-        namespace=constants.BM_DEBUG_NODE_NS,
+        namespace=namespace,
     )
     lsblk_output = json.loads(str(out))
     lsblk_devices = lsblk_output["blockdevices"]
 
     for lsblk_device in lsblk_devices:
-        if lsblk_device["name"] == str(selected_disk_to_ignore_cleanup):
+        if lsblk_device["name"] in selected_disks_to_ignore_cleanup:
+            logger.info(f'the disk cleanup is ignored for, {lsblk_device["name"]}')
             pass
         else:
             logger.info(f"Cleaning up {lsblk_device['name']}")
             out = ocp_obj.exec_oc_debug_cmd(
                 node=worker.name,
                 cmd_list=[f"wipefs -a -f /dev/{lsblk_device['name']}"],
-                namespace=constants.BM_DEBUG_NODE_NS,
+                namespace=namespace,
             )
             logger.info(out)
             out = ocp_obj.exec_oc_debug_cmd(
                 node=worker.name,
                 cmd_list=[f"sgdisk --zap-all /dev/{lsblk_device['name']}"],
-                namespace=constants.BM_DEBUG_NODE_NS,
+                namespace=namespace,
             )
             logger.info(out)
 

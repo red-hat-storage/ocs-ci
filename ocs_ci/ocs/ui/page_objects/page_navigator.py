@@ -51,7 +51,7 @@ class PageNavigator(BaseUI):
                 self.storage_class = "standard_sc"
             else:
                 self.storage_class = "standard_csi_sc"
-        self.page_has_loaded(5, 2, self.page_nav["page_navigator_sidebar"])
+        self.page_has_loaded(30, 2, self.page_nav["page_navigator_sidebar"])
 
     def navigate_OCP_home_page(self):
         """
@@ -443,7 +443,7 @@ class PageNavigator(BaseUI):
 
         logger.info("Navigate to Storage Client Page")
         self.choose_expanded_mode(mode=True, locator=self.page_nav["Storage"])
-        self.page_has_loaded(retries=120, sleep_time=10)
+        self.page_has_loaded(retries=120)
         self.do_click(
             locator=self.page_nav["storageclients_page"], enable_screenshot=False
         )
