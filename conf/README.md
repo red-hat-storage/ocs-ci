@@ -301,6 +301,10 @@ higher priority).
             * `private_gw` - GW for the private interface
             * `root_disk_id` - ID of the root disk
             * `root_disk_sn` - Serial number of the root disk
+            * `node_network_configuration_policy_name` - The NodeNetworkConfigurationPolicy CR name
+            * `node_network_configuration_policy_ip` - The ip address of NodeNetworkConfigurationPolicy CR
+            * `node_network_configuration_policy_prefix_length` - The subnetmask of NodeNetworkConfigurationPolicy CR
+            * `node_network_configuration_policy_destination_route` - The destination route of NodeNetworkConfigurationPolicy CR
 * `hcp_version` - version of HCP client to be deployed on machine running the tests
 * `metallb_version` - MetalLB operator version to install
 * `install_hypershift_upstream` - Install hypershift from upstream or not (Default: false). Necessary for unreleased OCP/CNV versions
@@ -313,6 +317,10 @@ higher priority).
       * `nodepool_replicas` - number of replicas of nodepool for each cluster
       * `hosted_odf_registry` - registry for hosted ODF
       * `hosted_odf_version` - version of ODF to be deployed on hosted clusters
+* `wait_timeout_for_healthy_osd_in_minutes` - timeout waiting for healthy OSDs before continuing upgrade (see https://bugzilla.redhat.com/show_bug.cgi?id=2276694 for more details)
+* `odf_provider_mode_deployment` - True if you would like to enable provider mode deployment.
+* `client_subcription_image` - ODF subscription image details for the storageclients.
+* `channel_to_client_subscription` - Channel value for the odf subscription image for storageclients.
 
 #### UPGRADE
 

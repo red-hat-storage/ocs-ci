@@ -184,7 +184,7 @@ class ValidationUI(PageNavigator):
         refresh_web_console_popup = self.wait_until_expected_text_is_found(
             locator=self.validation_loc["warning-alert"],
             expected_text="Refresh web console",
-            timeout=120,
+            timeout=180,
         )
         if refresh_web_console_popup:
             logger.info(
@@ -558,8 +558,8 @@ class ValidationUI(PageNavigator):
         """
         if self.ocp_version_semantic >= version.VERSION_4_9:
             self.navigate_installed_operators_page()
-            logger.info("Search and select openshift-storage namespace")
-            self.select_namespace(project_name="openshift-storage")
+            logger.info("Search and select storage cluster namespace")
+            self.select_namespace(project_name=config.ENV_DATA["cluster_namespace"])
             logger.info(
                 "Click on Storage System under Provided APIs on Installed Operators Page"
             )
@@ -627,7 +627,7 @@ class ValidationUI(PageNavigator):
         logger.info("Navigating to Installed Operator Page")
         self.navigate_installed_operators_page()
 
-        self.select_namespace(project_name="openshift-storage")
+        self.select_namespace(project_name=config.ENV_DATA["cluster_namespace"])
 
         logger.info("Searching for Openshift Data Foundation Operator")
         odf_operator_presence = self.wait_until_expected_text_is_found(
@@ -642,3 +642,31 @@ class ValidationUI(PageNavigator):
             expected_text="OpenShift Container Storage",
         )
         return odf_operator_presence, ocs_operator_presence
+
+    def verify_storage_clients_page(self):
+        """
+        Verify storage clients page in UI
+
+        Returns:
+        StorageClients: Storage Clients page object
+
+        """
+        self.refresh_web_console()
+        storage_client_obj = self.nav_to_storageclients_page()
+        strings_storage_clients_tab = ["Storage clients", "Name"]
+        self.verify_page_contain_strings(
+            strings_on_page=strings_storage_clients_tab, page_name="storage clients"
+        )
+        self.do_click(
+            self.validation_loc["generate_client_onboarding_token_button"],
+            enable_screenshot=True,
+        )
+        strings_object_service_tab = [
+            "Client onboarding token",
+            "How to use this token",
+        ]
+        self.verify_page_contain_strings(
+            strings_on_page=strings_object_service_tab,
+            page_name="client_onboarding_token_page",
+        )
+        return storage_client_obj

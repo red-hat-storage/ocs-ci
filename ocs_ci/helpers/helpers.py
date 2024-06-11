@@ -605,30 +605,39 @@ def create_ceph_block_pool(
     return cbp_obj
 
 
-def create_ceph_file_system(pool_name=None):
+def create_ceph_file_system(
+    cephfs_name=None, label=None, namespace=constants.OPENSHIFT_STORAGE_NAMESPACE
+):
     """
     Create a Ceph file system
-    ** This method should not be used anymore **
-    ** This method is for internal testing only **
 
     Args:
-        pool_name (str): The pool name to create
+        cephfs_name (str): The ceph FS name to create
+        label (dict): The label to give to pool
+        namespace (str): The name space in which the ceph FS has to be created
 
     Returns:
         OCS: An OCS instance for the Ceph file system
     """
-    cfs_data = templating.load_yaml(constants.CEPHFILESYSTEM_YAML)
-    cfs_data["metadata"]["name"] = (
-        pool_name if pool_name else create_unique_resource_name("test", "cfs")
+    cephfs_data = templating.load_yaml(constants.CEPHFILESYSTEM_YAML)
+    cephfs_data["metadata"]["name"] = (
+        cephfs_name if cephfs_name else create_unique_resource_name("test", "cfs")
     )
-    cfs_data["metadata"]["namespace"] = config.ENV_DATA["cluster_namespace"]
-    cfs_data = create_resource(**cfs_data)
-    cfs_data.reload()
+    cephfs_data["metadata"]["namespace"] = namespace
+    if label:
+        cephfs_data["metadata"]["labels"] = label
+
+    try:
+        cephfs_data = create_resource(**cephfs_data)
+        cephfs_data.reload()
+    except Exception as e:
+        logger.error(e)
+        raise e
 
     assert validate_cephfilesystem(
-        cfs_data.name
-    ), f"File system {cfs_data.name} does not exist"
-    return cfs_data
+        cephfs_data.name, namespace
+    ), f"File system {cephfs_data.name} does not exist"
+    return cephfs_data
 
 
 def default_storage_class(
@@ -977,7 +986,7 @@ def verify_block_pool_exists(pool_name):
     logger.info(f"Verifying that block pool {pool_name} exists")
     ct_pod = pod.get_ceph_tools_pod()
     try:
-        for pools in TimeoutSampler(60, 3, ct_pod.exec_ceph_cmd, "ceph osd lspools"):
+        for pools in TimeoutSampler(180, 3, ct_pod.exec_ceph_cmd, "ceph osd lspools"):
             logger.info(f"POOLS are {pools}")
             for pool in pools:
                 if pool_name in pool.get("poolname"):
@@ -1041,7 +1050,7 @@ def get_cephfs_data_pool_name():
     return out[0]["data_pools"][0]
 
 
-def validate_cephfilesystem(fs_name):
+def validate_cephfilesystem(fs_name, namespace=config.ENV_DATA["cluster_namespace"]):
     """
     Verify CephFileSystem exists at Ceph and OCP
 
@@ -1052,9 +1061,7 @@ def validate_cephfilesystem(fs_name):
         bool: True if CephFileSystem is created at Ceph and OCP side else
            will return False with valid msg i.e Failure cause
     """
-    cfs = ocp.OCP(
-        kind=constants.CEPHFILESYSTEM, namespace=config.ENV_DATA["cluster_namespace"]
-    )
+    cfs = ocp.OCP(kind=constants.CEPHFILESYSTEM, namespace=namespace)
     ct_pod = pod.get_ceph_tools_pod()
     ceph_validate = False
     ocp_validate = False
@@ -2864,6 +2871,27 @@ def modify_deployment_replica_count(
     ocp_obj = ocp.OCP(kind=constants.DEPLOYMENT, namespace=namespace)
     params = f'{{"spec": {{"replicas": {replica_count}}}}}'
     return ocp_obj.patch(resource_name=deployment_name, params=params)
+
+
+def modify_deploymentconfig_replica_count(
+    deploymentconfig_name, replica_count, namespace=config.ENV_DATA["cluster_namespace"]
+):
+    """
+    Function to modify deploymentconfig replica count,
+    i.e to scale up or down deploymentconfig
+
+    Args:
+        deploymentcofig_name (str): Name of deploymentconfig
+        replica_count (int): replica count to be changed to
+        namespace (str): namespace where the deploymentconfig exists
+
+    Returns:
+        bool: True in case if changes are applied. False otherwise
+
+    """
+    dc_ocp_obj = ocp.OCP(kind=constants.DEPLOYMENTCONFIG, namespace=namespace)
+    params = f'{{"spec": {{"replicas": {replica_count}}}}}'
+    return dc_ocp_obj.patch(resource_name=deploymentconfig_name, params=params)
 
 
 def modify_job_parallelism_count(

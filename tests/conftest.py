@@ -69,6 +69,7 @@ from ocs_ci.ocs.resources.deployment import Deployment
 from ocs_ci.ocs.resources.job import get_job_obj
 from ocs_ci.ocs.resources.backingstore import (
     backingstore_factory as backingstore_factory_implementation,
+    clone_bs_dict_from_backingstore,
 )
 from ocs_ci.ocs.cluster import check_clusters
 from ocs_ci.ocs.resources.namespacestore import (
@@ -4928,6 +4929,8 @@ def pv_encryption_kms_setup_factory(request):
     # set the KMS provider based on KMS_PROVIDER env value.
     if ocsci_config.ENV_DATA["KMS_PROVIDER"].lower() == constants.HPCS_KMS_PROVIDER:
         return pv_encryption_hpcs_setup_factory(request)
+    elif ocsci_config.ENV_DATA["KMS_PROVIDER"] == constants.AZURE_KV_PROVIDER_NAME:
+        return pv_encryption_azure_kv_setup_factory(request)
     else:
         return pv_encryption_vault_setup_factory(request)
 
@@ -5163,6 +5166,30 @@ def pv_encryption_hpcs_setup_factory(request):
             "secret",
             ocsci_config.ENV_DATA["cluster_namespace"],
         )
+
+    request.addfinalizer(finalizer)
+    return factory
+
+
+def pv_encryption_azure_kv_setup_factory(request):
+    """
+    Create a Azure KV resource and returh the azure KV Object.
+    """
+    kms = KMS.AzureKV()
+
+    def factory():
+        """
+        Create a Azure KV resources in the cluster
+        """
+        # setup KMS connection details.
+        kms.create_azure_kv_csi_kms_connection_details()
+        return kms
+
+    def finalizer():
+        """
+        Cleanup Azure KV resources from the cluster.
+        """
+        kms.remove_kmsid()
 
     request.addfinalizer(finalizer)
     return factory
@@ -7272,7 +7299,7 @@ def override_default_backingstore_fixture(
         resource_name=constants.DEFAULT_NOOBAA_BUCKETCLASS,
     )
 
-    def _override_nb_default_backingstore_implementation(alt_backingstore_name=None):
+    def _override_nb_default_backingstore_implementation(alt_bs_name=None):
         """
         1. If the name of an alternative backingstore is not provided,
             Create a new backingstore of the same type as the current default
@@ -7286,29 +7313,18 @@ def override_default_backingstore_fixture(
 
         # 1. if the name of an alternative backingstore is not provided,
         # Create a new backingstore of the same type as the current default
-        if alt_backingstore_name is None:
-            original_bs_type = OCP(
-                kind="backingstore",
-                namespace=ocsci_config.ENV_DATA["cluster_namespace"],
-                resource_name=constants.DEFAULT_NOOBAA_BACKINGSTORE,
-            ).data["spec"]["type"]
-            original_bs_platform_name = constants.BS_TYPE_TO_PLATFORM_NAME_MAPPING[
-                original_bs_type
-            ]
-            if original_bs_platform_name != "pv":
-                alt_bs_dict = {original_bs_platform_name: [(1, None)]}
-            elif ocsci_config.ENV_DATA["mcg_only_deployment"]:
-                alt_bs_dict = {"pv": [1, 20, constants.THIN_CSI_STORAGECLASS]}
-            else:
-                alt_bs_dict = {"pv": [(1, 20, constants.DEFAULT_STORAGECLASS_RBD)]}
-            alt_backingstore_name = backingstore_factory("oc", alt_bs_dict)[0].name
+        if alt_bs_name is None:
+            bs_dict = clone_bs_dict_from_backingstore(
+                protype_backingstore_name=constants.DEFAULT_NOOBAA_BACKINGSTORE,
+            )
+            alt_bs_name = backingstore_factory("oc", bs_dict)[0].name
 
         # 2. Update the new default resource of the admin account
         mcg_obj_session.exec_mcg_cmd(
             "".join(
                 (
                     f"account update {mcg_obj_session.noobaa_user} ",
-                    f"--new_default_resource={alt_backingstore_name}",
+                    f"--new_default_resource={alt_bs_name}",
                 )
             )
         )
@@ -7318,7 +7334,7 @@ def override_default_backingstore_fixture(
             {
                 "op": "replace",
                 "path": "/spec/placementPolicy/tiers/0/backingStores/0",
-                "value": alt_backingstore_name,
+                "value": alt_bs_name,
             }
         ]
         bucketclass_ocp_obj.patch(
@@ -7327,7 +7343,7 @@ def override_default_backingstore_fixture(
             format_type="json",
         )
 
-        return alt_backingstore_name
+        return alt_bs_name
 
     def finalizer():
         """

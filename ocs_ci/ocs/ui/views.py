@@ -162,7 +162,7 @@ deployment_4_9 = {
         By.CSS_SELECTOR,
     ),
     "choose_openshift-storage_project": (
-        "//span[text()='openshift-storage']",
+        "//span[text()='" + config.ENV_DATA["cluster_namespace"] + "']",
         By.XPATH,
     ),
     "choose_all_projects": ("//span[text()='All Projects']", By.XPATH),
@@ -368,6 +368,7 @@ generic_locators = {
     ),
     "developer_selected": ("//h2[.='Developer']", By.XPATH),
     "administrator_selected": ("//h2[.='Administrator']", By.XPATH),
+    "blockpool_name": ("//a[text()='{}']", By.XPATH),
 }
 
 ocs_operator_locators = {
@@ -1172,10 +1173,6 @@ block_pool = {
         'button[data-test-action="Edit BlockPool"]',
         By.CSS_SELECTOR,
     ),
-    "delete_pool_inside_pool": (
-        'button[data-test-action="Delete BlockPool"]',
-        By.CSS_SELECTOR,
-    ),
     "confirm_delete_inside_pool": ("//button[text()='Delete']", By.XPATH),
     "replica_dropdown_edit": ('button[data-test="replica-dropdown"]', By.CSS_SELECTOR),
     "compression_checkbox_edit": (
@@ -1186,6 +1183,11 @@ block_pool = {
     "pool_state_inside_pool": ('span[data-test="status-text"]', By.CSS_SELECTOR),
     "pool_cannot_be_deleted_warning": (
         "//p[@data-test='pool-bound-message']",
+        By.XPATH,
+    ),
+    "used_raw_capacity_in_UI": ("//div[@class='ceph-raw-card-legend__text']", By.XPATH),
+    "delete_pool_inside_pool": (
+        "//a[text()='Delete BlockPool']",
         By.XPATH,
     ),
 }
@@ -1283,6 +1285,11 @@ storageclass = {
         By.XPATH,
     ),
     "button_with_txt": ("//button[text()=('{}')]", By.XPATH),
+    "volume_binding_mode": (
+        "button[id='storage-class-volume-binding-mode']",
+        By.CSS_SELECTOR,
+    ),
+    "immediate_binding_mode": ("button[id='Immediate-link']", By.CSS_SELECTOR),
 }
 
 storageclass_4_9 = {
@@ -1646,6 +1653,12 @@ validation_4_14 = {
         "/ancestor::div[2]//div[@class='ceph-raw-card-legend__text']",
         By.XPATH,
     ),
+    "generate_client_onboarding_token_button": (
+        "//button[text()='Generate client onboarding token']",
+        By.XPATH,
+    ),
+    "copy to clipboard": ("//button[text()='Copy to clipboard']", By.XPATH),
+    "onboarding_token": ("//*[@class='odf-onboarding-modal__text-area']", By.XPATH),
 }
 
 topology = {
@@ -2075,6 +2088,8 @@ locators = {
         },
         "add_capacity": {**add_capacity, **add_capacity_4_11},
         "obc": obc,
+        "block_pool": {**block_pool, **block_pool_4_12},
+        "storageclass": storageclass,
     },
     "4.10": {
         "login": login,

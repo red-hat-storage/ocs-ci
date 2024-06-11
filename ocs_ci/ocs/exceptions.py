@@ -532,6 +532,10 @@ class ACMClusterDestroyException(Exception):
     pass
 
 
+class ACMClusterConfigurationException(Exception):
+    pass
+
+
 class WrongVersionExpression(ValueError):
     pass
 
