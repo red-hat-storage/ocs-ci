@@ -160,3 +160,8 @@ MUST_GATHER_UPSTREAM_TAG = "latest"
 
 # CrushDeviceClass
 CRUSH_DEVICE_CLASS = "ssd"
+
+
+# IBM Cloud
+IBM_CLOUD_LOAD_BALANCER_QUOTA = 50
+IBM_CLOUD_REGIONS = {"us-south", "us-east"}

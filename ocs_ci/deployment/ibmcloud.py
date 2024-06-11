@@ -12,6 +12,7 @@ from ocs_ci.deployment.cloud import CloudDeploymentBase, IPIOCPDeployment
 from ocs_ci.deployment.ocp import OCPDeployment as BaseOCPDeployment
 from ocs_ci.framework import config
 from ocs_ci.ocs import constants
+from ocs_ci.ocs.defaults import IBM_CLOUD_REGIONS
 from ocs_ci.ocs.exceptions import (
     CommandFailed,
     UnsupportedPlatformVersionError,
@@ -157,11 +158,25 @@ class IBMCloudIPI(CloudDeploymentBase):
             raise UnsupportedPlatformVersionError(
                 "IBM Cloud IPI deployments are only supported on OCP versions >= 4.10"
             )
+        # By default, IBM cloud has load balancer limit of 50 per region.
+        # switch to us-south, if current load balancers are more than 45.
+        # https://cloud.ibm.com/docs/vpc?topic=vpc-quotas
+        ibmcloud.login()
+        current_region = config.ENV_DATA["region"]
+        other_region = list(IBM_CLOUD_REGIONS - {current_region})[0]
+        if config.ENV_DATA.get("enable_region_dynamic_switching"):
+            current_region_lb_count = self.get_load_balancers_count()
+            ibmcloud.login(region=other_region)
+            other_region_lb_count = self.get_load_balancers_count(other_region)
+            if current_region_lb_count > other_region_lb_count:
+                logger.info(
+                    f"Switching region to {other_region} due to lack of load balancers"
+                )
+                ibmcloud.set_region(other_region)
         self.ocp_deployment = self.OCPDeployment()
         self.ocp_deployment.deploy_prereq()
 
         # IBM Cloud specific prereqs
-        ibmcloud.login()
         cco.configure_cloud_credential_operator()
         self.export_api_key()
         self.manually_create_iam_for_vpc()
@@ -197,18 +212,25 @@ class IBMCloudIPI(CloudDeploymentBase):
             logger.warning(
                 "Resource group for the cluster doesn't exist! Will not run installer to destroy the cluster!"
             )
-        # Make sure ccoctl is downloaded before using it in destroy job.
-        cco.configure_cloud_credential_operator()
-        cco.delete_service_id(self.cluster_name, self.credentials_requests_dir)
-        if resource_group:
-            resource_group = self.get_resource_group()
-        # Based on docs:
-        # https://docs.openshift.com/container-platform/4.13/installing/installing_ibm_cloud_public/uninstalling-cluster-ibm-cloud.html
-        # The volumes should be removed before running openshift-installer for destroy, but it's not
-        # working and failing, hence moving this step back after openshift-installer.
-        self.delete_volumes(resource_group)
-        self.delete_leftover_resources(resource_group)
-        self.delete_resource_group(resource_group)
+        try:
+            # Make sure ccoctl is downloaded before using it in destroy job.
+            cco.configure_cloud_credential_operator()
+            cco.delete_service_id(self.cluster_name, self.credentials_requests_dir)
+            if resource_group:
+                resource_group = self.get_resource_group()
+            # Based on docs:
+            # https://docs.openshift.com/container-platform/4.13/installing/installing_ibm_cloud_public/uninstalling-cluster-ibm-cloud.html
+            # The volumes should be removed before running openshift-installer for destroy, but it's not
+            # working and failing, hence moving this step back after openshift-installer.
+            self.delete_volumes(resource_group)
+            self.delete_leftover_resources(resource_group)
+            self.delete_resource_group(resource_group)
+        except Exception as ex:
+            logger.error(f"During IBM Cloud cleanup some exception occurred {ex}")
+            raise
+        finally:
+            logger.info("Force cleaning up Service IDs and Account Policies leftovers")
+            ibmcloud.cleanup_policies_and_service_ids(self.cluster_name)
 
     def manually_create_iam_for_vpc(self):
         """
@@ -445,3 +467,35 @@ class IBMCloudIPI(CloudDeploymentBase):
         logger.info("Exporting IC_API_KEY environment variable")
         api_key = config.AUTH["ibmcloud"]["api_key"]
         os.environ["IC_API_KEY"] = api_key
+
+    def get_load_balancers(self):
+        """
+        Gets the load balancers
+
+        Returns:
+            json: load balancers in json format
+
+        """
+        cmd = "ibmcloud is lbs --output json"
+        out = exec_cmd(cmd)
+        load_balancers = json.loads(out.stdout)
+        logger.debug(f"load balancers: {load_balancers}")
+        return load_balancers
+
+    def get_load_balancers_count(self, region=None):
+        """
+        Gets the number of load balancers
+
+        Args:
+            region (str): region (e.g. us-south), if not defined it will take from config.
+        Return:
+            int: number of load balancers
+
+        """
+        load_balancers_count = len(self.get_load_balancers())
+        if not region:
+            region = config.ENV_DATA.get("region")
+        logger.info(
+            f"Current load balancers count in region {region} is {load_balancers_count}"
+        )
+        return load_balancers_count
