@@ -59,7 +59,7 @@ def test_deployment(pvc_factory, pod_factory):
                 if config.ENV_DATA["mcg_only_deployment"]:
                     mcg_only_install_verification(ocs_registry_image=ocs_registry_image)
                     return
-                elif config.ENV_DATA.get["odf_provider_mode_deployment", False]:
+                elif config.ENV_DATA.get("odf_provider_mode_deployment", False):
                     storage_client_deployment_obj = (
                         ODFAndNativeStorageClientDeploymentOnProvider()
                     )
