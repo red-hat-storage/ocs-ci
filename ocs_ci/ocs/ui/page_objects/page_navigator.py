@@ -4,7 +4,7 @@ from selenium.common.exceptions import (
 from ocs_ci.framework import config
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.ocp import get_ocp_url
-from ocs_ci.ocs.ui.base_ui import BaseUI, logger
+from ocs_ci.ocs.ui.base_ui import BaseUI, logger, navigate_to_local_cluster
 from ocs_ci.ocs.ui.views import ODF_OPERATOR, OCS_OPERATOR
 from ocs_ci.utility import version
 
@@ -336,14 +336,29 @@ class PageNavigator(BaseUI):
         Navigate to block pools page
 
         """
-        logger.info("Navigate to block pools page")
+        logger.info("Navigate to Block Pools Page")
         storage_system_details = (
             self.nav_odf_default_page()
             .nav_storage_systems_tab()
             .nav_storagecluster_storagesystem_details()
         )
         storage_system_details.nav_ceph_blockpool()
-        logger.info("Now at Block pool page")
+        logger.info("Now at Block Pools page")
+
+    def navigate_client_page(self):
+        """
+        Navigate to Storage Clients page of Provider cluster UI
+        in Provider/Client setup
+
+        """
+        logger.info("Navigate to local cluster")
+        navigate_to_local_cluster()
+        logger.info("Navigate to Storage Clients Page")
+        self.choose_expanded_mode(mode=True, locator=self.page_nav["Storage"])
+        self.do_click(
+            locator=self.page_nav["storageclients_page"],
+            enable_screenshot=False,
+        )
 
     def select_namespace(self, project_name):
         """

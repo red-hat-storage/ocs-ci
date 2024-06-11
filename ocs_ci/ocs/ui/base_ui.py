@@ -148,6 +148,9 @@ class BaseUI:
         self.topology_loc = self.deep_get(locators, self.ocp_version, "topology")
         self.storage_clients_loc = self.deep_get(locators, self.ocp_version, "storage")
         self.alerting_loc = self.deep_get(locators, self.ocp_version, "alerting")
+        self.storageclient_loc = self.deep_get(
+            locators, self.ocp_version, "storageclient"
+        )
 
     def __repr__(self):
         return f"{self.__class__.__name__} Web Page"

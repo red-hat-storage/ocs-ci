@@ -687,6 +687,7 @@ page_nav = {
     "Workloads": ("//button[text()='Workloads']", By.XPATH),
     "Pods": ("Pods", By.LINK_TEXT),
     "quickstarts": ('a[href="/quickstart"]', By.CSS_SELECTOR),
+    "storageclients": ("Storage Clients", By.LINK_TEXT),
     "block_pool_link": (
         'a[data-test-id="horizontal-link-Block Pools"]',
         By.CSS_SELECTOR,
@@ -1306,6 +1307,22 @@ storageclass_4_9 = {
     "toggle_switch": ("no-label-switch-on-on", By.ID),
 }
 
+storageclient = {
+    "generate_token": ("//button[text()='Generate client onboarding token']", By.XPATH),
+    "copy": ("//button[text()='Copy to clipboard']", By.XPATH),
+    "token": ("//div[@class='odf-onboarding-modal__text-area']", By.XPATH),
+    "search_client": ("input[data-test='name-filter-input']", By.CSS_SELECTOR),
+    "clients_number_on_dashboad": (
+        "div[data-status-id='Storage Clients-secondary-status']",
+        By.CSS_SELECTOR,
+    ),
+    "client_name": ("name", By.ID),
+    "cluster_id": ("clusterID", By.ID),
+    "ocp_version": ("openshiftVersion", By.ID),
+    "odf_version": ("dataFoundationVersion", By.ID),
+    "heartbeat": ("lastHeartbeat", By.ID),
+}
+
 validation = {
     "object_service_button": ("//button[text()='Object Service']", By.XPATH),
     "data_resiliency_button": ("//button[text()='Data Resiliency']", By.XPATH),
@@ -1653,6 +1670,23 @@ validation_4_14 = {
         "/ancestor::div[2]//div[@class='ceph-raw-card-legend__text']",
         By.XPATH,
     ),
+    "generate_token": ("//button[text()='Generate client onboarding token']", By.XPATH),
+    "copy_to_clipboard": ("//button[text()='Copy to clipboard']", By.XPATH),
+    "token": ("//div[@class='odf-onboarding-modal__text-area']", By.XPATH),
+    "token_explanation_part_1": (
+        "p[data-ouia-component-type='PF4/Text']",
+        By.CSS_SELECTOR,
+    ),
+    "search_client": ("input[data-test='name-filter-input']", By.CSS_SELECTOR),
+    "clients_number_on_dashboad": (
+        "div[data-status-id='Storage Clients-secondary-status']",
+        By.CSS_SELECTOR,
+    ),
+    "client_name": ("name", By.ID),
+    "client_cluster_id": ("clusterID", By.ID),
+    "client_ocp_version": ("openshiftVersion", By.ID),
+    "client_odf_version": ("dataFoundationVersion", By.ID),
+    "client_heartbeat": ("lastHeartbeat", By.ID),
 }
 
 topology = {
