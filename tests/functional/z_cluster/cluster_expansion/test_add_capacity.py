@@ -1,8 +1,8 @@
 import pytest
 import logging
+import concurrent.futures
 
 from ocs_ci.framework import config
-import concurrent.futures
 from ocs_ci.framework.pytest_customization.marks import (
     polarion_id,
     pre_upgrade,
@@ -10,6 +10,7 @@ from ocs_ci.framework.pytest_customization.marks import (
     skipif_bm,
     skipif_external_mode,
     skipif_bmpsi,
+    tier4b,
     skipif_ibm_power,
     skipif_no_lso,
     skipif_lso,
@@ -27,13 +28,13 @@ from ocs_ci.framework.testlib import (
     cloud_platform_required,
 )
 from ocs_ci.ocs import constants
-from ocs_ci.utility.utils import TimeoutSampler, ceph_health_check_base
-from ocs_ci.helpers.managed_services import (
-    get_used_capacity,
-    verify_osd_used_capacity_greater_than_expected,
-)
-
+from ocs_ci.ocs.exceptions import TimeoutExpiredError
 from ocs_ci.ocs.ocp import OCP
+from ocs_ci.helpers.helpers import (
+    odf_cli_set_recover_profile,
+    get_ceph_recovery_profile,
+)
+from ocs_ci.utility.utils import TimeoutSampler
 from ocs_ci.ocs.resources.pod import (
     get_osd_pods,
     get_ceph_tools_pod,
@@ -53,80 +54,23 @@ from ocs_ci.ocs.resources.storage_cluster import (
 from ocs_ci.ocs.ui.helpers_ui import ui_add_capacity_conditions, ui_add_capacity
 from ocs_ci.utility.utils import is_cluster_y_version_upgraded
 from ocs_ci.utility import version
-
+from ocs_ci.helpers.managed_services import (
+    get_used_capacity,
+    verify_osd_used_capacity_greater_than_expected,
+)
 
 logger = logging.getLogger(__name__)
 
 
-@pytest.mark.polarion_id("OCS-XXXX")
-@pytest.mark.parametrize(
-    argnames=["recovery_profile"],
-    argvalues=[
-        pytest.param("balanced"),
-        pytest.param("high_client_ops"),
-        pytest.param("high_recovery_ops"),
-    ],
-)
-def add_capacity_test(recovery_profile, multi_pvc_factory, ui_flag=False):
+def add_capacity_test(ui_flag=False):
     """
     Add capacity on non-lso cluster
+
 
     Args:
         ui_flag(bool): add capacity via ui [true] or via cli [false]
 
     """
-    ceph_cluster = CephCluster()
-    pvc_count = 20
-    ceph_capacity = int(ceph_cluster.get_ceph_capacity())
-    size = int((ceph_capacity * 0.4) / pvc_count)
-    filesize = int(size * 0.8)
-    # Change the file size to MB for the FIO function
-    file_size = f"{filesize * constants.GB2MB}M"
-
-    pvc_objs = multi_pvc_factory(
-        interface=constants.CEPHFILESYSTEM,
-        size=size,
-        num_of_pvc=pvc_count,
-    )
-    pod_objs = list()
-
-    log.info(f"filee{size}")
-
-    for pvc_obj in pvc_objs:
-        pod_objs.append(pod_factory(pvc=pvc_obj))
-
-    executor = concurrent.futures.ThreadPoolExecutor(max_workers=pvc_count)
-    futures_fio = []
-    for pod in pod_objs:
-        futures_fio.append(
-            executor.submit(
-                pod.run_io,
-                storage_type="fs",
-                size=file_size,
-                invalidate=0,
-                bs="512K",
-                runtime=2100,
-                timeout=3300,
-                jobs=1,
-                readwrite="readwrite",
-            )
-        )
-    for _ in concurrent.futures.as_completed(futures_fio):
-        log.info("Some pod submitted FIO")
-    concurrent.futures.wait(futures_fio)
-    executor = concurrent.futures.ThreadPoolExecutor(max_workers=pvc_count)
-
-    get_used_capacity("After filling up the cluster")
-    sample = TimeoutSampler(
-        timeout=3600,
-        sleep=300,
-        func=verify_osd_used_capacity_greater_than_expected,
-        expected_used_capacity=30.0,
-    )
-    if not sample.wait_for_func_status(result=True):
-        log.error("After 60 seconds the used capacity smaller than 30%")
-        raise TimeoutExpiredError
-
     osd_size = storage_cluster.get_osd_size()
     existing_osd_pods = get_osd_pods()
     existing_osd_pod_names = [pod.name for pod in existing_osd_pods]
@@ -271,3 +215,137 @@ class TestAddCapacityPreUpgrade(ManageTest):
         Test to add variable capacity to the OSD cluster while IOs running
         """
         add_capacity_test()
+
+
+@brown_squad
+@ignore_leftovers
+@pytest.mark.second_to_last
+@skipif_managed_service
+@skipif_aws_i3
+@skipif_bm
+@skipif_bmpsi
+@skipif_lso
+@skipif_external_mode
+@skipif_ibm_power
+@skipif_managed_service
+@skipif_hci_provider_and_client
+@tier4b
+@pytest.mark.polarion_id("OCS-XXXX")
+@pytest.mark.parametrize(
+    argnames=["recovery_profile"],
+    argvalues=[
+        pytest.param("balanced"),
+        pytest.param("high_client_ops"),
+        pytest.param("high_recovery_ops"),
+    ],
+)
+class TestAddCapacityRecoveryProfile(ManageTest):
+    """
+    Add capacity on non-lso cluster
+
+    """
+
+    @pytest.fixture(autouse=True)
+    def setup(self, recovery_profile, multi_pvc_factory, pod_factory):
+        """
+        Setting up test environment
+        """
+        assert odf_cli_set_recover_profile(recovery_profile)
+        logger.info(
+            "Fetching ceph osd_mclock_profile/recovery profile using odf-cli tool."
+        )
+        a = get_ceph_recovery_profile()
+        logger.info(f"Applied recovery profile on ceph cluster is {a}")
+        assert (
+            recovery_profile == get_ceph_recovery_profile()
+        ), f"Recovery profile set by ODF CLI ({recovery_profile}) does not match with the value reported by Ceph"
+
+        ceph_cluster = CephCluster()
+        pvc_count = 20
+
+        # Get file size to fill up the cluster
+        ceph_capacity = int(ceph_cluster.get_ceph_capacity())
+        size = int((ceph_capacity * 0.4) / pvc_count)
+        filesize = int(size * 0.8)
+        # Change the file size to MB for the FIO function
+        file_size = f"{filesize * constants.GB2MB}M"
+
+        # Creating PVCs for filling up the cluster
+        pvc_objs = multi_pvc_factory(
+            interface=constants.CEPHFILESYSTEM,
+            size=size,
+            num_of_pvc=pvc_count,
+        )
+        pod_objs = list()
+
+        for pvc_obj in pvc_objs:
+            pod_objs.append(pod_factory(pvc=pvc_obj))
+
+        # Run FIO concurrently on created pods
+        executor = concurrent.futures.ThreadPoolExecutor(max_workers=pvc_count)
+        futures_fio = []
+        for pod in pod_objs:
+            futures_fio.append(
+                executor.submit(
+                    pod.run_io,
+                    storage_type="fs",
+                    size=file_size,
+                    invalidate=0,
+                    bs="512K",
+                    runtime=2100,
+                    timeout=3300,
+                    jobs=1,
+                    readwrite="readwrite",
+                )
+            )
+        for _ in concurrent.futures.as_completed(futures_fio):
+            logger.info("Some pod submitted FIO")
+        concurrent.futures.wait(futures_fio)
+        executor = concurrent.futures.ThreadPoolExecutor(max_workers=pvc_count)
+
+        # Wait for cluster to be filled up to 30%
+        get_used_capacity("After filling up the cluster")
+        sample = TimeoutSampler(
+            timeout=3600,
+            sleep=300,
+            func=verify_osd_used_capacity_greater_than_expected,
+            expected_used_capacity=30.0,
+        )
+        if not sample.wait_for_func_status(result=True):
+            logger.error("After 3600 seconds the used capacity smaller than 30%")
+            raise TimeoutExpiredError
+
+    @pytest.fixture(autouse=True)
+    def teardown(self):
+        """
+        teardown function, Setting recovery-profile back to balanced.
+        """
+        assert odf_cli_set_recover_profile("balanced")
+        logger.info(
+            "Fetching ceph osd_mclock_profile/recovery profile using odf-cli tool."
+        )
+        a = get_ceph_recovery_profile()
+        logger.info(f"Applied recovery profile on ceph cluster is {a}")
+
+    def test_add_capacity_recovery_profile_cli(self, reduce_and_resume_cluster_load):
+
+        """
+        Test setting the recovery profile by ODF CLI and run add capacity test.
+        Steps:
+            1. Set recovery-profile using ODF cli tool
+            2. Verify recovery profile from the ceph toolbox pod
+            3. Add capacity test via CLI
+
+        """
+        # Setting up and verifying the recovery profile value with the odf CLI tool
+        add_capacity_test(ui_flag=False)
+
+    def test_add_capacity_recovery_profile_ui(self, reduce_and_resume_cluster_load):
+        """
+        Test setting the recovery profile by ODF CLI and run add capacity test.
+        Steps:
+            1. Set recovery-profile using ODF cli tool
+            2. Verify recovery profile from the ceph toolbox pod
+            3. Add capacity test via UI
+        """
+        add_capacity_test(ui_flag=True)
