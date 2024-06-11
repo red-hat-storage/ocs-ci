@@ -1,12 +1,15 @@
 import logging
+from random import random
+
 import pytest
 import time
 
-from ocs_ci.ocs import ocp, constants
+from ocs_ci.ocs import ocp, constants, node
 from ocs_ci.ocs.cluster import (
     is_flexible_scaling_enabled,
     check_ceph_health_after_add_capacity,
     CephClusterExternal,
+    is_lso_cluster,
 )
 from ocs_ci.framework.testlib import (
     tier4b,
@@ -17,22 +20,161 @@ from ocs_ci.framework.testlib import (
     skipif_hci_provider_and_client,
 )
 from ocs_ci.framework import config
+from ocs_ci.ocs.exceptions import CommandFailed, ResourceWrongStatusException
 from ocs_ci.ocs.resources.pod import (
     get_all_pods,
     wait_for_pods_to_be_running,
     check_toleration_on_pods,
+    check_toleration_on_subscriptions,
 )
 from ocs_ci.ocs.node import (
     taint_nodes,
     untaint_nodes,
     get_worker_nodes,
+    get_nodes,
+    wait_for_nodes_status,
 )
+from ocs_ci.utility.retry import retry
+
 from ocs_ci.ocs.resources import storage_cluster
 from ocs_ci.framework.pytest_customization.marks import bugzilla, brown_squad
 from ocs_ci.framework.testlib import skipif_ocs_version
 from ocs_ci.helpers.sanity_helpers import Sanity
 
 logger = logging.getLogger(__name__)
+
+
+def select_osd_node_name():
+    """
+    select randomly one of the osd nodes
+
+    Returns:
+        str: the selected osd node name
+
+    """
+    osd_node_names = node.get_osd_running_nodes()
+    osd_node_name = random.choice(osd_node_names)
+    logger.info(f"Selected OSD is {osd_node_name}")
+    return osd_node_name
+
+
+def check_node_replacement_verification_steps(
+    old_node_name, new_node_name, old_osd_node_names, old_osd_ids
+):
+    """
+    Check if the node replacement verification steps finished successfully.
+
+    Args:
+        old_node_name (str): The name of the old node that has been deleted
+        new_node_name (str): The name of the new node that has been created
+        old_osd_node_names (list): The name of the new node that has been added to osd nodes
+        old_osd_ids (list): List of the old osd ids
+
+    Raises:
+        AssertionError: If the node replacement verification steps failed.
+
+    """
+    min_osd_nodes = 3
+    num_of_old_osd_nodes = len(old_osd_node_names)
+    ocs_nodes = node.get_ocs_nodes()
+    num_of_old_ocs_nodes = len(ocs_nodes)
+
+    if num_of_old_osd_nodes <= min_osd_nodes:
+        logger.info(
+            f"We have {num_of_old_osd_nodes} osd nodes in the cluster - which is the minimum number "
+            f"of osd nodes. Wait for the new created worker node to appear in the osd nodes"
+        )
+        timeout = 1500
+        # In vSphere UPI platform, we are creating new node with same name as deleted
+        # node using terraform
+        if (
+            config.ENV_DATA["platform"].lower() == constants.VSPHERE_PLATFORM
+            and config.ENV_DATA["deployment_type"] == "upi"
+        ):
+            new_osd_node_name = old_node_name
+        else:
+            new_osd_node_name = node.wait_for_new_osd_node(old_osd_node_names, timeout)
+        logger.info(f"Newly created OSD name: {new_osd_node_name}")
+        assert new_osd_node_name, (
+            f"New osd node not found after the node replacement process "
+            f"while waiting for {timeout} seconds"
+        )
+    elif num_of_old_osd_nodes < num_of_old_ocs_nodes:
+        num_of_extra_old_ocs_nodes = num_of_old_ocs_nodes - num_of_old_osd_nodes
+        logger.info(
+            f"We have {num_of_extra_old_ocs_nodes} existing extra OCS worker nodes in the cluster"
+            f"Wait for one of the existing OCS nodes to appear in the osd nodes"
+        )
+        timeout = 600
+        new_osd_node_name = node.wait_for_new_osd_node(old_osd_node_names, timeout)
+        assert new_osd_node_name, (
+            f"New osd node not found after the node replacement process "
+            f"while waiting for {timeout} seconds"
+        )
+    else:
+        logger.info(
+            f"We have more than {min_osd_nodes} osd nodes in the cluster, and also we don't have "
+            f"an existing extra OCS worker nodes in the cluster. Don't wait for the new osd node"
+        )
+        new_osd_node_name = None
+
+    assert node.node_replacement_verification_steps_ceph_side(
+        old_node_name, new_node_name, new_osd_node_name
+    )
+    assert node.node_replacement_verification_steps_user_side(
+        old_node_name, new_node_name, new_osd_node_name, old_osd_ids
+    )
+
+
+def delete_and_create_osd_node(osd_node_name):
+    """
+    Delete an osd node, and create a new one to replace it
+
+    Args:
+        osd_node_name (str): The osd node name to delete
+
+    """
+    new_node_name = None
+    old_osd_ids = node.get_node_osd_ids(osd_node_name)
+
+    old_osd_node_names = node.get_osd_running_nodes()
+
+    # error message for invalid deployment configuration
+    msg_invalid = (
+        "ocs-ci config 'deployment_type' value "
+        f"'{config.ENV_DATA['deployment_type']}' is not valid, "
+        f"results of this test run are all invalid."
+    )
+
+    if config.ENV_DATA["deployment_type"] in ["ipi", "managed"]:
+        if is_lso_cluster():
+            # TODO: Implement functionality for Internal-Attached devices mode
+            # once ocs-ci issue #4545 is resolved
+            # https://github.com/red-hat-storage/ocs-ci/issues/4545
+            pytest.skip("Functionality not implemented for this deployment mode")
+        else:
+            new_node_name = node.delete_and_create_osd_node_ipi(osd_node_name)
+
+    elif config.ENV_DATA["deployment_type"] == "upi":
+        if config.ENV_DATA["platform"].lower() == constants.AWS_PLATFORM:
+            new_node_name = node.delete_and_create_osd_node_aws_upi(osd_node_name)
+        elif config.ENV_DATA["platform"].lower() == constants.VSPHERE_PLATFORM:
+            if is_lso_cluster():
+                new_node_name = node.delete_and_create_osd_node_vsphere_upi_lso(
+                    osd_node_name, use_existing_node=False
+                )
+            else:
+                new_node_name = node.delete_and_create_osd_node_vsphere_upi(
+                    osd_node_name, use_existing_node=False
+                )
+    else:
+        logger.error(msg_invalid)
+        pytest.fail(msg_invalid)
+
+    logger.info("Start node replacement verification steps...")
+    check_node_replacement_verification_steps(
+        osd_node_name, new_node_name, old_osd_node_names, old_osd_ids
+    )
 
 
 @brown_squad
@@ -227,3 +369,140 @@ class TestNonOCSTaintAndTolerations(E2ETest):
                 resource_count=count * replica_count,
             ), "New OSDs failed to reach running state"
             check_ceph_health_after_add_capacity(ceph_rebalance_timeout=2500)
+
+    @skipif_ocs_version("<=4.15")
+    def test_custom_taint_node_operations(self, nodes):
+        """
+        Test runs the following steps
+        1. Add toleration in storagecluster CR and odf-operator subscription.
+        2. Verify toleration applied in ODF subscription is reflecting
+           for other subscriptions, Ceph and nooba components or not(Check all 7 subscriptions).
+        3. Apply custom taint to all nodes.
+        4. Verify the pods in all nodes are running as per taints applied.
+        5. Reboot one of the nodes and check toleration on all odf pods on that node.
+        7.Replace one of the nodes and check all odf pods on that node are running.
+        """
+
+        logger.info("Taint all nodes with custom taint")
+        ocs_nodes = get_worker_nodes()
+        taint_nodes(nodes=ocs_nodes, taint_label="xyz=true:NoSchedule")
+
+        resource_name = constants.DEFAULT_CLUSTERNAME
+        if config.DEPLOYMENT["external_mode"]:
+            resource_name = constants.DEFAULT_CLUSTERNAME_EXTERNAL_MODE
+
+        logger.info("Add tolerations to storagecluster")
+        storagecluster_obj = ocp.OCP(
+            resource_name=resource_name,
+            namespace=config.ENV_DATA["cluster_namespace"],
+            kind=constants.STORAGECLUSTER,
+        )
+
+        tolerations = (
+            '{"tolerations": [{"effect": "NoSchedule", "key": "xyz",'
+            '"operator": "Equal", "value": "true"}, '
+            '{"effect": "NoSchedule", "key": "node.ocs.openshift.io/storage", '
+            '"operator": "Equal", "value": "true"}]}'
+        )
+        if config.ENV_DATA["mcg_only_deployment"]:
+            param = f'{{"spec": {{"placement":{{"noobaa-standalone":{tolerations}}}}}}}'
+        elif config.DEPLOYMENT["external_mode"]:
+            param = (
+                f'{{"spec": {{"placement": {{"all": {tolerations}, '
+                f'"noobaa-core": {tolerations}}}}}}}'
+            )
+        else:
+            param = (
+                f'"all": {tolerations}, "csi-plugin": {tolerations}, "csi-provisioner": {tolerations}, '
+                f'"mds": {tolerations}, "metrics-exporter": {tolerations}, "noobaa-core": {tolerations}, '
+                f'"rgw": {tolerations}, "toolbox": {tolerations}'
+            )
+            param = f'{{"spec": {{"placement": {{{param}}}}}}}'
+
+        storagecluster_obj.patch(params=param, format_type="merge")
+        logger.info(f"Successfully added toleration to {storagecluster_obj.kind}")
+
+        logger.info("Add tolerations to the subscription")
+        sub_list = ocp.get_all_resource_names_of_a_kind(kind=constants.SUBSCRIPTION)
+        param = (
+            '{"spec": {"config":  {"tolerations": '
+            '[{"effect": "NoSchedule", "key": "xyz", "operator": "Equal", '
+            '"value": "true"}]}}}'
+        )
+        for sub in sub_list:
+            if sub == constants.ODF_SUBSCRIPTION:
+                sub_obj = ocp.OCP(
+                    resource_name=sub,
+                    namespace=config.ENV_DATA["cluster_namespace"],
+                    kind=constants.SUBSCRIPTION,
+                )
+                sub_obj.patch(params=param, format_type="merge")
+                logger.info(f"Successfully added toleration to {sub}")
+        logger.info("Check custom toleration on all subscriptions")
+        retry(CommandFailed, tries=5, delay=10,)(
+            check_toleration_on_subscriptions
+        )(toleration_key="xyz")
+
+        if config.ENV_DATA["mcg_only_deployment"]:
+            logger.info("Wait some time after adding toleration for pods respin")
+            waiting_time = 60
+            logger.info(f"Waiting {waiting_time} seconds...")
+            time.sleep(waiting_time)
+            logger.info("Force delete all pods")
+            pod_list = get_all_pods(
+                namespace=config.ENV_DATA["cluster_namespace"],
+                exclude_selector=True,
+            )
+            for pod in pod_list:
+                pod.delete(wait=False)
+
+        logger.info("After edit noticed few pod respins as expected")
+        assert wait_for_pods_to_be_running(timeout=1200, sleep=15)
+
+        logger.info(
+            "Check custom toleration on all newly created pods under openshift-storage"
+        )
+        retry(AssertionError, tries=5, delay=10)(check_toleration_on_pods)(
+            toleration_key="xyz"
+        )
+
+        if config.DEPLOYMENT["external_mode"]:
+            cephcluster = CephClusterExternal()
+            cephcluster.cluster_health_check()
+        else:
+            self.sanity_helpers.health_check()
+
+        # Get the node list
+        node = get_nodes("worker", num_of_nodes=1)
+
+        # Reboot one master nodes
+        nodes.restart_nodes(node, wait=False)
+
+        # Wait some time after rebooting master
+        waiting_time = 40
+        logger.info(f"Waiting {waiting_time} seconds...")
+        time.sleep(waiting_time)
+
+        # Validate all nodes and services are in READY state and up
+        retry(
+            (CommandFailed, TimeoutError, AssertionError, ResourceWrongStatusException),
+            tries=60,
+            delay=15,
+        )(ocp.wait_for_cluster_connectivity(tries=400))
+        retry(
+            (CommandFailed, TimeoutError, AssertionError, ResourceWrongStatusException),
+            tries=60,
+            delay=15,
+        )(wait_for_nodes_status(timeout=1800))
+
+        # Check cluster is health ok
+        self.sanity_helpers.health_check(tries=40)
+        assert wait_for_pods_to_be_running(timeout=900, sleep=15)
+
+        # Replace the node
+        osd_node_name = select_osd_node_name()
+        delete_and_create_osd_node(osd_node_name)
+
+        # Check cluster is health ok
+        logger.info("Verifying All resources are Running and matches expected result")
+        self.sanity_helpers.health_check(tries=120)
