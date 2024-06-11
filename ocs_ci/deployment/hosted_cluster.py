@@ -462,20 +462,24 @@ def create_agent_service_config():
     pod_obj = OCP(kind=constants.POD, namespace="multicluster-engine")
     for pod_label in ["app=assisted-service", "app=assisted-image-service"]:
         pod_obj.get(selector=pod_label, retry=600, wait=20, silent=True, field_selector="status.phase=Running")
-        # for pod_data in TimeoutSampler(
-        #     timeout=600,
-        #     sleep=20,
-        #     func=get_pods_having_label,
-        #     label=pod_label,
-        #     namespace="multicluster-engine",
-        # ):
-        #     if len(pod_data):pass
-        # wait_for_pods_to_be_running(
-        #     namespace="multicluster-engine",
-        #     pod_names=[pod_items[0]["metadata"]["name"]],
-        #     timeout=180,
-        #     sleep=10,
-        # )
+
+
+def create_host_inventory():
+    """
+    Create InfraEnv resource for host inventory
+
+    """
+    template_yaml = os.path.join(
+        constants.TEMPLATE_DIR, "hosted-cluster", "infra-env.yaml"
+    )
+    agent_service_config_data = templating.load_yaml(template_yaml)
+    # TODO: Add custom OS image details
+    helpers.create_resource(**agent_service_config_data)
+
+    # Verify new pods that should be created
+    pod_obj = OCP(kind=constants.POD, namespace="multicluster-engine")
+    for pod_label in ["app=assisted-service", "app=assisted-image-service"]:
+        pod_obj.get(selector=pod_label, retry=600, wait=20, silent=True, field_selector="status.phase=Running")
 
 
 class HostedODF(HypershiftHostedOCP):
