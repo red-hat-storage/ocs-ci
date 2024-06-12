@@ -19,3 +19,7 @@ ENV_DATA:
   encryption_at_rest: true
   sc_encryption: true
   KMS_PROVIDER: azure-kv
+REPORTING:
+  polarion:
+    deployment_id: 'OCS-5798'
+
