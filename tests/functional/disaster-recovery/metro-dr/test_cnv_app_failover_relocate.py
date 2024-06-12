@@ -5,8 +5,9 @@ import time
 from ocs_ci.deployment.cnv import CNVInstaller
 from ocs_ci.framework.pytest_customization.marks import tier2
 from ocs_ci.framework import config
-from ocs_ci.helpers.cnv_helpers import run_dd_io, cal_md5sum_vm
+from ocs_ci.helpers.cnv_helpers import run_dd_io
 from ocs_ci.ocs import constants
+from ocs_ci.ocs.dr.dr_workload import validate_data_integrity_vm
 from ocs_ci.ocs.node import wait_for_nodes_status, get_node_objs
 from ocs_ci.helpers.dr_helpers import (
     enable_fence,
@@ -47,7 +48,7 @@ class TestCnvApplicationMDR:
 
         def finalizer():
             if (
-                self.primary_cluster_name
+                self.primary_cluster_name is not None
                 and get_fence_state(self.primary_cluster_name) == "Fenced"
             ):
                 enable_unfence(self.primary_cluster_name)
@@ -86,13 +87,16 @@ class TestCnvApplicationMDR:
         """
         md5sum_original = []
         md5sum_failover = []
+        self.primary_cluster_name = None
         vm_filepaths = ["/dd_file1.txt", "/dd_file2.txt", "/dd_file3.txt"]
 
         # Download and extract the virtctl binary to bin_dir. Skips if already present.
         CNVInstaller().download_and_extract_virtctl_binary()
 
         # Create CNV applications(appset+sub)
-        cnv_workloads = cnv_dr_workload(num_of_vm_subscription=1, num_of_vm_appset=1)
+        cnv_workloads = cnv_dr_workload(
+            num_of_vm_subscription=1, num_of_vm_appset_push=1, num_of_vm_appset_pull=1
+        )
         self.wl_namespace = cnv_workloads[0].workload_namespace
 
         set_current_primary_cluster_context(
@@ -113,6 +117,10 @@ class TestCnvApplicationMDR:
                     username=cnv_wl.vm_username,
                     verify=True,
                 )
+            )
+        for cnv_wl, md5sum in zip(cnv_workloads, md5sum_original):
+            logger.info(
+                f"Original checksum of file {vm_filepaths[0]} on VM {cnv_wl.workload_name}: {md5sum}"
             )
 
         # Shutting down primary cluster nodes
@@ -164,18 +172,15 @@ class TestCnvApplicationMDR:
                     verify=True,
                 )
             )
+        for cnv_wl, md5sum in zip(cnv_workloads, md5sum_original):
+            logger.info(
+                f"Original checksum of file {vm_filepaths[1]} on VM {cnv_wl.workload_name}: {md5sum}"
+            )
 
         # Validating data integrity after failing-over VMs to secondary managed cluster
-        for count, cnv_wl in enumerate(cnv_workloads):
-            md5sum_fail_out = cal_md5sum_vm(
-                cnv_wl.vm_obj, file_path=vm_filepaths[0], username=cnv_wl.vm_username
-            )
-            logger.info(
-                f"Validating MD5sum of file {vm_filepaths[0]} on VM: {cnv_wl.workload_name} after FailOver"
-            )
-            assert (
-                md5sum_original[count] == md5sum_fail_out
-            ), "Failed: MD5 comparison after FailOver"
+        validate_data_integrity_vm(
+            cnv_workloads, vm_filepaths[0], md5sum_original, "FailOver"
+        )
 
         # Start nodes if cluster is down
         wait_time = 120
@@ -245,16 +250,9 @@ class TestCnvApplicationMDR:
             )
 
         # Validating data integrity(file1) after relocating VMs back to primary managed cluster
-        for count, cnv_wl in enumerate(cnv_workloads):
-            md5sum_org = cal_md5sum_vm(
-                cnv_wl.vm_obj, file_path=vm_filepaths[0], username=cnv_wl.vm_username
-            )
-            logger.info(
-                f"Validating MD5sum of file {vm_filepaths[0]} on VM: {cnv_wl.workload_name} after Relocate"
-            )
-            assert (
-                md5sum_original[count] == md5sum_org
-            ), f"Failed: MD5 comparison of {vm_filepaths[0]} after relocation"
+        validate_data_integrity_vm(
+            cnv_workloads, vm_filepaths[0], md5sum_original, "Relocate"
+        )
 
         # Creating a file(file3) post relocate
         for cnv_wl in cnv_workloads:
@@ -266,13 +264,6 @@ class TestCnvApplicationMDR:
             )
 
         # Validating data integrity(file2) after relocating VMs back to primary managed cluster
-        for count, cnv_wl in enumerate(cnv_workloads):
-            md5sum_fail = cal_md5sum_vm(
-                cnv_wl.vm_obj, file_path=vm_filepaths[1], username=cnv_wl.vm_username
-            )
-            logger.info(
-                f"Validating MD5sum of file {vm_filepaths[1]} on VM: {cnv_wl.workload_name} after Relocate"
-            )
-            assert (
-                md5sum_failover[count] == md5sum_fail
-            ), f"Failed: MD5 comparison of {vm_filepaths[1]}after relocation"
+        validate_data_integrity_vm(
+            cnv_workloads, vm_filepaths[1], md5sum_original, "Relocate"
+        )
