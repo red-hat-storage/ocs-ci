@@ -5,6 +5,7 @@ import time
 import warnings
 
 import pandas as pd
+from selenium.common.exceptions import TimeoutException
 from ocs_ci.framework import config
 from ocs_ci.framework.logger_helper import log_step
 from ocs_ci.ocs.cluster import (
@@ -21,7 +22,7 @@ from ocs_ci.ocs import constants
 from ocs_ci.ocs.resources.storage_cluster import StorageCluster
 from ocs_ci.utility import version
 from ocs_ci.utility.utils import TimeoutSampler
-from selenium.common.exceptions import TimeoutException
+from ocs_ci.ocs.ui.base_ui import wait_for_element_to_be_visible
 
 logger = logging.getLogger(__name__)
 
@@ -656,20 +657,37 @@ class ValidationUI(PageNavigator):
         """
         Verify storage clients page in UI
 
-        Returns:
-        StorageClients: Storage Clients page object
-
         """
         self.refresh_web_console()
-        storage_client_obj = self.nav_to_storageclients_page()
+        self.nav_to_storageclients_page()
         strings_storage_clients_tab = ["Storage clients", "Name"]
         self.verify_page_contain_strings(
             strings_on_page=strings_storage_clients_tab, page_name="storage clients"
         )
         self.do_click(
-            self.validation_loc["generate_client_onboarding_token_button"],
+            self.storage_clients_loc["generate_client_onboarding_ticket"],
             enable_screenshot=True,
         )
+        # Starting from ODF 4.17 custom storage amount select option is available
+        if self.ocs_version_semantic >= version.VERSION_4_17:
+            select_storage_quota_window = [
+                "Add storage capacity for the client cluster to consume from the provider cluster."
+                "Storage quota: Unlimited",
+                "Unlimited",
+                "Custom",
+            ]
+            self.verify_page_contain_strings(
+                strings_on_page=select_storage_quota_window,
+                page_name="client_onboarding_token_page",
+            )
+            # Check default storage quota selected as 'Unlimited'
+            assert wait_for_element_to_be_visible(
+                self.validation_loc["storage_quota_unlimited"]
+            ).is_selected(), "Default value unlimited quota is not selected"
+
+            # Take screenshot
+            self.take_screenshot()
+
         strings_object_service_tab = [
             "Client onboarding token",
             "How to use this token",
@@ -678,7 +696,6 @@ class ValidationUI(PageNavigator):
             strings_on_page=strings_object_service_tab,
             page_name="client_onboarding_token_page",
         )
-        return storage_client_obj
 
     def calculate_est_days_and_average_manually(self):
         """
