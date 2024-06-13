@@ -81,7 +81,7 @@ class TestCnvApplicationMDR:
         node_restart_teardown,
     ):
         """
-        Tests to verify CNV based subscription and appset application deployment and
+        Tests to verify CNV based Subscription and AppSet(Push and Pull based) application deployment and
         fail-over/relocate between managed clusters.
 
         """
@@ -163,6 +163,7 @@ class TestCnvApplicationMDR:
                 phase=constants.STATUS_RUNNING,
             )
 
+        # Write new file(file2) on all VMs post FailOver
         for cnv_wl in cnv_workloads:
             md5sum_failover.append(
                 run_dd_io(
@@ -172,9 +173,9 @@ class TestCnvApplicationMDR:
                     verify=True,
                 )
             )
-        for cnv_wl, md5sum in zip(cnv_workloads, md5sum_original):
+        for cnv_wl, md5sum in zip(cnv_workloads, md5sum_failover):
             logger.info(
-                f"Original checksum of file {vm_filepaths[1]} on VM {cnv_wl.workload_name}: {md5sum}"
+                f"Checksum of files written after FailOver: {vm_filepaths[1]} on VM {cnv_wl.workload_name}: {md5sum}"
             )
 
         # Validating data integrity after failing-over VMs to secondary managed cluster
@@ -265,5 +266,5 @@ class TestCnvApplicationMDR:
 
         # Validating data integrity(file2) after relocating VMs back to primary managed cluster
         validate_data_integrity_vm(
-            cnv_workloads, vm_filepaths[1], md5sum_original, "Relocate"
+            cnv_workloads, vm_filepaths[1], md5sum_failover, "Relocate"
         )

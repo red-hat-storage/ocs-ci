@@ -881,7 +881,8 @@ def validate_data_integrity_vm(
             cnv_wl.vm_obj, file_path=file_name, username=cnv_wl.vm_username
         )
         log.info(
-            f"Comparing original checksum: {md5sum_original[count]} of {file_name} with {md5sum_new} after {app_state}"
+            f"Comparing original checksum: {md5sum_original[count]} of {file_name} with {md5sum_new}"
+            f" on {cnv_wl.workload_name}after {app_state}"
         )
         assert (
             md5sum_original[count] == md5sum_new
