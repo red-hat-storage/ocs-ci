@@ -13,6 +13,7 @@ from ocs_ci.framework.testlib import (
     skipif_managed_service,
     runs_on_provider,
     skipif_external_mode,
+    green_squad,
 )
 from ocs_ci.ocs.ui.validation_ui import ValidationUI
 
@@ -20,6 +21,7 @@ log = logging.getLogger(__name__)
 
 
 @tier1
+@green_squad
 @skipif_ocs_version("<4.15")
 @skipif_ocp_version("<4.15")
 @skipif_external_mode
