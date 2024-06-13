@@ -656,7 +656,7 @@ class ValidationUI(PageNavigator):
 
         """
         self.refresh_web_console()
-        _ = self.nav_to_storageclients_page()
+        self.nav_to_storageclients_page()
         strings_storage_clients_tab = ["Storage clients", "Name"]
         self.verify_page_contain_strings(
             strings_on_page=strings_storage_clients_tab, page_name="storage clients"
