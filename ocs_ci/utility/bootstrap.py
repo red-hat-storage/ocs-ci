@@ -79,9 +79,8 @@ def get_gather_bootstrap_node_data():
         return get_node_data_vsphere()
     else:
         raise UnsupportedPlatformError(
-            "Platform '%s' is not supported, "
-            "unable to retrieve gather bootstrap node data",
-            platform,
+            f"Platform {platform} is not supported, "
+            "unable to retrieve gather bootstrap node data"
         )
 
 
