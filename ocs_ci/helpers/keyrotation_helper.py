@@ -6,6 +6,8 @@ from ocs_ci.ocs import constants
 from ocs_ci.ocs.exceptions import CommandFailed
 from ocs_ci.framework import config
 from ocs_ci.ocs.resources.pvc import get_deviceset_pvcs
+from ocs_ci.ocs.exceptions import UnexpectedBehaviour
+from ocs_ci.utility.retry import retry
 
 log = logging.getLogger(__name__)
 
@@ -259,7 +261,13 @@ class OSDKeyrotation(KeyRotation):
         Initializes RookKeyrotation object.
         """
         super().__init__()
-        self.deviceset = [pvc.name for pvc in get_deviceset_pvcs()]
+        self.deviceset = self._get_deviceset()
+
+    def _get_deviceset(self):
+        """
+        Listing deviceset for OSD.
+        """
+        return [pvc.name for pvc in get_deviceset_pvcs()]
 
     def is_osd_keyrotation_enabled(self):
         """
@@ -306,3 +314,39 @@ class OSDKeyrotation(KeyRotation):
         dmcrypt_key = self._exec_oc_cmd(cmd=cmd, out_yaml_format=False)
         log.info(f"dmcrypt-key of device {device} is {dmcrypt_key}")
         return dmcrypt_key
+
+    def verify_keyrotation(self, old_keys, tries=10, delay=20):
+        """
+        Verify Keyrotation is suceeded for all OSD devices.
+
+        Args:
+            old_keys (dict): osd devices and their keys.
+
+        Returns:
+            bool: True if all OSD keyrotation is happend, orherwise False.
+        """
+        log.info("Verifying OSD keyrotation is happening")
+
+        @retry(UnexpectedBehaviour, tries=tries, delay=delay)
+        def compare_old_with_new_keys():
+            for device in self._get_deviceset():
+                osd_keys_after_rotation = self.get_osd_dm_crypt(device)
+                log.info(
+                    f"Fetching New Key for device {device}: {osd_keys_after_rotation}"
+                )
+                if old_keys[device] == osd_keys_after_rotation:
+                    log.info(f"Keyrotation Still not happend for device {device}")
+                    raise UnexpectedBehaviour(
+                        f"Keyrotation is not happened for the device {device}"
+                    )
+                log.info(f"Keyrotation is happend for device {device}")
+            return True
+
+        try:
+            compare_old_with_new_keys()
+        except UnexpectedBehaviour:
+            log.error("Key rotation is Not happend after schedule is passed. ")
+            assert False
+
+        log.info("Keyrotation is sucessfully done for the all OSD.")
+        return True
