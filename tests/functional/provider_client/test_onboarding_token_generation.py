@@ -1,5 +1,6 @@
 import logging
 import pytest
+import time
 
 from ocs_ci.ocs.resources import pod
 from ocs_ci.ocs import constants, ocp
@@ -55,22 +56,22 @@ class TestOnboardingTokenGeneration(ManageTest):
             3. user can generate onboarding token by selecting this option.
         """
         # Respin ux-backend-server pod
-        ux_pod_objs = pod.get_all_pods(
+        ux_pod = pod.get_pods_having_label(
+            label=constants.UX_BACKEND_SERVER_LABEL,
             namespace=config.ENV_DATA["cluster_namespace"],
-            selector=constants.UX_BACKEND_SERVER_LABEL,
         )
-        pod.delete_pods(pod_objs=ux_pod_objs[0])
+        ux_pod_obj = pod.Pod(**ux_pod[0])
 
-        # Wait untill ux backend server pod's recovery
-        self.pod_obj.wait_for_resource(
-            condition=constants.STATUS_RUNNING,
-            selector=constants.UX_BACKEND_SERVER_LABEL,
-            resource_count=1,
-            timeout=180,
-            sleep=5,
+        ux_pod_obj.delete()
+        log.info("wait some time for another ux-backend-server pod to come up")
+        time.sleep(30)
+        ux_pod = pod.get_pods_having_label(
+            label=constants.UX_BACKEND_SERVER_LABEL,
+            namespace=config.ENV_DATA["cluster_namespace"],
         )
-        log.info("ux backed server pod is up and running")
-        assert pod.validate_pods_are_respinned_and_running_state(ux_pod_objs)
+        ux_pod_obj = pod.Pod(**ux_pod[0])
+        log.info("ux backed server pod respinned")
+        assert pod.validate_pods_are_respinned_and_running_state([ux_pod_obj])
 
     def test_onboarding_token_generation_option_is_available_in_ui(
         self, setup_ui_class
@@ -98,20 +99,3 @@ class TestOnboardingTokenGeneration(ManageTest):
             ), f"{secret_name} does not exist in {config.ENV_DATA['cluster_namespace']} namespace"
 
         ValidationUI().verify_storage_clients_page()
-
-    def test_onboarding_token_generation_from_ui(self):
-        """
-        Test to verify onboarding token generation from ui
-
-        Steps:
-            1. Create a hcp cluster from a provider cluster
-            2. Generate onboarding token from provider
-                storage-->storage clients-->generate clientonboarding token
-            3. Use the generated token to onboard a storageclient from the hcp cluster
-            4. Check storageclient is connected successfully
-        """
-        from tests.libtest.test_provider_create_hosted_cluster import TestProviderHosted
-
-        test_hosted_client = TestProviderHosted()
-        test_hosted_client.test_deploy_OCP_and_setup_ODF_client_on_hosted_clusters()
-        test_hosted_client.test_storage_client_connected()
