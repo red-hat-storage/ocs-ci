@@ -579,7 +579,7 @@ def process_cluster_cli_params(config):
         pytest.exit("--html option must be provided to send email reports")
     get_cli_param(config, "squad_analysis")
     get_cli_param(config, "-m")
-    osd_size = get_cli_param(config, "--osd-size")
+    osd_size = get_cli_param(config, f"--osd-size{suffix}")
     if osd_size:
         ocsci_config.ENV_DATA["device_size"] = osd_size
     ocp_version = get_cli_param(config, "--ocp-version")
