@@ -274,29 +274,29 @@ class ValidationUI(PageNavigator):
         1. Validate ODF console plugin is enabled, if not enable it
         2. Navigate to ODF Default first tab
         3. Verify if Overview tab is active
-        3.5 Ensure used raw capacity string in System Capacity card
-        4. Verify if Storage System popup works
-        5. Ensure that Block and File status, on Storage System popup is Ready
-        6. Navigate to Storage System details via Storage System popup
-        7. Verify only one Block Pool present on Storage System details page - optional. No BlockPools in External mode
-        8. Navigate Storage System via breadcrumb
-        9. Verify if Overview tab is active
-        10. Verify if System Capacity Card is present
-        11. Navigate to Storage System details via System Capacity Card - optional. Card not presented in External mode
-        12. Verify if Storage System details breadcrumb is present - optional. If step 11 was performed
-        13. Navigate to ODF Overview tab via tab bar - optional. If step 11 was performed
-        14. Verify if Performance Card is present and link works
-        15. Navigate to Storage System details via Performance Card
-        16. Verify if Storage System details breadcrumb is present and link works
-        17. Navigate ODF Backing store tab via Object Storage tab or PageNavigator
-        18. Verify if Backing Store is present and link to Backing Store resource works
-        19. Navigate to Backing Store tab via breadcrumb
-        20. Navigate to Bucket class tab
-        21. Navigate to the default Bucket Class details via Bucket Class tab
-        22. Verify the status of a default Bucket Class
-        23. Navigate to Bucket class via breadcrumb
-        24. Navigate to Namespace Store tab via Bucket Class tab
-        25. Navigate to ODF Overview tab via tab bar
+        4 Ensure used raw capacity string in System Capacity card
+        5. Verify if Storage System popup works
+        6. Ensure that Block and File status, on Storage System popup is Ready
+        7. Navigate to Storage System details via Storage System popup
+        8. Verify only one Block Pool present on Storage System details page - optional. No BlockPools in External mode
+        9. Navigate Storage System via breadcrumb
+        10. Verify if Overview tab is active
+        11. Verify if System Capacity Card is present
+        12. Navigate to Storage System details via System Capacity Card - optional. Card not presented in External mode
+        13. Verify if Storage System details breadcrumb is present - optional. If step 11 was performed
+        14. Navigate to ODF Overview tab via tab bar - optional. If step 11 was performed
+        15. Verify if Performance Card is present and link works
+        16. Navigate to Storage System details via Performance Card
+        17. Verify if Storage System details breadcrumb is present and link works
+        18. Navigate ODF Backing store tab via Object Storage tab or PageNavigator
+        19. Verify if Backing Store is present and link to Backing Store resource works
+        20. Navigate to Backing Store tab via breadcrumb
+        21. Navigate to Bucket class tab
+        22. Navigate to the default Bucket Class details via Bucket Class tab
+        23. Verify the status of a default Bucket Class
+        24. Navigate to Bucket class via breadcrumb
+        25. Navigate to Namespace Store tab via Bucket Class tab
+        26. Navigate to ODF Overview tab via tab bar
         """
         res_dict = {}
 
