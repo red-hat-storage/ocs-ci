@@ -1,6 +1,7 @@
 """
 Storage client related functions
 """
+import json
 import logging
 import tempfile
 import time
@@ -14,6 +15,9 @@ from ocs_ci.utility import templating, version
 from ocs_ci.utility.retry import retry
 from ocs_ci.helpers.managed_services import (
     get_all_storageclassclaims,
+)
+from ocs_ci.utility.utils import (
+    exec_cmd,
 )
 
 log = logging.getLogger(__name__)
@@ -551,3 +555,58 @@ class StorageClient:
         self.verify_storagerequest_exists(
             storageclient_name=storageclient_name, namespace=namespace
         )
+
+    def fetch_storage_consumer_name_for_storageclient(
+        self,
+        storage_client_name,
+        namespace=config.ENV_DATA["cluster_namespace"],
+    ):
+        """
+        This method is to fetch consumer name for a storageclient
+
+        Args:
+            storageclient_name (str): Name of the storageclient to fetch consumer name.
+            namespace (str): Namespace where the storageclient is present.
+
+        Returns:
+            consumer_name (str): consumer name
+                                example- storageconsumer-e5766b2d-e770-456f-8c9f-cc84140f8455
+
+        """
+        cmd = (
+            f"oc get storageconsumer -n {namespace} -o json | jq '.items[] |"
+            "select(.status.client.name == {storage_client_name})'"
+        )
+        res = exec_cmd(cmd, shell=True)
+        if res.returncode != 0:
+            log.error(f"Failed to fetch storage consumer details\n{res.stderr}")
+        consumer_details = res.stdout.decode()
+        consumer_data = json.loads(consumer_details)
+        log.info(
+            f"Storage consumer details for {storage_client_name} is : {consumer_data}"
+        )
+        consumer_name = consumer_data["metadata"]["name"]
+        return consumer_name
+
+    def delete_storageclaim(
+        self, storage_claim_name, namespace=config.ENV_DATA["cluster_namespace"]
+    ):
+        """
+        This method is to delete a storage claim
+
+        Args:
+            storageclient_name (str): Name of the storageclient to fetch consumer name.
+            namespace (str): Namespace where the storageclient is present.
+
+        Returns:
+            (bool): If claim gets deleted successfully
+
+        """
+        if self.ocs_version >= version.VERSION_4_16:
+            cmd = f"oc delete storageclaim {storage_claim_name} -n {namespace}"
+        else:
+            cmd = f"oc delete storageclassclaim {storage_claim_name} -n {namespace}"
+        res = exec_cmd(cmd, shell=True)
+        if res.returncode != 0:
+            log.error(f"Failed to delete storageclaim\n{storage_claim_name}")
+        return res.returncode == 0
