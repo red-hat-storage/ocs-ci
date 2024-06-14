@@ -4248,6 +4248,22 @@ def snapshot_restore_factory_fixture(request):
         ):
             restore_pvc_yaml = restore_pvc_yaml or constants.CSI_LVM_PVC_RESTORE_YAML
             no_interface = True
+        elif (
+            ocsci_config.ENV_DATA["platform"].lower() in constants.HCI_PC_OR_MS_PLATFORM
+        ):
+            storageclass = storageclass or vol_snapshot_class
+            storageclass_obj = OCP(kind="storageclass", resource_name=storageclass)
+            sc_data = storageclass_obj.get(resource_name=storageclass)
+            if sc_data["provisioner"] == constants.RBD_PROVISIONER:
+                restore_pvc_yaml = (
+                    restore_pvc_yaml or constants.CSI_RBD_PVC_RESTORE_YAML
+                )
+                interface = constants.CEPHBLOCKPOOL
+            elif sc_data["provisioner"] == constants.CEPHFS_PROVISIONER:
+                restore_pvc_yaml = (
+                    restore_pvc_yaml or constants.CSI_CEPHFS_PVC_RESTORE_YAML
+                )
+                interface = constants.CEPHFILESYSTEM
 
         restored_pvc = create_restore_pvc(
             sc_name=storageclass,
