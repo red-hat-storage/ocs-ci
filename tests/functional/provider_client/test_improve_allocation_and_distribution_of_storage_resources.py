@@ -1,49 +1,24 @@
 import pytest
 import logging
 
-# import tempfile
-# import time
-
-
-# from ocs_ci.framework import config
+from ocs_ci.framework import config
 from ocs_ci.ocs import constants
-
-# from ocs_ci.deployment.helpers.lso_helpers import setup_local_storage
-# from ocs_ci.ocs.node import label_nodes, get_all_nodes, get_node_objs
-# from ocs_ci.utility.retry import retry
-# from ocs_ci.ocs.ui.validation_ui import ValidationUI
-# from ocs_ci.ocs.ui.base_ui import login_ui, close_browser
-# from ocs_ci.ocs.utils import (
-#     setup_ceph_toolbox,
-#     enable_console_plugin,
-#     run_cmd,
-# )
-# from ocs_ci.utility.utils import (
-#     wait_for_machineconfigpool_status,
-# )
-# from ocs_ci.utility import templating, version
-
-# from ocs_ci.deployment.deployment import Deployment, create_catalog_source
-# from ocs_ci.deployment.baremetal import clean_disk
-# from ocs_ci.ocs.resources.storage_cluster import (
-#     verify_storage_cluster,
-#     check_storage_client_status,
-# )
-# from ocs_ci.ocs.resources.catalog_source import CatalogSource
-# from ocs_ci.ocs.bucket_utils import check_pv_backingstore_type
-# from ocs_ci.ocs.resources import pod
+from ocs_ci.ocs.resources.storage_client import StorageClient
 from ocs_ci.helpers.helpers import (
     get_all_storageclass_names,
     verify_block_pool_exists,
+    create_storage_class,
+    get_cephfs_data_pool_name,
+    create_ceph_block_pool,
+)
+from ocs_ci.ocs.rados_utils import (
     verify_cephblockpool_status,
     check_phase_of_rados_namespace,
 )
-
-# from ocs_ci.ocs.exceptions import CommandFailed
-from ocs_ci.helpers.managed_services import verify_storageclient
 from ocs_ci.framework.testlib import (
     skipif_ocs_version,
     ManageTest,
+    green_squad,
     tier1,
     skipif_ocp_version,
     skipif_managed_service,
@@ -55,6 +30,7 @@ log = logging.getLogger(__name__)
 
 
 @tier1
+@green_squad
 @skipif_ocs_version("<4.16")
 @skipif_ocp_version("<4.16")
 @skipif_external_mode
@@ -66,27 +42,43 @@ class TestStorageResourceAllocationAndDistribution(ManageTest):
         """
         Setup method for the class
 
-        1. Create storageclient for the provider
 
         """
+        self.storage_client = StorageClient()
+        self.storage_class_claims = [
+            constants.CEPHBLOCKPOOL_SC,
+            constants.CEPHFILESYSTEM_SC,
+        ]
+        self.native_storageclient_name = "ocs-storagecluster"
 
-    def test_storage_allocation_for_multiple_storageclients_using_same_storageprofile_for_storageclaims(
+    def test_storage_allocation_for_a_storageclient_for_storageclaims_creation(
         self,
+        secret_factory,
     ):
         """
-        For multiple clients to the same provider, and for each client StorageClaim is
-        created using the same Storage profile name.
-        at Provider side:
-        1. Verify storageclass creation works as expected
-        2. Verify that only one CephBlockPool gets created
-        3. Verify for each storageclaim creates a new radosnamespace corresponding to
-        the storageprofile check the radosnamespaces are in "Ready" status
-        Note: Storageclients are clusterscoped.
-        4. Verify data is isolated between the consumers sharing the same blockpool
-        """
+        This test is to verify that for storageclaims created for a storageclient new radosnamespaces gets created
+        using same or different storageprofiles.
 
-        # Validate storageclaims are Ready and associated storageclasses are created
-        verify_storageclient()
+        validate at Provider side:
+        1. Verify that only one CephBlockPool remains
+        2. Verify for each block type storageclaim creates a new radosnamespace corresponding to
+        the storageprofile check the radosnamespaces are in "Ready" status
+        3. Verify storageclassrequests gets created for the storageclaim
+        4. Verify storageclasses gets created
+        5. Verify storgeclass creation works as expected.
+        6. Verify the same behavior for storageclaims created with different storageprofiles
+        7. Verify data is isolated between the consumers sharing the same blockpool
+
+        """
+        # Check if native storageclient available else create storageclient
+        if not self.storage_client.check_storageclient_availability(
+            storage_client_name=self.native_storageclient_name
+        ):
+
+            self.storage_client.create_native_storage_client(
+                namespace_to_create_storage_client=config.ENV_DATA["cluster_namespace"]
+            )
+            self.storage_client.verify_native_storageclient()
 
         # Validate cephblockpool created
         assert verify_block_pool_exists(
@@ -100,8 +92,228 @@ class TestStorageResourceAllocationAndDistribution(ManageTest):
         ), "The radosnamespace is not in Ready phase"
 
         # Validate storageclassrequests created
-        storage_class_classes = get_all_storageclass_names()
+        assert self.storage_client.verify_storagerequest_exists(
+            storageclient_name=self.native_storageclient_name
+        ), "Storageclass requests are unavailable"
+
+        # Verify storageclasses gets created
+        storage_classes = get_all_storageclass_names()
         for storage_class in self.storage_class_claims:
             assert (
-                storage_class in storage_class_classes
+                storage_class in storage_classes
             ), "Storage classes ae not created as expected"
+
+        # Verify storgeclass creation works as expected
+        secret = secret_factory(interface=self.interface)
+        sc_obj = create_storage_class(
+            interface_type=constants.CEPHBLOCKPOOL,
+            interface_name=get_cephfs_data_pool_name(),
+            secret_name=secret.name,
+        )
+        assert sc_obj, f"Failed to create {sc_obj.name} storage class"
+        log.info(f"Storage class: {sc_obj.name} created successfully")
+
+        # Verify the radosnamespace is dispalying in ceph-csi-configs
+
+        # Create a new blockpool
+        cbp_obj = create_ceph_block_pool()
+        assert cbp_obj, "Failed to create block pool"
+
+        # Create storageclaim with the created blockpool value
+        self.storage_client.create_storageclaim(
+            storageclaim_name="claim-created-on-added-blockpool",
+            type="block",
+            storage_client_name=self.native_storageclient_name,
+            storageprofile=cbp_obj.name,
+        )
+
+        # Verify storageclaim created successfully
+        self.storage_client.verify_storage_claim_status(
+            storage_client_name=self.native_storageclient_name
+        )
+
+        # Validate a new radosnamespace created and in 'Ready' status
+        assert (
+            check_phase_of_rados_namespace()
+        ), "The radosnamespace is not in Ready phase"
+
+        # Validate storageclassrequests created
+        assert self.storage_client.verify_storagerequest_exists(
+            storageclient_name=self.native_storageclient_name
+        ), "Storageclass requests are unavailable"
+
+    def test_storage_allocation_for_hcp_cluster_storageclient_for_storageclaims_creation(
+        self,
+        secret_factory,
+    ):
+        """
+        This test is to verify that for storageclaims created for a storageclient new radosnamespaces gets created
+        using same or different storageprofiles.
+
+        validate at Provider side:
+        1. Verify that only one CephBlockPool remains
+        2. Verify for each block type storageclaim creates a new radosnamespace corresponding to
+        the storageprofile check the radosnamespaces are in "Ready" status
+        3. Verify storageclassrequests gets created for the storageclaim
+        4. Verify storageclasses gets created
+        5. Verify storgeclass creation works as expected.
+        6. Verify the same behavior for storageclaims created with different storageprofiles
+        7. Verify data is isolated between the consumers sharing the same blockpool
+
+        """
+        from tests.libtest.test_provider_create_hosted_cluster import TestProviderHosted
+
+        test_hosted_client = TestProviderHosted()
+        test_hosted_client.test_deploy_OCP_and_setup_ODF_client_on_hosted_clusters()
+        test_hosted_client.test_storage_client_connected()
+        # Validate cephblockpool created
+        assert verify_block_pool_exists(
+            constants.DEFAULT_BLOCKPOOL
+        ), f"{constants.DEFAULT_BLOCKPOOL} is not created"
+        assert verify_cephblockpool_status(), "the cephblockpool is not in Ready phase"
+
+        # Validate radosnamespace created and in 'Ready' status
+        assert (
+            check_phase_of_rados_namespace()
+        ), "The radosnamespace is not in Ready phase"
+
+        # Validate storageclassrequests created
+        assert self.storage_client.verify_storagerequest_exists(
+            storageclient_name=self.native_storageclient_name
+        ), "Storageclass requests are unavailable"
+
+        # Verify storageclasses gets created
+        storage_classes = get_all_storageclass_names()
+        for storage_class in self.storage_class_claims:
+            assert (
+                storage_class in storage_classes
+            ), "Storage classes ae not created as expected"
+
+        # Verify storgeclass creation works as expected
+        secret = secret_factory(interface=self.interface)
+        sc_obj = create_storage_class(
+            interface_type=constants.CEPHBLOCKPOOL,
+            interface_name=get_cephfs_data_pool_name(),
+            secret_name=secret.name,
+        )
+        assert sc_obj, f"Failed to create {sc_obj.name} storage class"
+        log.info(f"Storage class: {sc_obj.name} created successfully")
+
+        # Verify the radosnamespace is dispalying in ceph-csi-configs
+
+        # Create a new blockpool
+        cbp_obj = create_ceph_block_pool()
+        assert cbp_obj, "Failed to create block pool"
+
+        # Create storageclaim with the created blockpool value
+        self.storage_client.create_storageclaim(
+            storageclaim_name="claim-created-on-added-blockpool",
+            type="block",
+            storage_client_name=self.native_storageclient_name,
+            storageprofile=cbp_obj.name,
+        )
+
+        # Verify storageclaim created successfully
+        self.storage_client.verify_storage_claim_status(
+            storage_client_name=self.native_storageclient_name
+        )
+
+        # Validate a new radosnamespace created and in 'Ready' status
+        assert (
+            check_phase_of_rados_namespace()
+        ), "The radosnamespace is not in Ready phase"
+
+        # Validate storageclassrequests created
+        assert self.storage_client.verify_storagerequest_exists(
+            storageclient_name=self.native_storageclient_name
+        ), "Storageclass requests are unavailable"
+
+    def test_accociated_radosnamespace_gets_deleted_after_deletion_of_storageclient(
+        self,
+        secret_factory,
+    ):
+        """
+        This test is to verify that accociated radosnamespace will be deleted after deletion of a storageclient.
+
+        validate at Provider side:
+        1. Verify that only one CephBlockPool remains
+        2. Verify for each block type storageclaim creates a new radosnamespace corresponding to
+        the storageprofile check the radosnamespaces are in "Ready" status
+        3. Verify storageclassrequests gets created for the storageclaim
+        4. Verify storageclasses gets created
+        5. Verify storgeclass creation works as expected.
+        6. Verify the same behavior for storageclaims created with different storageprofiles
+        7. Verify data is isolated between the consumers sharing the same blockpool
+
+        """
+        # Check if native storageclient available else create storageclient
+        if not self.storage_client.check_storageclient_availability(
+            storage_client_name=self.native_storageclient_name
+        ):
+
+            self.storage_client.create_native_storage_client(
+                namespace_to_create_storage_client=config.ENV_DATA["cluster_namespace"]
+            )
+            self.storage_client.verify_native_storageclient()
+
+        # Validate cephblockpool created
+        assert verify_block_pool_exists(
+            constants.DEFAULT_BLOCKPOOL
+        ), f"{constants.DEFAULT_BLOCKPOOL} is not created"
+        assert verify_cephblockpool_status(), "the cephblockpool is not in Ready phase"
+
+        # Validate radosnamespace created and in 'Ready' status
+        assert (
+            check_phase_of_rados_namespace()
+        ), "The radosnamespace is not in Ready phase"
+
+        # Validate storageclassrequests created
+        assert self.storage_client.verify_storagerequest_exists(
+            storageclient_name=self.native_storageclient_name
+        ), "Storageclass requests are unavailable"
+
+        # Verify storageclasses gets created
+        storage_classes = get_all_storageclass_names()
+        for storage_class in self.storage_class_claims:
+            assert (
+                storage_class in storage_classes
+            ), "Storage classes ae not created as expected"
+
+        # Verify storgeclass creation works as expected
+        secret = secret_factory(interface=self.interface)
+        sc_obj = create_storage_class(
+            interface_type=constants.CEPHBLOCKPOOL,
+            interface_name=get_cephfs_data_pool_name(),
+            secret_name=secret.name,
+        )
+        assert sc_obj, f"Failed to create {sc_obj.name} storage class"
+        log.info(f"Storage class: {sc_obj.name} created successfully")
+
+        # Verify the radosnamespace is dispalying in ceph-csi-configs
+
+        # Create a new blockpool
+        cbp_obj = create_ceph_block_pool()
+        assert cbp_obj, "Failed to create block pool"
+
+        # Create storageclaim with the created blockpool value
+        self.storage_client.create_storageclaim(
+            storageclaim_name="claim-created-on-added-blockpool",
+            type="block",
+            storage_client_name=self.native_storageclient_name,
+            storageprofile=cbp_obj.name,
+        )
+
+        # Verify storageclaim created successfully
+        self.storage_client.verify_storage_claim_status(
+            storage_client_name=self.native_storageclient_name
+        )
+
+        # Validate a new radosnamespace created and in 'Ready' status
+        assert (
+            check_phase_of_rados_namespace()
+        ), "The radosnamespace is not in Ready phase"
+
+        # Validate storageclassrequests created
+        assert self.storage_client.verify_storagerequest_exists(
+            storageclient_name=self.native_storageclient_name
+        ), "Storageclass requests are unavailable"
