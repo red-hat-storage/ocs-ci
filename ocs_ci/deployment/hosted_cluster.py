@@ -27,8 +27,6 @@ from ocs_ci.ocs.resources.catalog_source import CatalogSource
 from ocs_ci.ocs.resources.csv import check_all_csvs_are_succeeded
 from ocs_ci.ocs.resources.pod import (
     wait_for_pods_to_be_in_statuses_concurrently,
-    wait_for_pods_to_be_running,
-    get_pods_having_label,
 )
 from ocs_ci.utility import templating, version
 from ocs_ci.utility.managedservice import generate_onboarding_token
