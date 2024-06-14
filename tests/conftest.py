@@ -118,6 +118,10 @@ from ocs_ci.utility.environment_check import (
     get_status_before_execution,
     get_status_after_execution,
 )
+from ocs_ci.utility.resource_check import (
+    create_resource_dct,
+    get_environment_status_after_execution,
+)
 from ocs_ci.utility.flexy import load_cluster_info
 from ocs_ci.utility.kms import is_kms_enabled, get_ksctl_cli
 from ocs_ci.utility.prometheus import PrometheusAPI
@@ -1801,6 +1805,10 @@ def cluster(
 
 @pytest.fixture(scope="class")
 def environment_checker(request):
+    if ocsci_config.RUN["disable_environment_checker"]:
+        log.debug("Skipping environment checker")
+        return
+
     node = request.node
     # List of marks for which we will ignore the leftover checker
     marks_to_ignore = [m.mark for m in [deployment, ignore_leftovers]]
@@ -1822,13 +1830,51 @@ def environment_checker(request):
     }:
         log.error(
             "Environment checker is NOT IMPLEMENTED for Fusion service and provider/client hci setup."
-            "This needds to be updated"
+            "This needs to be updated"
         )
     else:
         request.addfinalizer(
             partial(get_status_after_execution, exclude_labels=exclude_labels)
         )
         get_status_before_execution(exclude_labels=exclude_labels)
+
+
+@pytest.fixture(scope="class")
+def resource_checker(request):
+    if not ocsci_config.RUN["resource_checker"]:
+        log.debug("Skipping resource checker")
+        return
+
+    create_resource_dct()
+    node = request.node
+    # List of marks for which we will ignore the leftover checker
+    marks_to_ignore = [m.mark for m in [deployment, ignore_leftovers]]
+    # app labels of resources to be excluded for leftover check
+    exclude_labels = [
+        constants.must_gather_pod_label,
+        constants.S3CLI_APP_LABEL,
+        constants.MUST_GATHER_HELPER_LABEL,
+    ]
+    for mark in node.iter_markers():
+        if mark in marks_to_ignore:
+            return
+        if mark.name == ignore_leftover_label.name:
+            exclude_labels.extend(list(mark.args))
+    if ocsci_config.ENV_DATA["platform"] in {
+        constants.FUSIONAAS_PLATFORM,
+        constants.HCI_BAREMETAL,
+        constants.HCI_VSPHERE,
+    }:
+        log.error(
+            "Resource checker is NOT IMPLEMENTED for Fusion service and provider/client hci setup."
+            "This needs to be updated"
+        )
+    else:
+        request.addfinalizer(
+            lambda: get_environment_status_after_execution(
+                exclude_labels=exclude_labels
+            )
+        )
 
 
 @pytest.fixture(scope="session")

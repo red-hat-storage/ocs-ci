@@ -373,9 +373,47 @@ class OCP(object):
         command = "create "
         if yaml_file:
             command += f"-f {yaml_file}"
+            if config.RUN["resource_checker"]:
+                yaml_dct = load_yaml(yaml_file)
+                kind = yaml_dct["kind"]
+                if kind == "PersistentVolume":
+                    config.RUN["RESOURCE_DICT_TEST"]["pv"].append(
+                        yaml_dct["metadata"]["name"]
+                    )
+                if kind == "Pod":
+                    config.RUN["RESOURCE_DICT_TEST"]["pod"].append(
+                        yaml_dct["metadata"]["name"]
+                    )
+                if kind == "StorageClass":
+                    config.RUN["RESOURCE_DICT_TEST"]["sc"].append(
+                        yaml_dct["metadata"]["name"]
+                    )
+                if kind == "PersistentVolumeClaim":
+                    config.RUN["RESOURCE_DICT_TEST"]["pvc"].append(
+                        yaml_dct["metadata"]["name"]
+                    )
+                if kind == "Namespace":
+                    config.RUN["RESOURCE_DICT_TEST"]["namespace"].append(
+                        yaml_dct["metadata"]["name"]
+                    )
+                if kind == "volumesnapshot":
+                    config.RUN["RESOURCE_DICT_TEST"]["vs"].append(
+                        yaml_dct["metadata"]["name"]
+                    )
+                if kind == "CephFileSystem":
+                    config.RUN["RESOURCE_DICT_TEST"]["cephfs"].append(
+                        yaml_dct["metadata"]["name"]
+                    )
+                if kind == "CephBlockPool":
+                    config.RUN["RESOURCE_DICT_TEST"]["cephbp"].append(
+                        yaml_dct["metadata"]["name"]
+                    )
+
         elif resource_name:
             # e.g "oc namespace my-project"
             command += f"{self.kind} {resource_name}"
+            if config.RUN["resource_checker"]:
+                config.RUN["RESOURCE_DICT_TEST"][self.kind] = resource_name
         if out_yaml_format:
             command += " -o yaml"
         output = self.exec_oc_cmd(command)
@@ -528,9 +566,11 @@ class OCP(object):
             bool: True in case project creation succeeded, False otherwise
         """
         ocp = OCP(kind="namespace")
-        exec_output = run_cmd(
-            f"oc new-project {project_name}", threading_lock=self.threading_lock
-        )
+        if config.RUN["custom_kubeconfig_location"]:
+            cmd = f'oc --kubeconfig {config.RUN["custom_kubeconfig_location"]} new-project {project_name}'
+        else:
+            cmd = f"oc new-project {project_name}"
+        exec_output = run_cmd(cmd, threading_lock=self.threading_lock)
         if any(
             pattern in exec_output
             for pattern in [
