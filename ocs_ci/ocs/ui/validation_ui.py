@@ -274,7 +274,7 @@ class ValidationUI(PageNavigator):
         1. Validate ODF console plugin is enabled, if not enable it
         2. Navigate to ODF Default first tab
         3. Verify if Overview tab is active
-        4 Ensure used raw capacity string in System Capacity card
+        4. Ensure used raw capacity string in System Capacity card
         5. Verify if Storage System popup works
         6. Ensure that Block and File status, on Storage System popup is Ready
         7. Navigate to Storage System details via Storage System popup
