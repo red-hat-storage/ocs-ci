@@ -128,10 +128,24 @@ class StorageClient:
             if enable_console:
                 enable_console_plugin(value="[odf-client-console]")
 
+    def check_storageclient_availability(self, storage_client_name):
+        """
+        Check if the storage client exists
+
+        Returns:
+            bool: True if storage client exists, False otherwise
+        """
+        return self.storage_client_obj.check_resource_existence(
+            timeout=120,
+            resource_name=storage_client_name,
+            should_exist=True,
+        )
+
     def create_storage_client(
         self,
         storage_provider_endpoint=None,
         onboarding_token=None,
+        native_client=False,
     ):
         """
         This method creates storage clients
@@ -139,18 +153,34 @@ class StorageClient:
         Inputs:
         storage_provider_endpoint (str): storage provider endpoint details.
         onboarding_token (str): onboarding token
+        native_client (bool): flag to indicate if the storageclient is nativeclient
 
         """
 
-        # Pull storage-client yaml data
-        log.info("Pulling storageclient CR data from yaml")
-        storage_client_data = templating.load_yaml(constants.STORAGE_CLIENT_YAML)
-        resource_name = storage_client_data["metadata"]["name"]
-        log.info(f"the resource name: {resource_name}")
+        if self.ocs_version < version.VERSION_4_16:
+            # Pull storage-client yaml data
+            log.info("Pulling storageclient CR data from yaml")
+            storage_client_data = templating.load_yaml(
+                constants.NATIVE_STORAGE_CLIENT_YAML
+            )
+            storage_client_name = storage_client_data["metadata"]["name"]
+            log.info(f"the resource name: {storage_client_name}")
+
+        else:
+            log.info("Pulling storageclient CR data from yaml")
+            storage_client_data = templating.load_yaml(
+                constants.PROVIDER_MODE_STORAGE_CLIENT
+            )
+            if native_client:
+                storage_client_data["metadata"]["name"] = "ocs-storagecluster"
+                storage_client_name = storage_client_data["metadata"]["name"]
+            else:
+                storage_client_name = storage_client_data["metadata"]["name"]
+            log.info(f"the resource name: {storage_client_name}")
 
         # Check storageclient is available or not
-        is_available = self.storage_client_obj.is_exist(
-            resource_name=resource_name,
+        is_available = self.check_storageclient_availability(
+            storage_client_name=storage_client_name,
         )
 
         if not is_available:
@@ -478,10 +508,12 @@ class StorageClient:
         onboarding_token = storage_clients.generate_client_onboarding_ticket()
 
         # Create ODF subscription for storage-client
-        self.odf_installation_on_client()
+        if self.ocs_version < version.VERSION_4_16:
+            self.odf_installation_on_client()
         self.create_storage_client(
             storage_provider_endpoint=storage_provider_endpoint,
             onboarding_token=onboarding_token,
+            native_client=True,
         )
 
         if self.ocs_version < version.VERSION_4_16:
