@@ -216,6 +216,7 @@ NETWORK_POLICY = "NetworkPolicy"
 INGRESSCONTROLLER = "ingresscontroller"
 PROVISIONING = "Provisioning"
 AGENT_SERVICE_CONFIG = "AgentServiceConfig"
+INFRA_ENV = "InfraEnv"
 
 # Provisioners
 AWS_EFS_PROVISIONER = "openshift.org/aws-efs"
