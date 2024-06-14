@@ -662,7 +662,6 @@ class Deployment(object):
         self.do_deploy_submariner()
         self.do_gitops_deploy()
         self.do_deploy_ocs()
-        self.do_deploy_oadp()
         self.do_deploy_rdr()
         self.do_deploy_fusion()
         self.do_deploy_odf_provider_mode()
