@@ -163,6 +163,18 @@ class TestCnvApplicationMDR:
                 phase=constants.STATUS_RUNNING,
             )
 
+        # Verify applications are deleted from old managed cluster(Fenced)
+        if not primary_cluster_down:
+            set_current_secondary_cluster_context(
+                cnv_workloads[0].workload_namespace, cnv_workloads[0].workload_type
+            )
+            for cnv_wl in cnv_workloads:
+                wait_for_all_resources_deletion(cnv_wl.workload_namespace)
+
+        set_current_primary_cluster_context(
+            self.wl_namespace, cnv_workloads[0].workload_type
+        )
+
         # Write new file(file2) on all VMs post FailOver
         for cnv_wl in cnv_workloads:
             md5sum_failover.append(
@@ -186,10 +198,6 @@ class TestCnvApplicationMDR:
         # Start nodes if cluster is down
         wait_time = 120
         if primary_cluster_down:
-            logger.info(
-                f"Waiting for {wait_time} seconds before starting nodes of previous primary cluster"
-            )
-            time.sleep(wait_time)
             nodes_multicluster[primary_cluster_index].start_nodes(node_objs)
             logger.info(
                 f"Waiting for {wait_time} seconds after starting nodes of previous primary cluster"
@@ -197,12 +205,12 @@ class TestCnvApplicationMDR:
             time.sleep(wait_time)
             wait_for_nodes_status([node.name for node in node_objs])
 
-        # Verify application are deleted from old managed cluster
-        set_current_secondary_cluster_context(
-            cnv_workloads[0].workload_namespace, cnv_workloads[0].workload_type
-        )
-        for cnv_wl in cnv_workloads:
-            wait_for_all_resources_deletion(cnv_wl.workload_namespace)
+            # Verify application are deleted from old managed cluster
+            set_current_secondary_cluster_context(
+                cnv_workloads[0].workload_namespace, cnv_workloads[0].workload_type
+            )
+            for cnv_wl in cnv_workloads:
+                wait_for_all_resources_deletion(cnv_wl.workload_namespace)
 
         # Un-fence the managed cluster
         enable_unfence(drcluster_name=self.primary_cluster_name)
