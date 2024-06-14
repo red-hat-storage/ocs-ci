@@ -310,6 +310,25 @@ def verify_cephblockpool_status(
     return phase == required_phase
 
 
+def get_rados_namespace_items(namespace=None):
+    """
+    Get available radosnamespace items
+
+    Args:
+        namespace(str): cluster namespace
+
+    Returns:
+        str: Returns rados_namespace_items
+    """
+    logger.info("Fetch radosnamespaces exist")
+    if not namespace:
+        namespace = config.ENV_DATA["cluster_namespace"]
+    rados_ns_obj = ocp.OCP(kind=constants.CEPHBLOCKPOOLRADOSNS, namespace=namespace)
+    result = rados_ns_obj.get()
+    sample = result["items"]
+    return sample
+
+
 def fetch_rados_namespaces(namespace=None):
     """
     Verify if rados namespace exists
@@ -321,11 +340,7 @@ def fetch_rados_namespaces(namespace=None):
         bool: True if the radosnamespace exists, False otherwise
     """
     logger.info("Fetch radosnamespaces exist")
-    if not namespace:
-        namespace = config.ENV_DATA["cluster_namespace"]
-    rados_ns_obj = ocp.OCP(kind=constants.CEPHBLOCKPOOLRADOSNS, namespace=namespace)
-    result = rados_ns_obj.get()
-    sample = result["items"]
+    sample = get_rados_namespace_items(namespace=namespace)
     rados_ns_list = [item.get("metadata").get("name") for item in sample]
     return rados_ns_list
 
@@ -353,6 +368,79 @@ def check_phase_of_rados_namespace(
         )
         phase = run_cmd(cmd=check_radosns_phase_cmd)
         return phase == required_phase
+
+
+def check_rados_namespace_available_for_a_consumer(
+    consumer_name, rados_ns_data, namespace=None
+):
+    """
+    Verify if rados namespace exists
+
+    Args:
+        namespace(str): cluster namespace
+        consumer_name(str): consumer_name
+        rados_ns_data (json): rados ns items
+
+    Returns:
+        bool: True if the radosnamespace exists, False otherwise
+    """
+    logger.info("Verifying if radosnamespace is available for a consumer")
+    if not namespace:
+        namespace = config.ENV_DATA["cluster_namespace"]
+
+    sample = get_rados_namespace_items(namespace=namespace)
+    data = json.loads(sample)
+    return (
+        data["metadata"]["labels"]["ocs.openshift.io/storageconsumer-name"]
+        == consumer_name
+    )
+
+
+def fetch_rados_namespace_for_a_consumer(consumer_name, namespace=None):
+    """
+    Verify if rados namespace exists
+
+    Args:
+        namespace(str): cluster namespace
+        consumer_name(str): consumer_name
+
+    Returns:
+        rados_ns_name (str): rados ns name for a consumer
+    """
+    logger.info("fetch rados ns created for a consumer")
+    if not namespace:
+        namespace = config.ENV_DATA["cluster_namespace"]
+    sample = get_rados_namespace_items(namespace=namespace)
+    data = json.loads(sample)
+    if check_rados_namespace_available_for_a_consumer(
+        consumer_name=consumer_name, rados_ns_data=data
+    ):
+        return data["metadata"]["name"]
+    else:
+        logger.error("Rados namespace is unavailable")
+
+
+def check_status_of_a_rados_namespace(
+    rados_ns_name, namespace=None, required_phase=constants.STATUS_READY
+):
+    """
+    Args:
+        namespace(str): cluster namespace
+        consumer_name(str): consumer_name
+        required_phase(str): required phase of the rados namespace
+
+    Returns:
+        bool: True if the radosnamespace is in expected status else False
+    """
+    if not namespace:
+        namespace = config.ENV_DATA["cluster_namespace"]
+
+    check_radosns_phase_cmd = (
+        f"oc get {constants.CEPHBLOCKPOOLRADOSNS} {rados_ns_name} -n {namespace} "
+        "-o=jsonpath='{.status.phase}'"
+    )
+    phase = run_cmd(cmd=check_radosns_phase_cmd)
+    return phase == required_phase
 
 
 def corrupt_pg(osd_deployment, pool_name, pool_object):
