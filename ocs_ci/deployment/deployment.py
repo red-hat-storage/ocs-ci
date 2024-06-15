@@ -1012,50 +1012,17 @@ class Deployment(object):
 
         # Create Multus Networks
         if config.ENV_DATA.get("is_multus_enabled"):
-            from ocs_ci.deployment.nmstate import NMStateInstaller
+            if config.ENV_DATA.get("multus_create_public_net"):
+                from ocs_ci.deployment.nmstate import NMStateInstaller
 
-            logger.info("Install NMState operator and create an instance")
-            nmstate_obj = NMStateInstaller()
-            nmstate_obj.running_nmstate()
-            logger.info("Configure NodeNetworkConfigurationPolicy on all worker nodes")
-            worker_node_names = get_worker_nodes()
-            for worker_node_name in worker_node_names:
-                worker_network_configuration = config.ENV_DATA["baremetal"]["servers"][
-                    worker_node_name
-                ]
-                node_network_configuration_policy = templating.load_yaml(
-                    constants.NODE_NETWORK_CONFIGURATION_POLICY
+                logger.info("Install NMState operator and create an instance")
+                nmstate_obj = NMStateInstaller()
+                nmstate_obj.running_nmstate()
+                from ocs_ci.helpers.helpers import (
+                    configure_node_network_configuration_policy_on_all_worker_nodes,
                 )
-                node_network_configuration_policy["spec"]["nodeSelector"][
-                    "kubernetes.io/hostname"
-                ] = worker_node_name
-                node_network_configuration_policy["metadata"][
-                    "name"
-                ] = worker_network_configuration[
-                    "node_network_configuration_policy_name"
-                ]
-                node_network_configuration_policy["spec"]["desiredState"]["interfaces"][
-                    0
-                ]["ipv4"]["address"][0]["ip"] = worker_network_configuration[
-                    "node_network_configuration_policy_ip"
-                ]
-                node_network_configuration_policy["spec"]["desiredState"]["interfaces"][
-                    0
-                ]["ipv4"]["address"][0]["prefix-length"] = worker_network_configuration[
-                    "node_network_configuration_policy_prefix_length"
-                ]
-                node_network_configuration_policy["spec"]["desiredState"]["routes"][
-                    "config"
-                ][0]["destination"] = worker_network_configuration[
-                    "node_network_configuration_policy_destination_route"
-                ]
-                public_net_yaml = tempfile.NamedTemporaryFile(
-                    mode="w+", prefix="multus_public", delete=False
-                )
-                templating.dump_data_to_temp_yaml(
-                    node_network_configuration_policy, public_net_yaml.name
-                )
-                run_cmd(f"oc create -f {public_net_yaml.name}")
+
+                configure_node_network_configuration_policy_on_all_worker_nodes()
 
             create_public_net = config.ENV_DATA["multus_create_public_net"]
             create_cluster_net = config.ENV_DATA["multus_create_cluster_net"]

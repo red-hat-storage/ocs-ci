@@ -4782,12 +4782,14 @@ def get_network_attachment_definitions(
     nad_name, namespace=config.ENV_DATA["cluster_namespace"]
 ):
     """
-    Get network_attachment_definitions obj
+    Get NetworkAttachmentDefinition obj
+
     Args:
         nad_name (str) : network_attachment_definition name
         namespace (str): Namespace of the resource
     Returns:
         network_attachment_definitions (obj) : network_attachment_definitions object
+
     """
     return OCP(
         kind=constants.NETWORK_ATTACHEMENT_DEFINITION,
@@ -4846,6 +4848,10 @@ def add_route_public_nad():
 
 
 def reset_all_osd_pods():
+    """
+    Reset all osd pods
+
+    """
     from ocs_ci.ocs.resources.pod import get_osd_pods
 
     osd_pod_objs = get_osd_pods()
@@ -4870,6 +4876,11 @@ def enable_csi_disable_holder_pods():
 
 
 def delete_csi_holder_pods():
+    """
+
+    Returns:
+
+    """
     from ocs_ci.ocs.utils import get_pod_name_by_pattern
     from ocs_ci.ocs.node import drain_nodes, schedule_nodes
 
@@ -4894,6 +4905,10 @@ def delete_csi_holder_pods():
 
 
 def configure_node_network_configuration_policy_on_all_worker_nodes():
+    """
+    Configure NodeNetworkConfigurationPolicy CR on each worker node in cluster
+
+    """
     from ocs_ci.ocs.node import get_worker_nodes
 
     logger.info("Configure NodeNetworkConfigurationPolicy on all worker nodes")
@@ -4936,6 +4951,15 @@ def configure_node_network_configuration_policy_on_all_worker_nodes():
 
 
 def get_daemonsets_names(namespace=config.ENV_DATA["cluster_namespace"]):
+    """
+    Get all daemonspaces in namespace
+
+    Args:
+        namespace:
+
+    Returns:
+
+    """
     daemonset_names = list()
     daemonset_objs = OCP(
         kind=constants.DAEMONSET,
@@ -4947,10 +4971,23 @@ def get_daemonsets_names(namespace=config.ENV_DATA["cluster_namespace"]):
 
 
 def get_daemonsets_obj(name, namespace=config.ENV_DATA["cluster_namespace"]):
+    """
+    Get daemonset obj
+    Args:
+        name:
+        namespace:
+
+    Returns:
+
+    """
     return OCP(kind=constants.DAEMONSET, namespace=namespace, resource_name=name)
 
 
 def delete_csi_holder_daemonsets():
+    """
+    Delete csi holder daemonsets
+
+    """
     daemonset_names = get_daemonsets_names()
     for daemonset_name in daemonset_names:
         if "holder" in daemonset_name:
@@ -4959,13 +4996,14 @@ def delete_csi_holder_daemonsets():
 
 
 def upgrade_multus_holder_design():
-    add_route_public_nad()
-    from ocs_ci.deployment.nmstate import NMStateInstaller
+    if config.ENV_DATA.get("multus_create_public_net"):
+        add_route_public_nad()
+        from ocs_ci.deployment.nmstate import NMStateInstaller
 
-    logger.info("Install NMState operator and create an instance")
-    nmstate_obj = NMStateInstaller()
-    nmstate_obj.running_nmstate()
-    configure_node_network_configuration_policy_on_all_worker_nodes()
+        logger.info("Install NMState operator and create an instance")
+        nmstate_obj = NMStateInstaller()
+        nmstate_obj.running_nmstate()
+        configure_node_network_configuration_policy_on_all_worker_nodes()
     reset_all_osd_pods()
     enable_csi_disable_holder_pods()
     delete_csi_holder_pods()
