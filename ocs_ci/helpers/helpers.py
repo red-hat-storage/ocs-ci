@@ -4546,7 +4546,6 @@ def check_selinux_relabeling(pod_obj):
     logger.info(f"{key} is present in inspect logs of application pod running node")
 
 
-<<<<<<< HEAD
 def verify_log_exist_in_pods_logs(
     pod_names,
     expected_log,
@@ -4777,6 +4776,7 @@ def is_rbd_default_storage_class(custom_sc=None):
 
     logger.error("Storageclass {default_rbd_sc} is not a default  RBD StorageClass.")
     return False
+
 
 def get_secret_obj(name, namespace):
     """
