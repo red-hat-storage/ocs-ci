@@ -9,7 +9,6 @@ from threading import Event
 
 import yaml
 
-# from ocs_ci.deployment.hosted_cluster import HostedClients
 from ocs_ci.utility import version
 from ocs_ci.utility.retry import retry
 from ocs_ci.framework import config, Config
@@ -1412,12 +1411,12 @@ def create_hypershift_clusters():
 
         for cluster_name in cluster_names:
             cluster_config = Config()
-            with open(
-                os.path.join(
-                    os.path.dirname(os.path.abspath(__file__)),
-                    f"conf/deployment/fusion_hci_pc/hypershift_client_bm_{worker_nodes_number}w.yaml",
-                )
-            ) as file_stream:
+            curr_dir = os.path.dirname(os.path.abspath(__file__))
+            rel_path = f"conf/deployment/fusion_hci_pc/hypershift_client_bm_{worker_nodes_number}w.yaml"
+            full_path = os.path.join(curr_dir, rel_path)
+            if not os.path.exists(full_path):
+                raise FileNotFoundError(f"File {full_path} not found")
+            with open(full_path) as file_stream:
                 def_client_config_dict = {
                     k: (v if v is not None else {})
                     for (k, v) in yaml.safe_load(file_stream).items()
