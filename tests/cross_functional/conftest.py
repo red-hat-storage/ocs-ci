@@ -1,4 +1,5 @@
 import os
+import json
 import logging
 import boto3
 import pytest
@@ -6,9 +7,12 @@ import pytest
 from concurrent.futures import ThreadPoolExecutor
 from threading import Event
 
+import yaml
+
+from ocs_ci.deployment.hosted_cluster import HostedClients
 from ocs_ci.utility import version
 from ocs_ci.utility.retry import retry
-from ocs_ci.framework import config
+from ocs_ci.framework import config, Config
 from ocs_ci.helpers.e2e_helpers import (
     create_muliple_types_provider_obcs,
     validate_mcg_bucket_replicaton,
@@ -989,7 +993,6 @@ def setup_rgw_kafka_notification(request, rgw_bucket_factory, rgw_obj):
     ) = amq.create_kafkadrop()
 
     def factory():
-
         """
         Factory function implementing the fixture
 
@@ -1106,9 +1109,9 @@ def validate_mcg_bg_features(
 
         event = Event()
         executor = ThreadPoolExecutor(
-            max_workers=5 - len(skip_any_features)
-            if skip_any_features is not None
-            else 5
+            max_workers=(
+                5 - len(skip_any_features) if skip_any_features is not None else 5
+            )
         )
         skip_any_features = list() if skip_any_features is None else skip_any_features
 
@@ -1350,5 +1353,76 @@ def setup_mcg_bg_features(
         feature_setup_map["executor"]["threads"] = threads
         feature_setup_map["all_buckets"] = all_buckets
         return feature_setup_map
+
+    return factory
+
+
+@pytest.fixture()
+def create_hypershift_clusters():
+    """
+    Create hosted hyperhift clusters.
+
+    Here we reach cluster deployment configuration that was set in the Test. With this configuration we
+    create a hosted cluster. After successful creation of the hosted cluster, we update the Multicluster Config,
+    adding the new cluster configuration to the list of the clusters. Now we can operate with new and old clusters
+    switching the context of Multicluster Config
+
+    Expects following dictionary config to be set in the Test (might be updated, check the documetation):
+    ENV_DATA:
+        clusters:
+            <cluster_name>:
+                hosted_cluster_path: <path>
+                ocp_version: <version>
+                cpu_cores_per_hosted_cluster: <cores>
+                memory_per_hosted_cluster: <memory>
+                hosted_odf_registry: <registry>
+                hosted_odf_version: <version>
+                setup_storage_client: <bool>
+                nodepool_replicas: <replicas>
+
+    """
+
+    def factory(hosted_cluster_conf_on_provider):
+
+        data = json.loads(hosted_cluster_conf_on_provider)
+        worker_nodes_number = data.get("ENV_DATA").get("nodepool_replicas")
+        logger.info(
+            "Creating a hosted clusters with following deployment config: %s",
+            json.dumps(data, indent=4),
+        )
+
+        # During the initial deployment phase, we always deploy Hosting and specific Hosted clusters.
+        # To distinguish between clusters intended for deployment on deployment CI stage and those intended for
+        # deployment on the Test stage, we pass the names of the clusters to be deployed to the
+        # HostedClients().do_deploy() method.
+        cluster_names = list(
+            hosted_cluster_conf_on_provider.get("ENV_DATA").get("clusters").keys()
+        )
+        HostedClients().do_deploy(cluster_names)
+
+        config.update(hosted_cluster_conf_on_provider)
+
+        for cluster_name in cluster_names:
+            cluster_config = Config()
+            with open(
+                os.path.join(
+                    os.path.dirname(os.path.abspath(__file__)),
+                    f"conf/deployment/fusion_hci_pc/hypershift_client_bm_{worker_nodes_number}w.yaml",
+                )
+            ) as file_stream:
+                def_client_config_dict = {
+                    k: (v if v is not None else {})
+                    for (k, v) in yaml.safe_load(file_stream).items()
+                }
+                def_client_config_dict.get("ENV_DATA").update(
+                    {"cluster_name": cluster_name}
+                )
+
+                cluster_config.update(def_client_config_dict)
+                logger.info(
+                    "Inserting new hosted cluster config to Multicluster Config "
+                    f"\n{json.dumps(cluster_config, indent=4)}"
+                )
+                config.insert_cluster_config(config.nclusters, cluster_config)
 
     return factory
