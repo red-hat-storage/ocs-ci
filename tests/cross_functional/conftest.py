@@ -9,6 +9,7 @@ from threading import Event
 
 import yaml
 
+from ocs_ci.deployment.hosted_cluster import HostedClients
 from ocs_ci.ocs.constants import FUSION_CONF_DIR
 from ocs_ci.utility import version
 from ocs_ci.utility.retry import retry
@@ -1393,7 +1394,7 @@ def create_hypershift_clusters():
 
         assert worker_nodes_number, "Worker nodes number is not set"
         logger.info(
-            "Creating a hosted clusters with following deployment config: %s",
+            "Creating a hosted clusters with following deployment config: \n%s",
             json.dumps(
                 hosted_cluster_conf_on_provider, indent=4, cls=CustomJSONEncoder
             ),
@@ -1406,8 +1407,8 @@ def create_hypershift_clusters():
         cluster_names = list(
             hosted_cluster_conf_on_provider.get("ENV_DATA").get("clusters").keys()
         )
-        # HostedClients().do_deploy(cluster_names)
-
+        hosted_clients_obj = HostedClients()
+        hosted_clients_obj.do_deploy(cluster_names)
         config.update(hosted_cluster_conf_on_provider)
 
         for cluster_name in cluster_names:
@@ -1425,9 +1426,15 @@ def create_hypershift_clusters():
                 def_client_config_dict.get("ENV_DATA").update(
                     {"cluster_name": cluster_name}
                 )
+                kubeconfig_path = hosted_clients_obj.get_kubeconfig_path(cluster_names)
+                logger.info(f"Kubeconfig path: {kubeconfig_path}")
+                def_client_config_dict.get("RUN").update(
+                    {"kubeconfig": kubeconfig_path}
+                )
                 cluster_config = Config()
                 cluster_config.update(def_client_config_dict)
-                logger.info(
+
+                logger.debug(
                     "Inserting new hosted cluster config to Multicluster Config "
                     f"\n{json.dumps(vars(cluster_config), indent=4, cls=CustomJSONEncoder)}"
                 )
