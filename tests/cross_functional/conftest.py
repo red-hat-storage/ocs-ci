@@ -9,6 +9,7 @@ from threading import Event
 
 import yaml
 
+from ocs_ci.ocs.constants import FUSION_CONF_DIR
 from ocs_ci.utility import version
 from ocs_ci.utility.retry import retry
 from ocs_ci.framework import config, Config
@@ -1410,13 +1411,13 @@ def create_hypershift_clusters():
         config.update(hosted_cluster_conf_on_provider)
 
         for cluster_name in cluster_names:
-            cluster_config = Config()
-            curr_dir = os.path.dirname(os.path.abspath(__file__))
-            rel_path = f"conf/deployment/fusion_hci_pc/hypershift_client_bm_{worker_nodes_number}w.yaml"
-            full_path = os.path.join(curr_dir, rel_path)
-            if not os.path.exists(full_path):
-                raise FileNotFoundError(f"File {full_path} not found")
-            with open(full_path) as file_stream:
+
+            client_conf_default_dir = os.path.join(
+                FUSION_CONF_DIR, f"hypershift_client_bm_{worker_nodes_number}w.yaml"
+            )
+            if not os.path.exists(client_conf_default_dir):
+                raise FileNotFoundError(f"File {client_conf_default_dir} not found")
+            with open(client_conf_default_dir) as file_stream:
                 def_client_config_dict = {
                     k: (v if v is not None else {})
                     for (k, v) in yaml.safe_load(file_stream).items()
@@ -1424,7 +1425,7 @@ def create_hypershift_clusters():
                 def_client_config_dict.get("ENV_DATA").update(
                     {"cluster_name": cluster_name}
                 )
-
+                cluster_config = Config()
                 cluster_config.update(def_client_config_dict)
                 logger.info(
                     "Inserting new hosted cluster config to Multicluster Config "
