@@ -9,7 +9,7 @@ from threading import Event
 
 import yaml
 
-from ocs_ci.deployment.hosted_cluster import HostedClients
+# from ocs_ci.deployment.hosted_cluster import HostedClients
 from ocs_ci.utility import version
 from ocs_ci.utility.retry import retry
 from ocs_ci.framework import config, Config
@@ -1384,11 +1384,12 @@ def create_hypershift_clusters():
 
     def factory(hosted_cluster_conf_on_provider):
 
-        data = json.loads(hosted_cluster_conf_on_provider)
-        worker_nodes_number = data.get("ENV_DATA").get("nodepool_replicas")
+        worker_nodes_number = hosted_cluster_conf_on_provider.get("ENV_DATA").get(
+            "nodepool_replicas"
+        )
         logger.info(
             "Creating a hosted clusters with following deployment config: %s",
-            json.dumps(data, indent=4),
+            json.dumps(hosted_cluster_conf_on_provider, indent=4),
         )
 
         # During the initial deployment phase, we always deploy Hosting and specific Hosted clusters.
@@ -1398,7 +1399,7 @@ def create_hypershift_clusters():
         cluster_names = list(
             hosted_cluster_conf_on_provider.get("ENV_DATA").get("clusters").keys()
         )
-        HostedClients().do_deploy(cluster_names)
+        # HostedClients().do_deploy(cluster_names)
 
         config.update(hosted_cluster_conf_on_provider)
 
