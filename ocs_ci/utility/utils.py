@@ -5041,3 +5041,10 @@ def sum_of_two_storage_sizes(storage_size1, storage_size2, convert_size=1024):
     size = size1 + size2
     new_storage_size = f"{size}{unit}"
     return new_storage_size
+
+
+class CustomJSONEncoder(json.JSONEncoder):
+    def default(self, obj):
+        if isinstance(obj, set):
+            return list(obj)
+        return super().default(obj)

@@ -56,7 +56,7 @@ from ocs_ci.helpers.helpers import (
 
 from ocs_ci.utility.kms import is_kms_enabled
 
-from ocs_ci.utility.utils import clone_notify
+from ocs_ci.utility.utils import clone_notify, CustomJSONEncoder
 
 logger = logging.getLogger(__name__)
 
@@ -1389,7 +1389,9 @@ def create_hypershift_clusters():
         )
         logger.info(
             "Creating a hosted clusters with following deployment config: %s",
-            json.dumps(hosted_cluster_conf_on_provider, indent=4),
+            json.dumps(
+                hosted_cluster_conf_on_provider, indent=4, cls=CustomJSONEncoder
+            ),
         )
 
         # During the initial deployment phase, we always deploy Hosting and specific Hosted clusters.
@@ -1422,7 +1424,7 @@ def create_hypershift_clusters():
                 cluster_config.update(def_client_config_dict)
                 logger.info(
                     "Inserting new hosted cluster config to Multicluster Config "
-                    f"\n{json.dumps(cluster_config, indent=4)}"
+                    f"\n{json.dumps(cluster_config, indent=4, cls=CustomJSONEncoder)}"
                 )
                 config.insert_cluster_config(config.nclusters, cluster_config)
 
