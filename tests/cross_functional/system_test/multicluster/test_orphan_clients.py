@@ -51,8 +51,6 @@ class TestStorageClientRemoval(object):
         cluster_name = get_random_cluster_name()
         odf_version = str(get_ocs_version_from_csv()).replace(".stable", "")
 
-        logger.info(f">>>> version \n{odf_version}\n <<<<")
-
         ocp_version = get_latest_release_version()
         hosted_clusters_conf_on_provider = {
             "ENV_DATA": {
