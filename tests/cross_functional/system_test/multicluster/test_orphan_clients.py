@@ -1,5 +1,4 @@
 import logging
-from typing import re
 
 import pytest
 
@@ -50,7 +49,7 @@ class TestStorageClientRemoval(object):
         4. Verify the storage client and it's resources were removed from Provider.
         """
         cluster_name = get_random_cluster_name()
-        odf_version = re.sub(r"\.stable$", "", str(get_ocs_version_from_csv()))
+        odf_version = str(get_ocs_version_from_csv()).replace(".stable", "")
 
         logger.info(f">>>> version \n{odf_version}\n <<<<")
 
