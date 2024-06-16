@@ -17,6 +17,8 @@ LOG_FORMAT = "%(asctime)s - %(threadName)s - %(name)s - %(levelname)s - %(messag
 # Directories
 TOP_DIR = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 CONF_DIR = os.path.join(TOP_DIR, "conf")
+DEPLOYMENT_CONF_DIR = os.path.join(CONF_DIR, "deployment")
+FUSION_CONF_DIR = os.path.join(DEPLOYMENT_CONF_DIR, "fusion_hci_pc")
 FRAMEWORK_CONF_DIR = os.path.join(TOP_DIR, "ocs_ci", "framework", "conf")
 OCP_VERSION_CONF_DIR = os.path.join(FRAMEWORK_CONF_DIR, "ocp_version")
 OCS_VERSION_CONF_DIR = os.path.join(FRAMEWORK_CONF_DIR, "ocs_version")
