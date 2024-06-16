@@ -51,6 +51,7 @@ class HostedClients(HyperShiftBase):
 
     def __init__(self):
         HyperShiftBase.__init__(self)
+        self.kubeconfig_paths = None
         if not config.ENV_DATA.get("clusters"):
             raise ValueError(
                 "No 'clusters': '{<cluster names>: <cluster paths>}' set to ENV_DATA"
@@ -312,12 +313,27 @@ class HostedClients(HyperShiftBase):
         if not (self.hcp_binary_exists() and self.hypershift_binary_exists()):
             self.download_hcp_binary_with_podman()
 
-        kubeconfig_paths = []
         for name in config.ENV_DATA.get("clusters").keys():
             path = config.ENV_DATA.get("clusters").get(name).get("hosted_cluster_path")
-            kubeconfig_paths.append(self.download_hosted_cluster_kubeconfig(name, path))
+            self.kubeconfig_paths.append(
+                self.download_hosted_cluster_kubeconfig(name, path)
+            )
 
-        return kubeconfig_paths
+        return self.kubeconfig_paths
+
+    def get_kubeconfig_path(self, cluster_name):
+        """
+        Get the kubeconfig path for the cluster
+
+        Args:
+            cluster_name: str: Name of the cluster
+        Returns:
+            str: Path to the kubeconfig file
+        """
+        for kubeconfig_path in self.kubeconfig_paths:
+            if cluster_name in kubeconfig_path:
+                return kubeconfig_path
+        return None
 
     def deploy_multiple_odf_clients(self):
         """
