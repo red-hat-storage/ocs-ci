@@ -1384,9 +1384,14 @@ def create_hypershift_clusters():
 
     def factory(hosted_cluster_conf_on_provider):
 
-        worker_nodes_number = hosted_cluster_conf_on_provider.get("ENV_DATA").get(
-            "nodepool_replicas"
+        env_data = hosted_cluster_conf_on_provider.get("ENV_DATA", {})
+        clusters = env_data.get("clusters", {})
+        first_cluster_name = next(iter(clusters), None)
+        worker_nodes_number = clusters.get(first_cluster_name, {}).get(
+            "nodepool_replicas", None
         )
+
+        assert worker_nodes_number, "Worker nodes number is not set"
         logger.info(
             "Creating a hosted clusters with following deployment config: %s",
             json.dumps(

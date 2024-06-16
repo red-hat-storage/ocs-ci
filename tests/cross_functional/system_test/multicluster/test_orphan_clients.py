@@ -9,9 +9,8 @@ from ocs_ci.framework import config as ocsci_config
 from ocs_ci.framework.pytest_customization.marks import (
     tier4b,
 )
-from ocs_ci.ocs.version import get_ocs_version
 from ocs_ci.utility.utils import get_latest_release_version
-
+from ocs_ci.utility.version import get_ocs_version_from_csv
 
 logger = logging.getLogger(__name__)
 
@@ -50,7 +49,7 @@ class TestStorageClientRemoval(object):
         4. Verify the storage client and it's resources were removed from Provider.
         """
         cluster_name = get_random_cluster_name()
-        odf_version = get_ocs_version()
+        odf_version = get_ocs_version_from_csv()
         ocp_version = get_latest_release_version()
         hosted_clusters_conf_on_provider = {
             "ENV_DATA": {
