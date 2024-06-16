@@ -1429,7 +1429,7 @@ def create_hypershift_clusters():
                 cluster_config.update(def_client_config_dict)
                 logger.info(
                     "Inserting new hosted cluster config to Multicluster Config "
-                    f"\n{json.dumps(cluster_config, indent=4, cls=CustomJSONEncoder)}"
+                    f"\n{json.dumps(vars(cluster_config), indent=4, cls=CustomJSONEncoder)}"
                 )
                 config.insert_cluster_config(config.nclusters, cluster_config)
 
