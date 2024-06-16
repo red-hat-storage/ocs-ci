@@ -49,7 +49,7 @@ class TestStorageClientRemoval(object):
         4. Verify the storage client and it's resources were removed from Provider.
         """
         cluster_name = get_random_cluster_name()
-        odf_version = get_ocs_version_from_csv()
+        odf_version = str(get_ocs_version_from_csv()).split(".")[0]
         ocp_version = get_latest_release_version()
         hosted_clusters_conf_on_provider = {
             "ENV_DATA": {
