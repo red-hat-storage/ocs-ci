@@ -6,7 +6,7 @@ ENV_DATA:
   platform: 'hci_baremetal'
   cluster_type: 'provider'
   cluster_namespace: "openshift-storage"
-  deployment_type: 'ai'
+  deployment_type: 'upi'
   worker_replicas: 3
   master_replicas: 3
   mon_type: 'hostpath'
