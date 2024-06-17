@@ -336,10 +336,8 @@ class HostedClients(HyperShiftBase):
         Deploy multiple ODF clients on hosted OCP clusters. Method tries to deploy ODF client on all hosted OCP clusters
         If ODF was already deployed on some of the clusters, it will be skipped for those clusters.
 
-        Returns:
-            list: the list of kubeconfig paths for all hosted OCP clusters
         """
-        kubeconfig_paths = self.update_hcp_binary()
+        self.update_hcp_binary()
 
         hosted_cluster_names = get_hosted_cluster_names()
 
@@ -347,8 +345,6 @@ class HostedClients(HyperShiftBase):
             logger.info(f"Deploying ODF client on hosted OCP cluster '{cluster_name}'")
             hosted_odf = HostedODF(cluster_name)
             hosted_odf.do_deploy()
-
-        return kubeconfig_paths
 
 
 class HypershiftHostedOCP(HyperShiftBase, MetalLBInstaller, CNVInstaller, Deployment):
