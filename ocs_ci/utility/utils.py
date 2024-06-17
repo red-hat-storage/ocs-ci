@@ -5044,6 +5044,10 @@ def sum_of_two_storage_sizes(storage_size1, storage_size2, convert_size=1024):
 
 
 class CustomJSONEncoder(json.JSONEncoder):
+    """
+    Custom JSON encoder to handle set objects
+    """
+
     def default(self, obj):
         if isinstance(obj, set):
             return list(obj)
