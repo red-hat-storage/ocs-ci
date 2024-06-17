@@ -22,6 +22,10 @@ from ocs_ci.ocs.ocp import OCP
 from ocs_ci.utility.utils import get_latest_release_version
 from ocs_ci.utility.version import get_ocs_version_from_csv
 from ocs_ci.framework import config as ocsci_config
+from tests.cross_functional.conftest import (
+    create_hypershift_clusters,
+    destroy_hosted_cluster,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -129,9 +133,7 @@ class TestProviderHosted(object):
 
     @runs_on_provider
     @hci_provider_required
-    def test_create_hosted_cluster_with_fixture(
-        self, create_hypershift_clusters, destroy_hosted_cluster
-    ):
+    def test_create_hosted_cluster_with_fixture(self):
         """
         Test create hosted cluster with fixture
         """
