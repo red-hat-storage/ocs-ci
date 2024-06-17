@@ -460,15 +460,15 @@ def create_agent_service_config():
     helpers.create_resource(**agent_service_config_data)
 
     # Verify new pods that should be created
-    pod_obj = OCP(kind=constants.POD, namespace="multicluster-engine")
-    for pod_label in ["app=assisted-service", "app=assisted-image-service"]:
-        pod_obj.get(
-            selector=pod_label,
-            retry=600,
-            wait=20,
-            silent=True,
-            field_selector="status.phase=Running",
-        )
+    wait_for_pods_to_be_in_statuses_concurrently(
+        app_selectors_to_resource_count_list=[
+            "app=assisted-service",
+            "app=assisted-image-service",
+        ],
+        namespace="multicluster-engine",
+        timeout=600,
+        status=constants.STATUS_RUNNING,
+    )
 
 
 def create_host_inventory():
