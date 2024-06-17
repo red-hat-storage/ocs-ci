@@ -51,7 +51,7 @@ class HostedClients(HyperShiftBase):
 
     def __init__(self):
         HyperShiftBase.__init__(self)
-        self.kubeconfig_paths = None
+        self.kubeconfig_paths = []
 
     def do_deploy(self, cluster_names=None):
         """

@@ -57,7 +57,7 @@ class TestStorageClientRemoval(object):
         """
 
         log_step("Create hosted client")
-        cluster_name = get_random_cluster_name()
+        cluster_name = "hcp" + get_random_cluster_name()
         odf_version = str(get_ocs_version_from_csv()).replace(".stable", "")
 
         ocp_version = get_latest_release_version()
