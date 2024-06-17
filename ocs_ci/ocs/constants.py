@@ -213,6 +213,7 @@ IP_ADDRESS_POOL = "IPAddressPool"
 L2_ADVERTISEMENT = "L2Advertisement"
 METALLB_INSTANCE = "MetalLB"
 NETWORK_POLICY = "NetworkPolicy"
+DAEMONSET = "DaemonSet"
 INGRESSCONTROLLER = "ingresscontroller"
 
 # Provisioners
