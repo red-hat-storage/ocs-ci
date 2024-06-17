@@ -23,6 +23,10 @@ from ocs_ci.ocs.ocp import OCP
 from ocs_ci.utility.utils import get_latest_release_version
 from ocs_ci.utility.version import get_ocs_version_from_csv
 from ocs_ci.framework import config as ocsci_config
+from tests.cross_functional.conftest import (
+    create_hypershift_clusters,
+    destroy_hosted_cluster,
+)
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.resources.storage_client import StorageClient
 from ocs_ci.helpers.helpers import (
