@@ -9,6 +9,7 @@ from threading import Event
 
 import yaml
 
+from ocs_ci.deployment.helpers.hypershift_base import HyperShiftBase
 from ocs_ci.deployment.hosted_cluster import HostedClients
 from ocs_ci.ocs.constants import FUSION_CONF_DIR
 from ocs_ci.utility import version
@@ -1363,12 +1364,12 @@ def create_hypershift_clusters():
     """
     Create hosted hyperhift clusters.
 
-    Here we reach cluster deployment configuration that was set in the Test. With this configuration we
+    Here we create cluster deployment configuration that was set in the Test. With this configuration we
     create a hosted cluster. After successful creation of the hosted cluster, we update the Multicluster Config,
     adding the new cluster configuration to the list of the clusters. Now we can operate with new and old clusters
     switching the context of Multicluster Config
 
-    Expects following dictionary config to be set in the Test (might be updated, check the documetation):
+    Following arguments are necessary to build the hosted cluster configuration:
     ENV_DATA:
         clusters:
             <cluster_name>:
@@ -1383,16 +1384,34 @@ def create_hypershift_clusters():
 
     """
 
-    def factory(hosted_cluster_conf_on_provider):
+    def factory(
+        cluster_names, ocp_version, odf_version, setup_storage_client, nodepool_replicas
+    ):
+        """
+        Factory function implementing the fixture
 
-        env_data = hosted_cluster_conf_on_provider.get("ENV_DATA", {})
-        clusters = env_data.get("clusters", {})
-        first_cluster_name = next(iter(clusters), None)
-        worker_nodes_number = clusters.get(first_cluster_name, {}).get(
-            "nodepool_replicas", None
-        )
+        Args:
+            cluster_names (list): List of cluster names
+            ocp_version (str): OCP version
+            odf_version (str): ODF version
+            setup_storage_client (bool): Setup storage client
+            nodepool_replicas (int): Nodepool replicas; supported values are 2,3
 
-        assert worker_nodes_number, "Worker nodes number is not set"
+        """
+        hosted_cluster_conf_on_provider = {"ENV_DATA": {"clusters": {}}}
+
+        for cluster_name in cluster_names:
+            hosted_cluster_conf_on_provider["ENV_DATA"]["clusters"][cluster_name] = {
+                "hosted_cluster_path": f"~/clusters/{cluster_name}/openshift-cluster-dir",
+                "ocp_version": ocp_version,
+                "cpu_cores_per_hosted_cluster": 8,
+                "memory_per_hosted_cluster": "12Gi",
+                "hosted_odf_registry": "quay.io/rhceph-dev/ocs-registry",
+                "hosted_odf_version": odf_version,
+                "setup_storage_client": setup_storage_client,
+                "nodepool_replicas": nodepool_replicas,
+            }
+
         logger.info(
             "Creating a hosted clusters with following deployment config: \n%s",
             json.dumps(
@@ -1405,16 +1424,14 @@ def create_hypershift_clusters():
         # To distinguish between clusters intended for deployment on deployment CI stage and those intended for
         # deployment on the Test stage, we pass the names of the clusters to be deployed to the
         # HostedClients().do_deploy() method.
-        cluster_names = list(
-            hosted_cluster_conf_on_provider.get("ENV_DATA").get("clusters").keys()
-        )
         hosted_clients_obj = HostedClients()
-        hosted_clients_obj.do_deploy(cluster_names)
+        deployed_hosted_cluster_objects = hosted_clients_obj.do_deploy(cluster_names)
+        deployed_clusters = [obj.name for obj in deployed_hosted_cluster_objects]
 
-        for cluster_name in cluster_names:
+        for cluster_name in deployed_clusters:
 
             client_conf_default_dir = os.path.join(
-                FUSION_CONF_DIR, f"hypershift_client_bm_{worker_nodes_number}w.yaml"
+                FUSION_CONF_DIR, f"hypershift_client_bm_{nodepool_replicas}w.yaml"
             )
             if not os.path.exists(client_conf_default_dir):
                 raise FileNotFoundError(f"File {client_conf_default_dir} not found")
@@ -1439,5 +1456,26 @@ def create_hypershift_clusters():
                     f"\n{json.dumps(vars(cluster_config), indent=4, cls=CustomJSONEncoder)}"
                 )
                 config.insert_cluster_config(config.nclusters, cluster_config)
+
+    return factory
+
+
+@pytest.fixture()
+def destroy_hosted_cluster():
+    def factory(cluster_name):
+        config.switch_to_provider()
+        logger.info("Destroying hosted cluster. OCS related leftovers are expected")
+        hypershift_base_obj = HyperShiftBase()
+
+        if not hypershift_base_obj.hcp_binary_exists():
+            hypershift_base_obj.update_hcp_binary()
+
+        destroy_res = HyperShiftBase().destroy_kubevirt_cluster(cluster_name)
+
+        if destroy_res:
+            logger.info("Removing cluster from Multicluster Config")
+            config.remove_cluster_by_name(cluster_name)
+
+        return destroy_res
 
     return factory

@@ -81,7 +81,9 @@ def get_random_cluster_name():
         random_letters = "".join(
             random.choice(string.ascii_lowercase) for _ in range(3)
         )
-        cluster_name = hcp_version + "-" + bm_name[match.start() :] + random_letters
+        cluster_name = (
+            "hcp" + hcp_version + "-" + bm_name[match.start() :] + random_letters
+        )
     else:
         raise ValueError("Cluster name not found in the env data")
     return cluster_name
@@ -607,7 +609,7 @@ class HyperShiftBase:
         Args:
             name (str): Name of the cluster
         """
-        destroy_timeout_min = 10
+        destroy_timeout_min = 15
         logger.info(
             f"Destroying HyperShift hosted cluster {name}. Timeout: {destroy_timeout_min} min"
         )
