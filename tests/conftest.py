@@ -8024,7 +8024,7 @@ def create_hypershift_clusters():
                 )
                 kubeconfig_path = hosted_clients_obj.get_kubeconfig_path(cluster_name)
                 log.info(f"Kubeconfig path: {kubeconfig_path}")
-                def_client_config_dict.get("RUN").update(
+                def_client_config_dict.setdefault("RUN", {}).update(
                     {"kubeconfig": kubeconfig_path}
                 )
                 cluster_config = Config()

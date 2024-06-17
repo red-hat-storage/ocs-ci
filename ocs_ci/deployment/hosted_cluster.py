@@ -326,10 +326,12 @@ class HostedClients(HyperShiftBase):
         Returns:
             str: Path to the kubeconfig file
         """
+        if not self.kubeconfig_paths:
+            self.download_hosted_clusters_kubeconfig_files()
         for kubeconfig_path in self.kubeconfig_paths:
             if cluster_name in kubeconfig_path:
                 return kubeconfig_path
-        return None
+        return
 
     def deploy_multiple_odf_clients(self):
         """
