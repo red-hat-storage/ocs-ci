@@ -1400,6 +1400,7 @@ def create_hypershift_clusters():
                 hosted_cluster_conf_on_provider, indent=4, cls=CustomJSONEncoder
             ),
         )
+        config.update(hosted_cluster_conf_on_provider)
 
         # During the initial deployment phase, we always deploy Hosting and specific Hosted clusters.
         # To distinguish between clusters intended for deployment on deployment CI stage and those intended for
@@ -1410,7 +1411,6 @@ def create_hypershift_clusters():
         )
         hosted_clients_obj = HostedClients()
         hosted_clients_obj.do_deploy(cluster_names)
-        config.update(hosted_cluster_conf_on_provider)
 
         for cluster_name in cluster_names:
 
