@@ -1,5 +1,4 @@
 import os
-import json
 import logging
 import boto3
 import pytest
@@ -7,14 +6,9 @@ import pytest
 from concurrent.futures import ThreadPoolExecutor
 from threading import Event
 
-import yaml
-
-from ocs_ci.deployment.helpers.hypershift_base import HyperShiftBase
-from ocs_ci.deployment.hosted_cluster import HostedClients
-from ocs_ci.ocs.constants import FUSION_CONF_DIR
 from ocs_ci.utility import version
 from ocs_ci.utility.retry import retry
-from ocs_ci.framework import config, Config
+from ocs_ci.framework import config
 from ocs_ci.helpers.e2e_helpers import (
     create_muliple_types_provider_obcs,
     validate_mcg_bucket_replicaton,
@@ -58,7 +52,7 @@ from ocs_ci.helpers.helpers import (
 
 from ocs_ci.utility.kms import is_kms_enabled
 
-from ocs_ci.utility.utils import clone_notify, CustomJSONEncoder
+from ocs_ci.utility.utils import clone_notify
 
 logger = logging.getLogger(__name__)
 
@@ -1355,127 +1349,5 @@ def setup_mcg_bg_features(
         feature_setup_map["executor"]["threads"] = threads
         feature_setup_map["all_buckets"] = all_buckets
         return feature_setup_map
-
-    return factory
-
-
-@pytest.fixture()
-def create_hypershift_clusters():
-    """
-    Create hosted hyperhift clusters.
-
-    Here we create cluster deployment configuration that was set in the Test. With this configuration we
-    create a hosted cluster. After successful creation of the hosted cluster, we update the Multicluster Config,
-    adding the new cluster configuration to the list of the clusters. Now we can operate with new and old clusters
-    switching the context of Multicluster Config
-
-    Following arguments are necessary to build the hosted cluster configuration:
-    ENV_DATA:
-        clusters:
-            <cluster_name>:
-                hosted_cluster_path: <path>
-                ocp_version: <version>
-                cpu_cores_per_hosted_cluster: <cores>
-                memory_per_hosted_cluster: <memory>
-                hosted_odf_registry: <registry>
-                hosted_odf_version: <version>
-                setup_storage_client: <bool>
-                nodepool_replicas: <replicas>
-
-    """
-
-    def factory(
-        cluster_names, ocp_version, odf_version, setup_storage_client, nodepool_replicas
-    ):
-        """
-        Factory function implementing the fixture
-
-        Args:
-            cluster_names (list): List of cluster names
-            ocp_version (str): OCP version
-            odf_version (str): ODF version
-            setup_storage_client (bool): Setup storage client
-            nodepool_replicas (int): Nodepool replicas; supported values are 2,3
-
-        """
-        hosted_cluster_conf_on_provider = {"ENV_DATA": {"clusters": {}}}
-
-        for cluster_name in cluster_names:
-            hosted_cluster_conf_on_provider["ENV_DATA"]["clusters"][cluster_name] = {
-                "hosted_cluster_path": f"~/clusters/{cluster_name}/openshift-cluster-dir",
-                "ocp_version": ocp_version,
-                "cpu_cores_per_hosted_cluster": 8,
-                "memory_per_hosted_cluster": "12Gi",
-                "hosted_odf_registry": "quay.io/rhceph-dev/ocs-registry",
-                "hosted_odf_version": odf_version,
-                "setup_storage_client": setup_storage_client,
-                "nodepool_replicas": nodepool_replicas,
-            }
-
-        logger.info(
-            "Creating a hosted clusters with following deployment config: \n%s",
-            json.dumps(
-                hosted_cluster_conf_on_provider, indent=4, cls=CustomJSONEncoder
-            ),
-        )
-        config.update(hosted_cluster_conf_on_provider)
-
-        # During the initial deployment phase, we always deploy Hosting and specific Hosted clusters.
-        # To distinguish between clusters intended for deployment on deployment CI stage and those intended for
-        # deployment on the Test stage, we pass the names of the clusters to be deployed to the
-        # HostedClients().do_deploy() method.
-        hosted_clients_obj = HostedClients()
-        deployed_hosted_cluster_objects = hosted_clients_obj.do_deploy(cluster_names)
-        deployed_clusters = [obj.name for obj in deployed_hosted_cluster_objects]
-
-        for cluster_name in deployed_clusters:
-
-            client_conf_default_dir = os.path.join(
-                FUSION_CONF_DIR, f"hypershift_client_bm_{nodepool_replicas}w.yaml"
-            )
-            if not os.path.exists(client_conf_default_dir):
-                raise FileNotFoundError(f"File {client_conf_default_dir} not found")
-            with open(client_conf_default_dir) as file_stream:
-                def_client_config_dict = {
-                    k: (v if v is not None else {})
-                    for (k, v) in yaml.safe_load(file_stream).items()
-                }
-                def_client_config_dict.get("ENV_DATA").update(
-                    {"cluster_name": cluster_name}
-                )
-                kubeconfig_path = hosted_clients_obj.get_kubeconfig_path(cluster_name)
-                logger.info(f"Kubeconfig path: {kubeconfig_path}")
-                def_client_config_dict.get("RUN").update(
-                    {"kubeconfig": kubeconfig_path}
-                )
-                cluster_config = Config()
-                cluster_config.update(def_client_config_dict)
-
-                logger.debug(
-                    "Inserting new hosted cluster config to Multicluster Config "
-                    f"\n{json.dumps(vars(cluster_config), indent=4, cls=CustomJSONEncoder)}"
-                )
-                config.insert_cluster_config(config.nclusters, cluster_config)
-
-    return factory
-
-
-@pytest.fixture()
-def destroy_hosted_cluster():
-    def factory(cluster_name):
-        config.switch_to_provider()
-        logger.info("Destroying hosted cluster. OCS related leftovers are expected")
-        hypershift_base_obj = HyperShiftBase()
-
-        if not hypershift_base_obj.hcp_binary_exists():
-            hypershift_base_obj.update_hcp_binary()
-
-        destroy_res = HyperShiftBase().destroy_kubevirt_cluster(cluster_name)
-
-        if destroy_res:
-            logger.info("Removing cluster from Multicluster Config")
-            config.remove_cluster_by_name(cluster_name)
-
-        return destroy_res
 
     return factory
