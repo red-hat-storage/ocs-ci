@@ -6,6 +6,7 @@ The basic configuration is done in run_ocsci.py module casue we need to load
 all the config before pytest run. This run_ocsci.py is just a wrapper for
 pytest which proccess config and passes all params to pytest.
 """
+
 import logging
 import os
 import pandas as pd
@@ -41,6 +42,8 @@ from ocs_ci.utility.utils import (
     get_testrun_name,
     load_config_file,
     create_stats_dir,
+    get_oadp_version,
+    get_acm_version,
 )
 
 from ocs_ci.utility.memory import (
@@ -463,7 +466,19 @@ def gather_version_info_for_report(config):
         config._metadata["OCS operator"] = get_ocs_build_number()
         mods = {}
         mods = get_version_info(namespace=ocsci_config.ENV_DATA["cluster_namespace"])
+
         skip_list = ["ocs-operator"]
+        if (
+            ocsci_config.MULTICLUSTER["acm_cluster"]
+            or ocsci_config.MULTICLUSTER["active_acm_cluster"]
+        ):
+            config._metadata["ACM operator"] = get_acm_version()
+
+        if ocsci_config.MULTICLUSTER["primary_cluster"]:
+            oadp_version = get_oadp_version()
+            if oadp_version:
+                config._metadata["OADP operator"] = oadp_version
+
         for key, val in mods.items():
             if key not in skip_list:
                 config._metadata[key] = val.rsplit("/")[-1]
