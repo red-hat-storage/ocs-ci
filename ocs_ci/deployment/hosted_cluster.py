@@ -52,10 +52,6 @@ class HostedClients(HyperShiftBase):
     def __init__(self):
         HyperShiftBase.__init__(self)
         self.kubeconfig_paths = None
-        if not config.ENV_DATA.get("clusters"):
-            raise ValueError(
-                "No 'clusters': '{<cluster names>: <cluster paths>}' set to ENV_DATA"
-            )
 
     def do_deploy(self, cluster_names=None):
         """
