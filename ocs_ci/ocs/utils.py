@@ -1681,3 +1681,14 @@ def collect_pod_container_rpm_package(dir_name):
                     go_log_file_name = f"{package_log_dir_path}/{pod_obj.name}-{container_name}-go-version.log"
                     with open(go_log_file_name, "w") as f:
                         f.write(go_output)
+
+
+def is_dr_scenario():
+    """
+    Check if it is RDR or MDR setup
+
+    Returns:
+        bool: return True if it is rdr or mdr setup otherwise False
+
+    """
+    return ocsci_config.MULTICLUSTER["multicluster_mode"] in ("metro-dr", "regional-dr")
