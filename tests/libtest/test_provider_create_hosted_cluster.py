@@ -163,7 +163,9 @@ class TestProviderHosted(object):
         log_step("Switch to the hosted cluster")
         ocsci_config.switch_to_cluster_by_name(cluster_name)
 
-        server = OCP().exec_oc_cmd("oc whoami --show-server", out_yaml_format=False)
+        server = str(
+            OCP().exec_oc_cmd("oc whoami --show-server", out_yaml_format=False)
+        )
 
         assert (
             cluster_name in server
