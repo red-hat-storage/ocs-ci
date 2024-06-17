@@ -1426,7 +1426,7 @@ def create_hypershift_clusters():
                 def_client_config_dict.get("ENV_DATA").update(
                     {"cluster_name": cluster_name}
                 )
-                kubeconfig_path = hosted_clients_obj.get_kubeconfig_path(cluster_names)
+                kubeconfig_path = hosted_clients_obj.get_kubeconfig_path(cluster_name)
                 logger.info(f"Kubeconfig path: {kubeconfig_path}")
                 def_client_config_dict.get("RUN").update(
                     {"kubeconfig": kubeconfig_path}
