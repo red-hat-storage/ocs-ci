@@ -44,6 +44,11 @@ from ocs_ci.utility.utils import (
     create_stats_dir,
     get_oadp_version,
     get_acm_version,
+    get_dr_hub_operator_version,
+    get_odf_multicluster_orchestrator_version,
+    get_ocp_gitops_operator_version,
+    get_submariner_operator_version,
+    get_volsync_operator_version,
 )
 
 from ocs_ci.utility.memory import (
@@ -472,12 +477,19 @@ def gather_version_info_for_report(config):
             ocsci_config.MULTICLUSTER["acm_cluster"]
             or ocsci_config.MULTICLUSTER["active_acm_cluster"]
         ):
-            config._metadata["ACM operator"] = get_acm_version()
+            config._metadata["ACM Operator"] = get_acm_version()
+            config._metadata["OCP DR Hub Operator"] = get_dr_hub_operator_version()
+            config._metadata[
+                "ODF Multicluster Orchestrator"
+            ] = get_odf_multicluster_orchestrator_version()
+            config._metadata["GitOps Operator"] = get_ocp_gitops_operator_version()
 
         if ocsci_config.MULTICLUSTER["primary_cluster"]:
-            oadp_version = get_oadp_version()
-            if oadp_version:
-                config._metadata["OADP operator"] = oadp_version
+            config._metadata["OADP Operator"] = get_oadp_version()
+            config._metadata["OCP DR Hub Operator"] = get_dr_hub_operator_version()
+            config._metadata["GitOps Operator"] = get_ocp_gitops_operator_version()
+            config._metadata["VolSync Operator "] = get_volsync_operator_version()
+            config._metadata["Submariner Operator"] = get_submariner_operator_version()
 
         for key, val in mods.items():
             if key not in skip_list:

@@ -4858,6 +4858,105 @@ def get_acm_version():
             return csv["spec"]["version"]
 
 
+def get_dr_hub_operator_version():
+    """
+    Get DR Hub Opertaor Version
+
+    Returns:
+        str: returns version string
+    """
+    # Importing here to avoid circular dependency
+    from ocs_ci.ocs.resources.csv import get_csvs_start_with_prefix
+
+    csv_list = get_csvs_start_with_prefix(
+        constants.ACM_ODR_HUB_OPERATOR_RESOURCE, namespace=constants.ACM_HUB_NAMESPACE
+    )
+    for csv in csv_list:
+        if constants.ACM_ODR_HUB_OPERATOR_RESOURCE in csv["metadata"]["name"]:
+            # extract version string
+            return csv["spec"]["version"]
+
+
+def get_odf_multicluster_orchestrator_version():
+    """
+    Get ODF Multicluster Orchestrator Version
+
+    Returns:
+        str: returns version string
+    """
+    # Importing here to avoid circular dependency
+    from ocs_ci.ocs.resources.csv import get_csvs_start_with_prefix
+
+    csv_list = get_csvs_start_with_prefix(
+        constants.ACM_ODF_MULTICLUSTER_ORCHESTRATOR_RESOURCE,
+        namespace=constants.ACM_HUB_NAMESPACE,
+    )
+    for csv in csv_list:
+        if (
+            constants.ACM_ODF_MULTICLUSTER_ORCHESTRATOR_RESOURCE
+            in csv["metadata"]["name"]
+        ):
+            # extract version string
+            return csv["spec"]["version"]
+
+
+def get_ocp_gitops_operator_version():
+    """
+    Get OCP Gitops Operator Version
+
+    Returns:
+        str: returns version string
+    """
+    # Importing here to avoid circular dependency
+    from ocs_ci.ocs.resources.csv import get_csvs_start_with_prefix
+
+    csv_list = get_csvs_start_with_prefix(
+        "openshift-gitops-operator", namespace=constants.ACM_HUB_NAMESPACE
+    )
+    for csv in csv_list:
+        if "openshift-gitops-operator" in csv["metadata"]["name"]:
+            # extract version string
+            return csv["spec"]["version"]
+
+
+def get_submariner_operator_version():
+    """
+    Get Submariner Operator Version
+
+    Returns:
+        str: returns version string
+    """
+    # Importing here to avoid circular dependency
+    from ocs_ci.ocs.resources.csv import get_csvs_start_with_prefix
+
+    csv_list = get_csvs_start_with_prefix(
+        "submariner", namespace=constants.ACM_HUB_NAMESPACE
+    )
+    for csv in csv_list:
+        if "submariner-operator" in csv["metadata"]["name"]:
+            # extract version string
+            return csv["spec"]["version"]
+
+
+def get_volsync_operator_version():
+    """
+    Get VolSync Operator Version
+
+    Returns:
+        str: returns version string
+    """
+    # Importing here to avoid circular dependency
+    from ocs_ci.ocs.resources.csv import get_csvs_start_with_prefix
+
+    csv_list = get_csvs_start_with_prefix(
+        "volsync", namespace=constants.ACM_HUB_NAMESPACE
+    )
+    for csv in csv_list:
+        if "volsync" in csv["metadata"]["name"]:
+            # extract version string
+            return csv["spec"]["version"]
+
+
 def is_cluster_y_version_upgraded():
     """
     Checks whether cluster is upgraded or not
