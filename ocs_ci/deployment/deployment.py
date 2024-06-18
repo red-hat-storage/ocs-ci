@@ -3031,7 +3031,7 @@ class MultiClusterDROperatorsDeploy(object):
         Args:
             acm_indexes (list): List of acm indexes
         """
-        bucket_name = ""
+        bucket_name = "dr-"
         for index in acm_indexes:
             bucket_name += config.clusters[index].ENV_DATA["cluster_name"]
         return bucket_name
