@@ -49,6 +49,7 @@ from ocs_ci.utility.utils import (
     get_ocp_gitops_operator_version,
     get_submariner_operator_version,
     get_volsync_operator_version,
+    get_ocp_dr_cluster_operator_version,
 )
 
 from ocs_ci.utility.memory import (
@@ -440,6 +441,14 @@ def pytest_configure(config):
             check_clusters()
             if ocsci_config.RUN.get("cephcluster"):
                 gather_version_info_for_report(config)
+            if ocsci_config.MULTICLUSTER["acm_cluster"]:
+                config._metadata["ACM Operator"] = get_acm_version()
+                config._metadata["OCP DR Hub Operator"] = get_dr_hub_operator_version()
+                config._metadata[
+                    "ODF Multicluster Orchestrator"
+                ] = get_odf_multicluster_orchestrator_version()
+                config._metadata["GitOps Operator"] = get_ocp_gitops_operator_version()
+
     # switch the configuration context back to the default cluster
     ocsci_config.switch_default_cluster_ctx()
 
@@ -471,22 +480,12 @@ def gather_version_info_for_report(config):
         config._metadata["OCS operator"] = get_ocs_build_number()
         mods = {}
         mods = get_version_info(namespace=ocsci_config.ENV_DATA["cluster_namespace"])
-
         skip_list = ["ocs-operator"]
-        if (
-            ocsci_config.MULTICLUSTER["acm_cluster"]
-            or ocsci_config.MULTICLUSTER["active_acm_cluster"]
-        ):
-            config._metadata["ACM Operator"] = get_acm_version()
-            config._metadata["OCP DR Hub Operator"] = get_dr_hub_operator_version()
-            config._metadata[
-                "ODF Multicluster Orchestrator"
-            ] = get_odf_multicluster_orchestrator_version()
-            config._metadata["GitOps Operator"] = get_ocp_gitops_operator_version()
-
         if ocsci_config.MULTICLUSTER["primary_cluster"]:
             config._metadata["OADP Operator"] = get_oadp_version()
-            config._metadata["OCP DR Hub Operator"] = get_dr_hub_operator_version()
+            config._metadata[
+                "OCP DR Cluster Operator"
+            ] = get_ocp_dr_cluster_operator_version()
             config._metadata["GitOps Operator"] = get_ocp_gitops_operator_version()
             config._metadata["VolSync Operator "] = get_volsync_operator_version()
             config._metadata["Submariner Operator"] = get_submariner_operator_version()
