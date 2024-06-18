@@ -6730,7 +6730,7 @@ def dr_workloads_on_managed_clusters(request):
                 )
                 primary_cluster_instances.append(workload)
                 total_pvc_count += workload_details["pvc_count"]
-                workload.deploy_workload(
+                workload.deploy_workloads_on_managed_clusters(
                     primary_cluster=primary_cluster, secondary_cluster=None
                 )
 
@@ -6745,7 +6745,7 @@ def dr_workloads_on_managed_clusters(request):
                 )
                 secondary_cluster_instances.append(workload)
                 total_pvc_count += workload_details["pvc_count"]
-                workload.deploy_workload(
+                workload.deploy_workloads_on_managed_clusters(
                     primary_cluster=None, secondary_cluster=secondary_cluster
                 )
 
@@ -6759,7 +6759,7 @@ def dr_workloads_on_managed_clusters(request):
             for workload in instance:
                 try:
                     dr_helpers_ui.delete_application_ui(
-                        acm_obj, workload_to_delete=workload.name
+                        acm_obj, workload_to_delete=workload.workload_namespace
                     )
                 except ResourceNotDeleted:
                     failed_to_delete = True

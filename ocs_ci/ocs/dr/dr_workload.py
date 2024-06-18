@@ -132,13 +132,45 @@ class BusyBox(DRWorkload):
             self.workload_subscription_dir, self.workload_name, "placementrule.yaml"
         )
 
-    def deploy_workload(self, primary_cluster=None, secondary_cluster=None):
+    def deploy_workload(self):
+        """
+        Deployment specific to busybox workload
+
+        """
+        self._deploy_prereqs()
+        self.workload_namespace = self._get_workload_namespace()
+
+        # load drpc.yaml
+        drpc_yaml_data = templating.load_yaml(self.drpc_yaml_file)
+        drpc_yaml_data["spec"]["preferredCluster"] = self.preferred_primary_cluster
+        drpc_yaml_data["spec"]["drPolicyRef"]["name"] = self.dr_policy_name
+        templating.dump_data_to_temp_yaml(drpc_yaml_data, self.drpc_yaml_file)
+
+        # TODO
+        # drpc_yaml_file needs to be committed back to the repo
+        # because ACM would refetch from repo directly
+
+        # load channel.yaml
+        channel_yaml_data = templating.load_yaml(self.channel_yaml_file)
+        channel_yaml_data["spec"]["pathname"] = self.workload_repo_url
+        templating.dump_data_to_temp_yaml(channel_yaml_data, self.channel_yaml_file)
+
+        # Create the resources on Hub cluster
+        config.switch_acm_ctx()
+        run_cmd(f"oc create -k {self.workload_subscription_dir}")
+        run_cmd(f"oc create -k {self.workload_subscription_dir}/{self.workload_name}")
+
+        self.verify_workload_deployment()
+
+    def deploy_workloads_on_managed_clusters(
+        self, primary_cluster=True, secondary_cluster=None
+    ):
         """
         Deployment specific to busybox workload on both primary and secondary clusters
 
         Args:
-            bool: True if apps needs to be deployed on primary cluster
-            bool: True if apps needs to be deployed on secondary cluster
+            primary_cluster(bool) : True if apps needs to be deployed on primary cluster
+            secondary_cluster(bool) : True if apps needs to be deployed on secondary cluster
 
         """
         self._deploy_prereqs()
@@ -352,13 +384,19 @@ class BusyBox(DRWorkload):
         )
 
     def _get_ramen_namespace(self):
-        """ """
+        """
+        Get the ramen repo namespace
+
+        """
         git_ramen_yaml_data = templating.load_yaml(self.git_repo_namespace_yaml_file)
         return git_ramen_yaml_data["metadata"]["name"]
 
     def verify_workload_deployment(self, cluster=None):
         """
         Verify busybox workload
+
+        Args:
+            cluster : Cluster to verify if workload is running on it
 
         """
         self.workload_namespace = self._get_workload_namespace()
