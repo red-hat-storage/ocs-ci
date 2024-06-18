@@ -3295,7 +3295,7 @@ class MDRMultiClusterDROperatorsDeploy(MultiClusterDROperatorsDeploy):
             raise
 
     def build_bucket_name(self):
-        bucket_name = ""
+        bucket_name = "dr-"
         for index in get_all_acm_indexes():
             bucket_name += config.clusters[index].ENV_DATA["cluster_name"]
         return bucket_name
