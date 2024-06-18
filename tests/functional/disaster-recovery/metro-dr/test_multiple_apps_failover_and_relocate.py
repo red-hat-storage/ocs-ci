@@ -4,28 +4,22 @@ import pytest
 from ocs_ci.framework.pytest_customization.marks import tier1
 from ocs_ci.framework import config
 
-# from ocs_ci.ocs.acm.acm import AcmAddClusters
+from ocs_ci.ocs.acm.acm import AcmAddClusters
 from ocs_ci.ocs import constants
 from ocs_ci.helpers.dr_helpers import (
     enable_fence,
     enable_unfence,
     get_fence_state,
-    # failover,
-    # relocate,
     set_current_primary_cluster_context,
-    # set_current_secondary_cluster_context,
     get_current_primary_cluster_name,
     get_current_secondary_cluster_name,
-    # wait_for_all_resources_creation,
-    # wait_for_all_resources_deletion,
+    wait_for_all_resources_creation,
     gracefully_reboot_ocp_nodes,
 )
-
-# from ocs_ci.helpers.dr_helpers_ui import (
-#     check_cluster_status_on_acm_console,
-#     failover_relocate_ui,
-#     verify_failover_relocate_status_ui,
-# )
+from ocs_ci.helpers.dr_helpers_ui import (
+    failover_relocate_ui,
+    verify_failover_relocate_status_ui,
+)
 from ocs_ci.framework.pytest_customization.marks import turquoise_squad
 from ocs_ci.utility import version
 
@@ -83,7 +77,7 @@ class TestMultipleApplicationFailoverAndRelocate:
                 )
                 raise NotImplementedError
 
-        # acm_obj = AcmAddClusters()
+        acm_obj = AcmAddClusters()
         primary_instances = []
         secondary_instances = []
 
@@ -109,48 +103,44 @@ class TestMultipleApplicationFailoverAndRelocate:
         )
         logger.info(f"The secondary cluster is {secondary_cluster_name}")
 
+        logger.info(f"Primary instances {primary_instances}")
+        logger.info(f"Secondary instances {secondary_instances}")
+
         # Fence the primary managed cluster
         enable_fence(drcluster_name=self.primary_cluster_name)
 
-        # # Application Failover to Secondary managed cluster
-        # for instance in primary_instances:
-        #     if (
-        #         config.RUN.get("mdr_failover_via_ui")
-        #         and workload_type == constants.SUBSCRIPTION
-        #     ):
-        #         logger.info(
-        #             "Start the process of Failover of subscription based app from ACM UI"
-        #         )
-        #         config.switch_acm_ctx()
-        #         failover_relocate_ui(
-        #             acm_obj,
-        #             workload_to_move=f"{instance.workload_namespace}-1",
-        #             policy_name=workload.dr_policy_name,
-        #             failover_or_preferred_cluster=secondary_cluster_name,
-        #         )
-        # if workload_type == constants.APPLICATION_SET:
-        #     # TODO: Failover appset based apps via UI
-        #     # TODO: Failover of multiple apps to
-        #     failover(
-        #         failover_cluster=secondary_cluster_name,
-        #         namespace=workload.workload_namespace,
-        #         workload_type=workload_type,
-        #         workload_placement_name=workload.appset_placement_name,
-        #     )
-        #
-        # # Verify application are running in other managedcluster
-        # # And not in previous cluster
-        # set_current_primary_cluster_context(
-        #     primary_instances[0].workload_namespace, workload_type
-        # )
-        # for instance in primary_instances:
-        #     wait_for_all_resources_creation(
-        #         workload.workload_pvc_count,
-        #         workload.workload_pod_count,
-        #         instance.workload_namespace,
-        #     )
-        #
-        # # Verify the failover status from UI
-        # if config.RUN.get("mdr_failover_via_ui"):
-        #     config.switch_acm_ctx()
-        #     verify_failover_relocate_status_ui(acm_obj)
+        # Application Failover to Secondary managed cluster
+        config.switch_acm_ctx()
+        for instance in primary_instances:
+            if (
+                config.RUN.get("mdr_failover_via_ui")
+                and workload_type == constants.SUBSCRIPTION
+            ):
+                logger.info(
+                    "Start the process of Failover of subscription based app from ACM UI"
+                )
+                failover_relocate_ui(
+                    acm_obj,
+                    workload_to_move=f"{instance.workload_namespace}-1",
+                    policy_name=instance.dr_policy_name,
+                    failover_or_preferred_cluster=secondary_cluster_name,
+                )
+
+        # Verify application are running in other managedcluster
+        # And not in previous cluster
+        set_current_primary_cluster_context(
+            primary_instances[0].workload_namespace, workload_type
+        )
+        for instance in primary_instances:
+            wait_for_all_resources_creation(
+                instance.workload_pvc_count,
+                instance.workload_pod_count,
+                instance.workload_namespace,
+            )
+
+        # Verify the failover status from UI
+        if config.RUN.get("mdr_failover_via_ui"):
+            config.switch_acm_ctx()
+            verify_failover_relocate_status_ui(acm_obj)
+
+        # TODO Relocate of sub apps
