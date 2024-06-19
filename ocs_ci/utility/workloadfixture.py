@@ -197,14 +197,10 @@ def ignore_next_measurement_file(err, name, test, plugin):
         https://github.com/box/flaky/blob/d29ca76d5a72845428a0716c74f8fa0d40d98532/flaky/flaky_decorator.py#L16
 
     Args:
-        err (`tuple` of `class`, :class:`Exception`, `traceback`):
-            Information about the test failure (from sys.exc_info())
-        name (`unicode`):
-            The test name
-        test (:class:`Function`):
-            The test that has raised an error
-        plugin (:class:`FlakyPytestPlugin`):
-            The flaky plugin. Has a :prop:`stream` that can be written to in
+        err (tuple): Information about the test failure (from sys.exc_info())
+        name (str): The test name
+        test (function): The test that has raised an error
+        plugin (function): The flaky plugin. Has a :prop:`stream` that can be written to in
             order to add to the Flaky Report.
     """
     config.RUN["ignore_next_measurement_file"] = True
