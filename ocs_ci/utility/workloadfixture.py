@@ -201,6 +201,6 @@ def ignore_next_measurement_file(err, name, test, plugin):
         name (str): The test name
         test (function): The test that has raised an error
         plugin (function): The flaky plugin.
-        """
+    """
     config.RUN["ignore_next_measurement_file"] = True
     return True
