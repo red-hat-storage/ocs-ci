@@ -48,7 +48,7 @@ ENV_DATA:
   ]
   dr_cnv_workload_sub: [
     { name: "vm-sub-1", destination_namespace: "vm-sub-1", workload_dir: "mdr/cnv-workload/subscription/vm-sub-1",
-      workload_file: "vm-sub-1", dr_workload_app_placement_name: "vm-sub-1-placement", vm_name: "vm-workload-1",
+      dr_workload_app_placement_name: "vm-sub-1-placement", vm_name: "vm-workload-1",
       vm_secret: "vm-secret-1", vm_username: "cirros",
       dr_workload_app_pvc_selector: { 'appname': 'kubevirt' }, pod_count: 1, pvc_count: 1
     },
