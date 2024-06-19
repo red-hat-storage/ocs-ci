@@ -428,6 +428,82 @@ class HypershiftHostedOCP(HyperShiftBase, MetalLBInstaller, CNVInstaller, Deploy
                         f"Failed to install Hypershift on the cluster: {e}"
                     )
 
+        # Enable central infrastructure management service for agent
+        if config.DEPLOYMENT.get("hosted_cluster_platform") == "agent":
+            provisioning_obj = OCP(**OCP(kind=constants.PROVISIONING).get()[0])
+            if not provisioning_obj.data["spec"].get("watchAllNamespaces") == "true":
+                provisioning_obj.patch(
+                    resource_name=provisioning_obj.resource_name,
+                    params='{"spec":{"watchAllNamespaces": true }}',
+                    format_type="merge",
+                )
+                assert (
+                    provisioning_obj.get()["spec"].get("watchAllNamespaces") == "true"
+                ), "Cannot proceed with hosted cluster creation using agent."
+
+            if not OCP(kind=constants.AGENT_SERVICE_CONFIG).get(dont_raise=True):
+                create_agent_service_config()
+            if not OCP(kind=constants.INFRA_ENV).get(dont_raise=True):
+                create_host_inventory()
+
+
+def create_agent_service_config():
+    """
+    Create AgentServiceConfig resource
+
+    """
+    template_yaml = os.path.join(
+        constants.TEMPLATE_DIR, "hosted-cluster", "agent_service_config.yaml"
+    )
+    agent_service_config_data = templating.load_yaml(template_yaml)
+    # TODO: Add custom OS image details
+    helpers.create_resource(**agent_service_config_data)
+
+    # Verify new pods that should be created
+    wait_for_pods_to_be_in_statuses_concurrently(
+        app_selectors_to_resource_count_list=[
+            "app=assisted-service",
+            "app=assisted-image-service",
+        ],
+        namespace="multicluster-engine",
+        timeout=600,
+        status=constants.STATUS_RUNNING,
+    )
+
+
+def create_host_inventory():
+    """
+    Create InfraEnv resource for host inventory
+
+    """
+    # Create new project
+    project_name = helpers.create_project(project_name="bm-agents").resource_name
+
+    # Create pull secret for InfraEnv
+    secret_obj = OCP(
+        kind=constants.POD,
+        resource_name="pull-secret",
+        namespace=constants.OPENSHIFT_CONFIG_NAMESPACE,
+    )
+    secret_data = secret_obj.get()
+    # This is the name of pull secret and namespace used in InfraEnv template
+    secret_data["metadata"]["name"] = "pull-secret-agents"
+    secret_data["metadata"]["namespace"] = project_name
+    helpers.create_resource(**secret_data)
+
+    # Create InfraEnv
+    template_yaml = os.path.join(
+        constants.TEMPLATE_DIR, "hosted-cluster", "infra-env.yaml"
+    )
+    infra_env_data = templating.load_yaml(template_yaml)
+    ssh_pub_file_path = config.DEPLOYMENT["ssh_key"]
+    with open(ssh_pub_file_path, "r") as ssh_key:
+        ssh_pub_key = ssh_key.read().strip()
+    infra_env_data["spec"]["sshAuthorizedKey"] = ssh_pub_key
+    # TODO: Add custom OS image details. Reference https://access.redhat.com/documentation/en-us/red_hat_advanced_
+    #  cluster_management_for_kubernetes/2.10/html-single/clusters/index#create-host-inventory-cli-steps
+    helpers.create_resource(**infra_env_data)
+
 
 class HostedODF(HypershiftHostedOCP):
     def __init__(self, name: str):

@@ -215,6 +215,9 @@ METALLB_INSTANCE = "MetalLB"
 NETWORK_POLICY = "NetworkPolicy"
 DAEMONSET = "DaemonSet"
 INGRESSCONTROLLER = "ingresscontroller"
+PROVISIONING = "Provisioning"
+AGENT_SERVICE_CONFIG = "AgentServiceConfig"
+INFRA_ENV = "InfraEnv"
 
 # Provisioners
 AWS_EFS_PROVISIONER = "openshift.org/aws-efs"
