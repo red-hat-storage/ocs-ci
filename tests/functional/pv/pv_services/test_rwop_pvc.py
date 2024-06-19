@@ -19,6 +19,13 @@ from ocs_ci.utility.utils import run_cmd
 log = logging.getLogger(__name__)
 
 
+@pytest.mark.parametrize(
+    argnames="interface",
+    argvalues=[
+        pytest.param(*[constants.CEPHBLOCKPOOL]),
+        pytest.param(*[constants.CEPHFILESYSTEM]),
+    ],
+)
 @green_squad
 @skipif_ocs_version("<4.15")
 class TestRwopPvc(ManageTest):
@@ -27,20 +34,20 @@ class TestRwopPvc(ManageTest):
     """
 
     @pytest.fixture(autouse=True)
-    def setup(self, project_factory, pvc_factory, pod_factory):
+    def setup(self, project_factory, pvc_factory, pod_factory, interface):
         """
         Create PVC and pods
 
         """
         self.pvc_obj = pvc_factory(
-            interface=constants.CEPHBLOCKPOOL,
+            interface=interface,
             access_mode=constants.ACCESS_MODE_RWOP,
             size=10,
         )
 
     @polarion_id("OCS-5456")
     @tier1
-    def test_pod_with_same_priority(self, pod_factory):
+    def test_pod_with_same_priority(self, pod_factory, interface):
         """
         Test RBD Block volume mode RWOP PVC
 
@@ -55,7 +62,7 @@ class TestRwopPvc(ManageTest):
         new_pod_obj = helpers.create_pods(
             [self.pvc_obj],
             pod_factory,
-            constants.CEPHBLOCKPOOL,
+            interface,
         )
 
         # sleep for 60s
@@ -161,7 +168,7 @@ class TestRwopPvc(ManageTest):
 
     @polarion_id("OCS-5472")
     @tier1
-    def test_rwop_create_pod_on_different_node(self, pod_factory):
+    def test_rwop_create_pod_on_different_node(self, pod_factory, interface):
         """
         Test RBD Block volume access mode by creating pods on different nodes
         """
@@ -169,14 +176,14 @@ class TestRwopPvc(ManageTest):
         worker_nodes_list = node.get_worker_nodes()
         log.info(f"Creating pod on {worker_nodes_list[0]}")
         pod_factory(
-            interface=constants.CEPHBLOCKPOOL,
+            interface=interface,
             pvc=self.pvc_obj,
             node_name=worker_nodes_list[0],
         )
 
         log.info(f"Creating second pod on {worker_nodes_list[1]}")
         second_pod_obj = pod_factory(
-            interface=constants.CEPHBLOCKPOOL,
+            interface=interface,
             pvc=self.pvc_obj,
             status=None,
             node_name=worker_nodes_list[1],
