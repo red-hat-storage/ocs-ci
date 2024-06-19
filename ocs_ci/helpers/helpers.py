@@ -4884,11 +4884,13 @@ def delete_csi_holder_pods():
     from ocs_ci.ocs.utils import get_pod_name_by_pattern
     from ocs_ci.ocs.node import drain_nodes, schedule_nodes
 
-    pods_csi_cephfsplugin = get_pod_name_by_pattern("csi-rbdplugin")
+    pods_csi_cephfsplugin_holder = get_pod_name_by_pattern("csi-cephfsplugin-holder")
+    pods_csi_rbdplugin_holder = get_pod_name_by_pattern("csi-rbdplugin-holder")
+    pods_csi_holder = pods_csi_cephfsplugin_holder + pods_csi_rbdplugin_holder
     worker_pods_dict = dict()
     from ocs_ci.ocs.resources.pod import get_pod_obj
 
-    for pod_name in pods_csi_cephfsplugin:
+    for pod_name in pods_csi_holder:
         pod_obj = get_pod_obj(
             name=pod_name, namespace=config.ENV_DATA["cluster_namespace"]
         )
@@ -4898,6 +4900,7 @@ def delete_csi_holder_pods():
             worker_pods_dict[pod_obj.pod_data["spec"]["nodeName"]] = [pod_obj]
 
     for worker_node_name, csi_pod_objs in worker_pods_dict.items():
+        run_cmd(f"oc adm cordon {worker_node_name}")
         drain_nodes([worker_node_name])
         for csi_pod_obj in csi_pod_objs:
             csi_pod_obj.delete()
@@ -4992,7 +4995,21 @@ def delete_csi_holder_daemonsets():
     for daemonset_name in daemonset_names:
         if "holder" in daemonset_name:
             daemonsets_obj = get_daemonsets_obj(daemonset_name)
-            daemonsets_obj.delete()
+            daemonsets_obj.delete(resource_name=daemonset_name)
+
+
+def verify_csi_holder_pods_do_not_exist():
+    """
+
+    Returns:
+
+    """
+    from ocs_ci.ocs.utils import get_pod_name_by_pattern
+
+    if len(get_pod_name_by_pattern("holder")) > 0:
+        raise AssertionError(
+            "The csi holder pod exist even though we deleted the daemonset"
+        )
 
 
 def upgrade_multus_holder_design():
@@ -5008,3 +5025,4 @@ def upgrade_multus_holder_design():
     enable_csi_disable_holder_pods()
     delete_csi_holder_pods()
     delete_csi_holder_daemonsets()
+    verify_csi_holder_pods_do_not_exist()
