@@ -19,12 +19,14 @@ from ocs_ci.helpers.sanity_helpers import Sanity
 from ocs_ci.helpers.helpers import (
     wait_for_ct_pod_recovery,
     clear_crash_warning_and_osd_removal_leftovers,
+    run_cmd_verify_cli_output,
 )
 from ocs_ci.ocs.resources.pod import (
     get_osd_pods,
     get_pod_node,
     delete_pods,
     get_pod_objs,
+    wait_for_pods_to_be_running,
 )
 from ocs_ci.utility.aws import AWSTimeoutException
 from ocs_ci.ocs.resources.storage_cluster import osd_encryption_verification
@@ -61,7 +63,7 @@ class TestDiskFailures(ManageTest):
         except AWSTimeoutException as e:
             if "Volume state: in-use" in e:
                 logger.info(
-                    f"Volume {data_volume} re-attached successfully to worker"
+                    f"Volume {data_volume} is still attached to worker, detach did not complete"
                     f" node {worker_node}"
                 )
             else:
@@ -71,10 +73,17 @@ class TestDiskFailures(ManageTest):
             Wait for worker volume to be re-attached automatically
             to the node
             """
-            assert nodes.wait_for_volume_attach(data_volume), (
-                f"Volume {data_volume} failed to be re-attached to worker "
-                f"node {worker_node}"
-            )
+            logger.info(f"Volume {data_volume} is deattached successfully")
+            if config.ENV_DATA.get("platform", "").lower() == constants.AWS_PLATFORM:
+                logger.info(
+                    f"For {constants.AWS_PLATFORM} platform, attaching volume manually"
+                )
+                nodes.attach_volume(volume=data_volume, node=worker_node)
+            else:
+                assert nodes.wait_for_volume_attach(data_volume), (
+                    f"Volume {data_volume} failed to be re-attached to worker "
+                    f"node {worker_node}"
+                )
 
     @pytest.fixture(autouse=True)
     def teardown(self, request, nodes):
@@ -175,6 +184,27 @@ class TestDiskFailures(ManageTest):
         # W/A: For the investigation of BZ 1825675, timeout is increased to see if cluster
         # becomes healthy eventually
         # TODO: Remove 'tries=100'
+
+        logger.info("Wait for all the pods in openshift-storage to be in running state")
+        assert wait_for_pods_to_be_running(
+            timeout=720
+        ), "Not all the pods reached running state"
+
+        logger.info("Archive OSD crash if occurred due to detach and attach of volume")
+        is_daemon_recently_crash_warnings = run_cmd_verify_cli_output(
+            cmd="ceph health detail",
+            expected_output_lst={"HEALTH_WARN", "daemons have recently crashed"},
+            cephtool_cmd=True,
+        )
+        if is_daemon_recently_crash_warnings:
+            logger.info("Clear all ceph crash warnings")
+            # Importing here to avoid shadow by loop variable
+            from ocs_ci.ocs.resources import pod
+
+            ct_pod = pod.get_ceph_tools_pod()
+            ct_pod.exec_ceph_cmd(ceph_cmd="ceph crash archive-all")
+        else:
+            logger.info("There are no daemon crash warnings")
         self.sanity_helpers.health_check(tries=100)
 
     @skipif_managed_service
@@ -209,6 +239,27 @@ class TestDiskFailures(ManageTest):
         nodes.restart_nodes(
             [worker_and_volume["worker"] for worker_and_volume in workers_and_volumes]
         )
+
+        logger.info("Wait for all the pods in openshift-storage to be in running state")
+        assert wait_for_pods_to_be_running(
+            timeout=720
+        ), "Not all the pods reached running state"
+
+        logger.info("Archive OSD crash if occurred due to detach and attach of volume")
+        is_daemon_recently_crash_warnings = run_cmd_verify_cli_output(
+            cmd="ceph health detail",
+            expected_output_lst={"HEALTH_WARN", "daemons have recently crashed"},
+            cephtool_cmd=True,
+        )
+        if is_daemon_recently_crash_warnings:
+            logger.info("Clear all ceph crash warnings")
+            # Importing here to avoid shadow by loop variable
+            from ocs_ci.ocs.resources import pod
+
+            ct_pod = pod.get_ceph_tools_pod()
+            ct_pod.exec_ceph_cmd(ceph_cmd="ceph crash archive-all")
+        else:
+            logger.info("There are no daemon crash warnings")
 
         # Validate cluster is still functional
         self.sanity_helpers.health_check()
