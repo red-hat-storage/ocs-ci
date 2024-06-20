@@ -44,6 +44,8 @@ from ocs_ci.utility.utils import (
     create_stats_dir,
     get_oadp_version,
     get_acm_version,
+)
+from ocs_ci.utility.version import (
     get_dr_hub_operator_version,
     get_odf_multicluster_orchestrator_version,
     get_ocp_gitops_operator_version,
