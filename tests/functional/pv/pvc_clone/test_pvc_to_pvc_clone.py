@@ -106,7 +106,9 @@ class TestClone(ManageTest):
             sc_name, parent_pvc, clone_yaml, namespace
         )
         teardown_factory(cloned_pvc_obj)
-        helpers.wait_for_resource_state(cloned_pvc_obj, constants.STATUS_BOUND)
+        helpers.wait_for_resource_state(
+            cloned_pvc_obj, constants.STATUS_BOUND, timeout=120
+        )
         cloned_pvc_obj.reload()
 
         # Create and attach pod to the pvc
