@@ -4861,8 +4861,7 @@ def reset_all_osd_pods():
 
 def enable_csi_disable_holder_pods():
     """
-
-    Returns:
+    Enable CSI_DISABLE_HOLDER_PODS in rook-ceph-operator-config config-map
 
     """
     configmap_obj = OCP(
@@ -4878,7 +4877,14 @@ def enable_csi_disable_holder_pods():
 def delete_csi_holder_pods():
     """
 
-    Returns:
+    Drain/schedule worker nodes and reset csi-holder-pods
+
+    Procedure:
+    1.Cordon worker node-X
+    2.Drain worker node-X
+    3.Reset csi-cephfsplugin-holder and csi-rbdplugin-holder pods on node-X
+    4.schedule node-X
+    5.Verify all node-X in Ready state
 
     """
     from ocs_ci.ocs.utils import get_pod_name_by_pattern
@@ -4958,9 +4964,10 @@ def get_daemonsets_names(namespace=config.ENV_DATA["cluster_namespace"]):
     Get all daemonspaces in namespace
 
     Args:
-        namespace:
+        namespace (str): namespace
 
     Returns:
+        list: all daemonset names in the namespace
 
     """
     daemonset_names = list()
@@ -4977,10 +4984,11 @@ def get_daemonsets_obj(name, namespace=config.ENV_DATA["cluster_namespace"]):
     """
     Get daemonset obj
     Args:
-        name:
-        namespace:
+        name (str): the name of daemeonset
+        namespace (str): the namespace of daemonset
 
     Returns:
+        ocp_obj: daemonset ocp obj
 
     """
     return OCP(kind=constants.DAEMONSET, namespace=namespace, resource_name=name)
@@ -5000,8 +5008,10 @@ def delete_csi_holder_daemonsets():
 
 def verify_csi_holder_pods_do_not_exist():
     """
+    Verify csi-holder pods do not exist
 
     Returns:
+        AssertionError: if csi-holder pod exist raise Exception
 
     """
     from ocs_ci.ocs.utils import get_pod_name_by_pattern
@@ -5013,6 +5023,10 @@ def verify_csi_holder_pods_do_not_exist():
 
 
 def upgrade_multus_holder_design():
+    """
+    Upgrade  multus holder design from ODF4.15 to ODF4.16
+
+    """
     if config.ENV_DATA.get("multus_create_public_net"):
         add_route_public_nad()
         from ocs_ci.deployment.nmstate import NMStateInstaller
