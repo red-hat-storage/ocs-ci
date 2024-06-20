@@ -4785,7 +4785,7 @@ def get_network_attachment_definitions(
     Get NetworkAttachmentDefinition obj
 
     Args:
-        nad_name (str) : network_attachment_definition name
+        nad_name (str): network_attachment_definition name
         namespace (str): Namespace of the resource
     Returns:
         network_attachment_definitions (obj) : network_attachment_definitions object
