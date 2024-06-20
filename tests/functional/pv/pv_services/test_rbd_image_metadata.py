@@ -1,5 +1,4 @@
 import logging
-import time
 
 from ocs_ci.framework import config
 from ocs_ci.ocs import constants
