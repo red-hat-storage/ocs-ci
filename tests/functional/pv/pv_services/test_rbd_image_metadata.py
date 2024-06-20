@@ -1,4 +1,5 @@
 import logging
+import time
 
 from ocs_ci.framework import config
 from ocs_ci.ocs import constants
@@ -55,7 +56,9 @@ class TestRbdImageMetadata:
         rbd_images.append(snap_image_name)
 
         # restore the snapshot
-        restored_pvc = snapshot_restore_factory(snapshot_obj=snap_obj, timeout=600)
+        restored_pvc = snapshot_restore_factory(
+            snapshot_obj=snap_obj, volume_mode=pvc_obj.get_pvc_vol_mode, timeout=600
+        )
         log.info(f"restored the snapshot {restored_pvc.name} created!")
 
         # create a clone of the PVC
