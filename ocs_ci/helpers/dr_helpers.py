@@ -5,6 +5,7 @@ Helper functions specific for DR
 import json
 import logging
 import tempfile
+import time
 
 from ocs_ci.framework import config
 from ocs_ci.ocs.acm.acm import (
@@ -1356,8 +1357,10 @@ def disable_dr_from_app(secondary_cluster_name):
         cmd="oc get drpc -A",
         expected_output_lst="No resources found",
     )
-    if not sample.wait_for_func_status(result=True):
+    if not sample.wait_for_func_status(result=False):
         raise Exception("All drpcs are not deleted")
+
+    time.sleep(10)
 
     # Remove annotation from placements
     for placement in placements:
@@ -1414,11 +1417,21 @@ def replace_cluster(workload, primary_cluster_name, secondary_cluster_name):
     run_cmd(cmd=f"chmod +x {constants.REMOVE_DR_EACH_MANAGED_CLUSTER}")
     run_cmd(cmd=f"sh {constants.REMOVE_DR_EACH_MANAGED_CLUSTER}")
 
+    sample = TimeoutSampler(
+        timeout=300,
+        sleep=5,
+        func=run_cmd_verify_cli_output,
+        cmd="oc get namespace openshift-operators",
+        expected_output_lst={"openshift-operators", "Active"},
+    )
+    if not sample.wait_for_func_status(result=True):
+        raise Exception("Namespace openshift-operators is not created")
+
     # add label to openshift-opeartors namespace
-    ocp_obj = ocp.OCP(kind="namespace")
+    ocp_obj = ocp.OCP(kind="Namespace")
     label = "openshift.io/cluster-monitoring='true'"
     ocp_obj.add_label(
-        kind="namespace", resource_name=constants.OPENSHIFT_OPERATORS, label=label
+        kind="Namespace", resource_name=constants.OPENSHIFT_OPERATORS, label=label
     )
 
     # Detach old primary
