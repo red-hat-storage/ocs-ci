@@ -29,6 +29,7 @@ BUCKET_PREFIXES_SPECIAL_RULES = {
     "ocs-qe-upi-us-east-2": sys.maxsize,
     "ocsci-test-files": sys.maxsize,
     "openshift-qe-upi": sys.maxsize,
+    "dr-": 500,
     "j-": 500,
     "lr1-": 100,
     "lr2-": 150,
