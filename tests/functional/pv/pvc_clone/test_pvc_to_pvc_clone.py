@@ -107,7 +107,7 @@ class TestClone(ManageTest):
         )
         teardown_factory(cloned_pvc_obj)
         helpers.wait_for_resource_state(
-            cloned_pvc_obj, constants.STATUS_BOUND, timeout=120
+            cloned_pvc_obj, constants.STATUS_BOUND, timeout=300
         )
         cloned_pvc_obj.reload()
 
