@@ -1592,6 +1592,7 @@ ARO_WORKER_SUBNET = "worker-subnet"
 ARO_MASTER_SUBNET = "master-subnet"
 ARO_WORKER_SUBNET_ADDRESS_PREFIXES = "10.0.2.0/23"
 ARO_MASTER_SUBNET_ADDRESS_PREFIXES = "10.0.0.0/23"
+CLIENT_OPERATOR_CONFIGMAP = "ocs-client-operator-config"
 
 # UI Deployment constants
 HTPASSWD_SECRET_NAME = "htpass-secret"
