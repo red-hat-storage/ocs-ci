@@ -3001,3 +3001,63 @@ def get_node_by_internal_ip(internal_ip):
             return n
 
     return None
+
+def get_worker_node_where_ceph_toolbox_not_running():
+    log.info(
+        "Testing cephtoolbox pod with nodeaffinity in the openshift-storage namespace."
+    )
+
+    ct_pod = pod.get_ceph_tools_pod()
+    # Identify on which node the ceph toolbox is running currently
+    ct_pod_running_node_name = ct_pod.data["spec"].get("nodeName")
+
+    worker_nodes = get_worker_nodes()
+    log.info(worker_nodes)
+
+    other_nodes = [node for node in worker_nodes if node != ct_pod_running_node_name]
+    return other_nodes
+
+
+def apply_node_affinity_for_ceph_toolbox(node_name):
+    """
+    Apply node affinity for ceph toolbox pod.
+
+    Args:
+        node_name = node name which need to be added in the node affinity
+
+    Returns:
+        True: if node affinity applied successfully .
+        False: if node affinity fails
+    """
+    resource_name = constants.DEFAULT_CLUSTERNAME
+    if config.DEPLOYMENT["external_mode"]:
+        resource_name = constants.DEFAULT_CLUSTERNAME_EXTERNAL_MODE
+
+    storagecluster_obj = ocp.OCP(
+        resource_name=resource_name,
+        namespace=config.ENV_DATA["cluster_namespace"],
+        kind=constants.STORAGECLUSTER,
+    )
+    nodeaffinity = (
+        f'{{"toolbox": {{"nodeAffinity": {{"requiredDuringSchedulingIgnoredDuringExecution": '
+        f'{{"nodeSelectorTerms": [{{"matchExpressions": [{{"key": "kubernetes.io/hostname",'
+        f'"operator": "In",'
+        f'"values": ["{node_name}"]}}]}}]}}}}}}}}'
+    )
+    param = f'{{"spec": {{"placement": {nodeaffinity}}}}}'
+    storagecluster_obj.patch(params=param, format_type="merge")
+    log.info(
+        f"Successfully applied node affinity for ceph toolbox pod with {node_name}"
+    )
+
+    ct_new_pod = pod.get_ceph_tools_pod()
+    # Identify on which node the ceph toolbox is running after failover due to nodeaffinity
+    ct_new_pod_running_node_name = ct_new_pod.data["spec"].get("nodeName")
+    if node_name == ct_new_pod_running_node_name:
+        log.info(
+            f"ceph toolbox pod failovered to the new node {ct_new_pod_running_node_name}"
+            f" given in node affinity successfully "
+        )
+        return True
+    else:
+        return False
