@@ -1012,7 +1012,11 @@ class Deployment(object):
 
         # Create Multus Networks
         if config.ENV_DATA.get("is_multus_enabled"):
-            if config.ENV_DATA.get("multus_create_public_net"):
+            ocs_version = version.get_semantic_ocs_version_from_config()
+            if (
+                config.ENV_DATA.get("multus_create_public_net")
+                and ocs_version >= version.VERSION_4_16
+            ):
                 from ocs_ci.deployment.nmstate import NMStateInstaller
 
                 logger.info("Install NMState operator and create an instance")
