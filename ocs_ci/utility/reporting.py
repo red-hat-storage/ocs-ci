@@ -2,11 +2,23 @@ import logging
 from getpass import getuser
 
 from ocs_ci.framework import config
-from ocs_ci.utility.utils import get_ocp_version, get_testrun_name
+from ocs_ci.utility.utils import (
+    get_ocp_version,
+    get_testrun_name,
+    get_oadp_version,
+    get_acm_version,
+)
 from ocs_ci.utility.version import (
     get_semantic_ocs_version_from_config,
     VERSION_4_13,
+    get_dr_hub_operator_version,
+    get_ocp_dr_cluster_operator_version,
+    get_odf_multicluster_orchestrator_version,
+    get_ocp_gitops_operator_version,
+    get_submariner_operator_version,
+    get_volsync_operator_version,
 )
+
 
 log = logging.getLogger(__name__)
 
@@ -80,6 +92,19 @@ def get_rp_launch_attributes():
         > config.RUN["skipped_on_ceph_health_threshold"]
     ):
         rp_attrs["ceph_health_skips_over_threshold"] = True
+    if config.MULTICLUSTER["acm_cluster"]:
+        rp_attrs["acm_operator"] = get_acm_version()
+        rp_attrs["ocp_dr_hub_operator"] = get_dr_hub_operator_version()
+        rp_attrs[
+            "odf_multicluster_orchestrator"
+        ] = get_odf_multicluster_orchestrator_version()
+        rp_attrs["gitops_operator"] = get_ocp_gitops_operator_version()
+    if config.MULTICLUSTER["primary_cluster"]:
+        rp_attrs["oadp_operator"] = get_oadp_version()
+        rp_attrs["ocp_dr_cluster_operator"] = get_ocp_dr_cluster_operator_version()
+        rp_attrs["gitops_operator"] = get_ocp_gitops_operator_version()
+        rp_attrs["volsync_operator"] = get_volsync_operator_version()
+        rp_attrs["submariner_operator"] = get_submariner_operator_version()
 
     return rp_attrs
 
