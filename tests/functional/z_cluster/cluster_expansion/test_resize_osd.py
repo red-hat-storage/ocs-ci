@@ -13,6 +13,7 @@ from ocs_ci.framework.pytest_customization.marks import (
     skipif_managed_service,
     skipif_hci_provider_and_client,
     brown_squad,
+    black_squad,
 )
 from ocs_ci.framework.testlib import (
     ignore_leftovers,
@@ -21,6 +22,7 @@ from ocs_ci.framework.testlib import (
     tier4b,
     tier4c,
     tier4a,
+    tier4,
 )
 from ocs_ci.ocs.constants import VOLUME_MODE_BLOCK, OSD, ROOK_OPERATOR, MON_DAEMON
 from ocs_ci.helpers.osd_resize import (
@@ -29,6 +31,7 @@ from ocs_ci.helpers.osd_resize import (
     check_resize_osd_pre_conditions,
     update_resize_osd_count,
     basic_resize_osd,
+    check_storage_size_is_reflected_in_ui,
 )
 from ocs_ci.ocs.resources.pod import (
     get_osd_pods,
@@ -101,14 +104,6 @@ class TestResizeOSD(ManageTest):
 
         self.pod_file_name = "fio_test"
         self.sanity_helpers = Sanity()
-        pvc_size = random.randint(3, 7)
-        self.pvcs1, self.pods_for_integrity_check = create_pvcs_and_pods(
-            pvc_size=pvc_size, num_of_rbd_pvc=6, num_of_cephfs_pvc=6
-        )
-        pvc_size = random.randint(3, 8)
-        self.pvcs2, self.pods_for_run_io = create_pvcs_and_pods(
-            pvc_size=pvc_size, num_of_rbd_pvc=5, num_of_cephfs_pvc=5
-        )
 
     @pytest.fixture(autouse=True)
     def teardown(self, request):
@@ -154,6 +149,14 @@ class TestResizeOSD(ManageTest):
         Prepare the data before resizing the osd
 
         """
+        pvc_size = random.randint(3, 7)
+        self.pvcs1, self.pods_for_integrity_check = self.create_pvcs_and_pods(
+            pvc_size=pvc_size, num_of_rbd_pvc=6, num_of_cephfs_pvc=6
+        )
+        pvc_size = random.randint(3, 8)
+        self.pvcs2, self.pods_for_run_io = self.create_pvcs_and_pods(
+            pvc_size=pvc_size, num_of_rbd_pvc=5, num_of_cephfs_pvc=5
+        )
         logger.info("Run IO on the pods for integrity check")
         self.run_io_on_pods(self.pods_for_integrity_check)
         logger.info("Calculate the md5sum of the pods for integrity check")
@@ -296,3 +299,20 @@ class TestResizeOSD(ManageTest):
         self.prepare_data_before_resize_osd()
         resize_osd(self.new_storage_size)
         self.verification_steps_post_resize_osd()
+
+    @tier1
+    @tier4
+    @black_squad
+    @pytest.mark.last
+    @polarion_id("OCS-5800")
+    def test_ui_storage_size_post_resize_osd(self, setup_ui_session):
+        """
+        Test the new total storage size is reflected in the UI post resize osd
+
+        """
+        if config.RUN["resize_osd_count"] < 1:
+            pytest.skip(
+                "No resize osd has been performed in the current test run. "
+                "The test should run only post resize osd"
+            )
+        check_storage_size_is_reflected_in_ui()
