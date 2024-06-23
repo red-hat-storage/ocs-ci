@@ -10,7 +10,6 @@ from ocs_ci.framework import config
 from ocs_ci.ocs import defaults
 from ocs_ci.ocs.exceptions import WrongVersionExpression
 from ocs_ci.ocs import constants
-from ocs_ci.ocs.resources.csv import get_csvs_start_with_prefix
 
 
 def get_semantic_version(
@@ -183,6 +182,9 @@ def get_dr_hub_operator_version(namespace="openshift"):
     Returns:
         str: returns version string
     """
+    # Importing here to avoid circular dependency
+    from ocs_ci.ocs.resources.csv import get_csvs_start_with_prefix
+
     csv_list = get_csvs_start_with_prefix(
         constants.ACM_ODR_HUB_OPERATOR_RESOURCE, namespace=namespace
     )
@@ -199,6 +201,9 @@ def get_ocp_dr_cluster_operator_version(namespace="openshift"):
     Returns:
         str: returns version string
     """
+    # Importing here to avoid circular dependency
+    from ocs_ci.ocs.resources.csv import get_csvs_start_with_prefix
+
     csv_list = get_csvs_start_with_prefix("odr-cluster-operator", namespace=namespace)
     for csv in csv_list:
         if "odr-cluster-operator" in csv["metadata"]["name"]:
@@ -213,6 +218,9 @@ def get_odf_multicluster_orchestrator_version(namespace=constants.ACM_HUB_NAMESP
     Returns:
         str: returns version string
     """
+    # Importing here to avoid circular dependency
+    from ocs_ci.ocs.resources.csv import get_csvs_start_with_prefix
+
     csv_list = get_csvs_start_with_prefix(
         constants.ACM_ODF_MULTICLUSTER_ORCHESTRATOR_RESOURCE,
         namespace=namespace,
@@ -233,6 +241,9 @@ def get_ocp_gitops_operator_version(namespace="openshift"):
     Returns:
         str: returns version string
     """
+    # Importing here to avoid circular dependency
+    from ocs_ci.ocs.resources.csv import get_csvs_start_with_prefix
+
     csv_list = get_csvs_start_with_prefix(
         "openshift-gitops-operator", namespace=namespace
     )
@@ -249,6 +260,9 @@ def get_submariner_operator_version(namespace=constants.SUBMARINER_OPERATOR_NAME
     Returns:
         str: returns version string
     """
+    # Importing here to avoid circular dependency
+    from ocs_ci.ocs.resources.csv import get_csvs_start_with_prefix
+
     csv_list = get_csvs_start_with_prefix("submariner", namespace=namespace)
     for csv in csv_list:
         if "submariner" in csv["metadata"]["name"]:
@@ -263,6 +277,9 @@ def get_volsync_operator_version(namespace=constants.SUBMARINER_OPERATOR_NAMESPA
     Returns:
         str: returns version string
     """
+    # Importing here to avoid circular dependency
+    from ocs_ci.ocs.resources.csv import get_csvs_start_with_prefix
+
     csv_list = get_csvs_start_with_prefix("volsync", namespace=namespace)
     for csv in csv_list:
         if "volsync" in csv["metadata"]["name"]:
