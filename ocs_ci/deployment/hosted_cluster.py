@@ -555,9 +555,11 @@ class HypershiftHostedOCP(
                     "watchAllNamespaces"
                 ), "Cannot proceed with hosted cluster creation using agent."
 
-            if not OCP(kind=constants.AGENT_SERVICE_CONFIG).get(dont_raise=True):
+            if not len(OCP(kind=constants.AGENT_SERVICE_CONFIG).get(dont_raise=True)):
                 create_agent_service_config()
-            if not OCP(kind=constants.INFRA_ENV).get(dont_raise=True):
+            if not len(
+                OCP(kind=constants.INFRA_ENV).get(dont_raise=True, all_namespaces=True)
+            ):
                 create_host_inventory()
 
 
