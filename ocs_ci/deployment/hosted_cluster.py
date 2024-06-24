@@ -28,6 +28,7 @@ from ocs_ci.ocs.exceptions import (
 from ocs_ci.ocs.ocp import OCP
 from ocs_ci.ocs.resources.catalog_source import CatalogSource
 from ocs_ci.ocs.resources.csv import check_all_csvs_are_succeeded
+from ocs_ci.ocs.resources.ocs import OCS
 from ocs_ci.ocs.resources.pod import (
     wait_for_pods_to_be_in_statuses_concurrently,
 )
@@ -541,7 +542,7 @@ class HypershiftHostedOCP(
 
         # Enable central infrastructure management service for agent
         if config.DEPLOYMENT.get("hosted_cluster_platform") == "agent":
-            provisioning_obj = OCP(
+            provisioning_obj = OCS(
                 **OCP(kind=constants.PROVISIONING).get().get("items")[0]
             )
             if not provisioning_obj.data["spec"].get("watchAllNamespaces") == "true":
