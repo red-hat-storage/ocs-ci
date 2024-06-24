@@ -546,8 +546,8 @@ class HypershiftHostedOCP(
                 **OCP(kind=constants.PROVISIONING).get().get("items")[0]
             )
             if not provisioning_obj.data["spec"].get("watchAllNamespaces") == "true":
-                provisioning_obj.patch(
-                    resource_name=provisioning_obj.resource_name,
+                provisioning_obj.ocp.patch(
+                    resource_name=provisioning_obj.name,
                     params='{"spec":{"watchAllNamespaces": true }}',
                     format_type="merge",
                 )
