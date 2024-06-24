@@ -545,14 +545,14 @@ class HypershiftHostedOCP(
             provisioning_obj = OCS(
                 **OCP(kind=constants.PROVISIONING).get().get("items")[0]
             )
-            if not provisioning_obj.data["spec"].get("watchAllNamespaces") == "true":
+            if not provisioning_obj.data["spec"].get("watchAllNamespaces"):
                 provisioning_obj.ocp.patch(
                     resource_name=provisioning_obj.name,
                     params='{"spec":{"watchAllNamespaces": true }}',
                     format_type="merge",
                 )
-                assert (
-                    provisioning_obj.get()["spec"].get("watchAllNamespaces") == "true"
+                assert provisioning_obj.get()["spec"].get(
+                    "watchAllNamespaces"
                 ), "Cannot proceed with hosted cluster creation using agent."
 
             if not OCP(kind=constants.AGENT_SERVICE_CONFIG).get(dont_raise=True):
