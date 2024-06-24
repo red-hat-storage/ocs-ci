@@ -541,7 +541,7 @@ class HypershiftHostedOCP(
 
         # Enable central infrastructure management service for agent
         if config.DEPLOYMENT.get("hosted_cluster_platform") == "agent":
-            provisioning_obj = OCP(**OCP(kind=constants.PROVISIONING).get()[0])
+            provisioning_obj = OCP(**OCP(kind=constants.PROVISIONING).get("items")[0])
             if not provisioning_obj.data["spec"].get("watchAllNamespaces") == "true":
                 provisioning_obj.patch(
                     resource_name=provisioning_obj.resource_name,
