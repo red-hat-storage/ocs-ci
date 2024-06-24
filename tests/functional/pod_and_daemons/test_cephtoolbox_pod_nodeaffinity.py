@@ -2,7 +2,8 @@ import logging
 import pytest
 import time
 
-from ocs_ci.ocs import node
+from ocs_ci.framework import config
+from ocs_ci.ocs import ocp, node, constants
 from ocs_ci.ocs.resources import pod
 from ocs_ci.framework.pytest_customization.marks import bugzilla, magenta_squad
 from ocs_ci.framework.testlib import tier1
@@ -11,6 +12,9 @@ from ocs_ci.ocs.node import (
     unschedule_nodes,
     drain_nodes,
     schedule_nodes,
+)
+from ocs_ci.ocs.resources.pod import (
+    wait_for_pods_to_be_running,
 )
 
 log = logging.getLogger(__name__)
@@ -27,6 +31,27 @@ class TestCephtoolboxPod:
 
         """
         self.sanity_helpers = Sanity()
+
+    @pytest.fixture(autouse=True)
+    def teardown(self, request):
+        def finalizer():
+            resource_name = constants.DEFAULT_CLUSTERNAME
+            if config.DEPLOYMENT["external_mode"]:
+                resource_name = constants.DEFAULT_CLUSTERNAME_EXTERNAL_MODE
+            storagecluster_obj = ocp.OCP(
+                resource_name=resource_name,
+                namespace=config.ENV_DATA["cluster_namespace"],
+                kind=constants.STORAGECLUSTER,
+            )
+            params = '[{"op": "remove", "path": "/spec/placement/toolbox"},]'
+            storagecluster_obj.patch(params=params, format_type="json")
+            log.info("Patched storage cluster  back to the default")
+            time.sleep(100)
+            assert (
+                wait_for_pods_to_be_running()
+            ), "some of the pods didn't came up running"
+
+        request.addfinalizer(finalizer)
 
     def test_node_affinity_to_ceph_toolbox_pod(self):
         # This test verifies whether ceph toolbox failovered or not after applying node affinity
