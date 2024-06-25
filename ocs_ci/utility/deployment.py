@@ -194,7 +194,8 @@ def get_ocp_release_image_from_installer():
 
     """
     logger.info("Retrieving release image from openshift installer")
-    cmd = f"{config.RUN['bin_dir']}/openshift-install version"
+    installer_path = config.ENV_DATA["installer_path"]
+    cmd = f"{installer_path} version"
     proc = exec_cmd(cmd)
     for line in proc.stdout.decode().split("\n"):
         if "release image" in line:
