@@ -212,6 +212,7 @@ higher priority).
 * `skip_ocp_deployment` - Skip the OCP deployment step or not (Default: false)
 * `skip_ocs_deployment` - Skip the OCS deployment step or not (Default: false)
 * `ocs_version` - Version of OCS that is being deployed
+* `acm_version` - Version of acm to be used for this run (applicable mostly to DR scenarios)
 * `vm_template` - VMWare template to use for RHCOS images
 * `fio_storageutilization_min_mbps` - Minimal write speed of FIO used in workload_fio_storageutilization
 * `TF_LOG_LEVEL` - Terraform log level
