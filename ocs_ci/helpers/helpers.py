@@ -4792,7 +4792,6 @@ def get_ceph_recovery_profile():
     return ceph_output
 
 
-
 def is_rbd_default_storage_class(custom_sc=None):
     """
     Check if RDB is a default storageclass for the cluster
@@ -4821,4 +4820,3 @@ def is_rbd_default_storage_class(custom_sc=None):
 
     logger.error("Storageclass {default_rbd_sc} is not a default  RBD StorageClass.")
     return False
-
