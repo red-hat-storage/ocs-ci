@@ -1,6 +1,7 @@
 """
 General PVC object
 """
+
 import logging
 import time
 from concurrent.futures import ThreadPoolExecutor
@@ -398,10 +399,18 @@ def get_deviceset_pvcs():
         AssertionError: In case the deviceset PVCs are not found
 
     """
+    storage_cluster_obj = OCP(
+        kind=constants.STORAGECLUSTER,
+        resource_name=constants.DEFAULT_CLUSTERNAME,
+        namespace=config.ENV_DATA["cluster_namespace"],
+    )
     ocs_pvc_obj = get_all_pvc_objs(namespace=config.ENV_DATA["cluster_namespace"])
+    deviceset_prefix = (
+        storage_cluster_obj.get().get("spec").get("storageDeviceSets")[0].get("name")
+    )
     deviceset_pvcs = []
     for pvc_obj in ocs_pvc_obj:
-        if pvc_obj.name.startswith(constants.DEFAULT_DEVICESET_PVC_NAME):
+        if pvc_obj.name.startswith(deviceset_prefix):
             deviceset_pvcs.append(pvc_obj)
     assert deviceset_pvcs, "Failed to find the deviceset PVCs"
     return deviceset_pvcs
