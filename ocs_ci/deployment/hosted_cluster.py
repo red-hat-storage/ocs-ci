@@ -486,7 +486,7 @@ def create_host_inventory():
 
     # Create pull secret for InfraEnv
     secret_obj = OCP(
-        kind=constants.POD,
+        kind=constants.SECRET,
         resource_name="pull-secret",
         namespace=constants.OPENSHIFT_CONFIG_NAMESPACE,
     )
