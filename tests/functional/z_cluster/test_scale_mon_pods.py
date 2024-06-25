@@ -35,15 +35,21 @@ log = logging.getLogger(__name__)
 @skipif_less_than_five_workers
 @skipif_ocs_version("<4.15")
 class TestFiveMonInCluster(ManageTest):
+    def __init__(self):
 
-    mon_count = 5
-    ceph_cluster = CephCluster()
+        """
+        Initializer function
 
-    storagecluster_obj = ocp.OCP(
-        resource_name=constants.DEFAULT_CLUSTERNAME,
-        namespace=config.ENV_DATA["cluster_namespace"],
-        kind=constants.STORAGECLUSTER,
-    )
+        """
+
+        self.mon_count = 5
+        self.ceph_cluster = CephCluster()
+
+        self.storagecluster_obj = ocp.OCP(
+            resource_name=constants.DEFAULT_CLUSTERNAME,
+            namespace=config.ENV_DATA["cluster_namespace"],
+            kind=constants.STORAGECLUSTER,
+        )
 
     def assign_dummy_racks(self):
         """
