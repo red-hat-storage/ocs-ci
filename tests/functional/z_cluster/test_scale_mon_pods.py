@@ -192,7 +192,7 @@ class TestFiveMonInCluster(ManageTest):
                 "INVALID: Mon count is already set to five."
             )
         else:
-            # if test got to this point, the alert was found, test PASS
+            # If CephMonLowCount warning is not found post updating mon count, fail the test
             pytest.fail(
                 "Failed to get CephMonLowCount warning when mon count is updated to five"
             )

@@ -3752,6 +3752,9 @@ def fetch_rgw_pod_restart_count(namespace=config.ENV_DATA["cluster_namespace"]):
 def verify_mon_pod_running(mon_count):
     """
     Verify that all the mon pods are in Running state.
+    Args:
+        mon_count(int): Expected number of mon pods to which should be in running state
+
     Returns:
         bool: True if all mon pods are in running state, False otherwise
     """
