@@ -23,55 +23,44 @@ from ocs_ci.ocs.constants import (
     REPLICA1_STORAGECLASS,
     VOLUME_MODE_BLOCK,
     CSI_RBD_RAW_BLOCK_POD_YAML,
+    DEFALUT_DEVICE_CLASS,
 )
 from ocs_ci.helpers.helpers import create_pvc
 from ocs_ci.ocs.replica_one import (
-    delete_replica1_cephblockpools,
     delete_replica_1_sc,
     get_osd_pgs_used,
     purge_replica1_osd,
     delete_replica1_cephblockpools_cr,
-    get_replica1_osd_deployment,
     count_osd_pods,
     modify_replica1_osd_count,
     get_osd_kb_used_data,
     get_device_class_from_ceph,
     get_all_osd_names_by_device_class,
-    FAILURE_DOMAINS,
+    get_failure_domains,
 )
 
 
 log = getLogger(__name__)
 
-DEFALUT_DEVICE_CLASS = "ssd"
 
+def create_pod_on_failure_domain(project_factory, pod_factory, failure_domain: str):
+    """
+    Creates a pod on the specified failure domain.
 
-def create_replica1_pvc(project_factory) -> None:
+    Args:
+        failure_domain (str): Failure domain to create the pod on.
+
+    Returns:
+        Pod: Pod object
+    """
     proj_obj = project_factory()
     proj = proj_obj.namespace
-    create_pvc(
+    pvc = create_pvc(
         namespace=proj,
         sc_name=REPLICA1_STORAGECLASS,
         size="80G",
         access_mode=ACCESS_MODE_RWO,
     )
-
-
-def create_pvc_for_project(project, size="80G", access_mode=ACCESS_MODE_RWO):
-    return create_pvc(
-        namespace=project,
-        sc_name=REPLICA1_STORAGECLASS,
-        size=size,
-        access_mode=access_mode,
-    )
-
-
-def create_pod_on_failure_domain(
-    project_factory, pod_factory, failure_domain: str
-) -> None:
-    proj_obj = project_factory()
-    proj = proj_obj.namespace
-    pvc = create_pvc_for_project(proj)
 
     node = {"topology.kubernetes.io/zone": failure_domain}
     return pod_factory(pvc=pvc, node_selector=node)
@@ -98,7 +87,20 @@ def validate_dict_values(input_dict: dict) -> bool:
 
 def compare_dictionaries(
     dict1: dict, dict2: dict, known_different_keys: list, tolerance: int = 10
-):
+) -> dict:
+    """
+    Compares two dictionaries and returns a dictionary with the keys that have different values,
+    but allow a tolerance between this values.
+
+    Args:
+        dict1 (dict): dictionary to compare.
+        dict2 (dict): dictionary to compare.
+        known_different_keys (list): keys to ignore from the comparison.
+        tolerance (int): level of tolerance by precentage. Defaults to 10.
+
+    Returns:
+        dict: difrerences between the two dictionaries.
+    """
     differences = dict()
 
     for key in dict1.keys():
@@ -126,7 +128,7 @@ def compare_dictionaries(
 
 @pytest.fixture(scope="function", autouse=False)
 def setup_replica1(
-    request: pytest.FixtureRequest,
+    request,
     pod_factory,
     project_factory,
 ):
@@ -143,21 +145,16 @@ def setup_replica1(
     )
 
     yield
-    # This part is not working at the moment
     log.info("Teardown fixture called")
     cephblockpools = OCP(kind=CEPHBLOCKPOOL)
     set_non_resilient_pool(storage_cluster, enable=False)
-    storage_cluster.wait_for_resource(
-        condition=STATUS_READY, column="PHASE", timeout=180, sleep=15
-    )
     delete_replica_1_sc()
     log.info("StorageClass Deleted")
     delete_replica1_cephblockpools_cr(cephblockpools)
-    delete_replica1_cephblockpools(cephblockpools)
-    deployments_name = get_replica1_osd_deployment()
-    log.info(deployments_name)
     purge_replica1_osd()
-    # End
+    storage_cluster.wait_for_resource(
+        condition=STATUS_READY, column="PHASE", timeout=1800, sleep=60
+    )
 
 
 @polarion_id("OCS-5720")
@@ -165,11 +162,10 @@ def setup_replica1(
 @bugzilla("2274175")
 @tier1
 class TestReplicaOne:
-    osd_before_test = count_osd_pods()
-
     def test_cluster_before_configuration(
         self, pod_factory, pvc_factory, project_factory
     ):
+        self.osd_before_test = count_osd_pods()
         self.kb_before_workload = get_osd_kb_used_data()
         log.info(f"{self.kb_before_workload} KB used before test")
         self.device_class_before_test = get_device_class_from_ceph()
@@ -200,7 +196,7 @@ class TestReplicaOne:
     def test_configure_replica1(self, project_factory, pod_factory, setup_replica1):
         log.info("Starting Tier1 replica one test")
 
-        failure_domains = FAILURE_DOMAINS
+        failure_domains = get_failure_domains()
         testing_pod = create_pod_on_failure_domain(
             project_factory,
             pod_factory,

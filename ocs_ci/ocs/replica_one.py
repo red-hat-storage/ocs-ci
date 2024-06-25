@@ -1,5 +1,4 @@
 from logging import getLogger
-from typing import List  # To be removed when python 3.8 support is dropped
 
 from ocs_ci.framework import config
 from ocs_ci.ocs.resources.pod import (
@@ -16,16 +15,36 @@ from ocs_ci.ocs.constants import (
     DEPLOYMENT,
     STORAGECLUSTER,
     STATUS_READY,
+    REPLICA1_STORAGECLASS,
 )
 from ocs_ci.ocs.exceptions import CommandFailed
 
 
 log = getLogger(__name__)
 
-REPLICA1_STORAGECLASS = "ocs-storagecluster-ceph-non-resilient-rbd"
+_FAILURE_DOMAINS = None
 
 
-def get_failures_domain_name() -> List[str]:
+def get_failure_domains() -> list[str]:
+    """
+    Gets Cluster Failure Domains
+
+    Returns:
+        list: Failure Domains names
+    """
+    global _FAILURE_DOMAINS
+    if _FAILURE_DOMAINS is None:
+        try:
+            _FAILURE_DOMAINS = config.ENV_DATA.get(
+                "worker_availability_zones", get_failures_domain_name()
+            )
+        except CommandFailed as e:
+            print(f"Error initializing FAILURE_DOMAINS: {e}")
+            _FAILURE_DOMAINS = []
+    return _FAILURE_DOMAINS
+
+
+def get_failures_domain_name() -> list[str]:
     """
     Fetch Failure domains from cephblockpools names
 
@@ -37,10 +56,12 @@ def get_failures_domain_name() -> List[str]:
     failure_domains = list()
     cephblockpools_names = list()
     prefix = DEFAULT_CEPHBLOCKPOOL
-    for i in range(0, len((cbp_object.data["items"]))):
-        cephblockpools_names.append(cbp_object.data["items"][i]["metadata"]["name"])
-
-    log.info(f"Cephblockpool names:{cephblockpools_names}")
+    items = cbp_object.data.get("items", [])
+    for i in range(len(items)):
+        name = items[i].get("metadata", {}).get("name")
+        if name:
+            cephblockpools_names.append(name)
+        log.info(f"Cephblockpool names:{cephblockpools_names}")
 
     for name in cephblockpools_names:
         if name.startswith(prefix):
@@ -54,11 +75,6 @@ def get_failures_domain_name() -> List[str]:
     return failure_domains
 
 
-FAILURE_DOMAINS = config.ENV_DATA.get(
-    "worker_availability_zones", get_failures_domain_name()
-)
-
-
 def get_replica_1_osds() -> dict:
     """
     Gets the names and IDs of OSD associated with replica1
@@ -69,7 +85,7 @@ def get_replica_1_osds() -> dict:
     """
     replica1_osds = dict()
     all_osds = get_pods_having_label(label=OSD_APP_LABEL)
-    for domain in FAILURE_DOMAINS:
+    for domain in get_failure_domains():
         for osd in all_osds:
             if osd["metadata"]["labels"]["ceph.rook.io/DeviceSet"] == domain:
                 replica1_osds[osd["metadata"]["name"]] = osd["metadata"]["labels"][
@@ -79,7 +95,7 @@ def get_replica_1_osds() -> dict:
     return replica1_osds
 
 
-def get_replica1_osd_deployment() -> List[str]:
+def get_replica1_osd_deployment() -> list[str]:
     """
     Gets the names of OSD deployments associated with replica1
 
@@ -103,7 +119,7 @@ def get_replica1_osd_deployment() -> List[str]:
     for deployment in osd_deployment:
         if (
             deployment["metadata"]["labels"]["ceph.rook.io/DeviceSet"]
-            in FAILURE_DOMAINS
+            in get_failure_domains()
         ):
             log.info(deployment["metadata"]["name"])
             replica1_osd_deployment.append(deployment["metadata"]["name"])
@@ -111,7 +127,7 @@ def get_replica1_osd_deployment() -> List[str]:
     return replica1_osd_deployment
 
 
-def scaledown_deployment(deployments_name: List[str]) -> None:
+def scaledown_deployment(deployments_name: list[str]) -> None:
     """
     Scale down deployments to 0
 
@@ -173,31 +189,14 @@ def delete_replica1_cephblockpools_cr(cbp_object: OCP):
     Deletes CR of cephblockpools associated with replica1
 
     Args:
-        cbp_object (OCP): OCP object with kind=CEPHBLOCKPOOL
+        cbp_object (ocp.OCP): OCP object with kind=CEPHBLOCKPOOL
 
     """
     for i in range(0, len((cbp_object.data["items"]))):
-        cbp_cr_name = cbp_object.data["items"][i]["metadata"]["name"]
-        if cbp_cr_name != DEFAULT_CEPHBLOCKPOOL:
-            cbp_object.delete(resource_name=cbp_cr_name)
-
-
-def delete_replica1_cephblockpools(cbp_object: OCP):
-    """
-    Deletes cephblockpools associated with replica1
-
-    Args:
-        cbp_object (OCP): OCP object with kind=CEPHBLOCKPOOL
-
-    """
-    toolbox_pod = get_ceph_tools_pod()
-    for i in range(0, len((cbp_object.data["items"]))):
-        replica1_pool_name = cbp_object.data["items"][i]["metadata"]["name"]
-        if replica1_pool_name != DEFAULT_CEPHBLOCKPOOL:
-            command = f"ceph osd pool rm {replica1_pool_name} {replica1_pool_name} --yes-i-really-really-mean-it"
-            toolbox_pod.exec_cmd_on_pod(command)
-
-            log.info(f"deleting {replica1_pool_name}")
+        cbp_cr_name = cbp_object.data["items"][i]["spec"]["deviceClass"]
+        log.info(f"cbp_cr_name: {cbp_cr_name}")
+        if cbp_cr_name in get_failure_domains():
+            cbp_object.delete(resource_name=(f"{DEFAULT_CEPHBLOCKPOOL}-{cbp_cr_name}"))
 
 
 def modify_replica1_osd_count(new_osd_count):
