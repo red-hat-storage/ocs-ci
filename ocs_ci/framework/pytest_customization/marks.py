@@ -198,6 +198,11 @@ stretchcluster_required = pytest.mark.skipif(
     reason="Test runs only on Stretch cluster with arbiter deployments",
 )
 
+skipif_less_than_five_workers = pytest.mark.skipif(
+    config.ENV_DATA["worker_replicas"] < 5,
+    reason="This test cannot run on setup having less than three worker nodes",
+)
+
 sts_deployment_required = pytest.mark.skipif(
     config.DEPLOYMENT.get("sts_enabled") is False,
     reason="Test runs only on the AWS STS enabled cluster deployments",
