@@ -582,13 +582,14 @@ def create_agent_service_config():
     # Verify new pods that should be created
     wait_for_pods_to_be_in_statuses_concurrently(
         app_selectors_to_resource_count_list=[
-            "app=assisted-service",
-            "app=assisted-image-service",
+            {"app=assisted-service": 1},
+            {"app=assisted-image-service": 1},
         ],
         namespace="multicluster-engine",
         timeout=600,
         status=constants.STATUS_RUNNING,
     )
+    logger.info("Created AgentServiceConfig.")
 
 
 def create_host_inventory():
@@ -623,6 +624,7 @@ def create_host_inventory():
     # TODO: Add custom OS image details. Reference https://access.redhat.com/documentation/en-us/red_hat_advanced_
     #  cluster_management_for_kubernetes/2.10/html-single/clusters/index#create-host-inventory-cli-steps
     helpers.create_resource(**infra_env_data)
+    logger.info("Created InfraEnv.")
 
 
 class HostedODF(HypershiftHostedOCP):
