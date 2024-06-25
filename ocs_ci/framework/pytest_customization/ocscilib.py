@@ -263,6 +263,11 @@ def pytest_addoption(parser):
         ),
     )
     parser.addoption(
+        "--acm-version",
+        dest="acm_version",
+        help="acm version(e.g. 2.8) to be used for the current run",
+    )
+    parser.addoption(
         "--upgrade-acm-version",
         dest="upgrade_acm_version",
         help="acm version to upgrade(e.g. 2.8), use only with DR upgrade scenario",
@@ -670,6 +675,9 @@ def process_cluster_cli_params(config):
     if custom_kubeconfig_location:
         os.environ["KUBECONFIG"] = custom_kubeconfig_location
         ocsci_config.RUN["kubeconfig"] = custom_kubeconfig_location
+    acm_version = get_cli_param(config, "--acm-version")
+    if acm_version:
+        ocsci_config.ENV_DATA["acm_version"] = acm_version
     upgrade_acm_version = get_cli_param(config, "--upgrade-acm-version")
     if upgrade_acm_version:
         ocsci_config.UPGRADE["upgrade_acm_version"] = upgrade_acm_version
