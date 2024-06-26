@@ -146,6 +146,7 @@ anywhere else.
 * `sts_enabled` - Enable STS deployment functionality.
 * `metallb_operator` - Enable MetalLB operator installation during OCP deployment.
 * `multi_storagecluster` - Enable multi-storagecluster deployment when set to true.
+* `rgw_enable_virtual_host_style_access` - Configure access buckets with DNS subdomain style (Virtual host style) for RGW (default: `True`)
 
 #### REPORTING
 
