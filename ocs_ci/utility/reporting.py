@@ -2,15 +2,11 @@ import logging
 from getpass import getuser
 
 from ocs_ci.framework import config
-from ocs_ci.utility.utils import (
-    get_ocp_version,
-    get_testrun_name,
-)
+from ocs_ci.utility.utils import get_ocp_version, get_testrun_name
 from ocs_ci.utility.version import (
     get_semantic_ocs_version_from_config,
     VERSION_4_13,
 )
-
 
 log = logging.getLogger(__name__)
 
