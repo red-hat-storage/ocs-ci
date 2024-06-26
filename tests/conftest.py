@@ -6647,11 +6647,14 @@ def cnv_dr_workload(request):
     """
     instances = []
 
-    def factory(num_of_vm_subscription=1, num_of_vm_appset=0):
+    def factory(
+        num_of_vm_subscription=1, num_of_vm_appset_push=0, num_of_vm_appset_pull=0
+    ):
         """
         Args:
             num_of_vm_subscription (int): Number of Subscription type workload to be created
-            num_of_vm_appset (int): Number of ApplicationSet type workload to be created
+            num_of_vm_appset_push (int): Number of ApplicationSet Push type workload to be created
+            num_of_vm_appset_pull (int): Number of ApplicationSet Pull type workload to be created
 
         Raises:
             ResourceNotDeleted: In case workload resources not deleted properly
@@ -6662,16 +6665,21 @@ def cnv_dr_workload(request):
         """
         total_pvc_count = 0
         workload_types = [
-            (constants.SUBSCRIPTION, "dr_cnv_workload_sub"),
-            (constants.APPLICATION_SET, "dr_cnv_workload_appset"),
+            (constants.SUBSCRIPTION, "dr_cnv_workload_sub", num_of_vm_subscription),
+            (
+                constants.APPLICATION_SET,
+                "dr_cnv_workload_appset_push",
+                num_of_vm_appset_push,
+            ),
+            (
+                constants.APPLICATION_SET,
+                "dr_cnv_workload_appset_pull",
+                num_of_vm_appset_pull,
+            ),
         ]
 
-        for workload_type, data_key in workload_types:
-            for index in range(
-                num_of_vm_subscription
-                if workload_type == constants.SUBSCRIPTION
-                else num_of_vm_appset
-            ):
+        for workload_type, data_key, num_of_vm in workload_types:
+            for index in range(num_of_vm):
                 workload_details = ocsci_config.ENV_DATA[data_key][index]
                 workload = CnvWorkload(
                     workload_type=workload_type,
@@ -6680,6 +6688,7 @@ def cnv_dr_workload(request):
                     vm_secret=workload_details["vm_secret"],
                     vm_username=workload_details["vm_username"],
                     workload_name=workload_details["name"],
+                    workload_namespace=workload_details["destination_namespace"],
                     workload_pod_count=workload_details["pod_count"],
                     workload_pvc_count=workload_details["pvc_count"],
                     workload_placement_name=workload_details[
@@ -6688,6 +6697,9 @@ def cnv_dr_workload(request):
                     workload_pvc_selector=workload_details[
                         "dr_workload_app_pvc_selector"
                     ],
+                    appset_model=workload_details["appset_model"]
+                    if workload_type == constants.APPLICATION_SET
+                    else None,
                 )
                 instances.append(workload)
                 total_pvc_count += workload_details["pvc_count"]

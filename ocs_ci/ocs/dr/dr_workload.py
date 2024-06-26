@@ -13,7 +13,7 @@ from time import sleep
 
 from ocs_ci.framework import config
 from ocs_ci.helpers import dr_helpers
-from ocs_ci.helpers.cnv_helpers import create_vm_secret
+from ocs_ci.helpers.cnv_helpers import create_vm_secret, cal_md5sum_vm
 from ocs_ci.helpers.helpers import (
     delete_volume_in_backend,
     verify_volume_deleted_in_backend,
@@ -582,6 +582,7 @@ class CnvWorkload(DRWorkload):
         self.drpc_yaml_file = os.path.join(constants.DRPC_PATH)
         self.cnv_workload_placement_name = kwargs.get("workload_placement_name")
         self.cnv_workload_pvc_selector = kwargs.get("workload_pvc_selector")
+        self.appset_model = kwargs.get("appset_model", None)
 
     def deploy_workload(self):
         """
@@ -589,25 +590,10 @@ class CnvWorkload(DRWorkload):
 
         """
         self._deploy_prereqs()
-        self.workload_namespace = self._get_workload_namespace()
         self.vm_obj = VirtualMachine(
             vm_name=self.vm_name, namespace=self.workload_namespace
         )
-
-        # Creating secrets to access the VMs via SSH
-        for cluster in get_non_acm_cluster_config():
-            config.switch_ctx(cluster.MULTICLUSTER["multicluster_index"])
-            try:
-                create_project(project_name=self.workload_namespace)
-            except CommandFailed as ex:
-                if str(ex).find("(AlreadyExists)"):
-                    log.warning("The namespace already exists !")
-
-            self.vm_secret_obj.append(
-                create_vm_secret(
-                    secret_name=self.vm_secret_name, namespace=self.workload_namespace
-                )
-            )
+        self.manage_dr_vm_secrets()
 
         # Load DRPC
         drpc_yaml_data = templating.load_yaml(self.drpc_yaml_file)
@@ -635,12 +621,59 @@ class CnvWorkload(DRWorkload):
         )
         log.info(cnv_workload_yaml_data_load)
         for cnv_workload_yaml_data in cnv_workload_yaml_data_load:
-            # Update Channel for sub apps
             if self.workload_type == constants.SUBSCRIPTION:
+                # Update channel for Subscription apps
                 if cnv_workload_yaml_data["kind"] == "Channel":
                     cnv_workload_yaml_data["spec"]["pathname"] = self.workload_repo_url
+            elif cnv_workload_yaml_data["kind"] == "ApplicationSet":
+                cnv_workload_yaml_data["metadata"]["name"] = self.workload_name
+                # Change the destination namespace for AppSet workload
+                cnv_workload_yaml_data["spec"]["template"]["spec"]["destination"][
+                    "namespace"
+                ] = self.workload_namespace
+
+                # Change the AppSet placement label
+                for generator in cnv_workload_yaml_data["spec"]["generators"]:
+                    if (
+                        "clusterDecisionResource" in generator
+                        and "labelSelector" in generator["clusterDecisionResource"]
+                    ):
+                        labels = generator["clusterDecisionResource"][
+                            "labelSelector"
+                        ].get("matchLabels", {})
+                        if "cluster.open-cluster-management.io/placement" in labels:
+                            labels[
+                                "cluster.open-cluster-management.io/placement"
+                            ] = self.cnv_workload_placement_name
+
+                if self.appset_model == "pull":
+                    # load appset_yaml_file, add "annotations" key and add values to it
+                    cnv_workload_yaml_data["spec"]["template"]["metadata"].setdefault(
+                        "annotations", {}
+                    )
+                    cnv_workload_yaml_data["spec"]["template"]["metadata"][
+                        "annotations"
+                    ][
+                        "apps.open-cluster-management.io/ocm-managed-cluster"
+                    ] = "{{name}}"
+                    cnv_workload_yaml_data["spec"]["template"]["metadata"][
+                        "annotations"
+                    ]["argocd.argoproj.io/skip-reconcile"] = "true"
+
+                    # Assign values to the "labels" key
+                    cnv_workload_yaml_data["spec"]["template"]["metadata"]["labels"][
+                        "apps.open-cluster-management.io/pull-to-ocm-managed-cluster"
+                    ] = "true"
 
             if cnv_workload_yaml_data["kind"] == constants.PLACEMENT:
+                cnv_workload_yaml_data["metadata"][
+                    "name"
+                ] = self.cnv_workload_placement_name
+                cnv_workload_yaml_data["metadata"]["namespace"] = (
+                    self.workload_namespace
+                    if self.workload_type == constants.SUBSCRIPTION
+                    else constants.GITOPS_CLUSTER_NAMESPACE
+                )
                 # Update preferred cluster name
                 cnv_workload_yaml_data["spec"]["predicates"][0][
                     "requiredClusterSelector"
@@ -785,6 +818,75 @@ class CnvWorkload(DRWorkload):
         ) as ex:
             err_msg = f"Failed to delete the workload: {ex}"
             raise ResourceNotDeleted(err_msg)
+
+    def manage_dr_vm_secrets(self):
+        """
+        Create secrets to access the VMs via SSH. If a secret already exists, delete and recreate it.
+
+        """
+        for cluster in get_non_acm_cluster_config():
+            config.switch_ctx(cluster.MULTICLUSTER["multicluster_index"])
+
+            # Create namespace if it doesn't exist
+            try:
+                create_project(project_name=self.workload_namespace)
+            except CommandFailed as ex:
+                if "(AlreadyExists)" in str(ex):
+                    log.warning("The namespace already exists!")
+
+            # Create or recreate the secret for ssh access
+            try:
+                log.info(
+                    f"Creating secret namespace {self.workload_namespace} for ssh access"
+                )
+                self.vm_secret_obj.append(
+                    create_vm_secret(
+                        secret_name=self.vm_secret_name,
+                        namespace=self.workload_namespace,
+                    )
+                )
+            except CommandFailed as ex:
+                if "(AlreadyExists)" in str(ex):
+                    log.warning(
+                        f"Secret {self.vm_secret_name} already exists in namespace {self.workload_namespace}, "
+                        f"deleting and recreating the secret to fetch the right SSH pub key."
+                    )
+                    ocp.OCP(
+                        kind=constants.SECRET,
+                        namespace=self.workload_namespace,
+                    ).delete(resource_name=self.vm_secret_name, wait=True)
+                    self.vm_secret_obj.append(
+                        create_vm_secret(
+                            secret_name=self.vm_secret_name,
+                            namespace=self.workload_namespace,
+                        )
+                    )
+
+
+def validate_data_integrity_vm(
+    cnv_workloads, file_name, md5sum_original, app_state="FailOver"
+):
+    """
+    Validates the MD5 checksum of files on VMs after FailOver/Relocate.
+
+    Args:
+        cnv_workloads (list): List of workloads, each containing vm_obj, vm_username, and workload_name.
+        file_name (str): Name/path of the file to validate md5sum on.
+        md5sum_original (list): List of original MD5 checksums for the file.
+        app_state (str): State of the app FailOver/Relocate to log it during validation
+
+    """
+    for count, cnv_wl in enumerate(cnv_workloads):
+        md5sum_new = cal_md5sum_vm(
+            cnv_wl.vm_obj, file_path=file_name, username=cnv_wl.vm_username
+        )
+        log.info(
+            f"Comparing original checksum: {md5sum_original[count]} of {file_name} with {md5sum_new}"
+            f" on {cnv_wl.workload_name}after {app_state}"
+        )
+        assert (
+            md5sum_original[count] == md5sum_new
+        ), f"Failed: MD5 comparison after {app_state}"
 
 
 def validate_data_integrity(namespace, path="/mnt/test/hashfile", timeout=600):
