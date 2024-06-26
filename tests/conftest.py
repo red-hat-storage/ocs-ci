@@ -1592,6 +1592,57 @@ def additional_testsuite_properties(record_testsuite_property, pytestconfig):
     # add markers as separated property
     markers = ocsci_config.RUN["cli_params"].get("-m", "").replace(" ", "-")
     record_testsuite_property("rp_markers", markers)
+    from ocs_ci.utility.version import (
+        get_dr_hub_operator_version,
+        get_ocp_dr_cluster_operator_version,
+        get_odf_multicluster_orchestrator_version,
+        get_ocp_gitops_operator_version,
+        get_submariner_operator_version,
+        get_volsync_operator_version,
+    )
+    from ocs_ci.utility.utils import (
+        get_oadp_version,
+        get_acm_version,
+    )
+
+    if ocsci_config.MULTICLUSTER["acm_cluster"]:
+        acm_operator_version = get_acm_version()
+        if acm_operator_version:
+            record_testsuite_property("rp_acm_version", acm_operator_version)
+        ocp_dr_hub_operator_version = get_dr_hub_operator_version()
+        if ocp_dr_hub_operator_version:
+            record_testsuite_property("rp_dr_hub_version", ocp_dr_hub_operator_version)
+        odf_multicluster_orchestrator_version = (
+            get_odf_multicluster_orchestrator_version()
+        )
+        if odf_multicluster_orchestrator_version:
+            record_testsuite_property(
+                "rp_odf_multicluster_orchestrator_version",
+                odf_multicluster_orchestrator_version,
+            )
+        gitops_operator_version = get_ocp_gitops_operator_version()
+        if gitops_operator_version:
+            record_testsuite_property("rp_gitops_version", gitops_operator_version)
+    if ocsci_config.MULTICLUSTER["primary_cluster"]:
+        oadp_operator_version = get_oadp_version()
+        if oadp_operator_version:
+            record_testsuite_property("rp_oadp_version", oadp_operator_version)
+        ocp_dr_cluster_operator_version = get_ocp_dr_cluster_operator_version()
+        if ocp_dr_cluster_operator_version:
+            record_testsuite_property(
+                "rp_ocp_dr_cluster_version", ocp_dr_cluster_operator_version
+            )
+        gitops_operator_version = get_ocp_gitops_operator_version()
+        if gitops_operator_version:
+            record_testsuite_property("rp_gitops_version", gitops_operator_version)
+        volsync_operator_version = get_volsync_operator_version()
+        if volsync_operator_version:
+            record_testsuite_property("rp_volsync_version", volsync_operator_version)
+        submariner_operator_version = get_submariner_operator_version()
+        if submariner_operator_version:
+            record_testsuite_property(
+                "rp_submariner_version", submariner_operator_version
+            )
 
 
 @pytest.fixture(scope="session")
