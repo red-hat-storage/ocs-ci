@@ -1,8 +1,8 @@
-from datetime import datetime
 import logging
 import uuid
-from ocs_ci.helpers.helpers import setup_pod_directories
+from datetime import datetime
 
+from ocs_ci.helpers.helpers import setup_pod_directories
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.bucket_utils import (
     craft_s3_command,
@@ -34,7 +34,6 @@ class MockupBucketLogger:
             region(str): The region of the uls bucket
 
         """
-
         self.awscli_pod = awscli_pod
         self.mcg_obj = mcg_obj
         self.log_files_dir = setup_pod_directories(awscli_pod, ["bucket_logs_dir"])[0]
@@ -51,55 +50,6 @@ class MockupBucketLogger:
         logs_bucket = bucket_factory(bucketclass=bucketclass_dict)[0]
         self.logs_bucket_mcg_name = logs_bucket.name
         self.logs_bucket_uls_name = logs_bucket.bucketclass.namespacestores[0].uls_name
-
-        self._standard_test_obj_list = self.awscli_pod.exec_cmd_on_pod(
-            f"ls -A1 {constants.AWSCLI_TEST_OBJ_DIR}"
-        ).split(" ")
-
-    @property
-    def standard_test_obj_list(self):
-        return self._standard_test_obj_list
-
-    def upload_test_objs_and_log(self, bucket_name):
-        """
-        Uploads files from files_dir to the MCG bucket and write matching
-        mockup logs to the logs bucket
-
-        Args:
-            files_dir(str): Full path to a directory on awscli_pod
-
-        """
-
-        logger.info(f"Uploading test objects to {bucket_name}")
-
-        sync_object_directory(
-            self.awscli_pod,
-            constants.AWSCLI_TEST_OBJ_DIR,
-            f"s3://{bucket_name}",
-            self.mcg_obj,
-        )
-
-        self._upload_mockup_logs(
-            bucket_name=bucket_name, obj_list=self._standard_test_obj_list, op="PUT"
-        )
-
-    def upload_arbitrary_object_and_log(self, bucket_name):
-        """
-        Uploads an arbitrary object to the MCG bucket and upload a matching mockup log
-
-        """
-
-        logger.info(f"Uploading an arbitrary object to {bucket_name}")
-
-        obj_name = self._standard_test_obj_list[0]
-        cmd = f"cp {constants.AWSCLI_TEST_OBJ_DIR}{obj_name} s3://{bucket_name}/{obj_name}"
-
-        self.awscli_pod.exec_cmd_on_pod(
-            craft_s3_command(cmd, mcg_obj=self.mcg_obj),
-            out_yaml_format=False,
-        )
-
-        self._upload_mockup_logs(bucket_name, [obj_name], "PUT")
 
     def delete_objs_and_log(self, bucket_name, objs):
         """
@@ -123,28 +73,9 @@ class MockupBucketLogger:
                     f"rm s3://{bucket_name}/{objs[i]}", self.mcg_obj
                 )
                 self.awscli_pod.exec_cmd_on_pod(s3cmd)
-            self._upload_mockup_logs(bucket_name, objs, "DELETE")
+            self.upload_mockup_logs(bucket_name, objs, "DELETE")
 
-    def delete_all_objects_and_log(self, bucket_name):
-        """
-        Deletes all objects from the MCG bucket and write matching mockup logs
-
-        """
-
-        logger.info(f"Deleting all objects from {bucket_name}")
-
-        obj_list = list_objects_from_bucket(
-            self.awscli_pod,
-            f"s3://{bucket_name}",
-            s3_obj=self.mcg_obj,
-        )
-
-        s3cmd = craft_s3_command(f"rm s3://{bucket_name} --recursive", self.mcg_obj)
-        self.awscli_pod.exec_cmd_on_pod(s3cmd)
-
-        self._upload_mockup_logs(bucket_name, obj_list, "DELETE")
-
-    def _upload_mockup_logs(self, bucket_name, obj_list, op):
+    def upload_mockup_logs(self, bucket_name, obj_list, op):
         """
         Uploads a mockup log for each object in obj_list to the logs bucket based on the given operation
 

@@ -1865,7 +1865,7 @@ def get_bucket_available_size(mcg_obj, bucket_name):
 
 
 def compare_bucket_object_list(
-    mcg_obj, first_bucket_name, second_bucket_name, timeout=600
+    mcg_obj, first_bucket_name, second_bucket_name, timeout=600, prefix=""
 ):
     """
     Compares the object lists of two given buckets
@@ -1875,6 +1875,7 @@ def compare_bucket_object_list(
         first_bucket_name (str): The name of the first bucket to compare
         second_bucket_name (str): The name of the second bucket to compare
         timeout (int): The maximum time in seconds to wait for the buckets to be identical
+        prefix (str): The prefix to use when listing objects in the buckets
 
     Returns:
         bool: True if both buckets contain the same object names in all objects,
@@ -1883,10 +1884,12 @@ def compare_bucket_object_list(
 
     def _comparison_logic():
         first_bucket_object_set = {
-            obj.key for obj in mcg_obj.s3_list_all_objects_in_bucket(first_bucket_name)
+            obj.key
+            for obj in mcg_obj.s3_list_all_objects_in_bucket(first_bucket_name, prefix)
         }
         second_bucket_object_set = {
-            obj.key for obj in mcg_obj.s3_list_all_objects_in_bucket(second_bucket_name)
+            obj.key
+            for obj in mcg_obj.s3_list_all_objects_in_bucket(second_bucket_name, prefix)
         }
         if first_bucket_object_set == second_bucket_object_set:
             logger.info(
@@ -2019,9 +2022,11 @@ def update_replication_policy(bucket_name, replication_policy_dict):
     replication_policy_patch_dict = {
         "spec": {
             "additionalConfig": {
-                "replicationPolicy": json.dumps(replication_policy_dict)
-                if replication_policy_dict
-                else ""
+                "replicationPolicy": (
+                    json.dumps(replication_policy_dict)
+                    if replication_policy_dict
+                    else ""
+                )
             }
         }
     }
@@ -2631,39 +2636,3 @@ def bulk_s3_put_bucket_lifecycle_config(mcg_obj, buckets, lifecycle_config):
             Bucket=bucket.name, LifecycleConfiguration=lifecycle_config
         )
     logger.info("Applied lifecyle rule on all the buckets")
-
-
-def upload_test_objects_to_source_and_wait_for_replication(
-    mcg_obj, source_bucket, target_bucket, mockup_logger, timeout
-):
-    """
-    Upload a set of objects to the source bucket, logs the operations and wait for the replication to complete.
-
-    """
-    logger.info("Uploading test objects and waiting for replication to complete")
-    mockup_logger.upload_test_objs_and_log(source_bucket.name)
-
-    assert compare_bucket_object_list(
-        mcg_obj,
-        source_bucket.name,
-        target_bucket.name,
-        timeout=timeout,
-    ), f"Standard replication failed to complete in {timeout} seconds"
-
-
-def delete_objects_from_source_and_wait_for_deletion_sync(
-    mcg_obj, source_bucket, target_bucket, mockup_logger, timeout
-):
-    """
-    Delete all objects from the source bucket,logs the operations and wait for the deletion sync to complete.
-
-    """
-    logger.info("Deleting source objects and waiting for deletion sync with target")
-    mockup_logger.delete_all_objects_and_log(source_bucket.name)
-
-    assert compare_bucket_object_list(
-        mcg_obj,
-        source_bucket.name,
-        target_bucket.name,
-        timeout=timeout,
-    ), f"Deletion sync failed to complete in {timeout} seconds"

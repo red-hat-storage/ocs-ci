@@ -2,7 +2,7 @@ from abc import ABC, abstractmethod
 import uuid
 
 
-class McgReplicationPolicy:
+class ReplicationPolicy:
     """
     A class to handle the MCG bucket replication policy JSON structure.
 
@@ -28,7 +28,7 @@ class McgReplicationPolicy:
         return str(self.to_dict())
 
 
-class LogBasedReplicationPolicy(McgReplicationPolicy, ABC):
+class LbrPolicy(ReplicationPolicy, ABC):
     """
     An abstract subclass of ReplicationPolicy that includes log-based replication information.
 
@@ -52,7 +52,7 @@ class LogBasedReplicationPolicy(McgReplicationPolicy, ABC):
         return dict
 
 
-class AwsLogBasedReplicationPolicy(LogBasedReplicationPolicy):
+class AwsLbrPolicy(LbrPolicy):
     """
     A class to handle the AWS log-based bucket replication policy JSON structure.
 
@@ -80,7 +80,7 @@ class AwsLogBasedReplicationPolicy(LogBasedReplicationPolicy):
         return dict
 
 
-class AzureLogBasedReplicationPolicy(LogBasedReplicationPolicy):
+class AzureLbrPolicy(LbrPolicy):
     """
     A class to handle the Azure log-based bucket replication policy JSON structure.
 
