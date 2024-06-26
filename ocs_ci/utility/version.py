@@ -177,7 +177,7 @@ def get_previous_version(version, count=1):
 
 def get_dr_hub_operator_version(namespace="openshift"):
     """
-    Get DR Hub Opertaor Version
+    Get DR Hub Operator Version
 
     Returns:
         str: returns version string
@@ -196,10 +196,11 @@ def get_dr_hub_operator_version(namespace="openshift"):
 
 def get_ocp_dr_cluster_operator_version(namespace="openshift"):
     """
-    Get DR Hub Opertaor Version
+    Get DR Hub Operator Version
 
     Returns:
         str: returns version string
+
     """
     # Importing here to avoid circular dependency
     from ocs_ci.ocs.resources.csv import get_csvs_start_with_prefix
@@ -217,6 +218,7 @@ def get_odf_multicluster_orchestrator_version(namespace=constants.ACM_HUB_NAMESP
 
     Returns:
         str: returns version string
+
     """
     # Importing here to avoid circular dependency
     from ocs_ci.ocs.resources.csv import get_csvs_start_with_prefix
@@ -240,6 +242,7 @@ def get_ocp_gitops_operator_version(namespace="openshift"):
 
     Returns:
         str: returns version string
+
     """
     # Importing here to avoid circular dependency
     from ocs_ci.ocs.resources.csv import get_csvs_start_with_prefix
@@ -259,6 +262,7 @@ def get_submariner_operator_version(namespace=constants.SUBMARINER_OPERATOR_NAME
 
     Returns:
         str: returns version string
+
     """
     # Importing here to avoid circular dependency
     from ocs_ci.ocs.resources.csv import get_csvs_start_with_prefix
@@ -276,6 +280,7 @@ def get_volsync_operator_version(namespace=constants.SUBMARINER_OPERATOR_NAMESPA
 
     Returns:
         str: returns version string
+
     """
     # Importing here to avoid circular dependency
     from ocs_ci.ocs.resources.csv import get_csvs_start_with_prefix

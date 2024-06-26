@@ -146,6 +146,8 @@ from ocs_ci.utility.utils import (
     skipif_ui_not_support,
     run_cmd,
     ceph_health_check_multi_storagecluster_external,
+    get_oadp_version,
+    get_acm_version,
 )
 from ocs_ci.helpers import helpers, dr_helpers
 from ocs_ci.helpers.helpers import (
@@ -171,6 +173,14 @@ from ocs_ci.helpers.longevity_helpers import (
 )
 from ocs_ci.ocs.longevity import start_app_workload
 from ocs_ci.utility.decorators import switch_to_default_cluster_index_at_last
+from ocs_ci.utility.version import (
+    get_dr_hub_operator_version,
+    get_ocp_dr_cluster_operator_version,
+    get_odf_multicluster_orchestrator_version,
+    get_ocp_gitops_operator_version,
+    get_submariner_operator_version,
+    get_volsync_operator_version,
+)
 
 log = logging.getLogger(__name__)
 
@@ -1592,20 +1602,7 @@ def additional_testsuite_properties(record_testsuite_property, pytestconfig):
     # add markers as separated property
     markers = ocsci_config.RUN["cli_params"].get("-m", "").replace(" ", "-")
     record_testsuite_property("rp_markers", markers)
-    from ocs_ci.utility.version import (
-        get_dr_hub_operator_version,
-        get_ocp_dr_cluster_operator_version,
-        get_odf_multicluster_orchestrator_version,
-        get_ocp_gitops_operator_version,
-        get_submariner_operator_version,
-        get_volsync_operator_version,
-    )
-    from ocs_ci.utility.utils import (
-        get_oadp_version,
-        get_acm_version,
-    )
-
-    if ocsci_config.MULTICLUSTER["acm_cluster"]:
+    if ocsci_config.MULTICLUSTER.get("acm_cluster"):
         acm_operator_version = get_acm_version()
         if acm_operator_version:
             record_testsuite_property("rp_acm_version", acm_operator_version)
@@ -1623,7 +1620,7 @@ def additional_testsuite_properties(record_testsuite_property, pytestconfig):
         gitops_operator_version = get_ocp_gitops_operator_version()
         if gitops_operator_version:
             record_testsuite_property("rp_gitops_version", gitops_operator_version)
-    if ocsci_config.MULTICLUSTER["primary_cluster"]:
+    if ocsci_config.MULTICLUSTER.get("primary_cluster"):
         oadp_operator_version = get_oadp_version()
         if oadp_operator_version:
             record_testsuite_property("rp_oadp_version", oadp_operator_version)
