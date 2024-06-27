@@ -1232,7 +1232,6 @@ class Deployment(object):
                     replace_to=config.DEPLOYMENT["csv_change_to"],
                 )
 
-
         # create storage system
         if ocs_version >= version.VERSION_4_9:
             exec_cmd(f"oc apply -f {constants.STORAGE_SYSTEM_ODF_YAML}")
