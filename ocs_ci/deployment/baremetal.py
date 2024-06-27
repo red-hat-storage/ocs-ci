@@ -62,6 +62,13 @@ class BMBaseOCPDeployment(BaseOCPDeployment):
         self.srv_details = config.ENV_DATA["baremetal"]["servers"]
         self.aws = aws.AWS()
         self.__helper_node_handler = None
+        # create connection to Provisioner server (the Bootstrap VM for IPI deployment and VM with DHCP and HTTP
+        # services for UPI deployment are hosted on this server)
+        self.provisioner = Connection(
+            host=self.bm_config["bm_provisioner"],
+            user=self.bm_config["bm_provisioner_user"],
+            private_key=os.path.expanduser(config.DEPLOYMENT["ssh_key_private"]),
+        )
 
     def deploy_prereq(self):
         """
@@ -297,6 +304,28 @@ class BMBaseOCPDeployment(BaseOCPDeployment):
         assert (
             self.helper_node_handler.exec_cmd(cmd=cmd)[0] == 0
         ), "Failed to restart dnsmasq service"
+
+    def start_helper_node_vm(self):
+        """
+        Start helper VM hosting httpd, tftp and dhcp server for UPI deployment
+        """
+        # start odf-bm-upi-tools VM (dhcp and http services) on provisioner (if not running)
+        bm_httpd_server_vm = config.ENV_DATA["baremetal"]["bm_httpd_server_vm"]
+        cmd = f"virsh dominfo {bm_httpd_server_vm} || virsh start {bm_httpd_server_vm}"
+        self.provisioner.exec_cmd(cmd=cmd)
+
+    def stop_helper_node_vm(self):
+        """
+        Stop helper VM hosting httpd, tftp and dhcp server for UPI deployment
+        (the VM should be stopped during IPI deployment to not interfere with bootstrap VM
+        created by the openshift installer)
+        """
+        # start odf-bm-upi-tools VM (dhcp and http services) on provisioner (if not running)
+        bm_httpd_server_vm = config.ENV_DATA["baremetal"]["bm_httpd_server_vm"]
+        cmd = (
+            f"virsh dominfo {bm_httpd_server_vm} && virsh shutdown {bm_httpd_server_vm}"
+        )
+        self.provisioner.exec_cmd(cmd=cmd)
 
 
 class BAREMETALUPI(BAREMETALBASE):
