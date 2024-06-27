@@ -2,10 +2,6 @@ apiVersion: {{ api_version | default('v1') }}
 baseDomain: {{ base_domain | default('qe.rh-ocs.com') }}
 metadata:
   name: '{{ cluster_name }}'
-networking:
-  machineNetwork:
-  - cidr: {{ machine_network_cidr | default('10.0.0.0/16') }}
-  networkType: {{ network_type | default('OpenShiftSDN') }}
 compute:
   - name: worker
     replicas: {{ worker_replicas | default(3) }}
@@ -14,6 +10,15 @@ controlPlane:
   replicas: {{ master_replicas | default(3) }}
   platform:
     baremetal: {}
+networking:
+  clusterNetwork:
+  - cidr: {{ cluster_network_cidr | default('10.128.0.0/14') }}
+    hostPrefix: 23
+  machineNetwork:
+  - cidr: {{ machine_cidr | default('10.0.0.0/16') }}
+  networkType: {{ network_type | default('OVNKubernetes') }}
+  serviceNetwork:
+    - {{ service_network_cidr | default('172.30.0.0/16') }}
 {% if fips %}
 fips: {{ fips }}
 {% endif %}
