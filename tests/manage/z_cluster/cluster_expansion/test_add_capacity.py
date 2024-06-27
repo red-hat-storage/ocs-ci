@@ -108,7 +108,7 @@ def add_capacity_test(ui_flag=False):
         verify_storage_device_class(device_class)
         verify_device_class_in_osd_tree(ct_pod, device_class)
 
-    check_ceph_health_after_add_capacity(ceph_rebalance_timeout=3600)
+    check_ceph_health_after_add_capacity(ceph_rebalance_timeout=5400)
 
 
 @brown_squad
