@@ -1131,13 +1131,19 @@ class BAREMETALIPI(BAREMETALBASE):
 
             raise Exception("TMP ABORT - deploy() not implemented")
 
-        def destroy(self):
+        def destroy(self, log_level=""):
             """
             Cleanup cluster related resources.
             """
             # TODO: destroy process via openshift-install
 
             # TODO: check the DNS records cleanup
+            # THIS:
+            self.aws.delete_hosted_zone(
+                cluster_name=config.ENV_DATA.get("cluster_name"),
+                delete_from_base_domain=True,
+            )
+            # OR THIS:
             # delete DNS records for API and Ingress
             # get the record sets
             record_sets = self.aws.get_record_sets()
@@ -1157,6 +1163,9 @@ class BAREMETALIPI(BAREMETALBASE):
                 if record["Name"] in records_to_delete:
                     logger.info(f"Deleting DNS record: {record}")
                     self.aws.delete_record(record, hosted_zone_id)
+
+            self.start_dnsmasq_service_on_helper_vm()
+            super().destroy(log_level=log_level)
 
 
 class BAREMETALAI(BAREMETALBASE):
