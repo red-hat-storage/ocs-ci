@@ -317,6 +317,7 @@ class BAREMETALUPI(BAREMETALBASE):
             Pre-Requisites for Bare Metal UPI Deployment
             """
             super(BAREMETALUPI.OCPDeployment, self).deploy_prereq()
+            self.start_dnsmasq_service_on_helper_vm()
             # create manifest
             self.create_manifest()
             # create chrony resource
@@ -835,6 +836,7 @@ class BAREMETALIPI(BAREMETALBASE):
             Pre-Requisites for Bare Metal IPI Deployment
             """
             super().deploy_prereq()
+            self.stop_dnsmasq_service_on_helper_vm()
 
         def create_config(self):
             """
@@ -985,6 +987,7 @@ class BAREMETALAI(BAREMETALBASE):
             Pre-Requisites for Bare Metal AI Deployment
             """
             super().deploy_prereq()
+            self.start_dnsmasq_service_on_helper_vm()
 
             # create initial metadata.json file in cluster dir, to ensure, that
             # destroy job will be properly triggered even when the deployment fails
