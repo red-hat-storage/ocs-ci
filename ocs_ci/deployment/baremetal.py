@@ -868,23 +868,23 @@ class BAREMETALIPI(BAREMETALBASE):
             # find boostrap machine
             bm = [
                 key
-                for key in self.mgmt_details
-                if self.mgmt_details[key].get("role") == constants.BOOTSTRAP_MACHINE
+                for key in self.srv_details
+                if self.srv_details[key].get("role") == constants.BOOTSTRAP_MACHINE
             ][0]
 
             install_config_obj["platform"]["baremetal"][
                 "bootstrapExternalStaticIP"
-            ] = self.mgmt_details[bm]["ip"]
+            ] = self.srv_details[bm]["ip"]
             install_config_obj["platform"]["baremetal"][
                 "bootstrapExternalStaticGateway"
-            ] = self.mgmt_details[bm]["gw"]
+            ] = self.srv_details[bm]["gw"]
 
             install_config_obj["platform"]["baremetal"]["hosts"] = []
             # add master nodes
             master_nodes = [
                 key
-                for key in self.mgmt_details
-                if self.mgmt_details[key].get("role") == constants.MASTER_MACHINE
+                for key in self.srv_details
+                if self.srv_details[key].get("role") == constants.MASTER_MACHINE
             ]
             if len(master_nodes) < int(config.ENV_DATA["master_replicas"]):
                 raise ConfigurationError(
@@ -898,21 +898,21 @@ class BAREMETALIPI(BAREMETALBASE):
                         "role": "master",
                         "bmc": {
                             "address": self.bmc_address(master_nodes[i]),
-                            "username": self.mgmt_details[master_nodes[i]][
+                            "username": self.srv_details[master_nodes[i]][
                                 "mgmt_username"
                             ],
-                            "password": self.mgmt_details[master_nodes[i]][
+                            "password": self.srv_details[master_nodes[i]][
                                 "mgmt_password"
                             ],
                         },
-                        "bootMACAddress": self.mgmt_details[master_nodes[i]]["mac"],
+                        "bootMACAddress": self.srv_details[master_nodes[i]]["mac"],
                     }
                 )
             # add worker nodes
             worker_nodes = [
                 key
-                for key in self.mgmt_details
-                if self.mgmt_details[key].get("role") == constants.WORKER_MACHINE
+                for key in self.srv_details
+                if self.srv_details[key].get("role") == constants.WORKER_MACHINE
             ]
             if len(worker_nodes) < int(config.ENV_DATA["worker_replicas"]):
                 raise ConfigurationError(
@@ -926,15 +926,15 @@ class BAREMETALIPI(BAREMETALBASE):
                         "role": "worker",
                         "bmc": {
                             "address": self.bmc_address(worker_nodes[i]),
-                            "username": self.mgmt_details[worker_nodes[i]][
+                            "username": self.srv_details[worker_nodes[i]][
                                 "mgmt_username"
                             ],
-                            "password": self.mgmt_details[worker_nodes[i]][
+                            "password": self.srv_details[worker_nodes[i]][
                                 "mgmt_password"
                             ],
                             "disableCertificateVerification": True,
                         },
-                        "bootMACAddress": self.mgmt_details[worker_nodes[i]]["mac"],
+                        "bootMACAddress": self.srv_details[worker_nodes[i]]["mac"],
                     }
                 )
 
@@ -964,7 +964,7 @@ class BAREMETALIPI(BAREMETALBASE):
             """
             return (
                 "idrac-virtualmedia://"
-                "{self.mgmt_details[machine]]['mgmt_console']}"
+                "{self.srv_details[machine]]['mgmt_console']}"
                 "/redfish/v1/Systems/System.Embedded.1"
             )
 
