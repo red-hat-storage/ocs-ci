@@ -2810,6 +2810,9 @@ OPERATION_TERMINATE = "terminate"
 # Resize osd
 MAX_RESIZE_OSD = "8Ti"
 AWS_MAX_RESIZE_OSD_COUNT = 1
+# The max total cluster capacity, including all OSDs
+MAX_TOTAL_CLUSTER_CAPACITY = "12Ti"
+MAX_IBMCLOUD_TOTAL_CLUSTER_CAPACITY = "24Ti"
 
 # CCOCTL
 CCOCTL_LOG_FILE = "ccoctl-service-id.log"

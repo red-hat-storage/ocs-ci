@@ -31,6 +31,8 @@ from ocs_ci.ocs.constants import (
     MAX_RESIZE_OSD,
     AWS_MAX_RESIZE_OSD_COUNT,
     AWS_PLATFORM,
+    MAX_TOTAL_CLUSTER_CAPACITY,
+    MAX_IBMCLOUD_TOTAL_CLUSTER_CAPACITY,
 )
 
 
@@ -325,7 +327,7 @@ def check_ceph_health_after_resize_osd(
     ), "Data re-balance failed to complete"
 
 
-def check_resize_osd_pre_conditions():
+def check_resize_osd_pre_conditions(expected_storage_size):
     """
     Check the resize osd pre-conditions:
     1. Check that the current storage size is less than the osd max size
@@ -333,14 +335,28 @@ def check_resize_osd_pre_conditions():
 
     If the conditions are not met, the test will be skipped.
 
+    Args:
+        expected_storage_size (str): The expected storage size for the storage cluster
+
     """
-    current_storage_size = get_storage_size()
-    current_storage_size_in_gb = convert_device_size(current_storage_size, "GB", 1024)
+    expected_storage_size_in_gb = convert_device_size(expected_storage_size, "GB", 1024)
     max_storage_size_in_gb = convert_device_size(MAX_RESIZE_OSD, "GB", 1024)
-    if current_storage_size_in_gb >= max_storage_size_in_gb:
+    if expected_storage_size_in_gb > max_storage_size_in_gb:
         pytest.skip(
-            f"The current storage size {current_storage_size} is greater or equal to the "
+            f"The expected storage size {expected_storage_size} is greater than the "
             f"max resize osd {MAX_RESIZE_OSD}"
+        )
+
+    if config.ENV_DATA["platform"] == constants.IBMCLOUD_PLATFORM:
+        max_cluster_capacity = MAX_IBMCLOUD_TOTAL_CLUSTER_CAPACITY
+    else:
+        max_cluster_capacity = MAX_TOTAL_CLUSTER_CAPACITY
+    max_cluster_capacity_in_gb = convert_device_size(max_cluster_capacity, "GB", 1024)
+    expected_cluster_capacity_in_gb = expected_storage_size_in_gb * len(get_osd_pods())
+    if expected_cluster_capacity_in_gb > max_cluster_capacity_in_gb:
+        pytest.skip(
+            f"The expected cluster capacity {expected_cluster_capacity_in_gb}Gi is greater than the "
+            f"max cluster capacity {max_cluster_capacity}"
         )
 
     config.RUN["resize_osd_count"] = config.RUN.get("resize_osd_count", 0)
