@@ -63,13 +63,7 @@ class BMBaseOCPDeployment(BaseOCPDeployment):
         self.srv_details = config.ENV_DATA["baremetal"]["servers"]
         self.aws = aws.AWS()
         self.__helper_node_handler = None
-        # create connection to Provisioner server (the Bootstrap VM for IPI deployment and VM with DHCP and HTTP
-        # services for UPI deployment are hosted on this server)
-        self.provisioner = Connection(
-            host=self.bm_config["bm_provisioner"],
-            user=self.bm_config["bm_provisioner_user"],
-            private_key=os.path.expanduser(config.DEPLOYMENT["ssh_key_private"]),
-        )
+        self.__provisioner = None
 
     def deploy_prereq(self):
         """
@@ -110,6 +104,23 @@ class BMBaseOCPDeployment(BaseOCPDeployment):
                 self.host, self.user, self.private_key
             )
         return self.__helper_node_handler
+
+    # connection to Provisioner server (the Bootstrap VM for IPI deployment and VM with DHCP and HTTP
+    # services for UPI deployment are hosted on this server)
+    @property
+    @retry((TimeoutError, socket.gaierror), tries=10, delay=120, backoff=1)
+    def provisioner(self):
+        """
+        Create connection to Provisioner server (where is hosted Bootstrap VM for IPI deployment and VM with DHCP, TFTP
+        and HTTP services for UPI and AI deployment)
+        """
+        if not self.__provisioner:
+            self.provisioner = Connection(
+                host=self.bm_config["bm_provisioner"],
+                user=self.bm_config["bm_provisioner_user"],
+                private_key=os.path.expanduser(config.DEPLOYMENT["ssh_key_private"]),
+            )
+        return self.__provisioner
 
     def check_bm_status_exist(self):
         """
