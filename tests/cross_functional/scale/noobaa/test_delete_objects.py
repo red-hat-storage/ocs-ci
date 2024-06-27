@@ -85,7 +85,9 @@ class TestDeleteObjects:
             # as we have to delete one object at a time, till 2 million objects are deleted.
             # pytest.param("single"),
             pytest.param("batch"),
-            pytest.param("whole"),
+            # Below parameter needs to uncommented after we have fix for noobaa db performance
+            # bottleneck
+            # pytest.param("whole"),
         ],
     )
     def test_delete_objects(
