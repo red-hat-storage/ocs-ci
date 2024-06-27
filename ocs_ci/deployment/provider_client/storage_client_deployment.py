@@ -1,6 +1,7 @@
 """
 This module provides installation of ODF and native storage-client creation in provider mode
 """
+
 import logging
 import time
 
@@ -21,7 +22,7 @@ from ocs_ci.ocs.utils import (
 from ocs_ci.utility.utils import (
     wait_for_machineconfigpool_status,
 )
-from ocs_ci.utility import templating, version
+from ocs_ci.utility import templating, kms as KMS, version
 from ocs_ci.deployment.deployment import Deployment, create_catalog_source
 from ocs_ci.deployment.baremetal import clean_disk
 from ocs_ci.ocs.resources.storage_cluster import verify_storage_cluster
@@ -176,6 +177,11 @@ class ODFAndNativeStorageClientDeploymentOnProvider(object):
                 )
                 self.ocp_obj.exec_oc_cmd(f"apply -f {constants.STORAGE_PROFILE_YAML}")
 
+        # Create KMS resources if needed
+        if config.DEPLOYMENT.get("kms_deployment"):
+            kms = KMS.get_kms_deployment()
+            kms.deploy()
+
         # Create storage cluster if not present already
         is_storagecluster = self.storage_cluster_obj.is_exist(
             resource_name=constants.DEFAULT_STORAGE_CLUSTER
@@ -188,6 +194,9 @@ class ODFAndNativeStorageClientDeploymentOnProvider(object):
                 storage_cluster_data = templating.load_yaml(
                     constants.OCS_STORAGE_CLUSTER_YAML
                 )
+                storage_cluster_data = self.add_encryption_details_to_cluster_data(
+                    storage_cluster_data
+                )
                 templating.dump_data_to_temp_yaml(
                     storage_cluster_data, constants.OCS_STORAGE_CLUSTER_YAML
                 )
@@ -197,6 +206,9 @@ class ODFAndNativeStorageClientDeploymentOnProvider(object):
             else:
                 storage_cluster_data = templating.load_yaml(
                     constants.OCS_STORAGE_CLUSTER_UPDATED_YAML
+                )
+                storage_cluster_data = self.add_encryption_details_to_cluster_data(
+                    storage_cluster_data
                 )
                 templating.dump_data_to_temp_yaml(
                     storage_cluster_data, constants.OCS_STORAGE_CLUSTER_UPDATED_YAML
@@ -277,6 +289,31 @@ class ODFAndNativeStorageClientDeploymentOnProvider(object):
         # Enable odf-console:
         enable_console_plugin()
         time.sleep(30)
+
+    def add_encryption_details_to_cluster_data(self, storage_cluster_data):
+        """
+        Update storage cluster YAML data with encryption information from
+        configuration.
+
+        Args:
+            storage_cluster_data (dict): storage cluster YAML data
+
+        Returns:
+            dict: updated storage storage cluster yaml
+        """
+        if config.ENV_DATA.get("encryption_at_rest"):
+            log.info("Enabling encryption at REST!")
+            storage_cluster_data["spec"]["encryption"] = {
+                "enable": True,
+            }
+            storage_cluster_data["spec"]["encryption"] = {
+                "clusterWide": True,
+            }
+        if config.DEPLOYMENT.get("kms_deployment"):
+            storage_cluster_data["spec"]["encryption"]["kms"] = {
+                "enable": True,
+            }
+        return storage_cluster_data
 
     def verify_provider_mode_deployment(self):
         """
