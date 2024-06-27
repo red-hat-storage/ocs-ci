@@ -21,7 +21,7 @@ from ocs_ci.framework import config
 from ocs_ci.deployment.ocp import OCPDeployment as BaseOCPDeployment
 from ocs_ci.deployment import assisted_installer
 from ocs_ci.ocs import constants, ocp, exceptions
-from ocs_ci.ocs.exceptions import CommandFailed, RhcosImageNotFound, TimeoutExpiredError
+from ocs_ci.ocs.exceptions import CommandFailed, ConfigurationError, RhcosImageNotFound, TimeoutExpiredError
 from ocs_ci.ocs.node import get_nodes
 from ocs_ci.ocs.openshift_ops import OCP
 from ocs_ci.utility import ibmcloud_bm
@@ -815,6 +815,156 @@ LABEL disk0
                 f"-H {self.srv_details[machine]['mgmt_console']} chassis power on"
             )
             run_cmd(cmd=cmd, secrets=secrets)
+
+
+class BAREMETALIPI(BAREMETALBASE):
+    """
+    A class to handle Bare metal IPI specific deployment
+    """
+
+    def __init__(self):
+        logger.info("BAREMETAL IPI")
+        super().__init__()
+
+    class OCPDeployment(BAREMETALBASE.BMBaseOCPDeployment):
+        def __init__(self):
+            super().__init__()
+
+        def deploy_prereq(self):
+            """
+            Pre-Requisites for Bare Metal IPI Deployment
+            """
+            super().deploy_prereq()
+
+        def create_config(self):
+            """
+            Create the OCP deploy config.
+            """
+            # Generate install-config from template
+            logger.info("Generating install-config")
+            _templating = Templating()
+            ocp_install_template = (
+                f"install-config-{self.deployment_platform}-"
+                f"{self.deployment_type}.yaml.j2"
+            )
+            ocp_install_template_path = os.path.join(
+                "ocp-deployment", ocp_install_template
+            )
+            install_config_str = _templating.render_template(
+                ocp_install_template_path, config.ENV_DATA
+            )
+            # Log the install config *before* adding the pull secret,
+            # so we don't leak sensitive data.
+            logger.info(f"Install config: \n{install_config_str}")
+            # Parse the rendered YAML so that we can manipulate the object directly
+            install_config_obj = yaml.safe_load(install_config_str)
+            install_config_obj["pullSecret"] = self.get_pull_secret()
+            ssh_key = self.get_ssh_key()
+            if ssh_key:
+                install_config_obj["sshKey"] = ssh_key
+
+            # find boostrap machine
+            bm = [
+                key
+                for key in self.mgmt_details
+                if self.mgmt_details[key].get("role") == constants.BOOTSTRAP_MACHINE
+            ][0]
+
+            install_config_obj["platform"]["baremetal"][
+                "bootstrapExternalStaticIP"
+            ] = self.mgmt_details[bm]["ip"]
+            install_config_obj["platform"]["baremetal"][
+                "bootstrapExternalStaticGateway"
+            ] = self.mgmt_details[bm]["gw"]
+
+            install_config_obj["platform"]["baremetal"]["hosts"] = []
+            # add master nodes
+            master_nodes = [
+                key
+                for key in self.mgmt_details
+                if self.mgmt_details[key].get("role") == constants.MASTER_MACHINE
+            ]
+            if len(master_nodes) < int(config.ENV_DATA["master_replicas"]):
+                raise ConfigurationError(
+                    f"Number of available master nodes ({', '.join(master_nodes)}) "
+                    f"is lower than master_replicas ({config.ENV_DATA['master_replicas']})"
+                )
+            for i in range(int(config.ENV_DATA["master_replicas"])):
+                install_config_obj["platform"]["baremetal"]["hosts"].append(
+                    {
+                        "name": f"openshift-master-{i}",
+                        "role": "master",
+                        "bmc": {
+                            "address": self.bmc_address(master_nodes[i]),
+                            "username": self.mgmt_details[master_nodes[i]][
+                                "mgmt_username"
+                            ],
+                            "password": self.mgmt_details[master_nodes[i]][
+                                "mgmt_password"
+                            ],
+                        },
+                        "bootMACAddress": self.mgmt_details[master_nodes[i]]["mac"],
+                    }
+                )
+            # add worker nodes
+            worker_nodes = [
+                key
+                for key in self.mgmt_details
+                if self.mgmt_details[key].get("role") == constants.WORKER_MACHINE
+            ]
+            if len(worker_nodes) < int(config.ENV_DATA["worker_replicas"]):
+                raise ConfigurationError(
+                    f"Number of available worker nodes ({', '.join(worker_nodes)}) "
+                    f"is lower than worker_replicas ({config.ENV_DATA['worker_replicas']})"
+                )
+            for i in range(int(config.ENV_DATA["worker_replicas"])):
+                install_config_obj["platform"]["baremetal"]["hosts"].append(
+                    {
+                        "name": f"openshift-worker-{i}",
+                        "role": "worker",
+                        "bmc": {
+                            "address": self.bmc_address(worker_nodes[i]),
+                            "username": self.mgmt_details[worker_nodes[i]][
+                                "mgmt_username"
+                            ],
+                            "password": self.mgmt_details[worker_nodes[i]][
+                                "mgmt_password"
+                            ],
+                            "disableCertificateVerification": True,
+                        },
+                        "bootMACAddress": self.mgmt_details[worker_nodes[i]]["mac"],
+                    }
+                )
+
+            # install_config_obj["metadata"]["name"] = constants.BM_DEFAULT_CLUSTER_NAME
+            install_config_str = yaml.safe_dump(install_config_obj)
+            install_config = os.path.join(self.cluster_path, "install-config.yaml")
+            install_config_backup = os.path.join(
+                self.cluster_path, "install-config.yaml.backup"
+            )
+            # TODO: remove this log! #######################
+            logger.warning(f"Install config: \n{install_config_str}")
+            # --------------------------------------
+            with open(install_config, "w") as f:
+                f.write(install_config_str)
+            with open(install_config_backup, "w") as f:
+                f.write(install_config_str)
+
+        def bmc_address(self, machine):
+            """
+            Return BMC address.
+
+            Args:
+                machine (str): Machine Name
+
+            Returns:
+                str: BMC address
+            """
+            return (
+                "idrac-virtualmedia://"
+                "{self.mgmt_details[machine]]['mgmt_console']}"
+                "/redfish/v1/Systems/System.Embedded.1"
+            )
 
 
 class BAREMETALAI(BAREMETALBASE):
