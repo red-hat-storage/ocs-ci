@@ -882,8 +882,8 @@ class BAREMETALIPI(BAREMETALBASE):
 
             # prepare directory for backup of previous work dirs (if not exists)
             cmd = "mkdir -p ~/clusterconfigs-backup"
-            # backup working directory on Provisioner from previous deployment
             self.provisioner.exec_cmd(cmd=cmd)
+            # backup working directory on Provisioner from previous deployment
             cmd = (
                 "[[ -d ~/clusterconfigs ]] && "
                 "mv ~/clusterconfigs ~/clusterconfigs-backup/clusterconfigs-$(date '+%Y-%m-%dT%H-%M-%S')"
@@ -947,6 +947,7 @@ class BAREMETALIPI(BAREMETALBASE):
             logger.info("Records Created Successfully")
 
             # Ensure all bare metal nodes are powered off prior to installing the OCP cluster
+            # TODO: use the appropriate method for stopping the servers based on mgmt_provider configuration
             nodes = [
                 key
                 for key in self.srv_details
