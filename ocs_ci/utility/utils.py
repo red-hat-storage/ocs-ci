@@ -809,11 +809,12 @@ def get_openshift_installer(
         # record current working directory and switch to BIN_DIR
         previous_dir = os.getcwd()
         os.chdir(bin_dir)
-        tarball = f"{installer_filename}.tar.gz"
-        url = get_openshift_mirror_url(installer_filename, version)
-        download_file(url, tarball)
-        run_cmd(f"tar xzvf {tarball} {installer_filename}")
-        delete_file(tarball)
+        pull_secret_path = os.path.join(constants.DATA_DIR, "pull-secret")
+        cmd = (
+            f"oc adm release extract --registry-config {pull_secret_path} --command={installer_filename} "
+            f"--to ./ registry.ci.openshift.org/ocp/release:{version}"
+        )
+        exec_cmd(cmd)
         # return to the previous working directory
         os.chdir(previous_dir)
 
