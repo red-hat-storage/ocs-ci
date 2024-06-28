@@ -37,7 +37,6 @@ from ocs_ci.utility.utils import (
     CommandFailed,
     run_cmd,
 )
-from ocs_ci.utility.utils import TimeoutSampler, CommandFailed, run_cmd
 from ocs_ci.helpers.helpers import run_cmd_verify_cli_output
 
 
@@ -1430,9 +1429,7 @@ def replace_cluster(workload, primary_cluster_name, secondary_cluster_name):
     # add label to openshift-opeartors namespace
     ocp_obj = ocp.OCP(kind="Namespace")
     label = "openshift.io/cluster-monitoring='true'"
-    ocp_obj.add_label(
-        kind="Namespace", resource_name=constants.OPENSHIFT_OPERATORS, label=label
-    )
+    ocp_obj.add_label(resource_name=constants.OPENSHIFT_OPERATORS, label=label)
 
     # Detach old primary
     run_cmd(cmd=f"oc delete managedcluster {primary_cluster_name}")
