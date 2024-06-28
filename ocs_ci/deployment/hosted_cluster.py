@@ -592,33 +592,29 @@ def create_host_inventory():
     Create InfraEnv resource for host inventory
 
     """
-    # Create new project
-    project_name = helpers.create_project(project_name="bm-agents").resource_name
-
-    # Create pull secret for InfraEnv
-    secret_obj = OCP(
-        kind=constants.SECRET,
-        resource_name="pull-secret",
-        namespace=constants.OPENSHIFT_CONFIG_NAMESPACE,
-    )
-    secret_data = secret_obj.get()
-    # This is the name of pull secret and namespace used in InfraEnv template
-    secret_data["metadata"]["name"] = "pull-secret-agents"
-    secret_data["metadata"]["namespace"] = project_name
-    helpers.create_resource(**secret_data)
-
     # Create InfraEnv
     template_yaml = os.path.join(
         constants.TEMPLATE_DIR, "hosted-cluster", "infra-env.yaml"
     )
-    infra_env_data = templating.load_yaml(template_yaml)
+    infra_env_data = templating.load_yaml(file=template_yaml, multi_document=True)
     ssh_pub_file_path = config.DEPLOYMENT["ssh_key"]
     with open(ssh_pub_file_path, "r") as ssh_key:
         ssh_pub_key = ssh_key.read().strip()
-    infra_env_data["spec"]["sshAuthorizedKey"] = ssh_pub_key
     # TODO: Add custom OS image details. Reference https://access.redhat.com/documentation/en-us/red_hat_advanced_
     #  cluster_management_for_kubernetes/2.10/html-single/clusters/index#create-host-inventory-cli-steps
-    helpers.create_resource(**infra_env_data)
+    for data in infra_env_data:
+        if data["kind"] == constants.INFRA_ENV:
+            data["spec"]["sshAuthorizedKey"] = ssh_pub_key
+            infra_env_namespace = data["metadata"]["namespace"]
+            # Create project
+            helpers.create_project(project_name=infra_env_namespace)
+            # Create Secret
+            create_secret_cmd = (
+                f"oc get secret pull-secret --namespace={constants.OPENSHIFT_CONFIG_NAMESPACE} -o yaml | "
+                f"sed 's/namespace: .*/namespace: {infra_env_namespace}/' | kubectl apply -f -"
+            )
+            exec_cmd(create_secret_cmd)
+        helpers.create_resource(**data)
     logger.info("Created InfraEnv.")
 
 
