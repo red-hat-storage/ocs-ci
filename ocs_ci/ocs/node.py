@@ -2947,3 +2947,23 @@ def verify_crypt_device_present_onnode(node, vol_handle):
 
     log.info(f"Crypt device for volume handle {vol_handle} present on the node: {node}")
     return True
+
+
+def get_node_by_internal_ip(internal_ip):
+    """
+    Get the node object by the node internal ip.
+
+    Args:
+        internal_ip (str): The node internal ip to search for
+
+    Returns:
+        ocs_ci.ocs.resources.ocs.OCS: The node object with the given internal ip.
+            If not found, it returns None.
+
+    """
+    node_objs = get_node_objs()
+    for n in node_objs:
+        if get_node_internal_ip(n) == internal_ip:
+            return n
+
+    return None
