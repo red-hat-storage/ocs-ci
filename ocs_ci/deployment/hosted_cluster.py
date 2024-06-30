@@ -314,6 +314,7 @@ class HypershiftHostedOCP(HyperShiftBase, MetalLBInstaller, CNVInstaller, Deploy
         HyperShiftBase.__init__(self)
         MetalLBInstaller.__init__(self)
         CNVInstaller.__init__(self)
+        Deployment.__init__(self)
         self.name = name
         if config.ENV_DATA["clusters"].get(self.name):
             cluster_path = (
