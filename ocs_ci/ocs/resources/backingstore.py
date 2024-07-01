@@ -284,7 +284,7 @@ def backingstore_factory(request, cld_mgr, mcg_obj, cloud_uls_factory):
         },
     }
 
-    def _create_backingstore(method, uls_dict):
+    def _create_backingstore(method, uls_dict, timeout=None):
         """
         Tracks creation and cleanup of all the backing stores that were created in the scope
 
@@ -391,7 +391,7 @@ def backingstore_factory(request, cld_mgr, mcg_obj, cloud_uls_factory):
                                 cld_mgr, backingstore_name, uls_name, region
                             )
                         mcg_obj.check_backingstore_state(
-                            backingstore_name, constants.BS_OPTIMAL
+                            backingstore_name, constants.BS_OPTIMAL, timeout=timeout
                         )
                         # TODO: Verify OC\CLI BS health by using the appropriate methods
 
