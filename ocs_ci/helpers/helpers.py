@@ -4783,3 +4783,22 @@ def is_rbd_default_storage_class(custom_sc=None):
 
     logger.error("Storageclass {default_rbd_sc} is not a default  RBD StorageClass.")
     return False
+
+
+def get_secret_obj(name, namespace):
+    """
+    Get Secret obj by name
+
+    Args:
+        name (str): the name secret
+        namespace (str): the namespace
+
+    Returns:
+        ocp object: ocp object of secret
+
+    """
+    return OCP(
+        kind="secret",
+        namespace=namespace,
+        resource_name=name,
+    ).get()
