@@ -128,15 +128,21 @@ class TestCrossScCloneSnapRestore(ManageTest):
         restore_pvc_obj2.delete()
 
     @pytest.mark.parametrize(
-        argnames="interface_type",
+        argnames=["interface_type", "replica1", "replica2"],
         argvalues=[
-            pytest.param(*[constants.CEPHBLOCKPOOL]),
-            pytest.param(*[constants.CEPHFILESYSTEM]),
+            pytest.param(*[constants.CEPHBLOCKPOOL], "", ""),
+            pytest.param(*[constants.CEPHFILESYSTEM], "", ""),
+            pytest.param(*[constants.CEPHBLOCKPOOL], 3, 2),
+            pytest.param(*[constants.CEPHFILESYSTEM], 3, 2),
+            pytest.param(*[constants.CEPHBLOCKPOOL], 2, 3),
+            pytest.param(*[constants.CEPHFILESYSTEM], 2, 3),
         ],
     )
     def test_cross_class_different_pool_clone_snap_restore(
         self,
         interface_type,
+        replica1,
+        replica2,
         storageclass_factory,
         pvc_factory,
         pod_factory,
@@ -154,7 +160,10 @@ class TestCrossScCloneSnapRestore(ManageTest):
         """
 
         # Create a Storage Class on default pool
-        sc_obj1 = storageclass_factory(interface=interface_type)
+        if replica1 == "":
+            sc_obj1 = storageclass_factory(interface=interface_type)
+        else:
+            sc_obj1 = storageclass_factory(interface=interface_type, replica=replica1)
         pool_name1 = run_cmd(
             f"oc get sc {sc_obj1.name} -o jsonpath={{'.parameters.pool'}}"
         )
@@ -166,7 +175,12 @@ class TestCrossScCloneSnapRestore(ManageTest):
         )
 
         # Create a Storage Class on another pool
-        sc_obj2 = storageclass_factory(interface=interface_type, new_rbd_pool=True)
+        if replica2 == "":
+            sc_obj2 = storageclass_factory(interface=interface_type, new_rbd_pool=True)
+        else:
+            sc_obj2 = storageclass_factory(
+                interface=interface_type, replica=replica2, new_rbd_pool=True
+            )
         pool_name2 = run_cmd(
             f"oc get sc {sc_obj2.name} -o jsonpath={{'.parameters.pool'}}"
         )
