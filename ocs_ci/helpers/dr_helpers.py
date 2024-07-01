@@ -5,8 +5,13 @@ Helper functions specific for DR
 import json
 import logging
 import tempfile
+import time
 
 from ocs_ci.framework import config
+from ocs_ci.ocs.acm.acm import (
+    import_recovery_clusters_with_acm,
+    validate_cluster_import,
+)
 from ocs_ci.ocs import constants, ocp
 from ocs_ci.ocs.exceptions import (
     TimeoutExpiredError,
@@ -25,11 +30,14 @@ from ocs_ci.ocs.utils import (
 )
 from ocs_ci.utility import version, templating
 from ocs_ci.utility.retry import retry
+
 from ocs_ci.utility.utils import (
     TimeoutSampler,
     CommandFailed,
     run_cmd,
 )
+from ocs_ci.helpers.helpers import run_cmd_verify_cli_output
+
 
 logger = logging.getLogger(__name__)
 
@@ -1091,3 +1099,139 @@ def verify_drpolicy_cli(switch_ctx=None):
         raise UnexpectedBehaviour(
             f"DRPolicy is not in succeeded or validated state: {status}"
         )
+
+
+def disable_dr_from_app(secondary_cluster_name):
+    old_ctx = config.cur_index
+    config.switch_acm_ctx()
+
+    # get all placement and replace value with surviving cluster
+    placement_obj = ocp.OCP(kind=constants.PLACEMENT)
+    placements = placement_obj.get(all_namespaces=True).get("items")
+    for placement in placements:
+        name = placement["metadata"]["name"]
+        if (name != "all-openshift-clusters") and (name != "global"):
+            namespace = placement["metadata"]["namespace"]
+            path = "/spec/predicates/0/requiredClusterSelector/labelSelector/matchExpressions/0/values/0"
+            params = f"""[{{"op": "replace", "path": "{path}", "value": "{secondary_cluster_name}"}}]"""
+            cmd = f"oc patch placement {name} -n {namespace}  -p '{params}' --type=json"
+            run_cmd(cmd)
+
+    # Delete all drpc
+    run_cmd("oc delete drpc --all -A")
+    sample = TimeoutSampler(
+        timeout=300,
+        sleep=5,
+        func=run_cmd_verify_cli_output,
+        cmd="oc get drpc -A",
+        expected_output_lst="No resources found",
+    )
+    if not sample.wait_for_func_status(result=False):
+        raise Exception("All drpcs are not deleted")
+
+    time.sleep(10)
+
+    # Remove annotation from placements
+    for placement in placements:
+        name = placement["metadata"]["name"]
+        if (name != "all-openshift-clusters") and (name != "global"):
+            namespace = placement["metadata"]["namespace"]
+            path = "/metadata/annotations/cluster.open-cluster-management.io~1experimental-scheduling-disable"
+            params = f"""[{{"op": "remove", "path": "{path}"}}]"""
+            cmd = f"oc patch {constants.PLACEMENT} {name} -n {namespace} -p '{params}' --type=json"
+            run_cmd(cmd)
+
+    config.switch_ctx(old_ctx)
+    return placement_obj
+
+
+def apply_drpolicy_to_workload(workload, drcluster_name):
+    """
+    Function for applying drpolicy to indiviusual workload
+
+    Args:
+    workload(List): List of workload objects
+    drcluster_name(str): Name of the DRcluster on which workloads belongs
+    """
+    for wl in workload:
+        drpc_yaml_data = templating.load_yaml(wl.drpc_yaml_file)
+        drpc_yaml_data["spec"]["preferredCluster"] = drcluster_name
+        templating.dump_data_to_temp_yaml(drpc_yaml_data, wl.drpc_yaml_file)
+
+        config.switch_acm_ctx()
+        run_cmd(f"oc create -k {wl.drpc_yaml_file}")
+
+
+def replace_cluster(workload, primary_cluster_name, secondary_cluster_name):
+
+    """
+    Function to do core replace cluster task
+
+    Args:
+    workload(List): List of workload objects
+    primary_cluster_name (str): Name of the primary DRcluster
+    secondary_cluster_name(str): Name of the secondary DRcluster
+    """
+
+    # Delete dr cluster
+    config.switch_acm_ctx()
+    run_cmd(cmd=f"oc delete drcluster {primary_cluster_name} --wait=false")
+
+    # Disable DR on hub for each app
+    placement_obj = disable_dr_from_app(secondary_cluster_name)
+    logger.info("DR configuration is successfully disabled on each app")
+
+    # Remove DR configuration from hub and surviving cluster
+    logger.info("Running Remove DR configuration script..")
+    run_cmd(cmd=f"chmod +x {constants.REMOVE_DR_EACH_MANAGED_CLUSTER}")
+    run_cmd(cmd=f"sh {constants.REMOVE_DR_EACH_MANAGED_CLUSTER}")
+
+    sample = TimeoutSampler(
+        timeout=300,
+        sleep=5,
+        func=run_cmd_verify_cli_output,
+        cmd="oc get namespace openshift-operators",
+        expected_output_lst={"openshift-operators", "Active"},
+    )
+    if not sample.wait_for_func_status(result=True):
+        raise Exception("Namespace openshift-operators is not created")
+
+    # add label to openshift-opeartors namespace
+    ocp_obj = ocp.OCP(kind="Namespace")
+    label = "openshift.io/cluster-monitoring='true'"
+    ocp_obj.add_label(resource_name=constants.OPENSHIFT_OPERATORS, label=label)
+
+    # Detach old primary
+    run_cmd(cmd=f"oc delete managedcluster {primary_cluster_name}")
+
+    # Verify old primary cluster is dettached
+    expected_output = primary_cluster_name
+    out = run_cmd(cmd=f"oc get managedcluster {primary_cluster_name}")
+    if expected_output not in out:
+        raise Exception("Old primary cluster is not dettached.")
+
+    # Import Recovery cluster
+    cluster_name_recoevry = import_recovery_clusters_with_acm()
+
+    # Verify recovery cluster is imported
+    validate_cluster_import(cluster_name_recoevry)
+
+    # Install MCO on active hub again
+    from ocs_ci.deployment.deployment import MultiClusterDROperatorsDeploy
+
+    dep_mco = MultiClusterDROperatorsDeploy()
+    dep_mco.deploy_dr_multicluster_orchestrator()
+
+    # Create DR policy
+    dep_multi_obj = MultiClusterDROperatorsDeploy()
+    dep_multi_obj.deploy_dr_policy()
+
+    # Validate drpolicy
+    verify_drpolicy_cli(switch_ctx=get_active_acm_index())
+
+    # Apply dr policy on all app on secondary cluster
+    apply_drpolicy_to_workload(workload, secondary_cluster_name)
+
+    placement_obj.annotate(
+        annotation="cluster.open-cluster-management.io/experimental-scheduling-disable='true'"
+    )

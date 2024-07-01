@@ -265,14 +265,14 @@ class Deployment(object):
         run_cmd(f"oc create -f {gitops_subscription_manifest.name}")
 
         self.wait_for_subscription(
-            constants.GITOPS_OPERATOR_NAME, namespace=constants.OPENSHIFT_OPERATORS
+            constants.GITOPS_OPERATOR_NAME, namespace=constants.GITOPS_NAMESPACE
         )
         logger.info("Sleeping for 90 seconds after subscribing to GitOps Operator")
         time.sleep(90)
         subscriptions = ocp.OCP(
             kind=constants.SUBSCRIPTION_WITH_ACM,
             resource_name=constants.GITOPS_OPERATOR_NAME,
-            namespace=constants.OPENSHIFT_OPERATORS,
+            namespace=constants.GITOPS_NAMESPACE,
         ).get()
         gitops_csv_name = subscriptions["status"]["currentCSV"]
         csv = CSV(resource_name=gitops_csv_name, namespace=constants.GITOPS_NAMESPACE)
