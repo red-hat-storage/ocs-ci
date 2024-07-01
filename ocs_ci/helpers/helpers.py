@@ -743,6 +743,7 @@ def create_storage_class(
     encrypted=False,
     encryption_kms_id=None,
     fs_name=None,
+    clients=None,
     volume_binding_mode="Immediate",
     allow_volume_expansion=True,
     kernelMountOptions=None,
@@ -769,6 +770,7 @@ def create_storage_class(
             pod attachment.
         allow_volume_expansion(bool): True to create sc with volume expansion
         kernelMountOptions (str): Mount option for security context
+        clients (str): hostname/ip address for external nfs mount
     Returns:
         OCS: An OCS instance for the storage class
     """
@@ -776,6 +778,7 @@ def create_storage_class(
     yamls = {
         constants.CEPHBLOCKPOOL: constants.CSI_RBD_STORAGECLASS_YAML,
         constants.CEPHFILESYSTEM: constants.CSI_CEPHFS_STORAGECLASS_YAML,
+        constants.CEPHNFSFILESYSTEM: constants.CSI_CEPHFS_NFS_STORAGECLASS_YAML,
     }
     sc_data = dict()
     sc_data = templating.load_yaml(yamls[interface_type])
@@ -803,6 +806,10 @@ def create_storage_class(
         sc_data["provisioner"] = (
             provisioner if provisioner else defaults.CEPHFS_PROVISIONER
         )
+
+    elif interface_type == constants.CEPHNFSFILESYSTEM:
+        sc_data["parameters"]["clients"] = clients
+
     sc_data["parameters"]["pool"] = interface_name
 
     sc_data["metadata"]["name"] = (

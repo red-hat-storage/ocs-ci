@@ -140,6 +140,7 @@ LIFECYCLE_INTERVAL_PARAM = CONFIG_JS_PREFIX + "LIFECYCLE_INTERVAL"
 
 # Resources / Kinds
 CEPHFILESYSTEM = "CephFileSystem"
+CEPHNFSFILESYSTEM = "CephNfsFileSystem"
 CEPHBLOCKPOOL = "CephBlockPool"
 CEPHBLOCKPOOLRADOSNS = "cephblockpoolradosnamespaces"
 CEPHBLOCKPOOL_THICK = "CephBlockPoolThick"
@@ -565,6 +566,9 @@ ROOK_CSI_RBD_STORAGECLASS_YAML = os.path.join(ROOK_CSI_RBD_DIR, "storageclass.ya
 CSI_RBD_PVC_CLONE_YAML = os.path.join(TEMPLATE_CSI_RBD_DIR, "pvc-clone.yaml")
 
 CSI_CEPHFS_STORAGECLASS_YAML = os.path.join(TEMPLATE_CSI_FS_DIR, "storageclass.yaml")
+CSI_CEPHFS_NFS_STORAGECLASS_YAML = os.path.join(
+    TEMPLATE_CSI_FS_DIR, "storageclass_nfs.yaml"
+)
 
 CSI_CEPHFS_PVC_CLONE_YAML = os.path.join(TEMPLATE_CSI_FS_DIR, "pvc-clone.yaml")
 
