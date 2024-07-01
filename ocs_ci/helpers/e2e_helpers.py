@@ -62,7 +62,14 @@ def create_muliple_types_provider_obcs(
         for provider, provider_config in providers.items():
             for bucket_type, type_config in bucket_types.items():
                 if provider == "pv" and bucket_type != "data":
-                    provider = random.choice(["aws", "azure"])
+                    available_providers = [
+                        key for key in cloud_providers.keys() if key != "pv"
+                    ]
+                    if available_providers:
+                        provider = random.choice(available_providers)
+                    else:
+                        # If 'pv' is the only available provider, choose between 'aws' and 'azure'
+                        provider = random.choice(["aws", "azure"])
                     provider_config = providers[provider]
                 bucketclass = copy.deepcopy(type_config)
 
