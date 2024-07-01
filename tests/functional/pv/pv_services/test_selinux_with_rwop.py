@@ -350,7 +350,7 @@ class TestSelinuxrelabel(E2ETest):
 
         """
 
-        logging.info("Check seLinuxMount is set to true in CSIdrivers")
+        log.info("Check seLinuxMount is set to true in CSIdrivers")
         csi_driver = ocp.OCP(kind="CSIDriver")
         csi_driver_items = csi_driver.get()["items"]
         seLinuxMount_set_to_true = any(
