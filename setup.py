@@ -86,7 +86,7 @@ setup(
         "protobuf==4.21.7",
         "ping3==4.0.3",
         "psutil==5.9.0",
-        "azure-identity==1.15.0",
+        "azure-identity==1.16.1",
         "azure-mgmt-storage==21.0.0",
         "fauxfactory==3.1.0",
         "google-api-core==2.11.0",
