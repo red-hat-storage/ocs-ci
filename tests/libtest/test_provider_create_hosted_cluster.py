@@ -171,6 +171,39 @@ class TestProviderHosted(object):
             cluster_name in server
         ), f"Failed to switch to cluster '{cluster_name}' and fetch data"
 
+    @runs_on_provider
+    @hci_provider_required
+    def test_create_destroy_hosted_cluster_with_fixture(
+        self, create_hypershift_clusters, destroy_hosted_cluster
+    ):
+        """
+        Test create hosted cluster with fixture
+        """
+        log_step("Create hosted client")
+        cluster_name = get_random_cluster_name()
+        odf_version = str(get_ocs_version_from_csv()).replace(".stable", "")
+        ocp_version = get_latest_release_version()
+        nodepool_replicas = 2
+
+        create_hypershift_clusters(
+            cluster_names=[cluster_name],
+            ocp_version=ocp_version,
+            odf_version=odf_version,
+            setup_storage_client=True,
+            nodepool_replicas=nodepool_replicas,
+        )
+
+        log_step("Switch to the hosted cluster")
+        ocsci_config.switch_to_cluster_by_name(cluster_name)
+
+        server = str(
+            OCP().exec_oc_cmd("oc whoami --show-server", out_yaml_format=False)
+        )
+
+        assert (
+            cluster_name in server
+        ), f"Failed to switch to cluster '{cluster_name}' and fetch data"
+
         log_step("Destroy hosted cluster")
         assert destroy_hosted_cluster(cluster_name), "Failed to destroy hosted cluster"
 
