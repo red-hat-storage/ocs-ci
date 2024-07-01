@@ -254,6 +254,7 @@ def verify_storageclient(
         verify_sc (bool): True to verify the storageclassclaims and storageclasses associated with the storageclient.
 
     """
+    ocs_version = version.get_semantic_ocs_version_from_config()
     storageclient_obj = OCP(
         kind=constants.STORAGECLIENT,
         namespace=namespace or config.ENV_DATA["cluster_namespace"],
