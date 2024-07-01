@@ -782,7 +782,17 @@ def run_ocs_upgrade(
         # in pending state
         is_all_csvs_succeeded = check_all_csvs_are_succeeded(namespace=namespace)
         assert is_all_csvs_succeeded, "Not all CSV's are in succeeded state"
+        if config.ENV_DATA.get("is_multus_enabled"):
+            from ocs_ci.helpers.helpers import upgrade_multus_holder_design
 
+            upgrade_multus_holder_design()
+            ocs_install_verification(
+                timeout=600,
+                skip_osd_distribution_check=True,
+                ocs_registry_image=upgrade_ocs.ocs_registry_image,
+                post_upgrade_verification=False,
+                version_before_upgrade=upgrade_ocs.version_before_upgrade,
+            )
         ocs_install_verification(
             timeout=600,
             skip_osd_distribution_check=True,
