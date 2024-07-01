@@ -8,6 +8,7 @@ from ocs_ci.framework.testlib import (
     skipif_external_mode,
     skipif_ms_consumer,
     skipif_hci_client,
+    dr_setup_required,
 )
 from ocs_ci.ocs.must_gather.must_gather import MustGather
 from ocs_ci.ocs.must_gather import const_must_gather
@@ -45,6 +46,13 @@ class TestMustGather(ManageTest):
                     skipif_external_mode,
                     skipif_ms_consumer,
                     skipif_hci_client,
+                ],
+            ),
+            pytest.param(
+                *[False, False, False, False, False, True],
+                marks=[
+                    pytest.mark.polarion_id("OCS-5797"),
+                    dr_setup_required,
                 ],
             ),
         ],
