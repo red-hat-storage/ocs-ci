@@ -38,7 +38,7 @@ def check_alert_list(
             it is not checked if there is more of occurences than one.
     """
 
-    target_alerts = [
+    all_alerts = [
         alert for alert in alerts if alert.get("labels").get("alertname") == label
     ]
     logger.info(f"Checking properties of found {label} alerts")
@@ -46,7 +46,7 @@ def check_alert_list(
     for key, state in enumerate(states):
         target_alerts = [
             alert
-            for alert in target_alerts
+            for alert in all_alerts
             if alert["annotations"]["message"] == msg
             and alert["annotations"]["severity_level"] == severity
             and alert["state"] == state
