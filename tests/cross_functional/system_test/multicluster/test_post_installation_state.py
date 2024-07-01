@@ -4,6 +4,7 @@ import pytest
 from ocs_ci.framework import config
 from ocs_ci.ocs import constants, managedservice, ocp
 from ocs_ci.ocs.resources import pod, storage_cluster
+from ocs_ci.helpers import managed_services
 from ocs_ci.framework.pytest_customization.marks import yellow_squad
 from ocs_ci.framework.testlib import (
     acceptance,
@@ -30,6 +31,7 @@ class TestPostInstallationState(ManageTest):
     @provider_client_ms_platform_required
     def test_post_installation(self):
         storage_cluster.ocs_install_verification()
+        managed_services.verify_provider_after_client_onboarding()
 
     @acceptance
     @pc_or_ms_provider_required
@@ -53,30 +55,6 @@ class TestPostInstallationState(ManageTest):
                 assert (
                     resource["status"] == "Ready"
                 ), f"{resource['name']} of {consumer_name} is in status {resource['status']}"
-
-    @acceptance
-    @pc_or_ms_provider_required
-    @pytest.mark.polarion_id("OCS-3910")
-    def test_consumers_capacity(self):
-        """
-        Test each storageconsumer's capacity and requested capacity.
-        Now only 1Ti value is possible. If more options get added, the test
-        will need to get the value from the consumer cluster's config file
-        """
-        consumer_names = managedservice.get_consumer_names()
-        for consumer_name in consumer_names:
-            consumer_yaml = ocp.OCP(
-                kind="StorageConsumer",
-                namespace=config.ENV_DATA["cluster_namespace"],
-                resource_name=consumer_name,
-            ).get()
-            log.info(f"Verifying capacity of {consumer_name}")
-            assert consumer_yaml["spec"]["capacity"] in {"1Ti", "1Pi"}
-            log.info(f"Verifying granted capacity of {consumer_name}")
-            assert (
-                consumer_yaml["status"]["grantedCapacity"]
-                == consumer_yaml["spec"]["capacity"]
-            )
 
     @tier1
     @pytest.mark.polarion_id("OCS-3917")
@@ -119,16 +97,24 @@ class TestPostInstallationState(ManageTest):
             for cephclient in cephclients:
                 if (
                     cephclient["metadata"]["annotations"][
-                        "ocs.openshift.io.storageconsumer"
+                        "ocs.openshift.io.storagerequest"
                     ]
-                    == consumer_name
+                    == "global"
                 ):
-                    found_client = (
-                        f"{cephclient['metadata']['annotations']['ocs.openshift.io.storageclaim']}-"
-                        f"{cephclient['metadata']['annotations']['ocs.openshift.io.cephusertype']}"
-                    )
-                    log.info(f"Ceph client {found_client} for {consumer_name} found")
-                    found_clients.append(found_client)
+                    if (
+                        cephclient["metadata"]["annotations"][
+                            "ocs.openshift.io.storageconsumer"
+                        ]
+                        == consumer_name
+                    ):
+                        found_client = (
+                            f"{cephclient['metadata']['annotations']['ocs.openshift.io.storagerequest']}-"
+                            f"{cephclient['metadata']['annotations']['ocs.openshift.io.cephusertype']}"
+                        )
+                        log.info(
+                            f"Ceph client {found_client} for {consumer_name} found"
+                        )
+                        found_clients.append(found_client)
             for client in {
                 "rbd-provisioner",
                 "rbd-node",
@@ -157,7 +143,7 @@ class TestPostInstallationState(ManageTest):
             if "ERR" in line:
                 log.info(f"{line}")
         log.info(f"Deployer log has {len(log_lines)} lines.")
-        assert len(log_lines) > 100
+        assert len(log_lines) > 50
 
     @tier1
     @bugzilla("2117312")

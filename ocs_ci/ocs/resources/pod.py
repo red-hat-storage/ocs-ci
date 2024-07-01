@@ -1525,7 +1525,7 @@ def run_io_and_verify_mount_point(pod_obj, bs="10M", count="950"):
 
 def get_pods_having_label(
     label,
-    namespace=constants.OPENSHIFT_STORAGE_NAMESPACE,
+    namespace=None,
     cluster_config=None,
     statuses=None,
 ):
@@ -1543,6 +1543,7 @@ def get_pods_having_label(
         list: of pods info
 
     """
+    namespace = namespace or config.ENV_DATA["cluster_namespace"]
     ocp_pod = OCP(kind=constants.POD, namespace=namespace)
     pods = ocp_pod.get(selector=label, cluster_config=cluster_config).get("items")
     if statuses:
@@ -1646,7 +1647,7 @@ def get_osd_pods(osd_label=constants.OSD_APP_LABEL, namespace=None):
 
 def get_osd_prepare_pods(
     osd_prepare_label=constants.OSD_PREPARE_APP_LABEL,
-    namespace=config.ENV_DATA["cluster_namespace"],
+    namespace=None,
 ):
     """
     Fetches info about osd prepare pods in the cluster
@@ -1756,7 +1757,7 @@ def get_pod_obj(name, namespace=None):
 def get_pod_logs(
     pod_name,
     container=None,
-    namespace=config.ENV_DATA["cluster_namespace"],
+    namespace=None,
     previous=False,
     all_containers=False,
     since=None,
@@ -1775,6 +1776,7 @@ def get_pod_logs(
         str: Output from 'oc get logs <pod_name> command
 
     """
+    namespace = namespace or config.ENV_DATA["cluster_namespace"]
     pod = OCP(kind=constants.POD, namespace=namespace)
     cmd = f"logs {pod_name}"
     if container:
