@@ -218,6 +218,7 @@ INGRESSCONTROLLER = "ingresscontroller"
 PROVISIONING = "Provisioning"
 AGENT_SERVICE_CONFIG = "AgentServiceConfig"
 INFRA_ENV = "InfraEnv"
+STORAGEREQUEST = "Storagerequest"
 
 # Provisioners
 AWS_EFS_PROVISIONER = "openshift.org/aws-efs"

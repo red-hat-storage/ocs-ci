@@ -974,3 +974,24 @@ def create_toolbox_on_faas_consumer():
         resource_count=1,
         timeout=180,
     )
+
+
+def verify_provider_after_client_onboarding():
+    """
+    Verify resources on provider cluster after client onboarding:
+
+    1. There are 2 storagerequests for each storageconsumer, and their status is Ready
+    """
+    storagerequests_obj = OCP(
+        kind=constants.STORAGEREQUEST, namespace=config.ENV_DATA["cluster_namespace"]
+    )
+    storagerequests = storagerequests_obj.get().get("items")
+    storageconsumer_obj = OCP(
+        kind=constants.STORAGECONSUMER, namespace=config.ENV_DATA["cluster_namespace"]
+    )
+    storageconsumers = storageconsumer_obj.get().get("items")
+    assert len(storagerequests) == 2 * len(
+        storageconsumers
+    ), f"There should be 2 storagerequests for each storageconsumer"
+    for storagerequest in storagerequests:
+        assert storagerequest.get("status").get("phase") == constants.STATUS_READY

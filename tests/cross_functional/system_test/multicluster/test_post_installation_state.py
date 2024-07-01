@@ -4,6 +4,7 @@ import pytest
 from ocs_ci.framework import config
 from ocs_ci.ocs import constants, managedservice, ocp
 from ocs_ci.ocs.resources import pod, storage_cluster
+from ocs_ci.helpers import managed_services
 from ocs_ci.framework.pytest_customization.marks import yellow_squad
 from ocs_ci.framework.testlib import (
     acceptance,
@@ -30,6 +31,7 @@ class TestPostInstallationState(ManageTest):
     @provider_client_ms_platform_required
     def test_post_installation(self):
         storage_cluster.ocs_install_verification()
+        managed_services.verify_provider_after_client_onboarding()
 
     @acceptance
     @pc_or_ms_provider_required
