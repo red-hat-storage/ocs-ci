@@ -11,8 +11,6 @@ from ocs_ci.framework.pytest_customization.marks import (
     bugzilla,
     tier1,
     tier2,
-    pre_upgrade,
-    post_upgrade,
     skipif_aws_creds_are_missing,
     ignore_leftovers,
     mcg,
@@ -74,7 +72,9 @@ class TestDefaultBackingstoreOverride(MCGTest):
             == alt_default_bs_name
         ), "The default OC bucket does not use the new default backingstore!"
 
-    @pre_upgrade
+    # Run after other pre-upgrade tests
+    @pytest.mark.order(constants.ORDER_BEFORE_OCS_UPGRADE + 1)
+    @pytest.mark.pre_upgrade  # @pre_upgrade conflicts with the order marker
     def test_default_backingstore_override_pre_upgrade(
         self,
         request,
@@ -98,7 +98,9 @@ class TestDefaultBackingstoreOverride(MCGTest):
             default_admin_resource == default_bc_bs == alt_default_bs_name
         ), "The new default backingstore was not overriden before the upgrade!"
 
-    @post_upgrade
+    # Run before other post-upgrade tests
+    @pytest.mark.order(constants.ORDER_AFTER_OCS_UPGRADE - 1)
+    @pytest.mark.post_upgrade  # @post_upgrade conflicts with the order marker
     @polarion_id("OCS-5194")
     def test_default_backingstore_override_post_upgrade(
         self,
