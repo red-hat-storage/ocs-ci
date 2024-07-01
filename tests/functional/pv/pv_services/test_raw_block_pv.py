@@ -9,7 +9,6 @@ from ocs_ci.framework.pytest_customization.marks import green_squad
 from ocs_ci.framework.testlib import (
     tier1,
     ManageTest,
-    acceptance,
     skipif_managed_service,
     skipif_hci_provider_and_client,
 )
@@ -21,9 +20,12 @@ from ocs_ci.utility.utils import convert_device_size
 log = logging.getLogger(__name__)
 
 
+# this test was also part of acceptance test suite, where it was replaced by
+# tests/functional/pv/pv_services/test_pvc_acceptance.py
+# if you need to change this test, please review also the test_pvc_acceptance
+# and update accordingly if needed
 @green_squad
 @tier1
-@acceptance
 @pytest.mark.parametrize(
     argnames=["reclaim_policy"],
     argvalues=[
@@ -128,7 +130,7 @@ class TestRawBlockPV(ManageTest):
                 p.submit(
                     pod.run_io,
                     storage_type=storage_type,
-                    size=f"{random.randint(10,200)}M",
+                    size=f"{random.randint(10, 200)}M",
                     invalidate=0,
                 )
             for pod in pvc_gb_pods:
@@ -136,7 +138,7 @@ class TestRawBlockPV(ManageTest):
                 p.submit(
                     pod.run_io,
                     storage_type=storage_type,
-                    size=f"{random.randint(1,5)}G",
+                    size=f"{random.randint(1, 5)}G",
                     invalidate=0,
                 )
             for pod in pvc_tb_pods:
@@ -144,7 +146,7 @@ class TestRawBlockPV(ManageTest):
                 p.submit(
                     pod.run_io,
                     storage_type=storage_type,
-                    size=f"{random.randint(10,15)}G",
+                    size=f"{random.randint(10, 15)}G",
                     invalidate=0,
                 )
 

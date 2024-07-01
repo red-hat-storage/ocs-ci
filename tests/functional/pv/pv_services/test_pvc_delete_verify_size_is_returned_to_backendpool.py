@@ -9,7 +9,7 @@ from ocs_ci.ocs import constants
 from ocs_ci.ocs.exceptions import UnexpectedBehaviour
 from ocs_ci.helpers import helpers
 from ocs_ci.framework.pytest_customization.marks import green_squad
-from ocs_ci.framework.testlib import tier1, acceptance, ManageTest
+from ocs_ci.framework.testlib import tier1, ManageTest
 from ocs_ci.utility import templating
 from ocs_ci.utility.retry import retry
 from ocs_ci.ocs.resources import pod
@@ -56,7 +56,10 @@ class TestPVCDeleteAndVerifySizeIsReturnedToBackendPool(ManageTest):
     Testing after pvc deletion the size is returned to backendpool
     """
 
-    @acceptance
+    # this test was also part of acceptance test suite, where it was replaced by
+    # tests/functional/pv/pv_services/test_pvc_acceptance.py
+    # if you need to change this test, please review also the test_pvc_acceptance
+    # and update accordingly if needed
     @tier1
     def test_pvc_delete_and_verify_size_is_returned_to_backend_pool(
         self, pause_and_resume_cluster_load, pvc_factory, pod_factory
