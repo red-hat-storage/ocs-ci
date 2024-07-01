@@ -1513,6 +1513,20 @@ def get_non_acm_cluster_config():
     return non_acm_list
 
 
+def get_non_acm_cluster_indexes():
+    """
+    Get config index of all non-acm clusters
+
+    Returns:
+        list: of integer indexes of non-acm clusters
+
+    """
+    non_acm_indexes = list()
+    for cluster in get_non_acm_cluster_config():
+        non_acm_indexes.append(cluster.MULTICLUSTER["multicluster_index"])
+    return non_acm_indexes
+
+
 def get_all_acm_indexes():
     """
     Get indexes fro all ACM clusters
@@ -1527,6 +1541,16 @@ def get_all_acm_indexes():
         if cluster.MULTICLUSTER["acm_cluster"]:
             acm_indexes.append(cluster.MULTICLUSTER["multicluster_index"])
     return acm_indexes
+
+
+def is_acm_cluster():
+    """
+    Check whether the current cluster in context is an ACM cluster
+
+    Returns:
+        bool: True if its an ACM cluster else False
+    """
+    return ocsci_config.MULTICLUSTER["multicluster_index"] in get_all_acm_indexes()
 
 
 def enable_mco_console_plugin():
@@ -1583,6 +1607,14 @@ def get_primary_cluster_config():
     for cluster in ocsci_config.clusters:
         if cluster.MULTICLUSTER["primary_cluster"]:
             return cluster
+
+
+def get_primary_cluster_index():
+    """
+    Get the index of primary cluster in case of multicluster scenario
+    """
+    pcluster = get_primary_cluster_config()
+    return pcluster.MULTICLUSTER["multicluster_index"]
 
 
 def thread_init_class(class_init_operations, shutdown):
