@@ -793,8 +793,6 @@ class Longevity(object):
             project_factory : Fixture to create a new Project.
             multi_pvc_pod_lifecycle_factory : Fixture to create/delete multiple pvcs and pods and
                                                 measure pvc creation/deletion time and pod attach time.
-            multi_obc_lifecycle_factory : Fixture to create/delete multiple obcs and
-                                            measure their creation/deletion time.
             num_of_pvcs (int) : Total Number of PVCs / PODs we want to create.
             pvc_size (int) : Size of each PVC in GB.
             num_of_buckets(int): Number of buckets for each MCG features
