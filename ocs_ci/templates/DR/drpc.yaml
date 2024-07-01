@@ -1,8 +1,6 @@
 apiVersion: ramendr.openshift.io/v1alpha1
 kind: DRPlacementControl
 metadata:
-  labels:
-    cluster.open-cluster-management.io/backup: resource
   name: PLACEHOLDER
   namespace: openshift-gitops
 spec:
@@ -16,6 +14,19 @@ spec:
     name: PLACEHOLDER
     namespace: openshift-gitops
   preferredCluster: PLACEHOLDER
+  kubeObjectProtection:
+    captureInterval: PLACEHOLDER
+    kubeObjectSelector:
+      matchExpressions:
+        - key: PLACEHOLDER
+          operator: In
+          values:
+            - PLACEHOLDER
   pvcSelector:
     matchLabels:
       PLACEHOLDER
+    matchExpressions:
+      - key: PLACEHOLDER
+        operator: In
+        values:
+          - PLACEHOLDER
