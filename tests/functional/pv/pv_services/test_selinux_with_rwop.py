@@ -10,9 +10,19 @@ from ocs_ci.helpers import helpers
 from ocs_ci.helpers.helpers import verify_log_exist_in_pods_logs
 from ocs_ci.ocs import ocp, constants
 from ocs_ci.framework.testlib import E2ETest
-from ocs_ci.ocs.exceptions import PodNotCreated, CommandFailed
+from ocs_ci.ocs.exceptions import (
+    PodNotCreated,
+    CommandFailed,
+    ResourceWrongStatusException,
+)
+from ocs_ci.ocs.node import wait_for_nodes_status
 from ocs_ci.ocs.resources import pod as res_pod
-from ocs_ci.ocs.resources.pod import get_plugin_pods, get_pod_node
+from ocs_ci.ocs.resources.pod import (
+    get_plugin_pods,
+    get_pod_node,
+    wait_for_pods_to_be_running,
+)
+from ocs_ci.utility.retry import retry
 from ocs_ci.utility.utils import run_cmd, TimeoutSampler
 from ocs_ci.utility.templating import dump_data_to_temp_yaml
 from ocs_ci.framework.pytest_customization.marks import (
@@ -197,12 +207,13 @@ class TestSelinuxrelabel(E2ETest):
     ):
         """
         Steps:
-            1. Create cephfs pvcs and attach pod with more than 100K files across multiple nested directories
-            2. Take md5sum for them some random files and get pod restart time
-            3. Apply the fix for SeLinux-relabeling
-            4. Restart the pods which are hosting cephfs files in large numbers.
-            5. Check data integrity.
-            6. Check for relabeling - this should not be happening.
+            1. Create cephfs RWOP and RWO pvc and pod with 100K files across multiple nested directories
+            2. Observe the mountflags in csi-cephfsplugin-xx pod csi-cephfsplugin container logs
+            3. Take md5sum for random files in pod
+            4. Take backup of each pod's yaml.
+            5. Change `securityContext.SeLinuxOptions.Level: s0:c26,c20` value to something different on rwop pod
+            and apply the new pod yaml
+            6. Observe the new mountflags
 
         Args:
             pvc_factory (function): A call to pvc_factory function
@@ -303,8 +314,49 @@ class TestSelinuxrelabel(E2ETest):
                 f"The expected log '{expected_log}' exist in {self.pod_obj2.name} pods after reclaimspacejob deletion"
             )
 
-        self.backup_pod(pod_obj=self.pod_obj2)
         pod_attach_time_2 = self.get_pod_start_time(self.pod_obj2.name)
         log.info(f"Time taken by pod to restart is {pod_attach_time_2}")
 
         assert pod_attach_time_1 < pod_attach_time_2
+
+        node = get_pod_node(self.pod_obj)
+        # Reboot one master nodes
+        node.restart_nodes(wait=False)
+
+        # Wait some time after rebooting master
+        waiting_time = 40
+        log.info(f"Waiting {waiting_time} seconds...")
+        time.sleep(waiting_time)
+
+        # Validate all nodes and services are in READY state and up
+        retry(
+            (CommandFailed, TimeoutError, AssertionError, ResourceWrongStatusException),
+            tries=60,
+            delay=15,
+        )(ocp.wait_for_cluster_connectivity(tries=400))
+        retry(
+            (CommandFailed, TimeoutError, AssertionError, ResourceWrongStatusException),
+            tries=60,
+            delay=15,
+        )(wait_for_nodes_status(timeout=1800))
+
+        # Check cluster is health ok
+        self.sanity_helpers.health_check(tries=40)
+        assert wait_for_pods_to_be_running(pod_names=pod_name, timeout=900, sleep=15)
+
+    def test_check_selinuxmount_csidriver(self):
+        """
+        Check cephfs csidriver object for presence of `Spec.Selinux: true` parameter.
+
+        """
+
+        logging.info("Check seLinuxMount is set to true in CSIdrivers")
+        csi_driver = ocp.OCP(kind="CSIDriver")
+        csi_driver_items = csi_driver.get()["items"]
+        seLinuxMount_set_to_true = any(
+            item["spec"].get("seLinuxMount") is True for item in csi_driver_items
+        )
+
+        assert (
+            seLinuxMount_set_to_true
+        ), "seLinuxMount is either not present or not set to true in any of the CSIDriver objects"
