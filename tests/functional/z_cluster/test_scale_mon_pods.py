@@ -35,22 +35,6 @@ log = logging.getLogger(__name__)
 @skipif_less_than_five_workers
 @skipif_ocs_version("<4.15")
 class TestFiveMonInCluster(ManageTest):
-    def __init__(self):
-
-        """
-        Initializer function
-
-        """
-
-        self.mon_count = 5
-        self.ceph_cluster = CephCluster()
-
-        self.storagecluster_obj = ocp.OCP(
-            resource_name=constants.DEFAULT_CLUSTERNAME,
-            namespace=config.ENV_DATA["cluster_namespace"],
-            kind=constants.STORAGECLUSTER,
-        )
-
     def assign_dummy_racks(self):
         """
         Assign node labels to given nodes based on given rack lists.
@@ -87,6 +71,14 @@ class TestFiveMonInCluster(ManageTest):
         Label each node in different failure domain, Here we make use of rack based failure domains
 
         """
+        self.mon_count = 5
+        self.ceph_cluster = CephCluster()
+
+        self.storagecluster_obj = ocp.OCP(
+            resource_name=constants.DEFAULT_CLUSTERNAME,
+            namespace=config.ENV_DATA["cluster_namespace"],
+            kind=constants.STORAGECLUSTER,
+        )
         if not self.are_rack_labels_present():
             self.nodes = get_worker_nodes()
             self.racks = ["rack{}".format(i) for i in range(0, len(self.nodes))]
