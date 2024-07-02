@@ -311,10 +311,10 @@ class HostedClients(HyperShiftBase):
 
 class HypershiftHostedOCP(HyperShiftBase, MetalLBInstaller, CNVInstaller, Deployment):
     def __init__(self, name):
+        Deployment.__init__(self)
         HyperShiftBase.__init__(self)
         MetalLBInstaller.__init__(self)
         CNVInstaller.__init__(self)
-        Deployment.__init__(self)
         self.name = name
         if config.ENV_DATA["clusters"].get(self.name):
             cluster_path = (
