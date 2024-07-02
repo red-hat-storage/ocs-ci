@@ -238,7 +238,7 @@ class TestFiveMonInCluster(ManageTest):
             node_names = [n.name for n in ocp_nodes]
             wait_for_nodes_status(node_names, constants.STATUS_READY, timeout=420)
         else:
-            nodes.restart_nodes_by_stop_and_start(nodes=ocp_nodes, force=force)
+            nodes.restart_nodes_by_stop_and_start(nodes=ocp_nodes, force="True")
 
         self.sanity_helpers.health_check()
         self.sanity_helpers.create_resources(
