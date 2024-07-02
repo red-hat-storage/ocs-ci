@@ -140,6 +140,7 @@ anywhere else.
 * `customized_deployment_storage_class` - Customize the storage class type in the deployment.
 * `ibmcloud_disable_addon` - Disable OCS addon
 * `in_transit_encryption` - Enable in-transit encryption.
+* `sc_encryption` - Enable StorageClass encryption.
 * `skip_ocp_installer_destroy` - Skip OCP installer to destroy the cluster -
   useful for enforcing force deploy steps only.
 
