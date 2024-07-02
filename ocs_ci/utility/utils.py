@@ -1084,14 +1084,15 @@ def get_openshift_client(
         # record current working directory and switch to BIN_DIR
         previous_dir = os.getcwd()
         os.chdir(bin_dir)
-        url = get_openshift_mirror_url("openshift-client", version)
+
         tarball = "openshift-client.tar.gz"
         try:
+            url = get_openshift_mirror_url("openshift-client", version)
             download_file(url, tarball)
             run_cmd(f"tar xzvf {tarball} oc kubectl")
             delete_file(tarball)
         except Exception as e:
-            log.error(f"Failed to download the url {url} with exception '{e}'")
+            log.error(f"Failed to download the openshift client. Exception '{e}'")
             # check given version is GA'ed or not
             if "nightly" in version:
                 get_nightly_oc_via_ga(version, tarball)
