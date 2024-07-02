@@ -2,6 +2,7 @@ import logging
 
 import pytest
 import random
+import concurrent.futures
 
 from ocs_ci.framework import config
 from ocs_ci.ocs.resources import pod
@@ -12,13 +13,20 @@ from ocs_ci.framework.testlib import (
     ipi_deployment_required,
 )
 from ocs_ci.ocs import constants, node
+from ocs_ci.helpers.helpers import (
+    odf_cli_set_recover_profile,
+    get_ceph_recovery_profile,
+)
+from ocs_ci.utility.utils import TimeoutSampler
 from ocs_ci.ocs.cluster import CephCluster, is_lso_cluster, is_ms_provider_cluster
 from ocs_ci.ocs.resources.storage_cluster import osd_encryption_verification
+from ocs_ci.ocs.exceptions import TimeoutExpiredError
 from ocs_ci.framework.pytest_customization.marks import (
     skipif_managed_service,
     skipif_hci_provider_and_client,
     skipif_bmpsi,
     bugzilla,
+    tier4b,
     skipif_external_mode,
     skipif_ms_consumer,
     skipif_hci_client,
@@ -26,6 +34,11 @@ from ocs_ci.framework.pytest_customization.marks import (
 )
 from ocs_ci.helpers.helpers import verify_storagecluster_nodetopology
 from ocs_ci.helpers.sanity_helpers import Sanity
+from ocs_ci.helpers.managed_services import (
+    get_used_capacity,
+    verify_osd_used_capacity_greater_than_expected,
+)
+
 
 log = logging.getLogger(__name__)
 
@@ -341,3 +354,175 @@ class TestNodeReplacementTwice(ManageTest):
             assert (
                 verify_storagecluster_nodetopology
             ), "Storagecluster node topology is having an entry of non ocs node(s) - Not expected"
+
+
+@brown_squad
+@tier4b
+@ignore_leftovers
+@ipi_deployment_required
+@skipif_managed_service
+@skipif_hci_provider_and_client
+@skipif_bmpsi
+@skipif_external_mode
+class TestNodeReplacementWithRecoveryProfile(ManageTest):
+    """
+    Knip-894 Node replacement proactive with IO
+
+    """
+
+    @pytest.fixture(autouse=True)
+    def init_sanity(self):
+        """
+        Initialize Sanity instance
+
+        """
+        self.sanity_helpers = Sanity()
+
+    @pytest.fixture(autouse=True)
+    def teardown(self):
+        """
+        teardown function, Setting recovery-profile back to balanced.
+        """
+        assert odf_cli_set_recover_profile("balanced")
+        log.info(
+            "Fetching ceph osd_mclock_profile/recovery profile using odf-cli tool."
+        )
+        a = get_ceph_recovery_profile()
+        log.info(f"Applied recovery profile on ceph cluster is {a}")
+
+    @pytest.mark.polarion_id("OCS-XXXX")
+    @pytest.mark.parametrize(
+        argnames=["recovery_profile"],
+        argvalues=[
+            pytest.param("balanced"),
+            pytest.param("high_client_ops"),
+            pytest.param("high_recovery_ops"),
+        ],
+    )
+    def test_nodereplacement_proactive_with_recovery_profile_and_io_running(
+        self,
+        recovery_profile,
+        pvc_factory,
+        pod_factory,
+        dc_pod_factory,
+        bucket_factory,
+        rgw_bucket_factory,
+        multi_pvc_factory,
+    ):
+        """
+        Test setting the recovery profile by ODF CLI.
+        Steps:
+            1. Set recovery-profile using ODF cli tool
+            2. Verify recovery profile from the ceph toolbox pod
+            3. Node Replacement proactive when IO running in the background
+
+        """
+        # Setting up and verifying the recovery profile value with the odf CLI tool
+
+        assert odf_cli_set_recover_profile(recovery_profile)
+        log.info(
+            "Fetching ceph osd_mclock_profile/recovery profile using odf-cli tool."
+        )
+        a = get_ceph_recovery_profile()
+        log.info(f"Applied recovery profile on ceph cluster is {a}")
+        assert (
+            recovery_profile == get_ceph_recovery_profile()
+        ), f"Recovery profile set by ODF CLI ({recovery_profile}) does not match with the value reported by Ceph"
+
+        ceph_cluster = CephCluster()
+        pvc_count = 20
+
+        # Get file size to fill up the cluster
+        ceph_capacity = int(ceph_cluster.get_ceph_capacity())
+        size = int((ceph_capacity * 0.4) / pvc_count)
+        filesize = int(size * 0.8)
+        # Change the file size to MB for the FIO function
+        file_size = f"{filesize * constants.GB2MB}M"
+
+        # Creating PVCs for filling up the cluster
+        pvc_objs = multi_pvc_factory(
+            interface=constants.CEPHFILESYSTEM,
+            size=size,
+            num_of_pvc=pvc_count,
+        )
+        pod_objs = list()
+
+        for pvc_obj in pvc_objs:
+            pod_objs.append(pod_factory(pvc=pvc_obj))
+
+        # Run FIO concurrently on created pods
+        executor = concurrent.futures.ThreadPoolExecutor(max_workers=pvc_count)
+        futures_fio = []
+        for pod1 in pod_objs:
+            futures_fio.append(
+                executor.submit(
+                    pod1.run_io,
+                    storage_type="fs",
+                    size=file_size,
+                    invalidate=0,
+                    bs="512K",
+                    runtime=2100,
+                    timeout=3300,
+                    jobs=1,
+                    readwrite="readwrite",
+                )
+            )
+        for _ in concurrent.futures.as_completed(futures_fio):
+            log.info("Some pod submitted FIO")
+        concurrent.futures.wait(futures_fio)
+        executor = concurrent.futures.ThreadPoolExecutor(max_workers=pvc_count)
+
+        # Wait for cluster to be filled up to 30%
+        get_used_capacity("After filling up the cluster")
+        sample = TimeoutSampler(
+            timeout=3600,
+            sleep=300,
+            func=verify_osd_used_capacity_greater_than_expected,
+            expected_used_capacity=30.0,
+        )
+        if not sample.wait_for_func_status(result=True):
+            log.error("After 3600 seconds the used capacity smaller than 30%")
+            raise TimeoutExpiredError
+
+        worker_node_list = node.get_worker_nodes()
+        log.info(f"Current available worker nodes are {worker_node_list}")
+
+        osd_node_name = select_osd_node_name()
+
+        log.info("Creating dc pod backed with rbd pvc and running io in bg")
+        for worker_node in worker_node_list:
+            if worker_node != osd_node_name:
+                rbd_dc_pod = dc_pod_factory(
+                    interface=constants.CEPHBLOCKPOOL, node_name=worker_node, size=80
+                )
+                pod.run_io_in_bg(rbd_dc_pod, expect_to_fail=False, fedora_dc=True)
+
+        log.info("Creating dc pod backed with cephfs pvc and running io in bg")
+        for worker_node in worker_node_list:
+            if worker_node != osd_node_name:
+                cephfs_dc_pod = dc_pod_factory(
+                    interface=constants.CEPHFILESYSTEM, node_name=worker_node, size=20
+                )
+                pod.run_io_in_bg(cephfs_dc_pod, expect_to_fail=False, fedora_dc=True)
+
+        delete_and_create_osd_node(osd_node_name)
+
+        # Creating Resources
+        log.info("Creating Resources using sanity helpers")
+        self.sanity_helpers.create_resources(
+            pvc_factory, pod_factory, bucket_factory, rgw_bucket_factory
+        )
+        # Deleting Resources
+        self.sanity_helpers.delete_resources()
+
+        # Verify everything running fine
+        log.info("Verifying All resources are Running and matches expected result")
+        self.sanity_helpers.health_check(tries=120)
+
+        # Verify OSD is encrypted
+        if config.ENV_DATA.get("encryption_at_rest"):
+            osd_encryption_verification()
+
+        assert (
+            verify_storagecluster_nodetopology
+        ), "Storagecluster node topology is having an entry of non ocs node(s) - Not expected"

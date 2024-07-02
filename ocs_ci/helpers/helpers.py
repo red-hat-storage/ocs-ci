@@ -4755,6 +4755,39 @@ def flatten_multilevel_dict(d):
     return leaves_list
 
 
+def odf_cli_set_recover_profile(recovery_profile):
+    """
+    Set the recovery profile for a Ceph service.
+
+    Args:
+        recovery_profile (str): The recovery profile name (balanced or high_client_ops or high_recovery_ops )
+    """
+    from pathlib import Path
+
+    if not Path(constants.CLI_TOOL_LOCAL_PATH).exists():
+        retrieve_cli_binary(cli_type="odf")
+
+    logger.info(f"Setting ceph recovery profile {recovery_profile} using odf-cli tool.")
+    cmd = f"odf-cli set recovery-profile  {recovery_profile}"
+    output = run_cmd(cmd)
+    return output
+
+
+def get_ceph_recovery_profile():
+    """
+    Return CEPH recover profile
+
+    """
+
+    # Fetchhing recovery profile from ceph config
+    toolbox = pod.get_ceph_tools_pod()
+    ceph_cmd = "ceph config get osd osd_mclock_profile"
+
+    ceph_output = toolbox.exec_ceph_cmd(ceph_cmd)
+
+    return ceph_output
+
+
 def is_rbd_default_storage_class(custom_sc=None):
     """
     Check if RDB is a default storageclass for the cluster
