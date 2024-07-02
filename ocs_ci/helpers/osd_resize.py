@@ -23,7 +23,13 @@ from ocs_ci.ocs.resources.storage_cluster import (
     resize_osd,
 )
 from ocs_ci.ocs.cluster import check_ceph_osd_tree, CephCluster
-from ocs_ci.utility.utils import ceph_health_check, TimeoutSampler, convert_device_size
+from ocs_ci.ocs.ui.page_objects.page_navigator import PageNavigator
+from ocs_ci.utility.utils import (
+    ceph_health_check,
+    TimeoutSampler,
+    convert_device_size,
+    human_to_bytes_ui,
+)
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.ocp import OCP
 from ocs_ci.framework import config
@@ -411,3 +417,51 @@ def basic_resize_osd(old_storage_size):
     logger.info(f"Increase the osd size to {new_storage_size}")
     resize_osd(new_storage_size)
     return new_storage_size
+
+
+def check_storage_size_is_reflected_in_ui():
+    """
+    Check that the current total storage size is reflected in the
+    UI 'ocs-storagecluster-storagesystem' page.
+
+    """
+    block_and_file = (
+        PageNavigator()
+        .nav_odf_default_page()
+        .nav_storage_systems_tab()
+        .nav_storagecluster_storagesystem_details()
+        .nav_block_and_file()
+    )
+    used, available = block_and_file.get_raw_capacity_card_values()
+    # Get the used, available and total size in bytes
+    used_size_bytes = human_to_bytes_ui(used)
+    available_size_bytes = human_to_bytes_ui(available)
+    total_size_bytes = used_size_bytes + available_size_bytes
+
+    # Convert the used, available and total size to GB
+    bytes_to_gb = 1024**3
+    used_size_gb = used_size_bytes / bytes_to_gb
+    available_size_gb = available_size_bytes / bytes_to_gb
+    total_size_gb = round(total_size_bytes / bytes_to_gb)
+    logger.info(f"Used size = {used_size_gb}Gi")
+    logger.info(f"Available size = {available_size_gb}Gi")
+    logger.info(f"Total size = {total_size_gb}Gi")
+
+    ceph_cluster = CephCluster()
+    ceph_capacity = int(ceph_cluster.get_ceph_capacity())
+    ceph_total_size = ceph_capacity * len(get_osd_pods())
+
+    # There could be a small gap between the total size in the UI and the actual Ceph total size.
+    # So, instead of checking the accurate size, we check that the total size is within the expected range.
+    max_gap = 6 if ceph_total_size < 1500 else 12
+    expected_total_size_range_gb = range(
+        ceph_total_size - max_gap, ceph_total_size + max_gap
+    )
+    logger.info(
+        f"Check that the total UI size {total_size_gb}Gi is in the "
+        f"expected total size range {expected_total_size_range_gb}Gi"
+    )
+    assert total_size_gb in expected_total_size_range_gb, (
+        f"The total UI size {total_size_gb}Gi is not in the "
+        f"expected total size range {expected_total_size_range_gb}Gi"
+    )
