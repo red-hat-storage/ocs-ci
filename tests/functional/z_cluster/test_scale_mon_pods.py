@@ -225,7 +225,7 @@ class TestFiveMonInCluster(ManageTest):
             )
             log.info("Verifying that all five mon pods are in running state")
             assert verify_mon_pod_running(
-                pods
+                self.mon_count
             ), "All five mon pods are not up and running state"
 
             self.ceph_cluster.cluster_health_check(timeout=60)
