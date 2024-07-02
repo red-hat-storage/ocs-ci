@@ -2947,3 +2947,12 @@ def verify_crypt_device_present_onnode(node, vol_handle):
 
     log.info(f"Crypt device for volume handle {vol_handle} present on the node: {node}")
     return True
+
+
+def get_node_by_internal_ip(internal_ip):
+    node_objs = get_node_objs()
+    for n in node_objs:
+        if get_node_internal_ip(n) == internal_ip:
+            return n
+
+    return None
