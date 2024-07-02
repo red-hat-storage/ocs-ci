@@ -128,7 +128,7 @@ class TestCrossScCloneSnapRestore(ManageTest):
         restore_pvc_obj2.delete()
 
     @pytest.mark.parametrize(
-        argnames=["interface_type", "replica1", "replica2"],
+        argnames=["interface_type", "sc1_replica", "sc_replica2"],
         argvalues=[
             pytest.param(*[constants.CEPHBLOCKPOOL], "", ""),
             pytest.param(*[constants.CEPHFILESYSTEM], "", ""),
@@ -141,8 +141,8 @@ class TestCrossScCloneSnapRestore(ManageTest):
     def test_cross_class_different_pool_clone_snap_restore(
         self,
         interface_type,
-        replica1,
-        replica2,
+        sc1_replica,
+        sc_replica2,
         storageclass_factory,
         pvc_factory,
         pod_factory,
@@ -157,13 +157,19 @@ class TestCrossScCloneSnapRestore(ManageTest):
         4. Clone pvc created on the first storage class to the second storage class
         5. Create pvc's shapshot
         6. Restore the snapshot to a pvc on the second storage class
+
+        Args:
+            sc1_replica (str/int): Number of replica for the first sc object. If is empty string, use default
+            sc2_replica (str/int): Number of replica for the second sc object. If is empty string, use default
         """
 
         # Create a Storage Class on default pool
-        if replica1 == "":
+        if sc1_replica == "":
             sc_obj1 = storageclass_factory(interface=interface_type)
         else:
-            sc_obj1 = storageclass_factory(interface=interface_type, replica=replica1)
+            sc_obj1 = storageclass_factory(
+                interface=interface_type, replica=sc1_replica
+            )
         pool_name1 = run_cmd(
             f"oc get sc {sc_obj1.name} -o jsonpath={{'.parameters.pool'}}"
         )
@@ -175,11 +181,11 @@ class TestCrossScCloneSnapRestore(ManageTest):
         )
 
         # Create a Storage Class on another pool
-        if replica2 == "":
+        if sc_replica2 == "":
             sc_obj2 = storageclass_factory(interface=interface_type, new_rbd_pool=True)
         else:
             sc_obj2 = storageclass_factory(
-                interface=interface_type, replica=replica2, new_rbd_pool=True
+                interface=interface_type, replica=sc_replica2, new_rbd_pool=True
             )
         pool_name2 = run_cmd(
             f"oc get sc {sc_obj2.name} -o jsonpath={{'.parameters.pool'}}"
