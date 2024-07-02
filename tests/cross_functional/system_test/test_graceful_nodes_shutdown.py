@@ -447,7 +447,9 @@ class TestGracefulNodesShutdown(E2ETest):
             " Noobaa caching,Object expiration,"
             "MCG NSFS,RGW kafka notification"
         )
-        setup_mcg_bg_features(skip_any_features=["caching", "nsfs", "rgw kafka"])
+        feature_setup_map = setup_mcg_bg_features(
+            skip_any_features=["caching", "nsfs", "rgw kafka"]
+        )
 
         # check OSD status after graceful node shutdown
         worker_nodes = get_nodes(node_type="worker")
@@ -504,7 +506,7 @@ class TestGracefulNodesShutdown(E2ETest):
         self.validate_pvc_expansion(pvc_size_new=10)
 
         validate_mcg_bg_features(
-            skip_any_features=["caching", "rgw kafka", "nsfs", "replication"]
+            feature_setup_map, skip_any_features=["caching", "rgw kafka", "nsfs"]
         )
         self.validate_ocp_workload_exists()
 
