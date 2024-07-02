@@ -22,7 +22,6 @@ from ocs_ci.framework.testlib import (
     tier4b,
     tier4c,
     tier4a,
-    tier4,
 )
 from ocs_ci.ocs.constants import VOLUME_MODE_BLOCK, OSD, ROOK_OPERATOR, MON_DAEMON
 from ocs_ci.helpers.osd_resize import (
@@ -301,7 +300,9 @@ class TestResizeOSD(ManageTest):
         self.verification_steps_post_resize_osd()
 
     @tier1
-    @tier4
+    @tier4a
+    @tier4b
+    @tier4c
     @black_squad
     @pytest.mark.last
     @polarion_id("OCS-5800")
