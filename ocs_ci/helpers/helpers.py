@@ -4768,13 +4768,9 @@ def odf_cli_set_recover_profile(recovery_profile):
         retrieve_cli_binary(cli_type="odf")
 
     logger.info(f"Setting ceph recovery profile {recovery_profile} using odf-cli tool.")
-    cmd = (
-        f"{constants.CLI_TOOL_LOCAL_PATH} --kubeconfig {os.getenv('KUBECONFIG')} "
-        f" set recovery-profile  {recovery_profile}"
-    )
-
-    logger.info(cmd)
-    return exec_cmd(cmd, use_shell=True)
+    cmd = f"odf-cli set recovery-profile  {recovery_profile}"
+    output = run_cmd(cmd)
+    return output
 
 
 def get_ceph_recovery_profile():
