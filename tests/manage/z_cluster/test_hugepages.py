@@ -69,6 +69,7 @@ class TestHugePages(E2ETest):
         request.addfinalizer(finalizer)
 
     @skipif_external_mode
+    @pytest.mark.order(-3)
     def test_hugepages_post_odf_deployment(
         self,
         pvc_factory,
