@@ -2,11 +2,12 @@ import logging
 import pytest
 from ocs_ci.deployment.metallb import MetalLBInstaller
 from ocs_ci.framework import config
-from ocs_ci.framework.pytest_customization.marks import purple_squad
+from ocs_ci.framework.pytest_customization.marks import purple_squad, libtest
 
 logger = logging.getLogger(__name__)
 
 
+@libtest
 class TestMetalLB(object):
     """
     Test MetalLB installation
@@ -25,13 +26,12 @@ class TestMetalLB(object):
             """
             Clean up the environment after testing
             """
-            # self.metallb.undeploy()
-            pass
+            self.metallb.undeploy()
 
         request.addfinalizer(teardown)
 
     @purple_squad
-    def test_install_metallb(self):
+    def test_install_uninstall_metallb(self):
         """
         Test MetalLB installation
         """
