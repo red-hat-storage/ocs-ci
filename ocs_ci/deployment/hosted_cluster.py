@@ -597,7 +597,7 @@ def create_host_inventory():
         constants.TEMPLATE_DIR, "hosted-cluster", "infra-env.yaml"
     )
     infra_env_data = templating.load_yaml(file=template_yaml, multi_document=True)
-    ssh_pub_file_path = config.DEPLOYMENT["ssh_key"]
+    ssh_pub_file_path = os.path.expanduser(config.DEPLOYMENT["ssh_key"])
     with open(ssh_pub_file_path, "r") as ssh_key:
         ssh_pub_key = ssh_key.read().strip()
     # TODO: Add custom OS image details. Reference https://access.redhat.com/documentation/en-us/red_hat_advanced_
