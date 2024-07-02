@@ -25,7 +25,8 @@ class TestMetalLB(object):
             """
             Clean up the environment after testing
             """
-            self.metallb.undeploy()
+            # self.metallb.undeploy()
+            pass
 
         request.addfinalizer(teardown)
 
