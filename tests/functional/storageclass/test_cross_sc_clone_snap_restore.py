@@ -50,11 +50,14 @@ class TestCrossScCloneSnapRestore(ManageTest):
         Test function which validates operations accross different storage classes.
         1. Create two storage classes in the same pool
         2. Create a pvc in the first sc
-        3. Create a clone on the same sc
-        4. Create a clone on another sc
-        5. Create pvc's shapshot
-        6. Restore the snapshot on the same sc
-        7. Restore the snapshot on another sc
+        3. Create a clone1 on the same sc
+        4. Create a clone2 on another sc
+        5. Create a clone of clone2 on the first sc
+        6. Create pvc's shapshot
+        7. Restore the snapshot on the same sc
+        8. Restore the snapshot on another sc
+        9. Take snapshot of the pvs from step 9.
+        10. Restore pvc from the snapshot of step 9 to the first sc
         """
 
         # Create a Storage Class
@@ -67,27 +70,34 @@ class TestCrossScCloneSnapRestore(ManageTest):
             pvc_factory, pod_factory, interface_type, sc_obj1
         )
 
-        clone_pvc = pvc_clone_factory(
+        clone_same_sc_pvc = pvc_clone_factory(
             pvc_obj,
             clone_name=f"pvc-{interface_type.lower()}-clone-test-cross-same-sc",
             storageclass=pvc_obj.backed_sc,
         )
-        log.info(f"Same SC clone {clone_pvc.name} successfully created")
+        log.info(f"Same SC clone {clone_same_sc_pvc.name} successfully created")
 
         sc_obj2 = storageclass_factory(interface=interface_type)
         log.info(
             f"{interface_type}StorageClass: {sc_obj2.name} " f"created successfully"
         )
-        clone_pvc = pvc_clone_factory(
+        clone_sc2_pvc = pvc_clone_factory(
             pvc_obj,
             clone_name=f"pvc-{interface_type.lower()}-clone-test-cross-other-sc",
             storageclass=sc_obj2.name,
         )
-        log.info(f"Other SC clone {clone_pvc.name} successfully created")
+        log.info(f"Other SC clone {clone_sc2_pvc.name} successfully created")
 
-        snap_name = f"pvc-{interface_type.lower()}-snapshot-test-cross"
-        snap_obj = snapshot_factory(pvc_obj, snap_name)
-        log.info(f"Snapshot {snap_name} successfully created")
+        clone_sc1_pvc = pvc_clone_factory(
+            clone_sc2_pvc,
+            clone_name=f"pvc-{interface_type.lower()}-clone-test-cross-first-sc",
+            storageclass=sc_obj1.name,
+        )
+        log.info(f"First SC clone {clone_sc1_pvc.name} successfully created")
+
+        snap_name1 = f"pvc-{interface_type.lower()}-snapshot-test-cross"
+        snap_obj1 = snapshot_factory(pvc_obj, snap_name1)
+        log.info(f"Snapshot {snap_name1} successfully created")
 
         restore_pvc_yaml = constants.CSI_RBD_PVC_RESTORE_YAML
         if interface_type == constants.CEPHFILESYSTEM:
@@ -97,8 +107,8 @@ class TestCrossScCloneSnapRestore(ManageTest):
         log.info("Restoring the PVC from snapshot on the same SC")
         restore_pvc_obj1 = pvc.create_restore_pvc(
             sc_name=f"{sc_obj1.name}",
-            snap_name=snap_obj.name,
-            namespace=snap_obj.namespace,
+            snap_name=snap_obj1.name,
+            namespace=snap_obj1.namespace,
             size=f"{pvc_obj.size}Gi",
             pvc_name=restore_pvc_name1,
             restore_pvc_yaml=restore_pvc_yaml,
@@ -114,8 +124,8 @@ class TestCrossScCloneSnapRestore(ManageTest):
         log.info("Restoring the PVC from Snapshot")
         restore_pvc_obj2 = pvc.create_restore_pvc(
             sc_name=f"{sc_obj2.name}",
-            snap_name=snap_obj.name,
-            namespace=snap_obj.namespace,
+            snap_name=snap_obj1.name,
+            namespace=snap_obj1.namespace,
             size=f"{pvc_obj.size}Gi",
             pvc_name=restore_pvc_name2,
             restore_pvc_yaml=restore_pvc_yaml,
@@ -125,7 +135,29 @@ class TestCrossScCloneSnapRestore(ManageTest):
         )
         restore_pvc_obj2.reload()
         log.info("PVC was restored from the snapshot on another SC")
+
+        snap_name2 = f"pvc-{interface_type.lower()}-snapshot-test-cross-back1"
+        snap_obj2 = snapshot_factory(restore_pvc_obj2, snap_name2)
+        log.info(f"Snapshot {snap_name2} successfully created")
+
         restore_pvc_obj2.delete()
+
+        restore_pvc_sc1_name = f"{pvc_obj.name}-restored-from-other-sc"
+        log.info("Restoring the PVC from Snapshot on the first SC")
+        restore_pvc_obj3 = pvc.create_restore_pvc(
+            sc_name=f"{sc_obj1.name}",
+            snap_name=snap_obj2.name,
+            namespace=snap_obj1.namespace,
+            size=f"{pvc_obj.size}Gi",
+            pvc_name=restore_pvc_sc1_name,
+            restore_pvc_yaml=restore_pvc_yaml,
+        )
+        helpers.wait_for_resource_state(
+            restore_pvc_obj3, constants.STATUS_BOUND, timeout=600
+        )
+        restore_pvc_obj3.reload()
+        log.info("PVC was restored on the first SC from the snapshot on another SC")
+        restore_pvc_obj3.delete()
 
     @pytest.mark.parametrize(
         argnames=["interface_type", "sc1_replica", "sc_replica2"],
@@ -155,8 +187,10 @@ class TestCrossScCloneSnapRestore(ManageTest):
         2. Create a pvc in the first storage class
         3. Create second storage class on another pool
         4. Clone pvc created on the first storage class to the second storage class
-        5. Create pvc's shapshot
-        6. Restore the snapshot to a pvc on the second storage class
+        5. Clone the clone created on the step 4 back to the first storage class
+        6. Create pvc's shapshot
+        7. Restore the snapshot to a pvc on the second storage class
+        8. Take snapshot of the pvc restored on the step 7 and restore it back to the first storage class
 
         Args:
             sc1_replica (str/int): Number of replica for the first sc object. If is empty string, use default
@@ -194,39 +228,75 @@ class TestCrossScCloneSnapRestore(ManageTest):
             f"{interface_type}StorageClass: {sc_obj2.name} on pool {pool_name2} created successfully"
         )
 
-        clone_pvc = pvc_clone_factory(
+        # Clones
+        clone_pvc_sc2 = pvc_clone_factory(
             pvc_obj,
             clone_name=f"pvc-{interface_type.lower()}-clone-test-cross-other-sc",
             storageclass=sc_obj2.name,
         )
         log.info(
-            f"SC clone {clone_pvc.name}  on storage class on another pool successfully created"
+            f"SC clone {clone_pvc_sc2.name}  on storage class on another pool successfully created"
+        )
+        # clone the clone created on sc2 (restore_pvc_sc2_obj) back tp sc1
+        clone_pvc_sc1 = pvc_clone_factory(
+            clone_pvc_sc2,
+            clone_name=f"pvc-{interface_type.lower()}-clone-test-cross-back-sc1",
+            storageclass=sc_obj1.name,
+        )
+        log.info(
+            f"SC clone {clone_pvc_sc1.name} on storage class {sc_obj1.name} on the first pool successfully created"
         )
 
-        snap_name = f"pvc-{interface_type.lower()}-snapshot-test-cross"
-        snap_obj = snapshot_factory(pvc_obj, snap_name)
-        log.info(f"Snapshot {snap_name} successfully created")
+        # Snapshots
+        # Create the pvs snapshot on the first sc and restore it on the second sc
+        snap_name_sc1 = f"pvc-{interface_type.lower()}-snapshot-test-cross-sc1"
+        snap_obj1 = snapshot_factory(pvc_obj, snap_name_sc1)
+        log.info(f"Snapshot {snap_name_sc1} successfully created")
 
         restore_pvc_yaml = constants.CSI_RBD_PVC_RESTORE_YAML
         if interface_type == constants.CEPHFILESYSTEM:
             restore_pvc_yaml = constants.CSI_CEPHFS_PVC_RESTORE_YAML
 
-        restore_pvc_name = f"{pvc_obj.name}-restored-sc-another-pool"
+        restore_pvc_sc2_name = f"{pvc_obj.name}-restored-sc-another-pool"
         log.info("Restoring the PVC from snapshot")
-        restore_pvc_obj = pvc.create_restore_pvc(
+        restore_pvc_sc2_obj = pvc.create_restore_pvc(
             sc_name=f"{sc_obj2.name}",
-            snap_name=snap_obj.name,
-            namespace=snap_obj.namespace,
+            snap_name=snap_obj1.name,
+            namespace=snap_obj1.namespace,
             size=f"{pvc_obj.size}Gi",
-            pvc_name=restore_pvc_name,
+            pvc_name=restore_pvc_sc2_name,
             restore_pvc_yaml=restore_pvc_yaml,
         )
         helpers.wait_for_resource_state(
-            restore_pvc_obj, constants.STATUS_BOUND, timeout=600
+            restore_pvc_sc2_obj, constants.STATUS_BOUND, timeout=600
         )
-        restore_pvc_obj.reload()
+        restore_pvc_sc2_obj.reload()
         log.info("PVC was restored from the snapshot on SC on another pool")
-        restore_pvc_obj.delete()
+
+        # On the second sc take the snapshot of the restored pvc and restore it back to the first sc
+        snap_name_sc2 = f"pvc-{interface_type.lower()}-snapshot-test-cross-sc1"
+        snap_obj2 = snapshot_factory(restore_pvc_sc2_obj, snap_name_sc2)
+        log.info(f"Snapshot {snap_name_sc2} successfully created")
+
+        restore_pvc_sc2_obj.delete()
+
+        restore_pvc_sc1_name = f"{restore_pvc_sc2_obj.name}-restored-sc-same-pool"
+        log.info("Restoring the PVC from snapshot")
+        restore_pvc_sc1_obj = pvc.create_restore_pvc(
+            sc_name=f"{sc_obj1.name}",
+            snap_name=snap_obj2.name,
+            namespace=snap_obj1.namespace,
+            size=f"{pvc_obj.size}Gi",
+            pvc_name=restore_pvc_sc1_name,
+            restore_pvc_yaml=restore_pvc_yaml,
+        )
+        helpers.wait_for_resource_state(
+            restore_pvc_sc1_obj, constants.STATUS_BOUND, timeout=600
+        )
+        restore_pvc_sc1_obj.reload()
+        log.info("PVC was restored from the snapshot back on SC on the first pool")
+
+        restore_pvc_sc1_obj.delete()
 
     def create_pvc_and_run_fio(
         self,
