@@ -204,7 +204,7 @@ class TestFiveMonInCluster(ManageTest):
         )
 
     def test_mon_restart_post_five_mon_update(
-        self, nodes, pvc_factory, pod_factory, force, bucket_factory, rgw_bucket_factory
+        self, nodes, pvc_factory, pod_factory, bucket_factory, rgw_bucket_factory
     ):
         """
         Test nodes restart (from the platform layer, i.e, EC2 instances, VMWare VMs) post
@@ -234,7 +234,7 @@ class TestFiveMonInCluster(ManageTest):
         if is_vsphere_ipi_cluster():
             # When using vSphere IPI, we restart the nodes without stopping them.
             # See issue https://github.com/red-hat-storage/ocs-ci/issues/7760.
-            nodes.restart_nodes(nodes=ocp_nodes, force=force, wait=False)
+            nodes.restart_nodes(nodes=ocp_nodes, force="True", wait=False)
             node_names = [n.name for n in ocp_nodes]
             wait_for_nodes_status(node_names, constants.STATUS_READY, timeout=420)
         else:
