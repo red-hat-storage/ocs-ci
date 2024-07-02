@@ -25,6 +25,7 @@ from ocs_ci.ocs.exceptions import (
 from ocs_ci.ocs.ocp import OCP
 from ocs_ci.ocs.resources.catalog_source import CatalogSource
 from ocs_ci.ocs.resources.csv import check_all_csvs_are_succeeded
+from ocs_ci.ocs.resources.ocs import OCS
 from ocs_ci.ocs.resources.pod import (
     wait_for_pods_to_be_in_statuses_concurrently,
 )
@@ -430,20 +431,23 @@ class HypershiftHostedOCP(HyperShiftBase, MetalLBInstaller, CNVInstaller, Deploy
 
         # Enable central infrastructure management service for agent
         if config.DEPLOYMENT.get("hosted_cluster_platform") == "agent":
-            provisioning_obj = OCP(**OCP(kind=constants.PROVISIONING).get()[0])
-            if not provisioning_obj.data["spec"].get("watchAllNamespaces") == "true":
-                provisioning_obj.patch(
-                    resource_name=provisioning_obj.resource_name,
+            provisioning_obj = OCS(
+                **OCP(kind=constants.PROVISIONING).get().get("items")[0]
+            )
+            if not provisioning_obj.data["spec"].get("watchAllNamespaces"):
+                provisioning_obj.ocp.patch(
+                    resource_name=provisioning_obj.name,
                     params='{"spec":{"watchAllNamespaces": true }}',
                     format_type="merge",
                 )
-                assert (
-                    provisioning_obj.get()["spec"].get("watchAllNamespaces") == "true"
+                assert provisioning_obj.get()["spec"].get(
+                    "watchAllNamespaces"
                 ), "Cannot proceed with hosted cluster creation using agent."
 
-            if not OCP(kind=constants.AGENT_SERVICE_CONFIG).get(dont_raise=True):
+            if not len(
+                OCP(kind=constants.AGENT_SERVICE_CONFIG).get(dont_raise=True)["items"]
+            ):
                 create_agent_service_config()
-            if not OCP(kind=constants.INFRA_ENV).get(dont_raise=True):
                 create_host_inventory()
 
 
@@ -462,13 +466,14 @@ def create_agent_service_config():
     # Verify new pods that should be created
     wait_for_pods_to_be_in_statuses_concurrently(
         app_selectors_to_resource_count_list=[
-            "app=assisted-service",
-            "app=assisted-image-service",
+            {"app=assisted-service": 1},
+            {"app=assisted-image-service": 1},
         ],
         namespace="multicluster-engine",
         timeout=600,
         status=constants.STATUS_RUNNING,
     )
+    logger.info("Created AgentServiceConfig.")
 
 
 def create_host_inventory():
@@ -476,33 +481,30 @@ def create_host_inventory():
     Create InfraEnv resource for host inventory
 
     """
-    # Create new project
-    project_name = helpers.create_project(project_name="bm-agents").resource_name
-
-    # Create pull secret for InfraEnv
-    secret_obj = OCP(
-        kind=constants.POD,
-        resource_name="pull-secret",
-        namespace=constants.OPENSHIFT_CONFIG_NAMESPACE,
-    )
-    secret_data = secret_obj.get()
-    # This is the name of pull secret and namespace used in InfraEnv template
-    secret_data["metadata"]["name"] = "pull-secret-agents"
-    secret_data["metadata"]["namespace"] = project_name
-    helpers.create_resource(**secret_data)
-
     # Create InfraEnv
     template_yaml = os.path.join(
         constants.TEMPLATE_DIR, "hosted-cluster", "infra-env.yaml"
     )
-    infra_env_data = templating.load_yaml(template_yaml)
-    ssh_pub_file_path = config.DEPLOYMENT["ssh_key"]
+    infra_env_data = templating.load_yaml(file=template_yaml, multi_document=True)
+    ssh_pub_file_path = os.path.expanduser(config.DEPLOYMENT["ssh_key"])
     with open(ssh_pub_file_path, "r") as ssh_key:
         ssh_pub_key = ssh_key.read().strip()
-    infra_env_data["spec"]["sshAuthorizedKey"] = ssh_pub_key
     # TODO: Add custom OS image details. Reference https://access.redhat.com/documentation/en-us/red_hat_advanced_
     #  cluster_management_for_kubernetes/2.10/html-single/clusters/index#create-host-inventory-cli-steps
-    helpers.create_resource(**infra_env_data)
+    for data in infra_env_data:
+        if data["kind"] == constants.INFRA_ENV:
+            data["spec"]["sshAuthorizedKey"] = ssh_pub_key
+            infra_env_namespace = data["metadata"]["namespace"]
+            # Create project
+            helpers.create_project(project_name=infra_env_namespace)
+            # Create Secret
+            create_secret_cmd = (
+                f"oc get secret pull-secret --namespace={constants.OPENSHIFT_CONFIG_NAMESPACE} -o yaml | "
+                f"sed 's/namespace: .*/namespace: {infra_env_namespace}/' | kubectl apply -f -"
+            )
+            exec_cmd(create_secret_cmd)
+        helpers.create_resource(**data)
+    logger.info("Created InfraEnv.")
 
 
 class HostedODF(HypershiftHostedOCP):
