@@ -67,9 +67,10 @@ class TestFiveMonInCluster(ManageTest):
             n["metadata"]["labels"].get("topology.rook.io/rack")
             for n in nodes_labeled["items"]
         ]
+        rack_label_wo_dup = list(set(rack_labels))
         log.info(rack_labels)
         log.info("nodes with '%s' rack label: %s", constants.RACK_LABEL, node_names)
-        return len(nodes_labeled["items"]) == len(get_worker_nodes())
+        return len(nodes_labeled["items"]) == len(rack_label_wo_dup)
 
     @pytest.fixture(autouse=True)
     def setup(self):
