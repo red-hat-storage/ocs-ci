@@ -44,7 +44,7 @@ def check_alert_list(
     logger.info(f"Checking properties of found {label} alerts")
 
     for key, state in enumerate(states):
-        target_alerts = [
+        found_alerts = [
             alert
             for alert in target_alerts
             if alert["annotations"]["message"] == msg
@@ -55,13 +55,13 @@ def check_alert_list(
             f"There was not found alert {label} with message: {msg}, "
             f"severity: {severity} in state: {state}"
         )
-        assert target_alerts, assert_msg
+        assert found_alerts, assert_msg
         if not ignore_more_occurences:
             assert_msg = (
                 f"There are multiple instances of alert {label} with "
                 f"message: {msg}, severity: {severity} in state: {state}"
             )
-            assert len(target_alerts) == 1, assert_msg
+            assert len(found_alerts) == 1, assert_msg
 
     logger.info("Alerts were triggered correctly during utilization")
 
