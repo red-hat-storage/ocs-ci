@@ -63,6 +63,11 @@ class TestFiveMonInCluster(ManageTest):
         node_h = ocp.OCP(kind="node")
         nodes_labeled = node_h.get(selector=constants.RACK_LABEL)
         node_names = [n["metadata"]["name"] for n in nodes_labeled["items"]]
+        rack_labels = [
+            n["metadata"]["labels"].get("topology.rook.io/rack")
+            for n in nodes_labeled["items"]
+        ]
+        log.info(rack_labels)
         log.info("nodes with '%s' rack label: %s", constants.RACK_LABEL, node_names)
         return len(nodes_labeled["items"]) == len(get_worker_nodes())
 
