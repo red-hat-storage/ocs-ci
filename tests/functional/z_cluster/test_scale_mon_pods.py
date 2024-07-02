@@ -66,6 +66,7 @@ class TestFiveMonInCluster(ManageTest):
         log.info("nodes with '%s' rack label: %s", constants.RACK_LABEL, node_names)
         return len(nodes_labeled["items"]) == len(get_worker_nodes())
 
+    @pytest.fixture(autouse=True)
     def setup(self):
         """
         Label each node in different failure domain, Here we make use of rack based failure domains
