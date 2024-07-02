@@ -15,6 +15,7 @@ from ocs_ci.framework.testlib import (
 from ocs_ci.framework import config
 from ocs_ci.ocs.cluster import CephCluster
 from ocs_ci.utility import prometheus
+from ocs_ci.helpers.sanity_helpers import Sanity
 from ocs_ci.ocs.exceptions import ResourceNotFoundError, CommandFailed
 from ocs_ci.ocs.node import (
     get_worker_nodes,
@@ -35,6 +36,14 @@ log = logging.getLogger(__name__)
 @skipif_less_than_five_workers
 @skipif_ocs_version("<4.15")
 class TestFiveMonInCluster(ManageTest):
+    @pytest.fixture(autouse=True)
+    def init_sanity(self):
+        """
+        Initialize Sanity instance
+
+        """
+        self.sanity_helpers = Sanity()
+
     def assign_dummy_racks(self):
         """
         Assign node labels to given nodes based on given rack lists.
