@@ -4826,26 +4826,6 @@ def add_route_public_nad():
     templating.dump_data_to_temp_yaml(public_net_data, public_net_yaml.name)
     run_cmd(f"oc apply -f {public_net_yaml.name}")
 
-    # nad_obj = OCP(
-    #     kind=constants.NETWORK_ATTACHEMENT_DEFINITION,
-    #     namespace="default",
-    #     resource_name="public-net",
-    # )
-    # params = f'{{"spec": {{"config": "a"}}}}'
-    # nad_obj.patch(params=params, format_type="merge")
-    # nad_obj = get_network_attachment_definitions(nad_name=nad_name, namespace=namespace)
-    # nad_config_str = nad_obj.data["spec"]["config"]
-    # nad_config_dict = json.loads(nad_config_str)
-    # nad_config_dict["ipam"]["routes"] = [{"dst": config.ENV_DATA["multus_destination_route"]}]
-    # nad_config_dict_string = json.dumps(nad_config_dict)
-    # params = f"""[{{ "op": "replace", "path": "/spec/config",
-    #             "value": {str(nad_config_dict_string)}}}]"""
-    # nad_obj.patch(
-    #     resource_name=nad_name,
-    #     params=params.strip("\n"),
-    #     format_type="json",
-    # )
-
 
 def reset_all_osd_pods():
     """
