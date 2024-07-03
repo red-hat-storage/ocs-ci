@@ -153,6 +153,8 @@ class TestProviderHosted(object):
         )
         assert hypershift_hosted.cnv_hyperconverged_installed(), "CNV not installed"
 
+    @runs_on_provider
+    @hci_provider_required
     def test_deploy_metallb(self):
         """
         Test deploy dependencies
