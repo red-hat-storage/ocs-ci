@@ -1514,7 +1514,7 @@ def add_capacity(osd_size_capacity_requested, add_extra_disk_to_existing_worker=
             log.info("Found Extra PV")
         else:
             if (
-                platform == constants.VSPHERE_PLATFORM
+                platform == constants.IBM_Z_PLATFORM
                 and add_extra_disk_to_existing_worker
             ):
                 log.info("No Extra PV found")
