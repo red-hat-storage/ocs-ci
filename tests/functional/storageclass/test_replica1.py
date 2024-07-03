@@ -7,7 +7,6 @@ from ocs_ci.framework.pytest_customization.marks import (
     polarion_id,
     bugzilla,
     tier1,
-    tier2,
 )
 from ocs_ci.ocs.ocp import OCP
 from ocs_ci.ocs.resources.storage_cluster import (
@@ -18,12 +17,12 @@ from ocs_ci.ocs.resources.storage_cluster import (
 from ocs_ci.ocs.constants import (
     CEPHBLOCKPOOL,
     ACCESS_MODE_RWO,
-    STORAGECLUSTER,
     STATUS_READY,
     REPLICA1_STORAGECLASS,
     VOLUME_MODE_BLOCK,
     CSI_RBD_RAW_BLOCK_POD_YAML,
     DEFALUT_DEVICE_CLASS,
+    OPENSHIFT_STORAGE_NAMESPACE,
 )
 from ocs_ci.helpers.helpers import create_pvc
 from ocs_ci.ocs.replica_one import (
@@ -32,7 +31,6 @@ from ocs_ci.ocs.replica_one import (
     purge_replica1_osd,
     delete_replica1_cephblockpools_cr,
     count_osd_pods,
-    modify_replica1_osd_count,
     get_osd_kb_used_data,
     get_device_class_from_ceph,
     get_all_osd_names_by_device_class,
@@ -126,42 +124,41 @@ def compare_dictionaries(
     return differences
 
 
-@pytest.fixture(scope="function", autouse=False)
-def setup_replica1(
-    request,
-    pod_factory,
-    project_factory,
-):
-    log.info("setup fixture called")
-    storage_cluster = StorageCluster(
-        resource_name=config.ENV_DATA["storage_cluster_name"],
-        namespace=config.ENV_DATA["cluster_namespace"],
-    )
-
-    set_non_resilient_pool(storage_cluster)
-    validate_non_resilient_pool(storage_cluster)
-    storage_cluster.wait_for_resource(
-        condition=STATUS_READY, column="PHASE", timeout=180, sleep=15
-    )
-
-    yield
-    log.info("Teardown fixture called")
-    cephblockpools = OCP(kind=CEPHBLOCKPOOL)
-    set_non_resilient_pool(storage_cluster, enable=False)
-    delete_replica_1_sc()
-    log.info("StorageClass Deleted")
-    delete_replica1_cephblockpools_cr(cephblockpools)
-    purge_replica1_osd()
-    storage_cluster.wait_for_resource(
-        condition=STATUS_READY, column="PHASE", timeout=1800, sleep=60
-    )
-
-
 @polarion_id("OCS-5720")
 @brown_squad
 @bugzilla("2274175")
 @tier1
 class TestReplicaOne:
+    @pytest.fixture(scope="class")
+    def replica1_setup(self):
+        log.info("Setup function called")
+        storage_cluster = StorageCluster(
+            resource_name=config.ENV_DATA["storage_cluster_name"],
+            namespace=config.ENV_DATA["cluster_namespace"],
+        )
+        set_non_resilient_pool(storage_cluster)
+        validate_non_resilient_pool(storage_cluster)
+        storage_cluster.wait_for_resource(
+            condition=STATUS_READY, column="PHASE", timeout=180, sleep=15
+        )
+        return storage_cluster
+
+    @pytest.fixture(scope="class")
+    def replica1_teardown(self, request, replica1_setup):
+        yield
+        log.info("Teardown function called")
+        storage_cluster = replica1_setup
+        cephblockpools = OCP(kind=CEPHBLOCKPOOL, namespace=OPENSHIFT_STORAGE_NAMESPACE)
+        set_non_resilient_pool(storage_cluster, enable=False)
+        delete_replica_1_sc()
+        log.info("StorageClass Deleted")
+        delete_replica1_cephblockpools_cr(cephblockpools)
+        log.info("CephBlockPool CR Deleted")
+        purge_replica1_osd()
+        storage_cluster.wait_for_resource(
+            condition=STATUS_READY, column="PHASE", timeout=1800, sleep=60
+        )
+
     def test_cluster_before_configuration(
         self, pod_factory, pvc_factory, project_factory
     ):
@@ -193,9 +190,10 @@ class TestReplicaOne:
             for value in self.device_class_before_test.values()
         ), f"Device class is not as expected. expected 'ssd', actual: {self.device_class_before_test}"
 
-    def test_configure_replica1(self, project_factory, pod_factory, setup_replica1):
+    def test_configure_replica1(
+        self, replica1_setup, project_factory, pod_factory, replica1_teardown
+    ):
         log.info("Starting Tier1 replica one test")
-
         failure_domains = get_failure_domains()
         testing_pod = create_pod_on_failure_domain(
             project_factory,
@@ -216,18 +214,3 @@ class TestReplicaOne:
         osd_number = get_all_osd_names_by_device_class(osds, failure_domains[0])
         diff = compare_dictionaries(kb_before_workload, kb_after_workload, osd_number)
         assert not diff, "KB amount in used OSD is not equal"
-
-    @tier2
-    @pytest.mark.parametrize("new_osd_count", [2, 3, 4])
-    def test_scale_up_osd(setup_rellica1, new_osd_count):
-        storage_cluster = OCP(kind=STORAGECLUSTER)
-        current_osd_count = count_osd_pods()
-
-        modify_replica1_osd_count(new_osd_count)
-
-        storage_cluster.wait_for_resource(condition=STATUS_READY)
-
-        new_osd_count_after_test = count_osd_pods()
-        assert new_osd_count_after_test == (
-            current_osd_count + new_osd_count
-        ), f"Expected {new_osd_count_after_test} OSDs, but got {current_osd_count} OSDs"

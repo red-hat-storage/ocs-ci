@@ -135,7 +135,8 @@ def scaledown_deployment(deployments_name: list[str]) -> None:
         deployments_name (list[str]): list of deployment names.
 
     """
-    deployment_obj = OCP(kind=DEPLOYMENT)
+    log.info("Starts Scaledown deployments")
+    deployment_obj = OCP(kind=DEPLOYMENT, namespace="openshift-storage")
     for deployment in deployments_name:
         deployment_obj.exec_oc_cmd(f"scale deployment {deployment} --replicas=0")
         log.info(f"scaling to 0: {deployment}")
@@ -177,6 +178,7 @@ def purge_replica1_osd():
 
     """
     deployments_name = get_replica1_osd_deployment()
+    log.info(f"Deployments Name: {deployments_name}")
     scaledown_deployment(deployments_name)
     replica1_osds = get_replica_1_osds()
     log.info(f"OSDS : {replica1_osds.keys()}")
@@ -196,6 +198,7 @@ def delete_replica1_cephblockpools_cr(cbp_object: OCP):
         cbp_cr_name = cbp_object.data["items"][i]["spec"]["deviceClass"]
         log.info(f"cbp_cr_name: {cbp_cr_name}")
         if cbp_cr_name in get_failure_domains():
+            log.info(f"Deleting {DEFAULT_CEPHBLOCKPOOL}-{cbp_cr_name}")
             cbp_object.delete(resource_name=(f"{DEFAULT_CEPHBLOCKPOOL}-{cbp_cr_name}"))
 
 
