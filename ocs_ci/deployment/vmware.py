@@ -2443,20 +2443,57 @@ def modify_haproxyservice():
         )
 
 
-def assign_ips(num_of_vips):
+def assign_ips(num_of_vips=None, hosts=None):
     """
-    Assign IPs to hosts
+    Assign IPs to hosts from IPAM server and return the IPs
+    Takes either num_of_vips or hosts as input. If both are passed, num_of_vips will be considered
+    and hosts will be ignored
+
+    We have to pass similar config while deploying Provider/Client mode cluster
+
+    #   ENV_DATA:
+    #       # MS cluster on custom secondary-2 subnet
+    #       subnet_type: 'secondary_mcidr2'
+    #       machine_cidr: '10.206.16.0/23'
 
     Args:
         num_of_vips (int): Number of IPs to assign
+        hosts (list): List of hosts to assign IPs
 
+    Raises:
+        ValueError: Either hosts or num_of_vips should be passed
     """
     ipam = IPAM(appiapp="address")
     subnet = config.ENV_DATA["machine_cidr"].split("/")[0]
-    hosts = [f"{config.ENV_DATA.get('cluster_name')}-{i}" for i in range(num_of_vips)]
-    ips = ipam.assign_ips(hosts, subnet)
+
+    if num_of_vips:
+        hosts = [
+            f"{config.ENV_DATA.get('cluster_name')}-{i}" for i in range(num_of_vips)
+        ]
+        ips = ipam.assign_ips(hosts, subnet)
+    elif hosts:
+        hosts = [f"{host}" for host in hosts]
+        ips = ipam.assign_ips(hosts, subnet)
+    else:
+        logger.error("Either hosts or num_of_vips should be passed")
+        raise ValueError("Either hosts or num_of_vips should be passed")
+
     logger.debug(f"IPs reserved for hosts {hosts} are {ips}")
     return ips
+
+
+def release_ips(hosts):
+    """
+    Release IPs
+
+    Args:
+        hosts (list): List of hosts to release IPs
+    """
+    if not hosts:
+        logger.info("No hosts to release IPs")
+        return
+    ipam = IPAM(appiapp="address")
+    ipam.release_ips(hosts)
 
 
 def create_dns_records(ips):

@@ -8,7 +8,7 @@ from libcloud.compute.types import Provider
 from ocs_ci.framework import config
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.exceptions import NodeNotFoundError, UnsupportedPlatformError
-from ocs_ci.utility import vsphere
+from ocs_ci.utility import version, vsphere
 from ocs_ci.utility.utils import get_infra_id, run_cmd
 
 logger = logging.getLogger(__name__)
@@ -28,7 +28,15 @@ def gather_bootstrap():
     gather_bootstrap_dir = os.path.expanduser(
         os.path.join(config.RUN["log_dir"], "gather_bootstrap")
     )
-    openshift_install = os.path.join(config.RUN.get("bin_dir"), "openshift-install")
+    if (
+        config.ENV_DATA.get("fips")
+        and version.get_semantic_ocp_version_from_config() >= version.VERSION_4_16
+    ):
+        openshift_install = os.path.join(
+            config.RUN.get("bin_dir"), "openshift-install-fips"
+        )
+    else:
+        openshift_install = os.path.join(config.RUN.get("bin_dir"), "openshift-install")
     ssh_key = os.path.expanduser(config.DEPLOYMENT.get("ssh_key_private"))
     data = get_gather_bootstrap_node_data()
     bootstrap_ip = data["bootstrap_ip"]
@@ -71,9 +79,8 @@ def get_gather_bootstrap_node_data():
         return get_node_data_vsphere()
     else:
         raise UnsupportedPlatformError(
-            "Platform '%s' is not supported, "
-            "unable to retrieve gather bootstrap node data",
-            platform,
+            f"Platform {platform} is not supported, "
+            "unable to retrieve gather bootstrap node data"
         )
 
 

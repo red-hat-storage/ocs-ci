@@ -41,38 +41,27 @@ def check_alert_list(
     target_alerts = [
         alert for alert in alerts if alert.get("labels").get("alertname") == label
     ]
-
     logger.info(f"Checking properties of found {label} alerts")
-    if ignore_more_occurences:
-        for state in states:
-            delete = False
-            for key, alert in reversed(list(enumerate(target_alerts))):
-                if alert.get("state") == state:
-                    if delete:
-                        d_msg = f"Ignoring {alert} as alert already appeared."
-                        logger.debug(d_msg)
-                        target_alerts.pop(key)
-                    else:
-                        delete = True
-    assert_msg = (
-        f"Incorrect number of {label} alerts ({len(target_alerts)} "
-        f"instead of {len(states)} with states: {states})."
-        f"\nAlerts: {target_alerts}"
-    )
-    assert len(target_alerts) == len(states), assert_msg
 
     for key, state in enumerate(states):
-
-        assert_msg = "Alert message for alert {label} is not correct"
-        assert target_alerts[key]["annotations"]["message"] == msg, assert_msg
-
-        assert_msg = f"Alert {label} doesn't have {severity} severity"
-        assert (
-            target_alerts[key]["annotations"]["severity_level"] == severity
-        ), assert_msg
-
-        assert_msg = f"Alert {label} is not in {state} state"
-        assert target_alerts[key]["state"] == state, assert_msg
+        found_alerts = [
+            alert
+            for alert in target_alerts
+            if alert["annotations"]["message"] == msg
+            and alert["annotations"]["severity_level"] == severity
+            and alert["state"] == state
+        ]
+        assert_msg = (
+            f"There was not found alert {label} with message: {msg}, "
+            f"severity: {severity} in state: {state}"
+        )
+        assert found_alerts, assert_msg
+        if not ignore_more_occurences:
+            assert_msg = (
+                f"There are multiple instances of alert {label} with "
+                f"message: {msg}, severity: {severity} in state: {state}"
+            )
+            assert len(found_alerts) == 1, assert_msg
 
     logger.info("Alerts were triggered correctly during utilization")
 
@@ -717,6 +706,35 @@ class PrometheusAPI(object):
             # 2. One bad response should not fail the test
             # 3. If Prometheus stopped responding, or we missed alert the test will fail anyway on checking alert list
             logger.error(msg)
+
+    def verify_alerts_via_prometheus(self, expected_alerts, threading_lock):
+        """
+        Verify Alerts on prometheus
+
+        Args:
+            expected_alerts (list): list of alert names
+            threading_lock (threading.Rlock): Lock object to prevent simultaneous calls to 'oc'
+
+        Returns:
+            bool: True if expected_alerts exist, False otherwise
+
+        """
+        logger.info("Logging of all prometheus alerts started")
+        alerts_response = self.get(
+            "alerts", payload={"silenced": False, "inhibited": False}
+        )
+        actual_alerts = list()
+        for alert in alerts_response.json().get("data").get("alerts"):
+            actual_alerts.append(alert.get("labels").get("alertname"))
+            logger.info(f"Actual Alerts: {actual_alerts}")
+        for expected_alert in expected_alerts:
+            if expected_alert not in actual_alerts:
+                logger.error(
+                    f"{expected_alert} alert does not exist in alerts list."
+                    f"The actual alerts : {actual_alerts}"
+                )
+                return False
+        return True
 
 
 class PrometheusAlertSubscriber(Timer):

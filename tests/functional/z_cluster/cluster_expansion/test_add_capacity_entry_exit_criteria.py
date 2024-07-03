@@ -25,6 +25,8 @@ from ocs_ci.framework import config
 from ocs_ci.helpers.pvc_ops import test_create_delete_pvcs
 from ocs_ci.ocs.resources.storage_cluster import osd_encryption_verification
 from ocs_ci.helpers.sanity_helpers import Sanity
+from ocs_ci.utility.version import get_semantic_ocp_running_version, VERSION_4_16
+from ocs_ci.helpers.keyrotation_helper import OSDKeyrotation
 
 logger = logging.getLogger(__name__)
 
@@ -46,6 +48,19 @@ logger = logging.getLogger(__name__)
 @skipif_managed_service
 @skipif_hci_provider_and_client
 class TestAddCapacity(ManageTest):
+    @pytest.fixture(autouse=True)
+    def teardown(self, request):
+        """
+        Resetting the default value of KeyRotation
+        """
+
+        def finalizer():
+            kr_obj = OSDKeyrotation()
+            kr_obj.set_keyrotation_schedule("@weekly")
+            kr_obj.enable_keyrotation()
+
+        request.addfinalizer(finalizer)
+
     @pytest.fixture(autouse=True)
     def setup(self):
         """
@@ -386,6 +401,37 @@ class TestAddCapacity(ManageTest):
         assert (
             cluster_obj.get_ceph_health() != "HEALTH_ERR"
         ), "Ceph cluster health checking failed"
+
+        # Verify Keyrotation for newly added OSD are happning or not.
+        if (get_semantic_ocp_running_version() >= VERSION_4_16) and (
+            config.ENV_DATA.get("encryption_at_rest")
+            and (not config.DEPLOYMENT.get("kms_deployment"))
+        ):
+            logger.info("Verifying Keyrotation for OSD")
+            osd_keyrotation = OSDKeyrotation()
+
+            # Recored existing OSD keys before rotation is happen.
+            osd_keys_before_rotation = {}
+            for device in osd_keyrotation.deviceset:
+                osd_keys_before_rotation[device] = osd_keyrotation.get_osd_dm_crypt(
+                    device
+                )
+
+            # Enable Keyrotation and verify its enable status at rook and storagecluster end.
+            logger.info("Enabling the Keyrotation in storagecluster Spec.")
+            osd_keyrotation.enable_keyrotation()
+
+            # Set Key Rotation schedule to every 3 minutes.
+            schedule = "*/3 * * * *"
+            osd_keyrotation.set_keyrotation_schedule(schedule)
+
+            assert osd_keyrotation.verify_keyrotation(
+                osd_keys_before_rotation
+            ), "Keyrotation not happend for the OSD."
+
+            # Change the keyrotation value to default.
+            logger.info("Changing the keyrotation value to default.")
+            osd_keyrotation.set_keyrotation_schedule("@weekly")
 
         logger.info("ALL Exit criteria verification successfully")
         logger.info(

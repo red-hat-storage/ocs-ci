@@ -14,7 +14,7 @@ setup(
     author="OCS QE",
     author_email="ocs-ci@redhat.com",
     license="MIT",
-    python_requires=">3.8.1",
+    python_requires=">=3.9.18",
     install_requires=[
         "apache-libcloud==3.1.0",
         "cryptography==42.0.4",
@@ -28,6 +28,7 @@ setup(
         "openshift==0.11.2",
         "boto3==1.24.96",
         "munch==2.5.0",
+        "pytest-progress==1.2.5",
         "pytest==6.2.5",
         "pytest-logger==0.5.1",
         "pytest-html==3.1.1",
@@ -97,6 +98,7 @@ setup(
         "googleapis-common-protos==1.59.0",
         "urllib3==1.26.18",
         "psycopg2-binary==2.9.9",
+        "azure-keyvault-secrets==4.8.0",
     ],
     entry_points={
         "console_scripts": [

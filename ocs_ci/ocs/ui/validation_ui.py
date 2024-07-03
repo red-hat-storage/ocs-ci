@@ -184,7 +184,7 @@ class ValidationUI(PageNavigator):
         refresh_web_console_popup = self.wait_until_expected_text_is_found(
             locator=self.validation_loc["warning-alert"],
             expected_text="Refresh web console",
-            timeout=120,
+            timeout=180,
         )
         if refresh_web_console_popup:
             logger.info(
@@ -274,28 +274,29 @@ class ValidationUI(PageNavigator):
         1. Validate ODF console plugin is enabled, if not enable it
         2. Navigate to ODF Default first tab
         3. Verify if Overview tab is active
-        4. Verify if Storage System popup works
-        5. Ensure that Block and File status, on Storage System popup is Ready
-        6. Navigate to Storage System details via Storage System popup
-        7. Verify only one Block Pool present on Storage System details page - optional. No BlockPools in External mode
-        8. Navigate Storage System via breadcrumb
-        9. Verify if Overview tab is active
-        10. Verify if System Capacity Card is present
-        11. Navigate to Storage System details via System Capacity Card - optional. Card not presented in External mode
-        12. Verify if Storage System details breadcrumb is present - optional. If step 11 was performed
-        13. Navigate to ODF Overview tab via tab bar - optional. If step 11 was performed
-        14. Verify if Performance Card is present and link works
-        15. Navigate to Storage System details via Performance Card
-        16. Verify if Storage System details breadcrumb is present and link works
-        17. Navigate ODF Backing store tab via Object Storage tab or PageNavigator
-        18. Verify if Backing Store is present and link to Backing Store resource works
-        19. Navigate to Backing Store tab via breadcrumb
-        20. Navigate to Bucket class tab
-        21. Navigate to the default Bucket Class details via Bucket Class tab
-        22. Verify the status of a default Bucket Class
-        23. Navigate to Bucket class via breadcrumb
-        24. Navigate to Namespace Store tab via Bucket Class tab
-        25. Navigate to ODF Overview tab via tab bar
+        4. Ensure used raw capacity string in System Capacity card
+        5. Verify if Storage System popup works
+        6. Ensure that Block and File status, on Storage System popup is Ready
+        7. Navigate to Storage System details via Storage System popup
+        8. Verify only one Block Pool present on Storage System details page - optional. No BlockPools in External mode
+        9. Navigate Storage System via breadcrumb
+        10. Verify if Overview tab is active
+        11. Verify if System Capacity Card is present
+        12. Navigate to Storage System details via System Capacity Card - optional. Card not presented in External mode
+        13. Verify if Storage System details breadcrumb is present - optional. If step 11 was performed
+        14. Navigate to ODF Overview tab via tab bar - optional. If step 11 was performed
+        15. Verify if Performance Card is present and link works
+        16. Navigate to Storage System details via Performance Card
+        17. Verify if Storage System details breadcrumb is present and link works
+        18. Navigate ODF Backing store tab via Object Storage tab or PageNavigator
+        19. Verify if Backing Store is present and link to Backing Store resource works
+        20. Navigate to Backing Store tab via breadcrumb
+        21. Navigate to Bucket class tab
+        22. Navigate to the default Bucket Class details via Bucket Class tab
+        23. Verify the status of a default Bucket Class
+        24. Navigate to Bucket class via breadcrumb
+        25. Navigate to Namespace Store tab via Bucket Class tab
+        26. Navigate to ODF Overview tab via tab bar
         """
         res_dict = {}
 
@@ -309,6 +310,11 @@ class ValidationUI(PageNavigator):
         res_dict[
             "overview_tab_is_active_1"
         ] = odf_overview_tab.validate_overview_tab_active()
+
+        log_step("Ensure used raw capacity string in System Capacity card")
+        res_dict["system_raw_capacity_check_bz_2185042"] = self.check_element_text(
+            "System raw capacity"
+        )
 
         log_step("Verify if Storage System popup works")
         res_dict[
@@ -558,8 +564,8 @@ class ValidationUI(PageNavigator):
         """
         if self.ocp_version_semantic >= version.VERSION_4_9:
             self.navigate_installed_operators_page()
-            logger.info("Search and select openshift-storage namespace")
-            self.select_namespace(project_name="openshift-storage")
+            logger.info("Search and select storage cluster namespace")
+            self.select_namespace(project_name=config.ENV_DATA["cluster_namespace"])
             logger.info(
                 "Click on Storage System under Provided APIs on Installed Operators Page"
             )
@@ -627,7 +633,7 @@ class ValidationUI(PageNavigator):
         logger.info("Navigating to Installed Operator Page")
         self.navigate_installed_operators_page()
 
-        self.select_namespace(project_name="openshift-storage")
+        self.select_namespace(project_name=config.ENV_DATA["cluster_namespace"])
 
         logger.info("Searching for Openshift Data Foundation Operator")
         odf_operator_presence = self.wait_until_expected_text_is_found(
@@ -642,3 +648,31 @@ class ValidationUI(PageNavigator):
             expected_text="OpenShift Container Storage",
         )
         return odf_operator_presence, ocs_operator_presence
+
+    def verify_storage_clients_page(self):
+        """
+        Verify storage clients page in UI
+
+        Returns:
+        StorageClients: Storage Clients page object
+
+        """
+        self.refresh_web_console()
+        storage_client_obj = self.nav_to_storageclients_page()
+        strings_storage_clients_tab = ["Storage clients", "Name"]
+        self.verify_page_contain_strings(
+            strings_on_page=strings_storage_clients_tab, page_name="storage clients"
+        )
+        self.do_click(
+            self.validation_loc["generate_client_onboarding_token_button"],
+            enable_screenshot=True,
+        )
+        strings_object_service_tab = [
+            "Client onboarding token",
+            "How to use this token",
+        ]
+        self.verify_page_contain_strings(
+            strings_on_page=strings_object_service_tab,
+            page_name="client_onboarding_token_page",
+        )
+        return storage_client_obj

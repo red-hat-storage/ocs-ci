@@ -109,6 +109,9 @@ class OCS(object):
     def describe(self):
         return self.ocp.describe(resource_name=self.name)
 
+    def set_deleted(self):
+        self._is_deleted = True
+
     def create(self, do_reload=True):
         log.info(f"Adding {self.kind} with name {self.name}")
         if self.kind in ("Pod", "Deployment", "DeploymentConfig", "StatefulSet"):

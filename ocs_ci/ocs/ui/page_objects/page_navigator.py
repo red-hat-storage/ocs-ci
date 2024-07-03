@@ -51,7 +51,7 @@ class PageNavigator(BaseUI):
                 self.storage_class = "standard_sc"
             else:
                 self.storage_class = "standard_csi_sc"
-        self.page_has_loaded(5, 2, self.page_nav["page_navigator_sidebar"])
+        self.page_has_loaded(30, 2, self.page_nav["page_navigator_sidebar"])
 
     def navigate_OCP_home_page(self):
         """
@@ -297,8 +297,12 @@ class PageNavigator(BaseUI):
 
         """
         logger.info("Navigate to Alerting Page")
-        self.choose_expanded_mode(mode=True, locator=self.page_nav["Monitoring"])
+        self.choose_expanded_mode(mode=True, locator=self.page_nav["observe"])
         self.do_click(locator=self.page_nav["alerting_page"], enable_screenshot=False)
+
+        from ocs_ci.ocs.ui.page_objects.alerting import Alerts
+
+        return Alerts()
 
     def navigate_metrics_page(self):
         """
@@ -306,7 +310,7 @@ class PageNavigator(BaseUI):
 
         """
         logger.info("Navigate to Metrics Page")
-        self.choose_expanded_mode(mode=True, locator=self.page_nav["Monitoring"])
+        self.choose_expanded_mode(mode=True, locator=self.page_nav["observe"])
         self.do_click(locator=self.page_nav["metrics_page"], enable_screenshot=False)
 
     def navigate_dashboards_page(self):
@@ -420,10 +424,27 @@ class PageNavigator(BaseUI):
         """
         logger.info("Select the OCP administrator user role from the dropdown")
         if self.get_elements(self.generic_locators["developer_selected"]):
-            self.do_click(self.sc_loc["Developer_dropdown"])
-            self.do_click(self.sc_loc["select_administrator"], timeout=5)
+            self.do_click(self.validation_loc["developer_dropdown"])
+            self.do_click(self.validation_loc["select_administrator"], timeout=5)
             logger.info("Administrator user is selected")
         elif self.get_elements(self.generic_locators["administrator_selected"]):
             logger.info("Administrator user was already selected")
         else:
             logger.error("Unknown user role selected by default")
+
+    def nav_to_storageclients_page(self):
+        """
+        Navigate to Storage Clients Page
+
+        Returns:
+            StorageClients: Storage Clients page object
+        """
+        from ocs_ci.ocs.ui.page_objects.storage_clients import StorageClients
+
+        logger.info("Navigate to Storage Client Page")
+        self.choose_expanded_mode(mode=True, locator=self.page_nav["Storage"])
+        self.page_has_loaded(retries=120)
+        self.do_click(
+            locator=self.page_nav["storageclients_page"], enable_screenshot=False
+        )
+        return StorageClients()

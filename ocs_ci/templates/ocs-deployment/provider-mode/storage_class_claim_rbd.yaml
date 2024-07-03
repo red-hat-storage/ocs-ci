@@ -1,0 +1,10 @@
+---
+apiVersion: ocs.openshift.io/v1alpha1
+kind: StorageClassClaim
+metadata:
+  name: ocs-storagecluster-ceph-rbd
+spec:
+  storageClient:
+    name: storage-client
+    namespace: openshift-storage-client
+  type: blockpool

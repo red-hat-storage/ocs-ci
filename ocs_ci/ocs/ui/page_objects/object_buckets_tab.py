@@ -3,6 +3,7 @@ import json
 import requests
 from selenium.webdriver.common.by import By
 from ocs_ci.ocs.ocp import get_ocp_url
+from ocs_ci.ocs import exceptions
 from ocs_ci.ocs.ui.page_objects.object_storage import ObjectStorage, logger
 
 
@@ -28,17 +29,28 @@ class ObjectBucketsTab(ObjectStorage):
                 # locator of three_dots btn aligned with the specific resource name
                 locator = (
                     f"//td[@id='name']//a[contains(text(), '{resource_name}')]"
-                    "/../../..//button[@aria-label='Actions']",
+                    "/../../..//button[@aria-label='Actions'] | "
+                    f"//tr[contains(., '{resource_name}')]//button[@data-test='kebab-button']",
                     By.XPATH,
                 )
                 # when three_dots element is active attribute 'disabled' does not exist
-                self.wait_for_element_attribute(
-                    locator,
-                    attribute="disabled",
-                    attribute_value="true",
-                    timeout=5,
-                    sleep=1,
-                )
+                # it could be disabled="true" or with no value
+                try:
+                    self.wait_for_element_attribute(
+                        locator,
+                        attribute="disabled",
+                        attribute_value="true",
+                        timeout=5,
+                        sleep=1,
+                    )
+                except exceptions.TimeoutExpiredError:
+                    self.wait_for_element_attribute(
+                        locator,
+                        attribute="disabled",
+                        attribute_value=None,
+                        timeout=5,
+                        sleep=1,
+                    )
 
                 # PopUp is not reachable via Selenium driver. It does not appear in DOM
                 URL = f"{get_ocp_url()}/locales/resource.json?lng=en&ns=plugin__odf-console"

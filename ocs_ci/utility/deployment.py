@@ -1,6 +1,7 @@
 """
 Utility functions that are used as a part of OCP or OCS deployments
 """
+
 import logging
 import os
 import re
@@ -67,6 +68,10 @@ def create_external_secret(ocs_version=None, apply=False):
     if not external_cluster_details:
         raise ExternalClusterDetailsException("No external cluster data found")
     secret_data["data"]["external_cluster_details"] = external_cluster_details
+    if config.DEPLOYMENT.get("multi_storagecluster"):
+        secret_data["metadata"][
+            "namespace"
+        ] = constants.OPENSHIFT_STORAGE_EXTENDED_NAMESPACE
     secret_data_yaml = tempfile.NamedTemporaryFile(
         mode="w+", prefix="external_cluster_secret", delete=False
     )
@@ -189,7 +194,8 @@ def get_ocp_release_image_from_installer():
 
     """
     logger.info("Retrieving release image from openshift installer")
-    cmd = f"{config.RUN['bin_dir']}/openshift-install version"
+    installer_path = config.ENV_DATA["installer_path"]
+    cmd = f"{installer_path} version"
     proc = exec_cmd(cmd)
     for line in proc.stdout.decode().split("\n"):
         if "release image" in line:

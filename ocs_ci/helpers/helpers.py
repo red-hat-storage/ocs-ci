@@ -22,7 +22,7 @@ from itertools import cycle
 from subprocess import PIPE, run
 from uuid import uuid4
 
-
+from ocs_ci.deployment.ocp import download_pull_secret
 from ocs_ci.framework import config
 from ocs_ci.helpers.proxy import (
     get_cluster_proxies,
@@ -49,7 +49,6 @@ from ocs_ci.utility.utils import (
     ocsci_log_path,
     run_cmd,
     update_container_with_mirrored_image,
-    create_directory_path,
     exec_cmd,
     get_ocs_build_number,
 )
@@ -254,6 +253,7 @@ def create_pod(
     scc=None,
     volumemounts=None,
     pvc_read_only_mode=None,
+    priorityClassName=None,
 ):
     """
     Create a pod
@@ -436,6 +436,9 @@ def create_pod(
         else:
             pod_data["spec"]["containers"][0]["volumeMounts"][0]["subPath"] = subpath
 
+    if priorityClassName:
+        pod_data["spec"]["priorityClassName"] = priorityClassName
+
     # overwrite used image (required for disconnected installation)
     update_container_with_mirrored_image(pod_data)
 
@@ -602,30 +605,39 @@ def create_ceph_block_pool(
     return cbp_obj
 
 
-def create_ceph_file_system(pool_name=None):
+def create_ceph_file_system(
+    cephfs_name=None, label=None, namespace=constants.OPENSHIFT_STORAGE_NAMESPACE
+):
     """
     Create a Ceph file system
-    ** This method should not be used anymore **
-    ** This method is for internal testing only **
 
     Args:
-        pool_name (str): The pool name to create
+        cephfs_name (str): The ceph FS name to create
+        label (dict): The label to give to pool
+        namespace (str): The name space in which the ceph FS has to be created
 
     Returns:
         OCS: An OCS instance for the Ceph file system
     """
-    cfs_data = templating.load_yaml(constants.CEPHFILESYSTEM_YAML)
-    cfs_data["metadata"]["name"] = (
-        pool_name if pool_name else create_unique_resource_name("test", "cfs")
+    cephfs_data = templating.load_yaml(constants.CEPHFILESYSTEM_YAML)
+    cephfs_data["metadata"]["name"] = (
+        cephfs_name if cephfs_name else create_unique_resource_name("test", "cfs")
     )
-    cfs_data["metadata"]["namespace"] = config.ENV_DATA["cluster_namespace"]
-    cfs_data = create_resource(**cfs_data)
-    cfs_data.reload()
+    cephfs_data["metadata"]["namespace"] = namespace
+    if label:
+        cephfs_data["metadata"]["labels"] = label
+
+    try:
+        cephfs_data = create_resource(**cephfs_data)
+        cephfs_data.reload()
+    except Exception as e:
+        logger.error(e)
+        raise e
 
     assert validate_cephfilesystem(
-        cfs_data.name
-    ), f"File system {cfs_data.name} does not exist"
-    return cfs_data
+        cephfs_data.name, namespace
+    ), f"File system {cephfs_data.name} does not exist"
+    return cephfs_data
 
 
 def default_storage_class(
@@ -661,6 +673,14 @@ def default_storage_class(
         else:
             if external:
                 resource_name = constants.DEFAULT_EXTERNAL_MODE_STORAGECLASS_RBD
+            elif config.ENV_DATA["platform"].lower() in constants.HCI_PC_OR_MS_PLATFORM:
+                storage_class = OCP(kind="storageclass")
+                # TODO: Select based on storageclient name or namespace in case of multiple storageclients in a cluster
+                resource_name = [
+                    sc_data["metadata"]["name"]
+                    for sc_data in storage_class.get()["items"]
+                    if sc_data["provisioner"] == constants.RBD_PROVISIONER
+                ][0]
             else:
                 resource_name = constants.DEFAULT_STORAGECLASS_RBD
     elif interface_type == constants.CEPHFILESYSTEM:
@@ -674,6 +694,14 @@ def default_storage_class(
         else:
             if external:
                 resource_name = constants.DEFAULT_EXTERNAL_MODE_STORAGECLASS_CEPHFS
+            elif config.ENV_DATA["platform"].lower() in constants.HCI_PC_OR_MS_PLATFORM:
+                storage_class = OCP(kind="storageclass")
+                # TODO: Select based on storageclient name or namespace in case of multiple storageclients in a cluster
+                resource_name = [
+                    sc_data["metadata"]["name"]
+                    for sc_data in storage_class.get()["items"]
+                    if sc_data["provisioner"] == constants.CEPHFS_PROVISIONER
+                ][0]
             else:
                 resource_name = constants.DEFAULT_STORAGECLASS_CEPHFS
     base_sc = OCP(kind="storageclass", resource_name=resource_name)
@@ -958,7 +986,7 @@ def verify_block_pool_exists(pool_name):
     logger.info(f"Verifying that block pool {pool_name} exists")
     ct_pod = pod.get_ceph_tools_pod()
     try:
-        for pools in TimeoutSampler(60, 3, ct_pod.exec_ceph_cmd, "ceph osd lspools"):
+        for pools in TimeoutSampler(180, 3, ct_pod.exec_ceph_cmd, "ceph osd lspools"):
             logger.info(f"POOLS are {pools}")
             for pool in pools:
                 if pool_name in pool.get("poolname"):
@@ -1022,7 +1050,7 @@ def get_cephfs_data_pool_name():
     return out[0]["data_pools"][0]
 
 
-def validate_cephfilesystem(fs_name):
+def validate_cephfilesystem(fs_name, namespace=config.ENV_DATA["cluster_namespace"]):
     """
     Verify CephFileSystem exists at Ceph and OCP
 
@@ -1033,9 +1061,7 @@ def validate_cephfilesystem(fs_name):
         bool: True if CephFileSystem is created at Ceph and OCP side else
            will return False with valid msg i.e Failure cause
     """
-    cfs = ocp.OCP(
-        kind=constants.CEPHFILESYSTEM, namespace=config.ENV_DATA["cluster_namespace"]
-    )
+    cfs = ocp.OCP(kind=constants.CEPHFILESYSTEM, namespace=namespace)
     ct_pod = pod.get_ceph_tools_pod()
     ceph_validate = False
     ocp_validate = False
@@ -2847,6 +2873,27 @@ def modify_deployment_replica_count(
     return ocp_obj.patch(resource_name=deployment_name, params=params)
 
 
+def modify_deploymentconfig_replica_count(
+    deploymentconfig_name, replica_count, namespace=config.ENV_DATA["cluster_namespace"]
+):
+    """
+    Function to modify deploymentconfig replica count,
+    i.e to scale up or down deploymentconfig
+
+    Args:
+        deploymentcofig_name (str): Name of deploymentconfig
+        replica_count (int): replica count to be changed to
+        namespace (str): namespace where the deploymentconfig exists
+
+    Returns:
+        bool: True in case if changes are applied. False otherwise
+
+    """
+    dc_ocp_obj = ocp.OCP(kind=constants.DEPLOYMENTCONFIG, namespace=namespace)
+    params = f'{{"spec": {{"replicas": {replica_count}}}}}'
+    return dc_ocp_obj.patch(resource_name=deploymentconfig_name, params=params)
+
+
 def modify_job_parallelism_count(
     job_name, count, namespace=config.ENV_DATA["cluster_namespace"]
 ):
@@ -3118,29 +3165,53 @@ def default_volumesnapshotclass(interface_type):
     """
     external = config.DEPLOYMENT["external_mode"]
     if interface_type == constants.CEPHBLOCKPOOL:
-        resource_name = (
-            constants.DEFAULT_EXTERNAL_MODE_VOLUMESNAPSHOTCLASS_RBD
-            if external
-            else (
-                constants.DEFAULT_VOLUMESNAPSHOTCLASS_RBD_MS_PC
-                if (
-                    config.ENV_DATA["platform"].lower()
-                    in constants.HCI_PC_OR_MS_PLATFORM
+        if (
+            config.ENV_DATA["platform"].lower()
+            in constants.HCI_PROVIDER_CLIENT_PLATFORMS
+        ):
+            sc_obj = OCP(kind=constants.STORAGECLASS)
+            # TODO: Select based on storageclient name or namespace in case of multiple storageclients in a cluster
+            resource_name = [
+                sc_data["metadata"]["name"]
+                for sc_data in sc_obj.get()["items"]
+                if sc_data["provisioner"] == constants.RBD_PROVISIONER
+            ][0]
+        else:
+            resource_name = (
+                constants.DEFAULT_EXTERNAL_MODE_VOLUMESNAPSHOTCLASS_RBD
+                if external
+                else (
+                    constants.DEFAULT_VOLUMESNAPSHOTCLASS_RBD_MS_PC
+                    if (
+                        config.ENV_DATA["platform"].lower()
+                        in constants.MANAGED_SERVICE_PLATFORMS
+                    )
+                    else constants.DEFAULT_VOLUMESNAPSHOTCLASS_RBD
                 )
-                else constants.DEFAULT_VOLUMESNAPSHOTCLASS_RBD
             )
-        )
     elif interface_type == constants.CEPHFILESYSTEM:
-        resource_name = (
-            constants.DEFAULT_EXTERNAL_MODE_VOLUMESNAPSHOTCLASS_CEPHFS
-            if external
-            else (
-                constants.DEFAULT_VOLUMESNAPSHOTCLASS_CEPHFS_MS_PC
-                if config.ENV_DATA["platform"].lower()
-                in constants.HCI_PC_OR_MS_PLATFORM
-                else constants.DEFAULT_VOLUMESNAPSHOTCLASS_CEPHFS
+        if (
+            config.ENV_DATA["platform"].lower()
+            in constants.HCI_PROVIDER_CLIENT_PLATFORMS
+        ):
+            sc_obj = OCP(kind=constants.STORAGECLASS)
+            # TODO: Select based on storageclient name or namespace in case of multiple storageclients in a cluster
+            resource_name = [
+                sc_data["metadata"]["name"]
+                for sc_data in sc_obj.get()["items"]
+                if sc_data["provisioner"] == constants.CEPHFS_PROVISIONER
+            ][0]
+        else:
+            resource_name = (
+                constants.DEFAULT_EXTERNAL_MODE_VOLUMESNAPSHOTCLASS_CEPHFS
+                if external
+                else (
+                    constants.DEFAULT_VOLUMESNAPSHOTCLASS_CEPHFS_MS_PC
+                    if config.ENV_DATA["platform"].lower()
+                    in constants.MANAGED_SERVICE_PLATFORMS
+                    else constants.DEFAULT_VOLUMESNAPSHOTCLASS_CEPHFS
+                )
             )
-        )
     base_snapshot_class = OCP(
         kind=constants.VOLUMESNAPSHOTCLASS, resource_name=resource_name
     )
@@ -3170,7 +3241,7 @@ def get_snapshot_content_obj(snap_obj):
     return snapcontent_obj
 
 
-def wait_for_pv_delete(pv_objs):
+def wait_for_pv_delete(pv_objs, timeout=180):
     """
     Wait for PVs to delete. Delete PVs having ReclaimPolicy 'Retain'
 
@@ -3185,7 +3256,7 @@ def wait_for_pv_delete(pv_objs):
         ):
             wait_for_resource_state(pv_obj, constants.STATUS_RELEASED)
             pv_obj.delete()
-        pv_obj.ocp.wait_for_delete(resource_name=pv_obj.name, timeout=180)
+        pv_obj.ocp.wait_for_delete(resource_name=pv_obj.name, timeout=timeout)
 
 
 @retry(UnexpectedBehaviour, tries=40, delay=10, backoff=1)
@@ -4103,6 +4174,20 @@ def create_reclaim_space_cronjob(
     return ocs_obj
 
 
+def create_priority_class(priority, value):
+    """
+    Function to create priority class on the cluster
+    Returns:
+        bool: Returns priority class obj
+    """
+    priority_class_data = templating.load_yaml(constants.PRIORITY_CLASS_YAML)
+    priority_class_data["value"] = value
+    priority_class_name = priority_class_data["metadata"]["name"] + "-" + priority
+    priority_class_data["metadata"]["name"] = priority_class_name
+    ocs_obj = create_resource(**priority_class_data)
+    return ocs_obj
+
+
 def get_cephfs_subvolumegroup():
     """
     Get the name of cephfilesystemsubvolumegroup. The name should be fetched if the platform is not MS.
@@ -4528,7 +4613,7 @@ def retrieve_cli_binary(cli_type="mcg"):
     if cli_type == "mcg":
         local_cli_path = constants.NOOBAA_OPERATOR_LOCAL_CLI_PATH
     elif cli_type == "odf":
-        local_cli_path = constants.CLI_TOOL_LOCAL_PATH
+        local_cli_path = os.path.join(config.RUN["bin_dir"], "odf-cli")
     local_cli_dir = os.path.dirname(local_cli_path)
     live_deployment = config.DEPLOYMENT["live_deployment"]
     if live_deployment and semantic_version >= version.VERSION_4_13:
@@ -4539,19 +4624,7 @@ def retrieve_cli_binary(cli_type="mcg"):
     else:
         image = f"{constants.MCG_CLI_DEV_IMAGE}:{ocs_build}"
 
-    pull_secret_path = os.path.join(constants.DATA_DIR, "pull-secret")
-
-    # create DATA_DIR if it doesn't exist
-    if not os.path.exists(constants.DATA_DIR):
-        create_directory_path(constants.DATA_DIR)
-
-    if not os.path.isfile(pull_secret_path):
-        logger.info(f"Extracting pull-secret and placing it under {pull_secret_path}")
-        exec_cmd(
-            f"oc get secret pull-secret -n {constants.OPENSHIFT_CONFIG_NAMESPACE} -ojson | "
-            f"jq -r '.data.\".dockerconfigjson\"|@base64d' > {pull_secret_path}",
-            shell=True,
-        )
+    pull_secret_path = download_pull_secret()
     exec_cmd(
         f"oc image extract --registry-config {pull_secret_path} "
         f"{image} --confirm "
@@ -4680,3 +4753,33 @@ def flatten_multilevel_dict(d):
         else:
             leaves_list.append(value)
     return leaves_list
+
+
+def is_rbd_default_storage_class(custom_sc=None):
+    """
+    Check if RDB is a default storageclass for the cluster
+
+    Args:
+        custom_sc: custom storageclass name.
+
+    Returns:
+        bool : True if RBD is set as the  Default storage class for the cluster, False otherwise.
+    """
+    default_rbd_sc = (
+        constants.DEFAULT_STORAGECLASS_RBD if custom_sc is None else custom_sc
+    )
+    cmd = (
+        f"oc get storageclass {default_rbd_sc} -o=jsonpath='{{.metadata.annotations}}' "
+    )
+    try:
+        check_annotations = json.loads(run_cmd(cmd))
+    except json.decoder.JSONDecodeError:
+        logger.error("Error to get annotation value from storageclass.")
+        return False
+
+    if check_annotations.get("storageclass.kubernetes.io/is-default-class") == "true":
+        logger.info(f"Storageclass {default_rbd_sc} is a default  RBD StorageClass.")
+        return True
+
+    logger.error("Storageclass {default_rbd_sc} is not a default  RBD StorageClass.")
+    return False

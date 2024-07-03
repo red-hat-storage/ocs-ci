@@ -1,13 +1,17 @@
 """
 Helper functions specific for DR
 """
+
 import json
 import logging
 import tempfile
 
 from ocs_ci.framework import config
 from ocs_ci.ocs import constants, ocp
-from ocs_ci.ocs.exceptions import TimeoutExpiredError, UnexpectedBehaviour
+from ocs_ci.ocs.exceptions import (
+    TimeoutExpiredError,
+    UnexpectedBehaviour,
+)
 from ocs_ci.ocs.resources.drpc import DRPC
 from ocs_ci.ocs.resources.pod import get_all_pods
 from ocs_ci.ocs.resources.pv import get_all_pvs
@@ -21,7 +25,11 @@ from ocs_ci.ocs.utils import (
 )
 from ocs_ci.utility import version, templating
 from ocs_ci.utility.retry import retry
-from ocs_ci.utility.utils import TimeoutSampler, CommandFailed, run_cmd
+from ocs_ci.utility.utils import (
+    TimeoutSampler,
+    CommandFailed,
+    run_cmd,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -997,7 +1005,7 @@ def create_backup_schedule():
     """
     old_ctx = config.cur_index
     config.switch_ctx(get_active_acm_index())
-    backup_schedule = templating.load_yaml(constants.MDR_BACKUP_SCHEDULE_YAML)
+    backup_schedule = templating.load_yaml(constants.BACKUP_SCHEDULE_YAML)
     backup_schedule_yaml = tempfile.NamedTemporaryFile(
         mode="w+", prefix="bkp", delete=False
     )

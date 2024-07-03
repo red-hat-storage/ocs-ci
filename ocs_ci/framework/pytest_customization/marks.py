@@ -31,10 +31,12 @@ from ocs_ci.ocs.constants import (
     HCI_CLIENT,
     MS_CONSUMER_TYPE,
     HCI_PROVIDER,
+    BAREMETAL_PLATFORMS,
 )
 from ocs_ci.utility import version
 from ocs_ci.utility.aws import update_config_from_s3
 from ocs_ci.utility.utils import load_auth_config
+
 
 # tier marks
 
@@ -194,6 +196,11 @@ fips_required = pytest.mark.skipif(
 stretchcluster_required = pytest.mark.skipif(
     config.DEPLOYMENT.get("arbiter_deployment") is False,
     reason="Test runs only on Stretch cluster with arbiter deployments",
+)
+
+sts_deployment_required = pytest.mark.skipif(
+    config.DEPLOYMENT.get("sts_enabled") is False,
+    reason="Test runs only on the AWS STS enabled cluster deployments",
 )
 
 google_api_required = pytest.mark.skipif(
@@ -386,6 +393,7 @@ skipif_bmpsi = pytest.mark.skipif(
     reason="Test will not run on Baremetal PSI",
 )
 
+
 skipif_managed_service = pytest.mark.skipif(
     config.ENV_DATA["platform"].lower() in MANAGED_SERVICE_PLATFORMS,
     reason="Test will not run on Managed service cluster",
@@ -468,6 +476,11 @@ skipif_disconnected_cluster = pytest.mark.skipif(
     reason="Test will not run on disconnected clusters",
 )
 
+skipif_stretch_cluster = pytest.mark.skipif(
+    config.DEPLOYMENT.get("arbiter_deployment") is True,
+    reason="Test will not run on stretch cluster",
+)
+
 skipif_proxy_cluster = pytest.mark.skipif(
     config.DEPLOYMENT.get("proxy") is True,
     reason="Test will not run on proxy clusters",
@@ -513,6 +526,10 @@ skipif_flexy_deployment = pytest.mark.skipif(
     reason="This test doesn't work correctly on OCP cluster deployed via Flexy",
 )
 
+skipif_noobaa_external_pgsql = pytest.mark.skipif(
+    config.ENV_DATA.get("noobaa_external_pgsql") is True,
+    reason="This test will not run correctly in external DB deployed cluster.",
+)
 metrics_for_external_mode_required = pytest.mark.skipif(
     version.get_semantic_ocs_version_from_config() < version.VERSION_4_6
     and config.DEPLOYMENT.get("external_mode") is True,
@@ -610,3 +627,28 @@ def get_current_test_marks():
 
     """
     return current_test_marks
+
+
+baremetal_deployment_required = pytest.mark.skipif(
+    (config.ENV_DATA["platform"].lower() not in BAREMETAL_PLATFORMS)
+    or (not vsphere_platform_required),
+    reason="Test required baremetal or vsphere deployment.",
+)
+
+ui_deployment_required = pytest.mark.skipif(
+    not config.DEPLOYMENT.get("ui_deployment"),
+    reason="UI Deployment required to run the test.",
+)
+
+
+# Marks to identify encryption at rest is configured.
+encryption_at_rest_required = pytest.mark.skipif(
+    not config.ENV_DATA.get("encryption_at_rest"),
+    reason="This test requires encryption at rest to be enabled.",
+)
+
+# Mark to identify encryption is configured with KMS.
+skipif_kms_deployment = pytest.mark.skipif(
+    config.DEPLOYMENT.get("kms_deployment") is True,
+    reason="This test is not supported for KMS deployment.",
+)

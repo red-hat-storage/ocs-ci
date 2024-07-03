@@ -144,6 +144,8 @@ anywhere else.
 * `skip_ocp_installer_destroy` - Skip OCP installer to destroy the cluster -
   useful for enforcing force deploy steps only.
 * `sts_enabled` - Enable STS deployment functionality.
+* `metallb_operator` - Enable MetalLB operator installation during OCP deployment.
+* `multi_storagecluster` - Enable multi-storagecluster deployment when set to true.
 
 #### REPORTING
 
@@ -177,8 +179,10 @@ higher priority).
 
 * `cluster_name` - Defaults to null, is set by the --cluster-name CLI argument
 * `storage_cluster_name` - OCS storage cluster name
+* `external_storage_cluster_name` - External storagecluster name
 * `storage_device_sets_name` - OCS storage device sets name
 * `cluster_namespace` - Namespace where OCS pods are created
+* `external_storage_cluster_namespace` - Namespace for external storageSystem incase multi-storagecluster
 * `local_storage_namespace` - Namespace where local storage operator pods are created
 * `monitoring_enabled` - For testing OCS monitoring based on Prometheus (Default: false)
 * `persistent-monitoring` - Change monitoring backend to OCS (Default: true)
@@ -297,6 +301,26 @@ higher priority).
             * `private_gw` - GW for the private interface
             * `root_disk_id` - ID of the root disk
             * `root_disk_sn` - Serial number of the root disk
+            * `node_network_configuration_policy_name` - The NodeNetworkConfigurationPolicy CR name
+            * `node_network_configuration_policy_ip` - The ip address of NodeNetworkConfigurationPolicy CR
+            * `node_network_configuration_policy_prefix_length` - The subnetmask of NodeNetworkConfigurationPolicy CR
+            * `node_network_configuration_policy_destination_route` - The destination route of NodeNetworkConfigurationPolicy CR
+* `hcp_version` - version of HCP client to be deployed on machine running the tests
+* `metallb_version` - MetalLB operator version to install
+* `install_hypershift_upstream` - Install hypershift from upstream or not (Default: false). Necessary for unreleased OCP/CNV versions
+* `clusters` - section for hosted clusters
+    * `<cluster name>` - name of the cluster
+      * `hosted_cluster_path` - path to the cluster directory to store auth_path, credentials files or cluster related files
+      * `ocp_version` - OCP version of the hosted cluster (e.g. "4.15.13")
+      * `cpu_cores_per_hosted_cluster` - number of CPU cores per hosted cluster
+      * `memory_per_hosted_cluster` - amount of memory per hosted cluster
+      * `nodepool_replicas` - number of replicas of nodepool for each cluster
+      * `hosted_odf_registry` - registry for hosted ODF
+      * `hosted_odf_version` - version of ODF to be deployed on hosted clusters
+* `wait_timeout_for_healthy_osd_in_minutes` - timeout waiting for healthy OSDs before continuing upgrade (see https://bugzilla.redhat.com/show_bug.cgi?id=2276694 for more details)
+* `odf_provider_mode_deployment` - True if you would like to enable provider mode deployment.
+* `client_subcription_image` - ODF subscription image details for the storageclients.
+* `channel_to_client_subscription` - Channel value for the odf subscription image for storageclients.
 
 #### UPGRADE
 

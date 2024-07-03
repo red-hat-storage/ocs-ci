@@ -43,6 +43,7 @@ ODF_OPERATOR_NAME = "odf-operator"
 ROOK_CEPH_OPERATOR = "rook-ceph-operator"
 ODF_PROMETHEUS_OPERATOR = "odf-prometheus-operator"
 ODF_CLIENT_OPERATOR = "ocs-client-operator"
+RECIPE_OPERATOR = "recipe"
 HCI_CLIENT_ODF_OPERATOR_NAME = "ocs-client-operator"
 NOOBAA_OPERATOR = "noobaa-operator"
 MCG_OPERATOR = "mcg-operator"
@@ -163,3 +164,8 @@ MUST_GATHER_UPSTREAM_TAG = "latest"
 
 # CrushDeviceClass
 CRUSH_DEVICE_CLASS = "ssd"
+
+
+# IBM Cloud
+IBM_CLOUD_LOAD_BALANCER_QUOTA = 50
+IBM_CLOUD_REGIONS = {"us-south", "us-east"}

@@ -785,6 +785,7 @@ class AWSNodes(NodesBase):
             return ebs_volume.attachments
 
         try:
+
             for sample in TimeoutSampler(300, 3, get_volume_attachments, volume):
                 logger.info(f"EBS volume {volume.id} attachments are: {sample}")
                 if sample:

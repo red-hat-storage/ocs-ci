@@ -3,6 +3,7 @@ This module contains KMS related class and methods
 currently supported KMSs: Vault and HPCS
 
 """
+
 import logging
 import os
 
@@ -48,6 +49,11 @@ from ocs_ci.utility.utils import (
     encode,
     prepare_bin_dir,
 )
+from fauxfactory import gen_alphanumeric
+from azure.identity import CertificateCredential
+from azure.keyvault.secrets import SecretClient
+from azure.core.exceptions import AzureError
+from ocs_ci.ocs.resources.pvc import get_deviceset_pvcs
 
 
 logger = logging.getLogger(__name__)
@@ -1797,7 +1803,316 @@ class KMIP(KMS):
             logger.info("Keys deleted from CipherTrust Manager")
 
 
-kms_map = {"vault": Vault, "hpcs": HPCS, "kmip": KMIP}
+class AzureKV(KMS):
+    """
+    Represents an Azure Key Vault implementation of KMS.
+    """
+
+    def __init__(self, namespace=config.ENV_DATA["cluster_namespace"]):
+        super().__init__(constants.AZURE_KV_PROVIDER_NAME)
+        self.namespace = namespace
+        self.kms_provider = constants.AZURE_KV_PROVIDER_NAME
+        self.azure_kms_connection_name = (
+            f"azure-kv-conn-{gen_alphanumeric(length=5).lower()}"
+        )
+        azure_auth = config.AUTH.get("azure_auth")
+        self.azure_kv_name = azure_auth.get("AZURE_KV_NAME")
+        self.azure_kv_certificate = azure_auth.get("AZURE_CERTIFICATE")
+        self.vault_url = azure_auth.get("AZURE_KV_URL")
+        self.vault_client_id = azure_auth.get("AZURE_KV_CLIENT_ID")
+        self.vault_tenant_id = azure_auth.get("AZURE_KV_TENANT_ID")
+        self.vault_cert_path = self._azure_kv_cert_path()
+
+        self.conn_data = {
+            "KMS_PROVIDER": self.kms_provider,
+            "KMS_SERVICE_NAME": self.azure_kms_connection_name,
+            "AZURE_CLIENT_ID": self.vault_client_id,
+            "AZURE_VAULT_URL": self.vault_url,
+            "AZURE_TENANT_ID": self.vault_tenant_id,
+        }
+
+    def deploy(self):
+        """
+        This Function will create the Azure KV connection details in the ConfigMap.
+        """
+        if not config.ENV_DATA.get("platform") == "azure":
+            raise VaultDeploymentError(
+                "Azure_KV deployment only supports on Azure platform."
+            )
+
+        self.create_azure_kv_csi_kms_connection_details()
+        if config.ENV_DATA.get("encryption_at_rest"):
+            self.create_azure_kv_ocs_csi_kms_connection_details()
+
+    def post_deploy_verification(self):
+        """
+        Post Deploy Verification For Azure Key Vault.
+        """
+        if config.ENV_DATA.get("encryption_at_rest"):
+            if not self.verify_osd_keys_present_on_azure_kv():
+                raise ValueError("OSD keys Not present on Azure Key Vault.")
+            logger.info("OSD Keys Are present on Azure Key Vault.")
+
+    def is_azure_kv_connection_exists(self):
+        """
+        Checks if the Azure KV connection exists in the ConfigMap
+        """
+
+        csi_kms_configmap = ocp.OCP(
+            kind=constants.CONFIGMAP,
+            resource_name=constants.VAULT_KMS_CSI_CONNECTION_DETAILS,
+            namespace=self.namespace,
+        )
+
+        if not csi_kms_configmap.is_exist():
+            raise ValueError(
+                f"ConfigMap {csi_kms_configmap.resource_name} Not found in the namespace {self.namespace}"
+            )
+
+        if self.azure_kms_connection_name not in csi_kms_configmap.data["data"]:
+            raise ValueError(
+                f"Azure Key vault connection {self.azure_kms_connection_name} not exists."
+            )
+
+    def create_azure_kv_secrets(self, prefix="azure-ocs-"):
+        """
+        Creates Azure KV secrets.
+        """
+        secret_name = gen_alphanumeric(length=18, start=prefix).lower()
+        client_secret = templating.load_yaml(constants.AZURE_CLIENT_SECRETS)
+
+        client_secret["metadata"]["name"] = secret_name
+        client_secret["metadata"]["namespace"] = self.namespace
+        client_secret["data"]["CLIENT_CERT"] = base64.b64encode(
+            self.azure_kv_certificate.encode()
+        ).decode()
+        logger.info(f"Creating a Azure Secret : {secret_name}")
+        self.create_resource(client_secret, prefix=prefix)
+        return secret_name
+
+    def create_azure_kv_csi_kms_connection_details(self):
+        """
+        Create Azure specific csi-kms-connection-details
+        configmap resource
+        """
+
+        # Check is already configmap exists
+        csi_kms_configmap = ocp.OCP(
+            kind=constants.CONFIGMAP,
+            resource_name=constants.AZURE_KV_CSI_CONNECTION_DETAILS,
+            namespace=self.namespace,
+        )
+
+        # Create a Connection data.
+        azure_conn = self.conn_data
+        azure_conn["AZURE_CERT_SECRET_NAME"] = self.create_azure_kv_secrets(
+            prefix="azure-csi-"
+        )
+
+        if not csi_kms_configmap.is_exist():
+            logger.info(
+                f"Creating Configmap {constants.AZURE_KV_CSI_CONNECTION_DETAILS}"
+            )
+
+            csi_kms_conn_details = templating.load_yaml(
+                constants.AZURE_CSI_KMS_CONNECTION_DETAILS
+            )
+
+            # Updating Templet data.
+            csi_kms_conn_details["data"] = {
+                self.azure_kms_connection_name: json.dumps(azure_conn)
+            }
+
+            csi_kms_conn_details["metadata"]["namespace"] = self.namespace
+            self.create_resource(csi_kms_conn_details, prefix="csiazureconn")
+        else:
+            # Append the connection details to existing ConfigMap.
+            logger.info(
+                f"Adding Azure connection to existing ConfigMap {constants.AZURE_KV_CSI_CONNECTION_DETAILS}"
+            )
+
+            param = json.dumps(
+                [
+                    {
+                        "op": "add",
+                        "path": f"/data/{self.azure_kms_connection_name}",
+                        "value": json.dumps(azure_conn),
+                    }
+                ]
+            )
+
+            csi_kms_configmap.patch(params=param, format_type="json")
+
+        # verifying ConfigMap is created or not.
+        self.is_azure_kv_connection_exists()
+
+    def create_azure_kv_ocs_csi_kms_connection_details(self):
+        """
+        Creates Azure KV OCS CSI KMS connection details ConfigMap.
+        """
+
+        # Creating ConfigMap for OCS CSI KMS connection details.
+        azure_data = self.conn_data
+        azure_data["AZURE_CERT_SECRET_NAME"] = self.create_azure_kv_secrets(
+            prefix="azure-ocs-"
+        )
+
+        # loading ConfigMap template
+        ocs_kms_conn_details = templating.load_yaml(
+            constants.AZURE_OCS_KMS_CONNECTION_DETAILS
+        )
+        ocs_kms_conn_details["metadata"]["namespace"] = self.namespace
+        ocs_kms_conn_details["data"] = azure_data
+
+        # creating ConfigMap Rsource
+        logger.info(
+            f"creating ConfigMap resource for {constants.AZURE_KV_CONNECTION_DETAILS_RESOURCE}"
+        )
+        self.create_resource(ocs_kms_conn_details, prefix="ocsazureconn")
+
+        # Verify ConfigMap is created or not.
+        ocs_kms_configmap = ocp.OCP(
+            kind=constants.CONFIGMAP,
+            resource_name=constants.AZURE_KV_CONNECTION_DETAILS_RESOURCE,
+            namespace=self.namespace,
+        )
+
+        if not ocs_kms_configmap.is_exist():
+            raise ValueError(
+                f"ConfigMap Resource {constants.AZURE_KV_CONNECTION_DETAILS_RESOURCE}"
+                f" is not created in namespace {self.namespace}"
+            )
+
+        logger.info(
+            f"Successfully Created configmap {constants.AZURE_KV_CONNECTION_DETAILS_RESOURCE} "
+            f"in {self.namespace} namespace"
+        )
+
+    def _azure_kv_cert_path(self):
+        """
+        Create a temporary certificate file and write the Azure Key Vault certificate to it.
+        """
+        try:
+            temp_dir = tempfile.mkdtemp()
+            cert_file = os.path.join(temp_dir, "certificate.pem")
+
+            with open(cert_file, "w") as fd:
+                fd.write(self.azure_kv_certificate)
+
+            return cert_file
+        except Exception as ex:
+            raise ValueError(f"Error Creating Azure certificate file : {ex}")
+
+    def azure_kv_secrets(self):
+        """
+        List the secrets in the Azure Key Vault.
+        """
+        try:
+            # Create a CertificateCredential using the certificate
+            credential = CertificateCredential(
+                vault_url=self.vault_url,
+                tenant_id=self.vault_tenant_id,
+                client_id=self.vault_client_id,
+                certificate_path=self.vault_cert_path,
+            )
+
+            # Create a SecretClient using the certificate for authentication
+            secret_client = SecretClient(
+                vault_url=self.vault_url, credential=credential
+            )
+
+            # Get the list of secrets
+            secrets = secret_client.list_properties_of_secrets()
+
+            # Extract and return the list of secret names
+            secret_names = [secret.name for secret in secrets]
+            return secret_names
+
+        except AzureError as az_error:
+            print(f"AzureError occurred: {az_error.message}")
+            return None
+        except Exception as e:
+            print(f"An error occurred: {e}")
+            return None
+
+    def azure_kv_osd_keys(self):
+        """
+        List of OSD keys found in Azure Key Vault
+        """
+        azure_kv_secrets = self.azure_kv_secrets()
+        deviceset = [pvc.name for pvc in get_deviceset_pvcs()]
+
+        found_osd_keys = [
+            kv_secret
+            for kv_secret in azure_kv_secrets
+            if [dev for dev in deviceset if dev in kv_secret]
+        ]
+
+        logger.info(f"OSD Keys on Azure KV: {found_osd_keys}")
+
+        return found_osd_keys
+
+    def verify_osd_keys_present_on_azure_kv(self):
+        """
+        Verify if all OSD keys are present in Azure Key Vault
+        """
+
+        osd_keys = self.azure_kv_osd_keys()
+        deviceset = [pvc.name for pvc in get_deviceset_pvcs()]
+
+        if len(osd_keys) != len(deviceset):
+            logger.info("Not all OSD keys present in the Azure KV")
+            return False
+
+        logger.info("All OSD keys are present in the Azure KV ")
+        return True
+
+    def remove_kmsid(self):
+        """
+        Removing azure kmsid from the configmap `csi-kms-connection-details`.
+
+        Returns:
+            bool: True if KMS ID is successfully removed, otherwise False.
+        """
+        if not self.is_azure_kv_connection_exists():
+            logger.info(
+                f"There is no KMS connection {self.azure_kms_connection_name} available in the configmap"
+            )
+            return False
+
+        csi_kms_configmap = ocp.OCP(
+            kind=constants.CONFIGMAP,
+            resource_name=constants.VAULT_KMS_CSI_CONNECTION_DETAILS,
+            namespace=self.namespace,
+        )
+
+        if len(get_encryption_kmsid()) <= 1:
+            # removing configmap csi-kms-connection-details.
+            csi_kms_configmap.delete()
+        else:
+            params = json.dumps(
+                [{"op": "remove", "path": f"/data/{self.azure_kms_connection_name}"}]
+            )
+            csi_kms_configmap.patch(params=params, format_type="json")
+        return True
+
+    def verify_pv_secrets_present_in_azure_kv(self, vol_handle):
+        """
+        Verify Azure KV has the secrets for given volume handle.
+
+        Returns:
+            bool: True if PV secrets are found in the Azure KV, otherwise False.
+        """
+        secrets = self.azure_kv_secrets()
+        if vol_handle in secrets:
+            logger.info(f"PV sceret for {vol_handle} is found in the Azure KV.")
+            return True
+
+        logger.info(f"PV secret for {vol_handle} not found in the Azure KV.")
+        return False
+
+
+kms_map = {"vault": Vault, "hpcs": HPCS, "kmip": KMIP, "azure-kv": AzureKV}
 
 
 def update_csi_kms_vault_connection_details(update_config):
@@ -1845,7 +2160,7 @@ def get_kms_deployment():
     try:
         return kms_map[provider]()
     except KeyError:
-        raise KMSNotSupported("Not a supported KMS deployment")
+        raise KMSNotSupported(f"Not a supported KMS deployment , provider: {provider}")
 
 
 def is_kms_enabled(dont_raise=False):

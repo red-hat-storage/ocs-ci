@@ -13,6 +13,7 @@ from ocs_ci.framework.pytest_customization.marks import (
     skipif_no_lso,
     skipif_lso,
     skipif_managed_service,
+    skipif_stretch_cluster,
     skipif_hci_provider_and_client,
     brown_squad,
 )
@@ -26,7 +27,10 @@ from ocs_ci.framework.testlib import (
 )
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.ocp import OCP
-from ocs_ci.ocs.resources.pod import get_osd_pods, get_ceph_tools_pod
+from ocs_ci.ocs.resources.pod import (
+    get_osd_pods,
+    get_ceph_tools_pod,
+)
 from ocs_ci.ocs.resources import storage_cluster
 from ocs_ci.ocs.cluster import (
     check_ceph_health_after_add_capacity,
@@ -156,6 +160,7 @@ class TestAddCapacity(ManageTest):
 @skipif_managed_service
 @skipif_hci_provider_and_client
 @skipif_no_lso
+@skipif_stretch_cluster
 class TestAddCapacityLSO(ManageTest):
     """
     Add capacity on lso cluster

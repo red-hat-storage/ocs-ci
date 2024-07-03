@@ -1,6 +1,7 @@
 """
 General PVC object
 """
+
 import logging
 import time
 from concurrent.futures import ThreadPoolExecutor
@@ -10,6 +11,7 @@ from ocs_ci.ocs import constants
 from ocs_ci.ocs.exceptions import UnavailableResourceException
 from ocs_ci.ocs.ocp import OCP
 from ocs_ci.ocs.resources.ocs import OCS
+from ocs_ci.ocs.resources import pod
 from ocs_ci.framework import config
 from ocs_ci.utility.utils import run_cmd
 from ocs_ci.utility.utils import TimeoutSampler, convert_device_size
@@ -397,10 +399,18 @@ def get_deviceset_pvcs():
         AssertionError: In case the deviceset PVCs are not found
 
     """
+    storage_cluster_obj = OCP(
+        kind=constants.STORAGECLUSTER,
+        resource_name=constants.DEFAULT_CLUSTERNAME,
+        namespace=config.ENV_DATA["cluster_namespace"],
+    )
     ocs_pvc_obj = get_all_pvc_objs(namespace=config.ENV_DATA["cluster_namespace"])
+    deviceset_prefix = (
+        storage_cluster_obj.get().get("spec").get("storageDeviceSets")[0].get("name")
+    )
     deviceset_pvcs = []
     for pvc_obj in ocs_pvc_obj:
-        if pvc_obj.name.startswith(constants.DEFAULT_DEVICESET_PVC_NAME):
+        if pvc_obj.name.startswith(deviceset_prefix):
             deviceset_pvcs.append(pvc_obj)
     assert deviceset_pvcs, "Failed to find the deviceset PVCs"
     return deviceset_pvcs
@@ -635,3 +645,40 @@ def scale_down_pods_and_remove_pvcs(sc_name):
 
             time.sleep(10)
             delete_pvcs([pvc_obj])
+
+
+def flatten_image(clone_obj):
+    """
+    Flatten the image of clone
+
+    Args:
+        clone_obj: Object of clone of which image to be flatten
+    """
+    image_name = clone_obj.get_rbd_image_name
+    pool_name = constants.DEFAULT_CEPHBLOCKPOOL
+
+    tool_pod = pod.get_ceph_tools_pod()
+    out = tool_pod.exec_ceph_cmd(
+        ceph_cmd=f"rbd flatten {pool_name}/{image_name}",
+        format=None,
+    )
+    log.info(f"{out}")
+    log.info(f"Successfully flatten the image of {clone_obj.name}")
+
+
+def get_pvc_size(pvc_obj, convert_size=1024):
+    """
+    Returns the PVC size in GB
+
+    Args:
+        pvc_obj (ocs_ci.ocs.resources.ocs.OCS): The pvc object
+        convert_size (int): set convert by 1024 or 1000
+
+    Returns:
+        int: PVC size
+
+    """
+    unformatted_size = (
+        pvc_obj.data.get("spec").get("resources").get("requests").get("storage")
+    )
+    return convert_device_size(unformatted_size, "GB", convert_size)

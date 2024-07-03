@@ -11,7 +11,9 @@ from ocs_ci.ocs import defaults
 from ocs_ci.ocs.exceptions import WrongVersionExpression
 
 
-def get_semantic_version(version, only_major_minor=False, ignore_pre_release=False):
+def get_semantic_version(
+    version, only_major_minor=False, ignore_pre_release=False, only_major=False
+):
     """
     Returning semantic version from provided version as string.
 
@@ -19,15 +21,22 @@ def get_semantic_version(version, only_major_minor=False, ignore_pre_release=Fal
         version (str): String version (e.g. 4.6)
         only_major_minor (bool): If True, only major and minor will be parsed.
         ignore_pre_release (bool): If True, the pre release version will be ignored
+        only_major(bool): If True, only major will be parsed.
 
     Returns:
        semantic_version.base.Version: Object of semantic version.
 
     """
     version = Version.coerce(version)
-    if only_major_minor:
+    if only_major:
+        version.minor = None
         version.patch = None
         version.prerelease = None
+    elif only_major_minor:
+        version.patch = None
+        version.prerelease = None
+        version.build = None
+        version.partial = None
     elif ignore_pre_release:
         version.prerelease = None
     return version
@@ -49,6 +58,7 @@ VERSION_4_13 = get_semantic_version("4.13", True)
 VERSION_4_14 = get_semantic_version("4.14", True)
 VERSION_4_15 = get_semantic_version("4.15", True)
 VERSION_4_16 = get_semantic_version("4.16", True)
+VERSION_4_17 = get_semantic_version("4.17", True)
 
 
 def get_semantic_ocs_version_from_config(cluster_config=None):
@@ -143,3 +153,22 @@ def compare_versions(expression):
         )
     v1, op, v2 = m.groups()
     return eval(f"get_semantic_version(v1, True){op}get_semantic_version(v2, True)")
+
+
+def get_previous_version(version, count=1):
+    """
+    Fetches the nth previous version
+
+    Args:
+        version (str): Version ( eg: 4.16, 4.16.0-0.nightly-2024-06-25-194629)
+        count (int): previous version count. if count is 1, it will get 1st previous version.
+            if count is 2, it will get 2nd previous version.
+
+    Returns:
+        str: Previous version ( returns only major and minor version, eg: 4.15 )
+
+    """
+    version = get_semantic_version(version, only_major_minor=True)
+    new_minor = version.minor - count
+    previous_version = f"{version.major}.{new_minor}"
+    return previous_version

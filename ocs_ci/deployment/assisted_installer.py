@@ -82,7 +82,11 @@ class AssistedInstallerCluster(object):
                 raise ClusterNotFoundException(
                     f"Cluster '{name}' not found in Assisted Installer Console"
                 )
-            self.id = [cl["id"] for cl in clusters if cl["name"] == name][0]
+            self.id = [
+                cl["id"]
+                for cl in clusters
+                if cl["name"] == name and cl["kind"] == "Cluster"
+            ][0]
             # load configuration of existing cluster
             self.load_existing_cluster_configuration()
             logger.info(
@@ -141,6 +145,25 @@ class AssistedInstallerCluster(object):
         self.cpu_architecture = cl_config["cpu_architecture"]
         self.high_availability_mode = cl_config["high_availability_mode"]
         self.image_type = infra_config["type"]
+        self.openshift_cluster_id = cl_config.get("openshift_cluster_id")
+        # load records with: 'kind': 'AddHostsCluster'
+        self.add_hosts_clusters = [
+            cl["id"]
+            for cl in self.api.get_clusters()
+            if self.openshift_cluster_id
+            and cl.get("openshift_cluster_id") == self.openshift_cluster_id
+            and cl["kind"] == "AddHostsCluster"
+        ]
+        logger.debug(f"AddHostsClusters: {', '.join(self.add_hosts_clusters)}")
+        self.add_hosts_infra_envs = [
+            infra["id"]
+            for cl_id in self.add_hosts_clusters
+            for infra in self.api.get_infra_envs()
+            if infra["cluster_id"] == cl_id
+        ]
+        logger.debug(
+            f"AddHosts Infrastructure Environments: {', '.join(self.add_hosts_infra_envs)}"
+        )
 
     def prepare_pull_secret(self, original_pull_secret):
         """
@@ -458,6 +481,12 @@ class AssistedInstallerCluster(object):
         logger.info(
             f"Cluster {self.name} (id: {self.id}) was deleted from Assisted Installer Console"
         )
+        if self.add_hosts_clusters:
+            for cl_id in self.add_hosts_clusters:
+                self.api.delete_cluster(cl_id)
+                logger.info(
+                    f"AddHostsCluster {self.name} (id: {cl_id}) was deleted from Assisted Installer Console"
+                )
 
     def delete_infrastructure_environment(self):
         """
@@ -468,3 +497,10 @@ class AssistedInstallerCluster(object):
             f"Infrastructure environment {self.infra_id} for cluster {self.name} (id: {self.id}) "
             "was deleted from Assisted Installer Console"
         )
+        if self.add_hosts_infra_envs:
+            for infra_id in self.add_hosts_infra_envs:
+                self.api.delete_infra_env(infra_id)
+                logger.info(
+                    f"Infrastructure environment {infra_id} for adding hosts to cluster {self.name} (id: {self.id}) "
+                    "was deleted from Assisted Installer Console"
+                )

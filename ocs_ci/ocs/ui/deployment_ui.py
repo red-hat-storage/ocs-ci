@@ -2,7 +2,7 @@ import logging
 import time
 
 
-from ocs_ci.ocs.ui.views import osd_sizes, OCS_OPERATOR, ODF_OPERATOR
+from ocs_ci.ocs.ui.views import osd_sizes, OCS_OPERATOR, ODF_OPERATOR, LOCAL_STORAGE
 from ocs_ci.ocs.ui.page_objects.page_navigator import PageNavigator
 from ocs_ci.utility.utils import TimeoutSampler
 from ocs_ci.utility import version
@@ -115,7 +115,7 @@ class DeploymentUI(PageNavigator):
             self.do_click(
                 self.dep_loc["click_install_lso_page"], enable_screenshot=True
             )
-            self.verify_operator_succeeded(operator="Local Storage")
+            self.verify_operator_succeeded(operator=LOCAL_STORAGE, timeout_install=300)
 
     def install_storage_cluster(self):
         """
@@ -153,9 +153,17 @@ class DeploymentUI(PageNavigator):
             if self.check_element_text("404"):
                 logger.info("Refresh storage cluster page")
                 self.refresh_page()
+        # WA for https://issues.redhat.com/browse/OCPBUGS-32223
+        time.sleep(60)
         self.do_click(
             locator=self.dep_loc["create_storage_cluster"], enable_screenshot=True
         )
+        # WA for https://issues.redhat.com/browse/OCPBUGS-32223
+        time.sleep(30)
+        if self.check_element_text("An error"):
+            logger.info("Refresh storage system page if error occurred")
+            self.refresh_page()
+            time.sleep(30)
         if config.ENV_DATA.get("mcg_only_deployment", False):
             self.install_mcg_only_cluster()
         elif config.DEPLOYMENT.get("local_storage"):
@@ -425,12 +433,28 @@ class DeploymentUI(PageNavigator):
         """
         self.search_operator_installed_operators_page(operator=operator)
         time.sleep(5)
-        sample = TimeoutSampler(
-            timeout=timeout_install,
-            sleep=sleep,
-            func=self.check_element_text,
-            expected_text="Succeeded",
-        )
+        if operator == LOCAL_STORAGE:
+            sample = TimeoutSampler(
+                timeout=timeout_install,
+                sleep=sleep,
+                func=self.check_element_text,
+                expected_text="Succeeded",
+            )
+        elif self.ocs_version_semantic > version.VERSION_4_15:
+            sample = TimeoutSampler(
+                timeout=timeout_install,
+                sleep=sleep,
+                func=self.check_number_occurrences_text,
+                expected_text="Succeeded",
+                number=2,
+            )
+        else:
+            sample = TimeoutSampler(
+                timeout=timeout_install,
+                sleep=sleep,
+                func=self.check_element_text,
+                expected_text="Succeeded",
+            )
         if not sample.wait_for_func_status(result=True):
             logger.error(
                 f"{operator} Installation status is not Succeeded after {timeout_install} seconds"
@@ -440,6 +464,7 @@ class DeploymentUI(PageNavigator):
                 f"{operator} Installation status is not Succeeded after {timeout_install} seconds"
             )
         self.take_screenshot()
+        logger.info(f"{operator} operator installed Successfully.")
 
     def search_operator_installed_operators_page(self, operator=OCS_OPERATOR):
         """

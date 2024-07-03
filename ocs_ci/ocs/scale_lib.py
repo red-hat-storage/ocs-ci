@@ -124,8 +124,12 @@ class FioPodScale(object):
             raise UnexpectedBehaviour("Kube_job batch count should be lesser than 1200")
 
         logger.info(f"Start creating {pvc_count} PVC of 2 types RBD-RWO & FS-RWX")
-        cephfs_sc_obj = constants.DEFAULT_STORAGECLASS_CEPHFS
-        rbd_sc_obj = constants.DEFAULT_STORAGECLASS_RBD
+        if is_hci_cluster():
+            cephfs_sc_obj = constants.DEFAULT_STORAGECLASS_CLIENT_CEPHFS
+            rbd_sc_obj = constants.DEFAULT_STORAGECLASS_CLIENT_RBD
+        else:
+            cephfs_sc_obj = constants.DEFAULT_STORAGECLASS_CEPHFS
+            rbd_sc_obj = constants.DEFAULT_STORAGECLASS_RBD
 
         # Get pvc_dict_list, append all the pvc.yaml dict to pvc_dict_list
         rbd_pvc_dict_list, cephfs_pvc_dict_list = ([], [])
@@ -848,11 +852,15 @@ def check_and_add_enough_worker(worker_count):
                             )
                         )
                 else:
+                    # Getting the machineset configured during deployment of the cluster
+                    existing_ms_in_cluster = machine.get_machinesets()
+                    # Getting default machineset's zone from the cluster
+                    available_zone_in_cluster = existing_ms_in_cluster[0][-1]
                     ms_name.append(
                         machine.create_custom_machineset(
                             instance_type=constants.AWS_PRODUCTION_INSTANCE_TYPE,
                             labels=labels,
-                            zone="a",
+                            zone=available_zone_in_cluster,
                         )
                     )
                 for ms in ms_name:

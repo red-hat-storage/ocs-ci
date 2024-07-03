@@ -692,9 +692,7 @@ def create_oc_resource(
 
 
 def get_pod_name_by_pattern(
-    pattern="client",
-    namespace=None,
-    filter=None,
+    pattern="client", namespace=None, filter=None, cluster_kubeconfig=""
 ):
     """
     In a given namespace find names of the pods that match
@@ -704,13 +702,17 @@ def get_pod_name_by_pattern(
         pattern (str): name of the pod with given pattern
         namespace (str): Namespace value
         filter (str): pod name to filter from the list
+        cluster_kubeconfig (str): Path to kubeconfig file
 
     Returns:
         pod_list (list): List of pod names matching the pattern
 
     """
     namespace = namespace if namespace else ocsci_config.ENV_DATA["cluster_namespace"]
-    ocp_obj = OCP(kind="pod", namespace=namespace)
+
+    ocp_obj = OCP(
+        kind="pod", namespace=namespace, cluster_kubeconfig=cluster_kubeconfig
+    )
     pod_names = ocp_obj.exec_oc_cmd("get pods -o name", out_yaml_format=False)
     pod_names = pod_names.split("\n")
     pod_list = []
@@ -835,6 +837,13 @@ def setup_ceph_toolbox(force_setup=False, storage_cluster=None):
                 ceph_volume_mount_path
             )
             toolbox["spec"]["template"]["spec"]["volumes"].append(ceph_volume)
+            if ocs_version >= version.VERSION_4_16:
+                toolbox["spec"]["template"]["spec"][
+                    "serviceAccount"
+                ] = "rook-ceph-default"
+                toolbox["spec"]["template"]["spec"][
+                    "serviceAccountName"
+                ] = "rook-ceph-default"
             rook_toolbox = OCS(**toolbox)
             rook_toolbox.create()
             return
@@ -1110,7 +1119,13 @@ def collect_noobaa_db_dump(log_dir_path, cluster_config=None):
 
 
 def _collect_ocs_logs(
-    cluster_config, dir_name, ocp=True, ocs=True, mcg=False, status_failure=True
+    cluster_config,
+    dir_name,
+    ocp=True,
+    ocs=True,
+    mcg=False,
+    status_failure=True,
+    ocs_flags=None,
 ):
     """
     This function runs in thread
@@ -1165,6 +1180,7 @@ def _collect_ocs_logs(
             ocs_log_dir_path,
             ocs_must_gather_image_and_tag,
             cluster_config=cluster_config,
+            command=ocs_flags,
         )
         if (
             ocsci_config.DEPLOYMENT.get("disconnected")
@@ -1241,7 +1257,9 @@ def _collect_ocs_logs(
         log.info(out)
 
 
-def collect_ocs_logs(dir_name, ocp=True, ocs=True, mcg=False, status_failure=True):
+def collect_ocs_logs(
+    dir_name, ocp=True, ocs=True, mcg=False, status_failure=True, ocs_flags=None
+):
     """
     Collects OCS logs
 
@@ -1253,6 +1271,7 @@ def collect_ocs_logs(dir_name, ocp=True, ocs=True, mcg=False, status_failure=Tru
         mcg (bool): True for collecting MCG logs (noobaa db dump)
         status_failure (bool): Whether the collection is after success or failure,
             allows better naming for folders under logs directory
+        ocs_flags (str): flags to ocs must gather command for example ["-- /usr/bin/gather -cs"]
 
     """
     results = None
@@ -1266,6 +1285,7 @@ def collect_ocs_logs(dir_name, ocp=True, ocs=True, mcg=False, status_failure=Tru
                 ocs=ocs,
                 mcg=mcg,
                 status_failure=status_failure,
+                ocs_flags=ocs_flags,
             )
             for cluster in ocsci_config.clusters
         ]
@@ -1453,9 +1473,13 @@ def reboot_node(ceph_node, timeout=300):
         raise
 
 
-def enable_console_plugin():
+def enable_console_plugin(value="[odf-console]"):
     """
     Enables console plugin for ODF
+
+    Arg:
+        value(str): the odf console to enable
+
     """
     ocs_version = version.get_semantic_ocs_version_from_config()
     if (
@@ -1463,13 +1487,12 @@ def enable_console_plugin():
         and ocsci_config.ENV_DATA["enable_console_plugin"]
     ):
         log.info("Enabling console plugin")
-        ocp_obj = OCP()
-        patch = '\'[{"op": "add", "path": "/spec/plugins", "value": ["odf-console"]}]\''
-        patch_cmd = (
-            f"patch console.operator cluster -n {ocsci_config.ENV_DATA['cluster_namespace']}"
-            f" --type json -p {patch}"
+        path = "/spec/plugins"
+        params = f"""[{{"op": "add", "path": "{path}", "value": {value}}}]"""
+        ocp_obj = OCP(kind=constants.CONSOLE_CONFIG)
+        ocp_obj.patch(params=params, format_type="json"), (
+            "Failed to run patch command to update odf-console"
         )
-        ocp_obj.exec_oc_cmd(command=patch_cmd)
 
 
 def get_non_acm_cluster_config():

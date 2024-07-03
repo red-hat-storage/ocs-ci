@@ -3,6 +3,7 @@ Pod related functionalities and context info
 
 Each pod in the openshift cluster will have a corresponding pod object
 """
+from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timedelta
 import logging
 import os
@@ -661,6 +662,7 @@ def get_all_pods(
     exclude_selector=False,
     wait=False,
     field_selector=None,
+    cluster_kubeconfig="",
 ):
     """
     Get all pods in a namespace.
@@ -674,15 +676,19 @@ def get_all_pods(
         exclude_selector (bool): If list of the resource selector not to search with
         field_selector (str): Selector (field query) to filter on, supports
             '=', '==', and '!='. (e.g. status.phase=Running)
+        wait (bool): True if you want to wait for the pods to be Running
+        cluster_kubeconfig (str): Path to the kubeconfig file for the cluster
 
     Returns:
         list: List of Pod objects
 
     """
+
     ocp_pod_obj = OCP(
         kind=constants.POD,
         namespace=namespace,
         field_selector=field_selector,
+        cluster_kubeconfig=cluster_kubeconfig,
     )
     # In case of >4 worker nodes node failures automatic failover of pods to
     # other nodes will happen.
@@ -2258,7 +2264,10 @@ def wait_for_new_osd_pods_to_come_up(number_of_osd_pods_before):
         logger.warning("None of the new osd pods reached the desired status")
 
 
-def get_pod_restarts_count(namespace=config.ENV_DATA["cluster_namespace"]):
+def get_pod_restarts_count(
+    namespace=config.ENV_DATA["cluster_namespace"], label=None, list_of_pods=None
+):
+
     """
     Gets the dictionary of pod and its restart count for all the pods in a given namespace
 
@@ -2266,7 +2275,18 @@ def get_pod_restarts_count(namespace=config.ENV_DATA["cluster_namespace"]):
         dict: dictionary of pod name and its corresponding restart count
 
     """
-    list_of_pods = get_all_pods(namespace)
+    if label:
+        selector = label.split("=")[1]
+        selector_label = label.split("=")[0]
+    else:
+        selector = None
+        selector_label = None
+
+    if not list_of_pods:
+        list_of_pods = get_all_pods(
+            namespace=namespace, selector=[selector], selector_label=selector_label
+        )
+
     restart_dict = {}
     ocp_pod_obj = OCP(kind=constants.POD, namespace=namespace)
     for p in list_of_pods:
@@ -2286,6 +2306,7 @@ def check_pods_in_running_state(
     pod_names=None,
     raise_pod_not_found_error=False,
     skip_for_status=None,
+    cluster_kubeconfig="",
 ):
     """
     Checks whether the pods in a given namespace are in Running state or not.
@@ -2302,6 +2323,7 @@ def check_pods_in_running_state(
         skip_for_status(list): List of pod status that should be skipped. If the status of a pod is in the given list,
             the check for 'Running' status of that particular pod will be skipped.
             eg: ["Pending", "Completed"]
+        cluster_kubeconfig (str): The kubeconfig file to use for the oc command
     Returns:
         Boolean: True, if all pods in Running state. False, otherwise
 
@@ -2309,11 +2331,15 @@ def check_pods_in_running_state(
     ret_val = True
 
     if pod_names:
-        list_of_pods = get_pod_objs(pod_names, raise_pod_not_found_error)
+        list_of_pods = get_pod_objs(
+            pod_names, raise_pod_not_found_error, cluster_kubeconfig=cluster_kubeconfig
+        )
     else:
-        list_of_pods = get_all_pods(namespace)
+        list_of_pods = get_all_pods(namespace, cluster_kubeconfig=cluster_kubeconfig)
 
-    ocp_pod_obj = OCP(kind=constants.POD, namespace=namespace)
+    ocp_pod_obj = OCP(
+        kind=constants.POD, namespace=namespace, cluster_kubeconfig=cluster_kubeconfig
+    )
     for p in list_of_pods:
         # we don't want to compare osd-prepare and canary pods as they get created freshly when an osd need to be added.
         if (
@@ -2402,6 +2428,7 @@ def wait_for_pods_to_be_running(
     raise_pod_not_found_error=False,
     timeout=200,
     sleep=10,
+    cluster_kubeconfig="",
 ):
     """
     Wait for all the pods in a specific namespace to be running.
@@ -2416,6 +2443,7 @@ def wait_for_pods_to_be_running(
             the rest of the pod names. The default value is False
         timeout (int): time to wait for pods to be running
         sleep (int): Time in seconds to sleep between attempts
+        cluster_kubeconfig (str): The kubeconfig file to use for the oc command
 
     Returns:
          bool: True, if all pods in Running state. False, otherwise
@@ -2429,6 +2457,7 @@ def wait_for_pods_to_be_running(
             namespace=namespace,
             pod_names=pod_names,
             raise_pod_not_found_error=raise_pod_not_found_error,
+            cluster_kubeconfig=cluster_kubeconfig,
         ):
             # Check if all the pods in running state
             if pods_running:
@@ -2923,6 +2952,7 @@ def get_pod_objs(
     pod_names,
     raise_pod_not_found_error=False,
     namespace=config.ENV_DATA["cluster_namespace"],
+    cluster_kubeconfig="",
 ):
     """
     Get the pod objects of the specified pod names
@@ -2933,6 +2963,7 @@ def get_pod_objs(
         raise_pod_not_found_error (bool): If True, it raises an exception, if one of the pods
             in the pod names are not found. If False, it ignores the case of pod not found and
             returns the pod objects of the rest of the pod names. The default value is False
+        cluster_kubeconfig (str): The kubeconfig file to use for the oc command
 
     Returns:
         list: The pod objects of the specified pod names
@@ -2944,7 +2975,7 @@ def get_pod_objs(
     """
     # Convert it to set to reduce complexity
     pod_names_set = set(pod_names)
-    pods = get_all_pods(namespace=namespace)
+    pods = get_all_pods(namespace=namespace, cluster_kubeconfig=cluster_kubeconfig)
     pod_objs_found = [p for p in pods if p.name in pod_names_set]
 
     if len(pod_names) > len(pod_objs_found):
@@ -3192,6 +3223,55 @@ def wait_for_pods_to_be_in_statuses(
         exclude_pod_name_prefixes=exclude_pod_name_prefixes,
     )
     return sample.wait_for_func_status(result=True)
+
+
+def wait_for_pods_to_be_in_statuses_concurrently(
+    app_selectors_to_resource_count_list,
+    namespace,
+    timeout=1200,
+    status=constants.STATUS_RUNNING,
+    cluster_kubeconfig="",
+):
+    """
+    Verify pods are running in the namespace using app selectors. This method is using concurrent futures to
+    speed up execution and will be blocking until all pods are running or timeout is reached
+
+    Args:
+        app_selectors_to_resource_count_list:
+        namespace: namespace of the pods expected to run
+        timeout: time to wait for the pods to be running in seconds
+        status: status of the pods to wait for
+        cluster_kubeconfig: The kubeconfig file to use for the oc command
+
+    Returns:
+        bool: True if all pods are running, False otherwise
+    """
+    pod = OCP(
+        kind=constants.POD, namespace=namespace, cluster_kubeconfig=cluster_kubeconfig
+    )
+    results = dict()
+
+    def check_pod_status(app_selector, resource_count):
+        results[app_selector] = pod.wait_for_resource(
+            condition=status,
+            selector=app_selector,
+            resource_count=resource_count,
+            timeout=timeout,
+        )
+
+    with ThreadPoolExecutor(
+        max_workers=len(app_selectors_to_resource_count_list)
+    ) as executor:
+        futures = []
+        for item in app_selectors_to_resource_count_list:
+            for app_selector, resource_count in item.items():
+                futures.append(
+                    executor.submit(check_pod_status, app_selector, resource_count)
+                )
+
+        [future.result() for future in futures]
+
+    return all(value for value in results.values())
 
 
 def get_pod_ip(pod_obj):
@@ -3583,3 +3663,87 @@ def wait_for_pods_deletion(
         namespace=namespace,
     )
     sampler.wait_for_func_status(True)
+
+
+def calculate_md5sum_of_pod_files(pods_for_integrity_check, pod_file_name):
+    """
+    Calculate the md5sum of the pod files, and save it in the pod objects
+
+    Args:
+        pods_for_integrity_check (list): The list of the pod objects to calculate the md5sum
+        pod_file_name (str): The pod file name to save the md5sum
+
+    """
+    # Wait for IO to finish
+    logger.info("Wait for IO to finish on pods")
+    for pod_obj in pods_for_integrity_check:
+        pod_obj.get_fio_results()
+        logger.info(f"IO finished on pod {pod_obj.name}")
+        # Calculate md5sum
+        pod_file_name = (
+            pod_file_name
+            if (pod_obj.pvc.volume_mode == constants.VOLUME_MODE_FILESYSTEM)
+            else pod_obj.get_storage_path(storage_type="block")
+        )
+        logger.info(
+            f"Calculate the md5sum of the file {pod_file_name} in the pod {pod_obj.name}"
+        )
+        pod_obj.pvc.md5sum = cal_md5sum(
+            pod_obj,
+            pod_file_name,
+            pod_obj.pvc.volume_mode == constants.VOLUME_MODE_BLOCK,
+        )
+
+
+def verify_md5sum_on_pod_files(pods_for_integrity_check, pod_file_name):
+    """
+    Verify the md5sum of the pod files
+
+    Args:
+        pods_for_integrity_check (list): The list of the pod objects to verify the md5sum
+        pod_file_name (str): The pod file name to verify its md5sum
+
+    Raises:
+        AssertionError: If file doesn't exist or md5sum mismatch
+
+    """
+    for pod_obj in pods_for_integrity_check:
+        pod_file_name = (
+            pod_obj.get_storage_path(storage_type="block")
+            if (pod_obj.pvc.volume_mode == constants.VOLUME_MODE_BLOCK)
+            else pod_file_name
+        )
+        verify_data_integrity(
+            pod_obj,
+            pod_file_name,
+            pod_obj.pvc.md5sum,
+            pod_obj.pvc.volume_mode == constants.VOLUME_MODE_BLOCK,
+        )
+        logger.info(
+            f"Verified: md5sum of {pod_file_name} on pod {pod_obj.name} "
+            f"matches with the original md5sum"
+        )
+    logger.info("Data integrity check passed on all pods")
+
+
+def fetch_rgw_pod_restart_count(namespace=config.ENV_DATA["cluster_namespace"]):
+    """
+    This method fetches the restart count of rgw pod
+
+    Arg:
+        namespace(str): namespace where rgw pd is running. default value is,
+        config.ENV_DATA["cluster_namespace"]
+
+    Return:
+        rgw_pod_restart_count: restart count for rgw pod
+
+    """
+    list_of_rgw_pods = get_rgw_pods(namespace=namespace)
+    rgw_pod_obj = list_of_rgw_pods[0]
+    restart_count_for_rgw_pod = get_pod_restarts_count(
+        list_of_pods=list_of_rgw_pods,
+        namespace=namespace,
+    )
+    rgw_pod_restart_count = restart_count_for_rgw_pod[rgw_pod_obj.name]
+    logger.info(f"restart count for rgw pod is: {rgw_pod_restart_count}")
+    return rgw_pod_restart_count

@@ -146,6 +146,8 @@ class BaseUI:
             locators, self.ocp_version, "add_capacity"
         )
         self.topology_loc = self.deep_get(locators, self.ocp_version, "topology")
+        self.storage_clients_loc = self.deep_get(locators, self.ocp_version, "storage")
+        self.alerting_loc = self.deep_get(locators, self.ocp_version, "alerting")
 
     def __repr__(self):
         return f"{self.__class__.__name__} Web Page"
@@ -223,6 +225,7 @@ class BaseUI:
             # appears due to JS graphics on the page: one element overlapping another, or dynamic graphics in progress
             logger.info("ElementClickInterceptedException, try click again")
             take_screenshot("ElementClickInterceptedException")
+            self.copy_dom()
             time.sleep(5)
             _do_click(locator, timeout, enable_screenshot, copy_dom)
 
@@ -371,6 +374,23 @@ class BaseUI:
             f"//{element}[contains(text(), '{expected_text}')]"
         )
         return len(element_list) > 0
+
+    def check_number_occurrences_text(self, expected_text, number, element="*"):
+        """
+        The number of times the string appears on the web page
+
+        Args:
+            expected_text (string): The expected text.
+            number (int): The number of times the string appears on the web page
+
+        return:
+            bool: True if the text matches the expected text, False otherwise
+
+        """
+        element_list = self.driver.find_elements_by_xpath(
+            f"//{element}[contains(text(), '{expected_text}')]"
+        )
+        return len(element_list) == number
 
     def get_element_text(self, locator):
         """
@@ -647,6 +667,35 @@ class BaseUI:
         """
         wait = WebDriverWait(self.driver, timeout=timeout)
         wait.until(ec.url_matches(endswith))
+
+    def clear_input_gradually(self, locator):
+        """
+        Clean input field by gradually deleting characters one by one.
+        This way we avoid common automation issue when input field is not cleared.
+
+        Returns:
+            bool: True if the input element is successfully cleared, False otherwise.
+        """
+        wait_for_element_to_be_visible(locator, 30)
+        elements = self.get_elements(locator)
+        input_el = elements[0]
+        input_len = len(str(input_el.get_attribute("value")))
+
+        # timeout in seconds will be equal to a number of symbols to be removed, but not less than 30s
+        timeout = input_len if input_len > 30 else 30
+        timeout = time.time() + timeout
+        if len(elements):
+            while len(str(input_el.get_attribute("value"))) != 0:
+                if time.time() < timeout:
+                    # to remove text from the input independently where the caret is use both delete and backspace
+                    input_el.send_keys(Keys.BACKSPACE, Keys.DELETE)
+                    time.sleep(0.05)
+                else:
+                    raise TimeoutException("time to clear input os out")
+        else:
+            logger.error("test input locator not found")
+            return False
+        return True
 
 
 def screenshot_dom_location(type_loc="screenshot"):
