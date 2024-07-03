@@ -6,7 +6,7 @@ metadata:
 spec:
   containers:
    - name: web-server
-     image: quay.io/ocsci/nginx:fio
+     image: eu.artifactory.swg-devops.com/sys-ocs-on-z-team-docker-local/nginx:fio
      volumeMounts:
        - name: mypvc
          mountPath: /var/lib/www/html
