@@ -273,7 +273,7 @@ class TestODFTopology(object):
         random_node_idle = random.choice(
             [node for node in ocp_nodes if node != random_node_under_test]
         )
-        nodes.stop_nodes(nodes=[random_node_under_test], force=True)
+        nodes.stop_nodes(nodes=[random_node_under_test])
 
         api = prometheus.PrometheusAPI(threading_lock=threading_lock)
         logger.info(f"Verifying whether {constants.ALERT_NODEDOWN} has been triggered")
