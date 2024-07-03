@@ -4917,6 +4917,19 @@ def setup_ui_class(request):
     return setup_ui_fixture(request)
 
 
+@pytest.fixture(scope="class")
+def setup_ui_class_factory(request):
+    # The problem with class scope fixtures is that they are executed always the first, when the class is loaded.
+    # This fixture is used to control fixture execution order, and call the fixture from within the test, after
+    # switch_to_provider fixture with autouse=True will be executed (for example).
+    # This way we can control the order of execution and perform login to management-console only after
+    # switching the context.
+    def factory():
+        setup_ui_fixture(request)
+
+    return factory
+
+
 @pytest.fixture(scope="function")
 def setup_ui(request):
     return setup_ui_fixture(request)
@@ -6698,9 +6711,11 @@ def cnv_dr_workload(request):
                     workload_pvc_selector=workload_details[
                         "dr_workload_app_pvc_selector"
                     ],
-                    appset_model=workload_details["appset_model"]
-                    if workload_type == constants.APPLICATION_SET
-                    else None,
+                    appset_model=(
+                        workload_details["appset_model"]
+                        if workload_type == constants.APPLICATION_SET
+                        else None
+                    ),
                 )
                 instances.append(workload)
                 total_pvc_count += workload_details["pvc_count"]

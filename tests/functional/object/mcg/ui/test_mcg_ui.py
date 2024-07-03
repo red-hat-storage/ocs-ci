@@ -56,6 +56,7 @@ class TestStoreUserInterface(object):
 
     @ui
     @tier1
+    @runs_on_provider
     @skipif_disconnected_cluster
     @pytest.mark.parametrize(
         argnames=["kind", "provider", "region"],
@@ -71,7 +72,13 @@ class TestStoreUserInterface(object):
         ],
     )
     def test_store_creation_and_deletion(
-        self, setup_ui_class, cld_mgr, cloud_uls_factory, kind, provider, region
+        self,
+        setup_ui_class_factory,
+        cld_mgr,
+        cloud_uls_factory,
+        kind,
+        provider,
+        region,
     ):
         """
         Test creation and deletion of MCG stores via the UI
@@ -84,6 +91,8 @@ class TestStoreUserInterface(object):
         5. Verify store has been deleted via 'oc' cmd
 
         """
+        setup_ui_class_factory()
+
         log_step(
             "Navigate to Data Foundation / Object Storage / (Backing Store | Namespace Store)"
         )
@@ -290,6 +299,7 @@ class TestObcUserInterface(object):
 
     @ui
     @tier1
+    @runs_on_provider
     @bugzilla("2097772")
     @pytest.mark.parametrize(
         argnames=["storageclass", "bucketclass", "delete_via", "verify_ob_removal"],
@@ -324,7 +334,12 @@ class TestObcUserInterface(object):
         ],
     )
     def test_obc_creation_and_deletion(
-        self, setup_ui_class, storageclass, bucketclass, delete_via, verify_ob_removal
+        self,
+        setup_ui_class_factory,
+        storageclass,
+        bucketclass,
+        delete_via,
+        verify_ob_removal,
     ):
         """
         Test creation and deletion of an OBC via the UI
@@ -332,6 +347,8 @@ class TestObcUserInterface(object):
         The test covers BZ #2097772 Introduce tooltips for contextual information
         The test covers BZ #2175685 RGW OBC creation via the UI is blocked by "Address form errors to proceed"
         """
+        setup_ui_class_factory()
+
         obc_name = create_unique_resource_name(
             resource_description="ui", resource_type="obc"
         )
