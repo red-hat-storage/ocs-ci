@@ -15,6 +15,7 @@ from ocs_ci.framework.pytest_customization.marks import (
     brown_squad,
     black_squad,
     bugzilla,
+    ibmcloud_platform_required,
 )
 from ocs_ci.framework.testlib import (
     ignore_leftovers,
@@ -280,7 +281,8 @@ class TestResizeOSD(ManageTest):
         self.verification_steps_post_resize_osd()
 
     @tier4a
-    @pytest.mark.last
+    @pytest.mark.second
+    @ibmcloud_platform_required
     @pytest.mark.parametrize(
         argnames=["size_to_increase"],
         argvalues=[
