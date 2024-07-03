@@ -237,6 +237,7 @@ class HyperShiftBase:
         cpu_cores: int = 6,
         root_volume_size: str = 40,
         ocp_version=None,
+        cp_availability_policy=None,
     ):
         """
         Create HyperShift hosted cluster. Default parameters have minimal requirements for the cluster.
@@ -248,7 +249,8 @@ class HyperShiftBase:
             cpu_cores (str): CPU cores of the cluster, minimum 6
             ocp_version (str): OCP version of the cluster
             root_volume_size (str): Root volume size of the cluster, default 40 (Gi is not required)
-
+            cp_availability_policy (str): Control plane availability policy, default HighlyAvailable, if no value
+            provided and argument is not used in the command the single replica mode cluster will be created
         Returns:
             str: Name of the hosted cluster
         """
@@ -293,6 +295,18 @@ class HyperShiftBase:
             "--annotations 'hypershift.openshift.io/skip-release-image-validation=true' "
             "--olm-catalog-placement Guest"
         )
+
+        if (
+            cp_availability_policy
+            and cp_availability_policy in constants.CONTROL_PLANE_AVAILABILITY_POLICIES
+        ):
+            logger.error(
+                f"Control plane availability policy {cp_availability_policy} is not valid. "
+                f"Valid values are: {constants.CONTROL_PLANE_AVAILABILITY_POLICIES}"
+            )
+            create_hcp_cluster_cmd += (
+                f" --control-plane-availability-policy {cp_availability_policy} "
+            )
 
         logger.info("Creating HyperShift hosted cluster")
         exec_cmd(create_hcp_cluster_cmd)

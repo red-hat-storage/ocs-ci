@@ -433,6 +433,12 @@ CNV_OPERATORNAME = "kubevirt-hyperconverged.openshift-cnv"
 CNV_SELECTOR = f"operators.coreos.com/{CNV_OPERATORNAME}"
 HCP_REGISTRY = "quay.io/hypershift/hypershift-operator"
 HCP_REPOSITORY = "https://github.com/openshift/hypershift.git"
+CONTROL_PLANE_AVAILABILITY_POLICY_HA = "HighlyAvailable"
+CONTROL_PLANE_AVAILABILITY_POLICY_SINGLE = "SingleReplica"
+CONTROL_PLANE_AVAILABILITY_POLICIES = [
+    CONTROL_PLANE_AVAILABILITY_POLICY_SINGLE,
+    CONTROL_PLANE_AVAILABILITY_POLICY_HA,
+]
 
 # CNV VM constants
 VIRTUAL_MACHINE = "VirtualMachine"

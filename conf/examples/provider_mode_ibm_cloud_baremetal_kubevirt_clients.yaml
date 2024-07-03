@@ -29,6 +29,7 @@ ENV_DATA:
       hosted_odf_version: "4.16.0-99" # this is an example, please provide the desired version
       setup_storage_client: true # if true, the Storage Client will be created and verification will be performed
       nodepool_replicas: 3 # number of worker nodes created for Hosted cluster
+      cp_availability_policy: "HighlyAvailable" # this field is optional, if not provided the default value is "SingleReplica"
     hcp415-bm3-f:
       hosted_cluster_path: "~/clusters/hcp416-bm3-f/openshift-cluster-dir" # path to store auth_path dir or cluster related files
       ocp_version:  "4.15.10" # this is an example, please provide the desired OCP version
