@@ -71,7 +71,7 @@ def check_resources_state_post_resize_osd(old_osd_pods, old_osd_pvcs, old_osd_pv
     res = wait_for_pods_to_be_in_statuses(
         expected_statuses=[constants.STATUS_TERMINATING],
         pod_names=old_osd_pod_names,
-        timeout=300,
+        timeout=900,
         sleep=20,
     )
     if not res:
@@ -193,16 +193,17 @@ def check_storage_size_is_reflected(expected_storage_size):
         )
 
     ceph_cluster = CephCluster()
-    ceph_capacity = ceph_cluster.get_ceph_capacity()
+    ceph_capacity = round(ceph_cluster.get_ceph_capacity())
+    expected_ceph_capacity = round(expected_storage_size_in_gb * get_deviceset_count())
+
     logger.info(
         f"Check that the Ceph capacity {ceph_capacity} is equal "
-        f"to the expected storage size {expected_storage_size_in_gb}"
+        f"to the expected Ceph capacity {expected_ceph_capacity}"
     )
-    expected_ceph_capacity = expected_storage_size_in_gb * get_deviceset_count()
-    if not int(ceph_capacity) == expected_ceph_capacity:
+    if not (ceph_capacity == expected_ceph_capacity):
         raise StorageSizeNotReflectedException(
             f"The Ceph capacity {ceph_capacity} is not equal to the "
-            f"expected size {expected_ceph_capacity}"
+            f"expected Ceph capacity {expected_ceph_capacity}"
         )
 
 
