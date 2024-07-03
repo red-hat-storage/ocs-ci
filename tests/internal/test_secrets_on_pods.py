@@ -1,7 +1,7 @@
 import logging
 import yaml
 
-from ocs_ci.framework.testlib import ManageTest, bugzilla, tier1
+from ocs_ci.framework.testlib import ManageTest, bugzilla, tier1, green_squad
 from ocs_ci.utility.utils import run_cmd
 
 logger = logging.getLogger(__name__)
@@ -19,6 +19,7 @@ EXPECTED_NAMES = {"rook-ceph-config", "rook-ceph-mon", "ocs-kms-token"}
 
 class TestSecretsAndSecurityContext(ManageTest):
     @tier1
+    @green_squad
     @bugzilla("2171965")
     def test_secrets_in_env_variables(self):
         """
@@ -49,6 +50,7 @@ class TestSecretsAndSecurityContext(ManageTest):
                 break
 
     @tier1
+    @green_squad
     @bugzilla("2180732")
     def test_securityContext_in_Crashcollector(self):
         """
