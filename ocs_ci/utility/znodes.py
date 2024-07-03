@@ -4,8 +4,8 @@ import time
 from ocs_ci.framework import config
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.exceptions import UnexpectedBehaviour
-# from ocs_ci.ocs.node import wait_for_nodes_status, get_worker_nodes, get_master_nodes
-# from ocs_ci.ocs.ocp import wait_for_cluster_connectivity
+from ocs_ci.ocs.node import wait_for_nodes_status, get_worker_nodes, get_master_nodes
+from ocs_ci.ocs.ocp import wait_for_cluster_connectivity
 from ocs_ci.utility.utils import TimeoutSampler, exec_cmd
 from ocs_ci.utility.utils import get_ocp_version
 from ocs_ci.utility.service import KubeletService
@@ -59,7 +59,7 @@ class ZNodes(object):
 
         """
         result = exec_cmd(
-            "sudo virsh domstate test-ocp" + get_ocp_version("-") + f"-{node.name}"
+            "ssh root@m13lp81 'virsh domstate " + f"{node.name}'"
         )
         if result.stdout.lower().rstrip() == b"running":
             return False
@@ -112,7 +112,7 @@ class ZNodes(object):
         """
         ocpversion = get_ocp_version("-")
         for node in znode_machines:
-            cmd = f"sudo virsh shutdown test-ocp{ocpversion}-{node.name}"
+            cmd = f"ssh root@m13lp81 'virsh shutdown " + f"{node.name}'"
             result = exec_cmd(cmd)
             logger.info(f"Result of shutdown {result}")
             logger.info("Verifying node is down")
@@ -157,7 +157,7 @@ class ZNodes(object):
         """
         ocpversion = get_ocp_version("-")
         for node in znode_machines:
-            result = exec_cmd(f"sudo virsh start test-ocp{ocpversion}-{node.name}")
+            result = exec_cmd(f"ssh root@m13lp81 'virsh start " + f"{node.name}'")
             logger.info(f"Result of shutdown {result}")
 
         wait_for_cluster_connectivity(tries=900)

@@ -2366,6 +2366,24 @@ class IBMZNodes(NodesBase):
             else:
                 self.znodes.start_znodes_machines(stopped_znodes)
 
+    def terminate_nodes(self, nodes, wail=True):
+        """
+        Stop ZNode
+
+        Args:
+            nodes (list): The OCS objects of the nodes
+            force (bool): True for force nodes stop, False otherwise
+
+        """
+        if self.znodes.iskvm():
+            self.znodes.stop_znodes_machines_kvm(
+                nodes, timeout=900, wait=True, force=True
+            )
+        else:
+            self.znodes.restart_znodes_machines(
+                nodes, timeout=900, wait=True
+            )
+
 
 class AZURENodes(NodesBase):
     """
