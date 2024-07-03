@@ -5006,19 +5006,41 @@ def delete_csi_holder_daemonsets():
             daemonsets_obj.delete(resource_name=daemonset_name)
 
 
-def verify_csi_holder_pods_do_not_exist():
+def verify_pod_pattern_does_not_exist(pattern, namespace):
     """
     Verify csi-holder pods do not exist
 
+    Args:
+        pattern (str): the pattern of pod
+        namespace (str): the namespace of pod
+
     Returns:
-        AssertionError: if csi-holder pod exist raise Exception
+        bool: if pod with pattern exist return False otherwise return True
 
     """
     from ocs_ci.ocs.utils import get_pod_name_by_pattern
 
-    if len(get_pod_name_by_pattern("holder")) > 0:
-        raise AssertionError(
-            "The csi holder pod exist even though we deleted the daemonset"
+    return len(get_pod_name_by_pattern(pattern=pattern, namespace=namespace)) == 0
+
+
+def verify_csi_holder_pods_do_not_exist():
+    """
+    Verify csi holder pods do not exist
+
+    Returns:
+        TimeoutExpiredError: if csi-holder pod exist raise Exception
+
+    """
+    sample = TimeoutSampler(
+        timeout=300,
+        sleep=10,
+        func=verify_pod_pattern_does_not_exist,
+        pattern="holder",
+        namespace=config.ENV_DATA["cluster_namespace"],
+    )
+    if not sample.wait_for_func_status(result=True):
+        raise TimeoutExpiredError(
+            "The csi holder pod exist even though we deleted the daemonset after 300 seconds"
         )
 
 
