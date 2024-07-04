@@ -1222,6 +1222,16 @@ class Deployment(object):
                     )
                     is_ibm_sa_linked = True
             csv.wait_for_phase("Succeeded", timeout=720)
+            # Modify the CSV with custom values if required
+            if all(
+                key in config.DEPLOYMENT for key in ("csv_change_from", "csv_change_to")
+            ):
+                modify_csv(
+                    csv=csv_name,
+                    replace_from=config.DEPLOYMENT["csv_change_from"],
+                    replace_to=config.DEPLOYMENT["csv_change_to"],
+                )
+
         # create storage system
         if ocs_version >= version.VERSION_4_9:
             exec_cmd(f"oc apply -f {constants.STORAGE_SYSTEM_ODF_YAML}")
@@ -1241,16 +1251,6 @@ class Deployment(object):
             exec_cmd(
                 f"oc patch configmap -n {self.namespace} "
                 f"{constants.ROOK_OPERATOR_CONFIGMAP} -p {config_map_patch}"
-            )
-
-        # Modify the CSV with custom values if required
-        if all(
-            key in config.DEPLOYMENT for key in ("csv_change_from", "csv_change_to")
-        ):
-            modify_csv(
-                csv=csv_name,
-                replace_from=config.DEPLOYMENT["csv_change_from"],
-                replace_to=config.DEPLOYMENT["csv_change_to"],
             )
 
         # create custom storage class for StorageCluster CR if necessary
