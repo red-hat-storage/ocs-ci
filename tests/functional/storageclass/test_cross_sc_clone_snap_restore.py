@@ -160,14 +160,16 @@ class TestCrossScCloneSnapRestore(ManageTest):
         restore_pvc_obj3.delete()
 
     @pytest.mark.parametrize(
-        argnames=["interface_type", "sc1_replica", "sc_replica2"],
+        argnames=["interface_type", "sc1_replica", "sc_replica2", "sc2_compression"],
         argvalues=[
-            pytest.param(*[constants.CEPHBLOCKPOOL], "", ""),
-            pytest.param(*[constants.CEPHFILESYSTEM], "", ""),
-            pytest.param(*[constants.CEPHBLOCKPOOL], 3, 2),
-            pytest.param(*[constants.CEPHFILESYSTEM], 3, 2),
-            pytest.param(*[constants.CEPHBLOCKPOOL], 2, 3),
-            pytest.param(*[constants.CEPHFILESYSTEM], 2, 3),
+            pytest.param(*[constants.CEPHBLOCKPOOL], "", "", False),
+            pytest.param(*[constants.CEPHFILESYSTEM], "", "", False),
+            pytest.param(*[constants.CEPHBLOCKPOOL], "", "", True),
+            pytest.param(*[constants.CEPHFILESYSTEM], "", "", True),
+            pytest.param(*[constants.CEPHBLOCKPOOL], 3, 2, False),
+            pytest.param(*[constants.CEPHFILESYSTEM], 3, 2, False),
+            pytest.param(*[constants.CEPHBLOCKPOOL], 2, 3, False),
+            pytest.param(*[constants.CEPHFILESYSTEM], 2, 3, False),
         ],
     )
     def test_cross_class_different_pool_clone_snap_restore(
@@ -175,6 +177,7 @@ class TestCrossScCloneSnapRestore(ManageTest):
         interface_type,
         sc1_replica,
         sc_replica2,
+        sc2_compression,
         storageclass_factory,
         pvc_factory,
         pod_factory,
@@ -195,6 +198,7 @@ class TestCrossScCloneSnapRestore(ManageTest):
         Args:
             sc1_replica (str/int): Number of replica for the first sc object. If is empty string, use default
             sc2_replica (str/int): Number of replica for the second sc object. If is empty string, use default
+            sc2_compression (bool) If true, sc2 is created with compression = True, otherwise use default
         """
 
         # Create a Storage Class on default pool
@@ -216,7 +220,16 @@ class TestCrossScCloneSnapRestore(ManageTest):
 
         # Create a Storage Class on another pool
         if sc_replica2 == "":
-            sc_obj2 = storageclass_factory(interface=interface_type, new_rbd_pool=True)
+            if sc2_compression:
+                sc_obj2 = storageclass_factory(
+                    interface=interface_type,
+                    new_rbd_pool=True,
+                    compression="aggressive",
+                )
+            else:
+                sc_obj2 = storageclass_factory(
+                    interface=interface_type, new_rbd_pool=True
+                )
         else:
             sc_obj2 = storageclass_factory(
                 interface=interface_type, replica=sc_replica2, new_rbd_pool=True
