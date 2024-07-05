@@ -7742,7 +7742,7 @@ def scale_noobaa_db_pod_pv_size(request):
     ]
     labels = [
         constants.OCS_OPERATOR_LABEL,
-        constants.ROOK_CEPH_OPERATOR_LABEL,
+        constants.OPERATOR_LABEL,
         constants.NOOBAA_OPERATOR_POD_LABEL,
         constants.NOOBAA_DB_LABEL_47_AND_ABOVE,
     ]
@@ -7752,9 +7752,6 @@ def scale_noobaa_db_pod_pv_size(request):
         """
         Args:
             pv_size(int): Size in GB
-
-        Returns:
-            None
 
         """
         pods = []
