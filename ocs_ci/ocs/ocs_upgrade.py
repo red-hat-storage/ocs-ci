@@ -32,7 +32,7 @@ from ocs_ci.ocs.node import get_nodes
 from ocs_ci.ocs.resources.catalog_source import CatalogSource, disable_specific_source
 from ocs_ci.ocs.resources.csv import CSV, check_all_csvs_are_succeeded
 from ocs_ci.ocs.resources.install_plan import wait_for_install_plan_and_approve
-from ocs_ci.ocs.resources.pod import verify_pods_upgraded
+from ocs_ci.ocs.resources.pod import get_noobaa_pods, verify_pods_upgraded
 from ocs_ci.ocs.resources.packagemanifest import (
     get_selector_for_ocs_operator,
     PackageManifest,
@@ -134,11 +134,15 @@ def verify_image_versions(old_images, upgrade_version, version_before_upgrade):
     verify_pods_upgraded(old_images, selector=constants.OPERATOR_LABEL)
     default_noobaa_pods = 3
     noobaa_pods = default_noobaa_pods
+    noobaa_pod_obj = get_noobaa_pods()
     if (
         config.ENV_DATA.get("mcg_only_deployment")
         and config.ENV_DATA["platform"].lower() == constants.VSPHERE_PLATFORM
     ):
         default_noobaa_pods = 4
+    for pod in noobaa_pod_obj:
+        if "pv-backingstore" in pod.name:
+            default_noobaa_pods += 1
     if upgrade_version >= parse_version("4.7"):
         noobaa = OCP(kind="noobaa", namespace=config.ENV_DATA["cluster_namespace"])
         resource = noobaa.get()["items"][0]
@@ -158,7 +162,7 @@ def verify_image_versions(old_images, upgrade_version, version_before_upgrade):
     except TimeoutException as ex:
         if upgrade_version >= parse_version("4.7"):
             log.info(
-                "Nooba pods didn't match. Trying once more with max noobaa endpoints!"
+                "Noobaa pods didn't match. Trying once more with max noobaa endpoints!"
                 f"Exception: {ex}"
             )
             noobaa_pods = default_noobaa_pods + max_endpoints
