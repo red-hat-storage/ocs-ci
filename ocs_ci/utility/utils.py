@@ -58,6 +58,7 @@ from ocs_ci.ocs.exceptions import (
     NoRunningCephToolBoxException,
     ClusterNotInSTSModeException,
 )
+from ocs_ci.ocs.ocp import OCP
 
 from ocs_ci.utility import version as version_module
 from ocs_ci.utility.flexy import load_cluster_info
@@ -5052,3 +5053,19 @@ class CustomJSONEncoder(json.JSONEncoder):
         if isinstance(obj, set):
             return list(obj)
         return super().default(obj)
+
+
+def get_odf_tag_from_redhat_catsrc():
+    """
+    Get the ODF tag from the default redhat-operators Catalog Source
+
+    Returns:
+        str: ODF tag from redhat-operators Catalog Source
+    """
+    catsrc_data = OCP(
+        kind=constants.CATSRC,
+        namespace=constants.MARKETPLACE_NAMESPACE,
+        resource_name="redhat-operators",
+    ).get()
+    regestry_image = catsrc_data.get("spec").get("image")
+    return regestry_image.split(":")[-1]

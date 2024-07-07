@@ -4,7 +4,7 @@ import random
 from ocs_ci.deployment.deployment import validate_acm_hub_install, Deployment
 from ocs_ci.deployment.helpers.hypershift_base import (
     get_hosted_cluster_names,
-    get_random_cluster_name,
+    get_random_hosted_cluster_name,
 )
 from ocs_ci.deployment.hosted_cluster import (
     HypershiftHostedOCP,
@@ -20,7 +20,10 @@ from ocs_ci.framework.pytest_customization.marks import (
     runs_on_provider,
 )
 from ocs_ci.ocs.ocp import OCP
-from ocs_ci.utility.utils import get_latest_release_version
+from ocs_ci.utility.utils import (
+    get_latest_release_version,
+    get_odf_tag_from_redhat_catsrc,
+)
 from ocs_ci.utility.version import get_ocs_version_from_csv
 from ocs_ci.framework import config as ocsci_config
 from ocs_ci.ocs import constants
@@ -147,8 +150,10 @@ class TestProviderHosted(object):
         Test create hosted cluster with fixture
         """
         log_step("Create hosted client")
-        cluster_name = get_random_cluster_name()
+        cluster_name = get_random_hosted_cluster_name()
         odf_version = str(get_ocs_version_from_csv()).replace(".stable", "")
+        if "rhodf" in odf_version:
+            odf_version = get_odf_tag_from_redhat_catsrc()
         ocp_version = get_latest_release_version()
         nodepool_replicas = 2
 
@@ -180,8 +185,11 @@ class TestProviderHosted(object):
         Test create hosted cluster with fixture
         """
         log_step("Create hosted client")
-        cluster_name = get_random_cluster_name()
+        cluster_name = get_random_hosted_cluster_name()
         odf_version = str(get_ocs_version_from_csv()).replace(".stable", "")
+        if "rhodf" in odf_version:
+            odf_version = get_odf_tag_from_redhat_catsrc()
+
         ocp_version = get_latest_release_version()
         nodepool_replicas = 2
 
