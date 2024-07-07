@@ -5007,7 +5007,7 @@ def verify_csi_holder_pods_do_not_exist():
     """
     Verify csi holder pods do not exist
 
-    Returns:
+    Raises:
         TimeoutExpiredError: if csi-holder pod exist raise Exception
 
     """
