@@ -65,7 +65,7 @@ def kubeconfig_exists_decorator(func):
     return wrapper
 
 
-def get_random_cluster_name():
+def get_random_hosted_cluster_name():
     """
     Get a random cluster name
 
@@ -82,7 +82,12 @@ def get_random_cluster_name():
             random.choice(string.ascii_lowercase) for _ in range(3)
         )
         cluster_name = (
-            "hcp" + hcp_version + "-" + bm_name[match.start() :] + random_letters
+            "hcp"
+            + hcp_version
+            + "-bm"
+            + bm_name[match.start() :]
+            + "-"
+            + random_letters
         )
     else:
         raise ValueError("Cluster name not found in the env data")
