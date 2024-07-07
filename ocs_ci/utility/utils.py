@@ -58,8 +58,6 @@ from ocs_ci.ocs.exceptions import (
     NoRunningCephToolBoxException,
     ClusterNotInSTSModeException,
 )
-from ocs_ci.ocs.ocp import OCP
-
 from ocs_ci.utility import version as version_module
 from ocs_ci.utility.flexy import load_cluster_info
 from ocs_ci.utility.retry import retry
@@ -5062,6 +5060,8 @@ def get_odf_tag_from_redhat_catsrc():
     Returns:
         str: ODF tag from redhat-operators Catalog Source
     """
+    from ocs_ci.ocs.ocp import OCP
+
     catsrc_data = OCP(
         kind=constants.CATSRC,
         namespace=constants.MARKETPLACE_NAMESPACE,
