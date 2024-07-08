@@ -4900,6 +4900,7 @@ def configure_node_network_configuration_policy_on_all_worker_nodes():
     """
     from ocs_ci.ocs.node import get_worker_nodes
 
+    # This function require changes for compact mode
     logger.info("Configure NodeNetworkConfigurationPolicy on all worker nodes")
     worker_node_names = get_worker_nodes()
     for worker_node_name in worker_node_names:
@@ -5029,6 +5030,8 @@ def upgrade_multus_holder_design():
     Upgrade  multus holder design from ODF4.15 to ODF4.16
 
     """
+    if config.ENV_DATA.get("multus_delete_csi_holder_pods"):
+        return
     if config.ENV_DATA.get("multus_create_public_net"):
         add_route_public_nad()
         from ocs_ci.deployment.nmstate import NMStateInstaller
