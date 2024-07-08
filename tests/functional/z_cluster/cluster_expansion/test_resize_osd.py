@@ -14,6 +14,7 @@ from ocs_ci.framework.pytest_customization.marks import (
     skipif_hci_provider_and_client,
     brown_squad,
     black_squad,
+    bugzilla,
 )
 from ocs_ci.framework.testlib import (
     ignore_leftovers,
@@ -58,6 +59,9 @@ from ocs_ci.ocs import defaults
 logger = logging.getLogger(__name__)
 
 
+@bugzilla("2279843")
+@bugzilla("2295778")
+@bugzilla("2295750")
 @brown_squad
 @ignore_leftovers
 @skipif_managed_service
