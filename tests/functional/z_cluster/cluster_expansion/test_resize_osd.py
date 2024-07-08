@@ -61,6 +61,7 @@ logger = logging.getLogger(__name__)
 
 @bugzilla("2279843")
 @bugzilla("2295778")
+@bugzilla("2295750")
 @brown_squad
 @ignore_leftovers
 @skipif_managed_service
