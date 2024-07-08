@@ -679,8 +679,12 @@ class StretchCluster(OCS):
 
         """
         nodes_in_zone = [node.name for node in self.get_nodes_in_zone(zone)]
-        mon_pods = get_mon_pods()
-
+        mon_pods = [
+            Pod(**pod_info)
+            for pod_info in get_pods_having_label(
+                label=constants.MON_APP_LABEL, statuses=["Running"]
+            )
+        ]
         mon_pods_in_zone = [
             pod for pod in mon_pods if get_pod_node(pod).name in nodes_in_zone
         ]

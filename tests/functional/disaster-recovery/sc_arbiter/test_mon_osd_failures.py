@@ -72,7 +72,9 @@ def setup_logwriter_workloads(
             )
         except UnexpectedBehaviour:
 
-            logger.info("some pods are not running, so trying the work-around")
+            logger.info(
+                "Some app pods are not running, so trying the work-around to make them `Running`"
+            )
             pods_not_running = get_not_running_pods(
                 namespace=constants.STRETCH_CLUSTER_NAMESPACE
             )
@@ -135,10 +137,19 @@ def setup_logwriter_workloads(
 @stretchcluster_required
 @pytest.mark.usefixtures("setup_logwriter_workloads")
 class TestMonAndOSDFailures:
+    """
+    Here we test the Mon and OSD failures while CephFS & RBD
+    workloads are being run in the background.
+        * Run the workloads in the session scoped fixture setup
+        * Execute the mon & osd failure tests
+        * Verify the IO during the teardown
+
+    """
+
     @polarion_id("OCS-5059")
     def test_single_mon_failures(self):
         """
-        Test mon failure with IO in the background
+        Test single mon failure with cephFS/RBD workloads running in the background
 
         """
         logger.info("testing single mon failures scenario")
@@ -153,7 +164,7 @@ class TestMonAndOSDFailures:
 
         # scale the deployment of mon to 0
         # and wait 10 mins
-        logger.info(f"failing mon {mon_dep} now...")
+        logger.info(f"Failing mon by scaling down the deployment {mon_dep}")
         if modify_deployment_replica_count(mon_dep, 0):
             time.sleep(600)
 
@@ -164,15 +175,13 @@ class TestMonAndOSDFailures:
     @polarion_id("OCS-5060")
     def test_both_mon_failure(self):
         """
-        Test mon failure with IO for both the data-zones
+        Test both data zone mon failure with cephFS/RBD workloads running in the background
 
         """
         logger.info("testing mon failures at both the data-zones")
         sc_obj = StretchCluster()
-        data_zones = constants.ZONES_LABELS
-        data_zones.remove("arbiter")
         mon_deps = list()
-        for zone in data_zones:
+        for zone in constants.DATA_ZONE_LABELS:
             # get mon-pod of a single zone
             mon_pods_in_zone = sc_obj.get_mon_pods_in_a_zone(zone)
             mon_pod_to_fail = random.choice(mon_pods_in_zone).name
@@ -183,20 +192,22 @@ class TestMonAndOSDFailures:
             # scale the deployment of mon to 0
             # and wait 10 mins
             modify_deployment_replica_count(mon_dep, 0)
-            logger.info(f"Failing mon {mon_dep} from data-zone {zone}")
+            logger.info(
+                f"Failing mon by scaling down mon deployment {mon_dep} from data-zone {zone}"
+            )
             mon_deps.append(mon_dep)
 
         time.sleep(600)
 
         # scale the deployments back to 1
         for mon_dep in mon_deps:
-            logger.info(f"recovering mon {mon_dep}")
+            logger.info(f"Recovering mon by scaling up the mon deployment {mon_dep}")
             modify_deployment_replica_count(mon_dep, 1)
 
     @polarion_id("OCS-5061")
     def test_single_osd_failure(self):
         """
-        Test single osd failure while IO's running
+        Test single osd failure with cephFS/RBD workloads running in the background
 
         """
         logger.info("testing single osd failure scenarios")
@@ -211,10 +222,10 @@ class TestMonAndOSDFailures:
 
         # scale the deployment of osd to 0
         # and wait 10 mins
-        logger.info(f"failing osd {osd_dep} now...")
+        logger.info(f"Failing osd by scaling down osd deployment {osd_dep}")
         if modify_deployment_replica_count(osd_dep, 0):
             time.sleep(600)
 
         # scale the deployment back to 1
-        logger.info(f"recovering osd {osd_dep} now...")
+        logger.info(f"Recovering osd by scaling up osd deployment {osd_dep}")
         modify_deployment_replica_count(osd_dep, 1)
