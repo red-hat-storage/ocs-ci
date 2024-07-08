@@ -368,13 +368,16 @@ class HypershiftHostedOCP(HyperShiftBase, MetalLBInstaller, CNVInstaller, Deploy
         nodepool_replicas = (
             config.ENV_DATA["clusters"].get(self.name).get("nodepool_replicas")
         )
-
+        cp_availability_policy = (
+            config.ENV_DATA["clusters"].get(self.name).get("cp_availability_policy")
+        )
         return self.create_kubevirt_ocp_cluster(
             name=self.name,
             nodepool_replicas=nodepool_replicas,
             cpu_cores=cpu_cores_per_hosted_cluster,
             memory=memory_per_hosted_cluster,
             ocp_version=ocp_version,
+            cp_availability_policy=cp_availability_policy,
         )
 
     def deploy_dependencies(
