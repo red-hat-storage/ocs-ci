@@ -6,6 +6,10 @@ import logging
 
 from datetime import datetime, timezone
 
+from ocs_ci.framework.pytest_customization.marks import (
+    polarion_id,
+    stretchcluster_required,
+)
 from ocs_ci.helpers.helpers import modify_deployment_replica_count
 from ocs_ci.helpers.stretchcluster_helper import recover_workload_pods_post_recovery
 from ocs_ci.ocs.exceptions import UnexpectedBehaviour
@@ -128,8 +132,10 @@ def setup_logwriter_workloads(
     request.addfinalizer(finalizer)
 
 
+@stretchcluster_required
 @pytest.mark.usefixtures("setup_logwriter_workloads")
 class TestMonAndOSDFailures:
+    @polarion_id("OCS-5059")
     def test_single_mon_failures(self):
         """
         Test mon failure with IO in the background
@@ -155,6 +161,7 @@ class TestMonAndOSDFailures:
         logger.info(f"recovering mon {mon_dep} now...")
         modify_deployment_replica_count(mon_dep, 1)
 
+    @polarion_id("OCS-5060")
     def test_both_mon_failure(self):
         """
         Test mon failure with IO for both the data-zones
@@ -186,6 +193,7 @@ class TestMonAndOSDFailures:
             logger.info(f"recovering mon {mon_dep}")
             modify_deployment_replica_count(mon_dep, 1)
 
+    @polarion_id("OCS-5061")
     def test_single_osd_failure(self):
         """
         Test single osd failure while IO's running
