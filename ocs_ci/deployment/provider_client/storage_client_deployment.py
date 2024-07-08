@@ -124,6 +124,14 @@ class ODFAndNativeStorageClientDeploymentOnProvider(object):
         wait_for_machineconfigpool_status(node_type="all")
         log.info("All the nodes are upgraded")
 
+        # Mark master nodes schedulable if mark_masters_schedulable: True
+        if config.ENV_DATA.get("mark_masters_schedulable", False):
+            path = "/spec/mastersSchedulable"
+            params = f"""[{{"op": "replace", "path": "{path}", "value": true}}]"""
+            self.scheduler_obj.patch(params=params, format_type="json"), (
+                "Failed to run patch command to update control nodes as scheduleable"
+            )
+
         # Install LSO, create LocalVolumeDiscovery and LocalVolumeSet
         is_local_storage_available = self.sc_obj.is_exist(
             resource_name=self.storageclass,
