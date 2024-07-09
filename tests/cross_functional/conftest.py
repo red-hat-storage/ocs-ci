@@ -1070,7 +1070,10 @@ def validate_mcg_bg_features(
     """
 
     def factory(
-        feature_setup_map, run_in_bg=False, skip_any_features=None, object_amount=5
+        feature_setup_map,
+        run_in_bg=False,
+        skip_any_features=None,
+        object_amount=5,
     ):
         """
         factory functon implementing the fixture

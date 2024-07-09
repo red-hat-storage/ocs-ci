@@ -182,7 +182,8 @@ class PVC(OCS):
 
         # Modify size of PVC
         assert self.ocp.patch(
-            resource_name=self.name, params=patch_param
+            resource_name=self.name,
+            params=patch_param,
         ), f"Patch command to modify size of PVC {self.name} has failed."
 
         if verify:
