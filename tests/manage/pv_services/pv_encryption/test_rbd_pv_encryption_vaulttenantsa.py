@@ -21,7 +21,7 @@ from ocs_ci.ocs.exceptions import (
     ResourceNotFoundError,
 )
 from ocs_ci.utility import kms
-from ocs_ci.ocs.node import verify_crypt_device_present_onnode
+from ocs_ci.ocs.node import verify_crypt_device_present_on_node
 
 log = logging.getLogger(__name__)
 
@@ -148,7 +148,7 @@ class TestRbdPvEncryptionVaultTenantSA(ManageTest):
         # Verify whether encrypted device is present inside the pod and run IO
         for vol_handle, pod_obj in zip(vol_handles, pod_objs):
             node = pod_obj.get_node()
-            assert verify_crypt_device_present_onnode(
+            assert verify_crypt_device_present_on_node(
                 node, vol_handle
             ), f"Crypt devicve {vol_handle} not found on node:{node}"
 
