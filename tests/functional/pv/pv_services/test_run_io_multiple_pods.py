@@ -22,7 +22,7 @@ class TestIOMultiplePods(ManageTest):
     """
 
     num_of_pvcs = 10
-    pvc_size = 5
+    pvc_size = 25
 
     @pytest.fixture()
     def pods(self, interface, pod_factory, multi_pvc_factory):
@@ -47,7 +47,7 @@ class TestIOMultiplePods(ManageTest):
         Run IO on multiple pods in parallel
         """
         for pod in pods:
-            pod.run_io("fs", f"{self.pvc_size - 1}G")
+            pod.run_io("fs", f"{self.pvc_size - 5}G")
 
         for pod in pods:
             get_fio_rw_iops(pod)
