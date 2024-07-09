@@ -726,6 +726,39 @@ def get_pod_name_by_pattern(
     return pod_list
 
 
+def get_secret_name_by_pattern(
+    pattern="client",
+    namespace=None,
+    filter=None,
+):
+    """
+    In a given namespace find names of the secrets that match
+    the given pattern
+
+    Args:
+        pattern (str): name of the secret with given pattern
+        namespace (str): Namespace value
+        filter (str): secret name to filter from the list
+
+    Returns:
+        secret_list (list): List of secret names matching the pattern
+
+    """
+    namespace = namespace if namespace else ocsci_config.ENV_DATA["cluster_namespace"]
+    ocp_obj = OCP(kind="secret", namespace=namespace)
+    secret_names = ocp_obj.exec_oc_cmd("get secret -o name", out_yaml_format=False)
+    secret_names = secret_names.split("\n")
+    secret_list = []
+    for name in secret_names:
+        if filter is not None and re.search(filter, name):
+            log.info(f"Secret name filtered {name}")
+        elif re.search(pattern, name):
+            (_, name) = name.split("/")
+            log.info(f"secret name match found appending {name}")
+            secret_list.append(name)
+    return secret_list
+
+
 def get_namespce_name_by_pattern(
     pattern="client",
     filter=None,

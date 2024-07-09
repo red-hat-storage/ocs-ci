@@ -347,3 +347,15 @@ MULTICLUSTER:
   acm_cluster: False
   primary_cluster: False
   active_acm_cluster: False
+
+ACM_CONFIG:
+  ocp_image: "img4.14.3-multi-appsub"
+  cpus: 16
+  coresPerSocket: 2
+  memoryMB: 65536
+  diskSizeGB: 120
+  replicas: 3
+  clusternetwork_cidr: 10.128.0.0/14
+  clusternetwork_hostprefix: 23
+  servicenetwork: 172.30.0.0/16
+  networktype: OVNKubernetes
