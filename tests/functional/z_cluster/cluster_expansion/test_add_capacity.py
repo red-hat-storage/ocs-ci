@@ -250,7 +250,7 @@ class TestAddCapacityRecoveryProfile(ManageTest):
         """
         Setting up test environment
         """
-        assert odf_cli_set_recover_profile(recovery_profile)
+        odf_cli_set_recover_profile(recovery_profile)
         logger.info(
             "Fetching ceph osd_mclock_profile/recovery profile using odf-cli tool."
         )
