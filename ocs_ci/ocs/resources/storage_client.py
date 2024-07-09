@@ -513,7 +513,7 @@ class StorageClient:
             kind=constants.STORAGECLIENT,
             namespace=namespace,
         )
-        storageclient_data = storageclient_obj.get()["items"]
+        storageclient_data = storageclient_obj.get(retry=6, wait=30)["items"]
         log.info(f"storageclient data, {storageclient_data}")
         storageclient_name = storageclient_data[0]["metadata"]["name"]
 
