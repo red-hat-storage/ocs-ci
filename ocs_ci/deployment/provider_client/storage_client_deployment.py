@@ -13,7 +13,7 @@ from ocs_ci.ocs.rados_utils import (
     check_phase_of_rados_namespace,
 )
 from ocs_ci.deployment.helpers.lso_helpers import setup_local_storage
-from ocs_ci.ocs.node import label_nodes, get_all_nodes, get_node_objs
+from ocs_ci.ocs.node import label_nodes, get_all_nodes, get_node_objs, get_worker_nodes
 from ocs_ci.ocs.utils import (
     setup_ceph_toolbox,
     enable_console_plugin,
@@ -78,6 +78,7 @@ class ODFAndNativeStorageClientDeploymentOnProvider(object):
             namespace=config.ENV_DATA["cluster_namespace"],
         )
 
+        self.platform = config.ENV_DATA.get("platform").lower()
         self.deployment = Deployment()
         self.storage_clients = StorageClient()
 
@@ -131,6 +132,9 @@ class ODFAndNativeStorageClientDeploymentOnProvider(object):
             self.scheduler_obj.patch(params=params, format_type="json"), (
                 "Failed to run patch command to update control nodes as scheduleable"
             )
+
+        worker_nodes = get_worker_nodes()
+        no_of_worker_nodes = len(worker_nodes)
 
         # Install LSO, create LocalVolumeDiscovery and LocalVolumeSet
         is_local_storage_available = self.sc_obj.is_exist(
@@ -205,6 +209,11 @@ class ODFAndNativeStorageClientDeploymentOnProvider(object):
                 storage_cluster_data = self.add_encryption_details_to_cluster_data(
                     storage_cluster_data
                 )
+                if self.platform == constants.BAREMETAL_PLATFORM:
+                    storage_cluster_data["spec"]["storageDeviceSets"][0][
+                        "replica"
+                    ] = no_of_worker_nodes
+
                 templating.dump_data_to_temp_yaml(
                     storage_cluster_data, constants.OCS_STORAGE_CLUSTER_YAML
                 )
@@ -218,6 +227,10 @@ class ODFAndNativeStorageClientDeploymentOnProvider(object):
                 storage_cluster_data = self.add_encryption_details_to_cluster_data(
                     storage_cluster_data
                 )
+                if self.platform == constants.BAREMETAL_PLATFORM:
+                    storage_cluster_data["spec"]["storageDeviceSets"][0][
+                        "replica"
+                    ] = no_of_worker_nodes
                 templating.dump_data_to_temp_yaml(
                     storage_cluster_data, constants.OCS_STORAGE_CLUSTER_UPDATED_YAML
                 )
