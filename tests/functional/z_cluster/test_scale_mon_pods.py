@@ -266,10 +266,6 @@ class TestFiveMonInCluster(ManageTest):
         - Check cluster and Ceph health
         """
 
-        pods = ocp.OCP(
-            kind=constants.POD, namespace=config.ENV_DATA["cluster_namespace"]
-        )
-
         # Update monCount to five
         list_mons = self.ceph_cluster.get_mons_from_cluster()
         if len(list_mons) < 5:
