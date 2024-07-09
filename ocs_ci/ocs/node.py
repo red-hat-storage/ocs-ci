@@ -2786,7 +2786,7 @@ def is_node_rack_or_zone_exist(failure_domain, node_name):
     return get_node_rack_or_zone(failure_domain, node_obj) is not None
 
 
-def list_encrypted_rbd_devices_onnode(node):
+def list_encrypted_rbd_devices_on_node(node):
     """
     Get rbd crypt devices from the node
 
@@ -2814,10 +2814,9 @@ def verify_crypt_device_present_onnode(node, vol_handle):
         vol_handle : volumen handle name.
 
     Returns:
-        True: if volume handle device found on the node.
-        False: if volume handle device not found on the node.
+        bool: True if volume handle device found on the node, False otherwise
     """
-    device_list = list_encrypted_rbd_devices_onnode(node)
+    device_list = list_encrypted_rbd_devices_on_node(node)
     crypt_device = [device for device in device_list if vol_handle in device]
     if not crypt_device:
         log.error(
