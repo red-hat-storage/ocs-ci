@@ -5030,7 +5030,7 @@ def upgrade_multus_holder_design():
     Upgrade  multus holder design from ODF4.15 to ODF4.16
 
     """
-    if config.ENV_DATA.get("multus_delete_csi_holder_pods"):
+    if not config.ENV_DATA.get("multus_delete_csi_holder_pods"):
         return
     if config.ENV_DATA.get("multus_create_public_net"):
         add_route_public_nad()
