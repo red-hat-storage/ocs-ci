@@ -23,7 +23,7 @@ from ocs_ci.ocs.exceptions import (
 )
 from ocs_ci.utility import kms
 from semantic_version import Version
-from ocs_ci.ocs.node import verify_crypt_device_present_onnode
+from ocs_ci.ocs.node import verify_crypt_device_present_on_node
 
 
 log = logging.getLogger(__name__)
@@ -162,7 +162,7 @@ class TestEncryptedRbdClone(ManageTest):
         log.info("Checking for encrypted device and running IO on all pods")
         for vol_handle, pod_obj in zip(self.vol_handles, self.pod_objs):
             node = pod_obj.get_node()
-            assert verify_crypt_device_present_onnode(
+            assert verify_crypt_device_present_on_node(
                 node, vol_handle
             ), f"Crypt devicve {vol_handle} not found on node:{node}"
 
@@ -241,7 +241,7 @@ class TestEncryptedRbdClone(ManageTest):
         # Verify encrypted device is present and md5sum on all pods
         for vol_handle, pod_obj in zip(cloned_vol_handles, cloned_pod_objs):
             node = pod_obj.get_node()
-            assert verify_crypt_device_present_onnode(
+            assert verify_crypt_device_present_on_node(
                 node, vol_handle
             ), f"Crypt devicve {vol_handle} not found on node:{node}"
 

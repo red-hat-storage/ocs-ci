@@ -2805,7 +2805,7 @@ def list_encrypted_rbd_devices_on_node(node):
     return crypt_devices
 
 
-def verify_crypt_device_present_onnode(node, vol_handle):
+def verify_crypt_device_present_on_node(node, vol_handle):
     """
     Find the crypt device maching for given volume handle.
 

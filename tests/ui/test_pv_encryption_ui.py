@@ -29,7 +29,7 @@ from ocs_ci.framework.testlib import (
 from ocs_ci.utility.utils import get_vault_cli, get_ocp_version
 from ocs_ci.ocs import constants
 from ocs_ci.utility import version
-from ocs_ci.ocs.node import verify_crypt_device_present_onnode
+from ocs_ci.ocs.node import verify_crypt_device_present_on_node
 
 logger = logging.getLogger(__name__)
 
@@ -227,7 +227,7 @@ class TestPVEncryption(ManageTest):
         )
         for vol_handle, pod_obj in zip(vol_handles, pod_objs):
             node = pod_obj.get_node()
-            assert verify_crypt_device_present_onnode(
+            assert verify_crypt_device_present_on_node(
                 node, vol_handle
             ), f"Crypt devicve {vol_handle} not found on node:{node}"
 
