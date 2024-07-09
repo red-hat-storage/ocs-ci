@@ -4768,8 +4768,9 @@ def odf_cli_set_recover_profile(recovery_profile):
         retrieve_cli_binary(cli_type="odf")
 
     logger.info(f"Setting ceph recovery profile {recovery_profile} using odf-cli tool.")
-    cmd = f"odf-cli set recovery-profile  {recovery_profile}"
+    cmd = f"odf-cli set recovery-profile {recovery_profile}"
     output = run_cmd(cmd)
+    logger.info(output)
     return output
 
 
