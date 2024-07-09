@@ -59,6 +59,13 @@ class TestRwopPvc(ManageTest):
 
         # Verify that PVCs are reusable by creating new pods
         log.info(f"PVC obj {self.pvc_obj}")
+        self.create_pod_and_validate_pending(pod_factory, interface)
+
+        self.pvc_obj.resize_pvc(20, True)
+
+        self.create_pod_and_validate_pending(pod_factory, interface)
+
+    def create_pod_and_validate_pending(self, pod_factory, interface):
         new_pod_obj = helpers.create_pods(
             [self.pvc_obj],
             pod_factory,
