@@ -221,10 +221,6 @@ class TestFiveMonInCluster(ManageTest):
 
         """
 
-        pods = ocp.OCP(
-            kind=constants.POD, namespace=config.ENV_DATA["cluster_namespace"]
-        )
-
         list_mons = self.ceph_cluster.get_mons_from_cluster()
         if len(list_mons) < 5:
             params = '{"spec":{"managedResources":{"cephCluster":{"monCount": 5}}}}'
