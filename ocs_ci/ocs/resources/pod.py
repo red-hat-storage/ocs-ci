@@ -1526,9 +1526,11 @@ def run_io_and_verify_mount_point(pod_obj, bs="10M", count="950"):
 def get_pods_having_label(
     label,
     namespace=constants.OPENSHIFT_STORAGE_NAMESPACE,
+    retry=0,
     cluster_config=None,
     statuses=None,
 ):
+
     """
     Fetches pod resources with given label in given namespace
 
@@ -1544,7 +1546,9 @@ def get_pods_having_label(
 
     """
     ocp_pod = OCP(kind=constants.POD, namespace=namespace)
-    pods = ocp_pod.get(selector=label, cluster_config=cluster_config).get("items")
+    pods = ocp_pod.get(selector=label, retry=retry, cluster_config=cluster_config).get(
+        "items"
+    )
     if statuses:
         for pod in pods:
             if pod["status"]["phase"] not in statuses:

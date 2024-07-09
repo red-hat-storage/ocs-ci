@@ -7,6 +7,7 @@ import logging
 import os
 import shlex
 import time
+
 from uuid import uuid4
 
 import boto3
@@ -275,7 +276,7 @@ def list_objects_from_bucket(
         signed_request_creds (dictionary, optional): the access_key, secret_key,
             endpoint and region to use when willing to send signed aws s3 requests
         timeout (int): timeout for the exec_oc_cmd
-        recurive (bool): If true, list objects recursively using the --recursive option
+        recursive (bool): If true, list objects recursively using the --recursive option
 
     Returns:
         List of objects in a bucket
@@ -287,6 +288,7 @@ def list_objects_from_bucket(
         retrieve_cmd = f"ls {target}"
     if recursive:
         retrieve_cmd += " --recursive"
+
     if s3_obj:
         secrets = [s3_obj.access_key_id, s3_obj.access_key, s3_obj.s3_internal_endpoint]
     elif signed_request_creds:
@@ -864,6 +866,7 @@ def oc_create_rgw_backingstore(cld_mgr, backingstore_name, uls_name, region):
         region (str): which region to create backingstore (should be the same as uls)
 
     """
+
     bs_data = templating.load_yaml(constants.MCG_BACKINGSTORE_YAML)
     bs_data["metadata"]["name"] = backingstore_name
     bs_data["metadata"]["namespace"] = config.ENV_DATA["cluster_namespace"]
@@ -1783,6 +1786,7 @@ def s3_list_objects_v2(
     max_keys=1000,
     con_token="",
     fetch_owner=False,
+    start_after=None,
 ):
     """
     Boto3 client based list object version2
@@ -1795,6 +1799,7 @@ def s3_list_objects_v2(
         max_keys (int): Maximum number of keys returned in the response. Default 1,000 keys.
         con_token (str): Token used to continue the list
         fetch_owner (bool): Unique object Identifier
+        start_after (str): Name of the object after which you want to list
 
     Returns:
         dict : list object v2 response
@@ -1807,6 +1812,7 @@ def s3_list_objects_v2(
         MaxKeys=max_keys,
         ContinuationToken=con_token,
         FetchOwner=fetch_owner,
+        StartAfter=start_after,
     )
 
 
@@ -2667,3 +2673,42 @@ def delete_objects_from_source_and_wait_for_deletion_sync(
         target_bucket.name,
         timeout=timeout,
     ), f"Deletion sync failed to complete in {timeout} seconds"
+
+
+def list_objects_in_batches(
+    mcg_obj, bucket_name, batch_size=1000, yield_individual=True
+):
+    """
+    This method lists objects in a bucket either in batch of mentioned batch_size
+    or individually. This method is helpful when dealing with millions of objects
+    which maybe expensive in terms of typical list operations.
+
+    Args:
+        mcg_obj (MCG): MCG object
+        bucket_name (str): Name of the bucket
+        batch_size (int): Number of objects to list at a time, by default 1000
+        yield_individual (bool): If True, it will yield indviudal objects until all the
+        objects are listed. If False, batch of objects are yielded.
+
+    Returns:
+        yield: indvidual object key or list containing batch of objects
+
+    """
+
+    marker = ""
+
+    while True:
+        response = s3_list_objects_v2(
+            mcg_obj, bucket_name, max_keys=batch_size, start_after=marker
+        )
+        if yield_individual:
+            for obj in response.get("Contents", []):
+                yield obj["Key"]
+        else:
+            yield [{"Key": obj["Key"]} for obj in response.get("Contents", [])]
+
+        if not response.get("IsTruncated", False):
+            break
+
+        marker = response.get("Contents", [])[-1]["Key"]
+        del response

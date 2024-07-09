@@ -101,7 +101,7 @@ from ocs_ci.ocs.resources.pod import (
     get_pod_count,
     wait_for_pods_by_label_count,
 )
-from ocs_ci.ocs.resources.pvc import PVC, create_restore_pvc
+from ocs_ci.ocs.resources.pvc import PVC, create_restore_pvc, get_all_pvc_objs
 from ocs_ci.ocs.version import get_ocs_version, get_ocp_version_dict, report_ocs_version
 from ocs_ci.ocs.cluster_load import ClusterLoad, wrap_msg
 from ocs_ci.utility import (
@@ -153,6 +153,8 @@ from ocs_ci.helpers.helpers import (
     create_ocs_object_from_kind_and_name,
     setup_pod_directories,
     get_current_test_name,
+    modify_deployment_replica_count,
+    modify_statefulset_replica_count,
 )
 from ocs_ci.ocs.ceph_debug import CephObjectStoreTool, MonStoreTool, RookCephPlugin
 from ocs_ci.ocs.bucket_utils import get_rgw_restart_counts
@@ -7434,49 +7436,59 @@ def override_default_backingstore_fixture(
 
 
 @pytest.fixture(scope="session")
-def scale_noobaa_resources_session():
+def scale_noobaa_resources_session(request):
+
     """
     Session scoped fixture to scale noobaa resources
 
     """
-    scale_noobaa_resources()
+    scale_noobaa_resources(request)
 
 
 @pytest.fixture()
-def scale_noobaa_resources_fixture():
+def scale_noobaa_resources_fixture(request):
     """
     Fixture to scale noobaa resources
 
     """
-    scale_noobaa_resources()
+    scale_noobaa_resources(request)
 
 
-def scale_noobaa_resources():
+def scale_noobaa_resources(request):
+
     """
     Scale the noobaa pod resources and scale endpoint count
 
     """
 
-    storagecluster_obj = OCP(
-        kind="storagecluster",
-        resource_name="ocs-storagecluster",
-        namespace=constants.OPENSHIFT_STORAGE_NAMESPACE,
-    )
+    def factory(min_ep_count=3, max_ep_count=3, cpu=6, memory="10Gi"):
+        storagecluster_obj = OCP(
+            kind=constants.STORAGECLUSTER,
+            resource_name=constants.DEFAULT_STORAGE_CLUSTER,
+            namespace=constants.OPENSHIFT_STORAGE_NAMESPACE,
+        )
 
-    scale_endpoint_pods_param = (
-        '{"spec": {"multiCloudGateway": {"endpoints": {"minCount": 3,"maxCount": 10}}}}'
-    )
-    scale_noobaa_resources_param = (
-        '{"spec": {"resources": {"noobaa-core": {"limits": {"cpu": "3","memory": "4Gi"},'
-        '"requests": {"cpu": "3","memory": "4Gi"}},"noobaa-db": {"limits": {"cpu": "3","memory": "4Gi"},'
-        '"requests": {"cpu": "3","memory": "4Gi"}},"noobaa-endpoint": {"limits": {"cpu": "3","memory": "4Gi"},'
-        '"requests": {"cpu": "3","memory": "4Gi"}}}}}'
-    )
-    storagecluster_obj.patch(params=scale_endpoint_pods_param, format_type="merge")
-    log.info("Scaled noobaa endpoint counts")
-    storagecluster_obj.patch(params=scale_noobaa_resources_param, format_type="merge")
-    log.info("Scaled noobaa pod resources")
-    time.sleep(60)
+        scale_endpoint_pods_param = (
+            f'{{"spec": {{"multiCloudGateway": '
+            f'{{"endpoints": {{"minCount": {min_ep_count},"maxCount": {max_ep_count}}}}}}}}}'
+        )
+        scale_noobaa_resources_param = (
+            f'{{"spec": {{"resources": {{"noobaa-core": {{"limits": {{"cpu": {cpu},"memory": {memory}}},'
+            f'"requests": {{"cpu": {cpu},"memory": {memory}}}}},'
+            f'"noobaa-db": {{"limits": {{"cpu": {cpu},"memory": {memory}}},'
+            f'"requests": {{"cpu": {cpu},"memory": {memory}}}}},'
+            f'"noobaa-endpoint": {{"limits": {{"cpu": {cpu},"memory": {memory}}},'
+            f'"requests": {{"cpu": {cpu},"memory": "{memory}}}}}}}}}}}'
+        )
+        storagecluster_obj.patch(params=scale_endpoint_pods_param, format_type="merge")
+        log.info("Scaled noobaa endpoint counts")
+        storagecluster_obj.patch(
+            params=scale_noobaa_resources_param, format_type="merge"
+        )
+        log.info("Scaled noobaa pod resources")
+        time.sleep(60)
+
+    return factory
 
 
 @pytest.fixture(scope="function")
@@ -7708,6 +7720,100 @@ def benchmark_workload_storageutilization(request):
     def finalizer():
         if benchmark_obj is not None:
             benchmark_obj.cleanup()
+
+    request.addfinalizer(finalizer)
+    return factory
+
+
+@pytest.fixture()
+def scale_noobaa_db_pod_pv_size(request):
+    """
+    This fixtue helps to scale the noobaa db pv size.
+    follows KCS: https://access.redhat.com/solutions/6976547
+    Note: Once the noobaa db pv is scaled it can't be reverted back to the
+    original size
+
+    """
+
+    operators = [
+        constants.OCS_SUBSCRIPTION,
+        constants.ROOK_CEPH_OPERATOR,
+        constants.NOOBAA_OPERATOR_DEPLOYMENT,
+    ]
+    labels = [
+        constants.OCS_OPERATOR_LABEL,
+        constants.OPERATOR_LABEL,
+        constants.NOOBAA_OPERATOR_POD_LABEL,
+        constants.NOOBAA_DB_LABEL_47_AND_ABOVE,
+    ]
+    nb_pvc = get_all_pvc_objs(selector=constants.NOOBAA_DB_LABEL_47_AND_ABOVE)[0]
+
+    def factory(pv_size="50"):
+        """
+        Args:
+            pv_size(int): Size in GB
+
+        """
+        pods = []
+
+        for operator in operators:
+            modify_deployment_replica_count(deployment_name=operator, replica_count=0)
+        log.info(f"Scaled down operators: {operators}")
+
+        modify_statefulset_replica_count(
+            statefulset_name=constants.NOOBAA_DB_STATEFULSET, replica_count=0
+        )
+        log.info("Scaled down noobaa db sts")
+
+        nb_pvc.resize_pvc(new_size=pv_size)
+        log.info(f"{nb_pvc.name} is resized to {pv_size}")
+
+        modify_statefulset_replica_count(
+            statefulset_name=constants.NOOBAA_DB_STATEFULSET, replica_count=1
+        )
+        log.info("Scaled up noobaa db sts")
+
+        for operator in operators:
+            modify_deployment_replica_count(deployment_name=operator, replica_count=1)
+        log.info(f"Scaled up operators: {operators}")
+
+        for label in labels:
+            pods.extend(
+                get_pods_having_label(
+                    label=label,
+                    retry=5,
+                    namespace=constants.OPENSHIFT_STORAGE_NAMESPACE,
+                )
+            )
+
+        wait_for_pods_to_be_running(
+            pod_names=[pod_obj["metadata"]["name"] for pod_obj in pods]
+        )
+
+    def finalizer():
+        pods = []
+
+        modify_statefulset_replica_count(
+            statefulset_name=constants.NOOBAA_DB_STATEFULSET, replica_count=1
+        )
+        log.info("Scaled up noobaa db sts")
+
+        for operator in operators:
+            modify_deployment_replica_count(deployment_name=operator, replica_count=1)
+        log.info(f"Scaled up operators: {operators}")
+
+        for label in labels:
+            pods.extend(
+                get_pods_having_label(
+                    label=label,
+                    retry=5,
+                    namespace=constants.OPENSHIFT_STORAGE_NAMESPACE,
+                )
+            )
+
+        wait_for_pods_to_be_running(
+            pod_names=[pod_obj["metadata"]["name"] for pod_obj in pods]
+        )
 
     request.addfinalizer(finalizer)
     return factory
