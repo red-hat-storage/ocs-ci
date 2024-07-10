@@ -69,7 +69,7 @@ def add_capacity_test(ui_flag=False):
     osd_pod_names_post_expansion = [pod.name for pod in osd_pods_post_expansion]
     restarted_osds = list()
     logger.info(
-        "Checking if existing OSD pods were restarted (deleted) post add capacity (bug 1931601)"
+        "Checking if existing OSD pods were restarted (deleted) post adding capacity (bug 1931601)"
     )
 
     for pod in existing_osd_pod_names:
