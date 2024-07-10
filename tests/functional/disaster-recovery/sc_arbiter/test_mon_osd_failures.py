@@ -9,6 +9,7 @@ from datetime import datetime, timezone
 from ocs_ci.framework.pytest_customization.marks import (
     polarion_id,
     stretchcluster_required,
+    turquoise_squad,
 )
 from ocs_ci.helpers.helpers import modify_deployment_replica_count
 from ocs_ci.helpers.stretchcluster_helper import recover_workload_pods_post_recovery
@@ -134,6 +135,7 @@ def setup_logwriter_workloads(
     request.addfinalizer(finalizer)
 
 
+@turquoise_squad
 @stretchcluster_required
 @pytest.mark.usefixtures("setup_logwriter_workloads")
 class TestMonAndOSDFailures:
