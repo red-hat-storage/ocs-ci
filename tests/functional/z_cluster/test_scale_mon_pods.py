@@ -284,7 +284,7 @@ class TestFiveMonInCluster(ManageTest):
         mon_nodes = []
         mon_pods = pod.get_mon_pods()
         for podd in mon_pods:
-            mon_nodes.append(pod.get_pod_node((podd).name))
+            mon_nodes.append(pod.get_pod_node(podd))
         assert mon_nodes, "Failed to find a node for the test"
         # check csi-cephfsplugin-provisioner's and csi-rbdplugin-provisioner's
         # are ready, see BZ #2162504
