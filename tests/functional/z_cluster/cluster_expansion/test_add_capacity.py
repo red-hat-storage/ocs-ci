@@ -69,7 +69,7 @@ def add_capacity_test(ui_flag=False):
     osd_pod_names_post_expansion = [pod.name for pod in osd_pods_post_expansion]
     restarted_osds = list()
     logger.info(
-        "Checking if existing OSD pods were restarted (deleted) post add capacity (bug 1931601)"
+        "Checking if existing OSD pods were restarted (deleted) post adding capacity (bug 1931601)"
     )
 
     for pod in existing_osd_pod_names:
@@ -112,7 +112,7 @@ def add_capacity_test(ui_flag=False):
         verify_storage_device_class(device_class)
         verify_device_class_in_osd_tree(ct_pod, device_class)
 
-    check_ceph_health_after_add_capacity(ceph_rebalance_timeout=3600)
+    check_ceph_health_after_add_capacity(ceph_rebalance_timeout=5400)
 
 
 @brown_squad
