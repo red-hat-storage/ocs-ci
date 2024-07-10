@@ -10,6 +10,7 @@ from ocs_ci.framework.pytest_customization.marks import (
 )
 from ocs_ci.framework.testlib import (
     ManageTest,
+    ignore_leftovers,
     skipif_ocs_version,
 )
 from ocs_ci.framework import config
@@ -212,6 +213,7 @@ class TestFiveMonInCluster(ManageTest):
             label=target_label, measure_end_time=measure_end_time, time_min=300
         )
 
+    @ignore_leftovers
     def test_mon_restart_post_five_mon_update(
         self, nodes, pvc_factory, pod_factory, bucket_factory, rgw_bucket_factory
     ):
