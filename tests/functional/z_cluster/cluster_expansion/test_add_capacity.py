@@ -142,7 +142,6 @@ class TestAddCapacity(ManageTest):
         add_capacity_test(ui_flag=False)
 
     @tier1
-    @brown_squad
     @black_squad
     def test_add_capacity_ui(self, reduce_and_resume_cluster_load):
         """
@@ -177,7 +176,6 @@ class TestAddCapacityLSO(ManageTest):
         storage_cluster.add_capacity_lso(ui_flag=False)
 
     @tier1
-    @brown_squad
     @black_squad
     def test_add_capacity_lso_ui(self, reduce_and_resume_cluster_load):
         """
