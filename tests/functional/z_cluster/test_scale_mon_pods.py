@@ -284,7 +284,7 @@ class TestFiveMonInCluster(ManageTest):
         mon_nodes = []
         mon_pods = pod.get_mon_pods()
         for podd in mon_pods:
-            mon_nodes.append(pod.get_pod_node(podd))
+            mon_nodes.append((pod.get_pod_node(podd)).name)
         assert mon_nodes, "Failed to find a node for the test"
         # check csi-cephfsplugin-provisioner's and csi-rbdplugin-provisioner's
         # are ready, see BZ #2162504
@@ -298,7 +298,7 @@ class TestFiveMonInCluster(ManageTest):
         )
         provis_pod_names = [p["metadata"]["name"] for p in provis_pods]
 
-        # Maintenance the node (unschedule and drain)
+        # Maintenance of the node (unschedule and drain)
         log.info(f"Chosen nodes for draining are {mon_nodes[0:2]} ")
         drain_nodes(mon_nodes[0:2])
 
