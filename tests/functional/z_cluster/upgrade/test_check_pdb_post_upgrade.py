@@ -46,13 +46,24 @@ class TestToCheckPDBPostUpgrade(ManageTest):
         mons_after_upgrade = ceph_obj.get_mons_from_cluster()
         log.info(f"Mons after upgrade {mons_after_upgrade}")
 
+        if len(mons_after_upgrade) >= 5:
+            # pdb max unavailable is changed to 2 if we have at least 5 mons in a cluster
+            # https://bugzilla.redhat.com/show_bug.cgi?id=2264553
+            expected_max_unavailable_mon = 2
+            expected_disruptions_allowed = 2
+        else:
+            expected_max_unavailable_mon = 1
+            expected_disruptions_allowed = 1
+
         disruptions_allowed, min_available_mon, max_unavailable_mon = get_mon_pdb()
         log.info(f"Number of Mons Disruptions_allowed {disruptions_allowed}")
         log.info(f"Minimum_available mon count {min_available_mon}")
         log.info(f"Maximum_available mon count {max_unavailable_mon}")
 
         # The PDB values are considered from OCS 4.5 onwards.
-        assert disruptions_allowed == 1, "Mon Disruptions_allowed count not matching"
+        assert (
+            disruptions_allowed == expected_disruptions_allowed
+        ), "Mon Disruptions_allowed count not matching"
         ocs_version = config.ENV_DATA["ocs_version"]
         if Version.coerce(ocs_version) < Version.coerce("4.6"):
             assert min_available_mon == 2, "Minimum available mon count is not matching"
@@ -61,7 +72,7 @@ class TestToCheckPDBPostUpgrade(ManageTest):
             # (https://bugzilla.redhat.com/show_bug.cgi?id=1946573)
             # (https://bugzilla.redhat.com/show_bug.cgi?id=1935065)
             assert (
-                max_unavailable_mon == 1
+                max_unavailable_mon == expected_max_unavailable_mon
             ), "Maximum unavailable mon count is not matching"
 
     @post_ocs_upgrade
