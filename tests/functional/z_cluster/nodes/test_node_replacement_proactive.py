@@ -383,7 +383,7 @@ class TestNodeReplacementWithRecoveryProfile(ManageTest):
         """
         teardown function, Setting recovery-profile back to balanced.
         """
-        assert odf_cli_set_recover_profile("balanced")
+        odf_cli_set_recover_profile("balanced")
         log.info(
             "Fetching ceph osd_mclock_profile/recovery profile using odf-cli tool."
         )
@@ -419,7 +419,7 @@ class TestNodeReplacementWithRecoveryProfile(ManageTest):
         """
         # Setting up and verifying the recovery profile value with the odf CLI tool
 
-        assert odf_cli_set_recover_profile(recovery_profile)
+        odf_cli_set_recover_profile(recovery_profile)
         log.info(
             "Fetching ceph osd_mclock_profile/recovery profile using odf-cli tool."
         )

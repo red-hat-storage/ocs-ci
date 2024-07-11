@@ -221,12 +221,9 @@ class TestAddCapacityPreUpgrade(ManageTest):
 @ignore_leftovers
 @pytest.mark.second_to_last
 @skipif_managed_service
-@skipif_aws_i3
-@skipif_bm
 @skipif_bmpsi
 @skipif_lso
 @skipif_external_mode
-@skipif_ibm_power
 @skipif_managed_service
 @skipif_hci_provider_and_client
 @tier4b
