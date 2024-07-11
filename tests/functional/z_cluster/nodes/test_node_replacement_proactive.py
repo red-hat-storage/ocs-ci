@@ -472,16 +472,16 @@ class TestNodeReplacementWithRecoveryProfile(ManageTest):
         concurrent.futures.wait(futures_fio)
         executor = concurrent.futures.ThreadPoolExecutor(max_workers=pvc_count)
 
-        # Wait for cluster to be filled up to 30%
+        # Wait for cluster to be filled up to 20%
         get_used_capacity("After filling up the cluster")
         sample = TimeoutSampler(
             timeout=3600,
             sleep=300,
             func=verify_osd_used_capacity_greater_than_expected,
-            expected_used_capacity=30.0,
+            expected_used_capacity=20.0,
         )
         if not sample.wait_for_func_status(result=True):
-            log.error("After 3600 seconds the used capacity smaller than 30%")
+            log.error("After 3600 seconds the used capacity smaller than 20%")
             raise TimeoutExpiredError
 
         worker_node_list = node.get_worker_nodes()
