@@ -200,6 +200,11 @@ stretchcluster_required = pytest.mark.skipif(
     reason="Test runs only on Stretch cluster with arbiter deployments",
 )
 
+cnv_required = pytest.mark.skipif(
+    config.DEPLOYMENT.get("cnv_deployment") is False,
+    reason="Test runs only on CNV deployed clusters",
+)
+
 sts_deployment_required = pytest.mark.skipif(
     config.DEPLOYMENT.get("sts_enabled") is False,
     reason="Test runs only on the AWS STS enabled cluster deployments",

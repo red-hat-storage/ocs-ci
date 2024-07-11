@@ -8286,6 +8286,8 @@ def setup_vms_standalone_pvc(request, project_factory):
     vm_obj = None
 
     def factory():
+
+        nonlocal vm_obj
         project_obj = project_factory()
         log.info(f"Created project {project_obj.namespace} for VMs")
         vm_obj = create_vm_using_standalone_pvc(
