@@ -34,9 +34,9 @@ class TestRwopPvc(ManageTest):
     """
 
     @pytest.fixture(autouse=True)
-    def setup(self, project_factory, pvc_factory, pod_factory, interface):
+    def setup(self, pvc_factory, interface):
         """
-        Create PVC and pods
+        Create PVC
 
         """
         self.pvc_obj = pvc_factory(
@@ -52,41 +52,66 @@ class TestRwopPvc(ManageTest):
         Test RBD Block volume mode RWOP PVC
 
         """
+        self.node0_name = node.get_worker_nodes()[0]
         # Creating a pod
-        self.pod_obj = pod_factory(
-            pvc=self.pvc_obj,
-        )
+        pod_obj1 = pod_factory(pvc=self.pvc_obj, node_name=self.node0_name)
 
         # Verify that PVCs are reusable by creating new pods
         log.info(f"PVC obj {self.pvc_obj}")
-        self.create_pod_and_validate_pending(pod_factory, interface)
+        pod_obj2 = self.create_pod_and_validate_pending(pod_factory, interface)
+
+        # delete the first pod
+        pod_obj1.delete()
+        pod_obj1.ocp.wait_for_delete(resource_name=pod_obj1.name)
+
+        # verify that the second pod is now in the Running state
+        time.sleep(60)
+        self.validate_pod_status(pod_obj2, constants.STATUS_RUNNING)
 
         self.pvc_obj.resize_pvc(20, True)
 
         self.create_pod_and_validate_pending(pod_factory, interface)
 
-    def create_pod_and_validate_pending(self, pod_factory, interface):
-        new_pod_obj = helpers.create_pods(
-            [self.pvc_obj],
-            pod_factory,
-            interface,
-        )
+    def validate_pod_status(self, pod_obj, status):
+        """
+        Validates that the pod is in the desired status, throws error if this is not the case
 
-        # sleep for 60s
-        time.sleep(60)
+        Args:
+            pod_obj (obj): pod object to be validated
+            status (string) the desired status
 
+        """
         yaml_output = run_cmd(
-            "oc get pod " + str(new_pod_obj[0].name) + " -o yaml", timeout=60
+            "oc get pod " + str(pod_obj.name) + " -o yaml", timeout=60
         )
-        log.info(f"yaml_output of the pod {new_pod_obj[0].name} - {yaml_output}")
+        log.info(f"yaml_output of the pod {pod_obj.name} - {yaml_output}")
 
         # Validating the pod status
         results = yaml.safe_load(yaml_output)
         log.info(f"Status of the Pod : {results['status']['phase']}")
-        if results["status"]["phase"] != "Pending":
+        if results["status"]["phase"] != status:
             raise UnexpectedBehaviour(
-                f"Pod {new_pod_obj[0].name} using RWOP pvc {self.pvc_obj.name} is not in Pending state"
+                f"Pod {pod_obj.name} using RWOP pvc {self.pvc_obj.name} is not in {status} state"
             )
+
+    def create_pod_and_validate_pending(self, pod_factory, interface):
+        """
+        Creates pod and verifies that it is in the Pending state
+
+        Returns:
+            Pod object created
+
+        """
+
+        new_pod_obj = helpers.create_pods(
+            [self.pvc_obj], pod_factory, interface, nodes=[self.node0_name]
+        )[0]
+
+        time.sleep(60)
+
+        self.validate_pod_status(new_pod_obj, constants.STATUS_PENDING)
+
+        return new_pod_obj
 
     @polarion_id("OCS-5471")
     @tier1
