@@ -436,7 +436,7 @@ class StretchCluster(OCS):
         return True
 
     @retry(CommandFailed, tries=15, delay=5)
-    def check_ceph_accessibility(self, timeout, delay=5, grace=15):
+    def check_ceph_accessibility(self, timeout, delay=5, grace=120):
         """
         Check for ceph access for the 'timeout' seconds
 

@@ -9,6 +9,7 @@ from ocs_ci.framework.pytest_customization.marks import (
     turquoise_squad,
     tier1,
     stretchcluster_required,
+    cnv_required,
 )
 from ocs_ci.helpers.stretchcluster_helper import (
     recover_workload_pods_post_recovery,
@@ -35,6 +36,7 @@ logger = logging.getLogger(__name__)
 
 @tier1
 @stretchcluster_required
+@cnv_required
 @turquoise_squad
 class TestNetSplit:
     @pytest.fixture()
@@ -63,10 +65,10 @@ class TestNetSplit:
     @pytest.mark.parametrize(
         argnames="zones, duration",
         argvalues=[
-            pytest.param(constants.NETSPLIT_DATA_1_DATA_2, 13),
-            pytest.param(constants.NETSPLIT_ARBITER_DATA_1, 13),
-            pytest.param(constants.NETSPLIT_ARBITER_DATA_1_AND_ARBITER_DATA_2, 13),
-            pytest.param(constants.NETSPLIT_ARBITER_DATA_1_AND_DATA_1_DATA_2, 13),
+            pytest.param(constants.NETSPLIT_DATA_1_DATA_2, 15),
+            pytest.param(constants.NETSPLIT_ARBITER_DATA_1, 15),
+            pytest.param(constants.NETSPLIT_ARBITER_DATA_1_AND_ARBITER_DATA_2, 15),
+            pytest.param(constants.NETSPLIT_ARBITER_DATA_1_AND_DATA_1_DATA_2, 15),
         ],
         ids=[
             "Data-1-Data-2",
@@ -93,16 +95,18 @@ class TestNetSplit:
         Steps:
             1) Run both the logwriter and logreader CephFS and RBD workloads
                CephFS workload uses RWX volume and RBD workload uses RWO volumes
-            2) Reset the connection scores for the mons
-            3) Induce the network split
-            4) Make sure logreader job pods have Completed state.
+            2) Create VM using standalone PVC. Create some data inside the VM instance
+            3) Reset the connection scores for the mons
+            4) Induce the network split
+            5) Check VM data integrity is maintained post netsplit. Check if New IO is possible in VM and out of VM.
+            6) Make sure logreader job pods have Completed state.
                Check if there is any write or read pause. Fail only when neccessary.
-            5) For bc/ab-bc netsplit cases, it is expected for logreader/logwriter pods to go CLBO
+            7) For bc/ab-bc netsplit cases, it is expected for logreader/logwriter pods to go CLBO
                Make sure the above pods run fine after the nodes are restarted
-            6) Delete the old logreader job and create new logreader job to verify the data corruption
-            7) Make sure there is no data loss
-            8) Validate the connection scores
-            7) Do a complete cluster sanity and make sure there is no issue post recovery
+            8) Delete the old logreader job and create new logreader job to verify the data corruption
+            9) Make sure there is no data loss
+            10) Validate the connection scores
+            11) Do a complete cluster sanity and make sure there is no issue post recovery
 
         """
 
@@ -115,16 +119,12 @@ class TestNetSplit:
         ) = setup_logwriter_cephfs_workload_factory(read_duration=(duration + 10))
         logger.info("Workloads are running")
 
-        # Generate 5 minutes worth of logs before inducing the netsplit
-        logger.info("Generating 2 mins worth of log")
-        time.sleep(120)
-
         # setup vm and write some data to the VM instance
         vm_obj = setup_vms_standalone_pvc()
         vm_obj.run_ssh_cmd(
             command="dd if=/dev/zero of=/file_1.txt bs=1024 count=102400"
         )
-        md5sum_before = vm_obj.run_ssh_cmd(command="md5sum ./file_1.txt")
+        md5sum_before = vm_obj.run_ssh_cmd(command="md5sum /file_1.txt")
 
         # note all the pod names
         sc_obj.get_logwriter_reader_pods(label=constants.LOGWRITER_CEPHFS_LABEL)
@@ -169,7 +169,7 @@ class TestNetSplit:
         logger.info(f"Ended netsplit at {end_time}")
 
         # check vm data written before the failure for integrity
-        md5sum_after = vm_obj.run_ssh_cmd(command="md5sum ./file_1.txt")
+        md5sum_after = vm_obj.run_ssh_cmd(command="md5sum /file_1.txt")
         assert (
             md5sum_before == md5sum_after
         ), "Data integrity of the file inside VM is not maintained during the failure"
