@@ -8283,14 +8283,22 @@ def setup_vms_standalone_pvc(request, project_factory):
     This fixture will setup VM using standalone PVC
 
     """
+    vm_obj = None
 
-    project_obj = project_factory()
-    log.info(f"Created project {project_obj.namespace} for VMs")
-    vm_obj = create_vm_using_standalone_pvc(
-        running=True, namespace=project_obj.namespace
-    )
+    def factory():
+        project_obj = project_factory()
+        log.info(f"Created project {project_obj.namespace} for VMs")
+        vm_obj = create_vm_using_standalone_pvc(
+            running=True, namespace=project_obj.namespace
+        )
+        return vm_obj
 
     def finalizer():
+        """
+        Teardown all the objects created as part of
+        the setup factory
+
+        """
         pvc_obj = get_pvc_from_vm(vm_obj)
         secret_obj = get_secret_from_vm(vm_obj)
         volumeimportsource_obj = get_volumeimportsource(pvc_obj=pvc_obj)
@@ -8306,4 +8314,4 @@ def setup_vms_standalone_pvc(request, project_factory):
         )
 
     request.addfinalizer(finalizer)
-
+    return factory
