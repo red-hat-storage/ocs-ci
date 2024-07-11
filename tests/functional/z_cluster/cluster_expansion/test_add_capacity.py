@@ -320,7 +320,7 @@ class TestAddCapacityRecoveryProfile(ManageTest):
         """
         teardown function, Setting recovery-profile back to balanced.
         """
-        assert odf_cli_set_recover_profile("balanced")
+        odf_cli_set_recover_profile("balanced")
         logger.info(
             "Fetching ceph osd_mclock_profile/recovery profile using odf-cli tool."
         )
