@@ -11,7 +11,7 @@ import json
 from concurrent.futures.thread import ThreadPoolExecutor
 from datetime import datetime
 from math import floor
-from shutil import copyfile, rmtree
+from shutil import copyfile
 from functools import partial
 
 import boto3
@@ -32,6 +32,12 @@ from ocs_ci.framework.pytest_customization.marks import (
     ignore_leftover_label,
     upgrade_marks,
     ignore_resource_not_found_error_label,
+)
+from ocs_ci.helpers.cnv_helpers import (
+    create_vm_using_standalone_pvc,
+    get_pvc_from_vm,
+    get_secret_from_vm,
+    get_volumeimportsource,
 )
 from ocs_ci.helpers.proxy import update_container_with_proxy_env
 from ocs_ci.ocs import constants, defaults, fio_artefacts, node, ocp, platform_nodes
@@ -7697,6 +7703,7 @@ def override_default_backingstore_fixture(
 
 @pytest.fixture(scope="session")
 def scale_noobaa_resources_session(request):
+
     """
     Session scoped fixture to scale noobaa resources
 
@@ -7714,6 +7721,7 @@ def scale_noobaa_resources_fixture(request):
 
 
 def scale_noobaa_resources(request):
+
     """
     Scale the noobaa pod resources and scale endpoint count
 
@@ -8268,3 +8276,34 @@ def run_description():
         if not os.path.isfile(description_path):
             with open(description_path, "w") as file:
                 file.write(f"{run_name}\n")
+
+@pytest.fixture()
+def setup_vms_standalone_pvc(request, project_factory):
+    """
+    This fixture will setup VM using standalone PVC
+
+    """
+
+    project_obj = project_factory()
+    log.info(f"Created project {project_obj.namespace} for VMs")
+    vm_obj = create_vm_using_standalone_pvc(
+        running=True, namespace=project_obj.namespace
+    )
+
+    def finalizer():
+        pvc_obj = get_pvc_from_vm(vm_obj)
+        secret_obj = get_secret_from_vm(vm_obj)
+        volumeimportsource_obj = get_volumeimportsource(pvc_obj=pvc_obj)
+        vm_obj.delete()
+        log.info(f"Successfully deleted VM {vm_obj.name}")
+        pvc_obj.delete()
+        log.info(f"Successfully deleted PVC {pvc_obj.name}")
+        secret_obj.delete()
+        log.info(f"Successfully deleted secret {secret_obj.name}")
+        volumeimportsource_obj.delete()
+        log.info(
+            f"Successfully deleted VolumeImportSource {volumeimportsource_obj.name}"
+        )
+
+    request.addfinalizer(finalizer)
+
