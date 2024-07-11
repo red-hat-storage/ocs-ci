@@ -32,6 +32,7 @@ from ocs_ci.ocs.constants import (
     MS_CONSUMER_TYPE,
     HCI_PROVIDER,
     BAREMETAL_PLATFORMS,
+    AZURE_KV_PROVIDER_NAME,
 )
 from ocs_ci.utility import version
 from ocs_ci.utility.aws import update_config_from_s3
@@ -368,6 +369,11 @@ kms_config_required = pytest.mark.skipif(
         )
     ),
     reason="KMS config not found in auth.yaml",
+)
+
+azure_kv_config_required = pytest.mark.skipif(
+    config.ENV_DATA["KMS_PROVIDER"].lower() != AZURE_KV_PROVIDER_NAME,
+    reason="Azure KV config required to run the test.",
 )
 
 external_mode_required = pytest.mark.skipif(
