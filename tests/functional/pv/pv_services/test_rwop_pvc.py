@@ -110,6 +110,9 @@ class TestRwopPvc(ManageTest):
         time.sleep(60)
 
         self.validate_pod_status(new_pod_obj, constants.STATUS_PENDING)
+        # helpers.wait_for_resource_state(new_pod_obj, constants.STATUS_PENDING, 60)
+
+        new_pod_obj.wait_for_resource(condition=constants.STATUS_PENDING)
 
         return new_pod_obj
 
