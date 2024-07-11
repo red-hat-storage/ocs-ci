@@ -52,10 +52,9 @@ class TestRwopPvc(ManageTest):
         Test RBD Block volume mode RWOP PVC
 
         """
+        self.node0_name = node.get_worker_nodes()[0]
         # Creating a pod
-        pod_obj1 = pod_factory(
-            pvc=self.pvc_obj,
-        )
+        pod_obj1 = pod_factory(pvc=self.pvc_obj, node_name=self.node0_name)
 
         # Verify that PVCs are reusable by creating new pods
         log.info(f"PVC obj {self.pvc_obj}")
@@ -105,9 +104,7 @@ class TestRwopPvc(ManageTest):
         """
 
         new_pod_obj = helpers.create_pods(
-            [self.pvc_obj],
-            pod_factory,
-            interface,
+            [self.pvc_obj], pod_factory, interface, nodes=[self.node0_name]
         )[0]
 
         time.sleep(60)
