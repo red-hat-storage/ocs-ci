@@ -76,7 +76,7 @@ class DeploymentFactory(object):
                     "baremetalpsi_upi_flexy": BaremetalPSIUPI,
                     "baremetal_upi": BAREMETALUPI,
                     "baremetal_ai": BAREMETALAI,
-                    "hci_baremetal_ipi": BAREMETALAI,
+                    "hci_baremetal_ai": BAREMETALAI,
                 }
             )
         elif self.deployment_platform == constants.OPENSHIFT_DEDICATED_PLATFORM:
