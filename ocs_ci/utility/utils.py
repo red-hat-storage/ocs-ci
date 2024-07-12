@@ -1102,10 +1102,13 @@ def get_openshift_client(
 def is_ocp_version_gaed(version):
     """
     Checks whether given OCP version is GA'ed or not
+
     Args:
         version (str): OCP version ( eg: 4.16, 4.15 )
+
     Returns:
         bool: True if OCP is GA'ed otherwise False
+
     """
     channel = f"stable-{version}"
     total_versions_count = len(get_available_ocp_versions(channel))
