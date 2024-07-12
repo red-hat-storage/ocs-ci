@@ -1063,7 +1063,7 @@ add_capacity = {
         'a[data-test-id="horizontal-link-Storage System"]',
         By.CSS_SELECTOR,
     ),
-    "kebab_storage_cluster": ('button[data-test="kebab-button"]', By.CSS_SELECTOR),
+    "kebab_storage_cluster": ('button[aria-label="Dropdown toggle"]', By.CSS_SELECTOR),
     "add_capacity_button": ('button[data-test-action="Add Capacity"]', By.CSS_SELECTOR),
     "select_sc_add_capacity": (
         'button[data-test="add-cap-sc-dropdown"]',
