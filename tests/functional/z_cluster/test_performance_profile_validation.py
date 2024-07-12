@@ -1,9 +1,11 @@
 import logging
 import pytest
+import time
 
 from ocs_ci.framework.pytest_customization.marks import (
     tier4a,
     skipif_ocs_version,
+    ignore_leftovers,
     brown_squad,
 )
 from ocs_ci.framework.testlib import (
@@ -36,28 +38,59 @@ log = logging.getLogger(__name__)
 @pytest.mark.polarion_id("OCS-5656")
 @pytest.mark.polarion_id("OCS-5657")
 class TestProfileDefaultValuesCheck(ManageTest):
-    def test_validate_cluster_resource_profile(self):
+    @pytest.mark.parametrize(
+        argnames=["perf_profile"],
+        argvalues=[
+            pytest.param(*["performance"]),
+            pytest.param(*["lean"]),
+            pytest.param(*["balanced"]),
+        ],
+    )
+    @ignore_leftovers
+    def test_validate_cluster_resource_profile(self, perf_profile):
         """
         Testcase to validate osd, mgr, mon, mds and rgw pod memory and cpu values
         are matching with the predefined set of values post profile updation
 
         """
         pv_pod_obj = []
+        namespace = config.ENV_DATA["cluster_namespace"]
         log.info("Obtaining the performance profile values from the cluster")
         storage_cluster_name = config.ENV_DATA["storage_cluster_name"]
         storage_cluster = StorageCluster(
             resource_name=storage_cluster_name,
             namespace=config.ENV_DATA["cluster_namespace"],
         )
-        performance_profile = storage_cluster.data["spec"]["resourceProfile"]
-        if performance_profile == constants.PERFORMANCE_PROFILE_LEAN:
+        self.perf_profile = perf_profile
+
+        try:
+            exist_performance_profile = storage_cluster.data["spec"]["resourceProfile"]
+        except KeyError:
+            exist_performance_profile = None
+            pass
+        if exist_performance_profile == self.perf_profile:
+            log.info("Performance profile is same as profile that is already present")
+        else:
+            ptch = f'{{"spec": {{"resourceProfile":"{self.perf_profile}"}}}}'
+            ptch_cmd = (
+                f"oc patch storagecluster {storage_cluster.data.get('metadata').get('name')} "
+                f"-n {namespace}  --type merge --patch '{ptch}'"
+            )
+            run_cmd(ptch_cmd)
+            log.info("Verify storage cluster is on Ready state")
+            verify_storage_cluster()
+
+            # Sleep for 60 seconds for the profile changes to reflect
+            time.sleep(120)
+
+        if self.perf_profile == constants.PERFORMANCE_PROFILE_LEAN:
             expected_cpu_request_values = constants.LEAN_PROFILE_REQUEST_CPU_VALUES
             expected_memory_request_values = (
                 constants.LEAN_PROFILE_REQUEST_MEMORY_VALUES
             )
             expected_cpu_limit_values = constants.LEAN_PROFILE_CPU_LIMIT_VALUES
             expected_memory_limit_values = constants.LEAN_PROFILE_MEMORY_LIMIT_VALUES
-        elif performance_profile == constants.PERFORMANCE_PROFILE_BALANCED:
+        elif self.perf_profile == constants.PERFORMANCE_PROFILE_BALANCED:
             expected_cpu_request_values = constants.BALANCED_PROFILE_REQUEST_CPU_VALUES
             expected_memory_request_values = (
                 constants.BALANCED_PROFILE_REQUEST_MEMORY_VALUES
@@ -66,7 +99,7 @@ class TestProfileDefaultValuesCheck(ManageTest):
             expected_memory_limit_values = (
                 constants.BALANCED_PROFILE_MEMORY_LIMIT_VALUES
             )
-        elif performance_profile == constants.PERFORMANCE_PROFILE_PERFORMANCE:
+        elif self.perf_profile == constants.PERFORMANCE_PROFILE_PERFORMANCE:
             expected_cpu_request_values = (
                 constants.PERFORMANCE_PROFILE_REQUEST_CPU_VALUES
             )
@@ -79,8 +112,6 @@ class TestProfileDefaultValuesCheck(ManageTest):
             )
         else:
             log.error("Does not match any performance profiles")
-
-        log.info(performance_profile)
 
         label_selector = list(expected_cpu_limit_values.keys())
 
@@ -128,7 +159,11 @@ class TestProfileDefaultValuesCheck(ManageTest):
             resource_name=storage_cluster_name,
             namespace=config.ENV_DATA["cluster_namespace"],
         )
-        exist_performance_profile = storage_cluster.data["spec"]["resourceProfile"]
+        try:
+            exist_performance_profile = storage_cluster.data["spec"]["resourceProfile"]
+        except KeyError:
+            exist_performance_profile = None
+            pass
         if exist_performance_profile == self.perf_profile:
             log.info("Performance profile is same as profile that is already present")
         else:
@@ -142,10 +177,15 @@ class TestProfileDefaultValuesCheck(ManageTest):
 
             verify_storage_cluster()
 
-            # Verify that storage cluster is updated with new profile
+            # Sleep for 120 seconds for the profile changes to reflect
+            time.sleep(120)
+            storage_cluster1 = StorageCluster(
+                resource_name=storage_cluster_name,
+                namespace=config.ENV_DATA["cluster_namespace"],
+            )
 
             assert (
-                self.perf_profile == storage_cluster.data["spec"]["resourceProfile"]
+                self.perf_profile == storage_cluster1.data["spec"]["resourceProfile"]
             ), f"Performance profile is not updated successfully to {self.perf_profile}"
             log.info(
                 f"Performance profile successfully got updated to {self.perf_profile} mode"
