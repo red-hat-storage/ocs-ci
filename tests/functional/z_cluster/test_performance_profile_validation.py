@@ -80,8 +80,20 @@ class TestProfileDefaultValuesCheck(ManageTest):
             log.info("Verify storage cluster is on Ready state")
             verify_storage_cluster()
 
-            # Sleep for 60 seconds for the profile changes to reflect
+            # Sleep for 120 seconds for the profile changes to reflect
             time.sleep(120)
+
+            storage_cluster1 = StorageCluster(
+                resource_name=storage_cluster_name,
+                namespace=config.ENV_DATA["cluster_namespace"],
+            )
+
+            assert (
+                self.perf_profile == storage_cluster1.data["spec"]["resourceProfile"]
+            ), f"Performance profile is not updated successfully to {self.perf_profile}"
+            log.info(
+                f"Performance profile successfully got updated to {self.perf_profile} mode"
+            )
 
         if self.perf_profile == constants.PERFORMANCE_PROFILE_LEAN:
             expected_cpu_request_values = constants.LEAN_PROFILE_REQUEST_CPU_VALUES
@@ -104,7 +116,7 @@ class TestProfileDefaultValuesCheck(ManageTest):
                 constants.PERFORMANCE_PROFILE_REQUEST_CPU_VALUES
             )
             expected_memory_request_values = (
-                constants.PERFORMANCE_PROFILE_REQUESt_LIMIT_VALUES
+                constants.PERFORMANCE_PROFILE_REQUEST_MEMORY_VALUES
             )
             expected_cpu_limit_values = constants.PERFORMANCE_PROFILE_CPU_LIMIT_VALUES
             expected_memory_limit_values = (
@@ -145,6 +157,7 @@ class TestProfileDefaultValuesCheck(ManageTest):
             pytest.param(*["balanced"], marks=pytest.mark.polarion_id("OCS-5644")),
         ],
     )
+    @ignore_leftovers
     def test_change_cluster_resource_profile(self, perf_profile):
         """
         Testcase to validate osd, mgr, mon, mds and rgw pod memory and cpu values
