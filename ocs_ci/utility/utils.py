@@ -1119,9 +1119,11 @@ def is_ocp_version_gaed(version):
 def get_nightly_oc_via_ga(version, tarball="openshift-client.tar.gz"):
     """
     Downloads the nightly OC via GA'ed version
+
     Args:
         version (str): nightly OC version to download
         tarball (str): target name of the tarfile
+
     """
     version_major_minor = str(
         version_module.get_semantic_version(version, only_major_minor=True)
