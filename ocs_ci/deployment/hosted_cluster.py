@@ -518,7 +518,7 @@ class HostedODF(HypershiftHostedOCP):
         )
         self.timeout_check_resources_exist_sec = 6
         self.timeout_wait_csvs_minutes = 20
-        self.timeout_wait_pod_minutes = 20
+        self.timeout_wait_pod_minutes = 30
         self.storage_client_name = None
 
     @kubeconfig_exists_decorator
