@@ -408,3 +408,99 @@ class PVKeyrotation(KeyRotation):
             assert False
 
         return True
+
+def enable_key_rotation():
+    # Enable Keyrotation and verify its enable status at Noobaa and storagecluster end.
+    osd_keyrotation = OSDKeyrotation()
+    noobaa_keyrotation = NoobaaKeyrotation()
+    noobaa_keyrotation.enable_keyrotation()
+
+    assert (
+        noobaa_keyrotation.is_keyrotation_enable
+    ), "Keyrotation is not enabled in the storagecluster object."
+    assert (
+        noobaa_keyrotation.is_noobaa_keyrotation_enable
+    ), "Keyrotation is not enabled in the noobaa object."
+def set_key_rotatio_time(value):
+    """ value = no.of minutes"""
+    osd_keyrotation = OSDKeyrotation()
+    #noobaa_keyrotation = NoobaaKeyrotation()
+
+    schedule = f"*/{value} * * * *"
+    osd_keyrotation.set_keyrotation_schedule(schedule)
+
+
+def verify_key_rotation_time(schedule):
+    # Verify Keyrotation schedule changed at storagecluster object and rook object.
+    osd_keyrotation = OSDKeyrotation()
+    noobaa_keyrotation = NoobaaKeyrotation()
+    assert (
+        osd_keyrotation.get_keyrotation_schedule() == schedule
+    ), f"Keyrotation schedule is not set to {schedule} minutes in storagecluster object."
+    assert (
+        osd_keyrotation.get_osd_keyrotation_schedule() == schedule
+    ), "KeyRotation is not enabled in the Rook Object."
+    assert (
+        noobaa_keyrotation.get_noobaa_keyrotation_schedule() == schedule
+    ), f"Keyrotation schedule is not set to every {schedule} minutes in Noobaa object."
+
+
+def verify_new_key_after_rotation(tries,delays):
+    osd_keyrotation = OSDKeyrotation()
+    noobaa_keyrotation = NoobaaKeyrotation()
+
+    # Recored existing OSD keys before rotation is happened.
+    osd_keys_before_rotation = {}
+    for device in osd_keyrotation.deviceset:
+        osd_keys_before_rotation[device] = osd_keyrotation.get_osd_dm_crypt(device)
+
+    # Recoard Noobaa volume and backend keys before rotation.
+    (
+        old_noobaa_backend_key,
+        old_noobaa_backend_secret,
+    ) = noobaa_keyrotation.get_noobaa_backend_secret()
+    log.info(
+        f" Noobaa backend secrets before Rotation {old_noobaa_backend_key} : {old_noobaa_backend_secret}"
+    )
+
+    (
+        old_noobaa_volume_key,
+        old_noobaa_volume_secret,
+    ) = noobaa_keyrotation.get_noobaa_volume_secret()
+    log.info(
+        f"Noobaa Volume secrets before Rotation {old_noobaa_volume_key} : {old_noobaa_volume_secret}"
+    )
+
+    @retry(UnexpectedBehaviour, tries=tries, delay=delays)
+    def compare_old_keys_with_new_keys():
+        """
+        Compare old keys with new keys.
+        """
+        (
+            new_noobaa_backend_key,
+            new_noobaa_backend_secret,
+        ) = noobaa_keyrotation.get_noobaa_backend_secret()
+        (
+            new_noobaa_volume_key,
+            new_noobaa_volume_secret,
+        ) = noobaa_keyrotation.get_noobaa_volume_secret()
+
+        if new_noobaa_backend_key == old_noobaa_backend_key:
+            raise UnexpectedBehaviour("Noobaa Key Rotation is not happend")
+
+        if new_noobaa_volume_key == old_noobaa_volume_key:
+            raise UnexpectedBehaviour("Noobaa Key Rotation is not happend.")
+
+        log.info(
+            f"Noobaa Backend key rotated {new_noobaa_backend_key} : {new_noobaa_backend_secret}"
+        )
+        log.info(
+            f"Noobaa Volume key rotated {new_noobaa_volume_key} : {new_noobaa_volume_secret}"
+        )
+    try:
+        osd_keyrotation.verify_keyrotation(osd_keys_before_rotation, tries=10, delay=30)
+        compare_old_keys_with_new_keys()
+
+    except UnexpectedBehaviour:
+        log.error("Key rotation is Not happened after schedule is passed. ")
+        assert False
