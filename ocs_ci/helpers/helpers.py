@@ -839,6 +839,7 @@ def create_pvc(
     do_reload=True,
     access_mode=constants.ACCESS_MODE_RWO,
     volume_mode=None,
+    volume_name=None,
 ):
     """
     Create a PVC
@@ -852,6 +853,8 @@ def create_pvc(
         do_reload (bool): True for wait for reloading PVC after its creation, False otherwise
         access_mode (str): The access mode to be used for the PVC
         volume_mode (str): Volume mode for rbd RWX pvc i.e. 'Block'
+        volume_name (str): Persistent Volume name
+
 
     Returns:
         PVC: PVC instance
@@ -867,6 +870,8 @@ def create_pvc(
         pvc_data["spec"]["resources"]["requests"]["storage"] = size
     if volume_mode:
         pvc_data["spec"]["volumeMode"] = volume_mode
+    if volume_name:
+        pvc_data["spec"]["volumeName"] = volume_name
     ocs_obj = pvc.PVC(**pvc_data)
     created_pvc = ocs_obj.create(do_reload=do_reload)
     assert created_pvc, f"Failed to create resource {pvc_name}"
