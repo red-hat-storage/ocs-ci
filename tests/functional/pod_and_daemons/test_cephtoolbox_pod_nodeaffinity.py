@@ -93,3 +93,22 @@ class TestCephtoolboxPod:
                 f"ceph toolbox pod is running only on a node {ct_pod_running_node_name} which is in node-affinity"
             )
             assert True
+    def test_nodeaffinity_to_ceph_toolbox_with_default_taints(self):
+        # This test verifies whether ceph toolbox failovered or not after applying node affinity on tainted noded
+        worker_nodes = node.get_worker_nodes()
+        log.info(f"Current available worker nodes are {worker_nodes}")
+        node.taint_nodes(worker_nodes)
+        other_nodes = node.get_worker_node_where_ceph_toolbox_not_running()
+        # Apply node affinity with a node name other than currently running node.
+        assert node.apply_node_affinity_for_ceph_toolbox(other_nodes[0])
+
+    def test_nodeaffinity_to_ceph_toolbox_with_custom_taints(self):
+        #This test verifies whether ceph toolbox failovered or not after applying node affinity on custom tainted node.
+        worker_nodes = node.get_worker_nodes()
+        log.info(f"Current available worker nodes are {worker_nodes}")
+        # <<PR9808 yet to be merged. Once it is merged, the custom taints function need to be called here.>>
+        #<<The above task can be done in another PR>>
+        other_nodes = node.get_worker_node_where_ceph_toolbox_not_running()
+        # Apply node affinity with a node name other than currently running node.
+        assert node.apply_node_affinity_for_ceph_toolbox(other_nodes[0])
+
