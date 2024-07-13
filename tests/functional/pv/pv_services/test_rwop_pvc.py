@@ -15,6 +15,7 @@ from ocs_ci.framework.testlib import (
 from ocs_ci.helpers import helpers
 from ocs_ci.ocs.exceptions import UnexpectedBehaviour
 from ocs_ci.utility.utils import run_cmd
+from ocs_ci.ocs.resources import pvc
 
 log = logging.getLogger(__name__)
 
@@ -71,6 +72,63 @@ class TestRwopPvc(ManageTest):
         self.pvc_obj.resize_pvc(20, True)
 
         self.create_pod_and_validate_pending(pod_factory, interface)
+
+    def test_pvc_clone_and_snapshot(
+        self, pvc_clone_factory, snapshot_factory, pod_factory, interface
+    ):
+        """
+        Test cloning and snapshots on PVC witr RWOP access mode
+        1. Create pod and run IO
+        2. Clone pvc and verify that it has RWOP access mode
+        3. Make snapshot and restore pvc, verify that restored pvc has RWOP access mode
+
+        """
+
+        pod_obj = pod_factory(pvc=self.pvc_obj, interface=interface)
+        log.info(f"{pod_obj.name} created successfully and mounted {self.pvc_obj.name}")
+
+        # Run IO on each app pod for sometime
+        log.info(f"Running FIO on {pod_obj.name}")
+        pod_obj.run_io("fs", size="500M")
+
+        clone_pvc_obj = pvc_clone_factory(
+            self.pvc_obj,
+            clone_name=f"{self.pvc_obj.name}-{interface.lower()}-clone",
+        )
+        log.info(f"Clone {clone_pvc_obj.name} created successfully")
+        assert clone_pvc_obj.get_pvc_access_mode == constants.ACCESS_MODE_RWOP, (
+            f"Cloned PVC has {clone_pvc_obj.get_pvc_access_mode} access mode instead "
+            f"of expected {constants.ACCESS_MODE_RWOP}"
+        )
+
+        snap_name = f"{self.pvc_obj.name}-{interface.lower()}-snapshot"
+        snap_obj = snapshot_factory(self.pvc_obj, snap_name)
+        log.info(f"Snapshot {snap_name} successfully created")
+
+        restore_pvc_yaml = constants.CSI_RBD_PVC_RESTORE_YAML
+        if interface == constants.CEPHFILESYSTEM:
+            restore_pvc_yaml = constants.CSI_CEPHFS_PVC_RESTORE_YAML
+
+        log.info("Restoring the PVC from snapshot")
+        restored_pvc_obj = pvc.create_restore_pvc(
+            sc_name=self.pvc_obj.backed_sc,
+            snap_name=snap_obj.name,
+            namespace=self.pvc_obj.namespace,
+            size=f"{self.pvc_obj.size}Gi",
+            pvc_name=f"{snap_name}-restored",
+            restore_pvc_yaml=restore_pvc_yaml,
+            access_mode=constants.ACCESS_MODE_RWOP,
+        )
+        helpers.wait_for_resource_state(
+            restored_pvc_obj, constants.STATUS_BOUND, timeout=600
+        )
+        restored_pvc_obj.reload()
+        log.info("PVC was restored from the snapshot")
+        assert restored_pvc_obj.get_pvc_access_mode == constants.ACCESS_MODE_RWOP, (
+            f"Restored PVC has {restored_pvc_obj.get_pvc_access_mode} access mode "
+            f"instead of expected {constants.ACCESS_MODE_RWOP}"
+        )
+        restored_pvc_obj.delete()
 
     def validate_pod_status(self, pod_obj, status):
         """
