@@ -51,8 +51,8 @@ def teardown_nodes_job(request, nodes):
         """
         ceph_health_check(tries=60, delay=30)
 
-    request.addfinalizer(finalizer_restart_nodes_by_stop_and_start_teardown)
     request.addfinalizer(finalizer_wait_cluster_healthy)
+    request.addfinalizer(finalizer_restart_nodes_by_stop_and_start_teardown)
 
 
 @pytest.fixture()
