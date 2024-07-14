@@ -28,6 +28,7 @@ log = logging.getLogger(__name__)
     ],
 )
 @green_squad
+@tier1
 @skipif_ocs_version("<4.15")
 class TestRwopPvc(ManageTest):
     """
@@ -47,7 +48,6 @@ class TestRwopPvc(ManageTest):
         )
 
     @polarion_id("OCS-5456")
-    @tier1
     def test_pod_with_same_priority(self, pod_factory, interface):
         """
         Test RBD Block volume mode RWOP PVC
@@ -172,7 +172,6 @@ class TestRwopPvc(ManageTest):
         return new_pod_obj
 
     @polarion_id("OCS-5471")
-    @tier1
     def test_rwop_with_high_priority_pod(self, pod_factory, teardown_factory):
         """
         Test RBD Block volume access mode RWOP between priority pods
@@ -215,7 +214,6 @@ class TestRwopPvc(ManageTest):
         teardown_factory(priority_class_obj)
 
     @polarion_id("OCS-5470")
-    @tier1
     def test_rwop_with_low_priority_pod(self, pod_factory, teardown_factory):
         """
         Test RBD Block volume access mode RWOP between priority pods
@@ -257,7 +255,6 @@ class TestRwopPvc(ManageTest):
         teardown_factory([high_priority_class_obj, low_priority_class_obj])
 
     @polarion_id("OCS-5472")
-    @tier1
     def test_rwop_create_pod_on_different_node(self, pod_factory, interface):
         """
         Test RBD Block volume access mode by creating pods on different nodes
