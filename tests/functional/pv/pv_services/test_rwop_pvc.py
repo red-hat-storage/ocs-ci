@@ -13,13 +13,9 @@ from ocs_ci.framework.testlib import (
     skipif_ocs_version,
 )
 from ocs_ci.helpers import helpers
-from ocs_ci.ocs.exceptions import (
-    TimeoutExpiredError,
-    UnexpectedBehaviour,
-)
+from ocs_ci.ocs.exceptions import UnexpectedBehaviour
 from ocs_ci.utility.utils import run_cmd
 from ocs_ci.ocs.resources import pvc
-from ocs_ci.utility.utils import TimeoutSampler
 
 log = logging.getLogger(__name__)
 
