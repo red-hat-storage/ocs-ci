@@ -13,9 +13,13 @@ from ocs_ci.framework.testlib import (
     skipif_ocs_version,
 )
 from ocs_ci.helpers import helpers
-from ocs_ci.ocs.exceptions import UnexpectedBehaviour
+from ocs_ci.ocs.exceptions import (
+    TimeoutExpiredError,
+    UnexpectedBehaviour,
+)
 from ocs_ci.utility.utils import run_cmd
 from ocs_ci.ocs.resources import pvc
+from ocs_ci.utility.utils import TimeoutSampler
 
 log = logging.getLogger(__name__)
 
@@ -285,3 +289,16 @@ class TestRwopPvc(ManageTest):
                 f"Pod {self.pod_obj.name} using RWOP pvc {self.pvc_obj.name} is not in Pending state"
                 f"Pod {second_pod_obj.name} using RWOP pvc {self.pvc_obj.name} is not in Pending state"
             )
+
+    def test_rwop_pvc_reclaim_space(self):
+        """
+        Test to verify creation of reclaim space job and reclaim space cron job on RWOP pvc
+        """
+
+        schedule = "weekly"
+        reclaim_space_job = self.pvc_obj.create_reclaim_space_cronjob(schedule)
+        helpers.wait_for_reclaim_space_cronjob(reclaim_space_job, schedule)
+
+        reclaim_space_job = self.pvc_obj.create_reclaim_space_job()
+
+        helpers.wait_for_reclaim_space_job(reclaim_space_job)
