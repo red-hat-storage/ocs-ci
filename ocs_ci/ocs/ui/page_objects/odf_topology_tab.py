@@ -43,7 +43,6 @@ class TopologySidebar(BaseUI):
         return bool(self.get_elements(self.topology_loc["alerts_sidebar_tab"]))
 
     def open_side_bar_of_entity(self, entity_name: str = None, canvas: bool = False):
-
         """
         Opens the sidebar of an entity in the topology view.
 
@@ -111,7 +110,9 @@ class TopologySidebar(BaseUI):
         Returns:
             bool: if the node down alert visible in Alerts tab of the Topology
         """
-        alerts_dict = self.read_alerts_procedure(entity, read_canvas_alerts)
+        alerts_dict = retry(TimeoutException, tries=3, delay=5)(
+            self.read_alerts_procedure
+        )(entity, read_canvas_alerts)
         return (
             "Critical" in alerts_dict
             and constants.ALERT_NODEDOWN in alerts_dict["Critical"]

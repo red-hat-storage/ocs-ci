@@ -51,8 +51,8 @@ def teardown_nodes_job(request, nodes):
         """
         ceph_health_check(tries=60, delay=30)
 
-    request.addfinalizer(finalizer_restart_nodes_by_stop_and_start_teardown)
     request.addfinalizer(finalizer_wait_cluster_healthy)
+    request.addfinalizer(finalizer_restart_nodes_by_stop_and_start_teardown)
 
 
 @pytest.fixture()
@@ -273,7 +273,7 @@ class TestODFTopology(object):
         random_node_idle = random.choice(
             [node for node in ocp_nodes if node != random_node_under_test]
         )
-        nodes.stop_nodes(nodes=[random_node_under_test], force=True)
+        nodes.stop_nodes(nodes=[random_node_under_test])
 
         api = prometheus.PrometheusAPI(threading_lock=threading_lock)
         logger.info(f"Verifying whether {constants.ALERT_NODEDOWN} has been triggered")
