@@ -786,7 +786,8 @@ def run_ocs_upgrade(
         # in pending state
         is_all_csvs_succeeded = check_all_csvs_are_succeeded(namespace=namespace)
         assert is_all_csvs_succeeded, "Not all CSV's are in succeeded state"
-        upgrade_version = version.get_semantic_version(upgrade_version, True)
+        if not config.DEPLOYMENT["external_mode"]:
+            upgrade_version = version.get_semantic_version(upgrade_version, True)
         if (
             config.ENV_DATA.get("is_multus_enabled")
             and upgrade_version == version.VERSION_4_16
