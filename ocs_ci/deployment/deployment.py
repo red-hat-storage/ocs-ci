@@ -603,6 +603,19 @@ class Deployment(object):
         ):
             storage_client_deployment_obj.provider_and_native_client_installation()
 
+    def do_deploy_hosted_clusters(self):
+        """
+        Deploy Hosted cluster(s)
+        """
+        if (
+            config.ENV_DATA.get("clusters", False)
+            and not config.ENV_DATA["skip_ocs_deployment"]
+        ):
+            # imported locally due to a circular dependency
+            from ocs_ci.deployment.hosted_cluster import HostedClients
+
+            HostedClients().do_deploy()
+
     def deploy_cluster(self, log_cli_level="DEBUG"):
         """
         We are handling both OCP and OCS deployment here based on flags
@@ -668,11 +681,7 @@ class Deployment(object):
         self.do_deploy_odf_provider_mode()
         if config.DEPLOYMENT.get("cnv_deployment"):
             CNVInstaller().deploy_cnv()
-        if config.ENV_DATA.get("clusters"):
-            # imported locally due to a circular dependency
-            from ocs_ci.deployment.hosted_cluster import HostedClients
-
-            HostedClients().do_deploy()
+        self.do_deploy_hosted_clusters()
 
     def get_rdr_conf(self):
         """
