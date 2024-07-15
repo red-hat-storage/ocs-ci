@@ -1,6 +1,7 @@
 import logging
 import random
 
+from ocs_ci.deployment.deployment import validate_acm_hub_install
 from ocs_ci.deployment.helpers.hypershift_base import (
     get_hosted_cluster_names,
 )
@@ -120,3 +121,66 @@ class TestProviderHosted(object):
 
         cluster_names = list(config.ENV_DATA["clusters"].keys())
         assert HostedODF(cluster_names[-1]).get_storage_client_status() == "Connected"
+
+    @runs_on_provider
+    @hci_provider_required
+    def test_deploy_acm(self):
+        """
+        Test deploy dependencies
+        """
+        logger.info("Test deploy dependencies ACM")
+        HypershiftHostedOCP("dummy").deploy_dependencies(
+            deploy_acm_hub=True,
+            deploy_cnv=False,
+            deploy_metallb=False,
+            download_hcp_binary=False,
+        )
+        assert validate_acm_hub_install(), "ACM not installed or MCE not configured"
+
+    @runs_on_provider
+    @hci_provider_required
+    def test_deploy_cnv(self):
+        """
+        Test deploy dependencies
+        """
+        logger.info("Test deploy dependencies CNV")
+        hypershift_hosted = HypershiftHostedOCP("dummy")
+        hypershift_hosted.deploy_dependencies(
+            deploy_acm_hub=False,
+            deploy_cnv=True,
+            deploy_metallb=False,
+            download_hcp_binary=False,
+        )
+        assert hypershift_hosted.cnv_hyperconverged_installed(), "CNV not installed"
+
+    @runs_on_provider
+    @hci_provider_required
+    def test_deploy_metallb(self):
+        """
+        Test deploy dependencies
+        """
+        logger.info("Test deploy dependencies Metallb")
+        hypershift_hosted = HypershiftHostedOCP("dummy")
+        hypershift_hosted.deploy_dependencies(
+            deploy_acm_hub=False,
+            deploy_cnv=False,
+            deploy_metallb=True,
+            download_hcp_binary=False,
+        )
+        assert hypershift_hosted.metallb_instance_created(), "Metallb not installed"
+
+    @runs_on_provider
+    @hci_provider_required
+    def test_download_hcp(self):
+        """
+        Test deploy dependencies
+        """
+        logger.info("Test deploy dependencies HCP binary")
+        hypershift_hosted = HypershiftHostedOCP("dummy")
+        hypershift_hosted.deploy_dependencies(
+            deploy_acm_hub=False,
+            deploy_cnv=False,
+            deploy_metallb=False,
+            download_hcp_binary=True,
+        )
+        assert hypershift_hosted.hcp_binary_exists(), "HCP binary not downloaded"
