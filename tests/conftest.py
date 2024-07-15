@@ -6691,7 +6691,6 @@ def cnv_dr_workload(request):
                     vm_secret=workload_details["vm_secret"],
                     vm_username=workload_details["vm_username"],
                     workload_name=workload_details["name"],
-                    workload_namespace=workload_details["destination_namespace"],
                     workload_pod_count=workload_details["pod_count"],
                     workload_pvc_count=workload_details["pvc_count"],
                     workload_placement_name=workload_details[
