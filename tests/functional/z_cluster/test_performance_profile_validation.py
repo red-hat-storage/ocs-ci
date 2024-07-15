@@ -96,6 +96,7 @@ class TestProfileDefaultValuesCheck(ManageTest):
             )
 
         if self.perf_profile == constants.PERFORMANCE_PROFILE_LEAN:
+        if self.perf_profile == constants.PERFORMANCE_PROFILE_LEAN:
             expected_cpu_request_values = constants.LEAN_PROFILE_REQUEST_CPU_VALUES
             expected_memory_request_values = (
                 constants.LEAN_PROFILE_REQUEST_MEMORY_VALUES
@@ -133,11 +134,12 @@ class TestProfileDefaultValuesCheck(ManageTest):
             ):
                 pv_pod_obj.append(Pod(**pod))
                 podd = Pod(**pod)
-                log.info(podd.name)
+                log.info(f"Verifying memory and cpu values for pod {podd.name}")
                 resource_dict = OCP(
                     namespace=config.ENV_DATA["cluster_namespace"], kind="pod"
                 ).get(resource_name=podd.name)["spec"]["containers"][0]["resources"]
-
+                log.info(resource_dict["limits"])
+                log.info(resource_dict["requests"])
                 assert (
                     resource_dict["limits"]["cpu"] == expected_cpu_limit_values[label]
                     and resource_dict["limits"]["memory"]
