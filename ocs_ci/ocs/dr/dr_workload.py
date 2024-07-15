@@ -662,7 +662,7 @@ class CnvWorkload(DRWorkload):
                     cnv_workload_yaml_data["metadata"][
                         "namespace"
                     ] = self.workload_namespace
-            if cnv_workload_yaml_data["kind"] == "ApplicationSet":
+            elif cnv_workload_yaml_data["kind"] == "ApplicationSet":
                 cnv_workload_yaml_data["metadata"]["name"] = self.workload_name
                 # Change the destination namespace for AppSet workload
                 cnv_workload_yaml_data["spec"]["template"]["spec"]["destination"][

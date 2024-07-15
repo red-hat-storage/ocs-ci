@@ -1,6 +1,6 @@
 ENV_DATA:
   dr_workload_repo_url: "https://github.com/red-hat-storage/ocs-workloads.git"
-  dr_workload_repo_branch: "mdr_cnv_channel"
+  dr_workload_repo_branch: "master"
   dr_workload_subscription: [
     {name: "busybox-1", workload_dir: "mdr/subscriptions/busybox-app-1", pod_count: 2, pvc_count: 2},
     {name: "busybox-2", workload_dir: "mdr/subscriptions/busybox-app-2", pod_count: 2, pvc_count: 2},
