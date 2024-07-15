@@ -96,7 +96,6 @@ class TestProfileDefaultValuesCheck(ManageTest):
             )
 
         if self.perf_profile == constants.PERFORMANCE_PROFILE_LEAN:
-        if self.perf_profile == constants.PERFORMANCE_PROFILE_LEAN:
             expected_cpu_request_values = constants.LEAN_PROFILE_REQUEST_CPU_VALUES
             expected_memory_request_values = (
                 constants.LEAN_PROFILE_REQUEST_MEMORY_VALUES
