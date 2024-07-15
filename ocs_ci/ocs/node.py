@@ -42,6 +42,7 @@ from ocs_ci.utility.rosa import (
     wait_for_addon_to_be_ready,
 )
 from ocs_ci.utility.decorators import switch_to_orig_index_at_last
+from ocs_ci.utility.vsphere import VSPHERE
 
 
 log = logging.getLogger(__name__)
@@ -1707,6 +1708,12 @@ def verify_all_nodes_created():
         wait_time = 1200
 
     if expected_num_nodes != existing_num_nodes:
+        if (
+            config.ENV_DATA["platform"].lower() == constants.VSPHERE_PLATFORM
+            and config.ENV_DATA["deployment_type"] == "ipi"
+        ):
+            power_on_ocp_node_vms()
+
         platforms_to_wait = [
             constants.VSPHERE_PLATFORM,
             constants.IBMCLOUD_PLATFORM,
@@ -1752,6 +1759,30 @@ def verify_all_nodes_created():
             f"Expected number of nodes is {expected_num_nodes} but "
             f"created during deployment is {existing_num_nodes}"
         )
+
+
+def power_on_ocp_node_vms():
+    """
+    Power on OCP node VM's, this function will directly interact with vCenter.
+    This function will make sure all cluster node VM's are powered on.
+    """
+    vsp = VSPHERE(
+        config.ENV_DATA["vsphere_server"],
+        config.ENV_DATA["vsphere_user"],
+        config.ENV_DATA["vsphere_password"],
+    )
+    vms_dc = vsp.get_all_vms_in_dc(config.ENV_DATA["vsphere_datacenter"])
+    cluster_name = config.ENV_DATA["cluster_name"]
+    vms_ipi = []
+    for vm in vms_dc:
+        if cluster_name in vm.name and "rhcos-generated" not in vm.name:
+            vms_ipi.append(vm)
+            log.debug(vm.name)
+
+    for vm in vms_ipi:
+        power_status = vsp.get_vm_power_status(vm)
+        if power_status == constants.VM_POWERED_OFF:
+            vsp.start_vms(vms=[vm])
 
 
 def add_node_to_lvd_and_lvs(node_name):
