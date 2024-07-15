@@ -165,6 +165,10 @@ class TestODFTopology(object):
             deviations_df["details_cli"] != deviations_df["details_ui"]
         )
 
+        if config.ENV_DATA["worker_replicas"] == 0:
+            # Remove the row with index "role" from the deviations DataFrame if COMPACT MODE (0 worker nodes)
+            deviations_df = deviations_df.drop(index="role", errors="ignore")
+
         pd.set_option("display.max_colwidth", 100)
         if deviations_df["Differences"].any():
             pytest.fail(
