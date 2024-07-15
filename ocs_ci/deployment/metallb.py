@@ -24,7 +24,12 @@ from ocs_ci.ocs.resources.csv import check_all_csvs_are_succeeded
 from ocs_ci.ocs.resources.pod import wait_for_pods_to_be_running
 from ocs_ci.ocs.utils import get_pod_name_by_pattern
 from ocs_ci.utility import templating
-from ocs_ci.utility.utils import exec_cmd, get_ocp_version, TimeoutSampler
+from ocs_ci.utility.utils import (
+    exec_cmd,
+    get_ocp_version,
+    TimeoutSampler,
+    wait_for_machineconfigpool_status,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -495,6 +500,9 @@ class MetalLBInstaller:
         logger.info(
             f"Deploying MetalLB and dependant resources to namespace: '{self.namespace_lb}'"
         )
+        # icsp mirrors necessary to download packages for the downstream version of metallb
+        self.apply_icsp()
+
         if self.create_metallb_namespace():
             logger.info(f"Namespace {self.namespace_lb} created successfully")
         if self.create_catalog_source():
@@ -660,3 +668,16 @@ class MetalLBInstaller:
                 logger.info("MetalLB CSV installed successfully")
                 break
         return True
+
+    def apply_icsp(self):
+        """
+        Apply the ICSP to the cluster
+        """
+        icsp_data = templating.load_yaml(constants.SUBMARINER_DOWNSTREAM_BREW_ICSP)
+        icsp_data_yaml = tempfile.NamedTemporaryFile(
+            mode="w+", prefix="acm_icsp", delete=False
+        )
+        templating.dump_data_to_temp_yaml(icsp_data, icsp_data_yaml.name)
+        exec_cmd(f"oc create -f {icsp_data_yaml.name}", timeout=300)
+        wait_for_machineconfigpool_status(node_type="all")
+        logger.info("ICSP applied successfully")
