@@ -406,7 +406,7 @@ mcg_stores = {
         By.XPATH,
     ),
     "store_secret_dropdown": (
-        "//label[@for='secret-dropdown']/../following-sibling::*",
+        "//span[@class='text-muted' and text()='Select Secret']/../..",
         By.XPATH,
     ),
     "store_target_bucket_input": ("//input[@id='target-bucket']", By.XPATH),
