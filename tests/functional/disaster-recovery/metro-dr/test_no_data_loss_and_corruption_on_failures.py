@@ -38,21 +38,14 @@ class TestNoDataLossAndDataCorruptionOnFailures:
 
     """
 
-    @pytest.mark.polarion_id("OCS-XXXX")
+    @pytest.mark.polarion_id("OCS-4793")
     def test_no_data_loss_and_data_corruption_on_failures(
-        self, setup_acm_ui, nodes_multicluster, dr_workload
+        self, nodes_multicluster, dr_workload
     ):
 
         # Deploy Subscription based application
-        sub = dr_workload(num_of_subscription=1)[0]
-        self.namespace = sub.workload_namespace
-        self.workload_type = sub.workload_type
-
-        # Deploy AppSet based application
-        appset = dr_workload(num_of_subscription=0, num_of_appset=1)[0]
-
-        # Workloads list
-        workloads = [sub, appset]
+        workloads = dr_workload(num_of_subscription=1, num_of_appset=1)
+        self.namespace = workloads[0].workload_namespace
 
         # Create application on Primary managed cluster
         set_current_primary_cluster_context(self.namespace)
@@ -66,12 +59,13 @@ class TestNoDataLossAndDataCorruptionOnFailures:
             validate_data_integrity(wl.workload_namespace)
 
         # Noobaa pod restarts atleast 5 times and verify the data integrity
-        restart_pods_having_label(label=constants.NOOBAA_APP_LABEL)
+        for i in range(5):
+            restart_pods_having_label(label=constants.NOOBAA_APP_LABEL)
         for wl in workloads:
             config.switch_to_cluster_by_name(self.primary_cluster_name)
             validate_data_integrity(wl.workload_namespace)
 
-        # Get the nodes from one active zone
+        # Get the nodes from one active zone and reboot of the nodes in all zones
         config.switch_ctx(get_active_acm_index())
         active_hub_index = config.cur_index
         zone = config.ENV_DATA.get("zone")
@@ -98,7 +92,6 @@ class TestNoDataLossAndDataCorruptionOnFailures:
                 ceph_node_ips.append(
                     external_cluster_node_roles[ceph_node].get("ip_address")
                 )
-
         # Rolling reboot of the nodes in all zones one at a time
         wait_time = 120
         logger.info("Shutting down all the nodes from active hub zone")
