@@ -32,7 +32,7 @@ log = logging.getLogger(__name__)
 @skipif_ocs_version("<4.15")
 class TestRwopPvc(ManageTest):
     """
-    Tests ReadWriteOncePod RBD PVC
+    Tests ReadWriteOncePod PVC
     """
 
     @pytest.fixture(autouse=True)

@@ -5057,3 +5057,67 @@ def upgrade_multus_holder_design():
     delete_csi_holder_pods()
     delete_csi_holder_daemonsets()
     verify_csi_holder_pods_do_not_exist()
+
+
+def wait_for_reclaim_space_cronjob(reclaim_space_cron_job, schedule):
+    """
+    Wait for reclaim space cronjbo
+
+    Args:
+        reclaim_space_cron_job (obj): The reclaim space cron job
+        schedule (str): Reclaim space cron job schedule
+
+    Raises:
+        UnexpectedBehaviour: In case reclaim space cron job doesn't reach the desired state
+    """
+
+    try:
+        for reclaim_space_cron_job_yaml in TimeoutSampler(
+            timeout=120, sleep=5, func=reclaim_space_cron_job.get
+        ):
+            result = reclaim_space_cron_job_yaml["spec"]["schedule"]
+            if result == f"@{schedule}":
+                logger.info(
+                    f"ReclaimSpaceCronJob {reclaim_space_cron_job.name} succeeded"
+                )
+                break
+            else:
+                logger.info(
+                    f"Waiting for the @{schedule} result of the ReclaimSpaceCronJob {reclaim_space_cron_job.name}. "
+                    f"Present value of result is {result}"
+                )
+    except TimeoutExpiredError:
+        raise UnexpectedBehaviour(
+            f"ReclaimSpaceJob {reclaim_space_cron_job.name} is not successful. "
+            f"Yaml output: {reclaim_space_cron_job.get()}"
+        )
+
+
+def wait_for_reclaim_space_job(reclaim_space_job):
+    """
+    Wait for reclaim space cronjbo
+
+    Args:
+        reclaim_space_job (obj): The reclaim space job
+
+    Raises:
+        UnexpectedBehaviour: In case reclaim space job doesn't reach the Succeeded state
+    """
+
+    try:
+        for reclaim_space_job_yaml in TimeoutSampler(
+            timeout=120, sleep=5, func=reclaim_space_job.get
+        ):
+            result = reclaim_space_job_yaml.get("status", {}).get("result")
+            if result == "Succeeded":
+                logger.info(f"ReclaimSpaceJob {reclaim_space_job.name} succeeded")
+                break
+            else:
+                logger.info(
+                    f"Waiting for the Succeeded result of the ReclaimSpaceJob {reclaim_space_job.name}. "
+                    f"Present value of result is {result}"
+                )
+    except TimeoutExpiredError:
+        raise UnexpectedBehaviour(
+            f"ReclaimSpaceJob {reclaim_space_job.name} is not successful. Yaml output: {reclaim_space_job.get()}"
+        )
