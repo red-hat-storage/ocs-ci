@@ -2334,13 +2334,17 @@ class Deployment(object):
         ocp_obj = OCP(
             kind=constants.ACM_MULTICLUSTER_HUB, namespace=constants.ACM_HUB_NAMESPACE
         )
-        return ocp_obj.wait_for_resource(
-            condition=constants.STATUS_RUNNING,
-            resource_name=constants.ACM_MULTICLUSTER_RESOURCE,
-            column="STATUS",
-            timeout=720,
-            sleep=5,
-        )
+        try:
+            mch_running = ocp_obj.wait_for_resource(
+                condition=constants.STATUS_RUNNING,
+                resource_name=constants.ACM_MULTICLUSTER_RESOURCE,
+                column="STATUS",
+                timeout=6,
+                sleep=3,
+            )
+        except CommandFailed:
+            mch_running = False
+        return mch_running
 
 
 def create_external_pgsql_secret():
