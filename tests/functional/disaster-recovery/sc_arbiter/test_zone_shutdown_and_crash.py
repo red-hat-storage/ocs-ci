@@ -138,6 +138,7 @@ class TestZoneShutdownsAndCrashes:
         setup_logwriter_cephfs_workload_factory,
         setup_logwriter_rbd_workload_factory,
         logreader_workload_factory,
+        setup_vms_standalone_pvc,
     ):
         """
         This test will test the shutdown scenarios when active-active CephFS and RBD workloads
@@ -172,9 +173,12 @@ class TestZoneShutdownsAndCrashes:
             sc_obj.cephfs_logreader_job,
         ) = setup_logwriter_cephfs_workload_factory(read_duration=0)
 
-        # Generate 2 minutes worth of logs before inducing the netsplit
-        log.info("Generating 2 mins worth of log")
-        time.sleep(120)
+        # setup vm and write some data to the VM instance
+        vm_obj = setup_vms_standalone_pvc()
+        vm_obj.run_ssh_cmd(
+            command="dd if=/dev/zero of=/file_1.txt bs=1024 count=102400"
+        )
+        md5sum_before = vm_obj.run_ssh_cmd(command="md5sum /file_1.txt")
 
         sc_obj.get_logwriter_reader_pods(label=constants.LOGWRITER_CEPHFS_LABEL)
         sc_obj.get_logwriter_reader_pods(label=constants.LOGREADER_CEPHFS_LABEL)
@@ -284,6 +288,29 @@ class TestZoneShutdownsAndCrashes:
             log.info(f"Waiting {delay} mins before the next iteration!")
             time.sleep(delay * 60)
 
+        # check vm data written before the failure for integrity
+        md5sum_after = vm_obj.run_ssh_cmd(command="md5sum /file_1.txt")
+        assert (
+            md5sum_before == md5sum_after
+        ), "Data integrity of the file inside VM is not maintained during the failure"
+        log.info(
+            "Data integrity of the file inside VM is maintained during the failure"
+        )
+
+        # check if new data can be created
+        vm_obj.run_ssh_cmd(
+            command="dd if=/dev/zero of=/file_2.txt bs=1024 count=103600"
+        )
+        log.info("Successfully created new data inside VM")
+
+        # check if the data can be copied back to local machine
+        vm_obj.scp_from_vm(local_path="/tmp", vm_src_path="/file_1.txt")
+        log.info("VM data is successfully copied back to local machine")
+
+        # stop the VM
+        vm_obj.stop()
+        log.info("Stoped the VM successfully")
+
         if immediate:
             sc_obj.post_failure_checks(
                 start_time, end_time, wait_for_read_completion=False
@@ -354,6 +381,7 @@ class TestZoneShutdownsAndCrashes:
         setup_logwriter_rbd_workload_factory,
         logreader_workload_factory,
         nodes,
+        setup_vms_standalone_pvc,
     ):
         """
         This test will test the crash scenarios when active-active CephFS and RBD workloads
@@ -383,9 +411,12 @@ class TestZoneShutdownsAndCrashes:
             sc_obj.cephfs_logreader_job,
         ) = setup_logwriter_cephfs_workload_factory(read_duration=0)
 
-        # Generate 5 minutes worth of logs before inducing the netsplit
-        log.info("Generating 2 mins worth of log")
-        time.sleep(120)
+        # setup vm and write some data to the VM instance
+        vm_obj = setup_vms_standalone_pvc()
+        vm_obj.run_ssh_cmd(
+            command="dd if=/dev/zero of=/file_1.txt bs=1024 count=102400"
+        )
+        md5sum_before = vm_obj.run_ssh_cmd(command="md5sum /file_1.txt")
 
         sc_obj.get_logwriter_reader_pods(label=constants.LOGWRITER_CEPHFS_LABEL)
         sc_obj.get_logwriter_reader_pods(label=constants.LOGREADER_CEPHFS_LABEL)
@@ -481,6 +512,29 @@ class TestZoneShutdownsAndCrashes:
 
             log.info(f"Waiting {delay} mins before the next iteration!")
             time.sleep(delay * 60)
+
+        # check vm data written before the failure for integrity
+        md5sum_after = vm_obj.run_ssh_cmd(command="md5sum /file_1.txt")
+        assert (
+            md5sum_before == md5sum_after
+        ), "Data integrity of the file inside VM is not maintained during the failure"
+        log.info(
+            "Data integrity of the file inside VM is maintained during the failure"
+        )
+
+        # check if new data can be created
+        vm_obj.run_ssh_cmd(
+            command="dd if=/dev/zero of=/file_2.txt bs=1024 count=103600"
+        )
+        log.info("Successfully created new data inside VM")
+
+        # check if the data can be copied back to local machine
+        vm_obj.scp_from_vm(local_path="/tmp", vm_src_path="/file_1.txt")
+        log.info("VM data is successfully copied back to local machine")
+
+        # stop the VM
+        vm_obj.stop()
+        log.info("Stoped the VM successfully")
 
         sc_obj.cephfs_logreader_job.delete()
         for pod in sc_obj.cephfs_logreader_pods:
