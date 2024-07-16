@@ -921,7 +921,7 @@ class Deployment(object):
         if not namespace:
             namespace = self.namespace
 
-        if config.multicluster:
+        if self.muliclusterhub_running():
             resource_kind = constants.SUBSCRIPTION_WITH_ACM
         else:
             resource_kind = constants.SUBSCRIPTION
@@ -2323,6 +2323,24 @@ class Deployment(object):
         except Exception as ex:
             logger.error(f"Failed to install MultiClusterHub. Exception is: {ex}")
             return False
+
+    def muliclusterhub_running(self):
+        """
+        Check if MultiCluster Hub is running
+
+        Returns:
+            bool: True if MultiCluster Hub is running, False otherwise
+        """
+        ocp_obj = OCP(
+            kind=constants.ACM_MULTICLUSTER_HUB, namespace=constants.ACM_HUB_NAMESPACE
+        )
+        return ocp_obj.wait_for_resource(
+            condition=constants.STATUS_RUNNING,
+            resource_name=constants.ACM_MULTICLUSTER_RESOURCE,
+            column="STATUS",
+            timeout=720,
+            sleep=5,
+        )
 
 
 def create_external_pgsql_secret():

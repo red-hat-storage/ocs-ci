@@ -1,7 +1,7 @@
 import logging
 import random
 
-from ocs_ci.deployment.deployment import validate_acm_hub_install
+from ocs_ci.deployment.deployment import validate_acm_hub_install, Deployment
 from ocs_ci.deployment.helpers.hypershift_base import (
     get_hosted_cluster_names,
 )
@@ -184,3 +184,12 @@ class TestProviderHosted(object):
             download_hcp_binary=True,
         )
         assert hypershift_hosted.hcp_binary_exists(), "HCP binary not downloaded"
+
+    @runs_on_provider
+    def test_mch_status_running(self):
+        """
+        Get MCH status
+        """
+        logger.info("Get MCH status")
+        depl = Deployment()
+        assert depl.muliclusterhub_running(), "MCH not running"
