@@ -132,7 +132,7 @@ class TestNoDataLossAndDataCorruptionOnFailures:
 
         # RHCS nodes failures
         # 1 RHCS node in one zone
-        vm_objs.restart_vms(vms=ceph_vms[0])
+        vm_objs.restart_vms(vms=[ceph_vms[0]])
         time.sleep(wait_time)
         # Validate ceph health OK
         ceph_health_check(tries=40, delay=30)
