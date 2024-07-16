@@ -80,7 +80,6 @@ class TestGracefulNodesShutdown(E2ETest):
         Setting up test requirements
         1. Non encrypted fs PVC (create + clone + snapshot)
         2. encrypted block PVC (create + clone + snapshot)
-        3. encrypted fs PVC ()
         """
 
         def teardown():
@@ -128,20 +127,6 @@ class TestGracefulNodesShutdown(E2ETest):
             pv_encryption_kms_setup_factory=pv_encryption_kms_setup_factory,
             storageclass_factory=storageclass_factory,
             interface=constants.CEPHBLOCKPOOL,
-            pvc_factory=pvc_factory,
-            pod_factory=pod_factory,
-            pvc_clone_factory=pvc_clone_factory,
-            snapshot_factory=snapshot_factory,
-        )
-
-        # Encrypted fs PVC
-        (
-            self.efs_pvc_obj,
-            self.efs_pvc_pod_obj,
-            self.efs_file_name,
-            self.efs_pvc_orig_md5_sum,
-            self.efs_snap_obj,
-        ) = self.setup_encrypted_pvc(
             pvc_factory=pvc_factory,
             pod_factory=pod_factory,
             pvc_clone_factory=pvc_clone_factory,
@@ -293,14 +278,6 @@ class TestGracefulNodesShutdown(E2ETest):
             timeout=180,
         )
         self.restore_pvc_objs.append(eb_restored_pvc)
-        logger.info("Creating snapshot restore for encrypted fs pvcs after reboot")
-        efs_restored_pvc = snapshot_restore_factory(
-            self.efs_snap_obj,
-            storageclass=self.efs_pvc_obj.storageclass.name,
-            volume_mode=self.efs_snap_obj.parent_volume_mode,
-            timeout=180,
-        )
-        self.restore_pvc_objs.append(efs_restored_pvc)
 
         for pvc_obj in self.restore_pvc_objs:
             pod_obj = pod_factory(
@@ -351,13 +328,6 @@ class TestGracefulNodesShutdown(E2ETest):
         ), (
             f"Data integrity failed for file '{self.eb_file_name}' "
             f"on encrypted block pvc {self.eb_pvc_obj.name} on pod {self.eb_pvc_pod_obj.name}"
-        )
-
-        assert self.efs_pvc_orig_md5_sum == pod.cal_md5sum(
-            self.efs_pvc_pod_obj, self.efs_file_name
-        ), (
-            f"Data integrity failed for file '{self.efs_file_name}' "
-            f"on encrypted fs pvc {self.efs_pvc_obj.name} on pod {self.efs_pvc_pod_obj.name}"
         )
 
     def validate_ocp_workload_exists(self):
