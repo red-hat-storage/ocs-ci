@@ -121,9 +121,6 @@ DEPLOYMENT:
   sts_enabled: false
   ocm_cli_version: '0.1.75'
   rosa_cli_version: '1.2.49'
-  # Access buckets with DNS subdomain style (Virtual host style) for RGW
-
-
 
 # Section for reporting configuration
 REPORTING:
