@@ -1054,7 +1054,7 @@ class Deployment(object):
             worker_nodes = get_worker_nodes()
             node_obj = ocp.OCP(kind="node")
             platform = config.ENV_DATA.get("platform").lower()
-            if platform != constants.BAREMETAL_PLATFORM:
+            if platform not in [constants.BAREMETAL_PLATFORM, constants.HCI_BAREMETAL]:
                 for node in worker_nodes:
                     for interface in interfaces:
                         ip_link_cmd = f"ip link set promisc on {interface}"
@@ -1297,7 +1297,10 @@ class Deployment(object):
             cluster_data["spec"]["storageDeviceSets"][0]["replica"] = 1
 
         # set size of request for storage
-        if self.platform.lower() == constants.BAREMETAL_PLATFORM:
+        if self.platform.lower() in [
+            constants.BAREMETAL_PLATFORM,
+            constants.HCI_BAREMETAL,
+        ]:
             pv_size_list = helpers.get_pv_size(
                 storageclass=self.DEFAULT_STORAGECLASS_LSO
             )

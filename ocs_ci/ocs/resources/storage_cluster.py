@@ -1,6 +1,7 @@
 """
 StorageCluster related functionalities
 """
+
 import copy
 import ipaddress
 import logging
@@ -556,7 +557,8 @@ def ocs_install_verification(
             # removes duplicate hostname
             deviceset_pvcs = list(set(deviceset_pvcs))
             if (
-                config.ENV_DATA.get("platform") == constants.BAREMETAL_PLATFORM
+                config.ENV_DATA.get("platform")
+                in [constants.BAREMETAL_PLATFORM, constants.HCI_BAREMETAL]
                 or config.ENV_DATA.get("platform") == constants.AWS_PLATFORM
             ):
                 deviceset_pvcs = [
