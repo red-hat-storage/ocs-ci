@@ -32,6 +32,7 @@ from ocs_ci.framework.pytest_customization.marks import (
     tier1,
     turquoise_squad,
     stretchcluster_required,
+    cnv_required,
 )
 
 log = logging.getLogger(__name__)
@@ -40,6 +41,7 @@ log = logging.getLogger(__name__)
 @tier1
 @stretchcluster_required
 @turquoise_squad
+@cnv_required
 class TestZoneShutdownsAndCrashes:
 
     zones = constants.DATA_ZONE_LABELS
