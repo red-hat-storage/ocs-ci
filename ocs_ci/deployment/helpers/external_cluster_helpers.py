@@ -47,15 +47,17 @@ class ExternalCluster(object):
     Helper for External RHCS cluster
     """
 
-    def __init__(self, host, user, password=None, ssh_key=None):
+    def __init__(self, host, user, password=None, ssh_key=None, jump_host=None):
         """
         Initialize the variables required for external RHCS cluster
 
         Args:
-             host (str): Host name with FQDN or IP
-             user (str): User name
-             password (password): Password for the Host (optional if ssh_key provided)
-             ssh_key (str): Path to SSH private key for the host (optional if password provided).
+            host (str): Host name with FQDN or IP
+            user (str): User name
+            password (password): Password for the Host (optional if ssh_key provided)
+            ssh_key (str): Path to SSH private key for the host (optional if password provided).
+            jump_host (dict): configuration of jump host, if required or None
+                the dict could contain following keys: host, user, private_key, password
 
         Raises:
             ExternalClusterCephSSHAuthDetailsMissing: In case one of SSH key or password
@@ -76,6 +78,7 @@ class ExternalCluster(object):
             user=self.user,
             password=self.password,
             private_key=self.ssh_key,
+            jump_host=jump_host,
         )
 
     def get_external_cluster_details(self):

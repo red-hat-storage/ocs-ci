@@ -637,7 +637,13 @@ def ocs_install_verification(
             object_store_user = defaults.EXTERNAL_CLUSTER_OBJECT_STORE_USER
             realm = config.ENV_DATA.get("rgw-realm")
             host, user, password, ssh_key = get_external_cluster_client()
-            external_cluster = ExternalCluster(host, user, password, ssh_key)
+            external_cluster = ExternalCluster(
+                host,
+                user,
+                password,
+                ssh_key,
+                jump_host=config.EXTERNAL_MODE.get("ssh_jump_host"),
+            )
             assert external_cluster.is_object_store_user_exists(
                 user=object_store_user, realm=realm
             ), f"{object_store_user} doesn't exist in realm {realm}"

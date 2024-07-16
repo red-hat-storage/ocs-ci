@@ -1444,7 +1444,13 @@ class VSPHEREUPI(VSPHEREBASE):
                 rbd_name = config.ENV_DATA.get("rbd_name") or defaults.RBD_NAME
                 # get external cluster details
                 host, user, password, ssh_key = get_external_cluster_client()
-                external_cluster = ExternalCluster(host, user, password, ssh_key)
+                external_cluster = ExternalCluster(
+                    host,
+                    user,
+                    password,
+                    ssh_key,
+                    jump_host=config.EXTERNAL_MODE.get("ssh_jump_host"),
+                )
                 external_cluster.remove_rbd_images(pvs_to_delete, rbd_name)
             except Exception as ex:
                 logger.warning(
