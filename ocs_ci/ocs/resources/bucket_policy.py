@@ -57,6 +57,7 @@ class NoobaaAccount(object):
         mcg,
         name,
         email,
+        allow_bucket_creation=True,
         buckets=None,
         admin_access=False,
         s3_access=True,
@@ -79,6 +80,7 @@ class NoobaaAccount(object):
         """
         self.account_name = name
         self.email_id = email
+        self.mcg = mcg
         if buckets:
             params_dict = {
                 "email": email,
@@ -99,6 +101,9 @@ class NoobaaAccount(object):
                 "s3_access": s3_access,
                 "default_pool": backingstore_name,
             }
+
+        if not allow_bucket_creation:
+            params_dict["allow_bucket_creation"] = allow_bucket_creation
         (
             params_dict
             if (version.get_semantic_ocs_version_from_config() < version.VERSION_4_9)
@@ -126,6 +131,16 @@ class NoobaaAccount(object):
             endpoint_url=self.s3_endpoint,
             aws_access_key_id=self.access_key_id,
             aws_secret_access_key=self.access_key,
+        )
+
+    def delete_account(self):
+        """
+        Delete the noobaa account
+
+        """
+        params_dict = {"email": self.email_id}
+        return self.mcg.send_rpc_query(
+            api="account_api", method="delete_account", params=params_dict
         )
 
 
