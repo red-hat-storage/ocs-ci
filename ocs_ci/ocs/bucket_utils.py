@@ -88,6 +88,61 @@ def craft_s3_command(cmd, mcg_obj=None, api=False, signed_request_creds=None):
     return f"{base_command}{cmd}{string_wrapper}"
 
 
+def craft_sts_command(cmd, mcg_obj=None, signed_request_creds=None):
+    """
+    Crafts the AWS CLI STS command including the
+    login credentials and command to be ran
+
+    Args:
+        cmd: The AWSCLI STS command to run
+        mcg_obj: An MCG class instance
+        signed_request_creds: a dictionary containing AWS S3 creds for a signed request
+
+    Returns:
+        str: The crafted command, ready to be executed on the pod
+
+    """
+
+    no_ssl = (
+        "--no-verify-ssl"
+        if signed_request_creds and signed_request_creds.get("ssl") is False
+        else ""
+    )
+    if mcg_obj:
+        if mcg_obj.region:
+            region = f"AWS_DEFAULT_REGION={mcg_obj.region} "
+        else:
+            region = ""
+        base_command = (
+            f'sh -c "AWS_CA_BUNDLE={constants.SERVICE_CA_CRT_AWSCLI_PATH} '
+            f"AWS_ACCESS_KEY_ID={mcg_obj.access_key_id} "
+            f"AWS_SECRET_ACCESS_KEY={mcg_obj.access_key} "
+            f"{region}"
+            f"aws sts "
+            f"--endpoint={mcg_obj.sts_internal_endpoint} "
+        )
+        string_wrapper = '"'
+    elif signed_request_creds:
+        if signed_request_creds.get("region"):
+            region = f'AWS_DEFAULT_REGION={signed_request_creds.get("region")} '
+        else:
+            region = ""
+        base_command = (
+            f'sh -c "AWS_ACCESS_KEY_ID={signed_request_creds.get("access_key_id")} '
+            f'AWS_SECRET_ACCESS_KEY={signed_request_creds.get("access_key")} '
+            f"{region}"
+            f"aws sts "
+            f'--endpoint={signed_request_creds.get("endpoint")} '
+            f"{no_ssl} "
+        )
+        string_wrapper = '"'
+    else:
+        base_command = "aws sts --no-sign-request "
+        string_wrapper = ""
+
+    return f"{base_command}{cmd}{string_wrapper}"
+
+
 def craft_s3cmd_command(cmd, mcg_obj=None, signed_request_creds=None):
     """
     Crafts the S3cmd CLI command including the
@@ -2724,18 +2779,87 @@ def list_objects_in_batches(
         del response
 
 
-def map_objects_to_owners(mcg_obj, bucket_name, prefix=""):
+def sts_assume_role(
+    pod_obj,
+    role_name,
+    access_key_id_assumed_user,
+    role_session_name=None,
+    mcg_obj=None,
+    signed_request_creds=None,
+):
     """
-    This method returns a mapping of object key to owner data
+    Aws s3 assume role of an User
 
     Args:
+        role_name (str): Role name of a role attached to the assumed user
+        access_key_id_assumed_user (str): Access key id of the assumed user
         mcg_obj (MCG): MCG object
-        bucket_name (str): Name of the bucket
-        prefix (str): Prefix to list objects
-
+        signed_request_creds (dict): a dictionary containing AWS S3 creds for a signed request
     Returns:
-        dict: a mapping of object key to owner data
+        Dict: Representing the output of the command which on successful execution
+        consists of new credentials
 
     """
-    response = s3_list_objects_v2(mcg_obj, bucket_name, prefix=prefix, fetch_owner=True)
-    return {item["Key"]: item["Owner"] for item in response.get("Contents", [])}
+    if not role_session_name:
+        role_session_name = f"role-session-{uuid4().hex}"
+    cmd = (
+        f"assume-role --role-arn arn:aws:sts::{access_key_id_assumed_user}:role/{role_name} "
+        f"--role-session-name {role_session_name}"
+    )
+    cmd = craft_sts_command(
+        cmd, mcg_obj=mcg_obj, signed_request_creds=signed_request_creds
+    )
+    return pod_obj.exec_cmd_on_pod(command=cmd)
+
+
+def s3_create_bucket(s3_obj, bucket_name, s3_client=None):
+    """
+    AWS s3 create bucket
+
+    Args:
+        s3_obj (MCG): MCG object
+        bucket_name (str): Name of the bucket
+        s3_client (S3.Client): Any S3 client resource
+
+    """
+    if s3_client:
+        return s3_client.create_bucket(Bucket=bucket_name)
+    else:
+        return s3_obj.s3_client.create_bucket(Bucket=bucket_name)
+
+
+def s3_delete_bucket(s3_obj, bucket_name, s3_client=None):
+    """
+    AWS s3 delete bucket
+
+    Args:
+        s3_obj (MCG): MCG object
+        bucket_name (str): Name of the bucket
+        s3_client (S3.Client): Any s3 client resource
+
+    """
+    if s3_client:
+        return s3_client.delete_bucket(Bucket=bucket_name)
+    else:
+        return s3_obj.s3_client.delete_bucket(Bucket=bucket_name)
+
+
+def s3_list_buckets(s3_obj, s3_client=None):
+    """
+    AWS S3 list buckets
+
+    Args:
+        s3_obj (MCG): MCG object
+        s3_client (S3.Client): Any s3 client resource
+
+    Returns:
+        List of buckets
+
+    """
+
+    if s3_client:
+        response = s3_client.list_buckets()
+    else:
+        response = s3_obj.s3_client.list_buckets()
+
+    return [bucket["Name"] for bucket in response["Buckets"]]
