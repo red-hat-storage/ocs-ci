@@ -61,6 +61,9 @@ class TestNoDataLossAndDataCorruptionOnFailures:
         # Noobaa pod restarts atleast 5 times and verify the data integrity
         for i in range(5):
             restart_pods_having_label(label=constants.NOOBAA_APP_LABEL)
+        logger.info(
+            "Verify the data integrity of application after repeated failures of Noobaa pods"
+        )
         for wl in workloads:
             config.switch_to_cluster_by_name(self.primary_cluster_name)
             validate_data_integrity(wl.workload_namespace)
@@ -93,12 +96,14 @@ class TestNoDataLossAndDataCorruptionOnFailures:
                     external_cluster_node_roles[ceph_node].get("ip_address")
                 )
         # Rolling reboot of the nodes in all zones one at a time
-        wait_time = 120
+        wait_time = 300
         logger.info("Shutting down all the nodes from active hub zone")
-        nodes_multicluster[managed_cluster_index].restart_nodes(
+        nodes_multicluster[managed_cluster_index].restart_nodes_by_stop_and_start(
             managed_cluster_node_objs
         )
-        nodes_multicluster[active_hub_index].restart_nodes(active_hub_cluster_node_objs)
+        nodes_multicluster[active_hub_index].restart_nodes_by_stop_and_start(
+            active_hub_cluster_node_objs
+        )
         host = config.ENV_DATA["vsphere_server"]
         user = config.ENV_DATA["vsphere_user"]
         password = config.ENV_DATA["vsphere_password"]
@@ -118,6 +123,9 @@ class TestNoDataLossAndDataCorruptionOnFailures:
         ceph_health_check(tries=40, delay=30)
 
         # Again verify the data integrity of application
+        logger.info(
+            "Verify the data integrity of application after all nodes from active hub zone are rebooted"
+        )
         for wl in workloads:
             config.switch_to_cluster_by_name(self.primary_cluster_name)
             validate_data_integrity(wl.workload_namespace)
@@ -146,6 +154,9 @@ class TestNoDataLossAndDataCorruptionOnFailures:
         ceph_health_check(tries=120, delay=30)
 
         # Again verify the data integrity of application
+        logger.info(
+            "Verify the data integrity of application after repeated restart of ceph nodes from zones"
+        )
         for wl in workloads:
             config.switch_to_cluster_by_name(self.primary_cluster_name)
             validate_data_integrity(wl.workload_namespace)
