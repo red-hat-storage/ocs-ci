@@ -1406,7 +1406,7 @@ BALANCED_PROFILE_REQUEST_MEMORY_VALUES = {
 }
 
 PERFORMANCE_PROFILE_REQUEST_CPU_VALUES = {
-    "mgr": "1500m'",
+    "mgr": "1500m",
     "mon": "1500",
     "osd": "4",
     "mds": "3",
