@@ -169,7 +169,7 @@ class TestMonAndOSDFailures:
         # and wait 10 mins
         logger.info(f"Failing mon by scaling down the deployment {mon_dep}")
         if modify_deployment_replica_count(mon_dep, 0):
-            time.sleep(300)
+            time.sleep(600)
 
         # scale the deployment back to 1
         logger.info(f"recovering mon {mon_dep} now...")
@@ -208,7 +208,7 @@ class TestMonAndOSDFailures:
                 label=constants.MON_APP_LABEL, exptected_count=expected_mon_count
             )
 
-        time.sleep(300)
+        time.sleep(600)
 
         # scale the deployments back to 1
         for mon_dep in mon_deps:
@@ -218,28 +218,28 @@ class TestMonAndOSDFailures:
             label=constants.MON_APP_LABEL, exptected_count=5, timeout=300
         )
 
-    # @polarion_id("OCS-5061")
-    # def test_single_osd_failure(self):
-    #     """
-    #     Test single osd failure with cephFS/RBD workloads running in the background
-    #
-    #     """
-    #     logger.info("testing single osd failure scenarios")
-    #     sc_obj = StretchCluster()
-    #
-    #     # get osd-pod of a single zone
-    #     osd_pods_in_zone = sc_obj.get_osd_pods_in_a_zone("data-1")
-    #     osd_pod_to_fail = random.choice(osd_pods_in_zone).name
-    #
-    #     # get the deployment of the osd-pod
-    #     osd_dep = get_deployment_name(osd_pod_to_fail)
-    #
-    #     # scale the deployment of osd to 0
-    #     # and wait 10 mins
-    #     logger.info(f"Failing osd by scaling down osd deployment {osd_dep}")
-    #     if modify_deployment_replica_count(osd_dep, 0):
-    #         time.sleep(600)
-    #
-    #     # scale the deployment back to 1
-    #     logger.info(f"Recovering osd by scaling up osd deployment {osd_dep}")
-    #     modify_deployment_replica_count(osd_dep, 1)
+    @polarion_id("OCS-5061")
+    def test_single_osd_failure(self):
+        """
+        Test single osd failure with cephFS/RBD workloads running in the background
+
+        """
+        logger.info("testing single osd failure scenarios")
+        sc_obj = StretchCluster()
+
+        # get osd-pod of a single zone
+        osd_pods_in_zone = sc_obj.get_osd_pods_in_a_zone("data-1")
+        osd_pod_to_fail = random.choice(osd_pods_in_zone).name
+
+        # get the deployment of the osd-pod
+        osd_dep = get_deployment_name(osd_pod_to_fail)
+
+        # scale the deployment of osd to 0
+        # and wait 10 mins
+        logger.info(f"Failing osd by scaling down osd deployment {osd_dep}")
+        if modify_deployment_replica_count(osd_dep, 0):
+            time.sleep(600)
+
+        # scale the deployment back to 1
+        logger.info(f"Recovering osd by scaling up osd deployment {osd_dep}")
+        modify_deployment_replica_count(osd_dep, 1)
