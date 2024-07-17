@@ -2,9 +2,11 @@ import pytest
 import logging
 import time
 import os
+import socket
 
 
 from ocs_ci.utility import nfs_utils
+from ocs_ci.utility.utils import exec_cmd
 from ocs_ci.framework import config
 from ocs_ci.utility.connection import Connection
 from ocs_ci.ocs import constants, ocp
@@ -118,6 +120,7 @@ class TestNfsEnable(ManageTest):
         6:- Delete ocs nfs Service
 
         """
+        self.__nfs_client_connection = None
         self = request.node.cls
         log.info("-----Setup-----")
         self.namespace = "openshift-storage"
@@ -145,8 +148,6 @@ class TestNfsEnable(ManageTest):
             config.ENV_DATA.get("nfs_client_private_key")
             or config.DEPLOYMENT["ssh_key_private"]
         )
-
-        self.con = None
 
         # Enable nfs feature
         log.info("----Enable nfs----")
@@ -193,6 +194,35 @@ class TestNfsEnable(ManageTest):
                 nfs_utils.unmount(self.con, self.test_folder)
             log.info("Delete mount point")
             _, _, _ = self.con.exec_cmd("rm -rf " + self.test_folder)
+
+    # the NFS Client VM might not be healthy, so rebooting it and re-trying
+    @property
+    @retry((TimeoutError, socket.gaierror), tries=3, delay=60, backoff=1)
+    def con(self):
+        """
+        Create connection to NFS Client VM, if not accessible, try to restart it.
+        """
+        if not self.__nfs_client_connection:
+            nfs_client_vm_cloud = config.ENV_DATA.get("nfs_client_vm_cloud")
+            nfs_client_vm_name = config.ENV_DATA.get("nfs_client_vm_name")
+            cmd = f"openstack --os-cloud {nfs_client_vm_cloud} server reboot --hard --wait {nfs_client_vm_name}"
+            exec_cmd(cmd)
+
+            time.sleep(60)
+            self.__nfs_client_connection = self.get_nfs_client_connection()
+        return self.__nfs_client_connection
+
+    @retry((TimeoutError, socket.gaierror), tries=10, delay=60, backoff=1)
+    def get_nfs_client_connection(self):
+        """
+        Create connection to NFS Client VM.
+        """
+        log.info("Login to test vm")
+        return Connection(
+            self.nfs_client_ip,
+            self.nfs_client_user,
+            private_key=self.nfs_client_private_key,
+        )
 
     @tier1
     @polarion_id("OCS-4269")
@@ -325,14 +355,6 @@ class TestNfsEnable(ManageTest):
 
         """
         nfs_utils.skip_test_if_nfs_client_unavailable(self.nfs_client_ip)
-
-        # ssh to test-nfs-vm
-        log.info("Login to test vm")
-        self.con = Connection(
-            self.nfs_client_ip,
-            self.nfs_client_user,
-            private_key=self.nfs_client_private_key,
-        )
 
         # Create nfs pvcs with storageclass ocs-storagecluster-ceph-nfs
         nfs_pvc_obj = helpers.create_pvc(
@@ -504,14 +526,6 @@ class TestNfsEnable(ManageTest):
         """
         nfs_utils.skip_test_if_nfs_client_unavailable(self.nfs_client_ip)
 
-        # ssh to test-nfs-vm
-        log.info("Login to test vm")
-        self.con = Connection(
-            self.nfs_client_ip,
-            self.nfs_client_user,
-            private_key=self.nfs_client_private_key,
-        )
-
         # Create nfs pvcs with storageclass ocs-storagecluster-ceph-nfs
         nfs_pvc_objs, yaml_creation_dir = helpers.create_multiple_pvcs(
             sc_name=self.nfs_sc,
@@ -654,14 +668,6 @@ class TestNfsEnable(ManageTest):
         """
         nfs_utils.skip_test_if_nfs_client_unavailable(self.nfs_client_ip)
 
-        # ssh to test-nfs-vm
-        log.info("Login to test vm")
-        self.con = Connection(
-            self.nfs_client_ip,
-            self.nfs_client_user,
-            private_key=self.nfs_client_private_key,
-        )
-
         # Create nfs pvc with storageclass ocs-storagecluster-ceph-nfs
         pvc_objs = []
         nfs_pvc_obj = helpers.create_pvc(
@@ -801,13 +807,6 @@ class TestNfsEnable(ManageTest):
         """
         nfs_utils.skip_test_if_nfs_client_unavailable(self.nfs_client_ip)
 
-        # ssh to test-nfs-vm
-        log.info("Login to test vm")
-        self.con = Connection(
-            self.nfs_client_ip,
-            self.nfs_client_user,
-            private_key=self.nfs_client_private_key,
-        )
         # Create nfs pvcs with storageclass ocs-storagecluster-ceph-nfs
         nfs_pvc_obj = helpers.create_pvc(
             sc_name=self.nfs_sc,
