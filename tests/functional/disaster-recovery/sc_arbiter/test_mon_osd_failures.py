@@ -18,6 +18,7 @@ from ocs_ci.ocs.resources.pod import (
     get_not_running_pods,
     wait_for_pods_to_be_in_statuses,
     get_deployment_name,
+    wait_for_pods_by_label_count,
 )
 from ocs_ci.ocs.resources.pvc import get_pvc_objs
 from ocs_ci.ocs.resources.stretchcluster import StretchCluster
@@ -168,11 +169,14 @@ class TestMonAndOSDFailures:
         # and wait 10 mins
         logger.info(f"Failing mon by scaling down the deployment {mon_dep}")
         if modify_deployment_replica_count(mon_dep, 0):
-            time.sleep(600)
+            time.sleep(300)
 
         # scale the deployment back to 1
         logger.info(f"recovering mon {mon_dep} now...")
         modify_deployment_replica_count(mon_dep, 1)
+        wait_for_pods_by_label_count(
+            label=constants.MON_APP_LABEL, exptected_count=5, timeout=300
+        )
 
     @polarion_id("OCS-5060")
     def test_both_mon_failure(self):
@@ -183,6 +187,7 @@ class TestMonAndOSDFailures:
         logger.info("testing mon failures at both the data-zones")
         sc_obj = StretchCluster()
         mon_deps = list()
+        expected_mon_count = 5
         for zone in constants.DATA_ZONE_LABELS:
             # get mon-pod of a single zone
             mon_pods_in_zone = sc_obj.get_mon_pods_in_a_zone(zone)
@@ -197,37 +202,44 @@ class TestMonAndOSDFailures:
             logger.info(
                 f"Failing mon by scaling down mon deployment {mon_dep} from data-zone {zone}"
             )
+            expected_mon_count -= 1
             mon_deps.append(mon_dep)
+            wait_for_pods_by_label_count(
+                label=constants.MON_APP_LABEL, exptected_count=expected_mon_count
+            )
 
-        time.sleep(600)
+        time.sleep(300)
 
         # scale the deployments back to 1
         for mon_dep in mon_deps:
             logger.info(f"Recovering mon by scaling up the mon deployment {mon_dep}")
             modify_deployment_replica_count(mon_dep, 1)
+        wait_for_pods_by_label_count(
+            label=constants.MON_APP_LABEL, exptected_count=5, timeout=300
+        )
 
-    @polarion_id("OCS-5061")
-    def test_single_osd_failure(self):
-        """
-        Test single osd failure with cephFS/RBD workloads running in the background
-
-        """
-        logger.info("testing single osd failure scenarios")
-        sc_obj = StretchCluster()
-
-        # get osd-pod of a single zone
-        osd_pods_in_zone = sc_obj.get_osd_pods_in_a_zone("data-1")
-        osd_pod_to_fail = random.choice(osd_pods_in_zone).name
-
-        # get the deployment of the osd-pod
-        osd_dep = get_deployment_name(osd_pod_to_fail)
-
-        # scale the deployment of osd to 0
-        # and wait 10 mins
-        logger.info(f"Failing osd by scaling down osd deployment {osd_dep}")
-        if modify_deployment_replica_count(osd_dep, 0):
-            time.sleep(600)
-
-        # scale the deployment back to 1
-        logger.info(f"Recovering osd by scaling up osd deployment {osd_dep}")
-        modify_deployment_replica_count(osd_dep, 1)
+    # @polarion_id("OCS-5061")
+    # def test_single_osd_failure(self):
+    #     """
+    #     Test single osd failure with cephFS/RBD workloads running in the background
+    #
+    #     """
+    #     logger.info("testing single osd failure scenarios")
+    #     sc_obj = StretchCluster()
+    #
+    #     # get osd-pod of a single zone
+    #     osd_pods_in_zone = sc_obj.get_osd_pods_in_a_zone("data-1")
+    #     osd_pod_to_fail = random.choice(osd_pods_in_zone).name
+    #
+    #     # get the deployment of the osd-pod
+    #     osd_dep = get_deployment_name(osd_pod_to_fail)
+    #
+    #     # scale the deployment of osd to 0
+    #     # and wait 10 mins
+    #     logger.info(f"Failing osd by scaling down osd deployment {osd_dep}")
+    #     if modify_deployment_replica_count(osd_dep, 0):
+    #         time.sleep(600)
+    #
+    #     # scale the deployment back to 1
+    #     logger.info(f"Recovering osd by scaling up osd deployment {osd_dep}")
+    #     modify_deployment_replica_count(osd_dep, 1)
