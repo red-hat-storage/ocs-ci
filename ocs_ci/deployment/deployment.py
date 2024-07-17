@@ -3445,7 +3445,7 @@ class MDRMultiClusterDROperatorsDeploy(MultiClusterDROperatorsDeploy):
             self.meta_obj.bucket_name,
         )
         self.create_generic_credentials(
-            self.meta_obj.access_key, self.meta_obj.access_key, acm_indexes
+            self.meta_obj.access_key, self.meta_obj.secret_key, acm_indexes
         )
         self.validate_secret_creation_oadp()
         # Reconfigure OADP on all ACM clusters
