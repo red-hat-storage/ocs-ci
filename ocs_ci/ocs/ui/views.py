@@ -1097,7 +1097,7 @@ add_capacity_4_12 = {
 
 block_pool_4_12 = {
     "actions_inside_pool": (
-        "//span[text()='Actions']/..",
+        "//span[text()='Actions']/.. | //button[@data-test='kebab-button']",
         By.XPATH,
     ),
     "delete_pool_inside_pool": (
