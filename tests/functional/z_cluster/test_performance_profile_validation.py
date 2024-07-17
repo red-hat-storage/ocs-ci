@@ -144,6 +144,10 @@ class TestProfileDefaultValuesCheck(ManageTest):
                 log.info(resource_dict)
                 log.info(resource_dict["limits"])
                 log.info(resource_dict["requests"])
+                log.info(expected_cpu_limit_values[label])
+                log.info(expected_memory_limit_values[label])
+                log.info(expected_cpu_request_values[label])
+                log.info(expected_memory_request_values[label])
                 assert (
                     resource_dict["limits"]["cpu"] == expected_cpu_limit_values[label]
                     and resource_dict["limits"]["memory"]
