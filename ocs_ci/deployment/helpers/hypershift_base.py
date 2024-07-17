@@ -311,7 +311,7 @@ class HyperShiftBase:
             )
 
         if disable_default_sources:
-            create_hcp_cluster_cmd += " --disable-default-sources "
+            create_hcp_cluster_cmd += " --olm-disable-default-sources"
 
         logger.info("Creating HyperShift hosted cluster")
         exec_cmd(create_hcp_cluster_cmd)
