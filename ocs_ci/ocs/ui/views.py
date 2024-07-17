@@ -1161,7 +1161,10 @@ block_pool = {
         By.CSS_SELECTOR,
     ),
     "pool_confirm_create": ('button[data-test-id="confirm-action"]', By.CSS_SELECTOR),
-    "actions_outside_pool": ('button[aria-label="Actions"]', By.CSS_SELECTOR),
+    "actions_outside_pool": (
+        'button[aria-label="Actions"], button[data-test="kebab-button"]',
+        By.CSS_SELECTOR,
+    ),
     "edit_labels_of_pool": ("//a[normalize-space()='Edit labels']", By.XPATH),
     "edit_labels_of_pool_input": ("#tags-input", By.TAG_NAME),
     "invalid_label_name_note_edit_label_pool": (
