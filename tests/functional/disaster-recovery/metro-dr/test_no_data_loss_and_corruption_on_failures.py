@@ -3,7 +3,11 @@ import pytest
 import time
 
 
-from ocs_ci.framework.pytest_customization.marks import tier4a
+from ocs_ci.framework.pytest_customization.marks import (
+    tier4a,
+    turquoise_squad,
+    vsphere_platform_required,
+)
 from ocs_ci.framework import config
 from ocs_ci.ocs.dr.dr_workload import validate_data_integrity
 from ocs_ci.ocs import constants
@@ -15,7 +19,6 @@ from ocs_ci.helpers.dr_helpers import (
     get_current_primary_cluster_name,
     get_active_acm_index,
 )
-from ocs_ci.framework.pytest_customization.marks import turquoise_squad
 from ocs_ci.utility import vsphere
 from ocs_ci.utility.utils import ceph_health_check
 
@@ -24,6 +27,7 @@ logger = logging.getLogger(__name__)
 
 @tier4a
 @turquoise_squad
+@vsphere_platform_required
 class TestNoDataLossAndDataCorruptionOnFailures:
     """
     The  Objective of this test cases is to make sure that the MDR cluster remains accessible
