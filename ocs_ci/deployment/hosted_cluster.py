@@ -371,6 +371,11 @@ class HypershiftHostedOCP(HyperShiftBase, MetalLBInstaller, CNVInstaller, Deploy
         cp_availability_policy = (
             config.ENV_DATA["clusters"].get(self.name).get("cp_availability_policy")
         )
+        disable_default_sources = (
+            config.ENV_DATA["clusters"]
+            .get(self.name)
+            .get("disable_default_sources", False)
+        )
         return self.create_kubevirt_ocp_cluster(
             name=self.name,
             nodepool_replicas=nodepool_replicas,
@@ -378,6 +383,7 @@ class HypershiftHostedOCP(HyperShiftBase, MetalLBInstaller, CNVInstaller, Deploy
             memory=memory_per_hosted_cluster,
             ocp_version=ocp_version,
             cp_availability_policy=cp_availability_policy,
+            disable_default_sources=disable_default_sources,
         )
 
     def deploy_dependencies(
