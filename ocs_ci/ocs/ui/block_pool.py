@@ -21,7 +21,7 @@ class BlockPoolUI(PageNavigator):
     def __init__(self):
         super().__init__()
 
-    def create_pool(self, pool_type_block=True, replica, compression):
+    def create_pool(self, replica, compression, pool_type_block=True):
         """
         Create block pool via UI
 
