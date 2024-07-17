@@ -16,6 +16,8 @@ from ocs_ci.ocs.cluster import is_flexible_scaling_enabled
 from ocs_ci.ocs.ocp import OCP
 from ocs_ci.ocs.resources import storage_cluster
 from ocs_ci.ocs import flowtest
+from ocs_ci.utility.version import get_semantic_ocp_running_version, VERSION_4_16
+from ocs_ci.helpers.keyrotation_helper import OSDKeyrotation
 
 logger = logging.getLogger(__name__)
 
@@ -28,6 +30,19 @@ class TestBaseOperationNodeDrain(E2ETest):
     Tests Story/Flow based test scenario: Node Drain
 
     """
+
+    @pytest.fixture(autouse=True)
+    def teardown(self, request):
+        """
+        Resetting the default value of KeyRotation
+        """
+
+        def finalizer():
+            kr_obj = OSDKeyrotation()
+            kr_obj.set_keyrotation_schedule("@weekly")
+            kr_obj.enable_keyrotation()
+
+        request.addfinalizer(finalizer)
 
     @magenta_squad
     @skipif_aws_i3
@@ -53,6 +68,26 @@ class TestBaseOperationNodeDrain(E2ETest):
         4. Node n/w failure
 
         """
+        # Check for the OSD keyrotation condition.
+        keyrotation_condition = (
+            get_semantic_ocp_running_version() >= VERSION_4_16
+        ) and (
+            config.ENV_DATA.get("encryption_at_rest")
+            and (not config.DEPLOYMENT.get("kms_deployment"))
+        )
+        if keyrotation_condition:
+            # Change keyrotation schedule to every 3 min.
+            logger.info("Verifying Keyrotation for OSD")
+            osd_keyrotation = OSDKeyrotation()
+
+            # Enable Keyrotation and verify its enable status at rook and storagecluster end.
+            logger.info("Enabling the Keyrotation in storagecluster Spec.")
+            osd_keyrotation.enable_keyrotation()
+
+            # Set Key Rotation schedule to every 3 minutes.
+            schedule = "*/3 * * * *"
+            osd_keyrotation.set_keyrotation_schedule(schedule)
+
         logger.info("Starting IO operations in Background")
         project = project_factory()
         bg_handler = flowtest.BackgroundOps()
@@ -156,3 +191,19 @@ class TestBaseOperationNodeDrain(E2ETest):
         )
         bg_ops = [pvc_create_delete, obc_ios, pgsql_workload]
         bg_handler.wait_for_bg_operations(bg_ops, timeout=600)
+
+        if keyrotation_condition:
+            # Recored existing OSD keys before rotation is happen.
+            osd_keys_before_rotation = {}
+            for device in osd_keyrotation.deviceset:
+                osd_keys_before_rotation[device] = osd_keyrotation.get_osd_dm_crypt(
+                    device
+                )
+
+            assert osd_keyrotation.verify_keyrotation(
+                osd_keys_before_rotation
+            ), "Keyrotation not happend for the OSD."
+
+            # Check weather keyrotation functiol normally after .
+            logger.info("Changing the keyrotation value to default.")
+            osd_keyrotation.set_keyrotation_schedule("@weekly")
