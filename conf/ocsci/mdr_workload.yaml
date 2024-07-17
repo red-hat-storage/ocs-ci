@@ -31,7 +31,7 @@ ENV_DATA:
     },
   ]
   dr_cnv_workload_appset_push: [
-    { name: "vm-appset-push-1", destination_namespace: "vm-appset-push-1", appset_model: "push",
+    { name: "vm-appset-push-1", appset_model: "push",
       workload_dir: "mdr/cnv-workload/appset/vm-appset-push-1",
       dr_workload_app_placement_name: "vm-appset-push-1-placement", vm_name: "vm-workload-1",
       vm_secret: "vm-secret-1", vm_username: "cirros",
@@ -39,7 +39,7 @@ ENV_DATA:
     },
   ]
   dr_cnv_workload_appset_pull: [
-    { name: "vm-appset-pull-1", destination_namespace: "vm-appset-pull-1", appset_model: "pull",
+    { name: "vm-appset-pull-1", appset_model: "pull",
       workload_dir: "mdr/cnv-workload/appset/vm-appset-pull-1",
       dr_workload_app_placement_name: "vm-appset-pull-1-placement", vm_name: "vm-workload-1",
       vm_secret: "vm-secret-1", vm_username: "cirros",
@@ -47,7 +47,7 @@ ENV_DATA:
     },
   ]
   dr_cnv_workload_sub: [
-    { name: "vm-sub-1", destination_namespace: "vm-sub-1", workload_dir: "mdr/cnv-workload/subscription/vm-sub-1",
+    { name: "vm-subscription-1", workload_dir: "mdr/cnv-workload/subscription/vm-subscription-1",
       dr_workload_app_placement_name: "vm-sub-1-placement", vm_name: "vm-workload-1",
       vm_secret: "vm-secret-1", vm_username: "cirros",
       dr_workload_app_pvc_selector: { 'appname': 'kubevirt' }, pod_count: 1, pvc_count: 1
