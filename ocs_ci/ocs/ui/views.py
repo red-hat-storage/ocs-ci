@@ -1152,6 +1152,7 @@ block_pool = {
         'input[data-test="new-pool-name-textbox"]',
         By.CSS_SELECTOR,
     ),
+    "pool_type_block": ("type-block", By.ID),
     "first_select_replica": ('button[data-test="replica-dropdown"]', By.CSS_SELECTOR),
     "second_select_replica_2": ("//button[text()='2-way Replication']", By.XPATH),
     "second_select_replica_3": ("//button[text()='3-way Replication']", By.XPATH),
