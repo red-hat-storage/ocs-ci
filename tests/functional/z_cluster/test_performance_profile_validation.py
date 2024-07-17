@@ -81,7 +81,7 @@ class TestProfileDefaultValuesCheck(ManageTest):
             verify_storage_cluster()
 
             # Sleep for 120 seconds for the profile changes to reflect
-            time.sleep(120)
+            time.sleep(600)
 
             storage_cluster1 = StorageCluster(
                 resource_name=storage_cluster_name,
@@ -137,17 +137,9 @@ class TestProfileDefaultValuesCheck(ManageTest):
                 resource_dict = OCP(
                     namespace=config.ENV_DATA["cluster_namespace"], kind="pod"
                 ).get(resource_name=podd.name)["spec"]["containers"][0]["resources"]
-                resource_dict1 = OCP(
-                    namespace=config.ENV_DATA["cluster_namespace"], kind="pod"
-                ).get(resource_name=podd.name)["spec"]
-                log.info(resource_dict1)
-                log.info(resource_dict)
-                log.info(resource_dict["limits"])
-                log.info(resource_dict["requests"])
-                log.info(expected_cpu_limit_values[label])
-                log.info(expected_memory_limit_values[label])
-                log.info(expected_cpu_request_values[label])
-                log.info(expected_memory_request_values[label])
+                log.info(
+                    f"CPU request and limit values for pod {podd.name} are {resource_dict}"
+                )
                 assert (
                     resource_dict["limits"]["cpu"] == expected_cpu_limit_values[label]
                     and resource_dict["limits"]["memory"]
