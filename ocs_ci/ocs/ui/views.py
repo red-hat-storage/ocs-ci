@@ -1147,7 +1147,7 @@ block_pool_4_13 = {
 }
 
 block_pool = {
-    "create_block_pool": ("Create BlockPool", By.LINK_TEXT),
+    "create_block_pool": ("yaml-create", By.ID),
     "new_pool_name": (
         'input[data-test="new-pool-name-textbox"]',
         By.CSS_SELECTOR,
