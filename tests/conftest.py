@@ -6897,8 +6897,8 @@ def discovered_apps_dr_workload(request):
 
         """
         total_pvc_count = 0
-        log.info("dss")
         workload_key = "dr_workload_discovered_apps_rbd"
+        # TODO: When cephfs is ready
         # if pvc_interface == constants.CEPHFILESYSTEM:
         #     workload_key = "dr_workload_discovered_apps_cephfs"
         for index in range(kubeobject):

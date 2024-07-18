@@ -174,7 +174,7 @@ def failover(
         workload_placement_name (str): Placement name
         switch_ctx (int): The cluster index by the cluster name
         discovered_apps (bool): True when cluster is failing over DiscoveredApps
-        old_primary (str): Name of cluster where worklaod were running
+        old_primary (str): Name of cluster where workload were running
 
     """
     restore_index = config.cur_index
@@ -229,8 +229,8 @@ def relocate(
         workload_type (str): Type of workload, i.e., Subscription or ApplicationSet
         workload_placement_name (str): Placement name
         switch_ctx (int): The cluster index by the cluster name
-        discovered_apps (bool): True when cluster is failing over DiscoveredApps
-        old_primary (str): Name of cluster where worklaod were running
+        discovered_apps (bool): If true then deployed workload is discovered_apps
+        old_primary (str): Name of cluster where workload were running
 
     """
     restore_index = config.cur_index
