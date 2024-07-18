@@ -16,6 +16,7 @@ from ocs_ci.helpers.managed_services import (
     get_all_storageclassclaims,
 )
 from ocs_ci.ocs.resources.ocs import get_ocs_csv
+from ocs_ci.ocs.resources.storage_cluster import verify_storage_cluster
 
 log = logging.getLogger(__name__)
 
@@ -513,6 +514,11 @@ class StorageClient:
             kind=constants.STORAGECLIENT,
             namespace=namespace,
         )
+
+        # Check ocs-storagecluster is in 'Ready' status
+        log.info("Verify storagecluster on Ready state")
+        verify_storage_cluster()
+
         storageclient_data = storageclient_obj.get(retry=6, wait=30)["items"]
         log.info(f"storageclient data, {storageclient_data}")
         storageclient_name = storageclient_data[0]["metadata"]["name"]
