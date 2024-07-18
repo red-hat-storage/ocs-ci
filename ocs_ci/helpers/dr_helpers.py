@@ -5,7 +5,6 @@ Helper functions specific for DR
 import json
 import logging
 import tempfile
-import boto3
 
 from ocs_ci.framework import config
 from ocs_ci.ocs import constants, ocp
@@ -31,7 +30,6 @@ from ocs_ci.utility.utils import (
     CommandFailed,
     run_cmd,
 )
-from botocore.exceptions import BotoCoreError
 
 logger = logging.getLogger(__name__)
 
