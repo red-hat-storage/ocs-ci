@@ -4,7 +4,6 @@ from ocs_ci.helpers.helpers import is_rbd_default_storage_class
 from ocs_ci.ocs import constants
 from ocs_ci.utility import templating
 from ocs_ci.helpers.helpers import create_unique_resource_name
-from ocs_ci.helpers.helpers import default_storage_class
 from ocs_ci.framework.pytest_customization.marks import (
     tier1,
     green_squad,
@@ -29,18 +28,14 @@ class TestRBDStorageClassAsDefaultStorageClass:
         Test PVC creation without mentioning storageclass name in the spec.
 
         Steps:
-            1. Verify RBD storageclass  is set as default.
-            2. Create a PVC and don't provide any storage class name in the YAML file.
-            3. Verify PVC has created and it has attached to the Default RBD  SC.
+            1. Create a PVC and don't provide any storage class name in the YAML file.
+            2. Verify PVC has created and it has attached to the Default RBD  SC.
+            3. Verify Storagecalss attched to PVC is the default RBD.
             4. Create a POD and attached the  above PVC to the Pod.
             5. Start IO on verify that IO is successful on the PV.
         """
         if not is_ui_deployment():
             pytest.skip("cluster is not deployed from UI. Skipping test.")
-
-        assert (
-            is_rbd_default_storage_class()
-        ), "RBD is not default storageclass for Cluster."
 
         pvc_data = templating.load_yaml(constants.CSI_PVC_YAML)
         pvc_data["metadata"]["name"] = create_unique_resource_name("test", "pvc")
@@ -52,12 +47,11 @@ class TestRBDStorageClassAsDefaultStorageClass:
         assert pvc_obj, "PVC creation failed."
 
         sc_attached_to_pvc = pvc_obj.get().get("spec").get("storageClassName")
-        sc_default_in_cluster = default_storage_class(constants.CEPHBLOCKPOOL)
         log.info("Verifying the storageclass attached to PVC is correct.")
 
-        assert (
-            sc_attached_to_pvc == sc_default_in_cluster.name
-        ), "Storageclass attached to PVC is different from StorageClass set as default for BlockPool."
+        assert is_rbd_default_storage_class(
+            sc_name=sc_attached_to_pvc
+        ), "RBD is not default storageclass for Cluster."
 
         log.info("Attaching PVC to pod to start IO workload.")
         pod_obj = pod_factory(pvc=pvc_obj, status=constants.STATUS_RUNNING)
