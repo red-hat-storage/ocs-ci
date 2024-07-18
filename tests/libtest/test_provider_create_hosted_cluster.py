@@ -17,7 +17,16 @@ from ocs_ci.framework.pytest_customization.marks import (
     purple_squad,
     runs_on_provider,
 )
+from ocs_ci.ocs import constants
 from ocs_ci.ocs.resources.storage_client import StorageClient
+from ocs_ci.helpers.helpers import (
+    get_all_storageclass_names,
+    verify_block_pool_exists,
+)
+from ocs_ci.ocs.rados_utils import (
+    verify_cephblockpool_status,
+    check_phase_of_rados_namespace,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -196,10 +205,30 @@ class TestProviderHosted(object):
         assert depl.muliclusterhub_running(), "MCH not running"
 
     @runs_on_provider
-    def test_verify_native_storage_client(self):
+    def test_verify_native_storage(self):
         """
         Verify native storage client
         """
         logger.info("Verify native storage client")
         storage_client = StorageClient()
         storage_client.verify_native_storageclient()
+        assert verify_block_pool_exists(
+            constants.DEFAULT_BLOCKPOOL
+        ), f"{constants.DEFAULT_BLOCKPOOL} is not created"
+        assert verify_cephblockpool_status(), "the cephblockpool is not in Ready phase"
+
+        # Validate radosnamespace created and in 'Ready' status
+        assert (
+            check_phase_of_rados_namespace()
+        ), "The radosnamespace is not in Ready phase"
+
+        # Validate storageclassrequests created
+        storage_class_classes = get_all_storageclass_names()
+        storage_class_claims = [
+            constants.CEPHBLOCKPOOL_SC,
+            constants.CEPHFILESYSTEM_SC,
+        ]
+        for storage_class in storage_class_claims:
+            assert (
+                storage_class in storage_class_classes
+            ), "Storage classes ae not created as expected"
