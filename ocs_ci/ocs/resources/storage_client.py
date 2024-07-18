@@ -16,6 +16,7 @@ from ocs_ci.utility.retry import retry
 from ocs_ci.helpers.managed_services import (
     get_all_storageclassclaims,
 )
+from ocs_ci.utility.utils import TimeoutSampler
 
 log = logging.getLogger(__name__)
 
@@ -505,14 +506,7 @@ class StorageClient:
         else:
             namespace = constants.OPENSHIFT_STORAGE_CLIENT_NAMESPACE
 
-        storageclient_obj = ocp.OCP(
-            kind=constants.STORAGECLIENT,
-            namespace=namespace,
-        )
-
-        storageclient_data = storageclient_obj.get(retry=6, wait=30)["items"]
-        log.info(f"storageclient data, {storageclient_data}")
-        storageclient_name = storageclient_data[0]["metadata"]["name"]
+        storageclient_name = self.get_storageclient_name(namespace)
 
         # Verify storageclient is in Connected status
         self.verify_storageclient_status(
@@ -526,3 +520,26 @@ class StorageClient:
         self.verify_storagerequest_exists(
             storageclient_name=storageclient_name, namespace=namespace
         )
+
+    def get_storageclient_name(self, namespace, timeout=300, sleep=10):
+        """
+        This method fetches the first storageclient name.
+        Suits well only for native storage client wait and fetch
+
+        Args:
+            namespace(str): Namespace where the storageclient is created
+            timeout(int): Time to wait for the storageclient
+            sleep(int): Time to sleep between each iteration
+
+        Returns:
+            storageclient_name(str): name of the storageclient
+        """
+        for sample in TimeoutSampler(
+            timeout, sleep, ocp.OCP, kind=constants.STORAGECLIENT, namespace=namespace
+        ):
+            storageclient_data = sample.get().get("items", [])
+            for storageclient in storageclient_data:
+                if storageclient.get("metadata", {}).get("name"):
+                    log.info(f"storageclient data, {storageclient}")
+                    return storageclient.get("metadata", {}).get("name")
+        return None
