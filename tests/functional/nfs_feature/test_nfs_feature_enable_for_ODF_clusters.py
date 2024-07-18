@@ -202,7 +202,10 @@ class TestNfsEnable(ManageTest):
         """
         Create connection to NFS Client VM, if not accessible, try to restart it.
         """
-        if not self.__nfs_client_connection:
+        if (
+            not hasattr(self, "__nfs_client_connection")
+            or not self.__nfs_client_connection
+        ):
             try:
                 self.__nfs_client_connection = self.get_nfs_client_connection()
             except (TimeoutError, socket.gaierror):
