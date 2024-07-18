@@ -253,6 +253,9 @@ class Deployment(object):
         """
         config.switch_ctx(switch_ctx) if switch_ctx else config.switch_acm_ctx()
 
+        logger.info("Creating Namespace for GitOps Operator ")
+        run_cmd(f"oc create namespace {constants.GITOPS_NAMESPACE}")
+
         logger.info("Creating GitOps Operator Subscription")
 
         run_cmd(f"oc create -f {constants.GITOPS_SUBSCRIPTION_YAML}")
