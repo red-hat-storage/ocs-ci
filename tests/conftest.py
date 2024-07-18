@@ -19,6 +19,7 @@ from botocore.exceptions import ClientError
 import pytest
 from collections import namedtuple
 
+from ocs_ci.deployment.cnv import CNVInstaller
 from ocs_ci.deployment import factory as dep_factory
 from ocs_ci.framework import config as ocsci_config
 import ocs_ci.framework.pytest_customization.marks
@@ -31,10 +32,10 @@ from ocs_ci.framework.pytest_customization.marks import (
     ignore_resource_not_found_error_label,
 )
 from ocs_ci.helpers.cnv_helpers import (
-    create_vm_using_standalone_pvc,
     get_pvc_from_vm,
     get_secret_from_vm,
     get_volumeimportsource,
+    create_vm_using_standalone_pvc,
 )
 from ocs_ci.helpers.proxy import update_container_with_proxy_env
 from ocs_ci.ocs import constants, defaults, fio_artefacts, node, ocp, platform_nodes
@@ -7939,8 +7940,28 @@ def scale_noobaa_db_pod_pv_size(request):
     return factory
 
 
+@pytest.fixture(scope="session")
+def setup_cnv(request):
+    """
+    Session scoped fixture to setup and cleanup CNV
+    based on need of the tests
+
+    """
+    cnv_obj = CNVInstaller()
+    cnv_obj.deploy_cnv(check_cnv_deployed=True, check_cnv_ready=True)
+
+    def finalizer():
+        """
+        Clean up CNV deployment
+
+        """
+        cnv_obj.cleanup_cnv()
+
+    request.addfinalizer(finalizer)
+
+
 @pytest.fixture()
-def setup_vms_standalone_pvc(request, project_factory):
+def setup_vms_standalone_pvc(request, project_factory, setup_cnv):
     """
     This fixture will setup VM using standalone PVC
 
@@ -7948,7 +7969,6 @@ def setup_vms_standalone_pvc(request, project_factory):
     vm_obj = None
 
     def factory():
-
         nonlocal vm_obj
         project_obj = project_factory()
         log.info(f"Created project {project_obj.namespace} for VMs")

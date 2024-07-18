@@ -9,7 +9,6 @@ from ocs_ci.framework.pytest_customization.marks import (
     turquoise_squad,
     tier1,
     stretchcluster_required,
-    cnv_required,
 )
 from ocs_ci.helpers.stretchcluster_helper import (
     recover_workload_pods_post_recovery,
@@ -36,7 +35,6 @@ logger = logging.getLogger(__name__)
 
 @tier1
 @stretchcluster_required
-@cnv_required
 @turquoise_squad
 class TestNetSplit:
     @pytest.fixture()
