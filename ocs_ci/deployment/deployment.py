@@ -2384,8 +2384,8 @@ def validate_acm_hub_install():
         condition=constants.STATUS_RUNNING,
         resource_name=constants.ACM_MULTICLUSTER_RESOURCE,
         column="STATUS",
-        timeout=720,
-        sleep=5,
+        timeout=1200,
+        sleep=30,
     )
     logger.info("MultiClusterHub Deployment Succeeded")
 
