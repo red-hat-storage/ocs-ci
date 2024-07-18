@@ -57,7 +57,6 @@ from ocs_ci.ocs.exceptions import (
     UnexpectedDeploymentConfiguration,
     ResourceNotFoundError,
     ACMClusterConfigurationException,
-    MDRDeploymentException,
     ACMObservabilityNotEnabled,
 )
 from ocs_ci.deployment.cert_manager import deploy_cert_manager
@@ -3224,7 +3223,7 @@ class MultiClusterDROperatorsDeploy(object):
         resource = backupstorage.get()
         if resource["status"].get("phase") != "Available":
             raise ACMClusterConfigurationException(
-                "Backupstoragelocation resource is not in 'Avaialble' phase"
+                "Backupstoragelocation resource is not in 'Available' phase"
             )
         logger.info("Dataprotection application successful")
 
