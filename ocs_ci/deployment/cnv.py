@@ -648,3 +648,90 @@ class CNVInstaller(object):
             logger.error(f"Failed to disable multicluster engine\n{cmd_res.stderr}")
             return
         logger.info(cmd_res.stdout.decode("utf-8").splitlines())
+
+    def remove_hyperconverged(self):
+        """
+        Remove HyperConverged CR
+
+        """
+        hyperconverged_obj = OCP(
+            kind=constants.HYPERCONVERGED,
+            resource_name=constants.KUBEVIRT_HYPERCONVERGED,
+            namespace=self.namespace,
+        )
+        hyperconverged_obj.delete()
+        logger.info(
+            f"Deleted {constants.HYPERCONVERGED} {constants.KUBEVIRT_HYPERCONVERGED}"
+        )
+
+    def remove_cnv_subscription(self):
+        """
+        Remove CNV subscription
+
+        """
+        cnv_sub = OCP(
+            kind=constants.SUBSCRIPTION,
+            resource_name=constants.KUBEVIRT_HYPERCONVERGED,
+            namespace=self.namespace,
+        )
+        cnv_sub.delete()
+        logger.info(f"Deleted subscription {constants.KUBEVIRT_HYPERCONVERGED}")
+
+    def remove_cnv_csv(self):
+        """
+        Remove CNV ClusterServiceVersion
+
+        """
+        cnv_csv = OCP(
+            kind=constants.CLUSTER_SERVICE_VERSION,
+            selector=constants.CNV_SELECTOR,
+            namespace=self.namespace,
+        )
+        cnv_csv.delete()
+        logger.info(f"Deleted ClusterServiceVersion {constants.CNV_OPERATORNAME}")
+
+    def remove_crds(self):
+        """
+        Remove openshift virtualization CRDs
+
+        """
+        OCP().exec_oc_cmd(
+            command=f"delete crd -n {self.namespace} -l {constants.CNV_SELECTOR}"
+        )
+        logger.info("Deleted all the openshift virtualization CRDs")
+
+    def remove_namespace(self):
+        """
+        Remove openshift virtualization namespace
+
+        """
+        cnv_namespace = OCP(
+            kind=constants.NAMESPACE, resource_name=constants.CNV_NAMESPACE
+        )
+        cnv_namespace.delete()
+        logger.info(f"Deleted the namespace {constants.CNV_NAMESPACE}")
+
+    def cleanup_cnv(self, check_cnv_installed=False):
+        """
+        Uninstall CNV deployment
+
+        """
+        if check_cnv_installed:
+            if not self.cnv_hyperconverged_installed():
+                logger.info("CNV is not installed, skipping the cleanup...")
+                return
+
+        logger.info("Removing the virtualization hyperconverged")
+        self.remove_hyperconverged()
+
+        logger.info("Removing the virtualization subscription")
+        self.remove_cnv_subscription()
+
+        logger.info("Removing the virtualization CSV")
+        self.remove_cnv_csv()
+
+        logger.info("Removing the namespace")
+        self.remove_namespace()
+
+        logger.info("Removing the openshift virtualization CRDs")
+        self.remove_crds()

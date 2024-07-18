@@ -11,7 +11,7 @@ import json
 from concurrent.futures.thread import ThreadPoolExecutor
 from datetime import datetime
 from math import floor
-from shutil import copyfile
+from shutil import copyfile, rmtree
 from functools import partial
 
 import boto3
@@ -20,6 +20,7 @@ from botocore.exceptions import ClientError
 import pytest
 from collections import namedtuple
 
+from ocs_ci.deployment.cnv import CNVInstaller
 from ocs_ci.deployment import factory as dep_factory
 from ocs_ci.deployment.helpers.hypershift_base import HyperShiftBase
 from ocs_ci.deployment.hosted_cluster import HostedClients
@@ -34,7 +35,6 @@ from ocs_ci.framework.pytest_customization.marks import (
     ignore_resource_not_found_error_label,
 )
 from ocs_ci.helpers.cnv_helpers import (
-    create_vm_using_standalone_pvc,
     get_pvc_from_vm,
     get_secret_from_vm,
     get_volumeimportsource,
@@ -131,7 +131,6 @@ from ocs_ci.utility.environment_check import (
     get_status_before_execution,
     get_status_after_execution,
 )
-from ocs_ci.utility.json import SetToListJSONEncoder
 from ocs_ci.utility.resource_check import (
     create_resource_dct,
     get_environment_status_after_execution,
@@ -8239,7 +8238,7 @@ def clone_ocs_operator(request, tmp_path_factory):
     request.addfinalizer(finalizer)
     clone_repo(constants.OCS_OPERATOR_REPO, str(repo_dir), branch="main", tmp_repo=True)
     return repo_dir
-
+ƒ
 
 @pytest.fixture(scope="session")
 def clone_odf_monitoring_compare_tool(request, tmp_path_factory):
@@ -8277,43 +8276,22 @@ def run_description():
             with open(description_path, "w") as file:
                 file.write(f"{run_name}\n")
 
-@pytest.fixture()
-def setup_vms_standalone_pvc(request, project_factory):
+
+@pytest.fixture(scope="session")
+def setup_cnv(request):
     """
-    This fixture will setup VM using standalone PVC
+    Session scoped fixture to setup and cleanup CNV
+    based on need of the tests
 
     """
-    vm_obj = None
-
-    def factory():
-
-        nonlocal vm_obj
-        project_obj = project_factory()
-        log.info(f"Created project {project_obj.namespace} for VMs")
-        vm_obj = create_vm_using_standalone_pvc(
-            running=True, namespace=project_obj.namespace
-        )
-        return vm_obj
+    cnv_obj = CNVInstaller()
+    cnv_obj.deploy_cnv(check_cnv_deployed=True, check_cnv_ready=True)
 
     def finalizer():
         """
-        Teardown all the objects created as part of
-        the setup factory
+        Clean up CNV deployment
 
         """
-        pvc_obj = get_pvc_from_vm(vm_obj)
-        secret_obj = get_secret_from_vm(vm_obj)
-        volumeimportsource_obj = get_volumeimportsource(pvc_obj=pvc_obj)
-        vm_obj.delete()
-        log.info(f"Successfully deleted VM {vm_obj.name}")
-        pvc_obj.delete()
-        log.info(f"Successfully deleted PVC {pvc_obj.name}")
-        secret_obj.delete()
-        log.info(f"Successfully deleted secret {secret_obj.name}")
-        volumeimportsource_obj.delete()
-        log.info(
-            f"Successfully deleted VolumeImportSource {volumeimportsource_obj.name}"
-        )
+        cnv_obj.cleanup_cnv()
 
     request.addfinalizer(finalizer)
-    return factory
