@@ -30,7 +30,7 @@ from ocs_ci.framework.testlib import (
 
 from ocs_ci.ocs.resources import pod, ocs
 from ocs_ci.utility.retry import retry
-from ocs_ci.ocs.exceptions import CommandFailed
+from ocs_ci.ocs.exceptions import CommandFailed, ConfigurationError
 
 
 log = logging.getLogger(__name__)
@@ -212,6 +212,11 @@ class TestNfsEnable(ManageTest):
             except (TimeoutError, socket.gaierror):
                 nfs_client_vm_cloud = config.ENV_DATA.get("nfs_client_vm_cloud")
                 nfs_client_vm_name = config.ENV_DATA.get("nfs_client_vm_name")
+                if not nfs_client_vm_cloud or not nfs_client_vm_name:
+                    raise ConfigurationError(
+                        "NFS Client VM is not accessible and ENV_DATA nfs_client_vm_cloud and/or nfs_client_vm_name "
+                        "parameters are not configured to be able to automatically reboot the NFS Client VM."
+                    )
                 cmd = f"openstack --os-cloud {nfs_client_vm_cloud} server reboot --hard --wait {nfs_client_vm_name}"
                 exec_cmd(cmd)
 
