@@ -1315,6 +1315,7 @@ def clean_disk(worker, namespace=constants.DEFAULT_NAMESPACE):
     lsblk_output = json.loads(str(out))
     lsblk_devices = lsblk_output["blockdevices"]
 
+    disks_cleaned = []
     for lsblk_device in lsblk_devices:
         if lsblk_device["name"] not in disks_available_on_worker_nodes_for_cleanup:
             logger.info(f'the disk cleanup is ignored for, {lsblk_device["name"]}')
@@ -1333,6 +1334,8 @@ def clean_disk(worker, namespace=constants.DEFAULT_NAMESPACE):
                 namespace=namespace,
             )
             logger.info(out)
+            disks_cleaned.append(lsblk_device["name"])
+
 
 
 class BaremetalPSIUPI(Deployment):

@@ -147,8 +147,12 @@ class ODFAndNativeStorageClientDeploymentOnProvider(object):
             f"number of disks avilable for cleanup, {number_of_disks_available}"
         )
 
-        worker_nodes = get_worker_nodes()
-        no_of_worker_nodes = len(worker_nodes)
+        worker_node_objs = get_nodes(node_type=constants.WORKER_MACHINE)
+        no_of_worker_nodes = len(worker_node_objs)
+
+        no_of_disks_available_on_worker_nodes = disks_available_to_cleanup(
+            worker_node_objs[0]
+        )
 
         # Install LSO, create LocalVolumeDiscovery and LocalVolumeSet
         is_local_storage_available = self.sc_obj.is_exist(
