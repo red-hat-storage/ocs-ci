@@ -1786,7 +1786,7 @@ def s3_list_objects_v2(
     max_keys=1000,
     con_token="",
     fetch_owner=False,
-    start_after=None,
+    start_after="",
 ):
     """
     Boto3 client based list object version2
