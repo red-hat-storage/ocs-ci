@@ -203,13 +203,16 @@ class TestNfsEnable(ManageTest):
         Create connection to NFS Client VM, if not accessible, try to restart it.
         """
         if not self.__nfs_client_connection:
-            nfs_client_vm_cloud = config.ENV_DATA.get("nfs_client_vm_cloud")
-            nfs_client_vm_name = config.ENV_DATA.get("nfs_client_vm_name")
-            cmd = f"openstack --os-cloud {nfs_client_vm_cloud} server reboot --hard --wait {nfs_client_vm_name}"
-            exec_cmd(cmd)
+            try:
+                self.__nfs_client_connection = self.get_nfs_client_connection()
+            except (TimeoutError, socket.gaierror):
+                nfs_client_vm_cloud = config.ENV_DATA.get("nfs_client_vm_cloud")
+                nfs_client_vm_name = config.ENV_DATA.get("nfs_client_vm_name")
+                cmd = f"openstack --os-cloud {nfs_client_vm_cloud} server reboot --hard --wait {nfs_client_vm_name}"
+                exec_cmd(cmd)
 
-            time.sleep(60)
-            self.__nfs_client_connection = self.get_nfs_client_connection()
+                time.sleep(60)
+                self.__nfs_client_connection = self.get_nfs_client_connection()
         return self.__nfs_client_connection
 
     @retry((TimeoutError, socket.gaierror), tries=10, delay=60, backoff=1)
