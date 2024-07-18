@@ -33,7 +33,7 @@ logger = logging.getLogger(__name__)
 @turquoise_squad
 class TestSiteFailureAndRecoverHub:
     """
-    Perform site failure, recover hub by moving to passive hub using hub recovery and perform failover
+    Perform site failure and hub recovery by moving to passive hub using hub recovery and perform failover
     """
 
     def test_site_failure_and_failover(self, nodes_multicluster, dr_workload):
