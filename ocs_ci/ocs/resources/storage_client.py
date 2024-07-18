@@ -1,6 +1,7 @@
 """
 Storage client related functions
 """
+
 import logging
 import tempfile
 import time
@@ -334,20 +335,25 @@ class StorageClient:
             storageclient_name (str): Name of the storageclient to be verified.
             namespace (str): Namespace where the storageclient is present.
 
-        Returns:
-            storagerequest_exists (bool): returns true if the storagerequest exists
-
         """
-        cmd = f"get storagerequests -n {namespace} " "-o=jsonpath='{.items[*]}'"
-        storage_requests = self.ocp_obj.exec_oc_cmd(command=cmd, out_yaml_format=False)
-
-        log.info(f"The list of storagerequests: {storage_requests}")
-        return (
-            f"ocs.openshift.io/storagerequest-name: {storageclient_name}-cephfs"
-            in storage_requests
-            and f"ocs.openshift.io/storagerequest-name: {storageclient_name}-chep-rbd"
-            in storage_requests
+        storage_requests = ocp.OCP(
+            kind="StorageRequest",
+            namespace=namespace,
         )
+
+        storage_requests_data = storage_requests.get(retry=6, wait=30)["items"]
+
+        # check that both cephfs and rbd storage requests exist
+        assert any(
+            req["metadata"]["labels"]["ocs.openshift.io/storagerequest-name"]
+            == f"{storageclient_name}-cephfs"
+            for req in storage_requests_data
+        ), "cephfs storage request not found"
+        assert any(
+            req["metadata"]["labels"]["ocs.openshift.io/storagerequest-name"]
+            == f"{storageclient_name}-ceph-rbd"
+            for req in storage_requests_data
+        ), "rbd storage request not found"
 
     @retry(AssertionError, 12, 10, 1)
     def verify_storageclient_status(
@@ -503,7 +509,8 @@ class StorageClient:
             kind=constants.STORAGECLIENT,
             namespace=namespace,
         )
-        storageclient_data = storageclient_obj.get()["items"]
+
+        storageclient_data = storageclient_obj.get(retry=6, wait=30)["items"]
         log.info(f"storageclient data, {storageclient_data}")
         storageclient_name = storageclient_data[0]["metadata"]["name"]
 

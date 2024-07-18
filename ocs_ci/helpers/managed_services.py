@@ -1,6 +1,7 @@
 """
 Managed Services related functionalities
 """
+
 import logging
 import re
 
@@ -236,7 +237,7 @@ def verify_osd_distribution_on_provider():
         # 4Ti is the size of OSD
         assert (
             osd_count == int(size) / 4
-        ), f"Zone {zone} does not have {size/4} osd, but {osd_count}"
+        ), f"Zone {zone} does not have {size / 4} osd, but {osd_count}"
 
 
 def verify_storageclient(
@@ -326,7 +327,7 @@ def get_all_storageclassclaims(namespace=None):
         sc_claim_obj = OCP(kind=constants.STORAGECLAIM, namespace=namespace)
     else:
         sc_claim_obj = OCP(kind=constants.STORAGECLASSCLAIM, namespace=namespace)
-    sc_claims_data = sc_claim_obj.get()["items"]
+    sc_claims_data = sc_claim_obj.get(retry=6, wait=30)["items"]
     log.info(f"storage claims: {sc_claims_data}")
     return [OCS(**claim_data) for claim_data in sc_claims_data]
 

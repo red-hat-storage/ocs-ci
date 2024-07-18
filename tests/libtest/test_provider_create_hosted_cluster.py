@@ -17,6 +17,7 @@ from ocs_ci.framework.pytest_customization.marks import (
     purple_squad,
     runs_on_provider,
 )
+from ocs_ci.ocs.resources.storage_client import StorageClient
 
 logger = logging.getLogger(__name__)
 
@@ -193,3 +194,12 @@ class TestProviderHosted(object):
         logger.info("Get MCH status")
         depl = Deployment()
         assert depl.muliclusterhub_running(), "MCH not running"
+
+    @runs_on_provider
+    def test_verify_native_storage_client(self):
+        """
+        Verify native storage client
+        """
+        logger.info("Verify native storage client")
+        storage_client = StorageClient()
+        storage_client.verify_native_storageclient()
