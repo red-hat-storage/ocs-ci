@@ -13,11 +13,7 @@ from ocs_ci.ocs.rados_utils import (
     check_phase_of_rados_namespace,
 )
 from ocs_ci.deployment.helpers.lso_helpers import setup_local_storage
-<<<<<<< HEAD
 from ocs_ci.ocs.node import label_nodes, get_all_nodes, get_node_objs, get_nodes
-=======
-from ocs_ci.ocs.node import label_nodes, get_all_nodes, get_node_objs, get_worker_nodes
->>>>>>> f8a6541a (Added step to update osd replica count with worker node count)
 from ocs_ci.ocs.utils import (
     setup_ceph_toolbox,
     enable_console_plugin,
