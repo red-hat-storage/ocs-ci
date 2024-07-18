@@ -13,7 +13,7 @@ from ocs_ci.ocs.rados_utils import (
     check_phase_of_rados_namespace,
 )
 from ocs_ci.deployment.helpers.lso_helpers import setup_local_storage
-from ocs_ci.ocs.node import label_nodes, get_all_nodes, get_node_objs, get_worker_nodes
+from ocs_ci.ocs.node import label_nodes, get_all_nodes, get_node_objs, get_nodes
 from ocs_ci.ocs.utils import (
     setup_ceph_toolbox,
     enable_console_plugin,
@@ -24,7 +24,7 @@ from ocs_ci.utility.utils import (
 )
 from ocs_ci.utility import templating, kms as KMS, version
 from ocs_ci.deployment.deployment import Deployment, create_catalog_source
-from ocs_ci.deployment.baremetal import clean_disk
+from ocs_ci.deployment.baremetal import clean_disk, disks_available_to_cleanup
 from ocs_ci.ocs.resources.storage_cluster import verify_storage_cluster
 from ocs_ci.ocs.resources.storage_client import StorageClient
 from ocs_ci.ocs.bucket_utils import check_pv_backingstore_type
@@ -133,8 +133,12 @@ class ODFAndNativeStorageClientDeploymentOnProvider(object):
                 "Failed to run patch command to update control nodes as scheduleable"
             )
 
-        worker_nodes = get_worker_nodes()
-        no_of_worker_nodes = len(worker_nodes)
+        worker_node_objs = get_nodes(node_type=constants.WORKER_MACHINE)
+        no_of_worker_nodes = len(worker_node_objs)
+
+        no_of_disks_available_on_worker_nodes = disks_available_to_cleanup(
+            worker_node_objs[0]
+        )
 
         # Install LSO, create LocalVolumeDiscovery and LocalVolumeSet
         is_local_storage_available = self.sc_obj.is_exist(
@@ -213,6 +217,9 @@ class ODFAndNativeStorageClientDeploymentOnProvider(object):
                     storage_cluster_data["spec"]["storageDeviceSets"][0][
                         "replica"
                     ] = no_of_worker_nodes
+                    storage_cluster_data["spec"]["storageDeviceSets"][0][
+                        "count"
+                    ] = no_of_disks_available_on_worker_nodes
 
                 templating.dump_data_to_temp_yaml(
                     storage_cluster_data, constants.OCS_STORAGE_CLUSTER_YAML
@@ -231,6 +238,9 @@ class ODFAndNativeStorageClientDeploymentOnProvider(object):
                     storage_cluster_data["spec"]["storageDeviceSets"][0][
                         "replica"
                     ] = no_of_worker_nodes
+                    storage_cluster_data["spec"]["storageDeviceSets"][0][
+                        "count"
+                    ] = no_of_disks_available_on_worker_nodes
                 templating.dump_data_to_temp_yaml(
                     storage_cluster_data, constants.OCS_STORAGE_CLUSTER_UPDATED_YAML
                 )
