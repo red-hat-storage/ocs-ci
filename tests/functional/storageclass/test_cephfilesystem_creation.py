@@ -5,7 +5,6 @@ from ocs_ci.helpers.helpers import (
     create_ceph_file_system,
 )
 from ocs_ci.ocs.exceptions import CommandFailed
-import ocs_ci.ocs.resources.pod as pod
 from ocs_ci.framework.testlib import ManageTest
 from ocs_ci.framework.pytest_customization.marks import (
     tier2,
@@ -39,17 +38,14 @@ class TestCephFileSystemCreation(ManageTest):
                 logger.info("CephFile System Created. : test-ceph-fs")
             else:
                 logger.error("Unable to create the Ceph File System")
-            ct_pod = pod.get_ceph_tools_pod()
-            cmd1 = "ceph fs fail test-ceph-fs"
-            ct_pod.exec_cmd_on_pod(cmd1)
-            cmd2 = "ceph fs rm test-ceph-fs --yes-i-really-mean-it"
-            ct_pod.exec_cmd_on_pod(cmd2)
+            logger.info("Deleting the Cephf Filesystem")
+            cephFS_obj.delete()
             logger.info("Creating CephFileSystem in the namespace")
             new_cephFS_obj = create_ceph_file_system(
                 cephfs_name="test-ceph-fs", label={"use": "test"}
             )
             logger.info(
-                f"Not able to create a new ceph fs using same name {new_cephFS_obj}"
+                f"Not able to create a new ceph fs using same name {new_cephFS_obj.name}"
             )
 
         except CommandFailed as e:
