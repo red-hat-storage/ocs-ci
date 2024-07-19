@@ -10,6 +10,7 @@ import os
 import re
 import requests
 import time
+import ipaddress
 from copy import copy
 from json import JSONDecodeError
 from ocs_ci.framework import config
@@ -727,3 +728,150 @@ def cleanup_policies_and_service_ids(cluster_name, get_infra_id_from_metadata=Tr
         delete_account_policy(policy["id"], api_token)
     for service_id in service_ids:
         delete_service_id(service_id["id"])
+
+
+def create_resource_group(resource_group):
+    """
+    Create resource group.
+
+    Args:
+        resource_group (str): resource group name
+
+    """
+    run_ibmcloud_cmd(f"ibmcloud resource group-create {resource_group}")
+
+
+def create_vpc(cluster_name, resource_group):
+    """
+    Create VPC.
+
+    Args:
+        cluster_name (str): cluster name
+        resource_group (str): resource group name
+
+    """
+    run_ibmcloud_cmd(
+        f"ibmcloud is vpc-create {cluster_name} --address-prefix-management manual"
+        f" --resource-group-name {resource_group}"
+    )
+
+
+def get_used_subnets():
+    """
+    Get currently used subnets in IBM Cloud
+
+    Returns:
+        list: subnets
+
+    """
+    subnets_data = json.loads(run_ibmcloud_cmd("ibmcloud is subnets --output json"))
+    return [subnet["ipv4_cidr_block"] for subnet in subnets_data]
+
+
+def create_address_prefix(prefix_name, vpc, zone, cidr):
+    """
+    Create address prefix in VPC.
+
+    Args:
+        prefix_name (str): address prefix name to create
+        vpc (str): VPC name
+        zone (str): zone name
+        cidr (str): CIDR for address prefix
+
+    """
+    run_ibmcloud_cmd(
+        f"ibmcloud is vpc-address-prefix-create {prefix_name} {vpc} {zone} {cidr}"
+    )
+
+
+def create_subnet(subnet_name, vpc, zone, cidr, resource_group):
+    """
+    Create subnet in VPC.
+
+    Args:
+        subnet_name (str): address prefix name to create
+        vpc (str): VPC name
+        zone (str): zone name
+        cidr (str): CIDR for address prefix
+        resource_group (str): resource group name
+
+    """
+    run_ibmcloud_cmd(
+        f"ibmcloud is subnet-create {subnet_name} {vpc} --zone {zone} --ipv4-cidr-block {cidr}"
+        f" --resource-group-name {resource_group}"
+    )
+
+
+def create_public_gateway(gateway_name, vpc, zone, resource_group):
+    """
+    Create public gateway in VPC.
+
+    Args:
+        gateway_name (str): public gateway name
+        vpc (str): VPC name
+        zone (str): zone name
+        resource_group (str): resource group name
+
+    """
+    run_ibmcloud_cmd(
+        f"ibmcloud is public-gateway-create {gateway_name} {vpc} {zone} --resource-group-name {resource_group}"
+    )
+
+
+def attach_subnet_to_public_gateway(subnet_name, gateway_name, vpc):
+    """
+    Attach subnet to public gateway.
+
+    Args:
+        subnet_name (str): subnet name to attach to public gateway
+        gateway_name (str): public gateway name
+        vpc (str): VPC name
+
+    """
+    run_ibmcloud_cmd(
+        f"ibmcloud is subnet-update {subnet_name} --pgw {gateway_name} --vpc {vpc}"
+    )
+
+
+def find_free_network_subnets(subnet_cidr, network_prefix=27):
+    """
+    This function will look for currently used subnet, and will try to find one which
+    is not occupied by any other VPC.
+
+    Args:
+        subnet_cidr (str): subnet CIDR in which range to look for free subnet (e.g. 10.240.0.0/18)
+        network_prefix (int): subnet prefix to look for
+
+    Returns:
+        tuple: (network_with_prefix, network_split1, network_split2), where
+            network_with_prefix - is network CIDR which we are looking for.
+            network_split1 - is first CIDR split of network_with_prefix
+            network_split2 - is second CIDR split of network_with_prefix
+
+    """
+    network = ipaddress.ip_network(subnet_cidr)
+
+    # Get all possible /network_prefix+1 networks within the /network_prefix network
+    main_subnets = list(network.subnets(new_prefix=network_prefix))
+    split_subnets = list(network.subnets(new_prefix=network_prefix + 1))
+    zipped_subnets = [
+        (main_subnets[i], split_subnets[2 * i], split_subnets[2 * i + 1])
+        for i in range(len(main_subnets))
+    ]
+
+    for possible_subnets in zipped_subnets:
+        is_free = True
+        list_of_subnets = get_used_subnets()
+        for subnet in list_of_subnets:
+            for possible_subnet in possible_subnets:
+                tested_network = ipaddress.ip_network(subnet)
+                is_subnet = possible_subnet.subnet_of(tested_network)
+                if is_subnet:
+                    logger.debug(
+                        f"Subnet {possible_subnet} is subnet of {tested_network} skipping it!"
+                    )
+                    is_free = False
+                    break
+        if is_free:
+            logger.info(f"Free set of subnets found: {possible_subnets}")
+            return possible_subnets

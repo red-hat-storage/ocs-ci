@@ -322,6 +322,9 @@ higher priority).
 * `odf_provider_mode_deployment` - True if you would like to enable provider mode deployment.
 * `client_subcription_image` - ODF subscription image details for the storageclients.
 * `channel_to_client_subscription` - Channel value for the odf subscription image for storageclients.
+* `custom_vpc` - Applicable only for IMB Cloud IPI deployment where we want to create custom VPC and networking
+  with specific Address prefixes to prevent /18 CIDR to be used.
+* `ip_prefix` - Applicable only for IMB Cloud IPI deployment when custom_vpc, if not specified: 27 prefix will be used.
 
 #### UPGRADE
 
