@@ -27,6 +27,7 @@ from ocs_ci.utility import cco
 from ocs_ci.utility.deployment import get_ocp_release_image_from_installer
 from ocs_ci.utility.retry import retry
 from ocs_ci.utility.utils import (
+    get_random_str,
     exec_cmd,
     get_infra_id_from_openshift_install_state,
 )
@@ -173,6 +174,8 @@ class IBMCloudIPI(CloudDeploymentBase):
                     f"Switching region to {other_region} due to lack of load balancers"
                 )
                 ibmcloud.set_region(other_region)
+        if config.ENV_DATA.get("custom_vpc"):
+            self.prepare_custom_vpc_and_network()
         self.ocp_deployment = self.OCPDeployment()
         self.ocp_deployment.deploy_prereq()
 
@@ -499,3 +502,51 @@ class IBMCloudIPI(CloudDeploymentBase):
             f"Current load balancers count in region {region} is {load_balancers_count}"
         )
         return load_balancers_count
+
+    def prepare_custom_vpc_and_network(self):
+        """
+        Prepare resource group, VPC, address prefixes, subnets, public gateways
+        and attach subnets to public gateways. All for using custom VPC for
+        IBM Cloud IPI deployment described here:
+        https://docs.openshift.com/container-platform/4.15/installing/installing_ibm_cloud_public/installing-ibm-cloud-vpc.html
+        """
+        cluster_id = get_random_str(size=5)
+        config.ENV_DATA["cluster_id"] = cluster_id
+        cluster_name = f"{config.ENV_DATA['cluster_name']}-{cluster_id}"
+        resource_group = cluster_name
+        vpc_name = f"{cluster_name}-vpc"
+        worker_zones = config.ENV_DATA["worker_availability_zones"]
+        master_zones = config.ENV_DATA["master_availability_zones"]
+        ip_prefix = config.ENV_DATA.get("ip_prefix", 27)
+        region = config.ENV_DATA["region"]
+        zones = set(worker_zones + master_zones)
+        ip_prefixes_and_subnets = {}
+        ibmcloud.create_resource_group(resource_group)
+        ibmcloud.create_vpc(vpc_name, resource_group)
+        ibm_cloud_subnets = constants.IBM_CLOUD_SUBNETS[region]
+        for zone in zones:
+            ip_prefixes_and_subnets[zone] = ibmcloud.find_free_network_subnets(
+                ibm_cloud_subnets[zone], ip_prefix
+            )
+        for zone, ip_prefix_and_subnets in ip_prefixes_and_subnets.items():
+            gateway_name = f"{cluster_name}-public-gateway-{zone}"
+            address_prefix, subnet_split1, subnet_split2 = ip_prefix_and_subnets
+            ibmcloud.create_address_prefix(
+                f"{cluster_name}-{zone}", vpc_name, zone, address_prefix
+            )
+            ibmcloud.create_public_gateway(gateway_name, vpc_name, zone, resource_group)
+            for subnet_type, subnet in (
+                ("control-plane", subnet_split1),
+                ("compute", subnet_split2),
+            ):
+                subnet_type_key = f"{subnet_type.replace('-', '_')}_subnets"
+                if not config.ENV_DATA.get(subnet_type_key):
+                    config.ENV_DATA[subnet_type_key] = []
+                subnet_name = f"{cluster_name}-subnet-{subnet_type}-{zone}"
+                config.ENV_DATA[subnet_type_key].append(subnet_name)
+                ibmcloud.create_subnet(
+                    subnet_name, vpc_name, zone, subnet, resource_group
+                )
+                ibmcloud.attach_subnet_to_public_gateway(
+                    subnet_name, gateway_name, vpc_name
+                )

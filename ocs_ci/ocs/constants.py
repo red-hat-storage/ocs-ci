@@ -1423,6 +1423,21 @@ HCI_PROVIDER_CLIENT_PLATFORMS = [
     HCI_VSPHERE,
 ]
 
+IBM_CLOUD_SUBNETS = {
+    # Washington D.C.
+    "us-east": {
+        "us-east-1": "10.241.0.0/18",
+        "us-east-2": "10.241.64.0/18",
+        "us-east-3": "10.241.128.0/18",
+    },
+    # Dalas
+    "us-south": {
+        "us-south-1": "10.240.0.0/18",
+        "us-south-2": "10.240.64.0/18",
+        "us-south-3": "10.240.128.0/18",
+    },
+}
+
 HCI_PC_OR_MS_PLATFORM = MANAGED_SERVICE_PLATFORMS + HCI_PROVIDER_CLIENT_PLATFORMS
 # AWS i3 worker instance for LSO
 AWS_LSO_WORKER_INSTANCE = "i3en.2xlarge"
