@@ -580,6 +580,19 @@ class Deployment(object):
         ):
             storage_client_deployment_obj.provider_and_native_client_installation()
 
+    def do_deploy_cnv(self):
+        """
+        Deploy CNV
+        We run it in OCP deployment stage, hence `ship_ocs_deployment` is set True.
+        When we run it in OCS deployment stage, the `skip_ocs_deployment` is set to False automatically and
+        second installation does not happen.
+        """
+        if (
+            config.DEPLOYMENT.get("cnv_deployment")
+            and config.ENV_DATA["skip_ocs_deployment"]
+        ):
+            CNVInstaller().deploy_cnv()
+
     def do_deploy_hosted_clusters(self):
         """
         Deploy Hosted cluster(s)
@@ -656,8 +669,7 @@ class Deployment(object):
         self.do_deploy_rdr()
         self.do_deploy_fusion()
         self.do_deploy_odf_provider_mode()
-        if config.DEPLOYMENT.get("cnv_deployment"):
-            CNVInstaller().deploy_cnv()
+        self.do_deploy_cnv()
         self.do_deploy_hosted_clusters()
 
     def get_rdr_conf(self):
