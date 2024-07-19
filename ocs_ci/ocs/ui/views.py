@@ -1174,7 +1174,7 @@ block_pool = {
     "edit_labels_of_pool_save": ("//button[normalize-space()='Save']", By.XPATH),
     "cancel_edit_labels_of_pool": ("//button[normalize-space()='Cancel']", By.XPATH),
     "edit_pool_inside_pool": (
-        'button[data-test-action="Edit BlockPool"]',
+        'button[data-test-action="Edit BlockPool"], button[id="Edit Resource"]',
         By.CSS_SELECTOR,
     ),
     "confirm_delete_inside_pool": ("//button[text()='Delete']", By.XPATH),
@@ -1191,7 +1191,7 @@ block_pool = {
     ),
     "used_raw_capacity_in_UI": ("//div[@class='ceph-raw-card-legend__text']", By.XPATH),
     "delete_pool_inside_pool": (
-        "//a[text()='Delete BlockPool']",
+        "//a[text()='Delete BlockPool'] | //button[@id='Delete']",
         By.XPATH,
     ),
 }
