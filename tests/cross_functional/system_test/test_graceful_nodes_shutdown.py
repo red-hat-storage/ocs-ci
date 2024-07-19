@@ -376,6 +376,7 @@ class TestGracefulNodesShutdown(E2ETest):
     @magenta_squad
     def test_graceful_nodes_shutdown(
         self,
+        scale_noobaa_resources_session,
         multi_obc_lifecycle_factory,
         nodes,
         setup_mcg_bg_features,
