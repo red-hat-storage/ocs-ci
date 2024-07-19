@@ -9,4 +9,3 @@ spec:
   name: redhat-oadp-operator
   source: redhat-operators
   sourceNamespace: openshift-marketplace
-  startingCSV: PLACEHOLDER
