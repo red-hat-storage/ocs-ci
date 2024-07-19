@@ -2176,18 +2176,19 @@ def validate_existence_of_blocking_pdb():
     pdb_obj_get = pdb_obj.get()
     osd_pdb = []
     for pdb in pdb_obj_get.get("items"):
-        if not any(
-            osd in pdb["metadata"]["name"]
-            for osd in [constants.MDS_PDB, constants.MON_PDB]
-        ):
+        # blocking OSD PDBs are in the format of rook-ceph-osd-zone-data-1
+        if constants.OSD_PDB in pdb["metadata"]["name"]:
             osd_pdb.append(pdb)
     blocking_pdb_exist = False
     for osd in range(len(osd_pdb)):
         allowed_disruptions = osd_pdb[osd].get("status").get("disruptionsAllowed")
         maximum_unavailable = osd_pdb[osd].get("spec").get("maxUnavailable")
-        if allowed_disruptions & maximum_unavailable != 1:
-            logger.info("Blocking PDBs are created")
+        if allowed_disruptions & (maximum_unavailable != 1):
+            logger.info(
+                f"Blocking PDB {osd_pdb[osd].get('metadata').get('name')} are created"
+            )
             blocking_pdb_exist = True
+            return blocking_pdb_exist
         else:
             logger.info(
                 f"No blocking PDBs created, OSD PDB is {osd_pdb[osd].get('metadata').get('name')}"
