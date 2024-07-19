@@ -295,6 +295,7 @@ class StorageClient:
             )
             self.ocp_obj.exec_oc_cmd(f"apply -f {storage_classclaim_data_yaml.name}")
 
+    @retry(AssertionError, 20, 10, 1)
     def verify_storage_claim_status(
         self,
         storageclient_name=None,
@@ -326,6 +327,7 @@ class StorageClient:
                     ), "storageclaim is not in expected status"
         log.info(sc_claim)
 
+    @retry(AssertionError, 20, 10, 1)
     def verify_storagerequest_exists(
         self, storageclient_name=None, namespace=config.ENV_DATA["cluster_namespace"]
     ):
