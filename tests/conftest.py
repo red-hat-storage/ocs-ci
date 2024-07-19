@@ -7065,6 +7065,15 @@ def add_env_vars_to_noobaa_core_fixture(request, mcg_obj_session):
 
 @pytest.fixture()
 def logwriter_cephfs_many_pvc_factory(request, pvc_factory):
+    return logwriter_cephfs_many_pvc(request, pvc_factory)
+
+
+@pytest.fixture(scope="class")
+def logwriter_cephfs_many_pvc_class(request, pvc_factory_class):
+    return logwriter_cephfs_many_pvc(request, pvc_factory_class)
+
+
+def logwriter_cephfs_many_pvc(request, pvc_factory):
     """
     Fixture to create RWX cephfs volume
 
@@ -7090,8 +7099,17 @@ def setup_stretch_cluster_project(request, project_factory_session):
     return project_factory_session(constants.STRETCH_CLUSTER_NAMESPACE)
 
 
+@pytest.fixture(scope="class")
+def logwriter_workload_class(request, teardown_factory_class):
+    return setup_logwriter_workload(request, teardown_factory_class)
+
+
 @pytest.fixture()
 def logwriter_workload_factory(request, teardown_factory):
+    return setup_logwriter_workload(request, teardown_factory)
+
+
+def setup_logwriter_workload(request, teardown_factory):
     """
     Fixture to create logwriter deployment
 
@@ -7139,8 +7157,17 @@ def logwriter_workload_factory(request, teardown_factory):
     return factory
 
 
+@pytest.fixture(scope="class")
+def logreader_workload_class(request, teardown_factory_class):
+    return setup_logreader_workload(request, teardown_factory_class)
+
+
 @pytest.fixture()
 def logreader_workload_factory(request, teardown_factory):
+    return setup_logreader_workload(request, teardown_factory)
+
+
+def setup_logreader_workload(request, teardown_factory):
     def factory(pvc, logreader_path, duration=30):
         """
         Args:
@@ -7187,8 +7214,47 @@ def logreader_workload_factory(request, teardown_factory):
     return factory
 
 
+@pytest.fixture(scope="class")
+def setup_logwriter_cephfs_workload_class(
+    request,
+    setup_stretch_cluster_project,
+    pvc_factory_class,
+    logwriter_cephfs_many_pvc_class,
+    logwriter_workload_class,
+    logreader_workload_class,
+):
+
+    return setup_logwriter_cephfs_workload(
+        request,
+        setup_stretch_cluster_project,
+        pvc_factory_class,
+        logwriter_cephfs_many_pvc_class,
+        logwriter_workload_class,
+        logreader_workload_class,
+    )
+
+
 @pytest.fixture()
 def setup_logwriter_cephfs_workload_factory(
+    request,
+    setup_stretch_cluster_project,
+    pvc_factory,
+    logwriter_cephfs_many_pvc_factory,
+    logwriter_workload_factory,
+    logreader_workload_factory,
+):
+
+    return setup_logwriter_cephfs_workload(
+        request,
+        setup_stretch_cluster_project,
+        pvc_factory,
+        logwriter_cephfs_many_pvc_factory,
+        logwriter_workload_factory,
+        logreader_workload_factory,
+    )
+
+
+def setup_logwriter_cephfs_workload(
     request,
     setup_stretch_cluster_project,
     pvc_factory,
@@ -7227,8 +7293,25 @@ def setup_logwriter_cephfs_workload_factory(
     return factory
 
 
+@pytest.fixture(scope="class")
+def setup_logwriter_rbd_workload_class(
+    request, setup_stretch_cluster_project, teardown_factory_class
+):
+    return setup_logwriter_rbd_workload(
+        request, setup_stretch_cluster_project, teardown_factory_class
+    )
+
+
 @pytest.fixture()
 def setup_logwriter_rbd_workload_factory(
+    request, setup_stretch_cluster_project, teardown_factory
+):
+    return setup_logwriter_rbd_workload(
+        request, setup_stretch_cluster_project, teardown_factory
+    )
+
+
+def setup_logwriter_rbd_workload(
     request, setup_stretch_cluster_project, teardown_factory
 ):
     """
