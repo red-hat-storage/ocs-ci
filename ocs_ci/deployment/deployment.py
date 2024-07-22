@@ -669,7 +669,6 @@ class Deployment(object):
 
         """
         dr_conf = dict()
-        dr_conf["rbd_dr_scenario"] = config.ENV_DATA.get("rbd_dr_scenario", False)
         dr_conf["dr_metadata_store"] = config.ENV_DATA.get("dr_metadata_store", "awss3")
         return dr_conf
 
@@ -3332,10 +3331,6 @@ class RDRMultiClusterDROperatorsDeploy(MultiClusterDROperatorsDeploy):
 
     def __init__(self, dr_conf):
         super().__init__(dr_conf)
-        # DR use case could be RBD or CephFS or Both
-        self.rbd = dr_conf.get("rbd_dr_scenario", False)
-        # CephFS For future usecase
-        self.cephfs = dr_conf.get("cephfs_dr_scenario", False)
 
     def deploy(self):
         """
@@ -3345,11 +3340,9 @@ class RDRMultiClusterDROperatorsDeploy(MultiClusterDROperatorsDeploy):
         acm_indexes = get_all_acm_indexes()
         config.switch_acm_ctx()
         super().deploy()
-        # RBD specific dr deployment
-        if self.rbd:
-            rbddops = RBDDRDeployOps()
-            self.configure_mirror_peer()
-            rbddops.deploy()
+        rbddops = RBDDRDeployOps()
+        self.configure_mirror_peer()
+        rbddops.deploy()
         self.deploy_dr_policy()
 
         # Enable cluster backup on both ACMs
