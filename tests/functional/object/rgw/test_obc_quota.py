@@ -156,17 +156,45 @@ class TestOBCQuota:
         logger.info(f"created rgw bucket {bucket_name} with quota {quota}")
 
         # fill the bucket with about 90% of maxObjects
+        number_of_objects = int(quota["maxObjects"])
         write_random_test_objects_to_bucket(
             awscli_pod_session,
             bucket_name,
             test_directory_setup.origin_dir,
-            amount=(amount * 90) // 100,
+            amount=(number_of_objects * 90) // 100,
             mcg_obj=OBC(bucket_name),
         )
         logger.info(f"Filled bucket {bucket_name} with 90% maxObjects capacity")
 
+        # wait for obc full alert to occur and verify
         prometheus = PrometheusAPI(threading_lock=threading_lock)
-        alerts = prometheus.wait_for_alert(
-            name=constants.ALERT_OBC_QUOTA_OBJECTS_ALERT, state="firing", timeout=600
+        alerts = [
+            alert
+            for alert in prometheus.wait_for_alert(
+                name=constants.ALERT_OBC_QUOTA_OBJECTS_ALERT,
+                state="firing",
+                timeout=600,
+            )
+            if alert.get("labels").get("objectbucketclaim") == bucket_name
+        ]
+
+        if len(alerts) == 0:
+            assert False, (
+                f"Alert {constants.ALERT_OBC_QUOTA_OBJECTS_ALERT} doesn't seem to occur "
+                f"despite the bucket being 90% full"
+            )
+
+        alert_desc = (
+            f"ObjectBucketClaim {bucket_name} has crossed 80% "
+            f"of the size limit set by the quota(objects)"
         )
-        logger.info(alerts)
+        for alert in alerts:
+            if alert_desc in alert.get("annotations").get("description"):
+                logger.info(
+                    f"Verified the alert {constants.ALERT_OBC_QUOTA_OBJECTS_ALERT}"
+                )
+                break
+            else:
+                assert (
+                    False
+                ), f"Alert {constants.ALERT_OBC_QUOTA_OBJECTS_ALERT} doesn't seem have expected format"
