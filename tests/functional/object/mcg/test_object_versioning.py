@@ -19,6 +19,7 @@ from ocs_ci.ocs.bucket_utils import (
     s3_put_object,
     s3_delete_object,
     s3_head_object,
+    s3_get_object,
 )
 from ocs_ci.ocs.resources.pod import get_pods_having_label, Pod
 from ocs_ci.ocs import constants
@@ -139,3 +140,139 @@ class TestObjectVersioning:
             query_out
         ), "[Test failed] There are more than one versions considered to be latest version !!"
         logger.info("Test succeeded!!")
+
+
+class TestGetObjectByVersionID:
+
+    object_name = "file_1"
+    object_data = "version 1"
+
+    def test_get_object_pre_upgrade(
+        self, request, bucket_factory_session, mcg_obj_session
+    ):
+        """
+        This test will run as pre-upgrade test where we
+        verify 'GetObject' by version id
+
+        """
+
+        # create bucket
+        bucket = bucket_factory_session()[0]
+        logger.info(f"Created bucket {bucket.name}")
+
+        # enable bucket versioning
+        s3_put_bucket_versioning(mcg_obj_session, bucket.name)
+        logger.info(f"Enabled bucket versioning on bucket {bucket.name}")
+
+        # upload object with some data
+        s3_put_object(
+            mcg_obj_session,
+            bucket.name,
+            object_key=self.object_name,
+            data=self.object_data,
+        )
+        logger.info(f"uploaded {self.object_name} to {bucket.name}")
+
+        # get object from the bucket
+        ver_1 = s3_get_object(
+            mcg_obj_session,
+            bucket.name,
+            object_key=self.object_name,
+        )["VersionId"]
+
+        # update the same object with some extra data
+        new_data = "version 2"
+        s3_put_object(
+            mcg_obj_session,
+            bucket.name,
+            object_key=self.object_name,
+            data=new_data,
+        )
+        logger.info("updated the object with some extra data")
+
+        # get object with and without version id
+        response_body = (
+            s3_get_object(
+                mcg_obj_session,
+                bucket.name,
+                object_key=self.object_name,
+            )["Body"]
+            .read()
+            .decode("utf-8")
+        )
+        assert (
+            response_body == new_data
+        ), f"Object data doesnt match with the latest written data. Response data: {response_body}"
+
+        response_body_v1 = (
+            s3_get_object(
+                mcg_obj_session,
+                bucket.name,
+                object_key=self.object_name,
+                versionid=ver_1,
+            )["Body"]
+            .read()
+            .decode("utf-8")
+        )
+        assert (
+            response_body_v1 == self.object_data
+        ), f"Object data doesnt match the version {ver_1} data. Response data: {response_body_v1}"
+        logger.info(
+            f"Verified the get object by version id. \n Response data: {response_body_v1}"
+        )
+
+        # cache the bucket name to pass it to post upgrade verification
+        request.config.cache.set("versioning_enabled_bucket", bucket.name)
+        request.config.cache.set("object_version", ver_1)
+        logger.info(
+            "Cached the bucket name and object name for the post upgrade verification"
+        )
+
+    def test_get_object_post_upgrade(self, request, mcg_obj_session):
+        """
+        Test get object by bucket versioning on a bucket
+        which already has some versioned data
+
+        """
+        # fetch bucket name from the cache
+        bucket_name = request.config.cache.get("versioning_enabled_bucket", None)
+        ver_1 = request.config.cache.get("object_version", None)
+        logger.info(f"Bucket {bucket_name} fetched detail from cache")
+
+        # upload some data to the bucket
+        new_data = "version 3"
+        s3_put_object(
+            mcg_obj_session, bucket_name, object_key=self.object_name, data=new_data
+        )
+        logger.info("Updated the object with new data")
+
+        # get object with and without versioning
+        response_body = (
+            s3_get_object(
+                mcg_obj_session,
+                bucket_name,
+                object_key=self.object_name,
+            )["Body"]
+            .read()
+            .decode("utf-8")
+        )
+        assert (
+            response_body == new_data
+        ), f"Object data doesnt match with the latest written data. Response data: {response_body}"
+
+        response_body_v1 = (
+            s3_get_object(
+                mcg_obj_session,
+                bucket_name,
+                object_key=self.object_name,
+                versionid=ver_1,
+            )["Body"]
+            .read()
+            .decode("utf-8")
+        )
+        assert (
+            response_body_v1 == self.object_data
+        ), f"Object data doesnt match the version {ver_1} data. Response data: {response_body_v1}"
+        logger.info(
+            f"Verified the get object by version id. \n Response data: {response_body_v1}"
+        )
