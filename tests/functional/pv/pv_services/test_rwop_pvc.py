@@ -29,6 +29,7 @@ log = logging.getLogger(__name__)
 )
 @green_squad
 @tier1
+@post_upgrade
 @skipif_ocs_version("<4.15")
 class TestRwopPvc(ManageTest):
     """
