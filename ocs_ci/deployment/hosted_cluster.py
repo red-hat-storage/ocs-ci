@@ -1229,15 +1229,14 @@ class HostedODF(HypershiftHostedOCP):
         Returns:
              bool: True if storage class claim for RBD exists, False otherwise
         """
-        if (
-            get_semantic_version(
-                config.ENV_DATA.get("clusters")
-                .get(self.name)
-                .get("hosted_odf_version"),
-                True,
-            )
-            < version.VERSION_4_16
-        ):
+
+        hosted_odf_version = (
+            config.ENV_DATA.get("clusters").get(self.name).get("hosted_odf_version")
+        )
+        if "latest" in hosted_odf_version:
+            hosted_odf_version = hosted_odf_version.split("-")[-1]
+
+        if get_semantic_version(hosted_odf_version, True) < version.VERSION_4_16:
             ocp = OCP(
                 kind=constants.STORAGECLASSCLAIM,
                 namespace=self.namespace_client,
