@@ -142,6 +142,7 @@ class TestObjectVersioning:
         logger.info("Test succeeded!!")
 
 
+@bugzilla("2240714")
 class TestGetObjectByVersionID:
 
     object_name = "file_1"
@@ -218,7 +219,7 @@ class TestGetObjectByVersionID:
             response_body_v1 == self.object_data
         ), f"Object data doesnt match the version {ver_1} data. Response data: {response_body_v1}"
         logger.info(
-            f"Verified the get object by version id. \n Response data: {response_body_v1}"
+            f"Verified the get object by version id. \nResponse data: {response_body_v1}"
         )
 
         # cache the bucket name to pass it to post upgrade verification
@@ -274,5 +275,5 @@ class TestGetObjectByVersionID:
             response_body_v1 == self.object_data
         ), f"Object data doesnt match the version {ver_1} data. Response data: {response_body_v1}"
         logger.info(
-            f"Verified the get object by version id. \n Response data: {response_body_v1}"
+            f"Verified the get object by version id. \nResponse data: {response_body_v1}"
         )
