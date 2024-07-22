@@ -529,7 +529,12 @@ class HostedODF(HypershiftHostedOCP):
         self.timeout_check_resources_exist_sec = 6
         self.timeout_wait_csvs_minutes = 20
         self.timeout_wait_pod_minutes = 30
-        self.storage_client_name = None
+
+        # default cluster name picked from the storage client yaml
+        storage_client_data = templating.load_yaml(
+            constants.PROVIDER_MODE_STORAGE_CLIENT
+        )
+        self.storage_client_name = storage_client_data["metadata"]["name"]
 
     @kubeconfig_exists_decorator
     def exec_oc_cmd(self, cmd, timeout=300, ignore_error=False, **kwargs):
