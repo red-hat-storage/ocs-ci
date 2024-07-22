@@ -679,7 +679,7 @@ class MetalLBInstaller:
         return OCP(
             kind="ImageContentSourcePolicy", resource_name="brew-registry"
         ).check_resource_existence(
-            timeout=self.timeout_check_resources_existence, should_exist=False
+            timeout=self.timeout_check_resources_existence, should_exist=True
         )
 
     def apply_icsp(self):
