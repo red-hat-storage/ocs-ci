@@ -10,6 +10,7 @@ from ocs_ci.framework.testlib import (
     ManageTest,
     polarion_id,
     tier1,
+    post_upgrade,
     skipif_ocs_version,
 )
 from ocs_ci.helpers import helpers
