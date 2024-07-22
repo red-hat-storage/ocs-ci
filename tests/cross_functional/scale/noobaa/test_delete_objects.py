@@ -11,6 +11,11 @@ from ocs_ci.ocs.bucket_utils import (
     list_objects_in_batches,
     s3_delete_object,
     random_object_round_trip_verification,
+    generate_empty_files,
+    sync_object_directory,
+    rm_object_recursive,
+    expire_objects_in_bucket,
+    verify_objs_deleted_from_objmds,
 )
 from ocs_ci.framework.pytest_customization.marks import (
     bugzilla,
@@ -190,3 +195,52 @@ class TestDeleteObjects:
         # stop the io running in the background
         event.set()
         io_thread.result()
+
+    @pytest.mark.parametrize(
+        argnames=["is_expiration"],
+        argvalues=[
+            pytest.param(False),
+            pytest.param(True),
+        ],
+    )
+    def test_delete_objects_with_expiration(
+        self,
+        is_expiration,
+        bucket_factory,
+        reduce_expiration_interval,
+        awscli_pod_session,
+        test_directory_setup,
+        mcg_obj_session,
+    ):
+        """
+        This test aims to test deletion of objects through expiration
+
+        """
+        reduce_expiration_interval(interval=1)
+        log.info("Reduced expiration interval to 1 minute")
+
+        bucket = bucket_factory()[0]
+        log.info(f"Created bucket {bucket.name}")
+
+        generate_empty_files(
+            awscli_pod_session, dir=test_directory_setup.origin_dir, amount=1000
+        )
+
+        sync_object_directory(
+            awscli_pod_session,
+            test_directory_setup.origin_dir,
+            f"s3://{bucket.name}",
+            mcg_obj_session,
+            timeout=1200,
+        )
+        log.info(f"Uploaded objects to the bucket {bucket.name}")
+
+        if not is_expiration:
+            rm_object_recursive(awscli_pod_session, bucket.name, mcg_obj_session)
+            log.info("Deleted objects from the bucket recursively")
+
+        else:
+            expire_objects_in_bucket(bucket.name)
+            log.info("Expired objects in the bucket")
+
+        verify_objs_deleted_from_objmds(bucket.name)
