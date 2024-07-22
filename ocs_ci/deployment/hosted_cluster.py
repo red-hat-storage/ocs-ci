@@ -628,19 +628,9 @@ class HostedODF(HypershiftHostedOCP):
         """
         Deploy ODF client on hosted OCP cluster
         """
-        logger.info(f"Deploying ODF client on hosted OCP cluster '{self.name}'")
-        hosted_odf_version = get_semantic_version(
-            config.ENV_DATA.get("clusters").get(self.name).get("hosted_odf_version"),
-            only_major_minor=True,
+        logger.info(
+            f"Deploying ODF client on hosted OCP cluster '{self.name}'. Creating ODF client namespace"
         )
-
-        no_network_policy_version = version.VERSION_4_16
-
-        if hosted_odf_version < no_network_policy_version:
-            logger.info("Applying network policy")
-            self.apply_network_policy()
-
-        logger.info("Creating ODF client namespace")
         self.create_ns()
 
         if self.odf_csv_installed():
