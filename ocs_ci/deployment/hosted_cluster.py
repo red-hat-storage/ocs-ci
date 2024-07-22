@@ -1137,15 +1137,13 @@ class HostedODF(HypershiftHostedOCP):
         Returns:
             bool: True if storage class claim for CephFS exists, False otherwise
         """
-        if (
-            get_semantic_version(
-                config.ENV_DATA.get("clusters")
-                .get(self.name)
-                .get("hosted_odf_version"),
-                only_major_minor=True,
-            )
-            < version.VERSION_4_16
-        ):
+
+        hosted_odf_version = (
+            config.ENV_DATA.get("clusters").get(self.name).get("hosted_odf_version")
+        )
+        if "latest" in hosted_odf_version:
+            hosted_odf_version = hosted_odf_version.split("-")[-1]
+        if hosted_odf_version < version.VERSION_4_16:
             ocp = OCP(
                 kind=constants.STORAGECLASSCLAIM,
                 namespace=self.namespace_client,
