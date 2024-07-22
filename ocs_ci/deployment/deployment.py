@@ -3411,6 +3411,11 @@ class RDRMultiClusterDROperatorsDeploy(MultiClusterDROperatorsDeploy):
         """
         # current CTX: ACM
         acm_indexes = get_all_acm_indexes()
+        for i in acm_indexes:
+            config.switch_ctx(i)
+            self.deploy_dr_multicluster_orchestrator()
+            # Enable MCO console plugin
+            enable_mco_console_plugin()
         config.switch_acm_ctx()
         super().deploy()
         # RBD specific dr deployment
