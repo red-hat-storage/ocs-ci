@@ -3032,3 +3032,51 @@ def get_obj_versions(mcg_obj, awscli_pod, bucket_name, obj_key):
             d["ETag"] = d["ETag"].strip('"')
 
     return versions_dicts
+
+
+def generate_empty_files(aws_pod, dir, amount, pattern="File"):
+    """
+    Generate empty files with unqiue identifiers
+
+    """
+    aws_pod.exec_sh_cmd_on_pod(
+        command=f"for i in $(seq 1 {amount});do touch {dir}/{pattern}-$i;done",
+        timeout=2400,
+    )
+    logger.info(f"Generated {amount} empty files successfully")
+
+
+def verify_objs_deleted_from_objmds(bucket_name, timeout=600):
+    """
+    Verify objects are deleted by checking from Object mds
+
+    """
+
+    def _check_objs_deletion():
+
+        bucket_id = exec_nb_db_query(
+            f"select data->>'_id' as ID from buckets where data->>'name'='{bucket_name}'"
+        )[0].strip()
+
+        objs_count = exec_nb_db_query(
+            f"select count(*) from objectmds where data->>'bucket'='{bucket_id}'"
+        )
+        objs_deleted_count = exec_nb_db_query(
+            f"select count(*) from objectmds where data->>'bucket'='{bucket_id}' AND data ? 'deleted'"
+        )
+
+        logger.info(f"Objects count: {objs_count}")
+        logger.info(f"Objects deleted count: {objs_deleted_count}")
+
+        return objs_count == objs_deleted_count
+
+    sampler = TimeoutSampler(
+        timeout=timeout,
+        sleep=30,
+        func=_check_objs_deletion,
+    )
+
+    assert sampler.wait_for_func_status(
+        result=True
+    ), "Not all the objects are marked deleted"
+    logger.info("All the objects are marked expired")
