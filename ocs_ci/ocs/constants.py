@@ -2664,6 +2664,9 @@ GITOPS_MANAGEDCLUSTER_SETBINDING_YAML = os.path.join(
 GITOPS_SUBSCRIPTION_YAML = os.path.join(
     TEMPLATE_DIR, "gitops-deployment", "subscription.yaml"
 )
+GITOPS_OPERATORGROUP_YAML = os.path.join(
+    TEMPLATE_DIR, "gitops-deployment", "gitops_og.yaml"
+)
 OADP_NAMESPACE = "openshift-adp"
 OADP_OPERATOR_NAME = "redhat-oadp-operator"
 OADP_SUBSCRIPTION_YAML = os.path.join(

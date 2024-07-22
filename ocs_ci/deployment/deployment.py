@@ -256,6 +256,9 @@ class Deployment(object):
         logger.info("Creating Namespace for GitOps Operator ")
         run_cmd(f"oc create namespace {constants.GITOPS_NAMESPACE}")
 
+        logger.info("Creating OperatorGroup for GitOps Operator ")
+        run_cmd(f"oc create -f {constants.GITOPS_OPERATORGROUP_YAML}")
+
         logger.info("Creating GitOps Operator Subscription")
 
         run_cmd(f"oc create -f {constants.GITOPS_SUBSCRIPTION_YAML}")
