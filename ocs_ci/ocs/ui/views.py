@@ -1165,7 +1165,10 @@ block_pool = {
         'button[aria-label="Actions"], button[data-test="kebab-button"]',
         By.CSS_SELECTOR,
     ),
-    "edit_labels_of_pool": ("//a[normalize-space()='Edit labels']", By.XPATH),
+    "edit_labels_of_pool": (
+        "//a[normalize-space()='Edit labels'] | //button[@id='Edit Labels']",
+        By.XPATH,
+    ),
     "edit_labels_of_pool_input": ("#tags-input", By.TAG_NAME),
     "invalid_label_name_note_edit_label_pool": (
         "//h4[contains(@class, 'c-alert__title')]",
