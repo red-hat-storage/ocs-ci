@@ -1143,7 +1143,8 @@ class HostedODF(HypershiftHostedOCP):
         )
         if "latest" in hosted_odf_version:
             hosted_odf_version = hosted_odf_version.split("-")[-1]
-        if hosted_odf_version < version.VERSION_4_16:
+
+        if get_semantic_version(hosted_odf_version, True) < version.VERSION_4_16:
             ocp = OCP(
                 kind=constants.STORAGECLASSCLAIM,
                 namespace=self.namespace_client,
