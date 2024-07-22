@@ -1082,12 +1082,13 @@ class HostedODF(HypershiftHostedOCP):
         subscription_data = templating.load_yaml(constants.PROVIDER_MODE_SUBSCRIPTION)
 
         # since we are allowed to install N+1 on hosted clusters we can not rely on PackageManifest default channel
-        odf_version = get_semantic_version(
-            config.ENV_DATA.get("clusters").get(self.name).get("hosted_odf_version"),
-            only_major_minor=True,
+        hosted_odf_version = (
+            config.ENV_DATA.get("clusters").get(self.name).get("hosted_odf_version")
         )
+        if "latest" in hosted_odf_version:
+            hosted_odf_version = hosted_odf_version.split("-")[-1]
 
-        subscription_data["spec"]["channel"] = f"stable-{str(odf_version)}"
+        subscription_data["spec"]["channel"] = f"stable-{str(hosted_odf_version)}"
 
         subscription_file = tempfile.NamedTemporaryFile(
             mode="w+", prefix="subscription", delete=False
