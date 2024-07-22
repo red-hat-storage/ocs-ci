@@ -6,10 +6,14 @@ from ocs_ci.ocs.bucket_utils import (
     craft_s3_command,
     sync_object_directory,
     list_objects_from_bucket,
+    gen_empty_file_and_upload,
 )
 from ocs_ci.framework.pytest_customization.marks import orange_squad, mcg
 from ocs_ci.framework.testlib import E2ETest
-from ocs_ci.framework.testlib import scale, skipif_ocs_version
+from ocs_ci.framework.pytest_customization.marks import (
+    scale,
+    skipif_ocs_version,
+)
 from ocs_ci.ocs.resources.mcg import MCG
 
 
@@ -150,3 +154,58 @@ class TestListOfObjects(E2ETest):
             timeout=9000,
         )
         log.info("Test succeeded without any errors!")
+
+    @pytest.mark.polarion_id("OCS-6095")
+    def test_list_objects_single_dir(
+        self,
+        scale_noobaa_resources_session,
+        bucket_factory,
+        awscli_pod_session,
+        mcg_obj_session,
+        test_directory_setup,
+    ):
+        """
+        Test list objects from a single directory when it has millions of
+        objects
+
+        """
+
+        # create the bucket
+        bucket = bucket_factory()[0]
+        log.info(f"Created bucket {bucket.name}")
+
+        # generate 1 million empty file objects and upload
+        # to the bucket parallely under the prefix
+        prefix = "single_dir"
+        gen_empty_file_and_upload(
+            mcg_obj_session,
+            awscli_pod_session,
+            test_directory_setup.origin_dir,
+            amount=1000000,
+            bucket=bucket.name,
+            prefix=prefix,
+            threads=10,
+            timeout=10800,
+        )
+        log.info(f"Uploaded objects to the bucket {bucket.name}")
+
+        # list objects directly from the bucket using just the delimiter
+        list_objects_from_bucket(
+            pod_obj=awscli_pod_session,
+            target=f"s3://{bucket.name}/",
+            s3_obj=mcg_obj_session,
+            timeout=60,
+        )
+        log.info("List objects using delimiter was successful without any issues")
+
+        # list objects from the bucket using prefix and delimiter
+        list_objects_from_bucket(
+            pod_obj=awscli_pod_session,
+            target=f"s3://{bucket.name}",
+            prefix=prefix,
+            s3_obj=mcg_obj_session,
+            timeout=60,
+        )
+        log.info(
+            "List objects using prefix and delimter was successful without any issues"
+        )
