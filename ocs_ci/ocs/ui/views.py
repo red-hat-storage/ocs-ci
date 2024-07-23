@@ -1354,7 +1354,10 @@ validation = {
     "storage_cluster_readiness": ("//*[contains(text(),'Ready')]", By.XPATH),
     "backingstore_name": ("input[placeholder='my-backingstore']", By.CSS_SELECTOR),
     "namespacestore_name": ("input[placeholder='my-namespacestore']", By.CSS_SELECTOR),
-    "blockpool_name": ("input[placeholder='my-block-pool']", By.CSS_SELECTOR),
+    "blockpool_name": (
+        "input[placeholder='my-block-pool'], input[id=pool-name]",
+        By.CSS_SELECTOR,
+    ),
     "input_value_validator_icon": (
         "button[aria-label='Validation'], .pf-c-icon",
         By.CSS_SELECTOR,
