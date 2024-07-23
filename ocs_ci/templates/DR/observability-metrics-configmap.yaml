@@ -4,6 +4,7 @@
 
 ---
 apiVersion: v1
+kind: ConfigMap
 metadata:
   name: mp-custom-allowlist
   namespace: open-cluster-management-observability
