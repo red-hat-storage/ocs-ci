@@ -365,6 +365,24 @@ class DeploymentUI(PageNavigator):
         logger.info("Sleep 10 second after click on 'create storage cluster'")
         time.sleep(10)
 
+    def ui_configure_external_kms(self):
+        """
+        Configure KMS as per the option
+        """
+        self.do_click(self.dep_loc["enable_external_kms"])
+        kms_provider = config.ENV_DATA.get("KMS_PROVIDER")
+        if kms_provider == "azure-kv":
+            if not config.ENV_DATA.get("platform") == "azure":
+                raise ValueError("azure-KV only supported on azure platform.")
+
+            logger.info("Selecting KMS service")
+
+            pass
+        else:
+            raise NotImplementedError(
+                f"KMS deployment from UI fro the PROVIDER : {kms_provider} is not implimented."
+            )
+
     def configure_encryption(self):
         """
         Configure Encryption
@@ -381,6 +399,13 @@ class DeploymentUI(PageNavigator):
                 status=True, locator=self.dep_loc["wide_encryption"]
             )
         self.do_click(self.dep_loc["next"], enable_screenshot=True)
+
+        """
+        TODO: Configure KMS
+        """
+        # Enable External KMS
+        if config.ENV_DATA.get("kms_deployment"):
+            self.ui_configure_external_kms()
 
     def configure_data_protection(self):
         """

@@ -76,6 +76,24 @@ deployment = {
     "kms_address": ('//*[@id="kms-address"]', By.XPATH),
     "kms_address_port": ('//*[@id="kms-address-port"]', By.XPATH),
     "kms_token": ('//*[@id="kms-token"]', By.XPATH),
+    "enable_external_kms": ('//*[@id="kms-connection"]', By.XPATH),
+    "kms_service_provider": (
+        '//*[@id="content-scrollable"]/section/div[contains(@class, "pf-v5-c-wizard") and contains(@class, \
+            "odf-create-storage-system-wizard")]/div/div/div/div/form/div[1]/div[contains(@class, \
+                "pf-v5-c-form__group-control")]/div[1]/span[contains(@class, \
+                    "pf-v5-c-check__body")]/div[2]/div[contains(@class, \
+                        "pf-v5-c-form__group-control")]/div/span/div/div[1]/div[contains(@class, \
+                            "pf-v5-c-form__group-control")]/button',
+        By.XPATH,
+    ),
+    "azure_kms_option": (
+        '//*[@id="kms-provider"]/div/li[3]/button/span/span',
+        By.XPATH,
+    ),
+    "kms_connection_name": ('//*[@id="kms-service-name"]', By.XPATH),
+    "azure_vault_url": ('//*[@id="azure-vault-url"]', By.XPATH),
+    "azure_client_id": ('//*[@id="azure-client-id"]', By.XPATH),
+    "azure_tenant_id": ('//*[@id="azure-tenant-id"]', By.XPATH),
     "create_on_review": ("//button[text()='Create']", By.XPATH),
     "search_ocs_installed": ('input[data-test-id="item-filter"]', By.CSS_SELECTOR),
     "all_nodes_lso": (
