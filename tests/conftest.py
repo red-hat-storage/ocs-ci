@@ -8409,5 +8409,6 @@ def virtual_host_style_acess_for_rgw_session():
     Session scoped fixture to configure Virtual host style access for RGW
 
     """
+    # This feature is not implemented yet, for more details see https://bugzilla.redhat.com/show_bug.cgi?id=2283643
     # Access buckets with DNS subdomain style (Virtual host style) for RGW
     configure_virtual_host_style_acess_for_rgw()
