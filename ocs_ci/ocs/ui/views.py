@@ -1356,7 +1356,7 @@ validation = {
     "namespacestore_name": ("input[placeholder='my-namespacestore']", By.CSS_SELECTOR),
     "blockpool_name": ("input[placeholder='my-block-pool']", By.CSS_SELECTOR),
     "input_value_validator_icon": (
-        "button[aria-label='Validation'], .pf-c-icon, .pf-v5-c-icon",
+        "button[aria-label='Validation'], .pf-c-icon",
         By.CSS_SELECTOR,
     ),
     "text_input_field_error_improvements": (
