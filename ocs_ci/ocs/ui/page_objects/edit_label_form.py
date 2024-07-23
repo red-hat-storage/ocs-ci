@@ -122,7 +122,7 @@ class EditLabelForm(BaseUI):
         )
         logger.info(f"Clicking on Actions for {block_pool_name}")
         self.do_click(self.bp_loc["actions_outside_pool"], enable_screenshot=True)
-        logger.info(f"Clicking on Edit labels")
+        logger.info("Clicking on Edit labels")
         self.do_click(self.bp_loc["edit_labels_of_pool"])
 
     def enter_label_and_save(self, label):
