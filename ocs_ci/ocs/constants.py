@@ -2843,3 +2843,6 @@ CCOCTL_LOG_FILE = "ccoctl-service-id.log"
 # Noobaa Secrets
 NOOBAA_BACKEND_SECRET = "noobaa-root-master-key-backend"
 NOOBAA_VOLUME_SECRET = "noobaa-root-master-key-volume"
+
+# ascii characters
+ENTER_KEY = chr(13)
