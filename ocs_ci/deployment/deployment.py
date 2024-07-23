@@ -3402,10 +3402,6 @@ class RDRMultiClusterDROperatorsDeploy(MultiClusterDROperatorsDeploy):
         self.rbd = dr_conf.get("rbd_dr_scenario", False)
         # CephFS For future usecase
         self.cephfs = dr_conf.get("cephfs_dr_scenario", False)
-        self.thanos_yaml_file = os.path.join(constants.THANOS_PATH)
-        self.multiclusterobservability_file = os.path.join(
-            constants.MULTICLUSTEROBSERVABILITY_PATH
-        )
 
     def deploy(self):
         """
@@ -3471,10 +3467,8 @@ class RDRMultiClusterDROperatorsDeploy(MultiClusterDROperatorsDeploy):
         Create thanos secret yaml by using Noobaa or AWS bucket (AWS bucket is used in this function)
 
         """
-        secret_dict = load_auth_config().get("AUTH", {})
-        access_key = secret_dict["AWS"]["AWS_ACCESS_KEY_ID"]
-        secret_key = secret_dict["AWS"]["AWS_SECRET_ACCESS_KEY"]
-        thanos_secret_data = templating.load_yaml(self.thanos_yaml_file)
+        self.meta_obj.get_meta_access_secret_keys()
+        thanos_secret_data = templating.load_yaml(constants.THANOS_PATH)
         thanos_secret_data["stringData"]["thanos.yaml"]["config"][
             "bucket"
         ] = self.build_bucket_name()
@@ -3483,10 +3477,10 @@ class RDRMultiClusterDROperatorsDeploy(MultiClusterDROperatorsDeploy):
         ] = "https://s3.amazonaws.com"
         thanos_secret_data["stringData"]["thanos.yaml"]["config"][
             "access_key"
-        ] = access_key
+        ] = self.meta_obj.access_key
         thanos_secret_data["stringData"]["thanos.yaml"]["config"][
             "secret_key"
-        ] = secret_key
+        ] = self.meta_obj.secret_key
         thanos_data_yaml = tempfile.NamedTemporaryFile(
             mode="w+", prefix="thanos", delete=False
         )
@@ -3517,7 +3511,7 @@ class RDRMultiClusterDROperatorsDeploy(MultiClusterDROperatorsDeploy):
 
         # load multiclusterobservability.yaml
         multiclusterobservability_yaml_data = templating.load_yaml(
-            self.multiclusterobservability_file
+            constants.MULTICLUSTEROBSERVABILITY_PATH
         )
         multiclusterobservability_yaml_data["spec"]["storageConfig"][
             "storageClass"
