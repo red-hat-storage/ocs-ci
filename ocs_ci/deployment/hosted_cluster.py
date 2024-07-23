@@ -611,7 +611,7 @@ def create_host_inventory():
             # Create Secret
             create_secret_cmd = (
                 f"oc get secret pull-secret --namespace={constants.OPENSHIFT_CONFIG_NAMESPACE} -o yaml | "
-                f"sed 's/namespace: .*/namespace: {infra_env_namespace}/' | kubectl apply -f -"
+                f"sed 's/namespace: .*/namespace: {infra_env_namespace}/' | oc create -f -"
             )
             exec_cmd(create_secret_cmd)
         helpers.create_resource(**data)
