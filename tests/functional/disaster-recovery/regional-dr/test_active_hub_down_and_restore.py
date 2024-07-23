@@ -121,7 +121,7 @@ class TestActiveHubDownAndRestore:
         # Failover action via CLI
         failover_results = []
         logger.info(
-            f"Waiting for 300 seconds for drpc status to be restored before performing failover"
+            "Waiting for 300 seconds for drpc status to be restored before performing failover"
         )
         time.sleep(300)
 
