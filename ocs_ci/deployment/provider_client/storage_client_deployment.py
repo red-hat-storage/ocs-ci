@@ -97,12 +97,8 @@ class ODFAndNativeStorageClientDeploymentOnProvider(object):
         7. Create storage profile
         """
 
-        # Allow ODF to be deployed on all nodes
-        nodes = get_all_nodes()
-        node_objs = get_node_objs(nodes)
-
-        log.info("labeling storage nodes")
-        label_nodes(nodes=node_objs, label=constants.OPERATOR_NODE_LABEL)
+        worker_node_objs = get_nodes(node_type=constants.WORKER_MACHINE)
+        no_of_worker_nodes = len(worker_node_objs)
 
         # Allow hosting cluster domain to be usable by hosted clusters
         path = "/spec/routeAdmission"
@@ -132,12 +128,21 @@ class ODFAndNativeStorageClientDeploymentOnProvider(object):
             self.scheduler_obj.patch(params=params, format_type="json"), (
                 "Failed to run patch command to update control nodes as scheduleable"
             )
+            # Allow ODF to be deployed on all nodes
+            nodes = get_all_nodes()
+            node_objs = get_node_objs(nodes)
 
-        worker_node_objs = get_nodes(node_type=constants.WORKER_MACHINE)
-        no_of_worker_nodes = len(worker_node_objs)
+            log.info("labeling all nodes as storage nodes")
+            label_nodes(nodes=node_objs, label=constants.OPERATOR_NODE_LABEL)
+        else:
+            log.info("labeling worker nodes as storage nodes")
+            label_nodes(nodes=worker_node_objs, label=constants.OPERATOR_NODE_LABEL)
 
         no_of_disks_available_on_worker_nodes = disks_available_to_cleanup(
             worker_node_objs[0]
+        )
+        log.info(
+            f"no of disks avilable for cleanup, {no_of_disks_available_on_worker_nodes}"
         )
 
         # Install LSO, create LocalVolumeDiscovery and LocalVolumeSet

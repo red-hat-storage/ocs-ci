@@ -1270,6 +1270,9 @@ def disks_available_to_cleanup(worker, namespace=constants.DEFAULT_NAMESPACE):
     )
     disk_to_ignore_cleanup_raw = json.loads(str(out))
     disk_available_for_cleanup_json = disk_to_ignore_cleanup_raw["blockdevices"]
+    logger.info(
+        f"The disks avialble for cleanup json: {disk_available_for_cleanup_json}"
+    )
 
     for disk_to_ignore_cleanup in disk_available_for_cleanup_json:
         if disk_to_ignore_cleanup["mountpoint"] == "/boot":
@@ -1280,6 +1283,11 @@ def disks_available_to_cleanup(worker, namespace=constants.DEFAULT_NAMESPACE):
                 str(disk_to_ignore_cleanup["pkname"])
             )
         elif disk_to_ignore_cleanup["type"] == "rom":
+            logger.info(
+                f"Ignorning disk {disk_to_ignore_cleanup['kname']} for cleanup because it's a rom disk "
+            )
+            disk_available_for_cleanup_json.remove(str(disk_to_ignore_cleanup["kname"]))
+        elif "nbd" in disk_to_ignore_cleanup["kname"]:
             logger.info(
                 f"Ignorning disk {disk_to_ignore_cleanup['kname']} for cleanup because it's a rom disk "
             )
