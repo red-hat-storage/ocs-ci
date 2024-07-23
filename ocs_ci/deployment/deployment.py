@@ -157,7 +157,6 @@ from ocs_ci.utility.utils import get_az_count
 from ocs_ci.utility.ibmcloud import run_ibmcloud_cmd
 from ocs_ci.deployment.cnv import CNVInstaller
 
-
 logger = logging.getLogger(__name__)
 
 
@@ -3450,37 +3449,50 @@ class RDRMultiClusterDROperatorsDeploy(MultiClusterDROperatorsDeploy):
         else:
             self.enable_managed_serviceaccount()
 
-    @retry(CommandFailed, tries=10, delay=30)
+    @retry(ACMObservabilityNotEnabled, tries=10, delay=30)
     def check_observability_status(self):
         """
         Check observability status
         Returns (bool): True or False
 
         """
-        return run_cmd(
-            "oc get MultiClusterObservability observability -o jsonpath='{.status.conditions[1].status}'"
+
+        acm_observability_status = bool(
+            run_cmd(
+                "oc get MultiClusterObservability observability -o jsonpath='{.status.conditions[1].status}'"
+            )
         )
 
-    @retry(ACMObservabilityNotEnabled, tries=10, delay=5, backoff=5)
+        if acm_observability_status:
+            logger.info("ACM observability is successfully enabled")
+        else:
+            logger.error("ACM observability could not be enabled, re-trying...")
+            raise ACMObservabilityNotEnabled
+
     def thanos_secret(self):
         """
         Create thanos secret yaml by using Noobaa or AWS bucket (AWS bucket is used in this function)
 
         """
+        acm_indexes = get_all_acm_indexes()
         self.meta_obj.get_meta_access_secret_keys()
         thanos_secret_data = templating.load_yaml(constants.THANOS_PATH)
-        thanos_secret_data["stringData"]["thanos.yaml"]["config"][
-            "bucket"
-        ] = self.build_bucket_name()
-        thanos_secret_data["stringData"]["thanos.yaml"]["config"][
-            "endpoint"
-        ] = "https://s3.amazonaws.com"
-        thanos_secret_data["stringData"]["thanos.yaml"]["config"][
-            "access_key"
-        ] = self.meta_obj.access_key
-        thanos_secret_data["stringData"]["thanos.yaml"]["config"][
-            "secret_key"
-        ] = self.meta_obj.secret_key
+        thanos_bucket_name = (
+            f"dr-thanos-bucket-{config.clusters[0].ENV_DATA['cluster_name']}"
+        )
+        self.create_s3_bucket(
+            self.meta_obj.access_key,
+            self.meta_obj.secret_key,
+            thanos_bucket_name,
+        )
+        logger.info(f"ACM indexes {acm_indexes}")
+        navigate_thanos_yaml = thanos_secret_data["stringData"]["thanos.yaml"]
+        navigate_thanos_yaml = yaml.safe_load(navigate_thanos_yaml)
+        navigate_thanos_yaml["config"]["bucket"] = thanos_bucket_name
+        navigate_thanos_yaml["config"]["endpoint"] = "s3.amazonaws.com"
+        navigate_thanos_yaml["config"]["access_key"] = self.meta_obj.access_key
+        navigate_thanos_yaml["config"]["secret_key"] = self.meta_obj.secret_key
+        thanos_secret_data["stringData"]["thanos.yaml"] = str(navigate_thanos_yaml)
         thanos_data_yaml = tempfile.NamedTemporaryFile(
             mode="w+", prefix="thanos", delete=False
         )
@@ -3491,10 +3503,7 @@ class RDRMultiClusterDROperatorsDeploy(MultiClusterDROperatorsDeploy):
         )
         run_cmd(f"oc create -f {thanos_data_yaml.name}")
 
-        if self.check_observability_status():
-            logger.info("ACM observability is successfully enabled")
-        else:
-            logger.error("ACM observability could not be enabled")
+        self.check_observability_status()
 
     def enable_acm_observability(self):
         """
