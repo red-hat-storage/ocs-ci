@@ -31,7 +31,21 @@ from ocs_ci.ocs.resources.ocs import OCS
 from ocs_ci.utility import templating, version
 from ocs_ci.utility.prometheus import PrometheusAPI
 from ocs_ci.utility.retry import retry
-from ocs_ci.utility.utils import create_directory_path, mirror_image, run_cmd
+from ocs_ci.utility.utils import (
+    create_directory_path,
+    mirror_image,
+    run_cmd,
+    get_oadp_version,
+    get_acm_version,
+)
+from ocs_ci.utility.version import (
+    get_dr_hub_operator_version,
+    get_ocp_dr_cluster_operator_version,
+    get_odf_multicluster_orchestrator_version,
+    get_ocp_gitops_operator_version,
+    get_submariner_operator_version,
+    get_volsync_operator_version,
+)
 
 
 log = logging.getLogger(__name__)
@@ -1691,4 +1705,53 @@ def is_dr_scenario():
         bool: return True if it is rdr or mdr setup otherwise False
 
     """
-    return ocsci_config.MULTICLUSTER["multicluster_mode"] in ("metro-dr", "regional-dr")
+    return ocsci_config.MULTICLUSTER.get("multicluster_mode") in (
+        "metro-dr",
+        "regional-dr",
+    )
+
+
+def get_dr_operator_versions():
+    """
+    Get all DR operator versions on hub and primary clusters
+
+    Returns:
+        dict: return operator name as key and version as value
+
+    """
+    versions_dic = dict()
+    if is_dr_scenario():
+        with ocsci_config.RunWithAcmConfigContext():
+            acm_operator_version = get_acm_version()
+            if acm_operator_version:
+                versions_dic["acm_version"] = acm_operator_version
+            ocp_dr_hub_operator_version = get_dr_hub_operator_version()
+            if ocp_dr_hub_operator_version:
+                versions_dic["dr_hub_version"] = ocp_dr_hub_operator_version
+            odf_multicluster_orchestrator_version = (
+                get_odf_multicluster_orchestrator_version()
+            )
+            if odf_multicluster_orchestrator_version:
+                versions_dic[
+                    "odf_multicluster_orchestrator_version"
+                ] = odf_multicluster_orchestrator_version
+            gitops_operator_version = get_ocp_gitops_operator_version()
+            if gitops_operator_version:
+                versions_dic["gitops_version"] = gitops_operator_version
+        with ocsci_config.RunWithPrimaryConfigContext():
+            oadp_operator_version = get_oadp_version()
+            if oadp_operator_version:
+                versions_dic["oadp_version"] = oadp_operator_version
+            ocp_dr_cluster_operator_version = get_ocp_dr_cluster_operator_version()
+            if ocp_dr_cluster_operator_version:
+                versions_dic["ocp_dr_cluster_version"] = ocp_dr_cluster_operator_version
+            gitops_operator_version = get_ocp_gitops_operator_version()
+            if gitops_operator_version:
+                versions_dic["gitops_version"] = gitops_operator_version
+            volsync_operator_version = get_volsync_operator_version()
+            if volsync_operator_version:
+                versions_dic["volsync_version"] = volsync_operator_version
+            submariner_operator_version = get_submariner_operator_version()
+            if submariner_operator_version:
+                versions_dic["submariner_version"] = submariner_operator_version
+    return versions_dic

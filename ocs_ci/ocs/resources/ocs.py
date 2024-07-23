@@ -17,15 +17,7 @@ from ocs_ci.ocs.resources.packagemanifest import (
 from ocs_ci.ocs.exceptions import CSVNotFound
 from ocs_ci.utility import templating, utils
 from ocs_ci.utility.version import get_semantic_ocs_version_from_config, VERSION_4_9
-from ocs_ci.utility.version import (
-    get_dr_hub_operator_version,
-    get_ocp_dr_cluster_operator_version,
-    get_odf_multicluster_orchestrator_version,
-    get_ocp_gitops_operator_version,
-    get_submariner_operator_version,
-    get_volsync_operator_version,
-)
-from ocs_ci.utility.utils import get_oadp_version, get_acm_version
+
 
 log = logging.getLogger(__name__)
 
@@ -213,43 +205,11 @@ def get_version_info(namespace=None):
     csv_name = package_manifest.get_current_csv(channel)
     csv_pre = CSV(resource_name=csv_name, namespace=namespace)
     info = get_images(csv_pre.get())
-    from ocs_ci.ocs.utils import is_dr_scenario
+    from ocs_ci.ocs.utils import get_dr_operator_versions
 
-    if is_dr_scenario():
-        with config.RunWithAcmConfigContext():
-            acm_operator_version = get_acm_version()
-            if acm_operator_version:
-                info["acm_version"] = acm_operator_version
-            ocp_dr_hub_operator_version = get_dr_hub_operator_version()
-            if ocp_dr_hub_operator_version:
-                info["dr_hub_version"] = ocp_dr_hub_operator_version
-            odf_multicluster_orchestrator_version = (
-                get_odf_multicluster_orchestrator_version()
-            )
-            if odf_multicluster_orchestrator_version:
-                info[
-                    "odf_multicluster_orchestrator_version"
-                ] = odf_multicluster_orchestrator_version
-            gitops_operator_version = get_ocp_gitops_operator_version()
-            if gitops_operator_version:
-                info["gitops_version"] = gitops_operator_version
-        with config.RunWithPrimaryConfigContext():
-            oadp_operator_version = get_oadp_version()
-            if oadp_operator_version:
-                info["oadp_version"] = oadp_operator_version
-            ocp_dr_cluster_operator_version = get_ocp_dr_cluster_operator_version()
-            if ocp_dr_cluster_operator_version:
-                info["ocp_dr_cluster_version"] = ocp_dr_cluster_operator_version
-            gitops_operator_version = get_ocp_gitops_operator_version()
-            if gitops_operator_version:
-                info["gitops_version"] = gitops_operator_version
-            volsync_operator_version = get_volsync_operator_version()
-            if volsync_operator_version:
-                info["volsync_version"] = volsync_operator_version
-            submariner_operator_version = get_submariner_operator_version()
-            if submariner_operator_version:
-                info["submariner_version"] = submariner_operator_version
-    return info
+    dr_operator_versions = get_dr_operator_versions()
+    versions = {**info, **dr_operator_versions}
+    return versions
 
 
 def get_ocs_csv():
