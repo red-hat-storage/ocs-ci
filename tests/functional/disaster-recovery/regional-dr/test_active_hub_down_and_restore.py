@@ -43,7 +43,6 @@ class TestActiveHubDownAndRestore:
         Tests to verify failover and relocate all apps when active hub down and restored RDR
         """
 
-        # acm_obj = AcmAddClusters()
         # Deploy Subscription and Appset based application
         rdr_workload = dr_workload(
             num_of_subscription=1, num_of_appset=1, switch_ctx=get_passive_acm_index()
@@ -66,7 +65,7 @@ class TestActiveHubDownAndRestore:
         time.sleep(wait_time)
 
         # Get the active hub nodes
-        logger.info("Getting Active cluster node details")
+        logger.info("Getting active hub cluster's node details")
         config.switch_ctx(get_active_acm_index())
         active_hub_index = config.cur_index
         active_hub_cluster_node_objs = get_node_objs()
@@ -76,7 +75,7 @@ class TestActiveHubDownAndRestore:
         logger.info("Shutting down all the nodes of active hub")
         nodes_multicluster[active_hub_index].stop_nodes(active_hub_cluster_node_objs)
         logger.info(
-            "All nodes of active hub zone are powered off, "
+            "All nodes of active hub cluster are powered off, "
             f"wait {wait_time} seconds before restoring in passive hub"
         )
 
@@ -121,6 +120,9 @@ class TestActiveHubDownAndRestore:
 
         # Failover action via CLI
         failover_results = []
+        logger.info(f"Waiting for 300 seconds for drpc status to be restored before performing failover")
+        time.sleep(300)
+
         config.switch_ctx(get_passive_acm_index())
         with ThreadPoolExecutor() as executor:
             for wl in rdr_workload:
@@ -138,7 +140,6 @@ class TestActiveHubDownAndRestore:
                     )
                 )
                 time.sleep(60)
-        config.switch_ctx(get_passive_acm_index())
         # Wait for failover results
         for fl in failover_results:
             fl.result()
@@ -177,7 +178,6 @@ class TestActiveHubDownAndRestore:
                     )
                 )
                 time.sleep(60)
-        config.switch_ctx(get_passive_acm_index())
         # Wait for relocate results
         for rl in relocate_results:
             rl.result()
