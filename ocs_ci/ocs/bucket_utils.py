@@ -2913,7 +2913,13 @@ def create_s3client_from_assume_role_creds(mcg_obj, assume_role_creds):
 
 def generate_empty_files(aws_pod, dir, amount, pattern="File"):
     """
-    Generate empty files with unqiue identifiers
+    Generate empty files with unique identifiers
+
+    Args:
+        aws_pod (Pod): Pod object for aws-cli pod
+        dir (str): directory where the files need to generated
+        amount (int): number of files to be generated
+        pattern (str): pattern to use as prefix for the filename
 
     """
     aws_pod.exec_sh_cmd_on_pod(
@@ -2925,7 +2931,12 @@ def generate_empty_files(aws_pod, dir, amount, pattern="File"):
 
 def verify_objs_deleted_from_objmds(bucket_name, timeout=600):
     """
-    Verify objects are deleted by checking from Object mds
+    Verify that all the objects are marked deletion time by checking
+    the objmds table in nbcore db.
+
+    Args:
+        bucket_name (str): Name of the bucket
+        timeout (int): Timeout until all the objects are expired
 
     """
 
@@ -2937,15 +2948,15 @@ def verify_objs_deleted_from_objmds(bucket_name, timeout=600):
 
         objs_count = exec_nb_db_query(
             f"select count(*) from objectmds where data->>'bucket'='{bucket_id}'"
-        )
+        )[0].strip()
         objs_deleted_count = exec_nb_db_query(
             f"select count(*) from objectmds where data->>'bucket'='{bucket_id}' AND data ? 'deleted'"
-        )
+        )[0].strip()
 
         logger.info(f"Objects count: {objs_count}")
         logger.info(f"Objects deleted count: {objs_deleted_count}")
 
-        return objs_count == objs_deleted_count
+        return int(objs_count) == int(objs_deleted_count)
 
     sampler = TimeoutSampler(
         timeout=timeout,
