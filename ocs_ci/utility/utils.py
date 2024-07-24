@@ -4994,7 +4994,7 @@ def get_latest_release_version():
 
     """
     cmd = (
-        "curl -s https://mirror.openshift.com/pub/openshift-v4/clients/ocp/latest/release.txt | "
+        "curl -sL https://mirror.openshift.com/pub/openshift-v4/clients/ocp/latest/release.txt | "
         "awk '/^Name:/ {print $2}'"
     )
     try:
