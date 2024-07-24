@@ -249,7 +249,7 @@ def get_ocp_gitops_operator_version(namespace=constants.OPENSHIFT_NAMESPACE):
     from ocs_ci.ocs.resources.csv import get_csvs_start_with_prefix
 
     csv_list = get_csvs_start_with_prefix(
-        "openshift-gitops-operator", namespace=namespace
+        constants.GITOPS_OPERATOR_NAME, namespace=namespace
     )
     for csv in csv_list:
         if constants.GITOPS_OPERATOR_NAME in csv["metadata"]["name"]:
