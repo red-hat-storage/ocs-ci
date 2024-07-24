@@ -315,7 +315,8 @@ generic_locators = {
     "text_input_popup_rules": (
         "//*[@class='pf-c-helper-text__item-text'] | "
         "//div[@data-test='field-requirements-popover']"
-        "//*[@class='pf-v5-c-helper-text__item-text'] | //div[@class='pf-v5-c-popover__body']",
+        "//*[@class='pf-v5-c-helper-text__item-text'] | "
+        "//ul//span[@class='pf-v5-c-helper-text__item-text']]",
         By.XPATH,
     ),
     "ocp-overview-status-storage-popup-btn": (
