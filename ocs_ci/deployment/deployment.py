@@ -3417,7 +3417,6 @@ class RDRMultiClusterDROperatorsDeploy(MultiClusterDROperatorsDeploy):
             # Enable MCO console plugin
             enable_mco_console_plugin()
         config.switch_acm_ctx()
-        super().deploy()
         # RBD specific dr deployment
         if self.rbd:
             rbddops = RBDDRDeployOps()
