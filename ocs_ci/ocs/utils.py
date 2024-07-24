@@ -426,13 +426,13 @@ def set_cdn_repo(node, repos):
 
 def update_ca_cert(node, cert_url, timeout=120):
     if node.pkg_type == "deb":
-        cmd = "cd /usr/local/share/ca-certificates/ && {{ sudo curl -O {url} ; cd -; }}".format(
+        cmd = "cd /usr/local/share/ca-certificates/ && {{ sudo curl -OL {url} ; cd -; }}".format(
             url=cert_url
         )
         node.exec_command(cmd=cmd, timeout=timeout)
         node.exec_command(cmd="sudo update-ca-certificates", timeout=timeout)
     else:
-        cmd = "cd /etc/pki/ca-trust/source/anchors && {{ sudo curl -O {url} ; cd -; }}".format(
+        cmd = "cd /etc/pki/ca-trust/source/anchors && {{ sudo curl -OL {url} ; cd -; }}".format(
             url=cert_url
         )
         node.exec_command(cmd=cmd, timeout=timeout)
