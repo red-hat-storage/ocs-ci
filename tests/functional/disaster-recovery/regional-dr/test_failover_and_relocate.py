@@ -6,10 +6,7 @@ from time import sleep
 import pytest
 
 from ocs_ci.framework import config
-from ocs_ci.framework.pytest_customization.marks import (
-    turquoise_squad,
-    skipif_ocs_version,
-)
+from ocs_ci.framework.pytest_customization.marks import turquoise_squad
 from ocs_ci.framework.testlib import acceptance, tier1
 from ocs_ci.helpers import dr_helpers
 from ocs_ci.helpers.dr_helpers_ui import (
@@ -32,8 +29,6 @@ polarion_id_primary_up = "OCS-4430"
 polarion_id_primary_down = "OCS-4427"
 polarion_id_primary_down_appset = "OCS-5009"
 polarion_id_primary_up_appset = "OCS-5010"
-polarion_id_primary_up_appset_pull = None
-polarion_id_primary_down_appset_pull = None
 
 
 if config.RUN.get("rdr_failover_via_ui"):
@@ -52,55 +47,31 @@ class TestFailoverAndRelocate:
     """
 
     @pytest.mark.parametrize(
-        argnames=["workload_type", "primary_cluster_down", "appset_model"],
+        argnames=["workload_type", "primary_cluster_down"],
         argvalues=[
             pytest.param(
                 constants.SUBSCRIPTION,
                 False,
-                None,
                 marks=pytest.mark.polarion_id(polarion_id_primary_up),
                 id="primary_up_subscription",
             ),
             pytest.param(
                 constants.SUBSCRIPTION,
                 True,
-                None,
                 marks=pytest.mark.polarion_id(polarion_id_primary_down),
                 id="primary_down_subscription",
             ),
             pytest.param(
                 constants.APPLICATION_SET,
                 False,
-                "push",
                 marks=pytest.mark.polarion_id(polarion_id_primary_up_appset),
-                id="primary_up_appset_push",
-            ),
-            pytest.param(
-                constants.APPLICATION_SET,
-                False,
-                "pull",
-                marks=[
-                    pytest.mark.polarion_id(polarion_id_primary_up_appset_pull),
-                    skipif_ocs_version("<4.16"),
-                ],
-                id="primary_up_appset_pull",
+                id="primary_up_appset",
             ),
             pytest.param(
                 constants.APPLICATION_SET,
                 True,
-                "push",
                 marks=pytest.mark.polarion_id(polarion_id_primary_down_appset),
-                id="primary_down_appset_push",
-            ),
-            pytest.param(
-                constants.APPLICATION_SET,
-                True,
-                "pull",
-                marks=[
-                    pytest.mark.polarion_id(polarion_id_primary_down_appset_pull),
-                    skipif_ocs_version("<4.16"),
-                ],
-                id="primary_down_appset_pull",
+                id="primary_down_appset",
             ),
         ],
     )
@@ -110,7 +81,6 @@ class TestFailoverAndRelocate:
         setup_acm_ui,
         dr_workload,
         workload_type,
-        appset_model,
         nodes_multicluster,
         node_restart_teardown,
     ):
@@ -126,8 +96,6 @@ class TestFailoverAndRelocate:
         pass the yaml conf/ocsci/dr_ui.yaml to trigger it.
         The value of lastGroupSyncTime is verified in each stage.
 
-        appset_model pull type was introduced with ACM 2.10 and would be supported with ODF 4.16 and above
-
         """
         if config.RUN.get("rdr_failover_via_ui"):
             acm_obj = AcmAddClusters()
@@ -136,9 +104,7 @@ class TestFailoverAndRelocate:
             rdr_workload = dr_workload(num_of_subscription=1)[0]
             drpc_obj = DRPC(namespace=rdr_workload.workload_namespace)
         else:
-            rdr_workload = dr_workload(
-                num_of_subscription=0, num_of_appset=1, appset_model=appset_model
-            )[0]
+            rdr_workload = dr_workload(num_of_subscription=0, num_of_appset=1)[0]
             drpc_obj = DRPC(
                 namespace=constants.GITOPS_CLUSTER_NAMESPACE,
                 resource_name=f"{rdr_workload.appset_placement_name}-drpc",
@@ -230,11 +196,9 @@ class TestFailoverAndRelocate:
                 secondary_cluster_name,
                 rdr_workload.workload_namespace,
                 workload_type,
-                (
-                    rdr_workload.appset_placement_name
-                    if workload_type != constants.SUBSCRIPTION
-                    else None
-                ),
+                rdr_workload.appset_placement_name
+                if workload_type != constants.SUBSCRIPTION
+                else None,
             )
 
         # Verify resources creation on secondary cluster (failoverCluster)
@@ -338,11 +302,9 @@ class TestFailoverAndRelocate:
                 primary_cluster_name,
                 rdr_workload.workload_namespace,
                 workload_type,
-                (
-                    rdr_workload.appset_placement_name
-                    if workload_type != constants.SUBSCRIPTION
-                    else None
-                ),
+                rdr_workload.appset_placement_name
+                if workload_type != constants.SUBSCRIPTION
+                else None,
             )
 
         # Verify resources deletion from secondary cluster
