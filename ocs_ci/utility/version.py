@@ -252,7 +252,7 @@ def get_ocp_gitops_operator_version(namespace=constants.OPENSHIFT_NAMESPACE):
         "openshift-gitops-operator", namespace=namespace
     )
     for csv in csv_list:
-        if "openshift-gitops-operator" in csv["metadata"]["name"]:
+        if constants.GITOPS_OPERATOR_NAME in csv["metadata"]["name"]:
             # extract version string
             return csv["spec"]["version"]
 

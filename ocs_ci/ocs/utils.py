@@ -1735,16 +1735,13 @@ def get_dr_operator_versions():
                 versions_dic[
                     "odf_multicluster_orchestrator_version"
                 ] = odf_multicluster_orchestrator_version
-            gitops_operator_version = get_ocp_gitops_operator_version()
-            if gitops_operator_version:
-                versions_dic["gitops_version"] = gitops_operator_version
         with ocsci_config.RunWithPrimaryConfigContext():
             oadp_operator_version = get_oadp_version()
             if oadp_operator_version:
                 versions_dic["oadp_version"] = oadp_operator_version
             ocp_dr_cluster_operator_version = get_ocp_dr_cluster_operator_version()
             if ocp_dr_cluster_operator_version:
-                versions_dic["ocp_dr_cluster_version"] = ocp_dr_cluster_operator_version
+                versions_dic["dr_cluster_version"] = ocp_dr_cluster_operator_version
             gitops_operator_version = get_ocp_gitops_operator_version()
             if gitops_operator_version:
                 versions_dic["gitops_version"] = gitops_operator_version

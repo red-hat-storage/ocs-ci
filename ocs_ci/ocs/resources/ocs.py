@@ -194,6 +194,16 @@ class OCS(object):
 
 
 def get_version_info(namespace=None):
+    """
+    Get OCS versions and DR operator versions
+
+    Args:
+        namespace (str): the CSVs namespace
+
+    Returns:
+        dict: the ocs versions and DR operator versions
+
+    """
     operator_selector = get_selector_for_ocs_operator()
     subscription_plan_approval = config.DEPLOYMENT.get("subscription_plan_approval")
     package_manifest = PackageManifest(
