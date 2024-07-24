@@ -215,6 +215,7 @@ def get_version_info(namespace=None):
     csv_name = package_manifest.get_current_csv(channel)
     csv_pre = CSV(resource_name=csv_name, namespace=namespace)
     info = get_images(csv_pre.get())
+    # Importing here to avoid circular dependency
     from ocs_ci.ocs.utils import get_dr_operator_versions
 
     dr_operator_versions = get_dr_operator_versions()
