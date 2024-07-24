@@ -315,7 +315,8 @@ generic_locators = {
     "text_input_popup_rules": (
         "//*[@class='pf-c-helper-text__item-text'] | "
         "//div[@data-test='field-requirements-popover']"
-        "//*[@class='pf-v5-c-helper-text__item-text']",
+        "//*[@class='pf-v5-c-helper-text__item-text'] | "
+        "//ul//span[@class='pf-v5-c-helper-text__item-text']",
         By.XPATH,
     ),
     "ocp-overview-status-storage-popup-btn": (
@@ -1097,7 +1098,7 @@ add_capacity_4_12 = {
 
 block_pool_4_12 = {
     "actions_inside_pool": (
-        "//span[text()='Actions']/..",
+        "//span[text()='Actions']/.. | //button[@data-test='kebab-button']",
         By.XPATH,
     ),
     "delete_pool_inside_pool": (
@@ -1147,11 +1148,12 @@ block_pool_4_13 = {
 }
 
 block_pool = {
-    "create_block_pool": ("Create BlockPool", By.LINK_TEXT),
+    "create_block_pool": ("yaml-create", By.ID),
     "new_pool_name": (
         'input[data-test="new-pool-name-textbox"]',
         By.CSS_SELECTOR,
     ),
+    "pool_type_block": ("type-block", By.ID),
     "first_select_replica": ('button[data-test="replica-dropdown"]', By.CSS_SELECTOR),
     "second_select_replica_2": ("//button[text()='2-way Replication']", By.XPATH),
     "second_select_replica_3": ("//button[text()='3-way Replication']", By.XPATH),
@@ -1160,8 +1162,14 @@ block_pool = {
         By.CSS_SELECTOR,
     ),
     "pool_confirm_create": ('button[data-test-id="confirm-action"]', By.CSS_SELECTOR),
-    "actions_outside_pool": ('button[aria-label="Actions"]', By.CSS_SELECTOR),
-    "edit_labels_of_pool": ("//a[normalize-space()='Edit labels']", By.XPATH),
+    "actions_outside_pool": (
+        'button[aria-label="Actions"], button[data-test="kebab-button"]',
+        By.CSS_SELECTOR,
+    ),
+    "edit_labels_of_pool": (
+        "//a[normalize-space()='Edit labels'] | //button[@id='Edit Labels']",
+        By.XPATH,
+    ),
     "edit_labels_of_pool_input": ("#tags-input", By.TAG_NAME),
     "invalid_label_name_note_edit_label_pool": (
         "//h4[contains(@class, 'c-alert__title')]",
@@ -1170,7 +1178,7 @@ block_pool = {
     "edit_labels_of_pool_save": ("//button[normalize-space()='Save']", By.XPATH),
     "cancel_edit_labels_of_pool": ("//button[normalize-space()='Cancel']", By.XPATH),
     "edit_pool_inside_pool": (
-        'button[data-test-action="Edit BlockPool"]',
+        'button[data-test-action="Edit BlockPool"], button[id="Edit Resource"]',
         By.CSS_SELECTOR,
     ),
     "confirm_delete_inside_pool": ("//button[text()='Delete']", By.XPATH),
@@ -1187,7 +1195,7 @@ block_pool = {
     ),
     "used_raw_capacity_in_UI": ("//div[@class='ceph-raw-card-legend__text']", By.XPATH),
     "delete_pool_inside_pool": (
-        "//a[text()='Delete BlockPool']",
+        "//a[text()='Delete BlockPool'] | //button[@id='Delete']",
         By.XPATH,
     ),
 }
@@ -1347,8 +1355,14 @@ validation = {
     "storage_cluster_readiness": ("//*[contains(text(),'Ready')]", By.XPATH),
     "backingstore_name": ("input[placeholder='my-backingstore']", By.CSS_SELECTOR),
     "namespacestore_name": ("input[placeholder='my-namespacestore']", By.CSS_SELECTOR),
-    "blockpool_name": ("input[placeholder='my-block-pool']", By.CSS_SELECTOR),
-    "input_value_validator_icon": (".pf-c-icon, .pf-v5-c-icon", By.CSS_SELECTOR),
+    "blockpool_name": (
+        "input[placeholder='my-block-pool'], input[id=pool-name]",
+        By.CSS_SELECTOR,
+    ),
+    "input_value_validator_icon": (
+        "button[aria-label='Validation'], .pf-c-icon",
+        By.CSS_SELECTOR,
+    ),
     "text_input_field_error_improvements": (
         "input[data-ouia-component-id='OUIA-Generated-TextInputBase-1']",
         By.CSS_SELECTOR,
@@ -1598,7 +1612,11 @@ validation_4_11 = {
     "object-odf-4-10": ("//a[normalize-space()='Object']", By.XPATH),
     "blockandfile": ("//span[normalize-space()='Block and File']", By.XPATH),
     "blockandfile-odf-4-10": ("//a[normalize-space()='Block and File']", By.XPATH),
-    "blockpools": ("//span[normalize-space()='BlockPools']", By.XPATH),
+    "blockpools": (
+        "//span[normalize-space()='BlockPools'] | "
+        "//button[@data-test='horizontal-link-Storage pools']",
+        By.XPATH,
+    ),
     "blockpools-odf-4-10": ("//a[normalize-space()='BlockPools']", By.XPATH),
     "system-capacity": ("//div[contains(text(),'System Capacity')]", By.XPATH),
     "backingstorage-breadcrumb": ("//a[normalize-space()='BackingStores']", By.XPATH),
