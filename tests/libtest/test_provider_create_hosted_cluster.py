@@ -20,9 +20,9 @@ from ocs_ci.framework.pytest_customization.marks import (
     runs_on_provider,
 )
 from ocs_ci.ocs.ocp import OCP
+from ocs_ci.ocs.resources.catalog_source import get_odf_tag_from_redhat_catsrc
 from ocs_ci.utility.utils import (
     get_latest_release_version,
-    get_odf_tag_from_redhat_catsrc,
 )
 from ocs_ci.utility.version import get_ocs_version_from_csv
 from ocs_ci.framework import config as ocsci_config
