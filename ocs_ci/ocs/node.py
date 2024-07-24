@@ -797,6 +797,7 @@ def get_compute_node_names(no_replace=False):
         constants.BAREMETAL_PLATFORM,
         constants.BAREMETALPSI_PLATFORM,
         constants.IBM_POWER_PLATFORM,
+        constants.HCI_BAREMETAL,
     ]:
         if no_replace:
             return [
