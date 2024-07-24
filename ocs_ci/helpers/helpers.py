@@ -4791,8 +4791,6 @@ def is_rbd_default_storage_class(custom_sc=None):
     return False
 
 
-<<<<<<< HEAD
-<<<<<<< HEAD
 def get_network_attachment_definitions(
     nad_name, namespace=config.ENV_DATA["cluster_namespace"]
 ):
@@ -5123,6 +5121,8 @@ def wait_for_reclaim_space_job(reclaim_space_job):
     except TimeoutExpiredError:
         raise UnexpectedBehaviour(
             f"ReclaimSpaceJob {reclaim_space_job.name} is not successful. Yaml output: {reclaim_space_job.get()}"
+        )
+
 
 def check_pods_status_by_pattern(pattern, namespace, expected_status):
     """
