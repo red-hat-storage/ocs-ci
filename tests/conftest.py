@@ -65,6 +65,7 @@ from ocs_ci.ocs.utils import (
     setup_ceph_toolbox,
     collect_ocs_logs,
     collect_pod_container_rpm_package,
+    get_dr_operator_versions,
 )
 from ocs_ci.ocs.resources.deployment import Deployment
 from ocs_ci.ocs.resources.job import get_job_obj
@@ -173,6 +174,7 @@ from ocs_ci.helpers.longevity_helpers import (
 )
 from ocs_ci.ocs.longevity import start_app_workload
 from ocs_ci.utility.decorators import switch_to_default_cluster_index_at_last
+
 
 log = logging.getLogger(__name__)
 
@@ -1594,6 +1596,9 @@ def additional_testsuite_properties(record_testsuite_property, pytestconfig):
     # add markers as separated property
     markers = ocsci_config.RUN["cli_params"].get("-m", "").replace(" ", "-")
     record_testsuite_property("rp_markers", markers)
+    dr_operator_versions = get_dr_operator_versions()
+    for dr_operator_name, dr_operator_version in dr_operator_versions.items():
+        record_testsuite_property(f"rp_{dr_operator_name}", dr_operator_version)
 
 
 @pytest.fixture(scope="session")
