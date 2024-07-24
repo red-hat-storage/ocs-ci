@@ -234,7 +234,10 @@ class DeploymentUI(PageNavigator):
             self.do_click(
                 locator=self.dep_loc["all_nodes_create_sc"], enable_screenshot=True
             )
-        if config.ENV_DATA.get("platform") != constants.BAREMETAL_PLATFORM:
+        if config.ENV_DATA.get("platform") in [
+            constants.BAREMETAL_PLATFORM,
+            constants.HCI_BAREMETAL,
+        ]:
             self.verify_disks_lso_attached()
             timeout_next = 60
         else:

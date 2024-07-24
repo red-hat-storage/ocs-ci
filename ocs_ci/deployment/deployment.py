@@ -580,6 +580,19 @@ class Deployment(object):
         ):
             storage_client_deployment_obj.provider_and_native_client_installation()
 
+    def do_deploy_cnv(self):
+        """
+        Deploy CNV
+        We run it in OCP deployment stage, hence `ship_ocs_deployment` is set True.
+        When we run it in OCS deployment stage, the `skip_ocs_deployment` is set to False automatically and
+        second installation does not happen.
+        """
+        if (
+            config.DEPLOYMENT.get("cnv_deployment")
+            and config.ENV_DATA["skip_ocs_deployment"]
+        ):
+            CNVInstaller().deploy_cnv()
+
     def do_deploy_hosted_clusters(self):
         """
         Deploy Hosted cluster(s)
@@ -656,8 +669,7 @@ class Deployment(object):
         self.do_deploy_rdr()
         self.do_deploy_fusion()
         self.do_deploy_odf_provider_mode()
-        if config.DEPLOYMENT.get("cnv_deployment"):
-            CNVInstaller().deploy_cnv()
+        self.do_deploy_cnv()
         self.do_deploy_hosted_clusters()
 
     def get_rdr_conf(self):
@@ -921,7 +933,7 @@ class Deployment(object):
         if not namespace:
             namespace = self.namespace
 
-        if config.multicluster:
+        if self.muliclusterhub_running():
             resource_kind = constants.SUBSCRIPTION_WITH_ACM
         else:
             resource_kind = constants.SUBSCRIPTION
@@ -1054,7 +1066,7 @@ class Deployment(object):
             worker_nodes = get_worker_nodes()
             node_obj = ocp.OCP(kind="node")
             platform = config.ENV_DATA.get("platform").lower()
-            if platform != constants.BAREMETAL_PLATFORM:
+            if platform not in [constants.BAREMETAL_PLATFORM, constants.HCI_BAREMETAL]:
                 for node in worker_nodes:
                     for interface in interfaces:
                         ip_link_cmd = f"ip link set promisc on {interface}"
@@ -1297,7 +1309,10 @@ class Deployment(object):
             cluster_data["spec"]["storageDeviceSets"][0]["replica"] = 1
 
         # set size of request for storage
-        if self.platform.lower() == constants.BAREMETAL_PLATFORM:
+        if self.platform.lower() in [
+            constants.BAREMETAL_PLATFORM,
+            constants.HCI_BAREMETAL,
+        ]:
             pv_size_list = helpers.get_pv_size(
                 storageclass=self.DEFAULT_STORAGECLASS_LSO
             )
@@ -2321,6 +2336,28 @@ class Deployment(object):
             logger.error(f"Failed to install MultiClusterHub. Exception is: {ex}")
             return False
 
+    def muliclusterhub_running(self):
+        """
+        Check if MultiCluster Hub is running
+
+        Returns:
+            bool: True if MultiCluster Hub is running, False otherwise
+        """
+        ocp_obj = OCP(
+            kind=constants.ACM_MULTICLUSTER_HUB, namespace=constants.ACM_HUB_NAMESPACE
+        )
+        try:
+            mch_running = ocp_obj.wait_for_resource(
+                condition=constants.STATUS_RUNNING,
+                resource_name=constants.ACM_MULTICLUSTER_RESOURCE,
+                column="STATUS",
+                timeout=6,
+                sleep=3,
+            )
+        except CommandFailed:
+            mch_running = False
+        return mch_running
+
 
 def create_external_pgsql_secret():
     """
@@ -2359,8 +2396,8 @@ def validate_acm_hub_install():
         condition=constants.STATUS_RUNNING,
         resource_name=constants.ACM_MULTICLUSTER_RESOURCE,
         column="STATUS",
-        timeout=720,
-        sleep=5,
+        timeout=1200,
+        sleep=30,
     )
     logger.info("MultiClusterHub Deployment Succeeded")
 
