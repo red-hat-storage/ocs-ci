@@ -1556,6 +1556,13 @@ class Deployment(object):
             cluster_data["spec"]["managedResources"]["cephCluster"][
                 "waitTimeoutForHealthyOSDInMinutes"
             ] = wait_timeout_for_healthy_osd_in_minutes
+        if ocs_version >= version.VERSION_4_17:
+            cluster_data.setdefault("spec", {}).setdefault(
+                "managedResources", {}
+            ).setdefault("cephNonResilientPools", {})
+            cluster_data["spec"]["managedResources"]["cephNonResilientPools"][
+                "enable"
+            ] = True
 
         cluster_data_yaml = tempfile.NamedTemporaryFile(
             mode="w+", prefix="cluster_storage", delete=False
