@@ -204,6 +204,9 @@ def get_version_info(namespace=None):
         dict: the ocs versions and DR operator versions
 
     """
+    # Importing here to avoid circular dependency
+    from ocs_ci.ocs.utils import get_dr_operator_versions
+
     operator_selector = get_selector_for_ocs_operator()
     subscription_plan_approval = config.DEPLOYMENT.get("subscription_plan_approval")
     package_manifest = PackageManifest(
@@ -215,9 +218,6 @@ def get_version_info(namespace=None):
     csv_name = package_manifest.get_current_csv(channel)
     csv_pre = CSV(resource_name=csv_name, namespace=namespace)
     info = get_images(csv_pre.get())
-    # Importing here to avoid circular dependency
-    from ocs_ci.ocs.utils import get_dr_operator_versions
-
     dr_operator_versions = get_dr_operator_versions()
     versions = {**info, **dr_operator_versions}
     return versions
