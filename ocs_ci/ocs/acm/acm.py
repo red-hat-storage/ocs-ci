@@ -7,7 +7,10 @@ import requests
 from selenium.webdriver.support.wait import WebDriverWait
 from selenium.webdriver.support import expected_conditions as ec
 from selenium.webdriver.common.by import By
-from selenium.common.exceptions import NoSuchElementException
+from selenium.common.exceptions import (
+    NoSuchElementException,
+    StaleElementReferenceException,
+)
 from ocs_ci.helpers.helpers import create_unique_resource_name
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.acm.acm_constants import (
@@ -233,8 +236,18 @@ class AcmAddClusters(AcmPageNavigator):
         time.sleep(3)
         log.info("Click on 'Submariner add-ons' tab")
         self.do_click(self.page_nav["submariner-tab"])
-        log.info("Click on 'Install Submariner add-ons' button")
-        self.do_click(self.page_nav["install-submariner-btn"], timeout=120)
+        retries = 6
+        for attempt in range(retries):
+            try:
+                WebDriverWait(self, 10).until(
+                    ec.presence_of_element_located(
+                        self.do_click(self.page_nav["install-submariner-btn"])
+                    )
+                )
+                log.info("Click on 'Install Submariner add-ons' button")
+            except StaleElementReferenceException:
+                if attempt == retries - 1:
+                    raise
         log.info("Click on 'Target clusters'")
         self.do_click(self.page_nav["target-clusters"])
         log.info(f"Select 1st cluster which is {cluster_name_a}")
