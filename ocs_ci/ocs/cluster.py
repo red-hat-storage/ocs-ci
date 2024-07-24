@@ -3244,23 +3244,14 @@ def client_cluster_health_check():
     res = wait_for_pods_to_be_in_statuses(
         expected_statuses=expected_statuses,
         exclude_pod_name_prefixes=exclude_pod_name_prefixes,
-        timeout=300,
+        timeout=480,
         sleep=20,
     )
     if not res:
         raise ResourceWrongStatusException("Not all the pods in running state")
 
     logger.info("Checking that the storageclient is connected")
-    sc_obj = OCP(
-        kind=constants.STORAGECLIENT, namespace=config.ENV_DATA["cluster_namespace"]
-    )
-    sc_obj.wait_for_resource(
-        resource_name=config.cluster_ctx.ENV_DATA.get("storage_client_name"),
-        column="PHASE",
-        condition="Connected",
-        timeout=180,
-        sleep=10,
-    )
+    storage_cluster.wait_for_storage_client_connected()
 
     logger.info("The client cluster health check passed successfully")
 
