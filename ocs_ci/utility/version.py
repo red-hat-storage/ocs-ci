@@ -195,9 +195,9 @@ def get_dr_hub_operator_version(namespace=constants.OPENSHIFT_NAMESPACE):
             return csv["spec"]["version"]
 
 
-def get_ocp_dr_cluster_operator_version(namespace=constants.OPENSHIFT_NAMESPACE):
+def get_dr_cluster_operator_version(namespace=constants.OPENSHIFT_NAMESPACE):
     """
-    Get DR Hub Operator Version
+    Get DR Cluster Operator Version
 
     Returns:
         str: returns version string

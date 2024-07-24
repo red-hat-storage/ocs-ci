@@ -40,7 +40,7 @@ from ocs_ci.utility.utils import (
 )
 from ocs_ci.utility.version import (
     get_dr_hub_operator_version,
-    get_ocp_dr_cluster_operator_version,
+    get_dr_cluster_operator_version,
     get_odf_multicluster_orchestrator_version,
     get_ocp_gitops_operator_version,
     get_submariner_operator_version,
@@ -1739,7 +1739,7 @@ def get_dr_operator_versions():
             oadp_operator_version = get_oadp_version()
             if oadp_operator_version:
                 versions_dic["oadp_version"] = oadp_operator_version
-            ocp_dr_cluster_operator_version = get_ocp_dr_cluster_operator_version()
+            ocp_dr_cluster_operator_version = get_dr_cluster_operator_version()
             if ocp_dr_cluster_operator_version:
                 versions_dic["dr_cluster_version"] = ocp_dr_cluster_operator_version
             gitops_operator_version = get_ocp_gitops_operator_version()
