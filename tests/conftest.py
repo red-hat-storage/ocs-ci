@@ -124,6 +124,7 @@ from ocs_ci.utility.environment_check import (
     get_status_before_execution,
     get_status_after_execution,
 )
+from ocs_ci.utility.json import SetToListJSONEncoder
 from ocs_ci.utility.resource_check import (
     create_resource_dct,
     get_environment_status_after_execution,
@@ -151,7 +152,6 @@ from ocs_ci.utility.utils import (
     skipif_ui_not_support,
     run_cmd,
     ceph_health_check_multi_storagecluster_external,
-    CustomJSONEncoder,
 )
 from ocs_ci.helpers import helpers, dr_helpers
 from ocs_ci.helpers.helpers import (
@@ -6713,9 +6713,11 @@ def cnv_dr_workload(request):
                     workload_pvc_selector=workload_details[
                         "dr_workload_app_pvc_selector"
                     ],
-                    appset_model=workload_details["appset_model"]
-                    if workload_type == constants.APPLICATION_SET
-                    else None,
+                    appset_model=(
+                        workload_details["appset_model"]
+                        if workload_type == constants.APPLICATION_SET
+                        else None
+                    ),
                 )
                 instances.append(workload)
                 total_pvc_count += workload_details["pvc_count"]
@@ -7533,7 +7535,6 @@ def override_default_backingstore_fixture(
 
 @pytest.fixture(scope="session")
 def scale_noobaa_resources_session(request):
-
     """
     Session scoped fixture to scale noobaa resources
 
@@ -7551,7 +7552,6 @@ def scale_noobaa_resources_fixture(request):
 
 
 def scale_noobaa_resources(request):
-
     """
     Scale the noobaa pod resources and scale endpoint count
 
@@ -7971,7 +7971,7 @@ def create_hypershift_clusters():
         log.info(
             "Creating a hosted clusters with following deployment config: \n%s",
             json.dumps(
-                hosted_cluster_conf_on_provider, indent=4, cls=CustomJSONEncoder
+                hosted_cluster_conf_on_provider, indent=4, cls=SetToListJSONEncoder
             ),
         )
         ocsci_config.update(hosted_cluster_conf_on_provider)
@@ -8009,7 +8009,7 @@ def create_hypershift_clusters():
 
                 log.debug(
                     "Inserting new hosted cluster config to Multicluster Config "
-                    f"\n{json.dumps(vars(cluster_config), indent=4, cls=CustomJSONEncoder)}"
+                    f"\n{json.dumps(vars(cluster_config), indent=4, cls=SetToListJSONEncoder)}"
                 )
                 ocsci_config.insert_cluster_config(
                     ocsci_config.nclusters, cluster_config

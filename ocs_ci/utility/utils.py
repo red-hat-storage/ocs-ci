@@ -5040,32 +5040,3 @@ def sum_of_two_storage_sizes(storage_size1, storage_size2, convert_size=1024):
     size = size1 + size2
     new_storage_size = f"{size}{unit}"
     return new_storage_size
-
-
-class CustomJSONEncoder(json.JSONEncoder):
-    """
-    Custom JSON encoder to handle set objects
-    """
-
-    def default(self, obj):
-        if isinstance(obj, set):
-            return list(obj)
-        return super().default(obj)
-
-
-def get_odf_tag_from_redhat_catsrc():
-    """
-    Get the ODF tag from the default redhat-operators Catalog Source
-
-    Returns:
-        str: ODF tag from redhat-operators Catalog Source
-    """
-    from ocs_ci.ocs.ocp import OCP
-
-    catsrc_data = OCP(
-        kind=constants.CATSRC,
-        namespace=constants.MARKETPLACE_NAMESPACE,
-        resource_name="redhat-operators",
-    ).get()
-    regestry_image = catsrc_data.get("spec").get("image")
-    return regestry_image.split(":")[-1]

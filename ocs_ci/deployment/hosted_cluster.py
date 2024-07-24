@@ -202,6 +202,9 @@ class HostedClients(HyperShiftBase):
 
         Args:
             cluster_name: str: Name of the cluster
+
+        Returns:
+            bool: True if the storage client installation was requested, False otherwise
         """
         return (
             config.ENV_DATA.get("clusters", {})
