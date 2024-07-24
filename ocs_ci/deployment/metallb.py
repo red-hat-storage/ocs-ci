@@ -502,7 +502,7 @@ class MetalLBInstaller:
         )
 
         if self.apply_icsp():
-            logger.info("ICSP brew-regestry applied successfully")
+            logger.info("ICSP brew-registry applied successfully")
         if self.create_metallb_namespace():
             logger.info(f"Namespace {self.namespace_lb} created successfully")
         if self.create_catalog_source():
@@ -669,7 +669,7 @@ class MetalLBInstaller:
                 break
         return True
 
-    def icsp_brew_regestry_exists(self):
+    def icsp_brew_registry_exists(self):
         """
         Check if the ICSP Brew registry exists
 
@@ -686,7 +686,7 @@ class MetalLBInstaller:
         """
         Apply the ICSP to the cluster
         """
-        if self.icsp_brew_regestry_exists():
+        if self.icsp_brew_registry_exists():
             logger.info("ICSP Brew registry already exists")
             return
         icsp_data = templating.load_yaml(constants.SUBMARINER_DOWNSTREAM_BREW_ICSP)
@@ -697,4 +697,4 @@ class MetalLBInstaller:
         exec_cmd(f"oc create -f {icsp_data_yaml.name}", timeout=300)
         wait_for_machineconfigpool_status(node_type="all")
         logger.info("ICSP applied successfully")
-        return self.icsp_brew_regestry_exists()
+        return self.icsp_brew_registry_exists()
