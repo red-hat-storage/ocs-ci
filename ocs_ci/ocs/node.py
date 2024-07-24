@@ -2611,9 +2611,11 @@ def check_for_zombie_process_on_node(node_name=None):
     for node_obj in node_obj_list:
         debug_cmd = (
             f"debug nodes/{node_obj.name} --to-namespace={config.ENV_DATA['cluster_namespace']} "
-            '-- chroot /host /bin/bash -c "ps -A -ostat,pid,ppid | grep -e "[zZ]""'
+            '-- chroot /host /bin/bash -c "ps -A -ostat,pid,ppid | grep -e [zZ]"'
         )
-        out = node_obj.ocp.exec_oc_cmd(command=debug_cmd, out_yaml_format=False)
+        out = node_obj.ocp.exec_oc_cmd(
+            command=debug_cmd, ignore_error=True, out_yaml_format=False
+        )
         if not out:
             log.info(f"No Zombie process found on the node: {node_obj.name}")
         else:
