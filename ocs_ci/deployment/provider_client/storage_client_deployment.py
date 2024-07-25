@@ -13,7 +13,7 @@ from ocs_ci.ocs.rados_utils import (
     check_phase_of_rados_namespace,
 )
 from ocs_ci.deployment.helpers.lso_helpers import setup_local_storage
-from ocs_ci.ocs.node import label_nodes, get_all_nodes, get_node_objs
+from ocs_ci.ocs.node import label_nodes, get_all_nodes, get_node_objs, get_nodes
 from ocs_ci.ocs.utils import (
     setup_ceph_toolbox,
     enable_console_plugin,
@@ -24,7 +24,7 @@ from ocs_ci.utility.utils import (
 )
 from ocs_ci.utility import templating, kms as KMS, version
 from ocs_ci.deployment.deployment import Deployment, create_catalog_source
-from ocs_ci.deployment.baremetal import clean_disk
+from ocs_ci.deployment.baremetal import clean_disk, disks_available_to_cleanup
 from ocs_ci.ocs.resources.storage_cluster import verify_storage_cluster
 from ocs_ci.ocs.resources.storage_client import StorageClient
 from ocs_ci.ocs.bucket_utils import check_pv_backingstore_type
@@ -78,6 +78,7 @@ class ODFAndNativeStorageClientDeploymentOnProvider(object):
             namespace=config.ENV_DATA["cluster_namespace"],
         )
 
+        self.platform = config.ENV_DATA.get("platform").lower()
         self.deployment = Deployment()
         self.storage_clients = StorageClient()
 
@@ -95,13 +96,10 @@ class ODFAndNativeStorageClientDeploymentOnProvider(object):
         6. Disable ROOK_CSI_ENABLE_CEPHFS and ROOK_CSI_ENABLE_RBD
         7. Create storage profile
         """
-
-        # Allow ODF to be deployed on all nodes
         nodes = get_all_nodes()
         node_objs = get_node_objs(nodes)
-
-        log.info("labeling storage nodes")
-        label_nodes(nodes=node_objs, label=constants.OPERATOR_NODE_LABEL)
+        worker_node_objs = get_nodes(node_type=constants.WORKER_MACHINE)
+        no_of_worker_nodes = len(worker_node_objs)
 
         # Allow hosting cluster domain to be usable by hosted clusters
         path = "/spec/routeAdmission"
@@ -123,6 +121,29 @@ class ODFAndNativeStorageClientDeploymentOnProvider(object):
         self.ocp_obj.exec_oc_cmd(f"apply -f {constants.MACHINE_CONFIG_YAML}")
         wait_for_machineconfigpool_status(node_type="all")
         log.info("All the nodes are upgraded")
+
+        # Mark master nodes schedulable if mark_masters_schedulable: True
+        if config.ENV_DATA.get("mark_masters_schedulable", False):
+            path = "/spec/mastersSchedulable"
+            params = f"""[{{"op": "replace", "path": "{path}", "value": true}}]"""
+            self.scheduler_obj.patch(params=params, format_type="json"), (
+                "Failed to run patch command to update control nodes as scheduleable"
+            )
+            # Allow ODF to be deployed on all nodes
+
+            log.info("labeling all nodes as storage nodes")
+            label_nodes(nodes=node_objs, label=constants.OPERATOR_NODE_LABEL)
+        else:
+            log.info("labeling worker nodes as storage nodes")
+            label_nodes(nodes=worker_node_objs, label=constants.OPERATOR_NODE_LABEL)
+
+        no_of_disks_available_on_worker_nodes = disks_available_to_cleanup(
+            worker_node_objs[0]
+        )
+        log.info(
+            f"disks avilable for cleanup, {no_of_disks_available_on_worker_nodes}"
+            f"number of disks avilable for cleanup, {len(no_of_disks_available_on_worker_nodes)}"
+        )
 
         # Install LSO, create LocalVolumeDiscovery and LocalVolumeSet
         is_local_storage_available = self.sc_obj.is_exist(
@@ -197,6 +218,14 @@ class ODFAndNativeStorageClientDeploymentOnProvider(object):
                 storage_cluster_data = self.add_encryption_details_to_cluster_data(
                     storage_cluster_data
                 )
+                if self.platform == constants.BAREMETAL_PLATFORM:
+                    storage_cluster_data["spec"]["storageDeviceSets"][0][
+                        "replica"
+                    ] = no_of_worker_nodes
+                    storage_cluster_data["spec"]["storageDeviceSets"][0][
+                        "count"
+                    ] = no_of_disks_available_on_worker_nodes
+
                 templating.dump_data_to_temp_yaml(
                     storage_cluster_data, constants.OCS_STORAGE_CLUSTER_YAML
                 )
@@ -210,6 +239,13 @@ class ODFAndNativeStorageClientDeploymentOnProvider(object):
                 storage_cluster_data = self.add_encryption_details_to_cluster_data(
                     storage_cluster_data
                 )
+                if self.platform == constants.BAREMETAL_PLATFORM:
+                    storage_cluster_data["spec"]["storageDeviceSets"][0][
+                        "replica"
+                    ] = no_of_worker_nodes
+                    storage_cluster_data["spec"]["storageDeviceSets"][0][
+                        "count"
+                    ] = no_of_disks_available_on_worker_nodes
                 templating.dump_data_to_temp_yaml(
                     storage_cluster_data, constants.OCS_STORAGE_CLUSTER_UPDATED_YAML
                 )
