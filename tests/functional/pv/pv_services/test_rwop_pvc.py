@@ -10,6 +10,7 @@ from ocs_ci.framework.testlib import (
     ManageTest,
     polarion_id,
     tier1,
+    post_upgrade,
     skipif_ocs_version,
 )
 from ocs_ci.helpers import helpers
@@ -29,6 +30,7 @@ log = logging.getLogger(__name__)
 )
 @green_squad
 @tier1
+@post_upgrade
 @skipif_ocs_version("<4.15")
 class TestRwopPvc(ManageTest):
     """
