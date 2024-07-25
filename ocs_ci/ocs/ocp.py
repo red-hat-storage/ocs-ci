@@ -81,10 +81,33 @@ class OCP(object):
         self._data = {}
         self.selector = selector
         self.field_selector = field_selector
-        self.cluster_kubeconfig = cluster_kubeconfig
+        # In provider mode multicluster run, certain kind of resources are available in the provider cluster only.
+        # Setting cluster_kubeconfig of provider cluster in such cases will enable running "oc" commands seamlessly even
+        # when dealing with two instances of this class simultaneously despite the cluster context. This is achievable
+        # because all the methods use "exec_oc_cmd" method to run "oc" commmands. Primary cluster context being a
+        # client cluster, the test cases need not switch context to provider cluster before initializing a resource of
+        # the kinds listed in constants.PROVIDER_CLUSTER_RESOURCE_KINDS
+        if (
+            (not cluster_kubeconfig)
+            and config.multicluster
+            and config.ENV_DATA.get("odf_provider_mode_deployment", False)
+            and kind.lower() in constants.PROVIDER_CLUSTER_RESOURCE_KINDS
+        ):
+            provider_cluster_index = config.get_provider_index()
+            provider_kubeconfig_path = os.path.join(
+                config.clusters[provider_cluster_index].ENV_DATA["cluster_path"],
+                config.clusters[provider_cluster_index].RUN.get("kubeconfig_location"),
+            )
+            self.cluster_kubeconfig = provider_kubeconfig_path
+            # TODO : self.cluster_context = provider_cluster_index, remove cluster_kubeconfig check in if condition
+        else:
+            self.cluster_kubeconfig = cluster_kubeconfig
         self.threading_lock = threading_lock
         self.silent = silent
         self.skip_tls_verify = skip_tls_verify
+        # TODO: Set cluster_context based on the conditions of setting cluster_kubeconfig. Currently, setting
+        #  cluster_context expects the current context to be the cluster where the resource is present.
+        #  This cannot deal with simultaneous usage of two instances in two different clusters.
         self.cluster_context = config.cluster_ctx.MULTICLUSTER.get("multicluster_index")
 
     @property
