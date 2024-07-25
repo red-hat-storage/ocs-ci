@@ -436,6 +436,47 @@ def pytest_collection_finish(session):
     ocsci_config.RUN["number_of_tests"] = len(session.items)
 
 
+@pytest.fixture(scope="function", autouse=True)
+def switch_to_provider_for_test(request):
+    """
+    Switch to provider cluster as required by the test. Applicable for Managed Services and HCI Provider-client only if
+    the marker 'runs_on_provider' is added in the test. No autouse fixteres should be before this to ensure proper
+    execution. Fixtures with different scope than function need to be altered if needed to be executed on provider.
+
+    """
+    switched_to_provider = False
+    current_cluster = ocsci_config.cluster_ctx
+    if (
+        request.node.get_closest_marker("runs_on_provider")
+        and ocsci_config.multicluster
+        and (
+            current_cluster.ENV_DATA.get("platform", "").lower()
+            in constants.HCI_PC_OR_MS_PLATFORM
+        )
+    ):
+        for cluster in ocsci_config.clusters:
+            if cluster.ENV_DATA.get("cluster_type") == "provider":
+                provider_cluster = cluster
+                log.debug("Switching to the provider cluster context")
+                # TODO: Use 'switch_to_provider' function introduced in PR 5541
+                ocsci_config.switch_ctx(
+                    provider_cluster.MULTICLUSTER["multicluster_index"]
+                )
+                switched_to_provider = True
+                break
+
+    def finalizer():
+        """
+        Switch context to the initial cluster
+
+        """
+        if switched_to_provider:
+            log.debug("Switching back to the previous cluster context")
+            ocsci_config.switch_ctx(current_cluster.MULTICLUSTER["multicluster_index"])
+
+    request.addfinalizer(finalizer)
+
+
 @pytest.fixture()
 def supported_configuration():
     """
@@ -6128,46 +6169,6 @@ def toolbox_on_faas_consumer():
     )
     if not tools_pod:
         create_toolbox_on_faas_consumer()
-
-
-@pytest.fixture(scope="function", autouse=True)
-def switch_to_provider_for_test(request):
-    """
-    Switch to provider cluster as required by the test. Applicable for Managed Services and HCI Provider-client only if
-    the marker 'runs_on_provider' is added in the test.
-
-    """
-    switched_to_provider = False
-    current_cluster = ocsci_config.cluster_ctx
-    if (
-        request.node.get_closest_marker("runs_on_provider")
-        and ocsci_config.multicluster
-        and (
-            current_cluster.ENV_DATA.get("platform", "").lower()
-            in constants.HCI_PC_OR_MS_PLATFORM
-        )
-    ):
-        for cluster in ocsci_config.clusters:
-            if cluster.ENV_DATA.get("cluster_type") == "provider":
-                provider_cluster = cluster
-                log.debug("Switching to the provider cluster context")
-                # TODO: Use 'switch_to_provider' function introduced in PR 5541
-                ocsci_config.switch_ctx(
-                    provider_cluster.MULTICLUSTER["multicluster_index"]
-                )
-                switched_to_provider = True
-                break
-
-    def finalizer():
-        """
-        Switch context to the initial cluster
-
-        """
-        if switched_to_provider:
-            log.debug("Switching back to the previous cluster context")
-            ocsci_config.switch_ctx(current_cluster.MULTICLUSTER["multicluster_index"])
-
-    request.addfinalizer(finalizer)
 
 
 @pytest.fixture()
