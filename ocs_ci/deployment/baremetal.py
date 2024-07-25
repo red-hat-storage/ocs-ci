@@ -1273,28 +1273,17 @@ def disks_available_to_cleanup(worker, namespace=constants.DEFAULT_NAMESPACE):
     logger.info(
         f"The disks avialble for cleanup json: {disk_available_for_cleanup_json}"
     )
-
+    disks_available_for_cleanup = []
     for disk_to_ignore_cleanup in disk_available_for_cleanup_json:
-        if disk_to_ignore_cleanup["mountpoint"] == "/boot":
-            logger.info(
-                f"Ignorning disk {disk_to_ignore_cleanup['pkname']} for cleanup because it's a root disk "
-            )
-            disk_available_for_cleanup_json.remove(
-                str(disk_to_ignore_cleanup["pkname"])
-            )
-        elif disk_to_ignore_cleanup["type"] == "rom":
-            logger.info(
-                f"Ignorning disk {disk_to_ignore_cleanup['kname']} for cleanup because it's a rom disk "
-            )
-            disk_available_for_cleanup_json.remove(str(disk_to_ignore_cleanup["kname"]))
-        elif "nbd" in disk_to_ignore_cleanup["kname"]:
-            logger.info(
-                f"Ignorning disk {disk_to_ignore_cleanup['kname']} for cleanup because it's a rom disk "
-            )
-            disk_available_for_cleanup_json.remove(str(disk_to_ignore_cleanup["kname"]))
-        return logger.info(
-            f"no of disks avaliable to cleanup {len(disk_available_for_cleanup_json)}"
-        )
+        if (
+            disk_to_ignore_cleanup["mountpoint"] != "/boot"
+            or disk_to_ignore_cleanup["type"] != "rom"
+            or "nbd" not in disk_to_ignore_cleanup["kname"]
+        ):
+            disks_available_for_cleanup.append(str(disk_to_ignore_cleanup["pkname"]))
+    return logger.info(
+        f"no of disks avaliable to cleanup {len(disks_available_for_cleanup)}"
+    )
 
 
 @retry(exceptions.CommandFailed, tries=10, delay=30, backoff=1)
