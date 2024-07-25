@@ -8,6 +8,7 @@ from ocs_ci.ocs.exceptions import PoolStateIsUnknow
 import ocs_ci.ocs.resources.pod as pod
 from ocs_ci.ocs.ui.page_objects.block_and_file import BlockAndFile
 from ocs_ci.ocs.ui.helpers_ui import format_locator
+from ocs_ci.utility import version
 
 logger = logging.getLogger(__name__)
 
@@ -37,7 +38,7 @@ class BlockPoolUI(PageNavigator):
         pool_name = create_unique_resource_name("test", "rbd-pool")
         self.navigate_block_pool_page()
         self.do_click(self.bp_loc["create_block_pool"])
-        if pool_type_block:
+        if pool_type_block and self.ocs_version_semantic >= version.VERSION_4_17:
             self.do_click(self.bp_loc["pool_type_block"])
         self.do_send_keys(self.bp_loc["new_pool_name"], pool_name)
         self.do_click(self.bp_loc["first_select_replica"])
