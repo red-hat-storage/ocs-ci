@@ -171,7 +171,6 @@ class Disruptions:
         node_name = node_name or self.resource_obj[0].pod_data.get("spec").get(
             "nodeName"
         )
-        awk_print = "'{print $1}'"
         pid_cmd = (
             f"oc {self.kubeconfig_parameter()}debug node/{node_name}"
             f" --to-namespace={config.ENV_DATA['cluster_namespace']} -- chroot /host pidof ceph-{self.resource}"
@@ -241,7 +240,6 @@ class Disruptions:
         node_name = node_name or self.resource_obj[0].pod_data.get("spec").get(
             "nodeName"
         )
-        awk_print = "'{print $1}'"
         pid_cmd = (
             f"oc {self.kubeconfig_parameter()}debug node/{node_name} "
             f"--to-namespace={config.ENV_DATA['cluster_namespace']} -- chroot /host pidof ceph-{self.resource}"
