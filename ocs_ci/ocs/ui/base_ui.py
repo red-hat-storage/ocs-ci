@@ -829,7 +829,7 @@ class SeleniumDriver(WebDriver):
             # headless browsers are web browsers without a GUI
             headless = ocsci_config.UI_SELENIUM.get("headless")
             if headless:
-                chrome_options.add_argument("--headless")
+                chrome_options.add_argument("--headless=new")
                 chrome_options.add_argument("window-size=1920,1400")
 
             # use proxy server, if required
