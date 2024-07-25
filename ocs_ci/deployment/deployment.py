@@ -1564,13 +1564,41 @@ class Deployment(object):
         wait_timeout_for_healthy_osd_in_minutes = config.ENV_DATA.get(
             "wait_timeout_for_healthy_osd_in_minutes"
         )
-        if wait_timeout_for_healthy_osd_in_minutes:
+        # For testing: https://issues.redhat.com/browse/RHSTOR-5929
+        ceph_threshold_backfill_full_ratio = config.ENV_DATA.get(
+            "ceph_threshold_backfill_full_ratio"
+        )
+        ceph_threshold_full_ratio = config.ENV_DATA.get("ceph_threshold_full_ratio")
+        ceph_threshold_near_full_ratio = config.ENV_DATA.get(
+            "ceph_threshold_near_full_ratio"
+        )
+        set_managed_resources_ceph_cluster = (
+            wait_timeout_for_healthy_osd_in_minutes
+            or ceph_threshold_backfill_full_ratio
+            or ceph_threshold_full_ratio
+            or ceph_threshold_near_full_ratio
+        )
+        if set_managed_resources_ceph_cluster:
             cluster_data.setdefault("spec", {}).setdefault(
                 "managedResources", {}
             ).setdefault("cephCluster", {})
-            cluster_data["spec"]["managedResources"]["cephCluster"][
-                "waitTimeoutForHealthyOSDInMinutes"
-            ] = wait_timeout_for_healthy_osd_in_minutes
+            managed_resources_ceph_cluster = cluster_data["spec"]["managedResources"][
+                "cephCluster"
+            ]
+            if wait_timeout_for_healthy_osd_in_minutes:
+                managed_resources_ceph_cluster[
+                    "waitTimeoutForHealthyOSDInMinutes"
+                ] = wait_timeout_for_healthy_osd_in_minutes
+            if ceph_threshold_backfill_full_ratio:
+                managed_resources_ceph_cluster[
+                    "backfillFullRatio"
+                ] = ceph_threshold_backfill_full_ratio
+            if ceph_threshold_full_ratio:
+                managed_resources_ceph_cluster["fullRatio"] = ceph_threshold_full_ratio
+            if ceph_threshold_near_full_ratio:
+                managed_resources_ceph_cluster[
+                    "nearFullRatio"
+                ] = ceph_threshold_near_full_ratio
 
         cluster_data_yaml = tempfile.NamedTemporaryFile(
             mode="w+", prefix="cluster_storage", delete=False

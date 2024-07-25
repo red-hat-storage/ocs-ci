@@ -325,6 +325,9 @@ higher priority).
 * `custom_vpc` - Applicable only for IMB Cloud IPI deployment where we want to create custom VPC and networking
   with specific Address prefixes to prevent /18 CIDR to be used.
 * `ip_prefix` - Applicable only for IMB Cloud IPI deployment when custom_vpc, if not specified: 27 prefix will be used.
+* `ceph_threshold_backfill_full_ratio` - Configure backfillFullRatio the ceph osd full thresholds value in the StorageCluster CR.
+* `ceph_threshold_full_ratio` - Configure fullRatio the ceph osd full thresholds value in the StorageCluster CR.
+* `ceph_threshold_near_full_ratio` - Configure nearFullRatio the ceph osd full thresholds value in the StorageCluster CR.
 
 #### UPGRADE
 
