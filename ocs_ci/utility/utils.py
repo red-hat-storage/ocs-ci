@@ -1224,7 +1224,7 @@ def get_vault_cli(bind_dir=None, force_download=False):
 
 
 def ensure_nightly_build_availability(build_url):
-    base_build_url = build_url.rsplit("/", 1)[0]
+    base_build_url = build_url.rsplit("/", 1)[0] + "/"
     r = requests.get(base_build_url)
     extracting_condition = b"Extracting" in r.content
     if extracting_condition:
