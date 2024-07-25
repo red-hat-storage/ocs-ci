@@ -246,6 +246,10 @@ class AcmAddClusters(AcmPageNavigator):
                 )
                 log.info("Click on 'Install Submariner add-ons' button")
             except StaleElementReferenceException:
+                self.take_screenshot()
+                log.info(
+                    f'The stale element is {self.page_nav["install-submariner-btn"]}'
+                )
                 if attempt == retries - 1:
                     raise
         log.info("Click on 'Target clusters'")
