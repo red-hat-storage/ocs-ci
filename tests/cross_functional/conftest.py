@@ -1282,7 +1282,7 @@ def setup_mcg_bg_features(
                         f"and valid are {list(cloud_providers.keys())}"
                     )
                 else:
-                    bucket_types.pop(provider)
+                    cloud_providers.pop(provider)
 
         all_buckets = list()
         feature_setup_map = dict()
@@ -1349,6 +1349,7 @@ def setup_mcg_bg_features(
         )
         feature_setup_map["executor"]["event"] = event
         feature_setup_map["executor"]["threads"] = threads
+        feature_setup_map["all_buckets"] = all_buckets
         return feature_setup_map
 
     return factory
