@@ -121,7 +121,7 @@ from ocs_ci.utility.retry import retry
 from ocs_ci.utility.secret import link_all_sa_and_secret_and_delete_pods
 from ocs_ci.utility.ssl_certs import (
     configure_custom_ingress_cert,
-    configure_custom_api_cert,
+    configure_custom_api_cert, get_root_ca_cert,
 )
 from ocs_ci.utility.utils import (
     ceph_health_check,
@@ -2925,9 +2925,6 @@ class MultiClusterDROperatorsDeploy(object):
                 config_map_data["data"].pop(f"{constants.DR_RAMEN_CONFIG_MANAGER_KEY}")
             )
         }
-        ramen_section[constants.DR_RAMEN_CONFIG_MANAGER_KEY][
-            "drClusterOperator"
-        ].update({"deploymentAutomationEnabled": True})
         logger.debug("Merge back the ramen_section with config_map_data")
         config_map_data["data"].update(ramen_section)
         for key in ["annotations", "creationTimestamp", "resourceVersion", "uid"]:
@@ -3263,6 +3260,29 @@ class MultiClusterDROperatorsDeploy(object):
         else:
             raise ResourceWrongStatusException("Compliance status does not match")
 
+
+    def add_cacert_ramen_configmap(self):
+        """
+        Add CaCert to Ramen hub ConfigMap
+
+        """
+
+        ca_cert_path = get_root_ca_cert()
+        logger.info("Encoding Ca Cert")
+        ca_cert_data_byte = open(ca_cert_path, "r").read().encode("ascii")
+        ca_cert_data_encode = base64.b64encode(ca_cert_data_byte).decode("ascii")
+        dr_ramen_hub_configmap_data = self.meta_obj.get_ramen_resource()
+        ramen_config = yaml.safe_load(
+            dr_ramen_hub_configmap_data.data["data"]["ramen_manager_config.yaml"]
+        )
+        logger.info("Adding Encoded Ca Cert to Ramen Hub configmap")
+        for s3profile in ramen_config["s3StoreProfiles"]:
+            s3profile['CACertificates'] = ca_cert_data_encode
+        dr_ramen_hub_configmap_data_get = dr_ramen_hub_configmap_data.get()
+        dr_ramen_hub_configmap_data_get["data"]["ramen_manager_config.yaml"] = str(ramen_config)
+        logger.info("Applying changes to Ramen Hub configmap")
+        self.update_config_map_commit(dict(dr_ramen_hub_configmap_data_get))
+
     class s3_meta_obj_store:
         """
         Internal class to handle aws s3 metadata obj store
@@ -3435,7 +3455,17 @@ class RDRMultiClusterDROperatorsDeploy(MultiClusterDROperatorsDeploy):
         for i in acm_indexes:
             config.switch_ctx(i)
             self.create_dpa(self.meta_obj.bucket_name)
+
+        config.switch_acm_ctx()
+        # Adding Ca Cert
+        self.add_cacert_ramen_configmap()
         # Only on the active hub enable managedserviceaccount-preview
+        managed_clusters = get_non_acm_cluster_config()
+        for cluster in managed_clusters:
+            index = cluster.MULTICLUSTER["multicluster_index"]
+            config.switch_ctx(index)
+            logger.info("Creating Resource DataProtectionApplication")
+            run_cmd(f"oc create -f {constants.DPA_DISCOVERED_APPS_PATH}")
         config.switch_acm_ctx()
         acm_version = get_acm_version()
 
@@ -3491,6 +3521,10 @@ class MDRMultiClusterDROperatorsDeploy(MultiClusterDROperatorsDeploy):
         for i in acm_indexes:
             config.switch_ctx(i)
             self.create_dpa(self.meta_obj.bucket_name)
+
+        config.switch_acm_ctx()
+        # Adding Ca Cert
+        self.add_cacert_ramen_configmap()
         config.switch_ctx(old_ctx)
         # Only on the active hub enable managedserviceaccount-preview
         acm_version = get_acm_version()
