@@ -219,6 +219,7 @@ def relocate(
     switch_ctx=None,
     discovered_apps=False,
     old_primary=None,
+    workload_instance=None
 ):
     """
     Initiates Relocate action to the specified cluster
@@ -231,6 +232,8 @@ def relocate(
         switch_ctx (int): The cluster index by the cluster name
         discovered_apps (bool): If true then deployed workload is discovered_apps
         old_primary (str): Name of cluster where workload were running
+        workload_instance (object): Discovered App instance to get namespace and dir location
+
 
     """
     restore_index = config.cur_index
@@ -266,6 +269,15 @@ def relocate(
     if discovered_apps:
         relocate_condition = constants.STATUS_RELOCATING
     drpc_obj.wait_for_phase(relocate_condition)
+
+    if discovered_apps and workload_instance:
+        logger.info("Doing Cleanup Operations")
+        do_discovered_apps_cleanup(
+            drpc_name=workload_placement_name,
+            old_primary=old_primary,
+            workload_namespace=workload_instance.workload_namespace,
+            workload_dir=workload_instance.workload_dir,
+        )
     config.switch_ctx(restore_index)
 
 
