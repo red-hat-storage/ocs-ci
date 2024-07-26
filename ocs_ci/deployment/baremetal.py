@@ -1260,7 +1260,7 @@ def disks_available_to_cleanup(worker, namespace=constants.DEFAULT_NAMESPACE):
         namespace (str): namespace where the oc_debug command will be executed
 
     Returns:
-        disks_available_for_cleanup (int): No of disks avoid to cleanup on a node
+        disk_names_available_for_cleanup (int): No of disks avoid to cleanup on a node
 
     """
     ocp_obj = ocp.OCP()
@@ -1270,7 +1270,6 @@ def disks_available_to_cleanup(worker, namespace=constants.DEFAULT_NAMESPACE):
     )
     disk_to_ignore_cleanup_raw = json.loads(str(out))
     disks_available = disk_to_ignore_cleanup_raw["blockdevices"]
-    logger.info(f"The disks avialble for cleanup json: {disks_available}")
     boot_disks = set()
     disks_available_for_cleanup = []
     for disk in disks_available:
@@ -1296,44 +1295,22 @@ def disks_available_to_cleanup(worker, namespace=constants.DEFAULT_NAMESPACE):
 
 
 @retry(exceptions.CommandFailed, tries=10, delay=30, backoff=1)
-def clean_disk(
-    worker, namespace=constants.DEFAULT_NAMESPACE, return_no_of_disks_cleanedup=False
-):
+def clean_disk(worker, namespace=constants.DEFAULT_NAMESPACE):
     """
     Perform disk cleanup
 
     Args:
         worker (object): worker node object
         namespace (str): namespace where the oc_debug command will be executed
-        return_no_of_disks_cleanedup (bool): If True then return, disks_cleaned the number of disks cleaned
 
     Returns:
         disks_cleaned (int): No of disks cleaned on a node
 
     """
     ocp_obj = ocp.OCP()
-    cmd = """lsblk --all --noheadings --output "KNAME,PKNAME,TYPE,MOUNTPOINT" --json"""
-    out = ocp_obj.exec_oc_debug_cmd(
-        node=worker.name, cmd_list=[cmd], namespace=namespace
+    disks_available_on_worker_nodes_for_cleanup = disks_available_to_cleanup(
+        worker.name
     )
-    disk_to_ignore_cleanup_raw = json.loads(str(out))
-    disk_to_ignore_cleanup_json = disk_to_ignore_cleanup_raw["blockdevices"]
-    selected_disks_to_ignore_cleanup = []
-    for disk_to_ignore_cleanup in disk_to_ignore_cleanup_json:
-        if disk_to_ignore_cleanup["mountpoint"] == "/boot":
-            logger.info(
-                f"Ignorning disk {disk_to_ignore_cleanup['pkname']} for cleanup because it's a root disk "
-            )
-            selected_disks_to_ignore_cleanup.append(
-                str(disk_to_ignore_cleanup["pkname"])
-            )
-        elif disk_to_ignore_cleanup["type"] == "rom":
-            logger.info(
-                f"Ignorning disk {disk_to_ignore_cleanup['kname']} for cleanup because it's a rom disk "
-            )
-            selected_disks_to_ignore_cleanup.append(
-                str(disk_to_ignore_cleanup["kname"])
-            )
 
     out = ocp_obj.exec_oc_debug_cmd(
         node=worker.name,
@@ -1343,9 +1320,8 @@ def clean_disk(
     lsblk_output = json.loads(str(out))
     lsblk_devices = lsblk_output["blockdevices"]
 
-    disks_cleaned = []
     for lsblk_device in lsblk_devices:
-        if lsblk_device["name"] in selected_disks_to_ignore_cleanup:
+        if lsblk_device["name"] not in disks_available_on_worker_nodes_for_cleanup:
             logger.info(f'the disk cleanup is ignored for, {lsblk_device["name"]}')
             pass
         else:
@@ -1362,11 +1338,6 @@ def clean_disk(
                 namespace=namespace,
             )
             logger.info(out)
-            disks_cleaned.append(lsblk_device["name"])
-
-    if return_no_of_disks_cleanedup:
-        logger.info(f"no of disks available for lso: {len(disks_cleaned)}")
-        return len(disks_cleaned)
 
 
 class BaremetalPSIUPI(Deployment):

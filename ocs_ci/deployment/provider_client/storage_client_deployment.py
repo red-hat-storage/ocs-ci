@@ -130,19 +130,21 @@ class ODFAndNativeStorageClientDeploymentOnProvider(object):
                 "Failed to run patch command to update control nodes as scheduleable"
             )
             # Allow ODF to be deployed on all nodes
-
             log.info("labeling all nodes as storage nodes")
             label_nodes(nodes=node_objs, label=constants.OPERATOR_NODE_LABEL)
+            worker_node_objs = get_nodes(node_type=constants.WORKER_MACHINE)
+            no_of_worker_nodes = len(worker_node_objs)
         else:
             log.info("labeling worker nodes as storage nodes")
             label_nodes(nodes=worker_node_objs, label=constants.OPERATOR_NODE_LABEL)
 
-        no_of_disks_available_on_worker_nodes = disks_available_to_cleanup(
+        disks_available_on_worker_nodes_for_cleanup = disks_available_to_cleanup(
             worker_node_objs[0]
         )
+        number_of_disks_available = len(disks_available_on_worker_nodes_for_cleanup)
         log.info(
-            f"disks avilable for cleanup, {no_of_disks_available_on_worker_nodes}"
-            f"number of disks avilable for cleanup, {len(no_of_disks_available_on_worker_nodes)}"
+            f"disks avilable for cleanup, {disks_available_on_worker_nodes_for_cleanup}"
+            f"number of disks avilable for cleanup, {number_of_disks_available}"
         )
 
         # Install LSO, create LocalVolumeDiscovery and LocalVolumeSet
@@ -218,13 +220,14 @@ class ODFAndNativeStorageClientDeploymentOnProvider(object):
                 storage_cluster_data = self.add_encryption_details_to_cluster_data(
                     storage_cluster_data
                 )
+                storage_cluster_data["spec"]["storageDeviceSets"][0][
+                    "replica"
+                ] = no_of_worker_nodes
+
                 if self.platform == constants.BAREMETAL_PLATFORM:
                     storage_cluster_data["spec"]["storageDeviceSets"][0][
-                        "replica"
-                    ] = no_of_worker_nodes
-                    storage_cluster_data["spec"]["storageDeviceSets"][0][
                         "count"
-                    ] = no_of_disks_available_on_worker_nodes
+                    ] = number_of_disks_available
 
                 templating.dump_data_to_temp_yaml(
                     storage_cluster_data, constants.OCS_STORAGE_CLUSTER_YAML
@@ -239,13 +242,14 @@ class ODFAndNativeStorageClientDeploymentOnProvider(object):
                 storage_cluster_data = self.add_encryption_details_to_cluster_data(
                     storage_cluster_data
                 )
+                storage_cluster_data["spec"]["storageDeviceSets"][0][
+                    "replica"
+                ] = no_of_worker_nodes
+
                 if self.platform == constants.BAREMETAL_PLATFORM:
                     storage_cluster_data["spec"]["storageDeviceSets"][0][
-                        "replica"
-                    ] = no_of_worker_nodes
-                    storage_cluster_data["spec"]["storageDeviceSets"][0][
                         "count"
-                    ] = no_of_disks_available_on_worker_nodes
+                    ] = number_of_disks_available
                 templating.dump_data_to_temp_yaml(
                     storage_cluster_data, constants.OCS_STORAGE_CLUSTER_UPDATED_YAML
                 )
