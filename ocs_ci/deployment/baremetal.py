@@ -1308,9 +1308,7 @@ def clean_disk(worker, namespace=constants.DEFAULT_NAMESPACE):
 
     """
     ocp_obj = ocp.OCP()
-    disks_available_on_worker_nodes_for_cleanup = disks_available_to_cleanup(
-        worker.name
-    )
+    disks_available_on_worker_nodes_for_cleanup = disks_available_to_cleanup(worker)
 
     out = ocp_obj.exec_oc_debug_cmd(
         node=worker.name,
