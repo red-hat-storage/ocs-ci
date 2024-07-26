@@ -142,3 +142,22 @@ def compare_versions(expression):
         )
     v1, op, v2 = m.groups()
     return eval(f"get_semantic_version(v1, True){op}get_semantic_version(v2, True)")
+
+
+def get_previous_version(version, count=1):
+    """
+    Fetches the nth previous version
+
+    Args:
+        version (str): Version ( eg: 4.16, 4.16.0-0.nightly-2024-06-25-194629)
+        count (int): previous version count. if count is 1, it will get 1st previous version.
+            if count is 2, it will get 2nd previous version.
+
+    Returns:
+        str: Previous version ( returns only major and minor version, eg: 4.15 )
+
+    """
+    version = get_semantic_version(version, only_major_minor=True)
+    new_minor = version.minor - count
+    previous_version = f"{version.major}.{new_minor}"
+    return previous_version
