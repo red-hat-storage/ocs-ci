@@ -508,7 +508,7 @@ class BusyBox_AppSet(DRWorkload):
                     check_replication_resources_state=False,
                 )
 
-            log.info("Verify backend RBD images are deleted")
+            log.info("Verify backend images or subvolumes are deleted")
             for cluster in get_non_acm_cluster_config():
                 config.switch_ctx(cluster.MULTICLUSTER["multicluster_index"])
                 rbd_pool_name = (
@@ -517,11 +517,17 @@ class BusyBox_AppSet(DRWorkload):
                     else constants.DEFAULT_CEPHBLOCKPOOL
                 )
                 for image_uuid in image_uuids:
-                    status = verify_volume_deleted_in_backend(
-                        interface=constants.CEPHBLOCKPOOL,
-                        image_uuid=image_uuid,
-                        pool_name=rbd_pool_name,
-                    )
+                    # TODO: Add a better condition to identify CephFS or RBD
+                    if "cephfs" in self.workload_namespace:
+                        status = verify_volume_deleted_in_backend(
+                            interface=constants.CEPHFILESYSTEM, image_uuid=image_uuid
+                        )
+                    else:
+                        status = verify_volume_deleted_in_backend(
+                            interface=constants.CEPHBLOCKPOOL,
+                            image_uuid=image_uuid,
+                            pool_name=rbd_pool_name,
+                        )
                     if not status:
                         raise UnexpectedBehaviour(
                             "RBD image(s) still exists on backend"
