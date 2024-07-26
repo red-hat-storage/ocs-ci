@@ -94,6 +94,8 @@ deployment = {
     "azure_vault_url": ('//*[@id="azure-vault-url"]', By.XPATH),
     "azure_client_id": ('//*[@id="azure-client-id"]', By.XPATH),
     "azure_tenant_id": ('//*[@id="azure-tenant-id"]', By.XPATH),
+    "upload_azure_certificate": ('//*[@id="clientCert-browse-button"]', By.XPATH),
+    "upload_azure_certificate_textbox": ('//*[@id="clientCert-filename"]', By.XPATH),
     "create_on_review": ("//button[text()='Create']", By.XPATH),
     "search_ocs_installed": ('input[data-test-id="item-filter"]', By.CSS_SELECTOR),
     "all_nodes_lso": (

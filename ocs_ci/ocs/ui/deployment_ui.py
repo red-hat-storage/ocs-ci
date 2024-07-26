@@ -15,6 +15,7 @@ from ocs_ci.deployment.helpers.lso_helpers import (
     add_disk_for_vsphere_platform,
     create_optional_operators_catalogsource_non_ga,
 )
+from ocs_ci.utility.kms import AzureKV
 
 
 logger = logging.getLogger(__name__)
@@ -365,9 +366,9 @@ class DeploymentUI(PageNavigator):
         logger.info("Sleep 10 second after click on 'create storage cluster'")
         time.sleep(10)
 
-    def ui_configure_external_kms(self):
+    def configure_external_kms(self):
         """
-        Configure KMS as per the option
+        Configure KMS as per the option set in the config.
         """
         self.do_click(self.dep_loc["enable_external_kms"])
         kms_provider = config.ENV_DATA.get("KMS_PROVIDER")
@@ -375,12 +376,47 @@ class DeploymentUI(PageNavigator):
             if not config.ENV_DATA.get("platform") == "azure":
                 raise ValueError("azure-KV only supported on azure platform.")
 
-            logger.info("Selecting KMS service")
+            kms = AzureKV()
 
-            pass
+            logger.info("Selecting KMS service")
+            self.do_click(self.dep_loc["kms_service_provider"])
+            self.do_click(self.dep_loc["azure_kms_option"])
+
+            logger.info(
+                f"Setting Connection Name in textbox as {kms.azure_kms_connection_name}"
+            )
+            self.do_send_keys(
+                locator=self.dep_loc["kms_connection_name"],
+                text=kms.azure_kms_connection_name,
+            )
+
+            logger.info("Setting Azure Vault URL in textbox.")
+            self.do_send_keys(
+                locator=self.dep_loc["azure_vault_url"],
+                text=kms.vault_url,
+            )
+
+            logger.info("Setting Client ID in textBox")
+            self.do_send_keys(
+                locator=self.dep_loc["azure_client_id"],
+                text=kms.vault_client_id,
+            )
+
+            logger.info("Setting Tenant ID in textBox.")
+            self.do_send_keys(
+                locator=self.dep_loc["azure_tenant_id"],
+                text=kms.vault_tenant_id,
+            )
+
+            logger.info("Uploading vault certs.")
+            self.do_send_keys(
+                locator=self.dep_loc["upload_azure_certificate_textbox"],
+                text=kms._azure_kv_cert_path,
+                enable_screenshot=True,
+            )
         else:
             raise NotImplementedError(
-                f"KMS deployment from UI fro the PROVIDER : {kms_provider} is not implimented."
+                f"KMS deployment from UI for the PROVIDER : {kms_provider} is not implimented."
             )
 
     def configure_encryption(self):
@@ -405,7 +441,7 @@ class DeploymentUI(PageNavigator):
         """
         # Enable External KMS
         if config.ENV_DATA.get("kms_deployment"):
-            self.ui_configure_external_kms()
+            self.configure_external_kms()
 
     def configure_data_protection(self):
         """
