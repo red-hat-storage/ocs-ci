@@ -171,11 +171,9 @@ class Disruptions:
         node_name = node_name or self.resource_obj[0].pod_data.get("spec").get(
             "nodeName"
         )
-        awk_print = "'{print $1}'"
         pid_cmd = (
             f"oc {self.kubeconfig_parameter()}debug node/{node_name}"
-            f" --to-namespace={config.ENV_DATA['cluster_namespace']} -- chroot /host ps ax | grep"
-            f" ' ceph-{self.resource} --' | grep -v grep | awk {awk_print}"
+            f" --to-namespace={config.ENV_DATA['cluster_namespace']} -- chroot /host pidof ceph-{self.resource}"
         )
         pid_proc = run_async(pid_cmd)
         ret, pid, err = pid_proc.async_communicate()
@@ -185,7 +183,7 @@ class Disruptions:
         # on one node. eg: More than one osd on same node.
         pids = pid.split()
         self.pids = [pid.strip() for pid in pids]
-        assert self.pids, "Obtained pid value is empty."
+        assert self.pids, f"Obtained pid values of ceph-{self.resource} is empty."
         pid = self.pids[0]
 
         # ret will be 0 and err will be None if command is success
@@ -242,11 +240,9 @@ class Disruptions:
         node_name = node_name or self.resource_obj[0].pod_data.get("spec").get(
             "nodeName"
         )
-        awk_print = "'{print $1}'"
         pid_cmd = (
             f"oc {self.kubeconfig_parameter()}debug node/{node_name} "
-            f"--to-namespace={config.ENV_DATA['cluster_namespace']} -- chroot /host ps ax | grep"
-            f" ' ceph-{self.resource} --' | grep -v grep | awk {awk_print}"
+            f"--to-namespace={config.ENV_DATA['cluster_namespace']} -- chroot /host pidof ceph-{self.resource}"
         )
         try:
             for pid_proc in TimeoutSampler(60, 2, run_async, command=pid_cmd):
@@ -259,7 +255,9 @@ class Disruptions:
                 if len(pids) != len(self.pids):
                     continue
                 new_pid = [pid for pid in pids if pid not in self.pids]
-                assert len(new_pid) == 1, "Found more than one new pid."
+                assert (
+                    len(new_pid) == 1
+                ), f"Found more than one new pid of ceph-{self.resource} in the node {node_name}"
                 new_pid = new_pid[0]
                 if new_pid.isdigit() and (new_pid != self.daemon_pid):
                     log.info(f"New pid of ceph-{self.resource} is {new_pid}")
