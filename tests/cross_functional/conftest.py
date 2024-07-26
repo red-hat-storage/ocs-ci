@@ -1349,6 +1349,7 @@ def setup_mcg_bg_features(
         )
         feature_setup_map["executor"]["event"] = event
         feature_setup_map["executor"]["threads"] = threads
-        return feature_setup_map, all_buckets
+        feature_setup_map["all_buckets"] = all_buckets
+        return feature_setup_map
 
     return factory
