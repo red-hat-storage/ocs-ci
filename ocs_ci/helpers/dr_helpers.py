@@ -544,12 +544,10 @@ def wait_for_replication_resources_creation(
 
     """
     logger.info("Waiting for VRG to be created")
-    if discovered_apps:
-        workload_namespace = namespace
-        namespace = constants.DR_OPS_NAMESAPCE
+    vrg_namespace = constants.DR_OPS_NAMESAPCE
 
     sample = TimeoutSampler(
-        timeout=timeout, sleep=5, func=check_vrg_existence, namespace=namespace
+        timeout=timeout, sleep=5, func=check_vrg_existence, namespace=vrg_namespace
     )
     if not sample.wait_for_func_status(result=True):
         error_msg = "VRG resource is not created"
@@ -563,8 +561,6 @@ def wait_for_replication_resources_creation(
     else:
         resource_kind = constants.VOLUME_REPLICATION
         count_function = get_vr_count
-    if discovered_apps:
-        namespace = workload_namespace
     if config.MULTICLUSTER["multicluster_mode"] != "metro-dr":
         logger.info(f"Waiting for {vr_count} {resource_kind}s to be created")
         sample = TimeoutSampler(
@@ -591,15 +587,13 @@ def wait_for_replication_resources_creation(
                 logger.error(error_msg)
                 raise TimeoutExpiredError(error_msg)
 
-    if discovered_apps:
-        namespace = constants.DR_OPS_NAMESAPCE
     logger.info("Waiting for VRG to reach primary state")
     sample = TimeoutSampler(
         timeout=timeout,
         sleep=5,
         func=check_vrg_state,
         state="primary",
-        namespace=namespace,
+        namespace=vrg_namespace,
     )
     if not sample.wait_for_func_status(result=True):
         error_msg = "VRG hasn't reached expected state primary within the time limit."
