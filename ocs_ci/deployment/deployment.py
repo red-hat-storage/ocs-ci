@@ -933,13 +933,9 @@ class Deployment(object):
         if not namespace:
             namespace = self.namespace
 
-        if self.muliclusterhub_running():
-            resource_kind = constants.SUBSCRIPTION_WITH_ACM
-        else:
-            resource_kind = constants.SUBSCRIPTION
-        ocp.OCP(kind=resource_kind, namespace=namespace)
+        ocp.OCP(kind=constants.SUBSCRIPTION_COREOS, namespace=namespace)
         for sample in TimeoutSampler(
-            300, 10, ocp.OCP, kind=resource_kind, namespace=namespace
+            300, 10, ocp.OCP, kind=constants.SUBSCRIPTION_COREOS, namespace=namespace
         ):
             subscriptions = sample.get().get("items", [])
             for subscription in subscriptions:
