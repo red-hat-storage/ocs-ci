@@ -819,7 +819,7 @@ class Longevity(object):
                 f"PVC_POD-{run_pvc_pod_only}]#################"
             )
             if run_mcg_only:
-                _, all_buckets = setup_mcg_bg_features(
+                buckets_list = setup_mcg_bg_features(
                     num_of_buckets=num_of_buckets,
                     object_amount=object_amount,
                     is_disruptive=False,
@@ -827,7 +827,7 @@ class Longevity(object):
                     skip_any_provider=["azure"],
                 )
 
-                for bucket in all_buckets:
+                for bucket in buckets_list["all_buckets"]:
                     log.info(f"Cleaning up bucket {bucket.name}")
                     try:
                         bucket.delete()
