@@ -1030,11 +1030,17 @@ def get_openshift_client(
         # record current working directory and switch to BIN_DIR
         previous_dir = os.getcwd()
         os.chdir(bin_dir)
-        url = get_openshift_mirror_url("openshift-client", version)
         tarball = "openshift-client.tar.gz"
-        download_file(url, tarball)
-        run_cmd(f"tar xzvf {tarball} oc kubectl")
-        delete_file(tarball)
+        try:
+            url = get_openshift_mirror_url("openshift-client", version)
+            download_file(url, tarball)
+            run_cmd(f"tar xzvf {tarball} oc kubectl")
+            delete_file(tarball)
+        except Exception as e:
+            log.error(f"Failed to download the openshift client. Exception '{e}'")
+            # check given version is GA'ed or not
+            if "nightly" in version:
+                get_nightly_oc_via_ga(version, tarball)
         if custom_ocp_image and not skip_if_client_downloaded_from_installer:
             extract_ocp_binary_from_image("oc", custom_ocp_image, bin_dir)
         try:
@@ -1063,6 +1069,83 @@ def get_openshift_client(
 
     log.info(f"OpenShift Client version: {client_version}")
     return client_binary_path
+
+
+def is_ocp_version_gaed(version):
+    """
+    Checks whether given OCP version is GA'ed or not
+
+    Args:
+        version (str): OCP version ( eg: 4.16, 4.15 )
+
+    Returns:
+        bool: True if OCP is GA'ed otherwise False
+
+    """
+    channel = f"stable-{version}"
+    total_versions_count = len(get_available_ocp_versions(channel))
+    if total_versions_count != 0:
+        return True
+
+
+def get_nightly_oc_via_ga(version, tarball="openshift-client.tar.gz"):
+    """
+    Downloads the nightly OC via GA'ed version
+
+    Args:
+        version (str): nightly OC version to download
+        tarball (str): target name of the tarfile
+
+    """
+    version_major_minor = str(
+        version_module.get_semantic_version(version, only_major_minor=True)
+    )
+
+    # For GA'ed version, check for N, N-1 and N-2 versions
+    for current_version_count in range(3):
+        previous_version = version_module.get_previous_version(
+            version_major_minor, current_version_count
+        )
+        log.debug(
+            f"previous version with count {current_version_count} is {previous_version}"
+        )
+        if is_ocp_version_gaed(previous_version):
+            # Download GA'ed version
+            pull_secret_path = os.path.join(constants.DATA_DIR, "pull-secret")
+            log.info(
+                f"version {previous_version} is GA'ed, use the same version to download oc"
+            )
+            config.DEPLOYMENT["ocp_url_template"] = (
+                "https://mirror.openshift.com/pub/openshift-v4/clients/"
+                "ocp/{version}/{file_name}-{os_type}-{version}.tar.gz"
+            )
+            ga_version = expose_ocp_version(f"{previous_version}-ga")
+            url = get_openshift_mirror_url("openshift-client", ga_version)
+            download_file(url, tarball)
+
+            # extract to tmp location, since we need to download the nightly version again
+            tmp_oc_path = "/tmp"
+            run_cmd(f"tar xzvf {tarball} -C {tmp_oc_path}")
+
+            # use appropriate oc based on glibc version
+            glibc_version = get_glibc_version()
+            if version_module.get_semantic_version(
+                glibc_version
+            ) < version_module.get_semantic_version("2.34"):
+                oc_type = "oc.rhel8"
+            else:
+                oc_type = "oc"
+
+            # extract oc
+            cmd = (
+                f"{tmp_oc_path}/oc adm release extract -a {pull_secret_path} --command={oc_type} "
+                f"registry.ci.openshift.org/ocp/release:{version} --to ."
+            )
+            exec_cmd(cmd)
+            delete_file(tarball)
+            break
+        else:
+            log.debug(f"version {previous_version} is not GA'ed")
 
 
 def get_vault_cli(bind_dir=None, force_download=False):
@@ -4414,3 +4497,21 @@ def get_oadp_version():
         if "oadp-operator" in csv["metadata"]["name"]:
             # extract version string
             return csv["spec"]["version"]
+
+
+def get_glibc_version():
+    """
+    Gets the GLIBC version.
+
+    Returns:
+        str: GLIBC version
+
+    """
+    cmd = "ldd --version ldd"
+    res = exec_cmd(cmd)
+    out = res.stdout.decode("utf-8")
+    version_match = re.search(r"ldd \(GNU libc\) (\d+\.\d+)", out)
+    if version_match:
+        return version_match.group(1)
+    else:
+        log.warning("GLIBC version number not found")
