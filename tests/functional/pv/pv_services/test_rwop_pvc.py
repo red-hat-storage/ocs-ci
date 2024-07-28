@@ -50,6 +50,13 @@ class TestRwopPvc(ManageTest):
         )
 
     @polarion_id("OCS-5456")
+    @polarion_id("OCS-5899")
+    @polarion_id("OCS-5900")
+    @polarion_id("OCS-5905")
+    @polarion_id("OCS-5906")
+    @polarion_id("OCS-5911")
+    @polarion_id("OCS-5912")
+    @polarion_id("OCS-5924")
     def test_pod_with_same_priority(self, pod_factory, interface):
         """
         Test RBD Block volume mode RWOP PVC
@@ -75,6 +82,8 @@ class TestRwopPvc(ManageTest):
 
         self.create_pod_and_validate_pending(pod_factory, interface)
 
+    @polarion_id("OCS-5913")
+    @polarion_id("OCS-5914")
     def test_pvc_clone_and_snapshot(
         self, pvc_clone_factory, snapshot_factory, pod_factory, interface
     ):
@@ -174,6 +183,8 @@ class TestRwopPvc(ManageTest):
         return new_pod_obj
 
     @polarion_id("OCS-5471")
+    @polarion_id("OCS-5901")
+    @polarion_id("OCS-5902")
     def test_rwop_with_high_priority_pod(self, pod_factory, teardown_factory):
         """
         Test RBD Block volume access mode RWOP between priority pods
@@ -216,6 +227,8 @@ class TestRwopPvc(ManageTest):
         teardown_factory(priority_class_obj)
 
     @polarion_id("OCS-5470")
+    @polarion_id("OCS-5903")
+    @polarion_id("OCS-5904")
     def test_rwop_with_low_priority_pod(self, pod_factory, teardown_factory):
         """
         Test RBD Block volume access mode RWOP between priority pods
@@ -257,6 +270,7 @@ class TestRwopPvc(ManageTest):
         teardown_factory([high_priority_class_obj, low_priority_class_obj])
 
     @polarion_id("OCS-5472")
+    @polarion_id("OCS-5910")
     def test_rwop_create_pod_on_different_node(self, pod_factory, interface):
         """
         Test RBD Block volume access mode by creating pods on different nodes
