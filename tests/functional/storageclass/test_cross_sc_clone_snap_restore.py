@@ -6,6 +6,7 @@ from ocs_ci.framework.pytest_customization.marks import green_squad
 from ocs_ci.framework.testlib import (
     ManageTest,
     tier2,
+    polarion_id,
     post_upgrade,
     skipif_managed_service,
     skipif_hci_provider_and_client,
@@ -39,6 +40,8 @@ class TestCrossScCloneSnapRestore(ManageTest):
             pytest.param(*[constants.CEPHFILESYSTEM]),
         ],
     )
+    @polarion_id("OCS-5872")
+    @polarion_id("OCS-5873")
     def test_cross_class_same_pool_clone_snap_restore(
         self,
         interface_type,
@@ -174,6 +177,13 @@ class TestCrossScCloneSnapRestore(ManageTest):
             pytest.param(*[constants.CEPHFILESYSTEM], 2, 3, False),
         ],
     )
+    @polarion_id("OCS-5871")
+    @polarion_id("OCS-5874")
+    @polarion_id("OCS-5875")
+    @polarion_id("OCS-5876")
+    @polarion_id("OCS-5881")
+    @polarion_id("OCS-5882")
+    @polarion_id("OCS-5884")
     def test_cross_class_different_pool_clone_snap_restore(
         self,
         interface_type,
