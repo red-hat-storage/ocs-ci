@@ -11,6 +11,7 @@ from ocs_ci.ocs.ui.views import locators
 from ocs_ci.ocs.ui.helpers_ui import format_locator
 from ocs_ci.utility.utils import get_ocp_version
 from ocs_ci.ocs.utils import get_non_acm_cluster_config
+from ocs_ci.utility import version
 
 log = logging.getLogger(__name__)
 
@@ -160,6 +161,9 @@ def verify_drpolicy_ui(acm_obj, scheduling_interval):
     acm_loc = locators[ocp_version]["acm_page"]
     acm_obj.navigate_data_services()
     log.info("Verify status of DRPolicy on ACM UI")
+    if version.get_semantic_ocs_version_from_config() >= version.VERSION_4_16:
+        log.info("Navigate to Policies page under Disaster recovery")
+        acm_obj.do_click(acm_loc["search-bar"])
     policy_status = acm_obj.wait_until_expected_text_is_found(
         acm_loc["drpolicy-status"], expected_text="Validated"
     )
