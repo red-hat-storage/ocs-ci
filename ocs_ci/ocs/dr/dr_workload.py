@@ -1260,10 +1260,11 @@ class Busybox_DiscoveredApps(DRWorkload):
         for cluster in get_non_acm_cluster_config():
             log.info(f"Deleting Workload from {cluster}")
             config.switch_ctx(cluster.MULTICLUSTER["multicluster_index"])
-            run_cmd(f"oc delete -k {self.workload_path} -n {self.workload_namespace}")
+            run_cmd(f"oc delete -k {self.workload_path} -n {self.workload_namespace}", ignore_error=True)
             dr_helpers.wait_for_all_resources_deletion(
                 namespace=self.workload_namespace
             )
+            run_cmd(f"oc delete project {self.workload_namespace}")
 
 
 def validate_data_integrity(namespace, path="/mnt/test/hashfile", timeout=600):
