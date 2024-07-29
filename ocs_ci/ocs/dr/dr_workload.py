@@ -1247,14 +1247,6 @@ class Busybox_DiscoveredApps(DRWorkload):
 
         """
 
-        for cluster in get_non_acm_cluster_config():
-            log.info(f"Deleting Workload from {cluster}")
-            config.switch_ctx(cluster.MULTICLUSTER["multicluster_index"])
-            run_cmd(f"oc delete -k {self.workload_path} -n {self.workload_namespace}")
-            dr_helpers.wait_for_all_resources_deletion(
-                namespace=self.workload_namespace
-            )
-
         log.info("Deleting DRPC")
         config.switch_acm_ctx()
         run_cmd(
@@ -1264,6 +1256,14 @@ class Busybox_DiscoveredApps(DRWorkload):
         run_cmd(
             f"oc delete placement -n {constants.DR_OPS_NAMESAPCE} {self.discovered_apps_placement_name}-placement-1"
         )
+
+        for cluster in get_non_acm_cluster_config():
+            log.info(f"Deleting Workload from {cluster}")
+            config.switch_ctx(cluster.MULTICLUSTER["multicluster_index"])
+            run_cmd(f"oc delete -k {self.workload_path} -n {self.workload_namespace}")
+            dr_helpers.wait_for_all_resources_deletion(
+                namespace=self.workload_namespace
+            )
 
 
 def validate_data_integrity(namespace, path="/mnt/test/hashfile", timeout=600):
