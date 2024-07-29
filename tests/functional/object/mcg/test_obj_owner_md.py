@@ -1,7 +1,6 @@
 import json
 import logging
 import random
-import time
 import pytest
 import boto3
 
@@ -15,7 +14,6 @@ from ocs_ci.ocs.bucket_utils import (
 from ocs_ci.framework.testlib import (
     MCGTest,
     tier2,
-    skipif_aws_creds_are_missing,
     skipif_disconnected_cluster,
     skipif_proxy_cluster,
 )
@@ -25,7 +23,9 @@ from ocs_ci.framework.pytest_customization.marks import (
     mcg,
 )
 
+from ocs_ci.ocs.exceptions import CommandFailed
 from ocs_ci.ocs.resources.bucket_policy import gen_bucket_policy
+from ocs_ci.utility.retry import retry
 
 logger = logging.getLogger(__name__)
 
@@ -76,8 +76,8 @@ class TestObjOwnerMD(MCGTest):
         Objects in a bucket should be owned by the account that created the bucket:
 
         1. Create a bucket using the noobaa admin account credentials
-        2. Create a bucket using another account credentials
-        3. Allow the other account access to the admin's bucket
+        2. Allow the other account access to the admin's bucket
+        3. Create a bucket using another account credentials
         4. Write objects from each account to both buckets
         5. For both buckets, check that the objects are owned by the creator of the bucket
 
@@ -85,9 +85,15 @@ class TestObjOwnerMD(MCGTest):
         # 1. Create a bucket using the noobaa admin account credentials
         admin_bucket_name = bucket_factory()[0].name
 
-        # 2. Create a bucket using another account credentials
+        # 2. Allow the other account access to the admin's bucket
+        bucket_policy = gen_bucket_policy(
+            user_list="*",
+            actions_list=["*"],
+            resources_list=[admin_bucket_name, f"{admin_bucket_name}/*"],
+        )
+        put_bucket_policy(mcg_obj, admin_bucket_name, json.dumps(bucket_policy))
 
-        # Set MCG object with the other account's credentials
+        # Set mcg_obj to use the other account's credentials
         mcg_obj.s3_resource = boto3.resource(
             "s3",
             verify=False,
@@ -97,23 +103,13 @@ class TestObjOwnerMD(MCGTest):
         )
         mcg_obj.s3_client = mcg_obj.s3_resource.meta.client
 
+        # 3. Create a bucket using another account credentials
         # Since bucket_factory uses the MCG object,
         # the following command creates a bucket using the other account's creds
         non_admin_bucket_name = bucket_factory()[0].name
 
         # Set the mcg_obj credentials back to the noobaa admin account's
         mcg_obj.update_s3_creds()
-
-        # 3. Allow the other account access to the admin's bucket
-        bucket_policy = gen_bucket_policy(
-            user_list="*",
-            actions_list=["*"],
-            resources_list=[admin_bucket_name, f"{admin_bucket_name}/*"],
-        )
-        put_bucket_policy(mcg_obj, admin_bucket_name, json.dumps(bucket_policy))
-
-        logger.info("Waiting 30s for the bucket policy to take effect...")
-        time.sleep(30)
 
         # 4. Write objects from each account to both buckets
         for bucket in (admin_bucket_name, non_admin_bucket_name):
@@ -126,7 +122,12 @@ class TestObjOwnerMD(MCGTest):
                 mcg_obj=mcg_obj,
             )
 
-            write_random_test_objects_to_bucket(
+            # Using the non-privileged account's credentials requires
+            # the use of retry since the bucket policy may take some time to propagate
+            retry_write_random_objs = retry(CommandFailed, tries=10, delay=10)(
+                write_random_test_objects_to_bucket
+            )
+            retry_write_random_objs(
                 amount=3,
                 io_pod=awscli_pod_session,
                 file_dir=test_directory_setup.origin_dir,
@@ -151,14 +152,13 @@ class TestObjOwnerMD(MCGTest):
     @tier2
     @skipif_disconnected_cluster
     @skipif_proxy_cluster
-    @skipif_aws_creds_are_missing
     @pytest.mark.parametrize(
         argnames=["bucketclass"],
         argvalues=[
             pytest.param(
                 {
                     "interface": "CLI",
-                    "backingstore_dict": {"aws": [(1, None)]},
+                    "backingstore_dict": {"aws": [(1, "us-east-2")]},
                 },
             ),
             pytest.param(
@@ -166,14 +166,34 @@ class TestObjOwnerMD(MCGTest):
                     "interface": "OC",
                     "namespace_policy_dict": {
                         "type": "Single",
-                        "namespacestore_dict": {"aws": [(1, None)]},
+                        "namespacestore_dict": {"aws": [(1, "us-east-2")]},
+                    },
+                },
+            ),
+            pytest.param(
+                {
+                    "interface": "OC",
+                    "namespace_policy_dict": {
+                        "type": "Single",
+                        "namespacestore_dict": {"azure": [(1, None)]},
+                    },
+                },
+            ),
+            pytest.param(
+                {
+                    "interface": "OC",
+                    "namespace_policy_dict": {
+                        "type": "Single",
+                        "namespacestore_dict": {"ibmcos": [(1, None)]},
                     },
                 },
             ),
         ],
         ids=[
-            "backingstore-cli",
-            "namespacestore-oc",
+            "aws-backingstore",
+            "aws-nss",
+            "azure-nss",
+            "ibmcos-nss",
         ],
     )
     def test_obj_owner_in_obc_buckets(
