@@ -5204,15 +5204,11 @@ def update_volsync_channel():
 
     """
     logger.info("Update Volsync Channel.")
-    from ocs_ci.ocs.acm.acm import RunWithConfigContext, RunWithAcmConfigContext
-
     if config.ENV_DATA.get("acm_hub_unreleased") is not True:
         return
     non_acm_clusters = get_non_acm_cluster_config()
 
-    with RunWithConfigContext(
-        non_acm_clusters[0].MULTICLUSTER.get("multicluster_index")
-    ):
+    with config.RunWithPrimaryConfigContext():
         from ocs_ci.ocs.utils import get_pod_name_by_pattern
 
         logger.info("Verify volsync-controller-manager pods exist")
@@ -5225,7 +5221,7 @@ def update_volsync_channel():
             return
         channel = get_volsync_channel()
 
-    with RunWithAcmConfigContext():
+    with config.RunWithAcmConfigContext():
         for non_acm_cluster in non_acm_clusters:
             logger.info(
                 f"Add operator-subscription-channel:{channel} annotation to managed cluster addons CR"
@@ -5243,21 +5239,17 @@ def update_volsync_channel():
                 params=params.strip("\n"),
                 format_type="json",
             )
-
-    for non_acm_cluster in non_acm_clusters:
-        with RunWithConfigContext(
-            non_acm_cluster.MULTICLUSTER.get("multicluster_index")
-        ):
-            logger.info("Verify volsync-controller-manager pods in Running state")
-            sample = TimeoutSampler(
-                timeout=300,
-                sleep=10,
-                func=check_pods_status_by_pattern,
-                pattern="volsync-controller-manager",
-                namespace=constants.OPENSHIFT_OPERATORS,
-                expected_status=constants.STATUS_RUNNING,
+    with config.RunWithPrimaryConfigContext():
+        logger.info("Verify volsync-controller-manager pods in Running state")
+        sample = TimeoutSampler(
+            timeout=300,
+            sleep=10,
+            func=check_pods_status_by_pattern,
+            pattern="volsync-controller-manager",
+            namespace=constants.OPENSHIFT_OPERATORS,
+            expected_status=constants.STATUS_RUNNING,
+        )
+        if not sample.wait_for_func_status(result=True):
+            logger.error(
+                f"Pod volsync-controller-manager not in {constants.STATUS_RUNNING} after 300 seconds"
             )
-            if not sample.wait_for_func_status(result=True):
-                logger.error(
-                    f"Pod volsync-controller-manager not in {constants.STATUS_RUNNING} after 300 seconds"
-                )

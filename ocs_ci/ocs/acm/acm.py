@@ -21,11 +21,7 @@ from ocs_ci.ocs.ocp import OCP, get_ocp_url
 from ocs_ci.framework import config
 from ocs_ci.ocs.resources.pod import wait_for_pods_to_be_running
 from ocs_ci.ocs.ui.helpers_ui import format_locator
-from ocs_ci.ocs.utils import (
-    get_non_acm_cluster_config,
-    get_primary_cluster_config,
-    get_all_acm_indexes,
-)
+from ocs_ci.ocs.utils import get_non_acm_cluster_config, get_primary_cluster_config
 from ocs_ci.utility.utils import (
     TimeoutSampler,
     get_ocp_version,
@@ -47,7 +43,6 @@ from ocs_ci.ocs.exceptions import (
 from ocs_ci.utility import templating
 from ocs_ci.ocs.resources.ocs import OCS
 from ocs_ci.helpers.helpers import create_project
-
 
 log = logging.getLogger(__name__)
 
@@ -630,22 +625,3 @@ def import_clusters_with_acm():
         )
     else:
         import_clusters_via_cli(clusters)
-
-
-class RunWithConfigContext(object):
-    def __init__(self, config_index):
-        self.original_config_index = config.cur_index
-        self.config_index = config_index
-
-    def __enter__(self):
-        config.switch_ctx(self.config_index)
-        return self
-
-    def __exit__(self, exc_type, exc_value, exc_traceback):
-        config.switch_ctx(self.original_config_index)
-
-
-class RunWithAcmConfigContext(RunWithConfigContext):
-    def __init__(self):
-        acm_index = get_all_acm_indexes()[0]
-        super().__init__(acm_index)
