@@ -91,6 +91,7 @@ class TestFailoverAndRelocateWithDiscoveredApps:
         logger.info(f"Waiting for {wait_time} minutes to run IOs")
         sleep(wait_time * 60)
 
+
         dr_helpers.relocate(
             preferred_cluster=secondary_cluster_name,
             namespace=rdr_workload.workload_namespace,
@@ -100,11 +101,4 @@ class TestFailoverAndRelocateWithDiscoveredApps:
             workload_instance=rdr_workload
         )
 
-        logger.info("Doing Cleanup Operations")
-        dr_helpers.do_discovered_apps_cleanup(
-            drpc_name=rdr_workload.discovered_apps_placement_name,
-            old_primary=primary_cluster_name_after_failover,
-            workload_namespace=rdr_workload.workload_namespace,
-            workload_dir=rdr_workload.workload_dir,
-        )
         # # TODO: Add data integrity checks
