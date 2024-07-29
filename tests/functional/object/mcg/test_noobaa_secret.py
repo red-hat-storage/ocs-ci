@@ -1,8 +1,15 @@
+import re
+
 import pytest
 import json
 import logging
 import boto3
 
+from ocs_ci.ocs.resources.pod import (
+    get_pod_logs,
+    get_noobaa_operator_pod,
+    filter_pod_logs,
+)
 from ocs_ci.utility import templating
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.resources.backingstore import BackingStore
@@ -19,6 +26,7 @@ from ocs_ci.framework.pytest_customization.marks import (
     runs_on_provider,
     mcg,
     post_upgrade,
+    acceptance,
 )
 from ocs_ci.ocs.exceptions import CommandFailed
 from ocs_ci.utility.aws import update_config_from_s3
@@ -355,3 +363,30 @@ def test_noobaa_root_secret():
         check_if_mcg_root_secret_public() is False
     ), "Seems like MCG root secrets are exposed publicly, please check"
     logger.info("MCG root secrets are not exposed to public")
+
+
+@mcg
+@red_squad
+@acceptance
+def test_operator_logs_for_secret():
+    """
+    This test verifies if secrets are exposed
+    in noobaa operator logs
+
+    """
+
+    # get the noobaa operator logs
+    nb_operator_logs = get_pod_logs(pod_name=get_noobaa_operator_pod().name)
+    filtered_log = filter_pod_logs(
+        nb_operator_logs, filter=["RPC: account.check_external_connection()"]
+    )
+
+    # check if secrets are exposed in the noobaa operator logs
+    pattern = r"Identity:\S+ Secret:\S+"
+    for log_line in filtered_log.splitlines():
+        matches = re.findall(pattern, log_line)
+        for match in matches:
+            assert (
+                match == "Identity:**** Secret:****"
+            ), f"Looks like secrets are exposed in the noobaa operator logs. {match}"
+    logger.info("Secrets are not exposed in the operator logs")

@@ -1795,6 +1795,38 @@ def get_pod_logs(
     return pod.exec_oc_cmd(cmd, out_yaml_format=False)
 
 
+def filter_pod_logs(pod_logs, filter=[], any_filter=False):
+    """
+    To filter the pod logs with particular substring/s line by
+    line
+
+    Args:
+        pod_logs (str): Pod logs
+        filter (list): List of substrings that needs to be
+        present in the pod logs
+        any_filter(bool): True if any one filter is enough, False
+        if all filters should be present
+
+    Returns:
+        Str: Filtered pod logs
+
+    """
+
+    pod_log_lines = pod_logs.splitlines()
+
+    if any_filter:
+        filtered_lines = [
+            line for line in pod_log_lines if any(sub in line for sub in filter)
+        ]
+    else:
+        filtered_lines = [
+            line for line in pod_log_lines if all(sub in line for sub in filter)
+        ]
+
+    filtered_log = "\n".join(filtered_lines)
+    return filtered_log
+
+
 def get_pod_node(pod_obj):
     """
     Get the node that the pod is running on
