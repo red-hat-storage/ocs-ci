@@ -248,7 +248,7 @@ class AcmAddClusters(AcmPageNavigator):
             except StaleElementReferenceException:
                 self.take_screenshot()
                 log.info(
-                    f'The stale element is {self.page_nav["install-submariner-btn"]}, re-trying..'
+                    f'The stale element is {self.page_nav["install-submariner-btn"]}, re-try..'
                 )
                 if attempt == retries - 1:
                     raise
