@@ -1033,10 +1033,11 @@ def get_replica_count(machine_set):
     )
     return (
         machinesets_obj.get(resource_name=machine_set)
-        .get("spec")
-        .get("selector")
-        .get("matchLabels")
-        .get("machine.openshift.io/cluster-api-machineset")
+        .get("spec", {})
+        .get("template", {})
+        .get("metadata", {})
+        .get("labels", {})
+        .get("machine.openshift.io/cluster-api-machineset", "default_value")
     )
 
 
@@ -1055,10 +1056,11 @@ def get_ready_replica_count(machine_set):
     )
     return (
         machinesets_obj.get(resource_name=machine_set)
-        .get("spec")
-        .get("selector")
-        .get("matchLabels")
-        .get("machine.openshift.io/cluster-api-machineset")
+        .get("spec", {})
+        .get("template", {})
+        .get("metadata", {})
+        .get("labels", {})
+        .get("machine.openshift.io/cluster-api-machineset", "default_value")
     )
 
 
