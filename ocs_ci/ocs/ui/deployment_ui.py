@@ -390,7 +390,10 @@ class DeploymentUI(PageNavigator):
         Configure Data Protection
 
         """
-        if self.ocs_version_semantic >= version.VERSION_4_14:
+        if (
+            self.ocs_version_semantic >= version.VERSION_4_14
+            and self.ocs_version_semantic <= version.VERSION_4_16
+        ):
             self.do_click(self.dep_loc["next"], enable_screenshot=True)
 
     def enable_taint_nodes(self):
