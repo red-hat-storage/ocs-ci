@@ -10,6 +10,7 @@ from selenium.webdriver.common.by import By
 from selenium.common.exceptions import (
     NoSuchElementException,
     StaleElementReferenceException,
+    TimeoutException,
 )
 from ocs_ci.helpers.helpers import create_unique_resource_name
 from ocs_ci.ocs import constants
@@ -241,11 +242,14 @@ class AcmAddClusters(AcmPageNavigator):
             try:
                 WebDriverWait(self, 10).until(
                     ec.presence_of_element_located(
-                        self.do_click(self.page_nav["install-submariner-btn"])
+                        self.page_nav["install-submariner-btn"]
                     )
                 )
+                self.do_click(
+                    self.page_nav["install-submariner-btn"], enable_screenshot=True
+                )
                 log.info("Click on 'Install Submariner add-ons' button")
-            except StaleElementReferenceException:
+            except (StaleElementReferenceException, TimeoutException):
                 self.take_screenshot()
                 log.info(
                     f'The stale element is {self.page_nav["install-submariner-btn"]}, re-try..'
