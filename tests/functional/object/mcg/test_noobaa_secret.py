@@ -351,7 +351,7 @@ class TestNoobaaSecrets:
 @bugzilla("2219522")
 @polarion_id("OCS-5205")
 @runs_on_provider
-@tier2
+@acceptance
 def test_noobaa_root_secret():
     """
     This test verifies if the noobaa root secret is publicly
@@ -368,6 +368,8 @@ def test_noobaa_root_secret():
 @mcg
 @red_squad
 @acceptance
+@bugzilla()
+@polarion_id()
 def test_operator_logs_for_secret():
     """
     This test verifies if secrets are exposed
