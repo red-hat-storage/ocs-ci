@@ -101,7 +101,9 @@ class TestApplicationFailoverAndRelocateWhenZoneDown:
 
         # Deploy applications on managed clusters
         # ToDO: deploy application on both managed clusters
-        workloads = dr_workload(num_of_subscription=1, num_of_appset=1)
+        workloads = dr_workload(
+            num_of_subscription=1, num_of_appset=1, switch_ctx=get_passive_acm_index()
+        )
         self.namespace = workloads[0].workload_namespace
 
         # Create application on Primary managed cluster
@@ -145,10 +147,10 @@ class TestApplicationFailoverAndRelocateWhenZoneDown:
             "All nodes from active hub zone are powered off, "
             f"wait {wait_time} seconds before restoring in passive hub"
         )
+        time.sleep(wait_time)
 
         # Restore new hub
         restore_backup()
-        wait_time = 300
         logger.info(f"Wait {wait_time} until restores are taken ")
         time.sleep(wait_time)
 
@@ -217,6 +219,9 @@ class TestApplicationFailoverAndRelocateWhenZoneDown:
                         failover_cluster=secondary_cluster_name,
                         namespace=wl.workload_namespace,
                         workload_type=wl.workload_type,
+                        workload_placement_name=wl.appset_placement_name
+                        if wl.workload_type != constants.SUBSCRIPTION
+                        else None,
                         switch_ctx=get_passive_acm_index(),
                     )
                 )
@@ -318,6 +323,9 @@ class TestApplicationFailoverAndRelocateWhenZoneDown:
                         preferred_cluster=self.primary_cluster_name,
                         namespace=wl.workload_namespace,
                         workload_type=wl.workload_type,
+                        workload_placement_name=wl.appset_placement_name
+                        if wl.workload_type != constants.SUBSCRIPTION
+                        else None,
                         switch_ctx=get_passive_acm_index(),
                     )
                 )
