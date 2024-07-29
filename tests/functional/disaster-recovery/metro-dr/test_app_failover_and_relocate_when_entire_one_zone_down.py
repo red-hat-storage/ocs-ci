@@ -211,6 +211,7 @@ class TestApplicationFailoverAndRelocateWhenZoneDown:
 
         # Failover action via CLI
         failover_results = []
+        config.switch_ctx(get_passive_acm_index())
         with ThreadPoolExecutor() as executor:
             for wl in workloads:
                 failover_results.append(
@@ -225,7 +226,7 @@ class TestApplicationFailoverAndRelocateWhenZoneDown:
                         switch_ctx=get_passive_acm_index(),
                     )
                 )
-                time.sleep(30)
+                time.sleep(60)
 
         # Wait for failover results
         for fl in failover_results:
@@ -315,6 +316,7 @@ class TestApplicationFailoverAndRelocateWhenZoneDown:
         # Application Relocate to Primary managed cluster
         logger.info("Start the process of Relocate from CLI")
         relocate_results = []
+        config.switch_ctx(get_passive_acm_index())
         with ThreadPoolExecutor() as executor:
             for wl in workloads:
                 relocate_results.append(
@@ -329,7 +331,7 @@ class TestApplicationFailoverAndRelocateWhenZoneDown:
                         switch_ctx=get_passive_acm_index(),
                     )
                 )
-                time.sleep(30)
+                time.sleep(60)
 
         # Wait for relocate results
         for rl in relocate_results:
