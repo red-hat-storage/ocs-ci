@@ -180,7 +180,8 @@ class TestProviderHosted(object):
         self, create_hypershift_clusters, destroy_hosted_cluster
     ):
         """
-        Test create hosted cluster with fixture
+        Test create hosted cluster with fixture and destroy cluster abruptly
+        Important that ceph resources associate with the cluster will not be cleaned up
         """
         log_step("Create hosted client")
         cluster_name = get_random_hosted_cluster_name()
