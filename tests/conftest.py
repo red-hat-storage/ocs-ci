@@ -6929,7 +6929,14 @@ def discovered_apps_dr_workload(request):
             workload.deploy_workload()
 
         return instances
+    def teardown():
+        for instance in instances:
+            try:
+                instance.delete_workload(force=True)
+            except ResourceNotDeleted:
+                raise ResourceNotDeleted("Workload deletion was unsuccessful")
 
+    request.addfinalizer(teardown)
     return factory
 
 
