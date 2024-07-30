@@ -487,7 +487,7 @@ def noobaa_db_backup_and_recovery(
     restore_pvc_objs = []
 
     def factory(snapshot_factory=snapshot_factory):
-        global restore_pvc_objs
+        nonlocal restore_pvc_objs
         # Get noobaa pods before execution
         noobaa_pods = pod.get_noobaa_pods()
 
