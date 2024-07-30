@@ -898,13 +898,6 @@ class SeleniumDriver(WebDriver):
         else:
             logger.info("SeleniumDriver instance attr not found")
 
-    def return_driver(self):
-        """
-        This function is created for cases where fixtures can not be used to instantiate webdriver objects
-        """
-
-        self._set_driver()
-
 
 @retry(
     exception_to_check=(TimeoutException, WebDriverException, AttributeError),

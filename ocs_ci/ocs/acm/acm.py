@@ -60,7 +60,7 @@ class AcmAddClusters(AcmPageNavigator):
     def __init__(self):
         super().__init__()
         self.page_nav = self.acm_page_nav
-        self.driver = SeleniumDriver().return_driver()
+        self.driver = SeleniumDriver()
 
     def import_cluster_ui(self, cluster_name, kubeconfig_location):
         """
