@@ -141,24 +141,26 @@ class TestZoneShutdownsAndCrashes:
         setup_vms_standalone_pvc,
     ):
         """
-        This test will test the shutdown scenarios when active-active CephFS and RBD workloads
-        is running.
+        This test will test the shutdown scenarios when CephFS, RBD and VM workloads
+        are running.
         Steps:
             1) Run both the logwriter and logreader CephFS and RBD workloads
                CephFS workload uses RWX volume and RBD workload uses RWO volumes
-            2) Reset the connection scores for the mons
-            3) Induce the shutdown
+            2) Create VM using standalone PVC. Create some data inside the VM instance
+            3) Reset the connection scores for the mons
+            4) Induce the shutdown
                In case of normal shutdown we shut-down and wait for about 15 mins
                before start of nodes whereas immediate shutdown would involve starting
                nodes immediately just after 5 mins.
-            4) Make sure ceph is accessible during the crash duration
-            5) Repeat the shutdown process as many times as number of iterations
-            6) Make sure logreader job pods have Completed state.
+            5) Make sure ceph is accessible during the crash duration
+            6) Repeat the shutdown process as many times as number of iterations
+            7) Check VM data integrity is maintained post netsplit. Check if New IO is possible in VM and out of VM.
+            8) Make sure logreader job pods have Completed state.
                Check if there is any write or read pause. Fail only when neccessary.
-            7) Delete the old logreader job and create new logreader job to verify the data corruption
-            8) Make sure there is no data loss
-            9) Validate the connection scores
-            10) Do a complete cluster sanity and make sure there is no issue post recovery
+            9) Delete the old logreader job and create new logreader job to verify the data corruption
+            10) Make sure there is no data loss
+            11) Validate the connection scores
+            12) Do a complete cluster sanity and make sure there is no issue post recovery
 
         """
 
@@ -384,21 +386,23 @@ class TestZoneShutdownsAndCrashes:
         setup_vms_standalone_pvc,
     ):
         """
-        This test will test the crash scenarios when active-active CephFS and RBD workloads
-        is running.
+        This test will test the crash scenarios when CephFS, RBD and VM workloads
+        are running.
         Steps:
             1) Run both the logwriter and logreader CephFS and RBD workloads
                CephFS workload uses RWX volume and RBD workload uses RWO volumes
-            2) Reset the connection scores for the mons
-            3) Crash the zone nodes
-            4) Repeat the crash process as many times as number of iterations
-            5) Make sure ceph is accessible during the crash duration
-            6) Make sure logreader job pods have Completed state.
+            2) Create VM using standalone PVC. Create some data inside the VM instance
+            3) Reset the connection scores for the mons
+            4) Crash the zone nodes
+            5) Repeat the crash process as many times as number of iterations
+            6) Make sure ceph is accessible during the crash duration
+            7) Check VM data integrity is maintained post netsplit. Check if New IO is possible in VM and out of VM.
+            8) Make sure logreader job pods have Completed state.
                Check if there is any write or read pause. Fail only when neccessary.
-            7) Delete the old logreader job and create new logreader job to verify the data corruption
-            8) Make sure there is no data loss
-            9) Validate the connection scores
-            10) Do a complete cluster sanity and make sure there is no issue post recovery
+            9) Delete the old logreader job and create new logreader job to verify the data corruption
+            10) Make sure there is no data loss
+            11) Validate the connection scores
+            12) Do a complete cluster sanity and make sure there is no issue post recovery
 
         """
 
