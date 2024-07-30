@@ -536,6 +536,12 @@ skipif_noobaa_external_pgsql = pytest.mark.skipif(
     config.ENV_DATA.get("noobaa_external_pgsql") is True,
     reason="This test will not run correctly in external DB deployed cluster.",
 )
+
+skipif_compact_mode = pytest.mark.skipif(
+    config.ENV_DATA.get("deployment_mode") == "compact",
+    reason="This test is not supported for compact mode deployment types.",
+)
+
 metrics_for_external_mode_required = pytest.mark.skipif(
     version.get_semantic_ocs_version_from_config() < version.VERSION_4_6
     and config.DEPLOYMENT.get("external_mode") is True,

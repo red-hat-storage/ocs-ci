@@ -1031,11 +1031,7 @@ def get_replica_count(machine_set):
     machinesets_obj = OCP(
         kind=constants.MACHINESETS, namespace=constants.OPENSHIFT_MACHINE_API_NAMESPACE
     )
-    return (
-        machinesets_obj.get(resource_name=machine_set)
-        .get("spec", {})
-        .get("replicas", "default_value")
-    )
+    return machinesets_obj.get(resource_name=machine_set).get("spec").get("replicas")
 
 
 def get_ready_replica_count(machine_set):
@@ -1053,8 +1049,8 @@ def get_ready_replica_count(machine_set):
     )
     return (
         machinesets_obj.get(resource_name=machine_set)
-        .get("spec", {})
-        .get("replicas", "default_value")
+        .get("status")
+        .get("readyReplicas")
     )
 
 
