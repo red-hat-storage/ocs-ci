@@ -191,7 +191,7 @@ class TestListOfObjects(E2ETest):
             test_directory_setup.origin_dir,
             f"s3://{bucket.name}/{prefix}/",
             mcg_obj_session,
-            timeout=1200,
+            timeout=7200,
         )
         log.info(f"Uploaded objects to the bucket {bucket.name}")
 
@@ -200,7 +200,7 @@ class TestListOfObjects(E2ETest):
             pod_obj=awscli_pod_session,
             target=f"s3://{bucket.name}/",
             s3_obj=mcg_obj_session,
-            timeout=120,
+            timeout=60,
         )
         log.info("List objects using delimiter was successful without any issues")
 
@@ -210,7 +210,7 @@ class TestListOfObjects(E2ETest):
             target=f"s3://{bucket.name}",
             prefix=prefix,
             s3_obj=mcg_obj_session,
-            timeout=120,
+            timeout=60,
         )
         log.info(
             "List objects using prefix and delimter was successful without any issues"
