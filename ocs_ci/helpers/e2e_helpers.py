@@ -350,7 +350,11 @@ def validate_rgw_kafka_notification(kafka_rgw_dict, event, run_in_bg=False):
 
 
 def validate_mcg_object_expiration(
-    mcg_obj, buckets, event, run_in_bg=False, object_amount=5, prefix=""
+    mcg_obj,
+    buckets,
+    event,
+    run_in_bg=False,
+    object_amount=5,
 ):
     """
     Validates objects expiration for MCG buckets
@@ -371,7 +375,7 @@ def validate_mcg_object_expiration(
                 s3_put_object(
                     mcg_obj,
                     bucket.name,
-                    f"{prefix}/obj-key-{uuid4().hex}",
+                    f"obj-key-{uuid4().hex}",
                     "Some random data",
                 )
             expire_objects_in_bucket(bucket.name)
