@@ -24,8 +24,8 @@ setup(
         # More https://stackoverflow.com/questions/71443345/gevent-cant-be-installed-on-m1-mac-using-poetry
         "gevent==21.12.0",
         "reportportal-client==3.2.3",
-        "requests==2.25.0",
-        "paramiko==2.11.0",
+        "requests==2.32.3",
+        "paramiko==3.4.0",
         "pyyaml>=4.2b1",
         "jinja2==3.0.3",
         "openshift==0.11.2",
@@ -75,7 +75,7 @@ setup(
         # by default program attempting to load an x86_64-only library from a native arm64 process
         # Beginning with gevent 20.12.0, 64-bit ARM binaries are distributed on PyPI for aarch64 manylinux2014
         # compatible systems. Resolves problem for m1 Mac chips
-        "greenlet==1.1.2",
+        "greenlet==3.0rc3",
         "ovirt-engine-sdk-python==4.4.11",
         "junitparser==3.1.0",
         "flaky==3.7.0",
