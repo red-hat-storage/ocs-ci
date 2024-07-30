@@ -202,7 +202,7 @@ class TestDeleteObjects:
         io_thread.result()
 
     @bugzilla("2279742")
-    @polarion_id("")
+    @polarion_id("OCS-6096")
     @pytest.mark.parametrize(
         argnames=["is_expiration"],
         argvalues=[
@@ -215,6 +215,7 @@ class TestDeleteObjects:
         is_expiration,
         bucket_factory,
         reduce_expiration_interval,
+        scale_noobaa_resources_session,
         change_lifecycle_batch_size,
         awscli_pod_session,
         test_directory_setup,
@@ -241,7 +242,7 @@ class TestDeleteObjects:
 
         # generate 1 million empty files with unique identifiers
         generate_empty_files(
-            awscli_pod_session, dir=test_directory_setup.origin_dir, amount=100000
+            awscli_pod_session, dir=test_directory_setup.origin_dir, amount=1000000
         )
 
         # sync all objects generated above to the bucket
@@ -250,7 +251,7 @@ class TestDeleteObjects:
             test_directory_setup.origin_dir,
             f"s3://{bucket.name}",
             mcg_obj_session,
-            timeout=1200,
+            timeout=7200,
         )
         log.info(f"Uploaded objects to the bucket {bucket.name}")
 
