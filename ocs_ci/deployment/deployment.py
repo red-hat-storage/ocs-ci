@@ -3477,7 +3477,7 @@ class RDRMultiClusterDROperatorsDeploy(MultiClusterDROperatorsDeploy):
             self.validate_policy_compliance_status(
                 resource_name=f"v{secret_name}",
                 resource_namespace=constants.OPENSHIFT_OPERATORS,
-                compliance_state=constants.ACM_POLICY_COMPLIANT
+                compliance_state=constants.ACM_POLICY_COMPLIANT,
             )
 
         if version.compare_versions(f"{acm_version} >= 2.10"):
@@ -3554,7 +3554,7 @@ class MDRMultiClusterDROperatorsDeploy(MultiClusterDROperatorsDeploy):
             self.validate_policy_compliance_status(
                 resource_name=f"v{secret_name}",
                 resource_namespace=constants.OPENSHIFT_OPERATORS,
-                compliance_state=constants.ACM_POLICY_COMPLIANT
+                compliance_state=constants.ACM_POLICY_COMPLIANT,
             )
         if version.compare_versions(f"{acm_version} >= 2.10"):
             logger.info("Skipping Enabling Managed ServiceAccount")
