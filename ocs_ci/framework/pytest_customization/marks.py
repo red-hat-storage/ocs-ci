@@ -538,7 +538,7 @@ skipif_noobaa_external_pgsql = pytest.mark.skipif(
 )
 
 skipif_compact_mode = pytest.mark.skipif(
-    config.ENV_DATA.get("deployment_mode") == "compact",
+    config.ENV_DATA.get("worker_replicas") == 0,
     reason="This test is not supported for compact mode deployment types.",
 )
 
