@@ -97,6 +97,7 @@ setup(
         "google-resumable-media==2.4.1",
         "googleapis-common-protos==1.59.0",
         "urllib3==1.26.18",
+        "pytest-jira==0.3.21",
     ],
     entry_points={
         "console_scripts": [
