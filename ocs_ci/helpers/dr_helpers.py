@@ -219,7 +219,7 @@ def relocate(
     switch_ctx=None,
     discovered_apps=False,
     old_primary=None,
-    workload_instance=None
+    workload_instance=None,
 ):
     """
     Initiates Relocate action to the specified cluster
