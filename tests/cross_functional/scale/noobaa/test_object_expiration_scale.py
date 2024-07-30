@@ -27,7 +27,7 @@ log = logging.getLogger(__name__)
 @scale
 class TestObjectExpirationScale:
     @bugzilla("2279964")
-    @polarion_id("")
+    @polarion_id("OCS-6097")
     def test_object_expiration_with_millions_objs(
         self,
         scale_noobaa_resources_session,
@@ -52,7 +52,7 @@ class TestObjectExpirationScale:
 
         # generate 1 million empty files with unique identifiers
         generate_empty_files(
-            awscli_pod_session, dir=test_directory_setup.origin_dir, amount=1000
+            awscli_pod_session, dir=test_directory_setup.origin_dir, amount=1000000
         )
 
         # create the bucket
@@ -65,7 +65,7 @@ class TestObjectExpirationScale:
             test_directory_setup.origin_dir,
             f"s3://{bucket.name}",
             mcg_obj_session,
-            timeout=1200,
+            timeout=7200,
         )
         log.info(f"Uploaded the million objects to the bucket {bucket.name}")
 
