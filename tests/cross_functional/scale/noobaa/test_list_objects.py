@@ -6,6 +6,7 @@ from ocs_ci.ocs.bucket_utils import (
     craft_s3_command,
     sync_object_directory,
     list_objects_from_bucket,
+    generate_empty_files,
 )
 from ocs_ci.framework.pytest_customization.marks import orange_squad, mcg
 from ocs_ci.framework.testlib import E2ETest
@@ -157,3 +158,60 @@ class TestListOfObjects(E2ETest):
             timeout=9000,
         )
         log.info("Test succeeded without any errors!")
+
+    @bugzilla("2277990")
+    @pytest.mark.polarion_id("OCS-6095")
+    def test_list_objects_single_dir(
+        self,
+        scale_noobaa_resources_session,
+        bucket_factory,
+        awscli_pod_session,
+        mcg_obj_session,
+        test_directory_setup,
+    ):
+        """
+        Test list objects from a single directory when it has millions of
+        objects
+
+        """
+
+        # create the bucket
+        bucket = bucket_factory()[0]
+        log.info(f"Created bucket {bucket.name}")
+
+        # generate 1 million empty files with unique identifiers
+        generate_empty_files(
+            awscli_pod_session, dir=test_directory_setup.origin_dir, amount=1000000
+        )
+
+        # upload the million objects to the bucket
+        prefix = "single_dir"
+        sync_object_directory(
+            awscli_pod_session,
+            test_directory_setup.origin_dir,
+            f"s3://{bucket.name}/{prefix}/",
+            mcg_obj_session,
+            timeout=1200,
+        )
+        log.info(f"Uploaded objects to the bucket {bucket.name}")
+
+        # list objects directly from the bucket using just the delimiter
+        list_objects_from_bucket(
+            pod_obj=awscli_pod_session,
+            target=f"s3://{bucket.name}/",
+            s3_obj=mcg_obj_session,
+            timeout=120,
+        )
+        log.info("List objects using delimiter was successful without any issues")
+
+        # list objects from the bucket using prefix and delimiter
+        list_objects_from_bucket(
+            pod_obj=awscli_pod_session,
+            target=f"s3://{bucket.name}",
+            prefix=prefix,
+            s3_obj=mcg_obj_session,
+            timeout=120,
+        )
+        log.info(
+            "List objects using prefix and delimter was successful without any issues"
+        )
