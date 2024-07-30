@@ -6929,6 +6929,7 @@ def discovered_apps_dr_workload(request):
             workload.deploy_workload()
 
         return instances
+
     def teardown():
         for instance in instances:
             try:

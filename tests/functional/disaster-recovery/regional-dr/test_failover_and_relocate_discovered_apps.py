@@ -91,7 +91,6 @@ class TestFailoverAndRelocateWithDiscoveredApps:
         logger.info(f"Waiting for {wait_time} minutes to run IOs")
         sleep(wait_time * 60)
 
-
         dr_helpers.relocate(
             preferred_cluster=secondary_cluster_name,
             namespace=rdr_workload.workload_namespace,
