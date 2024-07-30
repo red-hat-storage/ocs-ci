@@ -48,10 +48,19 @@ class TestS3Routes:
             )
             if (
                 nb_s3_route_obj.data["spec"]["tls"]["insecureEdgeTerminationPolicy"]
-                == "Redirect"
+                == "None"
             ):
-                s3_route_param = '{"spec":{"tls":{"insecureEdgeTerminationPolicy":"Allow","termination":"reencrypt"}}}'
-                nb_s3_route_obj.patch(params=s3_route_param, format_type="merge")
+                # Set spec.multiCloudGateway.denyHTTP to true on ocs-storagecluster
+                storagecluster_obj = ocp.OCP(
+                    kind=constants.STORAGECLUSTER,
+                    namespace=config.ENV_DATA["cluster_namespace"],
+                    resource_name=constants.DEFAULT_CLUSTERNAME,
+                )
+                lb_param = '[{"op": "replace", "path": "/spec/multiCloudGateway/denyHTTP", "value": false}]'
+                logger.info(
+                    "Patching noobaa resource to disable disableLoadBalancerService"
+                )
+                storagecluster_obj.patch(params=lb_param, format_type="json")
 
             # Revert disableRoute param
             if config.ENV_DATA.get("platform") in constants.ON_PREM_PLATFORMS:
