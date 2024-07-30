@@ -88,8 +88,8 @@ class TestNetSplit:
         setup_vms_standalone_pvc,
     ):
         """
-        This test will test the netsplit scenarios when active-active CephFS and RBD workloads
-        is running.
+        This test will test the netsplit scenarios (BC, AB, AB-AC, AB-BC) when CephFS, RBD and VM workloads
+        are running.
         Steps:
             1) Run both the logwriter and logreader CephFS and RBD workloads
                CephFS workload uses RWX volume and RBD workload uses RWO volumes
