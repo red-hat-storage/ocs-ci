@@ -97,7 +97,7 @@ class TestFailoverAndRelocateWithDiscoveredApps:
             workload_placement_name=rdr_workload.discovered_apps_placement_name,
             discovered_apps=True,
             old_primary=primary_cluster_name_after_failover,
-            workload_instance=rdr_workload
+            workload_instance=rdr_workload,
         )
 
         # # TODO: Add data integrity checks
