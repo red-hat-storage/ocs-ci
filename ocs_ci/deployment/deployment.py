@@ -3371,7 +3371,7 @@ class MultiClusterDROperatorsDeploy(object):
             dr_ramen_hub_configmap_data = ocp.OCP(
                 kind="ConfigMap",
                 resource_name=constants.DR_RAMEN_HUB_OPERATOR_CONFIG,
-                namespace=constants.OPENSHIFT_DR_SYSTEM_NAMESPACE,
+                namespace=constants.OPENSHIFT_OPERATORS,
             )
             dr_ramen_hub_configmap_data.get()
             return dr_ramen_hub_configmap_data
@@ -3470,6 +3470,15 @@ class RDRMultiClusterDROperatorsDeploy(MultiClusterDROperatorsDeploy):
             run_cmd(f"oc create -f {constants.DPA_DISCOVERED_APPS_PATH}")
         config.switch_acm_ctx()
         acm_version = get_acm_version()
+        logger.info("Getting S3 Secret name from Ramen Config")
+        secret_names = self.meta_obj.get_s3_secret_names()
+        for secret_name in secret_names:
+            logger.info(f"Validation Policy for resource v{secret_name}")
+            self.validate_policy_compliance_status(
+                resource_name=f"v{secret_name}",
+                resource_namespace=constants.OPENSHIFT_OPERATORS,
+                compliance_state=constants.ACM_POLICY_COMPLIANT
+            )
 
         if version.compare_versions(f"{acm_version} >= 2.10"):
             logger.info("Skipping Enabling Managed ServiceAccount")
@@ -3538,6 +3547,15 @@ class MDRMultiClusterDROperatorsDeploy(MultiClusterDROperatorsDeploy):
         # Only on the active hub enable managedserviceaccount-preview
         acm_version = get_acm_version()
 
+        logger.info("Getting S3 Secret name from Ramen Config")
+        secret_names = self.meta_obj.get_s3_secret_names()
+        for secret_name in secret_names:
+            logger.info(f"Validation Policy for resource v{secret_name}")
+            self.validate_policy_compliance_status(
+                resource_name=f"v{secret_name}",
+                resource_namespace=constants.OPENSHIFT_OPERATORS,
+                compliance_state=constants.ACM_POLICY_COMPLIANT
+            )
         if version.compare_versions(f"{acm_version} >= 2.10"):
             logger.info("Skipping Enabling Managed ServiceAccount")
         else:
