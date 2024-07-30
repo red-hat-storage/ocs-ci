@@ -223,7 +223,8 @@ PROVISIONING = "Provisioning"
 AGENT_SERVICE_CONFIG = "AgentServiceConfig"
 INFRA_ENV = "InfraEnv"
 DEFALUT_DEVICE_CLASS = "ssd"
-
+VM = "VM"
+HOSTED_CLUSTERS = "hostedclusters"
 
 # Provisioners
 AWS_EFS_PROVISIONER = "openshift.org/aws-efs"
