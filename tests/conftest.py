@@ -7955,7 +7955,8 @@ def setup_cnv(request):
         Clean up CNV deployment
 
         """
-        cnv_obj.cleanup_cnv()
+        if cnv_obj.cnv_hyperconverged_installed():
+            cnv_obj.cleanup_cnv()
 
     request.addfinalizer(finalizer)
 

@@ -120,7 +120,15 @@ class TestZoneShutdownsAndCrashes:
                     pytest.mark.polarion_id("OCS-5088"),
                 ],
             ),
-            pytest.param(1, True, 5, marks=[pytest.mark.polarion_id("OCS-5064")]),
+            pytest.param(
+                1,
+                True,
+                5,
+                marks=[
+                    pytest.mark.polarion_id("OCS-5064"),
+                    pytest.mark.polarion_id("OCS-5850"),
+                ],
+            ),
         ],
         ids=[
             "Normal-Shutdown",
@@ -370,7 +378,14 @@ class TestZoneShutdownsAndCrashes:
     @pytest.mark.parametrize(
         argnames="iteration, delay",
         argvalues=[
-            pytest.param(1, 5, marks=[pytest.mark.polarion_id("OCS-5062")]),
+            pytest.param(
+                1,
+                5,
+                marks=[
+                    pytest.mark.polarion_id("OCS-5062"),
+                    pytest.mark.polarion_id("OCS-5850"),
+                ],
+            ),
         ],
     )
     def test_zone_crashes(
