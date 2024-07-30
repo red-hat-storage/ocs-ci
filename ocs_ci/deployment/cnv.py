@@ -659,7 +659,7 @@ class CNVInstaller(object):
             resource_name=constants.KUBEVIRT_HYPERCONVERGED,
             namespace=self.namespace,
         )
-        hyperconverged_obj.delete()
+        hyperconverged_obj.delete(resource_name=constants.KUBEVIRT_HYPERCONVERGED)
         logger.info(
             f"Deleted {constants.HYPERCONVERGED} {constants.KUBEVIRT_HYPERCONVERGED}"
         )
@@ -674,7 +674,7 @@ class CNVInstaller(object):
             resource_name=constants.KUBEVIRT_HYPERCONVERGED,
             namespace=self.namespace,
         )
-        cnv_sub.delete()
+        cnv_sub.delete(resource_name=constants.KUBEVIRT_HYPERCONVERGED)
         logger.info(f"Deleted subscription {constants.KUBEVIRT_HYPERCONVERGED}")
 
     def remove_cnv_csv(self):
@@ -687,7 +687,7 @@ class CNVInstaller(object):
             selector=constants.CNV_SELECTOR,
             namespace=self.namespace,
         )
-        cnv_csv.delete()
+        cnv_csv.delete(resource_name=cnv_csv.get()["items"][0]["metadata"]["name"])
         logger.info(f"Deleted ClusterServiceVersion {constants.CNV_OPERATORNAME}")
 
     def remove_crds(self):
@@ -708,7 +708,7 @@ class CNVInstaller(object):
         cnv_namespace = OCP(
             kind=constants.NAMESPACE, resource_name=constants.CNV_NAMESPACE
         )
-        cnv_namespace.delete()
+        cnv_namespace.delete(resource_name=constants.CNV_NAMESPACE)
         logger.info(f"Deleted the namespace {constants.CNV_NAMESPACE}")
 
     def cleanup_cnv(self, check_cnv_installed=False):

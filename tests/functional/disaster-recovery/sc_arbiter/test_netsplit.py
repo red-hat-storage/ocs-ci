@@ -63,10 +63,38 @@ class TestNetSplit:
     @pytest.mark.parametrize(
         argnames="zones, duration",
         argvalues=[
-            pytest.param(constants.NETSPLIT_DATA_1_DATA_2, 15),
-            pytest.param(constants.NETSPLIT_ARBITER_DATA_1, 15),
-            pytest.param(constants.NETSPLIT_ARBITER_DATA_1_AND_ARBITER_DATA_2, 15),
-            pytest.param(constants.NETSPLIT_ARBITER_DATA_1_AND_DATA_1_DATA_2, 15),
+            pytest.param(
+                constants.NETSPLIT_DATA_1_DATA_2,
+                15,
+                marks=[
+                    pytest.mark.polarion_id("OCS-5069"),
+                    pytest.mark.polarion_id("OCS-5071"),
+                ],
+            ),
+            pytest.param(
+                constants.NETSPLIT_ARBITER_DATA_1,
+                15,
+                marks=[
+                    pytest.mark.polarion_id("OCS-5072"),
+                    pytest.mark.polarion_id("OCS-5074"),
+                ],
+            ),
+            pytest.param(
+                constants.NETSPLIT_ARBITER_DATA_1_AND_ARBITER_DATA_2,
+                15,
+                marks=[
+                    pytest.mark.polarion_id("OCS-5083"),
+                    pytest.mark.polarion_id("OCS-5085"),
+                ],
+            ),
+            pytest.param(
+                constants.NETSPLIT_ARBITER_DATA_1_AND_DATA_1_DATA_2,
+                15,
+                marks=[
+                    pytest.mark.polarion_id("OCS-5077"),
+                    pytest.mark.polarion_id("OCS-5079"),
+                ],
+            ),
         ],
         ids=[
             "Data-1-Data-2",
@@ -75,6 +103,7 @@ class TestNetSplit:
             "Arbiter-Data-1-and-Data-1-Data-2",
         ],
     )
+    @pytest.mark.polarion_id("OCS-5850")
     def test_netsplit(
         self,
         setup_logwriter_cephfs_workload_factory,
