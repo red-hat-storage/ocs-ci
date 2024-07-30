@@ -60,8 +60,9 @@ class AcmAddClusters(AcmPageNavigator):
     def __init__(self):
         super().__init__()
         self.page_nav = self.acm_page_nav
-        base = SeleniumDriver()  # Creates an instance of SeleniumDriverClass
-        self.driver = base.return_driver()
+        # Using this private method to instantiate the driver object and
+        # to avoid creating another function in SeleniumDriver Class.
+        self.driver = SeleniumDriver._set_driver()
 
     def import_cluster_ui(self, cluster_name, kubeconfig_location):
         """

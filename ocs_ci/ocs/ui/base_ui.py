@@ -898,9 +898,6 @@ class SeleniumDriver(WebDriver):
         else:
             logger.info("SeleniumDriver instance attr not found")
 
-    def return_driver(self):
-        self._set_driver()
-
 
 @retry(
     exception_to_check=(TimeoutException, WebDriverException, AttributeError),
