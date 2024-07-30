@@ -121,7 +121,8 @@ from ocs_ci.utility.retry import retry
 from ocs_ci.utility.secret import link_all_sa_and_secret_and_delete_pods
 from ocs_ci.utility.ssl_certs import (
     configure_custom_ingress_cert,
-    configure_custom_api_cert, get_root_ca_cert,
+    configure_custom_api_cert,
+    get_root_ca_cert,
 )
 from ocs_ci.utility.utils import (
     ceph_health_check,
@@ -3260,7 +3261,6 @@ class MultiClusterDROperatorsDeploy(object):
         else:
             raise ResourceWrongStatusException("Compliance status does not match")
 
-
     def add_cacert_ramen_configmap(self):
         """
         Add CaCert to Ramen hub ConfigMap
@@ -3277,9 +3277,11 @@ class MultiClusterDROperatorsDeploy(object):
         )
         logger.info("Adding Encoded Ca Cert to Ramen Hub configmap")
         for s3profile in ramen_config["s3StoreProfiles"]:
-            s3profile['CACertificates'] = ca_cert_data_encode
+            s3profile["CACertificates"] = ca_cert_data_encode
         dr_ramen_hub_configmap_data_get = dr_ramen_hub_configmap_data.get()
-        dr_ramen_hub_configmap_data_get["data"]["ramen_manager_config.yaml"] = str(ramen_config)
+        dr_ramen_hub_configmap_data_get["data"]["ramen_manager_config.yaml"] = str(
+            ramen_config
+        )
         logger.info("Applying changes to Ramen Hub configmap")
         self.update_config_map_commit(dict(dr_ramen_hub_configmap_data_get))
 
@@ -3525,6 +3527,13 @@ class MDRMultiClusterDROperatorsDeploy(MultiClusterDROperatorsDeploy):
         config.switch_acm_ctx()
         # Adding Ca Cert
         self.add_cacert_ramen_configmap()
+        # Only on the active hub enable managedserviceaccount-preview
+        managed_clusters = get_non_acm_cluster_config()
+        for cluster in managed_clusters:
+            index = cluster.MULTICLUSTER["multicluster_index"]
+            config.switch_ctx(index)
+            logger.info("Creating Resource DataProtectionApplication")
+            run_cmd(f"oc create -f {constants.DPA_DISCOVERED_APPS_PATH}")
         config.switch_ctx(old_ctx)
         # Only on the active hub enable managedserviceaccount-preview
         acm_version = get_acm_version()
