@@ -37,6 +37,10 @@ class Config:
     COMPONENTS: dict = field(default_factory=dict)
     # Used for multicluster only
     MULTICLUSTER: dict = field(default_factory=dict)
+    # Use this variable to store any arbitrary key/values related
+    # to the upgrade context. Applicable only in the multicluster upgrade
+    # scenario
+    PREUPGRADE_CONFIG = field(default_factory=dict)
 
     def __post_init__(self):
         self.reset()
