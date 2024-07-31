@@ -160,10 +160,12 @@ def failover(
     if workload_type == constants.APPLICATION_SET:
         namespace = constants.GITOPS_CLUSTER_NAMESPACE
         drpc_obj = DRPC(
-            namespace=namespace, resource_name=f"{workload_placement_name}-drpc"
+            namespace=namespace,
+            resource_name=f"{workload_placement_name}-drpc",
+            switch_ctx=switch_ctx,
         )
     else:
-        drpc_obj = DRPC(namespace=namespace)
+        drpc_obj = DRPC(namespace=namespace, switch_ctx=switch_ctx)
 
     drpc_obj.wait_for_peer_ready_status()
     logger.info(f"Initiating Failover action with failoverCluster:{failover_cluster}")
