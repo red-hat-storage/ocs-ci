@@ -69,6 +69,7 @@ from ocs_ci.ocs.mcg_workload import mcg_job_factory as mcg_job_factory_implement
 from ocs_ci.ocs.node import get_node_objs, schedule_nodes
 from ocs_ci.ocs.ocp import OCP
 from ocs_ci.ocs.resources import pvc
+from ocs_ci.ocs.resources.bucket_logging_manager import BucketLoggingManager
 from ocs_ci.ocs.resources.bucket_policy import gen_bucket_policy
 from ocs_ci.ocs.resources.mcg_replication_policy import AwsLogBasedReplicationPolicy
 from ocs_ci.ocs.resources.mockup_bucket_logger import MockupBucketLogger
@@ -114,7 +115,12 @@ from ocs_ci.ocs.resources.pod import (
     get_pod_count,
     wait_for_pods_by_label_count,
 )
-from ocs_ci.ocs.resources.pvc import PVC, create_restore_pvc, get_all_pvc_objs
+from ocs_ci.ocs.resources.pvc import (
+    PVC,
+    create_restore_pvc,
+    get_all_pvc_objs,
+    get_pvc_objs,
+)
 from ocs_ci.ocs.version import get_ocs_version, get_ocp_version_dict, report_ocs_version
 from ocs_ci.ocs.cluster_load import ClusterLoad, wrap_msg
 from ocs_ci.utility import (
@@ -8387,3 +8393,98 @@ def setup_cnv(request):
             cnv_obj.uninstall_cnv()
 
     request.addfinalizer(finalizer)
+
+
+@pytest.fixture(scope="class")
+def enable_guaranteed_bucket_logging(request, pvc_factory_class):
+    """
+    Session-scoped fixture to enable guaranteed bucket logging
+    in the NooBaa CR
+    """
+    return enable_guaranteed_bucket_logging_fixture(request, pvc_factory_class)
+
+
+def enable_guaranteed_bucket_logging_fixture(request, pvc_factory):
+    """
+    Fixture to manage enabling and disabling guaranteed bucket logging
+    in the NooBaa CR
+
+    Args:
+        request: pytest's request object, used to handle finalizer cleanup.
+        pvc_factory: Factory fixture for creating a custom logging PVC if needed.
+
+    Returns:
+        function: Factory function to enable guaranteed bucket logging.
+    """
+
+    logs_manager = BucketLoggingManager()
+    alt_logs_pvc = None
+    default_pvc_labeled = False
+
+    def factory(use_custom_logs_pvc=False):
+        """
+        Configures bucket logging with an optional alternative PVC.
+
+        Args:
+            use_custom_logs_pvc (bool): If True, create and use a custom PVC for bucket logging.
+                                          If False, use the default PVC unless an alternative is already set.
+        """
+        namespace = ocsci_config.ENV_DATA["cluster_namespace"]
+        pv_ocp_obj = OCP(namespace=namespace, kind=constants.PV)
+
+        # Check if a non-default PVC is already set for logging
+        logging_config = logs_manager.get_logging_config_from_cr()
+        gbl_is_set = (
+            bool(logging_config) and logging_config["loggingType"] == "guaranteed"
+        )
+        is_custom_pvc_in_use = gbl_is_set and "bucketLoggingPVC" in logging_config
+
+        # Create an alternative PVC for logging if needed
+        nonlocal alt_logs_pvc
+        if use_custom_logs_pvc and not alt_logs_pvc:
+            odf_project = OCP(namespace=namespace)
+            alt_logs_pvc = pvc_factory(
+                interface=constants.CEPHFILESYSTEM,
+                project=odf_project,
+                size=20,
+                access_mode=constants.ACCESS_MODE_RWX,
+            )
+
+            # Add a custom label to the PVC and the corrseponding PV
+            # to allow ignoring potential false leftover errors
+            alt_logs_pvc.add_label(constants.CUSTOM_MCG_LABEL)
+            pv_ocp_obj.add_label(
+                resource_name=alt_logs_pvc.backed_pv,
+                label=constants.CUSTOM_MCG_LABEL,
+            )
+
+        # Existing config need to be changed if we're moving from
+        # a custom PVC to the default one or vice versa
+        existing_config_needs_change = use_custom_logs_pvc != is_custom_pvc_in_use
+
+        # Enable or modify the config on the NooBaa CR if needed
+        if not gbl_is_set or existing_config_needs_change:
+            logs_manager.enable_bucket_logging_on_cr(
+                alt_logs_pvc.name if use_custom_logs_pvc else None
+            )
+            logs_manager.wait_for_logs_pvc_mount_status(mount_status_expected=True)
+
+        # Label the default noobaa PV with a custom label
+        # to allow ignoring false leftover errors
+        nonlocal default_pvc_labeled
+        if not is_custom_pvc_in_use and not default_pvc_labeled:
+            default_pvc = get_pvc_objs(
+                pvc_names=[constants.DEFAULT_MCG_BUCKET_LOGS_PVC]
+            )[0]
+            default_pvc.add_label(constants.CUSTOM_MCG_LABEL)
+            pv_ocp_obj.add_label(
+                resource_name=default_pvc.backed_pv, label=constants.CUSTOM_MCG_LABEL
+            )
+            default_pvc_labeled = True
+
+    def cleanup():
+        logs_manager.disable_bucket_logging_on_cr()
+        logs_manager.wait_for_logs_pvc_mount_status(mount_status_expected=False)
+
+    request.addfinalizer(cleanup)
+    return factory

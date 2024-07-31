@@ -50,69 +50,89 @@ class TestPvPool:
     Test pv pool related operations
     """
 
-    @pytest.mark.skip(
-        reason="Skipped because of https://github.com/red-hat-storage/ocs-ci/issues/3323"
-    )
     @pytest.mark.polarion_id("OCS-2332")
     @tier3
     def test_write_to_full_bucket(
         self, mcg_obj_session, awscli_pod_session, bucket_class_factory, bucket_factory
     ):
         """
-        Test to check the full capacity functionality of a pv based backing store.
+        Test to check the full capacity functionality of a pv-based backing store.
+        This test verifies that once a bucket reaches full capacity, the system
+        correctly reports the `NO_CAPACITY` status and prevents further uploads,
+        and also confirms the bucket’s functionality after deleting objects.
         """
+
+        # Define a bucketclass that uses PV-based backing stores.
         bucketclass_dict = {
-            "interface": "OC",
+            "interface": "OC",  # ObjectClient interface
             "backingstore_dict": {
                 "pv": [
                     (
-                        1,
-                        MIN_PV_BACKINGSTORE_SIZE_IN_GB,
-                        "ocs-storagecluster-ceph-rbd",
+                        1,  # Only one backing store
+                        MIN_PV_BACKINGSTORE_SIZE_IN_GB,  # Minimum size for the backing store in GB
+                        "ocs-storagecluster-ceph-rbd",  # Use the ceph-rbd storage class
                     )
                 ]
             },
         }
+
+        # Create a bucket using the above bucketclass
         bucket = bucket_factory(1, "OC", bucketclass=bucketclass_dict)[0]
 
+        # Loop to upload files and fill the bucket with data
         for i in range(1, 18):
-            # add some data to the first pod
+            # Generate a 1 GB random file inside the awscli pod
             awscli_pod_session.exec_cmd_on_pod(
                 "dd if=/dev/urandom of=/tmp/testfile bs=1M count=1000"
             )
             try:
+                # Upload the generated file to the bucket
                 awscli_pod_session.exec_s3_cmd_on_pod(
                     f"cp /tmp/testfile s3://{bucket.name}/testfile{i}", mcg_obj_session
                 )
-            except CommandFailed:
+            except CommandFailed as e:
+                # Check if the backing store reports `NO_CAPACITY` after the bucket is full
+                logger.error(e)
                 assert check_pv_backingstore_status(
-                    bucket.bucketclass.backingstores[0],
+                    bucket.bucketclass.backingstores[0].name,
                     config.ENV_DATA["cluster_namespace"],
                     "`NO_CAPACITY`",
                 ), "Failed to fill the bucket"
+            # Clean up the test file from the pod after the upload
             awscli_pod_session.exec_cmd_on_pod("rm -f /tmp/testfile")
+
+        # Verify that files can still be downloaded after reaching full capacity
         try:
+            # Download the first uploaded file from the bucket to the pod
             awscli_pod_session.exec_s3_cmd_on_pod(
                 f"cp s3://{bucket.name}/testfile1 /tmp/testfile", mcg_obj_session
             )
         except CommandFailed as e:
+            # Raise any errors during the download process
             raise e
+
+        # Test the removal and re-upload of a file after bucket reaches full capacity
         try:
+            # Remove the first file from the bucket
             awscli_pod_session.exec_s3_cmd_on_pod(
                 f"rm s3://{bucket.name}/testfile1", mcg_obj_session
             )
         except CommandFailed as e:
+            # Raise any errors during the removal process
             raise e
+
         try:
+            # Re-upload the file after removal to confirm capacity is freed up
             awscli_pod_session.exec_s3_cmd_on_pod(
                 f"cp /tmp/testfile s3://{bucket.name}/testfile1", mcg_obj_session
             )
         except CommandFailed:
+            # Verify that the backing store no longer reports `NO_CAPACITY`
             assert not check_pv_backingstore_status(
-                bucket.bucketclass.backingstores[0],
+                bucket.bucketclass.backingstores[0].name,
                 config.ENV_DATA["cluster_namespace"],
                 "`NO_CAPACITY`",
-            ), "Failed to re-upload the removed file file"
+            ), "Failed to re-upload the removed file"
 
     @pytest.mark.polarion_id("OCS-2333")
     @tier2
