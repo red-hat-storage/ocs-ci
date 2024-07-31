@@ -1149,11 +1149,12 @@ def get_nodes_from_active_zone(namespace):
     external_cluster_node_roles = config.EXTERNAL_MODE.get(
         "external_cluster_node_roles"
     )
+    zone = "zone-b" if zone == "b" else "zone-c"
     ceph_node_ips = []
     for ceph_node in external_cluster_node_roles:
         if (
             external_cluster_node_roles[ceph_node].get("location").get("datacenter")
-            != "zone-b"
+            != zone
         ):
             continue
         else:
