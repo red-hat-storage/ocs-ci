@@ -10,6 +10,7 @@ from ocs_ci.framework.testlib import (
     tier1,
     acceptance,
     skipif_ocp_version,
+    config,
 )
 from ocs_ci.ocs.resources import pvc
 from ocs_ci.ocs.resources import pod
@@ -314,11 +315,13 @@ class TestClone(ManageTest):
         ), f"File {file_name} does not exist"
         logger.info(f"File {file_name} exists in {self.pod_obj.name}")
 
+        cephfs_name = config.ENV_DATA.get("cephfs_name") or helpers.get_cephfs_name()
+
         # Checking out subvolumes before taking snapshot
         logger.info("Checking subvolumes before snapshots.")
         toolbox = pod.get_ceph_tools_pod()
         subvolumes_before_snapshot = toolbox.exec_ceph_cmd(
-            "ceph fs subvolume ls ocs-storagecluster-cephfilesystem --group_name csi"
+            f"ceph fs subvolume ls {cephfs_name} --group_name csi"
         )
         logger.info(f"Subvolumes before snapshots are:\n{subvolumes_before_snapshot}")
 
@@ -344,7 +347,7 @@ class TestClone(ManageTest):
         logger.info("Checking subvolumes before snapshots.")
         toolbox = pod.get_ceph_tools_pod()
         subvolumes_after_snapshot = toolbox.exec_ceph_cmd(
-            "ceph fs subvolume ls ocs-storagecluster-cephfilesystem --group_name csi"
+            f"ceph fs subvolume ls {cephfs_name} --group_name csi"
         )
         logger.info(f"Subvolumes before snapshots are:\n{subvolumes_after_snapshot}")
         assert (
@@ -447,11 +450,13 @@ class TestClone(ManageTest):
         ), f"File {file_name} does not exist"
         logger.info(f"File {file_name} exists in {self.pod_obj.name}")
 
+        cephfs_name = config.ENV_DATA.get("cephfs_name") or helpers.get_cephfs_name()
+
         # Checking out subvolumes before taking snapshot
         logger.info("Checking subvolumes before snapshots.")
         toolbox = pod.get_ceph_tools_pod()
         subvolumes_before_snapshot = toolbox.exec_ceph_cmd(
-            "ceph fs subvolume ls ocs-storagecluster-cephfilesystem --group_name csi"
+            f"ceph fs subvolume ls {cephfs_name} --group_name csi"
         )
         logger.info(f"Subvolumes before snapshots are:\n{subvolumes_before_snapshot}")
 
@@ -482,7 +487,7 @@ class TestClone(ManageTest):
         logger.info("Checking subvolumes after snapshots.")
         toolbox = pod.get_ceph_tools_pod()
         subvolumes_after_snapshot = toolbox.exec_ceph_cmd(
-            "ceph fs subvolume ls ocs-storagecluster-cephfilesystem --group_name csi"
+            f"ceph fs subvolume ls {cephfs_name} --group_name csi"
         )
         logger.info(f"Subvolumes after snapshots are:\n{subvolumes_after_snapshot}")
         assert (
@@ -532,7 +537,7 @@ class TestClone(ManageTest):
         logger.info("Checking subvolumes after PVC clone.")
         toolbox = pod.get_ceph_tools_pod()
         subvolumes_after_pvc_clone = toolbox.exec_ceph_cmd(
-            "ceph fs subvolume ls ocs-storagecluster-cephfilesystem --group_name csi"
+            f"ceph fs subvolume ls {cephfs_name} --group_name csi"
         )
         logger.info(f"Subvolumes after PVC clone are:\n{subvolumes_after_pvc_clone}")
         assert (
