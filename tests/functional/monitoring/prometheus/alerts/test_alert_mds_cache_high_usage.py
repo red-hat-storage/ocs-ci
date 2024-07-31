@@ -8,7 +8,7 @@ from concurrent.futures import ThreadPoolExecutor
 from ocs_ci.helpers import helpers
 from ocs_ci.ocs import cluster
 from ocs_ci.utility import prometheus
-from ocs_ci.framework.pytest_customization.marks import magenta_squad
+from ocs_ci.framework.pytest_customization.marks import blue_squad
 from ocs_ci.utility.utils import ceph_health_check_base
 from ocs_ci.ocs.node import (
     unschedule_nodes,
@@ -94,8 +94,9 @@ def active_mds_alert_values(threading_lock):
 
 
 @tier2
-@magenta_squad
+@blue_squad
 class TestMdsMemoryAlerts:
+    @pytest.mark.polarion_id("OCS-5570")
     def test_alert_triggered(self, run_metadata_io_with_cephfs, threading_lock):
         # This function verifies the mds cache alert triggered or not
         log.info(
@@ -105,6 +106,7 @@ class TestMdsMemoryAlerts:
         log.info("Validating the alert now")
         assert active_mds_alert_values(threading_lock)
 
+    @pytest.mark.polarion_id("OCS-5571")
     def test_mds_cache_alert_with_active_node_drain(
         self, run_metadata_io_with_cephfs, threading_lock
     ):
@@ -133,6 +135,7 @@ class TestMdsMemoryAlerts:
         time.sleep(600)
         assert active_mds_alert_values(threading_lock)
 
+    @pytest.mark.polarion_id("OCS-5577")
     def test_mds_cache_alert_with_active_node_scaledown(
         self, run_metadata_io_with_cephfs, threading_lock
     ):
@@ -155,6 +158,7 @@ class TestMdsMemoryAlerts:
         time.sleep(900)
         assert active_mds_alert_values(threading_lock)
 
+    @pytest.mark.polarion_id("OCS-5578")
     def test_mds_cache_alert_with_sr_node_scaledown(
         self, run_metadata_io_with_cephfs, threading_lock
     ):
@@ -175,6 +179,7 @@ class TestMdsMemoryAlerts:
         time.sleep(900)
         assert active_mds_alert_values(threading_lock)
 
+    @pytest.mark.polarion_id("OCS-5579")
     def test_mds_cache_alert_with_all_mds_node_scaledown(
         self, run_metadata_io_with_cephfs, threading_lock
     ):

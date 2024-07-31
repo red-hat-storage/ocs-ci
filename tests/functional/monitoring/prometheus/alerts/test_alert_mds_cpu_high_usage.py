@@ -8,7 +8,7 @@ from concurrent.futures import ThreadPoolExecutor
 from ocs_ci.helpers import helpers
 from ocs_ci.ocs import cluster
 from ocs_ci.utility import prometheus
-from ocs_ci.framework.pytest_customization.marks import magenta_squad
+from ocs_ci.framework.pytest_customization.marks import blue_squad
 from ocs_ci.utility.utils import ceph_health_check_base
 
 log = logging.getLogger(__name__)
@@ -90,8 +90,9 @@ def active_mds_alert_values(threading_lock):
 
 
 @tier2
-@magenta_squad
+@blue_squad
 class TestMdsCpuAlerts:
+    @pytest.mark.polarion_id("OCS-5581")
     def test_alert_triggered(self, run_file_creator_io_with_cephfs, threading_lock):
         log.info(
             "File creation IO started in the background."
