@@ -4,6 +4,7 @@ from copy import deepcopy
 from pkg_resources import parse_version
 from tempfile import NamedTemporaryFile
 import time
+import yaml
 
 from selenium.webdriver.common.by import By
 from ocs_ci.framework import config
@@ -312,6 +313,18 @@ class OCSUpgrade(object):
 
         return parsed_version_before_upgrade, parsed_upgrade_version
 
+    def store_pre_upgrade_ctx(self):
+        """
+        Store pre upgrade ctx values in config.upgrade_ctx
+
+        """
+        version_config_file = os.path.join(
+            constants.OCS_VERSION_CONF_DIR, f"ocs-{self.version_before_upgrade}.yaml"
+        )
+        buf = yaml.safe_load(version_config_file)
+
+
+
     def load_version_config_file(self, upgrade_version):
         """
         Loads config file to the ocs-ci config with upgrade version
@@ -333,6 +346,15 @@ class OCSUpgrade(object):
             version_config_file = os.path.join(
                 constants.OCS_VERSION_CONF_DIR, f"ocs-{upgrade_version}.yaml"
             )
+            if config.multicluster:
+                # In case of multicluster upgrade
+                # we need to preserve the old config values so that
+                # any following tests will not read overwritten values
+                # we want to do it only once and the first test which hits this function
+                # will have the responsibility to store the previous config values
+                # TODO: CHANGE THIS TO STORE THE CONTEXT IN THE RESPECTIVE
+                # CONFIG CLASS DURING INITIAL STAGES OF THE UPGRADE RUN
+                self.save_pre_upgrade_ctx(version_config_file)
             log.info(f"Reloading config file for OCS/ODF version: {upgrade_version}.")
             load_config_file(version_config_file)
         else:
