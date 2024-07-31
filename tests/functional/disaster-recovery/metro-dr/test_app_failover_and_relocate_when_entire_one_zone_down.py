@@ -83,7 +83,6 @@ class TestApplicationFailoverAndRelocateWhenZoneDown:
         self,
         nodes_multicluster,
         dr_workload,
-        node_restart_teardown,
     ):
 
         """
@@ -220,10 +219,10 @@ class TestApplicationFailoverAndRelocateWhenZoneDown:
                         failover_cluster=secondary_cluster_name,
                         namespace=wl.workload_namespace,
                         workload_type=wl.workload_type,
+                        switch_ctx=get_passive_acm_index(),
                         workload_placement_name=wl.appset_placement_name
                         if wl.workload_type != constants.SUBSCRIPTION
                         else None,
-                        switch_ctx=get_passive_acm_index(),
                     )
                 )
                 time.sleep(60)
@@ -325,10 +324,10 @@ class TestApplicationFailoverAndRelocateWhenZoneDown:
                         preferred_cluster=self.primary_cluster_name,
                         namespace=wl.workload_namespace,
                         workload_type=wl.workload_type,
+                        switch_ctx=get_passive_acm_index(),
                         workload_placement_name=wl.appset_placement_name
                         if wl.workload_type != constants.SUBSCRIPTION
                         else None,
-                        switch_ctx=get_passive_acm_index(),
                     )
                 )
                 time.sleep(60)
