@@ -18,7 +18,6 @@ from ocs_ci.framework.pytest_customization.marks import (
 from ocs_ci.framework.testlib import ManageTest
 from ocs_ci.ocs.ocp import OCP
 from ocs_ci.ocs.ui.page_objects.page_navigator import PageNavigator
-from ocs_ci.utility import version
 
 logger = logging.getLogger(__name__)
 
@@ -140,8 +139,7 @@ class TestErrorMessageImprovements(ManageTest):
         blocking_pool_tab.check_edit_labels(block_pool_obj.name)
 
         blocking_pool_tab.proceed_resource_creation()
-        if blocking_pool_tab.ocs_version_semantic >= version.VERSION_4_17:
-            blocking_pool_tab.do_click(blocking_pool_tab.bp_loc["pool_type_block"])
+
         blocking_pool_tab.check_error_messages()
 
     @bugzilla("2193109")
