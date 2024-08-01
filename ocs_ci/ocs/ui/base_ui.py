@@ -359,17 +359,21 @@ class BaseUI:
         if status != current_status:
             self.do_click(locator=locator)
 
-    def check_element_text(self, expected_text, element="*"):
+    def check_element_text(self, expected_text, element="*", take_screenshot=False):
         """
         Check if the text matches the expected text.
 
         Args:
             expected_text (string): The expected text.
+            element (str): element (default: *)
+            take_screenshot (bool): if screenshot should be taken
 
         return:
             bool: True if the text matches the expected text, False otherwise
 
         """
+        if take_screenshot:
+            self.take_screenshot()
         element_list = self.driver.find_elements_by_xpath(
             f"//{element}[contains(text(), '{expected_text}')]"
         )
