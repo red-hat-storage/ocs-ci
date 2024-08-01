@@ -3,7 +3,12 @@ import logging
 
 from uuid import uuid4
 from ocs_ci.ocs.resources.bucket_policy import NoobaaAccount
-from ocs_ci.ocs.bucket_utils import sts_assume_role, s3_create_bucket, s3_delete_bucket
+from ocs_ci.ocs.bucket_utils import (
+    sts_assume_role,
+    s3_create_bucket,
+    s3_delete_bucket,
+    s3_list_buckets,
+)
 from ocs_ci.ocs.exceptions import CommandFailed
 
 logger = logging.getLogger(__name__)
@@ -93,14 +98,14 @@ def new_bucket(request, mcg_obj_session):
     buckets_created = []
 
     def factory(bucket_name, s3_client=None):
+        s3_create_bucket(mcg_obj_session, bucket_name, s3_client)
+        logger.info(f"Created new-bucket {bucket_name}")
         bucket_obj = {
             "s3client": s3_client,
             "bucket": bucket_name,
             "mcg": mcg_obj_session,
         }
         buckets_created.append(bucket_obj)
-        s3_create_bucket(mcg_obj_session, bucket_name, s3_client)
-        logger.info(f"Created new-bucket {bucket_name}")
 
     def finalizer():
         """
@@ -108,6 +113,7 @@ def new_bucket(request, mcg_obj_session):
 
         """
         for bucket in buckets_created:
+            logger.info(f"Deleting bucket {bucket.get('bucket')}")
             s3_delete_bucket(
                 bucket.get("mcg"), bucket.get("bucket"), bucket.get("s3client")
             )
@@ -179,23 +185,29 @@ class TestSTSClient:
             if "AccessDenied" not in err.args[0]:
                 raise
             logger.info("Bucket creation failed as expected")
-        s3_delete_bucket(mcg_obj_session, bucket_1, mcg_obj_session.assumed_s3_client)
-        logger.info(f"Deleted bucket {bucket_1}")
+        # s3_delete_bucket(mcg_obj_session, bucket_1, mcg_obj_session.assumed_s3_client)
+        # logger.info(f"Deleted bucket {bucket_1}")
+        logger.info(s3_list_buckets(mcg_obj_session, mcg_obj_session.assumed_s3_client))
 
         # remove the role from the user
         mcg_obj_session.remove_sts_role(user_email)
         logger.info(f"Removed the assume role policy from the user {user_name}")
 
         # try to assume role after the assume role policy is removed
-        sts_assume_role(
+        creds_generated = sts_assume_role(
             awscli_pod_session,
             role_name,
             nb_user_access_key_id,
             mcg_obj=mcg_obj_session,
         )
+        mcg_obj_session.create_s3client_assumed_role(creds_generated)
+        logger.info(creds_generated)
 
+        import time
+
+        time.sleep(300)
         # perform io to validate the role assumption is no longer valid
-        s3_create_bucket(mcg_obj_session, bucket_1)
-        logger.info(f"Created bucket {bucket_1} again")
-        s3_delete_bucket(mcg_obj_session, bucket_1)
-        logger.info(f"Deleted bucket {bucket_1} again")
+        new_bucket(bucket_2, mcg_obj_session.assumed_s3_client)
+        logger.info(f"Created bucket {bucket_2} again")
+        # s3_delete_bucket(mcg_obj_session, bucket_1)
+        # logger.info(f"Deleted bucket {bucket_1} again")

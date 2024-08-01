@@ -2832,3 +2832,24 @@ def s3_delete_bucket(s3_obj, bucket_name, s3_client=None):
         return s3_client.delete_bucket(Bucket=bucket_name)
     else:
         return s3_obj.s3_client.delete_bucket(Bucket=bucket_name)
+
+
+def s3_list_buckets(s3_obj, s3_client=None):
+    """
+    AWS S3 list buckets
+
+    Args:
+        s3_obj (MCG): MCG object
+        s3_client (S3.Client): Any s3 client resource
+
+    Returns:
+        List of buckets
+
+    """
+
+    if s3_client:
+        response = s3_client.list_buckets()
+    else:
+        response = s3_obj.s3_client.list_buckets()
+
+    return [bucket["Name"] for bucket in response["Buckets"]]
