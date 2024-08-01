@@ -89,6 +89,18 @@ class DRPC(OCP):
             result=True
         ), f"Progression status is not expected current status {self.get_progression_status()} expected status {status}"
 
+    def get_last_group_sync_time(self):
+        """
+        Fetch lastGroupSyncTime from DRPC
+
+        Returns:
+            str: lastGroupSyncTime
+
+        """
+        last_group_sync_time = self.get().get("status").get("lastGroupSyncTime")
+        logger.info(f"Current lastGroupSyncTime is {last_group_sync_time}.")
+        return last_group_sync_time
+
 
 def get_drpc_name(namespace, switch_ctx=None):
     """
