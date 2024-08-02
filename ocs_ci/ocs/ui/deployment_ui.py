@@ -237,7 +237,7 @@ class DeploymentUI(PageNavigator):
             self.do_click(
                 locator=self.dep_loc["all_nodes_create_sc"], enable_screenshot=True
             )
-        if config.ENV_DATA.get("platform") in [
+        if config.ENV_DATA.get("platform") not in [
             constants.BAREMETAL_PLATFORM,
             constants.HCI_BAREMETAL,
         ]:

@@ -365,7 +365,7 @@ class BaseUI:
 
         Args:
             expected_text (string): The expected text.
-            element (str): element (default: *)
+            element (str): element
             take_screenshot (bool): if screenshot should be taken
 
         return:
