@@ -221,6 +221,7 @@ class TestAutomatedRecoveryFromFailedNodes(ManageTest):
 @tier4a
 @ipi_deployment_required
 @skipif_ibm_cloud
+@skipif_compact_mode
 class TestAutomatedRecoveryFromStoppedNodes(ManageTest):
 
     osd_worker_node = None
@@ -277,7 +278,8 @@ class TestAutomatedRecoveryFromStoppedNodes(ManageTest):
         argnames=["additional_node"],
         argvalues=[
             pytest.param(
-                True, marks=[(pytest.mark.polarion_id("OCS-2191")), skipif_compact_mode]
+                True,
+                marks=pytest.mark.polarion_id("OCS-2191"),
             ),
             pytest.param(False, marks=pytest.mark.polarion_id("OCS-2190")),
         ],
