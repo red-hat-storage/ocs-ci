@@ -268,6 +268,14 @@ deployment_4_16 = {
     ),
 }
 
+deployment_4_17 = {
+    "osd_size_dropdown": (
+        "//*[@class='pf-v5-c-select dropdown--full-width'] | "
+        "//*[@class='pf-c-select dropdown--full-width']",
+        By.XPATH,
+    ),
+}
+
 generic_locators = {
     "project_selector": (
         "//span[@class='pf-c-menu-toggle__text' and contains(text(), 'Project:')] | "
@@ -370,6 +378,9 @@ generic_locators = {
     "developer_selected": ("//h2[.='Developer']", By.XPATH),
     "administrator_selected": ("//h2[.='Administrator']", By.XPATH),
     "blockpool_name": ("//a[text()='{}']", By.XPATH),
+    "openshift-operators": (
+        "//a[@data-test-operator-row='ODF Multicluster Orchestrator']"
+    ),
 }
 
 ocs_operator_locators = {
@@ -1890,6 +1901,7 @@ locators = {
             **deployment_4_12,
             **deployment_4_15,
             **deployment_4_16,
+            **deployment_4_17,
         },
         "obc": obc,
         "pvc": {
