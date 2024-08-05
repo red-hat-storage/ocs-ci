@@ -284,7 +284,7 @@ def backingstore_factory(request, cld_mgr, mcg_obj, cloud_uls_factory):
         },
     }
 
-    def _create_backingstore(method, uls_dict, timeout=None):
+    def _create_backingstore(method, uls_dict, timeout=600):
         """
         Tracks creation and cleanup of all the backing stores that were created in the scope
 
