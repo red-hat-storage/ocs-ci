@@ -224,7 +224,7 @@ class ODFAndNativeStorageClientDeploymentOnProvider(object):
                     "replica"
                 ] = no_of_worker_nodes
 
-                if self.platform == constants.BAREMETAL_PLATFORM:
+                if self.platform in constants.HCI_PROVIDER_CLIENT_PLATFORMS:
                     storage_cluster_data["spec"]["storageDeviceSets"][0][
                         "count"
                     ] = number_of_disks_available
@@ -246,7 +246,7 @@ class ODFAndNativeStorageClientDeploymentOnProvider(object):
                     "replica"
                 ] = no_of_worker_nodes
 
-                if self.platform == constants.BAREMETAL_PLATFORM:
+                if self.platform in constants.HCI_PROVIDER_CLIENT_PLATFORMS:
                     storage_cluster_data["spec"]["storageDeviceSets"][0][
                         "count"
                     ] = number_of_disks_available

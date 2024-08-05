@@ -1260,7 +1260,7 @@ def disks_available_to_cleanup(worker, namespace=constants.DEFAULT_NAMESPACE):
         namespace (str): namespace where the oc_debug command will be executed
 
     Returns:
-        disk_names_available_for_cleanup (int): No of disks avoid to cleanup on a node
+        disk_names_available_for_cleanup (list): The disk names available for cleanup on a node
 
     """
     ocp_obj = ocp.OCP()
@@ -1302,9 +1302,6 @@ def clean_disk(worker, namespace=constants.DEFAULT_NAMESPACE):
     Args:
         worker (object): worker node object
         namespace (str): namespace where the oc_debug command will be executed
-
-    Returns:
-        disks_cleaned (int): No of disks cleaned on a node
 
     """
     ocp_obj = ocp.OCP()
