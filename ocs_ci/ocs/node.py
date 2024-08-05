@@ -3002,6 +3002,7 @@ def get_node_by_internal_ip(internal_ip):
 
     return None
 
+
 def get_worker_node_where_ceph_toolbox_not_running():
     log.info(
         "Testing cephtoolbox pod with nodeaffinity in the openshift-storage namespace."
@@ -3026,8 +3027,8 @@ def apply_node_affinity_for_ceph_toolbox(node_name):
         node_name = node name which need to be added in the node affinity
 
     Returns:
-        True: if node affinity applied successfully .
-        False: if node affinity fails
+        bool: return True --> if node affinity applied successfully .
+        bool: return False --> if node affinity fails.
     """
     resource_name = constants.DEFAULT_CLUSTERNAME
     if config.DEPLOYMENT["external_mode"]:
