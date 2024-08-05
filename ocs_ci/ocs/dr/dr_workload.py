@@ -1165,17 +1165,14 @@ class Busybox_DiscoveredApps(DRWorkload):
         """
         Create DRPC for discovered Apps
 
-
         """
         drpc_yaml_data = templating.load_yaml(self.drpc_yaml_file)
         drpc_yaml_data["spec"].setdefault("kubeObjectProtection", {})
-        # drpc_yaml_data["spec"]["kubeObjectProtection"].setdefault("captureInterval", {})
         drpc_yaml_data["spec"]["kubeObjectProtection"].setdefault("kubeObjectSelector")
         drpc_yaml_data["spec"].setdefault("protectedNamespaces", []).append(
             self.workload_namespace
         )
         del drpc_yaml_data["spec"]["pvcSelector"]["matchLabels"]
-        # drpc_yaml_data["spec"]["pvcSelector"].setdefault("matchExpressions", [])
 
         log.info(self.discovered_apps_pvc_selector_key)
         drpc_yaml_data["metadata"]["name"] = self.discovered_apps_placement_name
