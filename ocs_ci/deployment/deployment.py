@@ -148,6 +148,7 @@ from ocs_ci.utility.vsphere_nodes import update_ntp_compute_nodes
 from ocs_ci.helpers import helpers
 from ocs_ci.helpers.helpers import (
     set_configmap_log_level_rook_ceph_operator,
+    update_volsync_channel,
 )
 from ocs_ci.ocs.ui.helpers_ui import ui_deployment_conditions
 from ocs_ci.utility.utils import get_az_count
@@ -3403,15 +3404,27 @@ class RDRMultiClusterDROperatorsDeploy(MultiClusterDROperatorsDeploy):
         RDR specific steps for deploy
         """
         # current CTX: ACM
+        logger.info("A100+")
         acm_indexes = get_all_acm_indexes()
+        logger.info("A110+")
         config.switch_acm_ctx()
+        logger.info("A40+")
         super().deploy()
+        logger.info("A42+")
         # RBD specific dr deployment
+        logger.info("A43+")
         if self.rbd:
+            logger.info("A44+")
             rbddops = RBDDRDeployOps()
+            logger.info("A45+")
             self.configure_mirror_peer()
+            logger.info("A46+")
             rbddops.deploy()
+            logger.info("A47+")
         self.deploy_dr_policy()
+        logger.info("A48+")
+        update_volsync_channel()
+        logger.info("A49+")
 
         # Enable cluster backup on both ACMs
         for i in acm_indexes:
@@ -3465,6 +3478,7 @@ class MDRMultiClusterDROperatorsDeploy(MultiClusterDROperatorsDeploy):
         self.configure_mirror_peer()
         # Deploy dr policy
         self.deploy_dr_policy()
+        update_volsync_channel()
         # Configure DRClusters for fencing automation
         configure_drcluster_for_fencing()
 
