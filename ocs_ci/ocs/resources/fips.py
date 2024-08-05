@@ -10,17 +10,19 @@ def check_fips_enabled(fips_location=constants.FIPS_LOCATION):
     """
     Checks if FIPS is activated on all pods
 
-        Args:
-            fips_location: File that refers to fips, written 1 if enabled,
-                0 otherwise
-        Raises:
-            FipsNotInstalledException:
-                If the value of fips location file does not include 1
-                    in all pods within the given namespace.
+    Args:
+        fips_location: File that refers to fips, written 1 if enabled,
+            0 otherwise
+    Raises:
+        FipsNotInstalledException:
+            If the value of fips location file does not include 1
+                in all pods within the given namespace.
 
     """
-
-    running_pods_object = pod.get_running_state_pods()
+    # ignore rook-ceph-detect-version pods
+    running_pods_object = pod.get_running_state_pods(
+        ignore_selector=["rook-ceph-detect-version"]
+    )
     for running_pod in running_pods_object:
         fips_value = running_pod.exec_sh_cmd_on_pod(f"cat {fips_location}")
         if str(fips_value).strip() != "1":
