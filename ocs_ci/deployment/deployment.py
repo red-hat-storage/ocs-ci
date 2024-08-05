@@ -3453,7 +3453,8 @@ class RDRMultiClusterDROperatorsDeploy(MultiClusterDROperatorsDeploy):
     def check_observability_status(self):
         """
         Check observability status
-        Returns (bool): True or False
+
+        raises ACMObservabilityNotEnabled: if the cmd returns False, ACM observability is not enabled
 
         """
 
