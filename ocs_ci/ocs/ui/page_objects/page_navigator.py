@@ -207,6 +207,19 @@ class PageNavigator(BaseUI):
         logger.info("Enter the OCS operator page")
         self.do_click(self.generic_locators["ocs_operator"], enable_screenshot=False)
 
+    def navigate_to_mco_operator_page(self):
+        """
+        Navigate to the ODF Multicluster Orchestrator Operator page
+
+        """
+        self.navigate_installed_operators_page()
+        logger.info("Select 'ODF Multicluster Orchestrator' project")
+        self.select_namespace("openshift-operators")
+        logger.info("Enter the MCO operator page")
+        self.do_click(
+            self.generic_locators["openshift-operators"], enable_screenshot=False
+        )
+
     def navigate_persistentvolumes_page(self):
         """
         Navigate to Persistent Volumes Page

@@ -12,6 +12,7 @@ from ocs_ci.ocs.ui.helpers_ui import format_locator
 from ocs_ci.utility.utils import get_ocp_version
 from ocs_ci.ocs.utils import get_non_acm_cluster_config
 from ocs_ci.utility import version
+from ocs_ci.ocs.ui.page_objects.page_navigator import PageNavigator
 
 log = logging.getLogger(__name__)
 
@@ -396,3 +397,14 @@ def verify_failover_relocate_status_ui(
         log.info("Close button found")
         acm_obj.do_click_by_xpath("//*[text()='Close']")
         log.info("Data policy modal page closed")
+
+
+def verify_mco_console_plugin():
+    """
+    Function to verify MCO console plugin is enabled, otherwise enable it
+
+    """
+    page_nav_obj = PageNavigator()
+    ocp_version = get_ocp_version()
+    _ = locators[ocp_version]["acm_page"]
+    page_nav_obj.navigate_OCP_home_page()
