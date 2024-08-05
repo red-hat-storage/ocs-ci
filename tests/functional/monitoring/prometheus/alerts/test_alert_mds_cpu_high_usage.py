@@ -92,12 +92,16 @@ def active_mds_alert_values(threading_lock):
 @tier2
 @blue_squad
 class TestMdsCpuAlerts:
+    alert_timer = 900  # sleep time to generate the alert 15 minutes
+
     @pytest.mark.polarion_id("OCS-5581")
-    def test_alert_triggered(self, run_file_creator_io_with_cephfs, threading_lock):
+    def test_alert_triggered(
+        self, run_file_creator_io_with_cephfs, threading_lock, alert_timer
+    ):
         log.info(
             "File creation IO started in the background."
             " Script will sleep for 15 minutes before validating the MDS alert"
         )
-        time.sleep(900)
+        time.sleep(alert_timer)
         log.info("Validating the alert now")
         assert active_mds_alert_values(threading_lock)
