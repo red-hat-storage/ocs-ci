@@ -52,7 +52,6 @@ def run_metadata_io_with_cephfs(pvc_factory, dc_pod_factory):
         # Run meta_data_io.py on fedora pod
         log.info("Running meta data IO on fedora pod ")
         metaio_executor = ThreadPoolExecutor(max_workers=1)
-        # self.metaio_thread = metaio_executor.submit(
         metaio_executor.submit(
             pod_obj.exec_sh_cmd_on_pod, command="python3 meta_data_io.py"
         )
@@ -96,51 +95,56 @@ def active_mds_alert_values(threading_lock):
 @tier2
 @blue_squad
 class TestMdsMemoryAlerts:
+    alert_timer = 900  # sleep time to generate the alert 15 minutes
+    scale_timer = 100  # sleep time to wait after running scale down
+
     @pytest.mark.polarion_id("OCS-5570")
-    def test_alert_triggered(self, run_metadata_io_with_cephfs, threading_lock):
+    def test_alert_triggered(
+        self, run_metadata_io_with_cephfs, threading_lock, alert_timer
+    ):
         # This function verifies the mds cache alert triggered or not
         log.info(
             "Metadata IO started in the background. Script will sleep for 15 minutes before validating the MDS alert"
         )
-        time.sleep(900)
+        time.sleep(alert_timer)
         log.info("Validating the alert now")
         assert active_mds_alert_values(threading_lock)
 
     @pytest.mark.polarion_id("OCS-5571")
     def test_mds_cache_alert_with_active_node_drain(
-        self, run_metadata_io_with_cephfs, threading_lock
+        self, run_metadata_io_with_cephfs, threading_lock, alert_timer
     ):
         # This function verifies the mds cache alert with active mds running node drain
         log.info(
             "Metadata IO started in the background. Lets wait for 15 minutes before validating the MDS alert"
         )
-        time.sleep(900)
+        time.sleep(alert_timer)
         log.info("Validating the alert now")
         assert active_mds_alert_values(threading_lock)
 
         node_name = cluster.get_active_mds_info()["node_name"]
-
         # Unschedule active mds running node.
         unschedule_nodes([node_name])
         log.info(f"node {node_name} unscheduled successfully")
-
         # Drain node operation
         drain_nodes([node_name])
         log.info(f"node {node_name} drained successfully")
-
         # Make the node schedule-able
         schedule_nodes([node_name])
         log.info(f"Scheduled the node {node_name}")
-        log.info("Script will sleep for 10 minutes before validating the alert")
-        time.sleep(600)
+        log.info("Script will sleep for 15 minutes before validating the alert")
+        time.sleep(alert_timer)
         assert active_mds_alert_values(threading_lock)
 
     @pytest.mark.polarion_id("OCS-5577")
     def test_mds_cache_alert_with_active_node_scaledown(
-        self, run_metadata_io_with_cephfs, threading_lock
+        self, run_metadata_io_with_cephfs, threading_lock, alert_timer, scale_timer
     ):
         # This function verifies the mds cache alert with active mds scale down and up
-        time.sleep(900)
+        log.info(
+            "Metadata IO started in the background. Script will sleep for 15 minutes before validating the MDS alert"
+        )
+        time.sleep(alert_timer)
         assert active_mds_alert_values(threading_lock)
 
         active_mds = cluster.get_active_mds_info()["mds_daemon"]
@@ -149,21 +153,29 @@ class TestMdsMemoryAlerts:
         helpers.modify_deployment_replica_count(
             deployment_name=deployment_name, replica_count=0
         )
-        time.sleep(100)
+        log.info(
+            " Script will be in sleep for 100 seconds to make sure active mds scale down completed."
+        )
+        time.sleep(scale_timer)
         log.info(f"Scale up {deployment_name} to 1")
         helpers.modify_deployment_replica_count(
             deployment_name=deployment_name, replica_count=1
         )
-
-        time.sleep(900)
+        log.info(
+            "Metadata IO started in the background. Script will sleep for 15 minutes before validating the MDS alert"
+        )
+        time.sleep(alert_timer)
         assert active_mds_alert_values(threading_lock)
 
     @pytest.mark.polarion_id("OCS-5578")
     def test_mds_cache_alert_with_sr_node_scaledown(
-        self, run_metadata_io_with_cephfs, threading_lock
+        self, run_metadata_io_with_cephfs, threading_lock, alert_timer, scale_timer
     ):
         # This function verifies the mds cache alert with standby-replay mds scale down and up
-        time.sleep(900)
+        log.info(
+            "Metadata IO started in the background. Script will sleep for 15 minutes before validating the MDS alert"
+        )
+        time.sleep(alert_timer)
         assert active_mds_alert_values(threading_lock)
 
         sr_mds = cluster.get_mds_standby_replay_info()["mds_daemon"]
@@ -171,25 +183,32 @@ class TestMdsMemoryAlerts:
         helpers.modify_deployment_replica_count(
             deployment_name=deployment_name, replica_count=0
         )
-        time.sleep(100)
+        log.info(
+            " Script will be in sleep for 100 seconds to make sure standby-replay mds scale down completed."
+        )
+        time.sleep(scale_timer)
         helpers.modify_deployment_replica_count(
             deployment_name=deployment_name, replica_count=1
         )
-
-        time.sleep(900)
+        log.info(
+            "Metadata IO started in the background. Script will sleep for 15 minutes before validating the MDS alert"
+        )
+        time.sleep(alert_timer)
         assert active_mds_alert_values(threading_lock)
 
     @pytest.mark.polarion_id("OCS-5579")
     def test_mds_cache_alert_with_all_mds_node_scaledown(
-        self, run_metadata_io_with_cephfs, threading_lock
+        self, run_metadata_io_with_cephfs, threading_lock, alert_timer, scale_timer
     ):
         # This function verifies the mds cache alert with both active and standby-replay mds scale down and up
-        time.sleep(900)
+        log.info(
+            "Metadata IO started in the background. Script will sleep for 15 minutes before validating the MDS alert"
+        )
+        time.sleep(alert_timer)
         assert active_mds_alert_values(threading_lock)
 
         active_mds = cluster.get_active_mds_info()["mds_daemon"]
         sr_mds = cluster.get_mds_standby_replay_info()["mds_daemon"]
-
         active_mds_dc = "rook-ceph-mds-" + active_mds
         log.info(f"Scale down {active_mds_dc} to 0")
         helpers.modify_deployment_replica_count(
@@ -200,12 +219,16 @@ class TestMdsMemoryAlerts:
         helpers.modify_deployment_replica_count(
             deployment_name=sr_mds_dc, replica_count=0
         )
-        time.sleep(100)
-
+        log.info(
+            " Script will be in sleep for 100 seconds to make sure both mds scale down completed."
+        )
+        time.sleep(scale_timer)
         mds = [active_mds_dc, sr_mds_dc]
         for i in mds:
             log.info(f"Scale up {i} to 1")
             helpers.modify_deployment_replica_count(deployment_name=i, replica_count=1)
-
-        time.sleep(900)
+        log.info(
+            "Metadata IO started in the background. Script will sleep for 15 minutes before validating the MDS alert"
+        )
+        time.sleep(alert_timer)
         assert active_mds_alert_values(threading_lock)
