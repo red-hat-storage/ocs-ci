@@ -2889,7 +2889,9 @@ class MultiClusterDROperatorsDeploy(object):
         # on all participating clusters except HUB
         # We will switch config ctx to Participating clusters
         for cluster in config.clusters:
-            if cluster.MULTICLUSTER["multicluster_index"] in get_all_acm_indexes():
+            if cluster.MULTICLUSTER[
+                "multicluster_index"
+            ] in get_all_acm_indexes() or cluster.MULTICLUSTER.get("recovery_cluster"):
                 continue
             else:
                 config.switch_ctx(cluster.MULTICLUSTER["multicluster_index"])
