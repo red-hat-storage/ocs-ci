@@ -139,7 +139,7 @@ class TestErrorMessageImprovements(ManageTest):
         blocking_pool_tab.check_edit_labels(block_pool_obj.name)
 
         blocking_pool_tab.proceed_resource_creation()
-        blocking_pool_tab.do_click(blocking_pool_tab.bp_loc["pool_type_block"])
+
         blocking_pool_tab.check_error_messages()
 
     @bugzilla("2193109")
