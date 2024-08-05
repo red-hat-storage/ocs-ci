@@ -2171,15 +2171,26 @@ def check_pods_in_running_state(
     return ret_val
 
 
-def get_running_state_pods(namespace=config.ENV_DATA["cluster_namespace"]):
+def get_running_state_pods(
+    namespace=config.ENV_DATA["cluster_namespace"], ignore_selector=None
+):
     """
     Checks the running state pods in a given namespace.
 
-        Returns:
-            List: all the pod objects that are in running state only
+    Args:
+        namespace (str): Cluster namespace where pods are running
+        ignore_selector (list): List of pod selectors to ignore ( eg: ["rook-ceph-mgr", "rook-ceph-detect-version"] )
+
+    Returns:
+        List: all the pod objects that are in running state only
 
     """
-    list_of_pods = get_all_pods(namespace)
+    if ignore_selector:
+        list_of_pods = get_all_pods(
+            namespace, selector=ignore_selector, exclude_selector=True
+        )
+    else:
+        list_of_pods = get_all_pods(namespace)
     ocp_pod_obj = OCP(kind=constants.POD, namespace=namespace)
     running_pods_object = list()
     for pod in list_of_pods:
