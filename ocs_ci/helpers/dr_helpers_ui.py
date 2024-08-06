@@ -408,3 +408,4 @@ def verify_mco_console_plugin():
     ocp_version = get_ocp_version()
     _ = locators[ocp_version]["acm_page"]
     page_nav_obj.navigate_OCP_home_page()
+    page_nav_obj.navigate_to_mco_operator_page()
