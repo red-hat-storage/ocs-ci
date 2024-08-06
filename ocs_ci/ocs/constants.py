@@ -2760,6 +2760,13 @@ DRPC_PATH = os.path.join(TEMPLATE_DIR, "DR", "drpc.yaml")
 CLUSTERROLEBINDING_APPSET_PULLMODEL_PATH = os.path.join(
     TEMPLATE_DIR, "DR", "clusterrolebinding_appset_pullmodel.yaml"
 )
+THANOS_PATH = os.path.join(TEMPLATE_DIR, "DR", "thanos.yaml")
+MULTICLUSTEROBSERVABILITY_PATH = os.path.join(
+    TEMPLATE_DIR, "DR", "multiclusterobservability.yaml"
+)
+OBSERVABILITYMETRICSCONFIGMAP_PATH = os.path.join(
+    TEMPLATE_DIR, "DR", "observability-metrics-configmap.yaml"
+)
 APPLICATION_SET = "ApplicationSet"
 PLACEMENT = "Placement"
 GITOPS_CLUSTER_NAMESPACE = "openshift-gitops"

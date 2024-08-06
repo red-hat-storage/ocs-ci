@@ -1,0 +1,27 @@
+# This config file is allow data to reflect on the DR monitoring dashboard
+# by whitelisting ceph_rbd_* metrics
+# Additionally we whitelist a few odf_* metrics but those are optional.
+
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: mp-custom-allowlist
+  namespace: open-cluster-management-observability
+data:
+  metrics_list.yaml: |
+    names:
+      - odf_system_health_status
+      - odf_system_map
+      - odf_system_raw_capacity_total_bytes
+      - odf_system_raw_capacity_used_bytes
+      - ceph_rbd_mirror_snapshot_sync_bytes
+      - ceph_rbd_mirror_snapshot_snapshots
+      - ceph_rbd_mirror_snapshot_sync_time_sum
+    matches:
+      - __name__="csv_succeeded",exported_namespace="openshift-storage",name=~"odf-operator.*"
+      - __name__="csv_succeeded",exported_namespace="openshift-dr-system",name=~"odr-cluster-operator.*"
+      - __name__="csv_succeeded",exported_namespace="openshift-operators",name=~"volsync.*"
+    recording_rules:
+      - record: count_persistentvolumeclaim_total
+        expr: count(kube_persistentvolumeclaim_info)
