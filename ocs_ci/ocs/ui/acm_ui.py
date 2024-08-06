@@ -125,6 +125,7 @@ class AcmPageNavigator(BaseUI):
             enable_screenshot=True,
         )
 
+    @retry(TimeoutException, tries=5, delay=80, backoff=2)
     def navigate_applications_page(self):
         """
         Navigate to ACM Applications Page
@@ -187,6 +188,49 @@ class AcmPageNavigator(BaseUI):
             log.error(
                 "Couldn't navigate to Disaster recovery Overview page under 'Data Services' on ACM console"
             )
+            raise NoSuchElementException
+
+    def navigate_disaster_recovery(self):
+        """
+        Navigate to Disaster recovery page on ACM UI
+
+        """
+        log.info("Navigate to Disaster recovery page on ACM console")
+        find_element = self.wait_until_expected_text_is_found(
+            locator=self.acm_page_nav["data-services"],
+            expected_text="Data Services",
+            timeout=240,
+        )
+        if find_element:
+            self.do_click(
+                locator=self.acm_page_nav["data-services"],
+                timeout=160,
+                avoid_stale=True,
+            )
+            disaster_recovery = self.wait_until_expected_text_is_found(
+                locator=self.acm_page_nav["disaster-recovery"],
+                expected_text="Disaster recovery",
+                timeout=240,
+            )
+            if disaster_recovery:
+                self.do_click(
+                    locator=self.acm_page_nav["disaster-recovery"],
+                    enable_screenshot=True,
+                    avoid_stale=True,
+                )
+            policies = self.wait_until_expected_text_is_found(
+                locator=self.acm_page_nav["policies"],
+                expected_text="Policies",
+                timeout=240,
+            )
+            if policies:
+                self.do_click(
+                    locator=self.acm_page_nav["policies"],
+                    enable_screenshot=True,
+                    avoid_stale=True,
+                )
+        else:
+            log.error("Couldn't navigate to disaster recovery page on ACM UI")
             raise NoSuchElementException
 
     def navigate_from_ocp_to_acm_cluster_page(self):

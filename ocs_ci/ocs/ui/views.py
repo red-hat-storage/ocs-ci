@@ -1027,11 +1027,9 @@ acm_configuration_4_12 = {
     "failover-app": ("//button[normalize-space()='Failover application']", By.XPATH),
     "relocate-app": ("//button[normalize-space()='Relocate application']", By.XPATH),
     "delete-app": ("//button[normalize-space()='Delete application']", By.XPATH),
-    # "remove-app-resources": (
-    #     "//button[@type='checkbox'][@class='pf-c-check__input'][@id='remove-app-resources']", By.XPATH
-    # ),
-    "remove-app-resources": ("@id='remove-app-resources'", By.ID),
+    "remove-app-resources": (".//*[@id='remove-app-resources']", By.XPATH),
     "delete": ("//button[@type='button'][@class='pf-c-button pf-m-danger']", By.XPATH),
+    "no-results-found": ("//*[text()='No results found']", By.XPATH),
     "policy-dropdown": ("#drPolicy-selection", By.CSS_SELECTOR),
     "select-policy": ('//*[text()="{}"]', By.XPATH),
     "target-cluster-dropdown": (
@@ -1139,6 +1137,8 @@ acm_configuration_4_16 = {
         "(//span[@class='pf-v5-c-menu__item-text'][normalize-space()='busybox-1'])[2]",
         By.XPATH,
     ),
+    "disaster-recovery": ("Disaster recovery", By.LINK_TEXT),
+    "policies": ("//a[normalize-space()='Policies']", By.XPATH),
 }
 
 add_capacity = {

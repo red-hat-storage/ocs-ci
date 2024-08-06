@@ -11,9 +11,8 @@ import yaml
 from subprocess import TimeoutExpired
 
 from ocs_ci.framework import config
-from ocs_ci.helpers import dr_helpers
-from ocs_ci.helpers.cnv_helpers import create_vm_secret, cal_md5sum_vm
 from ocs_ci.helpers import dr_helpers, helpers
+from ocs_ci.helpers.cnv_helpers import create_vm_secret, cal_md5sum_vm
 from ocs_ci.helpers.helpers import (
     create_project,
     create_unique_resource_name,
@@ -71,6 +70,7 @@ class BusyBox(DRWorkload):
 
         self.workload_type = kwargs.get("workload_type", constants.SUBSCRIPTION)
         self.workload_namespace = kwargs.get("workload_namespace", None)
+        self.app_name = kwargs.get("app_name", None)
         self.workload_pod_count = kwargs.get("workload_pod_count")
         self.workload_pvc_count = kwargs.get("workload_pvc_count")
         self.dr_policy_name = kwargs.get(
@@ -313,6 +313,9 @@ class BusyBox(DRWorkload):
             app_yaml_data["metadata"]["name"] = helpers.create_unique_resource_name(
                 resource_type="app", resource_description="busybox"
             )
+            templating.dump_data_to_temp_yaml(app_yaml_data, self.app_yaml_file)
+
+            self.app_name = app_yaml_data["metadata"]["name"]
 
             # load workload kustomization.yaml
             workload_kustomization_yaml_data = templating.load_yaml(

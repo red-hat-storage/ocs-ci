@@ -6752,22 +6752,13 @@ def dr_workloads_on_managed_clusters(request):
         return primary_cluster_instances, secondary_cluster_instances
 
     def teardown():
-        failed_to_delete = False
         acm_obj = AcmAddClusters()
         instances = [primary_cluster_instances, secondary_cluster_instances]
         for instance in instances:
             for workload in instance:
-                try:
-                    dr_helpers_ui.delete_application_ui(
-                        acm_obj, workload_to_delete=workload.workload_namespace
-                    )
-                except ResourceNotDeleted:
-                    failed_to_delete = True
-
-        if failed_to_delete:
-            raise ResourceNotDeleted(
-                "Workload deletion was unsuccessful. Leftover resources were removed from the managed clusters."
-            )
+                dr_helpers_ui.delete_application_ui(
+                    acm_obj, workload_to_delete=workload.app_name
+                )
 
     request.addfinalizer(teardown)
     return factory

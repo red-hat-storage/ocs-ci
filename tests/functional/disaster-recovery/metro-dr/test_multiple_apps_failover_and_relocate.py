@@ -7,6 +7,7 @@ from ocs_ci.framework import config
 from ocs_ci.ocs.acm.acm import AcmAddClusters
 from ocs_ci.ocs import constants
 from ocs_ci.helpers.dr_helpers import (
+    failover,
     enable_fence,
     enable_unfence,
     get_fence_state,
@@ -34,18 +35,19 @@ class TestMultipleApplicationFailoverAndRelocate:
     """
 
     @pytest.fixture(autouse=True)
-    def teardown(self, request, dr_workload):
+    def teardown(self, request, dr_workloads_on_managed_clusters):
         """
         If fenced, unfence the cluster and reboot nodes
         """
 
         def finalizer():
+
             if (
-                self.primary_cluster_name
+                self.primary_cluster_name is not None
                 and get_fence_state(self.primary_cluster_name) == "Fenced"
             ):
                 enable_unfence(self.primary_cluster_name)
-                gracefully_reboot_ocp_nodes(self.namespace, self.primary_cluster_name)
+                gracefully_reboot_ocp_nodes(self.primary_cluster_name)
 
         request.addfinalizer(finalizer)
 
@@ -63,11 +65,13 @@ class TestMultipleApplicationFailoverAndRelocate:
         nodes_multicluster,
         dr_workloads_on_managed_clusters,
         workload_type,
+        node_restart_teardown,
     ):
         """
         Tests to failover and relocate of applications from both the managed clusters
 
         """
+        acm_obj = AcmAddClusters()
         self.workload_namespaces = []
         if config.RUN.get("mdr_failover_via_ui"):
             ocs_version = version.get_semantic_ocs_version_from_config()
@@ -83,7 +87,7 @@ class TestMultipleApplicationFailoverAndRelocate:
 
         if workload_type == constants.SUBSCRIPTION:
             primary_instances, secondary_instances = dr_workloads_on_managed_clusters(
-                num_of_subscription=1, primary_cluster=True, secondary_cluster=True
+                num_of_subscription=2, primary_cluster=True, secondary_cluster=True
             )
 
         # Set Primary managed cluster
@@ -94,17 +98,12 @@ class TestMultipleApplicationFailoverAndRelocate:
             namespace=primary_instances[0].workload_namespace,
             workload_type=workload_type,
         )
-        logger.info(f"The primary cluster is {self.primary_cluster_name}")
 
         # Set secondary managed cluster
         secondary_cluster_name = get_current_secondary_cluster_name(
             namespace=primary_instances[0].workload_namespace,
             workload_type=workload_type,
         )
-        logger.info(f"The secondary cluster is {secondary_cluster_name}")
-
-        logger.info(f"Primary instances {primary_instances}")
-        logger.info(f"Secondary instances {secondary_instances}")
 
         # Fence the primary managed cluster
         enable_fence(drcluster_name=self.primary_cluster_name)
@@ -121,9 +120,15 @@ class TestMultipleApplicationFailoverAndRelocate:
                 )
                 failover_relocate_ui(
                     acm_obj,
-                    workload_to_move=f"{instance.workload_namespace}-1",
+                    workload_to_move=f"{instance.app_name}-1",
                     policy_name=instance.dr_policy_name,
                     failover_or_preferred_cluster=secondary_cluster_name,
+                )
+            else:
+                failover(
+                    failover_cluster=secondary_cluster_name,
+                    namespace=f"{instance.workload_namespace}",
+                    workload_type=workload_type,
                 )
 
         # Verify application are running in other managedcluster
@@ -144,3 +149,4 @@ class TestMultipleApplicationFailoverAndRelocate:
             verify_failover_relocate_status_ui(acm_obj)
 
         # TODO Relocate of sub apps
+        # TODO Failover of apps from c2 to c1
