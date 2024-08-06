@@ -3004,6 +3004,13 @@ def get_node_by_internal_ip(internal_ip):
 
 
 def get_worker_node_where_ceph_toolbox_not_running():
+    """
+    This function get a list of all worker nodes
+    and compare each worker node name with the node name of ceph tool box running.
+
+    Returns:
+        List of worker nodes other than the node where ceph tool box is already running.
+    """
     log.info(
         "Testing cephtoolbox pod with nodeaffinity in the openshift-storage namespace."
     )
@@ -3051,7 +3058,7 @@ def apply_node_affinity_for_ceph_toolbox(node_name):
         f"Successfully applied node affinity for ceph toolbox pod with {node_name}"
     )
 
-    ct_new_pod = pod.get_ceph_tools_pod()
+    ct_new_pod = pod.get_ceph_tools_pod(skip_creating_pod=True)
     # Identify on which node the ceph toolbox is running after failover due to nodeaffinity
     ct_new_pod_running_node_name = ct_new_pod.data["spec"].get("nodeName")
     if node_name == ct_new_pod_running_node_name:
