@@ -461,3 +461,15 @@ class PageNavigator(BaseUI):
             locator=self.page_nav["storageclients_page"], enable_screenshot=False
         )
         return StorageClients()
+
+    def nav_to_disaster_recovery_overview_page(self):
+        """
+        Navigate to Disaster Recovery Overview page on the RHACM console on a DR setup
+
+        Ensure that you are already on the RHACM console before calling this function
+
+        The navigation steps considers that ACM observability is enabled on the setup
+
+        """
+
+        logger.info("Navigate to Storage Client Page")
