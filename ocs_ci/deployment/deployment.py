@@ -3454,7 +3454,8 @@ class RDRMultiClusterDROperatorsDeploy(MultiClusterDROperatorsDeploy):
         """
         Check observability status
 
-        raises ACMObservabilityNotEnabled: if the cmd returns False, ACM observability is not enabled
+        Raises:
+             ACMObservabilityNotEnabled: if the cmd returns False, ACM observability is not enabled
 
         """
 
