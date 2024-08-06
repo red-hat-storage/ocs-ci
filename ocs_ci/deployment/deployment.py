@@ -333,7 +333,7 @@ class Deployment(object):
             for cluster in managed_clusters:
                 if cluster["metadata"]["name"] != constants.ACM_LOCAL_CLUSTER:
                     config.switch_to_cluster_by_name(cluster["metadata"]["name"])
-                    run_cmd(
+                    exec_cmd(
                         f"oc create -f {constants.CLUSTERROLEBINDING_APPSET_PULLMODEL_PATH}"
                     )
 
@@ -3459,7 +3459,7 @@ class RDRMultiClusterDROperatorsDeploy(MultiClusterDROperatorsDeploy):
         """
 
         acm_observability_status = bool(
-            run_cmd(
+            exec_cmd(
                 "oc get MultiClusterObservability observability -o jsonpath='{.status.conditions[1].status}'"
             )
         )
@@ -3502,7 +3502,7 @@ class RDRMultiClusterDROperatorsDeploy(MultiClusterDROperatorsDeploy):
         logger.info(
             "Creating thanos.yaml needed for ACM observability after passing required params"
         )
-        run_cmd(f"oc create -f {thanos_data_yaml.name}")
+        exec_cmd(f"oc create -f {thanos_data_yaml.name}")
 
         self.check_observability_status()
 
@@ -3534,18 +3534,18 @@ class RDRMultiClusterDROperatorsDeploy(MultiClusterDROperatorsDeploy):
             multiclusterobservability_data_yaml.name,
         )
 
-        run_cmd(f"oc create -f {multiclusterobservability_data_yaml.name}")
+        exec_cmd(f"oc create -f {multiclusterobservability_data_yaml.name}")
 
         logger.info("Create thanos secret yaml")
         self.thanos_secret()
 
         logger.info("Whitelist RBD metrics by creating configmap")
-        run_cmd(f"oc create -f {constants.OBSERVABILITYMETRICSCONFIGMAP_PATH}")
+        exec_cmd(f"oc create -f {constants.OBSERVABILITYMETRICSCONFIGMAP_PATH}")
 
         logger.info(
             "Add label for cluster-monitoring needed to fire VolumeSyncronizationDelayAlert on the Hub cluster"
         )
-        run_cmd(
+        exec_cmd(
             "oc label namespace openshift-operators openshift.io/cluster-monitoring='true'"
         )
 
