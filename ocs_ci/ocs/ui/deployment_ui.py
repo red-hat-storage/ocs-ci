@@ -45,11 +45,13 @@ class DeploymentUI(PageNavigator):
             capacity_str = str(capacity / 1024).rstrip("0").rstrip(".") + " TiB"
         else:
             capacity_str = str(capacity) + " GiB"
+        logger.info(f"Waiting for {capacity_str}")
         sample = TimeoutSampler(
             timeout=timeout,
             sleep=sleep,
             func=self.check_element_text,
             expected_text=capacity_str,
+            take_screenshot=True,
         )
         if not sample.wait_for_func_status(result=True):
             raise TimeoutExpiredError(f"Disks are not attached after {timeout} seconds")
@@ -226,6 +228,7 @@ class DeploymentUI(PageNavigator):
             text=constants.LOCAL_BLOCK_RESOURCE,
             timeout=300,
         )
+        self.take_screenshot()
         self.do_send_keys(
             locator=self.dep_loc["sc_name"], text=constants.LOCAL_BLOCK_RESOURCE
         )
@@ -234,7 +237,11 @@ class DeploymentUI(PageNavigator):
             self.do_click(
                 locator=self.dep_loc["all_nodes_create_sc"], enable_screenshot=True
             )
-        if config.ENV_DATA.get("platform") != constants.BAREMETAL_PLATFORM:
+        if config.ENV_DATA.get("platform") not in [
+            constants.BAREMETAL_PLATFORM,
+            constants.HCI_BAREMETAL,
+        ]:
+            self.take_screenshot()
             self.verify_disks_lso_attached()
             timeout_next = 60
         else:
@@ -387,7 +394,10 @@ class DeploymentUI(PageNavigator):
         Configure Data Protection
 
         """
-        if self.ocs_version_semantic >= version.VERSION_4_14:
+        if (
+            self.ocs_version_semantic >= version.VERSION_4_14
+            and self.ocs_version_semantic <= version.VERSION_4_16
+        ):
             self.do_click(self.dep_loc["next"], enable_screenshot=True)
 
     def enable_taint_nodes(self):

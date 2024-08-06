@@ -9,7 +9,7 @@ except ImportError:
 
 setup(
     name="ocs-ci",
-    version="4.16.0",
+    version="4.17.0",
     description="OCS CI tests that run in jenkins and standalone mode using aws provider",
     author="OCS QE",
     author_email="ocs-ci@redhat.com",
@@ -21,10 +21,10 @@ setup(
         "docopt==0.6.2",
         "gevent==23.9.1",
         "reportportal-client==3.2.3",
-        "requests==2.31.0",
+        "requests==2.32.0",
         "paramiko==3.4.0",
         "pyyaml>=4.2b1",
-        "jinja2==3.1.3",
+        "jinja2==3.1.4",
         "openshift==0.11.2",
         "boto3==1.24.96",
         "munch==2.5.0",
@@ -66,7 +66,7 @@ setup(
         "range-key-dict==1.1.0",
         "GitPython==3.1.41",
         "selenium==3.141.0",
-        "webdriver-manager==4.0.0",
+        "webdriver-manager==4.0.2",
         # greenlet 1.0.0 is broken on ppc64le
         # https://github.com/python-greenlet/greenlet/issues/230
         # by default program attempting to load an x86_64-only library from a native arm64 process
@@ -86,7 +86,7 @@ setup(
         "protobuf==4.21.7",
         "ping3==4.0.3",
         "psutil==5.9.0",
-        "azure-identity==1.15.0",
+        "azure-identity==1.16.1",
         "azure-mgmt-storage==21.0.0",
         "fauxfactory==3.1.0",
         "google-api-core==2.11.0",
@@ -96,9 +96,10 @@ setup(
         "google-crc32c==1.5.0",
         "google-resumable-media==2.4.1",
         "googleapis-common-protos==1.59.0",
-        "urllib3==1.26.18",
+        "urllib3==1.26.19",
         "psycopg2-binary==2.9.9",
         "azure-keyvault-secrets==4.8.0",
+        "pytest-jira==0.3.21",
     ],
     entry_points={
         "console_scripts": [

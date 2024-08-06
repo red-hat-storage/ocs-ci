@@ -116,10 +116,13 @@ class EditLabelForm(BaseUI):
         Args:
             block_pool_name (str): The name of the block pool to open the edit label page for.
         """
+        logger.info(f"Filtering pool page for {block_pool_name}")
         self.do_send_keys(
             self.generic_locators["search_resource_field"], block_pool_name
         )
-        self.do_click(self.bp_loc["actions_outside_pool"])
+        logger.info(f"Clicking on Actions for {block_pool_name}")
+        self.do_click(self.bp_loc["actions_outside_pool"], enable_screenshot=True)
+        logger.info("Clicking on Edit labels")
         self.do_click(self.bp_loc["edit_labels_of_pool"])
 
     def enter_label_and_save(self, label):

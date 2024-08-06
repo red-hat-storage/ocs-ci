@@ -1,6 +1,7 @@
 """
 StorageCluster related functionalities
 """
+
 import copy
 import ipaddress
 import logging
@@ -556,7 +557,8 @@ def ocs_install_verification(
             # removes duplicate hostname
             deviceset_pvcs = list(set(deviceset_pvcs))
             if (
-                config.ENV_DATA.get("platform") == constants.BAREMETAL_PLATFORM
+                config.ENV_DATA.get("platform")
+                in [constants.BAREMETAL_PLATFORM, constants.HCI_BAREMETAL]
                 or config.ENV_DATA.get("platform") == constants.AWS_PLATFORM
             ):
                 deviceset_pvcs = [
@@ -2673,7 +2675,7 @@ def patch_storage_cluster_for_custom_storage_class(
         return False
 
 
-@retry(AssertionError, 50, 10, 1)
+@retry(AssertionError, 50, 20, 5)
 def validate_serviceexport():
     """
     validate the serviceexport resource
@@ -2768,3 +2770,46 @@ def resize_osd(new_osd_size, check_size=True):
         format_type="json",
     )
     return res
+
+
+def get_client_storage_provider_endpoint():
+    """
+    Get the client "storageProviderEndpoint" from the storage-client
+
+    Returns:
+        str: The client "storageProviderEndpoint"
+
+    """
+    sc_obj = ocp.OCP(
+        kind=constants.STORAGECLIENT,
+        namespace=config.ENV_DATA["cluster_namespace"],
+        resource_name=config.cluster_ctx.ENV_DATA.get("storage_client_name"),
+    )
+    return sc_obj.get()["spec"]["storageProviderEndpoint"]
+
+
+def wait_for_storage_client_connected(timeout=180, sleep=10):
+    """
+    Wait for the storage-client to be in a connected phase
+
+    Args:
+        timeout (int): Time to wait for the storage-client to be in a connected phase
+        sleep (int): Time in seconds to sleep between attempts
+
+    Raises:
+        ResourceWrongStatusException: In case the storage-client didn't reach the desired connected phase
+
+    """
+    sc_obj = OCP(
+        kind=constants.STORAGECLIENT, namespace=config.ENV_DATA["cluster_namespace"]
+    )
+    resource_name = config.ENV_DATA.get(
+        "storage_client_name", constants.STORAGE_CLIENT_NAME
+    )
+    sc_obj.wait_for_resource(
+        resource_name=resource_name,
+        column="PHASE",
+        condition="Connected",
+        timeout=timeout,
+        sleep=sleep,
+    )

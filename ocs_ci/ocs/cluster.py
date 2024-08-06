@@ -2176,18 +2176,19 @@ def validate_existence_of_blocking_pdb():
     pdb_obj_get = pdb_obj.get()
     osd_pdb = []
     for pdb in pdb_obj_get.get("items"):
-        if not any(
-            osd in pdb["metadata"]["name"]
-            for osd in [constants.MDS_PDB, constants.MON_PDB]
-        ):
+        # blocking OSD PDBs are in the format of rook-ceph-osd-zone-data-1
+        if constants.OSD_PDB in pdb["metadata"]["name"]:
             osd_pdb.append(pdb)
     blocking_pdb_exist = False
     for osd in range(len(osd_pdb)):
         allowed_disruptions = osd_pdb[osd].get("status").get("disruptionsAllowed")
         maximum_unavailable = osd_pdb[osd].get("spec").get("maxUnavailable")
-        if allowed_disruptions & maximum_unavailable != 1:
-            logger.info("Blocking PDBs are created")
+        if allowed_disruptions & (maximum_unavailable != 1):
+            logger.info(
+                f"Blocking PDB {osd_pdb[osd].get('metadata').get('name')} are created"
+            )
             blocking_pdb_exist = True
+            return blocking_pdb_exist
         else:
             logger.info(
                 f"No blocking PDBs created, OSD PDB is {osd_pdb[osd].get('metadata').get('name')}"
@@ -3243,23 +3244,14 @@ def client_cluster_health_check():
     res = wait_for_pods_to_be_in_statuses(
         expected_statuses=expected_statuses,
         exclude_pod_name_prefixes=exclude_pod_name_prefixes,
-        timeout=300,
+        timeout=480,
         sleep=20,
     )
     if not res:
         raise ResourceWrongStatusException("Not all the pods in running state")
 
     logger.info("Checking that the storageclient is connected")
-    sc_obj = OCP(
-        kind=constants.STORAGECLIENT, namespace=config.ENV_DATA["cluster_namespace"]
-    )
-    sc_obj.wait_for_resource(
-        resource_name=config.cluster_ctx.ENV_DATA.get("storage_client_name"),
-        column="PHASE",
-        condition="Connected",
-        timeout=180,
-        sleep=10,
-    )
+    storage_cluster.wait_for_storage_client_connected()
 
     logger.info("The client cluster health check passed successfully")
 

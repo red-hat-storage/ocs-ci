@@ -42,6 +42,7 @@ from ocs_ci.utility.rosa import (
     wait_for_addon_to_be_ready,
 )
 from ocs_ci.utility.decorators import switch_to_orig_index_at_last
+from ocs_ci.utility.vsphere import VSPHERE
 
 
 log = logging.getLogger(__name__)
@@ -796,6 +797,7 @@ def get_compute_node_names(no_replace=False):
         constants.BAREMETAL_PLATFORM,
         constants.BAREMETALPSI_PLATFORM,
         constants.IBM_POWER_PLATFORM,
+        constants.HCI_BAREMETAL,
     ]:
         if no_replace:
             return [
@@ -1707,6 +1709,12 @@ def verify_all_nodes_created():
         wait_time = 1200
 
     if expected_num_nodes != existing_num_nodes:
+        if (
+            config.ENV_DATA["platform"].lower() == constants.VSPHERE_PLATFORM
+            and config.ENV_DATA["deployment_type"] == "ipi"
+        ):
+            power_on_ocp_node_vms()
+
         platforms_to_wait = [
             constants.VSPHERE_PLATFORM,
             constants.IBMCLOUD_PLATFORM,
@@ -1752,6 +1760,30 @@ def verify_all_nodes_created():
             f"Expected number of nodes is {expected_num_nodes} but "
             f"created during deployment is {existing_num_nodes}"
         )
+
+
+def power_on_ocp_node_vms():
+    """
+    Power on OCP node VM's, this function will directly interact with vCenter.
+    This function will make sure all cluster node VM's are powered on.
+    """
+    vsp = VSPHERE(
+        config.ENV_DATA["vsphere_server"],
+        config.ENV_DATA["vsphere_user"],
+        config.ENV_DATA["vsphere_password"],
+    )
+    vms_dc = vsp.get_all_vms_in_dc(config.ENV_DATA["vsphere_datacenter"])
+    cluster_name = config.ENV_DATA["cluster_name"]
+    vms_ipi = []
+    for vm in vms_dc:
+        if cluster_name in vm.name and "rhcos-generated" not in vm.name:
+            vms_ipi.append(vm)
+            log.debug(vm.name)
+
+    for vm in vms_ipi:
+        power_status = vsp.get_vm_power_status(vm)
+        if power_status == constants.VM_POWERED_OFF:
+            vsp.start_vms(vms=[vm])
 
 
 def add_node_to_lvd_and_lvs(node_name):
@@ -2579,9 +2611,11 @@ def check_for_zombie_process_on_node(node_name=None):
     for node_obj in node_obj_list:
         debug_cmd = (
             f"debug nodes/{node_obj.name} --to-namespace={config.ENV_DATA['cluster_namespace']} "
-            '-- chroot /host /bin/bash -c "ps -A -ostat,pid,ppid | grep -e "[zZ]""'
+            '-- chroot /host /bin/bash -c "ps -A -ostat,pid,ppid | grep -e [zZ]"'
         )
-        out = node_obj.ocp.exec_oc_cmd(command=debug_cmd, out_yaml_format=False)
+        out = node_obj.ocp.exec_oc_cmd(
+            command=debug_cmd, ignore_error=True, out_yaml_format=False
+        )
         if not out:
             log.info(f"No Zombie process found on the node: {node_obj.name}")
         else:
@@ -2947,3 +2981,23 @@ def verify_crypt_device_present_onnode(node, vol_handle):
 
     log.info(f"Crypt device for volume handle {vol_handle} present on the node: {node}")
     return True
+
+
+def get_node_by_internal_ip(internal_ip):
+    """
+    Get the node object by the node internal ip.
+
+    Args:
+        internal_ip (str): The node internal ip to search for
+
+    Returns:
+        ocs_ci.ocs.resources.ocs.OCS: The node object with the given internal ip.
+            If not found, it returns None.
+
+    """
+    node_objs = get_node_objs()
+    for n in node_objs:
+        if get_node_internal_ip(n) == internal_ip:
+            return n
+
+    return None

@@ -839,6 +839,7 @@ def create_pvc(
     do_reload=True,
     access_mode=constants.ACCESS_MODE_RWO,
     volume_mode=None,
+    volume_name=None,
 ):
     """
     Create a PVC
@@ -852,6 +853,8 @@ def create_pvc(
         do_reload (bool): True for wait for reloading PVC after its creation, False otherwise
         access_mode (str): The access mode to be used for the PVC
         volume_mode (str): Volume mode for rbd RWX pvc i.e. 'Block'
+        volume_name (str): Persistent Volume name
+
 
     Returns:
         PVC: PVC instance
@@ -867,6 +870,8 @@ def create_pvc(
         pvc_data["spec"]["resources"]["requests"]["storage"] = size
     if volume_mode:
         pvc_data["spec"]["volumeMode"] = volume_mode
+    if volume_name:
+        pvc_data["spec"]["volumeName"] = volume_name
     ocs_obj = pvc.PVC(**pvc_data)
     created_pvc = ocs_obj.create(do_reload=do_reload)
     assert created_pvc, f"Failed to create resource {pvc_name}"
@@ -4618,7 +4623,7 @@ def retrieve_cli_binary(cli_type="mcg"):
     live_deployment = config.DEPLOYMENT["live_deployment"]
     if live_deployment and semantic_version >= version.VERSION_4_13:
         if semantic_version >= version.VERSION_4_15:
-            image = f"{constants.ODF_CLI_OFFICIAL_IMAGE}:v{semantic_version}"
+            image = f"{constants.ODF_CLI_OFFICIAL_IMAGE}:v{semantic_version}.0"
         else:
             image = f"{constants.MCG_CLI_OFFICIAL_IMAGE}:v{semantic_version}"
     else:
@@ -4783,3 +4788,336 @@ def is_rbd_default_storage_class(custom_sc=None):
 
     logger.error("Storageclass {default_rbd_sc} is not a default  RBD StorageClass.")
     return False
+
+
+def get_network_attachment_definitions(
+    nad_name, namespace=config.ENV_DATA["cluster_namespace"]
+):
+    """
+    Get NetworkAttachmentDefinition obj
+
+    Args:
+        nad_name (str): network_attachment_definition name
+        namespace (str): Namespace of the resource
+    Returns:
+        network_attachment_definitions (obj) : network_attachment_definitions object
+
+    """
+    return OCP(
+        kind=constants.NETWORK_ATTACHEMENT_DEFINITION,
+        namespace=namespace,
+        resource_name=nad_name,
+    )
+
+
+def add_route_public_nad():
+    """
+    Add route section to network_attachment_definitions object
+
+    """
+    nad_obj = get_network_attachment_definitions(
+        nad_name=config.ENV_DATA.get("multus_public_net_name"),
+        namespace=config.ENV_DATA.get("multus_public_net_namespace"),
+    )
+    nad_config_str = nad_obj.data["spec"]["config"]
+    nad_config_dict = json.loads(nad_config_str)
+    nad_config_dict["ipam"]["routes"] = [
+        {"dst": config.ENV_DATA["multus_destination_route"]}
+    ]
+    nad_config_dict_string = json.dumps(nad_config_dict)
+    logger.info("Creating Multus public network")
+    public_net_data = templating.load_yaml(constants.MULTUS_PUBLIC_NET_YAML)
+    public_net_data["metadata"]["name"] = config.ENV_DATA.get("multus_public_net_name")
+    public_net_data["metadata"]["namespace"] = config.ENV_DATA.get(
+        "multus_public_net_namespace"
+    )
+    public_net_data["spec"]["config"] = nad_config_dict_string
+    public_net_yaml = tempfile.NamedTemporaryFile(
+        mode="w+", prefix="multus_public", delete=False
+    )
+    templating.dump_data_to_temp_yaml(public_net_data, public_net_yaml.name)
+    run_cmd(f"oc apply -f {public_net_yaml.name}")
+
+
+def reset_all_osd_pods():
+    """
+    Reset all osd pods
+
+    """
+    from ocs_ci.ocs.resources.pod import get_osd_pods
+
+    osd_pod_objs = get_osd_pods()
+    for osd_pod_obj in osd_pod_objs:
+        osd_pod_obj.delete()
+
+
+def enable_csi_disable_holder_pods():
+    """
+    Enable CSI_DISABLE_HOLDER_PODS in rook-ceph-operator-config config-map
+
+    """
+    configmap_obj = OCP(
+        kind=constants.CONFIGMAP,
+        namespace=config.ENV_DATA["cluster_namespace"],
+        resource_name=constants.ROOK_OPERATOR_CONFIGMAP,
+    )
+    value = "true"
+    params = f'{{"data": {{"CSI_DISABLE_HOLDER_PODS": "{value}"}}}}'
+    configmap_obj.patch(params=params, format_type="merge")
+
+
+def delete_csi_holder_pods():
+    """
+
+    Drain/schedule worker nodes and reset csi-holder-pods
+
+    Procedure:
+    1.Cordon worker node-X
+    2.Drain worker node-X
+    3.Reset csi-cephfsplugin-holder and csi-rbdplugin-holder pods on node-X
+    4.schedule node-X
+    5.Verify all node-X in Ready state
+
+    """
+    from ocs_ci.ocs.utils import get_pod_name_by_pattern
+    from ocs_ci.ocs.node import drain_nodes, schedule_nodes
+
+    pods_csi_cephfsplugin_holder = get_pod_name_by_pattern("csi-cephfsplugin-holder")
+    pods_csi_rbdplugin_holder = get_pod_name_by_pattern("csi-rbdplugin-holder")
+    pods_csi_holder = pods_csi_cephfsplugin_holder + pods_csi_rbdplugin_holder
+    worker_pods_dict = dict()
+    from ocs_ci.ocs.resources.pod import get_pod_obj
+
+    for pod_name in pods_csi_holder:
+        pod_obj = get_pod_obj(
+            name=pod_name, namespace=config.ENV_DATA["cluster_namespace"]
+        )
+        if pod_obj.pod_data["spec"]["nodeName"] in worker_pods_dict:
+            worker_pods_dict[pod_obj.pod_data["spec"]["nodeName"]].append(pod_obj)
+        else:
+            worker_pods_dict[pod_obj.pod_data["spec"]["nodeName"]] = [pod_obj]
+
+    for worker_node_name, csi_pod_objs in worker_pods_dict.items():
+        run_cmd(f"oc adm cordon {worker_node_name}")
+        drain_nodes([worker_node_name])
+        for csi_pod_obj in csi_pod_objs:
+            csi_pod_obj.delete()
+        schedule_nodes([worker_node_name])
+
+
+def configure_node_network_configuration_policy_on_all_worker_nodes():
+    """
+    Configure NodeNetworkConfigurationPolicy CR on each worker node in cluster
+
+    """
+    from ocs_ci.ocs.node import get_worker_nodes
+
+    # This function require changes for compact mode
+    logger.info("Configure NodeNetworkConfigurationPolicy on all worker nodes")
+    worker_node_names = get_worker_nodes()
+    for worker_node_name in worker_node_names:
+        worker_network_configuration = config.ENV_DATA["baremetal"]["servers"][
+            worker_node_name
+        ]
+        node_network_configuration_policy = templating.load_yaml(
+            constants.NODE_NETWORK_CONFIGURATION_POLICY
+        )
+        node_network_configuration_policy["spec"]["nodeSelector"][
+            "kubernetes.io/hostname"
+        ] = worker_node_name
+        node_network_configuration_policy["metadata"][
+            "name"
+        ] = worker_network_configuration["node_network_configuration_policy_name"]
+        node_network_configuration_policy["spec"]["desiredState"]["interfaces"][0][
+            "ipv4"
+        ]["address"][0]["ip"] = worker_network_configuration[
+            "node_network_configuration_policy_ip"
+        ]
+        node_network_configuration_policy["spec"]["desiredState"]["interfaces"][0][
+            "ipv4"
+        ]["address"][0]["prefix-length"] = worker_network_configuration[
+            "node_network_configuration_policy_prefix_length"
+        ]
+        node_network_configuration_policy["spec"]["desiredState"]["routes"]["config"][
+            0
+        ]["destination"] = worker_network_configuration[
+            "node_network_configuration_policy_destination_route"
+        ]
+        public_net_yaml = tempfile.NamedTemporaryFile(
+            mode="w+", prefix="multus_public", delete=False
+        )
+        templating.dump_data_to_temp_yaml(
+            node_network_configuration_policy, public_net_yaml.name
+        )
+        run_cmd(f"oc create -f {public_net_yaml.name}")
+
+
+def get_daemonsets_names(namespace=config.ENV_DATA["cluster_namespace"]):
+    """
+    Get all daemonspaces in namespace
+
+    Args:
+        namespace (str): namespace
+
+    Returns:
+        list: all daemonset names in the namespace
+
+    """
+    daemonset_names = list()
+    daemonset_objs = OCP(
+        kind=constants.DAEMONSET,
+        namespace=namespace,
+    )
+    for daemonset_obj in daemonset_objs.data.get("items"):
+        daemonset_names.append(daemonset_obj["metadata"]["name"])
+    return daemonset_names
+
+
+def get_daemonsets_obj(name, namespace=config.ENV_DATA["cluster_namespace"]):
+    """
+    Get daemonset obj
+    Args:
+        name (str): the name of daemeonset
+        namespace (str): the namespace of daemonset
+
+    Returns:
+        ocp_obj: daemonset ocp obj
+
+    """
+    return OCP(kind=constants.DAEMONSET, namespace=namespace, resource_name=name)
+
+
+def delete_csi_holder_daemonsets():
+    """
+    Delete csi holder daemonsets
+
+    """
+    daemonset_names = get_daemonsets_names()
+    for daemonset_name in daemonset_names:
+        if "holder" in daemonset_name:
+            daemonsets_obj = get_daemonsets_obj(daemonset_name)
+            daemonsets_obj.delete(resource_name=daemonset_name)
+
+
+def verify_pod_pattern_does_not_exist(pattern, namespace):
+    """
+    Verify csi-holder pods do not exist
+
+    Args:
+        pattern (str): the pattern of pod
+        namespace (str): the namespace of pod
+
+    Returns:
+        bool: if pod with pattern exist return False otherwise return True
+
+    """
+    from ocs_ci.ocs.utils import get_pod_name_by_pattern
+
+    return len(get_pod_name_by_pattern(pattern=pattern, namespace=namespace)) == 0
+
+
+def verify_csi_holder_pods_do_not_exist():
+    """
+    Verify csi holder pods do not exist
+
+    Raises:
+        TimeoutExpiredError: if csi-holder pod exist raise Exception
+
+    """
+    sample = TimeoutSampler(
+        timeout=300,
+        sleep=10,
+        func=verify_pod_pattern_does_not_exist,
+        pattern="holder",
+        namespace=config.ENV_DATA["cluster_namespace"],
+    )
+    if not sample.wait_for_func_status(result=True):
+        raise TimeoutExpiredError(
+            "The csi holder pod exist even though we deleted the daemonset after 300 seconds"
+        )
+
+
+def upgrade_multus_holder_design():
+    """
+    Upgrade  multus holder design from ODF4.15 to ODF4.16
+
+    """
+    if not config.ENV_DATA.get("multus_delete_csi_holder_pods"):
+        return
+    if config.ENV_DATA.get("multus_create_public_net"):
+        add_route_public_nad()
+        from ocs_ci.deployment.nmstate import NMStateInstaller
+
+        logger.info("Install NMState operator and create an instance")
+        nmstate_obj = NMStateInstaller()
+        nmstate_obj.running_nmstate()
+        configure_node_network_configuration_policy_on_all_worker_nodes()
+    reset_all_osd_pods()
+    enable_csi_disable_holder_pods()
+    delete_csi_holder_pods()
+    delete_csi_holder_daemonsets()
+    verify_csi_holder_pods_do_not_exist()
+
+
+def wait_for_reclaim_space_cronjob(reclaim_space_cron_job, schedule):
+    """
+    Wait for reclaim space cronjbo
+
+    Args:
+        reclaim_space_cron_job (obj): The reclaim space cron job
+        schedule (str): Reclaim space cron job schedule
+
+    Raises:
+        UnexpectedBehaviour: In case reclaim space cron job doesn't reach the desired state
+    """
+
+    try:
+        for reclaim_space_cron_job_yaml in TimeoutSampler(
+            timeout=120, sleep=5, func=reclaim_space_cron_job.get
+        ):
+            result = reclaim_space_cron_job_yaml["spec"]["schedule"]
+            if result == f"@{schedule}":
+                logger.info(
+                    f"ReclaimSpaceCronJob {reclaim_space_cron_job.name} succeeded"
+                )
+                break
+            else:
+                logger.info(
+                    f"Waiting for the @{schedule} result of the ReclaimSpaceCronJob {reclaim_space_cron_job.name}. "
+                    f"Present value of result is {result}"
+                )
+    except TimeoutExpiredError:
+        raise UnexpectedBehaviour(
+            f"ReclaimSpaceJob {reclaim_space_cron_job.name} is not successful. "
+            f"Yaml output: {reclaim_space_cron_job.get()}"
+        )
+
+
+def wait_for_reclaim_space_job(reclaim_space_job):
+    """
+    Wait for reclaim space cronjbo
+
+    Args:
+        reclaim_space_job (obj): The reclaim space job
+
+    Raises:
+        UnexpectedBehaviour: In case reclaim space job doesn't reach the Succeeded state
+    """
+
+    try:
+        for reclaim_space_job_yaml in TimeoutSampler(
+            timeout=120, sleep=5, func=reclaim_space_job.get
+        ):
+            result = reclaim_space_job_yaml.get("status", {}).get("result")
+            if result == "Succeeded":
+                logger.info(f"ReclaimSpaceJob {reclaim_space_job.name} succeeded")
+                break
+            else:
+                logger.info(
+                    f"Waiting for the Succeeded result of the ReclaimSpaceJob {reclaim_space_job.name}. "
+                    f"Present value of result is {result}"
+                )
+    except TimeoutExpiredError:
+        raise UnexpectedBehaviour(
+            f"ReclaimSpaceJob {reclaim_space_job.name} is not successful. Yaml output: {reclaim_space_job.get()}"
+        )

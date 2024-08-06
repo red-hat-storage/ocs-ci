@@ -32,6 +32,7 @@ from ocs_ci.ocs.constants import (
     MS_CONSUMER_TYPE,
     HCI_PROVIDER,
     BAREMETAL_PLATFORMS,
+    AZURE_KV_PROVIDER_NAME,
 )
 from ocs_ci.utility import version
 from ocs_ci.utility.aws import update_config_from_s3
@@ -84,6 +85,7 @@ scale_changed_layout = pytest.mark.scale_changed_layout
 deployment = pytest.mark.deployment
 polarion_id = pytest.mark.polarion_id
 bugzilla = pytest.mark.bugzilla
+jira = pytest.mark.jira
 acm_import = pytest.mark.acm_import
 
 tier_marks = [
@@ -370,6 +372,11 @@ kms_config_required = pytest.mark.skipif(
     reason="KMS config not found in auth.yaml",
 )
 
+azure_kv_config_required = pytest.mark.skipif(
+    config.ENV_DATA["KMS_PROVIDER"].lower() != AZURE_KV_PROVIDER_NAME,
+    reason="Azure KV config required to run the test.",
+)
+
 external_mode_required = pytest.mark.skipif(
     config.DEPLOYMENT.get("external_mode") is not True,
     reason="Test will run on External Mode cluster only",
@@ -530,6 +537,12 @@ skipif_noobaa_external_pgsql = pytest.mark.skipif(
     config.ENV_DATA.get("noobaa_external_pgsql") is True,
     reason="This test will not run correctly in external DB deployed cluster.",
 )
+
+skipif_compact_mode = pytest.mark.skipif(
+    config.ENV_DATA.get("worker_replicas") == 0,
+    reason="This test is not supported for compact mode deployment types.",
+)
+
 metrics_for_external_mode_required = pytest.mark.skipif(
     version.get_semantic_ocs_version_from_config() < version.VERSION_4_6
     and config.DEPLOYMENT.get("external_mode") is True,

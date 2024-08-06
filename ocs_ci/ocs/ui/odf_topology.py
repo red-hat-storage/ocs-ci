@@ -24,7 +24,6 @@ logger = logging.getLogger(__name__)
 
 
 class TopologyUiStr:
-
     """
     Class-helper to visualize Topology configuration saved in dataframe gathered with Selenium driver.
     """
@@ -285,11 +284,7 @@ class OdfTopologyHelper:
 
             # for the depl such as rook-ceph-crashcollector-a7.a1.7434.ip4.static.sl-reverse.com there is an exclusion -
             # deployment name will be trimmed by '.com' and it will become the prefix of the pod name
-            if (
-                not pods_names
-                and "rook-ceph-crashcollector" in depl_name
-                and ".com" in depl_name
-            ):
+            if "rook-ceph-crashcollector" in depl_name and ".com" in depl_name:
                 ocp = OCP(namespace=config.ENV_DATA["cluster_namespace"])
                 pods_names_all = str(
                     ocp.exec_oc_cmd(

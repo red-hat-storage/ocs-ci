@@ -451,6 +451,33 @@ class MultiClusterConfig:
             self.get_cluster_type_indices_list(cluster_type)[num_of_cluster]
         )
 
+    class RunWithConfigContext(object):
+        def __init__(self, config_index):
+            self.original_config_index = config.cur_index
+            self.config_index = config_index
+
+        def __enter__(self):
+            config.switch_ctx(self.config_index)
+            return self
+
+        def __exit__(self, exc_type, exc_value, exc_traceback):
+            config.switch_ctx(self.original_config_index)
+
+    class RunWithAcmConfigContext(RunWithConfigContext):
+        def __init__(self):
+            from ocs_ci.ocs.utils import get_all_acm_indexes
+
+            acm_index = get_all_acm_indexes()[0]
+            super().__init__(acm_index)
+
+    class RunWithPrimaryConfigContext(RunWithConfigContext):
+        def __init__(self):
+            from ocs_ci.ocs.utils import get_primary_cluster_config
+
+            primary_config = get_primary_cluster_config()
+            primary_index = primary_config.MULTICLUSTER.get("multicluster_index")
+            super().__init__(primary_index)
+
 
 config = MultiClusterConfig()
 

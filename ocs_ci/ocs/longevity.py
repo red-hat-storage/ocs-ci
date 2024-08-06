@@ -61,6 +61,7 @@ from ocs_ci.ocs.node import (
     get_node_resource_utilization_from_oc_describe,
     check_for_zombie_process_on_node,
 )
+from botocore.exceptions import ClientError
 
 
 log = logging.getLogger(__name__)
@@ -227,7 +228,7 @@ class Longevity(object):
         return res_yaml_dict
 
     def validate_pvc_in_kube_job_reached_bound_state(
-        self, kube_job_obj_list, namespace, pvc_count, timeout=60
+        self, kube_job_obj_list, namespace, pvc_count, timeout=600
     ):
         """
         Validate PVCs in the kube job list reached BOUND state
@@ -772,13 +773,17 @@ class Longevity(object):
         self,
         project_factory,
         multi_pvc_pod_lifecycle_factory,
-        multi_obc_lifecycle_factory,
+        setup_mcg_bg_features,
         num_of_pvcs=100,
         pvc_size=2,
-        num_of_obcs=20,
+        num_of_buckets=20,
+        object_amount=2,
         run_time=1440,
         measure=True,
         delay=600,
+        run_pvc_pod_only=True,
+        run_mcg_only=True,
+        collect_cluster_sanity_checks=True,
     ):
         """
         Function to handle automation of Longevity Stage 2 Sequential Steps i.e. Creation / Deletion of PVCs, PODs and
@@ -788,42 +793,64 @@ class Longevity(object):
             project_factory : Fixture to create a new Project.
             multi_pvc_pod_lifecycle_factory : Fixture to create/delete multiple pvcs and pods and
                                                 measure pvc creation/deletion time and pod attach time.
-            multi_obc_lifecycle_factory : Fixture to create/delete multiple obcs and
-                                            measure their creation/deletion time.
             num_of_pvcs (int) : Total Number of PVCs / PODs we want to create.
             pvc_size (int) : Size of each PVC in GB.
-            num_of_obcs (int) : Number of OBCs we want to create of each type. (Total OBCs = num_of_obcs * 5)
+            num_of_buckets(int): Number of buckets for each MCG features
+            object_amount (int): Number of objects to use while doing the validation
             run_time (int) : Total Run Time in minutes.
             measure (bool) : True if we want to measure the performance metrics, False otherwise.
             delay (int) : Delay time (in seconds) between sequential and bulk operations as well as between cycles.
+            run_pvc_pod_only (bool) : If True, run PVC and POD operations.
+            run_mcg_only (bool) : If True, run OBC operations.
+            collect_cluster_sanity_checks (bool): If True, collects the cluster level sanity checks
 
         """
         end_time = datetime.now() + timedelta(minutes=run_time)
         cycle_no = 0
-
+        if collect_cluster_sanity_checks:
+            log.info("Cluster sanity checks at the beginning of the stage")
+            self.collect_cluster_sanity_checks_outputs(
+                dir_name="Beginning_of_the_stage"
+            )
         while datetime.now() < end_time:
             cycle_no += 1
             log.info(
-                f"#################[STARTING STAGE2 CYCLE:{cycle_no}]#################"
+                f"#################[STARTING STAGE2 CYCLE:{cycle_no} --> MCG-{run_mcg_only} and "
+                f"PVC_POD-{run_pvc_pod_only}]#################"
             )
+            if run_mcg_only:
+                buckets_list = setup_mcg_bg_features(
+                    num_of_buckets=num_of_buckets,
+                    object_amount=object_amount,
+                    is_disruptive=False,
+                    skip_any_features=["nsfs", "rgw kafka"],
+                    skip_any_provider=["azure"],
+                )
 
-            for bulk in (False, True):
-                current_ops = "BULK-OPERATION" if bulk else "SEQUENTIAL-OPERATION"
-                log.info(f"#################[{current_ops}]#################")
-                namespace = (
-                    f"{STAGE_2_NAMESPACE_PREFIX}{cycle_no}-{current_ops.lower()}"
-                )
-                project = project_factory(project_name=namespace)
-                multi_pvc_pod_lifecycle_factory(
-                    num_of_pvcs=num_of_pvcs,
-                    pvc_size=pvc_size,
-                    bulk=bulk,
-                    project=project,
-                    measure=measure,
-                )
-                multi_obc_lifecycle_factory(
-                    num_of_obcs=num_of_obcs, bulk=bulk, measure=False
-                )
+                for bucket in buckets_list["all_buckets"]:
+                    log.info(f"Cleaning up bucket {bucket.name}")
+                    try:
+                        bucket.delete()
+                    except ClientError as e:
+                        if e.response["Error"]["Code"] == "NoSuchBucket":
+                            log.warning(f"{bucket.name} could not be found in cleanup")
+                        else:
+                            raise
+            if run_pvc_pod_only:
+                for bulk in (False, True):
+                    current_ops = "BULK-OPERATION" if bulk else "SEQUENTIAL-OPERATION"
+                    log.info(f"#################[{current_ops}]#################")
+                    namespace = (
+                        f"{STAGE_2_NAMESPACE_PREFIX}{cycle_no}-{current_ops.lower()}"
+                    )
+                    project = project_factory(project_name=namespace)
+                    multi_pvc_pod_lifecycle_factory(
+                        num_of_pvcs=num_of_pvcs,
+                        pvc_size=pvc_size,
+                        bulk=bulk,
+                        project=project,
+                        measure=measure,
+                    )
 
                 # Delay between Sequential and Bulk Operations
                 if not bulk:
@@ -833,9 +860,16 @@ class Longevity(object):
                     time.sleep(delay)
 
             log.info(
-                f"#################[ENDING STAGE2 CYCLE:{cycle_no}]#################"
+                f"#################[ENDING STAGE2 CYCLE:{cycle_no} --> MCG-{run_mcg_only} and "
+                f"PVC_POD-{run_pvc_pod_only}]#################"
             )
-
+            if collect_cluster_sanity_checks:
+                log.info(
+                    f"Collecting cluster sanity checks at end of STAGE2 CYCLE:{cycle_no}"
+                )
+                self.collect_cluster_sanity_checks_outputs(
+                    dir_name=f"STAGE2_CYCLE:{cycle_no}"
+                )
             log.info(
                 f"#################[WAITING FOR {delay} SECONDS AFTER STAGE2 {cycle_no} CYCLE.]#################"
             )
@@ -847,6 +881,7 @@ class Longevity(object):
         num_of_pvc=150,
         num_of_obc=150,
         pvc_size=None,
+        collect_cluster_sanity_checks=True,
         delay=60,
         run_time=1440,
     ):
@@ -865,12 +900,18 @@ class Longevity(object):
             num_of_obc (int): Bulk OBC count
             pvc_size (str): size of all pvcs to be created with Gi suffix (e.g. 10Gi).
             If None, random size pvc will be created
+            collect_cluster_sanity_checks (bool): If True, collects the cluster level sanity checks
             delay (int): Delay in seconds before starting the next cycle
             run_time (int): The amount of time the particular stage has to run (in minutes)
 
         """
         end_time = datetime.now() + timedelta(minutes=run_time)
         cycle_count = 1
+        if collect_cluster_sanity_checks:
+            log.info("Cluster sanity checks at the beginning of the stage")
+            self.collect_cluster_sanity_checks_outputs(
+                dir_name="Beginning_of_the_stage"
+            )
         while datetime.now() < end_time:
             log.info(f"Current time is {datetime.now()}")
             log.info(f"End time is {end_time}")
@@ -882,74 +923,82 @@ class Longevity(object):
             log.info(
                 "Creating the initial resources required for PVC/OBC/POD deletion operations concurrently"
             )
-            resource_to_delete = [
-                ThreadPoolExecutor(max_workers=1).submit(
-                    self.create_stagebuilder_all_pvc_types,
-                    num_of_pvc,
-                    namespace,
-                    pvc_size,
-                    kube_job_name="delete_all_pvc_job_profile",
-                ),
-                ThreadPoolExecutor(max_workers=1).submit(
-                    self.create_stagebuilder_obc,
-                    num_of_obc,
-                    namespace,
-                    obc_kube_job_name="delete_obc_job_profile",
-                ),
-                ThreadPoolExecutor(max_workers=1).submit(
-                    self.create_stagebuilder_pods_with_all_pvc_types,
-                    num_of_pvc,
-                    namespace,
-                    pvc_size,
-                    pvc_kube_job_name="delete_all_pvc_for_pod_attach_job_profile",
-                    pod_kube_job_name="delete_all_pods_job_profile",
-                ),
-            ]
-            resource_to_delete_job_file = []
-            # waiting for the resource thread to complete
-            log.info("Waiting for the resource thread to complete")
-            for resource in resource_to_delete:
-                resource_to_delete_job_file.append(resource.result())
+            with ThreadPoolExecutor(max_workers=5) as executor:
+                resource_to_delete = [
+                    executor.submit(
+                        self.create_stagebuilder_all_pvc_types,
+                        num_of_pvc,
+                        namespace,
+                        pvc_size,
+                        kube_job_name="delete_all_pvc_job_profile",
+                    ),
+                    executor.submit(
+                        self.create_stagebuilder_obc,
+                        num_of_obc,
+                        namespace,
+                        obc_kube_job_name="delete_obc_job_profile",
+                    ),
+                    executor.submit(
+                        self.create_stagebuilder_pods_with_all_pvc_types,
+                        num_of_pvc,
+                        namespace,
+                        pvc_size,
+                        pvc_kube_job_name="delete_all_pvc_for_pod_attach_job_profile",
+                        pod_kube_job_name="delete_all_pods_job_profile",
+                    ),
+                ]
+                # waiting for the resource thread to complete
+                log.info("Waiting for the resource to delete thread to complete")
+                resource_to_delete_job_file = [
+                    resource.result() for resource in resource_to_delete
+                ]
 
-            log.info(
-                "Starting concurrent bulk creation and deletion requests of PVC, OBC and APP pod"
-            )
-            bulk_create_delete = [
-                ThreadPoolExecutor(max_workers=1).submit(
-                    self.create_stagebuilder_all_pvc_types,
-                    num_of_pvc,
-                    namespace,
-                    pvc_size,
-                ),
-                ThreadPoolExecutor(max_workers=1).submit(
-                    self.create_stagebuilder_obc, num_of_obc, namespace
-                ),
-                ThreadPoolExecutor(max_workers=1).submit(
-                    self.create_stagebuilder_pods_with_all_pvc_types,
-                    num_of_pvc,
-                    namespace,
-                    pvc_size,
-                ),
-            ]
-            for job_file in resource_to_delete_job_file:
-                ThreadPoolExecutor(max_workers=1).submit(
-                    self.delete_stage_builder_kube_job, job_file, namespace
+                log.info(
+                    "Starting concurrent bulk creation and deletion requests of PVC, OBC and APP pod"
                 )
+                bulk_create_delete = [
+                    executor.submit(
+                        self.create_stagebuilder_all_pvc_types,
+                        num_of_pvc,
+                        namespace,
+                        pvc_size,
+                    ),
+                    executor.submit(
+                        self.create_stagebuilder_obc, num_of_obc, namespace
+                    ),
+                    executor.submit(
+                        self.create_stagebuilder_pods_with_all_pvc_types,
+                        num_of_pvc,
+                        namespace,
+                        pvc_size,
+                    ),
+                ]
+                for job_file in resource_to_delete_job_file:
+                    executor.submit(
+                        self.delete_stage_builder_kube_job, job_file, namespace
+                    )
 
-            bulk_create_delete_job_file = []
-            # waiting for the bulk create delete thread to complete
-            log.info("Waiting for the bulk create delete thread to complete")
-            for thread in bulk_create_delete:
-                bulk_create_delete_job_file.append(thread.result())
-            # Delete all the created resources in the bulk create delete thread
-            for job_file in bulk_create_delete_job_file:
-                ThreadPoolExecutor(max_workers=1).submit(
-                    self.delete_stage_builder_kube_job, job_file, namespace
-                )
+                # waiting for the bulk create delete thread to complete
+                log.info("Waiting for the bulk create delete thread to complete")
+                bulk_create_delete_job_file = [
+                    thread.result() for thread in bulk_create_delete
+                ]
+                # Delete all the created resources in the bulk create delete thread
+                for job_file in bulk_create_delete_job_file:
+                    executor.submit(
+                        self.delete_stage_builder_kube_job, job_file, namespace
+                    )
 
             log.info(
                 f"##############[COMPLETED STAGE3 CYCLE:{cycle_count}]####################"
             )
+            if collect_cluster_sanity_checks:
+                log.info(
+                    f"Collecting cluster sanity checks at end of STAGE3 CYCLE:{cycle_count}"
+                )
+                self.collect_cluster_sanity_checks_outputs(
+                    dir_name=f"STAGE3_CYCLE:{cycle_count}"
+                )
             cycle_count += 1
             log.info(
                 f"###########[SLEEPING FOR {delay} SECONDS BEFORE STARTING NEXT STAGE3 CYCLE]###########"
@@ -968,7 +1017,9 @@ class Longevity(object):
         fio_percentage=25,
         pvc_size=2,
         run_time=180,
+        delay=60,
         pvc_size_new=4,
+        collect_cluster_sanity_checks=True,
     ):
         """
         Function to handle automation of Longevity Stage 4 i.e.
@@ -993,12 +1044,18 @@ class Longevity(object):
             fio_percentage (float) : Percentage of PVC space we want to be utilized for FIO.
             pvc_size (int) : Size of each PVC in GB.
             run_time (int) : Total Run Time in minutes.
+            delay (int): Delay in seconds before starting the next cycle
             pvc_size_new (int) : Size of the expanded PVC in GB.
+            collect_cluster_sanity_checks (bool): If True, collects the cluster level sanity checks
 
         """
         end_time = datetime.now() + timedelta(minutes=run_time)
         cycle_no = 0
-
+        if collect_cluster_sanity_checks:
+            log.info("Cluster sanity checks at the beginning of the stage")
+            self.collect_cluster_sanity_checks_outputs(
+                dir_name="Beginning_of_the_stage"
+            )
         while datetime.now() < end_time:
             cycle_no += 1
             log.info(
@@ -1145,7 +1202,22 @@ class Longevity(object):
                 log.info("PVC deletion was successful.")
 
             log.info(
+                f"##############[COMPLETED STAGE4 CYCLE:{cycle_no}]####################"
+            )
+
+            if collect_cluster_sanity_checks:
+                log.info(
+                    f"Collecting cluster sanity checks at end of STAGE4 CYCLE:{cycle_no}"
+                )
+                self.collect_cluster_sanity_checks_outputs(
+                    dir_name=f"STAGE4_CYCLE:{cycle_no}"
+                )
+
+            log.info(
                 f"#################[ENDING STAGE4 CYCLE:{cycle_no}]#################"
+            )
+            log.info(
+                f"###########[SLEEPING FOR {delay} SECONDS BEFORE STARTING NEXT STAGE4 CYCLE]###########"
             )
 
     def longevity_all_stages(

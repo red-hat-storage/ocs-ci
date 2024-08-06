@@ -712,5 +712,9 @@ class APIRequestError(Exception):
     pass
 
 
+class ACMObservabilityNotEnabled(Exception):
+    pass
+
+
 class ProviderModeNotFoundException(Exception):
     pass

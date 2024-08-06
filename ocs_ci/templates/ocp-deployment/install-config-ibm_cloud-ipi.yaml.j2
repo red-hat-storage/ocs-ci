@@ -47,5 +47,18 @@ fips: {{ fips }}
 platform:
   ibmcloud:
     region: {{ region | default('us-south') }}
+{% if custom_vpc %}
+    resourceGroupName: {{ cluster_name }}-{{ cluster_id }}
+    networkResourceGroupName: {{ cluster_name }}-{{ cluster_id }}
+    vpcName: {{ cluster_name }}-{{ cluster_id }}-vpc
+    controlPlaneSubnets:
+{% for control_plane_subnet in control_plane_subnets %}
+      - {{ control_plane_subnet }}
+{% endfor %}
+    computeSubnets:
+{% for compute_subnet in compute_subnets %}
+      - {{ compute_subnet }}
+{% endfor %}
+{% endif %}
 publish: External
 pullSecret: ''

@@ -6,6 +6,7 @@ from ocs_ci.framework.pytest_customization.marks import green_squad
 from ocs_ci.framework.testlib import (
     ManageTest,
     tier2,
+    post_upgrade,
     skipif_managed_service,
     skipif_hci_provider_and_client,
 )
@@ -20,6 +21,7 @@ log = logging.getLogger(__name__)
 
 @green_squad
 @tier2
+@post_upgrade
 @skipif_managed_service
 @skipif_hci_provider_and_client
 @pytest.mark.usefixtures(

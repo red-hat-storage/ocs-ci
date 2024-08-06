@@ -17,11 +17,14 @@ We have markers defined in pytest_customization package under
 can import directly from `ocsci.testlib` module with this statement:
 `from ocsci.testlib import tier1` for example.
 
-## Bugzilla decorator
+## Bugzilla decorator (DEPRECATED - see Jira decorator section)
+
+As ODF product moves from Bugzilla to [Jira](https://issues.redhat.com/projects/DFBUGS/) for bug reporting, this bugzilla plugin will get removed later on.
+Please do not use it anymore, but rather use pytest-jira plugin described below in next section!
 
 You can mark test with specific bugzilla decorator as you can see in following
 example:
-:
+
 ```python
 import pytest
 
@@ -40,6 +43,42 @@ class TestPvCreation(ManageTest):
 For more details what else is possible with `pytest_marker_bugzilla` plugin
 look at the
 [project documentation](https://github.com/eanxgeek/pytest_marker_bugzilla).
+
+## Jira decorator
+
+As ODF product moves from Bugzilla to [Jira](https://issues.redhat.com/projects/DFBUGS/) for bug
+reporting, we should be using pytest-jira plugin for skipping tests with open issue.
+
+To enable pytest-jira plugin, run run-ci command with `--jira` parameter.
+
+You can mark test with specific jira decorator as you can see in following
+example:
+
+```python
+import pytest
+
+from ocs_ci.framework.testlib import jira, ManageTest
+
+@jira('DFBUGS-31', run=False)
+class TestPvCreation(ManageTest):
+    pass
+```
+
+The `run` argument is set to `False` in QE jenkins in `jira.cfg` file:
+`run_test_case = False`
+
+But as this value doesn't need to be set in other users, so we recommend to explicitly set run
+argument explicitly!
+
+```python
+# or you can directly use pytest.mark like:
+@pytest.mark.jira('DFBUGS-31', run=False)
+    pass
+```
+
+For more details what else is possible with `pytest-jira` plugin
+look at the
+[project documentation](https://github.com/rhevm-qe-automation/pytest_jira).
 
 ## Skipping tests based on ocs version
 

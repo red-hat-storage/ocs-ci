@@ -158,6 +158,7 @@ PVC = "PersistentVolumeClaim"
 POD = "Pod"
 ROUTE = "Route"
 SERVICE = "Service"
+DAEMONSET = "DaemonSet"
 CEPHOBJECTSTORE = "cephobjectstore"
 NODE = "Node"
 DEPLOYMENTCONFIG = "deploymentconfig"
@@ -249,6 +250,7 @@ IGNORE_SC_FLEX = "rook-ceph-block"
 TEST_FILES_BUCKET = "ocsci-test-files"
 ROOK_REPOSITORY = "https://github.com/rook/rook.git"
 OPENSHIFT_STORAGE_NAMESPACE = "openshift-storage"
+OPENSHIFT_NAMESPACE = "openshift"
 OPENSHIFT_STORAGE_CLIENT_NAMESPACE = "openshift-storage-client"
 OPENSHIFT_STORAGE_EXTENDED_NAMESPACE = "openshift-storage-extended"
 OPENSHIFT_STORAGE_CLIENT_NAMESPACE = "openshift-storage-client"
@@ -1421,6 +1423,21 @@ HCI_PROVIDER_CLIENT_PLATFORMS = [
     HCI_BAREMETAL,
     HCI_VSPHERE,
 ]
+
+IBM_CLOUD_SUBNETS = {
+    # Washington D.C.
+    "us-east": {
+        "us-east-1": "10.241.0.0/18",
+        "us-east-2": "10.241.64.0/18",
+        "us-east-3": "10.241.128.0/18",
+    },
+    # Dalas
+    "us-south": {
+        "us-south-1": "10.240.0.0/18",
+        "us-south-2": "10.240.64.0/18",
+        "us-south-3": "10.240.128.0/18",
+    },
+}
 
 HCI_PC_OR_MS_PLATFORM = MANAGED_SERVICE_PLATFORMS + HCI_PROVIDER_CLIENT_PLATFORMS
 # AWS i3 worker instance for LSO
@@ -2743,6 +2760,13 @@ DRPC_PATH = os.path.join(TEMPLATE_DIR, "DR", "drpc.yaml")
 CLUSTERROLEBINDING_APPSET_PULLMODEL_PATH = os.path.join(
     TEMPLATE_DIR, "DR", "clusterrolebinding_appset_pullmodel.yaml"
 )
+THANOS_PATH = os.path.join(TEMPLATE_DIR, "DR", "thanos.yaml")
+MULTICLUSTEROBSERVABILITY_PATH = os.path.join(
+    TEMPLATE_DIR, "DR", "multiclusterobservability.yaml"
+)
+OBSERVABILITYMETRICSCONFIGMAP_PATH = os.path.join(
+    TEMPLATE_DIR, "DR", "observability-metrics-configmap.yaml"
+)
 APPLICATION_SET = "ApplicationSet"
 PLACEMENT = "Placement"
 GITOPS_CLUSTER_NAMESPACE = "openshift-gitops"
@@ -2842,3 +2866,6 @@ CCOCTL_LOG_FILE = "ccoctl-service-id.log"
 # Noobaa Secrets
 NOOBAA_BACKEND_SECRET = "noobaa-root-master-key-backend"
 NOOBAA_VOLUME_SECRET = "noobaa-root-master-key-volume"
+
+# ascii characters
+ENTER_KEY = chr(13)

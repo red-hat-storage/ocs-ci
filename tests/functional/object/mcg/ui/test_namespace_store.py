@@ -31,9 +31,10 @@ class TestNamespaceStoreUI(object):
 
     @ui
     @tier1
+    @runs_on_provider
     @pytest.mark.bugzilla("2158922")
     @polarion_id("OCS-5125")
-    def test_create_namespace_store_ui(self, setup_ui_class, pvc_factory):
+    def test_create_namespace_store_ui(self, setup_ui_class_factory, pvc_factory):
         """
         1. Create a new PVC on openshift-storage namespce.
         2. Create namespacestore via ui based on filesystem and mount to new pvc
@@ -42,6 +43,8 @@ class TestNamespaceStoreUI(object):
         5. Delete PVC
 
         """
+        setup_ui_class_factory()
+
         self.namespace_store_obj = None
         openshift_storage_ns_obj = OCP(namespace=config.ENV_DATA["cluster_namespace"])
         pvc_obj = pvc_factory(

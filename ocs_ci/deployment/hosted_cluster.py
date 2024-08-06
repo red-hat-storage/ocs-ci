@@ -316,7 +316,7 @@ class HypershiftHostedOCP(HyperShiftBase, MetalLBInstaller, CNVInstaller, Deploy
         MetalLBInstaller.__init__(self)
         CNVInstaller.__init__(self)
         self.name = name
-        if config.ENV_DATA["clusters"].get(self.name):
+        if config.ENV_DATA.get("clusters", {}).get(self.name):
             cluster_path = (
                 config.ENV_DATA["clusters"].get(self.name).get("hosted_cluster_path")
             )
@@ -371,6 +371,11 @@ class HypershiftHostedOCP(HyperShiftBase, MetalLBInstaller, CNVInstaller, Deploy
         cp_availability_policy = (
             config.ENV_DATA["clusters"].get(self.name).get("cp_availability_policy")
         )
+        disable_default_sources = (
+            config.ENV_DATA["clusters"]
+            .get(self.name)
+            .get("disable_default_sources", False)
+        )
         return self.create_kubevirt_ocp_cluster(
             name=self.name,
             nodepool_replicas=nodepool_replicas,
@@ -378,6 +383,7 @@ class HypershiftHostedOCP(HyperShiftBase, MetalLBInstaller, CNVInstaller, Deploy
             memory=memory_per_hosted_cluster,
             ocp_version=ocp_version,
             cp_availability_policy=cp_availability_policy,
+            disable_default_sources=disable_default_sources,
         )
 
     def deploy_dependencies(
@@ -398,7 +404,11 @@ class HypershiftHostedOCP(HyperShiftBase, MetalLBInstaller, CNVInstaller, Deploy
             logger.info(
                 f"Changing the default StorageClass to {constants.CEPHBLOCKPOOL_SC}"
             )
-            helpers.change_default_storageclass(scname=constants.CEPHBLOCKPOOL_SC)
+            try:
+                helpers.change_default_storageclass(scname=constants.CEPHBLOCKPOOL_SC)
+            except CommandFailed as e:
+                logger.error(f"Failed to change default StorageClass: {e}")
+
         if deploy_cnv:
             self.deploy_cnv(check_cnv_ready=True)
         if deploy_acm_hub:
@@ -518,8 +528,13 @@ class HostedODF(HypershiftHostedOCP):
         )
         self.timeout_check_resources_exist_sec = 6
         self.timeout_wait_csvs_minutes = 20
-        self.timeout_wait_pod_minutes = 20
-        self.storage_client_name = None
+        self.timeout_wait_pod_minutes = 30
+
+        # default cluster name picked from the storage client yaml
+        storage_client_data = templating.load_yaml(
+            constants.PROVIDER_MODE_STORAGE_CLIENT
+        )
+        self.storage_client_name = storage_client_data["metadata"]["name"]
 
     @kubeconfig_exists_decorator
     def exec_oc_cmd(self, cmd, timeout=300, ignore_error=False, **kwargs):
@@ -618,19 +633,9 @@ class HostedODF(HypershiftHostedOCP):
         """
         Deploy ODF client on hosted OCP cluster
         """
-        logger.info(f"Deploying ODF client on hosted OCP cluster '{self.name}'")
-        hosted_odf_version = get_semantic_version(
-            config.ENV_DATA.get("clusters").get(self.name).get("hosted_odf_version"),
-            only_major_minor=True,
+        logger.info(
+            f"Deploying ODF client on hosted OCP cluster '{self.name}'. Creating ODF client namespace"
         )
-
-        no_network_policy_version = version.VERSION_4_16
-
-        if hosted_odf_version < no_network_policy_version:
-            logger.info("Applying network policy")
-            self.apply_network_policy()
-
-        logger.info("Creating ODF client namespace")
         self.create_ns()
 
         if self.odf_csv_installed():
@@ -1082,12 +1087,13 @@ class HostedODF(HypershiftHostedOCP):
         subscription_data = templating.load_yaml(constants.PROVIDER_MODE_SUBSCRIPTION)
 
         # since we are allowed to install N+1 on hosted clusters we can not rely on PackageManifest default channel
-        odf_version = get_semantic_version(
-            config.ENV_DATA.get("clusters").get(self.name).get("hosted_odf_version"),
-            only_major_minor=True,
+        hosted_odf_version = (
+            config.ENV_DATA.get("clusters").get(self.name).get("hosted_odf_version")
         )
+        if "latest" in hosted_odf_version:
+            hosted_odf_version = hosted_odf_version.split("-")[-1]
 
-        subscription_data["spec"]["channel"] = f"stable-{str(odf_version)}"
+        subscription_data["spec"]["channel"] = f"stable-{str(hosted_odf_version)}"
 
         subscription_file = tempfile.NamedTemporaryFile(
             mode="w+", prefix="subscription", delete=False
@@ -1136,15 +1142,14 @@ class HostedODF(HypershiftHostedOCP):
         Returns:
             bool: True if storage class claim for CephFS exists, False otherwise
         """
-        if (
-            get_semantic_version(
-                config.ENV_DATA.get("clusters")
-                .get(self.name)
-                .get("hosted_odf_version"),
-                only_major_minor=True,
-            )
-            < version.VERSION_4_16
-        ):
+
+        hosted_odf_version = (
+            config.ENV_DATA.get("clusters").get(self.name).get("hosted_odf_version")
+        )
+        if "latest" in hosted_odf_version:
+            hosted_odf_version = hosted_odf_version.split("-")[-1]
+
+        if get_semantic_version(hosted_odf_version, True) < version.VERSION_4_16:
             ocp = OCP(
                 kind=constants.STORAGECLASSCLAIM,
                 namespace=self.namespace_client,
@@ -1224,15 +1229,14 @@ class HostedODF(HypershiftHostedOCP):
         Returns:
              bool: True if storage class claim for RBD exists, False otherwise
         """
-        if (
-            get_semantic_version(
-                config.ENV_DATA.get("clusters")
-                .get(self.name)
-                .get("hosted_odf_version"),
-                True,
-            )
-            < version.VERSION_4_16
-        ):
+
+        hosted_odf_version = (
+            config.ENV_DATA.get("clusters").get(self.name).get("hosted_odf_version")
+        )
+        if "latest" in hosted_odf_version:
+            hosted_odf_version = hosted_odf_version.split("-")[-1]
+
+        if get_semantic_version(hosted_odf_version, True) < version.VERSION_4_16:
             ocp = OCP(
                 kind=constants.STORAGECLASSCLAIM,
                 namespace=self.namespace_client,

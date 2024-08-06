@@ -65,7 +65,13 @@ class Sanity:
                 self.ceph_cluster.cluster_health_check(timeout=120)
 
     def create_resources(
-        self, pvc_factory, pod_factory, bucket_factory, rgw_bucket_factory, run_io=True
+        self,
+        pvc_factory,
+        pod_factory,
+        bucket_factory,
+        rgw_bucket_factory,
+        run_io=True,
+        bucket_creation_timeout=180,
     ):
         """
         Sanity validation: Create resources - pods, OBCs (RGW and MCG), PVCs (FS and RBD) and run IO
@@ -76,6 +82,7 @@ class Sanity:
             bucket_factory (function): A call to bucket_factory function
             rgw_bucket_factory (function): A call to rgw_bucket_factory function
             run_io (bool): True for run IO, False otherwise
+            bucket_creation_timeout (int): Time to wait for the bucket object creation.
 
         """
         logger.info(
@@ -96,7 +103,11 @@ class Sanity:
             self.obc_objs.extend(rgw_bucket_factory(1, "rgw-oc"))
 
         if bucket_factory:
-            self.obc_objs.extend(bucket_factory(amount=1, interface="OC"))
+            self.obc_objs.extend(
+                bucket_factory(
+                    amount=1, interface="OC", timeout=bucket_creation_timeout
+                )
+            )
 
             self.ceph_cluster.wait_for_noobaa_health_ok()
 

@@ -36,6 +36,7 @@ from ocs_ci.ocs.exceptions import (
 from ocs_ci.helpers import helpers
 from ocs_ci.ocs.resources import storage_cluster
 from ocs_ci.utility import templating, version
+from ocs_ci.utility.retry import retry
 from ocs_ci.utility.utils import (
     download_file,
     delete_file,
@@ -1655,24 +1656,30 @@ class KMIP(KMS):
         else:
             return json.loads(out)
 
-    def get_key_list_ciphertrust(self):
+    def get_key_list_ciphertrust(self, limit=100):
         """
         Lists all keys in CipherTrust Manager
+
+        Args:
+            limit (int): number of entries to limit the results
 
         Returns:
             (list): list containing the IDs of the keys
 
         """
         key_id_list = []
-        cmd = "ksctl keys list"
-        out = subprocess.check_output(shlex.split(cmd))
-        json_out = json.loads(out)
-        if json_out["total"] == 0:
-            raise NotFoundError("No keys found")
-        else:
-            for key in json_out["resources"]:
-                key_id_list.append(key["id"])
-            return key_id_list
+        total = None
+        while len(key_id_list) != total:
+            cmd = f"ksctl keys list --limit {limit} --skip {len(key_id_list)}"
+            out = subprocess.check_output(shlex.split(cmd))
+            json_out = json.loads(out)
+            total = json_out["total"]
+            if total == 0:
+                raise NotFoundError("No keys found")
+            else:
+                for key in json_out["resources"]:
+                    key_id_list.append(key["id"])
+                return key_id_list
 
     def get_osd_key_ids(self):
         """
@@ -1726,16 +1733,18 @@ class KMIP(KMS):
         """
         self.validate_ciphertrust_deployment()
 
+    @retry(NotFoundError, tries=2, delay=30)
     def validate_ciphertrust_deployment(self):
         """
         Verify whether OSD and NooBaa keys are stored in CipherTrust Manager
 
         """
         self.update_kmip_env_vars()
-        key_id_list = self.get_key_list_ciphertrust()
 
         # Check for OSD keys
         osd_key_ids = self.get_osd_key_ids()
+        # Loading key list after gathering OSD pods to avoid mismatch.
+        key_id_list = self.get_key_list_ciphertrust()
         if all(id in key_id_list for id in osd_key_ids):
             logger.info("KMIP: All OSD keys found in CipherTrust Manager")
         else:

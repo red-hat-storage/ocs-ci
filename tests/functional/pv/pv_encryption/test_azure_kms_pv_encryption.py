@@ -5,7 +5,7 @@ from ocs_ci.framework.pytest_customization.marks import (
     tier1,
     green_squad,
     azure_platform_required,
-    kms_config_required,
+    azure_kv_config_required,
     polarion_id,
     skipif_ocs_version,
     skipif_managed_service,
@@ -24,7 +24,7 @@ log = logging.getLogger(__name__)
 @tier1
 @green_squad
 @azure_platform_required
-@kms_config_required
+@azure_kv_config_required
 @skipif_ocs_version("<4.16")
 @skipif_managed_service
 @skipif_hci_provider_and_client

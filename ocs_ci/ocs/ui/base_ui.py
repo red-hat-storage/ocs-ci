@@ -359,17 +359,21 @@ class BaseUI:
         if status != current_status:
             self.do_click(locator=locator)
 
-    def check_element_text(self, expected_text, element="*"):
+    def check_element_text(self, expected_text, element="*", take_screenshot=False):
         """
         Check if the text matches the expected text.
 
         Args:
             expected_text (string): The expected text.
+            element (str): element
+            take_screenshot (bool): if screenshot should be taken
 
         return:
             bool: True if the text matches the expected text, False otherwise
 
         """
+        if take_screenshot:
+            self.take_screenshot()
         element_list = self.driver.find_elements_by_xpath(
             f"//{element}[contains(text(), '{expected_text}')]"
         )
@@ -829,7 +833,7 @@ class SeleniumDriver(WebDriver):
             # headless browsers are web browsers without a GUI
             headless = ocsci_config.UI_SELENIUM.get("headless")
             if headless:
-                chrome_options.add_argument("--headless")
+                chrome_options.add_argument("--headless=new")
                 chrome_options.add_argument("window-size=1920,1400")
 
             # use proxy server, if required
@@ -906,7 +910,7 @@ class SeleniumDriver(WebDriver):
     backoff=2,
     func=garbage_collector_webdriver,
 )
-def login_ui(console_url=None, username=None, password=None, **kwargs):
+def login_ui(console_url=None, username=None, password=None):
     """
     Login to OpenShift Console
 
@@ -984,13 +988,13 @@ def login_ui(console_url=None, username=None, password=None, **kwargs):
 
     if hci_platform_conf_confirmed:
         dashboard_url = console_url + "/dashboards"
-        # automatically proceed to load-cluster if test marked with provider decorator
-        if (
-            "request" in kwargs
-            and kwargs["request"].node.get_closest_marker("runs_on_provider")
-            and driver.current_url != dashboard_url
-        ):
+        # proceed to local-cluster page if not already there. The rule is always to start from the local-cluster page
+        # when the hci platform is confirmed and proceed to the client if needed from within the test
+        current_url = driver.current_url
+        logger.info(f"Current url: {current_url}")
+        if current_url != dashboard_url:
             # timeout is unusually high for different scenarios when default page is not loaded immediately
+            logger.info("Navigate to 'Local Cluster' page")
             navigate_to_local_cluster(
                 acm_page=locators[ocp_version]["acm_page"], timeout=180
             )
@@ -1070,11 +1074,13 @@ def navigate_to_local_cluster(**kwargs):
 
     all_clusters_dropdown = acm_page_loc["all-clusters_dropdown"]
     try:
+        logger.info("Navigate to Local Cluster page. Click all clusters dropdown")
         acm_dropdown = wait_for_element_to_be_visible(all_clusters_dropdown, timeout)
         acm_dropdown.click()
         local_cluster_item = wait_for_element_to_be_visible(
             acm_page_loc["local-cluster_dropdown_item"]
         )
+        logger.info("Navigate to Local Cluster page. Click local cluster item")
         local_cluster_item.click()
     except TimeoutException:
         wait_for_element_to_be_visible(acm_page_loc["local-cluster_dropdown"])

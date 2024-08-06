@@ -24,6 +24,7 @@ from ocs_ci.ocs.resources.pod import (
     get_mon_pods,
     get_mon_pod_id,
     get_pod_node,
+    get_osd_pods,
 )
 
 logger = logging.getLogger(__name__)
@@ -665,3 +666,46 @@ class StretchCluster(OCS):
             failure_check_map[type](
                 start_time, end_time, wait_for_read_completion=wait_for_read_completion
             )
+
+    def get_mon_pods_in_a_zone(self, zone):
+        """
+        Fetches mon pods in a particular zone
+
+        Args:
+            zone (str): Zone
+
+        Returns:
+            List: mon pods in a zone
+
+        """
+        nodes_in_zone = [node.name for node in self.get_nodes_in_zone(zone)]
+        mon_pods = [
+            Pod(**pod_info)
+            for pod_info in get_pods_having_label(
+                label=constants.MON_APP_LABEL, statuses=["Running"]
+            )
+        ]
+        mon_pods_in_zone = [
+            pod for pod in mon_pods if get_pod_node(pod).name in nodes_in_zone
+        ]
+        return mon_pods_in_zone
+
+    def get_osd_pods_in_a_zone(self, zone):
+        """
+        Fetches osd osd pods in particular zone
+
+        Args:
+            zone (str): Zone
+
+        Returns:
+            List: OSD pods in a zone
+
+        """
+
+        nodes_in_zone = [node.name for node in self.get_nodes_in_zone(zone)]
+        osd_pods = get_osd_pods()
+
+        osd_pods_in_zone = [
+            pod for pod in osd_pods if get_pod_node(pod).name in nodes_in_zone
+        ]
+        return osd_pods_in_zone

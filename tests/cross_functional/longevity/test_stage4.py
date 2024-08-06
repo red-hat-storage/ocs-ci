@@ -42,4 +42,7 @@ class TestLongevityStage4(E2ETest):
             multi_snapshot_factory,
             snapshot_restore_factory,
             teardown_factory,
+            run_time=180,
+            delay=60,
+            collect_cluster_sanity_checks=True,
         )

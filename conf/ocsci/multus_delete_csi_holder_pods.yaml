@@ -1,0 +1,4 @@
+---
+# This configuration file is used for delete csi holder pods on ODF cluster with multus post upgrade
+ENV_DATA:
+  multus_delete_csi_holder_pods: True

@@ -7,6 +7,7 @@ from ocs_ci.framework.testlib import (
     post_upgrade,
     post_ocs_upgrade,
     polarion_id,
+    skipif_external_mode,
 )
 from ocs_ci.ocs import exceptions
 from ocs_ci.ocs.resources import pod
@@ -17,6 +18,7 @@ log = logging.getLogger(__name__)
 
 @tier4a
 @skipif_ocs_version("<4.15")
+@skipif_external_mode
 @post_upgrade
 @post_ocs_upgrade
 class TestMgrPods(BaseTest):

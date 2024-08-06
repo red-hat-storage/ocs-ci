@@ -238,6 +238,7 @@ class HyperShiftBase:
         root_volume_size: str = 40,
         ocp_version=None,
         cp_availability_policy=None,
+        disable_default_sources=None,
     ):
         """
         Create HyperShift hosted cluster. Default parameters have minimal requirements for the cluster.
@@ -251,6 +252,7 @@ class HyperShiftBase:
             root_volume_size (str): Root volume size of the cluster, default 40 (Gi is not required)
             cp_availability_policy (str): Control plane availability policy, default HighlyAvailable, if no value
             provided and argument is not used in the command the single replica mode cluster will be created
+            disable_default_sources (bool): Disable default sources on hosted cluster, such as 'redhat-operators'
         Returns:
             str: Name of the hosted cluster
         """
@@ -307,6 +309,9 @@ class HyperShiftBase:
             create_hcp_cluster_cmd += (
                 f" --control-plane-availability-policy {cp_availability_policy} "
             )
+
+        if disable_default_sources:
+            create_hcp_cluster_cmd += " --olm-disable-default-sources"
 
         logger.info("Creating HyperShift hosted cluster")
         exec_cmd(create_hcp_cluster_cmd)

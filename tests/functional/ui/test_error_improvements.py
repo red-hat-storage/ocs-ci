@@ -13,6 +13,7 @@ from ocs_ci.framework.pytest_customization.marks import (
     skipif_hci_provider_or_client,
     runs_on_provider,
     skipif_disconnected_cluster,
+    external_mode_required,
 )
 from ocs_ci.framework.testlib import ManageTest
 from ocs_ci.ocs.ocp import OCP
@@ -138,14 +139,18 @@ class TestErrorMessageImprovements(ManageTest):
         blocking_pool_tab.check_edit_labels(block_pool_obj.name)
 
         blocking_pool_tab.proceed_resource_creation()
+
         blocking_pool_tab.check_error_messages()
 
     @bugzilla("2193109")
     @polarion_id("OCS-4875")
+    @external_mode_required
     @skipif_hci_provider_or_client
     def test_storage_class_creation_rules(self, setup_ui_class):
         """
-        Test to verify error rules for the name when creating a new storage class
+        Test to verify error rules for the name when creating a new storage class.
+        external_mode_required deco added. Starting from ODF 4.16 this form is available for External mode only,
+        where still no clusters StorageSystem was created. Rules are:
             No more than 253 characters
             Starts and ends with a lowercase letter or number
             Only lowercase letters, numbers, non-consecutive periods, or hyphens

@@ -62,7 +62,14 @@ def create_muliple_types_provider_obcs(
         for provider, provider_config in providers.items():
             for bucket_type, type_config in bucket_types.items():
                 if provider == "pv" and bucket_type != "data":
-                    provider = random.choice(["aws", "azure"])
+                    available_providers = [
+                        key for key in cloud_providers.keys() if key != "pv"
+                    ]
+                    if available_providers:
+                        provider = random.choice(available_providers)
+                    else:
+                        # If 'pv' is the only available provider, choose between 'aws' and 'azure'
+                        provider = random.choice(["aws", "azure"])
                     provider_config = providers[provider]
                 bucketclass = copy.deepcopy(type_config)
 
@@ -343,7 +350,11 @@ def validate_rgw_kafka_notification(kafka_rgw_dict, event, run_in_bg=False):
 
 
 def validate_mcg_object_expiration(
-    mcg_obj, buckets, event, run_in_bg=False, object_amount=5, prefix=""
+    mcg_obj,
+    buckets,
+    event,
+    run_in_bg=False,
+    object_amount=5,
 ):
     """
     Validates objects expiration for MCG buckets
@@ -364,7 +375,7 @@ def validate_mcg_object_expiration(
                 s3_put_object(
                     mcg_obj,
                     bucket.name,
-                    f"{prefix}/obj-key-{uuid4().hex}",
+                    f"obj-key-{uuid4().hex}",
                     "Some random data",
                 )
             expire_objects_in_bucket(bucket.name)

@@ -212,7 +212,7 @@ def setup_local_storage(storageclass):
         # extra_disks is used in vSphere attach_disk() method
         storage_class_device_count = config.ENV_DATA.get("extra_disks", 1)
     expected_pvs = len(worker_names) * storage_class_device_count
-    if platform == constants.BAREMETAL_PLATFORM:
+    if platform in [constants.BAREMETAL_PLATFORM, constants.HCI_BAREMETAL]:
         verify_pvs_created(expected_pvs, storageclass, False)
     else:
         verify_pvs_created(expected_pvs, storageclass)

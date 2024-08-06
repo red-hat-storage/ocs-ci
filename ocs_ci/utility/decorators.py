@@ -48,3 +48,35 @@ def switch_to_default_cluster_index_at_last(func):
                 config.switch_ctx(default_cluster_index)
 
     return inner
+
+
+def switch_to_client_for_function(func, client_index=0):
+    """
+    A decorator for switching to the client cluster for the function execution.
+    After the function execution, it switches back to the original index.
+
+    Example of usage:
+    Suppose we have the function definition 'def wait_for_storage_client_connected(timeout=180, sleep=10)'.
+    Here are three examples of usage:
+    1. switch_to_client_for_function(wait_for_storage_client_connected)(timeout=30)
+    2. switch_to_client_for_function(wait_for_storage_client_connected, client_index=1)()
+    2. switch_to_client_for_function(wait_for_storage_client_connected, client_index=1)(timeout=30, sleep=5)
+
+
+    Args:
+        func (function): The function we want to decorate
+        client_index (int) : The client cluster index to switch. The default value is 0.
+
+    """
+
+    def inner(*args, **kwargs):
+        orig_index = config.cur_index
+        try:
+            config.switch_to_consumer(client_index)
+            return func(*args, **kwargs)
+        finally:
+            if config.cur_index != orig_index:
+                logger.info("Switching back to the original cluster")
+                config.switch_ctx(orig_index)
+
+    return inner

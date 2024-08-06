@@ -18,6 +18,7 @@ from ocs_ci.helpers.helpers import (
     delete_volume_in_backend,
     verify_volume_deleted_in_backend,
     create_project,
+    create_unique_resource_name,
 )
 from ocs_ci.ocs import constants, ocp
 from ocs_ci.ocs.cnv.virtual_machine import VirtualMachine
@@ -545,6 +546,8 @@ class CnvWorkload(DRWorkload):
 
     """
 
+    _repo_cloned = False
+
     def __init__(self, **kwargs):
         """
         Initialize CnvWorkload instance
@@ -561,7 +564,7 @@ class CnvWorkload(DRWorkload):
         self.vm_obj = None
         self.vm_username = kwargs.get("vm_username")
         self.workload_type = kwargs.get("workload_type")
-        self.workload_namespace = kwargs.get("workload_namespace", None)
+        self.workload_namespace = create_unique_resource_name("ns", "vm")
         self.workload_pod_count = kwargs.get("workload_pod_count")
         self.workload_pvc_count = kwargs.get("workload_pvc_count")
         self.dr_policy_name = kwargs.get(
@@ -576,6 +579,12 @@ class CnvWorkload(DRWorkload):
         self.cnv_workload_dir = os.path.join(
             self.target_clone_dir, kwargs.get("workload_dir")
         )
+        if self.workload_type == constants.SUBSCRIPTION:
+            self.channel_name = ""
+            self.channel_namespace = create_unique_resource_name("ns", "channel")
+            self.channel_yaml_file = os.path.join(
+                self.target_clone_dir, kwargs.get("workload_dir"), "channel.yaml"
+            )
         self.cnv_workload_yaml_file = os.path.join(
             self.cnv_workload_dir, self.workload_name + ".yaml"
         )
@@ -619,12 +628,40 @@ class CnvWorkload(DRWorkload):
         cnv_workload_yaml_data_load = list(
             templating.load_yaml(self.cnv_workload_yaml_file, multi_document=True)
         )
-        log.info(cnv_workload_yaml_data_load)
+        if self.workload_type == constants.SUBSCRIPTION:
+            # load channel.yaml
+            channel_yaml_data_load = list(
+                templating.load_yaml(self.channel_yaml_file, multi_document=True)
+            )
+            for channel_yaml_data in channel_yaml_data_load:
+                if channel_yaml_data["kind"] == "Namespace":
+                    channel_yaml_data["metadata"]["name"] = self.channel_namespace
+                elif channel_yaml_data["kind"] == "Channel":
+                    self.channel_name = channel_yaml_data["metadata"]["name"]
+                    channel_yaml_data["spec"]["pathname"] = self.workload_repo_url
+                    channel_yaml_data["metadata"]["namespace"] = self.channel_namespace
+                templating.dump_data_to_temp_yaml(
+                    channel_yaml_data_load, self.channel_yaml_file
+                )
         for cnv_workload_yaml_data in cnv_workload_yaml_data_load:
             if self.workload_type == constants.SUBSCRIPTION:
-                # Update channel for Subscription apps
-                if cnv_workload_yaml_data["kind"] == "Channel":
-                    cnv_workload_yaml_data["spec"]["pathname"] = self.workload_repo_url
+                if cnv_workload_yaml_data["kind"] == "Namespace":
+                    cnv_workload_yaml_data["metadata"]["name"] = self.workload_namespace
+                elif cnv_workload_yaml_data["kind"] == "Application":
+                    cnv_workload_yaml_data["metadata"][
+                        "namespace"
+                    ] = self.workload_namespace
+                elif cnv_workload_yaml_data["kind"] == "Subscription":
+                    cnv_workload_yaml_data["metadata"][
+                        "namespace"
+                    ] = self.workload_namespace
+                    cnv_workload_yaml_data["spec"][
+                        "channel"
+                    ] = f"{self.channel_namespace}/{self.channel_name}"
+                elif cnv_workload_yaml_data["kind"] == "ManagedClusterSetBinding":
+                    cnv_workload_yaml_data["metadata"][
+                        "namespace"
+                    ] = self.workload_namespace
             elif cnv_workload_yaml_data["kind"] == "ApplicationSet":
                 cnv_workload_yaml_data["metadata"]["name"] = self.workload_name
                 # Change the destination namespace for AppSet workload
@@ -685,6 +722,8 @@ class CnvWorkload(DRWorkload):
             cnv_workload_yaml_data_load, self.cnv_workload_yaml_file
         )
         config.switch_acm_ctx()
+        if self.workload_type == constants.SUBSCRIPTION:
+            run_cmd(f"oc create -f {self.channel_yaml_file}")
         run_cmd(f"oc create -f {self.cnv_workload_yaml_file}")
         self.add_annotation_to_placement()
         run_cmd(f"oc create -f {drcp_data_yaml.name}")
@@ -696,11 +735,13 @@ class CnvWorkload(DRWorkload):
 
         """
         # Clone workload repo
-        clone_repo(
-            url=self.workload_repo_url,
-            location=self.target_clone_dir,
-            branch=self.workload_repo_branch,
-        )
+        if not CnvWorkload._repo_cloned:
+            CnvWorkload._repo_cloned = True
+            clone_repo(
+                url=self.workload_repo_url,
+                location=self.target_clone_dir,
+                branch=self.workload_repo_branch,
+            )
 
     def add_annotation_to_placement(self):
         """
@@ -721,26 +762,6 @@ class CnvWorkload(DRWorkload):
         placement_obj.annotate(
             annotation="cluster.open-cluster-management.io/experimental-scheduling-disable='true'"
         )
-
-    def _get_workload_namespace(self):
-        """
-        Get the workload namespace
-
-        """
-
-        cnv_workload_data = list(
-            templating.load_yaml(self.cnv_workload_yaml_file, multi_document=True)
-        )
-
-        for _wl_data in cnv_workload_data:
-            if self.workload_type == constants.APPLICATION_SET:
-                if _wl_data["kind"] == constants.APPLICATION_SET:
-                    return _wl_data["spec"]["template"]["spec"]["destination"][
-                        "namespace"
-                    ]
-            else:
-                if _wl_data["kind"] == constants.SUBSCRIPTION:
-                    return _wl_data["metadata"]["namespace"]
 
     def _get_workload_name(self):
         """
@@ -792,7 +813,8 @@ class CnvWorkload(DRWorkload):
         try:
             config.switch_acm_ctx()
             run_cmd(cmd=f"oc delete -f {self.cnv_workload_yaml_file}", timeout=900)
-
+            if self.workload_type == constants.SUBSCRIPTION:
+                run_cmd(f"oc delete -f {self.channel_yaml_file}")
             for cluster, secret_obj in zip(
                 get_non_acm_cluster_config(), self.vm_secret_obj
             ):

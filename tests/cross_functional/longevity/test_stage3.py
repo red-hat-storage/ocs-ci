@@ -36,6 +36,7 @@ class TestLongevity(E2ETest):
             project_factory,
             num_of_pvc=150,
             num_of_obc=150,
+            collect_cluster_sanity_checks=True,
             run_time=180,
             delay=60,
         )

@@ -1,6 +1,7 @@
 import logging
 import random
 
+from ocs_ci.deployment.deployment import validate_acm_hub_install, Deployment
 from ocs_ci.deployment.helpers.hypershift_base import (
     get_hosted_cluster_names,
 )
@@ -15,6 +16,16 @@ from ocs_ci.framework.pytest_customization.marks import (
     libtest,
     purple_squad,
     runs_on_provider,
+)
+from ocs_ci.ocs import constants
+from ocs_ci.ocs.resources.storage_client import StorageClient
+from ocs_ci.helpers.helpers import (
+    get_all_storageclass_names,
+    verify_block_pool_exists,
+)
+from ocs_ci.ocs.rados_utils import (
+    verify_cephblockpool_status,
+    check_phase_of_rados_namespace,
 )
 
 logger = logging.getLogger(__name__)
@@ -120,3 +131,104 @@ class TestProviderHosted(object):
 
         cluster_names = list(config.ENV_DATA["clusters"].keys())
         assert HostedODF(cluster_names[-1]).get_storage_client_status() == "Connected"
+
+    @runs_on_provider
+    @hci_provider_required
+    def test_deploy_acm(self):
+        """
+        Test deploy dependencies
+        """
+        logger.info("Test deploy dependencies ACM")
+        HypershiftHostedOCP("dummy").deploy_dependencies(
+            deploy_acm_hub=True,
+            deploy_cnv=False,
+            deploy_metallb=False,
+            download_hcp_binary=False,
+        )
+        assert validate_acm_hub_install(), "ACM not installed or MCE not configured"
+
+    @runs_on_provider
+    @hci_provider_required
+    def test_deploy_cnv(self):
+        """
+        Test deploy dependencies
+        """
+        logger.info("Test deploy dependencies CNV")
+        hypershift_hosted = HypershiftHostedOCP("dummy")
+        hypershift_hosted.deploy_dependencies(
+            deploy_acm_hub=False,
+            deploy_cnv=True,
+            deploy_metallb=False,
+            download_hcp_binary=False,
+        )
+        assert hypershift_hosted.cnv_hyperconverged_installed(), "CNV not installed"
+
+    @runs_on_provider
+    @hci_provider_required
+    def test_deploy_metallb(self):
+        """
+        Test deploy dependencies
+        """
+        logger.info("Test deploy dependencies Metallb")
+        hypershift_hosted = HypershiftHostedOCP("dummy")
+        hypershift_hosted.deploy_dependencies(
+            deploy_acm_hub=False,
+            deploy_cnv=False,
+            deploy_metallb=True,
+            download_hcp_binary=False,
+        )
+        assert hypershift_hosted.metallb_instance_created(), "Metallb not installed"
+
+    @runs_on_provider
+    @hci_provider_required
+    def test_download_hcp(self):
+        """
+        Test deploy dependencies
+        """
+        logger.info("Test deploy dependencies HCP binary")
+        hypershift_hosted = HypershiftHostedOCP("dummy")
+        hypershift_hosted.deploy_dependencies(
+            deploy_acm_hub=False,
+            deploy_cnv=False,
+            deploy_metallb=False,
+            download_hcp_binary=True,
+        )
+        assert hypershift_hosted.hcp_binary_exists(), "HCP binary not downloaded"
+
+    @runs_on_provider
+    def test_mch_status_running(self):
+        """
+        Get MCH status
+        """
+        logger.info("Get MCH status")
+        depl = Deployment()
+        assert depl.muliclusterhub_running(), "MCH not running"
+
+    @runs_on_provider
+    def test_verify_native_storage(self):
+        """
+        Verify native storage client
+        """
+        logger.info("Verify native storage client")
+        storage_client = StorageClient()
+        storage_client.verify_native_storageclient()
+        assert verify_block_pool_exists(
+            constants.DEFAULT_BLOCKPOOL
+        ), f"{constants.DEFAULT_BLOCKPOOL} is not created"
+        assert verify_cephblockpool_status(), "the cephblockpool is not in Ready phase"
+
+        # Validate radosnamespace created and in 'Ready' status
+        assert (
+            check_phase_of_rados_namespace()
+        ), "The radosnamespace is not in Ready phase"
+
+        # Validate storageclassrequests created
+        storage_class_classes = get_all_storageclass_names()
+        storage_class_claims = [
+            constants.CEPHBLOCKPOOL_SC,
+            constants.CEPHFILESYSTEM_SC,
+        ]
+        for storage_class in storage_class_claims:
+            assert (
+                storage_class in storage_class_classes
+            ), "Storage classes ae not created as expected"

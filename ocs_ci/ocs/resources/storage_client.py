@@ -1,6 +1,7 @@
 """
 Storage client related functions
 """
+
 import logging
 import tempfile
 import time
@@ -15,6 +16,7 @@ from ocs_ci.utility.retry import retry
 from ocs_ci.helpers.managed_services import (
     get_all_storageclassclaims,
 )
+from ocs_ci.utility.utils import TimeoutSampler
 
 log = logging.getLogger(__name__)
 
@@ -293,6 +295,7 @@ class StorageClient:
             )
             self.ocp_obj.exec_oc_cmd(f"apply -f {storage_classclaim_data_yaml.name}")
 
+    @retry(AssertionError, 20, 10, 1)
     def verify_storage_claim_status(
         self,
         storageclient_name=None,
@@ -324,6 +327,7 @@ class StorageClient:
                     ), "storageclaim is not in expected status"
         log.info(sc_claim)
 
+    @retry(AssertionError, 20, 10, 1)
     def verify_storagerequest_exists(
         self, storageclient_name=None, namespace=config.ENV_DATA["cluster_namespace"]
     ):
@@ -334,20 +338,25 @@ class StorageClient:
             storageclient_name (str): Name of the storageclient to be verified.
             namespace (str): Namespace where the storageclient is present.
 
-        Returns:
-            storagerequest_exists (bool): returns true if the storagerequest exists
-
         """
-        cmd = f"get storagerequests -n {namespace} " "-o=jsonpath='{.items[*]}'"
-        storage_requests = self.ocp_obj.exec_oc_cmd(command=cmd, out_yaml_format=False)
-
-        log.info(f"The list of storagerequests: {storage_requests}")
-        return (
-            f"ocs.openshift.io/storagerequest-name: {storageclient_name}-cephfs"
-            in storage_requests
-            and f"ocs.openshift.io/storagerequest-name: {storageclient_name}-chep-rbd"
-            in storage_requests
+        storage_requests = ocp.OCP(
+            kind="StorageRequest",
+            namespace=namespace,
         )
+
+        storage_requests_data = storage_requests.get(retry=6, wait=30)["items"]
+
+        # check that both cephfs and rbd storage requests exist
+        assert any(
+            req["metadata"]["labels"]["ocs.openshift.io/storagerequest-name"]
+            == f"{storageclient_name}-cephfs"
+            for req in storage_requests_data
+        ), "cephfs storage request not found"
+        assert any(
+            req["metadata"]["labels"]["ocs.openshift.io/storagerequest-name"]
+            == f"{storageclient_name}-ceph-rbd"
+            for req in storage_requests_data
+        ), "rbd storage request not found"
 
     @retry(AssertionError, 12, 10, 1)
     def verify_storageclient_status(
@@ -499,13 +508,7 @@ class StorageClient:
         else:
             namespace = constants.OPENSHIFT_STORAGE_CLIENT_NAMESPACE
 
-        storageclient_obj = ocp.OCP(
-            kind=constants.STORAGECLIENT,
-            namespace=namespace,
-        )
-        storageclient_data = storageclient_obj.get()["items"]
-        log.info(f"storageclient data, {storageclient_data}")
-        storageclient_name = storageclient_data[0]["metadata"]["name"]
+        storageclient_name = self.get_storageclient_name(namespace)
 
         # Verify storageclient is in Connected status
         self.verify_storageclient_status(
@@ -519,3 +522,26 @@ class StorageClient:
         self.verify_storagerequest_exists(
             storageclient_name=storageclient_name, namespace=namespace
         )
+
+    def get_storageclient_name(self, namespace, timeout=300, sleep=10):
+        """
+        This method fetches the first storageclient name.
+        Suits well only for native storage client wait and fetch
+
+        Args:
+            namespace(str): Namespace where the storageclient is created
+            timeout(int): Time to wait for the storageclient
+            sleep(int): Time to sleep between each iteration
+
+        Returns:
+            storageclient_name(str): name of the storageclient
+        """
+        for sample in TimeoutSampler(
+            timeout, sleep, ocp.OCP, kind=constants.STORAGECLIENT, namespace=namespace
+        ):
+            storageclient_data = sample.get().get("items", [])
+            for storageclient in storageclient_data:
+                if storageclient.get("metadata", {}).get("name"):
+                    log.info(f"storageclient data, {storageclient}")
+                    return storageclient.get("metadata", {}).get("name")
+        return None

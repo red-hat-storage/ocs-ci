@@ -3,6 +3,7 @@ Pod related functionalities and context info
 
 Each pod in the openshift cluster will have a corresponding pod object
 """
+
 from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timedelta
 import logging
@@ -38,7 +39,7 @@ from ocs_ci.ocs.exceptions import (
 from ocs_ci.ocs.utils import setup_ceph_toolbox, get_pod_name_by_pattern
 from ocs_ci.ocs.resources.ocs import OCS
 from ocs_ci.ocs.resources.job import get_job_obj, get_jobs_with_prefix
-from ocs_ci.utility import templating, version
+from ocs_ci.utility import templating
 from ocs_ci.utility.utils import (
     run_cmd,
     check_timeout_reached,
@@ -213,9 +214,11 @@ class Pod(OCS):
         return self.exec_cmd_on_pod(
             craft_s3_command(command, mcg_obj),
             out_yaml_format=False,
-            secrets=[mcg_obj.access_key_id, mcg_obj.access_key, mcg_obj.s3_endpoint]
-            if mcg_obj
-            else None,
+            secrets=(
+                [mcg_obj.access_key_id, mcg_obj.access_key, mcg_obj.s3_endpoint]
+                if mcg_obj
+                else None
+            ),
         )
 
     def copy_to_pod_rsync(self, src_path, target_path, container=None):
@@ -1526,6 +1529,7 @@ def run_io_and_verify_mount_point(pod_obj, bs="10M", count="950"):
 def get_pods_having_label(
     label,
     namespace=constants.OPENSHIFT_STORAGE_NAMESPACE,
+    retry=0,
     cluster_config=None,
     statuses=None,
 ):
@@ -1544,7 +1548,9 @@ def get_pods_having_label(
 
     """
     ocp_pod = OCP(kind=constants.POD, namespace=namespace)
-    pods = ocp_pod.get(selector=label, cluster_config=cluster_config).get("items")
+    pods = ocp_pod.get(selector=label, retry=retry, cluster_config=cluster_config).get(
+        "items"
+    )
     if statuses:
         for pod in pods:
             if pod["status"]["phase"] not in statuses:
@@ -2267,7 +2273,6 @@ def wait_for_new_osd_pods_to_come_up(number_of_osd_pods_before):
 def get_pod_restarts_count(
     namespace=config.ENV_DATA["cluster_namespace"], label=None, list_of_pods=None
 ):
-
     """
     Gets the dictionary of pod and its restart count for all the pods in a given namespace
 
@@ -2377,15 +2382,26 @@ def check_pods_in_running_state(
     return ret_val
 
 
-def get_running_state_pods(namespace=config.ENV_DATA["cluster_namespace"]):
+def get_running_state_pods(
+    namespace=config.ENV_DATA["cluster_namespace"], ignore_selector=None
+):
     """
     Checks the running state pods in a given namespace.
 
-        Returns:
-            List: all the pod objects that are in running state only
+    Args:
+        namespace (str): Cluster namespace where pods are running
+        ignore_selector (list): List of pod selectors to ignore ( eg: ["rook-ceph-mgr", "rook-ceph-detect-version"] )
+
+    Returns:
+        List: all the pod objects that are in running state only
 
     """
-    list_of_pods = get_all_pods(namespace)
+    if ignore_selector:
+        list_of_pods = get_all_pods(
+            namespace, selector=ignore_selector, exclude_selector=True
+        )
+    else:
+        list_of_pods = get_all_pods(namespace)
     ocp_pod_obj = OCP(kind=constants.POD, namespace=namespace)
     running_pods_object = list()
     for pod in list_of_pods:
@@ -2599,23 +2615,10 @@ def run_osd_removal_job(osd_ids=None):
 
     """
     osd_ids_str = ",".join(map(str, osd_ids))
-    ocp_version = version.get_semantic_ocp_version_from_config()
-    ocs_version = version.get_semantic_ocs_version_from_config()
 
-    # Fixes: #6662
-    # Version OCS 4.6 and above requires FORCE_OSD_REMOVAL set to true in order to not get stuck
-    cmd_params = (
-        "-p FORCE_OSD_REMOVAL=true"
-        if ocs_version >= version.VERSION_4_6
-        and not check_safe_to_destroy_status(osd_ids_str)
-        else ""
-    )
+    cmd_params = "-p FORCE_OSD_REMOVAL=true"
 
-    # Parameter name FAILED_OSD_ID changed to FAILED_OSD_IDS for Version OCP 4.6 and above
-    if ocp_version >= version.VERSION_4_6:
-        cmd_params += f" -p FAILED_OSD_IDS={osd_ids_str}"
-    else:
-        cmd_params += f" -p FAILED_OSD_ID={osd_ids_str}"
+    cmd_params += f" -p FAILED_OSD_IDS={osd_ids_str}"
 
     logger.info(f"Executing OSD removal job on OSD ids: {osd_ids_str}")
     ocp_obj = ocp.OCP(namespace=config.ENV_DATA["cluster_namespace"])

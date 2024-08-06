@@ -82,7 +82,12 @@ class AcmPageNavigator(BaseUI):
         self.choose_expanded_mode(
             mode=True, locator=self.acm_page_nav["Infrastructure"]
         )
-        self.do_click(locator=self.acm_page_nav["Clusters_page"], timeout=timeout)
+        self.do_click(
+            locator=self.acm_page_nav["Clusters_page"],
+            timeout=timeout,
+            enable_screenshot=True,
+            avoid_stale=True,
+        )
 
     def navigate_bare_metal_assets_page(self):
         """
@@ -810,7 +815,7 @@ class ACMOCPPlatformVsphereIPI(ACMOCPClusterDeployment):
                 left_shift_offset = len(remote_text) - index
                 self.do_send_keys(
                     self.acm_page_nav["cc_vsphere_network_name"],
-                    f"{left_shift_offset*Keys.ARROW_LEFT}{constants.SPACE}",
+                    f"{left_shift_offset * Keys.ARROW_LEFT}{constants.SPACE}",
                 )
             except ValueError:
                 raise ACMClusterDeployException(

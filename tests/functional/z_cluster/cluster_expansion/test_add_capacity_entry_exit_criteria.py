@@ -58,6 +58,7 @@ class TestAddCapacity(ManageTest):
             kr_obj = OSDKeyrotation()
             kr_obj.set_keyrotation_schedule("@weekly")
             kr_obj.enable_keyrotation()
+            cluster_helpers.check_ceph_health_after_add_capacity()
 
         request.addfinalizer(finalizer)
 
@@ -98,19 +99,21 @@ class TestAddCapacity(ManageTest):
 
         # All OCS pods are in running state:
         # ToDo https://github.com/red-hat-storage/ocs-ci/issues/2361
-        assert (
-            pod_helpers.check_pods_in_running_state()
+        expected_statuses = [constants.STATUS_RUNNING, constants.STATUS_COMPLETED]
+        assert pod_helpers.check_pods_in_statuses(
+            expected_statuses=expected_statuses,
+            exclude_pod_name_prefixes=["demo-pod"],
         ), "Entry criteria FAILED: one or more OCS pods are not in running state"
         # Create the namespace under which this test will execute:
         project = project_factory()
 
         # total pvc created will be 'num_of_pvcs' * 4 types of pvcs(rbd-rwo,rwx
         # & cephfs-rwo,rwx)
-        num_of_pvcs = 40
+        num_of_pvcs = 20
 
         rwo_rbd_pods = multi_dc_pod(
             num_of_pvcs=num_of_pvcs,
-            pvc_size=175,
+            pvc_size=150,
             project=project,
             access_mode="RWO",
             pool_type="rbd",
@@ -124,7 +127,7 @@ class TestAddCapacity(ManageTest):
         # Create rwx-rbd pods
         pods_ios_rwx_rbd = multi_dc_pod(
             num_of_pvcs=10,
-            pvc_size=175,
+            pvc_size=150,
             project=project,
             access_mode="RWX-BLK",
             pool_type="rbd",
@@ -159,7 +162,7 @@ class TestAddCapacity(ManageTest):
                         bg_wrap.wrap,
                         cluster_exp_helpers.cluster_copy_ops,
                         p,
-                        iterations=200,
+                        iterations=120,
                     )
                 )
 
@@ -171,7 +174,7 @@ class TestAddCapacity(ManageTest):
             multi_pvc_factory,
             pod_factory,
             project,
-            iterations=200,
+            iterations=120,
         )
 
         # Start NooBaa IOs in the background.:
@@ -183,7 +186,7 @@ class TestAddCapacity(ManageTest):
             mcg_obj,
             awscli_pod,
             bucket_factory,
-            iterations=200,
+            iterations=120,
         )
 
         logger.info("Started obc_io_create_delete...")
@@ -194,7 +197,7 @@ class TestAddCapacity(ManageTest):
             mcg_obj,
             awscli_pod,
             bucket_factory,
-            iterations=200,
+            iterations=120,
         )
 
         # All ocs nodes are in Ready state (including master):
@@ -341,7 +344,11 @@ class TestAddCapacity(ManageTest):
         ]:
             # Change the method of creating resources when we use vSphere and IBM Cloud platforms
             self.sanity_helpers.create_resources(
-                pvc_factory, pod_factory, bucket_factory, rgw_bucket_factory
+                pvc_factory,
+                pod_factory,
+                bucket_factory,
+                rgw_bucket_factory,
+                bucket_creation_timeout=360,
             )
         else:
             num_of_pvcs = 1

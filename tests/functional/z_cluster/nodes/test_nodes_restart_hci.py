@@ -26,14 +26,21 @@ from ocs_ci.ocs.node import (
     wait_for_node_count_to_reach_status,
     drain_nodes,
     schedule_nodes,
+    get_node_by_internal_ip,
 )
 from ocs_ci.ocs.resources import pod
-from ocs_ci.helpers.sanity_helpers import Sanity
+from ocs_ci.helpers.sanity_helpers import SanityProviderMode
 from ocs_ci.ocs.cluster import (
     ceph_health_check,
 )
 from ocs_ci.framework import config
 from ocs_ci.utility.utils import switch_to_correct_cluster_at_setup
+from ocs_ci.ocs.resources.storage_cluster import (
+    get_client_storage_provider_endpoint,
+    wait_for_storage_client_connected,
+)
+from ocs_ci.utility.decorators import switch_to_client_for_function
+
 
 logger = logging.getLogger(__name__)
 
@@ -47,14 +54,16 @@ class TestNodesRestartHCI(ManageTest):
     """
 
     @pytest.fixture(autouse=True)
-    def setup(self, request, create_scale_pods_and_pvcs_using_kube_job_on_ms_consumers):
+    def setup(self, request, create_scale_pods_and_pvcs_using_kube_job_on_hci_clients):
         """
         Initialize Sanity instance, and create pods and PVCs factory
 
         """
         self.orig_index = config.cur_index
         switch_to_correct_cluster_at_setup(request)
-        self.sanity_helpers = Sanity()
+        self.sanity_helpers = SanityProviderMode(
+            create_scale_pods_and_pvcs_using_kube_job_on_hci_clients
+        )
 
     @pytest.fixture(autouse=True)
     def teardown(self, request, nodes):
@@ -146,7 +155,8 @@ class TestNodesRestartHCI(ManageTest):
         nodes.restart_nodes(nodes=[ocp_node], wait=True)
         logger.info("Wait for the expected node count to be ready...")
         wait_for_node_count_to_reach_status(node_count=node_count, node_type=node_type)
-        ceph_health_check()
+        self.sanity_helpers.health_check_provider_mode(tries=40)
+        self.sanity_helpers.create_resources_on_clients()
 
     @tier4a
     @pytest.mark.parametrize(
@@ -174,7 +184,8 @@ class TestNodesRestartHCI(ManageTest):
         nodes.restart_nodes_by_stop_and_start(nodes=[ocp_node], wait=True)
         logger.info("Wait for the expected node count to be ready...")
         wait_for_node_count_to_reach_status(node_count=node_count, node_type=node_type)
-        ceph_health_check()
+        self.sanity_helpers.health_check(tries=40)
+        self.sanity_helpers.create_resources_on_clients()
 
     @tier4b
     @bugzilla("1754287")
@@ -199,6 +210,9 @@ class TestNodesRestartHCI(ManageTest):
                 node_count=node_count, node_type=node_type
             )
             ceph_health_check(tries=40)
+
+        self.sanity_helpers.health_check(tries=20)
+        self.sanity_helpers.create_resources_on_clients()
 
     @tier4a
     @polarion_id("OCS-4482")
@@ -270,4 +284,97 @@ class TestNodesRestartHCI(ManageTest):
         # Mark the node as schedulable
         schedule_nodes([typed_node_name])
 
-        self.sanity_helpers.health_check()
+        self.sanity_helpers.health_check(tries=40)
+        self.sanity_helpers.create_resources_on_clients()
+
+    @tier4a
+    @polarion_id("OCS-5802")
+    @pytest.mark.parametrize(
+        "cluster_type",
+        [HCI_PROVIDER],
+    )
+    def test_stop_provider_endpoint_node_and_check_client_connection(
+        self, cluster_type, nodes
+    ):
+        """
+        Test stop the provider storage endpoint node and check the client connection is successfully
+        The test will implement the following steps:
+        1. Get the client "storageProviderEndpoint" param in the storage-client resource
+        2. Get the provider endpoint node by the client "storageProviderEndpoint" in the previous step,
+        and stop the provider endpoint node.
+        3. Verify the client storage-client is connected to the provider.
+        4. Try to create and delete resources from the client/s.
+        5. Start the provider endpoint node
+        6. Check the cluster health is ok for the provider and clients.
+        7. Check the client storage endpoint ip.
+
+        """
+        logger.info("Get the 'storageProviderEndpoint' node")
+        storage_provider_endpoint = switch_to_client_for_function(
+            get_client_storage_provider_endpoint
+        )()
+        endpoint_ip = storage_provider_endpoint.split(":")[0]
+        logger.info(f"client storage endpoint ip = {endpoint_ip}")
+        endpoint_node = get_node_by_internal_ip(endpoint_ip)
+        assert endpoint_node, "Didn't find the endpoint node in the provider"
+
+        logger.info(f"Stopping the endpoint node {endpoint_node.name}")
+        nodes.stop_nodes(nodes=[endpoint_node], wait=True)
+
+        logger.info("Check the client connection is OK")
+        switch_to_client_for_function(wait_for_storage_client_connected)(timeout=300)
+        logger.info("Try to create and delete resources on the clients")
+        self.sanity_helpers.create_resources_on_clients()
+        self.sanity_helpers.delete_resources_on_clients()
+        logger.info("Check again that the client connection is OK")
+        switch_to_client_for_function(wait_for_storage_client_connected)(timeout=120)
+
+        logger.info(f"Starting the endpoint node {endpoint_node.name}")
+        nodes.start_nodes(nodes=[endpoint_node], wait=True)
+        self.sanity_helpers.health_check_provider_mode(tries=40)
+
+        storage_provider_endpoint = switch_to_client_for_function(
+            get_client_storage_provider_endpoint
+        )()
+        endpoint_ip = storage_provider_endpoint.split(":")[0]
+        logger.info(
+            f"client storage endpoint ip after starting the endpoint node = {endpoint_ip}"
+        )
+
+    @tier4a
+    @polarion_id("OCS-5803")
+    @pytest.mark.parametrize(
+        "cluster_type",
+        [HCI_PROVIDER],
+    )
+    def test_stop_provider_mgr_node_and_check_client_connection(
+        self, cluster_type, nodes
+    ):
+        """
+        Test stop the provider MGR node and check the client connection is successfully
+        The test will implement the following steps:
+        1. Pick randomly one of the provider MGR nodes.
+        2. Stop the MGR node.
+        3. Verify the client storage-client is connected to the provider.
+        4. Try to create and delete resources from the client/s.
+        5. Start the MGR node
+        6. Check the cluster health is ok for the provider and clients.
+
+        """
+        mgr_pod = random.choice(pod.get_mgr_pods())
+        mgr_node = pod.get_pod_node(mgr_pod)
+
+        logger.info(f"Stopping the MGR node {mgr_node.name}")
+        nodes.stop_nodes(nodes=[mgr_node], wait=True)
+
+        logger.info("Check the client connection is OK")
+        switch_to_client_for_function(wait_for_storage_client_connected)(timeout=300)
+        logger.info("Try to create and delete resources on the clients")
+        self.sanity_helpers.create_resources_on_clients()
+        self.sanity_helpers.delete_resources_on_clients()
+        logger.info("Check again that the client connection is OK")
+        switch_to_client_for_function(wait_for_storage_client_connected)(timeout=120)
+
+        logger.info(f"Starting the MGR node {mgr_node.name}")
+        nodes.start_nodes(nodes=[mgr_node], wait=True)
+        self.sanity_helpers.health_check_provider_mode(tries=40)
