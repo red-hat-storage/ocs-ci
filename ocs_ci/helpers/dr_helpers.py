@@ -1436,9 +1436,11 @@ def replace_cluster(workload, primary_cluster_name, secondary_cluster_name):
 
     # Verify old primary cluster is dettached
     expected_output = primary_cluster_name
-    out = run_cmd(cmd=f"oc get managedcluster {primary_cluster_name}")
-    if expected_output not in out:
+    out = run_cmd(cmd="oc get managedcluster")
+    if expected_output in out:
         raise Exception("Old primary cluster is not dettached.")
+    else:
+        logger.info("Old primary cluster is dettached")
 
     # Import Recovery cluster
     cluster_name_recoevry = import_recovery_clusters_with_acm()

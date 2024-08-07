@@ -26,6 +26,7 @@ from ocs_ci.helpers.dr_helpers import (
     get_current_primary_cluster_name,
     get_current_secondary_cluster_name,
     wait_for_all_resources_creation,
+    gracefully_reboot_ocp_nodes,
 )
 
 logger = logging.getLogger(__name__)
@@ -50,6 +51,9 @@ class TestReplaceCluster:
                 and get_fence_state(self.primary_cluster_name) == "Fenced"
             ):
                 enable_unfence(self.primary_cluster_name)
+                gracefully_reboot_ocp_nodes(
+                    self.primary_cluster_name, disable_eviction=True
+                )
 
         request.addfinalizer(finalizer)
 

@@ -1641,7 +1641,7 @@ def get_recovery_cluster_config():
 
     """
     for cluster in ocsci_config.clusters:
-        if cluster.MULTICLUSTER["recovery_cluster"]:
+        if cluster.MULTICLUSTER.get("recovery_cluster"):
             return cluster
 
 
