@@ -5,6 +5,7 @@ from ocs_ci.framework.pytest_customization.marks import green_squad
 from ocs_ci.framework.testlib import (
     ManageTest,
     tier2,
+    polarion_id,
     skipif_ocs_version,
 )
 from ocs_ci.helpers import helpers
@@ -20,6 +21,7 @@ class TestRwopPvcReclaimSpace(ManageTest):
     Tests Reclaim Space on ReadWriteOncePod RBD PVC
     """
 
+    @polarion_id("OCS-5923")
     def test_rwop_pvc_reclaim_space(self, pvc_factory):
         """
         Test to verify creation of reclaim space job and reclaim space cron job on RWOP pvc
