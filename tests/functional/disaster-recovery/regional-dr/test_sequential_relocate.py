@@ -8,25 +8,40 @@ from ocs_ci.framework import config
 from ocs_ci.framework.testlib import tier1
 from ocs_ci.framework.pytest_customization.marks import turquoise_squad
 from ocs_ci.helpers import dr_helpers
+from ocs_ci.ocs import constants
 
 logger = logging.getLogger(__name__)
 
 
 @tier1
 @turquoise_squad
-@pytest.mark.polarion_id("OCS-4772")
+@pytest.mark.parametrize(
+    argnames=["pvc_interface"],
+    argvalues=[
+        pytest.param(
+            *[constants.CEPHBLOCKPOOL],
+            marks=pytest.mark.polarion_id("OCS-4772"),
+        ),
+        pytest.param(
+            *[constants.CEPHFILESYSTEM],
+            marks=pytest.mark.polarion_id("OCS-4735"),
+        ),
+    ],
+)
 class TestSequentialRelocate:
     """
     Test Sequential Relocate actions
 
     """
 
-    def test_sequential_relocate_to_secondary(self, dr_workload):
+    def test_sequential_relocate_to_secondary(self, pvc_interface, dr_workload):
         """
         Test to verify relocate action for multiple workloads one after another from primary to secondary cluster
 
         """
-        workloads = dr_workload(num_of_subscription=5)
+        workloads = dr_workload(
+            num_of_subscription=2, num_of_appset=3, pvc_interface=pvc_interface
+        )
 
         primary_cluster_name = dr_helpers.get_current_primary_cluster_name(
             workloads[0].workload_namespace
@@ -34,6 +49,14 @@ class TestSequentialRelocate:
         secondary_cluster_name = dr_helpers.get_current_secondary_cluster_name(
             workloads[0].workload_namespace
         )
+
+        # Verify the creation of ReplicationDestination resources on secondary cluster
+        if pvc_interface == constants.CEPHFILESYSTEM:
+            for wl in workloads:
+                config.switch_to_cluster_by_name(secondary_cluster_name)
+                dr_helpers.wait_for_replication_destinations_creation(
+                    wl.workload_pvc_count, wl.workload_namespace
+                )
 
         scheduling_interval = dr_helpers.get_scheduling_interval(
             workloads[0].workload_namespace
@@ -74,6 +97,20 @@ class TestSequentialRelocate:
                 wl.workload_namespace,
             )
 
-        dr_helpers.wait_for_mirroring_status_ok(
-            replaying_images=sum([wl.workload_pvc_count for wl in workloads])
-        )
+        if pvc_interface == constants.CEPHFILESYSTEM:
+            for wl in workloads:
+                config.switch_to_cluster_by_name(secondary_cluster_name)
+                # Verify the deletion of ReplicationDestination resources on secondary cluster
+                dr_helpers.wait_for_replication_destinations_deletion(
+                    wl.workload_namespace
+                )
+                config.switch_to_cluster_by_name(primary_cluster_name)
+                # Verify the creation of ReplicationDestination resources on primary cluster(current secondary)
+                dr_helpers.wait_for_replication_destinations_creation(
+                    wl.workload_pvc_count, wl.workload_namespace
+                )
+
+        if pvc_interface == constants.CEPHBLOCKPOOL:
+            dr_helpers.wait_for_mirroring_status_ok(
+                replaying_images=sum([wl.workload_pvc_count for wl in workloads])
+            )
