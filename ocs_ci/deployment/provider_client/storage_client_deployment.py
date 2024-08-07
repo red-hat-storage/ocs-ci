@@ -126,9 +126,9 @@ class ODFAndNativeStorageClientDeploymentOnProvider(object):
         if config.ENV_DATA.get("mark_masters_schedulable", False):
             path = "/spec/mastersSchedulable"
             params = f"""[{{"op": "replace", "path": "{path}", "value": true}}]"""
-            self.scheduler_obj.patch(params=params, format_type="json"), (
-                "Failed to run patch command to update control nodes as scheduleable"
-            )
+            assert self.scheduler_obj.patch(
+                params=params, format_type="json"
+            ), "Failed to run patch command to update control nodes as scheduleable"
             # Allow ODF to be deployed on all nodes
             log.info("labeling all nodes as storage nodes")
             label_nodes(nodes=node_objs, label=constants.OPERATOR_NODE_LABEL)
