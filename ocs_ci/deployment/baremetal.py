@@ -14,14 +14,14 @@ from semantic_version import Version
 import socket
 
 from .flexy import FlexyBaremetalPSI
-from ocs_ci.utility import psiutils, aws, version
+from ocs_ci.utility import psiutils, aws, version, baremetal
 
 from ocs_ci.deployment.deployment import Deployment
 from ocs_ci.framework import config
 from ocs_ci.deployment.ocp import OCPDeployment as BaseOCPDeployment
 from ocs_ci.deployment import assisted_installer
 from ocs_ci.ocs import constants, ocp, exceptions
-from ocs_ci.ocs.exceptions import CommandFailed, RhcosImageNotFound
+from ocs_ci.ocs.exceptions import CommandFailed, ConfigurationError, RhcosImageNotFound
 from ocs_ci.ocs.node import get_nodes
 from ocs_ci.ocs.openshift_ops import OCP
 from ocs_ci.utility import ibmcloud_bm
@@ -31,6 +31,7 @@ from ocs_ci.utility.csr import wait_for_all_nodes_csr_and_approve, approve_pendi
 from ocs_ci.utility.templating import Templating
 from ocs_ci.utility.retry import retry
 from ocs_ci.utility.utils import (
+    exec_cmd,
     run_cmd,
     upload_file,
     get_ocp_version,
@@ -62,6 +63,7 @@ class BMBaseOCPDeployment(BaseOCPDeployment):
         self.srv_details = config.ENV_DATA["baremetal"]["servers"]
         self.aws = aws.AWS()
         self.__helper_node_handler = None
+        self.__provisioner = None
 
     def deploy_prereq(self):
         """
@@ -102,6 +104,23 @@ class BMBaseOCPDeployment(BaseOCPDeployment):
                 self.host, self.user, self.private_key
             )
         return self.__helper_node_handler
+
+    # connection to Provisioner server (the Bootstrap VM for IPI deployment and VM with DHCP and HTTP
+    # services for UPI deployment are hosted on this server)
+    @property
+    @retry((TimeoutError, socket.gaierror), tries=10, delay=120, backoff=1)
+    def provisioner(self):
+        """
+        Create connection to Provisioner server (where is hosted Bootstrap VM for IPI deployment and VM with DHCP, TFTP
+        and HTTP services for UPI and AI deployment)
+        """
+        if not self.__provisioner:
+            self.provisioner = Connection(
+                host=self.bm_config["bm_provisioner"],
+                user=self.bm_config["bm_provisioner_user"],
+                private_key=os.path.expanduser(config.DEPLOYMENT["ssh_key_private"]),
+            )
+        return self.__provisioner
 
     def check_bm_status_exist(self):
         """
@@ -298,6 +317,28 @@ class BMBaseOCPDeployment(BaseOCPDeployment):
             self.helper_node_handler.exec_cmd(cmd=cmd)[0] == 0
         ), "Failed to restart dnsmasq service"
 
+    def start_helper_node_vm(self):
+        """
+        Start helper VM hosting httpd, tftp and dhcp server for UPI deployment
+        """
+        # start odf-bm-upi-tools VM (dhcp and http services) on provisioner (if not running)
+        bm_httpd_server_vm = config.ENV_DATA["baremetal"]["bm_httpd_server_vm"]
+        cmd = f"virsh dominfo {bm_httpd_server_vm} || virsh start {bm_httpd_server_vm}"
+        self.provisioner.exec_cmd(cmd=cmd)
+
+    def stop_helper_node_vm(self):
+        """
+        Stop helper VM hosting httpd, tftp and dhcp server for UPI deployment
+        (the VM should be stopped during IPI deployment to not interfere with bootstrap VM
+        created by the openshift installer)
+        """
+        # start odf-bm-upi-tools VM (dhcp and http services) on provisioner (if not running)
+        bm_httpd_server_vm = config.ENV_DATA["baremetal"]["bm_httpd_server_vm"]
+        cmd = (
+            f"virsh dominfo {bm_httpd_server_vm} && virsh shutdown {bm_httpd_server_vm}"
+        )
+        self.provisioner.exec_cmd(cmd=cmd)
+
 
 class BAREMETALUPI(BAREMETALBASE):
     """
@@ -317,6 +358,7 @@ class BAREMETALUPI(BAREMETALBASE):
             Pre-Requisites for Bare Metal UPI Deployment
             """
             super(BAREMETALUPI.OCPDeployment, self).deploy_prereq()
+            self.start_dnsmasq_service_on_helper_vm()
             # create manifest
             self.create_manifest()
             # create chrony resource
@@ -478,7 +520,7 @@ class BAREMETALUPI(BAREMETALBASE):
             master_count = 0
             worker_count = 0
             logger.info("Deploying OCP cluster for Bare Metal platform")
-            logger.info(f"Openshift-installer will be using log level:{log_cli_level}")
+            logger.info(f"Openshift-installer will be using log level: {log_cli_level}")
             ocp_version = get_ocp_version()
             for machine in self.srv_details:
                 if self.srv_details[machine].get("cluster_name") or self.srv_details[
@@ -817,6 +859,315 @@ LABEL disk0
             run_cmd(cmd=cmd, secrets=secrets)
 
 
+class BAREMETALIPI(BAREMETALBASE):
+    """
+    A class to handle Bare metal IPI specific deployment
+    """
+
+    def __init__(self):
+        logger.info("BAREMETAL IPI")
+        super().__init__()
+
+    class OCPDeployment(BAREMETALBASE.BMBaseOCPDeployment):
+        def __init__(self):
+            super(BAREMETALIPI.OCPDeployment, self).deploy_prereq()
+            self.baremetal = baremetal.BAREMETAL()
+
+        def deploy_prereq(self):
+            """
+            Pre-Requisites for Bare Metal IPI Deployment
+            """
+            super().deploy_prereq()
+            self.stop_dnsmasq_service_on_helper_vm()
+
+            # prepare directory for backup of previous work dirs (if not exists)
+            cmd = "mkdir -p ~/clusterconfigs-backup"
+            self.provisioner.exec_cmd(cmd=cmd)
+            # backup working directory on Provisioner from previous deployment
+            cmd = (
+                "[[ -d ~/clusterconfigs ]] && "
+                "mv ~/clusterconfigs ~/clusterconfigs-backup/clusterconfigs-$(date '+%Y-%m-%dT%H-%M-%S')"
+            )
+            self.provisioner.exec_cmd(cmd=cmd)
+            # prepare working directory on Provisioner
+            cmd = "mkdir ~/clusterconfigs"
+            self.provisioner.exec_cmd(cmd=cmd)
+            # copy install-config.yaml to Provisioner
+            self.provisioner.upload_file(
+                localpath=os.path.join(self.cluster_path, "install-config.yaml"),
+                remotepath="~/clusterconfigs/install-config.yaml",
+            )
+
+            # configure DNS records
+            logger.info("Configuring DNS records")
+            cluster_name = config.ENV_DATA.get("cluster_name")
+            zone_id = self.aws.create_hosted_zone(cluster_name=cluster_name)
+            response_list = []
+            response_list.append(
+                self.aws.update_hosted_zone_record(
+                    zone_id=zone_id,
+                    record_name=f"api.{cluster_name}",
+                    data=config.ENV_DATA["api_vip"],
+                    type="A",
+                    operation_type="Add",
+                )
+            )
+            response_list.append(
+                self.aws.update_hosted_zone_record(
+                    zone_id=zone_id,
+                    record_name=f"*.apps.{cluster_name}",
+                    data=config.ENV_DATA["ingress_vip"],
+                    type="A",
+                    operation_type="Add",
+                )
+            )
+
+            ns_list = self.aws.get_ns_for_hosted_zone(zone_id)
+            dns_data_dict = {}
+            ns_list_values = []
+            for value in ns_list:
+                dns_data_dict["Value"] = value
+                ns_list_values.append(dns_data_dict.copy())
+            base_domain_zone_id = self.aws.get_hosted_zone_id_for_domain(
+                domain=config.ENV_DATA["base_domain"]
+            )
+            response_list.append(
+                self.aws.update_hosted_zone_record(
+                    zone_id=base_domain_zone_id,
+                    record_name=f"{cluster_name}",
+                    data=ns_list_values,
+                    type="NS",
+                    operation_type="Add",
+                    ttl=300,
+                    raw_data=True,
+                )
+            )
+            logger.info("Waiting for Record Response")
+            self.aws.wait_for_record_set(response_list=response_list)
+            logger.info("Records Created Successfully")
+
+            # Ensure all bare metal nodes are powered off prior to installing the OCP cluster
+            # TODO: use the appropriate method for stopping the servers based on mgmt_provider configuration
+            nodes = [
+                key
+                for key in self.srv_details
+                if self.srv_details[key].get("role")
+                in (constants.MASTER_MACHINE, constants.WORKER_MACHINE)
+            ]
+            for node in nodes:
+                cmd = (
+                    f"ipmitool -I lanplus -U {self.srv_details[node]['mgmt_username']} "
+                    f"-P {self.srv_details[node]['mgmt_password']} "
+                    f"-H {self.srv_details[node]['mgmt_console']} chassis power off"
+                )
+                secrets = [
+                    self.srv_details[node]["mgmt_username"],
+                    self.srv_details[node]["mgmt_password"],
+                ]
+                exec_cmd(cmd=cmd, secrets=secrets)
+
+        def create_config(self):
+            """
+            Create the OCP deploy config.
+            """
+            # Generate install-config from template
+            logger.info("Generating install-config")
+            _templating = Templating()
+            ocp_install_template = (
+                f"install-config-{self.deployment_platform}-"
+                f"{self.deployment_type}.yaml.j2"
+            )
+            ocp_install_template_path = os.path.join(
+                "ocp-deployment", ocp_install_template
+            )
+            install_config_str = _templating.render_template(
+                ocp_install_template_path, config.ENV_DATA
+            )
+            # Log the install config *before* adding the pull secret,
+            # so we don't leak sensitive data.
+            logger.info(f"Install config: \n{install_config_str}")
+            # Parse the rendered YAML so that we can manipulate the object directly
+            install_config_obj = yaml.safe_load(install_config_str)
+            install_config_obj["pullSecret"] = self.get_pull_secret()
+            ssh_key = self.get_ssh_key()
+            if ssh_key:
+                install_config_obj["sshKey"] = ssh_key
+
+            # find bootstrap machine
+            # bm = [
+            #     key
+            #     for key in self.srv_details
+            #     if self.srv_details[key].get("role") == constants.BOOTSTRAP_MACHINE
+            # ][0]
+
+            install_config_obj["platform"]["baremetal"] = {}
+            # install_config_obj["platform"]["baremetal"][
+            #     "bootstrapExternalStaticIP"
+            # ] = self.srv_details[bm]["ip"]
+            # install_config_obj["platform"]["baremetal"][
+            #     "bootstrapExternalStaticGateway"
+            # ] = self.srv_details[bm]["gw"]
+            install_config_obj["platform"]["baremetal"]["apiVIP"] = config.ENV_DATA[
+                "api_vip"
+            ]
+            install_config_obj["platform"]["baremetal"]["ingressVIP"] = config.ENV_DATA[
+                "ingress_vip"
+            ]
+
+            install_config_obj["platform"]["baremetal"]["hosts"] = []
+            # add master nodes
+            master_nodes = [
+                key
+                for key in self.srv_details
+                if self.srv_details[key].get("role") == constants.MASTER_MACHINE
+            ]
+            if len(master_nodes) < int(config.ENV_DATA["master_replicas"]):
+                raise ConfigurationError(
+                    f"Number of available master nodes ({', '.join(master_nodes)}) "
+                    f"is lower than master_replicas ({config.ENV_DATA['master_replicas']})"
+                )
+            for i in range(int(config.ENV_DATA["master_replicas"])):
+                install_config_obj["platform"]["baremetal"]["hosts"].append(
+                    {
+                        "name": f"openshift-master-{i}",
+                        "role": "master",
+                        "bmc": {
+                            "address": self.bmc_address(master_nodes[i]),
+                            "username": self.srv_details[master_nodes[i]][
+                                "mgmt_username"
+                            ],
+                            "password": self.srv_details[master_nodes[i]][
+                                "mgmt_password"
+                            ],
+                            "disableCertificateVerification": True,
+                        },
+                        "bootMACAddress": self.srv_details[master_nodes[i]][
+                            "private_mac"
+                        ],
+                        "rootDeviceHints": {
+                            "serialNumber": self.srv_details[master_nodes[i]][
+                                "root_disk_sn"
+                            ],
+                        },
+                        "bootMode": "legacy",
+                    }
+                )
+            # add worker nodes
+            worker_nodes = [
+                key
+                for key in self.srv_details
+                if self.srv_details[key].get("role") == constants.WORKER_MACHINE
+            ]
+            if len(worker_nodes) < int(config.ENV_DATA["worker_replicas"]):
+                raise ConfigurationError(
+                    f"Number of available worker nodes ({', '.join(worker_nodes)}) "
+                    f"is lower than worker_replicas ({config.ENV_DATA['worker_replicas']})"
+                )
+            for i in range(int(config.ENV_DATA["worker_replicas"])):
+                install_config_obj["platform"]["baremetal"]["hosts"].append(
+                    {
+                        "name": f"openshift-worker-{i}",
+                        "role": "worker",
+                        "bmc": {
+                            "address": self.bmc_address(worker_nodes[i]),
+                            "username": self.srv_details[worker_nodes[i]][
+                                "mgmt_username"
+                            ],
+                            "password": self.srv_details[worker_nodes[i]][
+                                "mgmt_password"
+                            ],
+                            "disableCertificateVerification": True,
+                        },
+                        "bootMACAddress": self.srv_details[worker_nodes[i]][
+                            "private_mac"
+                        ],
+                        "rootDeviceHints": {
+                            "serialNumber": self.srv_details[master_nodes[i]][
+                                "root_disk_sn"
+                            ],
+                        },
+                        "bootMode": "legacy",
+                    }
+                )
+
+            # install_config_obj["metadata"]["name"] = constants.BM_DEFAULT_CLUSTER_NAME
+            install_config_str = yaml.safe_dump(install_config_obj)
+            install_config = os.path.join(self.cluster_path, "install-config.yaml")
+            install_config_backup = os.path.join(
+                self.cluster_path, "install-config.yaml.backup"
+            )
+            # TODO: remove this log! #######################
+            logger.warning(f"Install config: \n{install_config_str}")
+            # --------------------------------------
+            with open(install_config, "w") as f:
+                f.write(install_config_str)
+            with open(install_config_backup, "w") as f:
+                f.write(install_config_str)
+
+        def bmc_address(self, machine):
+            """
+            Return BMC address.
+
+            Args:
+                machine (str): Machine Name
+
+            Returns:
+                str: BMC address
+            """
+            return (
+                "idrac-virtualmedia://"
+                "{self.srv_details[machine]]['mgmt_console']}"
+                "/redfish/v1/Systems/System.Embedded.1"
+            )
+
+        def deploy(self, log_cli_level="DEBUG"):
+            """
+            Deploy
+            """
+            logger.info("Deploying OCP cluster for Bare Metal platform (IPI)")
+            logger.debug(
+                f"Openshift-installer will be using log level: {log_cli_level}"
+            )
+
+            raise Exception("TMP ABORT - deploy() not implemented")
+
+        def destroy(self, log_level=""):
+            """
+            Cleanup cluster related resources.
+            """
+            # TODO: destroy process via openshift-install
+
+            # TODO: check the DNS records cleanup
+            # THIS:
+            self.aws.delete_hosted_zone(
+                cluster_name=config.ENV_DATA.get("cluster_name"),
+                delete_from_base_domain=True,
+            )
+            # OR THIS:
+            # delete DNS records for API and Ingress
+            # get the record sets
+            record_sets = self.aws.get_record_sets()
+            # form the record sets to delete
+            cluster_domain = (
+                f"{config.ENV_DATA.get('cluster_name')}."
+                f"{config.ENV_DATA.get('base_domain')}"
+            )
+            records_to_delete = [
+                f"api.{cluster_domain}.",
+                f"\\052.apps.{cluster_domain}.",
+            ]
+            # delete the records
+            hosted_zone_id = self.aws.get_hosted_zone_id_for_domain()
+            logger.debug(f"hosted zone id: {hosted_zone_id}")
+            for record in record_sets:
+                if record["Name"] in records_to_delete:
+                    logger.info(f"Deleting DNS record: {record}")
+                    self.aws.delete_record(record, hosted_zone_id)
+
+            self.start_dnsmasq_service_on_helper_vm()
+            super().destroy(log_level=log_level)
+
+
 class BAREMETALAI(BAREMETALBASE):
     """
     A class to handle Bare metal Assisted Installer specific deployment
@@ -835,6 +1186,7 @@ class BAREMETALAI(BAREMETALBASE):
             Pre-Requisites for Bare Metal AI Deployment
             """
             super().deploy_prereq()
+            self.start_dnsmasq_service_on_helper_vm()
 
             # create initial metadata.json file in cluster dir, to ensure, that
             # destroy job will be properly triggered even when the deployment fails
