@@ -285,7 +285,7 @@ MS_PROVIDER_TYPE = "provider"
 NON_MS_CLUSTER_TYPE = "non_ms"
 
 # HCI cluster types
-HCI_CLIENT = "hci_client"
+PROVIDERMODE_CLIENT = "providermode_client"
 HCI_PROVIDER = "provider"
 
 # provider mode constants

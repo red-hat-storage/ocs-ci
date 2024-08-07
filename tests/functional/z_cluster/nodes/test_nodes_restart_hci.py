@@ -54,7 +54,9 @@ class TestNodesRestartHCI(ManageTest):
     """
 
     @pytest.fixture(autouse=True)
-    def setup(self, request, create_scale_pods_and_pvcs_using_kube_job_on_hci_clients):
+    def setup(
+        self, request, create_scale_pods_and_pvcs_using_kube_job_on_providermode_clients
+    ):
         """
         Initialize Sanity instance, and create pods and PVCs factory
 
@@ -62,7 +64,7 @@ class TestNodesRestartHCI(ManageTest):
         self.orig_index = config.cur_index
         switch_to_correct_cluster_at_setup(request)
         self.sanity_helpers = SanityProviderMode(
-            create_scale_pods_and_pvcs_using_kube_job_on_hci_clients
+            create_scale_pods_and_pvcs_using_kube_job_on_providermode_clients
         )
 
     @pytest.fixture(autouse=True)

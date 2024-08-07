@@ -14,7 +14,7 @@ from ocs_ci.ocs.cluster import (
     CephCluster,
     CephClusterExternal,
     is_ms_consumer_cluster,
-    is_hci_client_cluster,
+    is_providermode_client_cluster,
     is_hci_provider_cluster,
     client_clusters_health_check,
 )
@@ -39,7 +39,7 @@ class Sanity:
         self.pod_objs = list()
         self.obc_objs = list()
         self.obj_data = ""
-        if not is_hci_client_cluster():
+        if not is_providermode_client_cluster():
             self.ceph_cluster = CephCluster()
 
     def health_check(self, cluster_check=True, tries=20):
@@ -56,7 +56,7 @@ class Sanity:
                 config.ENV_DATA.get("platform") == constants.FUSIONAAS_PLATFORM
                 and config.ENV_DATA["cluster_type"].lower() == "consumer"
             )
-            or is_hci_client_cluster()
+            or is_providermode_client_cluster()
         ):
             ceph_health_check(
                 namespace=config.ENV_DATA["cluster_namespace"], tries=tries
@@ -404,7 +404,7 @@ class SanityProviderMode(Sanity):
 
     def __init__(
         self,
-        create_scale_pods_and_pvcs_using_kube_job_on_hci_clients,
+        create_scale_pods_and_pvcs_using_kube_job_on_providermode_clients,
         scale_count=None,
         pvc_per_pod_count=5,
         start_io=True,
@@ -416,10 +416,10 @@ class SanityProviderMode(Sanity):
         """
         Init the sanity Provider Mode class.
         Init the 'create resources on HCI clients' factory.
-        This method uses the 'create_scale_pods_and_pvcs_using_kube_job_on_hci_clients' factory.
+        This method uses the 'create_scale_pods_and_pvcs_using_kube_job_on_providermode_clients' factory.
 
         Args:
-           create_scale_pods_and_pvcs_using_kube_job_on_hci_clients (function): Factory for creating scale
+           create_scale_pods_and_pvcs_using_kube_job_on_providermode_clients (function): Factory for creating scale
                pods and PVCs using k8s on HCI clients fixture.
            scale_count (int): Number of PVCs to be Scaled. Should be one of the values in the dict
                "constants.SCALE_PVC_ROUND_UP_VALUE".
@@ -438,8 +438,8 @@ class SanityProviderMode(Sanity):
         # A dictionary of a client index per the fio_scale object
         self.client_i_per_fio_scale = {}
 
-        self.create_resources_on_hci_clients_factory = (
-            create_scale_pods_and_pvcs_using_kube_job_on_hci_clients
+        self.create_resources_on_providermode_clients_factory = (
+            create_scale_pods_and_pvcs_using_kube_job_on_providermode_clients
         )
         self.scale_count = scale_count
         self.pvc_per_pod_count = pvc_per_pod_count
@@ -457,7 +457,7 @@ class SanityProviderMode(Sanity):
             logger.info(
                 "The client indexes were not passed to the method. Checking the cluster type..."
             )
-            if is_hci_client_cluster():
+            if is_providermode_client_cluster():
                 logger.info(
                     "The cluster is a client cluster. We will create the resources only for this cluster"
                 )
@@ -476,7 +476,7 @@ class SanityProviderMode(Sanity):
     def create_resources_on_clients(self, tries=1, delay=30):
         """
         Try creates resources for client 'tries' times with delay 'delay' between the iterations
-        using the method 'base_create_resources_on_hci_clients'. If not specified, the default value of
+        using the method 'base_create_resources_on_providermode_clients'. If not specified, the default value of
         'tries' is 1 - which means that by default, it only tries to create the resources once.
         In every iteration, if it fails to generate the resources, it cleans up the current resources
         before continuing to the next iteration.
@@ -499,7 +499,7 @@ class SanityProviderMode(Sanity):
     def base_create_resources_on_clients(self):
         """
         Create resources on clients.
-        This function uses the factory "create_scale_pods_and_pvcs_using_kube_job_on_hci_clients"
+        This function uses the factory "create_scale_pods_and_pvcs_using_kube_job_on_providermode_clients"
         for creating the resources - Create scale pods, PVCs, and run IO using a Kube job on HCI clients.
         If it fails to create the resources, it cleans up the current resources.
 
@@ -512,14 +512,16 @@ class SanityProviderMode(Sanity):
 
         try:
             # Create the scale pods and PVCs using k8s on HCI clients factory
-            self.client_i_per_fio_scale = self.create_resources_on_hci_clients_factory(
-                scale_count=self.scale_count,
-                pvc_per_pod_count=self.pvc_per_pod_count,
-                start_io=self.start_io,
-                io_runtime=self.io_runtime,
-                pvc_size=self.pvc_size,
-                max_pvc_size=self.max_pvc_size,
-                client_indexes=self.client_indices,
+            self.client_i_per_fio_scale = (
+                self.create_resources_on_providermode_clients_factory(
+                    scale_count=self.scale_count,
+                    pvc_per_pod_count=self.pvc_per_pod_count,
+                    start_io=self.start_io,
+                    io_runtime=self.io_runtime,
+                    pvc_size=self.pvc_size,
+                    max_pvc_size=self.max_pvc_size,
+                    client_indexes=self.client_indices,
+                )
             )
             is_success = True
             logger.info("Successfully created the resources on the clients")

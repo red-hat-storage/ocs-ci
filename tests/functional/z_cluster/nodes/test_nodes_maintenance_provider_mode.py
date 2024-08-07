@@ -78,7 +78,9 @@ class TestNodesMaintenanceProviderMode(ManageTest):
     """
 
     @pytest.fixture(autouse=True)
-    def setup(self, request, create_scale_pods_and_pvcs_using_kube_job_on_hci_clients):
+    def setup(
+        self, request, create_scale_pods_and_pvcs_using_kube_job_on_providermode_clients
+    ):
         """
         1. Save the original index
         2. Switch to the correct cluster index
@@ -88,7 +90,7 @@ class TestNodesMaintenanceProviderMode(ManageTest):
         self.orig_index = config.cur_index
         switch_to_correct_cluster_at_setup(request)
         self.sanity_helpers = SanityProviderMode(
-            create_scale_pods_and_pvcs_using_kube_job_on_hci_clients
+            create_scale_pods_and_pvcs_using_kube_job_on_providermode_clients
         )
 
     @pytest.fixture(autouse=True)

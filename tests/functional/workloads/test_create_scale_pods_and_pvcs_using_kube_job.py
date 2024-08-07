@@ -304,15 +304,15 @@ class TestCreateScalePodsAndPvcsUsingKubeJobWithHCIClients(ManageTest):
         log.info("All the pods and PVCs were deleted successfully on the clients")
 
     @pytest.mark.polarion_id("OCS-5428")
-    def test_create_scale_pods_and_pvcs_with_hci_clients(
-        self, create_scale_pods_and_pvcs_using_kube_job_on_hci_clients
+    def test_create_scale_pods_and_pvcs_with_providermode_clients(
+        self, create_scale_pods_and_pvcs_using_kube_job_on_providermode_clients
     ):
         """
         Test create scale pods and PVCs using a kube job with HCI clients
         """
         self.orig_index = config.cur_index
         self.client_i_per_fio_scale = (
-            create_scale_pods_and_pvcs_using_kube_job_on_hci_clients(
+            create_scale_pods_and_pvcs_using_kube_job_on_providermode_clients(
                 scale_count=self.scale_count,
                 pvc_per_pod_count=self.pvc_per_pod_count,
             )
@@ -340,15 +340,15 @@ class TestCreateScalePodsAndPvcsUsingKubeJobWithHCIClients(ManageTest):
         )
 
     @pytest.mark.polarion_id("OCS-5429")
-    def test_create_and_delete_scale_pods_and_pvcs_with_hci_clients(
-        self, create_scale_pods_and_pvcs_using_kube_job_on_hci_clients
+    def test_create_and_delete_scale_pods_and_pvcs_with_providermode_clients(
+        self, create_scale_pods_and_pvcs_using_kube_job_on_providermode_clients
     ):
         """
         Test create and delete scale pods and PVCs using a kube job with HCI clients
         """
         self.orig_index = config.cur_index
         self.client_i_per_fio_scale = (
-            create_scale_pods_and_pvcs_using_kube_job_on_hci_clients(
+            create_scale_pods_and_pvcs_using_kube_job_on_providermode_clients(
                 scale_count=self.scale_count,
                 pvc_per_pod_count=self.pvc_per_pod_count,
             )

@@ -7,12 +7,12 @@ from ocs_ci.framework.testlib import (
     ManageTest,
     ignore_leftovers,
     hci_provider_and_client_required,
-    skipif_hci_client,
+    skipif_providermode_client,
     skipif_hci_provider,
     runs_on_provider,
 )
 from ocs_ci.ocs.cluster import (
-    is_hci_client_cluster,
+    is_providermode_client_cluster,
     is_hci_provider_cluster,
 )
 from ocs_ci.ocs.managedservice import check_and_change_current_index_to_default_index
@@ -41,14 +41,14 @@ class TestHCIProviderClientMarkers(ManageTest):
             "The default cluster index is equal to the current cluster index as expected"
         )
 
-    @skipif_hci_client
-    def test_marker_skipif_hci_client(self):
+    @skipif_providermode_client
+    def test_marker_skipif_providermode_client(self):
         """
-        Test that the 'skipif_hci_client' marker work as expected
+        Test that the 'skipif_providermode_client' marker work as expected
         """
         assert (
-            not is_hci_client_cluster()
-        ), "The cluster is a HCI Client cluster, even though we have the marker 'skipif_hci_client'"
+            not is_providermode_client_cluster()
+        ), "The cluster is a HCI Client cluster, even though we have the marker 'skipif_providermode_client'"
         logger.info("The cluster is not a HCI Client cluster as expected")
 
         assert check_and_change_current_index_to_default_index()
