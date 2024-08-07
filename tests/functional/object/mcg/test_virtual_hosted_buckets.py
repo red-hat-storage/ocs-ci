@@ -1,6 +1,5 @@
 import logging
 
-import pytest
 
 from ocs_ci.ocs.ocp import OCP
 from ocs_ci.ocs.resources.ocs import OCS
@@ -28,18 +27,9 @@ logger = logging.getLogger(__name__)
 @polarion_id("OCS-5217")
 @red_squad
 class TestVirtualHostedBuckets:
-    @pytest.fixture()
-    def s3cmd_setup(self, awscli_pod_session):
-        """
-        Setup s3cmd tool in s3cli pod
-
-        """
-        awscli_pod_session.exec_sh_cmd_on_pod(command="apk add s3cmd")
-        return awscli_pod_session
-
     def test_virtual_hosted_bucket(
         self,
-        s3cmd_setup,
+        awscli_pod_session,
         bucket_factory,
         mcg_obj_session,
         teardown_factory,
@@ -76,23 +66,23 @@ class TestVirtualHostedBuckets:
         )
 
         write_random_objects_in_pod(
-            s3cmd_setup, test_directory_setup.origin_dir, amount=1
+            awscli_pod_session, test_directory_setup.origin_dir, amount=1
         )
         logger.info("Uploading object to the bucket")
-        s3cmd_setup.exec_sh_cmd_on_pod(
+        awscli_pod_session.exec_sh_cmd_on_pod(
             command=f"s3cmd {config_cmd} put {test_directory_setup.origin_dir}/ObjKey-0 s3://{bucket_name}"
         )
         logger.info("Listing the objects in the bucket")
-        s3cmd_setup.exec_sh_cmd_on_pod(
+        awscli_pod_session.exec_sh_cmd_on_pod(
             command=f"s3cmd {config_cmd} ls s3://{bucket_name}"
         )
 
         logger.info("Downloading object from the bucket")
-        s3cmd_setup.exec_sh_cmd_on_pod(
+        awscli_pod_session.exec_sh_cmd_on_pod(
             command=f"s3cmd {config_cmd} get s3://{bucket_name}/ObjKey-0 {test_directory_setup.result_dir}"
         )
         verify_s3_object_integrity(
             original_object_path=f"{test_directory_setup.origin_dir}/ObjKey-0",
             result_object_path=f"{test_directory_setup.result_dir}/ObjKey-0",
-            awscli_pod=s3cmd_setup,
+            awscli_pod=awscli_pod_session,
         )
