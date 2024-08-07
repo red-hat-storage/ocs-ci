@@ -956,6 +956,8 @@ def run_must_gather(log_dir_path, image, command=None, cluster_config=None):
     log.info(f"Must gather image: {image} will be used.")
     create_directory_path(log_dir_path)
     cmd = f"adm must-gather --image={image} --dest-dir={log_dir_path}"
+    if cluster_config.ENV_DATA.get("cluster_type") == constants.HCI_CLIENT:
+        cmd += " --provider"
     if command:
         cmd += f" -- {command}"
 
