@@ -5,7 +5,7 @@ import time
 from ocs_ci.framework import config
 from ocs_ci.framework.pytest_customization.marks import orange_squad, mcg
 from ocs_ci.framework.testlib import MCGTest, scale, skipif_ocs_version
-from ocs_ci.ocs import constants, ocp, scale_pgsql
+from ocs_ci.ocs import constants, ocp
 from ocs_ci.utility import utils
 from ocs_ci.helpers import disruption_helpers
 from ocs_ci.ocs.scale_noobaa_lib import get_endpoint_pod_count, get_hpa_utilization
@@ -44,12 +44,9 @@ options = {
 
 
 @pytest.fixture(scope="function")
-def worker_node(request):
-    def teardown():
-        scale_pgsql.delete_worker_node()
-
-    request.addfinalizer(teardown)
-    return worker_node
+def teardown(request):
+    def finalizer():
+        request.addfinalizer(finalizer)
 
 
 @mcg
@@ -98,8 +95,6 @@ class TestScaleEndpointAutoScale(MCGTest):
         Generate S3 workload to trigger autoscale to increase from 1 to 2 endpoint
         then respin ceph pods
         """
-        # Add workers node to cluster
-        scale_pgsql.add_worker_node()
 
         # Check autoscale endpoint count before start s3 load
         self._assert_endpoint_count(desired_count=self.MIN_ENDPOINT_COUNT)
