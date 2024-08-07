@@ -3277,7 +3277,7 @@ class MultiClusterDROperatorsDeploy(object):
         )
         logger.info("Adding Encoded Ca Cert to Ramen Hub configmap")
         for s3profile in ramen_config["s3StoreProfiles"]:
-            s3profile["CACertificates"] = ca_cert_data_encode
+            s3profile["caCertificates"] = ca_cert_data_encode
         dr_ramen_hub_configmap_data_get = dr_ramen_hub_configmap_data.get()
         dr_ramen_hub_configmap_data_get["data"]["ramen_manager_config.yaml"] = str(
             ramen_config
