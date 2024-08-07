@@ -9,7 +9,7 @@ spec:
     kind: VolumeImportSource
     name: centos-source
   accessModes:
-  - ReadWriteMany
+    - ReadWriteMany
   resources:
     requests:
       storage: 30Gi
