@@ -5,7 +5,7 @@ import yaml
 from tempfile import NamedTemporaryFile
 
 from ocs_ci.ocs import constants, node
-from ocs_ci.framework.testlib import ManageTest, skipif_ocs_version, tier2
+from ocs_ci.framework.testlib import ManageTest, skipif_ocs_version, tier2, polarion_id
 from ocs_ci.helpers import helpers
 from ocs_ci.framework.pytest_customization.marks import green_squad
 from ocs_ci.ocs.exceptions import UnexpectedBehaviour
@@ -47,6 +47,7 @@ class TestMigrateRWO2RWOP(ManageTest):
         run_cmd(f"chmod 777 {temp_file.name}")
         run_cmd(f"sh {temp_file.name}")
 
+    @polarion_id("OCS-5907")
     def test_pvc_migrate_rwo_to_rwop(self, pvc_factory, pod_factory, interface):
         """
         Tests that changing access mode from ReadWriteOnce to ReadWriteOncePod is successful
