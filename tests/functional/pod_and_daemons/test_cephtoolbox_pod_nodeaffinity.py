@@ -15,6 +15,7 @@ from ocs_ci.ocs.node import (
     drain_nodes,
     schedule_nodes,
     taint_nodes,
+    untaint_nodes,
     get_worker_nodes,
     get_worker_node_where_ceph_toolbox_not_running,
     apply_node_affinity_for_ceph_toolbox,
@@ -36,6 +37,7 @@ class TestCephtoolboxPod:
     @pytest.fixture(scope="session", autouse=True)
     def teardown(self, request):
         def finalizer():
+            untaint_nodes()
             resource_name = constants.DEFAULT_CLUSTERNAME
             if config.DEPLOYMENT["external_mode"]:
                 resource_name = constants.DEFAULT_CLUSTERNAME_EXTERNAL_MODE
