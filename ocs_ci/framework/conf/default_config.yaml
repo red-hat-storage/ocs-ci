@@ -119,7 +119,6 @@ DEPLOYMENT:
   sts_enabled: false
 
 
-
 # Section for reporting configuration
 REPORTING:
   email:
