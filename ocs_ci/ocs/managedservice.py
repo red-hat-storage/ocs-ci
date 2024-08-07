@@ -12,7 +12,7 @@ from ocs_ci.ocs.constants import (
     MS_PROVIDER_TYPE,
     NON_MS_CLUSTER_TYPE,
     HCI_PROVIDER,
-    HCI_CLIENT,
+    PROVIDERMODE_CLIENT,
 )
 from ocs_ci.ocs.resources.catalog_source import CatalogSource, disable_specific_source
 from ocs_ci.ocs.resources.pod import get_ceph_tools_pod, get_pods_having_label, Pod
@@ -392,7 +392,7 @@ def check_switch_to_correct_cluster_at_setup(cluster_type=None):
         is_ms_consumer_cluster,
         is_ms_provider_cluster,
         is_managed_service_cluster,
-        is_hci_client_cluster,
+        is_providermode_client_cluster,
         is_hci_provider_cluster,
     )
 
@@ -409,7 +409,7 @@ def check_switch_to_correct_cluster_at_setup(cluster_type=None):
         MS_PROVIDER_TYPE,
         NON_MS_CLUSTER_TYPE,
         HCI_PROVIDER,
-        HCI_CLIENT,
+        PROVIDERMODE_CLIENT,
     ]
     assert (
         cluster_type in valid_cluster_types
@@ -425,8 +425,10 @@ def check_switch_to_correct_cluster_at_setup(cluster_type=None):
         # MS_PROVIDER_TYPE and HCI_PROVIDER are both "provider"
         assert is_ms_provider_cluster(), "The cluster is not an MS provider cluster"
         logger.info("The cluster is an MS provider cluster as expected")
-    elif cluster_type == HCI_CLIENT:
-        assert is_hci_client_cluster(), "The cluster is not an HCI client cluster"
+    elif cluster_type == PROVIDERMODE_CLIENT:
+        assert (
+            is_providermode_client_cluster()
+        ), "The cluster is not an HCI client cluster"
         logger.info("The cluster is an HCI client cluster as expected")
     elif cluster_type == HCI_PROVIDER:
         assert is_hci_provider_cluster(), "The cluster is not an HCI provider cluster"

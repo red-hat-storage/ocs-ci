@@ -1977,9 +1977,9 @@ def get_ocs_build_number():
         operator_name = defaults.ODF_OPERATOR_NAME
         if (
             config.ENV_DATA.get("platform") in constants.HCI_PROVIDER_CLIENT_PLATFORMS
-            and config.ENV_DATA.get("cluster_type") == constants.HCI_CLIENT
+            and config.ENV_DATA.get("cluster_type") == constants.PROVIDERMODE_CLIENT
         ):
-            operator_name = defaults.HCI_CLIENT_ODF_OPERATOR_NAME
+            operator_name = defaults.PROVIDERMODE_CLIENT_ODF_OPERATOR_NAME
     else:
         operator_name = defaults.OCS_OPERATOR_NAME
     ocs_csvs = get_csvs_start_with_prefix(

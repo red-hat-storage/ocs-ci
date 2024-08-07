@@ -743,7 +743,7 @@ def get_ceph_tools_pod(skip_creating_pod=False, wait=False, namespace=None):
         and config.ENV_DATA.get("platform", "").lower()
         in constants.HCI_PC_OR_MS_PLATFORM
         and config.ENV_DATA.get("cluster_type", "").lower()
-        in [constants.MS_CONSUMER_TYPE, constants.HCI_CLIENT]
+        in [constants.MS_CONSUMER_TYPE, constants.PROVIDERMODE_CLIENT]
     ):
         provider_kubeconfig = os.path.join(
             config.clusters[config.get_provider_index()].ENV_DATA["cluster_path"],
