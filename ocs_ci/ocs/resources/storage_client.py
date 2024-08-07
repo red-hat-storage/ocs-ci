@@ -16,6 +16,8 @@ from ocs_ci.utility.retry import retry
 from ocs_ci.helpers.managed_services import (
     get_all_storageclassclaims,
 )
+from ocs_ci.ocs.resources.ocs import get_ocs_csv
+from ocs_ci.ocs.resources.storage_cluster import verify_storage_cluster
 from ocs_ci.utility.utils import TimeoutSampler
 
 log = logging.getLogger(__name__)
@@ -503,11 +505,25 @@ class StorageClient:
         storageclaims, associated storageclasses and storagerequests are created successfully.
 
         """
+        ocs_csv = get_ocs_csv()
+        client_csv_version = ocs_csv.data["spec"]["version"]
+        ocs_version = version.get_ocs_version_from_csv(only_major_minor=True)
+        log.info(
+            f"Check if OCS version: {ocs_version} matches with CSV: {client_csv_version}"
+        )
+        assert (
+            f"{ocs_version}" in client_csv_version
+        ), f"OCS version: {ocs_version} mismatch with CSV version {client_csv_version}"
         if self.ocs_version >= version.VERSION_4_16:
             namespace = config.ENV_DATA["cluster_namespace"]
         else:
             namespace = constants.OPENSHIFT_STORAGE_CLIENT_NAMESPACE
 
+        # Check ocs-storagecluster is in 'Ready' status
+        log.info("Verify storagecluster on Ready state")
+        verify_storage_cluster()
+
+        # Fetch storage-client name
         storageclient_name = self.get_storageclient_name(namespace)
 
         # Verify storageclient is in Connected status

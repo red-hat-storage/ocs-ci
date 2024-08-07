@@ -35,7 +35,7 @@ spec:
   providerAPIServerServiceType: ClusterIP
   storageDeviceSets:
   - config: {}
-    count: 2
+    count: 4
     dataPVCTemplate:
       metadata: {}
       spec:
@@ -52,5 +52,5 @@ spec:
     name: local-storage-deviceset
     placement: {}
     preparePlacement: {}
-    replica: 6
+    replica: 3
     resources: {}
