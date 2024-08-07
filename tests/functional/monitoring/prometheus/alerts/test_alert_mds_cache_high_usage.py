@@ -14,9 +14,14 @@ from ocs_ci.ocs.node import (
     unschedule_nodes,
     drain_nodes,
     schedule_nodes,
+    get_worker_nodes,
 )
 
 log = logging.getLogger(__name__)
+
+
+alert_timer = 900  # sleep time to generate the alert is 15 minutes
+scale_timer = 100  # sleep time to wait after running scale down
 
 
 @pytest.fixture(scope="function")
@@ -33,24 +38,28 @@ def run_metadata_io_with_cephfs(pvc_factory, dc_pod_factory):
     interface = constants.CEPHFILESYSTEM
     log.info("Checking for Ceph Health OK")
     ceph_health_check_base()
-
+    active_mds_node = cluster.get_active_mds_info()["node_name"]
+    sr_mds_node = cluster.get_mds_standby_replay_info()["node_name"]
+    worker_nodes = get_worker_nodes()
+    target_node = []
+    for node in worker_nodes:
+        if (node != active_mds_node) and (node != sr_mds_node):
+            target_node.append(node)
     for i in range(3):
-        # Creating PVC with cephfs as interface
-        log.info(f"Creating {interface} based PVC")
+        log.info(f"Create {interface} based PVC")
         pvc_obj = pvc_factory(interface=interface, access_mode=access_mode, size="30")
-        # Creating a Fedora dc pod
-        log.info("Creating fedora dc pod")
+        log.info("Create fedora dc pod")
         pod_obj = dc_pod_factory(
-            pvc=pvc_obj, access_mode=access_mode, interface=interface
+            pvc=pvc_obj,
+            access_mode=access_mode,
+            interface=interface,
+            node_name=target_node[0],
         )
-        # Copy meta_data_io.py to fedora pod
-        log.info("Copying meta_data_io.py to fedora pod ")
+        log.info("Copy meta_data_io.py to fedora pod ")
         cmd = f"oc cp {file} {pvc_obj.namespace}/{pod_obj.name}:/"
         helpers.run_cmd(cmd=cmd)
         log.info("meta_data_io.py copied successfully ")
-
-        # Run meta_data_io.py on fedora pod
-        log.info("Running meta data IO on fedora pod ")
+        log.info("Run meta data IO on fedora pod ")
         metaio_executor = ThreadPoolExecutor(max_workers=1)
         metaio_executor.submit(
             pod_obj.exec_sh_cmd_on_pod, command="python3 meta_data_io.py"
@@ -58,6 +67,13 @@ def run_metadata_io_with_cephfs(pvc_factory, dc_pod_factory):
 
 
 def active_mds_alert_values(threading_lock):
+    """
+    This function verifies the prometheus alerts and compare details with the given alert values.
+    If given alert values matched with the pulled alert values in prometheus alerts then it returns True.
+
+    Returns:
+        bool: return True --> if alert verified successfully
+    """
     active_mds = cluster.get_active_mds_info()["mds_daemon"]
     sr_mds = cluster.get_mds_standby_replay_info()["mds_daemon"]
     cache_alert = constants.ALERT_MDSCACHEUSAGEHIGH
@@ -95,14 +111,27 @@ def active_mds_alert_values(threading_lock):
 @tier2
 @blue_squad
 class TestMdsMemoryAlerts:
-    alert_timer = 900  # sleep time to generate the alert 15 minutes
-    scale_timer = 100  # sleep time to wait after running scale down
+    @pytest.fixture(scope="function", autouse=True)
+    def teardown(self, request):
+        def finalizer():
+            cluster.clear_active_mds_load()
+            log.info(
+                "clearing the existing load on active MDS by failing the MDS daemon instantly"
+            )
+            time.sleep(scale_timer)
+            cluster.clear_active_mds_load()
+            log.info(
+                "clearing the existing load on newly become active MDS by failing the MDS daemon instantly"
+            )
+            time.sleep(scale_timer)
+
+        request.addfinalizer(finalizer)
 
     @pytest.mark.polarion_id("OCS-5570")
-    def test_alert_triggered(
-        self, run_metadata_io_with_cephfs, threading_lock, alert_timer
-    ):
-        # This function verifies the mds cache alert triggered or not
+    def test_alert_triggered(self, run_metadata_io_with_cephfs, threading_lock):
+        """
+        This function verifies the mds cache alert triggered or not.
+        """
         log.info(
             "Metadata IO started in the background. Script will sleep for 15 minutes before validating the MDS alert"
         )
@@ -112,9 +141,11 @@ class TestMdsMemoryAlerts:
 
     @pytest.mark.polarion_id("OCS-5571")
     def test_mds_cache_alert_with_active_node_drain(
-        self, run_metadata_io_with_cephfs, threading_lock, alert_timer
+        self, run_metadata_io_with_cephfs, threading_lock
     ):
-        # This function verifies the mds cache alert with active mds running node drain
+        """
+        This function verifies the mds cache alert when the active mds running node drained.
+        """
         log.info(
             "Metadata IO started in the background. Lets wait for 15 minutes before validating the MDS alert"
         )
@@ -123,13 +154,13 @@ class TestMdsMemoryAlerts:
         assert active_mds_alert_values(threading_lock)
 
         node_name = cluster.get_active_mds_info()["node_name"]
-        # Unschedule active mds running node.
+        log.info("Unschedule active mds running node")
         unschedule_nodes([node_name])
         log.info(f"node {node_name} unscheduled successfully")
-        # Drain node operation
+        log.info("Drain node operation")
         drain_nodes([node_name])
         log.info(f"node {node_name} drained successfully")
-        # Make the node schedule-able
+        log.info("Make the node schedule-able")
         schedule_nodes([node_name])
         log.info(f"Scheduled the node {node_name}")
         log.info("Script will sleep for 15 minutes before validating the alert")
@@ -138,9 +169,11 @@ class TestMdsMemoryAlerts:
 
     @pytest.mark.polarion_id("OCS-5577")
     def test_mds_cache_alert_with_active_node_scaledown(
-        self, run_metadata_io_with_cephfs, threading_lock, alert_timer, scale_timer
+        self, run_metadata_io_with_cephfs, threading_lock
     ):
-        # This function verifies the mds cache alert with active mds scale down and up
+        """
+        This test function verifies the mds cache alert with active mds scale down and up
+        """
         log.info(
             "Metadata IO started in the background. Script will sleep for 15 minutes before validating the MDS alert"
         )
@@ -169,9 +202,11 @@ class TestMdsMemoryAlerts:
 
     @pytest.mark.polarion_id("OCS-5578")
     def test_mds_cache_alert_with_sr_node_scaledown(
-        self, run_metadata_io_with_cephfs, threading_lock, alert_timer, scale_timer
+        self, run_metadata_io_with_cephfs, threading_lock
     ):
-        # This function verifies the mds cache alert with standby-replay mds scale down and up
+        """
+        This test function verifies the mds cache alert with standby-replay mds scale down and up
+        """
         log.info(
             "Metadata IO started in the background. Script will sleep for 15 minutes before validating the MDS alert"
         )
@@ -198,9 +233,11 @@ class TestMdsMemoryAlerts:
 
     @pytest.mark.polarion_id("OCS-5579")
     def test_mds_cache_alert_with_all_mds_node_scaledown(
-        self, run_metadata_io_with_cephfs, threading_lock, alert_timer, scale_timer
+        self, run_metadata_io_with_cephfs, threading_lock
     ):
-        # This function verifies the mds cache alert with both active and standby-replay mds scale down and up
+        """
+        This test function verifies the mds cache alert with both active and standby-replay mds scale down and up
+        """
         log.info(
             "Metadata IO started in the background. Script will sleep for 15 minutes before validating the MDS alert"
         )

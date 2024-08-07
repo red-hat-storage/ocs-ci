@@ -3131,11 +3131,17 @@ def get_mds_standby_replay_info():
             f"Unable to determine IP address of node running standby-replay MDS pod '{standby_replay_pod.name}'"
         )
         return None
-
+    node_name = standby_replay_pod.data["spec"].get("nodeName")
+    if not node_name:
+        logger.error(
+            f"Unable to determine Name of the node running standby-replay MDS pod '{standby_replay_pod.name}'"
+        )
+        return None
     return {
         "node_ip": node_ip,
         "mds_daemon": ceph_daemon_name,
         "standby_replay_pod": standby_replay_pod.name,
+        "node_name": node_name,
     }
 
 
@@ -3355,7 +3361,7 @@ def get_active_mds_info():
     ct_pod = pod.get_ceph_tools_pod()
     ceph_mdsmap = ct_pod.exec_ceph_cmd("ceph fs status")
 
-    # Find ceph daemon state as 'active'
+    logger.info("Find ceph daemon state as 'active'")
     ceph_daemon_name = next(
         (
             daemon["name"]
@@ -3371,9 +3377,9 @@ def get_active_mds_info():
 
     logger.info(f"Found active MDS daemon: {ceph_daemon_name}")
 
-    # Find ceph MDS pod running 'active' daemon.
+    logger.info("Find ceph MDS pod name where the active MDS daemon is running.")
     mds_pods = get_mds_pods()
-    active_pod = next((srp for srp in mds_pods if ceph_daemon_name in srp.name), None)
+    active_pod = next((pod for pod in mds_pods if ceph_daemon_name in pod.name), None)
 
     if active_pod is None:
         logger.error(
@@ -3382,15 +3388,14 @@ def get_active_mds_info():
         return None
 
     logger.info(f"Found active MDS pod: {active_pod.name}")
-
-    # Get the node IP of running pod
+    logger.info("Get the node IP of active mds running pod")
     node_ip = active_pod.data["status"].get("hostIP")
     if not node_ip:
         logger.error(
             f"Unable to determine IP address of node running active MDS pod '{active_pod.name}'"
         )
         return None
-    # Get the node name of running pod.
+    logger.info("Get the node name of of active mds  running pod")
     node_name = active_pod.data["spec"].get("nodeName")
     if not node_name:
         logger.error(
@@ -3404,3 +3409,12 @@ def get_active_mds_info():
         "active_pod": active_pod.name,
         "node_name": node_name,
     }
+
+
+def clear_active_mds_load():
+    """
+    This function executes a ceph cmd to fail active mds daemon instantly.
+    So that the existing load on active mds will be cleared off immediately.
+    """
+    ct_pod = pod.get_ceph_tools_pod()
+    ct_pod.exec_ceph_cmd("ceph mds fail 0")
