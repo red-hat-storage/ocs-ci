@@ -2017,6 +2017,8 @@ DISCON_CL_REQUIRED_PACKAGES = [
     "odf-operator",
 ]
 # for OCP >= 4.11
+# the list of available packages can be obtained via following command:
+# oc mirror list operators --catalog REGISTRY_IMAGE
 DISCON_CL_REQUIRED_PACKAGES_PER_ODF_VERSION = {
     "4.11": [
         "cluster-logging",
@@ -2054,9 +2056,23 @@ DISCON_CL_REQUIRED_PACKAGES_PER_ODF_VERSION[
     "4.15"
 ] = DISCON_CL_REQUIRED_PACKAGES_PER_ODF_VERSION["4.12"]
 
+DISCON_CL_REQUIRED_PACKAGES_PER_ODF_VERSION["4.16"] = [
+    "cluster-logging",
+    "elasticsearch-operator",
+    # we might need to uncomment next line, if we would like to use it in
+    # disconnected deployment:
+    # "lvms-operator",
+    "mcg-operator",
+    "ocs-operator",
+    "odf-csi-addons-operator",
+    "odf-multicluster-orchestrator",
+    "odf-operator",
+    # "odf-prometheus-operator",
+]
+
 DISCON_CL_REQUIRED_PACKAGES_PER_ODF_VERSION[
-    "4.16"
-] = DISCON_CL_REQUIRED_PACKAGES_PER_ODF_VERSION["4.12"]
+    "4.17"
+] = DISCON_CL_REQUIRED_PACKAGES_PER_ODF_VERSION["4.16"]
 
 # PSI-openstack constants
 NOVA_CLNT_VERSION = "2.0"
