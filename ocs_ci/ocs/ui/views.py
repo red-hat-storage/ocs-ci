@@ -268,6 +268,14 @@ deployment_4_16 = {
     ),
 }
 
+deployment_4_17 = {
+    "osd_size_dropdown": (
+        "//*[@class='pf-v5-c-select dropdown--full-width'] | "
+        "//*[@class='pf-c-select dropdown--full-width']",
+        By.XPATH,
+    ),
+}
+
 generic_locators = {
     "project_selector": (
         "//span[@class='pf-c-menu-toggle__text' and contains(text(), 'Project:')] | "
@@ -370,6 +378,9 @@ generic_locators = {
     "developer_selected": ("//h2[.='Developer']", By.XPATH),
     "administrator_selected": ("//h2[.='Administrator']", By.XPATH),
     "blockpool_name": ("//a[text()='{}']", By.XPATH),
+    "openshift-operators": (
+        "//a[@data-test-operator-row='ODF Multicluster Orchestrator']"
+    ),
 }
 
 ocs_operator_locators = {
@@ -741,6 +752,7 @@ acm_page_nav = {
     "Submit_import": ("//button[text()='Import']", By.XPATH),
     "Acm_import_endswith_url": "import",
     "modal_dialog_close_button": ("//button[@aria-label='Close']", By.XPATH),
+    "Policies": ("a[data-test-id='horizontal-link-Policies']", By.CSS_SELECTOR),
 }
 
 acm_configuration = {
@@ -989,8 +1001,12 @@ acm_configuration_4_12 = {
     "clusters-page": ("a[class*='c-breadcrumb__link']", By.CSS_SELECTOR),
     "nodes-tab": ("//a[normalize-space()='Nodes']", By.XPATH),
     "data-services": ("//button[normalize-space()='Data Services']", By.XPATH),
-    "data-policies": ("//a[normalize-space()='Data policies']", By.XPATH),
+    "disaster-recovery": ("//a[normalize-space()='Disaster recovery']", By.XPATH),
     "replication-policy": ("//td[@id='replicationPolicy']", By.XPATH),
+    "disaster-recovery-overview": (
+        "a[data-test-id='horizontal-link-Overview']",
+        By.CSS_SELECTOR,
+    ),
     "drpolicy-status": ("//*[text()='Validated']", By.XPATH),
     "workload-name": ('//*[text()="{}"]', By.XPATH),
     "search-bar": (
@@ -1034,6 +1050,11 @@ acm_configuration_4_12 = {
         "//*[@data-test-id='acm-perspective-nav'] | //*[@class='pf-v5-c-nav__list oc-perspective-nav']",
         By.XPATH,
     ),
+    "cluster-operator-status": (
+        "div[data-status-id='Cluster operator-secondary-status'] "
+        "small[class='co-status-card__health-item-text text-muted']",
+        By.CSS_SELECTOR,
+    ),
 }
 
 acm_configuration_4_13 = {
@@ -1045,6 +1066,35 @@ acm_configuration_4_14 = {
     "submariner-custom-subscription": ("isCustomSubscription", By.ID),
     "submariner-custom-source": ("source", By.ID),
     "submariner-custom-channel": ("channel", By.ID),
+}
+
+acm_configuration_4_16 = {
+    "managed_app_count": (
+        "div[class='pf-v5-l-gallery pf-m-gutter'] p[class='text-muted']",
+        By.CSS_SELECTOR,
+    ),
+    "total_app_count": (
+        "div[class='pf-v5-l-grid__item pf-m-3-row pf-m-12-col-on-sm pf-m-8-col-on-lg'] div:nth-child(2) p:nth-child(2)",
+        By.CSS_SELECTOR,
+    ),
+    "cluster-dropdown": ("//input[@placeholder='Select a cluster']", By.XPATH),
+    "cluster-1": ("//button[normalize-space()='{}']", By.XPATH),
+    "cluster-2": ("//button[normalize-space()='{}']", By.XPATH),
+    "cluster-health-status": (
+        "div[data-status-id='Cluster health-secondary-status'] "
+        "small[class='co-status-card__health-item-text text-muted']",
+        By.CSS_SELECTOR,
+    ),
+    "cluster-operator-health-status": (
+        "div[data-status-id='Operators health-secondary-status'] "
+        "small[class='co-status-card__health-item-text text-muted']",
+        By.CSS_SELECTOR,
+    ),
+    "app-dropdown": (
+        "//span[normalize-space()='Application: All Application']",
+        By.XPATH,
+    ),
+    "app-name": ("//span[normalize-space()='{}']", By.XPATH),
 }
 
 add_capacity = {
@@ -1890,6 +1940,7 @@ locators = {
             **deployment_4_12,
             **deployment_4_15,
             **deployment_4_16,
+            **deployment_4_17,
         },
         "obc": obc,
         "pvc": {
@@ -1907,6 +1958,7 @@ locators = {
             **acm_configuration_4_12,
             **acm_configuration_4_13,
             **acm_configuration_4_14,
+            **acm_configuration_4_16,
         },
         "validation": {
             **validation,

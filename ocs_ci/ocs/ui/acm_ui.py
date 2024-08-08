@@ -156,7 +156,9 @@ class AcmPageNavigator(BaseUI):
         Navigate to Data Services page on ACM UI, supported for ACM version 2.7 and above
 
         """
-        log.info("Navigate to Data Policies page on ACM console")
+        log.info(
+            "Navigate to Disaster recovery Overview page under 'Data Services' on ACM console"
+        )
         find_element = self.wait_until_expected_text_is_found(
             locator=self.acm_page_nav["data-services"],
             expected_text="Data Services",
@@ -168,17 +170,21 @@ class AcmPageNavigator(BaseUI):
             )
             if element.get_attribute("aria-expanded") == "false":
                 self.do_click(locator=self.acm_page_nav["data-services"])
-            data_policies = self.wait_until_expected_text_is_found(
-                locator=self.acm_page_nav["data-policies"],
-                expected_text="Data policies",
+            disaster_recovery = self.wait_until_expected_text_is_found(
+                locator=self.acm_page_nav["disaster-recovery"],
+                expected_text="Disaster recovery",
                 timeout=240,
             )
-            if data_policies:
+            if disaster_recovery:
                 self.do_click(
-                    locator=self.acm_page_nav["data-policies"], enable_screenshot=True
+                    locator=self.acm_page_nav["disaster-recovery"],
+                    enable_screenshot=True,
+                    avoid_stale=True,
                 )
         else:
-            log.error("Couldn't navigate to data Services page on ACM UI")
+            log.error(
+                "Couldn't navigate to Disaster recovery Overview page under 'Data Services' on ACM console"
+            )
             raise NoSuchElementException
 
     def navigate_from_ocp_to_acm_cluster_page(self):

@@ -207,6 +207,19 @@ class PageNavigator(BaseUI):
         logger.info("Enter the OCS operator page")
         self.do_click(self.generic_locators["ocs_operator"], enable_screenshot=False)
 
+    def navigate_to_mco_operator_page(self):
+        """
+        Navigate to the ODF Multicluster Orchestrator Operator page
+
+        """
+        self.navigate_installed_operators_page()
+        logger.info("Select 'ODF Multicluster Orchestrator' project")
+        self.select_namespace("openshift-operators")
+        logger.info("Enter the MCO operator page")
+        self.do_click(
+            self.generic_locators["openshift-operators"], enable_screenshot=False
+        )
+
     def navigate_persistentvolumes_page(self):
         """
         Navigate to Persistent Volumes Page
@@ -448,3 +461,15 @@ class PageNavigator(BaseUI):
             locator=self.page_nav["storageclients_page"], enable_screenshot=False
         )
         return StorageClients()
+
+    def nav_to_disaster_recovery_overview_page(self):
+        """
+        Navigate to Disaster Recovery Overview page on the RHACM console on a DR setup
+
+        Ensure that you are already on the RHACM console before calling this function
+
+        The navigation steps considers that ACM observability is enabled on the setup
+
+        """
+
+        logger.info("Navigate to Storage Client Page")
