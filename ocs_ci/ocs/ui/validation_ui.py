@@ -278,8 +278,8 @@ class ValidationUI(PageNavigator):
             self.validation_loc["console_plugin_option"]
         )
         if console_plugin_status == "Disabled":
-            logger.info(
-                "Storage plugin is disabled, Enable it to see ODF tab under Storage section"
+            logger.warning(
+                "MCO Storage plugin is disabled, enable it to navigate to ACM console"
             )
             self.do_click(self.validation_loc["console_plugin_option"])
             self.do_click(self.dep_loc["enable_console_plugin"])
@@ -299,7 +299,7 @@ class ValidationUI(PageNavigator):
                     enable_screenshot=True,
                 )
         else:
-            logger.info("MCO plugin is enabled, check skipped")
+            logger.info("MCO plugin is enabled on ACM UI, check skipped")
 
     def odf_overview_ui(
         self,
