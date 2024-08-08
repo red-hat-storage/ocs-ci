@@ -92,7 +92,6 @@ class NoobaaAccount(object):
                     "full_permission": full_bucket_access,
                     "permission_list": buckets,
                 },
-                "allow_bucket_creation": allow_bucket_creation,
             }
         else:
             params_dict = {
@@ -101,8 +100,10 @@ class NoobaaAccount(object):
                 "has_login": admin_access,
                 "s3_access": s3_access,
                 "default_pool": backingstore_name,
-                "allow_bucket_creation": allow_bucket_creation,
             }
+
+        if not allow_bucket_creation:
+            params_dict["allow_bucket_creation"] = allow_bucket_creation
         (
             params_dict
             if (version.get_semantic_ocs_version_from_config() < version.VERSION_4_9)
