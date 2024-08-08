@@ -1543,6 +1543,14 @@ def get_all_acm_indexes():
     return acm_indexes
 
 
+def is_acm_cluster(cluster):
+    return cluster.MULTICLUSTER["multicluster_index"] in get_all_acm_indexes()
+
+
+def is_recovery_cluster(cluster):
+    return cluster.MULTICLUSTER.get("recovery_cluster")
+
+
 def enable_mco_console_plugin():
     """
     Enables console plugin for MCO
