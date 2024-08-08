@@ -652,7 +652,7 @@ def import_recovery_clusters_with_acm():
     )
 
     cluster_name_recoevry = clusters_env.get(f"cluster_name_{recovery_index}")
-    clusters = (cluster_name_recoevry, kubeconfig_recovery)
+    clusters = ((cluster_name_recoevry, kubeconfig_recovery),)
     verify_running_acm()
 
     import_clusters_via_cli(clusters)

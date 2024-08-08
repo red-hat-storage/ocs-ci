@@ -28,6 +28,7 @@ from ocs_ci.ocs.utils import (
     get_active_acm_index,
     get_primary_cluster_config,
     get_passive_acm_index,
+    enable_mco_console_plugin,
 )
 from ocs_ci.utility import version, templating
 from ocs_ci.utility.retry import retry
@@ -1451,13 +1452,16 @@ def replace_cluster(workload, primary_cluster_name, secondary_cluster_name):
     # Install MCO on active hub again
     from ocs_ci.deployment.deployment import MultiClusterDROperatorsDeploy
 
-    dep_mco = MultiClusterDROperatorsDeploy()
-    dep_mco.deploy_dr_multicluster_orchestrator()
+    dr_conf = dict()
 
+    dep_mco = MultiClusterDROperatorsDeploy(dr_conf)
+    dep_mco.deploy()
+    # Enable MCO console plugin
+    enable_mco_console_plugin()
+    # Configure mirror peer
+    dep_mco.configure_mirror_peer()
     # Create DR policy
-    dep_multi_obj = MultiClusterDROperatorsDeploy()
-    dep_multi_obj.deploy_dr_policy()
-
+    dep_mco.deploy_dr_policy()
     # Validate drpolicy
     verify_drpolicy_cli(switch_ctx=get_active_acm_index())
 
@@ -1467,3 +1471,5 @@ def replace_cluster(workload, primary_cluster_name, secondary_cluster_name):
     placement_obj.annotate(
         annotation="cluster.open-cluster-management.io/experimental-scheduling-disable='true'"
     )
+    # Configure DRClusters for fencing automation
+    configure_drcluster_for_fencing()
