@@ -7,11 +7,11 @@ import logging
 from selenium.common.exceptions import NoSuchElementException
 from ocs_ci.framework import config
 from ocs_ci.ocs import constants
+from ocs_ci.ocs.ui.validation_ui import ValidationUI
 from ocs_ci.ocs.ui.views import locators
 from ocs_ci.ocs.ui.helpers_ui import format_locator
 from ocs_ci.utility.utils import get_ocp_version
 from ocs_ci.ocs.utils import get_non_acm_cluster_config
-from ocs_ci.utility import version
 from ocs_ci.ocs.ui.page_objects.page_navigator import PageNavigator
 
 log = logging.getLogger(__name__)
@@ -161,10 +161,9 @@ def verify_drpolicy_ui(acm_obj, scheduling_interval):
     ocp_version = get_ocp_version()
     acm_loc = locators[ocp_version]["acm_page"]
     acm_obj.navigate_data_services()
+    log.info("Click on 'Policies' tab under Disaster recovery")
+    acm_obj.do_click(acm_loc["Policies"], avoid_stale=True, enable_screenshot=True)
     log.info("Verify status of DRPolicy on ACM UI")
-    if version.get_semantic_ocs_version_from_config() >= version.VERSION_4_16:
-        log.info("Navigate to Policies page under Disaster recovery")
-        acm_obj.do_click(acm_loc["search-bar"])
     policy_status = acm_obj.wait_until_expected_text_is_found(
         acm_loc["drpolicy-status"], expected_text="Validated"
     )
@@ -183,7 +182,11 @@ def verify_drpolicy_ui(acm_obj, scheduling_interval):
             replication_policy
             == f"{constants.RDR_REPLICATION_POLICY}, interval: {scheduling_interval}m"
         ), f"Replication policy on ACM UI is {replication_policy}, can not proceed"
-    log.info("DRPolicy successfully validated on ACM UI")
+    log.info("DRPolicy and replication policy successfully validated on ACM UI")
+    log.info("Navigate back to Disaster recovery Overview page")
+    acm_obj.do_click(
+        acm_loc["disaster-recovery-overview"], avoid_stale=True, enable_screenshot=True
+    )
 
 
 def failover_relocate_ui(
@@ -195,6 +198,7 @@ def failover_relocate_ui(
     action=constants.ACTION_FAILOVER,
     timeout=120,
     move_workloads_to_same_cluster=False,
+    workload_type=constants.SUBSCRIPTION,
 ):
     """
     Function to perform Failover/Relocate operations via ACM UI
@@ -237,33 +241,36 @@ def failover_relocate_ui(
             acm_obj.do_click(
                 acm_loc["relocate-app"], enable_screenshot=True, timeout=timeout
             )
-        log.info("Click on policy dropdown")
-        acm_obj.do_click(acm_loc["policy-dropdown"], enable_screenshot=True)
-        log.info("Select policy from policy dropdown")
-        acm_obj.do_click(
-            format_locator(acm_loc["select-policy"], policy_name),
-            enable_screenshot=True,
-        )
-        log.info("Click on target cluster dropdown")
-        acm_obj.do_click(acm_loc["target-cluster-dropdown"], enable_screenshot=True)
-        if move_workloads_to_same_cluster:
-            log.info("Select target cluster same as current primary cluster on ACM UI")
+        if workload_type:
+            log.info("Click on policy dropdown")
+            acm_obj.do_click(acm_loc["policy-dropdown"], enable_screenshot=True)
+            log.info("Select policy from policy dropdown")
             acm_obj.do_click(
-                format_locator(
-                    acm_loc["failover-preferred-cluster-name"],
-                    failover_or_preferred_cluster,
-                ),
+                format_locator(acm_loc["select-policy"], policy_name),
                 enable_screenshot=True,
             )
-        else:
-            log.info("Select target cluster on ACM UI")
-            acm_obj.do_click(
-                format_locator(
-                    acm_loc["failover-preferred-cluster-name"],
-                    failover_or_preferred_cluster,
-                ),
-                enable_screenshot=True,
-            )
+            log.info("Click on target cluster dropdown")
+            acm_obj.do_click(acm_loc["target-cluster-dropdown"], enable_screenshot=True)
+            if move_workloads_to_same_cluster:
+                log.info(
+                    "Select target cluster same as current primary cluster on ACM UI"
+                )
+                acm_obj.do_click(
+                    format_locator(
+                        acm_loc["failover-preferred-cluster-name"],
+                        failover_or_preferred_cluster,
+                    ),
+                    enable_screenshot=True,
+                )
+            else:
+                log.info("Select target cluster on ACM UI")
+                acm_obj.do_click(
+                    format_locator(
+                        acm_loc["failover-preferred-cluster-name"],
+                        failover_or_preferred_cluster,
+                    ),
+                    enable_screenshot=True,
+                )
         log.info("Check operation readiness")
         if action == constants.ACTION_FAILOVER:
             if move_workloads_to_same_cluster:
@@ -308,14 +315,15 @@ def failover_relocate_ui(
                 )
                 acm_obj.take_screenshot()
                 return True
-        log.info("Click on subscription dropdown")
-        acm_obj.do_click(acm_loc["subscription-dropdown"], enable_screenshot=True)
-        # TODO: Commented below lines due to Regression BZ2208637
-        # log.info("Check peer readiness")
-        # assert acm_obj.wait_until_expected_text_is_found(
-        #     locator=acm_loc["peer-ready"],
-        #     expected_text=constants.PEER_READY,
-        # ), f"Peer is not ready, can not initiate {action}"
+        if workload_type:
+            log.info("Click on subscription dropdown")
+            acm_obj.do_click(acm_loc["subscription-dropdown"], enable_screenshot=True)
+            # TODO: Commented below lines due to Regression BZ2208637
+            # log.info("Check peer readiness")
+            # assert acm_obj.wait_until_expected_text_is_found(
+            #     locator=acm_loc["peer-ready"],
+            #     expected_text=constants.PEER_READY,
+            # ), f"Peer is not ready, can not initiate {action}"
         acm_obj.take_screenshot()
         if aria_disabled == "true":
             log.error("Initiate button in not enabled to failover/relocate")
@@ -401,11 +409,134 @@ def verify_failover_relocate_status_ui(
 
 def verify_mco_console_plugin():
     """
-    Function to verify MCO console plugin is enabled, otherwise enable it
+    Function to verify MCO console plugin is enabled or not, enables it if not already
 
     """
     page_nav_obj = PageNavigator()
-    ocp_version = get_ocp_version()
-    _ = locators[ocp_version]["acm_page"]
+    val_ui_obj = ValidationUI()
     page_nav_obj.navigate_OCP_home_page()
     page_nav_obj.navigate_to_mco_operator_page()
+    val_ui_obj.mco_console_plugin_check()
+
+
+def check_cluster_operator_status(acm_obj, timeout=30):
+    """
+    The function verifies the cluster operator status on the DR monitoring dashboard
+
+    """
+    ocp_version = get_ocp_version()
+    acm_loc = locators[ocp_version]["acm_page"]
+    log.info("Check the Cluster operator status")
+    cluster_operator_status = acm_obj.wait_until_expected_text_is_found(
+        locator=acm_loc["cluster-operator-status"],
+        expected_text="Degraded",
+        timeout=timeout,
+    )
+    if cluster_operator_status:
+        log.info("Text 'Degraded' for Cluster operator is not found, validation passed")
+        acm_obj.take_screenshot()
+        return True
+    else:
+        log.error("Cluster operator status on DR monitoring dashboard is degraded")
+        acm_obj.take_screenshot()
+        return False
+
+
+def acm_managed_applications_count_on_ui(acm_obj):
+    """
+    The function verifies the ACM managed applications count on the DR console
+
+    Returns:
+        number_of_applications (list): Number of ACM managed applications on DR dashboard
+
+    """
+    ocp_version = get_ocp_version()
+    acm_loc = locators[ocp_version]["acm_page"]
+    log.info("Fetch the ACM managed applications count on ACM UI")
+    managed_app_text = acm_obj.get_element_text(acm_loc["managed_app_count"])
+    number_of_managed_applications = int(managed_app_text.split(": ")[1])
+    total_app_text = acm_obj.get_element_text(acm_loc["total_app_count"])
+    number_of_total_applications = int(total_app_text.split(": ")[1])
+    app_count_list = []
+    return app_count_list.extend(
+        [number_of_managed_applications, number_of_total_applications]
+    )
+
+
+def cluster_and_operator_health_check_on_ui(
+    acm_obj, cluster1, cluster2, timeout=15, expected_text="Degraded"
+):
+    """
+    The function checks the cluster and operator health of both the managed clusters on DR dashboard
+
+    Args:
+        cluster1 (str): Name of managed cluster one
+        cluster2 (str): Name of managed cluster two
+        timeout (int): Timeout for which the expected text would be checked
+        expected_text (str): Text available on DR dashboard for Cluster and Operator status
+
+    Returns:
+        False if text Degraded is found either for cluster or operator health, True if it is not found for both of them
+
+    """
+
+    ocp_version = get_ocp_version()
+    acm_loc = locators[ocp_version]["acm_page"]
+    for cluster in [cluster1, cluster2]:
+        log.info(f"Select managed cluster {cluster} from cluster dropdown")
+        acm_obj.do_click(acm_loc["cluster-dropdown"], enable_screenshot=True)
+        acm_obj.do_click(format_locator(acm_loc["cluster"], cluster))
+        locator_list = ["cluster-health-status", "cluster-operator-health-status"]
+        for locator in locator_list:
+            cluster_health_status = acm_obj.wait_until_expected_text_is_found(
+                locator=acm_loc[locator],
+                expected_text=expected_text,
+                timeout=timeout,
+            )
+            if not cluster_health_status:
+                log.info(
+                    f"Text {expected_text} for locator {locator} found, validation passed"
+                )
+                acm_obj.take_screenshot()
+            else:
+                log.error(
+                    f"Text {expected_text} for locator {locator} not found, validation failed"
+                )
+                acm_obj.take_screenshot()
+                return False
+        return True
+
+
+def check_apps_running_on_selected_cluster(
+    acm_obj, cluster_name, app_names=[], timeout=10
+):
+    """
+    Function to check the apps running on selected managed cluster on DR dashboard
+    Args:
+        cluster_name (str): Name of the managed cluster where apps are primary
+        app_names (list): Name of the apps as a list to iterate over it
+        timeout (int): Timeout for which an element on UI should be looked for
+
+    Returns:
+        True if all the apps are found on selected managed cluster, False if any of the apps are missing
+
+    """
+    ocp_version = get_ocp_version()
+    acm_loc = locators[ocp_version]["acm_page"]
+    log.info(f"Select managed cluster {cluster_name} from cluster dropdown")
+    acm_obj.do_click(acm_loc["cluster-dropdown"], enable_screenshot=True)
+    acm_obj.do_click(format_locator(acm_loc["cluster"], cluster_name))
+    log.info("Select application from application dropdown")
+    acm_obj.do_click(acm_loc["app-dropdown"], enable_screenshot=True)
+    for app in app_names:
+        app_presence = acm_obj.wait_until_expected_text_is_found(
+            locator=format_locator(acm_loc["app-name"], app),
+            expected_text=app,
+            timeout=timeout,
+        )
+        if app_presence:
+            log.info(f"App {app} found on cluster {cluster_name} on DR dashboard")
+        else:
+            log.error(f"App {app} not found on cluster {cluster_name} on DR dashboard")
+            return False
+    return True
