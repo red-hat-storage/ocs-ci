@@ -87,7 +87,7 @@ class StorageConsumer:
         """
         Suspend status reporter cron job.
         """
-        with config.RunWithFirstConsumerConfigContext():
+        with config.RunWithConfigContext(self.consumer_context):
             patch_param = '{"spec": {"suspend": true}}'
             self.heartbeat_cronjob.ocp.patch(
                 resource_name=self.heartbeat_cronjob.name, params=patch_param
@@ -97,7 +97,7 @@ class StorageConsumer:
         """
         Resume status reporter cron job.
         """
-        with config.RunWithFirstConsumerConfigContext():
+        with config.RunWithConfigContext(self.consumer_context):
             patch_param = '{"spec": {"suspend": false}}'
             self.heartbeat_cronjob.ocp.patch(
                 resource_name=self.heartbeat_cronjob.name, params=patch_param
@@ -109,7 +109,7 @@ class StorageConsumer:
             object: status reporter cronjob OCS object
 
         """
-        with config.RunWithFirstConsumerConfigContext():
+        with config.RunWithConfigContext(self.consumer_context):
             cronjobs_obj = ocp.OCP(
                 kind=constants.CRONJOB,
                 namespace=config.cluster_ctx.ENV_DATA["cluster_namespace"],
