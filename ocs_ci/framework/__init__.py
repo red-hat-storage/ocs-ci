@@ -14,7 +14,7 @@ import logging
 from collections.abc import Mapping
 from dataclasses import dataclass, field, fields
 from ocs_ci.ocs.exceptions import ClusterNotFoundException
-from threading import Thread, RLock, get_ident
+from threading import Thread, RLock, local, get_ident
 
 THIS_DIR = os.path.dirname(os.path.abspath(__file__))
 DEFAULT_CONFIG_PATH = os.path.join(THIS_DIR, "conf/default_config.yaml")
@@ -133,7 +133,7 @@ class MultiClusterConfig:
     # multiple cluster contexts
     def __init__(self):
         # Holds all cluster's Config() object
-        self.thread_config_map = {}
+        self.thread_local_data = local()
         self.clusters = list()
         # This member always points to current cluster's Config() object
         self.nclusters = 1
@@ -151,14 +151,14 @@ class MultiClusterConfig:
 
     def __getattr__(self, attr):
         with config_lock:
-            thread_id = get_ident()
-            config_index = self.thread_config_map.get(thread_id, self.cur_index)
+            config_index = getattr(
+                self.thread_local_data, "config_index", self.cur_index
+            )
             return getattr(self.clusters[config_index], attr)
 
     @property
     def cluster_ctx(self):
-        thread_id = get_ident()
-        config_index = self.thread_config_map.get(thread_id, self.cur_index)
+        config_index = getattr(self.thread_local_data, "config_index", self.cur_index)
         return self.clusters[config_index]
 
     @property
@@ -172,11 +172,21 @@ class MultiClusterConfig:
             ocs_ci.framework.Config: The default cluster context
 
         """
+        return self.clusters[self.default_cluster_index]
+
+    @property
+    def default_cluster_index(self):
+        """
+        Get the default cluster index.
+        The default cluster index as defined in the
+        'ENV DATA' param 'default_cluster_context_index'
+
+        Returns:
+            int: The default cluster context index
+
+        """
         # Get the default index. If not found, the default value is 0
-        default_index = self.cluster_ctx.ENV_DATA.get(
-            "default_cluster_context_index", 0
-        )
-        return self.clusters[default_index]
+        return self.ENV_DATA.get("default_cluster_context_index", 0)
 
     def _single_cluster_init_cluster_configs(self):
         self.clusters.insert(0, Config())
@@ -216,6 +226,11 @@ class MultiClusterConfig:
 
     def switch_ctx(self, index=0):
         self.cur_index = index
+        if hasattr(self.thread_local_data, "config_index"):
+            thread_id = get_ident()
+            # TODO: Change to debug
+            logger.info(f"Thread ID: {thread_id} is using config index: {index}")
+            config.thread_local_data.config_index = index
         # TODO: We need to get rid of KUBECONFIG from ENV
         self._refresh_ctx()
         # Log the switch after changing the current index
@@ -491,7 +506,7 @@ config = MultiClusterConfig()
 class ConfigSafeThread(Thread):
     """
     This is the Config version of threading.Thread which will define config index
-    to be used by the all calls the thread is using as it updates config.thread_config_map
+    to be used by the all calls the thread is using as it updates config.thread_local_data
     with specific Thread ID and config ID to be used by thread for its life cycle.
     """
 
@@ -507,15 +522,39 @@ class ConfigSafeThread(Thread):
             self.config_index = config_index
 
     def run(self, *args, **kwargs):
+        config.thread_local_data.config_index = self.config_index
         thread_id = get_ident()
-        config.thread_config_map[thread_id] = self.config_index
-        print(f"ConfigSafeThread thread ID: {thread_id}")
-        print(f"Config thread map: {config.thread_config_map}")
+        # TODO: Change to debug
+        logger.info(
+            f"Thread ID: {thread_id} is using config index: {self.config_index}"
+        )
         try:
             super(ConfigSafeThread, self).run()
         finally:
-            if thread_id in config.thread_config_map:
-                del config.thread_config_map[thread_id]
+            if hasattr(self.thread_local_data, "config_index"):
+                del config.thread_local_data.config_index
+
+
+def config_safe_thread_pool_task(config_index, task, *args, **kwargs):
+    """
+    Wrapper function to be executed in ThreadPoolExecutor
+
+    Args:
+        config_index (int): first positional argument defining config index to be used by Thread.
+        task (function): function to be called by ThreadPoolExecutor
+
+    """
+    with config_lock:
+        thread_id = get_ident()
+        # TODO: Change to debug
+        logger.info(f"Thread ID: {thread_id} is using config index: {config_index}")
+        config.thread_local_data.config_index = config_index
+
+    try:
+        task(*args, **kwargs)
+    finally:
+        with config_lock:
+            del config.thread_local_data.config_index
 
 
 class GlobalVariables:
