@@ -649,8 +649,9 @@ def exec_cmd(
         cmd = shlex.split(cmd)
     if config.RUN.get("custom_kubeconfig_location") and cmd[0] == "oc":
         if "--kubeconfig" in cmd:
-            cmd.pop(2)
-            cmd.pop(1)
+            kube_index = cmd.index("--kubeconfig")
+            cmd.pop(kube_index + 1)
+            cmd.pop(kube_index)
         cmd = list_insert_at_position(cmd, 1, ["--kubeconfig"])
         cmd = list_insert_at_position(
             cmd, 2, [config.RUN["custom_kubeconfig_location"]]
