@@ -1079,7 +1079,14 @@ def measure_stop_worker_nodes(request, measurement_dir, nodes, threading_lock):
             "Nodes were not found: they were probably recreated. Check ceph health below"
         )
     # Validate all nodes are in READY state and up
-    retry((CommandFailed, ResourceWrongStatusException,), tries=60, delay=15,)(
+    retry(
+        (
+            CommandFailed,
+            ResourceWrongStatusException,
+        ),
+        tries=60,
+        delay=15,
+    )(
         wait_for_nodes_status
     )(timeout=900)
 
@@ -1150,18 +1157,15 @@ def measure_change_client_ocs_version_and_stop_heartbeat(
             the client version
 
     """
-    original_cluster = config.cluster_ctx.MULTICLUSTER["multicluster_index"]
-    logger.info(f"Provider cluster key: {original_cluster}")
     logger.info("Switch to client cluster")
-    config.switch_to_consumer()
-    client_cluster = config.cluster_ctx.MULTICLUSTER["multicluster_index"]
-    logger.info(f"Client cluster key: {client_cluster}")
-    cluster_id = exec_cmd(
-        "oc get clusterversion version -o jsonpath='{.spec.clusterID}'"
-    ).stdout.decode("utf-8")
-    client_name = f"storageconsumer-{cluster_id}"
-    logger.info(f"Switch to original cluster ({original_cluster})")
-    config.switch_ctx(original_cluster)
+    with config.RunWithFirstConsumerConfigContext():
+        client_cluster = config.cluster_ctx.MULTICLUSTER["multicluster_index"]
+        logger.info(f"Client cluster key: {client_cluster}")
+        cluster_id = exec_cmd(
+            "oc get clusterversion version -o jsonpath='{.spec.clusterID}'"
+        ).stdout.decode("utf-8")
+        client_name = f"storageconsumer-{cluster_id}"
+        logger.info(f"Switch to original cluster ({original_cluster})")
     client = storageconsumer.StorageConsumer(
         client_name, consumer_context=client_cluster
     )
