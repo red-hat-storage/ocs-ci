@@ -1,6 +1,7 @@
 """
 A module for all StorageConsumer functionalities and abstractions.
 """
+
 import logging
 
 from ocs_ci.framework import config
@@ -86,23 +87,21 @@ class StorageConsumer:
         """
         Suspend status reporter cron job.
         """
-        self._switch_consumer_cluster()
-        patch_param = '{"spec": {"suspend": true}}'
-        self.heartbeat_cronjob.ocp.patch(
-            resource_name=self.heartbeat_cronjob.name, params=patch_param
-        )
-        self._switch_provider_cluster()
+        with config.RunWithFirstConsumerConfigContext():
+            patch_param = '{"spec": {"suspend": true}}'
+            self.heartbeat_cronjob.ocp.patch(
+                resource_name=self.heartbeat_cronjob.name, params=patch_param
+            )
 
     def resume_heartbeat(self):
         """
         Resume status reporter cron job.
         """
-        self._switch_consumer_cluster()
-        patch_param = '{"spec": {"suspend": false}}'
-        self.heartbeat_cronjob.ocp.patch(
-            resource_name=self.heartbeat_cronjob.name, params=patch_param
-        )
-        self._switch_provider_cluster()
+        with config.RunWithFirstConsumerConfigContext():
+            patch_param = '{"spec": {"suspend": false}}'
+            self.heartbeat_cronjob.ocp.patch(
+                resource_name=self.heartbeat_cronjob.name, params=patch_param
+            )
 
     def get_heartbeat_cronjob(self):
         """
@@ -110,29 +109,14 @@ class StorageConsumer:
             object: status reporter cronjob OCS object
 
         """
-        self._switch_consumer_cluster()
-        cronjobs_obj = ocp.OCP(
-            kind=constants.CRONJOB,
-            namespace=config.cluster_ctx.ENV_DATA["cluster_namespace"],
-        )
-        cronjob = [
-            OCS(**job)
-            for job in cronjobs_obj.get().get("items")
-            if job["metadata"]["name"].endswith("status-reporter")
-        ][0]
-        self._switch_provider_cluster()
+        with config.RunWithFirstConsumerConfigContext():
+            cronjobs_obj = ocp.OCP(
+                kind=constants.CRONJOB,
+                namespace=config.cluster_ctx.ENV_DATA["cluster_namespace"],
+            )
+            cronjob = [
+                OCS(**job)
+                for job in cronjobs_obj.get().get("items")
+                if job["metadata"]["name"].endswith("status-reporter")
+            ][0]
         return cronjob
-
-    def _switch_provider_cluster(self):
-        """
-        Switch context to provider cluster.
-        """
-        config.switch_ctx(self.provider_context)
-        log.info(f"Switched to provider cluster with index {self.provider_context}")
-
-    def _switch_consumer_cluster(self):
-        """
-        Switch context to consumer cluster.
-        """
-        config.switch_ctx(self.consumer_context)
-        log.info(f"Switched to consumer cluster with index {self.consumer_context}")
