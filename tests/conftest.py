@@ -7956,13 +7956,13 @@ def setup_cnv(request):
 
         """
         if cnv_obj.cnv_hyperconverged_installed():
-            cnv_obj.cleanup_cnv()
+            cnv_obj.uninstall_cnv()
 
     request.addfinalizer(finalizer)
 
 
 @pytest.fixture()
-def setup_vms_standalone_pvc(request, project_factory, setup_cnv):
+def setup_vms_standalone_pvc(request, project_factory):
     """
     This fixture will setup VM using standalone PVC
 
@@ -7970,7 +7970,14 @@ def setup_vms_standalone_pvc(request, project_factory, setup_cnv):
     vm_obj = None
 
     def factory():
+        """
+        Factory method to setup VM using standalone PVC
+
+        """
         nonlocal vm_obj
+        assert (
+            CNVInstaller().cnv_hyperconverged_installed
+        ), "CNV is not installed in the cluster. please install CNV."
         project_obj = project_factory()
         log.info(f"Created project {project_obj.namespace} for VMs")
         vm_obj = create_vm_using_standalone_pvc(

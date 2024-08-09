@@ -649,6 +649,27 @@ class CNVInstaller(object):
             return
         logger.info(cmd_res.stdout.decode("utf-8").splitlines())
 
+    def check_if_any_vm_instances(self, namespace=None):
+        """
+        Checks if any VMs or VM instances are running
+
+        Args:
+            namespace (str): namespace to check
+
+        Returns:
+            True if any VMs or VMi else False
+
+        """
+
+        vm_obj = OCP(kind=constants.VIRTUAL_MACHINE, namespace=namespace)
+        vmi_obj = OCP(kind=constants.VIRTUAL_MACHINE_INSTANCE, namespace=namespace)
+
+        return vm_obj.get(
+            out_yaml_format=False, all_namespaces=not namespace, dont_raise=True
+        ) or vmi_obj.get(
+            out_yaml_format=False, all_namespaces=not namespace, dont_raise=True
+        )
+
     def remove_hyperconverged(self):
         """
         Remove HyperConverged CR
@@ -705,21 +726,30 @@ class CNVInstaller(object):
         Remove openshift virtualization namespace
 
         """
-        cnv_namespace = OCP(
-            kind=constants.NAMESPACE, resource_name=constants.CNV_NAMESPACE
-        )
-        cnv_namespace.delete(resource_name=constants.CNV_NAMESPACE)
+        cnv_namespace = OCP()
+        cnv_namespace.delete_project(constants.CNV_NAMESPACE)
         logger.info(f"Deleted the namespace {constants.CNV_NAMESPACE}")
 
-    def cleanup_cnv(self, check_cnv_installed=False):
+    def uninstall_cnv(self, check_cnv_installed=True):
         """
         Uninstall CNV deployment
+
+        Args:
+            check_cnv_installed (Bool): True if want to check if CNV installed
 
         """
         if check_cnv_installed:
             if not self.cnv_hyperconverged_installed():
                 logger.info("CNV is not installed, skipping the cleanup...")
                 return
+
+        assert not self.check_if_any_vm_instances(), (
+            "Vm or Vmi instances are found in the cluster,"
+            "Please make sure all VMs and VM instances are removed"
+        )
+        logger.info(
+            "No VM or VM instances are found in the cluster, proceeding with the uninstallation"
+        )
 
         logger.info("Removing the virtualization hyperconverged")
         self.remove_hyperconverged()

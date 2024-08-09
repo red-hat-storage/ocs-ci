@@ -147,6 +147,7 @@ class TestZoneShutdownsAndCrashes:
         setup_logwriter_rbd_workload_factory,
         logreader_workload_factory,
         setup_vms_standalone_pvc,
+        setup_cnv,
     ):
         """
         This test will test the shutdown scenarios when CephFS, RBD and VM workloads
@@ -399,6 +400,7 @@ class TestZoneShutdownsAndCrashes:
         logreader_workload_factory,
         nodes,
         setup_vms_standalone_pvc,
+        setup_cnv,
     ):
         """
         This test will test the crash scenarios when CephFS, RBD and VM workloads
