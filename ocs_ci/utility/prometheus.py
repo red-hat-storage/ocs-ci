@@ -63,6 +63,17 @@ def check_alert_list(
             )
             assert len(found_alerts) == 1, assert_msg
 
+        assert_msg = f"Alert message for alert {label} is not correct"
+        assert target_alerts[key]["annotations"]["message"] == msg, assert_msg
+
+        assert_msg = f"Alert {label} doesn't have {severity} severity"
+        assert (
+            target_alerts[key]["annotations"]["severity_level"] == severity
+        ), assert_msg
+
+        assert_msg = f"Alert {label} is not in {state} state"
+        assert target_alerts[key]["state"] == state, assert_msg
+
     logger.info("Alerts were triggered correctly during utilization")
 
 
@@ -783,3 +794,75 @@ class PrometheusAlertSubscriber(Timer):
         """
         self.cancel()
         logger.info("Logging of all prometheus alerts stopped")
+
+
+def verify_mds_alerts(
+    alert_name,
+    msg,
+    alerts,
+    active_mds,
+    standby_mds,
+    description,
+    runbook,
+    state,
+    severity,
+):
+    """
+    Check all the properties like severity, state, message, description, runbook_url
+    and alert triggered daemon name of the active mds alert.
+
+    Args:
+        alert_name (str): Alert name
+        msg (str): Alert message
+        alerts (list): List of alerts to check
+        state (str): state of the alert
+        active_mds(str): active mds daemon name
+        standby_mds(str): standby-replay mds daemon name
+        description(str): description of the alert triggered
+        runbook(str): runbook_url in the alert
+        severity(str): severity of the alert
+    """
+    alert_msg = f"{alert_name} alert didn't found in prometheus alerts {alerts}"
+    assert any(
+        alert_name == alert.get("labels").get("alertname") for alert in alerts
+    ), alert_msg
+
+    alert_msg = f"{alert_name} alert didn't found for Active MDS daemon {alerts}"
+    assert any(
+        alert.get("labels").get("ceph_daemon") == f"mds.{active_mds}"
+        for alert in alerts
+    ), alert_msg
+
+    # verify alert values for Active mds alert
+    for alert in alerts:
+        if alert.get("labels").get("alertname") == alert_name:
+            logger.info("Alert name matched")
+
+            if alert.get("labels").get("ceph_daemon") == f"mds.{active_mds}":
+                logger.info("Alert triggered on Active mds")
+
+                alert_msg = "Alert message didn't match for active mds alert"
+                assert alert.get("annotations").get("message") == msg, alert_msg
+
+                alert_msg = "Runbook didn't match for active mds alert"
+                assert alert.get("annotations").get("runbook_url") == runbook, alert_msg
+
+                alert_msg = "Alert description didn't match for active mds alert"
+                assert (
+                    alert.get("annotations").get("description") == description
+                ), alert_msg
+
+                alert_msg = (
+                    "Alert state "
+                    + alert.get("state")
+                    + " didn't match for active mds alert"
+                )
+                assert alert.get("state") == state, alert_msg
+
+                alert_msg = "Alert severity didn't match for active mds alert"
+                assert alert.get("labels").get("severity") == severity, alert_msg
+
+            elif alert.get("labels").get("ceph_daemon") == f"mds.{standby_mds}":
+                logger.info("Alert triggered on Standby-replay mds")
+
+    logger.info("Alerts were triggered correctly during utilization")
