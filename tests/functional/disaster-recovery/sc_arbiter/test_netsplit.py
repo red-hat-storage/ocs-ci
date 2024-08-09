@@ -115,6 +115,7 @@ class TestNetSplit:
         init_sanity,
         reset_conn_score,
         setup_vms_standalone_pvc,
+        setup_cnv,
     ):
         """
         This test will test the netsplit scenarios (BC, AB, AB-AC, AB-BC) when CephFS, RBD and VM workloads

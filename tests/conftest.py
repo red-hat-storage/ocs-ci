@@ -8293,6 +8293,5 @@ def setup_cnv(request):
 
         """
         if cnv_obj.cnv_hyperconverged_installed():
-            cnv_obj.cleanup_cnv()
-
+            cnv_obj.uninstall_cnv()
     request.addfinalizer(finalizer)
