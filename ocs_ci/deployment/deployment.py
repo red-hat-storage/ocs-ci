@@ -57,6 +57,7 @@ from ocs_ci.ocs.exceptions import (
     UnexpectedDeploymentConfiguration,
     ResourceNotFoundError,
     ACMClusterConfigurationException,
+    ACMObservabilityNotEnabled,
 )
 from ocs_ci.deployment.cert_manager import deploy_cert_manager
 from ocs_ci.deployment.zones import create_dummy_zone_labels
@@ -91,6 +92,7 @@ from ocs_ci.ocs.resources.storage_cluster import (
     setup_ceph_debug,
     get_osd_count,
     StorageCluster,
+    validate_serviceexport,
 )
 from ocs_ci.ocs.uninstall import uninstall_ocs
 from ocs_ci.ocs.utils import (
@@ -148,12 +150,12 @@ from ocs_ci.utility.vsphere_nodes import update_ntp_compute_nodes
 from ocs_ci.helpers import helpers
 from ocs_ci.helpers.helpers import (
     set_configmap_log_level_rook_ceph_operator,
+    get_default_storage_class,
 )
 from ocs_ci.ocs.ui.helpers_ui import ui_deployment_conditions
 from ocs_ci.utility.utils import get_az_count
 from ocs_ci.utility.ibmcloud import run_ibmcloud_cmd
 from ocs_ci.deployment.cnv import CNVInstaller
-
 
 logger = logging.getLogger(__name__)
 
@@ -331,7 +333,7 @@ class Deployment(object):
             for cluster in managed_clusters:
                 if cluster["metadata"]["name"] != constants.ACM_LOCAL_CLUSTER:
                     config.switch_to_cluster_by_name(cluster["metadata"]["name"])
-                    run_cmd(
+                    exec_cmd(
                         f"oc create -f {constants.CLUSTERROLEBINDING_APPSET_PULLMODEL_PATH}"
                     )
 
@@ -413,6 +415,7 @@ class Deployment(object):
                             .get("multiClusterService")
                             .get("enabled")
                         ), "Failed to update StorageCluster globalnet"
+                        validate_serviceexport()
                         ocs_install_verification(
                             timeout=2000, ocs_registry_image=ocs_registry_image
                         )
@@ -664,8 +667,8 @@ class Deployment(object):
         self.do_deploy_lvmo()
         self.do_deploy_submariner()
         self.do_gitops_deploy()
-        self.do_deploy_ocs()
         self.do_deploy_oadp()
+        self.do_deploy_ocs()
         self.do_deploy_rdr()
         self.do_deploy_fusion()
         self.do_deploy_odf_provider_mode()
@@ -2599,6 +2602,7 @@ class RBDDRDeployOps(object):
     def deploy(self):
         self.configure_rbd()
 
+    @retry(ResourceWrongStatusException, tries=10, delay=5)
     def configure_rbd(self):
         st_string = '{.items[?(@.metadata.ownerReferences[*].kind=="StorageCluster")].spec.mirroring.enabled}'
         query_mirroring = (
@@ -3209,7 +3213,7 @@ class MultiClusterDROperatorsDeploy(object):
         if veleropod[0]["status"]["phase"] != "Running":
             raise ACMClusterConfigurationException("Velero pod not in 'Running' phase")
 
-        # Check backupstoragelocation resource in "Available" phase
+        # Check backupstoragelocation resource is in "Available" phase
         backupstorage = ocp.OCP(
             kind="BackupStorageLocation",
             resource_name="default",
@@ -3218,7 +3222,7 @@ class MultiClusterDROperatorsDeploy(object):
         resource = backupstorage.get()
         if resource["status"].get("phase") != "Available":
             raise ACMClusterConfigurationException(
-                "Backupstoragelocation resource is not in 'Avaialble' phase"
+                "Backupstoragelocation resource is not in 'Available' phase"
             )
         logger.info("Dataprotection application successful")
 
@@ -3411,6 +3415,7 @@ class RDRMultiClusterDROperatorsDeploy(MultiClusterDROperatorsDeploy):
             rbddops = RBDDRDeployOps()
             self.configure_mirror_peer()
             rbddops.deploy()
+        self.enable_acm_observability()
         self.deploy_dr_policy()
 
         # Enable cluster backup on both ACMs
@@ -3443,6 +3448,107 @@ class RDRMultiClusterDROperatorsDeploy(MultiClusterDROperatorsDeploy):
             logger.info("Skipping Enabling Managed ServiceAccount")
         else:
             self.enable_managed_serviceaccount()
+
+    @retry(ACMObservabilityNotEnabled, tries=10, delay=30)
+    def check_observability_status(self):
+        """
+        Check observability status
+
+        Raises:
+             ACMObservabilityNotEnabled: if the cmd returns False, ACM observability is not enabled
+
+        """
+
+        acm_observability_status = bool(
+            exec_cmd(
+                "oc get MultiClusterObservability observability -o jsonpath='{.status.conditions[1].status}'"
+            )
+        )
+
+        if acm_observability_status:
+            logger.info("ACM observability is successfully enabled")
+        else:
+            logger.error("ACM observability could not be enabled, re-trying...")
+            raise ACMObservabilityNotEnabled
+
+    def thanos_secret(self):
+        """
+        Create thanos secret yaml by using Noobaa or AWS bucket (AWS bucket is used in this function)
+
+        """
+        acm_indexes = get_all_acm_indexes()
+        self.meta_obj.get_meta_access_secret_keys()
+        thanos_secret_data = templating.load_yaml(constants.THANOS_PATH)
+        thanos_bucket_name = (
+            f"dr-thanos-bucket-{config.clusters[0].ENV_DATA['cluster_name']}"
+        )
+        self.create_s3_bucket(
+            self.meta_obj.access_key,
+            self.meta_obj.secret_key,
+            thanos_bucket_name,
+        )
+        logger.info(f"ACM indexes {acm_indexes}")
+        navigate_thanos_yaml = thanos_secret_data["stringData"]["thanos.yaml"]
+        navigate_thanos_yaml = yaml.safe_load(navigate_thanos_yaml)
+        navigate_thanos_yaml["config"]["bucket"] = thanos_bucket_name
+        navigate_thanos_yaml["config"]["endpoint"] = "s3.amazonaws.com"
+        navigate_thanos_yaml["config"]["access_key"] = self.meta_obj.access_key
+        navigate_thanos_yaml["config"]["secret_key"] = self.meta_obj.secret_key
+        thanos_secret_data["stringData"]["thanos.yaml"] = str(navigate_thanos_yaml)
+        thanos_data_yaml = tempfile.NamedTemporaryFile(
+            mode="w+", prefix="thanos", delete=False
+        )
+        templating.dump_data_to_temp_yaml(thanos_secret_data, thanos_data_yaml.name)
+
+        logger.info(
+            "Creating thanos.yaml needed for ACM observability after passing required params"
+        )
+        exec_cmd(f"oc create -f {thanos_data_yaml.name}")
+
+        self.check_observability_status()
+
+    def enable_acm_observability(self):
+        """
+        Function to enable ACM observability for enabling DR monitoring dashboard for Regional DR on the RHACM console.
+
+        """
+        config.switch_acm_ctx()
+
+        defaultstorageclass = get_default_storage_class()
+
+        logger.info(
+            "Enabling ACM MultiClusterObservability for DR monitoring dashboard"
+        )
+
+        # load multiclusterobservability.yaml
+        multiclusterobservability_yaml_data = templating.load_yaml(
+            constants.MULTICLUSTEROBSERVABILITY_PATH
+        )
+        multiclusterobservability_yaml_data["spec"]["storageConfig"][
+            "storageClass"
+        ] = defaultstorageclass[0]
+        multiclusterobservability_data_yaml = tempfile.NamedTemporaryFile(
+            mode="w+", prefix="multiclusterobservability", delete=False
+        )
+        templating.dump_data_to_temp_yaml(
+            multiclusterobservability_yaml_data,
+            multiclusterobservability_data_yaml.name,
+        )
+
+        exec_cmd(f"oc create -f {multiclusterobservability_data_yaml.name}")
+
+        logger.info("Create thanos secret yaml")
+        self.thanos_secret()
+
+        logger.info("Whitelist RBD metrics by creating configmap")
+        exec_cmd(f"oc create -f {constants.OBSERVABILITYMETRICSCONFIGMAP_PATH}")
+
+        logger.info(
+            "Add label for cluster-monitoring needed to fire VolumeSyncronizationDelayAlert on the Hub cluster"
+        )
+        exec_cmd(
+            "oc label namespace openshift-operators openshift.io/cluster-monitoring='true'"
+        )
 
 
 class MDRMultiClusterDROperatorsDeploy(MultiClusterDROperatorsDeploy):

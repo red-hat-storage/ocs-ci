@@ -7,7 +7,9 @@ import requests
 from selenium.webdriver.support.wait import WebDriverWait
 from selenium.webdriver.support import expected_conditions as ec
 from selenium.webdriver.common.by import By
-from selenium.common.exceptions import NoSuchElementException
+from selenium.common.exceptions import (
+    NoSuchElementException,
+)
 from ocs_ci.helpers.helpers import create_unique_resource_name
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.acm.acm_constants import (
@@ -56,6 +58,7 @@ class AcmAddClusters(AcmPageNavigator):
     def __init__(self):
         super().__init__()
         self.page_nav = self.acm_page_nav
+        self.driver = SeleniumDriver()
 
     def import_cluster_ui(self, cluster_name, kubeconfig_location):
         """
@@ -234,7 +237,11 @@ class AcmAddClusters(AcmPageNavigator):
         log.info("Click on 'Submariner add-ons' tab")
         self.do_click(self.page_nav["submariner-tab"])
         log.info("Click on 'Install Submariner add-ons' button")
-        self.do_click(self.page_nav["install-submariner-btn"], timeout=120)
+        self.do_click(
+            self.page_nav["install-submariner-btn"],
+            enable_screenshot=True,
+            avoid_stale=True,
+        )
         log.info("Click on 'Target clusters'")
         self.do_click(self.page_nav["target-clusters"])
         log.info(f"Select 1st cluster which is {cluster_name_a}")
