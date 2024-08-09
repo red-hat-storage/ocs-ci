@@ -130,8 +130,8 @@ class StorageClient:
 
     def create_storage_client(
         self,
-        storage_provider_endpoint=None,
-        onboarding_token=None,
+        storage_provider_endpoint,
+        onboarding_token,
     ):
         """
         This method creates storage clients
@@ -164,7 +164,7 @@ class StorageClient:
             ] = storage_provider_endpoint
 
             # Set onboarding token
-            log.info("Updating storage provider endpoint details: %s", onboarding_token)
+            log.info("Updating storage client onboarding token: %s", onboarding_token)
             storage_client_data["spec"]["onboardingTicket"] = onboarding_token
             storage_client_data_yaml = tempfile.NamedTemporaryFile(
                 mode="w+", prefix="storage_client", delete=False
