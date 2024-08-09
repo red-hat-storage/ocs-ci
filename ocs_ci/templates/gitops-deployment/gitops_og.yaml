@@ -1,0 +1,8 @@
+---
+apiVersion: operators.coreos.com/v1
+kind: OperatorGroup
+metadata:
+  name: openshift-gitops-og
+  namespace: openshift-gitops
+spec:
+  upgradeStrategy: Default
