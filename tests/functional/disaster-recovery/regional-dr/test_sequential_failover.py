@@ -8,6 +8,7 @@ from ocs_ci.framework import config
 from ocs_ci.framework.testlib import tier1
 from ocs_ci.framework.pytest_customization.marks import turquoise_squad
 from ocs_ci.helpers import dr_helpers
+from ocs_ci.ocs import constants
 from ocs_ci.ocs.node import wait_for_nodes_status, get_node_objs
 from ocs_ci.ocs.resources.pod import wait_for_pods_to_be_running
 from ocs_ci.utility.utils import ceph_health_check
@@ -24,19 +25,34 @@ class TestSequentialFailover:
     """
 
     @pytest.mark.parametrize(
-        argnames=["primary_cluster_down"],
+        argnames=["primary_cluster_down", "pvc_interface"],
         argvalues=[
             pytest.param(
-                False, marks=pytest.mark.polarion_id("OCS-4771"), id="primary_up"
+                *[False, constants.CEPHBLOCKPOOL],
+                marks=pytest.mark.polarion_id("OCS-4771"),
+                id="primary_up-rbd",
             ),
             pytest.param(
-                True, marks=pytest.mark.polarion_id("OCS-4770"), id="primary_down"
+                *[True, constants.CEPHBLOCKPOOL],
+                marks=pytest.mark.polarion_id("OCS-4770"),
+                id="primary_down-rbd",
+            ),
+            pytest.param(
+                *[False, constants.CEPHFILESYSTEM],
+                marks=pytest.mark.polarion_id("OCS-4734"),
+                id="primary_up-cephfs",
+            ),
+            pytest.param(
+                *[True, constants.CEPHFILESYSTEM],
+                marks=pytest.mark.polarion_id("OCS-4733"),
+                id="primary_down-cephfs",
             ),
         ],
     )
     def test_sequential_failover_to_secondary(
         self,
         primary_cluster_down,
+        pvc_interface,
         dr_workload,
         nodes_multicluster,
         node_restart_teardown,
@@ -46,7 +62,9 @@ class TestSequentialFailover:
         when primary cluster is Up/Down
 
         """
-        workloads = dr_workload(num_of_subscription=5)
+        workloads = dr_workload(
+            num_of_subscription=2, num_of_appset=3, pvc_interface=pvc_interface
+        )
 
         primary_cluster_name = dr_helpers.get_current_primary_cluster_name(
             workloads[0].workload_namespace
@@ -58,6 +76,14 @@ class TestSequentialFailover:
             workloads[0].workload_namespace
         )
 
+        # Verify the creation of ReplicationDestination resources on secondary cluster
+        if pvc_interface == constants.CEPHFILESYSTEM:
+            for wl in workloads:
+                config.switch_to_cluster_by_name(secondary_cluster_name)
+                dr_helpers.wait_for_replication_destinations_creation(
+                    wl.workload_pvc_count, wl.workload_namespace
+                )
+
         scheduling_interval = dr_helpers.get_scheduling_interval(
             workloads[0].workload_namespace
         )
@@ -67,6 +93,7 @@ class TestSequentialFailover:
 
         # Stop primary cluster nodes
         if primary_cluster_down:
+            config.switch_to_cluster_by_name(primary_cluster_name)
             logger.info(f"Stopping nodes of primary cluster: {primary_cluster_name}")
             nodes_multicluster[primary_cluster_index].stop_nodes(primary_cluster_nodes)
 
@@ -119,6 +146,20 @@ class TestSequentialFailover:
         for wl in workloads:
             dr_helpers.wait_for_all_resources_deletion(wl.workload_namespace)
 
-        dr_helpers.wait_for_mirroring_status_ok(
-            replaying_images=sum([wl.workload_pvc_count for wl in workloads])
-        )
+        if pvc_interface == constants.CEPHFILESYSTEM:
+            for wl in workloads:
+                config.switch_to_cluster_by_name(secondary_cluster_name)
+                # Verify the deletion of ReplicationDestination resources on secondary cluster
+                dr_helpers.wait_for_replication_destinations_deletion(
+                    wl.workload_namespace
+                )
+                config.switch_to_cluster_by_name(primary_cluster_name)
+                # Verify the creation of ReplicationDestination resources on primary cluster(current secondary)
+                dr_helpers.wait_for_replication_destinations_creation(
+                    wl.workload_pvc_count, wl.workload_namespace
+                )
+
+        if pvc_interface == constants.CEPHBLOCKPOOL:
+            dr_helpers.wait_for_mirroring_status_ok(
+                replaying_images=sum([wl.workload_pvc_count for wl in workloads])
+            )
