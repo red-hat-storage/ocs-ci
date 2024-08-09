@@ -56,14 +56,19 @@ class TestApplicationFailoverAndRelocateWhenZoneDown:
     """
 
     @pytest.fixture(autouse=True)
-    def teardown(self, request, dr_workload, nodes_multicluster):
+    def teardown(self, request, nodes_multicluster, dr_workload):
         """
         If fenced, unfence the cluster and reboot nodes
         """
 
+        self.managed_cluster_node_objs = []
+        self.ceph_vms = []
+        self.primary_cluster_name = ""
+
         def finalizer():
 
             if self.managed_cluster_node_objs is not None:
+                config.switch_to_cluster_by_name(self.primary_cluster_name)
                 try:
                     nodes_multicluster[
                         self.managed_cluster_index
