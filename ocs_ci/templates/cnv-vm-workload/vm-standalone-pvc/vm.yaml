@@ -55,7 +55,7 @@ spec:
         - cloudInitNoCloud:
             userData: |-
               #cloud-config
-              user: centos
-              password: 7lua-f8o8-nk3t
+              user: admin
+              password: admin@123
               chpasswd: { expire: False }
           name: cloudinitdisk
