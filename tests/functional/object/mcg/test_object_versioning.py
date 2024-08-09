@@ -1,11 +1,10 @@
 import logging
 import pytest
 import os
-import threading
 
 from uuid import uuid4
 
-from ocs_ci.framework import config
+from ocs_ci.framework import config, ConfigSafeThread
 from ocs_ci.framework.pytest_customization.marks import (
     tier2,
     skipif_ocs_version,
@@ -105,12 +104,17 @@ class TestObjectVersioning:
         command = f'psql -h 127.0.0.1 -p 5432 -U postgres -d nbcore -c "{query}"'
 
         # perform PUT and DELETE parallely on loop
+        config_index = config.default_cluster_index
         for i in range(0, 5):
-            threading.Thread(
-                target=s3_delete_object, args=(s3_obj, bucket_name, filename)
+            ConfigSafeThread(
+                config_index=config_index,
+                target=s3_delete_object,
+                args=(s3_obj, bucket_name, filename),
             ).start()
-            threading.Thread(
-                target=s3_put_object, args=(s3_obj, bucket_name, filename, filename)
+            ConfigSafeThread(
+                config_index=config_index,
+                target=s3_put_object,
+                args=(s3_obj, bucket_name, filename, filename),
             ).start()
 
         # head object
