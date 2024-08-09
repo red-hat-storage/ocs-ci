@@ -105,6 +105,8 @@ from ocs_ci.ocs.utils import (
     get_active_acm_index,
     enable_mco_console_plugin,
     label_pod_security_admission,
+    is_acm_cluster,
+    is_recovery_cluster,
 )
 from ocs_ci.utility.deployment import (
     create_external_secret,
@@ -2889,7 +2891,7 @@ class MultiClusterDROperatorsDeploy(object):
         # on all participating clusters except HUB
         # We will switch config ctx to Participating clusters
         for cluster in config.clusters:
-            if cluster.MULTICLUSTER["multicluster_index"] in get_all_acm_indexes():
+            if is_acm_cluster(cluster) or is_recovery_cluster(cluster):
                 continue
             else:
                 config.switch_ctx(cluster.MULTICLUSTER["multicluster_index"])
