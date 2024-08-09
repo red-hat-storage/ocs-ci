@@ -1112,6 +1112,9 @@ VELERO_POD_COUNT = 1
 MDR_DPA = "dpa-1"
 MULTICLUSTER_ENGINE = "multiclusterengine"
 BACKUP_SCHEDULE_YAML = os.path.join(TEMPLATE_MULTICLUSTER_DIR, "backupschedule.yaml")
+KLUSTERLET_CONFIG_YAML = os.path.join(
+    TEMPLATE_MULTICLUSTER_DIR, "klusterlet_config.yaml"
+)
 MDR_BACKUP_SCHEDULE_RESOURCE = "schedule-acm"
 ACM_POLICY_COMPLIANT = "Compliant"
 ACM_POLICY_NONCOMPLIANT = "NonCompliant"
@@ -2623,6 +2626,8 @@ OADP_SUBSCRIPTION_YAML = os.path.join(
 OADP_NS_YAML = os.path.join(TEMPLATE_DIR, "oadp-deployment", "namespace_opg_oadp.yaml")
 ACM_HUB_BACKUP_NAMESPACE = "open-cluster-management-backup"
 ACM_HUB_RESTORE = "Restore"
+ACM_BACKUP_SCHEDULE = "BackupSchedule"
+KLUSTERLET_CONFIG = "KlusterletConfig"
 
 # Vault encryption KMS types for PV encryption
 VAULT_TOKEN = "vaulttokens"
