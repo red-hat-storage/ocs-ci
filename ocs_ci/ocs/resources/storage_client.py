@@ -1,11 +1,7 @@
 """
 Storage client related functions
 """
-<<<<<<< HEAD
-
-=======
 import json
->>>>>>> e1afc247 (Added storageclaim delete testcase)
 import logging
 import tempfile
 import time
@@ -20,15 +16,12 @@ from ocs_ci.utility.retry import retry
 from ocs_ci.helpers.managed_services import (
     get_all_storageclassclaims,
 )
-<<<<<<< HEAD
 from ocs_ci.ocs.resources.ocs import get_ocs_csv
 from ocs_ci.ocs.resources.storage_cluster import verify_storage_cluster
 from ocs_ci.utility.utils import TimeoutSampler
-=======
 from ocs_ci.utility.utils import (
     exec_cmd,
 )
->>>>>>> e1afc247 (Added storageclaim delete testcase)
 
 log = logging.getLogger(__name__)
 
@@ -603,7 +596,7 @@ class StorageClient:
                     log.info(f"storageclient data, {storageclient}")
                     return storageclient.get("metadata", {}).get("name")
         return None
-    
+
     def fetch_storage_consumer_name_for_storageclient(
         self,
         storage_client_name,
