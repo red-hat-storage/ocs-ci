@@ -1544,10 +1544,22 @@ def get_all_acm_indexes():
 
 
 def is_acm_cluster(cluster):
+    """
+    Checks given cluster is acm cluster
+
+    Returns:
+        bool: return True if acm cluster otherwise False
+    """
     return cluster.MULTICLUSTER["multicluster_index"] in get_all_acm_indexes()
 
 
 def is_recovery_cluster(cluster):
+    """
+    Checks given cluster is recovery cluster
+
+    Returns:
+        bool: return True if recovery cluster otherwise False
+    """
     return cluster.MULTICLUSTER.get("recovery_cluster")
 
 
