@@ -9,7 +9,6 @@ ENV_DATA:
   master_replicas: 3
   mon_type: 'hostpath'
   osd_type: 'nvme'
-  disk_pattern: 'nvme-INTEL'
 REPORTING:
   polarion:
     deployment_id: 'OCS-2505'
