@@ -13,7 +13,7 @@ from ocs_ci.framework import config
 from ocs_ci.ocs.acm.acm import validate_cluster_import
 from ocs_ci.ocs.dr.dr_workload import validate_data_integrity
 from ocs_ci.ocs import constants
-from ocs_ci.ocs.exceptions import UnexpectedBehaviour
+from ocs_ci.ocs.exceptions import UnexpectedBehaviour, CommandFailed
 from ocs_ci.ocs.node import wait_for_nodes_status
 from ocs_ci.helpers.dr_helpers import (
     add_label_to_appsub,
@@ -56,12 +56,32 @@ class TestApplicationFailoverAndRelocateWhenZoneDown:
     """
 
     @pytest.fixture(autouse=True)
-    def teardown(self, request, dr_workload):
+    def teardown(self, request, dr_workload, nodes_multicluster):
         """
         If fenced, unfence the cluster and reboot nodes
         """
 
         def finalizer():
+
+            if self.managed_cluster_node_objs is not None:
+                try:
+                    nodes_multicluster[
+                        self.managed_cluster_index
+                    ].restart_nodes_by_stop_and_start_teardown()
+                except CommandFailed:
+                    nodes_multicluster[self.managed_cluster_index].start_nodes(
+                        self.managed_cluster_node_objs
+                    )
+                    wait_for_nodes_status(
+                        [node.name for node in self.managed_cluster_node_objs]
+                    )
+
+            if self.ceph_vms is not None:
+                for vm in self.ceph_vms:
+                    status = self.vm_objs.get_vm_power_status(vm=vm)
+                    if status == "poweredOff":
+                        self.vm_objs.start_vms(vms=[vm])
+
             if (
                 self.primary_cluster_name is not None
                 and get_fence_state(
@@ -125,23 +145,26 @@ class TestApplicationFailoverAndRelocateWhenZoneDown:
         (
             active_hub_index,
             active_hub_cluster_node_objs,
-            managed_cluster_index,
-            managed_cluster_node_objs,
+            self.managed_cluster_index,
+            self.managed_cluster_node_objs,
             ceph_node_ips,
         ) = get_nodes_from_active_zone(self.namespace)
 
         # Shutdown one zones
         logger.info("Shutting down all the nodes from active hub zone")
-        nodes_multicluster[managed_cluster_index].stop_nodes(managed_cluster_node_objs)
+        nodes_multicluster[self.managed_cluster_index].stop_nodes(
+            self.managed_cluster_node_objs
+        )
         nodes_multicluster[active_hub_index].stop_nodes(active_hub_cluster_node_objs)
         host = config.ENV_DATA["vsphere_server"]
         user = config.ENV_DATA["vsphere_user"]
         password = config.ENV_DATA["vsphere_password"]
-        vm_objs = vsphere.VSPHERE(host, user, password)
-        ceph_vms = [
-            vm_objs.get_vm_by_ip(ip=each_ip, dc="None") for each_ip in ceph_node_ips
+        self.vm_objs = vsphere.VSPHERE(host, user, password)
+        self.ceph_vms = [
+            self.vm_objs.get_vm_by_ip(ip=each_ip, dc="None")
+            for each_ip in ceph_node_ips
         ]
-        vm_objs.stop_vms(vms=ceph_vms)
+        self.vm_objs.stop_vms(vms=self.ceph_vms)
         logger.info(
             "All nodes from active hub zone are powered off, "
             f"wait {wait_time} seconds before restoring in passive hub"
@@ -245,14 +268,16 @@ class TestApplicationFailoverAndRelocateWhenZoneDown:
         logger.info(f"Wait time {wait_time} before recovering the cluster")
         time.sleep(wait_time)
         # Recover ceph nodes
-        vm_objs.start_vms(vms=ceph_vms)
+        self.vm_objs.start_vms(vms=self.ceph_vms)
         # Recover active managed cluster
         config.switch_to_cluster_by_name(self.primary_cluster_name)
         logger.info(
             "Recover active managed cluster which went down during site-failure"
         )
-        nodes_multicluster[managed_cluster_index].start_nodes(managed_cluster_node_objs)
-        wait_for_nodes_status([node.name for node in managed_cluster_node_objs])
+        nodes_multicluster[self.managed_cluster_index].start_nodes(
+            self.managed_cluster_node_objs
+        )
+        wait_for_nodes_status([node.name for node in self.managed_cluster_node_objs])
         logger.info(
             "Check if recovered managed cluster is successfully imported on the new hub"
         )
