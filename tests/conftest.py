@@ -90,7 +90,6 @@ from ocs_ci.ocs.resources.objectbucket import BUCKET_MAP
 from ocs_ci.ocs.resources.ocs import OCS
 from ocs_ci.ocs.resources.pod import (
     get_rgw_pods,
-    delete_deploymentconfig_pods,
     get_pods_having_label,
     get_deployments_having_label,
     Pod,
@@ -101,6 +100,7 @@ from ocs_ci.ocs.resources.pod import (
     get_noobaa_pods,
     get_pod_count,
     wait_for_pods_by_label_count,
+    delete_deployment_pods,
 )
 from ocs_ci.ocs.resources.pvc import PVC, create_restore_pvc, get_all_pvc_objs
 from ocs_ci.ocs.version import get_ocs_version, get_ocp_version_dict, report_ocs_version
@@ -1461,9 +1461,9 @@ def service_account_factory_fixture(request):
 
 
 @pytest.fixture()
-def dc_pod_factory(request, pvc_factory, service_account_factory):
+def deployment_pod_factory(request, pvc_factory, service_account_factory):
     """
-    Create deploymentconfig pods
+    Create deployment pods
     """
     instances = []
 
@@ -1504,7 +1504,7 @@ def dc_pod_factory(request, pvc_factory, service_account_factory):
 
         """
         if custom_data:
-            dc_pod_obj = helpers.create_resource(**custom_data)
+            deploy_pod_obj = helpers.create_resource(**custom_data)
         else:
             pvc = pvc or pvc_factory(
                 interface=interface, size=size, access_mode=access_mode
@@ -1512,34 +1512,34 @@ def dc_pod_factory(request, pvc_factory, service_account_factory):
             sa_obj = sa_obj or service_account_factory(
                 project=pvc.project, service_account=service_account
             )
-            dc_pod_obj = helpers.create_pod(
+            deploy_pod_obj = helpers.create_pod(
                 interface_type=interface,
                 pvc_name=pvc.name,
                 do_reload=False,
                 namespace=pvc.namespace,
                 sa_name=sa_obj.name,
-                dc_deployment=True,
+                deployment=True,
                 replica_count=replica_count,
                 node_name=node_name,
                 node_selector=node_selector,
                 raw_block_pv=raw_block_pv,
-                pod_dict_path=constants.FEDORA_DC_YAML,
+                pod_dict_path=constants.FEDORA_DEPLOY_YAML,
             )
-        instances.append(dc_pod_obj)
-        log.info(dc_pod_obj.name)
+        instances.append(deploy_pod_obj)
+        log.info(deploy_pod_obj.name)
         if wait:
             helpers.wait_for_resource_state(
-                dc_pod_obj, constants.STATUS_RUNNING, timeout=180
+                deploy_pod_obj, constants.STATUS_RUNNING, timeout=180
             )
-        dc_pod_obj.pvc = pvc
-        return dc_pod_obj
+        deploy_pod_obj.pvc = pvc
+        return deploy_pod_obj
 
     def finalizer():
         """
         Delete dc pods
         """
         for instance in instances:
-            delete_deploymentconfig_pods(instance)
+            delete_deployment_pods(instance)
 
     request.addfinalizer(finalizer)
     return factory
@@ -3675,9 +3675,12 @@ def measurement_dir(tmp_path):
 
 
 @pytest.fixture()
-def multi_dc_pod(multi_pvc_factory, dc_pod_factory, service_account_factory):
+def multi_deployment_pods(
+    multi_pvc_factory, deployment_pod_factory, service_account_factory
+):
     """
-    Prepare multiple dc pods for the test
+    Prepare multiple deployment pods for the test
+
     Returns:
         any: Pod instances
     """
@@ -3720,7 +3723,7 @@ def multi_dc_pod(multi_pvc_factory, dc_pod_factory, service_account_factory):
                 if create_rbd_block_rwx_pod:
                     dc_pods_res.append(
                         p.submit(
-                            dc_pod_factory,
+                            deployment_pod_factory,
                             interface=constants.CEPHBLOCKPOOL,
                             pvc=pvc_obj,
                             raw_block_pv=True,
@@ -3730,7 +3733,7 @@ def multi_dc_pod(multi_pvc_factory, dc_pod_factory, service_account_factory):
                 else:
                     dc_pods_res.append(
                         p.submit(
-                            dc_pod_factory,
+                            deployment_pod_factory,
                             interface=dict_types[pool_type],
                             pvc=pvc_obj,
                             sa_obj=sa_obj,
