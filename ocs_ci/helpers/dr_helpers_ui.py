@@ -4,7 +4,7 @@ Helper functions specific to DR User Interface
 
 import logging
 
-from selenium.common.exceptions import NoSuchElementException
+from selenium.common.exceptions import NoSuchElementException, InvalidSelectorException
 from ocs_ci.framework import config
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.ui.views import locators
@@ -158,7 +158,10 @@ def verify_drpolicy_ui(acm_obj, scheduling_interval):
     """
     ocp_version = get_ocp_version()
     acm_loc = locators[ocp_version]["acm_page"]
-    acm_obj.navigate_data_services()
+    if ocp_version >= "4.16":
+        acm_obj.navigate_disaster_recovery()
+    else:
+        acm_obj.navigate_data_services()
     log.info("Verify status of DRPolicy on ACM UI")
     policy_status = acm_obj.wait_until_expected_text_is_found(
         acm_loc["drpolicy-status"], expected_text="Validated"
@@ -303,8 +306,6 @@ def failover_relocate_ui(
                 )
                 acm_obj.take_screenshot()
                 return True
-        log.info("Click on subscription dropdown")
-        acm_obj.do_click(acm_loc["subscription-dropdown"], enable_screenshot=True)
         # TODO: Commented below lines due to Regression BZ2208637
         # log.info("Check peer readiness")
         # assert acm_obj.wait_until_expected_text_is_found(
@@ -392,3 +393,88 @@ def verify_failover_relocate_status_ui(
         log.info("Close button found")
         acm_obj.do_click_by_xpath("//*[text()='Close']")
         log.info("Data policy modal page closed")
+
+
+def verify_application_not_present_in_ui(acm_obj, workload_to_check, timeout=60):
+    """
+    Verify if application is not present in UI
+
+    Args:
+        acm_obj (AcmAddClusters): ACM Page Navigator Class
+        workload_to_check (str): Specify the workload to check,
+        timeout (int): timeout to wait for certain elements to be found on the ACM UI
+
+    """
+    if workload_to_check:
+        ocp_version = get_ocp_version()
+        acm_loc = locators[ocp_version]["acm_page"]
+        acm_obj.navigate_applications_page()
+        log.info("Click on search bar")
+        acm_obj.do_click(acm_loc["search-bar"])
+        log.info("Clear existing text from search bar if any")
+        acm_obj.do_clear(acm_loc["search-bar"])
+        log.info("Enter the workload to be searched")
+        acm_obj.do_send_keys(acm_loc["search-bar"], text=workload_to_check)
+        action_status = acm_obj.wait_until_expected_text_is_found(
+            locator=acm_loc["no-results-found"],
+            expected_text="No results found",
+            timeout=timeout,
+        )
+        if action_status:
+            fetch_status = acm_obj.get_element_text(locator=acm_loc["no-results-found"])
+            assert action_status, "Application present in UI"
+            log.info(
+                f"Successfully verified on ACM UI, Application Not Found, fetch status is {fetch_status}"
+            )
+            return True
+        elif not action_status:
+            acm_obj.do_clear(acm_loc["search-bar"])
+            assert acm_obj.do_send_keys(acm_loc["search-bar"], text=workload_to_check)
+            return True
+        else:
+            raise InvalidSelectorException(
+                "One or more matches found, Try again with the correct workload name"
+            )
+            return False
+
+
+def delete_application_ui(acm_obj, workload_to_delete, timeout=60):
+    """
+    Function to delete specified workloads on ACM UI
+
+    Args:
+        acm_obj (AcmAddClusters): ACM Page Navigator Class
+        workload_to_delete (str): Specify the workload to delete, otherwise none will be deleted
+        timeout (int): timeout to wait for certain elements to be found on the ACM UI
+
+    """
+    log.info(f"workload_to_delete {workload_to_delete}")
+    if verify_application_not_present_in_ui(
+        acm_obj, workload_to_check=workload_to_delete, timeout=60
+    ):
+        ocp_version = get_ocp_version()
+        acm_loc = locators[ocp_version]["acm_page"]
+        acm_obj.navigate_applications_page()
+        log.info("Click on search bar")
+        acm_obj.do_click(acm_loc["search-bar"])
+        log.info("Clear existing text from search bar if any")
+        acm_obj.do_clear(acm_loc["search-bar"])
+        log.info("Enter the workload to be searched")
+        acm_obj.do_send_keys(acm_loc["search-bar"], text=workload_to_delete)
+        log.info("Click on kebab menu option")
+        acm_obj.do_click(acm_loc["kebab-action"], enable_screenshot=True)
+        acm_obj.do_click(acm_loc["delete-app"], enable_screenshot=True, timeout=timeout)
+        if not acm_obj.get_checkbox_status(acm_loc["remove-app-resources"]):
+            acm_obj.select_checkbox_status(
+                status=True, locator=acm_loc["remove-app-resources"]
+            )
+        acm_obj.do_click(acm_loc["delete"], enable_screenshot=True, timeout=timeout)
+        # Check if the workload got deleted
+        assert verify_application_not_present_in_ui(
+            acm_obj, workload_to_check=workload_to_delete, timeout=60
+        ), f"Application {workload_to_delete} still exists"
+        log.info(f"Application {workload_to_delete} got deleted successfully")
+        return True
+    else:
+        log.error("Application not present to delete")
+        return False
