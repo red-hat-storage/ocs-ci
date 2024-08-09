@@ -9,7 +9,6 @@ from ocs_ci.helpers import helpers
 from ocs_ci.ocs import cluster
 from ocs_ci.utility import prometheus
 from ocs_ci.framework.pytest_customization.marks import blue_squad
-from ocs_ci.utility.utils import ceph_health_check_base
 from ocs_ci.ocs.node import (
     unschedule_nodes,
     drain_nodes,
@@ -26,6 +25,7 @@ scale_timer = 100  # sleep time to wait after running scale down
 
 @pytest.fixture(scope="function")
 def run_metadata_io_with_cephfs(pvc_factory, dc_pod_factory):
+
     """
     This function facilitates
     1. Create PVC with Cephfs, access mode RWX
@@ -33,11 +33,10 @@ def run_metadata_io_with_cephfs(pvc_factory, dc_pod_factory):
     3. Copy helper_scripts/meta_data_io.py to Fedora dc pod
     4. Run meta_data_io.py on fedora pod
     """
+
     access_mode = constants.ACCESS_MODE_RWX
     file = constants.METAIO
     interface = constants.CEPHFILESYSTEM
-    log.info("Checking for Ceph Health OK")
-    ceph_health_check_base()
     active_mds_node = cluster.get_active_mds_info()["node_name"]
     sr_mds_node = cluster.get_mds_standby_replay_info()["node_name"]
     worker_nodes = get_worker_nodes()
@@ -67,6 +66,7 @@ def run_metadata_io_with_cephfs(pvc_factory, dc_pod_factory):
 
 
 def active_mds_alert_values(threading_lock):
+
     """
     This function verifies the prometheus alerts and compare details with the given alert values.
     If given alert values matched with the pulled alert values in prometheus alerts then it returns True.
@@ -74,6 +74,7 @@ def active_mds_alert_values(threading_lock):
     Returns:
         bool: return True --> if alert verified successfully
     """
+
     active_mds = cluster.get_active_mds_info()["mds_daemon"]
     sr_mds = cluster.get_mds_standby_replay_info()["mds_daemon"]
     cache_alert = constants.ALERT_MDSCACHEUSAGEHIGH
@@ -129,9 +130,11 @@ class TestMdsMemoryAlerts:
 
     @pytest.mark.polarion_id("OCS-5570")
     def test_alert_triggered(self, run_metadata_io_with_cephfs, threading_lock):
+
         """
         This function verifies the mds cache alert triggered or not.
         """
+
         log.info(
             "Metadata IO started in the background. Script will sleep for 15 minutes before validating the MDS alert"
         )
@@ -143,16 +146,17 @@ class TestMdsMemoryAlerts:
     def test_mds_cache_alert_with_active_node_drain(
         self, run_metadata_io_with_cephfs, threading_lock
     ):
+
         """
         This function verifies the mds cache alert when the active mds running node drained.
         """
+
         log.info(
             "Metadata IO started in the background. Lets wait for 15 minutes before validating the MDS alert"
         )
         time.sleep(alert_timer)
         log.info("Validating the alert now")
         assert active_mds_alert_values(threading_lock)
-
         node_name = cluster.get_active_mds_info()["node_name"]
         log.info("Unschedule active mds running node")
         unschedule_nodes([node_name])
@@ -171,15 +175,16 @@ class TestMdsMemoryAlerts:
     def test_mds_cache_alert_with_active_node_scaledown(
         self, run_metadata_io_with_cephfs, threading_lock
     ):
+
         """
         This test function verifies the mds cache alert with active mds scale down and up
         """
+
         log.info(
             "Metadata IO started in the background. Script will sleep for 15 minutes before validating the MDS alert"
         )
         time.sleep(alert_timer)
         assert active_mds_alert_values(threading_lock)
-
         active_mds = cluster.get_active_mds_info()["mds_daemon"]
         deployment_name = "rook-ceph-mds-" + active_mds
         log.info(f"Scale down {deployment_name} to 0")
@@ -204,15 +209,16 @@ class TestMdsMemoryAlerts:
     def test_mds_cache_alert_with_sr_node_scaledown(
         self, run_metadata_io_with_cephfs, threading_lock
     ):
+
         """
         This test function verifies the mds cache alert with standby-replay mds scale down and up
         """
+
         log.info(
             "Metadata IO started in the background. Script will sleep for 15 minutes before validating the MDS alert"
         )
         time.sleep(alert_timer)
         assert active_mds_alert_values(threading_lock)
-
         sr_mds = cluster.get_mds_standby_replay_info()["mds_daemon"]
         deployment_name = "rook-ceph-mds-" + sr_mds
         helpers.modify_deployment_replica_count(
@@ -235,9 +241,11 @@ class TestMdsMemoryAlerts:
     def test_mds_cache_alert_with_all_mds_node_scaledown(
         self, run_metadata_io_with_cephfs, threading_lock
     ):
+
         """
         This test function verifies the mds cache alert with both active and standby-replay mds scale down and up
         """
+
         log.info(
             "Metadata IO started in the background. Script will sleep for 15 minutes before validating the MDS alert"
         )
