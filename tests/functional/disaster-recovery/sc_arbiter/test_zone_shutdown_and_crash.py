@@ -120,7 +120,15 @@ class TestZoneShutdownsAndCrashes:
                     pytest.mark.polarion_id("OCS-5088"),
                 ],
             ),
-            pytest.param(1, True, 5, marks=[pytest.mark.polarion_id("OCS-5064")]),
+            pytest.param(
+                1,
+                True,
+                5,
+                marks=[
+                    pytest.mark.polarion_id("OCS-5064"),
+                    pytest.mark.polarion_id("OCS-5850"),
+                ],
+            ),
         ],
         ids=[
             "Normal-Shutdown",
@@ -138,26 +146,30 @@ class TestZoneShutdownsAndCrashes:
         setup_logwriter_cephfs_workload_factory,
         setup_logwriter_rbd_workload_factory,
         logreader_workload_factory,
+        setup_vms_standalone_pvc,
+        setup_cnv,
     ):
         """
-        This test will test the shutdown scenarios when active-active CephFS and RBD workloads
-        is running.
+        This test will test the shutdown scenarios when CephFS, RBD and VM workloads
+        are running.
         Steps:
             1) Run both the logwriter and logreader CephFS and RBD workloads
                CephFS workload uses RWX volume and RBD workload uses RWO volumes
-            2) Reset the connection scores for the mons
-            3) Induce the shutdown
+            2) Create VM using standalone PVC. Create some data inside the VM instance
+            3) Reset the connection scores for the mons
+            4) Induce the shutdown
                In case of normal shutdown we shut-down and wait for about 15 mins
                before start of nodes whereas immediate shutdown would involve starting
                nodes immediately just after 5 mins.
-            4) Make sure ceph is accessible during the crash duration
-            5) Repeat the shutdown process as many times as number of iterations
-            6) Make sure logreader job pods have Completed state.
+            5) Make sure ceph is accessible during the crash duration
+            6) Repeat the shutdown process as many times as number of iterations
+            7) Check VM data integrity is maintained post netsplit. Check if New IO is possible in VM and out of VM.
+            8) Make sure logreader job pods have Completed state.
                Check if there is any write or read pause. Fail only when neccessary.
-            7) Delete the old logreader job and create new logreader job to verify the data corruption
-            8) Make sure there is no data loss
-            9) Validate the connection scores
-            10) Do a complete cluster sanity and make sure there is no issue post recovery
+            9) Delete the old logreader job and create new logreader job to verify the data corruption
+            10) Make sure there is no data loss
+            11) Validate the connection scores
+            12) Do a complete cluster sanity and make sure there is no issue post recovery
 
         """
 
@@ -172,9 +184,12 @@ class TestZoneShutdownsAndCrashes:
             sc_obj.cephfs_logreader_job,
         ) = setup_logwriter_cephfs_workload_factory(read_duration=0)
 
-        # Generate 2 minutes worth of logs before inducing the netsplit
-        log.info("Generating 2 mins worth of log")
-        time.sleep(120)
+        # setup vm and write some data to the VM instance
+        vm_obj = setup_vms_standalone_pvc()
+        vm_obj.run_ssh_cmd(
+            command="dd if=/dev/zero of=/file_1.txt bs=1024 count=102400"
+        )
+        md5sum_before = vm_obj.run_ssh_cmd(command="md5sum /file_1.txt")
 
         sc_obj.get_logwriter_reader_pods(label=constants.LOGWRITER_CEPHFS_LABEL)
         sc_obj.get_logwriter_reader_pods(label=constants.LOGREADER_CEPHFS_LABEL)
@@ -284,6 +299,29 @@ class TestZoneShutdownsAndCrashes:
             log.info(f"Waiting {delay} mins before the next iteration!")
             time.sleep(delay * 60)
 
+        # check vm data written before the failure for integrity
+        md5sum_after = vm_obj.run_ssh_cmd(command="md5sum /file_1.txt")
+        assert (
+            md5sum_before == md5sum_after
+        ), "Data integrity of the file inside VM is not maintained during the failure"
+        log.info(
+            "Data integrity of the file inside VM is maintained during the failure"
+        )
+
+        # check if new data can be created
+        vm_obj.run_ssh_cmd(
+            command="dd if=/dev/zero of=/file_2.txt bs=1024 count=103600"
+        )
+        log.info("Successfully created new data inside VM")
+
+        # check if the data can be copied back to local machine
+        vm_obj.scp_from_vm(local_path="/tmp", vm_src_path="/file_1.txt")
+        log.info("VM data is successfully copied back to local machine")
+
+        # stop the VM
+        vm_obj.stop()
+        log.info("Stoped the VM successfully")
+
         if immediate:
             sc_obj.post_failure_checks(
                 start_time, end_time, wait_for_read_completion=False
@@ -341,7 +379,14 @@ class TestZoneShutdownsAndCrashes:
     @pytest.mark.parametrize(
         argnames="iteration, delay",
         argvalues=[
-            pytest.param(1, 5, marks=[pytest.mark.polarion_id("OCS-5062")]),
+            pytest.param(
+                1,
+                5,
+                marks=[
+                    pytest.mark.polarion_id("OCS-5062"),
+                    pytest.mark.polarion_id("OCS-5850"),
+                ],
+            ),
         ],
     )
     def test_zone_crashes(
@@ -354,23 +399,27 @@ class TestZoneShutdownsAndCrashes:
         setup_logwriter_rbd_workload_factory,
         logreader_workload_factory,
         nodes,
+        setup_vms_standalone_pvc,
+        setup_cnv,
     ):
         """
-        This test will test the crash scenarios when active-active CephFS and RBD workloads
-        is running.
+        This test will test the crash scenarios when CephFS, RBD and VM workloads
+        are running.
         Steps:
             1) Run both the logwriter and logreader CephFS and RBD workloads
                CephFS workload uses RWX volume and RBD workload uses RWO volumes
-            2) Reset the connection scores for the mons
-            3) Crash the zone nodes
-            4) Repeat the crash process as many times as number of iterations
-            5) Make sure ceph is accessible during the crash duration
-            6) Make sure logreader job pods have Completed state.
+            2) Create VM using standalone PVC. Create some data inside the VM instance
+            3) Reset the connection scores for the mons
+            4) Crash the zone nodes
+            5) Repeat the crash process as many times as number of iterations
+            6) Make sure ceph is accessible during the crash duration
+            7) Check VM data integrity is maintained post netsplit. Check if New IO is possible in VM and out of VM.
+            8) Make sure logreader job pods have Completed state.
                Check if there is any write or read pause. Fail only when neccessary.
-            7) Delete the old logreader job and create new logreader job to verify the data corruption
-            8) Make sure there is no data loss
-            9) Validate the connection scores
-            10) Do a complete cluster sanity and make sure there is no issue post recovery
+            9) Delete the old logreader job and create new logreader job to verify the data corruption
+            10) Make sure there is no data loss
+            11) Validate the connection scores
+            12) Do a complete cluster sanity and make sure there is no issue post recovery
 
         """
 
@@ -383,9 +432,12 @@ class TestZoneShutdownsAndCrashes:
             sc_obj.cephfs_logreader_job,
         ) = setup_logwriter_cephfs_workload_factory(read_duration=0)
 
-        # Generate 5 minutes worth of logs before inducing the netsplit
-        log.info("Generating 2 mins worth of log")
-        time.sleep(120)
+        # setup vm and write some data to the VM instance
+        vm_obj = setup_vms_standalone_pvc()
+        vm_obj.run_ssh_cmd(
+            command="dd if=/dev/zero of=/file_1.txt bs=1024 count=102400"
+        )
+        md5sum_before = vm_obj.run_ssh_cmd(command="md5sum /file_1.txt")
 
         sc_obj.get_logwriter_reader_pods(label=constants.LOGWRITER_CEPHFS_LABEL)
         sc_obj.get_logwriter_reader_pods(label=constants.LOGREADER_CEPHFS_LABEL)
@@ -481,6 +533,29 @@ class TestZoneShutdownsAndCrashes:
 
             log.info(f"Waiting {delay} mins before the next iteration!")
             time.sleep(delay * 60)
+
+        # check vm data written before the failure for integrity
+        md5sum_after = vm_obj.run_ssh_cmd(command="md5sum /file_1.txt")
+        assert (
+            md5sum_before == md5sum_after
+        ), "Data integrity of the file inside VM is not maintained during the failure"
+        log.info(
+            "Data integrity of the file inside VM is maintained during the failure"
+        )
+
+        # check if new data can be created
+        vm_obj.run_ssh_cmd(
+            command="dd if=/dev/zero of=/file_2.txt bs=1024 count=103600"
+        )
+        log.info("Successfully created new data inside VM")
+
+        # check if the data can be copied back to local machine
+        vm_obj.scp_from_vm(local_path="/tmp", vm_src_path="/file_1.txt")
+        log.info("VM data is successfully copied back to local machine")
+
+        # stop the VM
+        vm_obj.stop()
+        log.info("Stoped the VM successfully")
 
         sc_obj.cephfs_logreader_job.delete()
         for pod in sc_obj.cephfs_logreader_pods:

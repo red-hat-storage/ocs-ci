@@ -19,6 +19,7 @@ from botocore.exceptions import ClientError
 import pytest
 from collections import namedtuple
 
+from ocs_ci.deployment.cnv import CNVInstaller
 from ocs_ci.deployment import factory as dep_factory
 from ocs_ci.framework import config as ocsci_config
 import ocs_ci.framework.pytest_customization.marks
@@ -29,6 +30,12 @@ from ocs_ci.framework.pytest_customization.marks import (
     ignore_leftover_label,
     upgrade_marks,
     ignore_resource_not_found_error_label,
+)
+from ocs_ci.helpers.cnv_helpers import (
+    get_pvc_from_vm,
+    get_secret_from_vm,
+    get_volumeimportsource,
+    create_vm_using_standalone_pvc,
 )
 from ocs_ci.helpers.proxy import update_container_with_proxy_env
 from ocs_ci.ocs import constants, defaults, fio_artefacts, node, ocp, platform_nodes
@@ -7927,6 +7934,75 @@ def scale_noobaa_db_pod_pv_size(request):
 
         wait_for_pods_to_be_running(
             pod_names=[pod_obj["metadata"]["name"] for pod_obj in pods]
+        )
+
+    request.addfinalizer(finalizer)
+    return factory
+
+
+@pytest.fixture(scope="session")
+def setup_cnv(request):
+    """
+    Session scoped fixture to setup and cleanup CNV
+    based on need of the tests
+
+    """
+    cnv_obj = CNVInstaller()
+    cnv_obj.deploy_cnv(check_cnv_deployed=True, check_cnv_ready=True)
+
+    def finalizer():
+        """
+        Clean up CNV deployment
+
+        """
+        if cnv_obj.cnv_hyperconverged_installed():
+            cnv_obj.uninstall_cnv()
+
+    request.addfinalizer(finalizer)
+
+
+@pytest.fixture()
+def setup_vms_standalone_pvc(request, project_factory):
+    """
+    This fixture will setup VM using standalone PVC
+
+    """
+    vm_obj = None
+
+    def factory():
+        """
+        Factory method to setup VM using standalone PVC
+
+        """
+        nonlocal vm_obj
+        assert (
+            CNVInstaller().cnv_hyperconverged_installed
+        ), "CNV is not installed in the cluster. please install CNV."
+        project_obj = project_factory()
+        log.info(f"Created project {project_obj.namespace} for VMs")
+        vm_obj = create_vm_using_standalone_pvc(
+            running=True, namespace=project_obj.namespace
+        )
+        return vm_obj
+
+    def finalizer():
+        """
+        Teardown all the objects created as part of
+        the setup factory
+
+        """
+        pvc_obj = get_pvc_from_vm(vm_obj)
+        secret_obj = get_secret_from_vm(vm_obj)
+        volumeimportsource_obj = get_volumeimportsource(pvc_obj=pvc_obj)
+        vm_obj.delete()
+        log.info(f"Successfully deleted VM {vm_obj.name}")
+        pvc_obj.delete()
+        log.info(f"Successfully deleted PVC {pvc_obj.name}")
+        secret_obj.delete()
+        log.info(f"Successfully deleted secret {secret_obj.name}")
+        volumeimportsource_obj.delete()
+        log.info(
+            f"Successfully deleted VolumeImportSource {volumeimportsource_obj.name}"
         )
 
     request.addfinalizer(finalizer)
