@@ -95,7 +95,16 @@ class TestManagedClusterNodeFailure:
         verify the pod is rescheduled on a healthy node and mirroring is working as expected.
 
         """
-        dr_workload(num_of_subscription=1)
+        dr_workload(
+            num_of_subscription=1,
+            num_of_appset=1,
+            pvc_interface=constants.CEPHBLOCKPOOL,
+        )
+        dr_workload(
+            num_of_subscription=1,
+            num_of_appset=1,
+            pvc_interface=constants.CEPHFILESYSTEM,
+        )
         managed_clusters = get_non_acm_cluster_config()
 
         for cluster in managed_clusters:
@@ -169,7 +178,16 @@ class TestManagedClusterNodeFailure:
         verify the pod is rescheduled on a healthy node and mirroring is working as expected.
 
         """
-        dr_workload(num_of_subscription=1)
+        dr_workload(
+            num_of_subscription=1,
+            num_of_appset=1,
+            pvc_interface=constants.CEPHBLOCKPOOL,
+        )
+        dr_workload(
+            num_of_subscription=1,
+            num_of_appset=1,
+            pvc_interface=constants.CEPHFILESYSTEM,
+        )
         managed_clusters = get_non_acm_cluster_config()
         resources = []
         resources_node = []
