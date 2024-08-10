@@ -318,26 +318,24 @@ def failover_relocate_ui(
         if workload_type:
             log.info("Click on subscription dropdown")
             acm_obj.do_click(acm_loc["subscription-dropdown"], enable_screenshot=True)
-            # TODO: Commented below lines due to Regression BZ2208637
-            # log.info("Check peer readiness")
-            # assert acm_obj.wait_until_expected_text_is_found(
-            #     locator=acm_loc["peer-ready"],
-            #     expected_text=constants.PEER_READY,
-            # ), f"Peer is not ready, can not initiate {action}"
-        acm_obj.take_screenshot()
+            # DRPC name is by default selected, hence no code is needed
         if aria_disabled == "true":
             log.error("Initiate button in not enabled to failover/relocate")
             return False
         else:
             log.info("Click on Initiate button to failover/relocate")
-            acm_obj.do_click(acm_loc["initiate-action"], enable_screenshot=True)
+            acm_obj.do_click(
+                acm_loc["initiate-action"], enable_screenshot=True, avoid_stale=True
+            )
             if action == constants.ACTION_FAILOVER:
                 log.info("Failover trigerred from ACM UI")
             else:
                 log.info("Relocate trigerred from ACM UI")
             acm_obj.take_screenshot()
             log.info("Close the action modal")
-            acm_obj.do_click(acm_loc["close-action-modal"], enable_screenshot=True)
+            acm_obj.do_click(
+                acm_loc["close-action-modal"], enable_screenshot=True, avoid_stale=True
+            )
             return True
     else:
         log.error(
@@ -433,21 +431,22 @@ def check_cluster_operator_status(acm_obj, timeout=30):
         timeout=timeout,
     )
     if cluster_operator_status:
-        log.info("Text 'Degraded' for Cluster operator is not found, validation passed")
-        acm_obj.take_screenshot()
-        return True
-    else:
         log.error("Cluster operator status on DR monitoring dashboard is degraded")
         acm_obj.take_screenshot()
         return False
+    else:
+        log.info("Text 'Degraded' for Cluster operator is not found, validation passed")
+        acm_obj.take_screenshot()
+        return True
 
 
-def acm_managed_applications_count_on_ui(acm_obj):
+def application_count_on_ui(acm_obj):
     """
-    The function verifies the ACM managed applications count on the DR console
+    The function fetches the application count on the DR console
 
     Returns:
-        number_of_applications (list): Number of ACM managed applications on DR dashboard
+        number_of_applications (list): Number of ACM managed applications and total applications
+        enrolled in disaster recovery on DR dashboard
 
     """
     ocp_version = get_ocp_version()
