@@ -4,7 +4,6 @@ import pytest
 from time import sleep
 
 from ocs_ci.framework import config
-
 from ocs_ci.framework.testlib import skipif_ocs_version, tier1
 from ocs_ci.framework.pytest_customization.marks import turquoise_squad
 from ocs_ci.helpers import dr_helpers
@@ -15,7 +14,7 @@ from ocs_ci.helpers.dr_helpers_ui import (
     failover_relocate_ui,
     verify_drpolicy_ui,
     check_cluster_operator_status,
-    acm_managed_applications_count_on_ui,
+    application_count_on_ui,
     cluster_and_operator_health_check_on_ui,
     check_apps_running_on_selected_cluster,
 )
@@ -44,12 +43,10 @@ class TestRDRMonitoringDashboardUI:
         nodes_multicluster,
     ):
         """
-        Test to verify the presence of RDR monitoring dashboard and various workloads
+        Test to verify the presence of RDR monitoring dashboard, various workloads
         and their count, Cluster and Operator health status on it
 
         """
-
-        acm_obj = AcmAddClusters()
 
         rdr_workload = dr_workload(num_of_subscription=1, num_of_appset=1)
         rdr_workload_count = len(rdr_workload)
@@ -70,6 +67,9 @@ class TestRDRMonitoringDashboardUI:
             rdr_workload.workload_namespace, workload_type
         )
 
+        acm_obj = AcmAddClusters()
+        config.RUN.get("rdr_failover_via_ui")
+
         logger.info("Navigate to ACM console")
         config.switch_acm_ctx()
         check_cluster_status_on_acm_console(acm_obj)
@@ -80,13 +80,11 @@ class TestRDRMonitoringDashboardUI:
         ), "Cluster operator status is degraded"
         acm_obj.take_screenshot()
         assert all(
-            count == rdr_workload_count
-            for count in acm_managed_applications_count_on_ui(acm_obj)
+            count == rdr_workload_count for count in application_count_on_ui(acm_obj)
         ), (
-            f"Not all element count in list {acm_managed_applications_count_on_ui(acm_obj)} "
+            f"Not all application count in list {application_count_on_ui(acm_obj)} "
             f"is equal to {rdr_workload_count}"
         )
-        acm_obj.take_screenshot()
         assert cluster_and_operator_health_check_on_ui(
             cluster1=primary_cluster_name, cluster2=secondary_cluster_name
         ), "Cluster and Operator health check failed"
@@ -102,7 +100,6 @@ class TestRDRMonitoringDashboardUI:
         ), f"Apps {workload_names} not found on cluster {primary_cluster_name}"
         acm_obj.take_screenshot()
 
-        config.RUN.get("rdr_failover_via_ui")
         config.switch_to_cluster_by_name(primary_cluster_name)
         primary_cluster_index = config.cur_index
         primary_cluster_nodes = get_node_objs()
@@ -122,16 +119,15 @@ class TestRDRMonitoringDashboardUI:
         )
         acm_obj.take_screenshot()
         assert all(
-            count == rdr_workload_count
-            for count in acm_managed_applications_count_on_ui(acm_obj)
+            count == rdr_workload_count for count in application_count_on_ui(acm_obj)
         ), (
-            f"Not all element count in list {acm_managed_applications_count_on_ui(acm_obj)} "
+            f"Not all element count in list {application_count_on_ui(acm_obj)} "
             f"is equal to {rdr_workload_count} after {primary_cluster_name} went down"
         )
         acm_obj.take_screenshot()
         assert not cluster_and_operator_health_check_on_ui(
             cluster1=primary_cluster_name, cluster2=secondary_cluster_name
-        ), f"Cluster and Operator health is not in degraded after {primary_cluster_name} went down"
+        ), f"Cluster and Operator health are not in degraded after {primary_cluster_name} went down"
         # Failover via ACM UI
         for workload in rdr_workload:
             workload_number = 1
@@ -185,14 +181,15 @@ class TestRDRMonitoringDashboardUI:
         dr_helpers.wait_for_mirroring_status_ok(
             replaying_images=rdr_workload.workload_pvc_count
         )
+        config.switch_acm_ctx()
         check_cluster_status_on_acm_console(acm_obj)
         verify_drpolicy_ui(acm_obj, scheduling_interval=scheduling_interval)
         assert check_apps_running_on_selected_cluster(
             acm_obj, cluster_name=secondary_cluster_name, app_names=workload_names
-        ), f"Apps {workload_names} not found on cluster {secondary_cluster_name}"
+        ), f"Apps {workload_names} not found on cluster {secondary_cluster_name} after failover operation"
         acm_obj.take_screenshot()
         logger.info(
-            f"After failover, workloads moved to cluster {secondary_cluster_name} on DR dashboard"
+            f"After failover, workloads {workload_names} moved to cluster {secondary_cluster_name} on DR dashboard"
         )
 
         assert check_cluster_operator_status(
@@ -200,13 +197,12 @@ class TestRDRMonitoringDashboardUI:
         ), "Cluster operator status is degraded"
         acm_obj.take_screenshot()
         assert all(
-            count == rdr_workload_count
-            for count in acm_managed_applications_count_on_ui(acm_obj)
+            count == rdr_workload_count for count in application_count_on_ui(acm_obj)
         ), (
-            f"Not all element count in list {acm_managed_applications_count_on_ui(acm_obj)} "
+            f"Not all element count in list {application_count_on_ui(acm_obj)} "
             f"is equal to {rdr_workload_count}"
         )
         acm_obj.take_screenshot()
         assert cluster_and_operator_health_check_on_ui(
-            cluster1=primary_cluster_name, cluster2=secondary_cluster_name
+            acm_obj, cluster1=primary_cluster_name, cluster2=secondary_cluster_name
         ), "Cluster and Operator health check failed"

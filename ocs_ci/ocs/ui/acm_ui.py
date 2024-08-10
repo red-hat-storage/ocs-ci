@@ -153,7 +153,7 @@ class AcmPageNavigator(BaseUI):
 
     def navigate_data_services(self):
         """
-        Navigate to Data Services page on ACM UI, supported for ACM version 2.7 and above
+        Navigate to Data Services page on ACM UI, supported for ACM version 2.9 and above
 
         """
         log.info(
@@ -169,7 +169,9 @@ class AcmPageNavigator(BaseUI):
                 "//button[normalize-space()='Data Services']"
             )
             if element.get_attribute("aria-expanded") == "false":
-                self.do_click(locator=self.acm_page_nav["data-services"])
+                self.do_click(
+                    locator=self.acm_page_nav["data-services"], avoid_stale=True
+                )
             disaster_recovery = self.wait_until_expected_text_is_found(
                 locator=self.acm_page_nav["disaster-recovery"],
                 expected_text="Disaster recovery",
