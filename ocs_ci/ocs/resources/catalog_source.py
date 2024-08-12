@@ -197,5 +197,5 @@ def get_odf_tag_from_redhat_catsrc():
         namespace=constants.MARKETPLACE_NAMESPACE,
         resource_name="redhat-operators",
     ).get()
-    regestry_image = catsrc_data.get("spec").get("image")
-    return regestry_image.split(":")[-1]
+    registry_image = catsrc_data.get("spec").get("image")
+    return registry_image.split(":")[-1]

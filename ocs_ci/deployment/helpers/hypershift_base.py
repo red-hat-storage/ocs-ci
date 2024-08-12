@@ -73,7 +73,7 @@ def get_random_hosted_cluster_name():
         str: random cluster name
     """
     # getting the cluster name from the env data, for instance "ibm_cloud_baremetal3; mandatory conf field"
-    bm_name = config.ENV_DATA.get("baremetal").get("env_name")
+    bm_name = config.ENV_DATA.get("baremetal", {}).get("env_name")
     ocp_version = get_latest_release_version()
     hcp_version = "".join([c for c in ocp_version if c.isdigit()][:3])
     match = re.search(r"\d+$", bm_name)
