@@ -3186,7 +3186,8 @@ class MultiClusterDROperatorsDeploy(object):
         3. backupstoragelocation resource in "Available" phase
         """
         # Restic pods have been renamed to node-agent after oadp 1.2
-        oadp_version = get_oadp_version()
+        logger.info("Getting OADP version")
+        oadp_version = get_oadp_version(namespace=constants.ACM_HUB_BACKUP_NAMESPACE)
 
         if version.compare_versions(f"{oadp_version} >= 1.2"):
             restic_or_node_agent_pod_prefix = "node-agent"

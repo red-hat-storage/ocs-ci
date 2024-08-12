@@ -511,6 +511,43 @@ class MultiClusterConfig:
                 switch_index = config.cur_index
             super().__init__(switch_index)
 
+    def insert_cluster_config(self, index, new_config):
+        """
+        Insert a new cluster configuration at the given index
+
+        Args:
+            index (int): The index at which to insert the new configuration
+            new_config (Config): The new configuration to insert
+
+        """
+        self.clusters.insert(index, new_config)
+        self.nclusters += 1
+        self._refresh_ctx()
+
+    def remove_cluster(self, index):
+        """
+        Remove the cluster at the given index
+
+        Args:
+            index (int): The index of the cluster to remove
+        """
+        self.clusters.pop(index)
+        self.nclusters -= 1
+        self._refresh_ctx()
+
+    def remove_cluster_by_name(self, cluster_name):
+        """
+        Remove the cluster by the cluster name
+
+        Args:
+            cluster_name (str): The cluster name to remove
+
+        Raises:
+            ClusterNotFoundException: In case it didn't find the cluster
+
+        """
+        self.remove_cluster(self.get_cluster_index_by_name(cluster_name))
+
 
 config = MultiClusterConfig()
 

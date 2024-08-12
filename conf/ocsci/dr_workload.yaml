@@ -1,14 +1,14 @@
 ENV_DATA:
   dr_workload_repo_url: "https://github.com/red-hat-storage/ocs-workloads.git"
   dr_workload_repo_branch: "master"
-  dr_workload_subscription: [
+  dr_workload_subscription_rbd: [
     {name: "busybox-1", workload_dir: "rdr/busybox/app-busybox-1", pod_count: 20, pvc_count: 20},
     {name: "busybox-2", workload_dir: "rdr/busybox/app-busybox-2", pod_count: 5, pvc_count: 5},
     {name: "busybox-3", workload_dir: "rdr/busybox/app-busybox-3", pod_count: 20, pvc_count: 20},
     {name: "busybox-4", workload_dir: "rdr/busybox/app-busybox-4", pod_count: 20, pvc_count: 20},
     {name: "busybox-5", workload_dir: "rdr/busybox/app-busybox-5", pod_count: 20, pvc_count: 20},
   ]
-  dr_workload_appset: [
+  dr_workload_appset_rbd: [
     { name: "appset-busybox-1", workload_dir: "rdr/busybox/AppSet/appset-busybox-1",
       dr_workload_app_placement_name: "busybox-1-placement",
       dr_workload_app_pvc_selector: {'appname': 'busybox_app1'}, pod_count: 20, pvc_count: 20
@@ -34,17 +34,40 @@ ENV_DATA:
   dr_workload_subscription_cephfs: [
     { name: "busybox-1", workload_dir: "rdr/busybox/cephfs/app-busybox-1", pod_count: 20, pvc_count: 20 },
     { name: "busybox-2", workload_dir: "rdr/busybox/cephfs/app-busybox-2", pod_count: 20, pvc_count: 4 },
+    { name: "busybox-3", workload_dir: "rdr/busybox/cephfs/app-busybox-3", pod_count: 20, pvc_count: 20 },
   ]
 
-  dr_cnv_workload_appset: [
-    { name: "vm-appset-1", workload_dir: "rdr/cnv-workload/appset/vm-appset-1",
-      dr_workload_app_placement_name: "vm-appset-1-placement", vm_name: "vm-workload-1",
+  dr_workload_appset_cephfs: [
+    { name: "appset-busybox-1", workload_dir: "rdr/busybox/cephfs/AppSet/appset-busybox-1-cephfs",
+      dr_workload_app_placement_name: "busybox-1-placement-cephfs",
+      dr_workload_app_pvc_selector: { 'appname': 'busybox_app1_cephfs' }, pod_count: 20, pvc_count: 20
+    },
+    { name: "appset-busybox-2", workload_dir: "rdr/busybox/cephfs/AppSet/appset-busybox-2-cephfs",
+      dr_workload_app_placement_name: "busybox-2-placement-cephfs",
+      dr_workload_app_pvc_selector: { 'appname': 'busybox_app2_cephfs' }, pod_count: 20, pvc_count: 4
+    },
+    { name: "appset-busybox-3", workload_dir: "rdr/busybox/cephfs/AppSet/appset-busybox-3-cephfs",
+      dr_workload_app_placement_name: "busybox-3-placement-cephfs",
+      dr_workload_app_pvc_selector: { 'appname': 'busybox_app3_cephfs' }, pod_count: 20, pvc_count: 20
+    },
+  ]
+
+  dr_cnv_workload_appset_push: [
+    { name: "vm-appset-push-1", appset_model: "push", workload_dir: "rdr/cnv-workload/appset/vm-appset-push-1",
+      dr_workload_app_placement_name: "vm-appset-push-1-placement", vm_name: "vm-workload-1",
+      vm_secret: "vm-secret-1", vm_username: "cirros",
+      dr_workload_app_pvc_selector: { 'appname': 'kubevirt' }, pod_count: 1, pvc_count: 1
+    },
+  ]
+  dr_cnv_workload_appset_pull: [
+    { name: "vm-appset-pull-1", appset_model: "pull", workload_dir: "rdr/cnv-workload/appset/vm-appset-pull-1",
+      dr_workload_app_placement_name: "vm-appset-pull-1-placement", vm_name: "vm-workload-1",
       vm_secret: "vm-secret-1", vm_username: "cirros",
       dr_workload_app_pvc_selector: { 'appname': 'kubevirt' }, pod_count: 1, pvc_count: 1
     },
   ]
   dr_cnv_workload_sub: [
-    { name: "vm-sub-1", workload_dir: "rdr/cnv-workload/subscription/vm-sub-1",
+    { name: "vm-subscription-1", workload_dir: "rdr/cnv-workload/subscription/vm-subscription-1",
       dr_workload_app_placement_name: "vm-sub-1-placement", vm_name: "vm-workload-1",
       vm_secret: "vm-secret-1", vm_username: "cirros",
       dr_workload_app_pvc_selector: { 'appname': 'kubevirt' }, pod_count: 1, pvc_count: 1
