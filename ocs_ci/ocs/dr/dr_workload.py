@@ -1076,8 +1076,9 @@ class Busybox_DiscoveredApps(DRWorkload):
         self.discovered_apps_placement_name = kwargs.get("workload_placement_name")
         self.drpc_yaml_file = os.path.join(constants.DRPC_PATH)
         self.placement_yaml_file = os.path.join(constants.PLACEMENT_PATH)
-        self.kubeojbect_capture_interval = f"{generate_kubeojbect_capture_interval}m" or kwargs.get(
-            "kubeojbect_capture_interval"
+        self.kubeojbect_capture_interval = (
+            f"{generate_kubeojbect_capture_interval}m"
+            or kwargs.get("kubeojbect_capture_interval")
         )
         self.protection_type = kwargs.get("protection_type")
         self.target_clone_dir = config.ENV_DATA.get(
