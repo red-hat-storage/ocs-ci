@@ -9,6 +9,8 @@ from ocs_ci.ocs.resources.pod import (
 from ocs_ci.ocs.ocp import OCP
 from ocs_ci.ocs.constants import (
     DEFAULT_CEPHBLOCKPOOL,
+    DEFAULT_STORAGE_CLUSTER,
+    OPENSHIFT_STORAGE_NAMESPACE,
     OSD_APP_LABEL,
     CEPHBLOCKPOOL,
     STORAGECLASS,
@@ -105,7 +107,7 @@ def get_replica1_osd_deployment() -> list[str]:
     """
     dep_obj = OCP(kind=DEPLOYMENT)
     deployments = dep_obj.get()["items"]
-    replica1_osd_deployment = list()
+    replica1_osd_deployments = list()
     osd_deployment = list()
     for deployment in deployments:
         if (
@@ -122,12 +124,12 @@ def get_replica1_osd_deployment() -> list[str]:
             in get_failure_domains()
         ):
             log.info(deployment["metadata"]["name"])
-            replica1_osd_deployment.append(deployment["metadata"]["name"])
+            replica1_osd_deployments.append(deployment["metadata"]["name"])
 
-    return replica1_osd_deployment
+    return replica1_osd_deployments
 
 
-def scaledown_deployment(deployments_name: list[str]) -> None:
+def scaledown_deployment(deployment_names: list[str]) -> None:
     """
     Scale down deployments to 0
 
@@ -136,8 +138,8 @@ def scaledown_deployment(deployments_name: list[str]) -> None:
 
     """
     log.info("Starts Scaledown deployments")
-    deployment_obj = OCP(kind=DEPLOYMENT, namespace="openshift-storage")
-    for deployment in deployments_name:
+    deployment_obj = OCP(kind=DEPLOYMENT, namespace=OPENSHIFT_STORAGE_NAMESPACE)
+    for deployment in deployment_names:
         deployment_obj.exec_oc_cmd(f"scale deployment {deployment} --replicas=0")
         log.info(f"scaling to 0: {deployment}")
 
@@ -211,9 +213,9 @@ def modify_replica1_osd_count(new_osd_count):
         for instance, selecting 2, creates 6 osds
 
     """
-    storage_cluster = OCP(kind=STORAGECLUSTER, name="ocs-storagecluster")
+    storage_cluster = OCP(kind=STORAGECLUSTER, name=DEFAULT_STORAGE_CLUSTER)
     storage_cluster.exec_oc_cmd(
-        f"patch storagecluster ocs-storagecluster -n openshift-storage "
+        f"patch storagecluster {DEFAULT_STORAGE_CLUSTER} -n {OPENSHIFT_STORAGE_NAMESPACE} "
         f'--type json --patch \'[{{"op": "replace", "path": '
         f'"/spec/managedResources/cephNonResilientPools/count", "value": {new_osd_count} }}]\''
     )
@@ -241,6 +243,16 @@ def get_device_class_from_ceph() -> dict:
 
 
 def get_all_osd_names_by_device_class(osd_dict: dict, device_class: str) -> list:
+    """
+    Gets all OSD names by its device class
+
+    Args:
+        osd_dict (dict): OSD data
+        device_class (str): name of device class to search for
+
+    Returns:
+        list: OSD names haveing requested device class
+    """
     return [
         osd_name
         for osd_name, class_value in osd_dict.items()
