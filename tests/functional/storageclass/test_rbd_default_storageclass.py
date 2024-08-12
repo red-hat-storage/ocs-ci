@@ -51,7 +51,7 @@ class TestRBDStorageClassAsDefaultStorageClass:
 
         assert is_rbd_default_storage_class(
             sc_name=sc_attached_to_pvc
-        ), "RBD is not default storageclass for Cluster."
+        ), f"RBD storageclass {sc_attached_to_pvc} is not default storageclass for Cluster."
 
         log.info("Attaching PVC to pod to start IO workload.")
         pod_obj = pod_factory(pvc=pvc_obj, status=constants.STATUS_RUNNING)
