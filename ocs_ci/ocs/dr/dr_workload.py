@@ -13,6 +13,7 @@ from subprocess import TimeoutExpired
 from ocs_ci.framework import config
 from ocs_ci.helpers import dr_helpers, helpers
 from ocs_ci.helpers.cnv_helpers import create_vm_secret, cal_md5sum_vm
+from ocs_ci.helpers.dr_helpers import generate_kubeojbect_capture_interval
 from ocs_ci.helpers.helpers import (
     create_project,
     create_unique_resource_name,
@@ -1075,7 +1076,7 @@ class Busybox_DiscoveredApps(DRWorkload):
         self.discovered_apps_placement_name = kwargs.get("workload_placement_name")
         self.drpc_yaml_file = os.path.join(constants.DRPC_PATH)
         self.placement_yaml_file = os.path.join(constants.PLACEMENT_PATH)
-        self.kubeojbect_capture_interval = "5m" or kwargs.get(
+        self.kubeojbect_capture_interval = f"{generate_kubeojbect_capture_interval}m" or kwargs.get(
             "kubeojbect_capture_interval"
         )
         self.protection_type = kwargs.get("protection_type")
