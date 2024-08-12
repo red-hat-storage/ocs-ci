@@ -664,9 +664,13 @@ class Deployment(object):
             and ocp_version >= version.VERSION_4_9
         ):
             self.deploy_acm_hub()
-        if config.DEPLOYMENT.get("local_storage") and config.DEPLOYMENT.get(
+
+        perform_lso_standalone_deployment = config.DEPLOYMENT.get(
             "lso_standalone_deployment", False
-        ):
+        ) and not ocp.OCP(kind=constants.STORAGECLASS).is_exist(
+            resource_name=self.DEFAULT_STORAGECLASS_LSO
+        )
+        if perform_lso_standalone_deployment:
             setup_local_storage(storageclass=self.DEFAULT_STORAGECLASS_LSO)
         self.do_deploy_lvmo()
         self.do_deploy_submariner()
