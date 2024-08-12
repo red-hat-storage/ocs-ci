@@ -1585,7 +1585,7 @@ def do_discovered_apps_cleanup(
     config.switch_ctx(restore_index)
 
 
-def generate_kubeojbect_capture_interval():
+def generate_kubeobject_capture_interval():
     """
     Generate KubeObject Capture Interval
 
