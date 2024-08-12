@@ -58,7 +58,6 @@ from ocs_ci.ocs.exceptions import (
     NoRunningCephToolBoxException,
     ClusterNotInSTSModeException,
 )
-
 from ocs_ci.utility import version as version_module
 from ocs_ci.utility.flexy import load_cluster_info
 from ocs_ci.utility.retry import retry

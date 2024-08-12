@@ -51,12 +51,9 @@ class HostedClients(HyperShiftBase):
 
     def __init__(self):
         HyperShiftBase.__init__(self)
-        if not config.ENV_DATA.get("clusters"):
-            raise ValueError(
-                "No 'clusters': '{<cluster names>: <cluster paths>}' set to ENV_DATA"
-            )
+        self.kubeconfig_paths = []
 
-    def do_deploy(self):
+    def do_deploy(self, cluster_names=None):
         """
         Deploy multiple hosted OCP clusters on Provider platform and setup ODF client on them
         Perform the 7 stages of deployment:
@@ -73,11 +70,26 @@ class HostedClients(HyperShiftBase):
         solution: disable MCE and install upstream Hypershift on the cluster
 
         ! Important !
-        due to n-1 logic we are assuming that desired CNV version <= OCP version
+        due to n-1 logic we are assuming that desired CNV version <= OCP version of managing/Provider cluster
+
+        Args:
+            cluster_names (list): cluster names to deploy, if None, all clusters from ENV_DATA will be deployed
+
+        Returns:
+            list: the list of HostedODF objects for all hosted OCP clusters deployed by the method successfully
         """
 
         # stage 1 deploy multiple hosted OCP clusters
-        cluster_names = self.deploy_hosted_ocp_clusters()
+        # If all desired clusters were already deployed and self.deploy_hosted_ocp_clusters() returns None instead of
+        # the list, in this case we assume the stage of Hosted OCP clusters creation is done, and we
+        # proceed to ODF installation and storage client setup.
+        # If specific cluster names were provided, we will deploy only those.
+        if not cluster_names:
+            cluster_names = self.deploy_hosted_ocp_clusters() or list(
+                config.ENV_DATA.get("clusters").keys()
+            )
+        if cluster_names:
+            cluster_names = self.deploy_hosted_ocp_clusters(cluster_names)
 
         # stage 2 verify OCP clusters are ready
         logger.info(
@@ -90,11 +102,6 @@ class HostedClients(HyperShiftBase):
         # stage 3 download all available kubeconfig files
         logger.info("Download kubeconfig for all clusters")
         kubeconfig_paths = self.download_hosted_clusters_kubeconfig_files()
-
-        # if all desired clusters were already deployed and step 1 returns None instead of the list,
-        # we proceed to ODF installation and storage client setup
-        if not cluster_names:
-            cluster_names = list(config.ENV_DATA.get("clusters").keys())
 
         # stage 4 deploy ODF on all hosted clusters if not already deployed
         for cluster_name in cluster_names:
@@ -112,51 +119,39 @@ class HostedClients(HyperShiftBase):
         # stage 5 verify ODF client is installed on all hosted clusters
         odf_installed = []
         for cluster_name in cluster_names:
-
-            if not self.config_has_hosted_odf_image(cluster_name):
+            if self.config_has_hosted_odf_image(cluster_name):
                 logger.info(
-                    f"Hosted ODF image not set for cluster '{cluster_name}', skipping ODF validation"
+                    f"Validate ODF client operator installed on hosted OCP cluster '{cluster_name}'"
                 )
-                continue
-
-            logger.info(
-                f"Validate ODF client operator installed on hosted OCP cluster '{cluster_name}'"
-            )
-            hosted_odf = HostedODF(cluster_name)
-
-            if not hosted_odf.odf_client_installed():
-                # delete catalogsources help to finish install cluster if nodes have not enough mem
-                # see oc describe pod ocs-client-operator-controller-manager-<suffix> -n openshift-storage-client
-                # when the problem was hit
-                hosted_odf.exec_oc_cmd(
-                    "delete catalogsource --all -n openshift-marketplace"
-                )
-                logger.info("wait 30 sec and create catalogsource again")
-                time.sleep(30)
-                hosted_odf.create_catalog_source()
-            odf_installed.append(hosted_odf.odf_client_installed())
+                hosted_odf = HostedODF(cluster_name)
+                if not hosted_odf.odf_client_installed():
+                    hosted_odf.exec_oc_cmd(
+                        "delete catalogsource --all -n openshift-marketplace"
+                    )
+                    logger.info("wait 30 sec and create catalogsource again")
+                    time.sleep(30)
+                    hosted_odf.create_catalog_source()
+                odf_installed.append(hosted_odf.odf_client_installed())
 
         # stage 6 setup storage client on all hosted clusters
-        client_setup = []
+        client_setup_res = []
+        hosted_odf_clusters_installed = []
         for cluster_name in cluster_names:
-
-            if (
-                not config.ENV_DATA.get("clusters")
-                .get(cluster_name)
-                .get("setup_storage_client", False)
-            ):
+            if self.storage_installation_requested(cluster_name):
                 logger.info(
-                    f"Storage client setup not set for cluster '{cluster_name}', skipping storage client setup"
+                    f"Setting up Storage client on hosted OCP cluster '{cluster_name}'"
                 )
-                continue
-
-            logger.info(
-                f"Setting up Storage client on hosted OCP cluster '{cluster_name}'"
-            )
-            hosted_odf = HostedODF(cluster_name)
-            client_setup.append(hosted_odf.setup_storage_client())
-
-        # stage 7 verify all hosted clusters are ready and print kubeconfig paths
+                hosted_odf = HostedODF(cluster_name)
+                client_installed = hosted_odf.setup_storage_client()
+                client_setup_res.append(client_installed)
+                if client_installed:
+                    hosted_odf_clusters_installed.append(hosted_odf)
+            else:
+                logger.info(
+                    f"Storage client installation not requested for cluster '{cluster_name}', "
+                    "skipping storage client setup"
+                )
+        # stage 7 verify all hosted clusters are ready and print kubeconfig paths on Agent
         logger.info(
             "kubeconfig files for all hosted OCP clusters:\n"
             + "\n".join(
@@ -172,8 +167,10 @@ class HostedClients(HyperShiftBase):
             odf_installed
         ), "ODF client was not deployed on all hosted OCP clusters"
         assert all(
-            client_setup
+            client_setup_res
         ), "Storage client was not set up on all hosted ODF clusters"
+
+        return hosted_odf_clusters_installed
 
     def config_has_hosted_odf_image(self, cluster_name):
         """
@@ -199,23 +196,56 @@ class HostedClients(HyperShiftBase):
 
         return regestry_exists and version_exists
 
-    def deploy_hosted_ocp_clusters(
-        self,
-    ):
+    def storage_installation_requested(self, cluster_name):
+        """
+        Check if the storage client installation was requested in the config
+
+        Args:
+            cluster_name (str): Name of the cluster
+
+        Returns:
+            bool: True if the storage client installation was requested, False otherwise
+        """
+        return (
+            config.ENV_DATA.get("clusters", {})
+            .get(cluster_name, {})
+            .get("setup_storage_client", False)
+        )
+
+    def deploy_hosted_ocp_clusters(self, cluster_names_list=None):
         """
         Deploy multiple hosted OCP clusters on Provider platform
 
+        Args:
+            cluster_names_list (list): List of cluster names to deploy. If not provided, all clusters
+                                                 in config.ENV_DATA["clusters"] will be deployed (optional argument)
+
         Returns:
-            list: the list of cluster names for all hosted OCP clusters deployed by the func successfully
+            list: The list of cluster names for all hosted OCP clusters deployed by the func successfully
         """
 
-        cluster_names_desired = list(config.ENV_DATA["clusters"].keys())
+        # Get the list of cluster names to deploy
+        if cluster_names_list:
+            cluster_names_desired = [
+                name
+                for name in cluster_names_list
+                if name in config.ENV_DATA["clusters"].keys()
+            ]
+        else:
+            cluster_names_desired = list(config.ENV_DATA["clusters"].keys())
         number_of_clusters_to_deploy = len(cluster_names_desired)
-        logger.info(f"Deploying '{number_of_clusters_to_deploy}' number of clusters")
+        deployment_mode = (
+            "only specified clusters"
+            if cluster_names_list
+            else "clusters from deployment configuration"
+        )
+        logger.info(
+            f"Deploying '{number_of_clusters_to_deploy}' number of {deployment_mode}"
+        )
 
         cluster_names = []
 
-        for index, cluster_name in enumerate(config.ENV_DATA["clusters"].keys()):
+        for index, cluster_name in enumerate(cluster_names_desired):
             logger.info(f"Creating hosted OCP cluster: {cluster_name}")
             hosted_ocp_cluster = HypershiftHostedOCP(cluster_name)
             # we need to ensure that all dependencies are installed so for the first cluster we will install all,
@@ -282,22 +312,37 @@ class HostedClients(HyperShiftBase):
         if not (self.hcp_binary_exists() and self.hypershift_binary_exists()):
             self.download_hcp_binary_with_podman()
 
-        kubeconfig_paths = []
         for name in config.ENV_DATA.get("clusters").keys():
             path = config.ENV_DATA.get("clusters").get(name).get("hosted_cluster_path")
-            kubeconfig_paths.append(self.download_hosted_cluster_kubeconfig(name, path))
+            self.kubeconfig_paths.append(
+                self.download_hosted_cluster_kubeconfig(name, path)
+            )
 
-        return kubeconfig_paths
+        return self.kubeconfig_paths
+
+    def get_kubeconfig_path(self, cluster_name):
+        """
+        Get the kubeconfig path for the cluster
+
+        Args:
+            cluster_name (str): Name of the cluster
+        Returns:
+            str: Path to the kubeconfig file
+        """
+        if not self.kubeconfig_paths:
+            self.download_hosted_clusters_kubeconfig_files()
+        for kubeconfig_path in self.kubeconfig_paths:
+            if cluster_name in kubeconfig_path:
+                return kubeconfig_path
+        return
 
     def deploy_multiple_odf_clients(self):
         """
         Deploy multiple ODF clients on hosted OCP clusters. Method tries to deploy ODF client on all hosted OCP clusters
         If ODF was already deployed on some of the clusters, it will be skipped for those clusters.
 
-        Returns:
-            list: the list of kubeconfig paths for all hosted OCP clusters
         """
-        kubeconfig_paths = self.update_hcp_binary()
+        self.update_hcp_binary()
 
         hosted_cluster_names = get_hosted_cluster_names()
 
@@ -305,8 +350,6 @@ class HostedClients(HyperShiftBase):
             logger.info(f"Deploying ODF client on hosted OCP cluster '{cluster_name}'")
             hosted_odf = HostedODF(cluster_name)
             hosted_odf.do_deploy()
-
-        return kubeconfig_paths
 
 
 class HypershiftHostedOCP(HyperShiftBase, MetalLBInstaller, CNVInstaller, Deployment):

@@ -4,6 +4,7 @@ import random
 from ocs_ci.deployment.deployment import validate_acm_hub_install, Deployment
 from ocs_ci.deployment.helpers.hypershift_base import (
     get_hosted_cluster_names,
+    get_random_hosted_cluster_name,
 )
 from ocs_ci.deployment.hosted_cluster import (
     HypershiftHostedOCP,
@@ -11,12 +12,20 @@ from ocs_ci.deployment.hosted_cluster import (
     HostedClients,
 )
 from ocs_ci.framework import config
+from ocs_ci.framework.logger_helper import log_step
 from ocs_ci.framework.pytest_customization.marks import (
     hci_provider_required,
     libtest,
     purple_squad,
     runs_on_provider,
 )
+from ocs_ci.ocs.ocp import OCP
+from ocs_ci.ocs.resources.catalog_source import get_odf_tag_from_redhat_catsrc
+from ocs_ci.utility.utils import (
+    get_latest_release_version,
+)
+from ocs_ci.utility.version import get_ocs_version_from_csv
+from ocs_ci.framework import config as ocsci_config
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.resources.storage_client import StorageClient
 from ocs_ci.helpers.helpers import (
@@ -131,6 +140,77 @@ class TestProviderHosted(object):
 
         cluster_names = list(config.ENV_DATA["clusters"].keys())
         assert HostedODF(cluster_names[-1]).get_storage_client_status() == "Connected"
+
+    @runs_on_provider
+    @hci_provider_required
+    def test_create_hosted_cluster_with_fixture(
+        self, create_hypershift_clusters, destroy_hosted_cluster
+    ):
+        """
+        Test create hosted cluster with fixture
+        """
+        log_step("Create hosted client")
+        cluster_name = get_random_hosted_cluster_name()
+        odf_version = str(get_ocs_version_from_csv()).replace(".stable", "")
+        if "rhodf" in odf_version:
+            odf_version = get_odf_tag_from_redhat_catsrc()
+        ocp_version = get_latest_release_version()
+        nodepool_replicas = 2
+
+        create_hypershift_clusters(
+            cluster_names=[cluster_name],
+            ocp_version=ocp_version,
+            odf_version=odf_version,
+            setup_storage_client=True,
+            nodepool_replicas=nodepool_replicas,
+        )
+
+        log_step("Switch to the hosted cluster")
+        ocsci_config.switch_to_cluster_by_name(cluster_name)
+
+        server = str(OCP().exec_oc_cmd("whoami --show-server", out_yaml_format=False))
+
+        assert (
+            cluster_name in server
+        ), f"Failed to switch to cluster '{cluster_name}' and fetch data"
+
+    @runs_on_provider
+    @hci_provider_required
+    def test_create_destroy_hosted_cluster_with_fixture(
+        self, create_hypershift_clusters, destroy_hosted_cluster
+    ):
+        """
+        Test create hosted cluster with fixture and destroy cluster abruptly
+        Important that ceph resources associate with the cluster will not be cleaned up
+        """
+        log_step("Create hosted client")
+        cluster_name = get_random_hosted_cluster_name()
+        odf_version = str(get_ocs_version_from_csv()).replace(".stable", "")
+        if "rhodf" in odf_version:
+            odf_version = get_odf_tag_from_redhat_catsrc()
+
+        ocp_version = get_latest_release_version()
+        nodepool_replicas = 2
+
+        create_hypershift_clusters(
+            cluster_names=[cluster_name],
+            ocp_version=ocp_version,
+            odf_version=odf_version,
+            setup_storage_client=True,
+            nodepool_replicas=nodepool_replicas,
+        )
+
+        log_step("Switch to the hosted cluster")
+        ocsci_config.switch_to_cluster_by_name(cluster_name)
+
+        server = str(OCP().exec_oc_cmd("whoami --show-server", out_yaml_format=False))
+
+        assert (
+            cluster_name in server
+        ), f"Failed to switch to cluster '{cluster_name}' and fetch data"
+
+        log_step("Destroy hosted cluster")
+        assert destroy_hosted_cluster(cluster_name), "Failed to destroy hosted cluster"
 
     @runs_on_provider
     @hci_provider_required
