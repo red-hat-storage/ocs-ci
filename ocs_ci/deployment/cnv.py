@@ -13,7 +13,7 @@ import tarfile
 
 from ocs_ci.framework import config
 from ocs_ci.ocs.resources.ocs import OCS
-from ocs_ci.ocs.ocp import OCP
+from ocs_ci.ocs.ocp import OCP, switch_to_default_rook_cluster_project
 from ocs_ci.ocs.resources.packagemanifest import PackageManifest
 from ocs_ci.ocs.constants import (
     CNV_NAMESPACE_YAML,
@@ -711,6 +711,17 @@ class CNVInstaller(object):
         cnv_csv.delete(resource_name=cnv_csv.get()["items"][0]["metadata"]["name"])
         logger.info(f"Deleted ClusterServiceVersion {constants.CNV_OPERATORNAME}")
 
+    def remove_cnv_operator(self):
+        """
+        Remove CNV operator
+
+        """
+        cnv_operator = OCP(
+            kind=constants.OPERATOR_KIND, resource_name=constants.CNV_OPERATORNAME
+        )
+        cnv_operator.delete(resource_name=constants.CNV_OPERATORNAME)
+        logger.info(f"Deleted operator {constants.CNV_OPERATORNAME}")
+
     def remove_crds(self):
         """
         Remove openshift virtualization CRDs
@@ -727,6 +738,7 @@ class CNVInstaller(object):
 
         """
         cnv_namespace = OCP()
+        switch_to_default_rook_cluster_project()
         cnv_namespace.delete_project(constants.CNV_NAMESPACE)
         logger.info(f"Deleted the namespace {constants.CNV_NAMESPACE}")
 
@@ -759,6 +771,9 @@ class CNVInstaller(object):
 
         logger.info("Removing the virtualization CSV")
         self.remove_cnv_csv()
+
+        logger.info("Removing the virtualization Operator")
+        self.remove_cnv_operator()
 
         logger.info("Removing the namespace")
         self.remove_namespace()

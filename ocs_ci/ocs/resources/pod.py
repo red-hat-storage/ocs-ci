@@ -2432,7 +2432,10 @@ def get_not_running_pods(selector=None, namespace=config.ENV_DATA["cluster_names
     pods_not_running = list()
     for pod in pod_objs:
         status = pod.status()
-        if status != constants.STATUS_RUNNING:
+        if (
+            status != constants.STATUS_RUNNING
+            and status != constants.STATUS_TERMINATING
+        ):
             pods_not_running.append(pod)
 
     return pods_not_running

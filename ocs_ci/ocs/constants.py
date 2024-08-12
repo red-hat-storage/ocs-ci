@@ -228,6 +228,7 @@ INFRA_ENV = "InfraEnv"
 DEFALUT_DEVICE_CLASS = "ssd"
 VM = "vm"
 HOSTED_CLUSTERS = "hostedclusters"
+OPERATOR_KIND = "Operator"
 
 # Provisioners
 AWS_EFS_PROVISIONER = "openshift.org/aws-efs"

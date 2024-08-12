@@ -1,6 +1,7 @@
 import logging
 import json
 import re
+import time
 
 from datetime import timedelta
 
@@ -185,7 +186,7 @@ class StretchCluster(OCS):
         ocs_nodes_in_zone = nodes_in_zone.intersection(ocs_nodes)
         return get_node_objs(list(ocs_nodes_in_zone))
 
-    @retry(CommandFailed, tries=10, delay=10)
+    @retry(CommandFailed, tries=6, delay=10)
     def check_for_read_pause(self, label, start_time, end_time):
         """
         This checks for any read pause has occurred during the given
@@ -225,7 +226,7 @@ class StretchCluster(OCS):
                 paused += 1
         return paused
 
-    @retry(CommandFailed, tries=10, delay=10)
+    @retry(CommandFailed, tries=6, delay=10)
     def check_for_write_pause(self, label, start_time, end_time):
         """
         Checks for write pause between start time and end time
@@ -309,7 +310,7 @@ class StretchCluster(OCS):
             self.logfile_map[label][0] = list(set(self.logfile_map[label][0]))
         logger.info(self.logfile_map[label][0])
 
-    @retry(UnexpectedBehaviour, tries=10, delay=5)
+    @retry(UnexpectedBehaviour, tries=6, delay=5)
     def get_logwriter_reader_pods(
         self,
         label,
@@ -482,8 +483,26 @@ class StretchCluster(OCS):
         """
         # find out the mons in quorum
         ceph_tools_pod = pod.get_ceph_tools_pod()
-        output = dict(ceph_tools_pod.exec_cmd_on_pod(command="ceph quorum_status"))
-        quorum_mons = output.get("quorum_names")
+
+        @retry(CommandFailed, tries=10, delay=10)
+        def _get_non_quorum_mons():
+            """
+            Get non quorum mon pods
+
+            """
+            output = dict(ceph_tools_pod.exec_cmd_on_pod(command="ceph quorum_status"))
+            quorum_mons = output.get("quorum_names")
+
+            if len(quorum_mons) != 3:
+                raise CommandFailed
+            logger.info("waiting 10 seconds before re-checking")
+
+            time.sleep(10)
+            output = dict(ceph_tools_pod.exec_cmd_on_pod(command="ceph quorum_status"))
+            quorum_mons = output.get("quorum_names")
+            return quorum_mons
+
+        quorum_mons = _get_non_quorum_mons()
         logger.info(f"Mon's in quorum are: {quorum_mons}")
         mon_meta_data = list(
             ceph_tools_pod.exec_cmd_on_pod(command="ceph mon metadata")
@@ -634,7 +653,7 @@ class StretchCluster(OCS):
                 start_time,
                 end_time,
             )
-            <= 2
+            == 0
         ), "Write operations paused for RBD workloads even for the ones in available zone"
         logger.info("all write operations are successful for RBD workloads")
 

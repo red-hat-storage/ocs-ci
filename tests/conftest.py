@@ -131,6 +131,7 @@ from ocs_ci.utility.environment_check import (
     get_status_before_execution,
     get_status_after_execution,
 )
+from ocs_ci.utility.json import SetToListJSONEncoder
 from ocs_ci.utility.resource_check import (
     create_resource_dct,
     get_environment_status_after_execution,
@@ -8238,7 +8239,7 @@ def clone_ocs_operator(request, tmp_path_factory):
     request.addfinalizer(finalizer)
     clone_repo(constants.OCS_OPERATOR_REPO, str(repo_dir), branch="main", tmp_repo=True)
     return repo_dir
-ƒ
+
 
 @pytest.fixture(scope="session")
 def clone_odf_monitoring_compare_tool(request, tmp_path_factory):
@@ -8285,7 +8286,7 @@ def setup_cnv(request):
 
     """
     cnv_obj = CNVInstaller()
-    cnv_obj.deploy_cnv(check_cnv_deployed=True, check_cnv_ready=True)
+    cnv_obj.deploy_cnv(check_cnv_deployed=False, check_cnv_ready=True)
 
     def finalizer():
         """
