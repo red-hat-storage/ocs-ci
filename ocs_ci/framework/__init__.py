@@ -494,8 +494,7 @@ class MultiClusterConfig:
                 # no switch happens and code runs on current cluster
                 logger.DEBUG("No provider was found - using current cluster")
                 switch_index = config.cur_index
-            switch_index = config
-            super().__init__(primary_index)
+            super().__init__(switch_index)
 
     class RunWithFirstConsumerConfigContext(RunWithConfigContext):
         """
@@ -510,8 +509,7 @@ class MultiClusterConfig:
                 # no switch happens and code runs on current cluster
                 logger.DEBUG("No Consumer was found - using current cluster")
                 switch_index = config.cur_index
-            switch_index = config
-            super().__init__(primary_index)
+            super().__init__(switch_index)
 
 
 config = MultiClusterConfig()
