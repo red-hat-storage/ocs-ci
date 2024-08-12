@@ -201,7 +201,7 @@ class HostedClients(HyperShiftBase):
         Check if the storage client installation was requested in the config
 
         Args:
-            cluster_name: str: Name of the cluster
+            cluster_name (str): Name of the cluster
 
         Returns:
             bool: True if the storage client installation was requested, False otherwise
@@ -217,8 +217,8 @@ class HostedClients(HyperShiftBase):
         Deploy multiple hosted OCP clusters on Provider platform
 
         Args:
-            cluster_names_list (list, optional): List of cluster names to deploy. If not provided, all clusters
-                                                 in config.ENV_DATA["clusters"] will be deployed.
+            cluster_names_list (list): List of cluster names to deploy. If not provided, all clusters
+                                                 in config.ENV_DATA["clusters"] will be deployed (optional argument)
 
         Returns:
             list: The list of cluster names for all hosted OCP clusters deployed by the func successfully
@@ -325,7 +325,7 @@ class HostedClients(HyperShiftBase):
         Get the kubeconfig path for the cluster
 
         Args:
-            cluster_name: str: Name of the cluster
+            cluster_name (str): Name of the cluster
         Returns:
             str: Path to the kubeconfig file
         """
