@@ -46,7 +46,13 @@ def osd_device_replacement(nodes, cli_tool=False):
     logger.info(f"Getting the backing volume name for PV {osd_pv_name}")
     backing_volume = nodes.get_data_volumes(pvs=[osd_pv])[0]
     logger.info(f"backing volume for PV {osd_pv_name} is {backing_volume}")
-    volume_path = nodes.get_volume_path(backing_volume)
+    if config.DEPLOYMENT.get("local_storage"):
+        node_name = (
+            osd_pv.data["metadata"].get("labels", {}).get("kubernetes.io/hostname")
+        )
+        volume_path = nodes.get_volume_path(backing_volume, node_name)
+    else:
+        volume_path = nodes.get_volume_path(backing_volume)
 
     # Get the corresponding PVC
     logger.info(f"Getting the corresponding PVC of PV {osd_pv_name}")

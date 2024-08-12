@@ -663,6 +663,10 @@ class VSLMNotFoundException(Exception):
     pass
 
 
+class VolumePathNotFoundException(Exception):
+    pass
+
+
 class OperationFailedToCompleteException(Exception):
     pass
 
