@@ -1596,7 +1596,7 @@ def generate_kubeojbect_capture_interval():
     capture_interval = int(get_all_drpolicy()[0]["spec"]["schedulingInterval"][:-1])
 
     if capture_interval <= 5 and capture_interval != 1:
-        return capture_interval-1
+        return capture_interval - 1
     elif capture_interval > 6:
         return 5
     else:
