@@ -369,11 +369,7 @@ class TestApplicationFailoverAndRelocateWhenZoneDown:
         # Verify resources deletion from previous primary or current secondary cluster
         config.switch_to_cluster_by_name(secondary_cluster_name)
         for wl in workloads:
-            wait_for_all_resources_creation(
-                wl.workload_pvc_count,
-                wl.workload_pod_count,
-                wl.workload_namespace,
-            )
+            wait_for_all_resources_deletion(wl.workload_namespace)
 
         # Verify resources creation on preferredCluster
         config.switch_to_cluster_by_name(self.primary_cluster_name)
