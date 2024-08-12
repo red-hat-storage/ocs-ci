@@ -3348,6 +3348,7 @@ def ceph_health_detail():
     return ceph_tools_pod.exec_cmd_on_pod("ceph health detail", out_yaml_format=False)
 
 def get_active_mds_info():
+
     """Return information about the active Ceph MDS.
 
     Returns:
@@ -3358,9 +3359,9 @@ def get_active_mds_info():
         - "active_pod": The name of the active pod.
         - "node_name": The name of the node where active mds pod is running.
     """
+
     ct_pod = pod.get_ceph_tools_pod()
     ceph_mdsmap = ct_pod.exec_ceph_cmd("ceph fs status")
-
     logger.info("Find ceph daemon state as 'active'")
     ceph_daemon_name = next(
         (
@@ -3412,9 +3413,11 @@ def get_active_mds_info():
 
 
 def clear_active_mds_load():
+
     """
     This function executes a ceph cmd to fail active mds daemon instantly.
     So that the existing load on active mds will be cleared off immediately.
     """
+
     ct_pod = pod.get_ceph_tools_pod()
     ct_pod.exec_ceph_cmd("ceph mds fail 0")

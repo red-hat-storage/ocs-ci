@@ -44,8 +44,7 @@ def run_metadata_io_with_cephfs(pvc_factory, dc_pod_factory):
     for node in worker_nodes:
         if (node != active_mds_node) and (node != sr_mds_node):
             target_node.append(node)
-    for i in range(3):
-        log.info(f"Create {interface} based PVC")
+    for dc_pod in range(3):
         pvc_obj = pvc_factory(interface=interface, access_mode=access_mode, size="30")
         log.info("Create fedora dc pod")
         pod_obj = dc_pod_factory(
