@@ -413,7 +413,6 @@ def verify_mco_console_plugin():
     page_nav_obj = PageNavigator()
     val_ui_obj = ValidationUI()
     page_nav_obj.navigate_OCP_home_page()
-    page_nav_obj.navigate_to_mco_operator_page()
     val_ui_obj.mco_console_plugin_check()
 
 
