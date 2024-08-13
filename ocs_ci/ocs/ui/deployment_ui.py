@@ -373,8 +373,10 @@ class DeploymentUI(PageNavigator):
         self.do_click(self.dep_loc["enable_external_kms"])
         kms_provider = config.ENV_DATA.get("KMS_PROVIDER")
         if kms_provider == "azure-kv":
-            if not config.ENV_DATA.get("platform") == "azure":
+            if not config.ENV_DATA.get("platform").lower() == "azure":
                 raise ValueError("azure-KV only supported on azure platform.")
+            else:
+                logger.info("Configuring Azure-KV related settings.")
 
             kms = AzureKV()
 
