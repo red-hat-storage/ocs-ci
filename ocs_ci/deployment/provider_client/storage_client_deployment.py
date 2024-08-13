@@ -147,19 +147,6 @@ class ODFAndNativeStorageClientDeploymentOnProvider(object):
             f"number of disks avilable for cleanup, {number_of_disks_available}"
         )
 
-            log.info("labeling all nodes as storage nodes")
-            label_nodes(nodes=node_objs, label=constants.OPERATOR_NODE_LABEL)
-        else:
-            log.info("labeling worker nodes as storage nodes")
-            label_nodes(nodes=worker_node_objs, label=constants.OPERATOR_NODE_LABEL)
-
-        no_of_disks_available_on_worker_nodes = disks_available_to_cleanup(
-            worker_node_objs[0]
-        )
-        log.info(
-            f"no of disks avilable for cleanup, {no_of_disks_available_on_worker_nodes}"
-        )
-
         # Install LSO, create LocalVolumeDiscovery and LocalVolumeSet
         is_local_storage_available = self.sc_obj.is_exist(
             resource_name=self.storageclass,
@@ -237,7 +224,10 @@ class ODFAndNativeStorageClientDeploymentOnProvider(object):
                     "replica"
                 ] = no_of_worker_nodes
 
-                if self.platform in constants.HCI_PROVIDER_CLIENT_PLATFORMS:
+                if self.platform in [
+                    constants.BAREMETAL_PLATFORM,
+                    constants.VSPHERE_PLATFORM,
+                ]:
                     storage_cluster_data["spec"]["storageDeviceSets"][0][
                         "count"
                     ] = number_of_disks_available
@@ -259,7 +249,10 @@ class ODFAndNativeStorageClientDeploymentOnProvider(object):
                     "replica"
                 ] = no_of_worker_nodes
 
-                if self.platform in constants.HCI_PROVIDER_CLIENT_PLATFORMS:
+                if self.platform in [
+                    constants.BAREMETAL_PLATFORM,
+                    constants.VSPHERE_PLATFORM,
+                ]:
                     storage_cluster_data["spec"]["storageDeviceSets"][0][
                         "count"
                     ] = number_of_disks_available
