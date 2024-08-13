@@ -17,6 +17,7 @@ from ocs_ci.helpers.dr_helpers_ui import (
     application_count_on_ui,
     cluster_and_operator_health_check_on_ui,
     check_apps_running_on_selected_cluster,
+    verify_mco_console_plugin,
 )
 from ocs_ci.ocs.node import get_node_objs, wait_for_nodes_status
 from ocs_ci.ocs.resources.pod import wait_for_pods_to_be_running
@@ -72,6 +73,7 @@ class TestRDRMonitoringDashboardUI:
 
         logger.info("Navigate to ACM console")
         config.switch_acm_ctx()
+        verify_mco_console_plugin()
         check_cluster_status_on_acm_console(acm_obj)
         verify_drpolicy_ui(acm_obj, scheduling_interval=scheduling_interval)
 
