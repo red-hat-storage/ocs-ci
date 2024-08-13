@@ -973,7 +973,7 @@ def login_ui(console_url=None, username=None, password=None):
 
     username_el = wait_for_element_to_be_clickable(login_loc["username"], 60)
     if username is None:
-        username = constants.KUBEADMIN
+        username = config.RUN["username"]
     username_el.send_keys(username)
 
     password_el = wait_for_element_to_be_clickable(login_loc["password"], 60)
@@ -982,11 +982,15 @@ def login_ui(console_url=None, username=None, password=None):
     confirm_login_el = wait_for_element_to_be_clickable(login_loc["click_login"], 60)
     confirm_login_el.click()
 
-    hci_platform_conf_confirmed = (
+    hci_platform_conf = (
         config.ENV_DATA["platform"].lower() in HCI_PROVIDER_CLIENT_PLATFORMS
     )
 
-    if hci_platform_conf_confirmed:
+    platform_rosa_hcp = (
+        config.ENV_DATA["platform"].lower() == constants.ROSA_HCP_PLATFORM
+    )
+
+    if hci_platform_conf:
         dashboard_url = console_url + "/dashboards"
         # proceed to local-cluster page if not already there. The rule is always to start from the local-cluster page
         # when the hci platform is confirmed and proceed to the client if needed from within the test
@@ -1009,7 +1013,11 @@ def login_ui(console_url=None, username=None, password=None):
     if default_console is True and username is constants.KUBEADMIN:
         wait_for_element_to_be_visible(page_nav_loc["page_navigator_sidebar"], 180)
 
-    if username is not constants.KUBEADMIN and not hci_platform_conf_confirmed:
+    if (
+        username is not constants.KUBEADMIN
+        and not hci_platform_conf
+        and not platform_rosa_hcp
+    ):
         # OCP 4.14 and OCP 4.15 observed default user role is an admin
         skip_tour_el = wait_for_element_to_be_clickable(login_loc["skip_tour"], 180)
         skip_tour_el.click()
