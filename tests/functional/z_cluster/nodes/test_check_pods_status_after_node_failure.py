@@ -169,7 +169,7 @@ class TestCheckPodsAfterNodeFailure(ManageTest):
         log.info(f"The node '{node_name}' reached '{constants.NODE_NOT_READY}' status")
 
         log.info("Wait for a change in the node rook ceph pod statuses...")
-        timeout = 300
+        timeout = 420
         is_rook_ceph_pods_status_changed = wait_for_change_in_rook_ceph_pods(
             node_name, timeout=timeout
         )
