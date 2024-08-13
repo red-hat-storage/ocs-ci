@@ -12,6 +12,7 @@ from ocs_ci.framework.testlib import (
     runs_on_provider,
     skipif_external_mode,
     yellow_squad,
+    hci_provider_required,
 )
 from ocs_ci.ocs.ui.validation_ui import ValidationUI
 from ocs_ci.deployment.hosted_cluster import (
@@ -57,6 +58,7 @@ class TestOnboardingTokenGeneration(ManageTest):
 
         ValidationUI().verify_storage_clients_page()
 
+    @hci_provider_required
     def test_onboarding_storageclient_from_hcp_cluster(self):
         """
         Test to verify that a new storageclient can be onboarded successfully from a hcp cluster
