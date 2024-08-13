@@ -29,6 +29,7 @@ from ocs_ci.ocs.utils import (
     get_primary_cluster_config,
     get_passive_acm_index,
     enable_mco_console_plugin,
+    set_recovery_as_primary,
 )
 from ocs_ci.utility import version, templating
 from ocs_ci.utility.retry import retry
@@ -1449,11 +1450,13 @@ def replace_cluster(workload, primary_cluster_name, secondary_cluster_name):
     # Verify recovery cluster is imported
     validate_cluster_import(cluster_name_recoevry)
 
+    # Set recovery cluster as primary context wise
+    set_recovery_as_primary()
+
     # Install MCO on active hub again
     from ocs_ci.deployment.deployment import MultiClusterDROperatorsDeploy
 
     dr_conf = dict()
-
     dep_mco = MultiClusterDROperatorsDeploy(dr_conf)
     dep_mco.deploy()
     # Enable MCO console plugin

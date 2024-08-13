@@ -1645,6 +1645,32 @@ def get_recovery_cluster_config():
             return cluster
 
 
+def set_recovery_as_primary():
+    """
+    This function will set recovery cluster as primary cluster
+    after it is imported.
+    """
+    # 1. Popout primary from clusters list
+    cluster = get_primary_cluster_config()
+    ocsci_config.clusters.remove(cluster)
+    log.info("Old primary cluster config removed from list")
+
+    # 2. decrement count from nclusters
+    ocsci_config.nclusters -= 1
+    log.info(f"Number of clusters present in env: {ocsci_config.nclusters}")
+
+    # 3  switch context to recovery
+    recovery_cluster_config = get_recovery_cluster_config()
+    recovery_cluster_name = recovery_cluster_config.ENV_DATA["cluster_name"]
+    log.info(f"recovery_cluster_name: {recovery_cluster_name}")
+    ocsci_config.switch_to_cluster_by_name(recovery_cluster_name)
+    recovery_cluster_config.MULTICLUSTER["recovery_cluster"] = False
+    recovery_cluster_config.MULTICLUSTER["primary_cluster"] = True
+
+    # switch cobntext to acm
+    ocsci_config.switch_acm_ctx()
+
+
 def thread_init_class(class_init_operations, shutdown):
     if len(class_init_operations) > 0:
         executor = ThreadPoolExecutor(max_workers=len(class_init_operations))
