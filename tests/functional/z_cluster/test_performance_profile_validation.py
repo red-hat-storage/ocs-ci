@@ -16,12 +16,13 @@ from ocs_ci.framework.testlib import (
 from ocs_ci.framework import config
 from ocs_ci.ocs.ocp import OCP
 from ocs_ci.ocs.resources.storage_cluster import verify_storage_cluster
+from ocs_ci.helpers.helpers import verify_performance_profile_change
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.resources.pod import (
     get_pods_having_label,
     Pod,
 )
-from ocs_ci.utility.utils import run_cmd
+from ocs_ci.utility.utils import run_cmd, TimeoutSampler
 from ocs_ci.ocs.resources.storage_cluster import StorageCluster
 
 
@@ -66,6 +67,7 @@ class TestProfileDefaultValuesCheck(ManageTest):
         try:
             exist_performance_profile = storage_cluster.data["spec"]["resourceProfile"]
         except KeyError:
+            # On some occasions, a cluster will be deployed without performance profile, In that case, set it to None.
             exist_performance_profile = None
             pass
         if exist_performance_profile == self.perf_profile:
@@ -177,6 +179,7 @@ class TestProfileDefaultValuesCheck(ManageTest):
         try:
             exist_performance_profile = storage_cluster.data["spec"]["resourceProfile"]
         except KeyError:
+            # On some occasions, a cluster will be deployed without performance profile, In that case, set it to None.
             exist_performance_profile = None
             pass
         if exist_performance_profile == self.perf_profile:
@@ -192,19 +195,17 @@ class TestProfileDefaultValuesCheck(ManageTest):
 
             verify_storage_cluster()
 
-            # Sleep for 120 seconds for the profile changes to reflect
-            time.sleep(120)
-            storage_cluster1 = StorageCluster(
-                resource_name=storage_cluster_name,
-                namespace=config.ENV_DATA["cluster_namespace"],
+            sample = TimeoutSampler(
+                timeout=120,
+                sleep=20,
+                func=verify_performance_profile_change,
+                perf_profile=self.perf_profile,
             )
+            if not sample.wait_for_func_status(True):
+                raise Exception(
+                    f"Performance profile is not updated successfully to {self.perf_profile}"
+                )
 
-            assert (
-                self.perf_profile == storage_cluster1.data["spec"]["resourceProfile"]
-            ), f"Performance profile is not updated successfully to {self.perf_profile}"
-            log.info(
-                f"Performance profile successfully got updated to {self.perf_profile} mode"
-            )
             log.info("Reverting profile changes")
             ptch = f'{{"spec": {{"resourceProfile":"{exist_performance_profile}"}}}}'
 
