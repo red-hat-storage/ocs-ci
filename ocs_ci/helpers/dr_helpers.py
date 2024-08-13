@@ -1175,7 +1175,8 @@ def get_nodes_from_active_zone(namespace):
 
 def create_klusterlet_config():
     """
-    Create klusterlet config only on new hub or present active hub
+    Create klusterletconfig after hub recovery to avoid eviction
+    of resources by adding "AppliedManifestWork" eviction grace period
 
     """
     old_ctx = config.cur_index
@@ -1208,6 +1209,9 @@ def remove_parameter_klusterlet_config():
 
 def add_label_to_appsub(workloads, label="test", value="test1"):
     """
+    Function to add new label with any value to the AppSub on the hub.
+    This is needed as WA for sub app pods to show up after failover in ACM 2.11 post hub recovery (bz: 2295782)
+
     Args:
         workloads (list): List of workloads created
         label (str): Name of label to be added

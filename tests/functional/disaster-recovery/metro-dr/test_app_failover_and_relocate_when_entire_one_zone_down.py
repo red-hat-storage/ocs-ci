@@ -155,7 +155,7 @@ class TestApplicationFailoverAndRelocateWhenZoneDown:
             ceph_node_ips,
         ) = get_nodes_from_active_zone(self.namespace)
 
-        # Shutdown one zones
+        # Shutdown one zone
         logger.info("Shutting down all the nodes from active hub zone")
         nodes_multicluster[self.managed_cluster_index].stop_nodes(
             self.managed_cluster_node_objs
