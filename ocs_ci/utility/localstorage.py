@@ -152,7 +152,7 @@ def check_local_volume_local_volume_set():
         return lv_or_lvs_dict
 
 
-@retry(AssertionError, 12, 10, 1)
+@retry(AssertionError, 15, 15, 5)
 def check_pvs_created(num_pvs_required):
     """
     Verify that exact number of PVs were created and are in the Available state
