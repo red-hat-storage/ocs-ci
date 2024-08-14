@@ -5,7 +5,10 @@ from time import sleep
 
 from ocs_ci.framework import config
 from ocs_ci.framework.testlib import skipif_ocs_version, tier1
-from ocs_ci.framework.pytest_customization.marks import turquoise_squad
+from ocs_ci.framework.pytest_customization.marks import (
+    turquoise_squad,
+    rdr_ui_failover_config_required,
+)
 from ocs_ci.helpers import dr_helpers
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.acm.acm import AcmAddClusters
@@ -28,6 +31,7 @@ logger = logging.getLogger(__name__)
 
 @tier1
 @turquoise_squad
+@rdr_ui_failover_config_required
 @skipif_ocs_version("<4.16")
 class TestRDRMonitoringDashboardUI:
     """
@@ -69,7 +73,6 @@ class TestRDRMonitoringDashboardUI:
         )
 
         acm_obj = AcmAddClusters()
-        config.RUN.get("rdr_failover_via_ui")
 
         logger.info("Navigate to ACM console")
         config.switch_acm_ctx()
