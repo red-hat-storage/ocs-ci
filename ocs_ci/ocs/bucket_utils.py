@@ -3034,7 +3034,7 @@ def get_obj_versions(mcg_obj, awscli_pod, bucket_name, obj_key):
     return versions_dicts
 
 
-def generate_empty_files(aws_pod, dir, amount, pattern="File"):
+def generate_empty_files(aws_pod, dir, amount, pattern="File", timeout=600):
     """
     Generate empty files with unique identifiers
 
@@ -3047,7 +3047,7 @@ def generate_empty_files(aws_pod, dir, amount, pattern="File"):
     """
     aws_pod.exec_sh_cmd_on_pod(
         command=f"for i in $(seq 1 {amount});do touch {dir}/{pattern}-$i;done",
-        timeout=2400,
+        timeout=timeout,
     )
     logger.info(f"Generated {amount} empty files successfully")
 

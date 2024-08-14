@@ -8196,7 +8196,9 @@ def reduce_expiration_interval(add_env_vars_to_noobaa_core_class):
 
 
 @pytest.fixture()
-def change_lifecycle_batch_size(add_env_vars_to_noobaa_core_class):
+def change_lifecycle_batch_size(
+    add_env_vars_to_noobaa_core_class, add_env_vars_to_noobaa_endpoint_class
+):
     """
     Change the batch size for the object lifecycle
     by modifying the environment variable LIFECYCLE_BATCH_SIZE
@@ -8210,6 +8212,10 @@ def change_lifecycle_batch_size(add_env_vars_to_noobaa_core_class):
 
         """
         add_env_vars_to_noobaa_core_class(
+            [(constants.LIFECYCLE_BATCH_SIZE_PARAM, new_lifecycle_batch_size)]
+        )
+
+        add_env_vars_to_noobaa_endpoint_class(
             [(constants.LIFECYCLE_BATCH_SIZE_PARAM, new_lifecycle_batch_size)]
         )
 
