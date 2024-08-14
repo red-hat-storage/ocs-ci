@@ -21,7 +21,7 @@ class TestVmOperations(E2ETest):
         This test performs the VM lifecycle operations and IO
 
         Steps:
-        1) Create a VM using a standalone PVC
+        1) Create a VM using a standalone PVC/DV/DVT
             a) Create a cdi source with a registry url pointing to the source image
             b) Create a PVC using this source image backed with an odf storageclass
             c) Create a secret using a statically manged public SSH key and add this secret name to the VM spec for ssh
