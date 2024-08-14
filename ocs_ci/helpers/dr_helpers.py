@@ -1127,11 +1127,12 @@ def get_nodes_from_active_zone(namespace):
         namespace (str): Namespace of the app workload
 
     Returns:
-        active_hub_index (int): Index of the active hub cluster
-        active_hub_cluster_node_objs (list): Node list of the active hub nodes
-        managed_cluster_index (int): Index of the active zone managed cluster
-        managed_cluster_node_objs (list): Node list of the active zone managed cluster
-        ceph_node_ips (list): Ceph node list which are running in active zone
+        tuple: contains index and the node_objs list of the cluster
+            active_hub_index (int): Index of the active hub cluster
+            active_hub_cluster_node_objs (list): Node list of the active hub nodes
+            managed_cluster_index (int): Index of the active zone managed cluster
+            managed_cluster_node_objs (list): Node list of the active zone managed cluster
+            ceph_node_ips (list): Ceph node list which are running in active zone
 
     """
 
