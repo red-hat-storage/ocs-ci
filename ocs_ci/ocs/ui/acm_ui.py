@@ -232,26 +232,25 @@ class AcmPageNavigator(BaseUI):
 
         # There is a modal dialog box which appears as soon as we login
         # we need to click on close on that dialog box
-        if self.check_element_presence(
-            (
-                self.acm_page_nav["modal_dialog_close_button"][1],
-                self.acm_page_nav["modal_dialog_close_button"][0],
-            ),
-            timeout=200,
+        if self.wait_until_expected_text_is_found(
+            self.acm_page_nav["modal_dialog_close_button"], "Close"
         ):
-            self.do_click(self.acm_page_nav["modal_dialog_close_button"], timeout=300)
+            self.do_click(self.acm_page_nav["modal_dialog_close_button"], timeout=60)
+        else:
+            log.error("Modal dialog box on ACM page not found")
+
         if not self.check_element_presence(
             (
-                self.acm_page_nav["all-clusters-view"][1],
-                self.acm_page_nav["all-clusters-view"][0],
+                self.acm_page_nav["all-clusters-view-on-acm"][1],
+                self.acm_page_nav["all-clusters-view-on-acm"][0],
             ),
-            timeout=300,
+            timeout=120,
         ):
             log.error("'All Clusters' is not found, can not switch to OCP console")
             self.take_screenshot()
             raise NoSuchElementException
         log.info("Click on 'All Clusters'")
-        self.do_click(self.acm_page_nav["all-clusters-view"])
+        self.do_click(self.acm_page_nav["all-clusters-view-on-acm"])
         log.info("Select 'local-cluster'' view")
         self.do_click(self.acm_page_nav["click-local-cluster"])
         log.info("Successfully navigated to OCP console from ACM console")
