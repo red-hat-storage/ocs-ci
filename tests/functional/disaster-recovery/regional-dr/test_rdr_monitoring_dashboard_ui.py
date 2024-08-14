@@ -41,7 +41,7 @@ class TestRDRMonitoringDashboardUI:
     @pytest.mark.polarion_id("XXXX")
     def test_rdr_monitoring_dashboard_ui(
         self,
-        setup_acm_ui,
+        setup_acm_for_dashboard_ui,
         dr_workload,
         nodes_multicluster,
     ):

@@ -4962,12 +4962,17 @@ def setup_acm_ui_fixture(request):
     return driver
 
 
-def setup_acm_for_dashboard_ui_fixture(request):
+@pytest.fixture(scope="function")
+def setup_acm_for_dashboard_ui(request):
     """
     Conftest fixture to login to ACM console via OCP console after enabling MCO console plugin if not already.
     This can be used specifically for cases where DR monitoring dashboard is needed.
 
     """
+    return setup_acm_for_dashboard_ui_fixture(request)
+
+
+def setup_acm_for_dashboard_ui_fixture(request):
     if not ocsci_config.RUN.get("dr_action_via_ui"):
         return
     restore_ctx_index = ocsci_config.cur_index
