@@ -2,7 +2,12 @@ import time
 import pytest
 import logging
 
-from ocs_ci.framework.testlib import bugzilla, tier2
+from ocs_ci.framework.testlib import (
+    bugzilla,
+    tier2,
+    skipif_ocp_version,
+    skipif_ocs_version,
+)
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.resources import pod
 from concurrent.futures import ThreadPoolExecutor
@@ -21,6 +26,8 @@ log = logging.getLogger(__name__)
 @pytest.mark.polarion_id("OCS-5772")
 @green_squad
 @skipif_external_mode
+@skipif_ocs_version("<4.15")
+@skipif_ocp_version("<4.15")
 class TestCephfsWithChunkIo:
     """
     This class takes care of create Cephfs PVC, create Fedora dc pod and run Chunk IO on fedora pod
