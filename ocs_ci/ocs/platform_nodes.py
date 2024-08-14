@@ -24,6 +24,7 @@ from ocs_ci.ocs.exceptions import (
     NotAllNodesCreated,
     RebootEventNotFoundException,
     ResourceWrongStatusException,
+    VolumePathNotFoundException,
 )
 from ocs_ci.framework import config, merge_dict
 from ocs_ci.utility import templating
@@ -526,22 +527,24 @@ class VMWareNodes(NodesBase):
         """
         return [self.vsphere.get_vm_by_ip(ip, dc) for ip in node_ips]
 
-    def get_volume_path(self, volume_handle):
+    def get_volume_path(self, volume_handle, node_name=None):
         """
         Fetches the volume path for the volumeHandle
 
         Args:
             volume_handle (str): volumeHandle which exists in PV
+            node_name (str): Node name where PV exists.
 
         Returns:
             str: volume path of PV
 
         """
-        return self.vsphere.get_volume_path(
-            volume_id=volume_handle,
-            datastore_name=self.datastore,
-            datacenter_name=self.datacenter,
-        )
+        if not node_name:
+            return self.vsphere.get_volume_path(
+                volume_id=volume_handle,
+                datastore_name=self.datastore,
+                datacenter_name=self.datacenter,
+            )
 
 
 class AWSNodes(NodesBase):
@@ -2518,8 +2521,41 @@ class VMWareLSONodes(VMWareNodes):
         """
         vm = self.get_vms([node])[0]
         self.vsphere.remove_disk(
-            vm=vm, identifier=volume, key="disk_name", datastore=delete_from_backend
+            vm=vm, identifier=volume, key="volume_path", datastore=delete_from_backend
         )
+
+    def get_volume_path(self, volume_handle, node_name=None):
+        """
+        Fetches the volume path for the volumeHandle
+
+        Args:
+            volume_handle (str): volumeHandle which exists in PV
+            node_name (str): Node name where PV exists
+
+        Returns:
+            str: volume path of PV
+
+        """
+        volume_path = None
+        vm = self.vsphere.get_vm_in_pool_by_name(
+            name=node_name,
+            dc=config.ENV_DATA["vsphere_datacenter"],
+            cluster=config.ENV_DATA["vsphere_cluster"],
+            pool=config.ENV_DATA["cluster_name"],
+        )
+        disks = self.vsphere.get_disks(vm)
+        for each_disk in disks:
+            disk_wwn = each_disk["wwn"].replace("-", "")
+            if disk_wwn.lower() in volume_handle:
+                volume_path = each_disk["fileName"]
+                logger.info(
+                    f"Volume path for {volume_handle} is `{volume_path}` on node {node_name}"
+                )
+                break
+        if volume_path:
+            return volume_path
+        else:
+            raise VolumePathNotFoundException
 
 
 class RHVNodes(NodesBase):
