@@ -1073,6 +1073,10 @@ acm_configuration_4_14 = {
 
 acm_configuration_4_16 = {
     "all-clusters-view": ("button[class='pf-v5-c-menu__item']", By.CSS_SELECTOR),
+    "all-clusters-view-on-acm": (
+        "//span[@class='pf-v5-c-menu-toggle__text'][1]",
+        By.XPATH,
+    ),
     "managed_app_count": (
         "div[class='pf-v5-l-gallery pf-m-gutter'] p[class='text-muted']",
         By.CSS_SELECTOR,
