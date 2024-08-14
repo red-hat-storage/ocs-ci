@@ -11,7 +11,6 @@ from selenium.common.exceptions import (
     NoSuchElementException,
 )
 
-from ocs_ci.helpers.dr_helpers_ui import verify_mco_console_plugin
 from ocs_ci.helpers.helpers import create_unique_resource_name
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.acm.acm_constants import (
@@ -25,6 +24,7 @@ from ocs_ci.ocs.ocp import OCP, get_ocp_url
 from ocs_ci.framework import config
 from ocs_ci.ocs.resources.pod import wait_for_pods_to_be_running
 from ocs_ci.ocs.ui.helpers_ui import format_locator
+from ocs_ci.ocs.ui.page_objects.page_navigator import PageNavigator
 from ocs_ci.ocs.utils import get_non_acm_cluster_config, get_primary_cluster_config
 from ocs_ci.utility.utils import (
     TimeoutSampler,
@@ -474,7 +474,8 @@ def login_to_acm_via_ocp():
     url = get_ocp_url()
     log.info(f"URL: {url}")
     driver = login_ui(url)
-    verify_mco_console_plugin()
+    ocp_page_nav = PageNavigator()
+    ocp_page_nav.navigate_mco_operator_and_enable_console_plugin()
     page_nav = AcmPageNavigator()
     page_nav.navigate_from_ocp_to_acm_cluster_page()
     page_title = ACM_PAGE_TITLE_2_7_ABOVE

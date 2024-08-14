@@ -265,42 +265,6 @@ class ValidationUI(PageNavigator):
             else:
                 logger.info("Plugin availability check skipped")
 
-    def mco_console_plugin_check(self):
-        """
-        Function to verify if MCO console plugin is enabled on UI or not,
-        if not, this function will enable it so that we can navigate to RHACM console
-
-        """
-
-        self.navigate_to_mco_operator_page()
-        self.page_has_loaded(retries=25, sleep_time=1)
-        console_plugin_status = self.get_element_text(
-            self.validation_loc["console_plugin_option"]
-        )
-        if console_plugin_status == "Disabled":
-            logger.warning(
-                "MCO Storage plugin is disabled, enable it to navigate to ACM console"
-            )
-            self.do_click(self.validation_loc["console_plugin_option"])
-            self.do_click(self.dep_loc["enable_console_plugin"])
-            self.do_click(self.validation_loc["save_console_plugin_settings"])
-            logger.info("Waiting for warning alert to refresh the web console")
-            self.refresh_web_console()
-            refresh_web_console_popup = self.wait_until_expected_text_is_found(
-                locator=self.validation_loc["warning-alert"],
-                expected_text="Refresh web console",
-            )
-            if refresh_web_console_popup:
-                logger.info(
-                    "Refresh web console option is now available, click on it to see the changes"
-                )
-                self.do_click(
-                    self.validation_loc["refresh-web-console"],
-                    enable_screenshot=True,
-                )
-        else:
-            logger.info("MCO plugin is enabled on ACM UI, check skipped")
-
     def odf_overview_ui(
         self,
     ):

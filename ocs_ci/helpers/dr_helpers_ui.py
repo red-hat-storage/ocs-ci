@@ -7,7 +7,6 @@ import logging
 from selenium.common.exceptions import NoSuchElementException
 from ocs_ci.framework import config
 from ocs_ci.ocs import constants
-from ocs_ci.ocs.ui.validation_ui import ValidationUI
 from ocs_ci.ocs.ui.views import locators
 from ocs_ci.ocs.ui.helpers_ui import format_locator
 from ocs_ci.utility.utils import get_ocp_version
@@ -402,15 +401,6 @@ def verify_failover_relocate_status_ui(
         log.info("Close button found")
         acm_obj.do_click_by_xpath("//*[text()='Close']")
         log.info("Data policy modal page closed")
-
-
-def verify_mco_console_plugin():
-    """
-    Function to verify MCO console plugin is enabled or not, enables it if not already
-
-    """
-    val_ui_obj = ValidationUI()
-    val_ui_obj.mco_console_plugin_check()
 
 
 def check_cluster_operator_status(acm_obj, timeout=30):
