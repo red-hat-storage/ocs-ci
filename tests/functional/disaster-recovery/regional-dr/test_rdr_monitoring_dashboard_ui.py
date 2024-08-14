@@ -44,7 +44,6 @@ class TestRDRMonitoringDashboardUI:
         self,
         setup_acm_ui,
         dr_workload,
-        workload_type,
         nodes_multicluster,
     ):
         """
@@ -69,7 +68,7 @@ class TestRDRMonitoringDashboardUI:
             rdr_workload.workload_namespace
         )
         secondary_cluster_name = dr_helpers.get_current_secondary_cluster_name(
-            rdr_workload.workload_namespace, workload_type
+            rdr_workload.workload_namespace, rdr_workload[0].workload_type
         )
 
         acm_obj = AcmAddClusters()
@@ -137,7 +136,7 @@ class TestRDRMonitoringDashboardUI:
         for workload in rdr_workload:
             workload_number = 1
             while workload_number <= len(rdr_workload):
-                if workload_type == constants.SUBSCRIPTION:
+                if workload.workload_type == constants.SUBSCRIPTION:
                     failover_relocate_ui(
                         acm_obj,
                         scheduling_interval=scheduling_interval,
