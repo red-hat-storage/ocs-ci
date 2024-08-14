@@ -195,16 +195,6 @@ class AcmPageNavigator(BaseUI):
         console to ACM multicluster page
 
         """
-        # There is a modal dialog box which appears as soon as we login
-        # we need to click on close on that dialog box
-        if self.check_element_presence(
-            (
-                self.acm_page_nav["modal_dialog_close_button"][1],
-                self.acm_page_nav["modal_dialog_close_button"][0],
-            ),
-            timeout=200,
-        ):
-            self.do_click(self.acm_page_nav["modal_dialog_close_button"], timeout=300)
 
         if not self.check_element_presence(
             (
@@ -216,7 +206,20 @@ class AcmPageNavigator(BaseUI):
             log.error("local-cluster is not found, can not switch to ACM console")
             self.take_screenshot()
             raise NoSuchElementException
+        log.info("Click on local-cluster")
         self.do_click(self.acm_page_nav["click-local-cluster"])
+        log.info("Select All Clusters view")
+        self.do_click(self.acm_page_nav["all-clusters-view"])
+        # There is a modal dialog box which appears as soon as we login
+        # we need to click on close on that dialog box
+        if self.check_element_presence(
+            (
+                self.acm_page_nav["modal_dialog_close_button"][1],
+                self.acm_page_nav["modal_dialog_close_button"][0],
+            ),
+            timeout=200,
+        ):
+            self.do_click(self.acm_page_nav["modal_dialog_close_button"], timeout=300)
         log.info("Successfully navigated to ACM console")
         self.take_screenshot()
 

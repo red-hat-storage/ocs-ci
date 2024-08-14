@@ -10,6 +10,8 @@ from selenium.webdriver.common.by import By
 from selenium.common.exceptions import (
     NoSuchElementException,
 )
+
+from ocs_ci.helpers.dr_helpers_ui import verify_mco_console_plugin
 from ocs_ci.helpers.helpers import create_unique_resource_name
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.acm.acm_constants import (
@@ -454,6 +456,28 @@ def login_to_acm():
         page_title = ACM_PAGE_TITLE_2_7_ABOVE
     else:
         page_title = ACM_PAGE_TITLE
+    validate_page_title(title=page_title)
+
+    return driver
+
+
+def login_to_acm_via_ocp():
+    """
+    Login to ACM console via OCP console after enabling MCO console plugin needed for
+    DR monitoring dashboard related tests and validate by its title
+
+    Returns:
+        driver (Selenium WebDriver)
+
+    """
+
+    url = get_ocp_url()
+    log.info(f"URL: {url}")
+    driver = login_ui(url)
+    page_nav = AcmPageNavigator()
+    verify_mco_console_plugin()
+    page_nav.navigate_from_ocp_to_acm_cluster_page()
+    page_title = ACM_PAGE_TITLE_2_7_ABOVE
     validate_page_title(title=page_title)
 
     return driver
