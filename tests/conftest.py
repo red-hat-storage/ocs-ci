@@ -11,16 +11,19 @@ import json
 from concurrent.futures.thread import ThreadPoolExecutor
 from datetime import datetime
 from math import floor
-from shutil import copyfile
+from shutil import copyfile, rmtree
 from functools import partial
 
 import boto3
+import yaml
 from botocore.exceptions import ClientError
 import pytest
 from collections import namedtuple
 
 from ocs_ci.deployment import factory as dep_factory
-from ocs_ci.framework import config as ocsci_config
+from ocs_ci.deployment.helpers.hypershift_base import HyperShiftBase
+from ocs_ci.deployment.hosted_cluster import HostedClients
+from ocs_ci.framework import config as ocsci_config, Config
 import ocs_ci.framework.pytest_customization.marks
 from ocs_ci.framework.pytest_customization.marks import (
     deployment,
@@ -39,6 +42,7 @@ from ocs_ci.ocs.bucket_utils import (
     craft_s3_command,
     put_bucket_policy,
 )
+from ocs_ci.ocs.constants import FUSION_CONF_DIR
 from ocs_ci.ocs.dr.dr_workload import BusyBox, BusyBox_AppSet, CnvWorkload
 from ocs_ci.ocs.exceptions import (
     CommandFailed,
@@ -120,6 +124,7 @@ from ocs_ci.utility.environment_check import (
     get_status_before_execution,
     get_status_after_execution,
 )
+from ocs_ci.utility.json import SetToListJSONEncoder
 from ocs_ci.utility.resource_check import (
     create_resource_dct,
     get_environment_status_after_execution,
@@ -147,6 +152,7 @@ from ocs_ci.utility.utils import (
     skipif_ui_not_support,
     run_cmd,
     ceph_health_check_multi_storagecluster_external,
+    clone_repo,
 )
 from ocs_ci.helpers import helpers, dr_helpers
 from ocs_ci.helpers.helpers import (
@@ -7551,7 +7557,6 @@ def override_default_backingstore_fixture(
 
 @pytest.fixture(scope="session")
 def scale_noobaa_resources_session(request):
-
     """
     Session scoped fixture to scale noobaa resources
 
@@ -7569,7 +7574,6 @@ def scale_noobaa_resources_fixture(request):
 
 
 def scale_noobaa_resources(request):
-
     """
     Scale the noobaa pod resources and scale endpoint count
 
@@ -7931,3 +7935,176 @@ def scale_noobaa_db_pod_pv_size(request):
 
     request.addfinalizer(finalizer)
     return factory
+
+
+@pytest.fixture()
+def create_hypershift_clusters():
+    """
+    Create hosted hyperhift clusters.
+
+    Here we create cluster deployment configuration that was set in the Test. With this configuration we
+    create a hosted cluster. After successful creation of the hosted cluster, we update the Multicluster Config,
+    adding the new cluster configuration to the list of the clusters. Now we can operate with new and old clusters
+    switching the context of Multicluster Config
+
+    Following arguments are necessary to build the hosted cluster configuration:
+    ENV_DATA:
+        clusters:
+            <cluster_name>:
+                hosted_cluster_path: <path>
+                ocp_version: <version>
+                cpu_cores_per_hosted_cluster: <cores>
+                memory_per_hosted_cluster: <memory>
+                hosted_odf_registry: <registry>
+                hosted_odf_version: <version>
+                setup_storage_client: <bool>
+                nodepool_replicas: <replicas>
+
+    """
+
+    def factory(
+        cluster_names, ocp_version, odf_version, setup_storage_client, nodepool_replicas
+    ):
+        """
+        Factory function implementing the fixture
+
+        Args:
+            cluster_names (list): List of cluster names
+            ocp_version (str): OCP version
+            odf_version (str): ODF version
+            setup_storage_client (bool): Setup storage client
+            nodepool_replicas (int): Nodepool replicas; supported values are 2,3
+
+        """
+        hosted_cluster_conf_on_provider = {"ENV_DATA": {"clusters": {}}}
+
+        for cluster_name in cluster_names:
+            hosted_cluster_conf_on_provider["ENV_DATA"]["clusters"][cluster_name] = {
+                "hosted_cluster_path": f"~/clusters/{cluster_name}/openshift-cluster-dir",
+                "ocp_version": ocp_version,
+                "cpu_cores_per_hosted_cluster": 8,
+                "memory_per_hosted_cluster": "12Gi",
+                "hosted_odf_registry": "quay.io/rhceph-dev/ocs-registry",
+                "hosted_odf_version": odf_version,
+                "setup_storage_client": setup_storage_client,
+                "nodepool_replicas": nodepool_replicas,
+            }
+
+        log.info(
+            "Creating a hosted clusters with following deployment config: \n%s",
+            json.dumps(
+                hosted_cluster_conf_on_provider, indent=4, cls=SetToListJSONEncoder
+            ),
+        )
+        ocsci_config.update(hosted_cluster_conf_on_provider)
+
+        # During the initial deployment phase, we always deploy Hosting and specific Hosted clusters.
+        # To distinguish between clusters intended for deployment on deployment CI stage and those intended for
+        # deployment on the Test stage, we pass the names of the clusters to be deployed to the
+        # HostedClients().do_deploy() method.
+        hosted_clients_obj = HostedClients()
+        deployed_hosted_cluster_objects = hosted_clients_obj.do_deploy(cluster_names)
+        deployed_clusters = [obj.name for obj in deployed_hosted_cluster_objects]
+
+        for cluster_name in deployed_clusters:
+
+            client_conf_default_dir = os.path.join(
+                FUSION_CONF_DIR, f"hypershift_client_bm_{nodepool_replicas}w.yaml"
+            )
+            if not os.path.exists(client_conf_default_dir):
+                raise FileNotFoundError(f"File {client_conf_default_dir} not found")
+            with open(client_conf_default_dir) as file_stream:
+                def_client_config_dict = {
+                    k: (v if v is not None else {})
+                    for (k, v) in yaml.safe_load(file_stream).items()
+                }
+                def_client_config_dict.get("ENV_DATA").update(
+                    {"cluster_name": cluster_name}
+                )
+                kubeconfig_path = hosted_clients_obj.get_kubeconfig_path(cluster_name)
+                log.info(f"Kubeconfig path: {kubeconfig_path}")
+                def_client_config_dict.setdefault("RUN", {}).update(
+                    {"kubeconfig": kubeconfig_path}
+                )
+                cluster_config = Config()
+                cluster_config.update(def_client_config_dict)
+
+                log.debug(
+                    "Inserting new hosted cluster config to Multicluster Config "
+                    f"\n{json.dumps(vars(cluster_config), indent=4, cls=SetToListJSONEncoder)}"
+                )
+                ocsci_config.insert_cluster_config(
+                    ocsci_config.nclusters, cluster_config
+                )
+
+    return factory
+
+
+@pytest.fixture()
+def destroy_hosted_cluster():
+    def factory(cluster_name):
+        ocsci_config.switch_to_provider()
+        log.info("Destroying hosted cluster. OCS related leftovers are expected")
+        hypershift_base_obj = HyperShiftBase()
+
+        if not hypershift_base_obj.hcp_binary_exists():
+            hypershift_base_obj.update_hcp_binary()
+
+        destroy_res = HyperShiftBase().destroy_kubevirt_cluster(cluster_name)
+
+        if destroy_res:
+            log.info("Removing cluster from Multicluster Config")
+            ocsci_config.remove_cluster_by_name(cluster_name)
+
+        return destroy_res
+
+    return factory
+
+
+@pytest.fixture(scope="session")
+def clone_upstream_ceph(request, tmp_path_factory):
+    """
+    fixture to make temporary directory for the 'upstream ceph' and clone repo to it
+    """
+    repo_dir = tmp_path_factory.mktemp("upstream_ceph_dir")
+
+    def finalizer():
+        rmtree(repo_dir, ignore_errors=True)
+
+    request.addfinalizer(finalizer)
+    clone_repo(
+        constants.CEPH_UPSTREAM_REPO, str(repo_dir), branch="main", tmp_repo=True
+    )
+    return repo_dir
+
+
+@pytest.fixture(scope="session")
+def clone_ocs_operator(request, tmp_path_factory):
+    """
+    fixture to make temporary directory for the 'ocs operator' and clone repo to it
+    """
+    repo_dir = tmp_path_factory.mktemp("ocs_operator_dir")
+
+    def finalizer():
+        rmtree(repo_dir, ignore_errors=True)
+
+    request.addfinalizer(finalizer)
+    clone_repo(constants.OCS_OPERATOR_REPO, str(repo_dir), branch="main", tmp_repo=True)
+    return repo_dir
+
+
+@pytest.fixture(scope="session")
+def clone_odf_monitoring_compare_tool(request, tmp_path_factory):
+    """
+    fixture to make temporary directory for the 'ODF monitor compare tool' and clone repo to it
+    """
+    repo_dir = tmp_path_factory.mktemp("monitor_tool_dir")
+
+    def finalizer():
+        rmtree(repo_dir, ignore_errors=True)
+
+    request.addfinalizer(finalizer)
+    clone_repo(
+        constants.ODF_MONITORING_TOOL_REPO, str(repo_dir), branch="main", tmp_repo=True
+    )
+    return repo_dir

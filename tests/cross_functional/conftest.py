@@ -989,7 +989,6 @@ def setup_rgw_kafka_notification(request, rgw_bucket_factory, rgw_obj):
     ) = amq.create_kafkadrop()
 
     def factory():
-
         """
         Factory function implementing the fixture
 
@@ -1106,9 +1105,9 @@ def validate_mcg_bg_features(
 
         event = Event()
         executor = ThreadPoolExecutor(
-            max_workers=5 - len(skip_any_features)
-            if skip_any_features is not None
-            else 5
+            max_workers=(
+                5 - len(skip_any_features) if skip_any_features is not None else 5
+            )
         )
         skip_any_features = list() if skip_any_features is None else skip_any_features
 

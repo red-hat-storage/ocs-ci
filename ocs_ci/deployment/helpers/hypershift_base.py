@@ -1,6 +1,9 @@
 import logging
 import os
+import random
+import re
 import shutil
+import string
 import tempfile
 import time
 from datetime import datetime
@@ -14,7 +17,7 @@ from ocs_ci.ocs.ocp import OCP
 from ocs_ci.ocs.resources.pod import wait_for_pods_to_be_in_statuses_concurrently
 from ocs_ci.ocs.version import get_ocp_version
 from ocs_ci.utility.retry import retry
-from ocs_ci.utility.utils import exec_cmd, TimeoutSampler
+from ocs_ci.utility.utils import exec_cmd, TimeoutSampler, get_latest_release_version
 
 """
 This module contains the base class for HyperShift hosted cluster management.
@@ -60,6 +63,35 @@ def kubeconfig_exists_decorator(func):
         return func(self, *args, **kwargs)
 
     return wrapper
+
+
+def get_random_hosted_cluster_name():
+    """
+    Get a random cluster name
+
+    Returns:
+        str: random cluster name
+    """
+    # getting the cluster name from the env data, for instance "ibm_cloud_baremetal3; mandatory conf field"
+    bm_name = config.ENV_DATA.get("baremetal", {}).get("env_name")
+    ocp_version = get_latest_release_version()
+    hcp_version = "".join([c for c in ocp_version if c.isdigit()][:3])
+    match = re.search(r"\d+$", bm_name)
+    if match:
+        random_letters = "".join(
+            random.choice(string.ascii_lowercase) for _ in range(3)
+        )
+        cluster_name = (
+            "hcp"
+            + hcp_version
+            + "-bm"
+            + bm_name[match.start() :]
+            + "-"
+            + random_letters
+        )
+    else:
+        raise ValueError("Cluster name not found in the env data")
+    return cluster_name
 
 
 def get_binary_hcp_version():
@@ -582,7 +614,7 @@ class HyperShiftBase:
         Args:
             name (str): Name of the cluster
         """
-        destroy_timeout_min = 10
+        destroy_timeout_min = 15
         logger.info(
             f"Destroying HyperShift hosted cluster {name}. Timeout: {destroy_timeout_min} min"
         )
