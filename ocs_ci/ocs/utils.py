@@ -1548,7 +1548,7 @@ def is_acm_cluster(cluster):
     Checks given cluster is acm cluster
 
     Args:
-        cluster(Object): cluster Config() object
+        cluster (Object): cluster Config() object
 
     Returns:
         bool: return True if acm cluster otherwise False
@@ -1562,7 +1562,7 @@ def is_recovery_cluster(cluster):
     Checks given cluster is recovery cluster
 
     Args:
-        cluster(Object): cluster Config() object
+        cluster (Object): cluster Config() object
 
     Returns:
         bool: return True if recovery cluster otherwise False
