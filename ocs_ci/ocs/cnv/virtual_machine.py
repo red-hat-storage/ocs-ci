@@ -4,12 +4,26 @@ Virtual machine class
 import yaml
 import logging
 
+from ocs_ci.helpers.cnv_helpers import (
+    create_pvc_using_data_source,
+    create_volume_import_source,
+    create_vm_secret,
+    create_dv,
+)
+
+from ocs_ci.helpers.helpers import (
+    create_unique_resource_name,
+    create_project,
+    wait_for_resource_state,
+    create_resource,
+)
 from ocs_ci.ocs.ocp import OCP
 from ocs_ci.ocs.cnv.virtctl import Virtctl
 from ocs_ci.ocs.cnv.virtual_machine_instance import VirtualMachineInstance
 from ocs_ci.ocs import constants
+from ocs_ci.utility import templating
 from ocs_ci.utility.utils import TimeoutSampler
-from ocs_ci.ocs.exceptions import UsernameNotFoundException
+from ocs_ci.ocs.exceptions import UsernameNotFoundException, CommandFailed
 from ocs_ci.helpers import cnv_helpers
 
 
@@ -19,7 +33,7 @@ logger = logging.getLogger(__name__)
 class VirtualMachine(Virtctl):
     """
     Virtual Machine class which provides VM information and handles various VM related operations
-    like start / stop / status / restart/ etc
+    like create / start / stop / status / restart/ etc
     """
 
     def __init__(
@@ -35,23 +49,155 @@ class VirtualMachine(Virtctl):
             namespace (str): Namespace for the VirtualMachine.
 
         """
-        super().__init__(namespace=namespace)
         self._vm_name = vm_name
+        self.namespace = (
+            namespace if namespace else create_unique_resource_name("vm", "namespace")
+        )
+        super().__init__(namespace=self.namespace)
+        self.ns_obj = None
+        self.pvc_obj = None
+        self.dv_obj = None
+        self.secret_obj = None
+        self.volumeimportsource_obj = None
+        self.volume_interface = ""
         self.vm_ocp_obj = OCP(
             kind=constants.VIRTUAL_MACHINE,
-            namespace=namespace,
+            namespace=self.namespace,
         )
         self.vmi_ocp_obj = OCP(
             kind=constants.VIRTUAL_MACHINE_INSTANCE,
-            namespace=namespace,
+            namespace=self.namespace,
         )
         self.vmi_obj = VirtualMachineInstance(
-            vmi_name=self._vm_name, namespace=namespace
+            vmi_name=self._vm_name, namespace=self.namespace
         )
 
     @property
     def name(self):
         return self._vm_name
+
+    def create_vm_workload(
+        self,
+        volume_interface=constants.VM_VOLUME_PVC,
+        sc_name=constants.DEFAULT_CNV_CEPH_RBD_SC,
+        access_mode=constants.ACCESS_MODE_RWX,
+        pvc_size="30Gi",
+        source_url=constants.CNV_CENTOS_SOURCE,
+        ssh=True,
+        verify=True,
+        vm_dict_path=None,
+    ):
+
+        """
+        Create a Virtual Machine (VM) in the specified namespace using a standalone Persistent Volume Claim (PVC)
+
+        Args:
+            volume_interface (str): The type of volume interface to use. Default is `constants.VM_VOLUME_PVC`.
+            ssh (bool): If set to True, it adds a statically manged public SSH key during the VM creation
+            verify (bool): Set to True for to verify vm is running and ssh connectivity, False otherwise
+            vm_dict_path (str): Path to the VM YAML file
+            access_mode (str): The access mode for the volume. Default is `constants.ACCESS_MODE_RWX`
+            sc_name (str): The name of the storage class to use. Default is `constants.DEFAULT_CNV_CEPH_RBD_SC`.
+            pvc_size (str): The size of the PVC. Default is "30Gi".
+            source_url (str): The URL of the vm registry image. Default is `constants.CNV_CENTOS_SOURCE`.
+
+        Returns:
+            vm_obj: The VirtualMachine object
+
+        Raises:
+            CommandFailed: If an error occurs during the creation of the VM
+
+        """
+        self.volume_interface = volume_interface
+        # Create namespace if it doesn't exist
+        try:
+            self.ns_obj = create_project(project_name=self.namespace)
+        except CommandFailed as ex:
+            if "(AlreadyExists)" in str(ex):
+                logger.warning(f"The namespace: {self.namespace} already exists!")
+        vm_dict_path = (
+            vm_dict_path if vm_dict_path else constants.CNV_VM_STANDALONE_PVC_VM_YAML
+        )
+        vm_data = templating.load_yaml(vm_dict_path)
+        vm_data["metadata"]["name"] = self._vm_name
+        vm_data["metadata"]["namespace"] = self.namespace
+        if ssh:
+            self.secret_obj = create_vm_secret(namespace=self.namespace)
+            ssh_secret_dict = [
+                {
+                    "sshPublicKey": {
+                        "propagationMethod": {"noCloud": {}},
+                        "source": {"secret": {"secretName": f"{self.secret_obj.name}"}},
+                    }
+                }
+            ]
+            vm_data["spec"]["template"]["spec"]["accessCredentials"] = ssh_secret_dict
+
+        if volume_interface == constants.VM_VOLUME_PVC:
+            self.volumeimportsource_obj = create_volume_import_source(url=source_url)
+            self.pvc_obj = create_pvc_using_data_source(
+                source_name=self.volumeimportsource_obj.name,
+                pvc_size=pvc_size,
+                sc_name=sc_name,
+                access_mode=access_mode,
+                namespace=self.namespace,
+            )
+            vm_data["spec"]["template"]["spec"]["volumes"][0]["persistentVolumeClaim"][
+                "claimName"
+            ] = self.pvc_obj.name
+            wait_for_resource_state(
+                resource=self.pvc_obj, state=constants.STATUS_BOUND, timeout=300
+            )
+
+        if volume_interface == constants.VM_VOLUME_DV:
+            self.dv_obj = create_dv(
+                pvc_size=pvc_size,
+                sc_name=sc_name,
+                access_mode=access_mode,
+                namespace=self.namespace,
+                source_url=source_url,
+            )
+            vm_data["spec"]["template"]["spec"]["volumes"][0]["persistentVolumeClaim"][
+                "claimName"
+            ] = self.dv_obj.name
+
+        if volume_interface == constants.VM_VOLUME_DVT:
+            # Define the dataVolumeTemplates content with parameters
+            dvt_name = create_unique_resource_name("test", "dvt")
+            vm_data["spec"]["dataVolumeTemplates"] = []
+            metadata = {
+                "name": dvt_name,
+                "annotations": {"cdi.kubevirt.io/storage.checkStaticVolume": "true"},
+            }
+            storage_spec = {
+                "storage": {
+                    "accessModes": [access_mode],
+                    "storageClassName": sc_name,
+                    "resources": {"requests": {"storage": pvc_size}},
+                },
+                "source": {"registry": {"url": source_url}},
+            }
+
+            vm_data["spec"]["dataVolumeTemplates"].append(
+                {"metadata": metadata, "spec": storage_spec}
+            )
+            vm_data["spec"]["template"]["spec"]["volumes"][0]["persistentVolumeClaim"][
+                "claimName"
+            ] = dvt_name
+
+        vm_ocs_obj = create_resource(**vm_data)
+        logger.info(f"Successfully created VM: {vm_ocs_obj.name}")
+
+        if verify:
+            self.verify_vm(verify_ssh=ssh)
+
+    def verify_vm(self, verify_ssh=False):
+        """
+        Verifies vm status and ssh connectivity if ssh is configured
+        """
+        self.wait_for_vm_status(status=constants.VM_RUNNING)
+        if verify_ssh:
+            self.wait_for_ssh_connectivity(timeout=1200)
 
     def get(self, out_yaml_format=True):
         """
@@ -162,7 +308,6 @@ class VirtualMachine(Virtctl):
         Wait for the SSH connectivity to establish to the virtual machine
 
         Args:
-            vm_obj (vm object): The virtual machine object.
             username (str): The username to use for SSH. If None, it will use the OS username from vm_obj if exists
             timeout (int): The maximum time to wait for SSH connectivity in seconds
 
@@ -412,5 +557,14 @@ class VirtualMachine(Virtctl):
         """
         Delete the VirtualMachine
         """
+        if self.secret_obj:
+            self.secret_obj.delete()
         self.vm_ocp_obj.delete(resource_name=self._vm_name)
         self.vm_ocp_obj.wait_for_delete(resource_name=self._vm_name, timeout=180)
+        if self.volume_interface == constants.VM_VOLUME_PVC:
+            self.pvc_obj.delete()
+            self.volumeimportsource_obj.delete()
+        if self.volume_interface == constants.VM_VOLUME_DV:
+            self.dv_obj.delete()
+        if self.ns_obj:
+            self.ns_obj.delete_project(project_name=self.namespace)
