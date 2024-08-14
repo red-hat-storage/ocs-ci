@@ -55,20 +55,22 @@ class TestRDRMonitoringDashboardUI:
         rdr_workload = dr_workload(num_of_subscription=1, num_of_appset=1)
         rdr_workload_count = len(rdr_workload)
 
-        dr_helpers.set_current_primary_cluster_context(rdr_workload.workload_namespace)
+        dr_helpers.set_current_primary_cluster_context(
+            rdr_workload[0].workload_namespace
+        )
 
         scheduling_interval = dr_helpers.get_scheduling_interval(
-            rdr_workload.workload_namespace
+            rdr_workload[0].workload_namespace
         )
         wait_time = 2 * scheduling_interval  # Time in minutes
         logger.info(f"Waiting for {wait_time} minutes to run IOs")
         sleep(wait_time * 60)
 
         primary_cluster_name = dr_helpers.get_current_primary_cluster_name(
-            rdr_workload.workload_namespace
+            rdr_workload[0].workload_namespace
         )
         secondary_cluster_name = dr_helpers.get_current_secondary_cluster_name(
-            rdr_workload.workload_namespace, rdr_workload[0].workload_type
+            rdr_workload[0].workload_namespace, rdr_workload[0].workload_type
         )
 
         acm_obj = AcmAddClusters()
@@ -157,11 +159,12 @@ class TestRDRMonitoringDashboardUI:
 
         # Verify resources creation on secondary cluster (failoverCluster)
         config.switch_to_cluster_by_name(secondary_cluster_name)
-        dr_helpers.wait_for_all_resources_creation(
-            rdr_workload.workload_pvc_count,
-            rdr_workload.workload_pod_count,
-            rdr_workload.workload_namespace,
-        )
+        for workload in rdr_workload:
+            dr_helpers.wait_for_all_resources_creation(
+                workload.workload_pvc_count,
+                workload.workload_pod_count,
+                workload.workload_namespace,
+            )
 
         # Verify resources deletion from primary cluster
         config.switch_to_cluster_by_name(primary_cluster_name)
@@ -180,7 +183,8 @@ class TestRDRMonitoringDashboardUI:
         ), "Not all the pods reached running state"
         logger.info("Checking for Ceph Health OK")
         ceph_health_check()
-        dr_helpers.wait_for_all_resources_deletion(rdr_workload.workload_namespace)
+        for workload in rdr_workload:
+            dr_helpers.wait_for_all_resources_deletion(workload.workload_namespace)
 
         dr_helpers.wait_for_mirroring_status_ok(
             replaying_images=rdr_workload.workload_pvc_count
