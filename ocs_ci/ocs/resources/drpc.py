@@ -19,7 +19,7 @@ class DRPC(OCP):
 
     _has_phase = True
 
-    def __init__(self, namespace, resource_name="", *args, **kwargs):
+    def __init__(self, namespace, resource_name="", switch_ctx=None, *args, **kwargs):
         """
         Constructor method for DRPC class
 
@@ -27,10 +27,13 @@ class DRPC(OCP):
             resource_name (str): Name of DRPC
 
         """
+        config.switch_ctx(switch_ctx) if switch_ctx else config.switch_acm_ctx()
 
         super(DRPC, self).__init__(
             namespace=namespace,
-            resource_name=resource_name if resource_name else get_drpc_name(namespace),
+            resource_name=resource_name
+            if resource_name
+            else get_drpc_name(namespace, switch_ctx=switch_ctx),
             kind=constants.DRPC,
             *args,
             **kwargs,
@@ -64,17 +67,18 @@ class DRPC(OCP):
         ), "PeerReady status is not true, failover or relocate action can not be performed"
 
 
-def get_drpc_name(namespace):
+def get_drpc_name(namespace, switch_ctx=None):
     """
     Get the DRPC resource name in the given namespace
 
     Args:
         namespace (str): Name of the namespace
+        switch_ctx (int): The cluster index by the cluster name
 
     Returns:
         str: DRPC resource name
 
     """
-    config.switch_acm_ctx()
+    config.switch_ctx(switch_ctx) if switch_ctx else config.switch_acm_ctx()
     drpc_obj = OCP(kind=constants.DRPC, namespace=namespace).get()["items"][0]
     return drpc_obj["metadata"]["name"]

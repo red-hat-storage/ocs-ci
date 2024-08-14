@@ -16,7 +16,7 @@ from ocs_ci.ocs.resources.drpc import DRPC
 from ocs_ci.ocs.resources.pod import get_all_pods
 from ocs_ci.ocs.resources.pv import get_all_pvs
 from ocs_ci.ocs.resources.pvc import get_all_pvc_objs
-from ocs_ci.ocs.node import gracefully_reboot_nodes
+from ocs_ci.ocs.node import gracefully_reboot_nodes, get_node_objs
 from ocs_ci.ocs.utils import (
     get_non_acm_cluster_config,
     get_active_acm_index,
@@ -160,10 +160,12 @@ def failover(
     if workload_type == constants.APPLICATION_SET:
         namespace = constants.GITOPS_CLUSTER_NAMESPACE
         drpc_obj = DRPC(
-            namespace=namespace, resource_name=f"{workload_placement_name}-drpc"
+            namespace=namespace,
+            resource_name=f"{workload_placement_name}-drpc",
+            switch_ctx=switch_ctx,
         )
     else:
-        drpc_obj = DRPC(namespace=namespace)
+        drpc_obj = DRPC(namespace=namespace, switch_ctx=switch_ctx)
 
     drpc_obj.wait_for_peer_ready_status()
     logger.info(f"Initiating Failover action with failoverCluster:{failover_cluster}")
@@ -202,10 +204,12 @@ def relocate(
     if workload_type == constants.APPLICATION_SET:
         namespace = constants.GITOPS_CLUSTER_NAMESPACE
         drpc_obj = DRPC(
-            namespace=namespace, resource_name=f"{workload_placement_name}-drpc"
+            namespace=namespace,
+            resource_name=f"{workload_placement_name}-drpc",
+            switch_ctx=switch_ctx,
         )
     else:
-        drpc_obj = DRPC(namespace=namespace)
+        drpc_obj = DRPC(namespace=namespace, switch_ctx=switch_ctx)
     drpc_obj.wait_for_peer_ready_status()
     logger.info(f"Initiating Relocate action with preferredCluster:{preferred_cluster}")
     assert drpc_obj.patch(
@@ -1036,12 +1040,12 @@ def restore_backup():
 
     restore_index = config.cur_index
     config.switch_ctx(get_passive_acm_index())
-    backup_schedule = templating.load_yaml(constants.DR_RESTORE_YAML)
-    backup_schedule_yaml = tempfile.NamedTemporaryFile(
+    restore_schedule = templating.load_yaml(constants.DR_RESTORE_YAML)
+    restore_schedule_yaml = tempfile.NamedTemporaryFile(
         mode="w+", prefix="restore", delete=False
     )
-    templating.dump_data_to_temp_yaml(backup_schedule, backup_schedule_yaml.name)
-    run_cmd(f"oc create -f {backup_schedule_yaml.name}")
+    templating.dump_data_to_temp_yaml(restore_schedule, restore_schedule_yaml.name)
+    run_cmd(f"oc create -f {restore_schedule_yaml.name}")
     config.switch_ctx(restore_index)
 
 
@@ -1091,3 +1095,139 @@ def verify_drpolicy_cli(switch_ctx=None):
         raise UnexpectedBehaviour(
             f"DRPolicy is not in succeeded or validated state: {status}"
         )
+
+
+@retry(UnexpectedBehaviour, tries=40, delay=5, backoff=5)
+def verify_backup_is_taken():
+
+    """
+    Function to verify backup is taken
+
+    """
+    backup_index = config.cur_index
+    config.switch_ctx(get_active_acm_index())
+    backup_obj = ocp.OCP(
+        kind=constants.ACM_BACKUP_SCHEDULE, namespace=constants.ACM_HUB_BACKUP_NAMESPACE
+    )
+    cmd_output = backup_obj.exec_oc_cmd(command="get BackupSchedule -oyaml")
+    status = cmd_output["items"][0]["status"]["phase"]
+    if status == "Enabled":
+        logger.info("Backup enabled successfully")
+    else:
+        logger.error(f"Backup failed with some errors: {cmd_output}")
+        raise UnexpectedBehaviour("Backup failed with some errors")
+    config.switch_ctx(backup_index)
+
+
+def get_nodes_from_active_zone(namespace):
+    """
+    Get the nodes list and index from active zone
+
+    Args:
+        namespace (str): Namespace of the app workload
+
+    Returns:
+        tuple: contains index and the node_objs list of the cluster
+            active_hub_index (int): Index of the active hub cluster
+            active_hub_cluster_node_objs (list): Node list of the active hub nodes
+            managed_cluster_index (int): Index of the active zone managed cluster
+            managed_cluster_node_objs (list): Node list of the active zone managed cluster
+            ceph_node_ips (list): Ceph node list which are running in active zone
+
+    """
+
+    # Get nodes from zone where active hub running
+    config.switch_ctx(get_active_acm_index())
+    active_hub_index = config.cur_index
+    zone = config.ENV_DATA.get("zone")
+    active_hub_cluster_node_objs = get_node_objs()
+    set_current_primary_cluster_context(namespace)
+    if config.ENV_DATA.get("zone") == zone:
+        managed_cluster_index = config.cur_index
+        managed_cluster_node_objs = get_node_objs()
+    else:
+        set_current_secondary_cluster_context(namespace)
+        managed_cluster_index = config.cur_index
+        managed_cluster_node_objs = get_node_objs()
+    external_cluster_node_roles = config.EXTERNAL_MODE.get(
+        "external_cluster_node_roles"
+    )
+    zone = "zone-b" if zone == "b" else "zone-c"
+    ceph_node_ips = []
+    for ceph_node in external_cluster_node_roles:
+        if (
+            external_cluster_node_roles[ceph_node].get("location").get("datacenter")
+            != zone
+        ):
+            continue
+        else:
+            ceph_node_ips.append(
+                external_cluster_node_roles[ceph_node].get("ip_address")
+            )
+
+    return (
+        active_hub_index,
+        active_hub_cluster_node_objs,
+        managed_cluster_index,
+        managed_cluster_node_objs,
+        ceph_node_ips,
+    )
+
+
+def create_klusterlet_config():
+    """
+    Create klusterletconfig after hub recovery to avoid eviction
+    of resources by adding "AppliedManifestWork" eviction grace period
+
+    """
+    old_ctx = config.cur_index
+    config.switch_ctx(get_passive_acm_index())
+    klusterlet_config = templating.load_yaml(constants.KLUSTERLET_CONFIG_YAML)
+    klusterlet_config_yaml = tempfile.NamedTemporaryFile(
+        mode="w+", prefix="klusterlet_config", delete=False
+    )
+    templating.dump_data_to_temp_yaml(klusterlet_config, klusterlet_config_yaml.name)
+    run_cmd(f"oc create -f {klusterlet_config_yaml.name}")
+    config.switch_ctx(old_ctx)
+
+
+def remove_parameter_klusterlet_config():
+    """
+    Edit the global KlusterletConfig on the new hub and
+    remove the parameter appliedManifestWorkEvictionGracePeriod and its value
+
+    """
+    old_ctx = config.cur_index
+    config.switch_ctx(get_passive_acm_index())
+    klusterlet_config_obj = ocp.OCP(kind=constants.KLUSTERLET_CONFIG)
+    name = klusterlet_config_obj.get().get("items")[0].get("metadata").get("name")
+    remove_op = [{"op": "remove", "path": "/spec"}]
+    klusterlet_config_obj.patch(
+        resource_name=name, params=json.dumps(remove_op), format_type="json"
+    )
+    config.switch_ctx(old_ctx)
+
+
+def add_label_to_appsub(workloads, label="test", value="test1"):
+    """
+    Function to add new label with any value to the AppSub on the hub.
+    This is needed as WA for sub app pods to show up after failover in ACM 2.11 post hub recovery (bz: 2295782)
+
+    Args:
+        workloads (list): List of workloads created
+        label (str): Name of label to be added
+        value (str): Value to be added
+
+    """
+    old_ctx = config.cur_index
+    config.switch_ctx(get_passive_acm_index())
+    for wl in workloads:
+        if wl.workload_type == constants.SUBSCRIPTION:
+            sub_obj = ocp.OCP(
+                kind=constants.SUBSCRIPTION, namespace=wl.workload_namespace
+            )
+            name = sub_obj.get().get("items")[0].get("metadata").get("name")
+            run_cmd(
+                f"oc label appsub -n {wl.workload_namespace} {name} {label}={value}"
+            )
+    config.switch_ctx(old_ctx)
