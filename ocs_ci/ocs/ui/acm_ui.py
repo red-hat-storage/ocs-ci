@@ -223,6 +223,40 @@ class AcmPageNavigator(BaseUI):
         log.info("Successfully navigated to ACM console")
         self.take_screenshot()
 
+    def navigate_from_acm_to_ocp_cluster_page(self):
+        """
+        For ACM version 2.7 and above, this function can be used to navigate from ACM multicluster page
+        console to OCP
+
+        """
+
+        # There is a modal dialog box which appears as soon as we login
+        # we need to click on close on that dialog box
+        if self.check_element_presence(
+            (
+                self.acm_page_nav["modal_dialog_close_button"][1],
+                self.acm_page_nav["modal_dialog_close_button"][0],
+            ),
+            timeout=200,
+        ):
+            self.do_click(self.acm_page_nav["modal_dialog_close_button"], timeout=300)
+        if not self.check_element_presence(
+            (
+                self.acm_page_nav["all-clusters-view"][1],
+                self.acm_page_nav["all-clusters-view"][0],
+            ),
+            timeout=300,
+        ):
+            log.error("'All Clusters' is not found, can not switch to OCP console")
+            self.take_screenshot()
+            raise NoSuchElementException
+        log.info("Click on 'All Clusters'")
+        self.do_click(self.acm_page_nav["all-clusters-view"])
+        log.info("Select 'local-cluster'' view")
+        self.do_click(self.acm_page_nav["click-local-cluster"])
+        log.info("Successfully navigated to OCP console from ACM console")
+        self.take_screenshot()
+
 
 class ACMOCPClusterDeployment(AcmPageNavigator):
     """
