@@ -20,7 +20,7 @@ from libcloud.compute.providers import get_driver
 from libcloud.compute.types import Provider
 from paramiko.ssh_exception import SSHException
 
-from ocs_ci.framework import config as ocsci_config
+from ocs_ci.framework import config as ocsci_config, config
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.external_ceph import RolesContainer, Ceph, CephNode
 from ocs_ci.ocs.clients import WinNode
@@ -883,7 +883,9 @@ def setup_ceph_toolbox(force_setup=False, storage_cluster=None):
             '"/spec/enableCephTools", "value": true }]\''
         )
         run_cmd(cmd)
-        toolbox_pod = OCP(kind=constants.POD, namespace=namespace)
+        toolbox_pod = OCP(
+            kind=constants.POD, namespace=config.ENV_DATA["cluster_namespace"]
+        )
         toolbox_pod.wait_for_resource(
             condition="Running",
             selector="app=rook-ceph-tools",
