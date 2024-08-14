@@ -19,6 +19,16 @@ from ocs_ci.deployment.hosted_cluster import (
     HostedODF,
     HostedClients,
 )
+from ocs_ci.deployment.helpers.hypershift_base import (
+    get_random_hosted_cluster_name,
+)
+from ocs_ci.utility.version import get_ocs_version_from_csv
+from ocs_ci.ocs.resources.catalog_source import get_odf_tag_from_redhat_catsrc
+from ocs_ci.utility.utils import (
+    get_latest_release_version,
+)
+from ocs_ci.framework import config as ocsci_config
+from ocs_ci.ocs.ocp import OCP
 
 log = logging.getLogger(__name__)
 
@@ -59,7 +69,9 @@ class TestOnboardingTokenGeneration(ManageTest):
         ValidationUI().verify_storage_clients_page()
 
     @hci_provider_required
-    def test_onboarding_storageclient_from_hcp_cluster(self):
+    def test_onboarding_storageclient_from_hcp_cluster(
+        self, create_hypershift_clusters, destroy_hosted_cluster
+    ):
         """
         Test to verify that a new storageclient can be onboarded successfully from a hcp cluster
         using the onboardin token generated from provider--storage--storageclients page
@@ -69,16 +81,42 @@ class TestOnboardingTokenGeneration(ManageTest):
             3. Check ux-backend-server pod is respinned.
 
         """
-        log.info("Deploy hosted OCP on provider platform and onboard storageclient")
-        HostedClients().do_deploy()
+        log.info("Create hosted client")
+        cluster_name = get_random_hosted_cluster_name()
+        odf_version = str(get_ocs_version_from_csv()).replace(".stable", "")
+        if "rhodf" in odf_version:
+            odf_version = get_odf_tag_from_redhat_catsrc()
+
+        ocp_version = get_latest_release_version()
+        nodepool_replicas = 2
+
+        create_hypershift_clusters(
+            cluster_names=[cluster_name],
+            ocp_version=ocp_version,
+            odf_version=odf_version,
+            setup_storage_client=True,
+            nodepool_replicas=nodepool_replicas,
+        )
+
+        log.info("Switch to the hosted cluster")
+        ocsci_config.switch_to_cluster_by_name(cluster_name)
+
+        server = str(OCP().exec_oc_cmd("whoami --show-server", out_yaml_format=False))
+
+        assert (
+            cluster_name in server
+        ), f"Failed to switch to cluster '{cluster_name}' and fetch data"
+
         log.info("Test create onboarding key")
         HostedClients().download_hosted_clusters_kubeconfig_files()
 
-        cluster_name = list(config.ENV_DATA["clusters"].keys())[-1]
         assert len(
             HostedODF(cluster_name).get_onboarding_key()
         ), "Failed to get onboarding key"
         assert HostedODF(cluster_name).get_storage_client_status() == "Connected"
+
+        log.info("Destroy hosted cluster")
+        assert destroy_hosted_cluster(cluster_name), "Failed to destroy hosted cluster"
 
     def test_ux_server_pod_respin_for_provider_cluster(self):
         """
