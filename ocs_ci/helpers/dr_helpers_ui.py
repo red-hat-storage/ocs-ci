@@ -12,7 +12,6 @@ from ocs_ci.ocs.ui.views import locators
 from ocs_ci.ocs.ui.helpers_ui import format_locator
 from ocs_ci.utility.utils import get_ocp_version
 from ocs_ci.ocs.utils import get_non_acm_cluster_config
-from ocs_ci.ocs.ui.page_objects.page_navigator import PageNavigator
 
 log = logging.getLogger(__name__)
 
@@ -410,9 +409,7 @@ def verify_mco_console_plugin():
     Function to verify MCO console plugin is enabled or not, enables it if not already
 
     """
-    page_nav_obj = PageNavigator()
     val_ui_obj = ValidationUI()
-    page_nav_obj.navigate_OCP_home_page()
     val_ui_obj.mco_console_plugin_check()
 
 
