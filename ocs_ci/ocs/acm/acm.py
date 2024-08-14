@@ -475,8 +475,9 @@ def login_to_acm_via_ocp():
     log.info(f"URL: {url}")
     driver = login_ui(url)
     ocp_page_nav = PageNavigator()
-    ocp_page_nav.navigate_mco_operator_and_enable_console_plugin()
     page_nav = AcmPageNavigator()
+    page_nav.navigate_from_acm_to_ocp_cluster_page()
+    ocp_page_nav.navigate_mco_operator_and_enable_console_plugin()
     page_nav.navigate_from_ocp_to_acm_cluster_page()
     page_title = ACM_PAGE_TITLE_2_7_ABOVE
     validate_page_title(title=page_title)
