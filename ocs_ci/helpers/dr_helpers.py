@@ -8,10 +8,6 @@ import tempfile
 import time
 
 from ocs_ci.framework import config
-from ocs_ci.ocs.acm.acm import (
-    import_recovery_clusters_with_acm,
-    validate_cluster_import,
-)
 from ocs_ci.ocs import constants, ocp
 from ocs_ci.ocs.defaults import RBD_NAME
 from ocs_ci.ocs.exceptions import (
@@ -1445,6 +1441,11 @@ def replace_cluster(workload, primary_cluster_name, secondary_cluster_name):
         logger.info("Old primary cluster is dettached")
 
     # Import Recovery cluster
+    from ocs_ci.ocs.acm.acm import (
+        import_recovery_clusters_with_acm,
+        validate_cluster_import,
+    )
+
     cluster_name_recoevry = import_recovery_clusters_with_acm()
 
     # Verify recovery cluster is imported
