@@ -116,12 +116,11 @@ def get_drpc_name(namespace, switch_ctx=None):
         str: DRPC resource name
 
     """
-    config.switch_acm_ctx()
+    config.switch_ctx(switch_ctx) if switch_ctx else config.switch_acm_ctx()
     try:
         wait_for_cluster_connectivity(tries=5)
     except CommandFailed:
         config.switch_ctx(get_passive_acm_index())
 
-    config.switch_ctx(switch_ctx) if switch_ctx else config.switch_acm_ctx()
     drpc_obj = OCP(kind=constants.DRPC, namespace=namespace).get()["items"][0]
     return drpc_obj["metadata"]["name"]
