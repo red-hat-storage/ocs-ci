@@ -7,6 +7,8 @@ import logging
 import os
 import shlex
 import time
+from asyncio import as_completed
+from concurrent.futures.thread import ThreadPoolExecutor
 
 from uuid import uuid4
 
@@ -579,7 +581,7 @@ def download_objects_using_s3cmd(
     ), "Failed to download objects"
 
 
-def rm_object_recursive(podobj, target, mcg_obj, option=""):
+def rm_object_recursive(podobj, target, mcg_obj, option="", timeout=600):
     """
     Remove bucket objects with --recursive option
 
@@ -601,6 +603,7 @@ def rm_object_recursive(podobj, target, mcg_obj, option=""):
             mcg_obj.access_key,
             mcg_obj.s3_internal_endpoint,
         ],
+        timeout=timeout,
     )
 
 
@@ -3008,25 +3011,70 @@ def get_obj_versions(mcg_obj, awscli_pod, bucket_name, obj_key):
     return versions_dicts
 
 
-def generate_empty_files(aws_pod, dir, amount, pattern="File"):
+def gen_empty_file_and_upload(
+    mcg_obj,
+    aws_pod,
+    dir,
+    amount,
+    bucket,
+    pattern="File",
+    prefix=None,
+    threads=1,
+    timeout=600,
+):
     """
     Generate empty files with unique identifiers
 
     Args:
+        mcg_obj (MCG): MCG object
         aws_pod (Pod): Pod object for aws-cli pod
         dir (str): directory where the files need to generated
         amount (int): number of files to be generated
+        bucket (str): Name of the bucket
         pattern (str): pattern to use as prefix for the filename
+        prefix (str): prefix directory under which files needs to be
+                      uploaded.
+        threads (int): Number of threads to use for generate and upload
+                       process. Allows multithreading hence faster uploads.
+        timeout (int): Timeout to wait for the command completion
 
     """
-    aws_pod.exec_sh_cmd_on_pod(
-        command=f"for i in $(seq 1 {amount});do touch {dir}/{pattern}-$i;done",
-        timeout=2400,
-    )
+
+    def _run_file_creation_and_upload(index, begin=1, end=amount):
+        aws_pod.exec_sh_cmd_on_pod(
+            command=f"mkdir -p {dir}/{index} && for i in $(seq {begin} {end});do touch {dir}/{index}/{pattern}-$i;done",
+            timeout=timeout,
+        )
+        logger.info(f"Uploading batch of {end-begin} objects to the bucket {bucket}")
+        sync_object_directory(
+            aws_pod,
+            f"{dir}/{index}",
+            f"s3://{bucket}",
+            mcg_obj,
+            timeout=timeout,
+        )
+
+    with ThreadPoolExecutor(max_workers=threads) as executor:
+        begin = 0
+        futures = []
+        for i in range(threads):
+            futures.append(
+                executor.submit(
+                    _run_file_creation_and_upload,
+                    index=i,
+                    begin=begin + 1,
+                    end=begin + (amount // threads),
+                )
+            )
+            begin = begin + (amount // threads)
+        logger.info("Waiting for the upload objects to complete")
+        for f_obj in as_completed(futures):
+            f_obj.result()
+
     logger.info(f"Generated {amount} empty files successfully")
 
 
-def verify_objs_deleted_from_objmds(bucket_name, timeout=600):
+def verify_objs_deleted_from_objmds(bucket_name, timeout=600, sleep=30):
     """
     Verify that all the objects are marked deletion time by checking
     the objmds table in nbcore db.
@@ -3057,7 +3105,7 @@ def verify_objs_deleted_from_objmds(bucket_name, timeout=600):
 
     sampler = TimeoutSampler(
         timeout=timeout,
-        sleep=30,
+        sleep=sleep,
         func=_check_objs_deletion,
     )
 

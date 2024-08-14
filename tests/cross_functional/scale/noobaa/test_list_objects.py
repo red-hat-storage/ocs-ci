@@ -6,7 +6,7 @@ from ocs_ci.ocs.bucket_utils import (
     craft_s3_command,
     sync_object_directory,
     list_objects_from_bucket,
-    generate_empty_files,
+    gen_empty_file_and_upload,
 )
 from ocs_ci.framework.pytest_customization.marks import orange_squad, mcg
 from ocs_ci.framework.testlib import E2ETest
@@ -179,19 +179,18 @@ class TestListOfObjects(E2ETest):
         bucket = bucket_factory()[0]
         log.info(f"Created bucket {bucket.name}")
 
-        # generate 1 million empty files with unique identifiers
-        generate_empty_files(
-            awscli_pod_session, dir=test_directory_setup.origin_dir, amount=1000000
-        )
-
-        # upload the million objects to the bucket
+        # generate 1 million empty file objects and upload
+        # to the bucket parallely under the prefix
         prefix = "single_dir"
-        sync_object_directory(
+        gen_empty_file_and_upload(
+            mcg_obj_session,
             awscli_pod_session,
             test_directory_setup.origin_dir,
-            f"s3://{bucket.name}/{prefix}/",
-            mcg_obj_session,
-            timeout=7200,
+            amount=1000000,
+            bucket=bucket.name,
+            prefix=prefix,
+            threads=10,
+            timeout=10800,
         )
         log.info(f"Uploaded objects to the bucket {bucket.name}")
 
