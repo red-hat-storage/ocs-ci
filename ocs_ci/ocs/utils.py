@@ -878,7 +878,7 @@ def setup_ceph_toolbox(force_setup=False, storage_cluster=None):
         # https://github.com/openshift/ocs-operator/pull/207/
         log.info("starting ceph toolbox pod")
         cmd = (
-            f"oc patch storagecluster {storage_cluster} -n openshift-storage --type "
+            f"oc patch storagecluster {storage_cluster} -n {config.ENV_DATA['cluster_namespace']} --type "
             'json --patch  \'[{ "op": "replace", "path": '
             '"/spec/enableCephTools", "value": true }]\''
         )
