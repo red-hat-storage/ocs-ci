@@ -13,6 +13,4 @@ ENV_DATA:
   osd_type: 'nvme'
   region: 'us-east'
 REPORTING:
-  # This is to be used in internal image for must gather on HCI
   ocs_must_gather_image: "quay.io/rhceph-dev/ocs-must-gather"
-  ocs_must_gather_latest_tag: '4.14-fusion-hci'
