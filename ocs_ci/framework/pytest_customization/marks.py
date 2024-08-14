@@ -601,6 +601,11 @@ skipif_gcp_platform = pytest.mark.skipif(
     reason="Test will not run on GCP deployed cluster",
 )
 
+skipif_compact_mode = pytest.mark.skipif(
+    config.ENV_DATA.get("worker_replicas") == 0,
+    reason="This test is not supported for compact mode deployment types.",
+)
+
 # Squad marks
 aqua_squad = pytest.mark.aqua_squad
 black_squad = pytest.mark.black_squad
