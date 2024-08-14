@@ -1191,7 +1191,7 @@ def _collect_ocs_logs(
                 ocs_must_gather_image_and_tag, cluster_config
             )
         if cluster_config.ENV_DATA.get("cluster_type") == constants.HCI_CLIENT:
-            ocs_flags += " -p"
+            ocs_flags = ocs_flags + " -p" if ocs_flags else " -p"
 
         mg_output = run_must_gather(
             ocs_log_dir_path,
