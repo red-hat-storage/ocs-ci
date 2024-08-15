@@ -714,6 +714,7 @@ def oc_create_google_backingstore(cld_mgr, backingstore_name, uls_name, region):
     """
     bs_data = templating.load_yaml(constants.MCG_BACKINGSTORE_YAML)
     bs_data["metadata"]["name"] = backingstore_name
+    bs_data["metadata"]["namespace"] = config.ENV_DATA["cluster_namespace"]
     bs_data["spec"] = {
         "type": constants.BACKINGSTORE_TYPE_GOOGLE,
         "googleCloudStorage": {
@@ -762,6 +763,7 @@ def oc_create_azure_backingstore(cld_mgr, backingstore_name, uls_name, region):
     """
     bs_data = templating.load_yaml(constants.MCG_BACKINGSTORE_YAML)
     bs_data["metadata"]["name"] = backingstore_name
+    bs_data["metadata"]["namespace"] = config.ENV_DATA["cluster_namespace"]
     bs_data["spec"] = {
         "type": constants.BACKINGSTORE_TYPE_AZURE,
         "azureBlob": {
@@ -2025,9 +2027,11 @@ def update_replication_policy(bucket_name, replication_policy_dict):
     replication_policy_patch_dict = {
         "spec": {
             "additionalConfig": {
-                "replicationPolicy": json.dumps(replication_policy_dict)
-                if replication_policy_dict
-                else ""
+                "replicationPolicy": (
+                    json.dumps(replication_policy_dict)
+                    if replication_policy_dict
+                    else ""
+                )
             }
         }
     }
