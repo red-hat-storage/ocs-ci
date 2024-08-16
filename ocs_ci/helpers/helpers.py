@@ -2879,7 +2879,7 @@ def modify_deployment_replica_count(
 
 
 def modify_deploymentconfig_replica_count(
-    deploymentconfig_name, replica_count, namespace=config.ENV_DATA["cluster_namespace"]
+    deploymentconfig_name, replica_count, namespace=None
 ):
     """
     Function to modify deploymentconfig replica count,
@@ -2894,6 +2894,7 @@ def modify_deploymentconfig_replica_count(
         bool: True in case if changes are applied. False otherwise
 
     """
+    namespace = namespace or config.ENV_DATA["cluster_namespace"]
     dc_ocp_obj = ocp.OCP(kind=constants.DEPLOYMENTCONFIG, namespace=namespace)
     params = f'{{"spec": {{"replicas": {replica_count}}}}}'
     return dc_ocp_obj.patch(resource_name=deploymentconfig_name, params=params)
