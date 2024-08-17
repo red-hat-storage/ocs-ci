@@ -37,7 +37,9 @@ class TestActiveHubDownAndRestore:
     Test failover and relocate all apps when active hub down and restored RDR
     """
 
-    def test_hub_recovery_failover_and_relocate_rdr(self, nodes_multicluster, dr_workload):
+    def test_hub_recovery_failover_and_relocate_rdr(
+        self, nodes_multicluster, dr_workload
+    ):
 
         """
         Tests to verify failover and relocate all apps when active hub down and restored RDR
