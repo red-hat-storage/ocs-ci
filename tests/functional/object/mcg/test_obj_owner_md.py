@@ -113,28 +113,22 @@ class TestObjOwnerMD(MCGTest):
 
         # 4. Write objects from each account to both buckets
         for bucket in (admin_bucket_name, non_admin_bucket_name):
-            write_random_test_objects_to_bucket(
-                amount=3,
-                io_pod=awscli_pod_session,
-                file_dir=test_directory_setup.origin_dir,
-                pattern="admin-obj",
-                bucket_to_write=bucket,
-                mcg_obj=mcg_obj,
-            )
-
-            # Using the non-privileged account's credentials requires
-            # the use of retry since the bucket policy may take some time to propagate
-            retry_write_random_objs = retry(CommandFailed, tries=10, delay=10)(
-                write_random_test_objects_to_bucket
-            )
-            retry_write_random_objs(
-                amount=3,
-                io_pod=awscli_pod_session,
-                file_dir=test_directory_setup.origin_dir,
-                pattern="non-admin-obj",
-                bucket_to_write=bucket,
-                s3_creds=other_acc_creds,
-            )
+            for acc_creds, obj_pattern in (
+                (mcg_obj, "admin-obj"),
+                (other_acc_creds, "non-admin-obj"),
+            ):
+                # The fist attempts might fail while the bucket policy is being propagated
+                retry_write_random_objs = retry(CommandFailed, tries=10, delay=10)(
+                    write_random_test_objects_to_bucket
+                )
+                retry_write_random_objs(
+                    amount=3,
+                    io_pod=awscli_pod_session,
+                    file_dir=test_directory_setup.origin_dir,
+                    pattern=obj_pattern,
+                    bucket_to_write=bucket,
+                    s3_creds=acc_creds,
+                )
 
         # 5. For both buckets, check that the objects are owned by the creator of the bucket
         bucket_to_expected_owner = {
