@@ -344,6 +344,7 @@ class PrometheusAPI(object):
         # TODO: generate certificate for IBM cloud platform
         if (
             not config.ENV_DATA["platform"].lower() == "ibm_cloud"
+            and not config.ENV_DATA["platform"].lower() == constants.ROSA_HCP_PLATFORM
             and config.ENV_DATA["deployment_type"] == "managed"
         ):
             self.generate_cert()
