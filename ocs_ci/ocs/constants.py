@@ -223,7 +223,7 @@ PROVISIONING = "Provisioning"
 AGENT_SERVICE_CONFIG = "AgentServiceConfig"
 INFRA_ENV = "InfraEnv"
 DEFALUT_DEVICE_CLASS = "ssd"
-VM = "VM"
+VM = "vm"
 HOSTED_CLUSTERS = "hostedclusters"
 
 # Provisioners
@@ -271,6 +271,7 @@ OPENSHIFT_IMAGE_REGISTRY_DEPLOYMENT = "image-registry"
 OPENSHIFT_IMAGE_SELECTOR = "docker-registry=default"
 OPENSHIFT_INGRESS_NAMESPACE = "openshift-ingress"
 OPENSHIFT_MONITORING_NAMESPACE = "openshift-monitoring"
+CLUSTERS_NAMESPACE = "clusters"
 MASTER_MACHINE = "master"
 WORKER_MACHINE = "worker"
 BOOTSTRAP_MACHINE = "bootstrap"
@@ -293,6 +294,10 @@ NON_MS_CLUSTER_TYPE = "non_ms"
 # HCI cluster types
 HCI_CLIENT = "hci_client"
 HCI_PROVIDER = "provider"
+# hosted cluster types
+HOSTED_CLUSTER_KUBEVIRT = "kubevirt"
+HOSTED_CLUSTER_AGENT = "agent"
+NON_HOSTED_CLUSTER = "non_hosted"
 
 # provider mode constants
 PROVIDER_MODE_OCS_DEPLOYMENT_PATH = os.path.join(

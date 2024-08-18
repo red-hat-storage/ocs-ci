@@ -1,6 +1,6 @@
 # -*- coding: utf8 -*-
 """
-Module for interactions with IBM Cloud Cluster.
+Module for interactions with Kubevirt hosted cluster.
 
 """
 
@@ -9,7 +9,7 @@ import time
 
 from ocs_ci.deployment.helpers.hypershift_base import get_cluster_vm_namespace
 from ocs_ci.framework import config
-from ocs_ci.utility.utils import run_cmd
+from ocs_ci.utility.utils import exec_cmd
 from ocs_ci.ocs.ocp import OCP
 from ocs_ci.utility.decorators import switch_to_provider_for_function
 from ocs_ci.ocs import constants
@@ -35,22 +35,22 @@ def get_vm_name(vm):
 class KubevirtVM(object):
     """
     Wrapper for VM objects with kubevirt. The class should be used in Provider mode
-    when we have provider and client clusters in the run, and the client is the primary cluster.
+    when we have provider and client clusters in the run.
     """
 
-    def __init__(self):
+    def __init__(self, cluster_name):
         """
-        Constructor for access and modify the virtual machine (VM) in the cluster.
-        The class should be used in Provider mode when we have provider and client clusters in the run,
-        and the client is the primary cluster.
+        Constructor for access and modify the virtual machine (VM) of the hosted cluster
+        with the name 'cluster_name'. The class should be used in Provider mode when we have
+        provider and client clusters in the run.
 
         """
-        self.vm_namespace = get_cluster_vm_namespace()
+        self.vm_namespace = get_cluster_vm_namespace(cluster_name)
         provider_index = config.get_provider_index()
         self.vm_kubeconfig = config.clusters[provider_index].RUN["kubeconfig"]
 
         self.ocp_vm = OCP(
-            kind="vm",
+            kind=constants.VM,
             cluster_kubeconfig=self.vm_kubeconfig,
             namespace=self.vm_namespace,
         )
@@ -78,11 +78,11 @@ class KubevirtVM(object):
 
         """
         cmd = f"virtctl {cmd} -n {self.vm_namespace}"
-        return run_cmd(cmd, secrets, timeout, ignore_error, **kwargs)
+        return exec_cmd(cmd, secrets, timeout, ignore_error, **kwargs)
 
     def get_all_kubevirt_vms(self):
         """
-        Get all the kubevirt VMs in teh cluster
+        Get all the kubevirt VMs in the cluster
 
         Returns:
             list: List of dictionaries. List of all the VM objects in the cluster.
@@ -106,6 +106,18 @@ class KubevirtVM(object):
         return [vm for vm in vm_list if get_vm_name(vm) in vm_names]
 
     def wait_for_vms_status(self, vms, expected_status, timeout=180):
+        """
+        Wait for the VMs to be in the expected status
+
+        Args:
+            vms (list): The list of the VM objects
+            expected_status (str): The expected status
+            timeout (int): Time to wait for the VMs to reach the expected status
+
+        Raises:
+            TimeoutExpiredError: If the VMs didn't reach the expected status in the given timeout
+
+        """
         for vm in vms:
             self.ocp_vm.wait_for_resource(
                 condition=expected_status,

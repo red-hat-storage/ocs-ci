@@ -135,6 +135,24 @@ def get_cluster_vm_namespace(cluster_name=None):
 
 
 @switch_to_orig_index_at_last
+def is_hosted_cluster(cluster_name=None):
+    """
+    Check if the cluster is a hosted cluster
+
+    Args:
+        cluster_name (str): The cluster name
+
+    Returns:
+        bool: True, if the cluster is a hosted cluster. False, otherwise.
+
+    """
+    cluster_name = cluster_name or config.ENV_DATA["cluster_name"]
+    config.switch_to_provider()
+    ocp_obj = OCP(kind=constants.HOSTED_CLUSTERS, namespace="clusters")
+    return ocp_obj.is_exist(resource_name=cluster_name)
+
+
+@switch_to_orig_index_at_last
 def get_hosted_cluster_type(cluster_name=None):
     """
     Get the hosted cluster type

@@ -382,10 +382,14 @@ class TestNodesRestartHCI(ManageTest):
 
     @tier4a
     @pytest.mark.parametrize(
-        "cluster_type",
-        [HCI_CLIENT],
+        argnames=["cluster_type", "client_type"],
+        argvalues=[
+            pytest.param(*[HCI_CLIENT, constants.HOSTED_CLUSTER_KUBEVIRT]),
+            pytest.param(*[HCI_CLIENT, constants.HOSTED_CLUSTER_AGENT]),
+            pytest.param(*[HCI_CLIENT, constants.NON_HOSTED_CLUSTER]),
+        ],
     )
-    def test_hosted_cluster_nodes_restart(self, cluster_type, nodes):
+    def test_hosted_cluster_nodes_restart(self, cluster_type, client_type, nodes):
         """
         Test hosted cluster nodes restart
 
@@ -397,10 +401,16 @@ class TestNodesRestartHCI(ManageTest):
 
     @tier4a
     @pytest.mark.parametrize(
-        "cluster_type",
-        [HCI_CLIENT],
+        argnames=["cluster_type", "client_type"],
+        argvalues=[
+            pytest.param(*[HCI_CLIENT, constants.HOSTED_CLUSTER_KUBEVIRT]),
+            pytest.param(*[HCI_CLIENT, constants.HOSTED_CLUSTER_AGENT]),
+            pytest.param(*[HCI_CLIENT, constants.NON_HOSTED_CLUSTER]),
+        ],
     )
-    def test_hosted_cluster_nodes_restart_by_stop_and_start(self, cluster_type, nodes):
+    def test_hosted_cluster_nodes_restart_by_stop_and_start(
+        self, cluster_type, client_type, nodes
+    ):
         """
         Test hosted cluster nodes restart by stop and start
 

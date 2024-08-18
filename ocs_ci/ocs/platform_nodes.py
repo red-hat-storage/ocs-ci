@@ -11,7 +11,6 @@ from botocore.exceptions import WaiterError
 import yaml
 import ovirtsdk4.types as types
 
-from ocs_ci.deployment.helpers.hypershift_base import get_hosted_cluster_type
 from ocs_ci.deployment.terraform import Terraform
 from ocs_ci.deployment.vmware import (
     clone_openshift_installer,
@@ -61,6 +60,7 @@ from ocs_ci.utility.utils import (
     run_cmd,
     get_module_ip,
     get_terraform_ignition_provider,
+    get_client_type_by_name,
 )
 from ocs_ci.ocs.node import (
     wait_for_nodes_status,
@@ -102,6 +102,7 @@ class PlatformNodesFactory:
         }
 
     def get_nodes_platform(self):
+        cluster_name = config.ENV_DATA.get("cluster_name")
         platform = config.ENV_DATA["platform"]
         if platform == constants.VSPHERE_PLATFORM:
             deployment_type = config.ENV_DATA["deployment_type"]
@@ -109,10 +110,7 @@ class PlatformNodesFactory:
                 platform += "_lso"
             elif deployment_type in ("ipi", "upi"):
                 platform += f"_{deployment_type}"
-        elif (
-            platform == constants.HCI_BAREMETAL
-            and get_hosted_cluster_type() == "kubevirt"
-        ):
+        elif get_client_type_by_name(cluster_name) == constants.HOSTED_CLUSTER_KUBEVIRT:
             platform = "kubevirt_vm"
 
         return self.cls_map[platform]()
@@ -3250,11 +3248,12 @@ class KubevirtVMNodes(NodesBase):
 
     """
 
-    def __init__(self):
+    def __init__(self, cluster_name=None):
         super(KubevirtVMNodes, self).__init__()
         from ocs_ci.utility import kubevirt_vm
 
-        self.kubevirt_vm = kubevirt_vm.KubevirtVM()
+        cluster_name = cluster_name or config.ENV_DATA["cluster_name"]
+        self.kubevirt_vm = kubevirt_vm.KubevirtVM(cluster_name)
 
     def get_kubevirt_vms(self, nodes):
         """
