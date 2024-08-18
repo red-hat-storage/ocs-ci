@@ -82,6 +82,7 @@ class TestReplicaOne:
         storage_cluster.wait_for_resource(
             condition=STATUS_READY, column="PHASE", timeout=180, sleep=15
         )
+
         return storage_cluster
 
     @pytest.fixture(scope="class")
@@ -136,6 +137,8 @@ class TestReplicaOne:
     ):
         log.info("Starting Tier1 replica one test")
         failure_domains = get_failure_domains()
+        # get newly created pods
+        # wait for resources (pods) to be at status running
         testing_pod = create_pod_on_failure_domain(
             project_factory,
             pod_factory,

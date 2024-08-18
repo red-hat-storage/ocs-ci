@@ -2,9 +2,11 @@ from logging import getLogger
 
 from ocs_ci.framework import config
 from ocs_ci.ocs.resources.pod import (
+    delete_osd_removal_job,
     get_pods_having_label,
     get_ceph_tools_pod,
     run_osd_removal_job,
+    verify_osd_removal_job_completed_successfully,
 )
 from ocs_ci.ocs.ocp import OCP
 from ocs_ci.ocs.constants import (
@@ -186,6 +188,8 @@ def purge_replica1_osd():
     log.info(f"OSDS : {replica1_osds.keys()}")
     log.info(f"OSD IDs: {replica1_osds.values()}")
     run_osd_removal_job(osd_ids=replica1_osds.values())
+    verify_osd_removal_job_completed_successfully("4")
+    delete_osd_removal_job()
 
 
 def delete_replica1_cephblockpools_cr(cbp_object: OCP):
@@ -270,11 +274,12 @@ def get_osd_kb_used_data() -> dict:
     """
     ceph_pod = get_ceph_tools_pod()
     output = ceph_pod.exec_cmd_on_pod("ceph osd df tree -f json-pretty")
+    log.info(f"DF tree: {output}")
     nodes = output["nodes"]
     kb_used_data = dict()
     for node in nodes:
         if node["type"] == "osd":
-            kb_used_data[node["name"]] = node.get("kb_used_data", 0)
+            kb_used_data[node["name"]] = node.get("kb_used_data")
     log.info(f"KB Used per OSD: {kb_used_data}")
 
     return kb_used_data
