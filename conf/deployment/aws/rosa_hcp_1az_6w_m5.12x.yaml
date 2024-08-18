@@ -1,0 +1,13 @@
+DEPLOYMENT:
+  allow_lower_instance_requirements: false
+RUN:
+  username: 'cluster-admin'
+ENV_DATA:
+  platform: 'rosa_hcp'
+  deployment_type: 'managed'
+  region: 'us-west-2'
+  worker_availability_zones:
+    - 'us-west-2a'
+  worker_replicas: 6
+  worker_instance_type: 'm5.12xlarge'
+  cluster_namespace: "odf-storage"
