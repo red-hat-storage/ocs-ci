@@ -187,6 +187,7 @@ class TestCephDefaultValuesCheck(ManageTest):
             f"mds_cache_memory_limit is set with a value of {expected_mds_value_in_GB}GB"
         )
 
+    @runs_on_provider
     @bugzilla("2012930")
     @post_ocs_upgrade
     @pytest.mark.polarion_id("OCS-2739")
