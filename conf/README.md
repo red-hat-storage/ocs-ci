@@ -98,6 +98,7 @@ anywhere else.
 * `openshift_install_timeout` - Time (in seconds) to wait before timing out during OCP installation
 * `local_storage` - Deploy OCS with the local storage operator (aka LSO) (Default: false)
 * `local_storage_storagedeviceset_count` - This option allows one to control `spec.storageDeviceSets[0].count` of LSO backed StorageCluster.
+* `lso_standalone_deployment` - This option allows to deploy LSO separately (without actually deploying ODF)
 * `optional_operators_image` - If provided, it is used for LSO installation on unreleased OCP version
 * `disconnected` - Set if the cluster is deployed in a disconnected environment
 * `proxy` - Set if the cluster is deployed in a proxy environment
