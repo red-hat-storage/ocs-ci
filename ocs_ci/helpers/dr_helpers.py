@@ -1387,7 +1387,7 @@ def apply_drpolicy_to_workload(workload, drcluster_name):
         templating.dump_data_to_temp_yaml(drpc_yaml_data, wl.drpc_yaml_file)
 
         config.switch_acm_ctx()
-        run_cmd(f"oc create -k {wl.drpc_yaml_file}")
+        run_cmd(f"oc create -f {wl.drpc_yaml_file}")
 
 
 def replace_cluster(workload, primary_cluster_name, secondary_cluster_name):
@@ -1454,6 +1454,8 @@ def replace_cluster(workload, primary_cluster_name, secondary_cluster_name):
     # Set recovery cluster as primary context wise
     set_recovery_as_primary()
 
+    config.switch_acm_ctx()
+
     # Install MCO on active hub again
     from ocs_ci.deployment.deployment import MultiClusterDROperatorsDeploy
 
@@ -1462,6 +1464,7 @@ def replace_cluster(workload, primary_cluster_name, secondary_cluster_name):
     dep_mco.deploy()
     # Enable MCO console plugin
     enable_mco_console_plugin()
+    config.switch_acm_ctx()
     # Configure mirror peer
     dep_mco.configure_mirror_peer()
     # Create DR policy

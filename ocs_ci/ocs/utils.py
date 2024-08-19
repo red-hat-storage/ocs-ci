@@ -1653,19 +1653,29 @@ def set_recovery_as_primary():
     # 1. Popout primary from clusters list
     cluster = get_primary_cluster_config()
     ocsci_config.clusters.remove(cluster)
+
+    # 2.Reindexing After removing primary cluster
+    reindexing()
     log.info("Old primary cluster config removed from list")
 
-    # 2. decrement count from nclusters
+    # Decrement count from nclusters
     ocsci_config.nclusters -= 1
     log.info(f"Number of clusters present in env: {ocsci_config.nclusters}")
 
-    # 3  switch context to recovery
+    # Switch context to recovery
     recovery_cluster_config = get_recovery_cluster_config()
     recovery_cluster_name = recovery_cluster_config.ENV_DATA["cluster_name"]
     log.info(f"recovery_cluster_name: {recovery_cluster_name}")
     ocsci_config.switch_to_cluster_by_name(recovery_cluster_name)
     recovery_cluster_config.MULTICLUSTER["recovery_cluster"] = False
     recovery_cluster_config.MULTICLUSTER["primary_cluster"] = True
+
+
+def reindexing():
+    for cluster in ocsci_config.clusters:
+        current_index = ocsci_config.clusters.index(cluster)
+        if current_index != cluster.MULTICLUSTER["multicluster_index"]:
+            cluster.MULTICLUSTER["multicluster_index"] = current_index
 
     # switch cobntext to acm
     ocsci_config.switch_acm_ctx()
