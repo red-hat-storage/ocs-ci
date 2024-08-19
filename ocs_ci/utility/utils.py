@@ -4966,7 +4966,7 @@ def get_glibc_version():
     cmd = "ldd --version ldd"
     res = exec_cmd(cmd)
     out = res.stdout.decode("utf-8")
-    version_match = re.search(r"ldd \(GNU libc\) (\d+\.\d+)", out)
+    version_match = re.search(r"ldd \((?:Ubuntu GLIBC|GNU libc)\D*(\d+\.\d+)", out)
     if version_match:
         return version_match.group(1)
     else:
