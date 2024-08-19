@@ -178,23 +178,17 @@ class TestOBCQuota:
             if alert.get("labels").get("objectbucketclaim") == bucket_name
         ]
 
-        if len(alerts) == 0:
-            assert False, (
-                f"Alert {constants.ALERT_OBC_QUOTA_OBJECTS_ALERT} doesn't seem to occur "
-                f"despite the bucket being 90% full"
-            )
+        assert len(alerts) > 0, (
+            f"Alert {constants.ALERT_OBC_QUOTA_OBJECTS_ALERT} doesn't seem to occur "
+            f"despite the bucket being 90% full"
+        )
 
         alert_desc = (
             f"ObjectBucketClaim {bucket_name} has crossed 80% "
             f"of the size limit set by the quota(objects)"
         )
         for alert in alerts:
-            if alert_desc in alert.get("annotations").get("description"):
-                logger.info(
-                    f"Verified the alert {constants.ALERT_OBC_QUOTA_OBJECTS_ALERT}"
-                )
-                break
-            else:
-                assert (
-                    False
-                ), f"Alert {constants.ALERT_OBC_QUOTA_OBJECTS_ALERT} doesn't seem have expected format"
+            assert alert_desc in alert.get("annotations").get(
+                "description"
+            ), f"Alert {constants.ALERT_OBC_QUOTA_OBJECTS_ALERT} doesn't seem have expected format"
+        logger.info(f"Verified the alert {constants.ALERT_OBC_QUOTA_OBJECTS_ALERT}")

@@ -13,6 +13,8 @@ from ocs_ci.framework.pytest_customization.marks import (
     red_squad,
     runs_on_provider,
     mcg,
+    post_upgrade,
+    pre_upgrade,
 )
 from ocs_ci.ocs.bucket_utils import (
     s3_put_bucket_versioning,
@@ -142,12 +144,17 @@ class TestObjectVersioning:
         logger.info("Test succeeded!!")
 
 
+@mcg
+@red_squad
 @bugzilla("2240714")
 class TestGetObjectByVersionID:
 
+    # Common consts between the
+    # pre-upgrade and post-upgrade tests
     object_name = "file_1"
     object_data = "version 1"
 
+    @pre_upgrade
     def test_get_object_pre_upgrade(
         self, request, bucket_factory_session, mcg_obj_session
     ):
@@ -229,6 +236,7 @@ class TestGetObjectByVersionID:
             "Cached the bucket name and object name for the post upgrade verification"
         )
 
+    @post_upgrade
     def test_get_object_post_upgrade(self, request, mcg_obj_session):
         """
         Test get object by bucket versioning on a bucket
