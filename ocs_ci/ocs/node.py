@@ -24,6 +24,7 @@ from ocs_ci.ocs.ocp import OCP
 from ocs_ci.ocs.resources.ocs import OCS
 from ocs_ci.ocs import constants, exceptions, ocp, defaults
 from ocs_ci.utility import version
+from ocs_ci.utility.retry import retry
 from ocs_ci.utility.utils import TimeoutSampler, convert_device_size, get_az_count
 from ocs_ci.ocs import machine
 from ocs_ci.ocs.resources import pod
@@ -43,7 +44,6 @@ from ocs_ci.utility.rosa import (
 )
 from ocs_ci.utility.decorators import switch_to_orig_index_at_last
 from ocs_ci.utility.vsphere import VSPHERE
-
 
 log = logging.getLogger(__name__)
 
@@ -2017,6 +2017,7 @@ def get_node_zone_dict():
     return node_zone_dict
 
 
+@retry(ValueError, tries=5, delay=10)
 def get_node_rack_or_zone(failure_domain, node_obj):
     """
     Get the worker node rack or zone name based on the failure domain value
@@ -2029,9 +2030,13 @@ def get_node_rack_or_zone(failure_domain, node_obj):
         str: The worker node rack/zone name
 
     """
-    return (
+    node_rack_or_zone = (
         get_node_zone(node_obj) if failure_domain == "zone" else get_node_rack(node_obj)
     )
+    if node_rack_or_zone:
+        return node_rack_or_zone
+    else:
+        raise ValueError
 
 
 def get_node_rack_or_zone_dict(failure_domain):
