@@ -12,7 +12,7 @@ log = logging.getLogger(__name__)
 @bugzilla("2239208")
 @green_squad
 @pytest.mark.polarion_id("OCS-5476")
-class TestPvcCreationInMegabytes:
+class TestPvcCreationInMegabytes(E2ETest):
     """
     1. This class takes care of creating Cephfs PVC with small size 499M, 500M, 501M.
     2.Passing size_unit as 'M' [mega-bytes] and the created PVC size will be displayed in 'Mi' format in pvc yaml.
