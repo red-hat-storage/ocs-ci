@@ -445,7 +445,9 @@ def application_count_on_ui(acm_obj):
     log.info(f"Total app count is {total_app_count}")
     # number_of_total_applications = int(total_app_text.split(": ")[1])
     app_count_list = []
-    return app_count_list.extend([number_of_managed_applications, total_app_count])
+    app_count_list.extend([number_of_managed_applications, total_app_count])
+    log.info(f"ACM managed and total count list is {app_count_list}")
+    return app_count_list
 
 
 def cluster_and_operator_health_check_on_ui(
