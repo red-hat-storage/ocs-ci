@@ -341,7 +341,6 @@ class PrometheusAPI(object):
             self._password = password
         self._threading_lock = threading_lock
         self.refresh_connection()
-        # TODO: generate certificate for IBM cloud platform
         if (
             not config.ENV_DATA["platform"].lower() == "ibm_cloud"
             and not config.ENV_DATA["platform"].lower() == constants.ROSA_HCP_PLATFORM
