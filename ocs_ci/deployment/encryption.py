@@ -20,8 +20,14 @@ def add_in_transit_encryption_to_cluster_data(cluster_data):
     """
     if config.ENV_DATA.get("in_transit_encryption"):
         logger.debug("Configuring in-transit encryption for the storage cluster")
-        cluster_data = cluster_data | {
-            "spec": {"network": {"connections": {"encryption": {"enabled": True}}}}
+        if "network" not in cluster_data["spec"]:
+            cluster_data["spec"]["network"] = {}
+
+        if "connections" not in cluster_data["spec"]["network"]:
+            cluster_data["spec"]["network"]["connections"] = {}
+
+        cluster_data["spec"]["network"]["connections"] = {
+            "encryption": {"enabled": True}
         }
     return cluster_data
 
