@@ -8,7 +8,7 @@ from ocs_ci.framework import config
 logger = logging.getLogger(__name__)
 
 
-def add_in_transit_encryption_to_cluster_data(self, cluster_data):
+def add_in_transit_encryption_to_cluster_data(cluster_data):
     """
     Update storage cluster YAML data with in-transit encryption configuration if required.
 
@@ -26,7 +26,7 @@ def add_in_transit_encryption_to_cluster_data(self, cluster_data):
     return cluster_data
 
 
-def add_encryption_details_to_cluster_data(self, cluster_data):
+def add_encryption_details_to_cluster_data(cluster_data):
     """
     Update storage cluster YAML data with encryption information from
     configuration.
