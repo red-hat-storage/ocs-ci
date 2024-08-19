@@ -220,9 +220,8 @@ class BusyBox(DRWorkload):
         run_cmd(f"oc create -k {self.workload_subscription_dir}")
         run_cmd(f"oc create -k {self.workload_subscription_dir}/{self.workload_name}")
         if self.kwargs.get("is_placement"):
-            if placement_yaml_data["kind"] == "Placement":
-                self.add_annotation_to_placement()
-                run_cmd(f"oc create -f {drcp_data_yaml.name}")
+            self.add_annotation_to_placement()
+            run_cmd(f"oc create -f {drcp_data_yaml.name}")
 
         self.verify_workload_deployment()
 
