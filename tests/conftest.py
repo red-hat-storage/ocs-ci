@@ -32,7 +32,7 @@ from ocs_ci.framework.pytest_customization.marks import (
 )
 from ocs_ci.helpers.proxy import update_container_with_proxy_env
 from ocs_ci.ocs import constants, defaults, fio_artefacts, node, ocp, platform_nodes
-from ocs_ci.ocs.acm.acm import login_to_acm, login_to_acm_via_ocp
+from ocs_ci.ocs.acm.acm import login_to_acm
 from ocs_ci.ocs.awscli_pod import create_awscli_pod, awscli_pod_cleanup
 from ocs_ci.ocs.benchmark_operator_fio import get_file_size, BenchmarkOperatorFIO
 from ocs_ci.ocs.bucket_utils import (
@@ -4951,33 +4951,6 @@ def setup_acm_ui_fixture(request):
     restore_ctx_index = ocsci_config.cur_index
     ocsci_config.switch_acm_ctx()
     driver = login_to_acm()
-
-    def finalizer():
-        close_browser()
-        log.info("Switching back to the initial cluster context")
-        ocsci_config.switch_ctx(restore_ctx_index)
-
-    request.addfinalizer(finalizer)
-
-    return driver
-
-
-@pytest.fixture(scope="function")
-def setup_acm_for_dashboard_ui(request):
-    """
-    Conftest fixture to login to ACM console via OCP console after enabling MCO console plugin if not already.
-    This can be used specifically for cases where DR monitoring dashboard is needed.
-
-    """
-    return setup_acm_for_dashboard_ui_fixture(request)
-
-
-def setup_acm_for_dashboard_ui_fixture(request):
-    if not ocsci_config.RUN.get("dr_action_via_ui"):
-        return
-    restore_ctx_index = ocsci_config.cur_index
-    ocsci_config.switch_acm_ctx()
-    driver = login_to_acm_via_ocp()
 
     def finalizer():
         close_browser()

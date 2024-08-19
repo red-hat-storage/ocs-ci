@@ -24,7 +24,6 @@ from ocs_ci.ocs.ocp import OCP, get_ocp_url
 from ocs_ci.framework import config
 from ocs_ci.ocs.resources.pod import wait_for_pods_to_be_running
 from ocs_ci.ocs.ui.helpers_ui import format_locator
-from ocs_ci.ocs.ui.page_objects.page_navigator import PageNavigator
 from ocs_ci.ocs.utils import get_non_acm_cluster_config, get_primary_cluster_config
 from ocs_ci.utility.utils import (
     TimeoutSampler,
@@ -456,30 +455,6 @@ def login_to_acm():
         page_title = ACM_PAGE_TITLE_2_7_ABOVE
     else:
         page_title = ACM_PAGE_TITLE
-    validate_page_title(title=page_title)
-
-    return driver
-
-
-def login_to_acm_via_ocp():
-    """
-    Login to ACM console via OCP console after enabling MCO console plugin needed for
-    DR monitoring dashboard related tests and validate by its title
-
-    Returns:
-        driver (Selenium WebDriver)
-
-    """
-
-    url = get_ocp_url()
-    log.info(f"URL: {url}")
-    driver = login_ui(url)
-    ocp_page_nav = PageNavigator()
-    page_nav = AcmPageNavigator()
-    page_nav.navigate_from_acm_to_ocp_cluster_page()
-    ocp_page_nav.navigate_mco_operator_and_enable_console_plugin()
-    page_nav.navigate_from_ocp_to_acm_cluster_page()
-    page_title = ACM_PAGE_TITLE_2_7_ABOVE
     validate_page_title(title=page_title)
 
     return driver
