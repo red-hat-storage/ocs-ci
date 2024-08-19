@@ -104,6 +104,12 @@ class TestRDRMonitoringDashboardUI:
                 workload_name = f"{workload.workload_name}-{workload_number}"
                 workload_names.append(workload_name)
         acm_obj.take_screenshot()
+        # Ensure that the returned value is not None
+        application_counts = application_count_on_ui(acm_obj)
+        if application_counts is None:
+            raise ValueError(
+                "The function 'application_count_on_ui' returned None, expected a list with app count."
+            )
         assert check_apps_running_on_selected_cluster(
             acm_obj, cluster_name=primary_cluster_name, app_names=workload_names
         ), f"Apps {workload_names} not found on cluster {primary_cluster_name}"
