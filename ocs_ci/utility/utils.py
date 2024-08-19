@@ -1127,14 +1127,7 @@ def get_nightly_oc_via_ga(version, tarball="openshift-client.tar.gz"):
             tmp_oc_path = "/tmp"
             run_cmd(f"tar xzvf {tarball} -C {tmp_oc_path}")
 
-            # use appropriate oc based on glibc version
-            glibc_version = get_glibc_version()
-            if version_module.get_semantic_version(
-                glibc_version
-            ) < version_module.get_semantic_version("2.34"):
-                oc_type = "oc.rhel8"
-            else:
-                oc_type = "oc"
+            oc_type = "oc"
 
             # extract oc
             cmd = (
