@@ -38,7 +38,7 @@ def add_encryption_details_to_cluster_data(self, cluster_data):
         dict: updated storage storage cluster yaml
     """
     if config.ENV_DATA.get("encryption_at_rest"):
-        log.info("Enabling encryption at REST!")
+        logger.info("Enabling encryption at REST!")
         cluster_data["spec"]["encryption"] = {
             "enable": True,
         }
