@@ -439,13 +439,13 @@ def application_count_on_ui(acm_obj):
     acm_loc = locators[ocp_version]["acm_page"]
     log.info("Fetch the ACM managed applications count on ACM UI")
     managed_app_text = acm_obj.get_element_text(acm_loc["managed_app_count"])
+    log.info(f"Text on managed app count is {managed_app_text}")
     number_of_managed_applications = int(managed_app_text.split(": ")[1])
-    total_app_text = acm_obj.get_element_text(acm_loc["total_app_count"])
-    number_of_total_applications = int(total_app_text.split(": ")[1])
+    total_app_count = acm_obj.get_element_text(acm_loc["total_app_count"])
+    log.info(f"Total app count is {total_app_count}")
+    # number_of_total_applications = int(total_app_text.split(": ")[1])
     app_count_list = []
-    return app_count_list.extend(
-        [number_of_managed_applications, number_of_total_applications]
-    )
+    return app_count_list.extend([number_of_managed_applications, total_app_count])
 
 
 def cluster_and_operator_health_check_on_ui(
