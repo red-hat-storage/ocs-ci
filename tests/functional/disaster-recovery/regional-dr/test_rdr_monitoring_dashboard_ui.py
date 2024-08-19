@@ -23,6 +23,8 @@ from ocs_ci.helpers.dr_helpers_ui import (
 )
 from ocs_ci.ocs.node import get_node_objs, wait_for_nodes_status
 from ocs_ci.ocs.resources.pod import wait_for_pods_to_be_running
+from ocs_ci.ocs.ui.validation_ui import ValidationUI
+from ocs_ci.ocs.utils import enable_mco_console_plugin
 from ocs_ci.utility.utils import ceph_health_check
 
 logger = logging.getLogger(__name__)
@@ -41,7 +43,7 @@ class TestRDRMonitoringDashboardUI:
     @pytest.mark.polarion_id("XXXX")
     def test_rdr_monitoring_dashboard_ui(
         self,
-        setup_acm_for_dashboard_ui,
+        setup_acm_ui,
         dr_workload,
         nodes_multicluster,
     ):
@@ -50,6 +52,9 @@ class TestRDRMonitoringDashboardUI:
         and their count, Cluster and Operator health status on it
 
         """
+
+        # Enable MCO console plugin needed for DR dashboard
+        enable_mco_console_plugin()
 
         rdr_workload = dr_workload(num_of_subscription=1, num_of_appset=1)
         rdr_workload_count = len(rdr_workload)
@@ -61,9 +66,9 @@ class TestRDRMonitoringDashboardUI:
         scheduling_interval = dr_helpers.get_scheduling_interval(
             rdr_workload[0].workload_namespace
         )
-        wait_time = 2 * scheduling_interval  # Time in minutes
+        wait_time = 60  # Time in minutes
         logger.info(f"Waiting for {wait_time} minutes to run IOs")
-        sleep(wait_time * 60)
+        sleep(60)
 
         primary_cluster_name = dr_helpers.get_current_primary_cluster_name(
             rdr_workload[0].workload_namespace
@@ -73,6 +78,9 @@ class TestRDRMonitoringDashboardUI:
         )
 
         acm_obj = AcmAddClusters()
+        page_nav = ValidationUI()
+
+        page_nav.refresh_web_console()
         check_cluster_status_on_acm_console(acm_obj)
         verify_drpolicy_ui(acm_obj, scheduling_interval=scheduling_interval)
 
@@ -167,7 +175,7 @@ class TestRDRMonitoringDashboardUI:
         logger.info(
             f"Waiting for {wait_time} minutes before starting nodes of primary cluster: {primary_cluster_name}"
         )
-        sleep(wait_time * 60)
+        sleep(60)
         nodes_multicluster[primary_cluster_index].start_nodes(primary_cluster_nodes)
         wait_for_nodes_status([node.name for node in primary_cluster_nodes])
         logger.info("Wait for 180 seconds for pods to stabilize")
