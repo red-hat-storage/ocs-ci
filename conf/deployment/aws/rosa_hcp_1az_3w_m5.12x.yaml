@@ -8,6 +8,6 @@ ENV_DATA:
   region: 'us-west-2'
   worker_availability_zones:
     - 'us-west-2a'
-  worker_replicas: 6
+  worker_replicas: 3
   worker_instance_type: 'm5.12xlarge'
   cluster_namespace: "odf-storage"
