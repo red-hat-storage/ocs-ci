@@ -1,6 +1,5 @@
 import logging
 import pytest
-import time
 
 from ocs_ci.framework.pytest_customization.marks import (
     tier4a,
@@ -82,20 +81,17 @@ class TestProfileDefaultValuesCheck(ManageTest):
             log.info("Verify storage cluster is on Ready state")
             verify_storage_cluster()
 
-            # Sleep for 120 seconds for the profile changes to reflect
-            time.sleep(600)
-
-            storage_cluster1 = StorageCluster(
-                resource_name=storage_cluster_name,
-                namespace=config.ENV_DATA["cluster_namespace"],
+            # Wait up to 600 seconds for performance changes to reflect
+            sample = TimeoutSampler(
+                timeout=600,
+                sleep=30,
+                func=verify_performance_profile_change,
+                perf_profile=self.perf_profile,
             )
-
-            assert (
-                self.perf_profile == storage_cluster1.data["spec"]["resourceProfile"]
-            ), f"Performance profile is not updated successfully to {self.perf_profile}"
-            log.info(
-                f"Performance profile successfully got updated to {self.perf_profile} mode"
-            )
+            if not sample.wait_for_func_status(True):
+                raise Exception(
+                    f"Performance profile is not updated successfully to {self.perf_profile}"
+                )
 
         if self.perf_profile == constants.PERFORMANCE_PROFILE_LEAN:
             expected_cpu_request_values = constants.LEAN_PROFILE_REQUEST_CPU_VALUES
@@ -196,8 +192,8 @@ class TestProfileDefaultValuesCheck(ManageTest):
             verify_storage_cluster()
 
             sample = TimeoutSampler(
-                timeout=120,
-                sleep=20,
+                timeout=600,
+                sleep=30,
                 func=verify_performance_profile_change,
                 perf_profile=self.perf_profile,
             )
