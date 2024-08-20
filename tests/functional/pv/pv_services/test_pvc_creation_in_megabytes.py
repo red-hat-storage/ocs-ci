@@ -1,6 +1,7 @@
 import pytest
 import logging
 
+from ocs_ci.framework.testlib import E2ETest
 from ocs_ci.framework.testlib import bugzilla, tier1
 from ocs_ci.ocs import constants
 from ocs_ci.framework.pytest_customization.marks import green_squad
