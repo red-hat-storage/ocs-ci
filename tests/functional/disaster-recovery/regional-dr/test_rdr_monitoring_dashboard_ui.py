@@ -96,7 +96,7 @@ class TestRDRMonitoringDashboardUI:
         )
         assert cluster_and_operator_health_check_on_ui(
             acm_obj, cluster1=primary_cluster_name, cluster2=secondary_cluster_name
-        ), "Cluster and Operator health check failed"
+        ), "Cluster and Operator health aren't healthy, check failed"
         for workload in rdr_workload:
             workload_number = 1
             workload_names = []
@@ -142,7 +142,7 @@ class TestRDRMonitoringDashboardUI:
         acm_obj.take_screenshot()
         assert not cluster_and_operator_health_check_on_ui(
             acm_obj, cluster1=primary_cluster_name, cluster2=secondary_cluster_name
-        ), f"Cluster and Operator health are not in degraded after {primary_cluster_name} went down"
+        ), f"Cluster and Operator health are not in degraded even after {primary_cluster_name} went down"
         # Failover via ACM UI
         for workload in rdr_workload:
             workload_number = 1
@@ -222,4 +222,4 @@ class TestRDRMonitoringDashboardUI:
         acm_obj.take_screenshot()
         assert cluster_and_operator_health_check_on_ui(
             acm_obj, cluster1=primary_cluster_name, cluster2=secondary_cluster_name
-        ), "Cluster and Operator health check failed"
+        ), "Cluster and Operator health aren't healthy, check failed"
