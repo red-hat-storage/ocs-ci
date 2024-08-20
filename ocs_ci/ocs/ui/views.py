@@ -1086,8 +1086,7 @@ acm_configuration_4_16 = {
         By.CSS_SELECTOR,
     ),
     "cluster-dropdown": ("//input[@placeholder='Select a cluster']", By.XPATH),
-    "cluster-1": ("//button[normalize-space()='{}']", By.XPATH),
-    "cluster-2": ("//button[normalize-space()='{}']", By.XPATH),
+    "cluster": ("//button[normalize-space()='{}']", By.XPATH),
     "cluster-health-status": (
         "div[data-status-id='Cluster health-secondary-status'] "
         "small[class='co-status-card__health-item-text text-muted']",
