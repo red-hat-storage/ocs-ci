@@ -126,7 +126,7 @@ class BusyBox(DRWorkload):
 
     """
 
-    def __init__(self, workload_details, **kwargs):
+    def __init__(self, **kwargs):
         workload_repo_url = config.ENV_DATA["dr_workload_repo_url"]
         log.info(f"Repo used: {workload_repo_url}")
         workload_repo_branch = config.ENV_DATA["dr_workload_repo_branch"]
@@ -155,6 +155,7 @@ class BusyBox(DRWorkload):
         self.channel_yaml_file = os.path.join(
             self.workload_subscription_dir, "channel.yaml"
         )
+        workload_details = kwargs.get("workload_details")
         self.is_placement = workload_details.get("is_placement")
         if self.is_placement is not None:
             log.info("Inside 1st is_placement constructor")
