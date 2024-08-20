@@ -17,8 +17,10 @@ from ocs_ci.ocs.resources.storage_cluster import (
 from ocs_ci.ocs.constants import (
     CEPHBLOCKPOOL,
     ACCESS_MODE_RWO,
+    POD,
     STATUS_READY,
     REPLICA1_STORAGECLASS,
+    STATUS_RUNNING,
     VOLUME_MODE_BLOCK,
     CSI_RBD_RAW_BLOCK_POD_YAML,
     DEFALUT_DEVICE_CLASS,
@@ -29,6 +31,7 @@ from ocs_ci.utility.utils import validate_dict_values, compare_dictionaries
 from ocs_ci.ocs.replica_one import (
     delete_replica_1_sc,
     get_osd_pgs_used,
+    get_replica_1_osds,
     purge_replica1_osd,
     delete_replica1_cephblockpools_cr,
     count_osd_pods,
@@ -82,6 +85,14 @@ class TestReplicaOne:
         storage_cluster.wait_for_resource(
             condition=STATUS_READY, column="PHASE", timeout=180, sleep=15
         )
+        osd_names_n_id = get_replica_1_osds()
+        osd_names = list(osd_names_n_id.keys())
+
+        for osd in osd_names:
+            pod = OCP(
+                kind=POD, namespace=OPENSHIFT_STORAGE_NAMESPACE, resource_name=osd
+            )
+            pod.wait_for_resource(condition=STATUS_RUNNING, column="STATUS")
 
         return storage_cluster
 
@@ -137,8 +148,6 @@ class TestReplicaOne:
     ):
         log.info("Starting Tier1 replica one test")
         failure_domains = get_failure_domains()
-        # get newly created pods
-        # wait for resources (pods) to be at status running
         testing_pod = create_pod_on_failure_domain(
             project_factory,
             pod_factory,

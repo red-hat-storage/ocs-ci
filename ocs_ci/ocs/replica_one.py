@@ -1,4 +1,5 @@
 from logging import getLogger
+from time import sleep
 
 from ocs_ci.framework import config
 from ocs_ci.ocs.resources.pod import (
@@ -189,6 +190,7 @@ def purge_replica1_osd():
     log.info(f"OSD IDs: {replica1_osds.values()}")
     run_osd_removal_job(osd_ids=replica1_osds.values())
     verify_osd_removal_job_completed_successfully("4")
+    sleep(120)
     delete_osd_removal_job()
 
 
