@@ -126,7 +126,7 @@ class BusyBox(DRWorkload):
 
     """
 
-    def __init__(self, **kwargs):
+    def __init__(self, workload_details, **kwargs):
         workload_repo_url = config.ENV_DATA["dr_workload_repo_url"]
         log.info(f"Repo used: {workload_repo_url}")
         workload_repo_branch = config.ENV_DATA["dr_workload_repo_branch"]
@@ -155,7 +155,9 @@ class BusyBox(DRWorkload):
         self.channel_yaml_file = os.path.join(
             self.workload_subscription_dir, "channel.yaml"
         )
-        if kwargs.get("is_placement"):
+        self.is_placement = workload_details.get("is_placement")
+        if self.is_placement is not None:
+            log.info("Inside 1st is_placement constructor")
             self.placement_yaml_file = os.path.join(
                 self.workload_subscription_dir, self.workload_name, "placement.yaml"
             )
@@ -174,7 +176,7 @@ class BusyBox(DRWorkload):
         drpc_yaml_data["spec"]["preferredCluster"] = self.preferred_primary_cluster
         drpc_yaml_data["spec"]["drPolicyRef"]["name"] = self.dr_policy_name
         templating.dump_data_to_temp_yaml(drpc_yaml_data, self.drpc_yaml_file)
-        if self.kwargs.get("is_placement"):
+        if self.is_placement is not None:
             # load placement.yaml
             placement_yaml_data = templating.load_yaml(self.placement_yaml_file)
             placement_yaml_data["spec"]["predicates"][0]["requiredClusterSelector"][
@@ -219,10 +221,9 @@ class BusyBox(DRWorkload):
         config.switch_acm_ctx()
         run_cmd(f"oc create -k {self.workload_subscription_dir}")
         run_cmd(f"oc create -k {self.workload_subscription_dir}/{self.workload_name}")
-        if self.kwargs.get("is_placement"):
+        if self.is_placement is not None:
             self.add_annotation_to_placement()
             run_cmd(f"oc create -f {drcp_data_yaml.name}")
-
         self.verify_workload_deployment()
 
     def _deploy_prereqs(self):
