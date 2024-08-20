@@ -304,6 +304,13 @@ def ocs_install_verification(
             }
         )
 
+    if ocs_version >= version.VERSION_4_17:
+        resources_dict.update(
+            {
+                constants.CEPH_CSI_CONTROLLER_MANAGER_LABEL: 1,
+            }
+        )
+
     for label, count in resources_dict.items():
         if label == constants.RGW_APP_LABEL:
             if (
