@@ -4717,11 +4717,7 @@ def switch_to_correct_cluster_at_setup(request):
         pytest.skip(f"The cluster type '{cluster_type}' does not exist in the run")
 
     client_type = get_pytest_fixture_value(request, "client_type")
-    if (
-        cluster_type == constants.HCI_CLIENT
-        and client_type
-        and client_type != constants.NON_HOSTED_CLUSTER
-    ):
+    if cluster_type == constants.HCI_CLIENT and client_type:
         switch_to_correct_client_type(client_type)
         return
 

@@ -398,7 +398,7 @@ class TestNodesRestartHCI(ManageTest):
             ),
         ],
     )
-    def test_hosted_cluster_nodes_restart(self, cluster_type, client_type, nodes):
+    def test_client_cluster_nodes_restart(self, cluster_type, client_type, nodes):
         """
         Test hosted cluster nodes restart
 
@@ -426,7 +426,7 @@ class TestNodesRestartHCI(ManageTest):
             ),
         ],
     )
-    def test_hosted_cluster_nodes_restart_by_stop_and_start(
+    def test_client_cluster_nodes_restart_by_stop_and_start(
         self, cluster_type, client_type, nodes
     ):
         """
