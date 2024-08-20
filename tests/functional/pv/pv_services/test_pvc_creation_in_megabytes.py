@@ -1,9 +1,9 @@
-import pytest
 import logging
+import pytest
 
-from ocs_ci.framework.testlib import bugzilla, tier1, E2ETest
-from ocs_ci.ocs import constants
 from ocs_ci.framework.pytest_customization.marks import green_squad
+from ocs_ci.framework.testlib import bugzilla, E2ETest, tier1
+from ocs_ci.ocs import constants
 
 log = logging.getLogger(__name__)
 
