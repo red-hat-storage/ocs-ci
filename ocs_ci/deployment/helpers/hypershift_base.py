@@ -17,9 +17,7 @@ from ocs_ci.ocs.ocp import OCP
 from ocs_ci.ocs.resources.pod import wait_for_pods_to_be_in_statuses_concurrently
 from ocs_ci.ocs.version import get_ocp_version
 from ocs_ci.utility.retry import retry
-
 from ocs_ci.utility.utils import exec_cmd, TimeoutSampler, get_latest_release_version
-from ocs_ci.utility.utils import exec_cmd, TimeoutSampler
 from ocs_ci.utility.decorators import switch_to_orig_index_at_last
 from ocs_ci.ocs.utils import get_namespce_name_by_pattern
 
