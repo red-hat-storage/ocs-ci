@@ -32,6 +32,7 @@ def get_required_csvs():
             defaults.ODF_PROMETHEUS_OPERATOR,
             defaults.ODF_CLIENT_OPERATOR,
             defaults.RECIPE_OPERATOR,
+            defaults.CEPHCSI_OPERATOR,
         ]
         ocs_operator_names.extend(operators_4_16_additions)
     return ocs_operator_names
