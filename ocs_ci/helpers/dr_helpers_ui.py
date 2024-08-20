@@ -482,12 +482,12 @@ def cluster_and_operator_health_check_on_ui(
             )
             if not cluster_health_status:
                 log.info(
-                    f"Text {expected_text} for locator {locator} found, validation passed"
+                    f"Text {expected_text} for locator {locator} not found, validation passed"
                 )
                 acm_obj.take_screenshot()
             else:
                 log.error(
-                    f"Text {expected_text} for locator {locator} not found, validation failed"
+                    f"Text {expected_text} for locator {locator} found, validation failed"
                 )
                 acm_obj.take_screenshot()
                 return False
