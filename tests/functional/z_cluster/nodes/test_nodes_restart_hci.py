@@ -384,9 +384,18 @@ class TestNodesRestartHCI(ManageTest):
     @pytest.mark.parametrize(
         argnames=["cluster_type", "client_type"],
         argvalues=[
-            pytest.param(*[HCI_CLIENT, constants.HOSTED_CLUSTER_KUBEVIRT]),
-            pytest.param(*[HCI_CLIENT, constants.HOSTED_CLUSTER_AGENT]),
-            pytest.param(*[HCI_CLIENT, constants.NON_HOSTED_CLUSTER]),
+            pytest.param(
+                *[HCI_CLIENT, constants.HOSTED_CLUSTER_KUBEVIRT],
+                marks=pytest.mark.polarion_id("OCS-6170"),
+            ),
+            pytest.param(
+                *[HCI_CLIENT, constants.HOSTED_CLUSTER_AGENT],
+                marks=pytest.mark.polarion_id("OCS-6171"),
+            ),
+            pytest.param(
+                *[HCI_CLIENT, constants.NON_HOSTED_CLUSTER],
+                marks=pytest.mark.polarion_id("OCS-6172"),
+            ),
         ],
     )
     def test_hosted_cluster_nodes_restart(self, cluster_type, client_type, nodes):
@@ -403,9 +412,18 @@ class TestNodesRestartHCI(ManageTest):
     @pytest.mark.parametrize(
         argnames=["cluster_type", "client_type"],
         argvalues=[
-            pytest.param(*[HCI_CLIENT, constants.HOSTED_CLUSTER_KUBEVIRT]),
-            pytest.param(*[HCI_CLIENT, constants.HOSTED_CLUSTER_AGENT]),
-            pytest.param(*[HCI_CLIENT, constants.NON_HOSTED_CLUSTER]),
+            pytest.param(
+                *[HCI_CLIENT, constants.HOSTED_CLUSTER_KUBEVIRT],
+                marks=pytest.mark.polarion_id("OCS-6173"),
+            ),
+            pytest.param(
+                *[HCI_CLIENT, constants.HOSTED_CLUSTER_AGENT],
+                marks=pytest.mark.polarion_id("OCS-6174"),
+            ),
+            pytest.param(
+                *[HCI_CLIENT, constants.NON_HOSTED_CLUSTER],
+                marks=pytest.mark.polarion_id("OCS-6175"),
+            ),
         ],
     )
     def test_hosted_cluster_nodes_restart_by_stop_and_start(
