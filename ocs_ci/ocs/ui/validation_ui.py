@@ -213,12 +213,12 @@ class ValidationUI(PageNavigator):
         if default_projects_is_checked.get_attribute("data-checked-state") == "false":
             logger.info("Show default projects")
             self.do_click(self.validation_loc["show-default-projects"])
-        logger.info("Search for 'cluster_namespace' project")
+        logger.info("Search for '%s' project", config.ENV_DATA["cluster_namespace"])
         self.do_send_keys(
             self.validation_loc["project-search-bar"],
             text=config.ENV_DATA["cluster_namespace"],
         )
-        logger.info("Select 'cluster_namespace' project")
+        logger.info("Select '%s' project", config.ENV_DATA["cluster_namespace"])
         time.sleep(2)
         self.do_click(
             self.dep_loc["choose_openshift-storage_project"], enable_screenshot=True
