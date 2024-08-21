@@ -1,7 +1,7 @@
 """
 Storage client related functions
 """
-
+import json
 import logging
 import tempfile
 import time
@@ -19,6 +19,9 @@ from ocs_ci.helpers.managed_services import (
 from ocs_ci.ocs.resources.ocs import get_ocs_csv
 from ocs_ci.ocs.resources.storage_cluster import verify_storage_cluster
 from ocs_ci.utility.utils import TimeoutSampler
+from ocs_ci.utility.utils import (
+    exec_cmd,
+)
 
 log = logging.getLogger(__name__)
 
@@ -128,10 +131,24 @@ class StorageClient:
             if enable_console:
                 enable_console_plugin(value="[odf-client-console]")
 
+    def check_storageclient_availability(self, storage_client_name):
+        """
+        Check if the storage client exists
+
+        Returns:
+            bool: True if storage client exists, False otherwise
+        """
+        return self.storage_client_obj.check_resource_existence(
+            timeout=120,
+            resource_name=storage_client_name,
+            should_exist=True,
+        )
+
     def create_storage_client(
         self,
         storage_provider_endpoint=None,
         onboarding_token=None,
+        native_client=False,
     ):
         """
         This method creates storage clients
@@ -139,18 +156,34 @@ class StorageClient:
         Inputs:
         storage_provider_endpoint (str): storage provider endpoint details.
         onboarding_token (str): onboarding token
+        native_client (bool): flag to indicate if the storageclient is nativeclient
 
         """
 
-        # Pull storage-client yaml data
-        log.info("Pulling storageclient CR data from yaml")
-        storage_client_data = templating.load_yaml(constants.STORAGE_CLIENT_YAML)
-        resource_name = storage_client_data["metadata"]["name"]
-        log.info(f"the resource name: {resource_name}")
+        if self.ocs_version < version.VERSION_4_16:
+            # Pull storage-client yaml data
+            log.info("Pulling storageclient CR data from yaml")
+            storage_client_data = templating.load_yaml(
+                constants.NATIVE_STORAGE_CLIENT_YAML
+            )
+            storage_client_name = storage_client_data["metadata"]["name"]
+            log.info(f"the resource name: {storage_client_name}")
+
+        else:
+            log.info("Pulling storageclient CR data from yaml")
+            storage_client_data = templating.load_yaml(
+                constants.PROVIDER_MODE_STORAGE_CLIENT
+            )
+            if native_client:
+                storage_client_data["metadata"]["name"] = "ocs-storagecluster"
+                storage_client_name = storage_client_data["metadata"]["name"]
+            else:
+                storage_client_name = storage_client_data["metadata"]["name"]
+            log.info(f"the resource name: {storage_client_name}")
 
         # Check storageclient is available or not
-        is_available = self.storage_client_obj.is_exist(
-            resource_name=resource_name,
+        is_available = self.check_storageclient_availability(
+            storage_client_name=storage_client_name,
         )
 
         if not is_available:
@@ -478,10 +511,12 @@ class StorageClient:
         onboarding_token = storage_clients.generate_client_onboarding_ticket()
 
         # Create ODF subscription for storage-client
-        self.odf_installation_on_client()
+        if self.ocs_version < version.VERSION_4_16:
+            self.odf_installation_on_client()
         self.create_storage_client(
             storage_provider_endpoint=storage_provider_endpoint,
             onboarding_token=onboarding_token,
+            native_client=True,
         )
 
         if self.ocs_version < version.VERSION_4_16:
@@ -561,3 +596,58 @@ class StorageClient:
                     log.info(f"storageclient data, {storageclient}")
                     return storageclient.get("metadata", {}).get("name")
         return None
+
+    def fetch_storage_consumer_name_for_storageclient(
+        self,
+        storage_client_name,
+        namespace=config.ENV_DATA["cluster_namespace"],
+    ):
+        """
+        This method is to fetch consumer name for a storageclient
+
+        Args:
+            storageclient_name (str): Name of the storageclient to fetch consumer name.
+            namespace (str): Namespace where the storageclient is present.
+
+        Returns:
+            consumer_name (str): consumer name
+                                example- storageconsumer-e5766b2d-e770-456f-8c9f-cc84140f8455
+
+        """
+        cmd = (
+            f"oc get storageconsumer -n {namespace} -o json | jq '.items[] |"
+            "select(.status.client.name == {storage_client_name})'"
+        )
+        res = exec_cmd(cmd, shell=True)
+        if res.returncode != 0:
+            log.error(f"Failed to fetch storage consumer details\n{res.stderr}")
+        consumer_details = res.stdout.decode()
+        consumer_data = json.loads(consumer_details)
+        log.info(
+            f"Storage consumer details for {storage_client_name} is : {consumer_data}"
+        )
+        consumer_name = consumer_data["metadata"]["name"]
+        return consumer_name
+
+    def delete_storageclaim(
+        self, storage_claim_name, namespace=config.ENV_DATA["cluster_namespace"]
+    ):
+        """
+        This method is to delete a storage claim
+
+        Args:
+            storageclient_name (str): Name of the storageclient to fetch consumer name.
+            namespace (str): Namespace where the storageclient is present.
+
+        Returns:
+            (bool): If claim gets deleted successfully
+
+        """
+        if self.ocs_version >= version.VERSION_4_16:
+            cmd = f"oc delete storageclaim {storage_claim_name} -n {namespace}"
+        else:
+            cmd = f"oc delete storageclassclaim {storage_claim_name} -n {namespace}"
+        res = exec_cmd(cmd, shell=True)
+        if res.returncode != 0:
+            log.error(f"Failed to delete storageclaim\n{storage_claim_name}")
+        return res.returncode == 0
