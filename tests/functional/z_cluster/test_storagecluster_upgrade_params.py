@@ -76,8 +76,11 @@ class TestStorageclusterUpgradeParams(ManageTest):
             "osdMaintenanceTimeout": "18",
         }
 
-        for k, v in params_dict.items():
-            param = f'[{{"op": "add", "path": "/spec/managedResources/cephCluster/{k}", "value": {v}}}]'
+        for parameter, parameter_value in params_dict.items():
+            param = (
+                f'[{{"op": "add", "path": "/spec/managedResources/cephCluster/{parameter}",'
+                f' "value": {parameter_value}}}]'
+            )
             storagecluster_obj.patch(params=param, format_type="json")
 
         logger.info("Wait 2 sec the cephcluster will updated")
