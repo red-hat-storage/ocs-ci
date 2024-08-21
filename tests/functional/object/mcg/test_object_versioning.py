@@ -15,6 +15,7 @@ from ocs_ci.framework.pytest_customization.marks import (
     mcg,
     post_upgrade,
     pre_upgrade,
+    polarion_id,
 )
 from ocs_ci.ocs.bucket_utils import (
     s3_put_bucket_versioning,
@@ -147,6 +148,7 @@ class TestObjectVersioning:
 @mcg
 @red_squad
 @bugzilla("2240714")
+@polarion_id("OCS-6177")
 class TestGetObjectByVersionID:
 
     # Common consts between the

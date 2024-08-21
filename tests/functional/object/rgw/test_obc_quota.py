@@ -20,6 +20,7 @@ from ocs_ci.framework.pytest_customization.marks import (
     red_squad,
     rgw,
     runs_on_provider,
+    polarion_id,
 )
 
 logger = logging.getLogger(__name__)
@@ -123,6 +124,7 @@ class TestOBCQuota:
             logger.info(f"New quota {new_quota_str} got applied!!")
 
     @bugzilla("2188032")
+    @polarion_id("OCS-6178")
     @pytest.mark.parametrize(
         argnames="amount,interface,quota",
         argvalues=[
