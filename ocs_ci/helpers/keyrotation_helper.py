@@ -8,6 +8,7 @@ from ocs_ci.framework import config
 from ocs_ci.ocs.resources.pvc import get_deviceset_pvcs
 from ocs_ci.ocs.exceptions import UnexpectedBehaviour
 from ocs_ci.utility.retry import retry
+from ocs_ci.utility.kms import get_kms_deployment
 
 log = logging.getLogger(__name__)
 
@@ -349,4 +350,61 @@ class OSDKeyrotation(KeyRotation):
             assert False
 
         log.info("Keyrotation is sucessfully done for the all OSD.")
+        return True
+
+
+class PVKeyrotation(KeyRotation):
+    def __init__(self, sc_obj):
+        self.sc_obj = sc_obj
+        self.kms = get_kms_deployment()
+
+    def annotate_storageclass_key_rotation(self, schedule="@weekly"):
+        """
+        Annotate Storageclass To enable keyrotation for encrypted PV
+        """
+        annot_str = f"keyrotation.csiaddons.openshift.io/schedule='{schedule}'"
+        log.info(f"Adding annotation to the storage class:  {annot_str}")
+        self.sc_obj.annotate(annotation=annot_str)
+
+    @retry(UnexpectedBehaviour, tries=5, delay=20)
+    def compare_keys(self, device_handle, old_key):
+        """
+        Compares the current key with the rotated key.
+
+        Args:
+            device_handle (str): The handle or identifier for the device.
+            old_key (str): The current key before rotation.
+
+        Returns:
+            bool: True if the key has rotated successfully.
+
+        Raises:
+            UnexpectedBehaviour: If the keys have not rotated.
+        """
+        rotated_key = self.kms.get_pv_secret(device_handle)
+        if old_key == rotated_key:
+            raise UnexpectedBehaviour(
+                f"Keys are not rotated for device handle {device_handle}"
+            )
+        log.info(f"PV key rotated with new key : {rotated_key}")
+        return True
+
+    def wait_till_keyrotation(self, device_handle):
+        """
+        Waits until the key rotation occurs for a given device handle.
+
+        Args:
+            device_handle (str): The handle or identifier for the device whose key
+                rotation is to be checked.
+
+        Returns:
+            bool: True if the key rotation is successful, otherwise False.
+        """
+        old_key = self.kms.get_pv_secret(device_handle)
+        try:
+            self.compare_keys(device_handle, old_key)
+        except UnexpectedBehaviour:
+            log.error(f"Keys are not rotated for device handle {device_handle}")
+            assert False
+
         return True

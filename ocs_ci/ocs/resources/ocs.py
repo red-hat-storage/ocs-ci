@@ -174,6 +174,17 @@ class OCS(object):
         self.reload()
         return status
 
+    def annotate(self, annotation):
+        """
+        Add annotation to the OCS Object.
+
+        Args:
+            annotation (str): New annotation to the OCS object.
+        """
+        status = self.ocp.annotate(annotation, resource_name=self.name)
+        self.reload()
+        return status
+
     def delete_temp_yaml_file(self):
         utils.delete_file(self.temp_yaml)
 

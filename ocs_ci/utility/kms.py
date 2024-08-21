@@ -607,18 +607,32 @@ class Vault(KMS):
 
     def get_vault_connection_info(self, resource_name=None):
         """
-        Get resource info from ocs-kms-connection-defatils
+        Get resource info from ocs-kms-connection-defatils or csi-kms-connection-details
+        configmap.
 
         Args:
             resource_name (str): name of the resource
 
         """
-        connection_details = ocp.OCP(
+        cm_obj = ocp.OCP(
             kind="ConfigMap",
-            resource_name=constants.VAULT_KMS_CONNECTION_DETAILS_RESOURCE,
             namespace=config.ENV_DATA["cluster_namespace"],
         )
-        return connection_details.get().get("data")[resource_name]
+
+        if cm_obj.is_exist(constants.VAULT_KMS_CONNECTION_DETAILS_RESOURCE):
+            cm_data = cm_obj.get(constants.VAULT_KMS_CONNECTION_DETAILS_RESOURCE)
+            return cm_data.get().get("data")[resource_name]
+
+        elif cm_obj.is_exist(constants.VAULT_KMS_CSI_CONNECTION_DETAILS):
+            cm_data = cm_obj.get(constants.VAULT_KMS_CSI_CONNECTION_DETAILS)
+            for k, v in cm_data.get("data").items():
+                json_out = json.loads(cm_data.get("data")[k])
+                if json_out.get("KMS_SERVICE_NAME") == "vault":
+                    return json_out[resource_name]
+            else:
+                return None
+        else:
+            return None
 
     def get_vault_backend_path(self):
         """
@@ -1205,6 +1219,46 @@ class Vault(KMS):
         out = subprocess.check_output(shlex.split(cmd))
         if "Success" in out.decode():
             logger.info(f"Role {role_name} created successfully")
+
+    def get_pv_secret(self, device_handle):
+        """
+        Get secret stored in the vault KMS for the given device_handle
+
+        Args:
+            device_handle (str): PV device handle string
+
+        Returns:
+            secret (str): passphrase stored in the vault KMS for given device handle.
+        """
+        if not self.vault_backend_path:
+            self.get_vault_backend_path()
+
+        cmd = f"vault kv get -format=json {self.vault_backend_path}/{device_handle}"
+        out = subprocess.check_output(shlex.split(cmd))
+        json_out = json.loads(out)
+
+        def find_passphrase(obj):
+            """
+            Recursively searches for the 'passphrase' key in the JSON object.
+            """
+            if isinstance(obj, dict):
+                for key, value in obj.items():
+                    if key == "passphrase":
+                        return value
+                    elif isinstance(value, dict) or isinstance(value, list):
+                        result = find_passphrase(value)
+                        if result:
+                            return result
+            elif isinstance(obj, list):
+                for item in obj:
+                    result = find_passphrase(item)
+                    if result:
+                        return result
+            return None
+
+        secret = find_passphrase(json_out)
+
+        return secret
 
 
 class HPCS(KMS):
