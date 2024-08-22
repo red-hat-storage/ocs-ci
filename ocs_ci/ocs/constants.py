@@ -207,6 +207,7 @@ MANAGED_FUSION_OFFERING = "ManagedFusionOffering"
 CEPH_CLUSTER = "CephCluster"
 EXTERNAL_CEPHCLUSTER_NAME = "ocs-external-storagecluster-cephcluster"
 CEPH_CLUSTER_NAME = "ocs-storagecluster-cephcluster"
+REPLICA1_STORAGECLASS = "ocs-storagecluster-ceph-non-resilient-rbd"
 ENDPOINTS = "Endpoints"
 WEBHOOK = "ValidatingWebhookConfiguration"
 ROOK_CEPH_WEBHOOK = "rook-ceph-webhook"
@@ -221,6 +222,8 @@ INGRESSCONTROLLER = "ingresscontroller"
 PROVISIONING = "Provisioning"
 AGENT_SERVICE_CONFIG = "AgentServiceConfig"
 INFRA_ENV = "InfraEnv"
+DEFALUT_DEVICE_CLASS = "ssd"
+
 
 # Provisioners
 AWS_EFS_PROVISIONER = "openshift.org/aws-efs"

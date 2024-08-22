@@ -2739,7 +2739,7 @@ def verify_osd_removal_job_completed_successfully(osd_id):
     return True
 
 
-def delete_osd_removal_job(osd_id):
+def delete_osd_removal_job(osd_id=None):
     """
     Delete the ocs-osd-removal job.
 

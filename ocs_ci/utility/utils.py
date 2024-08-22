@@ -5040,3 +5040,63 @@ def sum_of_two_storage_sizes(storage_size1, storage_size2, convert_size=1024):
     size = size1 + size2
     new_storage_size = f"{size}{unit}"
     return new_storage_size
+
+
+def validate_dict_values(input_dict: dict) -> bool:
+    """
+    Validate that all values in the dictionary are the same when ignoring the last two digits.
+
+    Args:
+        input_dict (dict: {str:int}): The dictionary to validate.
+
+    Returns:
+        bool: True if all values pass the validation, False otherwise.
+
+    """
+    values = list(input_dict.values())
+    first_value = values[0] // 100
+    for value in values[1:]:
+        if value // 100 != first_value:
+            return False
+    return True
+
+
+def compare_dictionaries(
+    dict1: dict, dict2: dict, known_different_keys: list, tolerance: int = 10
+) -> dict:
+    """
+    Compares two dictionaries and returns a dictionary with the keys that have different values,
+    but allow a tolerance between this values.
+
+    Args:
+        dict1 (dict): dictionary to compare.
+        dict2 (dict): dictionary to compare.
+        known_different_keys (list): keys to ignore from the comparison.
+        tolerance (int): level of tolerance by precentage. Defaults to 10.
+
+    Returns:
+        dict: difrerences between the two dictionaries.
+    """
+    differences = dict()
+
+    for key in dict1.keys():
+        if key not in known_different_keys:
+            value1 = dict1[key]
+            value2 = dict2[key]
+
+            if isinstance(value1, (int)) and isinstance(value2, (int)):
+                # Calculate percentage difference
+                max_value = max(abs(value1), abs(value2))
+                if max_value != 0:
+                    diff_percentage = abs(value1 - value2) / max_value * 100
+
+                    if diff_percentage > tolerance:
+                        differences[key] = (value1, value2)
+                    elif 1 <= diff_percentage <= tolerance:
+                        log.warning(
+                            f"Key '{key}' has a {diff_percentage:.2f}% difference (values: {value1}, {value2})"
+                        )
+            elif value1 != value2:
+                differences[key] = (value1, value2)
+    log.info(f"Differences: {differences}")
+    return differences
