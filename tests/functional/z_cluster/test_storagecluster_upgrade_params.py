@@ -9,12 +9,14 @@ from ocs_ci.framework.testlib import (
     ManageTest,
     tier2,
     skipif_external_mode,
+    brown_squad,
 )
 
 logger = logging.getLogger(__name__)
 
 
 @tier2
+@brown_squad
 @skipif_external_mode
 @pytest.mark.polarion_id("OCS-XXX")
 class TestStorageclusterUpgradeParams(ManageTest):
@@ -31,11 +33,7 @@ class TestStorageclusterUpgradeParams(ManageTest):
         """
 
         def finalizer():
-            storagecluster_obj = ocp.OCP(
-                kind=constants.STORAGECLUSTER,
-                namespace=config.ENV_DATA["cluster_namespace"],
-                resource_name=constants.DEFAULT_CLUSTERNAME,
-            )
+
             params_dict = {
                 "waitTimeoutForHealthyOSDInMinutes": "10",
                 "skipUpgradeChecks": "false",
@@ -43,13 +41,7 @@ class TestStorageclusterUpgradeParams(ManageTest):
                 "upgradeOSDRequiresHealthyPGs": "false",
                 "osdMaintenanceTimeout": "30",
             }
-
-            for parameter, parameter_value in params_dict.items():
-                param = (
-                    f'[{{"op": "add", "path": "/spec/managedResources/cephCluster/{parameter}",'
-                    f' "value": {parameter_value}}}]'
-                )
-                storagecluster_obj.patch(params=param, format_type="json")
+            self.set_storage_cluster_upgrade_params(params_dict)
 
         request.addfinalizer(finalizer)
 
@@ -58,16 +50,10 @@ class TestStorageclusterUpgradeParams(ManageTest):
         Procedure:
         1.Configure storagecluster
         2.Wait 2 seconds
-        3.Read cephcluster parameter
-        4.Verify parameters on cephcluster CR same storagecluster CR
-        5.Configure the default params on storagecluster [treardown]
+        3.Verify upgrade parameters on cephcluster CR and storagecluster CR are same
+        4.Configure the default params on storagecluster [treardown]
 
         """
-        storagecluster_obj = ocp.OCP(
-            kind=constants.STORAGECLUSTER,
-            namespace=config.ENV_DATA["cluster_namespace"],
-            resource_name=constants.DEFAULT_CLUSTERNAME,
-        )
         params_dict = {
             "waitTimeoutForHealthyOSDInMinutes": "31",
             "skipUpgradeChecks": "true",
@@ -75,17 +61,14 @@ class TestStorageclusterUpgradeParams(ManageTest):
             "upgradeOSDRequiresHealthyPGs": "true",
             "osdMaintenanceTimeout": "18",
         }
-
-        for parameter, parameter_value in params_dict.items():
-            param = (
-                f'[{{"op": "add", "path": "/spec/managedResources/cephCluster/{parameter}",'
-                f' "value": {parameter_value}}}]'
-            )
-            storagecluster_obj.patch(params=param, format_type="json")
+        self.set_storage_cluster_upgrade_params(params_dict)
 
         logger.info("Wait 2 sec the cephcluster will updated")
         time.sleep(2)
 
+        logger.info(
+            "Verify upgrade parameters on cephcluster CR and storagecluster CR are same"
+        )
         cephcluster_obj = ocp.OCP(
             kind=constants.CEPH_CLUSTER,
             namespace=config.ENV_DATA["cluster_namespace"],
@@ -101,3 +84,24 @@ class TestStorageclusterUpgradeParams(ManageTest):
             assert (
                 str(actual_value).lower() == str(parameter_value).lower()
             ), f"The value of {parameter} is {actual_value} the expected value is {parameter_value}"
+
+    def set_storage_cluster_upgrade_params(self, params_dict):
+        """
+        Configure StorageCluster CR with upgrade params
+
+        Args:
+            params_dict:
+
+        """
+        logger.info(f"Configure StorageCluster CR with upgrade params {params_dict}")
+        storagecluster_obj = ocp.OCP(
+            kind=constants.STORAGECLUSTER,
+            namespace=config.ENV_DATA["cluster_namespace"],
+            resource_name=constants.DEFAULT_CLUSTERNAME,
+        )
+        for parameter, parameter_value in params_dict.items():
+            param = (
+                f'[{{"op": "add", "path": "/spec/managedResources/cephCluster/{parameter}",'
+                f' "value": {parameter_value}}}]'
+            )
+            storagecluster_obj.patch(params=param, format_type="json")
