@@ -986,10 +986,6 @@ def login_ui(console_url=None, username=None, password=None):
         config.ENV_DATA["platform"].lower() in HCI_PROVIDER_CLIENT_PLATFORMS
     )
 
-    platform_rosa_hcp = (
-        config.ENV_DATA["platform"].lower() == constants.ROSA_HCP_PLATFORM
-    )
-
     if hci_platform_conf:
         dashboard_url = console_url + "/dashboards"
         # proceed to local-cluster page if not already there. The rule is always to start from the local-cluster page
@@ -1013,14 +1009,17 @@ def login_ui(console_url=None, username=None, password=None):
     if default_console is True and username is constants.KUBEADMIN:
         wait_for_element_to_be_visible(page_nav_loc["page_navigator_sidebar"], 180)
 
-    if (
-        username is not constants.KUBEADMIN
-        and not hci_platform_conf
-        and not platform_rosa_hcp
+    # Skip tour if it appears, if not found, continue without clicking
+    # we don't want to wait for Tour Guide more than 15 sec, because in most cases it will not be present
+    if any(
+        (driver.find_elements(*login_loc["skip_tour"][::-1]) or time.sleep(5))
+        for _ in range(3)
     ):
-        # OCP 4.14 and OCP 4.15 observed default user role is an admin
         skip_tour_el = wait_for_element_to_be_clickable(login_loc["skip_tour"], 180)
         skip_tour_el.click()
+    else:
+        logger.info("Skip tour element not found. Continuing without clicking.")
+
     return driver
 
 
