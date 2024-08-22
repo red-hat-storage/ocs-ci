@@ -203,10 +203,12 @@ class BusyBox(DRWorkload):
                 drpc_yaml_data["spec"]["pvcSelector"][
                     "matchLabels"
                 ] = self.workload_pvc_selector
-                drcp_data_yaml = tempfile.NamedTemporaryFile(
+                self.drcp_data_yaml = tempfile.NamedTemporaryFile(
                     mode="w+", prefix="drpc", delete=False
                 )
-                templating.dump_data_to_temp_yaml(drpc_yaml_data, drcp_data_yaml.name)
+                templating.dump_data_to_temp_yaml(
+                    drpc_yaml_data, self.drcp_data_yaml.name
+                )
 
         # TODO
         # drpc_yaml_file needs to be committed back to the repo
@@ -223,7 +225,7 @@ class BusyBox(DRWorkload):
         run_cmd(f"oc create -k {self.workload_subscription_dir}/{self.workload_name}")
         if self.is_placement:
             self.add_annotation_to_placement()
-            run_cmd(f"oc create -f {drcp_data_yaml.name}")
+            run_cmd(f"oc create -f {self.drcp_data_yaml.name}")
         self.verify_workload_deployment()
 
     def _deploy_prereqs(self):
