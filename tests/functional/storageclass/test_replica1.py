@@ -7,6 +7,7 @@ from ocs_ci.framework.pytest_customization.marks import (
     polarion_id,
     bugzilla,
     tier1,
+    skipif_external_mode,
 )
 from ocs_ci.ocs.ocp import OCP
 from ocs_ci.ocs.resources.storage_cluster import (
@@ -72,6 +73,7 @@ def create_pod_on_failure_domain(project_factory, pod_factory, failure_domain: s
 @brown_squad
 @bugzilla("2274175")
 @tier1
+@skipif_external_mode
 class TestReplicaOne:
     @pytest.fixture(scope="class")
     def replica1_setup(self):
