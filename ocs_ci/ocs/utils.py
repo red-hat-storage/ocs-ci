@@ -1655,7 +1655,7 @@ def set_recovery_as_primary():
     ocsci_config.clusters.remove(cluster)
 
     # 2.Reindexing After removing primary cluster
-    reindexing()
+    cluster_config_reindex()
     log.info("Old primary cluster config removed from list")
 
     # Decrement count from nclusters
@@ -1671,7 +1671,7 @@ def set_recovery_as_primary():
     recovery_cluster_config.MULTICLUSTER["primary_cluster"] = True
 
 
-def reindexing():
+def cluster_config_reindex():
     for cluster in ocsci_config.clusters:
         current_index = ocsci_config.clusters.index(cluster)
         if current_index != cluster.MULTICLUSTER["multicluster_index"]:

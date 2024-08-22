@@ -1329,7 +1329,15 @@ def add_label_to_appsub(workloads, label="test", value="test1"):
             )
     config.switch_ctx(old_ctx)
 
+
 def disable_dr_from_app(secondary_cluster_name):
+    """
+    Function to disable DR from app
+
+    Args:
+        secondary_cluster_name(str): cluster where application is running
+
+    """
     old_ctx = config.cur_index
     config.switch_acm_ctx()
 
@@ -1340,8 +1348,10 @@ def disable_dr_from_app(secondary_cluster_name):
         name = placement["metadata"]["name"]
         if (name != "all-openshift-clusters") and (name != "global"):
             namespace = placement["metadata"]["namespace"]
-            path = "/spec/predicates/0/requiredClusterSelector/labelSelector/matchExpressions/0/values/0"
-            params = f"""[{{"op": "replace", "path": "{path}", "value": "{secondary_cluster_name}"}}]"""
+            params = (
+                f"""[{{"op": "replace", "path": "{constants.CLUSTERSELECTORPATH}","""
+                f""""value": "{secondary_cluster_name}"}}]"""
+            )
             cmd = f"oc patch placement {name} -n {namespace}  -p '{params}' --type=json"
             run_cmd(cmd)
 
@@ -1364,13 +1374,11 @@ def disable_dr_from_app(secondary_cluster_name):
         name = placement["metadata"]["name"]
         if (name != "all-openshift-clusters") and (name != "global"):
             namespace = placement["metadata"]["namespace"]
-            path = "/metadata/annotations/cluster.open-cluster-management.io~1experimental-scheduling-disable"
-            params = f"""[{{"op": "remove", "path": "{path}"}}]"""
+            params = f"""[{{"op": "remove", "path": "{constants.EXPERIMENTAL_ANNOTATION_PATH}"}}]"""
             cmd = f"oc patch {constants.PLACEMENT} {name} -n {namespace} -p '{params}' --type=json"
             run_cmd(cmd)
 
     config.switch_ctx(old_ctx)
-    return placement_obj
 
 
 def apply_drpolicy_to_workload(workload, drcluster_name):
@@ -1378,8 +1386,9 @@ def apply_drpolicy_to_workload(workload, drcluster_name):
     Function for applying drpolicy to indiviusual workload
 
     Args:
-    workload(List): List of workload objects
-    drcluster_name(str): Name of the DRcluster on which workloads belongs
+        workload(List): List of workload objects
+        drcluster_name(str): Name of the DRcluster on which workloads belongs
+
     """
     for wl in workload:
         drpc_yaml_data = templating.load_yaml(wl.drpc_yaml_file)
@@ -1387,6 +1396,7 @@ def apply_drpolicy_to_workload(workload, drcluster_name):
         templating.dump_data_to_temp_yaml(drpc_yaml_data, wl.drpc_yaml_file)
 
         config.switch_acm_ctx()
+        wl.add_annotation_to_placement()
         run_cmd(f"oc create -f {wl.drpc_yaml_file}")
 
 
@@ -1396,9 +1406,10 @@ def replace_cluster(workload, primary_cluster_name, secondary_cluster_name):
     Function to do core replace cluster task
 
     Args:
-    workload(List): List of workload objects
-    primary_cluster_name (str): Name of the primary DRcluster
-    secondary_cluster_name(str): Name of the secondary DRcluster
+        workload(List): List of workload objects
+        primary_cluster_name (str): Name of the primary DRcluster
+        secondary_cluster_name(str): Name of the secondary DRcluster
+
     """
 
     # Delete dr cluster
@@ -1406,7 +1417,7 @@ def replace_cluster(workload, primary_cluster_name, secondary_cluster_name):
     run_cmd(cmd=f"oc delete drcluster {primary_cluster_name} --wait=false")
 
     # Disable DR on hub for each app
-    placement_obj = disable_dr_from_app(secondary_cluster_name)
+    disable_dr_from_app(secondary_cluster_name)
     logger.info("DR configuration is successfully disabled on each app")
 
     # Remove DR configuration from hub and surviving cluster
@@ -1475,8 +1486,5 @@ def replace_cluster(workload, primary_cluster_name, secondary_cluster_name):
     # Apply dr policy on all app on secondary cluster
     apply_drpolicy_to_workload(workload, secondary_cluster_name)
 
-    placement_obj.annotate(
-        annotation="cluster.open-cluster-management.io/experimental-scheduling-disable='true'"
-    )
     # Configure DRClusters for fencing automation
     configure_drcluster_for_fencing()
