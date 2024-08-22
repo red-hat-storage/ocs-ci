@@ -368,8 +368,8 @@ def test_noobaa_root_secret():
 @mcg
 @red_squad
 @acceptance
-@bugzilla()
-@polarion_id()
+@bugzilla("2277186")
+@polarion_id("OCS-6184")
 def test_operator_logs_for_secret():
     """
     This test verifies if secrets are exposed

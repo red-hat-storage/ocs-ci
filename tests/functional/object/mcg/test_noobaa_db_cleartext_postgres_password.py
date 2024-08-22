@@ -3,12 +3,15 @@ import logging
 from ocs_ci.framework.testlib import tier2, BaseTest, bugzilla, polarion_id
 from ocs_ci.framework.pytest_customization.marks import red_squad, mcg
 from ocs_ci.framework import config
+from ocs_ci.helpers.helpers import get_noobaa_db_credentials_from_secret
 from ocs_ci.ocs.resources import pod
 from ocs_ci.ocs.resources.pod import filter_pod_logs
 
 log = logging.getLogger(__name__)
 
 
+@mcg
+@red_squad
 @tier2
 class TestNoobaaSecurity(BaseTest):
     """
@@ -16,8 +19,6 @@ class TestNoobaaSecurity(BaseTest):
 
     """
 
-    @mcg
-    @red_squad
     @bugzilla("2274193")
     @polarion_id("OCS-5787")
     def test_noobaa_db_cleartext_postgres_password(self):
@@ -44,6 +45,8 @@ class TestNoobaaSecurity(BaseTest):
             "set=password" not in nooobaa_db_pod_logs
         ), f"noobaa-db pod logs include password logs:{nooobaa_db_pod_logs}"
 
+    @bugzilla("2240778")
+    @polarion_id("OCS-6183")
     def test_nb_db_password_in_core_and_endpoint(self):
         """
         Verify that postgres password is not exposed in
@@ -54,6 +57,8 @@ class TestNoobaaSecurity(BaseTest):
         3. Verify postgres password doesnt exist in the endpoint and core logs
 
         """
+        # get the noobaa db password
+        _, noobaa_db_password = get_noobaa_db_credentials_from_secret()
 
         # get noobaa core log and verify that the password is not
         # present in the log
@@ -61,17 +66,7 @@ class TestNoobaaSecurity(BaseTest):
         noobaa_core_pod_logs = pod.get_pod_logs(nooba_core_pod.name)
         filtered_log = filter_pod_logs(
             pod_logs=noobaa_core_pod_logs,
-            filter=[
-                "host",
-                "noobaa-db-pg-0.noobaa-db-pg",
-                "user",
-                "noobaa",
-                "database",
-                "nbcore",
-                "port",
-                "5432",
-                "password",
-            ],
+            filter=[noobaa_db_password],
         )
         assert (
             len(filtered_log) == 0
@@ -86,17 +81,7 @@ class TestNoobaaSecurity(BaseTest):
         noobaa_endpoint_logs = pod.get_pod_logs(noobaa_endpoint_pod.name)
         filtered_log = filter_pod_logs(
             pod_logs=noobaa_endpoint_logs,
-            filter=[
-                "host",
-                "noobaa-db-pg-0.noobaa-db-pg",
-                "user",
-                "noobaa",
-                "database",
-                "nbcore",
-                "port",
-                "5432",
-                "password",
-            ],
+            filter=[noobaa_db_password],
         )
         assert (
             len(filtered_log) == 0
