@@ -1,6 +1,7 @@
 import logging
 import pytest
 
+from ocs_ci.framework.logger_helper import log_step
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.exceptions import CommandFailed
 from ocs_ci.ocs.resources.pod import get_used_space_on_mount_point
@@ -51,6 +52,16 @@ class TestPvcExpansionWhenFull(ManageTest):
         The test based on TimeoutSampler mechanism. It will fire TimeoutExpiredError if the alerts not present when
         conditions met or still firing after the timeout.
         The test has assertions on the fio job results.
+
+        Test Steps:
+            1. Run IO on PVCs to utilize 91% of available storage. Check PersistentVolumeUsageNearFull alert.
+            2. Run IO on PVCs to utilize 96% of available storage. Check PersistentVolumeUsageCritical alert.
+            3. Run IO on all to utilize 100% of PVCs storage capacity.
+            4. Expand PVCs.
+            5. Verify no PVC full alerts after PVC expansion.
+            6. Run IO after PVC expansion.
+            7. Verify no PVC full alerts after PVC expansion and additional IO.
+
         """
         pvc_size_expanded = 10
         pvc_fill_up_after_resize = 3
@@ -68,6 +79,9 @@ class TestPvcExpansionWhenFull(ManageTest):
 
         prometheus_api = PrometheusAPI(threading_lock=threading_lock)
 
+        log_step(
+            "Run IO on PVCs to utilize 91% of available storage. Check PersistentVolumeUsageNearFull alert."
+        )
         self._run_io_and_check_alerts(
             fill_up_near_full_mb,
             prometheus_api,
@@ -76,6 +90,9 @@ class TestPvcExpansionWhenFull(ManageTest):
             threshold_attr="near_full_alert",
         )
 
+        log_step(
+            "Run IO on PVCs to utilize 96% of available storage. Check PersistentVolumeUsageCritical alert."
+        )
         self._run_io_and_check_alerts(
             fill_up_near_full_mb + fill_up_critical_full_mb,
             prometheus_api,
@@ -84,16 +101,16 @@ class TestPvcExpansionWhenFull(ManageTest):
             threshold_attr="critical_alert",
         )
 
-        log.info("Run IO on all to utilise 100% of PVCs storage capacity.")
+        log_step("Run IO on all to utilize 100% of PVCs storage capacity.")
         self.fill_up_pvcs(
             fill_up_near_full_mb + fill_up_critical_full_mb + fill_up_full_mb,
             pvc_full_error_expected=True,
         )
 
-        log.info("Wait for IO to finish on pods")
+        log_step("Run IO on PVCs to utilise 100% of PVCs storage capacity.")
         self._verify_used_space_on_pods("100%")
 
-        log.info("Expanding PVCs.")
+        log_step("Expanding PVCs.")
         for pvc_obj in self.pvcs:
             log.info(f"Expanding size of PVC {pvc_obj.name} to {pvc_size_expanded}Gi")
             assert pvc_obj.resize_pvc(
@@ -101,9 +118,10 @@ class TestPvcExpansionWhenFull(ManageTest):
             ), f"Failed to resize PVC '{pvc_obj.name}'"
         log.info(f"All PVCs are expanded to {pvc_size_expanded}Gi")
 
+        log_step("Verify no PVC full alerts after PVC expansion.")
         self.verify_no_pvc_alerts(prometheus_api, round(timeout_alerts / 2))
 
-        log.info("Run IO after PVC expansion.")
+        log_step("Run IO after PVC expansion.")
         self.fill_up_pvcs(
             fill_up_near_full_mb
             + fill_up_critical_full_mb
@@ -111,6 +129,7 @@ class TestPvcExpansionWhenFull(ManageTest):
             + (pvc_fill_up_after_resize * 1024)
         )
 
+        log_step("Verify no PVC full alerts after PVC expansion and additional IO.")
         self.verify_no_pvc_alerts(prometheus_api, round(timeout_alerts / 2))
 
     def _run_io_and_check_alerts(
