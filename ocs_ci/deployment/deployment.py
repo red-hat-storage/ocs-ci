@@ -2690,7 +2690,7 @@ class RBDDRDeployOps(object):
             timeout -= 1
         if not timeout:
             RBDSideCarContainerException(
-                f"RBD Sidecar container count mismatch expected {rbd_sidecar_count} current {length_sidecar_container}"
+                f"RBD Sidecar container count mismatch. Expected: {rbd_sidecar_count}, Current: {length_sidecar_container}"
             )
 
     def validate_mirror_peer(self, resource_name):
