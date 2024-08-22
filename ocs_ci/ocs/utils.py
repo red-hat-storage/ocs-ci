@@ -1239,41 +1239,45 @@ def _collect_ocs_logs(
                 log.error(f"Failed to dump noobaa DB! Error: {ex}")
                 sleep(30)
     # Collect ACM logs only from ACM
-    if cluster_config.MULTICLUSTER.get("multicluster_mode", None) == "regional-dr":
-        if cluster_config.MULTICLUSTER.get("acm_cluster", False):
-            log.info("Collecting ACM logs")
-            image_prefix = '"acm_must_gather"'
-            acm_mustgather_path = os.path.join(log_dir_path, "acmlogs")
-            csv_cmd = (
-                f"oc --kubeconfig {cluster_config.RUN['kubeconfig']} "
-                f"get csv -l {constants.ACM_CSV_LABEL} -n open-cluster-management -o json"
-            )
-            jq_cmd = f"jq -r '.items[0].spec.relatedImages[]|select(.name=={image_prefix}).image'"
-            json_out = run_cmd(csv_cmd)
-            out = subprocess.run(
-                shlex.split(jq_cmd), input=json_out.encode(), stdout=subprocess.PIPE
-            )
-            acm_mustgather_image = out.stdout.decode()
-            run_must_gather(
-                acm_mustgather_path, acm_mustgather_image, cluster_config=cluster_config
-            )
+    # Collect this only once, with parallel ocp/ocs log collection, we want to collect acm logs only once
+    if ocs:
+        if cluster_config.MULTICLUSTER.get("multicluster_mode", None) == "regional-dr":
+            if cluster_config.MULTICLUSTER.get("acm_cluster", False):
+                log.info("Collecting ACM logs")
+                image_prefix = '"acm_must_gather"'
+                acm_mustgather_path = os.path.join(log_dir_path, "acmlogs")
+                csv_cmd = (
+                    f"oc --kubeconfig {cluster_config.RUN['kubeconfig']} "
+                    f"get csv -l {constants.ACM_CSV_LABEL} -n open-cluster-management -o json"
+                )
+                jq_cmd = f"jq -r '.items[0].spec.relatedImages[]|select(.name=={image_prefix}).image'"
+                json_out = run_cmd(csv_cmd)
+                out = subprocess.run(
+                    shlex.split(jq_cmd), input=json_out.encode(), stdout=subprocess.PIPE
+                )
+                acm_mustgather_image = out.stdout.decode()
+                run_must_gather(
+                    acm_mustgather_path,
+                    acm_mustgather_image,
+                    cluster_config=cluster_config,
+                )
 
-        submariner_log_path = os.path.join(
-            log_dir_path,
-            "submariner",
-        )
-        run_cmd(f"mkdir -p {submariner_log_path}")
-        cwd = os.getcwd()
-        run_cmd(f"chmod -R 777 {submariner_log_path}")
-        os.chdir(submariner_log_path)
-        submariner_log_collect = (
-            f"subctl gather --kubeconfig {cluster_config.RUN['kubeconfig']}"
-        )
-        log.info("Collecting submariner logs")
-        out = run_cmd(submariner_log_collect)
-        run_cmd(f"chmod -R 777 {submariner_log_path}")
-        os.chdir(cwd)
-        log.info(out)
+            submariner_log_path = os.path.join(
+                log_dir_path,
+                "submariner",
+            )
+            run_cmd(f"mkdir -p {submariner_log_path}")
+            cwd = os.getcwd()
+            run_cmd(f"chmod -R 777 {submariner_log_path}")
+            os.chdir(submariner_log_path)
+            submariner_log_collect = (
+                f"subctl gather --kubeconfig {cluster_config.RUN['kubeconfig']}"
+            )
+            log.info("Collecting submariner logs")
+            out = run_cmd(submariner_log_collect)
+            run_cmd(f"chmod -R 777 {submariner_log_path}")
+            os.chdir(cwd)
+            log.info(out)
 
 
 def collect_ocs_logs(
@@ -1293,21 +1297,48 @@ def collect_ocs_logs(
         ocs_flags (str): flags to ocs must gather command for example ["-- /usr/bin/gather -cs"]
 
     """
-    results = None
+    results = list()
     with ThreadPoolExecutor() as executor:
-        results = [
-            executor.submit(
-                _collect_ocs_logs,
-                cluster,
-                dir_name=dir_name,
-                ocp=ocp,
-                ocs=ocs,
-                mcg=mcg,
-                status_failure=status_failure,
-                ocs_flags=ocs_flags,
-            )
-            for cluster in ocsci_config.clusters
-        ]
+        for cluster in ocsci_config.clusters:
+            if ocp:
+                results.append(
+                    executor.submit(
+                        _collect_ocs_logs,
+                        cluster,
+                        dir_name=dir_name,
+                        ocp=ocp,
+                        ocs=False,
+                        mcg=False,
+                        status_failure=status_failure,
+                        ocs_flags=ocs_flags,
+                    )
+                )
+            if ocs:
+                results.append(
+                    executor.submit(
+                        _collect_ocs_logs,
+                        cluster,
+                        dir_name=dir_name,
+                        ocp=False,
+                        ocs=ocs,
+                        mcg=False,
+                        status_failure=status_failure,
+                        ocs_flags=ocs_flags,
+                    )
+                )
+            if mcg:
+                results.append(
+                    executor.submit(
+                        _collect_ocs_logs,
+                        cluster,
+                        dir_name=dir_name,
+                        ocp=False,
+                        ocs=False,
+                        mcg=mcg,
+                        status_failure=status_failure,
+                        ocs_flags=ocs_flags,
+                    )
+                )
 
     for f in as_completed(results):
         try:
