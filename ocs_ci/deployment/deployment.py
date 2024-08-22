@@ -2693,55 +2693,57 @@ class RBDDRDeployOps(object):
                 f"RBD Sidecar container count mismatch expected {rbd_sidecar_count} current {length_sidecar_container}"
             )
 
+    def validate_mirror_peer(self, resource_name):
+        """
+        Validate mirror peer,
+        Begins with CTX: ACM
 
-def validate_mirror_peer(self, resource_name):
-    """
-    Validate mirror peer,
-    Begins with CTX: ACM
+        1. Check initial phase of 'ExchangingSecret'
+        2. Check token-exchange-agent pod in 'Running' phase
 
-    1. Check initial phase of 'ExchangingSecret'
-    2. Check token-exchange-agent pod in 'Running' phase
+        Raises:
+            ResourceWrongStatusException: If pod is not in expected state
 
-    Raises:
-        ResourceWrongStatusException: If pod is not in expected state
+        """
+        # Check mirror peer status only on HUB
+        mirror_peer = ocp.OCP(
+            kind="MirrorPeer",
+            namespace=constants.DR_DEFAULT_NAMESPACE,
+            resource_name=resource_name,
+        )
+        mirror_peer._has_phase = True
+        mirror_peer.get()
+        try:
+            mirror_peer.wait_for_phase(phase="ExchangedSecret", timeout=1200)
+            logger.info("Mirror peer is in expected phase 'ExchangedSecret'")
+        except ResourceWrongStatusException:
+            logger.exception("Mirror peer couldn't attain expected phase")
+            raise
 
-    """
-    # Check mirror peer status only on HUB
-    mirror_peer = ocp.OCP(
-        kind="MirrorPeer",
-        namespace=constants.DR_DEFAULT_NAMESPACE,
-        resource_name=resource_name,
-    )
-    mirror_peer._has_phase = True
-    mirror_peer.get()
-    try:
-        mirror_peer.wait_for_phase(phase="ExchangedSecret", timeout=1200)
-        logger.info("Mirror peer is in expected phase 'ExchangedSecret'")
-    except ResourceWrongStatusException:
-        logger.exception("Mirror peer couldn't attain expected phase")
-        raise
-
-    # Check for token-exchange-agent pod and its status has to be running
-    # on all participating clusters except HUB
-    # We will switch config ctx to Participating clusters
-    for cluster in config.clusters:
-        if cluster.MULTICLUSTER["multicluster_index"] == config.get_active_acm_index():
-            continue
-        else:
-            config.switch_ctx(cluster.MULTICLUSTER["multicluster_index"])
-            token_xchange_agent = get_pods_having_label(
-                constants.TOKEN_EXCHANGE_AGENT_LABEL,
-                config.ENV_DATA["cluster_namespace"],
-            )
-            pod_status = token_xchange_agent[0]["status"]["phase"]
-            pod_name = token_xchange_agent[0]["metadata"]["name"]
-            if pod_status != "Running":
-                logger.error(f"On cluster {cluster.ENV_DATA['cluster_name']}")
-                ResourceWrongStatusException(
-                    pod_name, expected="Running", got=pod_status
+        # Check for token-exchange-agent pod and its status has to be running
+        # on all participating clusters except HUB
+        # We will switch config ctx to Participating clusters
+        for cluster in config.clusters:
+            if (
+                cluster.MULTICLUSTER["multicluster_index"]
+                == config.get_active_acm_index()
+            ):
+                continue
+            else:
+                config.switch_ctx(cluster.MULTICLUSTER["multicluster_index"])
+                token_xchange_agent = get_pods_having_label(
+                    constants.TOKEN_EXCHANGE_AGENT_LABEL,
+                    config.ENV_DATA["cluster_namespace"],
                 )
-    # Switching back CTX to ACM
-    config.switch_acm_ctx()
+                pod_status = token_xchange_agent[0]["status"]["phase"]
+                pod_name = token_xchange_agent[0]["metadata"]["name"]
+                if pod_status != "Running":
+                    logger.error(f"On cluster {cluster.ENV_DATA['cluster_name']}")
+                    ResourceWrongStatusException(
+                        pod_name, expected="Running", got=pod_status
+                    )
+        # Switching back CTX to ACM
+        config.switch_acm_ctx()
 
 
 def get_multicluster_dr_deployment():
