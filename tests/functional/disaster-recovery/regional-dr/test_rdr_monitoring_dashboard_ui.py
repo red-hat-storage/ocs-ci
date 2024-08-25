@@ -113,7 +113,7 @@ class TestRDRMonitoringDashboardUI:
             acm_obj, cluster_name=primary_cluster_name
         ), f"DR protected PVC count did not match on CLI and UI on cluster {primary_cluster_name}"
         logger.info(
-            f"DR Protected PVC count on UI matches CLI, count is {total_protected_pvc_count}"
+            f"DR Protected PVC count on UI matches with CLI, count is {total_protected_pvc_count}"
         )
         workload_names = []
         workload_number = 1
