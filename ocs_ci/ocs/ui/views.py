@@ -1013,6 +1013,13 @@ acm_configuration_4_12 = {
         "//input[contains(@class, 'c-text-input-group__text-input')]",
         By.XPATH,
     ),
+    "apply-filter": ("//div[@class='pf-c-select']", By.XPATH),
+    "clear-filter": (
+        "(//button[@type='button'][normalize-space()='Clear all filters'])[2]",
+        By.XPATH,
+    ),
+    "sub-checkbox": ("#type-subscription", By.CSS_SELECTOR),
+    "appset-checkbox": ("#type-appset", By.CSS_SELECTOR),
     "kebab-action": (
         "//button[contains(@class, 'c-dropdown__toggle pf-m-plain')]",
         By.XPATH,
@@ -1053,9 +1060,26 @@ acm_configuration_4_12 = {
         "//*[@data-test-id='acm-perspective-nav'] | //*[@class='pf-v5-c-nav__list oc-perspective-nav']",
         By.XPATH,
     ),
+    "2-healthy-dr-clusters": (
+        "div[class='co-status-card__health-item text-muted mco-dashboard__statusText--margin'] "
+        "div span[class='co-status-card__health-item-text']",
+        By.CSS_SELECTOR,
+    ),
+    "1-with-issues": (
+        "div[class='co-status-card__health-item text-muted'] div span[class='co-status-card__health-item-text']",
+        By.CSS_SELECTOR,
+    ),
     "cluster-operator-status": (
         "div[data-status-id='Cluster operator-secondary-status'] "
         "small[class='co-status-card__health-item-text text-muted']",
+        By.CSS_SELECTOR,
+    ),
+    "peer-connection": (
+        "span[class='co-icon-and-text text-muted'] span[data-test='status-text']",
+        By.CSS_SELECTOR,
+    ),
+    "total-vol-count": (
+        "div[class='pf-v5-l-grid__item pf-m-10-row pf-m-12-col-on-sm pf-m-9-col-on-lg'] h1",
         By.CSS_SELECTOR,
     ),
 }
@@ -1101,7 +1125,14 @@ acm_configuration_4_16 = {
         "//span[normalize-space()='Application: All Application']",
         By.XPATH,
     ),
-    "app-name": ("//span[normalize-space()='{}']", By.XPATH),
+    "app-name-1": (
+        "(//span[@class='pf-v5-c-menu__item-text'][normalize-space()='busybox-1'])[1]",
+        By.XPATH,
+    ),
+    "app-name-2": (
+        "(//span[@class='pf-v5-c-menu__item-text'][normalize-space()='busybox-1'])[2]",
+        By.XPATH,
+    ),
 }
 
 add_capacity = {

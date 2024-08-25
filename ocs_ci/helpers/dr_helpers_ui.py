@@ -7,6 +7,7 @@ import logging
 from selenium.common.exceptions import NoSuchElementException
 from ocs_ci.framework import config
 from ocs_ci.ocs import constants
+from ocs_ci.ocs.exceptions import ResourceWrongStatusException
 from ocs_ci.ocs.ui.views import locators
 from ocs_ci.ocs.ui.helpers_ui import format_locator
 from ocs_ci.utility.utils import get_ocp_version
@@ -329,12 +330,17 @@ def failover_relocate_ui(
                 log.info("Failover trigerred from ACM UI")
             else:
                 log.info("Relocate trigerred from ACM UI")
-            acm_obj.take_screenshot()
+        acm_obj.take_screenshot()
+        acm_obj.page_has_loaded()
+        if workload_type == constants.SUBSCRIPTION:
             log.info("Close the action modal")
             acm_obj.do_click(
                 acm_loc["close-action-modal"], enable_screenshot=True, avoid_stale=True
             )
-            return True
+            log.info(
+                f"Action modal successfully closed for {constants.SUBSCRIPTION} type workload"
+            )
+        return True
     else:
         log.error(
             "Incorrect or missing params to perform Failover/Relocate operation from ACM UI"
@@ -426,6 +432,36 @@ def check_cluster_operator_status(acm_obj, timeout=30):
         return True
 
 
+def clusters_in_dr_relationship(
+    acm_obj,
+    locator: tuple,
+    timeout=30,
+    expected_text=None,
+):
+    """
+    This function is to verify there are 2 clusters in a healthy DR relationship
+
+    """
+    log.info("Check the healthy clusters count")
+    healthy_clusters = acm_obj.wait_until_expected_text_is_found(
+        locator=locator,
+        expected_text=expected_text,
+        timeout=timeout,
+    )
+    if healthy_clusters:
+        log.info(
+            f"Text '{expected_text}' for clusters in disaster recovery relationship found"
+        )
+        acm_obj.take_screenshot()
+        return True
+    else:
+        log.error(
+            "Cluster operator status on DR monitoring dashboard is not as expected"
+        )
+        acm_obj.take_screenshot()
+        return False
+
+
 def application_count_on_ui(acm_obj):
     """
     The function fetches the application count on the DR console
@@ -439,7 +475,7 @@ def application_count_on_ui(acm_obj):
     acm_loc = locators[ocp_version]["acm_page"]
     log.info("Fetch the ACM managed applications count on ACM UI")
     managed_app_text = acm_obj.get_element_text(acm_loc["managed_app_count"])
-    log.info(f"Text on managed app count is {managed_app_text}")
+    log.info(f"Text on managed app count is '{managed_app_text}'")
     number_of_managed_applications = int(managed_app_text.split(": ")[1])
     total_app_count = int(acm_obj.get_element_text(acm_loc["total_app_count"]))
     log.info(f"Total app count is {total_app_count}")
@@ -450,7 +486,7 @@ def application_count_on_ui(acm_obj):
     return app_count_list
 
 
-def cluster_and_operator_health_check_on_ui(
+def health_and_peer_connection_check_on_ui(
     acm_obj, cluster1, cluster2, timeout=15, expected_text="Degraded"
 ):
     """
@@ -473,6 +509,22 @@ def cluster_and_operator_health_check_on_ui(
         log.info(f"Select managed cluster {cluster} from cluster dropdown")
         acm_obj.do_click(acm_loc["cluster-dropdown"], enable_screenshot=True)
         acm_obj.do_click(format_locator(acm_loc["cluster"], cluster))
+        peer_connection = acm_obj.wait_until_expected_text_is_found(
+            locator=acm_loc["peer-connection"],
+            expected_text="1 Connected",
+            timeout=timeout,
+        )
+        if peer_connection:
+            log.info(
+                f"Text '1 Connected' for cluster {cluster} found, validation passed"
+            )
+            # acm_obj.take_screenshot()
+        else:
+            log.error(
+                f"Text '1 Connected' for cluster {cluster} not found, validation failed"
+            )
+            acm_obj.take_screenshot()
+            raise ResourceWrongStatusException
         locator_list = ["cluster-health-status", "cluster-operator-health-status"]
         for locator in locator_list:
             cluster_health_status = acm_obj.wait_until_expected_text_is_found(
@@ -482,16 +534,38 @@ def cluster_and_operator_health_check_on_ui(
             )
             if not cluster_health_status:
                 log.info(
-                    f"Text {expected_text} for locator {locator} not found, validation passed"
+                    f"Text {expected_text} for locator {locator} for cluster {cluster} not found"
                 )
-                acm_obj.take_screenshot()
+                # acm_obj.take_screenshot()
             else:
-                log.error(
-                    f"Text {expected_text} for locator {locator} found, validation failed"
+                log.warning(
+                    f"Text {expected_text} for locator {locator} for cluster {cluster} found"
                 )
                 acm_obj.take_screenshot()
                 return False
-        return True
+    return True
+
+
+def protected_volume_count_per_cluster(acm_obj, cluster_name):
+    """
+    Function to check total protected volume count on selected cluster
+    Args:
+        cluster_name (str): Name of the managed cluster where apps are primary
+
+    Returns:
+        DR protected total volume count on the selected cluster
+
+    """
+    ocp_version = get_ocp_version()
+    acm_loc = locators[ocp_version]["acm_page"]
+    log.info(f"Select managed cluster {cluster_name} from cluster dropdown")
+    acm_obj.do_click(acm_loc["cluster-dropdown"], enable_screenshot=True)
+    acm_obj.do_click(format_locator(acm_loc["cluster"], cluster_name))
+    log.info(f"Fetch protected pvc count on cluster {cluster_name}")
+    total_pvc_count = acm_obj.get_element_text(
+        format_locator(acm_loc["total-vol-count"])
+    )
+    return int(total_pvc_count)
 
 
 def check_apps_running_on_selected_cluster(
@@ -513,11 +587,12 @@ def check_apps_running_on_selected_cluster(
     log.info(f"Select managed cluster {cluster_name} from cluster dropdown")
     acm_obj.do_click(acm_loc["cluster-dropdown"], enable_screenshot=True)
     acm_obj.do_click(format_locator(acm_loc["cluster"], cluster_name))
-    log.info("Select application from application dropdown")
+    log.info("Check application names in application dropdown")
     acm_obj.do_click(acm_loc["app-dropdown"], enable_screenshot=True)
-    for app in app_names:
+    locator_list = ["app-name-1", "app-name-2"]
+    for locator, app in zip(locator_list, app_names):
         app_presence = acm_obj.wait_until_expected_text_is_found(
-            locator=format_locator(acm_loc["app-name"], app),
+            locator=acm_loc[locator],
             expected_text=app,
             timeout=timeout,
         )
