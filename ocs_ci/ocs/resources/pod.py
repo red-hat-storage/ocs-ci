@@ -2585,7 +2585,7 @@ def check_toleration_on_pods(toleration_key=constants.TOLERATION_KEY):
                 assert (
                     key["key"] == toleration_key
                 ), f"The pod {resource_name} does not have toleration {toleration_key}"
-            logger.info(f"The Toleration {toleration_key} exists on {resource_name}")
+        logger.info(f"The Toleration {toleration_key} exists on {resource_name}")
 
 
 def check_toleration_on_subscriptions(toleration_key=constants.TOLERATION_KEY):
