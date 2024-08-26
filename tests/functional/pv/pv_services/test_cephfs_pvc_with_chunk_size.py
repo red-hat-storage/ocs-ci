@@ -1,22 +1,21 @@
-import time
-import pytest
 import logging
+import pytest
+import time
 
+from concurrent.futures import ThreadPoolExecutor
 from ocs_ci.framework.testlib import (
     bugzilla,
-    tier2,
     skipif_ocp_version,
     skipif_ocs_version,
+    tier2,
 )
-from ocs_ci.ocs import constants
-from ocs_ci.ocs.resources import pod
-from concurrent.futures import ThreadPoolExecutor
-from ocs_ci.helpers import helpers
-from ocs_ci.ocs import cluster
 from ocs_ci.framework.pytest_customization.marks import (
     green_squad,
     skipif_external_mode,
 )
+from ocs_ci.ocs import constants, cluster
+from ocs_ci.ocs.resources import pod
+from ocs_ci.helpers import helpers
 
 log = logging.getLogger(__name__)
 
@@ -39,7 +38,7 @@ class TestCephfsWithChunkIo:
         cluster.ceph_config_set_debug("1/5")
         log.info("Ceph mds debug level has been set to default 1/5")
 
-    def test_cephfs_with_large_chunk_io(self, pvc_factory, dc_pod_factory):
+    def test_cephfs_with_large_chunk_io(self, dc_pod_factory):
 
         """
         This function facilitates
