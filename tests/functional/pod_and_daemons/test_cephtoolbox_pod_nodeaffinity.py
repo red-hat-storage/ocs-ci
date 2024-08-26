@@ -62,7 +62,9 @@ class TestCephtoolboxPod:
         This test verifies whether ceph toolbox failovered or not after applying node affinity
         """
         other_nodes = get_worker_node_where_ceph_toolbox_not_running()
-        # Apply node affinity with a node name other than currently running node.
+        log.info(
+            "Apply node affinity with a node name other than currently running node."
+        )
         assert apply_node_affinity_for_ceph_toolbox(other_nodes[0])
 
     @tier4b
@@ -76,17 +78,15 @@ class TestCephtoolboxPod:
         other_nodes = get_worker_node_where_ceph_toolbox_not_running()
         node_name = other_nodes[0]
         apply_node_affinity_for_ceph_toolbox(node_name)
-        # Unschedule ceph tool box running node.
+        log.info("Unschedule ceph tools pod running node.")
         unschedule_nodes([node_name])
         log.info(f"node {node_name} unscheduled successfully")
-        # Drain node operation
         drain_nodes([node_name])
         log.info(f"node {node_name} drained successfully")
-        # Make the node schedule-able
         schedule_nodes([node_name])
         log.info(f"Scheduled the node {node_name}")
         ct_pod = pod.get_ceph_tools_pod(skip_creating_pod=True, wait=True)
-        # Identify on which node the ceph toolbox is running after node drain
+        log.info("Identify on which node the ceph toolbox is running after node drain")
         ct_pod_running_node_name = ct_pod.data["spec"].get("nodeName")
         if node_name == ct_pod_running_node_name:
             log.info(
@@ -108,7 +108,9 @@ class TestCephtoolboxPod:
         log.info(f"Current available worker nodes are {worker_nodes}")
         taint_nodes(worker_nodes)
         other_nodes = get_worker_node_where_ceph_toolbox_not_running()
-        # Apply node affinity with a node name other than currently running node.
+        log.info(
+            "Apply node affinity with a node name other than currently running node."
+        )
         assert apply_node_affinity_for_ceph_toolbox(other_nodes[0])
 
     @tier4b
@@ -120,7 +122,9 @@ class TestCephtoolboxPod:
         worker_nodes = get_worker_nodes()
         log.info(f"Current available worker nodes are {worker_nodes}")
         # <<PR9808 yet to be merged. Once it is merged, the custom taints function need to be called here.>>
-        # <<The above task can be done in another PR>>
+        # <<This task will be done in another PR>>
         other_nodes = get_worker_node_where_ceph_toolbox_not_running()
-        # Apply node affinity with a node name other than currently running node.
+        log.info(
+            "Apply node affinity with a node name other than currently running node."
+        )
         assert apply_node_affinity_for_ceph_toolbox(other_nodes[0])
