@@ -5,12 +5,10 @@ from ocs_ci.framework.testlib import MCGTest, tier1, tier3
 from ocs_ci.framework.pytest_customization.marks import (
     skipif_mcg_only,
     skipif_ocs_version,
-    ignore_leftover_label,
     red_squad,
     runs_on_provider,
     mcg,
 )
-from ocs_ci.ocs import constants
 from ocs_ci.ocs.bucket_utils import random_object_round_trip_verification
 from ocs_ci.ocs.exceptions import CommandFailed
 
@@ -27,7 +25,6 @@ logger = logging.getLogger(__name__)
 @runs_on_provider
 @skipif_mcg_only
 @skipif_ocs_version("<4.10")
-@ignore_leftover_label(constants.NOOBAA_ENDPOINT_POD_LABEL)
 @pytest.mark.usefixtures(revert_noobaa_endpoint_scc_class.__name__)
 class TestNSFSObjectIntegrity(MCGTest):
     """
