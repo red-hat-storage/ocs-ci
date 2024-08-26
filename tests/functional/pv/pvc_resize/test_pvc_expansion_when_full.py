@@ -5,7 +5,7 @@ from ocs_ci.framework.logger_helper import log_step
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.exceptions import CommandFailed
 from ocs_ci.ocs.resources.pod import get_used_space_on_mount_point
-from ocs_ci.framework.pytest_customization.marks import green_squad
+from ocs_ci.framework.pytest_customization.marks import green_squad, post_upgrade
 from ocs_ci.framework.testlib import (
     skipif_ocs_version,
     ManageTest,
@@ -44,6 +44,7 @@ class TestPvcExpansionWhenFull(ManageTest):
         self.near_full_threshold_violated = 0.91
         self.critical_full_threshold_violated = 0.96
 
+    @post_upgrade
     def test_pvc_expansion_when_full(self, threading_lock):
         """
         Verify PVC expansion when the PVC is 100% utilized.
