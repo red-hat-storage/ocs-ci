@@ -43,6 +43,7 @@ from ocs_ci.ocs.bucket_utils import (
     put_bucket_policy,
 )
 from ocs_ci.ocs.constants import FUSION_CONF_DIR
+from ocs_ci.ocs.cnv.virtual_machine import VirtualMachine
 from ocs_ci.ocs.dr.dr_workload import BusyBox, BusyBox_AppSet, CnvWorkload
 from ocs_ci.ocs.exceptions import (
     CommandFailed,
@@ -6758,6 +6759,59 @@ def cnv_dr_workload(request):
                 instance.delete_workload(force=True)
             except ResourceNotDeleted:
                 raise ResourceNotDeleted("Workload deletion was unsuccessful")
+
+    request.addfinalizer(teardown)
+    return factory
+
+
+@pytest.fixture()
+def cnv_workload(request):
+    """
+    Deploys CNV based workloads
+
+    """
+    cnv_workloads = []
+
+    def factory(
+        volume_interface=constants.VM_VOLUME_PVC,
+        access_mode=constants.ACCESS_MODE_RWX,
+        storageclass=constants.DEFAULT_CNV_CEPH_RBD_SC,
+        pvc_size="30Gi",
+        source_url=constants.CNV_CENTOS_SOURCE,
+        namespace=None,
+    ):
+        """
+        Args:
+            volume_interface (str): The type of volume interface to use. Default is `constants.VM_VOLUME_PVC`.
+            access_mode (str): The access mode for the volume. Default is `constants.ACCESS_MODE_RWX`
+            storageclass (str): The name of the storage class to use. Default is `constants.DEFAULT_CNV_CEPH_RBD_SC`.
+            pvc_size (str): The size of the PVC. Default is "30Gi".
+            source_url (str): The URL of the vm registry image. Default is `constants.CNV_CENTOS_SOURCE`.
+            namespace (str, optional): The namespace to create the vm on. Default, creates a unique namespace.
+
+        Returns:
+            list: objects of cnv workload class
+
+        """
+        vm_name = create_unique_resource_name("test", "vm")
+        cnv_wl = VirtualMachine(vm_name=vm_name, namespace=namespace)
+        cnv_wl.create_vm_workload(
+            volume_interface=volume_interface,
+            access_mode=access_mode,
+            sc_name=storageclass,
+            pvc_size=pvc_size,
+            source_url=source_url,
+        )
+        cnv_workloads.append(cnv_wl)
+        return cnv_workloads
+
+    def teardown():
+        """
+        Cleans up the CNV workloads
+
+        """
+        for cnv_wl in cnv_workloads:
+            cnv_wl.delete()
 
     request.addfinalizer(teardown)
     return factory

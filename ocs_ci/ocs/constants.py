@@ -455,7 +455,14 @@ CNV_VM_STOPPED = "Stopped"
 VM_PAUSED = "Paused"
 DEFAULT_CNV_CEPH_RBD_SC = "ocs-storagecluster-ceph-rbd-virtualization"
 VOLUME_IMPORT_SOURCE = "VolumeImportSource"
+VM_VOLUME_PVC = "PVC"
+VM_VOLUME_DV = "DV"
+VM_VOLUME_DVT = "DVT"
 
+# CNV VM source images:
+CNV_FEDORA_SOURCE = "docker://quay.io/containerdisks/fedora:latest"
+CNV_CENTOS_SOURCE = "docker://quay.io/containerdisks/centos-stream:9"
+CNV_RHEL_SOURCE = "docker://registry.redhat.io/rhel9/rhel-guest-image"
 
 # Virtctl constants
 VIRTCTL = "virtctl"
@@ -913,6 +920,7 @@ CNV_VM_STANDALONE_PVC_SOURCE_YAML = os.path.join(
 CNV_VM_STANDALONE_PVC_PVC_YAML = os.path.join(
     TEMPLATE_CNV_VM_STANDALONE_PVC_DIR, "pvc.yaml"
 )
+CNV_VM_STANDALONE_DV_YAML = os.path.join(TEMPLATE_CNV_VM_STANDALONE_PVC_DIR, "dv.yaml")
 CNV_VM_STANDALONE_PVC_VM_YAML = os.path.join(
     TEMPLATE_CNV_VM_STANDALONE_PVC_DIR, "vm.yaml"
 )
