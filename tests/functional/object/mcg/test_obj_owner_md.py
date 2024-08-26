@@ -1,28 +1,23 @@
 import json
 import logging
 import random
-import pytest
+
 import boto3
+import pytest
 
-from ocs_ci.ocs import constants
-from ocs_ci.ocs.bucket_utils import (
-    put_bucket_policy,
-    write_random_test_objects_to_bucket,
-    map_objects_to_owners,
-)
-
+from ocs_ci.framework.pytest_customization.marks import mcg, red_squad, runs_on_provider
 from ocs_ci.framework.testlib import (
     MCGTest,
-    tier2,
     skipif_disconnected_cluster,
     skipif_proxy_cluster,
+    tier2,
 )
-from ocs_ci.framework.pytest_customization.marks import (
-    red_squad,
-    runs_on_provider,
-    mcg,
+from ocs_ci.ocs import constants
+from ocs_ci.ocs.bucket_utils import (
+    map_objects_to_owners,
+    put_bucket_policy,
+    write_random_test_objects_to_bucket,
 )
-
 from ocs_ci.ocs.exceptions import CommandFailed
 from ocs_ci.ocs.resources.bucket_policy import gen_bucket_policy
 from ocs_ci.utility.retry import retry
@@ -112,23 +107,30 @@ class TestObjOwnerMD(MCGTest):
         mcg_obj.update_s3_creds()
 
         # 4. Write objects from each account to both buckets
+
+        # Prepare separate kwargs for the admin and non-admin accounts
+        # to be used in the write_random_test_objects_to_bucket function
+        base_kwargs = {
+            "amount": 3,
+            "io_pod": awscli_pod_session,
+            "file_dir": test_directory_setup.origin_dir,
+            "bucket_to_write": None,
+        }
+        admin_kwargs = {"pattern": "admin-obj", "mcg_obj": mcg_obj, "s3_creds": None}
+        non_admin_kwargs = {
+            "pattern": "non-admin-obj",
+            "mcg_obj": None,
+            "s3_creds": other_acc_creds,
+        }
         for bucket in (admin_bucket_name, non_admin_bucket_name):
-            for acc_creds, obj_pattern in (
-                (mcg_obj, "admin-obj"),
-                (other_acc_creds, "non-admin-obj"),
-            ):
+            for kwargs in (admin_kwargs, non_admin_kwargs):
+                kwargs = {**base_kwargs, **kwargs, "bucket_to_write": bucket}
+
                 # The fist attempts might fail while the bucket policy is being propagated
                 retry_write_random_objs = retry(CommandFailed, tries=10, delay=10)(
                     write_random_test_objects_to_bucket
                 )
-                retry_write_random_objs(
-                    amount=3,
-                    io_pod=awscli_pod_session,
-                    file_dir=test_directory_setup.origin_dir,
-                    pattern=obj_pattern,
-                    bucket_to_write=bucket,
-                    s3_creds=acc_creds,
-                )
+                retry_write_random_objs(**kwargs)
 
         # 5. For both buckets, check that the objects are owned by the creator of the bucket
         bucket_to_expected_owner = {
