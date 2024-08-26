@@ -17,20 +17,26 @@ from ocs_ci.framework.testlib import (
     skipif_hci_provider_and_client,
 )
 from ocs_ci.framework import config
+from ocs_ci.ocs.exceptions import CommandFailed
 from ocs_ci.ocs.resources.pod import (
     get_all_pods,
     wait_for_pods_to_be_running,
     check_toleration_on_pods,
+    check_toleration_on_subscriptions,
 )
 from ocs_ci.ocs.node import (
     taint_nodes,
     untaint_nodes,
     get_worker_nodes,
 )
+from ocs_ci.utility.retry import retry
 from ocs_ci.ocs.resources import storage_cluster
-from ocs_ci.framework.pytest_customization.marks import bugzilla, brown_squad
-from ocs_ci.framework.testlib import skipif_ocs_version
+from ocs_ci.framework.pytest_customization.marks import (
+    bugzilla,
+    brown_squad,
+)
 from ocs_ci.helpers.sanity_helpers import Sanity
+from ocs_ci.utility import version
 
 logger = logging.getLogger(__name__)
 
@@ -41,7 +47,6 @@ logger = logging.getLogger(__name__)
 @skipif_tainted_nodes
 @skipif_managed_service
 @skipif_hci_provider_and_client
-@skipif_ocs_version(">=4.16")
 @bugzilla("1992472")
 @pytest.mark.polarion_id("OCS-2705")
 class TestNonOCSTaintAndTolerations(E2ETest):
@@ -115,10 +120,18 @@ class TestNonOCSTaintAndTolerations(E2ETest):
                 f'"noobaa-core": {tolerations}}}}}}}'
             )
         else:
-            param = (
-                f'{{"spec": {{"placement": {{"all": {tolerations}, "mds": {tolerations}, '
-                f'"noobaa-core": {tolerations}, "rgw": {tolerations}}}}}}}'
-            )
+            if version.get_semantic_ocs_version_from_config() < version.VERSION_4_16:
+                param = (
+                    f'{{"spec": {{"placement": {{"all": {tolerations}, "mds": {tolerations}, '
+                    f'"noobaa-core": {tolerations}, "rgw": {tolerations}}}}}}}'
+                )
+            else:
+                param = (
+                    f'"all": {tolerations}, "csi-plugin": {tolerations}, "csi-provisioner": {tolerations}, '
+                    f'"mds": {tolerations}, "metrics-exporter": {tolerations}, "noobaa-core": {tolerations}, '
+                    f'"rgw": {tolerations}, "toolbox": {tolerations}'
+                )
+            param = f'{{"spec": {{"placement": {{{param}}}}}}}'
 
         storagecluster_obj.patch(params=param, format_type="merge")
         logger.info(f"Successfully added toleration to {storagecluster_obj.kind}")
@@ -130,16 +143,28 @@ class TestNonOCSTaintAndTolerations(E2ETest):
             '[{"effect": "NoSchedule", "key": "xyz", "operator": "Equal", '
             '"value": "true"}]}}}'
         )
-        for sub in sub_list:
-            sub_obj = ocp.OCP(
-                resource_name=sub,
-                namespace=config.ENV_DATA["cluster_namespace"],
-                kind=constants.SUBSCRIPTION,
-            )
-            sub_obj.patch(params=param, format_type="merge")
-            logger.info(f"Successfully added toleration to {sub}")
+        sub_obj = ocp.OCP(
+            namespace=config.ENV_DATA["cluster_namespace"],
+            kind=constants.SUBSCRIPTION,
+        )
+        if version.get_semantic_ocs_version_from_config() < version.VERSION_4_16:
+            for sub in sub_list:
+                sub_obj.patch(resource_name=sub, params=param, format_type="merge")
+                logger.info(f"Successfully added toleration to {sub}")
+        else:
+            for sub in sub_list:
+                if sub == constants.ODF_SUBSCRIPTION:
+                    sub_obj.patch(resource_name=sub, params=param, format_type="merge")
+                    logger.info(f"Successfully added toleration to {sub}")
 
-        if not config.ENV_DATA["mcg_only_deployment"]:
+        retry(CommandFailed, tries=5, delay=10,)(
+            check_toleration_on_subscriptions
+        )(toleration_key="xyz")
+
+        if (
+            not config.ENV_DATA["mcg_only_deployment"]
+            and version.get_semantic_ocs_version_from_config() < version.VERSION_4_16
+        ):
             logger.info("Add tolerations to the ocsinitializations.ocs.openshift.io")
             param = (
                 '{"spec":  {"tolerations": '
