@@ -315,7 +315,7 @@ class TestSelinuxrelabel(E2ETest):
 
         self.pod_obj = self.get_app_pod_obj()
         ocp.OCP(
-            kind=constants.POD, namespace=constants.OPENSHIFT_STORAGE_NAMESPACE
+            kind=constants.POD, namespace=config.ENV_DATA["cluster_namespace"]
         ).wait_for_resource(
             condition=constants.STATUS_RUNNING,
             resource_name=self.pod_obj.name,
