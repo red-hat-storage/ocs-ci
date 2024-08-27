@@ -1313,7 +1313,7 @@ def get_osd_utilization():
     return osd_filled
 
 
-def get_ceph_df_detail(format="json-pretty"):
+def get_ceph_df_detail(format="json-pretty", out_yaml_format=True):
     """
     Get ceph osd df detail
 
@@ -1323,7 +1323,9 @@ def get_ceph_df_detail(format="json-pretty"):
     """
     ceph_cmd = "ceph df detail"
     ct_pod = pod.get_ceph_tools_pod()
-    return ct_pod.exec_ceph_cmd(ceph_cmd=ceph_cmd, format=format, out_yaml_format=False)
+    return ct_pod.exec_ceph_cmd(
+        ceph_cmd=ceph_cmd, format=format, out_yaml_format=out_yaml_format
+    )
 
 
 def parse_ceph_df_pools(raw_output: str) -> pd.DataFrame:
@@ -1407,7 +1409,7 @@ def validate_num_of_pgs() -> bool:
     Returns:
         bool: True if all pools (excluding .mgr) have more than 1 PG, False otherwise.
     """
-    ceph_df_output = get_ceph_df_detail(format=None)
+    ceph_df_output = get_ceph_df_detail(format=None, out_yaml_format=False)
 
     pools_df = parse_ceph_df_pools(ceph_df_output)
     pools_dict = ceph_details_df_to_dict(pools_df)
