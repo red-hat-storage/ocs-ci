@@ -125,7 +125,7 @@ class AcmPageNavigator(BaseUI):
             enable_screenshot=True,
         )
 
-    @retry(TimeoutException, tries=5, delay=80, backoff=2)
+    @retry(TimeoutException, tries=5, delay=40, backoff=2)
     def navigate_applications_page(self):
         """
         Navigate to ACM Applications Page
@@ -199,18 +199,18 @@ class AcmPageNavigator(BaseUI):
         find_element = self.wait_until_expected_text_is_found(
             locator=self.acm_page_nav["data-services"],
             expected_text="Data Services",
-            timeout=240,
+            timeout=200,
         )
         if find_element:
             self.do_click(
                 locator=self.acm_page_nav["data-services"],
-                timeout=160,
+                timeout=200,
                 avoid_stale=True,
             )
             disaster_recovery = self.wait_until_expected_text_is_found(
                 locator=self.acm_page_nav["disaster-recovery"],
                 expected_text="Disaster recovery",
-                timeout=240,
+                timeout=200,
             )
             if disaster_recovery:
                 self.do_click(
@@ -221,7 +221,7 @@ class AcmPageNavigator(BaseUI):
             policies = self.wait_until_expected_text_is_found(
                 locator=self.acm_page_nav["policies"],
                 expected_text="Policies",
-                timeout=240,
+                timeout=200,
             )
             if policies:
                 self.do_click(

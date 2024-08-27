@@ -159,13 +159,7 @@ def verify_drpolicy_ui(acm_obj, scheduling_interval):
     """
     ocp_version = get_ocp_version()
     acm_loc = locators[ocp_version]["acm_page"]
-    acm_obj.navigate_data_services()
-    log.info("Click on 'Policies' tab under Disaster recovery")
-    acm_obj.do_click(acm_loc["Policies"], avoid_stale=True, enable_screenshot=True)
-    if ocp_version >= "4.16":
-        acm_obj.navigate_disaster_recovery()
-    else:
-        acm_obj.navigate_data_services()
+    acm_obj.navigate_disaster_recovery()
     log.info("Verify status of DRPolicy on ACM UI")
     policy_status = acm_obj.wait_until_expected_text_is_found(
         acm_loc["drpolicy-status"], expected_text="Validated"
@@ -663,6 +657,9 @@ def verify_application_not_present_in_ui(acm_obj, workload_to_check, timeout=60)
         workload_to_check (str): Specify the workload to check,
         timeout (int): timeout to wait for certain elements to be found on the ACM UI
 
+    Returns:
+        bool: True if the application is not present, raises Exception if multiple matches found
+
     """
     if workload_to_check:
         ocp_version = get_ocp_version()
@@ -692,9 +689,8 @@ def verify_application_not_present_in_ui(acm_obj, workload_to_check, timeout=60)
             return True
         else:
             raise InvalidSelectorException(
-                "One or more matches found, Try again with the correct workload name"
+                "One or more matches found, Incorrect workload name"
             )
-            return False
 
 
 def delete_application_ui(acm_obj, workload_to_delete, timeout=60):
@@ -705,6 +701,9 @@ def delete_application_ui(acm_obj, workload_to_delete, timeout=60):
         acm_obj (AcmAddClusters): ACM Page Navigator Class
         workload_to_delete (str): Specify the workload to delete, otherwise none will be deleted
         timeout (int): timeout to wait for certain elements to be found on the ACM UI
+
+    Returns:
+        bool: True if the application is deleted successfully, false otherwise
 
     """
     log.info(f"workload_to_delete {workload_to_delete}")

@@ -35,19 +35,21 @@ class TestMultipleApplicationFailoverAndRelocate:
     """
 
     @pytest.fixture(autouse=True)
-    def teardown(self, request, dr_workloads_on_managed_clusters):
+    def teardown(self, request, nodes_multicluster, dr_workloads_on_managed_clusters):
         """
         If fenced, unfence the cluster and reboot nodes
         """
 
         def finalizer():
-
             if (
                 self.primary_cluster_name is not None
-                and get_fence_state(self.primary_cluster_name) == "Fenced"
+                and get_fence_state(drcluster_name=self.primary_cluster_name)
+                == constants.ACTION_FENCE
             ):
                 enable_unfence(self.primary_cluster_name)
-                gracefully_reboot_ocp_nodes(self.primary_cluster_name)
+                gracefully_reboot_ocp_nodes(
+                    drcluster_name=self.primary_cluster_name, disable_eviction=True
+                )
 
         request.addfinalizer(finalizer)
 
@@ -68,10 +70,9 @@ class TestMultipleApplicationFailoverAndRelocate:
         node_restart_teardown,
     ):
         """
-        Tests to failover and relocate of applications from both the managed clusters
+        Test to failover and relocate of multiple applications from primary to secondary
 
         """
-        acm_obj = AcmAddClusters()
         self.workload_namespaces = []
         if config.RUN.get("mdr_failover_via_ui"):
             ocs_version = version.get_semantic_ocs_version_from_config()
@@ -87,7 +88,7 @@ class TestMultipleApplicationFailoverAndRelocate:
 
         if workload_type == constants.SUBSCRIPTION:
             primary_instances, secondary_instances = dr_workloads_on_managed_clusters(
-                num_of_subscription=2, primary_cluster=True, secondary_cluster=True
+                num_of_subscription=1, primary_cluster=True, secondary_cluster=False
             )
 
         # Set Primary managed cluster
@@ -108,19 +109,20 @@ class TestMultipleApplicationFailoverAndRelocate:
         # Fence the primary managed cluster
         enable_fence(drcluster_name=self.primary_cluster_name)
 
-        # Application Failover to Secondary managed cluster
+        # Multiple applications Failover to Secondary managed cluster
         config.switch_acm_ctx()
-        for instance in primary_instances:
-            if (
-                config.RUN.get("mdr_failover_via_ui")
-                and workload_type == constants.SUBSCRIPTION
-            ):
-                logger.info(
-                    "Start the process of Failover of subscription based app from ACM UI"
-                )
+        if (
+            config.RUN.get("mdr_failover_via_ui")
+            and workload_type == constants.SUBSCRIPTION
+        ):
+            logger.info(
+                "Start the process of Failover of subscription based apps from ACM UI"
+            )
+            for instance in primary_instances:
+                logger.info(f"Failing over app {instance.app_name} ")
                 failover_relocate_ui(
                     acm_obj,
-                    workload_to_move=f"{instance.app_name}-1",
+                    workload_to_move=instance.app_name,
                     policy_name=instance.dr_policy_name,
                     failover_or_preferred_cluster=secondary_cluster_name,
                 )

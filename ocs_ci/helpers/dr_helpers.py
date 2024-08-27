@@ -898,12 +898,14 @@ def get_all_drclusters():
     Returns:
         list: List of all DRClusters
     """
+    restore_index = config.cur_index
     config.switch_acm_ctx()
     drclusters_obj = ocp.OCP(kind=constants.DRCLUSTER)
     drclusters = []
     for cluster in drclusters_obj.get().get("items"):
         drclusters.append(cluster.get("metadata").get("name"))
     logger.info(f"The DRClusters are {drclusters}")
+    config.switch_ctx(restore_index)
     return drclusters
 
 

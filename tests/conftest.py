@@ -4962,7 +4962,7 @@ def setup_ui_fixture(request):
     return driver
 
 
-@pytest.fixture(scope="function")
+@pytest.fixture(scope="session", autouse=True)
 def setup_acm_ui(request):
     return setup_acm_ui_fixture(request)
 
@@ -6683,7 +6683,7 @@ def dr_workload(request):
 
 
 @pytest.fixture(scope="class")
-def dr_workloads_on_managed_clusters(request):
+def dr_workloads_on_managed_clusters(request, setup_acm_ui):
     """
     Deploying subscription apps on both primary and secondary managed clusters
     """
@@ -6705,11 +6705,7 @@ def dr_workloads_on_managed_clusters(request):
             primary_cluster (bool): True if apps to be deployed on primary cluster, false otherwise
             secondary_cluster (bool): True if apps to be deployed on secondary cluster, false otherwise
 
-        Raises:
-            ResourceNotDeleted: In case workload resources not deleted properly
-
         Returns:
-            instances (list): objects of appset workload class
             primary_cluster_instances (list): objects of subscription workload class on primary
             secondary_cluster_instances (list): objects of subscription workload class on secondary
 
