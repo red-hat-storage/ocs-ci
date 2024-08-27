@@ -2582,21 +2582,37 @@ def check_toleration_on_pods(toleration_key=constants.TOLERATION_KEY):
         toleration_key (str): The toleration key to check
 
     """
-
     pod_objs = get_all_pods(
         namespace=config.ENV_DATA["cluster_namespace"],
         selector=[constants.TOOL_APP_LABEL],
         exclude_selector=True,
     )
+
     for pod_obj in pod_objs:
         resource_name = pod_obj.name
-        tolerations = pod_obj.get().get("spec").get("tolerations")
-        for key in tolerations:
-            if key["key"] == toleration_key:
-                assert (
-                    key["key"] == toleration_key
-                ), f"The pod {resource_name} does not have toleration {toleration_key}"
-        logger.info(f"The Toleration {toleration_key} exists on {resource_name}")
+        if "-1-deploy" not in resource_name and "ocs-deviceset" not in resource_name:
+            pods_missing_toleration = []
+            tolerations = pod_obj.get().get("spec").get("tolerations")
+
+            # Check if any toleration matches the provided key
+            toleration_found = any(tol["key"] == toleration_key for tol in tolerations)
+
+            if not toleration_found:
+                logger.error(
+                    f"The pod {resource_name} does not have toleration {toleration_key}"
+                )
+                pods_missing_toleration.append(resource_name)
+            else:
+                logger.info(
+                    f"The Toleration {toleration_key} exists on {resource_name}"
+                )
+            if pods_missing_toleration:
+                logger.warning(
+                    f"Some pods are missing the toleration {toleration_key}: {', '.join(pods_missing_toleration)}"
+                )
+                raise AssertionError(
+                    f"The following pods do not have toleration {toleration_key}: {', '.join(pods_missing_toleration)}"
+                )
 
 
 def check_toleration_on_subscriptions(toleration_key=constants.TOLERATION_KEY):
@@ -2607,8 +2623,9 @@ def check_toleration_on_subscriptions(toleration_key=constants.TOLERATION_KEY):
         toleration_key (str): The toleration key to check
 
     """
-
     sub_list = ocp.get_all_resource_names_of_a_kind(kind=constants.SUBSCRIPTION)
+    subs_missing_toleration = []
+
     for sub in sub_list:
         sub_obj = ocp.OCP(
             resource_name=sub,
@@ -2616,12 +2633,25 @@ def check_toleration_on_subscriptions(toleration_key=constants.TOLERATION_KEY):
             kind=constants.SUBSCRIPTION,
         )
         tolerations = sub_obj.get().get("spec").get("config").get("tolerations")
-        for key in tolerations:
-            if key["key"] == toleration_key:
-                assert (
-                    key["key"] == toleration_key
-                ), f"The subscription {sub} does not have toleration {toleration_key}"
-        logger.info(f"The Toleration {toleration_key} exists on {sub}")
+
+        # Check if any toleration matches the provided key
+        toleration_found = any(tol["key"] == toleration_key for tol in tolerations)
+
+        if not toleration_found:
+            logger.error(
+                f"The subscription {sub} does not have toleration {toleration_key}"
+            )
+            subs_missing_toleration.append(sub)
+        else:
+            logger.info(f"The Toleration {toleration_key} exists on {sub}")
+
+    if subs_missing_toleration:
+        logger.warning(
+            f"Some subscriptions are missing the toleration {toleration_key}: {', '.join(subs_missing_toleration)}"
+        )
+        raise AssertionError(
+            f"The following subscriptions do not have toleration {toleration_key}: {', '.join(subs_missing_toleration)}"
+        )
 
 
 def run_osd_removal_job(osd_ids=None):
