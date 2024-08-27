@@ -5,6 +5,7 @@ import time
 from concurrent.futures import ThreadPoolExecutor
 from ocs_ci.framework.testlib import (
     bugzilla,
+    E2ETest,
     skipif_ocp_version,
     skipif_ocs_version,
     tier2,
@@ -27,7 +28,7 @@ log = logging.getLogger(__name__)
 @skipif_external_mode
 @skipif_ocs_version("<4.15")
 @skipif_ocp_version("<4.15")
-class TestCephfsWithChunkIo:
+class TestCephfsWithChunkIo(E2ETest):
     """
     This class takes care of create Cephfs PVC, create Fedora dc pod and run Chunk IO on fedora pod
     """
