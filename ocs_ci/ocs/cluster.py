@@ -3319,12 +3319,25 @@ def check_cephcluster_status(
 
 
 def ceph_config_set_debug(debug_level):
-    # default debug level for mds is 1/5, setting debug level with user defined value 'debug_level'
-    # debug_level should be given in str format
+    """
+    This function will be useful to set default debug level for mds i.e 1/5
+
+    Args:
+        debug_level (str): The debug level to set in ceph config
+        ex: debug_level='1/5'
+
+    """
+    logger.info(f"Setting debug level with user defined value {debug_level}")
     ceph_tools_pod = pod.get_ceph_tools_pod()
     ceph_tools_pod.exec_cmd_on_pod("ceph config set mds debug_mds " + debug_level)
 
 
 def ceph_health_detail():
+    """
+    Get ceph health detail
+
+    Returns:
+        str: the output of the cmd
+    """
     ceph_tools_pod = pod.get_ceph_tools_pod()
     return ceph_tools_pod.exec_cmd_on_pod("ceph health detail", out_yaml_format=False)
