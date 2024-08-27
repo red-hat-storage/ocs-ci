@@ -2,14 +2,10 @@ import logging
 import pytest
 
 from ocs_ci.framework import config
-from ocs_ci.ocs import ocp, constants
-from ocs_ci.ocs.resources import pod
 from ocs_ci.framework.pytest_customization.marks import bugzilla, brown_squad
 from ocs_ci.framework.testlib import tier1, tier4b, polarion_id
 from ocs_ci.helpers.sanity_helpers import Sanity
-from ocs_ci.ocs.resources.pod import (
-    wait_for_pods_to_be_running,
-)
+from ocs_ci.ocs import ocp, constants
 from ocs_ci.ocs.node import (
     unschedule_nodes,
     drain_nodes,
@@ -19,6 +15,10 @@ from ocs_ci.ocs.node import (
     get_worker_nodes,
     get_worker_node_where_ceph_toolbox_not_running,
     apply_node_affinity_for_ceph_toolbox,
+)
+from ocs_ci.ocs.resources import pod
+from ocs_ci.ocs.resources.pod import (
+    wait_for_pods_to_be_running,
 )
 
 log = logging.getLogger(__name__)
@@ -121,8 +121,8 @@ class TestCephtoolboxPod:
         """
         worker_nodes = get_worker_nodes()
         log.info(f"Current available worker nodes are {worker_nodes}")
-        # <<PR9808 yet to be merged. Once it is merged, the custom taints function need to be called here.>>
-        # <<This task will be done in another PR>>
+        # TODO: <<PR9808 yet to be merged. Once it is merged, the custom taints function need to be called here.>>
+        # <<This task will be implemented as part of https://github.com/red-hat-storage/ocs-ci/issues/10358 >>
         other_nodes = get_worker_node_where_ceph_toolbox_not_running()
         log.info(
             "Apply node affinity with a node name other than currently running node."
