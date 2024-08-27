@@ -297,11 +297,12 @@ class BusyBox(DRWorkload):
         kustomization_yaml_file = os.path.join(
             self.workload_subscription_dir, self.workload_name, "kustomization.yaml"
         )
-        kustomization_yaml_data = templating.load_yaml(kustomization_yaml_file)
-        kustomization_yaml_data["resources"].remove("drpc.yaml")
-        templating.dump_data_to_temp_yaml(
-            kustomization_yaml_data, kustomization_yaml_file
-        )
+        if not self.is_placement:
+            kustomization_yaml_data = templating.load_yaml(kustomization_yaml_file)
+            kustomization_yaml_data["resources"].remove("drpc.yaml")
+            templating.dump_data_to_temp_yaml(
+                kustomization_yaml_data, kustomization_yaml_file
+            )
 
         try:
             config.switch_ctx(switch_ctx) if switch_ctx else config.switch_acm_ctx()
