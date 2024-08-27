@@ -608,12 +608,22 @@ def create_host_inventory():
             infra_env_namespace = data["metadata"]["namespace"]
             # Create project
             helpers.create_project(project_name=infra_env_namespace)
-            # Create Secret
-            create_secret_cmd = (
-                f"oc get secret pull-secret --namespace={constants.OPENSHIFT_CONFIG_NAMESPACE} -o yaml | "
-                f"sed 's/namespace: .*/namespace: {infra_env_namespace}/' | oc create -f -"
+            # Create new secret in the namespace using the existing secret
+            secret_obj = OCP(
+                kind=constants.POD,
+                resource_name="pull-secret",
+                namespace=constants.OPENSHIFT_CONFIG_NAMESPACE,
             )
-            exec_cmd(create_secret_cmd)
+            secret_info = secret_obj.get()
+            secret_data = templating.load_yaml(constants.OCS_SECRET_YAML)
+            secret_data["data"][".dockerconfigjson"] = secret_info["data"][".dockerconfigjson"]
+            secret_data["metadata"]["namespace"] = infra_env_namespace
+            secret_data["metadata"]["name"] = "pull-secret"
+            secret_manifest = tempfile.NamedTemporaryFile(
+                mode="w+", prefix="pull_secret", delete=False
+            )
+            templating.dump_data_to_temp_yaml(secret_data, secret_manifest.name)
+            exec_cmd(cmd=f"oc create -f {secret_manifest.name}")
         helpers.create_resource(**data)
     logger.info("Created InfraEnv.")
 
