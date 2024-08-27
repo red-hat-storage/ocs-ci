@@ -222,6 +222,22 @@ def failover_relocate_ui(
         acm_loc = locators[ocp_version]["acm_page"]
         verify_drpolicy_ui(acm_obj, scheduling_interval=scheduling_interval)
         acm_obj.navigate_applications_page()
+        clear_filter = acm_obj.wait_until_expected_text_is_found(
+            locator=acm_loc["clear-filter"],
+            expected_text="Clear all filters",
+            timeout=10,
+        )
+        if clear_filter:
+            log.info("Clear existing filters")
+            acm_obj.do_click(acm_loc["clear-filter"])
+        if workload_type == constants.SUBSCRIPTION:
+            log.info(f"Apply filter for workload type {constants.SUBSCRIPTION}")
+            acm_obj.do_click(acm_loc["apply-filter"])
+            acm_obj.do_click(acm_loc["sub-checkbox"], enable_screenshot=True)
+        elif workload_type == constants.APPLICATION_SET:
+            log.info(f"Apply filter for workload type {constants.APPLICATION_SET}")
+            acm_obj.do_click(acm_loc["apply-filter"])
+            acm_obj.do_click(acm_loc["appset-checkbox"], enable_screenshot=True)
         log.info("Click on search bar")
         acm_obj.do_click(acm_loc["search-bar"])
         log.info("Clear existing text from search bar if any")
@@ -340,6 +356,7 @@ def failover_relocate_ui(
             log.info(
                 f"Action modal successfully closed for {constants.SUBSCRIPTION} type workload"
             )
+            # It automatically closes for Appset based workload
         return True
     else:
         log.error(
@@ -413,6 +430,12 @@ def check_cluster_operator_status(acm_obj, timeout=30):
     """
     The function verifies the cluster operator status on the DR monitoring dashboard
 
+    Args:
+        acm_obj (AcmAddClusters): ACM Page Navigator Class
+        timeout (int): Timeout for which status check should be done
+    Returns:
+        bool: False if expected text Degraded is found, True otherwise
+
     """
     ocp_version = get_ocp_version()
     acm_loc = locators[ocp_version]["acm_page"]
@@ -441,6 +464,15 @@ def clusters_in_dr_relationship(
     """
     This function is to verify there are 2 clusters in a healthy DR relationship
 
+    Args:
+        acm_obj (AcmAddClusters): ACM Page Navigator Class
+        locator (tuple): Locator for the element to be searched
+        timeout (int): Timeout for which status check should be done
+        expected_text (str): Text to be searched
+
+    Returns:
+        bool: True if expected_text is found, False otherwise
+
     """
     log.info("Check the healthy clusters count")
     healthy_clusters = acm_obj.wait_until_expected_text_is_found(
@@ -464,10 +496,14 @@ def clusters_in_dr_relationship(
 
 def application_count_on_ui(acm_obj):
     """
-    The function fetches the application count on the DR console
+    The function fetches the total application count on the DR monitoring dashboard
+
+
+    Args:
+        acm_obj (AcmAddClusters): ACM Page Navigator Class
 
     Returns:
-        number_of_applications (list): Number of ACM managed applications and total applications
+        app_count_list (list): Number of ACM managed applications and total applications
         enrolled in disaster recovery on DR dashboard
 
     """
@@ -490,16 +526,19 @@ def health_and_peer_connection_check_on_ui(
     acm_obj, cluster1, cluster2, timeout=15, expected_text="Degraded"
 ):
     """
-    The function checks the cluster and operator health of both the managed clusters on DR dashboard
+    The function checks the cluster and operator health, peer connection of both the managed clusters in a DR
+    relationship
 
     Args:
-        cluster1 (str): Name of managed cluster one
-        cluster2 (str): Name of managed cluster two
+        acm_obj (AcmAddClusters): ACM Page Navigator Class
+        cluster1 (str): Name of managed cluster one (primary preferably)
+        cluster2 (str): Name of managed cluster two (secondary is most cases)
         timeout (int): Timeout for which the expected text would be checked
-        expected_text (str): Text available on DR dashboard for Cluster and Operator status
+        expected_text (str): Text available on DR monitoring dashboard for Cluster and Operator status
 
     Returns:
-        False if text Degraded is found either for cluster or operator health, True if it is not found for both of them
+        False if text Degraded is found either for cluster or operator health for any of the managed clusters,
+        True if it is not found for both of them
 
     """
 
@@ -518,7 +557,7 @@ def health_and_peer_connection_check_on_ui(
             log.info(
                 f"Text '1 Connected' for cluster {cluster} found, validation passed"
             )
-            # acm_obj.take_screenshot()
+            acm_obj.take_screenshot()
         else:
             log.error(
                 f"Text '1 Connected' for cluster {cluster} not found, validation failed"
@@ -536,7 +575,7 @@ def health_and_peer_connection_check_on_ui(
                 log.info(
                     f"Text {expected_text} for locator {locator} for cluster {cluster} not found"
                 )
-                # acm_obj.take_screenshot()
+                acm_obj.take_screenshot()
             else:
                 log.warning(
                     f"Text {expected_text} for locator {locator} for cluster {cluster} found"
@@ -572,11 +611,13 @@ def check_apps_running_on_selected_cluster(
     acm_obj, cluster_name, app_names=[], timeout=10
 ):
     """
-    Function to check the apps running on selected managed cluster on DR dashboard
+    Function to check the apps running on selected managed cluster on DR monitoring dashboard
+
     Args:
+        acm_obj (AcmAddClusters): ACM Page Navigator Class
         cluster_name (str): Name of the managed cluster where apps are primary
-        app_names (list): Name of the apps as a list to iterate over it
-        timeout (int): Timeout for which an element on UI should be looked for
+        app_names (list): Name of the multiple apps from CLI in the form of a list to iterate over it
+        timeout (int): Timeout for which an element on UI should be checked for
 
     Returns:
         True if all the apps are found on selected managed cluster, False if any of the apps are missing

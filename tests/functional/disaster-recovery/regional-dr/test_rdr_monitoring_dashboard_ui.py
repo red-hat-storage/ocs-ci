@@ -43,7 +43,7 @@ class TestRDRMonitoringDashboardUI:
 
     """
 
-    @pytest.mark.polarion_id("XXXX")
+    @pytest.mark.polarion_id("OCS-5013")
     def test_rdr_monitoring_dashboard_ui(
         self,
         setup_acm_ui,
