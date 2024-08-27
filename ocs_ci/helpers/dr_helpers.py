@@ -1478,10 +1478,13 @@ def replace_cluster(workload, primary_cluster_name, secondary_cluster_name):
     # Enable MCO console plugin
     enable_mco_console_plugin()
     config.switch_acm_ctx()
+
     # Configure mirror peer
     dep_mco.configure_mirror_peer()
+
     # Create DR policy
     dep_mco.deploy_dr_policy()
+
     # Validate drpolicy
     verify_drpolicy_cli(switch_ctx=get_active_acm_index())
 

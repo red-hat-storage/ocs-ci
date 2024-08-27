@@ -4,17 +4,10 @@ import time
 
 from concurrent.futures import ThreadPoolExecutor
 from ocs_ci.framework import config
-from ocs_ci.ocs.acm.acm import AcmAddClusters
-from ocs_ci.ocs import constants
-
 from ocs_ci.framework.pytest_customization.marks import tier1, turquoise_squad
 from ocs_ci.helpers.dr_helpers import get_active_acm_index
 from ocs_ci.ocs.node import get_node_objs
 from ocs_ci.ocs.dr.dr_workload import validate_data_integrity
-from ocs_ci.helpers.dr_helpers_ui import (
-    check_cluster_status_on_acm_console,
-    failover_relocate_ui,
-)
 from ocs_ci.helpers.dr_helpers import (
     replace_cluster,
     enable_fence,
@@ -67,9 +60,6 @@ class TestReplaceCluster:
         """
 
         # Failover apps followed by unfence
-
-        acm_obj = AcmAddClusters()
-
         # Deploy Subscription based application
         sub = dr_workload(num_of_subscription=1, switch_ctx=get_active_acm_index())[0]
         self.namespace = sub.workload_namespace
@@ -96,15 +86,6 @@ class TestReplaceCluster:
         # Stop primary cluster nodes
         logger.info("Stopping primary cluster nodes")
         nodes_multicluster[primary_cluster_index].stop_nodes(node_objs)
-
-        # Verify if cluster is marked unavailable on ACM console
-        if config.RUN.get("mdr_failover_via_ui"):
-            config.switch_acm_ctx()
-            check_cluster_status_on_acm_console(
-                acm_obj,
-                down_cluster_name=self.primary_cluster_name,
-                expected_text="Unknown",
-            )
 
         # Fenced the primary managed cluster
         enable_fence(drcluster_name=self.primary_cluster_name)
@@ -152,38 +133,22 @@ class TestReplaceCluster:
 
         # Application Relocate to Primary managed cluster
         secondary_cluster_name = get_current_secondary_cluster_name(self.namespace)
-        if (
-            config.RUN.get("mdr_relocate_via_ui")
-            and self.workload_type == constants.SUBSCRIPTION
-        ):
-            logger.info("Start the process of Relocate from ACM UI")
-            # Relocate via ACM UI
-            config.switch_ctx(get_active_acm_index())
-            check_cluster_status_on_acm_console(acm_obj)
-            failover_relocate_ui(
-                acm_obj,
-                workload_to_move=f"{workload[0].workload_name}-1",
-                policy_name=workload[0].dr_policy_name,
-                failover_or_preferred_cluster=secondary_cluster_name,
-                action=constants.ACTION_RELOCATE,
-            )
-        else:
-            relocate_results = []
-            with ThreadPoolExecutor() as executor:
-                for wl in workload:
-                    relocate_results.append(
-                        executor.submit(
-                            relocate,
-                            preferred_cluster=secondary_cluster_name,
-                            namespace=wl.workload_namespace,
-                            switch_ctx=get_active_acm_index(),
-                        )
+        relocate_results = []
+        with ThreadPoolExecutor() as executor:
+            for wl in workload:
+                relocate_results.append(
+                    executor.submit(
+                        relocate,
+                        preferred_cluster=secondary_cluster_name,
+                        namespace=wl.workload_namespace,
+                        switch_ctx=get_active_acm_index(),
                     )
-                    time.sleep(5)
+                )
+                time.sleep(5)
 
-            # Wait for relocate results
-            for rl in relocate_results:
-                rl.result()
+        # Wait for relocate results
+        for rl in relocate_results:
+            rl.result()
 
         # Verify resources deletion from  secondary cluster
         config.switch_to_cluster_by_name(secondary_cluster_name)
