@@ -30,8 +30,10 @@ from ocs_ci.utility.utils import (
 IMAGE_SOURCE_POLICY = ocp.OCP(
     kind="ImageContentSourcePolicy", namespace=constants.MARKETPLACE_NAMESPACE
 )
-CATALOG_SOURCE = ocp.OCP(
-    kind="CatalogSource", namespace=constants.MARKETPLACE_NAMESPACE
+OPTIONAL_OPERATOR_CATALOG_SOURCE = ocp.OCP(
+    kind=constants.CATSRC,
+    namespace=constants.MARKETPLACE_NAMESPACE,
+    resource_name="optional-operators",
 )
 
 logger = logging.getLogger(__name__)
@@ -280,7 +282,7 @@ def create_optional_operators_catalogsource_non_ga(force=False):
     templating.dump_data_to_temp_yaml(
         optional_operators_data, optional_operators_yaml.name
     )
-    if not CATALOG_SOURCE.is_exist(resource_name=optional_operators_yaml.name):
+    if not OPTIONAL_OPERATOR_CATALOG_SOURCE.is_exist():
         with open(optional_operators_yaml.name, "r") as f:
             logger.info(f.read())
         logger.info(
