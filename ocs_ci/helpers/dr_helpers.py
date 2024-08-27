@@ -1391,13 +1391,15 @@ def apply_drpolicy_to_workload(workload, drcluster_name):
 
     """
     for wl in workload:
-        drpc_yaml_data = templating.load_yaml(wl.drpc_yaml_file)
+        drpc_yaml_data = templating.load_yaml(wl.drcp_data_yaml.name)
+        logger.info(drpc_yaml_data)
+        drpc_yaml_data["metadata"]["namespace"] = wl.workload_namespace
         drpc_yaml_data["spec"]["preferredCluster"] = drcluster_name
-        templating.dump_data_to_temp_yaml(drpc_yaml_data, wl.drpc_yaml_file)
+        templating.dump_data_to_temp_yaml(drpc_yaml_data, wl.drcp_data_yaml.name)
 
         config.switch_acm_ctx()
         wl.add_annotation_to_placement()
-        run_cmd(f"oc create -f {wl.drpc_yaml_file}")
+        run_cmd(f"oc create -f {wl.drcp_data_yaml.name}")
 
 
 def replace_cluster(workload, primary_cluster_name, secondary_cluster_name):
