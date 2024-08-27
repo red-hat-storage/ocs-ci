@@ -34,11 +34,7 @@ from ocs_ci.framework.pytest_customization.marks import (
     upgrade_marks,
     ignore_resource_not_found_error_label,
 )
-from ocs_ci.helpers.cnv_helpers import (
-    get_pvc_from_vm,
-    get_secret_from_vm,
-    get_volumeimportsource,
-)
+
 from ocs_ci.helpers.proxy import update_container_with_proxy_env
 from ocs_ci.ocs import constants, defaults, fio_artefacts, node, ocp, platform_nodes
 from ocs_ci.ocs.acm.acm import login_to_acm, AcmAddClusters
@@ -8286,13 +8282,18 @@ def setup_cnv(request):
 
     """
     cnv_obj = CNVInstaller()
-    cnv_obj.deploy_cnv(check_cnv_deployed=False, check_cnv_ready=True)
+    installed = False
+    if not cnv_obj.post_install_verification():
+        cnv_obj.deploy_cnv(check_cnv_deployed=False, check_cnv_ready=False)
+        installed = True
 
     def finalizer():
         """
         Clean up CNV deployment
 
         """
-        if cnv_obj.cnv_hyperconverged_installed():
+
+        # Uninstall CNV only if installed by this fixture
+        if installed:
             cnv_obj.uninstall_cnv()
     request.addfinalizer(finalizer)

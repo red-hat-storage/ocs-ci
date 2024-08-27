@@ -85,22 +85,22 @@ class TestNetSplit:
     @pytest.mark.parametrize(
         argnames="zones, duration",
         argvalues=[
-            # pytest.param(
-            #     constants.NETSPLIT_DATA_1_DATA_2,
-            #     15,
-            #     marks=[
-            #         pytest.mark.polarion_id("OCS-5069"),
-            #         pytest.mark.polarion_id("OCS-5071"),
-            #     ],
-            # ),
-            # pytest.param(
-            #     constants.NETSPLIT_ARBITER_DATA_1,
-            #     15,
-            #     marks=[
-            #         pytest.mark.polarion_id("OCS-5072"),
-            #         pytest.mark.polarion_id("OCS-5074"),
-            #     ],
-            # ),
+            pytest.param(
+                constants.NETSPLIT_DATA_1_DATA_2,
+                15,
+                marks=[
+                    pytest.mark.polarion_id("OCS-5069"),
+                    pytest.mark.polarion_id("OCS-5071"),
+                ],
+            ),
+            pytest.param(
+                constants.NETSPLIT_ARBITER_DATA_1,
+                15,
+                marks=[
+                    pytest.mark.polarion_id("OCS-5072"),
+                    pytest.mark.polarion_id("OCS-5074"),
+                ],
+            ),
             pytest.param(
                 constants.NETSPLIT_ARBITER_DATA_1_AND_ARBITER_DATA_2,
                 15,
@@ -109,20 +109,20 @@ class TestNetSplit:
                     pytest.mark.polarion_id("OCS-5085"),
                 ],
             ),
-            # pytest.param(
-            #     constants.NETSPLIT_ARBITER_DATA_1_AND_DATA_1_DATA_2,
-            #     15,
-            #     marks=[
-            #         pytest.mark.polarion_id("OCS-5077"),
-            #         pytest.mark.polarion_id("OCS-5079"),
-            #     ],
-            # ),
+            pytest.param(
+                constants.NETSPLIT_ARBITER_DATA_1_AND_DATA_1_DATA_2,
+                15,
+                marks=[
+                    pytest.mark.polarion_id("OCS-5077"),
+                    pytest.mark.polarion_id("OCS-5079"),
+                ],
+            ),
         ],
         ids=[
-            # "Data-1-Data-2",
-            # "Arbiter-Data-1",
+            "Data-1-Data-2",
+            "Arbiter-Data-1",
             "Arbiter-Data-1-and-Arbiter-Data-2",
-            # "Arbiter-Data-1-and-Data-1-Data-2",
+            "Arbiter-Data-1-and-Data-1-Data-2",
         ],
     )
     @pytest.mark.polarion_id("OCS-5850")
@@ -136,7 +136,7 @@ class TestNetSplit:
         duration,
         init_sanity,
         reset_conn_score,
-        setup_vms_standalone_pvc,
+        cnv_workload,
         setup_cnv,
     ):
         """
@@ -170,7 +170,7 @@ class TestNetSplit:
         logger.info("Workloads are running")
 
         # setup vm and write some data to the VM instance
-        vm_obj = setup_vms_standalone_pvc()
+        vm_obj = cnv_workload(volume_interface=constants.VM_VOLUME_PVC)[0]
         vm_obj.run_ssh_cmd(
             command="dd if=/dev/zero of=/file_1.txt bs=1024 count=102400"
         )
