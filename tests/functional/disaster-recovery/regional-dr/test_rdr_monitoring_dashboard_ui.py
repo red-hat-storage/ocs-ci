@@ -23,7 +23,7 @@ from ocs_ci.helpers.dr_helpers_ui import (
     clusters_in_dr_relationship,
     protected_volume_count_per_cluster,
 )
-from ocs_ci.ocs.node import get_node_objs, wait_for_nodes_status
+from ocs_ci.ocs.node import get_node_objs, wait_for_nodes_status, get_nodes_in_statuses
 from ocs_ci.ocs.resources.pod import wait_for_pods_to_be_running
 from ocs_ci.ocs.ui.validation_ui import ValidationUI
 from ocs_ci.ocs.ui.views import locators
@@ -42,6 +42,28 @@ class TestRDRMonitoringDashboardUI:
     Test class for RDR monitoring dashboard validation
 
     """
+
+    @pytest.fixture(autouse=True)
+    def teardown(self, request, nodes):
+        """
+        Makes sure all nodes are up again for successful resource cleanup
+
+        """
+
+        def finalizer():
+            not_ready_nodes = get_nodes_in_statuses([constants.NODE_NOT_READY])
+            if not_ready_nodes:
+                not_ready_node_names = [n.name for n in not_ready_nodes]
+                logger.warning(
+                    f"We have nodes in not ready statuses: {not_ready_node_names}. "
+                    f"Starting the nodes that are not ready..."
+                )
+                nodes.restart_nodes(not_ready_nodes)
+                wait_for_nodes_status(node_names=not_ready_node_names)
+            else:
+                logger.info("All the nodes are in 'Ready' state")
+
+        request.addfinalizer(finalizer)
 
     @pytest.mark.polarion_id("OCS-5013")
     def test_rdr_monitoring_dashboard_ui(
