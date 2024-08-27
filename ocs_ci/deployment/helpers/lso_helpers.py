@@ -26,7 +26,6 @@ from ocs_ci.utility.utils import (
     wait_for_machineconfigpool_status,
     wipe_all_disk_partitions_for_node,
 )
-from ocs_ci.deployment.baremetal import clean_disk
 
 
 logger = logging.getLogger(__name__)
@@ -458,6 +457,8 @@ def cleanup_nodes_for_lso_inastall():
     """
     Cleanup before installing lso
     """
+    from ocs_ci.deployment.baremetal import clean_disk
+
     nodes = get_all_nodes()
     node_objs = get_node_objs(nodes)
     for node in nodes:
