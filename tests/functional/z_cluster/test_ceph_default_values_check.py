@@ -21,7 +21,7 @@ from ocs_ci.ocs.cluster import get_pg_balancer_status, get_mon_config_value
 from ocs_ci.framework import config
 from ocs_ci.ocs.ocp import OCP
 from ocs_ci.ocs import constants
-from ocs_ci.ocs.cluster import get_mds_cache_memory_limit
+from ocs_ci.ocs.cluster import get_mds_cache_memory_limit, validate_num_of_pgs
 from ocs_ci.utility import version
 from ocs_ci.utility.retry import retry
 from ocs_ci.ocs.exceptions import CommandFailed
@@ -224,3 +224,33 @@ class TestCephDefaultValuesCheck(ManageTest):
             f"The expected values are:\n{stored_values}\n"
             f"The cluster's existing values are:{config_data}"
         )
+
+    def test_check_number_of_pgs(self, project_factory, pvc_factory, pod_factory):
+        """
+        Testcase to check number of pgs per pool
+
+        """
+        # Create a RWO PVC
+        project = project_factory()
+        pvc_obj = pvc_factory(
+            interface=constants.CEPHFILESYSTEM,
+            access_mode=constants.ACCESS_MODE_RWO,
+            status=constants.STATUS_BOUND,
+            project=project,
+            size=100,
+        )
+
+        # Create a pod using the PVC
+        pod_obj = pod_factory(
+            interface=constants.CEPHFILESYSTEM,
+            pvc=pvc_obj,
+            status=constants.STATUS_RUNNING,
+        )
+        pod_obj.run_io(
+            storage_type=constants.CEPHFILESYSTEM,
+            size="100M",
+            io_direction="write",
+            runtime=10,
+            fio_filename=f"{pod_obj.name}_io_file1",
+        )
+        assert validate_num_of_pgs()
