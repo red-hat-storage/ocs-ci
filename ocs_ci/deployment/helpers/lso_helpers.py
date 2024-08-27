@@ -81,11 +81,12 @@ def setup_local_storage(storageclass):
     lso_data_yaml = tempfile.NamedTemporaryFile(
         mode="w+", prefix="local_storage_operator", delete=False
     )
-    templating.dump_data_to_temp_yaml(lso_data, lso_data_yaml.name)
-    with open(lso_data_yaml.name, "r") as f:
-        logger.info(f.read())
-    logger.info("Creating local-storage-operator")
-    run_cmd(f"oc create -f {lso_data_yaml.name}")
+    if not run_cmd("oc get ImageContentSourcePolicy {lso_data_yaml.name}"):
+        templating.dump_data_to_temp_yaml(lso_data, lso_data_yaml.name)
+        with open(lso_data_yaml.name, "r") as f:
+            logger.info(f.read())
+        logger.info("Creating local-storage-operator")
+        run_cmd(f"oc create -f {lso_data_yaml.name}")
 
     local_storage_operator = ocp.OCP(kind=constants.POD, namespace=lso_namespace)
     assert local_storage_operator.wait_for_resource(
