@@ -453,7 +453,7 @@ def add_disk_for_rhv_platform():
         )
 
 
-def cleanup_nodes_for_lso_inastall():
+def cleanup_nodes_for_lso_install():
     """
     Cleanup before installing lso
     """

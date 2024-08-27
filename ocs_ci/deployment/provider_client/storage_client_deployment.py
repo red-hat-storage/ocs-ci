@@ -14,7 +14,7 @@ from ocs_ci.ocs.rados_utils import (
 )
 from ocs_ci.deployment.helpers.lso_helpers import (
     setup_local_storage,
-    cleanup_nodes_for_lso_inastall,
+    cleanup_nodes_for_lso_install,
 )
 from ocs_ci.ocs.node import label_nodes, get_all_nodes, get_node_objs, get_nodes
 from ocs_ci.ocs.utils import (
@@ -155,7 +155,7 @@ class ODFAndNativeStorageClientDeploymentOnProvider(object):
             resource_name=self.storageclass,
         )
         if not is_local_storage_available:
-            cleanup_nodes_for_lso_inastall()
+            cleanup_nodes_for_lso_install()
             setup_local_storage(storageclass=self.storageclass)
         else:
             log.info("local storage is already installed")
