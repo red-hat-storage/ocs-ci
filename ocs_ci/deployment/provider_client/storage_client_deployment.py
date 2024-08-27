@@ -12,7 +12,10 @@ from ocs_ci.ocs.rados_utils import (
     verify_cephblockpool_status,
     check_phase_of_rados_namespace,
 )
-from ocs_ci.deployment.helpers.lso_helpers import setup_local_storage
+from ocs_ci.deployment.helpers.lso_helpers import (
+    setup_local_storage,
+    cleanup_nodes_for_lso_inastall,
+)
 from ocs_ci.ocs.node import label_nodes, get_all_nodes, get_node_objs, get_nodes
 from ocs_ci.ocs.utils import (
     setup_ceph_toolbox,
@@ -24,7 +27,7 @@ from ocs_ci.utility.utils import (
 )
 from ocs_ci.utility import templating, kms as KMS, version
 from ocs_ci.deployment.deployment import Deployment, create_catalog_source
-from ocs_ci.deployment.baremetal import clean_disk, disks_available_to_cleanup
+from ocs_ci.deployment.baremetal import disks_available_to_cleanup
 from ocs_ci.ocs.resources.storage_cluster import verify_storage_cluster
 from ocs_ci.ocs.resources.storage_client import StorageClient
 from ocs_ci.ocs.bucket_utils import check_pv_backingstore_type
@@ -152,14 +155,7 @@ class ODFAndNativeStorageClientDeploymentOnProvider(object):
             resource_name=self.storageclass,
         )
         if not is_local_storage_available:
-            for node in nodes:
-                cmd = f"oc debug nodes/{node} -- chroot /host rm -rvf /var/lib/rook /mnt/local-storage"
-                out = run_cmd(cmd)
-                log.info(out)
-                log.info(f"Mount data cleared from node, {node}")
-            for node_obj in node_objs:
-                clean_disk(node_obj)
-            log.info("All nodes are wiped")
+            cleanup_nodes_for_lso_inastall()
             setup_local_storage(storageclass=self.storageclass)
         else:
             log.info("local storage is already installed")

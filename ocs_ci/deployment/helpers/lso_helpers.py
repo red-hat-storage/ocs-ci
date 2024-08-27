@@ -11,7 +11,12 @@ from ocs_ci.deployment.disconnected import prune_and_mirror_index_image
 from ocs_ci.framework import config
 from ocs_ci.ocs import constants, ocp, defaults
 from ocs_ci.ocs.exceptions import CommandFailed, UnsupportedPlatformError
-from ocs_ci.ocs.node import get_nodes, get_compute_node_names
+from ocs_ci.ocs.node import (
+    get_nodes,
+    get_compute_node_names,
+    get_all_nodes,
+    get_node_objs,
+)
 from ocs_ci.utility import templating, version
 from ocs_ci.utility.deployment import get_ocp_ga_version
 from ocs_ci.utility.localstorage import get_lso_channel
@@ -21,6 +26,7 @@ from ocs_ci.utility.utils import (
     wait_for_machineconfigpool_status,
     wipe_all_disk_partitions_for_node,
 )
+from ocs_ci.deployment.baremetal import clean_disk
 
 
 logger = logging.getLogger(__name__)
@@ -446,3 +452,19 @@ def add_disk_for_rhv_platform():
             config.ENV_DATA.get("sparse"),
             config.ENV_DATA.get("pass_discard"),
         )
+
+
+def cleanup_nodes_for_lso_inastall():
+    """
+    Cleanup before installing lso
+    """
+    nodes = get_all_nodes()
+    node_objs = get_node_objs(nodes)
+    for node in nodes:
+        cmd = f"oc debug nodes/{node} -- chroot /host rm -rvf /var/lib/rook /mnt/local-storage"
+        out = run_cmd(cmd)
+        logger.info(out)
+        logger.info(f"Mount data cleared from node, {node}")
+        for node_obj in node_objs:
+            clean_disk(node_obj)
+        logger.info("All nodes are wiped")
