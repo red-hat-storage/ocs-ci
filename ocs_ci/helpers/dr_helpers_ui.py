@@ -256,7 +256,7 @@ def failover_relocate_ui(
             acm_obj.do_click(
                 acm_loc["relocate-app"], enable_screenshot=True, timeout=timeout
             )
-        if workload_type:
+        if workload_type == constants.SUBSCRIPTION:
             log.info("Click on policy dropdown")
             acm_obj.do_click(acm_loc["policy-dropdown"], enable_screenshot=True)
             log.info("Select policy from policy dropdown")
@@ -330,7 +330,7 @@ def failover_relocate_ui(
                 )
                 acm_obj.take_screenshot()
                 return True
-        if workload_type:
+        if workload_type == constants.SUBSCRIPTION:
             log.info("Click on subscription dropdown")
             acm_obj.do_click(acm_loc["subscription-dropdown"], enable_screenshot=True)
             # DRPC name is by default selected, hence no code is needed
