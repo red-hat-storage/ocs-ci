@@ -19,7 +19,7 @@ def add_in_transit_encryption_to_cluster_data(cluster_data):
         dict: updated storage storage cluster yaml
     """
     if config.ENV_DATA.get("in_transit_encryption"):
-        logger.debug("Configuring in-transit encryption for the storage cluster")
+        logger.info("Configuring in-transit encryption for the storage cluster")
         if "network" not in cluster_data["spec"]:
             cluster_data["spec"]["network"] = {}
 
