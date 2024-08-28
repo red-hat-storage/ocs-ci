@@ -21,7 +21,7 @@ setup(
         "docopt==0.6.2",
         "gevent==23.9.1",
         "reportportal-client==3.2.3",
-        "requests==2.32.0",
+        "requests==2.32.3",
         "paramiko==3.4.0",
         "pyyaml>=4.2b1",
         "jinja2==3.1.4",
@@ -72,7 +72,7 @@ setup(
         # by default program attempting to load an x86_64-only library from a native arm64 process
         # Beginning with gevent 20.12.0, 64-bit ARM binaries are distributed on PyPI for aarch64 manylinux2014
         # compatible systems. Resolves problem for m1 Mac chips
-        "greenlet==2.0.2",
+        "greenlet==3.0rc3",
         "ovirt-engine-sdk-python==4.4.11",
         "junitparser==3.1.0",
         "flaky==3.7.0",
