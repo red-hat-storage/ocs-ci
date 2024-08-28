@@ -3022,7 +3022,7 @@ def get_worker_node_where_ceph_toolbox_not_running():
     return other_nodes
 
 
-def apply_node_affinity_for_ceph_toolbox(node_name, wait_time=60):
+def apply_node_affinity_for_ceph_toolbox(node_name):
     """
     Apply node affinity for ceph toolbox pod.
 
@@ -3072,7 +3072,8 @@ def get_ceph_tools_running_node():
     """
     Get node name where the ceph tools pod is currently running
 
-    :return: Node name (str)
+    Returns:
+         str: name of the node where ceph tools is running
 
     """
     ct_pod = pod.get_ceph_tools_pod(wait=True, skip_creating_pod=True)

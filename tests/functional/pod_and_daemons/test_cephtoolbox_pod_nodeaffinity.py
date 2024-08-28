@@ -8,6 +8,7 @@ from ocs_ci.framework.testlib import tier1, tier4b, polarion_id
 from ocs_ci.ocs import ocp, constants
 from ocs_ci.ocs.node import (
     apply_node_affinity_for_ceph_toolbox,
+    check_taint_on_nodes,
     drain_nodes,
     get_ceph_tools_running_node,
     get_worker_nodes,
@@ -34,7 +35,8 @@ class TestCephtoolboxPod:
             2. Removes nodeaffinity to bring storage cluster with default values.
 
             """
-            untaint_nodes()
+            if check_taint_on_nodes():
+                untaint_nodes()
             resource_name = constants.DEFAULT_CLUSTERNAME
             if config.DEPLOYMENT["external_mode"]:
                 resource_name = constants.DEFAULT_CLUSTERNAME_EXTERNAL_MODE
