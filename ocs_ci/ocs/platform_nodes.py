@@ -110,7 +110,11 @@ class PlatformNodesFactory:
                 platform += "_lso"
             elif deployment_type in ("ipi", "upi"):
                 platform += f"_{deployment_type}"
-        elif get_client_type_by_name(cluster_name) == constants.HOSTED_CLUSTER_KUBEVIRT:
+        elif (
+            config.hci_client_exist()
+            and get_client_type_by_name(cluster_name)
+            == constants.HOSTED_CLUSTER_KUBEVIRT
+        ):
             platform = "kubevirt_vm"
 
         return self.cls_map[platform]()

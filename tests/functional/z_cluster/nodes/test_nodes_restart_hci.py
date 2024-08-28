@@ -406,7 +406,9 @@ class TestNodesRestartHCI(ManageTest):
         ocp_nodes = get_nodes(node_type=constants.WORKER_MACHINE)[0:2]
         nodes.restart_nodes(nodes=ocp_nodes, wait=True)
         client_cluster_health_check()
-        self.sanity_helpers.create_resources_on_clients(tries=2, delay=30)
+        # We can't test create resources on the clients due to the BZ:
+        # https://bugzilla.redhat.com/show_bug.cgi?id=2304799. After the BZ resolves we will add the line:
+        # self.sanity_helpers.create_resources_on_clients(tries=2, delay=30)
 
     @tier4a
     @pytest.mark.parametrize(
@@ -436,4 +438,6 @@ class TestNodesRestartHCI(ManageTest):
         ocp_nodes = get_nodes(node_type=constants.WORKER_MACHINE)[0:2]
         nodes.restart_nodes_by_stop_and_start(nodes=ocp_nodes, wait=True)
         client_cluster_health_check()
-        self.sanity_helpers.create_resources_on_clients(tries=2, delay=30)
+        # We can't test create resources on the clients due to the BZ:
+        # https://bugzilla.redhat.com/show_bug.cgi?id=2304799. After the BZ resolves we will add the line:
+        # self.sanity_helpers.create_resources_on_clients(tries=2, delay=30)

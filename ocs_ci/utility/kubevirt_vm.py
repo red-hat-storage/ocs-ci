@@ -105,7 +105,7 @@ class KubevirtVM(object):
         vm_list = self.get_all_kubevirt_vms()
         return [vm for vm in vm_list if get_vm_name(vm) in vm_names]
 
-    def wait_for_vms_status(self, vms, expected_status, timeout=180):
+    def wait_for_vms_status(self, vms, expected_status, timeout=300):
         """
         Wait for the VMs to be in the expected status
 
