@@ -842,6 +842,7 @@ def storageclass_factory_fixture(
         volume_binding_mode="Immediate",
         allow_volume_expansion=True,
         kernelMountOptions=None,
+        annotations=None,
     ):
         """
         Args:
@@ -867,6 +868,7 @@ def storageclass_factory_fixture(
                 till pod attachment.
             allow_volume_expansion (bool): True to Allows volume expansion
             kernelMountOptions (str): Mount option for security context
+            annotations (dict): dict of annotation to be added to the storageclass.
 
         Returns:
             object: helpers.create_storage_class instance with links to
@@ -905,6 +907,7 @@ def storageclass_factory_fixture(
                 volume_binding_mode=volume_binding_mode,
                 allow_volume_expansion=allow_volume_expansion,
                 kernelMountOptions=kernelMountOptions,
+                annotations=annotations,
             )
             assert sc_obj, f"Failed to create {interface} storage class"
             sc_obj.secret = secret

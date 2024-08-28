@@ -746,6 +746,7 @@ def create_storage_class(
     volume_binding_mode="Immediate",
     allow_volume_expansion=True,
     kernelMountOptions=None,
+    annotations=None,
 ):
     """
     Create a storage class
@@ -769,6 +770,7 @@ def create_storage_class(
             pod attachment.
         allow_volume_expansion(bool): True to create sc with volume expansion
         kernelMountOptions (str): Mount option for security context
+        annotations(dict): dict of annotations to be added to the storageclass.
     Returns:
         OCS: An OCS instance for the storage class
     """
@@ -818,6 +820,9 @@ def create_storage_class(
         sc_data["parameters"][
             f"csi.storage.k8s.io/{key}-secret-namespace"
         ] = config.ENV_DATA["cluster_namespace"]
+
+    if annotations:
+        sc_data["metadata"]["annotations"] = annotations
 
     sc_data["parameters"]["clusterID"] = config.ENV_DATA["cluster_namespace"]
     sc_data["reclaimPolicy"] = reclaim_policy
@@ -5121,3 +5126,35 @@ def wait_for_reclaim_space_job(reclaim_space_job):
         raise UnexpectedBehaviour(
             f"ReclaimSpaceJob {reclaim_space_job.name} is not successful. Yaml output: {reclaim_space_job.get()}"
         )
+
+
+def get_rbd_image_info(rbd_pool, rbd_image_name):
+    """
+    Get RBD image information. (e.g provisioned size, used size, image ,   )
+
+    Args:
+        rbd_pool(str) : pool name
+        rbd_image_name(str) : name of rbd image
+
+    Returns:
+        dict :  rbd image information e.g, provisioned size, used size etc.
+    """
+    ct_pod = pod.get_ceph_tools_pod()
+
+    cmd = f"rbd du -p {rbd_pool} {rbd_image_name}"
+
+    cmd_out = ct_pod.exec_ceph_cmd(ceph_cmd=cmd, format="json")
+
+    data = next(
+        (volume for volume in cmd_out["images"] if volume["name"] == rbd_image_name),
+        None,
+    )
+
+    if data:
+        # Conversion constant: 1 GiB = 1024^3 bytes
+        bytes_in_gib = 1024**3
+
+        data["provisioned_size_gib"] = data["provisioned_size"] / bytes_in_gib
+        data["used_size_gib"] = data["used_size"] / bytes_in_gib
+
+    return data
