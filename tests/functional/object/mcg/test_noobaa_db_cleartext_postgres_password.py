@@ -5,7 +5,7 @@ from ocs_ci.framework.pytest_customization.marks import red_squad, mcg
 from ocs_ci.framework import config
 from ocs_ci.helpers.helpers import get_noobaa_db_credentials_from_secret
 from ocs_ci.ocs.resources import pod
-from ocs_ci.ocs.resources.pod import filter_pod_logs
+from ocs_ci.ocs.resources.pod import search_pattern_in_pod_logs
 
 log = logging.getLogger(__name__)
 
@@ -62,11 +62,9 @@ class TestNoobaaSecurity(BaseTest):
 
         # get noobaa core log and verify that the password is not
         # present in the log
-        nooba_core_pod = pod.get_noobaa_core_pod()
-        noobaa_core_pod_logs = pod.get_pod_logs(nooba_core_pod.name)
-        filtered_log = filter_pod_logs(
-            pod_logs=noobaa_core_pod_logs,
-            filter=[noobaa_db_password],
+        filtered_log = search_pattern_in_pod_logs(
+            pod_name=pod.get_noobaa_core_pod().name,
+            pattern=noobaa_db_password,
         )
         assert (
             len(filtered_log) == 0
@@ -77,11 +75,9 @@ class TestNoobaaSecurity(BaseTest):
 
         # get noobaa endpoint log and verify that the password is not
         # present in the log
-        noobaa_endpoint_pod = pod.get_noobaa_endpoint_pods()[0]
-        noobaa_endpoint_logs = pod.get_pod_logs(noobaa_endpoint_pod.name)
-        filtered_log = filter_pod_logs(
-            pod_logs=noobaa_endpoint_logs,
-            filter=[noobaa_db_password],
+        filtered_log = search_pattern_in_pod_logs(
+            pod_name=pod.get_noobaa_endpoint_pods()[0].name,
+            pattern=noobaa_db_password,
         )
         assert (
             len(filtered_log) == 0

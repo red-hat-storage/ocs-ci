@@ -6,9 +6,8 @@ import logging
 import boto3
 
 from ocs_ci.ocs.resources.pod import (
-    get_pod_logs,
     get_noobaa_operator_pod,
-    filter_pod_logs,
+    search_pattern_in_pod_logs,
 )
 from ocs_ci.utility import templating
 from ocs_ci.ocs import constants
@@ -26,7 +25,7 @@ from ocs_ci.framework.pytest_customization.marks import (
     runs_on_provider,
     mcg,
     post_upgrade,
-    acceptance,
+    tier1,
 )
 from ocs_ci.ocs.exceptions import CommandFailed
 from ocs_ci.utility.aws import update_config_from_s3
@@ -351,7 +350,7 @@ class TestNoobaaSecrets:
 @bugzilla("2219522")
 @polarion_id("OCS-5205")
 @runs_on_provider
-@acceptance
+@tier1
 def test_noobaa_root_secret():
     """
     This test verifies if the noobaa root secret is publicly
@@ -367,7 +366,7 @@ def test_noobaa_root_secret():
 
 @mcg
 @red_squad
-@acceptance
+@tier1
 @bugzilla("2277186")
 @polarion_id("OCS-6184")
 def test_operator_logs_for_secret():
@@ -377,15 +376,14 @@ def test_operator_logs_for_secret():
 
     """
 
-    # get the noobaa operator logs
-    nb_operator_logs = get_pod_logs(pod_name=get_noobaa_operator_pod().name)
-    filtered_log = filter_pod_logs(
-        nb_operator_logs, filter=["RPC: account.check_external_connection()"]
+    # get the noobaa operator logs filtered
+    pattern = r"Identity:\S+ Secret:\S+"
+    filtered_log = search_pattern_in_pod_logs(
+        pod_name=get_noobaa_operator_pod().name, pattern=pattern
     )
 
     # check if secrets are exposed in the noobaa operator logs
-    pattern = r"Identity:\S+ Secret:\S+"
-    for log_line in filtered_log.splitlines():
+    for log_line in filtered_log:
         matches = re.findall(pattern, log_line)
         for match in matches:
             assert (

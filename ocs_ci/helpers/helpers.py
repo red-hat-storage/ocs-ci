@@ -4497,6 +4497,10 @@ def get_noobaa_db_credentials_from_secret():
     Get credentials details i.e., user and password
     from noobaa-db secret
 
+    Returns:
+        user_name: Username for the db
+        password: Password for the db
+
     """
     ocp_secret_obj = OCP(
         kind=constants.SECRET, namespace=config.ENV_DATA["cluster_namespace"]
