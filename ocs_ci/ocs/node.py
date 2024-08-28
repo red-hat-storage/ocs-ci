@@ -3010,19 +3010,15 @@ def get_worker_node_where_ceph_toolbox_not_running():
 
     Returns:
         List of worker nodes other than the node where ceph tool box is already running.
+
     """
-    log.info(
-        "Testing cephtoolbox pod with nodeaffinity in the openshift-storage namespace."
-    )
-
-    ct_pod = pod.get_ceph_tools_pod()
-    # Identify on which node the ceph toolbox is running currently
-    ct_pod_running_node_name = ct_pod.data["spec"].get("nodeName")
-
+    ct_pod_running_node_name = get_ceph_tools_running_node()
     worker_nodes = get_worker_nodes()
-    log.info(worker_nodes)
-
+    log.info(
+        f"List of all worker nodes available in the cluster currently {worker_nodes}"
+    )
     other_nodes = [node for node in worker_nodes if node != ct_pod_running_node_name]
+    log.info(f"List of worker nodes where ceph tools pod is not running: {other_nodes}")
     return other_nodes
 
 
@@ -3034,8 +3030,8 @@ def apply_node_affinity_for_ceph_toolbox(node_name, wait_time=60):
         node_name = node name which need to be added in the node affinity
 
     Returns:
-        bool: return True --> if node affinity applied successfully .
-        bool: return False --> if node affinity fails.
+        bool: True if node affinity applied successfully
+
     """
     resource_name = constants.DEFAULT_CLUSTERNAME
     if config.DEPLOYMENT["external_mode"]:
@@ -3053,24 +3049,32 @@ def apply_node_affinity_for_ceph_toolbox(node_name, wait_time=60):
         f'"values": ["{node_name}"]}}]}}]}}}}}}}}'
     )
     param = f'{{"spec": {{"placement": {nodeaffinity}}}}}'
+    ct_pod = pod.get_ceph_tools_pod(skip_creating_pod=True)
+    ct_pod_name = ct_pod.name
     storagecluster_obj.patch(params=param, format_type="merge")
     log.info(
         f"Successfully applied node affinity for ceph toolbox pod with {node_name}"
     )
-    log.info(
-        "Script will be in sleep for a minute to make sure cephtools pod failovered with node affinity"
-    )
-    time.sleep(wait_time)
-    ct_new_pod = pod.get_ceph_tools_pod(skip_creating_pod=True)
+    ct_pod.ocp.wait_for_delete(ct_pod_name), f"Pod {ct_pod_name} is not deleted"
     log.info(
         "Identify on which node the ceph toolbox is running after failover due to node affinity"
     )
-    ct_new_pod_running_node_name = ct_new_pod.data["spec"].get("nodeName")
+    ct_new_pod_running_node_name = get_ceph_tools_running_node()
     if node_name == ct_new_pod_running_node_name:
         log.info(
             f"ceph toolbox pod failovered to the new node {ct_new_pod_running_node_name}"
             f" given in node affinity successfully "
         )
         return True
-    else:
-        return False
+
+
+def get_ceph_tools_running_node():
+    """
+    Get node name where the ceph tools pod is currently running
+
+    :return: Node name (str)
+
+    """
+    ct_pod = pod.get_ceph_tools_pod(wait=True, skip_creating_pod=True)
+    ct_pod_running_node = ct_pod.data["spec"].get("nodeName")
+    return ct_pod_running_node
