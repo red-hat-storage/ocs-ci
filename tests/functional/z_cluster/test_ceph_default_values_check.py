@@ -237,7 +237,7 @@ class TestCephDefaultValuesCheck(ManageTest):
             access_mode=constants.ACCESS_MODE_RWO,
             status=constants.STATUS_BOUND,
             project=project,
-            size=100,
+            size=200,
         )
 
         # Create a pod using the PVC
@@ -251,6 +251,5 @@ class TestCephDefaultValuesCheck(ManageTest):
             size="100M",
             io_direction="write",
             runtime=10,
-            fio_filename=f"{pod_obj.name}_io_file1",
         )
         assert validate_num_of_pgs()
