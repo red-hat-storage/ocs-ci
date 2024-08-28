@@ -3055,7 +3055,7 @@ def apply_node_affinity_for_ceph_toolbox(node_name):
     log.info(
         f"Successfully applied node affinity for ceph toolbox pod with {node_name}"
     )
-    ct_pod.ocp.wait_for_delete(ct_pod_name), f"Pod {ct_pod_name} is not deleted"
+    ct_pod.ocp.wait_for_delete(ct_pod_name)
     log.info(
         "Identify on which node the ceph toolbox is running after failover due to node affinity"
     )
