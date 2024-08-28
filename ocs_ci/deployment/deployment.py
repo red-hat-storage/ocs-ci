@@ -31,6 +31,7 @@ from ocs_ci.deployment.helpers.odf_deployment_helpers import get_required_csvs
 from ocs_ci.deployment.acm import Submariner
 from ocs_ci.deployment.helpers.lso_helpers import setup_local_storage
 from ocs_ci.deployment.disconnected import prepare_disconnected_ocs_deployment
+from ocs_ci.deployment.encryption import add_in_transit_encryption_to_cluster_data
 from ocs_ci.framework import config, merge_dict
 from ocs_ci.helpers.dr_helpers import (
     configure_drcluster_for_fencing,
@@ -1492,16 +1493,7 @@ class Deployment(object):
             }
 
         # Enable in-transit encryption.
-        if config.ENV_DATA.get("in_transit_encryption"):
-            if "network" not in cluster_data["spec"]:
-                cluster_data["spec"]["network"] = {}
-
-            if "connections" not in cluster_data["spec"]["network"]:
-                cluster_data["spec"]["network"]["connections"] = {}
-
-            cluster_data["spec"]["network"]["connections"] = {
-                "encryption": {"enabled": True}
-            }
+        cluster_data = add_in_transit_encryption_to_cluster_data(cluster_data)
 
         # Use Custom Storageclass Names
         if config.ENV_DATA.get("custom_default_storageclass_names"):

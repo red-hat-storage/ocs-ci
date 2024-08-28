@@ -24,6 +24,10 @@ from ocs_ci.utility.utils import (
 )
 from ocs_ci.utility import templating, kms as KMS, version
 from ocs_ci.deployment.deployment import Deployment, create_catalog_source
+from ocs_ci.deployment.encryption import (
+    add_encryption_details_to_cluster_data,
+    add_in_transit_encryption_to_cluster_data,
+)
 from ocs_ci.deployment.baremetal import clean_disk, disks_available_to_cleanup
 from ocs_ci.ocs.resources.storage_cluster import verify_storage_cluster
 from ocs_ci.ocs.resources.storage_client import StorageClient
@@ -217,7 +221,10 @@ class ODFAndNativeStorageClientDeploymentOnProvider(object):
                 storage_cluster_data = templating.load_yaml(
                     constants.OCS_STORAGE_CLUSTER_YAML
                 )
-                storage_cluster_data = self.add_encryption_details_to_cluster_data(
+                storage_cluster_data = add_encryption_details_to_cluster_data(
+                    storage_cluster_data
+                )
+                storage_cluster_data = add_in_transit_encryption_to_cluster_data(
                     storage_cluster_data
                 )
                 storage_cluster_data["spec"]["storageDeviceSets"][0][
@@ -239,7 +246,10 @@ class ODFAndNativeStorageClientDeploymentOnProvider(object):
                 storage_cluster_data = templating.load_yaml(
                     constants.OCS_STORAGE_CLUSTER_UPDATED_YAML
                 )
-                storage_cluster_data = self.add_encryption_details_to_cluster_data(
+                storage_cluster_data = add_encryption_details_to_cluster_data(
+                    storage_cluster_data
+                )
+                storage_cluster_data = add_in_transit_encryption_to_cluster_data(
                     storage_cluster_data
                 )
                 storage_cluster_data["spec"]["storageDeviceSets"][0][
@@ -329,31 +339,6 @@ class ODFAndNativeStorageClientDeploymentOnProvider(object):
         # Enable odf-console:
         enable_console_plugin()
         time.sleep(30)
-
-    def add_encryption_details_to_cluster_data(self, storage_cluster_data):
-        """
-        Update storage cluster YAML data with encryption information from
-        configuration.
-
-        Args:
-            storage_cluster_data (dict): storage cluster YAML data
-
-        Returns:
-            dict: updated storage storage cluster yaml
-        """
-        if config.ENV_DATA.get("encryption_at_rest"):
-            log.info("Enabling encryption at REST!")
-            storage_cluster_data["spec"]["encryption"] = {
-                "enable": True,
-            }
-            storage_cluster_data["spec"]["encryption"] = {
-                "clusterWide": True,
-            }
-        if config.DEPLOYMENT.get("kms_deployment"):
-            storage_cluster_data["spec"]["encryption"]["kms"] = {
-                "enable": True,
-            }
-        return storage_cluster_data
 
     def verify_provider_mode_deployment(self):
         """
