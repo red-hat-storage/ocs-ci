@@ -235,8 +235,11 @@ class DeploymentUI(PageNavigator):
         logger.info("Verifying that deployment on HDD is blocked")
         disk_type = self.wait_for_element_to_be_visible(self.dep_loc["disk_type"])
         hdd_disabled = disk_type.get_attribute("disabled")
+        current_disk_type = self.get_element_text(self.dep_loc["disk_type"])
         if not hdd_disabled:
             logger.error("Disk type choice is not disabled in the UI")
+        if not "SSD" in current_disk_type:
+            logger.error(f"Current disk type is {current_disk_type}. It should be SSD")
         if self.operator_name == OCS_OPERATOR:
             logger.info("Select all nodes on 'Create Storage Class' step")
             self.do_click(

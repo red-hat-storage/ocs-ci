@@ -182,7 +182,7 @@ deployment_4_9 = {
     "internal_mode_odf": ('input[id="bs-existing"]', By.CSS_SELECTOR),
     "create_storage_system": ("//button[text()='Create StorageSystem']", By.XPATH),
     "choose_lso_deployment": ('input[id="bs-local-devices"]', By.CSS_SELECTOR),
-    "disk_type": ("//button[text()='SSD / NVMe']", By.XPATH),
+    "disk_type": ("//button[@class='pf-v5-c-select__toggle pf-m-disabled']", By.XPATH),
     "refresh_popup": ("//button[text()='Refresh web console']", By.XPATH),
     "advanced_deployment": ("//span[text()='Advanced']", By.XPATH),
     "expand_advanced_mode": (
