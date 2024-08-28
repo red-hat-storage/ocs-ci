@@ -30,7 +30,7 @@ logger = logging.getLogger(__name__)
 @turquoise_squad
 class TestMultipleApplicationFailoverAndRelocate:
     """
-    Test Failover and Relocate actions for application
+    Deploy applications on both the managed clusters and test Failover and Relocate actions on them
     """
 
     @pytest.fixture(autouse=True)

@@ -332,13 +332,6 @@ def failover_relocate_ui(
             log.info("Click on subscription dropdown")
             acm_obj.do_click(acm_loc["subscription-dropdown"], enable_screenshot=True)
             # DRPC name is by default selected, hence no code is needed
-        # TODO: Commented below lines due to Regression BZ2208637
-        # log.info("Check peer readiness")
-        # assert acm_obj.wait_until_expected_text_is_found(
-        #     locator=acm_loc["peer-ready"],
-        #     expected_text=constants.PEER_READY,
-        # ), f"Peer is not ready, can not initiate {action}"
-        acm_obj.take_screenshot()
         if aria_disabled == "true":
             log.error("Initiate button in not enabled to failover/relocate")
             return False
