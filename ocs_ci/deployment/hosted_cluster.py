@@ -610,7 +610,7 @@ def create_host_inventory():
             helpers.create_project(project_name=infra_env_namespace)
             # Create new secret in the namespace using the existing secret
             secret_obj = OCP(
-                kind=constants.POD,
+                kind=constants.SECRET,
                 resource_name="pull-secret",
                 namespace=constants.OPENSHIFT_CONFIG_NAMESPACE,
             )
