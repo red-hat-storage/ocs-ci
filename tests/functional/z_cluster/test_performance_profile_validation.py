@@ -88,7 +88,6 @@ class TestProfileDefaultValuesCheck(ManageTest):
                 func=verify_performance_profile_change,
                 perf_profile=self.perf_profile,
             )
-            log.info(sample)
             if not sample.wait_for_func_status(True):
                 raise Exception(
                     f"Performance profile is not updated successfully to {self.perf_profile}"
