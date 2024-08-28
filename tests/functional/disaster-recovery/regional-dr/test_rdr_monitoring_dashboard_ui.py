@@ -66,7 +66,7 @@ class TestRDRMonitoringDashboardUI:
         scheduling_interval = dr_helpers.get_scheduling_interval(
             rdr_workload[0].workload_namespace
         )
-        wait_time = 2 * scheduling_interval  # Time in minutes
+        wait_time = 1.5 * scheduling_interval  # Time in minutes
         logger.info(f"Waiting for {wait_time} minutes to run IOs")
         sleep(wait_time * 60)
 
