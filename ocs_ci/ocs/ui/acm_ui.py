@@ -190,27 +190,29 @@ class AcmPageNavigator(BaseUI):
             )
             raise NoSuchElementException
 
-    def navigate_disaster_recovery(self):
+    def navigate_disaster_recovery(self, timeout=200):
         """
         Navigate to Disaster recovery page on ACM UI
 
+        Args:
+            timeout ( int): Timeout in seconds
         """
         log.info("Navigate to Disaster recovery page on ACM console")
         find_element = self.wait_until_expected_text_is_found(
             locator=self.acm_page_nav["data-services"],
             expected_text="Data Services",
-            timeout=200,
+            timeout=timeout,
         )
         if find_element:
             self.do_click(
                 locator=self.acm_page_nav["data-services"],
-                timeout=200,
+                timeout=timeout,
                 avoid_stale=True,
             )
             disaster_recovery = self.wait_until_expected_text_is_found(
                 locator=self.acm_page_nav["disaster-recovery"],
                 expected_text="Disaster recovery",
-                timeout=200,
+                timeout=timeout,
             )
             if disaster_recovery:
                 self.do_click(
@@ -218,10 +220,12 @@ class AcmPageNavigator(BaseUI):
                     enable_screenshot=True,
                     avoid_stale=True,
                 )
+            else:
+                raise NoSuchElementException
             policies = self.wait_until_expected_text_is_found(
                 locator=self.acm_page_nav["policies"],
                 expected_text="Policies",
-                timeout=200,
+                timeout=timeout,
             )
             if policies:
                 self.do_click(
@@ -229,6 +233,8 @@ class AcmPageNavigator(BaseUI):
                     enable_screenshot=True,
                     avoid_stale=True,
                 )
+            else:
+                raise NoSuchElementException
         else:
             log.error("Couldn't navigate to disaster recovery page on ACM UI")
             raise NoSuchElementException

@@ -22,7 +22,6 @@ from ocs_ci.helpers.dr_helpers_ui import (
     verify_failover_relocate_status_ui,
 )
 from ocs_ci.framework.pytest_customization.marks import turquoise_squad
-from ocs_ci.utility import version
 
 logger = logging.getLogger(__name__)
 
@@ -74,13 +73,6 @@ class TestMultipleApplicationFailoverAndRelocate:
 
         """
         self.workload_namespaces = []
-        if config.RUN.get("mdr_failover_via_ui"):
-            ocs_version = version.get_semantic_ocs_version_from_config()
-            if ocs_version <= version.VERSION_4_12:
-                logger.error(
-                    "ODF/ACM version isn't supported for Failover/Relocate operation"
-                )
-                raise NotImplementedError
 
         acm_obj = AcmAddClusters()
         primary_instances = []
@@ -126,12 +118,12 @@ class TestMultipleApplicationFailoverAndRelocate:
                     policy_name=instance.dr_policy_name,
                     failover_or_preferred_cluster=secondary_cluster_name,
                 )
-            else:
-                failover(
-                    failover_cluster=secondary_cluster_name,
-                    namespace=f"{instance.workload_namespace}",
-                    workload_type=workload_type,
-                )
+        else:
+            failover(
+                failover_cluster=secondary_cluster_name,
+                namespace=f"{instance.workload_namespace}",
+                workload_type=workload_type,
+            )
 
         # Verify application are running in other managedcluster
         # And not in previous cluster

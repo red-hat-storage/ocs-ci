@@ -4,7 +4,7 @@ Helper functions specific to DR User Interface
 
 import logging
 
-from selenium.common.exceptions import NoSuchElementException, InvalidSelectorException
+from selenium.common.exceptions import NoSuchElementException
 from ocs_ci.framework import config
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.exceptions import ResourceWrongStatusException
@@ -683,14 +683,9 @@ def verify_application_not_present_in_ui(acm_obj, workload_to_check, timeout=60)
                 f"Successfully verified on ACM UI, Application Not Found, fetch status is {fetch_status}"
             )
             return True
-        elif not action_status:
-            acm_obj.do_clear(acm_loc["search-bar"])
-            assert acm_obj.do_send_keys(acm_loc["search-bar"], text=workload_to_check)
-            return True
         else:
-            raise InvalidSelectorException(
-                "One or more matches found, Incorrect workload name"
-            )
+            log.error("One or more matches found, Incorrect workload name")
+            return False
 
 
 def delete_application_ui(acm_obj, workload_to_delete, timeout=60):

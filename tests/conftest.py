@@ -4962,7 +4962,7 @@ def setup_ui_fixture(request):
     return driver
 
 
-@pytest.fixture(scope="session", autouse=True)
+@pytest.fixture(scope="session")
 def setup_acm_ui(request):
     return setup_acm_ui_fixture(request)
 
