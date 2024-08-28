@@ -218,7 +218,7 @@ class TestRDRMonitoringDashboardUI:
             dr_helpers.wait_for_all_resources_deletion(workload.workload_namespace)
 
         dr_helpers.wait_for_mirroring_status_ok(
-            replaying_images=rdr_workload.total_protected_pvc_count
+            replaying_images=total_protected_pvc_count
         )
         config.switch_acm_ctx()
         check_cluster_status_on_acm_console(acm_obj)
