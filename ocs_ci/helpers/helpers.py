@@ -5391,3 +5391,4 @@ def verify_performance_profile_change(perf_profile):
         perf_profile == storage_cluster.data["spec"]["resourceProfile"]
     ), f"Performance profile is not updated successfully to {perf_profile}"
     logger.info(f"Performance profile successfully got updated to {perf_profile} mode")
+    return True
