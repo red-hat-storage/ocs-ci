@@ -35,6 +35,9 @@ TEMPLATE_MULTICLUSTER_DIR = os.path.join(TEMPLATE_DEPLOYMENT_DIR, "multicluster"
 TEMPLATE_DEPLOYMENT_DIR_CNV = os.path.join(TEMPLATE_DIR, "cnv-deployment")
 TEMPLATE_DEPLOYMENT_DIR_METALLB = os.path.join(TEMPLATE_DIR, "metallb-deployment")
 TEMPLATE_DEPLOYMENT_DIR_NMSTATE = os.path.join(TEMPLATE_DIR, "nmstate-deployment")
+TEMPLATE_DEPLOYMENT_DIR_INF = os.path.join(
+    TEMPLATE_DIR, "ingress-node-firewall-deployment"
+)
 TEMPLATE_CEPH_DIR = os.path.join(TEMPLATE_DIR, "ceph")
 TEMPLATE_CSI_DIR = os.path.join(TEMPLATE_DIR, "CSI")
 TEMPLATE_CSI_LVM_DIR = os.path.join(TEMPLATE_CSI_DIR, "lvm")
@@ -2912,3 +2915,12 @@ ENTER_KEY = chr(13)
 
 # Large size chunk IO
 CHUNK = os.path.join(TEMPLATE_WORKLOAD_DIR, "helper_scripts/chunk.py")
+
+# Ingress Node Firewall related constants
+INGRESS_NODE_FIREWALL_NAMESPACE = "openshift-ingress-node-firewall"
+INGRESS_NODE_FIREWALL_CSV_NAME = "ingress-node-firewall"
+INF_NAMESPACE_YAML = os.path.join(TEMPLATE_DEPLOYMENT_DIR_INF, "namespace.yaml")
+INF_OPERATORGROUP_YAML = os.path.join(TEMPLATE_DEPLOYMENT_DIR_INF, "operatorgroup.yaml")
+INF_SUBSCRIPTION_YAML = os.path.join(TEMPLATE_DEPLOYMENT_DIR_INF, "subscription.yaml")
+INF_CONFIG_YAML = os.path.join(TEMPLATE_DEPLOYMENT_DIR_INF, "config.yaml")
+INF_RULES_YAML = os.path.join(TEMPLATE_DEPLOYMENT_DIR_INF, "rules.yaml")
