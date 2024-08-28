@@ -29,6 +29,7 @@ from ocs_ci.deployment.helpers.mcg_helpers import (
 )
 from ocs_ci.deployment.helpers.odf_deployment_helpers import get_required_csvs
 from ocs_ci.deployment.acm import Submariner
+from ocs_ci.deployment.ingress_node_firewall import restrict_ssh_access_to_nodes
 from ocs_ci.deployment.helpers.lso_helpers import setup_local_storage
 from ocs_ci.deployment.disconnected import prepare_disconnected_ocs_deployment
 from ocs_ci.framework import config, merge_dict
@@ -734,6 +735,9 @@ class Deployment(object):
         )
         if ibmcloud_ipi:
             ibmcloud.label_nodes_region()
+        # configure Ingress Node Firewall and restrict SSH access to nodes
+        if config.ENV_DATA.get("restrict_ssh_access_to_nodes", False):
+            restrict_ssh_access_to_nodes()
 
     def label_and_taint_nodes(self):
         """
