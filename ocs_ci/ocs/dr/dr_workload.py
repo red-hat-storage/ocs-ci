@@ -151,9 +151,17 @@ class BusyBox(DRWorkload):
         self.drpc_yaml_file = os.path.join(
             self.workload_subscription_dir, self.workload_name, "drpc.yaml"
         )
+        self.drpc_yaml_file_placement = os.path.join(constants.DRPC_PATH)
         self.channel_yaml_file = os.path.join(
             self.workload_subscription_dir, "channel.yaml"
         )
+        workload_details = kwargs.get("workload_details")
+        self.is_placement = workload_details.get("is_placement")
+        if self.is_placement:
+            self.placement_yaml_file = os.path.join(
+                self.workload_subscription_dir, self.workload_name, "placement.yaml"
+            )
+            self.workload_pvc_selector = kwargs.get("workload_pvc_selector")
 
     def deploy_workload(self):
         """
@@ -168,6 +176,39 @@ class BusyBox(DRWorkload):
         drpc_yaml_data["spec"]["preferredCluster"] = self.preferred_primary_cluster
         drpc_yaml_data["spec"]["drPolicyRef"]["name"] = self.dr_policy_name
         templating.dump_data_to_temp_yaml(drpc_yaml_data, self.drpc_yaml_file)
+        if self.is_placement:
+            # load placement.yaml
+            placement_yaml_data = templating.load_yaml(self.placement_yaml_file)
+            placement_yaml_data["spec"]["predicates"][0]["requiredClusterSelector"][
+                "labelSelector"
+            ]["matchExpressions"][0]["values"][0] = self.preferred_primary_cluster
+            self.sub_placement_name = placement_yaml_data["metadata"]["name"]
+            templating.dump_data_to_temp_yaml(
+                placement_yaml_data, self.placement_yaml_file
+            )
+
+            if placement_yaml_data["kind"] == "Placement":
+                drpc_yaml_data = templating.load_yaml(self.drpc_yaml_file_placement)
+                drpc_yaml_data["metadata"]["name"] = f"{self.sub_placement_name}-drpc"
+                drpc_yaml_data["spec"][
+                    "preferredCluster"
+                ] = self.preferred_primary_cluster
+                drpc_yaml_data["spec"]["drPolicyRef"]["name"] = self.dr_policy_name
+                drpc_yaml_data["spec"]["placementRef"]["name"] = self.sub_placement_name
+
+                drpc_yaml_data["metadata"]["namespace"] = self.workload_namespace
+                drpc_yaml_data["spec"]["placementRef"][
+                    "namespace"
+                ] = self.workload_namespace
+                drpc_yaml_data["spec"]["pvcSelector"][
+                    "matchLabels"
+                ] = self.workload_pvc_selector
+                self.drcp_data_yaml = tempfile.NamedTemporaryFile(
+                    mode="w+", prefix="drpc", delete=False
+                )
+                templating.dump_data_to_temp_yaml(
+                    drpc_yaml_data, self.drcp_data_yaml.name
+                )
 
         # TODO
         # drpc_yaml_file needs to be committed back to the repo
@@ -182,7 +223,9 @@ class BusyBox(DRWorkload):
         config.switch_acm_ctx()
         run_cmd(f"oc create -k {self.workload_subscription_dir}")
         run_cmd(f"oc create -k {self.workload_subscription_dir}/{self.workload_name}")
-
+        if self.is_placement:
+            self.add_annotation_to_placement()
+            run_cmd(f"oc create -f {self.drcp_data_yaml.name}")
         self.verify_workload_deployment()
 
     def _deploy_prereqs(self):
@@ -208,6 +251,22 @@ class BusyBox(DRWorkload):
         )
         namespace_yaml_data = templating.load_yaml(namespace_yaml_file)
         return namespace_yaml_data["metadata"]["name"]
+
+    def add_annotation_to_placement(self):
+        """
+        Add annotation to sub placements
+
+        """
+
+        config.switch_acm_ctx()
+        placement_obj = ocp.OCP(
+            kind=constants.PLACEMENT,
+            resource_name=self.sub_placement_name,
+            namespace=self.workload_namespace,
+        )
+        placement_obj.annotate(
+            annotation="cluster.open-cluster-management.io/experimental-scheduling-disable='true'"
+        )
 
     def verify_workload_deployment(self):
         """
@@ -238,11 +297,12 @@ class BusyBox(DRWorkload):
         kustomization_yaml_file = os.path.join(
             self.workload_subscription_dir, self.workload_name, "kustomization.yaml"
         )
-        kustomization_yaml_data = templating.load_yaml(kustomization_yaml_file)
-        kustomization_yaml_data["resources"].remove("drpc.yaml")
-        templating.dump_data_to_temp_yaml(
-            kustomization_yaml_data, kustomization_yaml_file
-        )
+        if not self.is_placement:
+            kustomization_yaml_data = templating.load_yaml(kustomization_yaml_file)
+            kustomization_yaml_data["resources"].remove("drpc.yaml")
+            templating.dump_data_to_temp_yaml(
+                kustomization_yaml_data, kustomization_yaml_file
+            )
 
         try:
             config.switch_ctx(switch_ctx) if switch_ctx else config.switch_acm_ctx()
