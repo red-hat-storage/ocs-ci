@@ -29,7 +29,10 @@ from ocs_ci.deployment.helpers.mcg_helpers import (
 )
 from ocs_ci.deployment.helpers.odf_deployment_helpers import get_required_csvs
 from ocs_ci.deployment.acm import Submariner
-from ocs_ci.deployment.helpers.lso_helpers import setup_local_storage
+from ocs_ci.deployment.helpers.lso_helpers import (
+    setup_local_storage,
+    cleanup_nodes_for_lso_install,
+)
 from ocs_ci.deployment.disconnected import prepare_disconnected_ocs_deployment
 from ocs_ci.deployment.encryption import add_in_transit_encryption_to_cluster_data
 from ocs_ci.framework import config, merge_dict
@@ -674,6 +677,7 @@ class Deployment(object):
             resource_name=self.DEFAULT_STORAGECLASS_LSO
         )
         if perform_lso_standalone_deployment:
+            cleanup_nodes_for_lso_install()
             setup_local_storage(storageclass=self.DEFAULT_STORAGECLASS_LSO)
         self.do_deploy_lvmo()
         self.do_deploy_submariner()
@@ -1043,6 +1047,7 @@ class Deployment(object):
             create_catalog_source(image)
 
         if config.DEPLOYMENT.get("local_storage"):
+            cleanup_nodes_for_lso_install()
             setup_local_storage(storageclass=self.DEFAULT_STORAGECLASS_LSO)
 
         logger.info("Creating namespace and operator group.")
