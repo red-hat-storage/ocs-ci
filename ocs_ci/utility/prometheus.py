@@ -21,7 +21,14 @@ logger = logging.getLogger(name=__file__)
 # TODO(fbalak): if ignore_more_occurences is set to False then tests are flaky.
 # The root cause should be inspected.
 def check_alert_list(
-    label, msg, alerts, states, severity="warning", ignore_more_occurences=True
+    label,
+    msg,
+    alerts,
+    states,
+    severity="warning",
+    ignore_more_occurences=True,
+    description=None,
+    runbook=None,
 ):
     """
     Check list of alerts that there are alerts with requested label and
@@ -36,8 +43,10 @@ def check_alert_list(
         ignore_more_occurences (bool): If true then there is checkced only
             occurence of alert with requested label, message and state but
             it is not checked if there is more of occurences than one.
-    """
+        description (str): Alert description
+        runbook (str): Alert's runbook URL
 
+    """
     target_alerts = [
         alert for alert in alerts if alert.get("labels").get("alertname") == label
     ]
@@ -73,6 +82,26 @@ def check_alert_list(
 
         assert_msg = f"Alert {label} is not in {state} state"
         assert target_alerts[key]["state"] == state, assert_msg
+
+        assert_msg = f"Description for alert {label} is not correct"
+        assert (
+            target_alerts[key]["annotations"]["description"] == description
+        ), assert_msg
+
+        assert_msg = f"Runbook url for alert {label} is not correct"
+        assert target_alerts[key]["annotations"]["runbook_url"] == runbook, assert_msg
+
+        if description:
+            assert_msg = f"Alert description for alert {label} is not correct"
+            assert (
+                target_alerts[key]["annotations"]["description"] == description
+            ), assert_msg
+
+        if runbook:
+            assert_msg = f"Alert runbook url for alert {label} is not correct"
+            assert (
+                target_alerts[key]["annotations"]["runbook_url"] == runbook
+            ), assert_msg
 
     logger.info("Alerts were triggered correctly during utilization")
 
@@ -794,75 +823,3 @@ class PrometheusAlertSubscriber(Timer):
         """
         self.cancel()
         logger.info("Logging of all prometheus alerts stopped")
-
-
-def verify_mds_alerts(
-    alert_name,
-    msg,
-    alerts,
-    active_mds,
-    standby_mds,
-    description,
-    runbook,
-    state,
-    severity,
-):
-    """
-    Check all the properties like severity, state, message, description, runbook_url
-    and alert triggered daemon name of the active mds alert.
-
-    Args:
-        alert_name (str): Alert name
-        msg (str): Alert message
-        alerts (list): List of alerts to check
-        state (str): state of the alert
-        active_mds(str): active mds daemon name
-        standby_mds(str): standby-replay mds daemon name
-        description(str): description of the alert triggered
-        runbook(str): runbook_url in the alert
-        severity(str): severity of the alert
-    """
-    alert_msg = f"{alert_name} alert didn't found in prometheus alerts {alerts}"
-    assert any(
-        alert_name == alert.get("labels").get("alertname") for alert in alerts
-    ), alert_msg
-
-    alert_msg = f"{alert_name} alert didn't found for Active MDS daemon {alerts}"
-    assert any(
-        alert.get("labels").get("ceph_daemon") == f"mds.{active_mds}"
-        for alert in alerts
-    ), alert_msg
-
-    # verify alert values for Active mds alert
-    for alert in alerts:
-        if alert.get("labels").get("alertname") == alert_name:
-            logger.info("Alert name matched")
-
-            if alert.get("labels").get("ceph_daemon") == f"mds.{active_mds}":
-                logger.info("Alert triggered on Active mds")
-
-                alert_msg = "Alert message didn't match for active mds alert"
-                assert alert.get("annotations").get("message") == msg, alert_msg
-
-                alert_msg = "Runbook didn't match for active mds alert"
-                assert alert.get("annotations").get("runbook_url") == runbook, alert_msg
-
-                alert_msg = "Alert description didn't match for active mds alert"
-                assert (
-                    alert.get("annotations").get("description") == description
-                ), alert_msg
-
-                alert_msg = (
-                    "Alert state "
-                    + alert.get("state")
-                    + " didn't match for active mds alert"
-                )
-                assert alert.get("state") == state, alert_msg
-
-                alert_msg = "Alert severity didn't match for active mds alert"
-                assert alert.get("labels").get("severity") == severity, alert_msg
-
-            elif alert.get("labels").get("ceph_daemon") == f"mds.{standby_mds}":
-                logger.info("Alert triggered on Standby-replay mds")
-
-    logger.info("Alerts were triggered correctly during utilization")

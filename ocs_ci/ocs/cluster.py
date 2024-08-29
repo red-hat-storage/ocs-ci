@@ -3090,6 +3090,7 @@ def get_mds_standby_replay_info():
         - "node_ip": The IP address of the node running the standby-replay MDS daemon.
         - "mds_daemon": The name of the MDS daemon.
         - "standby_replay_pod": The name of the standby replay pod.
+        - "standby_replay_pod_obj": The object of standby replay pod.
     """
     ct_pod = pod.get_ceph_tools_pod()
     ceph_mdsmap = ct_pod.exec_ceph_cmd("ceph fs status")
@@ -3142,6 +3143,7 @@ def get_mds_standby_replay_info():
         "mds_daemon": ceph_daemon_name,
         "standby_replay_pod": standby_replay_pod.name,
         "node_name": node_name,
+        "standby_replay_pod_obj": standby_replay_pod,
     }
 
 
@@ -3409,15 +3411,80 @@ def get_active_mds_info():
         "mds_daemon": ceph_daemon_name,
         "active_pod": active_pod.name,
         "node_name": node_name,
+        "active_pod_obj": active_pod,
     }
 
 
 def clear_active_mds_load():
-
     """
     This function executes a ceph cmd to fail active mds daemon instantly.
     So that the existing load on active mds will be cleared off immediately.
-    """
 
+    """
     ct_pod = pod.get_ceph_tools_pod()
     ct_pod.exec_ceph_cmd("ceph mds fail 0")
+
+
+def get_active_mds_memory_utilisation_in_percentage():
+    """
+    This function gets total and used memory of active mds in Mebibytes and calculates the value in percentage.
+
+    Returns:
+         int: mds used memory in percentage
+
+    """
+    active_mds_pod_obj = get_active_mds_info()["active_pod_obj"]
+    get_total_memory = active_mds_pod_obj.get_memory(container_name="mds")
+    total_memory_in_mebibytes = int(get_total_memory[:-2]) * 1024
+    used_memory = pod.get_pod_used_memory_in_mebibytes(active_mds_pod_obj.name)
+    utilisation_in_percentage = (used_memory / total_memory_in_mebibytes) * 100
+    return utilisation_in_percentage
+
+
+def get_standby_replay_mds_memory_utilisation_in_percentage():
+    """
+    This function gets total and used memory of active mds in Mebibytes and calculates the value in percentage.
+
+    Returns:
+         int: mds used memory in percentage
+
+    """
+    standby_replay_mds_pod_obj = get_mds_standby_replay_info()["standby_replay_pod_obj"]
+    get_total_memory = standby_replay_mds_pod_obj.get_memory(container_name="mds")
+    total_memory_in_mebibytes = int(get_total_memory[:-2]) * 1024
+    used_memory = pod.get_pod_used_memory_in_mebibytes(standby_replay_mds_pod_obj.name)
+    utilisation_in_percentage = (used_memory / total_memory_in_mebibytes) * 100
+    return utilisation_in_percentage
+
+
+def bring_down_mds_memory_usage_gradually():
+    """
+    This function will monitor the mds memory usage for 20 minutes to make sure it is <=10%.
+    Even if the memory usage is still high after 20 mins,
+    it will fail the mds daemon and look for the same <=10% in memory utilisation.
+    This will repeat the process until the memory utilisation reduced.
+
+    """
+    logger.info("Continue monitoring mds memory usage until it get reduced to 10%")
+    attempts = 0
+    while True:
+        logger.info("Check memory usage and sleep if usage is higher than 10%")
+        if (
+            get_active_mds_memory_utilisation_in_percentage() >= 10
+            or get_standby_replay_mds_memory_utilisation_in_percentage() >= 10
+        ):
+            if attempts <= 4:
+                logger.info("Memory usage is high. Sleeping for 5 minutes...")
+                time.sleep(300)
+                attempts += 1
+            else:
+                clear_active_mds_load()
+                logger.info("clearing the existing load on MDS by failing mds daemon ")
+                logger.info(
+                    "Failed MDS.0 daemon to clear load. Sleeping for 2 minutes..."
+                )
+                time.sleep(120)
+                continue
+        else:
+            logger.info("Memory usage is within the acceptable limits.")
+            break
