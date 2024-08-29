@@ -1,6 +1,11 @@
 import logging
 from datetime import datetime, timezone
 
+from ocs_ci.framework.pytest_customization.marks import (
+    stretchcluster_required,
+    turquoise_squad,
+    polarion_id,
+)
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.resources.pod import wait_for_pods_to_be_in_statuses
 
@@ -10,9 +15,16 @@ from ocs_ci.ocs.resources.stretchcluster import StretchCluster
 logger = logging.getLogger(__name__)
 
 
+@stretchcluster_required
+@turquoise_squad
 class TestDeviceReplacementInStretchCluster:
+    @polarion_id("OCS-5047")
     def test_device_replacement(
-        self, nodes, setup_logwriter_cephfs_workload_factory, logreader_workload_factory
+        self,
+        nodes,
+        setup_logwriter_cephfs_workload_factory,
+        setup_logwriter_rbd_workload_factory,
+        logreader_workload_factory,
     ):
         """
         Test device replacement in stretch cluster while logwriter workload
