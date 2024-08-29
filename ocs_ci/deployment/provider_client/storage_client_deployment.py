@@ -27,7 +27,7 @@ from ocs_ci.utility.utils import (
 )
 from ocs_ci.utility import templating, kms as KMS, version
 from ocs_ci.deployment.deployment import Deployment, create_catalog_source
-from ocs_ci.deployment.baremetal import clean_disk, disks_available_to_cleanup
+from ocs_ci.deployment.baremetal import disks_available_to_cleanup
 from ocs_ci.deployment.encryption import (
     add_encryption_details_to_cluster_data,
     add_in_transit_encryption_to_cluster_data,
