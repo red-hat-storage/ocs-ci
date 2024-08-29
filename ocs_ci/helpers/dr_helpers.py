@@ -8,12 +8,13 @@ import tempfile
 
 from ocs_ci.framework import config
 from ocs_ci.ocs import constants, ocp
+from ocs_ci.ocs.defaults import RBD_NAME
 from ocs_ci.ocs.exceptions import (
     TimeoutExpiredError,
     UnexpectedBehaviour,
 )
 from ocs_ci.ocs.resources.drpc import DRPC
-from ocs_ci.ocs.resources.pod import get_all_pods
+from ocs_ci.ocs.resources.pod import get_all_pods, get_ceph_tools_pod
 from ocs_ci.ocs.resources.pv import get_all_pvs
 from ocs_ci.ocs.resources.pvc import get_all_pvc_objs
 from ocs_ci.ocs.node import gracefully_reboot_nodes
@@ -774,30 +775,102 @@ def wait_for_replication_destinations_deletion(namespace, timeout=900):
     sample.wait_for_func_value(0)
 
 
-def get_image_uuids(namespace):
+def get_backend_volumes_for_pvcs(namespace):
     """
-    Gets all image UUIDs associated with the PVCs in the given namespace
+    Gets list of RBD images or CephFS subvolumes associated with the PVCs in the given namespace
 
     Args:
-        namespace (str): the namespace of the VR resources
+        namespace (str): The namespace of the PVC resources
 
     Returns:
-        list: List of all image UUIDs
+        list: List of RBD images or CephFS subvolumes
 
     """
-    image_uuids = []
+    backend_volumes = []
     for cluster in get_non_acm_cluster_config():
         config.switch_ctx(cluster.MULTICLUSTER["multicluster_index"])
-        logger.info(
-            f"Fetching image UUIDs from cluster: {cluster.ENV_DATA['cluster_name']}"
-        )
+        logger.info(f"Fetching backend volume names for PVCs in namespace: {namespace}")
         all_pvcs = get_all_pvc_objs(namespace=namespace)
         for pvc_obj in all_pvcs:
-            if pvc_obj.backed_sc != constants.RDR_VOLSYNC_CEPHFILESYSTEM_SC:
-                image_uuids.append(pvc_obj.image_uuid)
-    image_uuids = list(set(image_uuids))
-    logger.info(f"All image UUIDs from managed clusters: {image_uuids}")
-    return image_uuids
+            if pvc_obj.backed_sc in [
+                constants.DEFAULT_STORAGECLASS_RBD,
+                constants.DEFAULT_EXTERNAL_MODE_STORAGECLASS_RBD,
+                constants.DEFAULT_CNV_CEPH_RBD_SC,
+            ]:
+                backend_volume = pvc_obj.get_rbd_image_name
+            elif pvc_obj.backed_sc in [
+                constants.DEFAULT_STORAGECLASS_CEPHFS,
+                constants.DEFAULT_EXTERNAL_MODE_STORAGECLASS_CEPHFS,
+            ]:
+                backend_volume = pvc_obj.get_cephfs_subvolume_name
+
+            backend_volumes.append(backend_volume)
+
+    backend_volumes = list(set(backend_volumes))
+    logger.info(f"Found {len(backend_volumes)} backend volumes: {backend_volumes}")
+    return backend_volumes
+
+
+def verify_backend_volume_deletion(backend_volumes):
+    """
+    Check whether RBD images/CephFS subvolumes are deleted in the backend.
+
+    Args:
+        backend_volumes (list): List of RBD images or CephFS subvolumes
+
+    Returns:
+        bool: True if volumes are deleted and False if volumes are not deleted
+
+    """
+    ct_pod = get_ceph_tools_pod()
+    rbd_pool_name = (
+        (config.ENV_DATA.get("rbd_name") or RBD_NAME)
+        if config.DEPLOYMENT["external_mode"]
+        else constants.DEFAULT_CEPHBLOCKPOOL
+    )
+    rbd_images = ct_pod.exec_cmd_on_pod(f"rbd ls {rbd_pool_name} --format json")
+
+    fs_name = ct_pod.exec_ceph_cmd("ceph fs ls")[0]["name"]
+    cephfs_cmd_output = ct_pod.exec_cmd_on_pod(
+        f"ceph fs subvolume ls {fs_name} --group_name csi"
+    )
+    cephfs_subvolumes = [subvolume["name"] for subvolume in cephfs_cmd_output]
+
+    ceph_volumes = rbd_images + cephfs_subvolumes
+    logger.info(f"All backend volumes present in the cluster: {ceph_volumes}")
+    not_deleted_volumes = []
+    for backend_volume in backend_volumes:
+        if backend_volume in ceph_volumes:
+            not_deleted_volumes.append(backend_volume)
+    if not_deleted_volumes:
+        logger.info(
+            f"The following backend volumes were not deleted: {not_deleted_volumes}"
+        )
+
+    return len(not_deleted_volumes) == 0
+
+
+def wait_for_backend_volume_deletion(backend_volumes, timeout=600):
+    """
+    Verify that RBD image/CephFS subvolume are deleted in the backend.
+
+    Args:
+        backend_volumes (list): List of RBD images or CephFS subvolumes
+        timeout (int): time in seconds to wait
+
+    Raises:
+        TimeoutExpiredError: In case backend volumes are not deleted
+    """
+    sample = TimeoutSampler(
+        timeout=timeout,
+        sleep=5,
+        func=verify_backend_volume_deletion,
+        backend_volumes=backend_volumes,
+    )
+    if not sample.wait_for_func_status(result=True):
+        error_msg = "Backend RBD images or CephFS subvolumes were not deleted"
+        logger.error(error_msg)
+        raise TimeoutExpiredError(error_msg)
 
 
 def get_all_drpolicy():
