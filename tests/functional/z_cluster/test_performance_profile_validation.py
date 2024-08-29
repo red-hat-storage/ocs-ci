@@ -62,9 +62,10 @@ class TestProfileDefaultValuesCheck(ManageTest):
             namespace=config.ENV_DATA["cluster_namespace"],
         )
         self.perf_profile = perf_profile
-
         try:
             exist_performance_profile = storage_cluster.data["spec"]["resourceProfile"]
+            curr_prof = storage_cluster.data["spec"]["resourceProfile"]
+            log.info(f"Current performance prfile is {curr_prof}")
         except KeyError:
             # On some occasions, a cluster will be deployed without performance profile, In that case, set it to None.
             exist_performance_profile = None
@@ -84,7 +85,7 @@ class TestProfileDefaultValuesCheck(ManageTest):
             # Wait up to 600 seconds for performance changes to reflect
             sample = TimeoutSampler(
                 timeout=600,
-                sleep=30,
+                sleep=120,
                 func=verify_performance_profile_change,
                 perf_profile=self.perf_profile,
             )
@@ -132,6 +133,10 @@ class TestProfileDefaultValuesCheck(ManageTest):
                 pv_pod_obj.append(Pod(**pod))
                 podd = Pod(**pod)
                 log.info(f"Verifying memory and cpu values for pod {podd.name}")
+                log.info(f"RequestCPU{expected_cpu_request_values}")
+                log.info(f"LimitCPU{expected_cpu_limit_values}")
+                log.info(f"RequestMEM{expected_memory_request_values}")
+                log.info(f"LimitMEM{expected_memory_limit_values}")
                 resource_dict = OCP(
                     namespace=config.ENV_DATA["cluster_namespace"], kind="pod"
                 ).get(resource_name=podd.name)["spec"]["containers"][0]["resources"]
