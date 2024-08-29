@@ -6720,6 +6720,7 @@ def dr_workloads_on_managed_clusters(request, setup_acm_ui):
                 workload_details = ocsci_config.ENV_DATA[workload_key][index]
 
                 workload = BusyBox(
+                    workload_details=workload_details,
                     workload_dir=workload_details["workload_dir"],
                     workload_pod_count=workload_details["pod_count"],
                     workload_pvc_count=workload_details["pvc_count"],
@@ -6735,6 +6736,7 @@ def dr_workloads_on_managed_clusters(request, setup_acm_ui):
                 workload_details = ocsci_config.ENV_DATA[workload_key][index]
 
                 workload = BusyBox(
+                    workload_details=workload_details,
                     workload_dir=workload_details["workload_dir"],
                     workload_pod_count=workload_details["pod_count"],
                     workload_pvc_count=workload_details["pvc_count"],

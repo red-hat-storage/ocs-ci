@@ -69,7 +69,7 @@ class TestMultipleApplicationFailoverAndRelocate:
         node_restart_teardown,
     ):
         """
-        Test to failover and relocate of multiple applications from primary to secondary
+        Test to deploy applications on both the managed clusters and test Failover and Relocate actions on them
 
         """
         self.workload_namespaces = []

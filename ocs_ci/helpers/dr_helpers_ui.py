@@ -651,7 +651,7 @@ def verify_application_not_present_in_ui(acm_obj, workload_to_check, timeout=60)
         timeout (int): timeout to wait for certain elements to be found on the ACM UI
 
     Returns:
-        bool: True if the application is not present, raises Exception if multiple matches found
+        bool: True if the application is not present, false otherwise
 
     """
     if workload_to_check:
@@ -695,7 +695,7 @@ def delete_application_ui(acm_obj, workload_to_delete, timeout=60):
 
     """
     log.info(f"workload_to_delete {workload_to_delete}")
-    if verify_application_not_present_in_ui(
+    if not verify_application_not_present_in_ui(
         acm_obj, workload_to_check=workload_to_delete, timeout=60
     ):
         ocp_version = get_ocp_version()
