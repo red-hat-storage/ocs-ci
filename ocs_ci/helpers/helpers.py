@@ -19,7 +19,7 @@ import stat
 import platform
 from concurrent.futures import ThreadPoolExecutor
 from itertools import cycle
-from subprocess import PIPE, run
+from subprocess import PIPE, run, TimeoutExpired
 from uuid import uuid4
 
 
@@ -2330,7 +2330,12 @@ def verify_pv_mounted_on_node(node_pv_dict):
     existing_pvs = {}
     for node_name, pvs in node_pv_dict.items():
         cmd = f"oc debug nodes/{node_name} --to-namespace={config.ENV_DATA['cluster_namespace']} -- df"
-        df_on_node = run_cmd(cmd)
+        try:
+            df_on_node = run_cmd(cmd, timeout=120)
+        # Workaround the issue https://github.com/red-hat-storage/ocs-ci/issues/7837
+        except TimeoutExpired:
+            cmd = f"oc debug nodes/{node_name} --to-namespace={config.ENV_DATA['cluster_namespace']} -- mount"
+            df_on_node = run_cmd(cmd, timeout=90)
         existing_pvs[node_name] = []
         for pv_name in pvs:
             if f"/pv/{pv_name}/" in df_on_node:
