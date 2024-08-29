@@ -1,3 +1,8 @@
+"""
+This is a helper script, it will be copied to an app pod and run, to create millions of files.
+This also do some file operations like 'change file mode', 'Rename the file', 'Change group' etc
+"""
+
 import time
 import os
 import logging
