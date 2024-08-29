@@ -555,6 +555,9 @@ NOOBAA_ENDPOINT_DEPLOYMENT = "noobaa-endpoint"
 NOOBAA_DB_STATEFULSET = "noobaa-db-pg"
 NOOBAA_CORE_STATEFULSET = "noobaa-core"
 
+# Noobaa db secret
+NOOBAA_DB_SECRET = "noobaa-db"
+
 # Auth Yaml
 OCSCI_DATA_BUCKET = "ocs-ci-data"
 AUTHYAML = "auth.yaml"

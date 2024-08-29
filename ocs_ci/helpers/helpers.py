@@ -4492,6 +4492,30 @@ def get_s3_credentials_from_secret(secret_name):
     return access_key, secret_key
 
 
+def get_noobaa_db_credentials_from_secret():
+    """
+    Get credentials details i.e., user and password
+    from noobaa-db secret
+
+    Returns:
+        user_name: Username for the db
+        password: Password for the db
+
+    """
+    ocp_secret_obj = OCP(
+        kind=constants.SECRET, namespace=config.ENV_DATA["cluster_namespace"]
+    )
+    nb_db_secret = ocp_secret_obj.get(resource_name=constants.NOOBAA_DB_SECRET)
+
+    base64_user_name = nb_db_secret["data"]["user"]
+    base64_password = nb_db_secret["data"]["password"]
+
+    user_name = base64.b64decode(base64_user_name).decode("utf-8")
+    password = base64.b64decode(base64_password).decode("utf-8")
+
+    return user_name, password
+
+
 def verify_pvc_size(pod_obj, expected_size):
     """
     Verify PVC size is as expected or not.
