@@ -9,14 +9,11 @@ import tempfile
 import yaml
 
 from subprocess import TimeoutExpired
-from time import sleep
 
 from ocs_ci.framework import config
 from ocs_ci.helpers import dr_helpers
 from ocs_ci.helpers.cnv_helpers import create_vm_secret, cal_md5sum_vm
 from ocs_ci.helpers.helpers import (
-    delete_volume_in_backend,
-    verify_volume_deleted_in_backend,
     create_project,
     create_unique_resource_name,
 )
@@ -55,69 +52,8 @@ class DRWorkload(object):
     def verify_workload_deployment(self):
         raise NotImplementedError("Method not implemented")
 
-    def delete_workload(self, force=False):
+    def delete_workload(self):
         raise NotImplementedError("Method not implemented")
-
-    @staticmethod
-    def resources_cleanup(namespace, image_uuids=None):
-        """
-        Cleanup workload and replication resources in a given namespace from managed clusters.
-        Useful for removing leftover resources to avoid further test failures.
-
-        Args:
-            namespace (str): The namespace of the workload
-            image_uuids (list): List of image UUIDs associated with the PVCs
-
-        """
-        resources = [
-            constants.DEPLOYMENT,
-            constants.POD,
-            constants.VOLUME_REPLICATION_GROUP,
-            constants.VOLUME_REPLICATION,
-            constants.PVC,
-            constants.PV,
-        ]
-        log.info("Cleaning up leftover resources in managed clusters")
-        for cluster in get_non_acm_cluster_config():
-            config.switch_ctx(cluster.MULTICLUSTER["multicluster_index"])
-            for resource in resources:
-                sleep(10)  # Wait 10 seconds before getting the list of items
-                log.info(f"Cleaning up {resource} resources")
-                ocp_obj = ocp.OCP(kind=resource, namespace=namespace)
-                item_list = ocp_obj.get()["items"]
-                for item in item_list:
-                    resource_name = item["metadata"]["name"]
-                    try:
-                        if resource == constants.PV:
-                            if item["spec"]["claimRef"]["namespace"] != namespace:
-                                continue
-                            ocp_obj.delete(resource_name=resource_name)
-                            ocp_obj.wait_for_delete(resource_name=resource_name)
-                        else:
-                            ocp_obj.delete(resource_name=resource_name, wait=False)
-                            ocp_obj.patch(
-                                resource_name=resource_name,
-                                params='{"metadata": {"finalizers":null}}',
-                                format_type="merge",
-                            )
-                            ocp_obj.wait_for_delete(resource_name=resource_name)
-
-                    except CommandFailed as ex:
-                        if "NotFound" in str(ex):
-                            log.info(
-                                f"{resource} {resource_name} got deleted successfully"
-                            )
-                        else:
-                            raise ex
-
-        for cluster in get_non_acm_cluster_config():
-            config.switch_ctx(cluster.MULTICLUSTER["multicluster_index"])
-            for image_uuid in image_uuids:
-                delete_volume_in_backend(
-                    img_uuid=image_uuid,
-                    pool_name=constants.DEFAULT_CEPHBLOCKPOOL,
-                    disable_mirroring=True,
-                )
 
 
 class BusyBox(DRWorkload):
@@ -278,20 +214,20 @@ class BusyBox(DRWorkload):
             self.workload_pvc_count, self.workload_pod_count, self.workload_namespace
         )
 
-    def delete_workload(self, force=False, rbd_name="rbd", switch_ctx=None):
+    def delete_workload(self, switch_ctx=None):
         """
         Delete busybox workload
 
         Args:
-            force (bool): If True, force remove the stuck resources, default False
-            rbd_name (str): Name of the pool
             switch_ctx (int): The cluster index by the cluster name
 
         Raises:
             ResourceNotDeleted: In case workload resources not deleted properly
 
         """
-        image_uuids = dr_helpers.get_image_uuids(self.workload_namespace)
+        backend_volumes = dr_helpers.get_backend_volumes_for_pvcs(
+            self.workload_namespace
+        )
 
         # Skipping drpc.yaml deletion since DRPC is automatically removed.
         kustomization_yaml_file = os.path.join(
@@ -320,38 +256,18 @@ class BusyBox(DRWorkload):
             log.info("Verify backend images or subvolumes are deleted")
             for cluster in get_non_acm_cluster_config():
                 config.switch_ctx(cluster.MULTICLUSTER["multicluster_index"])
-                rbd_pool_name = (
-                    (config.ENV_DATA.get("rbd_name") or rbd_name)
-                    if config.DEPLOYMENT["external_mode"]
-                    else constants.DEFAULT_CEPHBLOCKPOOL
-                )
-                for image_uuid in image_uuids:
-                    # TODO: Add a better condition to identify CephFS or RBD
-                    if "cephfs" in self.workload_namespace:
-                        status = verify_volume_deleted_in_backend(
-                            interface=constants.CEPHFILESYSTEM, image_uuid=image_uuid
-                        )
-                    else:
-                        status = verify_volume_deleted_in_backend(
-                            interface=constants.CEPHBLOCKPOOL,
-                            image_uuid=image_uuid,
-                            pool_name=rbd_pool_name,
-                        )
-                    if not status:
-                        raise UnexpectedBehaviour(
-                            "Images/subvolumes still exists on backend"
-                        )
+                dr_helpers.wait_for_backend_volume_deletion(backend_volumes)
 
         except (
             TimeoutExpired,
             TimeoutExpiredError,
             TimeoutError,
-            UnexpectedBehaviour,
         ) as ex:
-            err_msg = f"Failed to delete the workload: {ex}"
+            err_msg = (
+                f"Failed to delete the workload: {self.workload_name}, namespace: {self.workload_namespace}, "
+                f"Exception: {ex}"
+            )
             log.exception(err_msg)
-            if force:
-                self.resources_cleanup(self.workload_namespace, image_uuids)
             raise ResourceNotDeleted(err_msg)
 
         finally:
@@ -543,20 +459,20 @@ class BusyBox_AppSet(DRWorkload):
             skip_replication_resources=skip_replication_resources,
         )
 
-    def delete_workload(self, force=False, rbd_name="rbd", switch_ctx=None):
+    def delete_workload(self, switch_ctx=None):
         """
         Delete busybox workload
 
         Args:
-            force (bool): If True, force remove the stuck resources, default False
-            rbd_name (str): Name of the pool, default "rbd"
             switch_ctx (int): The cluster index by the cluster name
 
         Raises:
             ResourceNotDeleted: In case workload resources not deleted properly
 
         """
-        image_uuids = dr_helpers.get_image_uuids(self.workload_namespace)
+        backend_volumes = dr_helpers.get_backend_volumes_for_pvcs(
+            self.workload_namespace
+        )
         try:
             config.switch_ctx(switch_ctx) if switch_ctx else config.switch_acm_ctx()
             run_cmd(cmd=f"oc delete -f {self.appset_yaml_file}", timeout=900)
@@ -571,38 +487,18 @@ class BusyBox_AppSet(DRWorkload):
             log.info("Verify backend images or subvolumes are deleted")
             for cluster in get_non_acm_cluster_config():
                 config.switch_ctx(cluster.MULTICLUSTER["multicluster_index"])
-                rbd_pool_name = (
-                    (config.ENV_DATA.get("rbd_name") or rbd_name)
-                    if config.DEPLOYMENT["external_mode"]
-                    else constants.DEFAULT_CEPHBLOCKPOOL
-                )
-                for image_uuid in image_uuids:
-                    # TODO: Add a better condition to identify CephFS or RBD
-                    if "cephfs" in self.workload_namespace:
-                        status = verify_volume_deleted_in_backend(
-                            interface=constants.CEPHFILESYSTEM, image_uuid=image_uuid
-                        )
-                    else:
-                        status = verify_volume_deleted_in_backend(
-                            interface=constants.CEPHBLOCKPOOL,
-                            image_uuid=image_uuid,
-                            pool_name=rbd_pool_name,
-                        )
-                    if not status:
-                        raise UnexpectedBehaviour(
-                            "RBD image(s) still exists on backend"
-                        )
+                dr_helpers.wait_for_backend_volume_deletion(backend_volumes)
 
         except (
             TimeoutExpired,
             TimeoutExpiredError,
             TimeoutError,
-            UnexpectedBehaviour,
         ) as ex:
-            err_msg = f"Failed to delete the workload: {ex}"
+            err_msg = (
+                f"Failed to delete the workload: {self.workload_name}, namespace: {self.workload_namespace}, "
+                f"Exception: {ex}"
+            )
             log.exception(err_msg)
-            if force:
-                self.resources_cleanup(self.workload_namespace, image_uuids)
             raise ResourceNotDeleted(err_msg)
 
 
@@ -868,7 +764,7 @@ class CnvWorkload(DRWorkload):
             phase=constants.STATUS_RUNNING,
         )
 
-    def delete_workload(self, force=False):
+    def delete_workload(self):
         """
         Deletes cnv workload
 

@@ -6666,16 +6666,16 @@ def dr_workload(request):
         return instances
 
     def teardown():
-        failed_to_delete = False
+        failed_to_delete = []
         for instance in instances:
             try:
-                instance.delete_workload(switch_ctx=ctx[0], force=True)
+                instance.delete_workload(switch_ctx=ctx[0])
             except ResourceNotDeleted:
-                failed_to_delete = True
+                failed_to_delete.append(instance.workload_namespace)
 
         if failed_to_delete:
             raise ResourceNotDeleted(
-                "Workload deletion was unsuccessful. Leftover resources were removed from the managed clusters."
+                f"Deletion failed for the workload in following namespaces: {failed_to_delete}"
             )
 
     request.addfinalizer(teardown)
