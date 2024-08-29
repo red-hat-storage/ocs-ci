@@ -117,6 +117,7 @@ class Vault(KMS):
         self.vault_namespace = None
         self.vault_deploy_mode = config.ENV_DATA.get("vault_deploy_mode")
         self.vault_backend_path = None
+        self.csi_vault_backend_path = None
         self.vault_backend_version = config.ENV_DATA.get(
             "VAULT_BACKEND", defaults.VAULT_DEFAULT_BACKEND_VERSION
         )
@@ -605,36 +606,46 @@ class Vault(KMS):
                 vault_conf = load_auth_config()["vault"]
             return vault_conf
 
-    def get_vault_connection_info(self, resource_name=None):
+    def get_vault_connection_info(
+        self,
+        resource_name=None,
+        resource_configmap=constants.VAULT_KMS_CONNECTION_DETAILS_RESOURCE,
+    ):
         """
-        Get resource info from ocs-kms-connection-defatils or csi-kms-connection-details
-        configmap.
+        Get resource info from ocs-kms-connection-details or csi-kms-connection-details
+        ConfigMap.
 
         Args:
             resource_name (str): name of the resource
 
+        Returns:
+            str or None: The resource information, or None if not found.
         """
         cm_obj = ocp.OCP(
             kind="ConfigMap",
             namespace=config.ENV_DATA["cluster_namespace"],
         )
 
-        if cm_obj.is_exist(constants.VAULT_KMS_CONNECTION_DETAILS_RESOURCE):
-            cm_data = cm_obj.get(constants.VAULT_KMS_CONNECTION_DETAILS_RESOURCE)
-            return cm_data.get().get("data")[resource_name]
-
-        elif cm_obj.is_exist(constants.VAULT_KMS_CSI_CONNECTION_DETAILS):
-            cm_data = cm_obj.get(constants.VAULT_KMS_CSI_CONNECTION_DETAILS)
-            for k, v in cm_data.get("data").items():
-                json_out = json.loads(cm_data.get("data")[k])
-                if json_out.get("KMS_SERVICE_NAME") == "vault":
-                    return json_out[resource_name]
-            else:
-                return None
-        else:
+        if not cm_obj.is_exist(resource_configmap):
+            logger.info(f"Resource ConfigMap {resource_configmap} does not exist")
             return None
 
-    def get_vault_backend_path(self):
+        cm_data = cm_obj.get(resource_configmap).get("data", {})
+
+        if resource_configmap == constants.VAULT_KMS_CONNECTION_DETAILS_RESOURCE:
+            return cm_data.get(resource_name)
+
+        if resource_configmap == constants.VAULT_KMS_CSI_CONNECTION_DETAILS:
+            for v in cm_data.values():
+                json_out = json.loads(v)
+                if json_out.get("KMS_SERVICE_NAME") == "vault":
+                    return json_out.get(resource_name)
+
+        return None
+
+    def get_vault_backend_path(
+        self, resource_configmap=constants.VAULT_KMS_CONNECTION_DETAILS_RESOURCE
+    ):
         """
         Fetch the vault backend path used for this deployment
         This can be obtained from kubernetes secret resource
@@ -650,11 +661,23 @@ class Vault(KMS):
               VAULT_BACKEND_PATH: ocs
 
         """
-        if not self.vault_backend_path:
-            self.vault_backend_path = self.get_vault_connection_info(
-                "VAULT_BACKEND_PATH"
-            )
-            logger.info(f"setting vault_backend_path = {self.vault_backend_path}")
+        if resource_configmap == constants.VAULT_KMS_CONNECTION_DETAILS_RESOURCE:
+            if not self.vault_backend_path:
+                self.vault_backend_path = self.get_vault_connection_info(
+                    resource_name="VAULT_BACKEND_PATH",
+                    resource_configmap=resource_configmap,
+                )
+                logger.info(f"setting vault_backend_path = {self.vault_backend_path}")
+
+        elif resource_configmap == constants.VAULT_KMS_CSI_CONNECTION_DETAILS:
+            if not self.csi_vault_backend_path:
+                self.csi_vault_backend_path = self.get_vault_connection_info(
+                    resource_name="VAULT_BACKEND_PATH",
+                    resource_configmap=resource_configmap,
+                )
+                logger.info(f"setting vault_backend_path = {self.vault_backend_path}")
+        else:
+            logger.error(f"Wrong resource_configmap : {resource_configmap}.")
 
     def get_vault_path_token(self):
         """
@@ -1230,10 +1253,12 @@ class Vault(KMS):
         Returns:
             secret (str): passphrase stored in the vault KMS for given device handle.
         """
-        if not self.vault_backend_path:
-            self.get_vault_backend_path()
+        if not self.csi_vault_backend_path:
+            self.get_vault_backend_path(
+                resource_configmap=constants.VAULT_KMS_CSI_CONNECTION_DETAILS
+            )
 
-        cmd = f"vault kv get -format=json {self.vault_backend_path}/{device_handle}"
+        cmd = f"vault kv get -format=json {self.csi_vault_backend_path}/{device_handle}"
         out = subprocess.check_output(shlex.split(cmd))
         json_out = json.loads(out)
 
