@@ -2597,7 +2597,7 @@ def check_toleration_on_pods(toleration_key=constants.TOLERATION_KEY):
         else:
             logger.info(f"The Toleration {toleration_key} exists on {resource_name}")
     if pods_missing_toleration:
-        logger.warning(
+        logger.error(
             f"Some pods are missing the toleration {toleration_key}: {', '.join(pods_missing_toleration)}"
         )
         raise TolerationNotFoundException(
@@ -2639,7 +2639,7 @@ def check_toleration_on_subscriptions(toleration_key=constants.TOLERATION_KEY):
             logger.info(f"The Toleration {toleration_key} exists on {sub}")
 
     if subs_missing_toleration:
-        logger.warning(
+        logger.error(
             f"Some subscriptions are missing the toleration {toleration_key}: {', '.join(subs_missing_toleration)}"
         )
         raise TolerationNotFoundException(
