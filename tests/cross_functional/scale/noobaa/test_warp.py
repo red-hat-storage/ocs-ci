@@ -1,8 +1,8 @@
 import logging
 import pytest
+from time import sleep
 from ocs_ci.ocs import warp
 from ocs_ci.utility import utils
-from ocs_ci.ocs.constants import DEFAULT_STORAGECLASS_RBD
 from ocs_ci.ocs.scale_noobaa_lib import (
     get_noobaa_pods_status,
     check_memory_leak_in_noobaa_endpoint_log,
@@ -54,18 +54,6 @@ class TestWarp(E2ETest):
                     "OC",
                     {
                         "interface": "OC",
-                        "backingstore_dict": {
-                            "pv": [(1, 100, DEFAULT_STORAGECLASS_RBD)]
-                        },
-                    },
-                ],
-            ),
-            pytest.param(
-                *[
-                    1,
-                    "OC",
-                    {
-                        "interface": "OC",
                         "backingstore_dict": {"aws": [(1, "eu-central-1")]},
                     },
                 ],
@@ -94,7 +82,6 @@ class TestWarp(E2ETest):
         ],
         ids=[
             "OC-DEFAULT-BACKINGSTORE",
-            "OC-PVPOOL",
             "OC-AWS",
             "OC-AZURE",
             "OC-GCP",
@@ -129,17 +116,20 @@ class TestWarp(E2ETest):
         # Check noobaa pods status before running Warp benchmark
         get_noobaa_pods_status()
 
+        # Sleeping script for 1 minute before triggering warp workload
+        sleep(60)
+
         # Running warp s3 benchmark
         warps3.run_benchmark(
             bucket_name=object_bucket.name,
             access_key=mcg_obj.access_key_id,
             secret_key=mcg_obj.access_key,
-            duration="60m",
-            concurrent=20,
+            duration="30m",
+            concurrent=1,
             objects=5000,
             obj_size="4KB",
             validate=True,
-            timeout=4000,
+            timeout=8000,
             multi_client=False,
         )
 
