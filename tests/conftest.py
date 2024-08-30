@@ -8165,3 +8165,23 @@ def clone_odf_monitoring_compare_tool(request, tmp_path_factory):
         constants.ODF_MONITORING_TOOL_REPO, str(repo_dir), branch="main", tmp_repo=True
     )
     return repo_dir
+
+
+@pytest.fixture(scope="session", autouse=True)
+def run_description():
+    """
+    fixture to create description file for the run
+    """
+    testrun_name = get_testrun_name()
+    build_id = get_ocs_build_number()
+    build_str = f"BUILD ID: {build_id}" if build_id else ""
+    run_name = f"{testrun_name} ({build_str})"
+    teardown = ocsci_config.RUN["cli_params"].get("teardown")
+    deploy = ocsci_config.RUN["cli_params"].get("deploy")
+    if not (deploy or teardown):
+        description_path = (
+            f'{ocsci_config.ENV_DATA.get("cluster_path")}/description.txt'
+        )
+        if not os.path.isfile(description_path):
+            with open(description_path, "w") as file:
+                file.write(f"{run_name}\n")
