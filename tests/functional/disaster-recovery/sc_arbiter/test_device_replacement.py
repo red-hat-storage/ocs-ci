@@ -20,7 +20,11 @@ logger = logging.getLogger(__name__)
 class TestDeviceReplacementInStretchCluster:
     @polarion_id("OCS-5047")
     def test_device_replacement(
-        self, nodes, setup_logwriter_cephfs_workload_factory, logreader_workload_factory
+        self,
+        nodes,
+        setup_logwriter_cephfs_workload_factory,
+        setup_logwriter_rbd_workload_factory,
+        logreader_workload_factory,
     ):
         """
         Test device replacement in stretch cluster while logwriter workload
