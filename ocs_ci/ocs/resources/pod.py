@@ -34,6 +34,7 @@ from ocs_ci.ocs.exceptions import (
     NotFoundError,
     TimeoutException,
     NoRunningCephToolBoxException,
+    TolerationNotFoundException,
 )
 
 from ocs_ci.ocs.utils import setup_ceph_toolbox, get_pod_name_by_pattern
@@ -2581,38 +2582,38 @@ def check_toleration_on_pods(toleration_key=constants.TOLERATION_KEY):
     Args:
         toleration_key (str): The toleration key to check
 
+    Raises:
+            TolerationNotFoundException: Exception raised when a required toleration is not found in the pods.
+
     """
     pod_objs = get_all_pods(
         namespace=config.ENV_DATA["cluster_namespace"],
-        selector=[constants.TOOL_APP_LABEL],
+        selector=[constants.ROOK_CEPH_OSD_PREPARE],
         exclude_selector=True,
     )
 
+    pods_missing_toleration = []
     for pod_obj in pod_objs:
         resource_name = pod_obj.name
-        if "-1-deploy" not in resource_name and "ocs-deviceset" not in resource_name:
-            pods_missing_toleration = []
-            tolerations = pod_obj.get().get("spec").get("tolerations")
+        tolerations = pod_obj.get().get("spec").get("tolerations")
 
-            # Check if any toleration matches the provided key
-            toleration_found = any(tol["key"] == toleration_key for tol in tolerations)
+        # Check if any toleration matches the provided key
+        toleration_found = any(tol["key"] == toleration_key for tol in tolerations)
 
-            if not toleration_found:
-                logger.error(
-                    f"The pod {resource_name} does not have toleration {toleration_key}"
-                )
-                pods_missing_toleration.append(resource_name)
-            else:
-                logger.info(
-                    f"The Toleration {toleration_key} exists on {resource_name}"
-                )
-            if pods_missing_toleration:
-                logger.warning(
-                    f"Some pods are missing the toleration {toleration_key}: {', '.join(pods_missing_toleration)}"
-                )
-                raise AssertionError(
-                    f"The following pods do not have toleration {toleration_key}: {', '.join(pods_missing_toleration)}"
-                )
+        if not toleration_found:
+            logger.error(
+                f"The pod {resource_name} does not have toleration {toleration_key}"
+            )
+            pods_missing_toleration.append(resource_name)
+        else:
+            logger.info(f"The Toleration {toleration_key} exists on {resource_name}")
+    if pods_missing_toleration:
+        logger.warning(
+            f"Some pods are missing the toleration {toleration_key}: {', '.join(pods_missing_toleration)}"
+        )
+        raise TolerationNotFoundException(
+            f"The following pods do not have toleration {toleration_key}: {', '.join(pods_missing_toleration)}"
+        )
 
 
 def check_toleration_on_subscriptions(toleration_key=constants.TOLERATION_KEY):
@@ -2621,6 +2622,9 @@ def check_toleration_on_subscriptions(toleration_key=constants.TOLERATION_KEY):
 
     Args:
         toleration_key (str): The toleration key to check
+
+    Raises:
+            TolerationNotFoundException: Exception raised when a required toleration is not found in the pods.
 
     """
     sub_list = ocp.get_all_resource_names_of_a_kind(kind=constants.SUBSCRIPTION)
@@ -2649,7 +2653,7 @@ def check_toleration_on_subscriptions(toleration_key=constants.TOLERATION_KEY):
         logger.warning(
             f"Some subscriptions are missing the toleration {toleration_key}: {', '.join(subs_missing_toleration)}"
         )
-        raise AssertionError(
+        raise TolerationNotFoundException(
             f"The following subscriptions do not have toleration {toleration_key}: {', '.join(subs_missing_toleration)}"
         )
 

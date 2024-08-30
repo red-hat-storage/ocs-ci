@@ -722,3 +722,7 @@ class ACMObservabilityNotEnabled(Exception):
 
 class ProviderModeNotFoundException(Exception):
     pass
+
+
+class TolerationNotFoundException(Exception):
+    pass
