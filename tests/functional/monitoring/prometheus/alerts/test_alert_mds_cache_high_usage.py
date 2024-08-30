@@ -10,17 +10,17 @@ from ocs_ci.helpers import helpers
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.ocp import OCP
 from ocs_ci.ocs import cluster
-from ocs_ci.ocs.resources.pod import (
-    get_mon_pods,
-    get_operator_pods,
-    get_osd_pods,
-    delete_pods,
-)
 from ocs_ci.ocs.node import (
     unschedule_nodes,
     drain_nodes,
     schedule_nodes,
     get_worker_nodes,
+)
+from ocs_ci.ocs.resources.pod import (
+    get_mon_pods,
+    get_operator_pods,
+    get_osd_pods,
+    delete_pods,
 )
 from ocs_ci.utility.utils import ceph_health_check
 from ocs_ci.utility import prometheus
@@ -28,7 +28,7 @@ from ocs_ci.utility import prometheus
 log = logging.getLogger(__name__)
 
 
-scale_timer = 100  # sleep time to wait after running scale down
+scale_timer = 100  # sleep time  (in seconds) to wait after running scale down
 POD_OBJ = OCP(kind=constants.POD, namespace=config.ENV_DATA["cluster_namespace"])
 
 

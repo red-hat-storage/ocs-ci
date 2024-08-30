@@ -1,13 +1,12 @@
 import logging
 import pytest
 
-from ocs_ci.framework.testlib import tier2
-from ocs_ci.ocs import constants
 from concurrent.futures import ThreadPoolExecutor
-from ocs_ci.helpers import helpers
-from ocs_ci.ocs import cluster
-from ocs_ci.utility import prometheus
 from ocs_ci.framework.pytest_customization.marks import blue_squad
+from ocs_ci.framework.testlib import tier2
+from ocs_ci.helpers import helpers
+from ocs_ci.ocs import cluster, constants
+from ocs_ci.utility import prometheus
 from ocs_ci.utility.utils import ceph_health_check_base
 
 log = logging.getLogger(__name__)
@@ -21,6 +20,7 @@ def run_file_creator_io_with_cephfs(dc_pod_factory):
     2. Create dc pod with Fedora image
     3. Copy helper_scripts/file_creator_io.py to Fedora dc pod
     4. Run file_creator_io.py on fedora pod
+
     """
     access_mode = constants.ACCESS_MODE_RWX
     file = constants.FILE_CREATOR_IO
