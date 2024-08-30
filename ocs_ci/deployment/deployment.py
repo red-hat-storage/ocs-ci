@@ -2682,7 +2682,7 @@ class RBDDRDeployOps(object):
             out = run_cmd(rbd_pods)
             logger.info(out)
             length_sidecar_container = len(out.split(" "))
-            logger.info(length_sidecar_container)
+            logger.info(f"sidecar container count: {length_sidecar_container}")
             if rbd_sidecar_count != length_sidecar_container:
                 time.sleep(2)
             else:
