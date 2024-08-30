@@ -49,13 +49,34 @@ class TestUpgradeForProviderClient(ManageTest):
         Tests upgrade procedure of OCS cluster
 
         """
+        ocs_version = version.get_semantic_ocs_version_from_config()
+        ocs_version_major = ocs_version.major
+        ocs_version_minor = ocs_version.minor
         log.info(
             "Validate major version of ocs operator for provider is same as major version of odf client operator"
         )
         self.storage_clients.verify_version_of_odf_client_operator()
-        run_ocs_upgrade()
-        log.info("Validate post provider ocs upgrade odf client operator also upgraded")
-        self.storage_clients.verify_version_of_odf_client_operator()
+        upgrade_in_current_source = config.UPGRADE.get(
+            "upgrade_in_current_source", False
+        )
+        upgrade_ocs = OCSUpgrade(
+            namespace=config.ENV_DATA["cluster_namespace"],
+            version_before_upgrade=ocs_version,
+            ocs_registry_image=config.UPGRADE.get("upgrade_ocs_registry_image"),
+            upgrade_in_current_source=upgrade_in_current_source,
+        )
+        upgrade_version = upgrade_ocs.get_upgrade_version()
+        if (
+            upgrade_version.major == ocs_version_major
+            and upgrade_version.minor > ocs_version_minor
+        ):
+            run_ocs_upgrade()
+            log.info(
+                "Validate post provider ocs upgrade odf client operator also upgraded"
+            )
+            self.storage_clients.verify_version_of_odf_client_operator()
+        else:
+            log.info("The upgrade request is not for minor upgrade")
 
     @runs_on_provider
     @ocs_upgrade
