@@ -8,6 +8,7 @@ from ocs_ci.framework.pytest_customization.marks import tier1, turquoise_squad
 from ocs_ci.helpers.dr_helpers import get_active_acm_index
 from ocs_ci.ocs.node import get_node_objs
 from ocs_ci.ocs.dr.dr_workload import validate_data_integrity
+from ocs_ci.ocs import constants
 from ocs_ci.helpers.dr_helpers import (
     replace_cluster,
     enable_fence,
@@ -20,6 +21,8 @@ from ocs_ci.helpers.dr_helpers import (
     get_current_secondary_cluster_name,
     wait_for_all_resources_creation,
     gracefully_reboot_ocp_nodes,
+    wait_for_all_resources_deletion,
+    set_current_secondary_cluster_context,
 )
 
 logger = logging.getLogger(__name__)
@@ -142,6 +145,9 @@ class TestReplaceCluster:
                         preferred_cluster=secondary_cluster_name,
                         namespace=wl.workload_namespace,
                         switch_ctx=get_active_acm_index(),
+                        workload_placement_name=wl.appset_placement_name
+                        if wl.workload_type != constants.SUBSCRIPTION
+                        else None,
                     )
                 )
                 time.sleep(5)
@@ -151,24 +157,21 @@ class TestReplaceCluster:
             rl.result()
 
         # Verify resources deletion from  secondary cluster
-        config.switch_to_cluster_by_name(secondary_cluster_name)
         for wl in workload:
+            set_current_secondary_cluster_context(
+                wl.workload_namespace, wl.workload_type
+            )
+            wait_for_all_resources_deletion(wl.workload_namespace)
+
+            # Verify resources creation on preferredCluster
+            set_current_primary_cluster_context(wl.workload_namespace, wl.workload_type)
+            self.primary_cluster_name = get_current_primary_cluster_name(self.namespace)
             wait_for_all_resources_creation(
                 wl.workload_pvc_count,
                 wl.workload_pod_count,
                 wl.workload_namespace,
             )
 
-        # Verify resources creation on preferredCluster
-        config.switch_to_cluster_by_name(self.primary_cluster_name)
-        for wl in workload:
-            wait_for_all_resources_creation(
-                wl.workload_pvc_count,
-                wl.workload_pod_count,
-                wl.workload_namespace,
-            )
-
-        # Validate data integrity
-        config.switch_to_cluster_by_name(self.primary_cluster_name)
-        for wl in workload:
+            # Validate data integrityq
+            set_current_primary_cluster_context(wl.workload_namespace, wl.workload_type)
             validate_data_integrity(wl.workload_namespace)
