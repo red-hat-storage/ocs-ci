@@ -12,8 +12,6 @@ from ocs_ci.utility.utils import ceph_health_check_base
 
 log = logging.getLogger(__name__)
 
-alert_timer = 180  # sleep time to generate the alert 15 minutes
-
 
 @pytest.fixture(scope="function")
 def run_file_creator_io_with_cephfs(dc_pod_factory):
@@ -110,8 +108,6 @@ class TestMdsCpuAlerts:
         """
         log.info(
             "File creation IO started in the background."
-            " Script will sleep for 15 minutes before validating the MDS alert"
+            " Script will look for MDSCPUUsageHigh  alert"
         )
-        # time.sleep(alert_timer)
-        log.info("Validating the alert now")
         assert active_mds_alert_values(threading_lock)

@@ -168,6 +168,51 @@ class TestMdsMemoryAlerts:
         time.sleep(scale_timer)
         assert self.active_mds_alert_values(threading_lock)
 
+    @pytest.mark.polarion_id("OCS-5572")
+    def test_alert_by_restarting_operator_and_ceph_pods(
+        self, run_metadata_io_with_cephfs, threading_lock
+    ):
+        """
+        This test function verifies the mds cache alert by
+        1. Restarting the rook operator
+        2. Deleting the mon pod running on the active mds node
+        3. Deleting the OSD pod running on the active mds node
+
+        """
+        log.info(
+            "Metadata IO started in the background. Script will look for the MDS alert now."
+        )
+        assert self.active_mds_alert_values(threading_lock)
+
+        active_mds_node_name = cluster.get_active_mds_info()["node_name"]
+        log.info("Restart the rook-operator pod")
+        operator_pod_obj = get_operator_pods()
+        delete_pods(pod_objs=operator_pod_obj)
+        POD_OBJ.wait_for_resource(
+            condition=constants.STATUS_RUNNING,
+            selector=constants.OPERATOR_LABEL,
+        )
+        log.info("Validating the alert after the rook-operator pod restart")
+        assert self.active_mds_alert_values(threading_lock)
+
+        log.info("Find mon pod on active mds running node and delete it.")
+        mon_pod_objs = get_mon_pods()
+        for pod_obj in mon_pod_objs:
+            mon_pod_running_node_name = pod_obj.data["spec"].get("nodeName")
+            if mon_pod_running_node_name == active_mds_node_name:
+                delete_pods([pod_obj])
+        log.info("Validating the alert after the mon pod restart")
+        assert self.active_mds_alert_values(threading_lock)
+
+        log.info("Find OSD pod on active mds running node and delete it.")
+        osd_pod_objs = get_osd_pods()
+        for pod_obj in osd_pod_objs:
+            osd_pod_running_node_name = pod_obj.data["spec"].get("nodeName")
+            if osd_pod_running_node_name == active_mds_node_name:
+                delete_pods([pod_obj])
+        log.info("Validating the alert after the OSD pod restart")
+        assert self.active_mds_alert_values(threading_lock)
+
     @pytest.mark.polarion_id("OCS-5577")
     def test_mds_cache_alert_with_active_node_scaledown(
         self, run_metadata_io_with_cephfs, threading_lock
@@ -259,49 +304,4 @@ class TestMdsMemoryAlerts:
         for i in mds:
             log.info(f"Scale up {i} to 1")
             helpers.modify_deployment_replica_count(deployment_name=i, replica_count=1)
-        assert self.active_mds_alert_values(threading_lock)
-
-    @pytest.mark.polarion_id("OCS-5572")
-    def test_alert_by_restarting_operator_and_ceph_pods(
-        self, run_metadata_io_with_cephfs, threading_lock
-    ):
-        """
-        This test function verifies the mds cache alert by
-        1. Restarting the rook operator
-        2. Deleting the mon pod running on the active mds node
-        3. Deleting the OSD pod running on the active mds node
-
-        """
-        log.info(
-            "Metadata IO started in the background. Script will look for the MDS alert now."
-        )
-        assert self.active_mds_alert_values(threading_lock)
-
-        active_mds_node_name = cluster.get_active_mds_info()["node_name"]
-        log.info("Restart the rook-operator pod")
-        operator_pod_obj = get_operator_pods()
-        delete_pods(pod_objs=operator_pod_obj)
-        POD_OBJ.wait_for_resource(
-            condition=constants.STATUS_RUNNING,
-            selector=constants.OPERATOR_LABEL,
-        )
-        log.info("Validating the alert after the rook-operator pod restart")
-        assert self.active_mds_alert_values(threading_lock)
-
-        log.info("Find mon pod on active mds running node and delete it.")
-        mon_pod_objs = get_mon_pods()
-        for pod_obj in mon_pod_objs:
-            mon_pod_running_node_name = pod_obj.data["spec"].get("nodeName")
-            if mon_pod_running_node_name == active_mds_node_name:
-                delete_pods([pod_obj])
-        log.info("Validating the alert after the mon pod restart")
-        assert self.active_mds_alert_values(threading_lock)
-
-        log.info("Find OSD pod on active mds running node and delete it.")
-        osd_pod_objs = get_osd_pods()
-        for pod_obj in osd_pod_objs:
-            osd_pod_running_node_name = pod_obj.data["spec"].get("nodeName")
-            if osd_pod_running_node_name == active_mds_node_name:
-                delete_pods([pod_obj])
-        log.info("Validating the alert after the OSD pod restart")
         assert self.active_mds_alert_values(threading_lock)
