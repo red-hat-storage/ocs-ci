@@ -1393,10 +1393,10 @@ def apply_drpolicy_to_workload(workload, drcluster_name):
     for wl in workload:
         drpc_yaml_data = templating.load_yaml(wl.drcp_data_yaml.name)
         logger.info(drpc_yaml_data)
-        drpc_yaml_data["metadata"]["namespace"] = wl.workload_namespace
+        if wl.workload_type == constants.SUBSCRIPTION:
+            drpc_yaml_data["metadata"]["namespace"] = wl.workload_namespace
         drpc_yaml_data["spec"]["preferredCluster"] = drcluster_name
         templating.dump_data_to_temp_yaml(drpc_yaml_data, wl.drcp_data_yaml.name)
-
         config.switch_acm_ctx()
         wl.add_annotation_to_placement()
         run_cmd(f"oc create -f {wl.drcp_data_yaml.name}")

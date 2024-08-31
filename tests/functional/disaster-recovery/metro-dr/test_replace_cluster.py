@@ -62,21 +62,16 @@ class TestReplaceCluster:
         Tests to verify Recovery of replacement cluster
         """
 
-        # Failover apps followed by unfence
         # Deploy Subscription based application
-        sub = dr_workload(num_of_subscription=1, switch_ctx=get_active_acm_index())[0]
+        sub = dr_workload(num_of_subscription=1)[0]
         self.namespace = sub.workload_namespace
         self.workload_type = sub.workload_type
 
-        """
         # Deploy AppSet based application
-        appset = dr_workload(
-            num_of_subscription=0, num_of_appset=1, switch_ctx=get_active_acm_index()
-        )[0]
-        """
+        appset = dr_workload(num_of_subscription=0, num_of_appset=1)[1]
+
         # Workloads list
-        # workload = [sub, appset]
-        workload = [sub]
+        workload = [sub, appset]
 
         # Create application on Primary managed cluster
         set_current_primary_cluster_context(self.namespace)
@@ -105,6 +100,9 @@ class TestReplaceCluster:
                         namespace=wl.workload_namespace,
                         workload_type=wl.workload_type,
                         switch_ctx=get_active_acm_index(),
+                        workload_placement_name=wl.appset_placement_name
+                        if wl.workload_type != constants.SUBSCRIPTION
+                        else None,
                     )
                 )
                 time.sleep(10)
