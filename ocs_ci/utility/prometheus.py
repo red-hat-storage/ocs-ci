@@ -65,6 +65,7 @@ def check_alert_list(
             f"severity: {severity} in state: {state}"
         )
         assert found_alerts, assert_msg
+
         if not ignore_more_occurences:
             assert_msg = (
                 f"There are multiple instances of alert {label} with "
@@ -73,34 +74,34 @@ def check_alert_list(
             assert len(found_alerts) == 1, assert_msg
 
         assert_msg = f"Alert message for alert {label} is not correct"
-        assert target_alerts[key]["annotations"]["message"] == msg, assert_msg
+        assert found_alerts[key]["annotations"]["message"] == msg, assert_msg
 
         assert_msg = f"Alert {label} doesn't have {severity} severity"
         assert (
-            target_alerts[key]["annotations"]["severity_level"] == severity
+            found_alerts[key]["annotations"]["severity_level"] == severity
         ), assert_msg
 
         assert_msg = f"Alert {label} is not in {state} state"
-        assert target_alerts[key]["state"] == state, assert_msg
+        assert found_alerts[key]["state"] == state, assert_msg
 
         assert_msg = f"Description for alert {label} is not correct"
         assert (
-            target_alerts[key]["annotations"]["description"] == description
+            found_alerts[key]["annotations"]["description"] == description
         ), assert_msg
 
         assert_msg = f"Runbook url for alert {label} is not correct"
-        assert target_alerts[key]["annotations"]["runbook_url"] == runbook, assert_msg
+        assert found_alerts[key]["annotations"]["runbook_url"] == runbook, assert_msg
 
         if description:
             assert_msg = f"Alert description for alert {label} is not correct"
             assert (
-                target_alerts[key]["annotations"]["description"] == description
+                found_alerts[key]["annotations"]["description"] == description
             ), assert_msg
 
         if runbook:
             assert_msg = f"Alert runbook url for alert {label} is not correct"
             assert (
-                target_alerts[key]["annotations"]["runbook_url"] == runbook
+                found_alerts[key]["annotations"]["runbook_url"] == runbook
             ), assert_msg
 
     logger.info("Alerts were triggered correctly during utilization")

@@ -97,8 +97,8 @@ class TestMdsMemoryAlerts:
         """
         cache_alert = constants.ALERT_MDSCACHEUSAGEHIGH
         api = prometheus.PrometheusAPI(threading_lock=threading_lock)
+        log.info("Wait for an alert to be triggered....")
         api.wait_for_alert(name=cache_alert, state="firing")
-
         active_mds = cluster.get_active_mds_info()["mds_daemon"]
         message = f"High MDS cache usage for the daemon mds.{active_mds}."
         description = (

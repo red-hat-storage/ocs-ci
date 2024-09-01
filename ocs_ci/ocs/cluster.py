@@ -3325,6 +3325,7 @@ def check_cephcluster_status(
         )
         raise CephHealthException()
 
+
 def ceph_config_set_debug(debug_level):
     """
     This function will be useful to set default debug level for mds i.e 1/5
@@ -3348,6 +3349,7 @@ def ceph_health_detail():
     """
     ceph_tools_pod = pod.get_ceph_tools_pod()
     return ceph_tools_pod.exec_cmd_on_pod("ceph health detail", out_yaml_format=False)
+
 
 def get_active_mds_info():
 
@@ -3459,32 +3461,38 @@ def get_standby_replay_mds_memory_utilisation_in_percentage():
 
 def bring_down_mds_memory_usage_gradually():
     """
-    This function will monitor the mds memory usage for 20 minutes to make sure it is <=10%.
-    Even if the memory usage is still high after 20 mins,
+    This function will monitor the mds memory usage for 18 minutes to make sure it is <=10%.
+    Even if the memory usage is still high after 18 mins,
     it will fail the mds daemon and look for the same <=10% in memory utilisation.
-    This will repeat the process until the memory utilisation reduced.
+    This will repeat the process until the time_elapsed reaches 30mins
+    And it breaks if memory utilisation reduced in between.
 
     """
     logger.info("Continue monitoring mds memory usage until it get reduced to 10%")
-    attempts = 0
-    while True:
+    time_interval = 180
+    time_elapsed = 0
+    while time_elapsed <= 1800:
         logger.info("Check memory usage and sleep if usage is higher than 10%")
         if (
             get_active_mds_memory_utilisation_in_percentage() >= 10
             or get_standby_replay_mds_memory_utilisation_in_percentage() >= 10
         ):
-            if attempts <= 4:
-                logger.info("Memory usage is high. Sleeping for 5 minutes...")
-                time.sleep(300)
-                attempts += 1
+            if time_elapsed <= 900:
+                logger.info("Memory usage is high. Sleeping for 3 minutes...")
+                time.sleep(time_interval)
+                time_elapsed += time_interval
             else:
                 clear_active_mds_load()
                 logger.info("clearing the existing load on MDS by failing mds daemon ")
                 logger.info(
-                    "Failed MDS.0 daemon to clear load. Sleeping for 2 minutes..."
+                    "Failed MDS.0 daemon to clear load. Sleeping for 3 minutes..."
                 )
-                time.sleep(120)
+                time.sleep(time_interval)
                 continue
         else:
             logger.info("Memory usage is within the acceptable limits.")
             break
+
+    assert (
+        time_elapsed <= 1800
+    ), "Memory usage remained high for more than 30 minutes. Failed to bring down the memory usage of MDS"
