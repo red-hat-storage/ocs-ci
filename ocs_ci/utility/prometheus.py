@@ -63,6 +63,8 @@ def check_alert_list(
         assert_msg = (
             f"There was not found alert {label} with message: {msg}, "
             f"severity: {severity} in state: {state}"
+            f"Alerts matched with alert name are {target_alerts}"
+            f"Alerts matched with given message, severity and state are {found_alerts}"
         )
         assert found_alerts, assert_msg
 
