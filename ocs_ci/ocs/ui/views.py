@@ -668,6 +668,14 @@ storage_clients = {
         "//div[@class='odf-onboarding-modal__text-area']",
         By.XPATH,
     ),
+    "custom_quota": ("storage-quota-custom", By.ID),
+    "quota_value": ("//input[@type='number']", By.XPATH),
+    "choose_units": (
+        "//div[contains(@class, 'request-size-input__unit')]/button",
+        By.XPATH,
+    ),
+    "quota_ti": ("//li[@id='Ti']", By.XPATH),
+    "confirm_generation": ("//button[@data-test-id='confirm-action']", By.XPATH),
     "close_token_modal": ("//button[@aria-label='Close']", By.XPATH),
 }
 
