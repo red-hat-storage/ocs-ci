@@ -4,7 +4,7 @@ import time
 
 from concurrent.futures import ThreadPoolExecutor
 from ocs_ci.framework.pytest_customization.marks import blue_squad
-from ocs_ci.framework.testlib import tier2
+from ocs_ci.framework.testlib import E2ETest, tier2
 from ocs_ci.framework import config
 from ocs_ci.helpers import helpers
 from ocs_ci.ocs import constants
@@ -28,7 +28,7 @@ from ocs_ci.utility import prometheus
 log = logging.getLogger(__name__)
 
 
-scale_timer = 100  # sleep time  (in seconds) to wait after running scale down
+scale_timer = 30  # sleep time  (in seconds) to wait after running scale down
 POD_OBJ = OCP(kind=constants.POD, namespace=config.ENV_DATA["cluster_namespace"])
 
 
@@ -74,7 +74,7 @@ def run_metadata_io_with_cephfs(dc_pod_factory):
 
 @tier2
 @blue_squad
-class TestMdsMemoryAlerts:
+class TestMdsMemoryAlerts(E2ETest):
     @pytest.fixture(scope="function", autouse=True)
     def teardown(self, request):
         def finalizer():
@@ -92,13 +92,15 @@ class TestMdsMemoryAlerts:
         If given alert values matched with the pulled alert values in prometheus alerts then it returns True.
 
         Returns:
-            bool: return True --> if alert verified successfully
+            True: (bool) True --> if alert verified successfully.
 
         """
         cache_alert = constants.ALERT_MDSCACHEUSAGEHIGH
+
         api = prometheus.PrometheusAPI(threading_lock=threading_lock)
         log.info("Wait for an alert to be triggered....")
-        api.wait_for_alert(name=cache_alert, state="firing")
+        alerts = api.wait_for_alert(name=cache_alert, state="firing", sleep=60)
+
         active_mds = cluster.get_active_mds_info()["mds_daemon"]
         message = f"High MDS cache usage for the daemon mds.{active_mds}."
         description = (
@@ -111,11 +113,6 @@ class TestMdsMemoryAlerts:
         )
         state = ["firing"]
         severity = "error"
-        alerts_response = api.get(
-            "alerts", payload={"silenced": False, "inhibited": False}
-        )
-        prometheus_alerts = alerts_response.json()["data"]["alerts"]
-
         prometheus.check_alert_list(
             label=cache_alert,
             msg=message,
@@ -123,7 +120,7 @@ class TestMdsMemoryAlerts:
             runbook=runbook,
             states=state,
             severity=severity,
-            alerts=prometheus_alerts,
+            alerts=alerts,
         )
         log.info("Alert verified successfully")
         return True
@@ -163,7 +160,7 @@ class TestMdsMemoryAlerts:
         schedule_nodes([node_name])
         log.info(f"Scheduled the node {node_name}")
         log.info(
-            "Script will sleep for 100 seconds minutes before validating the alert"
+            f"Script will sleep for {scale_timer}  seconds minutes before validating the alert"
         )
         time.sleep(scale_timer)
         assert self.active_mds_alert_values(threading_lock)
@@ -232,7 +229,7 @@ class TestMdsMemoryAlerts:
             deployment_name=deployment_name, replica_count=0
         )
         log.info(
-            " Script will be in sleep for 100 seconds to make sure active mds scale down completed."
+            f" Script will be in sleep for {scale_timer}  seconds to make sure active mds scale down completed."
         )
         time.sleep(scale_timer)
         log.info(f"Scale up {deployment_name} to 1")
@@ -240,7 +237,7 @@ class TestMdsMemoryAlerts:
             deployment_name=deployment_name, replica_count=1
         )
         log.info(
-            " Script will be in sleep for 100 seconds to make sure mds scale up completed."
+            f" Script will be in sleep for {scale_timer}  seconds to make sure mds scale up completed."
         )
         time.sleep(scale_timer)
         assert self.active_mds_alert_values(threading_lock)
@@ -263,7 +260,7 @@ class TestMdsMemoryAlerts:
             deployment_name=deployment_name, replica_count=0
         )
         log.info(
-            " Script will be in sleep for 100 seconds to make sure standby-replay mds scale down completed."
+            f" Script will be in sleep for {scale_timer}  seconds to make sure standby-replay mds scale down completed."
         )
         time.sleep(scale_timer)
         helpers.modify_deployment_replica_count(
@@ -297,7 +294,7 @@ class TestMdsMemoryAlerts:
             deployment_name=sr_mds_dc, replica_count=0
         )
         log.info(
-            " Script will be in sleep for 100 seconds to make sure both mds scale down completed."
+            f" Script will be in sleep for {scale_timer} seconds to make sure both mds scale down completed."
         )
         time.sleep(scale_timer)
         mds = [active_mds_dc, sr_mds_dc]

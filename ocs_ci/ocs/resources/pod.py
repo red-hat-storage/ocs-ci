@@ -3766,7 +3766,6 @@ def get_pod_used_memory_in_mebibytes(podname):
     logger.info("Retrieve raw resource utilization data using oc adm top command")
     pod_raw_adm_out = pod_resource_utilization_raw_output_from_adm_top()
     lines = pod_raw_adm_out.strip().split("\n")
-    logger.info("Process each line to extract memory usage for MDS pods")
     for line in lines:
         parts = line.split()
         if podname in line:

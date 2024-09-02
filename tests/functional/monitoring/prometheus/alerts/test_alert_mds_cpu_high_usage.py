@@ -3,7 +3,7 @@ import pytest
 
 from concurrent.futures import ThreadPoolExecutor
 from ocs_ci.framework.pytest_customization.marks import blue_squad
-from ocs_ci.framework.testlib import tier2
+from ocs_ci.framework.testlib import E2ETest, tier2
 from ocs_ci.helpers import helpers
 from ocs_ci.ocs import cluster, constants
 from ocs_ci.utility import prometheus
@@ -54,7 +54,7 @@ def active_mds_alert_values(threading_lock):
     cpu_alert = constants.ALERT_MDSCPUUSAGEHIGH
 
     api = prometheus.PrometheusAPI(threading_lock=threading_lock)
-    api.wait_for_alert(name=cpu_alert, state="pending")
+    alert_list = api.wait_for_alert(name=cpu_alert, state="pending")
     message = f"Ceph metadata server pod ({active_mds_pod}) has high cpu usage"
     description = (
         f"Ceph metadata server pod ({active_mds_pod}) has high cpu usage."
@@ -66,8 +66,6 @@ def active_mds_alert_values(threading_lock):
     )
     severity = "warning"
     state = ["pending"]
-    alerts_response = api.get("alerts", payload={"silenced": False, "inhibited": False})
-    prometheus_alerts = alerts_response.json()["data"]["alerts"]
 
     prometheus.check_alert_list(
         label=cpu_alert,
@@ -76,7 +74,7 @@ def active_mds_alert_values(threading_lock):
         runbook=runbook,
         states=state,
         severity=severity,
-        alerts=prometheus_alerts,
+        alerts=alert_list,
     )
     log.info("Alert verified successfully")
     return True
@@ -84,7 +82,7 @@ def active_mds_alert_values(threading_lock):
 
 @tier2
 @blue_squad
-class TestMdsCpuAlerts:
+class TestMdsCpuAlerts(E2ETest):
     @pytest.fixture(scope="function", autouse=True)
     def teardown(self, request):
         def finalizer():
