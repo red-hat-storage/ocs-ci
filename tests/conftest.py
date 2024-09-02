@@ -7699,7 +7699,6 @@ def override_default_backingstore_fixture(
 
 @pytest.fixture(scope="session")
 def scale_noobaa_resources_session(request):
-
     """
     Session scoped fixture to scale noobaa resources
 
@@ -7717,7 +7716,6 @@ def scale_noobaa_resources_fixture(request):
 
 
 def scale_noobaa_resources(request):
-
     """
     Scale the noobaa pod resources and scale endpoint count
 
@@ -8296,4 +8294,5 @@ def setup_cnv(request):
         # Uninstall CNV only if installed by this fixture
         if installed:
             cnv_obj.uninstall_cnv()
+
     request.addfinalizer(finalizer)

@@ -649,9 +649,9 @@ class CNVInstaller(object):
             return
         logger.info(cmd_res.stdout.decode("utf-8").splitlines())
 
-    def check_if_any_vm_instances(self, namespace=None):
+    def check_if_any_vm_and_vmi(self, namespace=None):
         """
-        Checks if any VMs or VM instances are running
+        Checks if any VMs and VM instances are running
 
         Args:
             namespace (str): namespace to check
@@ -747,7 +747,7 @@ class CNVInstaller(object):
         Uninstall CNV deployment
 
         Args:
-            check_cnv_installed (Bool): True if want to check if CNV installed
+            check_cnv_installed (bool): True if want to check if CNV installed
 
         """
         if check_cnv_installed:
@@ -755,7 +755,7 @@ class CNVInstaller(object):
                 logger.info("CNV is not installed, skipping the cleanup...")
                 return
 
-        assert not self.check_if_any_vm_instances(), (
+        assert not self.check_if_any_vm_and_vmi(), (
             "Vm or Vmi instances are found in the cluster,"
             "Please make sure all VMs and VM instances are removed"
         )
