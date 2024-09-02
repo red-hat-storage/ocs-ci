@@ -68,6 +68,65 @@ class TestOnboardingTokenGeneration(ManageTest):
 
         ValidationUI().verify_storage_clients_page()
 
+    @skipif_ocs_version("<4.17")
+    @skipif_ocp_version("<4.17")
+    @hci_provider_required
+    def test_onboarding_token_generation_with_limited_storage_quota_from_ui(
+        self, create_hypershift_clusters, destroy_hosted_cluster
+    ):
+        """
+        Test to verify onboarding token generation with limited storage quota from
+        storage-->storage clients-->Generate client onboarding token from ui
+
+        Steps:
+            1. check onboarding-ticket-key and onboarding-private-key are available
+                under secrets page for openshift-storage ns
+            2. navigate to storage-->storage clients page
+            3. check Generate client onboarding token option is available
+            4. user can generate onboarding token with limited storage quota.
+            5. Onboard a storageclient with limited storage-quota
+        """
+        from ocs_ci.ocs.ui.page_objects.page_navigator import PageNavigator
+
+        storage_clients = PageNavigator().nav_to_storageclients_page()
+
+        log.info("Create hosted client")
+        cluster_name = get_random_hosted_cluster_name()
+        odf_version = str(get_ocs_version_from_csv()).replace(".stable", "")
+        if "rhodf" in odf_version:
+            odf_version = get_odf_tag_from_redhat_catsrc()
+
+        ocp_version = get_latest_release_version()
+        nodepool_replicas = 2
+
+        create_hypershift_clusters(
+            cluster_names=[cluster_name],
+            ocp_version=ocp_version,
+            odf_version=odf_version,
+            setup_storage_client=True,
+            nodepool_replicas=nodepool_replicas,
+        )
+
+        log.info("Switch to the hosted cluster")
+        ocsci_config.switch_to_cluster_by_name(cluster_name)
+
+        server = str(OCP().exec_oc_cmd("whoami --show-server", out_yaml_format=False))
+
+        assert (
+            cluster_name in server
+        ), f"Failed to switch to cluster '{cluster_name}' and fetch data"
+
+        log.info("Test create onboarding key")
+        HostedClients().download_hosted_clusters_kubeconfig_files()
+
+        assert len(
+            storage_clients.generate_client_onboarding_ticket_ui(storage_quota=8)
+        ), "Failed to get onboarding key"
+        assert HostedODF(cluster_name).get_storage_client_status() == "Connected"
+
+        log.info("Destroy hosted cluster")
+        assert destroy_hosted_cluster(cluster_name), "Failed to destroy hosted cluster"
+
     @hci_provider_required
     def test_onboarding_storageclient_from_hcp_cluster(
         self, create_hypershift_clusters, destroy_hosted_cluster
