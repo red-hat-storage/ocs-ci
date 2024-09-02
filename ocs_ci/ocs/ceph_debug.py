@@ -123,7 +123,7 @@ class RookCephPlugin(object):
             )
 
         command = self.cmd
-        command += f" debug start {deployment_name}"
+        command += f" maintenance start {deployment_name}"
         if alternate_image:
             self.alternate_image = alternate_image
             command += f" --alternate-image {self.alternate_image}"
@@ -150,7 +150,7 @@ class RookCephPlugin(object):
         # TODO: Make sure deployment is either mon or osd
 
         command = self.cmd
-        command += f" debug stop {deployment_name}"
+        command += f" maintenance stop {deployment_name}"
         if alternate_image:
             self.alternate_image = alternate_image
             command += f" --alternate-image {self.alternate_image}"
