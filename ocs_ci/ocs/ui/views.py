@@ -664,11 +664,16 @@ storage_clients = {
         "//button[normalize-space()='Generate client onboarding token']",
         By.XPATH,
     ),
-    "client_onboarding_token": (
+    "onboarding_key": (
         "//div[@class='odf-onboarding-modal__text-area']",
         By.XPATH,
     ),
+    "copy_to_clipboard": ("//button[text()='Copy to clipboard']", By.XPATH),
     "close_token_modal": ("//button[@aria-label='Close']", By.XPATH),
+    "generate_token": (
+        "//*[@id='pf-modal-part-4']/div[3]/ul/li/div/div[2]/button",
+        By.XPATH,
+    ),
 }
 
 page_nav = {
@@ -729,6 +734,13 @@ page_nav_4_10 = {
 page_nav_4_14 = {
     "object_storage_page": ("Object Storage", By.LINK_TEXT),
     "storageclients_page": ("Storage Clients", By.LINK_TEXT),
+}
+
+page_nav_4_17 = {
+    "storage_quota_selection_page_for_onboarding_client": (
+        "Object Storage",
+        By.LINK_TEXT,
+    ),
 }
 
 acm_page_nav = {
@@ -1765,12 +1777,16 @@ validation_4_14 = {
         "/ancestor::div[2]//div[@class='ceph-raw-card-legend__text']",
         By.XPATH,
     ),
-    "generate_client_onboarding_token_button": (
-        "//button[text()='Generate client onboarding token']",
+}
+
+validation_4_17 = {
+    "storage_quota_unlimited": ("storage-quota-unlimited", By.ID),
+    "storage_quota_custom": ("storage-quota-custom", By.ID),
+    "allocate_quota_value": (
+        "//*[@id='pf-modal-part-2']/div[2]/div/div/div[2]/div/div/div[1]/div/div/div[2]/span/input",
         By.XPATH,
     ),
-    "copy to clipboard": ("//button[text()='Copy to clipboard']", By.XPATH),
-    "onboarding_token": ("//*[@class='odf-onboarding-modal__text-area']", By.XPATH),
+    "quota_unit_dropdown": ("pf-dropdown-toggle-id-2", By.ID),
 }
 
 validation_4_17 = {
@@ -2035,7 +2051,7 @@ locators = {
     },
     "4.17": {
         "login": {**login, **login_4_11, **login_4_14},
-        "page": {**page_nav, **page_nav_4_10, **page_nav_4_14},
+        "page": {**page_nav, **page_nav_4_10, **page_nav_4_14, **page_nav_4_17},
         "generic": generic_locators,
         "add_capacity": {**add_capacity, **add_capacity_4_11, **add_capacity_4_12},
         "deployment": {
@@ -2084,6 +2100,7 @@ locators = {
         "topology": topology,
         "mcg_stores": mcg_stores,
         "alerting": alerting,
+        "storage_clients": storage_clients,
     },
     "4.16": {
         "login": {**login, **login_4_11, **login_4_14},
@@ -2134,6 +2151,7 @@ locators = {
         "topology": topology,
         "mcg_stores": mcg_stores,
         "alerting": alerting,
+        "storage_clients": storage_clients,
     },
     "4.15": {
         "login": {**login, **login_4_11, **login_4_14},

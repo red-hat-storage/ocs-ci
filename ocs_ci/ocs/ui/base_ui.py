@@ -147,7 +147,9 @@ class BaseUI:
             locators, self.ocp_version, "add_capacity"
         )
         self.topology_loc = self.deep_get(locators, self.ocp_version, "topology")
-        self.storage_clients_loc = self.deep_get(locators, self.ocp_version, "storage")
+        self.storage_clients_loc = self.deep_get(
+            locators, self.ocp_version, "storage_clients"
+        )
         self.alerting_loc = self.deep_get(locators, self.ocp_version, "alerting")
 
     def __repr__(self):
