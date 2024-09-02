@@ -665,6 +665,26 @@ class ValidationUI(PageNavigator):
             self.validation_loc["generate_client_onboarding_token_button"],
             enable_screenshot=True,
         )
+        # Starting from ODF 4.17 custom storage amount select option is available
+        if self.ocs_version_semantic >= version.VERSION_4_17:
+            select_storage_quota_window = [
+                "Add storage capacity for the client cluster to consume from the provider cluster."
+                "Storage quota: Unlimited",
+                "Unlimited",
+                "Custom",
+            ]
+            self.verify_page_contain_strings(
+                strings_on_page=select_storage_quota_window,
+                page_name="client_onboarding_token_page",
+            )
+            # Check default storage quota selected as 'Unlimited'
+            assert self.validation_loc[
+                "storage_quota_unlimited"
+            ].is_selected(), "Default value unlimited quota is not selected"
+
+            # Take screenshot
+            self.take_screenshot()
+
         strings_object_service_tab = [
             "Client onboarding token",
             "How to use this token",
