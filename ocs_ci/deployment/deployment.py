@@ -3006,7 +3006,7 @@ class MultiClusterDROperatorsDeploy(object):
             if (
                 cluster.ENV_DATA["cluster_name"]
                 == get_primary_cluster_config().ENV_DATA["cluster_name"]
-            ):
+            ) or is_recovery_cluster(cluster):
                 continue
             dr_policy_hub_data["spec"]["drClusters"][index] = cluster.ENV_DATA[
                 "cluster_name"
