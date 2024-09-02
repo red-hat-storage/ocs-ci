@@ -1839,6 +1839,23 @@ class Deployment(object):
         cephcluster = CephClusterExternal()
         cephcluster.cluster_health_check(timeout=300)
 
+    def odf_deployments_check(self):
+        """
+        Check on existance of deployments inspired by upstream check:
+        https://github.com/red-hat-storage/odf-operator/blob/main/hack/install-odf.sh#L34-L44
+        """
+        deployments = constants.OCS_DEPLOYMENTS_4_17
+        ocs_version = version.get_semantic_ocs_version_from_config()
+        if ocs_version == version.VERSION_4_16:
+            deployments = constants.OCS_DEPLOYMENTS_4_16
+        if ocs_version < version.VERSION_4_16:
+            deployments = constants.OCS_DEPLOYMENTS
+        deployments_string = " ".join(deployments)
+        exec_cmd(
+            f"oc wait --timeout=5m --for condition=Available -n {self.namespace} "
+            f"deployment {deployments_string}"
+        )
+
     def deploy_ocs(self):
         """
         Handle OCS deployment, since OCS deployment steps are common to any
@@ -1939,6 +1956,7 @@ class Deployment(object):
                         namespace=constants.OPENSHIFT_STORAGE_EXTENDED_NAMESPACE,
                     )
                 )
+        self.odf_deployments_check()
 
         wait_timeout_for_healthy_osd_in_minutes = config.ENV_DATA.get(
             "wait_timeout_for_healthy_osd_in_minutes"
