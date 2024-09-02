@@ -2674,19 +2674,25 @@ class RBDDRDeployOps(object):
         ocs_version = version.get_ocs_version_from_csv(only_major_minor=True)
         if ocs_version <= version.get_semantic_version("4.11"):
             rbd_sidecar_count = constants.RBD_SIDECAR_COUNT
-        else:
+        elif ocs_version <= version.get_semantic_version("4.16"):
             rbd_sidecar_count = constants.RBD_SIDECAR_COUNT_4_12
+        else:
+            rbd_sidecar_count = constants.RBD_SIDECAR_COUNT_4_17
         while timeout:
             out = run_cmd(rbd_pods)
             logger.info(out)
-            logger.info(len(out.split(" ")))
-            if rbd_sidecar_count != len(out.split(" ")):
+            length_sidecar_container = len(out.split(" "))
+            logger.info(f"sidecar container count: {length_sidecar_container}")
+            if rbd_sidecar_count != length_sidecar_container:
                 time.sleep(2)
             else:
                 break
             timeout -= 1
         if not timeout:
-            raise RBDSideCarContainerException("RBD Sidecar container count mismatch")
+            RBDSideCarContainerException(
+                f"RBD Sidecar container count mismatch. Expected: {rbd_sidecar_count}, "
+                f"Current: {length_sidecar_container}"
+            )
 
     def validate_mirror_peer(self, resource_name):
         """
