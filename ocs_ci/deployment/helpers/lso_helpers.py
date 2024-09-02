@@ -471,6 +471,7 @@ def cleanup_nodes_for_lso_install():
 
     nodes = get_all_nodes()
     node_objs = get_node_objs(nodes)
+    ocp.OCP().exec_oc_cmd("project default")
     for node in nodes:
         cmd = f"oc debug nodes/{node} -- chroot /host rm -rvf /var/lib/rook /mnt/local-storage"
         out = run_cmd(cmd)
