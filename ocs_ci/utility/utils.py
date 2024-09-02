@@ -4855,7 +4855,7 @@ def get_acm_version(namespace=constants.ACM_HUB_NAMESPACE):
     for csv in csv_list:
         if "advanced-cluster-management" in csv["metadata"]["name"]:
             # extract version string
-            return csv["spec"]["version"]
+            return re.sub(r"-.", "", csv["spec"]["version"])
 
 
 def is_cluster_y_version_upgraded():
