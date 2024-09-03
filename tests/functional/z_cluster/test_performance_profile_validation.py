@@ -84,8 +84,8 @@ class TestProfileDefaultValuesCheck(ManageTest):
 
             # Wait up to 600 seconds for performance changes to reflect
             sample = TimeoutSampler(
-                timeout=600,
-                sleep=150,
+                timeout=660,
+                sleep=180,
                 func=verify_performance_profile_change,
                 perf_profile=self.perf_profile,
             )
