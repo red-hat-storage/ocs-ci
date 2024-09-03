@@ -243,7 +243,7 @@ class DeploymentUI(PageNavigator):
         if "SSD" not in current_disk_type:
             logger.error(f"Current disk type is {current_disk_type}. It should be SSD")
         else:
-            logger.info("Disk type is {current_disk_type} as expected")
+            logger.info(f"Disk type is {current_disk_type} as expected")
         if self.operator_name == OCS_OPERATOR:
             logger.info("Select all nodes on 'Create Storage Class' step")
             self.do_click(
