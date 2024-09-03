@@ -6935,9 +6935,9 @@ def ceph_objectstore_tool_fixture(request):
     cot_obj = CephObjectStoreTool()
 
     def teardown():
-        deployment_in_debug = cot_obj.deployment_in_debug
-        for deployment_name in list(deployment_in_debug):
-            cot_obj.debug_stop(deployment_name=deployment_name)
+        deployment_in_maintenance = cot_obj.deployment_in_maintenance
+        for deployment_name in list(deployment_in_maintenance):
+            cot_obj.maintenance_stop(deployment_name=deployment_name)
 
     request.addfinalizer(teardown)
 
@@ -6959,9 +6959,9 @@ def ceph_monstore_tool_fixture(request):
     mot_obj = MonStoreTool()
 
     def teardown():
-        deployment_in_debug = mot_obj.deployment_in_debug
-        for deployment_name in list(deployment_in_debug):
-            mot_obj.debug_stop(deployment_name=deployment_name)
+        deployment_in_maintenance = mot_obj.deployment_in_maintenance
+        for deployment_name in list(deployment_in_maintenance):
+            mot_obj.maintenance_stop(deployment_name=deployment_name)
 
     request.addfinalizer(teardown)
 
