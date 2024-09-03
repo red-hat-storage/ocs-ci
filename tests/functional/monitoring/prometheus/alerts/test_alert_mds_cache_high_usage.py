@@ -28,8 +28,11 @@ from ocs_ci.utility import prometheus
 log = logging.getLogger(__name__)
 
 
-scale_timer = 30  # sleep time  (in seconds) to wait after running scale down
+timer = (
+    60  # sleep timer (in seconds) for scale up, resource deletion & alert verification
+)
 POD_OBJ = OCP(kind=constants.POD, namespace=config.ENV_DATA["cluster_namespace"])
+state = constants.STATUS_RUNNING
 
 
 @pytest.fixture(scope="function")
@@ -99,7 +102,7 @@ class TestMdsMemoryAlerts(E2ETest):
 
         api = prometheus.PrometheusAPI(threading_lock=threading_lock)
         log.info("Wait for an alert to be triggered....")
-        alerts = api.wait_for_alert(name=cache_alert, state="firing", sleep=60)
+        alerts = api.wait_for_alert(name=cache_alert, state="firing", sleep=timer)
 
         active_mds = cluster.get_active_mds_info()["mds_daemon"]
         message = f"High MDS cache usage for the daemon mds.{active_mds}."
@@ -160,9 +163,9 @@ class TestMdsMemoryAlerts(E2ETest):
         schedule_nodes([node_name])
         log.info(f"Scheduled the node {node_name}")
         log.info(
-            f"Script will sleep for {scale_timer}  seconds minutes before validating the alert"
+            f"Script will sleep for {timer}  seconds minutes before validating the alert"
         )
-        time.sleep(scale_timer)
+        time.sleep(timer)
         assert self.active_mds_alert_values(threading_lock)
 
     @pytest.mark.polarion_id("OCS-5572")
@@ -222,24 +225,28 @@ class TestMdsMemoryAlerts(E2ETest):
             "Metadata IO started in the background. Script will look for the MDS alert now."
         )
         assert self.active_mds_alert_values(threading_lock)
+
         active_mds = cluster.get_active_mds_info()["mds_daemon"]
+        active_mds_pod = cluster.get_active_mds_info()["active_pod"]
         deployment_name = "rook-ceph-mds-" + active_mds
+
         log.info(f"Scale down {deployment_name} to 0")
         helpers.modify_deployment_replica_count(
             deployment_name=deployment_name, replica_count=0
         )
-        log.info(
-            f" Script will be in sleep for {scale_timer}  seconds to make sure active mds scale down completed."
-        )
-        time.sleep(scale_timer)
+        POD_OBJ.wait_for_delete(resource_name=active_mds_pod)
         log.info(f"Scale up {deployment_name} to 1")
         helpers.modify_deployment_replica_count(
             deployment_name=deployment_name, replica_count=1
         )
         log.info(
-            f" Script will be in sleep for {scale_timer}  seconds to make sure mds scale up completed."
+            f" Script will be in sleep for {timer}  seconds to make sure mds scale up completed."
         )
-        time.sleep(scale_timer)
+        time.sleep(timer)
+        mds_pods = cluster.get_mds_pods()
+        for pod in mds_pods:
+            helpers.wait_for_resource_state(resource=pod, state=state)
+
         assert self.active_mds_alert_values(threading_lock)
 
     @pytest.mark.polarion_id("OCS-5578")
@@ -254,18 +261,22 @@ class TestMdsMemoryAlerts(E2ETest):
             "Metadata IO started in the background. Script will look for the MDS alert now."
         )
         assert self.active_mds_alert_values(threading_lock)
+
         sr_mds = cluster.get_mds_standby_replay_info()["mds_daemon"]
         deployment_name = "rook-ceph-mds-" + sr_mds
+        sr_mds_pod = cluster.get_mds_standby_replay_info()["standby_replay_pod"]
         helpers.modify_deployment_replica_count(
             deployment_name=deployment_name, replica_count=0
         )
-        log.info(
-            f" Script will be in sleep for {scale_timer}  seconds to make sure standby-replay mds scale down completed."
-        )
-        time.sleep(scale_timer)
+        POD_OBJ.wait_for_delete(resource_name=sr_mds_pod)
         helpers.modify_deployment_replica_count(
             deployment_name=deployment_name, replica_count=1
         )
+        time.sleep(timer)
+        mds_pods = cluster.get_mds_pods()
+        for pod in mds_pods:
+            helpers.wait_for_resource_state(resource=pod, state=state)
+
         assert self.active_mds_alert_values(threading_lock)
 
     @pytest.mark.polarion_id("OCS-5579")
@@ -284,21 +295,35 @@ class TestMdsMemoryAlerts(E2ETest):
         active_mds = cluster.get_active_mds_info()["mds_daemon"]
         sr_mds = cluster.get_mds_standby_replay_info()["mds_daemon"]
         active_mds_dc = "rook-ceph-mds-" + active_mds
+        sr_mds_dc = "rook-ceph-mds-" + sr_mds
+        active_mds_pod = cluster.get_active_mds_info()["active_pod"]
+        sr_mds_pod = cluster.get_mds_standby_replay_info()["standby_replay_pod"]
+        mds_dc_pods = [active_mds_dc, sr_mds_dc]
+
         log.info(f"Scale down {active_mds_dc} to 0")
         helpers.modify_deployment_replica_count(
             deployment_name=active_mds_dc, replica_count=0
         )
-        sr_mds_dc = "rook-ceph-mds-" + sr_mds
+        POD_OBJ.wait_for_delete(resource_name=active_mds_pod)
+
         log.info(f"Scale down {sr_mds_dc} to 0")
         helpers.modify_deployment_replica_count(
             deployment_name=sr_mds_dc, replica_count=0
         )
+        POD_OBJ.wait_for_delete(resource_name=sr_mds_pod)
+
+        for mds_pod_obj in mds_dc_pods:
+            log.info(f"Scale up {mds_pod_obj} to 1")
+            helpers.modify_deployment_replica_count(
+                deployment_name=mds_pod_obj, replica_count=1
+            )
         log.info(
-            f" Script will be in sleep for {scale_timer} seconds to make sure both mds scale down completed."
+            f" Script will be in sleep for {timer} seconds to make sure both mds scale up completed."
         )
-        time.sleep(scale_timer)
-        mds = [active_mds_dc, sr_mds_dc]
-        for i in mds:
-            log.info(f"Scale up {i} to 1")
-            helpers.modify_deployment_replica_count(deployment_name=i, replica_count=1)
+        time.sleep(timer)
+
+        mds_pods = cluster.get_mds_pods()
+        for pod in mds_pods:
+            helpers.wait_for_resource_state(resource=pod, state=state)
+
         assert self.active_mds_alert_values(threading_lock)
