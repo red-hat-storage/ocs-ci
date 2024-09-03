@@ -212,6 +212,7 @@ class TestNonOCSTaintAndTolerations(E2ETest):
                 pod.delete(wait=False)
 
         logger.info("After edit noticed few pod respins as expected")
+        time.sleep(180)
         assert wait_for_pods_to_be_running(timeout=900, sleep=15)
 
         logger.info(
