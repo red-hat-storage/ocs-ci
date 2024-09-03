@@ -1137,8 +1137,6 @@ acm_configuration_4_16 = {
         "(//span[@class='pf-v5-c-menu__item-text'][normalize-space()='busybox-1'])[2]",
         By.XPATH,
     ),
-    "disaster-recovery": ("Disaster recovery", By.LINK_TEXT),
-    "policies": ("//a[normalize-space()='Policies']", By.XPATH),
 }
 
 add_capacity = {

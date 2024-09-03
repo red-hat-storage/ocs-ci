@@ -72,7 +72,6 @@ class TestMultipleApplicationFailoverAndRelocate:
         Test to deploy applications on both the managed clusters and test Failover and Relocate actions on them
 
         """
-        self.workload_namespaces = []
 
         acm_obj = AcmAddClusters()
         primary_instances = []

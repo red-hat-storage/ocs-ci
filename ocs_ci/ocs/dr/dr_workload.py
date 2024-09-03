@@ -206,7 +206,6 @@ class BusyBox(DRWorkload):
 
         """
         self._deploy_prereqs()
-        workload_namespaces = []
 
         # By default, it deploys apps on primary cluster if not set to false
         clusters = [self.preferred_primary_cluster] if primary_cluster else []
@@ -315,8 +314,6 @@ class BusyBox(DRWorkload):
                 git_kustomization_yaml_data, self.git_repo_kustomization_yaml_file
             )
 
-            workload_namespaces.append(self._get_workload_namespace())
-
             # Create the resources on Hub cluster
             config.switch_acm_ctx()
             run_cmd(f"oc create -k {self.workload_subscription_dir}")
@@ -402,9 +399,6 @@ class BusyBox(DRWorkload):
         backend_volumes = dr_helpers.get_backend_volumes_for_pvcs(
             self.workload_namespace
         )
-        ramen_ns = self.get_ramen_namespace()
-        self.workload_namespace = self._get_workload_namespace()
-        image_uuids = dr_helpers.get_image_uuids(self.workload_namespace)
 
         # Skipping drpc.yaml deletion since DRPC is automatically removed.
         kustomization_yaml_file = os.path.join(
@@ -420,7 +414,7 @@ class BusyBox(DRWorkload):
         try:
             config.switch_ctx(switch_ctx) if switch_ctx else config.switch_acm_ctx()
             run_cmd(
-                f"oc delete -k {self.workload_subscription_dir}/{self.workload_name} -n {self.workload_namespace}"
+                f"oc delete -k {self.workload_subscription_dir}/{self.workload_name}"
             )
 
             for cluster in get_non_acm_cluster_config():
@@ -449,7 +443,7 @@ class BusyBox(DRWorkload):
 
         finally:
             config.switch_ctx(switch_ctx) if switch_ctx else config.switch_acm_ctx()
-            run_cmd(f"oc delete -k {self.workload_subscription_dir} -n {ramen_ns}")
+            run_cmd(f"oc delete -k {self.workload_subscription_dir}")
 
 
 class BusyBox_AppSet(DRWorkload):

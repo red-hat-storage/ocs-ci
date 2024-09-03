@@ -6751,12 +6751,15 @@ def dr_workloads_on_managed_clusters(request, setup_acm_ui):
 
     def teardown():
         acm_obj = AcmAddClusters()
-        instances = [primary_cluster_instances, secondary_cluster_instances]
-        for instance in instances:
-            for workload in instance:
-                dr_helpers_ui.delete_application_ui(
-                    acm_obj, workload_to_delete=workload.app_name
-                )
+        managed_cluster_instances = [
+            primary_cluster_instances,
+            secondary_cluster_instances,
+        ]
+        app_list = []
+        for cluster_instances in managed_cluster_instances:
+            for apps in cluster_instances:
+                app_list.append(apps.app_name)
+        dr_helpers_ui.delete_application_ui(acm_obj, workloads_to_delete=app_list)
 
     request.addfinalizer(teardown)
     return factory
