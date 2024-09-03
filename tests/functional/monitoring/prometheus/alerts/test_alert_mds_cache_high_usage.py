@@ -28,9 +28,8 @@ from ocs_ci.utility import prometheus
 log = logging.getLogger(__name__)
 
 
-timer = (
-    60  # sleep timer (in seconds) for scale up, resource deletion & alert verification
-)
+# sleep timer (in seconds) for scale up, resource deletion & alert verification
+timer = 60
 POD_OBJ = OCP(kind=constants.POD, namespace=config.ENV_DATA["cluster_namespace"])
 state = constants.STATUS_RUNNING
 
