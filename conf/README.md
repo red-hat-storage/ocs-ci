@@ -329,6 +329,8 @@ higher priority).
 * `ceph_threshold_backfill_full_ratio` - Configure backfillFullRatio the ceph osd full thresholds value in the StorageCluster CR.
 * `ceph_threshold_full_ratio` - Configure fullRatio the ceph osd full thresholds value in the StorageCluster CR.
 * `ceph_threshold_near_full_ratio` - Configure nearFullRatio the ceph osd full thresholds value in the StorageCluster CR.
+* `restrict_ssh_access_to_nodes` - Deploy and configure Ingress Node Firewall Operator to restrict SSH access to nodes.
+* `allow_ssh_access_from_subnets` - Defines a list of subnets wit allowed SSH access to nodes.
 
 #### UPGRADE
 
