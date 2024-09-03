@@ -662,7 +662,7 @@ class ValidationUI(PageNavigator):
             strings_on_page=strings_storage_clients_tab, page_name="storage clients"
         )
         self.do_click(
-            self.validation_loc["generate_client_onboarding_ticket"],
+            self.storage_clients_loc["generate_client_onboarding_ticket"],
             enable_screenshot=True,
         )
         # Starting from ODF 4.17 custom storage amount select option is available
