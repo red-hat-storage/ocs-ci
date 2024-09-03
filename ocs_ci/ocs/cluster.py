@@ -3219,7 +3219,7 @@ def client_cluster_health_check():
     """
     wait_for_cluster_connectivity(tries=120, delay=5)
     logger.info("Checking the cluster health")
-    wait_for_nodes_status(timeout=300, sleep=10)
+    wait_for_nodes_status(timeout=420, sleep=10)
 
     logger.info("Checking that there are no extra Ceph pods on the cluster")
     mon_pods = pod.get_mon_pods()

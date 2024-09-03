@@ -60,6 +60,7 @@ from ocs_ci.utility.utils import (
     run_cmd,
     get_module_ip,
     get_terraform_ignition_provider,
+    get_client_type_by_name,
 )
 from ocs_ci.ocs.node import (
     wait_for_nodes_status,
@@ -97,9 +98,11 @@ class PlatformNodesFactory:
             "vsphere_upi": VMWareUPINodes,
             "fusion_aas": AWSNodes,
             "hci_baremetal": IBMCloudBMNodes,
+            "kubevirt_vm": KubevirtVMNodes,
         }
 
     def get_nodes_platform(self):
+        cluster_name = config.ENV_DATA.get("cluster_name")
         platform = config.ENV_DATA["platform"]
         if platform == constants.VSPHERE_PLATFORM:
             deployment_type = config.ENV_DATA["deployment_type"]
@@ -107,6 +110,12 @@ class PlatformNodesFactory:
                 platform += "_lso"
             elif deployment_type in ("ipi", "upi"):
                 platform += f"_{deployment_type}"
+        elif (
+            config.hci_client_exist()
+            and get_client_type_by_name(cluster_name)
+            == constants.HOSTED_CLUSTER_KUBEVIRT
+        ):
+            platform = "kubevirt_vm"
 
         return self.cls_map[platform]()
 
@@ -3235,3 +3244,104 @@ class IBMCloudBMNodes(NodesBase):
 
         """
         raise NotImplementedError("terminate nodes functionality is not implemented")
+
+
+class KubevirtVMNodes(NodesBase):
+    """
+    KubeVirt VM Nodes class
+
+    """
+
+    def __init__(self, cluster_name=None):
+        super(KubevirtVMNodes, self).__init__()
+        from ocs_ci.utility import kubevirt_vm
+
+        cluster_name = cluster_name or config.ENV_DATA["cluster_name"]
+        self.kubevirt_vm = kubevirt_vm.KubevirtVM(cluster_name)
+
+    def get_kubevirt_vms(self, nodes):
+        """
+        Get the kubevirt VMs associated with the given nodes
+
+        Args:
+            nodes (list): The OCS objects of the nodes
+
+        Returns:
+            list: List of dictionaries. List of the kubevirt VMs associated with the given nodes
+
+        """
+        node_names = [n.name for n in nodes]
+        return self.kubevirt_vm.get_kubevirt_vms_by_names(node_names)
+
+    def stop_nodes(self, nodes, wait=True):
+        """
+        Stop nodes
+
+        Args:
+            nodes (list): The OCS objects of the nodes
+            wait (bool): If True, wait for the nodes to be in a NotReady state. False, otherwise
+
+        """
+        vms = self.get_kubevirt_vms(nodes)
+        self.kubevirt_vm.stop_kubevirt_vms(vms, wait=wait)
+
+    def start_nodes(self, nodes, wait=True):
+        """
+        Start nodes
+
+        Args:
+            nodes (list): The OCS objects of the nodes
+            wait (bool): If True, wait for the nodes to be ready. False, otherwise
+
+        """
+        vms = self.get_kubevirt_vms(nodes)
+        self.kubevirt_vm.start_kubevirt_vms(vms, wait=wait)
+
+    def restart_nodes(self, nodes, wait=True):
+        """
+        Restart nodes
+
+        Args:
+            nodes (list): The OCS objects of the nodes
+            wait (bool): If True, wait for the nodes to be ready. False, otherwise
+
+        """
+        vms = self.get_kubevirt_vms(nodes)
+        self.kubevirt_vm.restart_kubevirt_vms(vms, wait=wait)
+
+    def restart_nodes_by_stop_and_start(self, nodes, wait=True, force=True):
+        """
+        Restart the nodes by stop and start
+
+        Args:
+            nodes (list): The OCS objects of the nodes
+            wait (bool): If True, wait for the nodes to be ready. False, otherwise.
+            force (bool): If True, it will force restarting the nodes. False, otherwise.
+                Default value is True.
+
+        """
+        vms = self.get_kubevirt_vms(nodes)
+        self.kubevirt_vm.restart_kubevirt_vms_by_stop_and_start(
+            vms, wait=wait, force=force
+        )
+
+    def restart_nodes_by_stop_and_start_teardown(self):
+        """
+        Start the nodes in a NotReady state
+
+        """
+        self.kubevirt_vm.restart_kubevirt_vms_by_stop_and_start_teardown()
+
+    def create_nodes(self, node_conf, node_type, num_nodes):
+        """
+        Create nodes
+
+        """
+        raise NotImplementedError("Create nodes functionality not implemented")
+
+    def terminate_nodes(self, nodes, wait=True):
+        """
+        Terminate nodes
+
+        """
+        raise NotImplementedError("Terminate nodes functionality not implemented")

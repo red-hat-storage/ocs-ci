@@ -14,7 +14,7 @@ from ocs_ci.framework.testlib import (
     polarion_id,
 )
 from ocs_ci.ocs import constants
-from ocs_ci.ocs.constants import HCI_PROVIDER
+from ocs_ci.ocs.constants import HCI_PROVIDER, HCI_CLIENT
 from ocs_ci.ocs.exceptions import ResourceWrongStatusException
 from ocs_ci.ocs.node import (
     get_node_objs,
@@ -32,6 +32,7 @@ from ocs_ci.ocs.resources import pod
 from ocs_ci.helpers.sanity_helpers import SanityProviderMode
 from ocs_ci.ocs.cluster import (
     ceph_health_check,
+    client_cluster_health_check,
 )
 from ocs_ci.framework import config
 from ocs_ci.utility.utils import switch_to_correct_cluster_at_setup
@@ -378,3 +379,65 @@ class TestNodesRestartHCI(ManageTest):
         logger.info(f"Starting the MGR node {mgr_node.name}")
         nodes.start_nodes(nodes=[mgr_node], wait=True)
         self.sanity_helpers.health_check_provider_mode(tries=40)
+
+    @tier4a
+    @pytest.mark.parametrize(
+        argnames=["cluster_type", "client_type"],
+        argvalues=[
+            pytest.param(
+                *[HCI_CLIENT, constants.HOSTED_CLUSTER_KUBEVIRT],
+                marks=pytest.mark.polarion_id("OCS-6170"),
+            ),
+            pytest.param(
+                *[HCI_CLIENT, constants.HOSTED_CLUSTER_AGENT],
+                marks=pytest.mark.polarion_id("OCS-6171"),
+            ),
+            pytest.param(
+                *[HCI_CLIENT, constants.NON_HOSTED_CLUSTER],
+                marks=pytest.mark.polarion_id("OCS-6172"),
+            ),
+        ],
+    )
+    def test_client_cluster_nodes_restart(self, cluster_type, client_type, nodes):
+        """
+        Test hosted cluster nodes restart
+
+        """
+        ocp_nodes = get_nodes(node_type=constants.WORKER_MACHINE)[0:2]
+        nodes.restart_nodes(nodes=ocp_nodes, wait=True)
+        client_cluster_health_check()
+        # We can't test create resources on the clients due to the BZ:
+        # https://bugzilla.redhat.com/show_bug.cgi?id=2304799. After the BZ resolves we will add the line:
+        # self.sanity_helpers.create_resources_on_clients(tries=2, delay=30)
+
+    @tier4a
+    @pytest.mark.parametrize(
+        argnames=["cluster_type", "client_type"],
+        argvalues=[
+            pytest.param(
+                *[HCI_CLIENT, constants.HOSTED_CLUSTER_KUBEVIRT],
+                marks=pytest.mark.polarion_id("OCS-6173"),
+            ),
+            pytest.param(
+                *[HCI_CLIENT, constants.HOSTED_CLUSTER_AGENT],
+                marks=pytest.mark.polarion_id("OCS-6174"),
+            ),
+            pytest.param(
+                *[HCI_CLIENT, constants.NON_HOSTED_CLUSTER],
+                marks=pytest.mark.polarion_id("OCS-6175"),
+            ),
+        ],
+    )
+    def test_client_cluster_nodes_restart_by_stop_and_start(
+        self, cluster_type, client_type, nodes
+    ):
+        """
+        Test hosted cluster nodes restart by stop and start
+
+        """
+        ocp_nodes = get_nodes(node_type=constants.WORKER_MACHINE)[0:2]
+        nodes.restart_nodes_by_stop_and_start(nodes=ocp_nodes, wait=True)
+        client_cluster_health_check()
+        # We can't test create resources on the clients due to the BZ:
+        # https://bugzilla.redhat.com/show_bug.cgi?id=2304799. After the BZ resolves we will add the line:
+        # self.sanity_helpers.create_resources_on_clients(tries=2, delay=30)
