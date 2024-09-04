@@ -14,7 +14,6 @@ from ocs_ci.framework.testlib import (
     yellow_squad,
     hci_provider_required,
 )
-from ocs_ci.ocs.ui.validation_ui import ValidationUI
 from ocs_ci.deployment.hosted_cluster import (
     HostedODF,
     HostedClients,
@@ -54,6 +53,8 @@ class TestOnboardingTokenGeneration(ManageTest):
             3. check Generate client onboarding token option is available
             4. user can generate onboarding token by selecting this option.
         """
+        from ocs_ci.ocs.ui.validation_ui import ValidationUI
+
         secret_ocp_obj = ocp.OCP(
             kind=constants.SECRET, namespace=constants.OPENSHIFT_STORAGE_NAMESPACE
         )

@@ -661,7 +661,7 @@ pvc_4_14 = {
 
 storage_clients = {
     "generate_client_onboarding_ticket": (
-        "//button[normalize-space()='Generate client onboarding token']",
+        "//*[@id='content-scrollable']/section/div[1]/div/button[1]]",
         By.XPATH,
     ),
     "onboarding_key": (
