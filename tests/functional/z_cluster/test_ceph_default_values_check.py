@@ -142,8 +142,6 @@ class TestCephDefaultValuesCheck(ManageTest):
     @post_ocs_upgrade
     @skipif_external_mode
     @skipif_mcg_only
-    @bugzilla("1951348")
-    @bugzilla("1944148")
     @pytest.mark.polarion_id("OCS-2554")
     def test_check_mds_cache_memory_limit(self):
         """
