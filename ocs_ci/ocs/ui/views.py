@@ -661,7 +661,7 @@ pvc_4_14 = {
 
 storage_clients = {
     "generate_client_onboarding_ticket": (
-        "//*[@id='content-scrollable']/section/div[1]/div/button[1]]",
+        "//button[text()='Generate client onboarding token']",
         By.XPATH,
     ),
     "onboarding_key": (
@@ -671,7 +671,7 @@ storage_clients = {
     "copy_to_clipboard": ("//button[text()='Copy to clipboard']", By.XPATH),
     "close_token_modal": ("//button[@aria-label='Close']", By.XPATH),
     "generate_token": (
-        "//*[@id='pf-modal-part-4']/div[3]/ul/li/div/div[2]/button",
+        "//button[text()='Generate token']",
         By.XPATH,
     ),
 }
@@ -1783,7 +1783,7 @@ validation_4_17 = {
     "storage_quota_unlimited": ("storage-quota-unlimited", By.ID),
     "storage_quota_custom": ("storage-quota-custom", By.ID),
     "allocate_quota_value": (
-        "//*[@id='pf-modal-part-2']/div[2]/div/div/div[2]/div/div/div[1]/div/div/div[2]/span/input",
+        "//input[@type='number']",
         By.XPATH,
     ),
     "quota_unit_dropdown": ("pf-dropdown-toggle-id-2", By.ID),
