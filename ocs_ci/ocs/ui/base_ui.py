@@ -990,6 +990,8 @@ def login_ui(console_url=None, username=None, password=None):
     )
 
     if hci_platform_conf:
+        logger.info("Adding some sleep time so the page loads successfuly")
+        time.sleep(60)
         dashboard_url = console_url + "/dashboards"
         # proceed to local-cluster page if not already there. The rule is always to start from the local-cluster page
         # when the hci platform is confirmed and proceed to the client if needed from within the test
@@ -1085,7 +1087,7 @@ def navigate_to_local_cluster(**kwargs):
     if "timeout" in kwargs:
         timeout = kwargs["timeout"]
     else:
-        timeout = 30
+        timeout = 60
 
     all_clusters_dropdown = acm_page_loc["all-clusters_dropdown"]
     try:
