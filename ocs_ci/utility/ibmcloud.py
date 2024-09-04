@@ -577,6 +577,10 @@ class IBMCloud(object):
 
 
 class IBMCloudIPI(object):
+    """
+    Wrapper for Ibm Cloud IPI
+
+    """
     def restart_nodes(self, nodes, wait=True, timeout=900):
         """
         Reboot the nodes on IBM Cloud.

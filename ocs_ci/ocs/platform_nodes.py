@@ -3354,7 +3354,7 @@ class KubevirtVMNodes(NodesBase):
 
 class IBMCloudIPI(object):
     """
-    A base class for nodes related operations.
+    An IBM Cloud IPI class for node related operations
     Should be inherited by specific platform classes
     """
 
