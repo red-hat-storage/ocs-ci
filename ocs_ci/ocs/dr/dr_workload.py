@@ -103,7 +103,9 @@ class BusyBox(DRWorkload):
             self.placement_yaml_file = os.path.join(
                 self.workload_subscription_dir, self.workload_name, "placement.yaml"
             )
-            self.workload_pvc_selector = kwargs.get("workload_pvc_selector")
+            self.workload_pvc_selector = workload_details.get(
+                "dr_workload_app_pvc_selector"
+            )
         self.channel_yaml_file = os.path.join(
             self.workload_subscription_dir, "channel.yaml"
         )

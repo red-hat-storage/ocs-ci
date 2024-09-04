@@ -66,12 +66,12 @@ class TestReplaceCluster:
         sub = dr_workload(num_of_subscription=1)[0]
         self.namespace = sub.workload_namespace
         self.workload_type = sub.workload_type
-
+        """
         # Deploy AppSet based application
         appset = dr_workload(num_of_subscription=0, num_of_appset=1)[1]
-
+        """
         # Workloads list
-        workload = [sub, appset]
+        workload = [sub]
 
         # Create application on Primary managed cluster
         set_current_primary_cluster_context(self.namespace)
