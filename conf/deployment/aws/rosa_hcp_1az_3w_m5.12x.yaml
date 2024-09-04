@@ -1,6 +1,10 @@
 DEPLOYMENT:
   allow_lower_instance_requirements: false
   sts_enabled: true
+  force_download_ocm_cli: true
+  force_download_rosa_cli: true
+  ocm_cli_version: '0.1.67'
+  rosa_cli_version: '1.2.44'
 RUN:
   username: 'cluster-admin'
 ENV_DATA:
@@ -15,5 +19,3 @@ ENV_DATA:
   private_link: false
   machine_cidr: "10.0.0.0/16"
   ms_env_type: "staging"
-  force_download_ocm_cli: true
-  force_download_rosa_cli: true
