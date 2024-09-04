@@ -1,4 +1,5 @@
 import logging
+import pytest
 
 from ocs_ci.ocs.resources import pod
 from ocs_ci.ocs import constants, ocp
@@ -28,8 +29,20 @@ from ocs_ci.utility.utils import (
 )
 from ocs_ci.ocs.ocp import OCP
 from ocs_ci.ocs.ui.validation_ui import ValidationUI
+from ocs_ci.ocs.ui.base_ui import login_ui, close_browser
 
 log = logging.getLogger(__name__)
+
+
+@pytest.fixture(scope="class")
+def setup_ui_class(request):
+    driver = login_ui()
+
+    def finalizer():
+        close_browser()
+
+    request.addfinalizer(finalizer)
+    return driver
 
 
 @tier4c
@@ -39,9 +52,10 @@ log = logging.getLogger(__name__)
 @skipif_external_mode
 @runs_on_provider
 @skipif_managed_service
+@pytest.mark.usefixtures("setup_ui_class")
 class TestOnboardingTokenGeneration(ManageTest):
     def test_onboarding_token_generation_option_is_available_in_ui(
-        self, setup_ui_class_factory
+        self,
     ):
         """
         Test to verify storage-->storage clients-->Generate client onboarding token
@@ -54,7 +68,6 @@ class TestOnboardingTokenGeneration(ManageTest):
             3. check Generate client onboarding token option is available
             4. user can generate onboarding token by selecting this option.
         """
-        setup_ui_class_factory()
         secret_ocp_obj = ocp.OCP(
             kind=constants.SECRET, namespace=constants.OPENSHIFT_STORAGE_NAMESPACE
         )
