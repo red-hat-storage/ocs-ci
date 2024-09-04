@@ -289,13 +289,21 @@ class TestNodesRestartHCI(ManageTest):
         self.sanity_helpers.create_resources_on_clients()
 
     @tier4a
-    @polarion_id("OCS-5802")
     @pytest.mark.parametrize(
-        "cluster_type",
-        [HCI_PROVIDER],
+        argnames=["cluster_type", "onboard_new_client"],
+        argvalues=[
+            pytest.param(
+                *[HCI_PROVIDER, False],
+                marks=pytest.mark.polarion_id("OCS-5802"),
+            ),
+            pytest.param(
+                *[HCI_PROVIDER, True],
+                marks=pytest.mark.polarion_id("OCS-6187"),
+            ),
+        ],
     )
     def test_stop_provider_endpoint_node_and_check_client_connection(
-        self, cluster_type, nodes
+        self, cluster_type, onboard_new_client, nodes, create_hypershift_clusters
     ):
         """
         Test stop the provider storage endpoint node and check the client connection is successfully
@@ -305,9 +313,10 @@ class TestNodesRestartHCI(ManageTest):
         and stop the provider endpoint node.
         3. Verify the client storage-client is connected to the provider.
         4. Try to create and delete resources from the client/s.
-        5. Start the provider endpoint node
-        6. Check the cluster health is ok for the provider and clients.
-        7. Check the client storage endpoint ip.
+        5. If 'onboard_new_client' is True, try to onboard a new client.
+        6. Start the provider endpoint node.
+        7. Check the cluster health is ok for the provider and clients.
+        8. Check the client storage endpoint ip.
 
         """
         logger.info("Get the 'storageProviderEndpoint' node")
@@ -330,6 +339,9 @@ class TestNodesRestartHCI(ManageTest):
         logger.info("Check again that the client connection is OK")
         switch_to_client_for_function(wait_for_storage_client_connected)(timeout=120)
 
+        if onboard_new_client:
+            create_hypershift_clusters()
+
         logger.info(f"Starting the endpoint node {endpoint_node.name}")
         nodes.start_nodes(nodes=[endpoint_node], wait=True)
         self.sanity_helpers.health_check_provider_mode(tries=40)
@@ -343,13 +355,21 @@ class TestNodesRestartHCI(ManageTest):
         )
 
     @tier4a
-    @polarion_id("OCS-5803")
     @pytest.mark.parametrize(
-        "cluster_type",
-        [HCI_PROVIDER],
+        argnames=["cluster_type", "onboard_new_client"],
+        argvalues=[
+            pytest.param(
+                *[HCI_PROVIDER, False],
+                marks=pytest.mark.polarion_id("OCS-5803"),
+            ),
+            pytest.param(
+                *[HCI_PROVIDER, True],
+                marks=pytest.mark.polarion_id("OCS-6188"),
+            ),
+        ],
     )
     def test_stop_provider_mgr_node_and_check_client_connection(
-        self, cluster_type, nodes
+        self, cluster_type, onboard_new_client, nodes, create_hypershift_clusters
     ):
         """
         Test stop the provider MGR node and check the client connection is successfully
@@ -358,8 +378,9 @@ class TestNodesRestartHCI(ManageTest):
         2. Stop the MGR node.
         3. Verify the client storage-client is connected to the provider.
         4. Try to create and delete resources from the client/s.
-        5. Start the MGR node
-        6. Check the cluster health is ok for the provider and clients.
+        5. If 'onboard_new_client' is True, try to onboard a new client.
+        7. Start the MGR node.
+        8. Check the cluster health is ok for the provider and clients.
 
         """
         mgr_pod = random.choice(pod.get_mgr_pods())
@@ -375,6 +396,9 @@ class TestNodesRestartHCI(ManageTest):
         self.sanity_helpers.delete_resources_on_clients()
         logger.info("Check again that the client connection is OK")
         switch_to_client_for_function(wait_for_storage_client_connected)(timeout=120)
+
+        if onboard_new_client:
+            create_hypershift_clusters()
 
         logger.info(f"Starting the MGR node {mgr_node.name}")
         nodes.start_nodes(nodes=[mgr_node], wait=True)

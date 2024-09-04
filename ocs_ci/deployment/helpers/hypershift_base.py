@@ -1,9 +1,7 @@
 import logging
 import os
-import random
 import re
 import shutil
-import string
 import tempfile
 import time
 from datetime import datetime
@@ -17,7 +15,12 @@ from ocs_ci.ocs.ocp import OCP
 from ocs_ci.ocs.resources.pod import wait_for_pods_to_be_in_statuses_concurrently
 from ocs_ci.ocs.version import get_ocp_version
 from ocs_ci.utility.retry import retry
-from ocs_ci.utility.utils import exec_cmd, TimeoutSampler, get_latest_release_version
+from ocs_ci.utility.utils import (
+    exec_cmd,
+    TimeoutSampler,
+    get_latest_release_version,
+    get_random_str,
+)
 from ocs_ci.utility.decorators import switch_to_orig_index_at_last
 from ocs_ci.ocs.utils import get_namespce_name_by_pattern
 
@@ -80,9 +83,7 @@ def get_random_hosted_cluster_name():
     hcp_version = "".join([c for c in ocp_version if c.isdigit()][:3])
     match = re.search(r"\d+$", bm_name)
     if match:
-        random_letters = "".join(
-            random.choice(string.ascii_lowercase) for _ in range(3)
-        )
+        random_letters = get_random_str(size=5)
         cluster_name = (
             "hcp"
             + hcp_version
