@@ -35,7 +35,7 @@ from ocs_ci.framework.pytest_customization.marks import (
 )
 from ocs_ci.helpers.proxy import update_container_with_proxy_env
 from ocs_ci.ocs import constants, defaults, fio_artefacts, node, ocp, platform_nodes
-from ocs_ci.ocs.acm.acm import login_to_acm
+from ocs_ci.ocs.acm.acm import login_to_acm, AcmAddClusters
 from ocs_ci.ocs.awscli_pod import create_awscli_pod, awscli_pod_cleanup
 from ocs_ci.ocs.benchmark_operator_fio import get_file_size, BenchmarkOperatorFIO
 from ocs_ci.ocs.bucket_utils import (
@@ -155,7 +155,7 @@ from ocs_ci.utility.utils import (
     ceph_health_check_multi_storagecluster_external,
     clone_repo,
 )
-from ocs_ci.helpers import helpers, dr_helpers
+from ocs_ci.helpers import helpers, dr_helpers, dr_helpers_ui
 from ocs_ci.helpers.helpers import (
     create_unique_resource_name,
     create_ocs_object_from_kind_and_name,
@@ -4962,7 +4962,7 @@ def setup_ui_fixture(request):
     return driver
 
 
-@pytest.fixture(scope="function")
+@pytest.fixture(scope="session")
 def setup_acm_ui(request):
     return setup_acm_ui_fixture(request)
 
@@ -6677,6 +6677,89 @@ def dr_workload(request):
             raise ResourceNotDeleted(
                 f"Deletion failed for the workload in following namespaces: {failed_to_delete}"
             )
+
+    request.addfinalizer(teardown)
+    return factory
+
+
+@pytest.fixture(scope="class")
+def dr_workloads_on_managed_clusters(request, setup_acm_ui):
+    """
+    Deploying subscription apps on both primary and secondary managed clusters
+    """
+
+    primary_cluster_instances = []
+    secondary_cluster_instances = []
+
+    def factory(
+        num_of_subscription=1,
+        pvc_interface=constants.CEPHBLOCKPOOL,
+        primary_cluster=None,
+        secondary_cluster=None,
+    ):
+        """
+        Args:
+            num_of_subscription (int): Number of Subscription type workload to be created on each cluster
+            pvc_interface (str): 'CephBlockPool' or 'CephFileSystem'.
+                This decides whether a RBD based or CephFS based resource is created. RBD is default
+            primary_cluster (bool): True if apps to be deployed on primary cluster, false otherwise
+            secondary_cluster (bool): True if apps to be deployed on secondary cluster, false otherwise
+
+        Returns:
+            primary_cluster_instances (list): objects of subscription workload class on primary
+            secondary_cluster_instances (list): objects of subscription workload class on secondary
+
+        """
+        total_pvc_count = 0
+        workload_key = "dr_workload_subscription"
+        if pvc_interface == constants.CEPHFILESYSTEM:
+            workload_key = "dr_workload_subscription_cephfs"
+
+        if primary_cluster:
+            for index in range(num_of_subscription):
+                workload_details = ocsci_config.ENV_DATA[workload_key][index]
+
+                workload = BusyBox(
+                    workload_details=workload_details,
+                    workload_dir=workload_details["workload_dir"],
+                    workload_pod_count=workload_details["pod_count"],
+                    workload_pvc_count=workload_details["pvc_count"],
+                )
+                primary_cluster_instances.append(workload)
+                total_pvc_count += workload_details["pvc_count"]
+                workload.deploy_workloads_on_managed_clusters(
+                    primary_cluster=primary_cluster, secondary_cluster=None
+                )
+
+        if secondary_cluster:
+            for index in range(num_of_subscription):
+                workload_details = ocsci_config.ENV_DATA[workload_key][index]
+
+                workload = BusyBox(
+                    workload_details=workload_details,
+                    workload_dir=workload_details["workload_dir"],
+                    workload_pod_count=workload_details["pod_count"],
+                    workload_pvc_count=workload_details["pvc_count"],
+                )
+                secondary_cluster_instances.append(workload)
+                total_pvc_count += workload_details["pvc_count"]
+                workload.deploy_workloads_on_managed_clusters(
+                    primary_cluster=None, secondary_cluster=secondary_cluster
+                )
+
+        return primary_cluster_instances, secondary_cluster_instances
+
+    def teardown():
+        acm_obj = AcmAddClusters()
+        managed_cluster_instances = [
+            primary_cluster_instances,
+            secondary_cluster_instances,
+        ]
+        app_list = []
+        for cluster_instances in managed_cluster_instances:
+            for apps in cluster_instances:
+                app_list.append(apps.app_name)
+        dr_helpers_ui.delete_application_ui(acm_obj, workloads_to_delete=app_list)
 
     request.addfinalizer(teardown)
     return factory
