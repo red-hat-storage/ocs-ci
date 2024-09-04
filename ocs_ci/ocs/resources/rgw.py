@@ -58,7 +58,11 @@ class RGW(object):
             cephobjectstore = cos_ocp_obj.get(
                 resource_name=constants.RGW_ROUTE_EXTERNAL_MODE
             )
-            endpoint = cephobjectstore["status"]["endpoints"]["insecure"][0]
+            ep_lists = cephobjectstore["status"]["endpoints"]
+            endpoint = next(
+                iter(ep_lists.get("insecure", []) or ep_lists.get("secure", [])), None
+            )
+
         else:
             route_ocp_obj = OCP(
                 kind=constants.ROUTE, namespace=config.ENV_DATA["cluster_namespace"]
