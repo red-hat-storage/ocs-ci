@@ -481,9 +481,10 @@ class MultiClusterConfig:
             primary_index = primary_config.MULTICLUSTER.get("multicluster_index")
             super().__init__(primary_index)
 
-    class RunWithProviderConfigContext(RunWithConfigContext):
+    class RunWithProviderConfigContextIfAvailable(RunWithConfigContext):
         """
         Context manager that makes sure that a given code block is executed on Provider.
+        If Provider config is not available then run with current config context.
         """
 
         def __init__(self):
@@ -496,9 +497,10 @@ class MultiClusterConfig:
                 switch_index = config.cur_index
             super().__init__(switch_index)
 
-    class RunWithFirstConsumerConfigContext(RunWithConfigContext):
+    class RunWithFirstConsumerConfigContextIfAvailable(RunWithConfigContext):
         """
         Context manager that makes sure that a given code block is executed on First consumer.
+        If Consumer config is not available then run with current config context.
         """
 
         def __init__(self):

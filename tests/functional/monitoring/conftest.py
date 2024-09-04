@@ -1151,7 +1151,7 @@ def measure_change_client_ocs_version_and_stop_heartbeat(
 
     """
     logger.info("Switch to client cluster")
-    with config.RunWithFirstConsumerConfigContext():
+    with config.RunWithFirstConsumerConfigContextIfAvailable():
         client_cluster = config.cluster_ctx.MULTICLUSTER["multicluster_index"]
         logger.info(f"Client cluster key: {client_cluster}")
         cluster_id = exec_cmd(
