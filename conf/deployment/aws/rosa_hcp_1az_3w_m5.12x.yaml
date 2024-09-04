@@ -1,5 +1,6 @@
 DEPLOYMENT:
   allow_lower_instance_requirements: false
+  sts_enabled: true
 RUN:
   username: 'cluster-admin'
 ENV_DATA:
@@ -11,9 +12,8 @@ ENV_DATA:
   worker_replicas: 3
   worker_instance_type: 'm5.12xlarge'
   cluster_namespace: "odf-storage"
-  private_link: False
+  private_link: false
   machine_cidr: "10.0.0.0/16"
   ms_env_type: "staging"
-  sts_enabled: True
-  force_download_ocm_cli: True
-  force_download_rosa_cli: True
+  force_download_ocm_cli: true
+  force_download_rosa_cli: true

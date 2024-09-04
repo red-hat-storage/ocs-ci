@@ -1070,6 +1070,20 @@ class Deployment(object):
             setup_local_storage(storageclass=self.DEFAULT_STORAGECLASS_LSO)
 
         logger.info("Creating namespace and operator group.")
+        # patch OLM YAML with the namespace
+        olm_ns_op_group_data = list(templating.load_yaml(constants.OLM_YAML, True))
+
+        if self.namespace != constants.OPENSHIFT_STORAGE_NAMESPACE:
+
+            for cr in olm_ns_op_group_data:
+                if cr["kind"] == "Namespace":
+                    cr["metadata"]["name"] = self.namespace
+                elif cr["kind"] == "OperatorGroup":
+                    cr["metadata"]["namespace"] = self.namespace
+                    cr["spec"]["targetNamespaces"] = [self.namespace]
+
+            templating.dump_data_to_temp_yaml(olm_ns_op_group_data, constants.OLM_YAML)
+
         run_cmd(f"oc create -f {constants.OLM_YAML}")
 
         # Create Multus Networks
@@ -1235,8 +1249,16 @@ class Deployment(object):
                     replace_to=config.DEPLOYMENT["csv_change_to"],
                 )
 
+        # change namespace of storage system if needed
+        storage_system_data = templating.load_yaml(constants.STORAGE_SYSTEM_ODF_YAML)
+        storage_system_data["metadata"]["namespace"] = self.namespace
+        storage_system_data["spec"]["namespace"] = self.namespace
+
         # create storage system
         if ocs_version >= version.VERSION_4_9:
+            templating.dump_data_to_temp_yaml(
+                storage_system_data, constants.STORAGE_SYSTEM_ODF_YAML
+            )
             exec_cmd(f"oc apply -f {constants.STORAGE_SYSTEM_ODF_YAML}")
 
         ocp_version = version.get_semantic_ocp_version_from_config()
@@ -1321,6 +1343,7 @@ class Deployment(object):
             cluster_data["spec"]["storageDeviceSets"][0]["replica"] = 4
 
         cluster_data["metadata"]["name"] = config.ENV_DATA["storage_cluster_name"]
+        cluster_data["metadata"]["namespace"] = self.namespace
 
         deviceset_data = cluster_data["spec"]["storageDeviceSets"][0]
         device_size = int(config.ENV_DATA.get("device_size", defaults.DEVICE_SIZE))

@@ -135,12 +135,13 @@ def create_cluster(cluster_name, version, region):
         cmd += " --private-link "
 
     if rosa_hcp:
+        # with rosa hcp we need operator roles to be created before cluster creation
         prefix = f"operatorRoles{cluster_name}"
         create_operator_roles(cluster_name, prefix)
         cmd += f" --operator-roles-prefix {prefix} "
 
     utils.run_cmd(cmd, timeout=1200)
-    if rosa_mode != "auto":
+    if rosa_mode != "auto" and not rosa_hcp:
         logger.info(
             "Waiting for ROSA cluster status changed to waiting or pending state"
         )
