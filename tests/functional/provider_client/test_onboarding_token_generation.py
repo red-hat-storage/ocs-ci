@@ -27,7 +27,6 @@ from ocs_ci.ocs.resources.catalog_source import get_odf_tag_from_redhat_catsrc
 from ocs_ci.utility.utils import (
     get_latest_release_version,
 )
-from ocs_ci.framework import config as ocsci_config
 from ocs_ci.ocs.ocp import OCP
 
 log = logging.getLogger(__name__)
@@ -108,7 +107,7 @@ class TestOnboardingTokenGeneration(ManageTest):
         )
 
         log.info("Switch to the hosted cluster")
-        ocsci_config.switch_to_cluster_by_name(cluster_name)
+        config.switch_to_cluster_by_name(cluster_name)
 
         server = str(OCP().exec_oc_cmd("whoami --show-server", out_yaml_format=False))
 
@@ -158,7 +157,7 @@ class TestOnboardingTokenGeneration(ManageTest):
         )
 
         log.info("Switch to the hosted cluster")
-        ocsci_config.switch_to_cluster_by_name(cluster_name)
+        config.switch_to_cluster_by_name(cluster_name)
 
         server = str(OCP().exec_oc_cmd("whoami --show-server", out_yaml_format=False))
 
