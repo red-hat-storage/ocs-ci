@@ -27,6 +27,7 @@ from ocs_ci.utility.utils import (
     get_latest_release_version,
 )
 from ocs_ci.ocs.ocp import OCP
+from ocs_ci.ocs.ui.validation_ui import ValidationUI
 
 log = logging.getLogger(__name__)
 
@@ -40,7 +41,7 @@ log = logging.getLogger(__name__)
 @skipif_managed_service
 class TestOnboardingTokenGeneration(ManageTest):
     def test_onboarding_token_generation_option_is_available_in_ui(
-        self, setup_ui_class
+        self, setup_ui_class_factory
     ):
         """
         Test to verify storage-->storage clients-->Generate client onboarding token
@@ -53,8 +54,7 @@ class TestOnboardingTokenGeneration(ManageTest):
             3. check Generate client onboarding token option is available
             4. user can generate onboarding token by selecting this option.
         """
-        from ocs_ci.ocs.ui.validation_ui import ValidationUI
-
+        setup_ui_class_factory()
         secret_ocp_obj = ocp.OCP(
             kind=constants.SECRET, namespace=constants.OPENSHIFT_STORAGE_NAMESPACE
         )
