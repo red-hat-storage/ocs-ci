@@ -166,6 +166,7 @@ class OCPDeployment:
         if (
             not self.flexy_deployment
             and config.ENV_DATA["deployment_type"] != "managed"
+            and config.END_DATA.get("platform") != "rosa_hcp"
         ):
             self.create_config()
 

@@ -26,9 +26,11 @@ from ocs_ci.utility.managedservice import (
     generate_onboarding_token,
     get_storage_provider_endpoint,
 )
+from ocs_ci.utility.utils import exec_cmd
 
 logger = logging.getLogger(name=__file__)
 rosa = config.AUTH.get("rosa", {})
+rosa_hcp = config.ENV_DATA.get("platform") == "rosa_hcp"
 
 
 def login():
@@ -66,6 +68,11 @@ def create_cluster(cluster_name, version, region):
         logger.info(f"Using OCP version {rosa_ocp_version}")
 
     create_account_roles()
+    oidc_config_id = None
+    if rosa_hcp:
+        create_oidc_config()
+        oidc_config_id = get_latest_oidc_config_id()
+
     compute_nodes = config.ENV_DATA["worker_replicas"]
     compute_machine_type = config.ENV_DATA["worker_instance_type"]
     multi_az = "--multi-az " if config.ENV_DATA.get("multi_availability_zones") else ""
@@ -75,12 +82,18 @@ def create_cluster(cluster_name, version, region):
     subnet_section_name = "ms_subnet_ids_per_region_" + config.ENV_DATA.get(
         "subnet_type", "default"
     )
+    if rosa_hcp:
+        # For ROSA HCP we have only one subnet id's pair. Hence we can use default subnet id's.
+        subnet_section_name = "rosahcp_subnet_ids_per_region_default"
     cmd = (
         f"rosa create cluster --cluster-name {cluster_name} --region {region} "
         f"--machine-cidr {machine_cidr} --replicas {compute_nodes} "
         f"--compute-machine-type {compute_machine_type} "
         f"--version {rosa_ocp_version} {multi_az}--sts --yes"
     )
+
+    if oidc_config_id:
+        cmd += f" --oidc-config-id {oidc_config_id}"
     if rosa_mode == "auto":
         cmd += " --mode auto"
 
@@ -92,6 +105,17 @@ def create_cluster(cluster_name, version, region):
     # if parameters are not defined then existing byo-vpc will be used
     if config.ENV_DATA.get("subnet_ids", ""):
         subnet_ids = config.ENV_DATA.get("subnet_ids")
+    elif rosa_hcp:
+        # we have only one subnet id's pair, for ROSA HCP we need a pair of public and private subnet-ids
+        # ROSA CLI identifies public vs. private subnets based on routing
+        # in future we may want to change indexes and pick-up approach
+        public_subnet = config.ENV_DATA["rosahcp_subnet_ids_per_region_default"][
+            "us-west-2"
+        ]["public_subnet"].split(",")[0]
+        private_subnet = config.ENV_DATA["rosahcp_subnet_ids_per_region_default"][
+            "us-west-2"
+        ]["private_subnet"].split(",")[0]
+        subnet_ids = f"{public_subnet},{private_subnet}"
     elif config.ENV_DATA.get("vpc_name", ""):
         aws = AWSUtil()
         subnet_ids = ",".join(
@@ -109,6 +133,12 @@ def create_cluster(cluster_name, version, region):
 
     if private_link:
         cmd += " --private-link "
+
+    if rosa_hcp:
+        prefix = f"operatorRoles{cluster_name}"
+        create_operator_roles(cluster_name, prefix)
+        cmd += f" --operator-roles-prefix {prefix} "
+
     utils.run_cmd(cmd, timeout=1200)
     if rosa_mode != "auto":
         logger.info(
@@ -343,20 +373,29 @@ def create_account_roles(prefix="ManagedOpenShift"):
         prefix (str): role prefix
 
     """
-    cmd = f"rosa create account-roles --mode auto" f" --prefix {prefix}  --yes"
+    if config.ENV_DATA.get("platform") == "rosa_hcp":
+        prefix = "RosaHCP"
+        hosted_cp_param = "--hosted-cp"
+    else:
+        hosted_cp_param = ""
+
+    cmd = f"rosa create account-roles {hosted_cp_param} --mode auto --prefix {prefix} --yes"
     utils.run_cmd(cmd, timeout=1200)
 
 
-def create_operator_roles(cluster):
+def create_operator_roles(cluster, prefix=""):
     """
     Create the cluster-specific Operator IAM roles. The roles created include the
     relevant prefix for the cluster name
 
     Args:
         cluster (str): cluster name or cluster id
-
+        prefix (str): role prefix
     """
-    cmd = f"rosa create operator-roles --cluster {cluster}" f" --mode auto --yes"
+
+    cmd = f"rosa create operator-roles --cluster {cluster} --mode auto --yes"
+    if prefix:
+        cmd += f" --prefix {prefix}"
     utils.run_cmd(cmd, timeout=1200)
 
 
@@ -371,6 +410,20 @@ def create_oidc_provider(cluster):
     """
     cmd = f"rosa create oidc-provider --cluster {cluster} --mode auto --yes"
     utils.run_cmd(cmd, timeout=1200)
+
+
+def create_oidc_config():
+    cmd = "rosa create oidc-config --mode=auto --yes"
+    utils.run_cmd(cmd, timeout=1200)
+
+
+def get_latest_oidc_config_id():
+    cmd = "rosa list oidc-config -o json | jq -r 'max_by(.creation_timestamp) | .id'"
+    cmd_res = exec_cmd(cmd, shell=True)
+    if cmd_res.returncode != 0:
+        raise CommandFailed(f"Failed to get latest oidc config id: {cmd_res.stderr}")
+    logger.info(f"Latest OIDC config id: {cmd_res.stdout}")
+    return cmd_res.stdout.strip()
 
 
 def download_rosa_cli():
