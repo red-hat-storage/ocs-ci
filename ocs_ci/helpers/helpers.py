@@ -4213,7 +4213,10 @@ def get_cephfs_subvolumegroup():
         )
         subvolume_group_obj = subvolume_group.get().get("items")[0]
         subvolume_group_name = subvolume_group_obj.get("metadata").get("name")
-    elif config.ENV_DATA.get("cluster_type", "").lower() == constants.HCI_CLIENT:
+    elif (
+        config.ENV_DATA.get("cluster_type", "").lower()
+        == constants.STORAGE_CLIENT_CLUSTER
+    ):
         configmap_obj = ocp.OCP(
             kind=constants.CONFIGMAP,
             namespace=config.ENV_DATA["cluster_namespace"],

@@ -295,7 +295,7 @@ MS_PROVIDER_TYPE = "provider"
 NON_MS_CLUSTER_TYPE = "non_ms"
 
 # HCI cluster types
-HCI_CLIENT = "hci_client"
+STORAGE_CLIENT_CLUSTER = "storage_client_cluster"
 HCI_PROVIDER = "provider"
 # hosted cluster types
 HOSTED_CLUSTER_KUBEVIRT = "kubevirt"

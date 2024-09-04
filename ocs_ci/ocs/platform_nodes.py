@@ -111,7 +111,7 @@ class PlatformNodesFactory:
             elif deployment_type in ("ipi", "upi"):
                 platform += f"_{deployment_type}"
         elif (
-            config.hci_client_exist()
+            config.storage_client_cluster_exist()
             and get_client_type_by_name(cluster_name)
             == constants.HOSTED_CLUSTER_KUBEVIRT
         ):

@@ -1,7 +1,7 @@
 ---
 ENV_DATA:
   platform: 'hci_baremetal'
-  cluster_type: 'hci_client'
+  cluster_type: 'storage_client_cluster'
   cluster_namespace: "openshift-storage-client"
   deployment_type: 'upi'
   worker_replicas: 3

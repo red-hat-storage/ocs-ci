@@ -290,7 +290,7 @@ class CephCluster(object):
             "platform"
         ] in constants.HCI_PC_OR_MS_PLATFORM and config.ENV_DATA["cluster_type"] in [
             constants.MS_CONSUMER_TYPE,
-            constant.HCI_CLIENT,
+            constant.STORAGE_CLIENT_CLUSTER,
         ]:
             # on Managed Service Consumer cluster and HCI Client cluster,
             # check that there are no extra Ceph pods
@@ -2234,7 +2234,7 @@ def is_ms_consumer_cluster():
     )
 
 
-def is_hci_client_cluster():
+def is_storage_client_cluster_cluster():
     """
     Check if the cluster is a Fusion HCI Client cluster
 
@@ -2244,7 +2244,7 @@ def is_hci_client_cluster():
     """
     return (
         config.ENV_DATA["platform"].lower() in constants.HCI_PROVIDER_CLIENT_PLATFORMS
-        and config.ENV_DATA["cluster_type"].lower() == constants.HCI_CLIENT
+        and config.ENV_DATA["cluster_type"].lower() == constants.STORAGE_CLIENT_CLUSTER
     )
 
 

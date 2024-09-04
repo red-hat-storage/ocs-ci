@@ -28,7 +28,7 @@ from ocs_ci.ocs.constants import (
     HPCS_KMS_PROVIDER,
     HCI_PROVIDER_CLIENT_PLATFORMS,
     HCI_PC_OR_MS_PLATFORM,
-    HCI_CLIENT,
+    STORAGE_CLIENT_CLUSTER,
     MS_CONSUMER_TYPE,
     HCI_PROVIDER,
     BAREMETAL_PLATFORMS,
@@ -307,7 +307,7 @@ ms_provider_required = pytest.mark.skipif(
 pc_or_ms_consumer_required = pytest.mark.skipif(
     not (
         config.default_cluster_ctx.ENV_DATA["cluster_type"].lower()
-        in [HCI_CLIENT, MS_CONSUMER_TYPE]
+        in [STORAGE_CLIENT_CLUSTER, MS_CONSUMER_TYPE]
         and config.default_cluster_ctx.ENV_DATA["platform"].lower()
         in HCI_PC_OR_MS_PLATFORM
     ),
@@ -331,11 +331,12 @@ ms_provider_and_consumer_required = pytest.mark.skipif(
     reason="Test runs ONLY on Managed service with provider and consumer clusters",
 )
 
-hci_client_required = pytest.mark.skipif(
+storage_client_cluster_required = pytest.mark.skipif(
     not (
         config.default_cluster_ctx.ENV_DATA["platform"].lower()
         in HCI_PROVIDER_CLIENT_PLATFORMS
-        and config.default_cluster_ctx.ENV_DATA["cluster_type"].lower() == HCI_CLIENT
+        and config.default_cluster_ctx.ENV_DATA["cluster_type"].lower()
+        == STORAGE_CLIENT_CLUSTER
     ),
     reason="Test runs ONLY on Fusion HCI Client cluster",
 )
@@ -352,7 +353,7 @@ hci_provider_and_client_required = pytest.mark.skipif(
     not (
         config.ENV_DATA["platform"].lower() in HCI_PROVIDER_CLIENT_PLATFORMS
         and config.hci_provider_exist()
-        and config.hci_client_exist()
+        and config.storage_client_cluster_exist()
     ),
     reason="Test runs ONLY on Fusion HCI provider and client clusters",
 )
@@ -437,24 +438,25 @@ skipif_hci_provider = pytest.mark.skipif(
     reason="Test will not run on Fusion HCI provider cluster",
 )
 
-skipif_hci_client = pytest.mark.skipif(
+skipif_storage_client_cluster = pytest.mark.skipif(
     config.default_cluster_ctx.ENV_DATA["platform"].lower()
     in HCI_PROVIDER_CLIENT_PLATFORMS
-    and config.default_cluster_ctx.ENV_DATA["cluster_type"].lower() == HCI_CLIENT,
+    and config.default_cluster_ctx.ENV_DATA["cluster_type"].lower()
+    == STORAGE_CLIENT_CLUSTER,
     reason="Test will not run on Fusion HCI client cluster",
 )
 
 skipif_hci_provider_and_client = pytest.mark.skipif(
     config.ENV_DATA["platform"].lower() in HCI_PROVIDER_CLIENT_PLATFORMS
     and config.hci_provider_exist()
-    and config.hci_client_exist(),
+    and config.storage_client_cluster_exist(),
     reason="Test will not run on Fusion HCI provider and Client clusters",
 )
 
 skipif_hci_provider_or_client = pytest.mark.skipif(
     config.ENV_DATA["platform"].lower() in HCI_PROVIDER_CLIENT_PLATFORMS
     or config.hci_provider_exist()
-    or config.hci_client_exist(),
+    or config.storage_client_cluster_exist(),
     reason="Test will not run on Fusion HCI provider or Client clusters",
 )
 

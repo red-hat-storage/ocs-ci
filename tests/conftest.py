@@ -7750,7 +7750,7 @@ def scale_noobaa_resources(request):
 
 
 @pytest.fixture(scope="function")
-def create_scale_pods_and_pvcs_using_kube_job_on_hci_clients(request):
+def create_scale_pods_and_pvcs_using_kube_job_on_storage_client_clusters(request):
     """
     Create scale pods and PVCs using a kube job on HCI clients fixture. This fixture makes use of the
     FioPodScale class to create the expected number of PODs+PVCs.

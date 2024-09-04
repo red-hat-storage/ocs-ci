@@ -14,7 +14,7 @@ from ocs_ci.framework.testlib import (
     polarion_id,
 )
 from ocs_ci.ocs import constants
-from ocs_ci.ocs.constants import HCI_PROVIDER, HCI_CLIENT
+from ocs_ci.ocs.constants import HCI_PROVIDER, STORAGE_CLIENT_CLUSTER
 from ocs_ci.ocs.exceptions import ResourceWrongStatusException
 from ocs_ci.ocs.node import (
     get_node_objs,
@@ -55,7 +55,11 @@ class TestNodesRestartHCI(ManageTest):
     """
 
     @pytest.fixture(autouse=True)
-    def setup(self, request, create_scale_pods_and_pvcs_using_kube_job_on_hci_clients):
+    def setup(
+        self,
+        request,
+        create_scale_pods_and_pvcs_using_kube_job_on_storage_client_clusters,
+    ):
         """
         Initialize Sanity instance, and create pods and PVCs factory
 
@@ -63,7 +67,7 @@ class TestNodesRestartHCI(ManageTest):
         self.orig_index = config.cur_index
         switch_to_correct_cluster_at_setup(request)
         self.sanity_helpers = SanityProviderMode(
-            create_scale_pods_and_pvcs_using_kube_job_on_hci_clients
+            create_scale_pods_and_pvcs_using_kube_job_on_storage_client_clusters
         )
 
     @pytest.fixture(autouse=True)
@@ -385,15 +389,15 @@ class TestNodesRestartHCI(ManageTest):
         argnames=["cluster_type", "client_type"],
         argvalues=[
             pytest.param(
-                *[HCI_CLIENT, constants.HOSTED_CLUSTER_KUBEVIRT],
+                *[STORAGE_CLIENT_CLUSTER, constants.HOSTED_CLUSTER_KUBEVIRT],
                 marks=pytest.mark.polarion_id("OCS-6170"),
             ),
             pytest.param(
-                *[HCI_CLIENT, constants.HOSTED_CLUSTER_AGENT],
+                *[STORAGE_CLIENT_CLUSTER, constants.HOSTED_CLUSTER_AGENT],
                 marks=pytest.mark.polarion_id("OCS-6171"),
             ),
             pytest.param(
-                *[HCI_CLIENT, constants.NON_HOSTED_CLUSTER],
+                *[STORAGE_CLIENT_CLUSTER, constants.NON_HOSTED_CLUSTER],
                 marks=pytest.mark.polarion_id("OCS-6172"),
             ),
         ],
@@ -415,15 +419,15 @@ class TestNodesRestartHCI(ManageTest):
         argnames=["cluster_type", "client_type"],
         argvalues=[
             pytest.param(
-                *[HCI_CLIENT, constants.HOSTED_CLUSTER_KUBEVIRT],
+                *[STORAGE_CLIENT_CLUSTER, constants.HOSTED_CLUSTER_KUBEVIRT],
                 marks=pytest.mark.polarion_id("OCS-6173"),
             ),
             pytest.param(
-                *[HCI_CLIENT, constants.HOSTED_CLUSTER_AGENT],
+                *[STORAGE_CLIENT_CLUSTER, constants.HOSTED_CLUSTER_AGENT],
                 marks=pytest.mark.polarion_id("OCS-6174"),
             ),
             pytest.param(
-                *[HCI_CLIENT, constants.NON_HOSTED_CLUSTER],
+                *[STORAGE_CLIENT_CLUSTER, constants.NON_HOSTED_CLUSTER],
                 marks=pytest.mark.polarion_id("OCS-6175"),
             ),
         ],
