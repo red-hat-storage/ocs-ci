@@ -787,9 +787,14 @@ def ocs_odf_upgrade_ui():
     val_obj.do_click(
         upgrade_ocs.validation_loc["storage-system-on-installed-operators"]
     )
-    logger.info("Click on 'ocs-storagecluster-storagesystem' on Operator details page")
+
+    if config.DEPLOYMENT.get("external_mode"):
+        storage_system_loc_str = "ocs-external-storagecluster-storagesystem"
+    else:
+        storage_system_loc_str = "ocs-storagecluster-storagesystem"
+    logger.info(f"Click on '{storage_system_loc_str}' on Operator details page")
     val_obj.do_click(
-        upgrade_ocs.validation_loc["ocs-storagecluster-storgesystem"],
+        upgrade_ocs.validation_loc[storage_system_loc_str],
         enable_screenshot=True,
     )
     logger.info("Click on Resources")
