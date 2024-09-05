@@ -116,6 +116,7 @@ from ocs_ci.ocs.utils import (
 from ocs_ci.utility.deployment import (
     create_external_secret,
     get_and_apply_icsp_from_catalog,
+    workaround_mark_disks_as_ssd,
 )
 from ocs_ci.utility.flexy import load_cluster_info
 from ocs_ci.utility import (
@@ -631,6 +632,9 @@ class Deployment(object):
             log_cli_level (str): log level for installer (default: DEBUG)
         """
         self.do_deploy_ocp(log_cli_level)
+
+        if config.ENV_DATA.get("workaround_mark_disks_as_ssd"):
+            workaround_mark_disks_as_ssd()
 
         # TODO: use temporary directory for all temporary files of
         # ocs-deployment, not just here in this particular case
