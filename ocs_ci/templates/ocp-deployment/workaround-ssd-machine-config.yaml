@@ -3,8 +3,8 @@ apiVersion: machineconfiguration.openshift.io/v1
 kind: MachineConfig
 metadata:
   labels:
-    # machineconfiguration.openshift.io/role: worker
-  name: 99-workaround-ssd
+    machineconfiguration.openshift.io/role: worker
+  name: 99-worker-workaround-ssd
 spec:
   config:
     ignition:
