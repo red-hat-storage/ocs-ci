@@ -12,7 +12,7 @@ import requests
 
 from ocs_ci.framework import config
 from ocs_ci.ocs import constants
-from ocs_ci.ocs.exceptions import ExternalClusterDetailsException
+from ocs_ci.ocs.exceptions import CommandFailed, ExternalClusterDetailsException
 from ocs_ci.ocs.resources.ocs import OCS
 from ocs_ci.utility import templating
 from ocs_ci.utility.utils import (
@@ -210,9 +210,15 @@ def workaround_mark_disks_as_ssd():
     This is useful for example on some Bare metal servers where are SSD disks not properly recognized as SSD, because of
     wrong RAID controller configuration or issue.
     """
-    logger.info("WORKAROUND: mark disks as ssd (non rotational)")
-    mc_yaml_file = templating.load_yaml(constants.MC_WORKAROUND_SSD)
-    mc_yaml = OCS(**mc_yaml_file)
-    mc_yaml.create()
-    wait_for_machineconfigpool_status("all")
-    logger.info("WORKAROUND: disks marked as ssd (non rotational)")
+    try:
+        logger.info("WORKAROUND: mark disks as ssd (non rotational)")
+        mc_yaml_file = templating.load_yaml(constants.MC_WORKAROUND_SSD)
+        mc_yaml = OCS(**mc_yaml_file)
+        mc_yaml.create()
+        wait_for_machineconfigpool_status("all")
+        logger.info("WORKAROUND: disks marked as ssd (non rotational)")
+    except CommandFailed as err:
+        if "AlreadyExists" in str(err):
+            logger.info("Workaround already applied.")
+        else:
+            raise err
