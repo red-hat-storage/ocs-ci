@@ -1399,12 +1399,13 @@ def ceph_details_df_to_dict(df: pd.DataFrame) -> dict:
     return {row["POOL"]: row.drop("POOL").to_dict() for _, row in df.iterrows()}
 
 
-def validate_num_of_pgs(expected_pgs: dict) -> bool:
+def validate_num_of_pgs(expected_pgs: dict[str, int]) -> bool:
     """
     Validate the number of PGs for each pool against expected values.
 
     Args:
-        expected_pgs (dict): A dictionary where keys are pool names and values are expected PG numbers.
+        expected_pgs (dict[pool_name(str), expected_pg_num(int)]): A dictionary where keys
+        are pool names and values are expected PG numbers.
 
     Returns:
         bool: True if all pools have the expected number of PGs, False otherwise.
