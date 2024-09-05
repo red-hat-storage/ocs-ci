@@ -73,11 +73,14 @@ def create_awscli_pod(scope_name=None, namespace=None, service_account=None):
     )()
     wait_for_resource_state(awscli_pod_obj, constants.STATUS_RUNNING, timeout=180)
 
+    awscli_pod_obj.exec_cmd_on_pod(
+        f"cp {constants.SERVICE_CA_CRT_AWSCLI_PATH} {constants.AWSCLI_CA_BUNDLE_PATH}"
+    )
+
     if storagecluster_independent_check() and config.EXTERNAL_MODE["rgw_secure"]:
         log.info("Concatenating the RGW CA to the AWS CLI pod's CA bundle")
         awscli_pod_obj.exec_cmd_on_pod(
-            f"bash -c 'curl -s {config.EXTERNAL_MODE['rgw_cert_ca']} >> "
-            f"{constants.SERVICE_CA_CRT_AWSCLI_PATH}'"
+            f"bash -c 'wget -O - {config.EXTERNAL_MODE['rgw_cert_ca']} >> {constants.AWSCLI_CA_BUNDLE_PATH}'"
         )
 
     return awscli_pod_obj
