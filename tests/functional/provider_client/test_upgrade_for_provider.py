@@ -18,6 +18,7 @@ from ocs_ci.ocs.resources.storage_client import StorageClient
 from tests.functional.upgrade.test_upgrade_ocp import TestUpgradeOCP
 from ocs_ci.framework import config
 from ocs_ci.utility import version
+from semantic_version import Version
 
 log = logging.getLogger(__name__)
 
@@ -66,10 +67,9 @@ class TestUpgradeForProviderClient(ManageTest):
             upgrade_in_current_source=upgrade_in_current_source,
         )
         upgrade_version = upgrade_ocs.get_upgrade_version()
-        if (
-            upgrade_version.major == ocs_version_major
-            and upgrade_version.minor > ocs_version_minor
-        ):
+        if Version.coerce(upgrade_version.major) == Version.coerce(
+            ocs_version_major
+        ) and Version.coerce(upgrade_version.minor) > Version.coerce(ocs_version_minor):
             run_ocs_upgrade()
             log.info(
                 "Validate post provider ocs upgrade odf client operator also upgraded"
@@ -105,9 +105,11 @@ class TestUpgradeForProviderClient(ManageTest):
             upgrade_in_current_source=upgrade_in_current_source,
         )
         upgrade_version = upgrade_ocs.get_upgrade_version()
-        if version.get_semantic_version(
-            ocp_version, only_major_minor=True
-        ) >= version.get_semantic_version(upgrade_version, only_major_minor=True):
+        if Version.coerce(
+            version.get_semantic_version(ocp_version, only_major_minor=True)
+        ) >= Version.coerce(
+            version.get_semantic_version(upgrade_version, only_major_minor=True)
+        ):
             run_ocs_upgrade()
             log.info(
                 "Validate post provider ocs upgrade odf client operator also upgraded"
@@ -123,7 +125,7 @@ class TestUpgradeForProviderClient(ManageTest):
 
     @runs_on_provider
     @ocp_upgrade
-    def test_ocp_minor_version_upgrade_for_provider_without_hcp_cluster(self):
+    def test_ocp_upgrade_for_provider_without_hcp_cluster(self):
         """
         This test is to validate ocp minor version upgrade for provider
 
