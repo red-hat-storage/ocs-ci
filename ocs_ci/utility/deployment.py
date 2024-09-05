@@ -214,4 +214,5 @@ def workaround_mark_disks_as_ssd():
     mc_yaml_file = templating.load_yaml(constants.MC_WORKAROUND_SSD)
     mc_yaml = OCS(**mc_yaml_file)
     mc_yaml.create()
+    wait_for_machineconfigpool_status("all")
     logger.info("WORKAROUND: disks marked as ssd (non rotational)")
