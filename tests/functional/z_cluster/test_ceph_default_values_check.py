@@ -252,4 +252,9 @@ class TestCephDefaultValuesCheck(ManageTest):
             io_direction="write",
             runtime=10,
         )
-        assert validate_num_of_pgs()
+        expected_pgs = {
+            "ocs-storagecluster-cephblockpool": 1,
+            "ocs-storagecluster-cephfilesystem-data0": 1,
+            "ocs-storagecluster-cephfilesystem-metadata0": 1,
+        }
+        assert not validate_num_of_pgs(expected_pgs)
