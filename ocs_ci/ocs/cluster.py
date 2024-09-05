@@ -1399,31 +1399,33 @@ def ceph_details_df_to_dict(df: pd.DataFrame) -> dict:
     return {row["POOL"]: row.drop("POOL").to_dict() for _, row in df.iterrows()}
 
 
-def validate_num_of_pgs() -> bool:
+def validate_num_of_pgs(expected_pgs: dict) -> bool:
     """
-    Validate the number of PGs per OSD
+    Validate the number of PGs for each pool against expected values.
 
-    This function checks if each pool (excluding the .mgr pool) has more than 1 PG,
-    which is the recommended configuration.
+    Args:
+        expected_pgs (dict): A dictionary where keys are pool names and values are expected PG numbers.
 
     Returns:
-        bool: True if all pools (excluding .mgr) have more than 1 PG, False otherwise.
+        bool: True if all pools have the expected number of PGs, False otherwise.
     """
     ceph_df_output = get_ceph_df_detail(format=None, out_yaml_format=False)
-
     pools_df = parse_ceph_df_pools(ceph_df_output)
     pools_dict = ceph_details_df_to_dict(pools_df)
 
-    for pool_name, pool_data in pools_dict.items():
-        if pool_name != ".mgr":
-            pgs = int(pool_data["PGS"])
-            if pgs == 1:
-                logger.error(
-                    f"Pool {pool_name} has only 1 PG, which is not recommended."
-                )
-                return False
+    for pool_name, expected_pg_num in expected_pgs.items():
+        if pool_name not in pools_dict:
+            logger.error(f"Pool {pool_name} not found in the cluster.")
+            return False
 
-    logger.info("All pools (excluding .mgr) have more than 1 PG.")
+        actual_pg_num = int(pools_dict[pool_name]["PGS"])
+        if actual_pg_num != expected_pg_num:
+            logger.error(
+                f"Pool {pool_name} has {actual_pg_num} PGs, expected {expected_pg_num}."
+            )
+            return False
+
+    logger.info("All pools have the expected number of PGs.")
     return True
 
 
