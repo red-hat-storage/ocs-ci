@@ -173,3 +173,17 @@ class TestUserInterfaceValidation(object):
             "OCS operator is present in the installed operator tab, expected to see only ODF "
             "operator"
         )
+
+    @ui
+    @tier1
+    @runs_on_provider
+    @pytest.mark.bugzilla("XXXX")
+    def test_performance_modes_disable_page(self, setup_ui_class_factory):
+        """
+        test_performance_modes_disable_page
+
+        """
+        setup_ui_class_factory()
+
+        validation_ui_obj = ValidationUI()
+        validation_ui_obj.verify_performance_modes_disable_page()
