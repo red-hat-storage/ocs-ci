@@ -6,6 +6,7 @@ from ocs_ci.helpers.helpers import (
     modify_statefulset_replica_count,
     modify_job_parallelism_count,
 )
+from ocs_ci.ocs.exceptions import CommandFailed
 from ocs_ci.ocs.resources.pod import (
     wait_for_pods_deletion,
 )
@@ -46,9 +47,6 @@ def recover_workload_pods_post_recovery(sc_obj, pods_not_running):
     pod_names = [pod.name for pod in pods_not_running]
     logger.info(f"Pods not running: {pod_names}")
     scaled_down = []
-    dep_name = constants.LOGWRITER_CEPHFS_NAME
-    sts_name = constants.LOGWRITER_RBD_NAME
-    job_name = constants.LOGREADER_CEPHFS_NAME
 
     for pod in pods_not_running:
         # get the labels from the pod data
@@ -68,21 +66,29 @@ def recover_workload_pods_post_recovery(sc_obj, pods_not_running):
             continue
 
         # get the pod describe output
-        desc_out = OCP().exec_oc_cmd(
-            command=f"describe pod {pod.name}", out_yaml_format=False
-        )
+        try:
+            desc_out = OCP().exec_oc_cmd(
+                command=f"describe pod {pod.name}", out_yaml_format=False
+            )
+        except CommandFailed as e:
+            if "NotFound" not in e.args[0]:
+                raise e
+            else:
+                continue
 
         # if any of the above mentioned error messages are present in the
         # describe outpout we scaled down respective deployment/job/statefulset
         if check_errors_regex(desc_out, error_messages):
+            # Delete the ContainerStatusUnknown error pods
             if pod.status() == constants.STATUS_CONTAINER_STATUS_UNKNOWN:
                 pod.delete()
+
             if (
                 constants.LOGWRITER_CEPHFS_LABEL.split("=")[1] in labels
                 and constants.LOGWRITER_CEPHFS_LABEL not in scaled_down
             ):
                 modify_deployment_replica_count(
-                    deployment_name=dep_name,
+                    deployment_name=constants.LOGWRITER_CEPHFS_NAME,
                     replica_count=0,
                     namespace=constants.STRETCH_CLUSTER_NAMESPACE,
                 )
@@ -98,7 +104,7 @@ def recover_workload_pods_post_recovery(sc_obj, pods_not_running):
             ):
 
                 modify_statefulset_replica_count(
-                    statefulset_name=sts_name,
+                    statefulset_name=constants.LOGWRITER_RBD_NAME,
                     replica_count=0,
                     namespace=constants.STRETCH_CLUSTER_NAMESPACE,
                 )
@@ -115,7 +121,9 @@ def recover_workload_pods_post_recovery(sc_obj, pods_not_running):
             ):
 
                 modify_job_parallelism_count(
-                    job_name, count=0, namespace=constants.STRETCH_CLUSTER_NAMESPACE
+                    job_name=constants.LOGREADER_CEPHFS_NAME,
+                    count=0,
+                    namespace=constants.STRETCH_CLUSTER_NAMESPACE,
                 )
                 wait_for_pods_deletion(
                     constants.LOGREADER_CEPHFS_LABEL,
@@ -129,19 +137,21 @@ def recover_workload_pods_post_recovery(sc_obj, pods_not_running):
     for label in scaled_down:
         if label == constants.LOGWRITER_CEPHFS_LABEL:
             modify_deployment_replica_count(
-                deployment_name=dep_name,
+                deployment_name=constants.LOGWRITER_CEPHFS_NAME,
                 replica_count=4,
                 namespace=constants.STRETCH_CLUSTER_NAMESPACE,
             )
         elif label == constants.LOGWRITER_RBD_LABEL:
             modify_statefulset_replica_count(
-                statefulset_name=sts_name,
+                statefulset_name=constants.LOGWRITER_RBD_NAME,
                 replica_count=2,
                 namespace=constants.STRETCH_CLUSTER_NAMESPACE,
             )
         elif label == constants.LOGREADER_CEPHFS_LABEL:
             modify_job_parallelism_count(
-                job_name, count=4, namespace=constants.STRETCH_CLUSTER_NAMESPACE
+                job_name=constants.LOGREADER_CEPHFS_NAME,
+                count=4,
+                namespace=constants.STRETCH_CLUSTER_NAMESPACE,
             )
 
     # fetch workload pod details now and make sure all of them are running

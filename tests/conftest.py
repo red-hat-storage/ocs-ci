@@ -20,6 +20,7 @@ from botocore.exceptions import ClientError
 import pytest
 from collections import namedtuple
 
+from ocs_ci.deployment.cnv import CNVInstaller
 from ocs_ci.deployment import factory as dep_factory
 from ocs_ci.deployment.helpers.hypershift_base import HyperShiftBase
 from ocs_ci.deployment.hosted_cluster import HostedClients
@@ -33,6 +34,7 @@ from ocs_ci.framework.pytest_customization.marks import (
     upgrade_marks,
     ignore_resource_not_found_error_label,
 )
+
 from ocs_ci.helpers.proxy import update_container_with_proxy_env
 from ocs_ci.ocs import constants, defaults, fio_artefacts, node, ocp, platform_nodes
 from ocs_ci.ocs.acm.acm import login_to_acm, AcmAddClusters
@@ -8271,3 +8273,29 @@ def run_description():
         if not os.path.isfile(description_path):
             with open(description_path, "w") as file:
                 file.write(f"{run_name}\n")
+
+
+@pytest.fixture(scope="session")
+def setup_cnv(request):
+    """
+    Session scoped fixture to setup and cleanup CNV
+    based on need of the tests
+
+    """
+    cnv_obj = CNVInstaller()
+    installed = False
+    if not cnv_obj.post_install_verification():
+        cnv_obj.deploy_cnv(check_cnv_deployed=False, check_cnv_ready=False)
+        installed = True
+
+    def finalizer():
+        """
+        Clean up CNV deployment
+
+        """
+
+        # Uninstall CNV only if installed by this fixture
+        if installed:
+            cnv_obj.uninstall_cnv()
+
+    request.addfinalizer(finalizer)
