@@ -3090,6 +3090,7 @@ def get_mds_standby_replay_info():
         - "node_ip": The IP address of the node running the standby-replay MDS daemon.
         - "mds_daemon": The name of the MDS daemon.
         - "standby_replay_pod": The name of the standby replay pod.
+        - "standby_replay_pod_obj": The object of standby replay pod.
     """
     ct_pod = pod.get_ceph_tools_pod()
     ceph_mdsmap = ct_pod.exec_ceph_cmd("ceph fs status")
@@ -3131,11 +3132,18 @@ def get_mds_standby_replay_info():
             f"Unable to determine IP address of node running standby-replay MDS pod '{standby_replay_pod.name}'"
         )
         return None
-
+    node_name = standby_replay_pod.data["spec"].get("nodeName")
+    if not node_name:
+        logger.error(
+            f"Unable to determine Name of the node running standby-replay MDS pod '{standby_replay_pod.name}'"
+        )
+        return None
     return {
         "node_ip": node_ip,
         "mds_daemon": ceph_daemon_name,
         "standby_replay_pod": standby_replay_pod.name,
+        "node_name": node_name,
+        "standby_replay_pod_obj": standby_replay_pod,
     }
 
 
@@ -3341,3 +3349,150 @@ def ceph_health_detail():
     """
     ceph_tools_pod = pod.get_ceph_tools_pod()
     return ceph_tools_pod.exec_cmd_on_pod("ceph health detail", out_yaml_format=False)
+
+
+def get_active_mds_info():
+
+    """Return information about the active Ceph MDS.
+
+    Returns:
+        dict: A dictionary containing information about the active MDS daemon,
+        including the following keys in case of success, otherwise None.
+        - "node_ip": The IP address of the node running the active MDS daemon.
+        - "mds_daemon": The name of the MDS daemon.
+        - "active_pod": The name of the active pod.
+        - "node_name": The name of the node where active mds pod is running.
+    """
+
+    ct_pod = pod.get_ceph_tools_pod()
+    ceph_mdsmap = ct_pod.exec_ceph_cmd("ceph fs status")
+    logger.info("Find ceph daemon state as 'active'")
+    ceph_daemon_name = next(
+        (
+            daemon["name"]
+            for daemon in ceph_mdsmap["mdsmap"]
+            if daemon["state"] == "active"
+        ),
+        None,
+    )
+
+    if ceph_daemon_name is None:
+        logger.error("No active MDS daemon found")
+        return None
+
+    logger.info(f"Found active MDS daemon: {ceph_daemon_name}")
+
+    logger.info("Find ceph MDS pod name where the active MDS daemon is running.")
+    mds_pods = get_mds_pods()
+    active_pod = next((pod for pod in mds_pods if ceph_daemon_name in pod.name), None)
+
+    if active_pod is None:
+        logger.error(
+            f"No active MDS Pod found with running daemon '{ceph_daemon_name}'"
+        )
+        return None
+
+    logger.info(f"Found active MDS pod: {active_pod.name}")
+    logger.info("Get the node IP of active mds running pod")
+    node_ip = active_pod.data["status"].get("hostIP")
+    if not node_ip:
+        logger.error(
+            f"Unable to determine IP address of node running active MDS pod '{active_pod.name}'"
+        )
+        return None
+    logger.info("Get the node name of of active mds  running pod")
+    node_name = active_pod.data["spec"].get("nodeName")
+    if not node_name:
+        logger.error(
+            f"Unable to determine Name of the node running active MDS pod '{active_pod.name}'"
+        )
+        return None
+
+    return {
+        "node_ip": node_ip,
+        "mds_daemon": ceph_daemon_name,
+        "active_pod": active_pod.name,
+        "node_name": node_name,
+        "active_pod_obj": active_pod,
+    }
+
+
+def clear_active_mds_load():
+    """
+    This function executes a ceph cmd to fail active mds daemon instantly.
+    So that the existing load on active mds will be cleared off immediately.
+
+    """
+    ct_pod = pod.get_ceph_tools_pod()
+    ct_pod.exec_ceph_cmd("ceph mds fail 0")
+
+
+def get_active_mds_memory_utilisation_in_percentage():
+    """
+    This function gets total and used memory of active mds in Mebibytes and calculates the value in percentage.
+
+    Returns:
+         int: mds used memory in percentage
+
+    """
+    active_mds_pod_obj = get_active_mds_info()["active_pod_obj"]
+    get_total_memory = active_mds_pod_obj.get_memory(container_name="mds")
+    total_memory_in_mebibytes = int(get_total_memory[:-2]) * 1024
+    used_memory = pod.get_pod_used_memory_in_mebibytes(active_mds_pod_obj.name)
+    utilisation_in_percentage = (used_memory / total_memory_in_mebibytes) * 100
+    return utilisation_in_percentage
+
+
+def get_standby_replay_mds_memory_utilisation_in_percentage():
+    """
+    This function gets total and used memory of active mds in Mebibytes and calculates the value in percentage.
+
+    Returns:
+         int: mds used memory in percentage
+
+    """
+    standby_replay_mds_pod_obj = get_mds_standby_replay_info()["standby_replay_pod_obj"]
+    get_total_memory = standby_replay_mds_pod_obj.get_memory(container_name="mds")
+    total_memory_in_mebibytes = int(get_total_memory[:-2]) * 1024
+    used_memory = pod.get_pod_used_memory_in_mebibytes(standby_replay_mds_pod_obj.name)
+    utilisation_in_percentage = (used_memory / total_memory_in_mebibytes) * 100
+    return utilisation_in_percentage
+
+
+def bring_down_mds_memory_usage_gradually():
+    """
+    This function will monitor the mds memory usage for 18 minutes to make sure it is <=10%.
+    Even if the memory usage is still high after 18 mins,
+    it will fail the mds daemon and look for the same <=10% in memory utilisation.
+    This will repeat the process until the time_elapsed reaches 30mins
+    And it breaks if memory utilisation reduced in between.
+
+    """
+    logger.info("Continue monitoring mds memory usage until it get reduced to 10%")
+    time_interval = 180
+    time_elapsed = 0
+    while time_elapsed <= 1800:
+        logger.info("Check memory usage and sleep if usage is higher than 10%")
+        if (
+            get_active_mds_memory_utilisation_in_percentage() >= 10
+            or get_standby_replay_mds_memory_utilisation_in_percentage() >= 10
+        ):
+            if time_elapsed <= 900:
+                logger.info("Memory usage is high. Sleeping for 3 minutes...")
+                time.sleep(time_interval)
+                time_elapsed += time_interval
+            else:
+                clear_active_mds_load()
+                logger.info("clearing the existing load on MDS by failing mds daemon ")
+                logger.info(
+                    "Failed MDS.0 daemon to clear load. Sleeping for 3 minutes..."
+                )
+                time.sleep(time_interval)
+                continue
+        else:
+            logger.info("Memory usage is within the acceptable limits.")
+            break
+
+    assert (
+        time_elapsed <= 1800
+    ), "Memory usage remained high for more than 30 minutes. Failed to bring down the memory usage of MDS"

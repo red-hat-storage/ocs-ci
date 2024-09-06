@@ -3808,3 +3808,26 @@ def fetch_rgw_pod_restart_count(namespace=config.ENV_DATA["cluster_namespace"]):
     rgw_pod_restart_count = restart_count_for_rgw_pod[rgw_pod_obj.name]
     logger.info(f"restart count for rgw pod is: {rgw_pod_restart_count}")
     return rgw_pod_restart_count
+
+
+def get_pod_used_memory_in_mebibytes(podname):
+    """
+    Get a pod's used memory in MiB
+
+    Args:
+        podname: (str)  name of the pod to get used memory of it
+
+    Returns:
+        memory_value: (int) the used memory of the pod in Mebibytes (MiB)
+
+    """
+    logger.info("Retrieve raw resource utilization data using oc adm top command")
+    pod_raw_adm_out = pod_resource_utilization_raw_output_from_adm_top()
+    lines = pod_raw_adm_out.strip().split("\n")
+    for line in lines:
+        parts = line.split()
+        if podname in line:
+            memory_value_with_unit = parts[2]
+            if memory_value_with_unit.endswith("Mi"):
+                memory_value = int(memory_value_with_unit.replace("Mi", ""))
+                return memory_value

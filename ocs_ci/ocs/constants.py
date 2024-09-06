@@ -1248,6 +1248,7 @@ ALERT_STORAGECLIENTHEARTBEATMISSED = "StorageClientHeartbeatMissed"
 ALERT_STORAGECLIENTINCOMPATIBLEOPERATORVERSION = (
     "StorageClientIncompatibleOperatorVersion"
 )
+
 ALERT_CEPH_OSD_VERSION_MISMATCH = "CephOSDVersionMismatch"
 ALERT_PERSISTENT_VOLUME_USAGE_CRITICAL = "PersistentVolumeUsageCritical"
 ALERT_CEPH_CLUSTER_READ_ONLY = "CephClusterReadOnly"
@@ -1269,6 +1270,8 @@ ALERT_CEPH_OSD_NEAR_FULL = "CephOSDNearFull"
 ALERT_PERSISTENT_VOLUME_USAGE_NEAR_FULL = "PersistentVolumeUsageNearFull"
 ALERT_ODF_PERSISTENT_VOLUME_MIRROR_STATUS = "ODFPersistentVolumeMirrorStatus"
 ALERT_OBC_QUOTA_BYTES_ALERT = "ObcQuotaBytesAlert"
+ALERT_MDSCACHEUSAGEHIGH = "MDSCacheUsageHigh"
+ALERT_MDSCPUUSAGEHIGH = "MDSCPUUsageHigh"
 
 # OCS Deployment related constants
 OPERATOR_NODE_LABEL = "cluster.ocs.openshift.io/openshift-storage=''"
@@ -2933,3 +2936,10 @@ INF_OPERATORGROUP_YAML = os.path.join(TEMPLATE_DEPLOYMENT_DIR_INF, "operatorgrou
 INF_SUBSCRIPTION_YAML = os.path.join(TEMPLATE_DEPLOYMENT_DIR_INF, "subscription.yaml")
 INF_CONFIG_YAML = os.path.join(TEMPLATE_DEPLOYMENT_DIR_INF, "config.yaml")
 INF_RULES_YAML = os.path.join(TEMPLATE_DEPLOYMENT_DIR_INF, "rules.yaml")
+
+# helper script to perform meta data operations [create, rename, change permissions...etc] on app pod to fill MDS cache
+METAIO = os.path.join(TEMPLATE_WORKLOAD_DIR, "helper_scripts/meta_data_io.py")
+# helper script to perform file creation IO on app pod to fill MDS cpu
+FILE_CREATOR_IO = os.path.join(
+    TEMPLATE_WORKLOAD_DIR, "helper_scripts/file_creator_io.py"
+)
