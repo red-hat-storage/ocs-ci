@@ -1058,7 +1058,6 @@ class Deployment(object):
             create_catalog_source(image)
 
         if config.DEPLOYMENT.get("local_storage"):
-            cleanup_nodes_for_lso_install()
             setup_local_storage(storageclass=self.DEFAULT_STORAGECLASS_LSO)
 
         logger.info("Creating namespace and operator group.")
