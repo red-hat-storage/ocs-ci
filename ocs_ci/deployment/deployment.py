@@ -1325,9 +1325,11 @@ class Deployment(object):
         ocs_version = version.get_semantic_ocs_version_from_config()
         disable_noobaa = config.COMPONENTS.get("disable_noobaa", False)
         noobaa_cmd_arg = f"--param ignoreNoobaa={str(disable_noobaa).lower()}"
+        device_size = int(config.ENV_DATA.get("device_size", defaults.DEVICE_SIZE))
+        osd_size_arg = f"--param osdSize={device_size}Gi"
         cmd = (
             f"ibmcloud ks cluster addon enable openshift-data-foundation --cluster {clustername} -f --version "
-            f"{ocs_version}.0 {noobaa_cmd_arg}"
+            f"{ocs_version}.0 {noobaa_cmd_arg} {osd_size_arg}"
         )
         run_ibmcloud_cmd(cmd)
         time.sleep(120)
