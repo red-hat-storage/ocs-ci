@@ -790,13 +790,15 @@ def ocs_install_verification(
     )
 
     if ocs_version >= version.VERSION_4_17 and hci_cluster:
+        cephfs_driver_name = f"{namespace}.cephfs.csi.ceph.com"
+        rbd_driver_name = f"{namespace}.rbd.csi.ceph.com"
         provisioner_deployment_and_owner_names = {
-            f"{constants.CEPHFS_PROVISIONER}-ctrlplugin": constants.CEPHFS_PROVISIONER,
-            f"{constants.RBD_PROVISIONER}-ctrlplugin": constants.RBD_PROVISIONER,
+            f"{cephfs_driver_name}-ctrlplugin": cephfs_driver_name,
+            f"{rbd_driver_name}-ctrlplugin": rbd_driver_name,
         }
         nodeplugin_daemonset_and_owner_names = {
-            f"{constants.CEPHFS_PROVISIONER}-nodeplugin": constants.CEPHFS_PROVISIONER,
-            f"{constants.RBD_PROVISIONER}--nodeplugin": constants.RBD_PROVISIONER,
+            f"{cephfs_driver_name}-nodeplugin": cephfs_driver_name,
+            f"{rbd_driver_name}--nodeplugin": rbd_driver_name,
         }
         csi_owner_kind = constants.DRIVER
     else:
