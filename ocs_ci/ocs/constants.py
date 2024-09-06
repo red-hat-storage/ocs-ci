@@ -560,6 +560,10 @@ MANAGED_FUSION_ALERTMANAGER_LABEL = "alertmanager=managed-fusion-alertmanager"
 MANAGED_FUSION_AWS_DATA_GATHER = "name=aws-data-gather"
 MANAGED_FUSION_PROMETHEUS_LABEL = "prometheus=managed-fusion-prometheus"
 UX_BACKEND_SERVER_LABEL = "app=ux-backend-server"
+CEPHFS_NODEPLUGIN_LABEL = "app=openshift-storage.cephfs.csi.ceph.com-nodeplugin"
+RBD_NODEPLUGIN_LABEL = "app=openshift-storage.rbd.csi.ceph.com-nodeplugin"
+CEPHFS_CTRLPLUGIN_LABEL = "app=openshift-storage.cephfs.csi.ceph.com-ctrlplugin"
+RBD_CTRLPLUGIN_LABEL = "app=openshift-storage.rbd.csi.ceph.com-ctrlplugin"
 
 # Noobaa Deployments and Statefulsets
 NOOBAA_OPERATOR_DEPLOYMENT = "noobaa-operator"

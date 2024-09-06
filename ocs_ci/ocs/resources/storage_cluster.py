@@ -253,15 +253,6 @@ def ocs_install_verification(
                 constants.MDS_APP_LABEL: 2,
             }
         )
-    elif consumer_cluster or client_cluster:
-        resources_dict.update(
-            {
-                constants.CSI_CEPHFSPLUGIN_LABEL: number_of_worker_nodes,
-                constants.CSI_CEPHFSPLUGIN_PROVISIONER_LABEL: 2,
-                constants.CSI_RBDPLUGIN_LABEL: number_of_worker_nodes,
-                constants.CSI_RBDPLUGIN_PROVISIONER_LABEL: 2,
-            }
-        )
     elif not config.DEPLOYMENT["external_mode"]:
         resources_dict.update(
             {
@@ -309,6 +300,20 @@ def ocs_install_verification(
                 constants.CEPH_CSI_CONTROLLER_MANAGER_LABEL: 1,
             }
         )
+        # In provider mode, add the new name and label that replaces the provisioner and plugin pods
+        if hci_cluster:
+            del resources_dict[constants.CSI_CEPHFSPLUGIN_LABEL]
+            del resources_dict[constants.CSI_RBDPLUGIN_LABEL]
+            del resources_dict[constants.CSI_CEPHFSPLUGIN_PROVISIONER_LABEL]
+            del resources_dict[constants.CSI_RBDPLUGIN_PROVISIONER_LABEL]
+            resources_dict.update(
+                {
+                    constants.CEPHFS_NODEPLUGIN_LABEL: number_of_worker_nodes,
+                    constants.RBD_NODEPLUGIN_LABEL: number_of_worker_nodes,
+                    constants.CEPHFS_CTRLPLUGIN_LABEL: 2,
+                    constants.RBD_CTRLPLUGIN_LABEL: 2,
+                }
+            )
 
     for label, count in resources_dict.items():
         if label == constants.RGW_APP_LABEL:
@@ -790,15 +795,13 @@ def ocs_install_verification(
     )
 
     if ocs_version >= version.VERSION_4_17 and hci_cluster:
-        cephfs_driver_name = f"{namespace}.cephfs.csi.ceph.com"
-        rbd_driver_name = f"{namespace}.rbd.csi.ceph.com"
         provisioner_deployment_and_owner_names = {
-            f"{cephfs_driver_name}-ctrlplugin": cephfs_driver_name,
-            f"{rbd_driver_name}-ctrlplugin": rbd_driver_name,
+            f"{constants.CEPHFS_PROVISIONER}-ctrlplugin": constants.CEPHFS_PROVISIONER,
+            f"{constants.RBD_PROVISIONER}-ctrlplugin": constants.RBD_PROVISIONER,
         }
         nodeplugin_daemonset_and_owner_names = {
-            f"{cephfs_driver_name}-nodeplugin": cephfs_driver_name,
-            f"{rbd_driver_name}--nodeplugin": rbd_driver_name,
+            f"{constants.CEPHFS_PROVISIONER}-nodeplugin": constants.CEPHFS_PROVISIONER,
+            f"{constants.RBD_PROVISIONER}--nodeplugin": constants.RBD_PROVISIONER,
         }
         csi_owner_kind = constants.DRIVER
     else:
