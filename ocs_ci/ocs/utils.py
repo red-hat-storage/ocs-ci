@@ -1632,6 +1632,55 @@ def get_primary_cluster_config():
             return cluster
 
 
+def get_recovery_cluster_config():
+    """
+    Get the recovery cluster config object in a DR scenario
+
+    Return:
+        framework.config: primary cluster config obhect from config.clusters
+
+    """
+    for cluster in ocsci_config.clusters:
+        if cluster.MULTICLUSTER.get("recovery_cluster"):
+            return cluster
+
+
+def set_recovery_as_primary():
+    """
+    This function will set recovery cluster as primary cluster
+    after it is imported.
+    """
+    # 1. Popout primary from clusters list
+    cluster = get_primary_cluster_config()
+    ocsci_config.clusters.remove(cluster)
+
+    # 2.Reindexing After removing primary cluster
+    cluster_config_reindex()
+    log.info("Old primary cluster config removed from list")
+
+    # Decrement count from nclusters
+    ocsci_config.nclusters -= 1
+    log.info(f"Number of clusters present in env: {ocsci_config.nclusters}")
+
+    # Switch context to recovery
+    recovery_cluster_config = get_recovery_cluster_config()
+    recovery_cluster_name = recovery_cluster_config.ENV_DATA["cluster_name"]
+    log.info(f"recovery_cluster_name: {recovery_cluster_name}")
+    ocsci_config.switch_to_cluster_by_name(recovery_cluster_name)
+    recovery_cluster_config.MULTICLUSTER["recovery_cluster"] = False
+    recovery_cluster_config.MULTICLUSTER["primary_cluster"] = True
+
+
+def cluster_config_reindex():
+    for cluster in ocsci_config.clusters:
+        current_index = ocsci_config.clusters.index(cluster)
+        if current_index != cluster.MULTICLUSTER["multicluster_index"]:
+            cluster.MULTICLUSTER["multicluster_index"] = current_index
+
+    # switch cobntext to acm
+    ocsci_config.switch_acm_ctx()
+
+
 def thread_init_class(class_init_operations, shutdown):
     if len(class_init_operations) > 0:
         executor = ThreadPoolExecutor(max_workers=len(class_init_operations))

@@ -1179,6 +1179,7 @@ RDR_OSD_MODE_GREENFIELD = "greenfield"
 RDR_OSD_MODE_BROWNFIELD = "brownfield"
 RDR_VOLSYNC_CEPHFILESYSTEM_SC = "ocs-storagecluster-cephfs-vrg"
 
+
 # constants
 RBD_INTERFACE = "rbd"
 CEPHFS_INTERFACE = "cephfs"
@@ -2668,6 +2669,9 @@ GITOPS_MANAGEDCLUSTER_SETBINDING_YAML = os.path.join(
 GITOPS_SUBSCRIPTION_YAML = os.path.join(
     TEMPLATE_DIR, "gitops-deployment", "subscription.yaml"
 )
+GITOPS_OPERATORGROUP_YAML = os.path.join(
+    TEMPLATE_DIR, "gitops-deployment", "gitops_og.yaml"
+)
 OADP_NAMESPACE = "openshift-adp"
 OADP_OPERATOR_NAME = "redhat-oadp-operator"
 OADP_SUBSCRIPTION_YAML = os.path.join(
@@ -2828,6 +2832,15 @@ GITOPS_CLUSTER_NAMESPACE = "openshift-gitops"
 APPLICATION_ARGOCD = "applications.argoproj.io"
 PLACEMENT_KIND = "placements.cluster.open-cluster-management.io"
 DPA_DISCOVERED_APPS_PATH = os.path.join(TEMPLATE_DIR, "DR", "dpa_discovered_apps.yaml")
+
+DISABLE_DR_EACH_APP = os.path.join(TEMPLATE_DIR, "DR", "disable_dr_each_app.sh")
+REMOVE_DR_EACH_MANAGED_CLUSTER = os.path.join(TEMPLATE_DIR, "DR", "dr_conf_removal.sh")
+CLUSTERSELECTORPATH = "/spec/predicates/0/requiredClusterSelector/labelSelector/matchExpressions/0/values/0"
+EXPERIMENTAL_ANNOTATION_PATH = (
+    "/metadata/annotations/"
+    "cluster.open-cluster-management.io~1experimental-scheduling-disable"
+)
+
 # CNV
 VIRTUAL_MACHINE_INSTANCES = "vmi"
 

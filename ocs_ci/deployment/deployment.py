@@ -253,19 +253,25 @@ class Deployment(object):
         """
         config.switch_ctx(switch_ctx) if switch_ctx else config.switch_acm_ctx()
 
+        logger.info("Creating Namespace for GitOps Operator ")
+        run_cmd(f"oc create namespace {constants.GITOPS_NAMESPACE}")
+
+        logger.info("Creating OperatorGroup for GitOps Operator ")
+        run_cmd(f"oc create -f {constants.GITOPS_OPERATORGROUP_YAML}")
+
         logger.info("Creating GitOps Operator Subscription")
 
         run_cmd(f"oc create -f {constants.GITOPS_SUBSCRIPTION_YAML}")
 
         self.wait_for_subscription(
-            constants.GITOPS_OPERATOR_NAME, namespace=constants.OPENSHIFT_OPERATORS
+            constants.GITOPS_OPERATOR_NAME, namespace=constants.GITOPS_NAMESPACE
         )
         logger.info("Sleeping for 120 seconds after subscribing to GitOps Operator")
         time.sleep(120)
         subscriptions = ocp.OCP(
             kind=constants.SUBSCRIPTION_WITH_ACM,
             resource_name=constants.GITOPS_OPERATOR_NAME,
-            namespace=constants.OPENSHIFT_OPERATORS,
+            namespace=constants.GITOPS_NAMESPACE,
         ).get()
         gitops_csv_name = subscriptions["status"]["currentCSV"]
         csv = CSV(resource_name=gitops_csv_name, namespace=constants.GITOPS_NAMESPACE)

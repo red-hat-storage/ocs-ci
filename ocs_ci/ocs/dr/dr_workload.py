@@ -103,7 +103,9 @@ class BusyBox(DRWorkload):
             self.placement_yaml_file = os.path.join(
                 self.workload_subscription_dir, self.workload_name, "placement.yaml"
             )
-            self.workload_pvc_selector = kwargs.get("workload_pvc_selector")
+            self.workload_pvc_selector = workload_details.get(
+                "dr_workload_app_pvc_selector"
+            )
         self.channel_yaml_file = os.path.join(
             self.workload_subscription_dir, "channel.yaml"
         )
@@ -498,10 +500,10 @@ class BusyBox_AppSet(DRWorkload):
         drpc_yaml_data["spec"]["drPolicyRef"]["name"] = self.dr_policy_name
         drpc_yaml_data["spec"]["placementRef"]["name"] = self.appset_placement_name
         drpc_yaml_data["spec"]["pvcSelector"]["matchLabels"] = self.appset_pvc_selector
-        drcp_data_yaml = tempfile.NamedTemporaryFile(
+        self.drcp_data_yaml = tempfile.NamedTemporaryFile(
             mode="w+", prefix="drpc", delete=False
         )
-        templating.dump_data_to_temp_yaml(drpc_yaml_data, drcp_data_yaml.name)
+        templating.dump_data_to_temp_yaml(drpc_yaml_data, self.drcp_data_yaml.name)
 
         app_set_yaml_data_list = list(
             templating.load_yaml(self.appset_yaml_file, multi_document=True)
@@ -535,7 +537,7 @@ class BusyBox_AppSet(DRWorkload):
         run_cmd(f"oc create -f {self.appset_yaml_file}")
         self.check_pod_pvc_status(skip_replication_resources=True)
         self.add_annotation_to_placement()
-        run_cmd(f"oc create -f {drcp_data_yaml.name}")
+        run_cmd(f"oc create -f {self.drcp_data_yaml.name}")
         self.verify_workload_deployment()
 
     def _deploy_prereqs(self):
