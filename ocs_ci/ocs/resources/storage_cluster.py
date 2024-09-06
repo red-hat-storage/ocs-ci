@@ -783,18 +783,38 @@ def ocs_install_verification(
         validate_serviceexport()
 
     # Verify the owner of CSI deployments and daemonsets
-    csi_owner_kind = constants.CONFIGMAP if hci_cluster else constants.DEPLOYMENT
     csi_owner_name = (
         constants.CLIENT_OPERATOR_CONFIGMAP
         if hci_cluster
         else constants.ROOK_CEPH_OPERATOR
     )
+
+    if ocs_version >= version.VERSION_4_17 and hci_cluster:
+        provisioner_deployment_and_owner_names = {
+            f"{constants.CEPHFS_PROVISIONER}-ctrlplugin": constants.CEPHFS_PROVISIONER,
+            f"{constants.RBD_PROVISIONER}-ctrlplugin": constants.RBD_PROVISIONER,
+        }
+        nodeplugin_daemonset_and_owner_names = {
+            f"{constants.CEPHFS_PROVISIONER}-nodeplugin": constants.CEPHFS_PROVISIONER,
+            f"{constants.RBD_PROVISIONER}--nodeplugin": constants.RBD_PROVISIONER,
+        }
+        csi_owner_kind = constants.DRIVER
+    else:
+        provisioner_deployment_and_owner_names = {
+            "csi-cephfsplugin-provisioner": csi_owner_name,
+            "csi-rbdplugin-provisioner": csi_owner_name,
+        }
+        nodeplugin_daemonset_and_owner_names = {
+            "csi-cephfsplugin": csi_owner_name,
+            "csi-rbdplugin": csi_owner_name,
+        }
+        csi_owner_kind = constants.CONFIGMAP if hci_cluster else constants.DEPLOYMENT
     deployment_kind = OCP(kind=constants.DEPLOYMENT, namespace=namespace)
     daemonset_kind = OCP(kind=constants.DAEMONSET, namespace=namespace)
-    for provisioner_name in [
-        "csi-cephfsplugin-provisioner",
-        "csi-rbdplugin-provisioner",
-    ]:
+    for (
+        provisioner_name,
+        csi_owner_name,
+    ) in provisioner_deployment_and_owner_names.items():
         provisioner_deployment = deployment_kind.get(resource_name=provisioner_name)
         owner_references = provisioner_deployment["metadata"].get("ownerReferences")
         assert (
@@ -807,7 +827,7 @@ def ocs_install_verification(
             owner_references[0].get("name") == csi_owner_name
         ), f"Owner reference of {constants.DEPLOYMENT} {provisioner_name} is not {csi_owner_name} {csi_owner_kind}"
     log.info("Verified the ownerReferences CSI provisioner deployments")
-    for plugin_name in ["csi-cephfsplugin", "csi-rbdplugin"]:
+    for plugin_name, csi_owner_name in nodeplugin_daemonset_and_owner_names.items():
         plugin_daemonset = daemonset_kind.get(resource_name=plugin_name)
         owner_references = plugin_daemonset["metadata"].get("ownerReferences")
         assert (

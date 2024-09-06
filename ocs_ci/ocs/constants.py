@@ -229,6 +229,7 @@ DEFALUT_DEVICE_CLASS = "ssd"
 VM = "vm"
 HOSTED_CLUSTERS = "hostedclusters"
 OPERATOR_KIND = "Operator"
+DRIVER = "Driver"
 
 # Provisioners
 AWS_EFS_PROVISIONER = "openshift.org/aws-efs"
