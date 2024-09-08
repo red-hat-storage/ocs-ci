@@ -754,6 +754,10 @@ def run_ocs_upgrade(
         upgrade_ocs.version_before_upgrade,
     )
 
+    from ocs_ci.helpers.helpers import verify_nb_db_psql_version
+
+    verify_nb_db_psql_version()
+
     # update external secrets
     if config.DEPLOYMENT["external_mode"]:
         upgrade_version = version.get_semantic_version(upgrade_version, True)
