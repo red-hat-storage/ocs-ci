@@ -2417,7 +2417,7 @@ def wait_for_ceph_health_not_ok(timeout=300, sleep=10):
 
         """
 
-        status = run_ceph_health_cmd(constants.OPENSHIFT_STORAGE_NAMESPACE)
+        status = run_ceph_health_cmd(config.ENV_DATA["cluster_namespace"])
         return str(status).strip() != "HEALTH_OK"
 
     sampler = TimeoutSampler(
@@ -4954,7 +4954,7 @@ def exec_nb_db_query(query):
     nb_db_pod = pod.Pod(
         **pod.get_pods_having_label(
             label=constants.NOOBAA_DB_LABEL_47_AND_ABOVE,
-            namespace=constants.OPENSHIFT_STORAGE_NAMESPACE,
+            namespace=config.ENV_DATA["cluster_namespace"],
         )[0]
     )
 
@@ -4991,7 +4991,7 @@ def get_role_arn_from_sub():
         odf_sub = OCP(
             kind=constants.SUBSCRIPTION,
             resource_name=constants.ODF_SUBSCRIPTION,
-            namespace=constants.OPENSHIFT_STORAGE_NAMESPACE,
+            namespace=config.ENV_DATA["cluster_namespace"],
         )
         for item in odf_sub.get()["spec"]["config"]["env"]:
             if item["name"] == "ROLEARN":
