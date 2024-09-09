@@ -253,7 +253,7 @@ def ocs_install_verification(
                 constants.MDS_APP_LABEL: 2,
             }
         )
-    elif consumer_cluster or client_cluster:
+    elif client_cluster and (ocs_version < version.VERSION_4_17):
         resources_dict.update(
             {
                 constants.CSI_CEPHFSPLUGIN_LABEL: number_of_worker_nodes,
@@ -311,10 +311,6 @@ def ocs_install_verification(
         )
         # In provider mode, add the new name and label that replaces the provisioner and plugin pods
         if hci_cluster:
-            del resources_dict[constants.CSI_CEPHFSPLUGIN_LABEL]
-            del resources_dict[constants.CSI_RBDPLUGIN_LABEL]
-            del resources_dict[constants.CSI_CEPHFSPLUGIN_PROVISIONER_LABEL]
-            del resources_dict[constants.CSI_RBDPLUGIN_PROVISIONER_LABEL]
             resources_dict.update(
                 {
                     constants.CEPHFS_NODEPLUGIN_LABEL: number_of_worker_nodes,
