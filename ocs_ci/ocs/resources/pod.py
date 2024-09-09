@@ -3769,3 +3769,26 @@ def verify_mon_pod_running(mon_count):
     )
     logger.info(f"Waited for all mon pods to come up and running {ret}")
     return ret
+
+
+def get_pod_used_memory_in_mebibytes(podname):
+    """
+    Get a pod's used memory in MiB
+
+    Args:
+        podname: (str)  name of the pod to get used memory of it
+
+    Returns:
+        memory_value: (int) the used memory of the pod in Mebibytes (MiB)
+
+    """
+    logger.info("Retrieve raw resource utilization data using oc adm top command")
+    pod_raw_adm_out = pod_resource_utilization_raw_output_from_adm_top()
+    lines = pod_raw_adm_out.strip().split("\n")
+    for line in lines:
+        parts = line.split()
+        if podname in line:
+            memory_value_with_unit = parts[2]
+            if memory_value_with_unit.endswith("Mi"):
+                memory_value = int(memory_value_with_unit.replace("Mi", ""))
+                return memory_value
