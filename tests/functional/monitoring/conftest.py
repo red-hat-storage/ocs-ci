@@ -1150,18 +1150,14 @@ def measure_change_client_ocs_version_and_stop_heartbeat(
             the client version
 
     """
-    original_cluster = config.cluster_ctx.MULTICLUSTER["multicluster_index"]
-    logger.info(f"Provider cluster key: {original_cluster}")
     logger.info("Switch to client cluster")
-    config.switch_to_consumer()
-    client_cluster = config.cluster_ctx.MULTICLUSTER["multicluster_index"]
-    logger.info(f"Client cluster key: {client_cluster}")
-    cluster_id = exec_cmd(
-        "oc get clusterversion version -o jsonpath='{.spec.clusterID}'"
-    ).stdout.decode("utf-8")
-    client_name = f"storageconsumer-{cluster_id}"
-    logger.info(f"Switch to original cluster ({original_cluster})")
-    config.switch_ctx(original_cluster)
+    with config.RunWithFirstConsumerConfigContextIfAvailable():
+        client_cluster = config.cluster_ctx.MULTICLUSTER["multicluster_index"]
+        logger.info(f"Client cluster key: {client_cluster}")
+        cluster_id = exec_cmd(
+            "oc get clusterversion version -o jsonpath='{.spec.clusterID}'"
+        ).stdout.decode("utf-8")
+        client_name = f"storageconsumer-{cluster_id}"
     client = storageconsumer.StorageConsumer(
         client_name, consumer_context=client_cluster
     )
@@ -1175,26 +1171,19 @@ def measure_change_client_ocs_version_and_stop_heartbeat(
 
         """
         nonlocal client
-        nonlocal original_cluster
         # run_time of operation
         run_time = 60 * 7
         client.stop_heartbeat()
         client.set_ocs_version("4.13.0")
         logger.info(f"Waiting for {run_time} seconds")
         time.sleep(run_time)
-        logger.info(f"Switch to original cluster ({original_cluster})")
-        config.switch_ctx(original_cluster)
         return
 
     def teardown():
         nonlocal client
-        nonlocal original_cluster
         nonlocal client_cluster
         logger.info(f"Switch to client cluster ({client_cluster})")
-        config.switch_ctx(client_cluster)
         client.resume_heartbeat()
-        logger.info(f"Switch to original cluster ({original_cluster})")
-        config.switch_ctx(original_cluster)
 
     request.addfinalizer(teardown)
 
