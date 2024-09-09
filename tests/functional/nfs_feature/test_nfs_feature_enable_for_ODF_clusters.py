@@ -1394,14 +1394,15 @@ class TestNfsEnable(ManageTest):
         pv_obj.ocp.wait_for_delete(resource_name=pv_obj.name, timeout=180)
 
     @tier1
-    @polarion_id("OCS-4272")
+    @polarion_id("OCS-6193")
     def test_nfs_pvc_subvolume_deletion(
         self,
         pod_factory,
         pvc_factory,
     ):
         """
-        This test is to validate NFS export using a PVC mounted on an app pod (in-cluster)
+        This test is to validate NFS export using a PVC mounted on an app pod (in-cluster) and subvolume
+        deletion using odf-cli
 
         Steps:
         1:- Create nfs pvcs with storageclass ocs-storagecluster-ceph-nfs-retain
