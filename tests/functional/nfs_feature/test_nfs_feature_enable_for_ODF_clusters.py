@@ -12,7 +12,7 @@ from ocs_ci.utility.connection import Connection
 from ocs_ci.ocs import constants, ocp
 from ocs_ci.utility import templating
 from ocs_ci.helpers import helpers
-from ocs_ci.framework.pytest_customization.marks import brown_squad
+from ocs_ci.framework.pytest_customization.marks import brown_squad, skipif_rosa_hcp
 from ocs_ci.framework.testlib import (
     skipif_ocs_version,
     ManageTest,
@@ -73,6 +73,7 @@ class TestDefaultNfsDisabled(ManageTest):
 
 
 @brown_squad
+@skipif_rosa_hcp
 @skipif_external_mode
 @skipif_ocs_version("<4.11")
 @skipif_ocp_version("<4.11")
