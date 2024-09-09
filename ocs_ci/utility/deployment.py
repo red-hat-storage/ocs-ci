@@ -205,7 +205,7 @@ def get_ocp_release_image_from_installer():
 
 def workaround_mark_disks_as_ssd():
     """
-    This function creates MachineConfig defining new service `workaround-ssd`, which configures all sd* disks as SSD
+    This function creates MachineConfig defining new service `workaround-ssd`, which configures all disks as SSD
     (not rotational).
     This is useful for example on some Bare metal servers where are SSD disks not properly recognized as SSD, because of
     wrong RAID controller configuration or issue.

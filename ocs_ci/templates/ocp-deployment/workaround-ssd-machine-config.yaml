@@ -12,7 +12,7 @@ spec:
     storage:
       files:
       - contents:
-          source: data:text/plain;charset=utf-8;base64,IyEvYmluL2Jhc2gKCmZvciBkZXYgaW4gL3N5cy9ibG9jay9zZCovcXVldWUvcm90YXRpb25hbCA7IGRvCiAgZWNobyAwID4gJHtkZXZ9CmRvbmUK
+          source: data:text/plain;charset=utf-8;base64,IyEvYmluL2Jhc2gKCmZvciBkZXYgaW4gL3N5cy9ibG9jay8qZCovcXVldWUvcm90YXRpb25hbCA7IGRvCiAgZWNobyAwID4gJHtkZXZ9CmRvbmUK
         group:
           name: root
         mode: 500
