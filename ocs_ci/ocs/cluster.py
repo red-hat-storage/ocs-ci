@@ -400,11 +400,10 @@ class CephCluster(object):
         logger.info(f"Mon count changed to {new_count}")
         self.cluster.reload()
 
-    def update_mon_count_to_five(self):
+    def update_mon_count_to_five(self, new_count):
         """
         Change mon count  to five in the cluster
         """
-        new_count = 5
         self.cluster.reload()
         logger.info(self.cluster.data)
         self.cluster.data["spec"]["managedResources"]["cephFileSystem"][

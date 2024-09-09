@@ -98,6 +98,7 @@ class TestFiveMonInCluster(ManageTest):
         )
         if not self.are_rack_labels_present():
             self.nodes = get_worker_nodes()
+            # Scale the racks to six so that monCount can be updated to five
             self.racks = ["rack{}".format(i) for i in range(0, len(self.nodes))]
             self.assign_dummy_racks()
 
@@ -115,6 +116,7 @@ class TestFiveMonInCluster(ManageTest):
             ), log.error("Mon count should not be updated value other than 3 and 5")
         if self.are_rack_labels_present():
             self.nodes = get_worker_nodes()
+            # We will scaledown the total racks back to three during teardown
             self.racks = [
                 "rack{}".format(i % (len(self.nodes) // 2))
                 for i in range(len(self.nodes))
@@ -176,7 +178,7 @@ class TestFiveMonInCluster(ManageTest):
             params_neg = '{"spec":{"managedResources":{"cephCluster":{"monCount": 4}}}}'
             params = '{"spec":{"managedResources":{"cephCluster":{"monCount": 5}}}}'
             try:
-                assert self.storagecluster_obj.patch(
+                assert not self.storagecluster_obj.patch(
                     params=params_neg,
                     format_type="merge",
                 ), log.error("Mon count should not be updated value other than 3 and 5")
