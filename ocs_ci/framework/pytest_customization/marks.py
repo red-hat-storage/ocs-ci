@@ -33,6 +33,7 @@ from ocs_ci.ocs.constants import (
     HCI_PROVIDER,
     BAREMETAL_PLATFORMS,
     AZURE_KV_PROVIDER_NAME,
+    ROSA_HCP_PLATFORM,
 )
 from ocs_ci.utility import version
 from ocs_ci.utility.aws import update_config_from_s3
@@ -404,6 +405,11 @@ skipif_bmpsi = pytest.mark.skipif(
 skipif_managed_service = pytest.mark.skipif(
     config.ENV_DATA["platform"].lower() in MANAGED_SERVICE_PLATFORMS,
     reason="Test will not run on Managed service cluster",
+)
+
+skipif_rosa_hcp = pytest.mark.skipif(
+    config.ENV_DATA["platform"].lower() == ROSA_HCP_PLATFORM,
+    reason="Test will not run on ROSA HCP cluster",
 )
 
 skipif_openshift_dedicated = pytest.mark.skipif(
