@@ -28,6 +28,7 @@ from ocs_ci.ocs.resources.rgw import RGW
 from ocs_ci.ocs.utils import oc_get_all_obc_names
 from ocs_ci.utility import templating, version
 from ocs_ci.utility.utils import TimeoutSampler, mask_secrets
+from time import sleep
 
 logger = logging.getLogger(name=__file__)
 
@@ -475,6 +476,8 @@ class MCGS3Bucket(ObjectBucket):
                     obj_version.delete()
             else:
                 self.s3resource.Bucket(self.name).objects.all().delete()
+                if any("scale" in mark for mark in get_current_test_marks()):
+                    sleep(900)
             self.s3resource.Bucket(self.name).delete()
         except botocore.exceptions.ClientError as e:
             if e.response["Error"]["Code"] == "NoSuchBucket":

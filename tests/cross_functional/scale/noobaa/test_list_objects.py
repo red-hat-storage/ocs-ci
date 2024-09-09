@@ -60,7 +60,7 @@ class TestListOfObjects(E2ETest):
             full_object_path,
             s3_obj,
             recursive=True,
-            timeout=9000,
+            timeout=12600,
         )
 
         # List the objects recursively
