@@ -23,7 +23,7 @@ from ocs_ci.ocs.constants import (
     REPLICA1_STORAGECLASS,
 )
 from ocs_ci.ocs.exceptions import CommandFailed
-
+from ocs_ci.utility.utils import TimeoutSampler
 
 log = getLogger(__name__)
 
@@ -266,17 +266,47 @@ def get_all_osd_names_by_device_class(osd_dict: dict, device_class: str) -> list
     ]
 
 
+def get_ceph_osd_df_output():
+    """
+    Retrieves the Ceph OSD df tree output using TimeoutSampler.
+
+    Returns:
+        dict: The JSON output of 'ceph osd df tree' command.
+
+    Raises:
+        Exception: If unable to get valid output after maximum retries.
+    """
+    ceph_pod = get_ceph_tools_pod()
+    timeout = 120
+    sleep = 10
+
+    sampler = TimeoutSampler(
+        timeout=timeout,
+        sleep=sleep,
+        func=ceph_pod.exec_cmd_on_pod,
+        func_args=("ceph osd df tree -f json-pretty",),
+    )
+
+    try:
+        for output in sampler:
+            if output is not None:
+                return output
+        raise Exception("Failed to get valid output after maximum retries")
+    except Exception as e:
+        log.error(f"Error while getting ceph osd df data: {str(e)}")
+        raise
+
+
 def get_osd_kb_used_data() -> dict:
     """
     Retrieves the KB used data for each OSD from the Ceph cluster.
 
     Returns:
         dict: kb_used_data("osd_name": kb_used_data)
-
     """
-    ceph_pod = get_ceph_tools_pod()
-    output = ceph_pod.exec_cmd_on_pod("ceph osd df tree -f json-pretty")
+    output = get_ceph_osd_df_output()
     log.info(f"DF tree: {output}")
+
     nodes = output["nodes"]
     kb_used_data = dict()
     for node in nodes:
