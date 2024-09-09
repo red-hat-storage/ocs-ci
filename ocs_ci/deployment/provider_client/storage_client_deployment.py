@@ -176,7 +176,7 @@ class ODFAndNativeStorageClientDeploymentOnProvider(object):
         )
 
         if (
-            self.ocs_version < version.VERSION_4_16
+            self.ocs_version < version.VERSION_4_17
             and self.ocs_version >= version.VERSION_4_14
         ):
             # Disable ROOK_CSI_ENABLE_CEPHFS and ROOK_CSI_ENABLE_RBD
