@@ -806,7 +806,7 @@ def ocs_install_verification(
         }
         nodeplugin_daemonset_and_owner_names = {
             f"{constants.CEPHFS_PROVISIONER}-nodeplugin": constants.CEPHFS_PROVISIONER,
-            f"{constants.RBD_PROVISIONER}--nodeplugin": constants.RBD_PROVISIONER,
+            f"{constants.RBD_PROVISIONER}-nodeplugin": constants.RBD_PROVISIONER,
         }
         csi_owner_kind = constants.DRIVER
     else:
