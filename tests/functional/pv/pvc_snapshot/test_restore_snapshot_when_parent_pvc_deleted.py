@@ -137,7 +137,7 @@ class TestRestoreSnapshotWhenParentPVCDeleted(ManageTest):
             pvc_obj.delete()
             pvc_obj.ocp.wait_for_delete(resource_name=pvc_obj.name)
 
-        # Restore snapshots with different access mode
+        # Restore snapshots with same and different access mode
         log.info("Restoring snapshots to create new PVCs")
         restore_pvcs = []
         for snap_obj in snap_objs:
