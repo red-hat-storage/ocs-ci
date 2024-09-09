@@ -253,6 +253,15 @@ def ocs_install_verification(
                 constants.MDS_APP_LABEL: 2,
             }
         )
+    elif consumer_cluster or client_cluster:
+        resources_dict.update(
+            {
+                constants.CSI_CEPHFSPLUGIN_LABEL: number_of_worker_nodes,
+                constants.CSI_CEPHFSPLUGIN_PROVISIONER_LABEL: 2,
+                constants.CSI_RBDPLUGIN_LABEL: number_of_worker_nodes,
+                constants.CSI_RBDPLUGIN_PROVISIONER_LABEL: 2,
+            }
+        )
     elif not config.DEPLOYMENT["external_mode"]:
         resources_dict.update(
             {
