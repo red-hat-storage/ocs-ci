@@ -43,7 +43,7 @@ def test_rgw_unavailable(measure_stop_rgw, threading_lock):
         target_msg = (
             "Cluster Object Store is in unhealthy state or number of ready replicas for "
             "Rook Ceph RGW deployments is less than the desired replicas in "
-            f"namespace:cluster {constants.OPENSHIFT_STORAGE_NAMESPACE}:."
+            f"namespace:cluster {config.ENV_DATA['cluster_namespace']}:."
         )
     states = ["pending", "firing"]
 
