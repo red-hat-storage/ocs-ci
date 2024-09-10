@@ -6,8 +6,8 @@ DEPLOYMENT:
   # arbiter_deployment: true
   # arbiter_zone: 'us-south-3'
   # arbiter_autodetect: false
-  # network_split_setup: true
-  # network_zone_latency: 5
+  network_split_setup: true
+  network_zone_latency: 4
 ENV_DATA:
   platform: 'ibm_cloud'
   deployment_type: 'ipi'
