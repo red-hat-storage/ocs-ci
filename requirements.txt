@@ -1,2 +1,2 @@
--e git+https://github.com/red-hat-storage/ocp-network-split.git@main#egg=ocp-network-split
+-e git+https://github.com/red-hat-storage/ocp-network-split.git#egg=ocp-network-split
 -e .
