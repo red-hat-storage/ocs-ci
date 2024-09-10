@@ -6,7 +6,7 @@ metadata:
 spec:
   containers:
     - name: fedora
-      image: quay.io/ocsci/fedora-with-linuxtar-files:latest
+      image: quay.io/ocsci/fedora-with-linuxtar-files:200k-files
       # Override the default `aws` entrypoint in order to
       # allow the pod to run continuously and act as a relay
       command: ['/bin/sh']
