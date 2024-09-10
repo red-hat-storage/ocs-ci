@@ -3,6 +3,7 @@ import yaml
 
 from ocs_ci.framework.testlib import ManageTest, bugzilla, tier1, green_squad
 from ocs_ci.utility.utils import run_cmd
+from ocs_ci.framework import config
 
 logger = logging.getLogger(__name__)
 # The below expected keys and names are gathered from pods with safe security.
@@ -34,7 +35,7 @@ class TestSecretsAndSecurityContext(ManageTest):
                 pod = output[i + 1]
                 if "rook-ceph-" in pod:
                     data = run_cmd(
-                        f"oc --namespace=openshift-storage get pod {pod} -o yaml"
+                        f"oc --namespace={config.ENV_DATA['cluster_namespace']} get pod {pod} -o yaml"
                     )
                     yaml_data = yaml.safe_load(data)
                     k, n = self.checking_securtiyKeyRef(yaml_data)
@@ -58,11 +59,13 @@ class TestSecretsAndSecurityContext(ManageTest):
         normal cluster
         """
         logger.info("Checking security context on rook-ceph-crashcollector pods")
-        cmd = "oc --namespace=openshift-storage get pods -l app=rook-ceph-crashcollector -o name"
+        cmd = f"oc --namespace={config.ENV_DATA['cluster_namespace']} get pods -l app=rook-ceph-crashcollector -o name"
         output = run_cmd(cmd).strip().split("\n")
         logger.info("Checking securityContext in ceph-crash container")
         for pod in output:
-            data = run_cmd(f"oc --namespace=openshift-storage get {pod} -o yaml")
+            data = run_cmd(
+                f"oc --namespace={config.ENV_DATA['cluster_namespace']} get {pod} -o yaml"
+            )
             yaml_data = yaml.safe_load(data)
             securityContext = self.checking_securtiyContext_of_cephcrash_container(
                 yaml_data
