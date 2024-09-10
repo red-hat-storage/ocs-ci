@@ -76,7 +76,7 @@ setup(
         "ovirt-engine-sdk-python==4.4.11",
         "junitparser==3.1.0",
         "flaky==3.7.0",
-        "ocp-network-split==0.3.0",
+        "ocp-network-split==main",
         "pyopenssl==24.0.0",
         "pyparsing==2.4.7",
         "mysql-connector-python==8.0.27",
