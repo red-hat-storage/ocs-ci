@@ -736,7 +736,10 @@ class Deployment(object):
         if ibmcloud_ipi:
             ibmcloud.label_nodes_region()
         # configure Ingress Node Firewall and restrict SSH access to nodes
-        if config.ENV_DATA.get("restrict_ssh_access_to_nodes", False):
+        if (
+            config.ENV_DATA.get("restrict_ssh_access_to_nodes", False)
+            and version.get_semantic_ocp_version_from_config() >= version.VERSION_4_16
+        ):
             restrict_ssh_access_to_nodes()
 
     def label_and_taint_nodes(self):
