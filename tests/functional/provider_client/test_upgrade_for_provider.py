@@ -105,23 +105,22 @@ class TestUpgradeForProviderClient(ManageTest):
             upgrade_in_current_source=upgrade_in_current_source,
         )
         upgrade_version = upgrade_ocs.get_upgrade_version()
-        if Version.coerce(
-            version.get_semantic_version(ocp_version, only_major_minor=True)
-        ) >= Version.coerce(
-            version.get_semantic_version(upgrade_version, only_major_minor=True)
-        ):
-            run_ocs_upgrade()
-            log.info(
-                "Validate post provider ocs upgrade odf client operator also upgraded"
-            )
-            self.storage_clients.verify_version_of_odf_client_operator()
-        else:
-            self.test_upgrade_ocp.test_upgrade_ocp()
-            run_ocs_upgrade()
-            log.info(
-                "Validate post provider ocs upgrade odf client operator also upgraded"
-            )
-            self.storage_clients.verify_version_of_odf_client_operator()
+        log.info(f"upgrade to ocs version: {upgrade_version}")
+        # if Version.coerce(
+        #     version.get_semantic_version(ocp_version, only_major_minor=True)
+        # ) >= Version.coerce(
+        #     version.get_semantic_version(upgrade_version, only_major_minor=True)
+        # ):
+        run_ocs_upgrade()
+        log.info("Validate post provider ocs upgrade odf client operator also upgraded")
+        self.storage_clients.verify_version_of_odf_client_operator()
+        # else:
+        #     self.test_upgrade_ocp.test_upgrade_ocp()
+        #     run_ocs_upgrade()
+        #     log.info(
+        #         "Validate post provider ocs upgrade odf client operator also upgraded"
+        #     )
+        #     self.storage_clients.verify_version_of_odf_client_operator()
 
     @runs_on_provider
     @ocp_upgrade
