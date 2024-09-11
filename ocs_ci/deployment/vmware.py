@@ -148,12 +148,13 @@ class VSPHEREBASE(Deployment):
 
         self.wait_time = 90
 
-    def attach_disk(self, size=100, disk_type=constants.VM_DISK_TYPE):
+    def attach_disk(self, size=100, disk_type=constants.VM_DISK_TYPE, ssd=False):
         """
         Add a new disk to all the workers nodes
 
         Args:
             size (int): Size of disk in GB (default: 100)
+            ssd (bool): if True, mark disk as SSD
 
         """
         vms = self.vsphere.get_all_vms_in_pool(
@@ -163,7 +164,7 @@ class VSPHEREBASE(Deployment):
         for vm in vms:
             if "compute" in vm.name:
                 self.vsphere.add_disks(
-                    config.ENV_DATA.get("extra_disks", 1), vm, size, disk_type
+                    config.ENV_DATA.get("extra_disks", 1), vm, size, disk_type, ssd
                 )
 
     def add_nodes(self):
