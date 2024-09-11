@@ -1,0 +1,5 @@
+ENV_DATA:
+  skip_upgrade_checks: true
+  continue_upgrade_after_checks_even_if_not_healthy: true
+  upgrade_osd_requires_healthy_pgs: false
+  osd_maintenance_timeout: 33

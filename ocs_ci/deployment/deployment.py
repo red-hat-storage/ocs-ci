@@ -1592,11 +1592,27 @@ class Deployment(object):
         ceph_threshold_near_full_ratio = config.ENV_DATA.get(
             "ceph_threshold_near_full_ratio"
         )
+
+        osd_maintenance_timeout = config.ENV_DATA.get("osd_maintenance_timeout")
+
+        # For testing: https://issues.redhat.com/browse/RHSTOR-5758
+        skip_upgrade_checks = config.ENV_DATA.get("skip_upgrade_checks")
+        continue_upgrade_after_checks_even_if_not_healthy = config.ENV_DATA.get(
+            "continue_upgrade_after_checks_even_if_not_healthy"
+        )
+        upgrade_osd_requires_healthy_pgs = config.ENV_DATA.get(
+            "upgrade_osd_requires_healthy_pgs"
+        )
+
         set_managed_resources_ceph_cluster = (
             wait_timeout_for_healthy_osd_in_minutes
             or ceph_threshold_backfill_full_ratio
             or ceph_threshold_full_ratio
             or ceph_threshold_near_full_ratio
+            or osd_maintenance_timeout
+            or skip_upgrade_checks
+            or continue_upgrade_after_checks_even_if_not_healthy
+            or upgrade_osd_requires_healthy_pgs
         )
         if set_managed_resources_ceph_cluster:
             cluster_data.setdefault("spec", {}).setdefault(
@@ -1619,6 +1635,26 @@ class Deployment(object):
                 managed_resources_ceph_cluster[
                     "nearFullRatio"
                 ] = ceph_threshold_near_full_ratio
+
+            if osd_maintenance_timeout:
+                managed_resources_ceph_cluster[
+                    "osdMaintenanceTimeout"
+                ] = osd_maintenance_timeout
+
+            if skip_upgrade_checks is not None:
+                managed_resources_ceph_cluster[
+                    "skipUpgradeChecks"
+                ] = skip_upgrade_checks
+
+            if continue_upgrade_after_checks_even_if_not_healthy is not None:
+                managed_resources_ceph_cluster[
+                    "continueUpgradeAfterChecksEvenIfNotHealthy"
+                ] = continue_upgrade_after_checks_even_if_not_healthy
+
+            if upgrade_osd_requires_healthy_pgs is not None:
+                managed_resources_ceph_cluster[
+                    "upgradeOSDRequiresHealthyPGs"
+                ] = upgrade_osd_requires_healthy_pgs
 
         cluster_data_yaml = tempfile.NamedTemporaryFile(
             mode="w+", prefix="cluster_storage", delete=False
