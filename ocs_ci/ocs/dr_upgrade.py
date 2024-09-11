@@ -41,7 +41,10 @@ class DRUpgrade(OCSUpgrade):
         resource_name=None,
     ):
         if not version_before_upgrade:
-            version_before_upgrade = config.ENV_DATA.get("ocs_version")
+            if config.PREUPGRADE_CONFIG.get('ENV_DATA').get("ocs_version", ''):
+                version_before_upgrade = config.PREUPGRADE_CONFIG['ENV_DATA'].get("ocs_version")
+            else:
+                version_before_upgrade = config.ENV_DATA.get("ocs_version")
         if not ocs_registry_image:
             ocs_registry_image = config.UPGRADE.get("upgrade_ocs_registry_image")
         self.external_cluster = None
