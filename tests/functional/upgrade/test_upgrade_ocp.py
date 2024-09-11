@@ -100,7 +100,7 @@ class TestUpgradeOCP(ManageTest):
         if (
             config.multicluster
             and config.MULTICLUSTER["multicluster_mode"] == "metro-dr"
-            and is_acm_cluster()
+            and is_acm_cluster(config)
         ):
             # Find the ODF cluster in current zone
             mdr_upgrade = MDRClusterUpgradeParametrize()
