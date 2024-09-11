@@ -48,7 +48,7 @@ setup(
         "google-cloud-storage==2.6.0",
         "google-auth==2.14.1",
         "elasticsearch==8.11.1",
-        "numpy==1.22.0",
+        "numpy==1.23.2",
         "pandas==1.5.2",
         "tabulate==0.9.0",
         "python-ipmi==0.4.2",
