@@ -3,6 +3,8 @@ from concurrent.futures import ThreadPoolExecutor
 import os
 import logging
 
+logger = logging.getLogger(__name__)
+
 
 def create_files(base_path, num_files):
     try:
@@ -14,7 +16,7 @@ def create_files(base_path, num_files):
             file_paths.append(file_path)
         return file_paths
     except Exception as e:
-        logging.error(f"Error during file creation: {str(e)}")
+        logger.error(f"Error during file creation: {str(e)}")
         return []
 
 
