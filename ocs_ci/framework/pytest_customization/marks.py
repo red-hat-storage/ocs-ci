@@ -196,9 +196,13 @@ fips_required = pytest.mark.skipif(
     reason="Test runs only on FIPS enabled cluster",
 )
 
-stretchcluster_required = pytest.mark.skipif(
+stretchcluster_required_skipif = pytest.mark.skipif(
     config.DEPLOYMENT.get("arbiter_deployment") is False,
     reason="Test runs only on Stretch cluster with arbiter deployments",
+)
+
+stretchcluster_required = compose(
+    stretchcluster_required_skipif, pytest.mark.stretchcluster_required
 )
 
 sts_deployment_required = pytest.mark.skipif(
