@@ -50,6 +50,7 @@ def get_current_primary_cluster_name(
     Args:
         namespace (str): Name of the namespace
         workload_type (str): Type of workload, i.e., Subscription or ApplicationSet
+        discovered_apps (bool): If true then deployed workload is discovered_apps
 
     Returns:
         str: Current primary cluster name
@@ -78,6 +79,7 @@ def get_current_secondary_cluster_name(
     Args:
         namespace (str): Name of the namespace
         workload_type (str): Type of workload, i.e., Subscription or ApplicationSet
+        discovered_apps (bool): If true then deployed workload is discovered_apps
 
     Returns:
         str: Current secondary cluster name
@@ -139,6 +141,7 @@ def get_scheduling_interval(
     Args:
         namespace (str): Name of the namespace
         workload_type (str): Type of workload, i.e., Subscription or ApplicationSet
+        discovered_apps (bool): If true then deployed workload is discovered_apps
 
     Returns:
         int: scheduling interval value from DRPolicy
