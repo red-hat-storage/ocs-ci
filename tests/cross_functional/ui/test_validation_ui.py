@@ -180,7 +180,7 @@ class TestUserInterfaceValidation(object):
     @runs_on_provider
     @pytest.mark.bugzilla("XXXX")
     @skipif_no_lower_requirements
-    def test_performance_modes_disable_page(self, setup_ui_class_factory):
+    def test_performance_modes_disabled(self, setup_ui_class_factory):
         """
         test_performance_modes_disable_page
 
