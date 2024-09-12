@@ -25,6 +25,34 @@ class TestStorageclusterUpgradeParams(ManageTest):
 
     """
 
+    UPGRADE_PARAMS = [
+        {
+            "sc_key": "waitTimeoutForHealthyOSDInMinutes",
+            "value": "0.81",
+            "default_value": "0.8",
+        },
+        {
+            "sc_key": "skipUpgradeChecks",
+            "value": "0.86",
+            "default_value": "0.85",
+        },
+        {
+            "sc_key": "continueUpgradeAfterChecksEvenIfNotHealthy",
+            "value": "0.77",
+            "default_value": "0.75",
+        },
+        {
+            "sc_key": "upgradeOSDRequiresHealthyPGs",
+            "value": "0.77",
+            "default_value": "0.75",
+        },
+        {
+            "sc_key": "osdMaintenanceTimeout",
+            "value": "0.77",
+            "default_value": "0.75",
+        },
+    ]
+
     @pytest.fixture(autouse=True)
     def teardown_fixture(self, request):
         """
@@ -54,14 +82,7 @@ class TestStorageclusterUpgradeParams(ManageTest):
         4.Configure the default params on storagecluster [treardown]
 
         """
-        params_dict = {
-            "waitTimeoutForHealthyOSDInMinutes": "31",
-            "skipUpgradeChecks": "true",
-            "continueUpgradeAfterChecksEvenIfNotHealthy": "true",
-            "upgradeOSDRequiresHealthyPGs": "true",
-            "osdMaintenanceTimeout": "18",
-        }
-        self.set_storage_cluster_upgrade_params(params_dict)
+        self.set_storage_cluster_upgrade_params()
 
         logger.info("Wait 2 sec the cephcluster will updated")
         time.sleep(2)
@@ -74,7 +95,7 @@ class TestStorageclusterUpgradeParams(ManageTest):
             namespace=config.ENV_DATA["cluster_namespace"],
             resource_name=constants.CEPH_CLUSTER_NAME,
         )
-        for parameter, parameter_value in params_dict.items():
+        for parameter in self.UPGRADE_PARAMS:
             if parameter == "osdMaintenanceTimeout":
                 actual_value = cephcluster_obj.data["spec"]["disruptionManagement"][
                     parameter
@@ -82,26 +103,29 @@ class TestStorageclusterUpgradeParams(ManageTest):
             else:
                 actual_value = cephcluster_obj.data["spec"][parameter]
             assert (
-                str(actual_value).lower() == str(parameter_value).lower()
-            ), f"The value of {parameter} is {actual_value} the expected value is {parameter_value}"
+                str(actual_value).lower() == str(parameter["value"]).lower()
+            ), f"The value of {parameter['sc_key']} is {actual_value} the expected value is"
 
-    def set_storage_cluster_upgrade_params(self, params_dict):
+    def set_storage_cluster_ceph_full_thresholds_params(self, default_values=False):
         """
-        Configure StorageCluster CR with upgrade params
-
+        Configure StorageCluster CR with ceph full thresholds params
         Args:
-            params_dict:
-
+            default_values(bool): parameters to set in StorageCluster under /spec/managedResources/cephCluster/
         """
-        logger.info(f"Configure StorageCluster CR with upgrade params {params_dict}")
+        logger.info("Configure StorageCluster CR with upgrade params")
         storagecluster_obj = ocp.OCP(
             kind=constants.STORAGECLUSTER,
             namespace=config.ENV_DATA["cluster_namespace"],
             resource_name=constants.DEFAULT_CLUSTERNAME,
         )
-        for parameter, parameter_value in params_dict.items():
+        for parameter in self.UPGRADE_PARAMS:
+            sc_key = parameter["sc_key"]
+            if default_values:
+                parameter_value = parameter["default_value"]
+            else:
+                parameter_value = parameter["value"]
             param = (
-                f'[{{"op": "add", "path": "/spec/managedResources/cephCluster/{parameter}",'
+                f'[{{"op": "add", "path": "/spec/managedResources/cephCluster/{sc_key}",'
                 f' "value": {parameter_value}}}]'
             )
             storagecluster_obj.patch(params=param, format_type="json")
