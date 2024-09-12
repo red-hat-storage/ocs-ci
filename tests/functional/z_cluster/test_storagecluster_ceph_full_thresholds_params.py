@@ -30,19 +30,19 @@ class TestStorageClusterCephFullThresholdsParams(ManageTest):
     TRESHOLDS = [
         {
             "sc_key": "backfillFullRatio",
-            "value": "0.84",
-            "default_value": "0.85",
+            "value": "0.81",
+            "default_value": "0.8",
             "ceph_key": "backfillfull_ratio",
         },
         {
             "sc_key": "fullRatio",
-            "value": "0.79",
-            "default_value": "0.8",
+            "value": "0.86",
+            "default_value": "0.85",
             "ceph_key": "full_ratio",
         },
         {
             "sc_key": "nearFullRatio",
-            "value": "0.74",
+            "value": "0.77",
             "default_value": "0.75",
             "ceph_key": "nearfull_ratio",
         },
