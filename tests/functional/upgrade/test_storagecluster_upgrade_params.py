@@ -18,7 +18,7 @@ logger = logging.getLogger(__name__)
 @tier2
 @brown_squad
 @skipif_external_mode
-@pytest.mark.polarion_id("OCS-XXX")
+@pytest.mark.polarion_id("OCS-6225")
 class TestStorageclusterUpgradeParams(ManageTest):
     """
     Verify the upgrade storagecluster parameters move to cephcluster
