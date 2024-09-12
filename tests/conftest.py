@@ -46,7 +46,12 @@ from ocs_ci.ocs.bucket_utils import (
 )
 from ocs_ci.ocs.constants import FUSION_CONF_DIR
 from ocs_ci.ocs.cnv.virtual_machine import VirtualMachine
-from ocs_ci.ocs.dr.dr_workload import BusyBox, BusyBox_AppSet, CnvWorkload
+from ocs_ci.ocs.dr.dr_workload import (
+    BusyBox,
+    BusyBox_AppSet,
+    CnvWorkload,
+    BusyboxDiscoveredApps,
+)
 from ocs_ci.ocs.exceptions import (
     CommandFailed,
     TimeoutExpiredError,
@@ -6854,6 +6859,74 @@ def cnv_dr_workload(request):
 
         if ocsci_config.MULTICLUSTER["multicluster_mode"] == constants.RDR_MODE:
             dr_helpers.wait_for_mirroring_status_ok(replaying_images=total_pvc_count)
+
+        return instances
+
+    def teardown():
+        for instance in instances:
+            try:
+                instance.delete_workload(force=True)
+            except ResourceNotDeleted:
+                raise ResourceNotDeleted("Workload deletion was unsuccessful")
+
+    request.addfinalizer(teardown)
+    return factory
+
+
+@pytest.fixture()
+def discovered_apps_dr_workload(request):
+    """
+    Deploys Discovered App based workload for DR setup
+
+    """
+    instances = []
+
+    def factory(kubeobject=1):
+        """
+        Args:
+            kubeobject (int): Number if Discovered Apps workload with kube object protection to be created
+            recipe (int): Number if Discovered Apps workload with recipe protection to be created
+            pvc_interface (str): 'CephBlockPool' or 'CephFileSystem'.
+                This decides whether a RBD based or CephFS based resource is created. RBD is default.
+
+        Raises:
+            ResourceNotDeleted: In case workload resources not deleted properly
+
+        Returns:
+            list: objects of workload class
+
+        """
+        total_pvc_count = 0
+        workload_key = "dr_workload_discovered_apps_rbd"
+        # TODO: When cephfs is ready
+        # if pvc_interface == constants.CEPHFILESYSTEM:
+        #     workload_key = "dr_workload_discovered_apps_cephfs"
+        for index in range(kubeobject):
+            workload_details = ocsci_config.ENV_DATA[workload_key][index]
+            workload = BusyboxDiscoveredApps(
+                workload_dir=workload_details["workload_dir"],
+                workload_pod_count=workload_details["pod_count"],
+                workload_pvc_count=workload_details["pvc_count"],
+                workload_namespace=workload_details["workload_namespace"],
+                discovered_apps_pvc_selector_key=workload_details[
+                    "dr_workload_app_pvc_selector_key"
+                ],
+                discovered_apps_pvc_selector_value=workload_details[
+                    "dr_workload_app_pvc_selector_value"
+                ],
+                discovered_apps_pod_selector_key=workload_details[
+                    "dr_workload_app_pod_selector_key"
+                ],
+                discovered_apps_pod_selector_value=workload_details[
+                    "dr_workload_app_pod_selector_value"
+                ],
+                workload_placement_name=workload_details[
+                    "dr_workload_app_placement_name"
+                ],
+            )
+            instances.append(workload)
+            total_pvc_count += workload_details["pvc_count"]
+            workload.deploy_workload()
 
         return instances
 

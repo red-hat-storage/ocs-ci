@@ -125,7 +125,11 @@ STATUS_READYTOUSE = "READYTOUSE"
 STATUS_FAILED = "Failed"
 STATUS_FAILEDOVER = "FailedOver"
 STATUS_RELOCATED = "Relocated"
+STATUS_RELOCATING = "Relocating"
 STATUS_CONTAINER_STATUS_UNKNOWN = "ContainerStatusUnknown"
+STATUS_WAITFORUSERTOCLEANUP = "WaitOnUserToCleanUp"
+STATUS_POWERON = "ON"
+STATUS_POWEROFF = "OFF"
 
 # NooBaa statuses
 BS_AUTH_FAILED = "AUTH_FAILED"
@@ -2842,6 +2846,7 @@ UI_INPUT_RULES_STORAGE_SYSTEM = {
 
 # DR
 DRPC_PATH = os.path.join(TEMPLATE_DIR, "DR", "drpc.yaml")
+PLACEMENT_PATH = os.path.join(TEMPLATE_DIR, "DR", "placement.yaml")
 CLUSTERROLEBINDING_APPSET_PULLMODEL_PATH = os.path.join(
     TEMPLATE_DIR, "DR", "clusterrolebinding_appset_pullmodel.yaml"
 )
@@ -2857,6 +2862,9 @@ PLACEMENT = "Placement"
 GITOPS_CLUSTER_NAMESPACE = "openshift-gitops"
 APPLICATION_ARGOCD = "applications.argoproj.io"
 PLACEMENT_KIND = "placements.cluster.open-cluster-management.io"
+
+DISCOVERED_APPS = "DiscoveredApps"
+DR_OPS_NAMESAPCE = "openshift-dr-ops"
 DPA_DISCOVERED_APPS_PATH = os.path.join(TEMPLATE_DIR, "DR", "dpa_discovered_apps.yaml")
 
 DISABLE_DR_EACH_APP = os.path.join(TEMPLATE_DIR, "DR", "disable_dr_each_app.sh")
