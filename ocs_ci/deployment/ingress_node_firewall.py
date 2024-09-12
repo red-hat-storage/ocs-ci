@@ -162,7 +162,7 @@ class IngressNodeFirewallInstaller(object):
 
         """
         for csv in TimeoutSampler(
-            timeout=900,
+            timeout=1800,
             sleep=15,
             func=get_csvs_start_with_prefix,
             csv_prefix=constants.INGRESS_NODE_FIREWALL_CSV_NAME,
