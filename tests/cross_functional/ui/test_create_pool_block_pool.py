@@ -28,7 +28,7 @@ need_to_delete = []
 
 @skipif_ui_not_support("block_pool")
 @pytest.mark.parametrize(
-    argnames=["replica", "pool_type", "compression"],
+    argnames=["replica", "compression", "pool_type"],
     argvalues=[
         pytest.param(*[3, True], "rbd", marks=pytest.mark.polarion_id("OCS-2589")),
         pytest.param(*[3, False], "rbd", marks=pytest.mark.polarion_id("OCS-2588")),
