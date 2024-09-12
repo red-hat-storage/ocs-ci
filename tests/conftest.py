@@ -50,7 +50,7 @@ from ocs_ci.ocs.dr.dr_workload import (
     BusyBox,
     BusyBox_AppSet,
     CnvWorkload,
-    Busybox_DiscoveredApps,
+    BusyboxDiscoveredApps,
 )
 from ocs_ci.ocs.exceptions import (
     CommandFailed,
@@ -6903,7 +6903,7 @@ def discovered_apps_dr_workload(request):
         #     workload_key = "dr_workload_discovered_apps_cephfs"
         for index in range(kubeobject):
             workload_details = ocsci_config.ENV_DATA[workload_key][index]
-            workload = Busybox_DiscoveredApps(
+            workload = BusyboxDiscoveredApps(
                 workload_dir=workload_details["workload_dir"],
                 workload_pod_count=workload_details["pod_count"],
                 workload_pvc_count=workload_details["pvc_count"],

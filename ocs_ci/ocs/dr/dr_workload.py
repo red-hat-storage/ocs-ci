@@ -1051,7 +1051,7 @@ def validate_data_integrity_vm(
         ), f"Failed: MD5 comparison after {app_state}"
 
 
-class Busybox_DiscoveredApps(DRWorkload):
+class BusyboxDiscoveredApps(DRWorkload):
     """
     Class handling everything related to busybox workload for Discovered/Imperative Apps
 
