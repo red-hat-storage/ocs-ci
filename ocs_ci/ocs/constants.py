@@ -1299,6 +1299,25 @@ OPTIONAL_OPERATORS_SELECTOR = "catalog=optional-operators"
 OCS_OPERATOR_BUNDLE_IMAGE = "quay.io/rhceph-dev/ocs-operator-bundle"
 OCS_CATALOG_SOURCE_NAME = "ocs-catalogsource"
 
+OCS_DEPLOYMENTS = [
+    "csi-addons-controller-manager",
+    "noobaa-operator",
+    "ocs-operator",
+    "odf-console",
+    "odf-operator-controller-manager",
+    "rook-ceph-operator",
+    "ux-backend-server",
+]
+
+OCS_DEPLOYMENTS_4_16 = OCS_DEPLOYMENTS + [
+    "ocs-client-operator-console",
+    "ocs-client-operator-controller-manager",
+    "prometheus-operator",
+]
+OCS_DEPLOYMENTS_4_17 = OCS_DEPLOYMENTS_4_16 + [
+    "ceph-csi-controller-manager",
+]
+
 # OCP related constants
 OPENSHIFT_UPGRADE_INFO_API = (
     "https://api.openshift.com/api/upgrades_info/v1/graph?channel={channel}"
