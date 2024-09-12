@@ -7,6 +7,7 @@ from ocs_ci.ocs import constants, ocp
 from ocs_ci.framework import config
 from ocs_ci.helpers.helpers import run_cmd_verify_cli_output
 from ocs_ci.utility.utils import TimeoutSampler
+from ocs_ci.helpers.helpers import configure_cephcluster_params_in_storagecluster_cr
 from ocs_ci.framework.testlib import (
     ManageTest,
     tier2,
@@ -56,7 +57,9 @@ class TestStorageClusterCephFullThresholdsParams(ManageTest):
         """
 
         def finalizer():
-            self.set_storage_cluster_ceph_full_thresholds_params(default_values=True)
+            configure_cephcluster_params_in_storagecluster_cr(
+                params=self.TRESHOLDS, default_values=True
+            )
 
         request.addfinalizer(finalizer)
 
@@ -70,7 +73,9 @@ class TestStorageClusterCephFullThresholdsParams(ManageTest):
         5.Configure the default params on storagecluster [treardown]
 
         """
-        self.set_storage_cluster_ceph_full_thresholds_params()
+        configure_cephcluster_params_in_storagecluster_cr(
+            params=self.TRESHOLDS, default_values=False
+        )
 
         logger.info("Wait 2 sec the cephcluster will updated")
         time.sleep(2)
@@ -105,29 +110,3 @@ class TestStorageClusterCephFullThresholdsParams(ManageTest):
             raise Exception(
                 "The ceph full thresholds storagecluster parameters are not updated in ceph tool"
             )
-
-    def set_storage_cluster_ceph_full_thresholds_params(self, default_values=False):
-        """
-        Configure StorageCluster CR with ceph full thresholds params
-
-        Args:
-            default_values(bool): parameters to set in StorageCluster under /spec/managedResources/cephCluster/
-
-        """
-        logger.info("Configure StorageCluster CR with upgrade params")
-        storagecluster_obj = ocp.OCP(
-            kind=constants.STORAGECLUSTER,
-            namespace=config.ENV_DATA["cluster_namespace"],
-            resource_name=constants.DEFAULT_CLUSTERNAME,
-        )
-        for parameter in self.TRESHOLDS:
-            sc_key = parameter["sc_key"]
-            if default_values:
-                parameter_value = parameter["default_value"]
-            else:
-                parameter_value = parameter["value"]
-            param = (
-                f'[{{"op": "add", "path": "/spec/managedResources/cephCluster/{sc_key}",'
-                f' "value": {parameter_value}}}]'
-            )
-            storagecluster_obj.patch(params=param, format_type="json")

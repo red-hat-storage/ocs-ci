@@ -5183,3 +5183,31 @@ def get_rbd_image_info(rbd_pool, rbd_image_name):
         data["used_size_gib"] = data["used_size"] / bytes_in_gib
 
     return data
+
+
+def configure_cephcluster_params_in_storagecluster_cr(params, default_values=False):
+    """
+    Configure cephcluster block in StorageCluster CR /spec/managedResources/cephCluster/
+
+    Args:
+        params (list) : A list of dictionaries with value for cephCluster in StorageCluster CR
+        default_values(bool): parameters to set in StorageCluster under /spec/managedResources/cephCluster/
+
+    """
+    logger.info("Configure cephcluster block in StorageCluster CR")
+    storagecluster_obj = ocp.OCP(
+        kind=constants.STORAGECLUSTER,
+        namespace=config.ENV_DATA["cluster_namespace"],
+        resource_name=constants.DEFAULT_CLUSTERNAME,
+    )
+    for parameter in params:
+        sc_key = parameter["sc_key"]
+        if default_values:
+            parameter_value = parameter["default_value"]
+        else:
+            parameter_value = parameter["value"]
+        param = (
+            f'[{{"op": "add", "path": "/spec/managedResources/cephCluster/{sc_key}",'
+            f' "value": {parameter_value}}}]'
+        )
+        storagecluster_obj.patch(params=param, format_type="json")
