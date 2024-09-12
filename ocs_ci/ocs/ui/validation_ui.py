@@ -705,30 +705,3 @@ class ValidationUI(PageNavigator):
                 self.take_screenshot()
         self.take_screenshot()
         return True
-
-        # #  "configure_performance_button": ("//span[text()='Configure performance']", By.XPATH),
-        # #
-        # #
-        # #
-        # #     "add_capacity_button": ("//span[text()='Select options']", By.XPATH),
-        # # (
-        # #             'button[class="pf-v5-c-select__toggle"], '
-        # #             'button[class="pf-c-select__toggle"]',
-        # #             By.CSS_SELECTOR,
-        # #         ), timeout=10)
-        # from selenium.webdriver.common.by import By
-        #
-        # self.do_click(
-        #     (
-        #         'button[class="pf-v5-c-select__toggle"], '
-        #         'button[class="pf-c-select__toggle"]',
-        #         By.CSS_SELECTOR,
-        #     ),
-        #     timeout=10,
-        # )
-        # self.do_click(("//span[text()='Select options']", By.XPATH))
-        # self.do_click(("//span[text()='Lean mode']", By.XPATH))
-        # self.do_click(("//span[text()='Balanced mode']", By.XPATH))
-        # self.do_click(("//span[text()='Performance mode']", By.XPATH))
-        # self.do_click(self.add_capacity_ui_loc["add_capacity_button"])
-        # self.take_screenshot()
