@@ -1610,9 +1610,9 @@ class Deployment(object):
             or ceph_threshold_full_ratio
             or ceph_threshold_near_full_ratio
             or osd_maintenance_timeout
-            or skip_upgrade_checks
-            or continue_upgrade_after_checks_even_if_not_healthy
-            or upgrade_osd_requires_healthy_pgs
+            or skip_upgrade_checks is not None
+            or continue_upgrade_after_checks_even_if_not_healthy is not None
+            or upgrade_osd_requires_healthy_pgs is not None
         )
         if set_managed_resources_ceph_cluster:
             cluster_data.setdefault("spec", {}).setdefault(
