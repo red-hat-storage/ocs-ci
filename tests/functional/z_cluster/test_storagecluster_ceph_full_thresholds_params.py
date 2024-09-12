@@ -95,7 +95,7 @@ class TestStorageClusterCephFullThresholdsParams(ManageTest):
             func=run_cmd_verify_cli_output,
             cmd="ceph osd dump",
             expected_output_lst=(
-                tuple(f"{d['ceph_key']} {d['default_value']}" for d in self.TRESHOLDS)
+                tuple(f"{d['ceph_key']} {d['value']}" for d in self.TRESHOLDS)
             ),
             cephtool_cmd=True,
             ocs_operator_cmd=False,
@@ -111,7 +111,7 @@ class TestStorageClusterCephFullThresholdsParams(ManageTest):
         Configure StorageCluster CR with ceph full thresholds params
 
         Args:
-            default_values: parameters to set in StorageCluster under /spec/managedResources/cephCluster/
+            default_values(bool): parameters to set in StorageCluster under /spec/managedResources/cephCluster/
 
         """
         logger.info("Configure StorageCluster CR with upgrade params")
