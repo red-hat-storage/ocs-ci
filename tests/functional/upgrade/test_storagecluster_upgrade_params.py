@@ -28,28 +28,28 @@ class TestStorageclusterUpgradeParams(ManageTest):
     UPGRADE_PARAMS = [
         {
             "sc_key": "waitTimeoutForHealthyOSDInMinutes",
-            "value": "0.81",
-            "default_value": "0.8",
+            "value": "11",
+            "default_value": "10",
         },
         {
             "sc_key": "skipUpgradeChecks",
-            "value": "0.86",
-            "default_value": "0.85",
+            "value": "true",
+            "default_value": "false",
         },
         {
             "sc_key": "continueUpgradeAfterChecksEvenIfNotHealthy",
-            "value": "0.77",
-            "default_value": "0.75",
+            "value": "true",
+            "default_value": "false",
         },
         {
             "sc_key": "upgradeOSDRequiresHealthyPGs",
-            "value": "0.77",
-            "default_value": "0.75",
+            "value": "true",
+            "default_value": "false",
         },
         {
             "sc_key": "osdMaintenanceTimeout",
-            "value": "0.77",
-            "default_value": "0.75",
+            "value": "32",
+            "default_value": "30",
         },
     ]
 
@@ -62,14 +62,7 @@ class TestStorageclusterUpgradeParams(ManageTest):
 
         def finalizer():
 
-            params_dict = {
-                "waitTimeoutForHealthyOSDInMinutes": "10",
-                "skipUpgradeChecks": "false",
-                "continueUpgradeAfterChecksEvenIfNotHealthy": "false",
-                "upgradeOSDRequiresHealthyPGs": "false",
-                "osdMaintenanceTimeout": "30",
-            }
-            self.set_storage_cluster_upgrade_params(params_dict)
+            self.set_storage_cluster_upgrade_params(default_values=True)
 
         request.addfinalizer(finalizer)
 
@@ -96,19 +89,19 @@ class TestStorageclusterUpgradeParams(ManageTest):
             resource_name=constants.CEPH_CLUSTER_NAME,
         )
         for parameter in self.UPGRADE_PARAMS:
-            if parameter == "osdMaintenanceTimeout":
+            if parameter["sc_key"] == "osdMaintenanceTimeout":
                 actual_value = cephcluster_obj.data["spec"]["disruptionManagement"][
-                    parameter
+                    parameter["sc_key"]
                 ]
             else:
-                actual_value = cephcluster_obj.data["spec"][parameter]
+                actual_value = cephcluster_obj.data["spec"][parameter["sc_key"]]
             assert (
                 str(actual_value).lower() == str(parameter["value"]).lower()
-            ), f"The value of {parameter['sc_key']} is {actual_value} the expected value is"
+            ), f"The value of {parameter['sc_key']} is {actual_value} the expected value is {parameter['value']}"
 
-    def set_storage_cluster_ceph_full_thresholds_params(self, default_values=False):
+    def set_storage_cluster_upgrade_params(self, default_values=False):
         """
-        Configure StorageCluster CR with ceph full thresholds params
+        Configure StorageCluster CR with upgrades params
         Args:
             default_values(bool): parameters to set in StorageCluster under /spec/managedResources/cephCluster/
         """
