@@ -311,7 +311,6 @@ class OSDKeyrotation(KeyRotation):
 
         """
         cmd = f" get secret rook-ceph-osd-encryption-key-{device} -o jsonpath='{{.data.dmcrypt-key}}'"
-
         dmcrypt_key = self._exec_oc_cmd(cmd=cmd, out_yaml_format=False)
         log.info(f"dmcrypt-key of device {device} is {dmcrypt_key}")
         return dmcrypt_key
@@ -409,34 +408,53 @@ class PVKeyrotation(KeyRotation):
 
         return True
 
+
 def enable_key_rotation():
-    # Enable Keyrotation and verify its enable status at Noobaa and storagecluster end.
+    """
+    Enable Key rotation and verify its status for Noobaa and Storage cluster.
+
+    """
     osd_keyrotation = OSDKeyrotation()
     noobaa_keyrotation = NoobaaKeyrotation()
+    osd_keyrotation.enable_keyrotation()
     noobaa_keyrotation.enable_keyrotation()
 
+    assert (
+        osd_keyrotation.is_keyrotation_enable()
+    ), "Encryption Key rotation is not enabled for OSDs"
     assert (
         noobaa_keyrotation.is_keyrotation_enable
     ), "Keyrotation is not enabled in the storagecluster object."
     assert (
         noobaa_keyrotation.is_noobaa_keyrotation_enable
     ), "Keyrotation is not enabled in the noobaa object."
-def set_key_rotatio_time(value):
-    """ value = no.of minutes"""
-    osd_keyrotation = OSDKeyrotation()
-    #noobaa_keyrotation = NoobaaKeyrotation()
 
+
+def set_key_rotation_time(value):
+    """
+    This function will edit the storage cluster and add the value in key rotation schedule
+    Args:
+         value: (str) number of minutes
+
+    """
+    osd_keyrotation = OSDKeyrotation()
     schedule = f"*/{value} * * * *"
     osd_keyrotation.set_keyrotation_schedule(schedule)
 
 
 def verify_key_rotation_time(schedule):
-    # Verify Keyrotation schedule changed at storagecluster object and rook object.
+    """
+    Verify Key rotation schedule changed at storage cluster, rook and Noobaa object.
+
+    Args:
+        schedule: (str)
+
+    """
     osd_keyrotation = OSDKeyrotation()
     noobaa_keyrotation = NoobaaKeyrotation()
     assert (
         osd_keyrotation.get_keyrotation_schedule() == schedule
-    ), f"Keyrotation schedule is not set to {schedule} minutes in storagecluster object."
+    ), f"Keyrotation schedule is not set to {schedule} minutes in storage cluster object."
     assert (
         osd_keyrotation.get_osd_keyrotation_schedule() == schedule
     ), "KeyRotation is not enabled in the Rook Object."
@@ -445,16 +463,16 @@ def verify_key_rotation_time(schedule):
     ), f"Keyrotation schedule is not set to every {schedule} minutes in Noobaa object."
 
 
-def verify_new_key_after_rotation(tries,delays):
+def verify_new_key_after_rotation(tries, delays):
     osd_keyrotation = OSDKeyrotation()
     noobaa_keyrotation = NoobaaKeyrotation()
 
-    # Recored existing OSD keys before rotation is happened.
+    log.info("Record existing OSD keys before rotation is happened.")
     osd_keys_before_rotation = {}
     for device in osd_keyrotation.deviceset:
         osd_keys_before_rotation[device] = osd_keyrotation.get_osd_dm_crypt(device)
 
-    # Recoard Noobaa volume and backend keys before rotation.
+    log.info("Record Noobaa volume and backend keys before rotation.")
     (
         old_noobaa_backend_key,
         old_noobaa_backend_secret,
@@ -475,6 +493,7 @@ def verify_new_key_after_rotation(tries,delays):
     def compare_old_keys_with_new_keys():
         """
         Compare old keys with new keys.
+
         """
         (
             new_noobaa_backend_key,
@@ -497,6 +516,7 @@ def verify_new_key_after_rotation(tries,delays):
         log.info(
             f"Noobaa Volume key rotated {new_noobaa_volume_key} : {new_noobaa_volume_secret}"
         )
+
     try:
         osd_keyrotation.verify_keyrotation(osd_keys_before_rotation, tries=10, delay=30)
         compare_old_keys_with_new_keys()
