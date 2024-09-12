@@ -678,7 +678,8 @@ class ValidationUI(PageNavigator):
         )
         return storage_client_obj
 
-    def verify_performance_modes_disable_page(self):
+    def verify_performance_modes_options_disabled(self):
+        """ """
         self.navigate_installed_operators_page()
         self.do_click(self.add_capacity_ui_loc["odf_operator"])
         self.do_click(self.add_capacity_ui_loc["storage_system_tab"])
@@ -686,11 +687,48 @@ class ValidationUI(PageNavigator):
         logger.info("Click on kebab menu of Storage Systems")
         self.do_click(self.add_capacity_ui_loc["kebab_storage_cluster"])
         self.take_screenshot()
-        logger.info("Click on Add Capacity button under the kebab menu")
+        logger.info("Click on Configure performance under the kebab menu")
         self.wait_until_expected_text_is_found(
-            locator=self.add_capacity_ui_loc["add_capacity_button"],
+            locator=self.add_capacity_ui_loc["configure_performance_button"],
             timeout=10,
-            expected_text="Add Capacity",
+            expected_text="Configure performance",
         )
-        self.do_click(self.add_capacity_ui_loc["add_capacity_button"])
+        self.do_click(self.add_capacity_ui_loc["configure_performance_button"])
+        for mode in ("lean_mode", "performance_mode"):
+            try:
+                self.do_click(self.dep_loc["expand_advanced_mode"])
+                self.do_click(self.add_capacity_ui_loc[mode])
+                self.take_screenshot()
+                return False
+            except Exception as e:
+                logger.info(e)
+                self.take_screenshot()
         self.take_screenshot()
+        return True
+
+        # #  "configure_performance_button": ("//span[text()='Configure performance']", By.XPATH),
+        # #
+        # #
+        # #
+        # #     "add_capacity_button": ("//span[text()='Select options']", By.XPATH),
+        # # (
+        # #             'button[class="pf-v5-c-select__toggle"], '
+        # #             'button[class="pf-c-select__toggle"]',
+        # #             By.CSS_SELECTOR,
+        # #         ), timeout=10)
+        # from selenium.webdriver.common.by import By
+        #
+        # self.do_click(
+        #     (
+        #         'button[class="pf-v5-c-select__toggle"], '
+        #         'button[class="pf-c-select__toggle"]',
+        #         By.CSS_SELECTOR,
+        #     ),
+        #     timeout=10,
+        # )
+        # self.do_click(("//span[text()='Select options']", By.XPATH))
+        # self.do_click(("//span[text()='Lean mode']", By.XPATH))
+        # self.do_click(("//span[text()='Balanced mode']", By.XPATH))
+        # self.do_click(("//span[text()='Performance mode']", By.XPATH))
+        # self.do_click(self.add_capacity_ui_loc["add_capacity_button"])
+        # self.take_screenshot()

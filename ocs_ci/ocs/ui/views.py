@@ -1171,6 +1171,14 @@ add_capacity = {
     "managed-premium_sc": ('a[id="managed-premium-link"]', By.CSS_SELECTOR),
     "confirm_add_capacity": ('button[data-test="confirm-action"]', By.CSS_SELECTOR),
     "filter_pods": ('input[data-test-id="item-filter"]', By.CSS_SELECTOR),
+    "configure_performance_button": (
+        "//span[text()='Configure performance']",
+        By.XPATH,
+    ),
+    "select_performance_options": ("//span[text()='Select options']", By.XPATH),
+    "lean_mode": ("//span[text()='Lean mode']", By.XPATH),
+    "balanced_mode": ("//span[text()='Balanced mode']", By.XPATH),
+    "performance_mode": ("//span[text()='Performance mode']", By.XPATH),
 }
 
 add_capacity_4_11 = {

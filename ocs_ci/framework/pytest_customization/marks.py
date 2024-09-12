@@ -508,6 +508,11 @@ skipif_no_lso = pytest.mark.skipif(
     reason="Test run only on LSO deployed cluster",
 )
 
+skipif_no_lower_requirements = pytest.mark.skipif(
+    not config.ENV_DATA.get("worker_instance_type") == "m4.2xlarge",
+    reason="Test run only on lower requirements cluster",
+)
+
 skipif_rhel_os = pytest.mark.skipif(
     (config.ENV_DATA.get("rhel_workers", None) is True)
     or (config.ENV_DATA.get("rhel_user", None) is not None),
