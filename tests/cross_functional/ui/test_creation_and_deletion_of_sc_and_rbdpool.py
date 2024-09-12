@@ -3,7 +3,7 @@ import pytest
 
 from ocs_ci.ocs import constants
 from ocs_ci.framework.testlib import ManageTest, tier1
-from ocs_ci.ocs.ui.block_pool import BlockPoolUI
+from ocs_ci.ocs.ui.block_pool import StoragePoolUI
 from ocs_ci.ocs.ui.storageclass import StorageClassUI
 from ocs_ci.framework.pytest_customization.marks import (
     skipif_external_mode,
@@ -99,7 +99,7 @@ class TestRbDPool(ManageTest):
 
         # verifying rbd pool in ui
         blockpool_name = sc_obj.interface_name
-        blockpool_ui_obj = BlockPoolUI()
+        blockpool_ui_obj = StoragePoolUI()
         assert blockpool_ui_obj.check_pool_existence(blockpool_name)
 
         # verify storage classs in UI
@@ -187,7 +187,7 @@ class TestRbDPool(ManageTest):
         sc_obj_list = [sc_obj1, sc_obj2]
 
         # Check if 2 storage class exists in the pool page
-        blockpool_ui_obj = BlockPoolUI()
+        blockpool_ui_obj = StoragePoolUI()
         assert blockpool_ui_obj.check_pool_existence(pool_obj.name)
         assert (
             blockpool_ui_obj.check_storage_class_attached(pool_obj.name) == 2

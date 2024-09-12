@@ -13,9 +13,9 @@ from ocs_ci.utility import version
 logger = logging.getLogger(__name__)
 
 
-class BlockPoolUI(PageNavigator):
+class StoragePoolUI(PageNavigator):
     """
-    User Interface Selenium for Block Pools page
+    User Interface Selenium for Storage Pools page
 
     """
 

@@ -19,7 +19,7 @@ from ocs_ci.ocs.cluster import (
     validate_replica_data,
     check_pool_compression_replica_ceph_level,
 )
-from ocs_ci.ocs.ui.block_pool import BlockPoolUI
+from ocs_ci.ocs.ui.block_pool import StoragePoolUI
 
 logger = logging.getLogger(__name__)
 
@@ -28,12 +28,13 @@ need_to_delete = []
 
 @skipif_ui_not_support("block_pool")
 @pytest.mark.parametrize(
-    argnames=["replica", "compression"],
+    argnames=["replica", "pool_type", "compression"],
     argvalues=[
-        pytest.param(*[3, True], marks=pytest.mark.polarion_id("OCS-2589")),
-        pytest.param(*[3, False], marks=pytest.mark.polarion_id("OCS-2588")),
-        pytest.param(*[2, True], marks=pytest.mark.polarion_id("OCS-2587")),
-        pytest.param(*[2, False], marks=pytest.mark.polarion_id("OCS-2586")),
+        pytest.param(*[3, True], "rbd", marks=pytest.mark.polarion_id("OCS-2589")),
+        pytest.param(*[3, False], "rbd", marks=pytest.mark.polarion_id("OCS-2588")),
+        pytest.param(*[2, True], "rbd", marks=pytest.mark.polarion_id("OCS-2587")),
+        pytest.param(*[2, False], "rbd", marks=pytest.mark.polarion_id("OCS-2586")),
+        pytest.param(*[2, False], "cephfs", marks=pytest.mark.polarion_id("OCS-6215")),
     ],
 )
 @skipif_hci_provider_or_client
@@ -51,20 +52,29 @@ class TestPoolUserInterface(ManageTest):
         self.proj = self.proj_obj.namespace
 
     @pytest.fixture()
-    def storage(self, storageclass_factory_ui, replica, compression):
+    def storage(self, storageclass_factory_ui, replica, compression, pool_type="rbd"):
+        if pool_type == "rbd":
+            provisioner = constants.OCS_PROVISIONERS[0]
+        else:
+            provisioner = constants.OCS_PROVISIONERS[1]
         self.sc_obj = storageclass_factory_ui(
             create_new_pool=True,
             replica=replica,
             compression=compression,
             vol_binding_mode="Immediate",
+            provisioner=provisioner,
         )
         self.pool_name = self.sc_obj.get()["parameters"]["pool"]
 
     @pytest.fixture()
-    def pvc(self, pvc_factory):
+    def pvc(self, pvc_factory, pool_type="rbd"):
+        if pool_type == "rbd":
+            interface = constants.CEPHBLOCKPOOL
+        else:
+            interface = constants.CEPHFILESYSTEM
         self.pvc_obj = pvc_factory(
             project=self.proj_obj,
-            interface=constants.CEPHBLOCKPOOL,
+            interface=interface,
             storageclass=self.sc_obj,
             size=self.pvc_size,
         )
@@ -86,6 +96,7 @@ class TestPoolUserInterface(ManageTest):
         pvc,
         pod,
         setup_ui,
+        pool_type,
     ):
         """
         test create delete pool has the following workflow
@@ -121,15 +132,15 @@ class TestPoolUserInterface(ManageTest):
         get_fio_rw_iops(self.pod_obj)
 
         # Checking the raw capcity is loaded on the UI or not.
-        blockpool_ui_object = BlockPoolUI()
-        assert blockpool_ui_object.pool_raw_capacity_loaded(
+        storage_pool_ui_object = StoragePoolUI()
+        assert storage_pool_ui_object.pool_raw_capacity_loaded(
             self.pool_name
         ), "Block pool raw capacity is not visible on UI"
 
         # Cross checking the raw capacity of the blockpool between CLI and UI
-        assert blockpool_ui_object.cross_check_raw_capacity(
+        assert storage_pool_ui_object.cross_check_raw_capacity(
             self.pool_name
-        ), "Block pool raw capacity did not matched with UI"
+        ), "Block pool raw capacity did not match with UI"
 
         # Checking Results for compression and replication
         if compression:

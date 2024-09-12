@@ -115,7 +115,7 @@ class TestErrorMessageImprovements(ManageTest):
     @bugzilla("2193109")
     @polarion_id("OCS-4873")
     @skipif_hci_provider_or_client
-    def test_blocking_pool_creation_rules(self, cephblockpool_factory_ui_class):
+    def test_blocking_pool_creation_rules(self, storage_pool_factory_ui_class):
         """
         Test to verify
         * edit Block Pool label warnings
@@ -126,7 +126,7 @@ class TestErrorMessageImprovements(ManageTest):
             Cannot be used before
         """
 
-        block_pool_obj = cephblockpool_factory_ui_class()
+        block_pool_obj = storage_pool_factory_ui_class()
 
         blocking_pool_tab = (
             PageNavigator()
