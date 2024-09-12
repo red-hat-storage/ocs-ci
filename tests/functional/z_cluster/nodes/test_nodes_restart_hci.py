@@ -340,6 +340,7 @@ class TestNodesRestartHCI(ManageTest):
         switch_to_client_for_function(wait_for_storage_client_connected)(timeout=120)
 
         if onboard_new_client:
+            config.DEPLOYMENT["check_cnv_deployed"] = True
             create_hypershift_clusters()
 
         logger.info(f"Starting the endpoint node {endpoint_node.name}")
@@ -398,6 +399,7 @@ class TestNodesRestartHCI(ManageTest):
         switch_to_client_for_function(wait_for_storage_client_connected)(timeout=120)
 
         if onboard_new_client:
+            config.DEPLOYMENT["check_cnv_deployed"] = True
             create_hypershift_clusters()
 
         logger.info(f"Starting the MGR node {mgr_node.name}")

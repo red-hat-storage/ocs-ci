@@ -602,6 +602,11 @@ class CNVInstaller(object):
             check_cnv_deployed (bool): If True, check if CNV is already deployed. If so, skip the deployment.
             check_cnv_ready (bool): If True, check if CNV is ready. If so, skip the deployment.
         """
+        check_cnv_deployed = config.DEPLOYMENT.get(
+            "check_cnv_deployed", check_cnv_deployed
+        )
+        check_cnv_ready = config.DEPLOYMENT.get("check_cnv_ready", check_cnv_ready)
+
         if check_cnv_deployed:
             if self.cnv_hyperconverged_installed():
                 logger.info("CNV operator is already deployed, skipping the deployment")
