@@ -20,7 +20,7 @@ logger = logging.getLogger(__name__)
 @tier2
 @brown_squad
 @skipif_external_mode
-@pytest.mark.polarion_id("OCS-XXX")
+@pytest.mark.polarion_id("OCS-6224")
 class TestStorageClusterCephFullThresholdsParams(ManageTest):
     """
     Verify the ceph full thresholds storagecluster parameters move to cephcluster
@@ -95,7 +95,7 @@ class TestStorageClusterCephFullThresholdsParams(ManageTest):
             func=run_cmd_verify_cli_output,
             cmd="ceph osd dump",
             expected_output_lst=(
-                tuple(f"{d['ceph_key']} {d['value']}" for d in self.TRESHOLDS)
+                tuple(f"{d['ceph_key']} {d['default_value']}" for d in self.TRESHOLDS)
             ),
             cephtool_cmd=True,
             ocs_operator_cmd=False,
