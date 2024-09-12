@@ -95,9 +95,7 @@ class TestStorageClusterCephFullThresholdsParams(ManageTest):
             func=run_cmd_verify_cli_output,
             cmd="ceph osd dump",
             expected_output_lst=(
-                tuple(
-                    f"{d['ceph_key']} {d['default_value']} 11" for d in self.TRESHOLDS
-                )
+                tuple(f"{d['ceph_key']} {d['value']}" for d in self.TRESHOLDS)
             ),
             cephtool_cmd=True,
             ocs_operator_cmd=False,
