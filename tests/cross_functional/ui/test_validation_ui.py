@@ -182,7 +182,7 @@ class TestUserInterfaceValidation(object):
     @skipif_no_lower_requirements
     def test_performance_modes_disabled(self, setup_ui_class_factory):
         """
-        test_performance_modes_disable_page
+        Verify the lean and performance modes disabled for low requirements cluster in UI
 
         """
         setup_ui_class_factory()
@@ -190,4 +190,4 @@ class TestUserInterfaceValidation(object):
         validation_ui_obj = ValidationUI()
         assert (
             validation_ui_obj.verify_performance_modes_options_disabled()
-        ), "The performance mode and lean mode are not dosabled on low req cluster"
+        ), "The performance mode and lean mode are not disabled on low req cluster"
