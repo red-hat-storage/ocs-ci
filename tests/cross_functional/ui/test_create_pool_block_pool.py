@@ -56,6 +56,7 @@ class TestPoolUserInterface(ManageTest):
         if pool_type == "rbd":
             provisioner = constants.OCS_PROVISIONERS[0]
         else:
+            logger.info(f"Choosing provisioner: {constants.OCS_PROVISIONERS[1]}")
             provisioner = constants.OCS_PROVISIONERS[1]
         self.sc_obj = storageclass_factory_ui(
             create_new_pool=True,
