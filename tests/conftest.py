@@ -5333,8 +5333,8 @@ def storage_pool_factory_ui_session(request, setup_ui_session):
 
 
 @pytest.fixture(scope="function")
-def storage_pool_factory_ui(request, setup_ui):
-    return storage_pool_factory_ui_fixture(request, setup_ui)
+def storage_pool_factory_ui(request, setup_ui, blockpool=True):
+    return storage_pool_factory_ui_fixture(request, setup_ui, blockpool=True)
 
 
 def storage_pool_factory_ui_fixture(request, setup_ui, blockpool=True):
@@ -5346,6 +5346,7 @@ def storage_pool_factory_ui_fixture(request, setup_ui, blockpool=True):
     def factory(
         replica=3,
         compression=False,
+        blockpool=True,
     ):
         """
         Args:
