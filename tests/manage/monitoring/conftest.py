@@ -276,7 +276,9 @@ def measure_stop_ceph_osd(measurement_dir, threading_lock):
             threading_lock=threading_lock,
         )
     else:
-        measured_op = measure_operation(stop_osd, test_file, threading_lock=threading_lock)
+        measured_op = measure_operation(
+            stop_osd, test_file, threading_lock=threading_lock
+        )
     logger.info(f"Upscaling deployment {osd_to_stop} back to 1")
     oc.exec_oc_cmd(f"scale --replicas=1 deployment/{osd_to_stop}")
 
