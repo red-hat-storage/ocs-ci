@@ -24,7 +24,7 @@ class StoragePoolUI(PageNavigator):
 
     def create_pool(self, replica, compression, pool_type_block=True):
         """
-        Create block pool via UI
+        Create storage pool via UI
 
         Args:
             pool_type_block: True if type of storage pool is block, False otherwise
@@ -35,7 +35,7 @@ class StoragePoolUI(PageNavigator):
             array: pool name (str) pool status (bool) #pool can be created with failure status
 
         """
-        pool_name = create_unique_resource_name("test", "rbd-pool")
+        pool_name = create_unique_resource_name("test", "storage-pool")
         self.navigate_block_pool_page()
         self.do_click(self.bp_loc["create_block_pool"])
         if pool_type_block and self.ocs_version_semantic >= version.VERSION_4_17:
