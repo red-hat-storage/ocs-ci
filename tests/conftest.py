@@ -5469,8 +5469,10 @@ def storageclass_factory_ui_fixture(request, storage_pool_factory_ui, setup_ui):
         global sc_name
         if provisioner == constants.OCS_PROVISIONERS[1]:
             pool_type = "cephfs"
+            blockpool = False
         else:
             pool_type = "rbd"
+            blockpool = True
         storageclass_ui_object = StorageClassUI()
         if encryption:
             sc_name = storageclass_ui_object.create_encrypted_storage_class_ui(
@@ -5486,8 +5488,9 @@ def storageclass_factory_ui_fixture(request, storage_pool_factory_ui, setup_ui):
             if existing_pool is None and create_new_pool is False:
                 pool_name = default_pool
             if create_new_pool is True:
+                log.info(f"Creating {pool_type} pool with replica {replica}")
                 pool_ocs_obj = storage_pool_factory_ui(
-                    replica=replica, compression=compression
+                    replica=replica, compression=compression, blockpool=blockpool
                 )
                 pool_name = pool_ocs_obj.name
             if existing_pool is not None:

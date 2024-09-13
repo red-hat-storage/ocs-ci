@@ -1302,6 +1302,7 @@ storageclass = {
         By.CSS_SELECTOR,
     ),
     "rbd_provisioner": ("openshift-storage.rbd.csi.ceph.com", By.LINK_TEXT),
+    "cephfs_provisioner": ("openshift-storage.cephfs.csi.ceph.com", By.LINK_TEXT),
     "pool_dropdown": ('button[id="pool-dropdown-id"]', By.CSS_SELECTOR),
     "save_storageclass": ('button[id="save-changes"]', By.CSS_SELECTOR),
     "action_inside_storageclass": (
