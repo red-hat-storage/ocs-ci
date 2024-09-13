@@ -759,7 +759,12 @@ class Deployment(object):
             ibmcloud.label_nodes_region()
         # configure Ingress Node Firewall and restrict SSH access to nodes
         if config.ENV_DATA.get("restrict_ssh_access_to_nodes", False):
-            restrict_ssh_access_to_nodes()
+            try:
+                restrict_ssh_access_to_nodes()
+            except Exception as err:
+                logger.warning(
+                    f"Ingress Node Firewall deployment and SSH access to nodes restriction failed: {err}"
+                )
 
     def label_and_taint_nodes(self):
         """
