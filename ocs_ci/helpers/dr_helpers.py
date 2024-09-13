@@ -559,9 +559,7 @@ def wait_for_replication_resources_creation(
 
     """
     logger.info("Waiting for VRG to be created")
-    if discovered_apps:
-        vrg_namespace = constants.DR_OPS_NAMESAPCE
-
+    vrg_namespace = constants.DR_OPS_NAMESAPCE if discovered_apps else namespace
     sample = TimeoutSampler(
         timeout=timeout, sleep=5, func=check_vrg_existence, namespace=vrg_namespace
     )
