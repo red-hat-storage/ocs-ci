@@ -273,9 +273,10 @@ def measure_stop_ceph_osd(measurement_dir, threading_lock):
             test_file,
             minimal_time=60 * 19,
             pagerduty_service_ids=[get_pagerduty_service_id()],
+            threading_lock=threading_lock,
         )
     else:
-        measured_op = measure_operation(stop_osd, test_file)
+        measured_op = measure_operation(stop_osd, test_file, threading_lock=threading_lock)
     logger.info(f"Upscaling deployment {osd_to_stop} back to 1")
     oc.exec_oc_cmd(f"scale --replicas=1 deployment/{osd_to_stop}")
 
