@@ -1120,12 +1120,16 @@ def navigate_to_all_clusters(**kwargs):
         timeout = 30
 
     local_clusters_dropdown = acm_page["local-cluster_dropdown"]
+    find_element = wait_for_element_to_be_visible(acm_page["click-local-cluster"], 60)
     try:
-        acm_dropdown = wait_for_element_to_be_visible(local_clusters_dropdown, timeout)
-        acm_dropdown.click()
-        all_clusters_item = wait_for_element_to_be_visible(
-            acm_page["all-clusters_dropdown_item"]
-        )
-        all_clusters_item.click()
+        if not not find_element:
+            acm_dropdown = wait_for_element_to_be_visible(
+                local_clusters_dropdown, timeout
+            )
+            acm_dropdown.click()
+            all_clusters_item = wait_for_element_to_be_visible(
+                acm_page["all-clusters_dropdown_item"]
+            )
+            all_clusters_item.click()
     except TimeoutException:
         wait_for_element_to_be_visible(acm_page["all-clusters_dropdown"])

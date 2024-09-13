@@ -1,5 +1,4 @@
 import logging
-import pytest
 
 from ocs_ci.ocs.resources import pod
 from ocs_ci.ocs import constants, ocp
@@ -29,20 +28,19 @@ from ocs_ci.utility.utils import (
 )
 from ocs_ci.ocs.ocp import OCP
 from ocs_ci.ocs.ui.validation_ui import ValidationUI
-from ocs_ci.ocs.ui.base_ui import login_ui, close_browser
 
 log = logging.getLogger(__name__)
 
 
-@pytest.fixture(scope="class")
-def setup_ui_class(request):
-    driver = login_ui()
+# @pytest.fixture(scope="class")
+# def setup_ui_class(request):
+#     driver = login_ui()
 
-    def finalizer():
-        close_browser()
+#     def finalizer():
+#         close_browser()
 
-    request.addfinalizer(finalizer)
-    return driver
+#     request.addfinalizer(finalizer)
+#     return driver
 
 
 @tier4c
@@ -52,10 +50,10 @@ def setup_ui_class(request):
 @skipif_external_mode
 @runs_on_provider
 @skipif_managed_service
-@pytest.mark.usefixtures("setup_ui_class")
 class TestOnboardingTokenGeneration(ManageTest):
     def test_onboarding_token_generation_option_is_available_in_ui(
         self,
+        setup_ui,
     ):
         """
         Test to verify storage-->storage clients-->Generate client onboarding token
@@ -85,7 +83,7 @@ class TestOnboardingTokenGeneration(ManageTest):
     @skipif_ocp_version("<4.17")
     @hci_provider_required
     def test_onboarding_token_generation_with_limited_storage_quota_from_ui(
-        self, create_hypershift_clusters, destroy_hosted_cluster
+        self, setup_ui, create_hypershift_clusters, destroy_hosted_cluster
     ):
         """
         Test to verify onboarding token generation with limited storage quota from
