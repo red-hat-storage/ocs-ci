@@ -17,6 +17,7 @@ from ocs_ci.framework import config
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.resources.storage_cluster import StorageCluster
 from ocs_ci.framework.logger_helper import log_step
+from ocs_ci.ocs.ui.base_ui import wait_for_element_to_be_visible
 
 
 logger = logging.getLogger(__name__)
@@ -678,9 +679,9 @@ class ValidationUI(PageNavigator):
                 page_name="client_onboarding_token_page",
             )
             # Check default storage quota selected as 'Unlimited'
-            assert self.validation_loc[
-                "storage_quota_unlimited"
-            ].is_selected(), "Default value unlimited quota is not selected"
+            assert wait_for_element_to_be_visible(
+                self.validation_loc["storage_quota_unlimited"]
+            ).is_selected(), "Default value unlimited quota is not selected"
 
             # Take screenshot
             self.take_screenshot()
