@@ -19,12 +19,13 @@ class StorageClassUI(PageNavigator):
     def __init__(self):
         super().__init__()
 
-    def create_storageclass(self, pool_name):
+    def create_storageclass(self, pool_name, provisioner_type="rbd"):
         """
         Basic function to create RBD based storageclass
 
         Args:
             pool_name (str): The pool to choose in the storageclass.
+            provisioner_type (str): rbd or cephfs
 
         Return:
             sc_name (str): the name of the storageclass created, otherwise return None.
@@ -38,7 +39,7 @@ class StorageClassUI(PageNavigator):
         self.do_click(self.sc_loc["volume_binding_mode"])
         self.do_click(self.sc_loc["immediate_binding_mode"])
         self.do_click(self.sc_loc["provisioner_dropdown"])
-        self.do_click(self.sc_loc["rbd_provisioner"])
+        self.do_click(self.sc_loc[f"{provisioner_type}_provisioner"])
         self.do_click(self.sc_loc["pool_dropdown"])
         self.do_click([f"button[data-test={pool_name}", By.CSS_SELECTOR])
         self.do_click(self.sc_loc["save_storageclass"])
@@ -67,9 +68,9 @@ class StorageClassUI(PageNavigator):
         )
         return sc_existence
 
-    def delete_rbd_storage_class(self, sc_name):
+    def delete_storage_class(self, sc_name):
         """
-        Delete RBD storageclass
+        Delete storageclass
 
         Args:
             sc_name (str): Name of the storageclass to delete.

@@ -5467,6 +5467,10 @@ def storageclass_factory_ui_fixture(request, storage_pool_factory_ui, setup_ui):
 
         """
         global sc_name
+        if provisioner == constants.OCS_PROVISIONERS[1]:
+            pool_type = "cephfs"
+        else:
+            pool_type = "rbd"
         storageclass_ui_object = StorageClassUI()
         if encryption:
             sc_name = storageclass_ui_object.create_encrypted_storage_class_ui(
@@ -5488,7 +5492,9 @@ def storageclass_factory_ui_fixture(request, storage_pool_factory_ui, setup_ui):
                 pool_name = pool_ocs_obj.name
             if existing_pool is not None:
                 pool_name = existing_pool
-            sc_name = storageclass_ui_object.create_storageclass(pool_name)
+            sc_name = storageclass_ui_object.create_storageclass(
+                pool_name, provisioner_type=pool_type
+            )
         if sc_name is None:
             log.error("Storageclass was not created")
             raise StorageclassNotCreated(
@@ -5511,7 +5517,7 @@ def storageclass_factory_ui_fixture(request, storage_pool_factory_ui, setup_ui):
                 log.warning("Storageclass is already deleted")
                 continue
             storageclass_ui_obj = StorageClassUI()
-            if not storageclass_ui_obj.delete_rbd_storage_class(instance.name):
+            if not storageclass_ui_obj.delete_storage_class(instance.name):
                 instance.delete()
                 raise StorageClassNotDeletedFromUI(
                     f"Could not delete storageclass {instances.name} from UI."

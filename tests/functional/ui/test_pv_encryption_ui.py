@@ -291,4 +291,4 @@ class TestPVEncryption(ManageTest):
         # Deleting Storage Class via UI
         sc_obj = StorageClassUI()
         logger.info("Deleting Storage Class via UI")
-        sc_obj.delete_rbd_storage_class(sc_name=sc_name)
+        sc_obj.delete_storage_class(sc_name=sc_name)
