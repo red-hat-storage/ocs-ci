@@ -55,18 +55,15 @@ class TestPoolUserInterface(ManageTest):
     def storage(self, storageclass_factory_ui, replica, compression, pool_type="rbd"):
         if pool_type == "rbd":
             provisioner = constants.OCS_PROVISIONERS[0]
-            blockpool = True
         else:
             logger.info(f"Choosing provisioner: {constants.OCS_PROVISIONERS[1]}")
             provisioner = constants.OCS_PROVISIONERS[1]
-            blockpool = False
         self.sc_obj = storageclass_factory_ui(
             create_new_pool=True,
             replica=replica,
             compression=compression,
             vol_binding_mode="Immediate",
             provisioner=provisioner,
-            blockpool=blockpool,
         )
         self.pool_name = self.sc_obj.get()["parameters"]["pool"]
 
