@@ -89,7 +89,9 @@ def get_replica_1_osds() -> dict:
 
     """
     replica1_osds = dict()
-    all_osds = get_pods_having_label(label=OSD_APP_LABEL)
+    all_osds = get_pods_having_label(
+        label=OSD_APP_LABEL, namespace=config.ENV_DATA["cluster_namespace"]
+    )
     for domain in get_failure_domains():
         for osd in all_osds:
             if osd["metadata"]["labels"]["ceph.rook.io/DeviceSet"] == domain:
@@ -141,7 +143,9 @@ def scaledown_deployment(deployment_names: list[str]) -> None:
 
     """
     log.info("Starts Scaledown deployments")
-    deployment_obj = OCP(kind=DEPLOYMENT, namespace=OPENSHIFT_STORAGE_NAMESPACE)
+    deployment_obj = OCP(
+        kind=DEPLOYMENT, namespace=config.ENV_DATA["cluster_namespace"]
+    )
     for deployment in deployment_names:
         deployment_obj.exec_oc_cmd(f"scale deployment {deployment} --replicas=0")
         log.info(f"scaling to 0: {deployment}")
@@ -155,7 +159,11 @@ def count_osd_pods() -> int:
         int: number of OSDs in cluster
 
     """
-    return len(get_pods_having_label(label=OSD_APP_LABEL))
+    return len(
+        get_pods_having_label(
+            label=OSD_APP_LABEL, namespace=config.ENV_DATA["cluster_namespace"]
+        )
+    )
 
 
 def delete_replica_1_sc() -> None:
@@ -163,7 +171,11 @@ def delete_replica_1_sc() -> None:
     Deletes storage class associated with replica1
 
     """
-    sc_obj = OCP(kind=STORAGECLASS, resource_name=REPLICA1_STORAGECLASS)
+    sc_obj = OCP(
+        kind=STORAGECLASS,
+        resource_name=REPLICA1_STORAGECLASS,
+        namespace=config.ENV_DATA["cluster_namespace"],
+    )
     try:
         sc_obj.delete(resource_name=REPLICA1_STORAGECLASS)
     except CommandFailed as e:
