@@ -135,6 +135,7 @@ class TestPoolUserInterface(ManageTest):
         get_fio_rw_iops(self.pod_obj)
 
         # Checking pool type in the UI
+        storage_pool_ui_object = StoragePoolUI()
         pool_type_in_ui = storage_pool_ui_object.check_pool_volume_type(self.pool_name)
         if pool_type == "cephfs":
             assert pool_type_in_ui == constants.VOLUME_MODE_FILESYSTEM
@@ -142,7 +143,6 @@ class TestPoolUserInterface(ManageTest):
             assert pool_type_in_ui == constants.VOLUME_MODE_BLOCK
 
         # Checking the raw capcity is loaded on the UI or not.
-        storage_pool_ui_object = StoragePoolUI()
         assert storage_pool_ui_object.pool_raw_capacity_loaded(
             self.pool_name
         ), "Block pool raw capacity is not visible on UI"
