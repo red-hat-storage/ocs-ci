@@ -21,10 +21,7 @@ import pytest
 from collections import namedtuple
 
 from ocs_ci.deployment import factory as dep_factory
-from ocs_ci.deployment.helpers.hypershift_base import (
-    HyperShiftBase,
-    get_random_hosted_cluster_name,
-)
+from ocs_ci.deployment.helpers.hypershift_base import HyperShiftBase
 from ocs_ci.deployment.hosted_cluster import HostedClients
 from ocs_ci.framework import config as ocsci_config, Config
 import ocs_ci.framework.pytest_customization.marks
@@ -157,7 +154,6 @@ from ocs_ci.utility.utils import (
     run_cmd,
     ceph_health_check_multi_storagecluster_external,
     clone_repo,
-    get_latest_release_version,
 )
 from ocs_ci.helpers import helpers, dr_helpers
 from ocs_ci.helpers.helpers import (
@@ -185,8 +181,7 @@ from ocs_ci.helpers.longevity_helpers import (
 )
 from ocs_ci.ocs.longevity import start_app_workload
 from ocs_ci.utility.decorators import switch_to_default_cluster_index_at_last
-from ocs_ci.utility.version import get_ocs_version_from_csv
-from ocs_ci.ocs.resources.catalog_source import get_odf_tag_from_redhat_catsrc
+
 
 log = logging.getLogger(__name__)
 
@@ -8025,38 +8020,19 @@ def create_hypershift_clusters():
     """
 
     def factory(
-        num_of_clusters=1,
-        cluster_names=None,
-        ocp_version=None,
-        odf_version=None,
-        setup_storage_client=True,
-        nodepool_replicas=2,
+        cluster_names, ocp_version, odf_version, setup_storage_client, nodepool_replicas
     ):
         """
         Factory function implementing the fixture
 
         Args:
-            num_of_clusters (int): The number of clusters to create. This value will be ignored,
-                if the 'cluster_names' param is provided.
-            cluster_names (list): List of cluster names. If not provided, it will generate
-                'num_of_clusters' cluster names.
-            ocp_version (str): OCP version. Default value is the latest OCP stable version.
-            odf_version (str): ODF version. Default value is the latest ODF stable version.
+            cluster_names (list): List of cluster names
+            ocp_version (str): OCP version
+            odf_version (str): ODF version
             setup_storage_client (bool): Setup storage client
             nodepool_replicas (int): Nodepool replicas; supported values are 2,3
 
         """
-        if not cluster_names:
-            cluster_names = [
-                get_random_hosted_cluster_name() for _ in range(num_of_clusters)
-            ]
-        if not odf_version:
-            odf_version = str(get_ocs_version_from_csv()).replace(".stable", "")
-            if "rhodf" in odf_version:
-                odf_version = get_odf_tag_from_redhat_catsrc()
-        if not ocp_version:
-            ocp_version = get_latest_release_version()
-
         hosted_cluster_conf_on_provider = {"ENV_DATA": {"clusters": {}}}
 
         for cluster_name in cluster_names:

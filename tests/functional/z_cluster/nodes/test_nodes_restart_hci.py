@@ -41,6 +41,7 @@ from ocs_ci.ocs.resources.storage_cluster import (
     wait_for_storage_client_connected,
 )
 from ocs_ci.utility.decorators import switch_to_client_for_function
+from ocs_ci.deployment.helpers.hypershift_base import prepare_hosted_clusters_params
 
 
 logger = logging.getLogger(__name__)
@@ -341,7 +342,8 @@ class TestNodesRestartHCI(ManageTest):
 
         if onboard_new_client:
             config.DEPLOYMENT["check_cnv_deployed"] = True
-            create_hypershift_clusters()
+            hosted_clusters_params = prepare_hosted_clusters_params()
+            create_hypershift_clusters(**hosted_clusters_params)
 
         logger.info(f"Starting the endpoint node {endpoint_node.name}")
         nodes.start_nodes(nodes=[endpoint_node], wait=True)
@@ -400,7 +402,8 @@ class TestNodesRestartHCI(ManageTest):
 
         if onboard_new_client:
             config.DEPLOYMENT["check_cnv_deployed"] = True
-            create_hypershift_clusters()
+            hosted_clusters_params = prepare_hosted_clusters_params()
+            create_hypershift_clusters(**hosted_clusters_params)
 
         logger.info(f"Starting the MGR node {mgr_node.name}")
         nodes.start_nodes(nodes=[mgr_node], wait=True)

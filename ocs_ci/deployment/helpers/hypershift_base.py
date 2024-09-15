@@ -1,7 +1,9 @@
 import logging
 import os
+import random
 import re
 import shutil
+import string
 import tempfile
 import time
 from datetime import datetime
@@ -12,17 +14,14 @@ from ocs_ci.framework import config
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.exceptions import CommandFailed
 from ocs_ci.ocs.ocp import OCP
+from ocs_ci.ocs.resources.catalog_source import get_odf_tag_from_redhat_catsrc
 from ocs_ci.ocs.resources.pod import wait_for_pods_to_be_in_statuses_concurrently
 from ocs_ci.ocs.version import get_ocp_version
 from ocs_ci.utility.retry import retry
-from ocs_ci.utility.utils import (
-    exec_cmd,
-    TimeoutSampler,
-    get_latest_release_version,
-    get_random_str,
-)
+from ocs_ci.utility.utils import exec_cmd, TimeoutSampler, get_latest_release_version
 from ocs_ci.utility.decorators import switch_to_orig_index_at_last
 from ocs_ci.ocs.utils import get_namespce_name_by_pattern
+from ocs_ci.utility.version import get_ocs_version_from_csv
 
 """
 This module contains the base class for HyperShift hosted cluster management.
@@ -83,7 +82,9 @@ def get_random_hosted_cluster_name():
     hcp_version = "".join([c for c in ocp_version if c.isdigit()][:3])
     match = re.search(r"\d+$", bm_name)
     if match:
-        random_letters = get_random_str(size=5)
+        random_letters = "".join(
+            random.choice(string.ascii_lowercase) for _ in range(3)
+        )
         cluster_name = (
             "hcp"
             + hcp_version
@@ -760,3 +761,48 @@ class HyperShiftBase:
             return False
         logger.info(cmd_res.stdout.decode("utf-8").splitlines())
         return True
+
+
+def prepare_hosted_clusters_params(
+    num_of_clusters=1,
+    cluster_names=None,
+    ocp_version=None,
+    odf_version=None,
+    setup_storage_client=True,
+    nodepool_replicas=2,
+):
+    """
+    Prepare the hosted clusters parameters for creating new hosted clusters
+
+    Args:
+        num_of_clusters (int): The number of clusters to create. This value will be ignored,
+            if the 'cluster_names' param is provided.
+        cluster_names (list): List of cluster names. If not provided, it will generate
+            'num_of_clusters' cluster names.
+        ocp_version (str): OCP version. Default value is the latest OCP stable version.
+        odf_version (str): ODF version. Default value is the latest ODF stable version.
+        setup_storage_client (bool): Setup storage client
+        nodepool_replicas (int): Nodepool replicas; supported values are 2,3
+
+    Returns:
+        dict: A dictionary of the hosted clusters parameters per value for creating new hosted clusters
+
+    """
+    if not cluster_names:
+        cluster_names = [
+            get_random_hosted_cluster_name() for _ in range(num_of_clusters)
+        ]
+    if not odf_version:
+        odf_version = str(get_ocs_version_from_csv()).replace(".stable", "")
+        if "rhodf" in odf_version:
+            odf_version = get_odf_tag_from_redhat_catsrc()
+    if not ocp_version:
+        ocp_version = get_latest_release_version()
+
+    return {
+        "cluster_names": cluster_names,
+        "ocp_version": ocp_version,
+        "odf_version": odf_version,
+        "setup_storage_client": setup_storage_client,
+        "nodepool_replicas": nodepool_replicas,
+    }
