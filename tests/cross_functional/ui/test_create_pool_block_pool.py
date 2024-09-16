@@ -52,7 +52,7 @@ class TestPoolUserInterface(ManageTest):
         self.proj = self.proj_obj.namespace
 
     @pytest.fixture()
-    def storage(self, storageclass_factory_ui, replica, compression, pool_type="rbd"):
+    def storage(self, storageclass_factory_ui, replica, compression, pool_type):
         if pool_type == "rbd":
             provisioner = constants.OCS_PROVISIONERS[0]
         else:
