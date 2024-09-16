@@ -1697,7 +1697,6 @@ def verify_all_nodes_created():
         expected_num_nodes += 3
     else:
         expected_num_nodes += config.ENV_DATA.get("infra_replicas", 0)
-
     existing_num_nodes = len(get_all_nodes())
 
     # Some nodes will take time to create due to the issue https://issues.redhat.com/browse/SDA-6346
