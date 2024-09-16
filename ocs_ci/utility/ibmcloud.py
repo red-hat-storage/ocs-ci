@@ -197,6 +197,9 @@ def create_cluster(cluster_name):
         f" --kube-version {ocp_version}"
     )
     if provider == "vpc-gen2":
+        semantic_ocp_version = util_version.get_semantic_ocp_version_from_config()
+        if semantic_ocp_version >= util_version.VERSION_4_15:
+            cmd += " --disable-outbound-traffic-protection"
         vpc_id = config.ENV_DATA["vpc_id"]
         subnet_id = config.ENV_DATA["subnet_id"]
         cmd += f" --vpc-id {vpc_id} --subnet-id  {subnet_id} --zone {zone}"
