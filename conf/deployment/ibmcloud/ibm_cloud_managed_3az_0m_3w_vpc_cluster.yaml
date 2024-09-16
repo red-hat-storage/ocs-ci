@@ -1,5 +1,5 @@
-
-# This is the basic config for IBM cloud usage
+# This is the config for IBM cloud ROKS deployment
+# for 3 AZ setup.
 ---
 ENV_DATA:
   platform: 'ibm_cloud'
@@ -11,6 +11,8 @@ ENV_DATA:
   master_replicas: 0
   worker_replicas: 3
   worker_availability_zones:
+    - 'eu-de-1'
+    - 'eu-de-2'
     - 'eu-de-3'
   rhel_workers: true
   # Following values needs to be set in separate config and passed to ocs-ci in
