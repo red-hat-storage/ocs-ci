@@ -4,6 +4,7 @@ import time
 import pytest
 
 from ocs_ci.ocs import constants, ocp
+from ocs_ci.helpers.helpers import configure_cephcluster_params_in_storagecluster_cr
 from ocs_ci.framework import config
 from ocs_ci.framework.testlib import (
     ManageTest,
@@ -62,7 +63,9 @@ class TestStorageclusterUpgradeParams(ManageTest):
 
         def finalizer():
 
-            self.set_storage_cluster_upgrade_params(default_values=True)
+            configure_cephcluster_params_in_storagecluster_cr(
+                self.UPGRADE_PARAMS, default_values=True
+            )
 
         request.addfinalizer(finalizer)
 
@@ -75,7 +78,9 @@ class TestStorageclusterUpgradeParams(ManageTest):
         4.Configure the default params on storagecluster [treardown]
 
         """
-        self.set_storage_cluster_upgrade_params()
+        configure_cephcluster_params_in_storagecluster_cr(
+            params=self.UPGRADE_PARAMS, default_values=False
+        )
 
         logger.info("Wait 2 sec the cephcluster will updated")
         time.sleep(2)
@@ -98,27 +103,3 @@ class TestStorageclusterUpgradeParams(ManageTest):
             assert (
                 str(actual_value).lower() == str(parameter["value"]).lower()
             ), f"The value of {parameter['sc_key']} is {actual_value} the expected value is {parameter['value']}"
-
-    def set_storage_cluster_upgrade_params(self, default_values=False):
-        """
-        Configure StorageCluster CR with upgrades params
-        Args:
-            default_values(bool): parameters to set in StorageCluster under /spec/managedResources/cephCluster/
-        """
-        logger.info("Configure StorageCluster CR with upgrade params")
-        storagecluster_obj = ocp.OCP(
-            kind=constants.STORAGECLUSTER,
-            namespace=config.ENV_DATA["cluster_namespace"],
-            resource_name=constants.DEFAULT_CLUSTERNAME,
-        )
-        for parameter in self.UPGRADE_PARAMS:
-            sc_key = parameter["sc_key"]
-            if default_values:
-                parameter_value = parameter["default_value"]
-            else:
-                parameter_value = parameter["value"]
-            param = (
-                f'[{{"op": "add", "path": "/spec/managedResources/cephCluster/{sc_key}",'
-                f' "value": {parameter_value}}}]'
-            )
-            storagecluster_obj.patch(params=param, format_type="json")
