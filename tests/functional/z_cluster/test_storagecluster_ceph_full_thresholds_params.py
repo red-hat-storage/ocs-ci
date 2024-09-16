@@ -92,7 +92,7 @@ class TestStorageClusterCephFullThresholdsParams(ManageTest):
             actual_value = cephcluster_obj.data["spec"]["storage"][parameter["sc_key"]]
             assert (
                 str(actual_value).lower() == str(parameter["value"]).lower()
-            ), f"The value of {parameter['sc_key']} is {actual_value} the expected value is {parameter['value']}"
+            ), f"The value of {parameter['sc_key']} is {actual_value}, the expected value is {parameter['value']}"
 
         sample = TimeoutSampler(
             timeout=600,
