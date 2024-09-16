@@ -1074,6 +1074,7 @@ def pvc_factory_fixture(request, project_factory):
         status=constants.STATUS_BOUND,
         volume_mode=None,
         size_unit="Gi",
+        wait_for_resource_status_timeout=60,
     ):
         """
         Args:
@@ -1096,6 +1097,8 @@ def pvc_factory_fixture(request, project_factory):
             volume_mode (str): Volume mode for PVC.
                 eg: volume_mode='Block' to create rbd `block` type volume
             size_unit (str): PVC size unit, eg: "Mi"
+            wait_for_resource_status_timeout (int): Wait in seconds until the
+                desired PVC status is reached.
 
         Returns:
             object: helpers.create_pvc instance.
@@ -1134,7 +1137,9 @@ def pvc_factory_fixture(request, project_factory):
             assert pvc_obj, "Failed to create PVC"
 
         if status:
-            helpers.wait_for_resource_state(pvc_obj, status)
+            helpers.wait_for_resource_state(
+                pvc_obj, status, timeout=wait_for_resource_status_timeout
+            )
         pvc_obj.storageclass = storageclass
         pvc_obj.project = project
         pvc_obj.access_mode = access_mode
