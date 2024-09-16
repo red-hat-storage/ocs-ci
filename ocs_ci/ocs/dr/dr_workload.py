@@ -500,7 +500,7 @@ class BusyBox_AppSet(DRWorkload):
         drpc_yaml_data["spec"]["preferredCluster"] = self.preferred_primary_cluster
         drpc_yaml_data["spec"]["drPolicyRef"]["name"] = self.dr_policy_name
         drpc_yaml_data["spec"]["placementRef"]["name"] = self.appset_placement_name
-        del drpc_yaml_data["spec"]["matchExpressions"]
+        del drpc_yaml_data["spec"]['pvcSelector']["matchExpressions"]
         del drpc_yaml_data["spec"]["kubeObjectProtection"]
         drpc_yaml_data["spec"]["pvcSelector"]["matchLabels"] = self.appset_pvc_selector
         self.drcp_data_yaml = tempfile.NamedTemporaryFile(
@@ -747,7 +747,7 @@ class CnvWorkload(DRWorkload):
         drpc_yaml_data["metadata"]["name"] = f"{self.cnv_workload_placement_name}-drpc"
         drpc_yaml_data["spec"]["preferredCluster"] = self.preferred_primary_cluster
         drpc_yaml_data["spec"]["drPolicyRef"]["name"] = self.dr_policy_name
-        del drpc_yaml_data["spec"]["matchExpressions"]
+        del drpc_yaml_data["spec"]['pvcSelector']["matchExpressions"]
         del drpc_yaml_data["spec"]["kubeObjectProtection"]
         drpc_yaml_data["spec"]["placementRef"][
             "name"
