@@ -740,7 +740,12 @@ class Deployment(object):
             config.ENV_DATA.get("restrict_ssh_access_to_nodes", False)
             and version.get_semantic_ocp_version_from_config() >= version.VERSION_4_16
         ):
-            restrict_ssh_access_to_nodes()
+            try:
+                restrict_ssh_access_to_nodes()
+            except Exception as err:
+                logger.warning(
+                    f"Ingress Node Firewall deployment and SSH access to nodes restriction failed: {err}"
+                )
 
     def label_and_taint_nodes(self):
         """
