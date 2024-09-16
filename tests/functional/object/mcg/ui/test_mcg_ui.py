@@ -62,11 +62,11 @@ class TestStoreUserInterface(object):
         argnames=["kind", "provider", "region"],
         argvalues=[
             pytest.param(
-                *["backingstore", "aws", "us-east-2"],
+                *["BackingStore", "aws", "us-east-2"],
                 marks=pytest.mark.polarion_id("OCS-2549"),
             ),
             pytest.param(
-                *["namespacestore", "aws", "us-east-2"],
+                *["NamespaceStore", "aws", "us-east-2"],
                 marks=pytest.mark.polarion_id("OCS-2547"),
             ),
         ],
@@ -98,9 +98,9 @@ class TestStoreUserInterface(object):
         )
         object_storage = PageNavigator().nav_object_storage()
 
-        if kind == "backingstore":
+        if kind == "BackingStore":
             store_tab = object_storage.nav_backing_store_tab()
-        elif kind == "namespacestore":
+        elif kind == "NamespaceStore":
             store_tab = object_storage.nav_namespace_store_tab()
         else:
             raise IncorrectUiOptionRequested(f"Unknown store kind {kind}")
@@ -108,21 +108,20 @@ class TestStoreUserInterface(object):
         log_step("Create store with given parameters")
         uls_name = list(cloud_uls_factory({provider: [(1, region)]})[provider])[0]
         store_name = create_unique_resource_name(
-            resource_description="ui", resource_type=kind
+            resource_description="ui", resource_type=kind.lower()
         )
 
-        resource_page = store_tab.create_store(
+        resource_page, store_ready = store_tab.create_store_verify_state(
+            kind=kind,
             store_name=store_name,
             provider=provider,
             region=region,
             secret=cld_mgr.aws_client.secret.name,
             uls_name=uls_name,
         )
-
-        log_step("Verify via UI that status of the store is ready")
-        assert resource_page.verify_current_page_resource_status(
-            constants.STATUS_READY
-        ), f"Created {kind} was not ready in time"
+        assert (
+            store_ready
+        ), f"Created kind='{kind}' name='{store_name}' was not ready in time"
 
         log_step("Delete resource via UI")
         store_tab = resource_page.nav_resource_list_via_breadcrumbs()
