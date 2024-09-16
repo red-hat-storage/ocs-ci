@@ -14,7 +14,6 @@ from ocs_ci.framework.pytest_customization.marks import (
     skipif_hci_provider_and_client,
     brown_squad,
     black_squad,
-    bugzilla,
     ibmcloud_platform_required,
 )
 from ocs_ci.framework.testlib import (
@@ -60,12 +59,6 @@ from ocs_ci.ocs import defaults
 logger = logging.getLogger(__name__)
 
 
-@pytest.mark.skip(
-    reason="Skipping because of active bugs: 2279843, 2295778, 2295750 and problem with bugzilla plugin."
-)
-@bugzilla("2279843")
-@bugzilla("2295778")
-@bugzilla("2295750")
 @brown_squad
 @ignore_leftovers
 @skipif_managed_service
