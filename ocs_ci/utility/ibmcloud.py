@@ -188,16 +188,22 @@ def create_cluster(cluster_name):
 
     """
     provider = config.ENV_DATA["provider"]
+    worker_availability_zones = config.ENV_DATA.get("worker_availability_zones", [])
+    worker_zones_number = len(worker_availability_zones)
     zone = config.ENV_DATA["zone"]
     flavor = config.ENV_DATA["worker_instance_type"]
     worker_replicas = config.ENV_DATA["worker_replicas"]
+    if worker_zones_number > 1:
+        worker_replicas = 2
     ocp_version = get_ibmcloud_ocp_version()
-
     cmd = (
         f"ibmcloud ks cluster create {provider} --name {cluster_name}"
         f" --flavor {flavor}  --workers {worker_replicas}"
         f" --kube-version {ocp_version}"
     )
+    # Reloading correct number of worker replica for later usage.
+    if worker_zones_number > 1:
+        worker_replicas = int(config.ENV_DATA["worker_replicas"] / worker_zones_number)
     if provider == "vpc-gen2":
         semantic_ocp_version = util_version.get_semantic_ocp_version_from_config()
         if semantic_ocp_version >= util_version.VERSION_4_15:
@@ -214,11 +220,27 @@ def create_cluster(cluster_name):
     cluster_info = get_cluster_details(cluster_name)
     # Create metadata file to store the cluster name
     cluster_info["clusterName"] = cluster_name
-    cluster_info["clusterID"] = cluster_info["id"]
+    cluster_id = cluster_info["id"]
+    cluster_info["clusterID"] = cluster_id
     cluster_path = config.ENV_DATA["cluster_path"]
     metadata_file = os.path.join(cluster_path, "metadata.json")
     with open(metadata_file, "w+") as f:
         json.dump(cluster_info, f)
+    for worker_zone in worker_availability_zones:
+        if worker_zone == zone:
+            continue
+        subnet = config.ENV_DATA["subnet_ids_per_zone"][worker_zone]
+        cmd = (
+            f"ibmcloud oc zone add {provider} --subnet-id {subnet}  "
+            f"--cluster {cluster_id} --zone {worker_zone} --worker-pool default"
+        )
+        run_ibmcloud_cmd(cmd)
+    if worker_zones_number > 1:
+        cmd = (
+            f"ibmcloud ks worker-pool resize --cluster {cluster_name} --worker-pool "
+            f"default --size-per-zone {worker_replicas}"
+        )
+        run_ibmcloud_cmd(cmd)
     # Temporary increased timeout to 10 hours cause of issue with deployment on
     # IBM cloud
     timeout = 36000
