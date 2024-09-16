@@ -679,7 +679,9 @@ class ValidationUI(PageNavigator):
         return storage_client_obj
 
     def verify_performance_modes_options_disabled(self):
-        """ """
+        """
+        Verify performance modes options disabled
+        """
         self.navigate_installed_operators_page()
         self.do_click(self.add_capacity_ui_loc["odf_operator"])
         self.do_click(self.add_capacity_ui_loc["storage_system_tab"])
@@ -698,10 +700,10 @@ class ValidationUI(PageNavigator):
             try:
                 self.do_click(self.dep_loc["expand_advanced_mode"])
                 self.do_click(self.add_capacity_ui_loc[mode])
-                self.take_screenshot()
+                self.take_screenshot(mode)
                 return False
             except Exception as e:
                 logger.info(e)
-                self.take_screenshot()
-        self.take_screenshot()
+                self.take_screenshot(mode)
+        self.take_screenshot("verify_modes_done")
         return True
