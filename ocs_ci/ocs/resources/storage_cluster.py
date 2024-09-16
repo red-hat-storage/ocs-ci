@@ -2860,3 +2860,14 @@ def validate_non_resilient_pool(storage_cluster: StorageCluster) -> bool:
         return True
 
     return False
+
+
+def scale_up_mds_memory(scale_up_memory):
+    sc = get_storage_cluster()
+    patch_cmd = (
+        f"oc patch -n openshift-storage storagecluster ocs-storagecluster "
+        f"--type merge "
+        f'--patch \'{{"spec": {{"resources": {{"mds": {{"limits": {{"memory": "{scale_up_memory}"}},'
+        f'"requests": {{"memory": "{scale_up_memory}"}}}}}}}}}}\''
+    )
+    sc.patch(params=patch_cmd, format_type="merge")

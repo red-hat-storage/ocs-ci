@@ -22,6 +22,7 @@ from ocs_ci.ocs.resources.pod import (
     get_osd_pods,
     delete_pods,
 )
+from ocs_ci.ocs.resources.storage_cluster import scale_up_mds_memory
 from ocs_ci.utility.utils import ceph_health_check
 from ocs_ci.utility import prometheus
 
@@ -35,7 +36,7 @@ state = constants.STATUS_RUNNING
 
 
 @pytest.fixture(scope="function")
-def run_metadata_io_with_cephfs(dc_pod_factory):
+def run_metadata_io_with_cephfs(dc_pod_factory, pod_count=3):
     """
     This function facilitates
     1. Create PVC with Cephfs, access mode RWX
@@ -55,7 +56,7 @@ def run_metadata_io_with_cephfs(dc_pod_factory):
     for node in worker_nodes:
         if (node != active_mds_node) and (node != sr_mds_node):
             target_node.append(node)
-    for dc_pod in range(3):
+    for dc_pod in range(pod_count):
         log.info("Create fedora dc pod")
         pod_obj = dc_pod_factory(
             size="30",
@@ -326,3 +327,26 @@ class TestMdsMemoryAlerts(E2ETest):
             helpers.wait_for_resource_state(resource=pod, state=state)
 
         assert self.active_mds_alert_values(threading_lock)
+
+    def test_alert_after_mds_memory_scale_up(
+        self, request, threading_lock, dc_pod_factory
+    ):
+        request.getfixturevalue("run_metadata_io_with_cephfs", [5])
+        mds_obj = cluster.get_active_mds_info()["active_pod_obj"]
+        mds_memory = mds_obj.get_memory("mds")
+        scale_up_memory = 2 * int(mds_memory[:-2])
+
+        if self.active_mds_alert_values(threading_lock):
+            # POD_OBJ.exec_oc_cmd(command=patch_cmd)
+            scale_up_mds_memory(scale_up_memory)
+            time.sleep(100)
+            if int(mds_memory[:-2]) == scale_up_memory:
+                log.info("Verified mds memory after scale up, all good...")
+                assert not self.active_mds_alert_values(
+                    threading_lock
+                ), "MDS alert disappeared"
+                log.info("Validate the alert again after memory increment")
+                request.getfixturevalue("run_metadata_io_with_cephfs")
+                assert self.active_mds_alert_values(threading_lock)
+        else:
+            log.error("Alert didn't trigger withing the time frame")
