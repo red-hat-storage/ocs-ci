@@ -178,7 +178,6 @@ class TestUserInterfaceValidation(object):
     @ui
     @tier1
     @runs_on_provider
-    @pytest.mark.bugzilla("XXXX")
     @skipif_no_lower_requirements
     @black_squad
     def test_performance_modes_disabled(self, setup_ui_class_factory):
