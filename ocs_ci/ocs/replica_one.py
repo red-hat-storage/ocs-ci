@@ -288,15 +288,16 @@ def get_ceph_osd_df_output():
     Raises:
         Exception: If unable to get valid output after maximum retries.
     """
-    ceph_pod = get_ceph_tools_pod()
+    ceph_pod = get_ceph_tools_pod(namespace=config.ENV_DATA["cluster_namespace"])
     timeout = 120
     sleep = 10
 
     sampler = TimeoutSampler(
         timeout=timeout,
         sleep=sleep,
-        func=ceph_pod.exec_cmd_on_pod,
-        func_args=("ceph osd df tree -f json-pretty",),
+        func=lambda: ceph_pod.exec_cmd_on_pod(
+            command="ceph osd df tree -f json-pretty"
+        ),
     )
 
     try:
