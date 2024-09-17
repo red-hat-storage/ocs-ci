@@ -4790,7 +4790,7 @@ def flatten_multilevel_dict(d):
     return leaves_list
 
 
-def is_rbd_default_storage_class(custom_sc=None):
+def is_rbd_default_storage_class(sc_name=None):
     """
     Check if RDB is a default storageclass for the cluster
 
@@ -4800,9 +4800,7 @@ def is_rbd_default_storage_class(custom_sc=None):
     Returns:
         bool : True if RBD is set as the  Default storage class for the cluster, False otherwise.
     """
-    default_rbd_sc = (
-        constants.DEFAULT_STORAGECLASS_RBD if custom_sc is None else custom_sc
-    )
+    default_rbd_sc = constants.DEFAULT_STORAGECLASS_RBD if sc_name is None else sc_name
     cmd = (
         f"oc get storageclass {default_rbd_sc} -o=jsonpath='{{.metadata.annotations}}' "
     )
