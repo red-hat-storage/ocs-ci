@@ -128,6 +128,9 @@ def run_ibmcloud_cmd(cmd, secrets=None, timeout=600, ignore_error=False, **kwarg
         if "Please login" in str(ex):
             login()
             return run_cmd(cmd, secrets, timeout, ignore_error, **kwargs)
+        else:
+            if not ignore_error:
+                raise
 
 
 def get_cluster_details(cluster):
