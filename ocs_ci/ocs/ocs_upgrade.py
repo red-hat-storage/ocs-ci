@@ -343,7 +343,7 @@ class OCSUpgrade(object):
         if (
             (live_deployment and upgrade_in_same_source)
             or (managed_ibmcloud_platform and not use_upstream_mg_image)
-            or config["ENV_DATA"].get("platform") == constants.ROSA_HCP_PLATFORM
+            or config.ENV_DATA.get("platform") == constants.ROSA_HCP_PLATFORM
         ):
             update_live_must_gather_image()
         elif use_upstream_mg_image:
