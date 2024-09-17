@@ -192,9 +192,9 @@ class BucketLoggingManager:
                 )
                 raise
             logger.info(
-                "Waiting an additional 30 seconds for put-bucket-logging to propogate"
+                "Waiting an additional 60 seconds for put-bucket-logging to propogate"
             )
-            time.sleep(30)
+            time.sleep(60)
 
         logger.info(
             f"The logs bucket {logs_bucket_name} has been set on the source bucket {bucket_name}"
