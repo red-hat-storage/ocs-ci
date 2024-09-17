@@ -4,6 +4,7 @@ import time
 import pytest
 
 from ocs_ci.ocs import constants, ocp
+from ocs_ci.ocs.resources.storage_cluster import verify_storage_cluster
 from ocs_ci.helpers.helpers import configure_cephcluster_params_in_storagecluster_cr
 from ocs_ci.framework import config
 from ocs_ci.framework.testlib import (
@@ -66,6 +67,7 @@ class TestStorageclusterUpgradeParams(ManageTest):
             configure_cephcluster_params_in_storagecluster_cr(
                 self.UPGRADE_PARAMS, default_values=True
             )
+            verify_storage_cluster()
 
         request.addfinalizer(finalizer)
 
