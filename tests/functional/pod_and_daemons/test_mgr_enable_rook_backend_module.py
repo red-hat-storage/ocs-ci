@@ -69,7 +69,8 @@ class TestMgrRookModule(ManageTest):
 
     def test_mgr_enable_rook_backend_module(self):
         """
-        Test to verify there are no crashes post enabling rook module on mgr
+        Test to verify there are no crashes post enabling rook module on mgr and
+        setting rook as an orchestrator backend.
         BZ: https://bugzilla.redhat.com/show_bug.cgi?id=2274165
 
         """
@@ -93,7 +94,7 @@ class TestMgrRookModule(ManageTest):
 
         mgr_pods = pod.get_mgr_pods()
         for mgr_pod in mgr_pods:
-            log.info(f"Restarting mgr pod:{mgr_pod.name} post enabled rook module")
+            log.info(f"Restarting mgr pod:{mgr_pod.name} post enabling rook module")
             mgr_pod.delete(wait=True)
 
         log.info(
