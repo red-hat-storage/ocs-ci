@@ -189,7 +189,8 @@ def ocs_install_verification(
         and config.ENV_DATA["cluster_type"].lower() == constants.MS_CONSUMER_TYPE
     )
     client_cluster = (
-        hci_cluster and config.ENV_DATA["cluster_type"].lower() == constants.HCI_CLIENT
+        hci_cluster
+        and config.ENV_DATA["cluster_type"].lower() == constants.STORAGE_CLIENT_CLUSTER
     )
     ocs_version = version.get_semantic_ocs_version_from_config()
     external = config.DEPLOYMENT["external_mode"] or consumer_cluster or client_cluster

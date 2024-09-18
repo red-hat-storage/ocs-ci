@@ -1192,7 +1192,10 @@ def _collect_ocs_logs(
             ocs_must_gather_image_and_tag = mirror_image(
                 ocs_must_gather_image_and_tag, cluster_config
             )
-        if cluster_config.ENV_DATA.get("cluster_type") == constants.HCI_CLIENT:
+        if (
+            cluster_config.ENV_DATA.get("cluster_type")
+            == constants.STORAGE_CLIENT_CLUSTER
+        ):
             ocs_flags = ocs_flags + " -pc" if ocs_flags else " /usr/bin/gather -pc"
 
         mg_output = run_must_gather(

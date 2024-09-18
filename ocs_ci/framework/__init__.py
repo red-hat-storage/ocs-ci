@@ -282,7 +282,10 @@ class MultiClusterConfig:
         """
         consumer_indexes_list = []
         for i, cluster in enumerate(self.clusters):
-            if cluster.ENV_DATA["cluster_type"] in ["consumer", "hci_client"]:
+            if cluster.ENV_DATA["cluster_type"] in [
+                "consumer",
+                "storage_client_cluster",
+            ]:
                 consumer_indexes_list.append(i)
 
         if not consumer_indexes_list:
@@ -376,16 +379,16 @@ class MultiClusterConfig:
         cluster_types = [cluster.ENV_DATA["cluster_type"] for cluster in self.clusters]
         return "consumer" in cluster_types
 
-    def hci_client_exist(self):
+    def storage_client_cluster_exist(self):
         """
-        Check if the hci_client cluster exists in the clusters
+        Check if the storage_client_cluster cluster exists in the clusters
 
         Returns:
-            bool: True, if the hci_client cluster exists in the clusters. False, otherwise.
+            bool: True, if the storage_client_cluster cluster exists in the clusters. False, otherwise.
 
         """
         cluster_types = [cluster.ENV_DATA["cluster_type"] for cluster in self.clusters]
-        return "hci_client" in cluster_types
+        return "storage_client_cluster" in cluster_types
 
     def hci_provider_exist(self):
         """

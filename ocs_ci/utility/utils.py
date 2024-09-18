@@ -1976,9 +1976,9 @@ def get_ocs_build_number():
         operator_name = defaults.ODF_OPERATOR_NAME
         if (
             config.ENV_DATA.get("platform") in constants.HCI_PROVIDER_CLIENT_PLATFORMS
-            and config.ENV_DATA.get("cluster_type") == constants.HCI_CLIENT
+            and config.ENV_DATA.get("cluster_type") == constants.STORAGE_CLIENT_CLUSTER
         ):
-            operator_name = defaults.HCI_CLIENT_ODF_OPERATOR_NAME
+            operator_name = defaults.STORAGE_CLIENT_CLUSTER_ODF_OPERATOR_NAME
     else:
         operator_name = defaults.OCS_OPERATOR_NAME
     ocs_csvs = get_csvs_start_with_prefix(
@@ -4717,7 +4717,7 @@ def switch_to_correct_cluster_at_setup(request):
         pytest.skip(f"The cluster type '{cluster_type}' does not exist in the run")
 
     client_type = get_pytest_fixture_value(request, "client_type")
-    if cluster_type == constants.HCI_CLIENT and client_type:
+    if cluster_type == constants.STORAGE_CLIENT_CLUSTER and client_type:
         switch_to_correct_client_type(client_type)
         return
 
