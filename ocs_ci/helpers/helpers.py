@@ -5210,6 +5210,7 @@ def configure_cephcluster_params_in_storagecluster_cr(params, default_values=Fal
         )
         storagecluster_obj.patch(params=param, format_type="json")
 
+
 def set_watch_for_node_failure_rook_ceph_operator(value):
     """
     Set ROOK_WATCH_FOR_NODE_FAILURE on configmap of rook-ceph-operator

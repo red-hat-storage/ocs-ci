@@ -44,13 +44,13 @@ class TestVolumeRecoveryPostTaint(E2ETest):
     """
     Test to check CephFS and RBD volume recovery post Noschedule node taints
     """
+
     @pytest.fixture(autouse=True)
     def init_sanity(self):
         """
         Initialize Sanity instance
         """
         self.sanity_helpers = Sanity()
-
 
     def get_all_networkfences(self):
         """
@@ -66,7 +66,7 @@ class TestVolumeRecoveryPostTaint(E2ETest):
         nf_out_json = json.loads(nf_wide_out)
         networkfence_creation = False
         self.CIDR_IP = []
-        if (self.interface == constants.CEPHFILESYSTEM):
+        if self.interface == constants.CEPHFILESYSTEM:
             if not nf_out_json["items"]:
                 log.info("Looking for message no active mds in rook ceph operator log")
                 target_log = "ceph-cluster-controller: no active mds clients found for cephfs subvolume"
@@ -76,27 +76,41 @@ class TestVolumeRecoveryPostTaint(E2ETest):
             else:
                 for item in nf_out_json["items"]:
                     if item["spec"]["driver"] == constants.NFCEPHFSDRIVER:
-                        if item["spec"]["fenceState"] == "Fenced" and item["status"]["result"] == "Succeeded":
+                        if (
+                            item["spec"]["fenceState"] == "Fenced"
+                            and item["status"]["result"] == "Succeeded"
+                        ):
                             self.CIDR_IP.append(item["spec"]["cidrs"])
                             networkfence_creation = True
                             break
                 if networkfence_creation:
-                    log.info("Network fence is created and is in succeded state post tainting the node with Noschedule taint")
+                    log.info(
+                        "Network fence is created and is in succeded state post tainting the node with Noschedule taint"
+                    )
                     return True
                 else:
-                    log.error("Failed to create networkfence post tainting the node with Noschedule taint")
+                    log.error(
+                        "Failed to create networkfence post tainting the node with Noschedule taint"
+                    )
                     return False
         else:
             for item in nf_out_json["items"]:
                 if item["spec"]["driver"] == constants.NFRBDDRIVER:
-                    if nf["spec"]["fenceState"] == "Fenced" and nf["status"]["result"] == "Succeeded":
+                    if (
+                        nf["spec"]["fenceState"] == "Fenced"
+                        and nf["status"]["result"] == "Succeeded"
+                    ):
                         networkfece_creation = True
                         break
             if networkfece_creation:
-                log.info("Network fence is created and is in succeded state post tainting the node with Noschedule taint")
+                log.info(
+                    "Network fence is created and is in succeded state post tainting the node with Noschedule taint"
+                )
                 return True
             else:
-                log.error("Failed to create networkfence post tainting the node with Noschedule taint")
+                log.error(
+                    "Failed to create networkfence post tainting the node with Noschedule taint"
+                )
                 return False
 
     def check_cidr_is_blocklisted(self, CIDR_untaint=None):
@@ -116,7 +130,7 @@ class TestVolumeRecoveryPostTaint(E2ETest):
                 self.CIDR_IP = CIDR_untaint
             for CIDR in self.CIDR_IP:
                 log.info(f"CIDRR{CIDR}")
-                CIDR_IP = CIDR[0].split('/')[0]
+                CIDR_IP = CIDR[0].split("/")[0]
                 is_present = CIDR_IP in tree_output
             if is_present:
                 return True
@@ -145,7 +159,10 @@ class TestVolumeRecoveryPostTaint(E2ETest):
             ),
         ],
     )
-    def test_networkfence_on_rbd_and_cephfs(self, interface_type, ):
+    def test_networkfence_on_rbd_and_cephfs(
+        self,
+        interface_type,
+    ):
         """
         Test runs the following steps
         1. Create deployment pods
@@ -173,7 +190,9 @@ class TestVolumeRecoveryPostTaint(E2ETest):
             helpers.create_resource(**deployment_data)
             time.sleep(60)
             log.info("All the workloads pods are successfully up and running")
-            pods = get_pods_having_label(label=constants.LOGWRITER_CEPHFS_LABEL, namespace=self.namespace)
+            pods = get_pods_having_label(
+                label=constants.LOGWRITER_CEPHFS_LABEL, namespace=self.namespace
+            )
             pod_name = []
             taint_node = []
             for podd in pods:
@@ -181,15 +200,15 @@ class TestVolumeRecoveryPostTaint(E2ETest):
                 pod_name.append(podd.get("metadata").get("name"))
                 taint_node.append(node_name)
             self.interface = interface_type
-            log.info(
-                f"Taint worker node {node_name}with nodeshutdown:NoExecute taint"
-            )
+            log.info(f"Taint worker node {node_name}with nodeshutdown:NoExecute taint")
 
             taint_nodes(
                 nodes=taint_node,
                 taint_label="node.kubernetes.io/out-of-service=nodeshutdown:NoExecute",
             )
-            log.info("Inducing a delay of two minutes as rook ceph operator pod might get restarted post node taint")
+            log.info(
+                "Inducing a delay of two minutes as rook ceph operator pod might get restarted post node taint"
+            )
             time.sleep(120)
 
             rook_operator_pods = get_operator_pods()
@@ -202,12 +221,12 @@ class TestVolumeRecoveryPostTaint(E2ETest):
             pod_info = self.rook_operator_pod.get()
             node = pod_info["spec"]["nodeName"]
             # Wait for network fence to be created
-            if  node_name == node:
+            if node_name == node:
                 time.sleep(180)
             else:
                 time.sleep(60)
 
-            #Check if networkfence is created post taint
+            # Check if networkfence is created post taint
             assert self.get_all_networkfences(), "Failed to create network fence"
             CIDR_untaint = self.CIDR_IP
 
@@ -225,12 +244,13 @@ class TestVolumeRecoveryPostTaint(E2ETest):
             log.info("Inducing delay so that network fence operation is completed")
             time.sleep(60)
 
-            #Check if networkfence is removed post untaint
+            # Check if networkfence is removed post untaint
             assert not self.get_all_networkfences(), "Network fence still exists"
 
             # Check if CIDR IP is removed from blocklisted IPs post untaint
-            assert not self.check_cidr_is_blocklisted(CIDR_untaint), "CIDR IPs stil exist in blocklist"
+            assert not self.check_cidr_is_blocklisted(
+                CIDR_untaint
+            ), "CIDR IPs stil exist in blocklist"
             log.info("Volume recovery was successful post tainting the node")
         except:
             log.info("failed")
-

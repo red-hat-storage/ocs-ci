@@ -768,7 +768,9 @@ IBM_BDI_SCC_WORKLOAD_YAML = os.path.join(TEMPLATE_BDI_DIR, "ibm_bdi_scc.yaml")
 
 TILLER_YAML = os.path.join(TEMPLATE_BDI_DIR, "temp_tiller.yaml")
 
-LOGWRITER_CEPH_FS_POD_YAML = os.path.join(TEMPLATE_APP_POD_DIR, "logwriter_ceph_fs.yaml")
+LOGWRITER_CEPH_FS_POD_YAML = os.path.join(
+    TEMPLATE_APP_POD_DIR, "logwriter_ceph_fs.yaml"
+)
 
 SIMPLE_APP_RBD_POD_YAML = os.path.join(TEMPLATE_APP_POD_DIR, "simple-app.yaml")
 
@@ -2998,4 +3000,3 @@ METAIO = os.path.join(TEMPLATE_WORKLOAD_DIR, "helper_scripts/meta_data_io.py")
 FILE_CREATOR_IO = os.path.join(
     TEMPLATE_WORKLOAD_DIR, "helper_scripts/file_creator_io.py"
 )
-
