@@ -26,10 +26,11 @@ log = logging.getLogger(__name__)
 @skipif_ocs_version("<4.6")
 @pytest.mark.polarion_id("OCS-2394")
 @pytest.mark.parametrize(
-    argnames=["rbd_pool"],
+    argnames=["rbd_pool", "compression"],
     argvalues=[
-        pytest.param(True, marks=pytest.mark.polarion_id("OCS-2394")),
-        pytest.param(False, marks=pytest.mark.polarion_id("OCS-6221")),
+        pytest.param(True, "aggressive", marks=pytest.mark.polarion_id("OCS-2394")),
+        pytest.param(False, "aggressive", marks=pytest.mark.polarion_id("OCS-6221")),
+        pytest.param(False, "none", marks=pytest.mark.polarion_id("OCS-6220")),
     ],
 )
 class TestCreate2ScAtOnceWithIo(ManageTest):
@@ -39,7 +40,7 @@ class TestCreate2ScAtOnceWithIo(ManageTest):
     """
 
     def test_new_sc_rep2_rep3_at_once(
-        self, storageclass_factory, pvc_factory, pod_factory, rbd_pool
+        self, storageclass_factory, pvc_factory, pod_factory, rbd_pool, compression
     ):
         """
 
@@ -62,14 +63,14 @@ class TestCreate2ScAtOnceWithIo(ManageTest):
             interface=interface_type,
             new_rbd_pool=True,
             replica=2,
-            compression="aggressive",
+            compression=compression,
         )
 
         sc_obj2 = storageclass_factory(
             interface=interface_type,
             new_rbd_pool=True,
             replica=3,
-            compression="aggressive",
+            compression=compression,
         )
 
         replicas = dict()
@@ -106,7 +107,7 @@ class TestCreate2ScAtOnceWithIo(ManageTest):
             cbp_size = replicas[sc_obj.name]
             compression_result = validate_compression(cbp_name)
             replica_result = validate_replica_data(cbp_name, cbp_size)
-            if compression_result is False:
+            if compression_result is False and compression == "aggressive":
                 raise PoolNotCompressedAsExpected(
                     f"Pool {cbp_name} compression did not reach expected value"
                 )
