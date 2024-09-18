@@ -2621,7 +2621,7 @@ PATCH_SPECIFIC_SOURCES_CMD = (
 )
 PATCH_STORAGECLUSTER_TO_ADD_POOL = (
     f'oc patch {STORAGECLUSTER} {DEFAULT_STORAGE_CLUSTER} --type="json" '
-    'p=\'[{{"op": "add", "path": "/spec/managedResources/cephFilesystems/additionalDataPools/-", "value": '
+    '-p=\'[{{"op": "add", "path": "/spec/managedResources/cephFilesystems/additionalDataPools/-", "value": '
     '{{"compressionMode": "{compression}", "name": "{pool_name}", "replicated": {{"size": {replica}}}}}}}]\''
 )
 
