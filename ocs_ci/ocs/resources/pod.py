@@ -3955,3 +3955,24 @@ def get_age_of_cluster_in_days():
     seconds_per_day = 24 * 60 * 60
     time_diff_in_days = time_difference_in_sec / seconds_per_day
     return math.ceil(time_diff_in_days)
+
+
+def get_prometheus_pods(
+    prometheus_label=constants.PROMETHEUS_POD_LABEL,
+    namespace=constants.MONITORING_NAMESPACE,
+):
+    """
+    Fetches info about prometheus pods in the cluster
+
+    Args:
+        prometheus_label (str): label associated with prometheus pods
+        namespace (str): Namespace in which prometheus pods lives
+
+    Returns:
+        list : of prometheus pod objects
+
+    """
+    namespace = namespace
+    pods_with_label_match = get_pods_having_label(prometheus_label, namespace)
+    prometheus_pod_objs = [Pod(**prometheus) for prometheus in pods_with_label_match]
+    return prometheus_pod_objs

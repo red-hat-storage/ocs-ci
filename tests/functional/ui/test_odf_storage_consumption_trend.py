@@ -1,7 +1,9 @@
 import logging
+import math
 import re
 import time
 
+from ocs_ci.framework import config
 from ocs_ci.framework.testlib import (
     ManageTest,
     tier2,
@@ -9,16 +11,19 @@ from ocs_ci.framework.testlib import (
     ignore_leftovers,
     black_squad,
 )
-from ocs_ci.ocs.cluster import get_used_and_total_capacity_in_gibibytes
 from ocs_ci.helpers import helpers
-from ocs_ci.ocs.ocp import OCP
-from ocs_ci.framework import config
+from ocs_ci.helpers.osd_resize import basic_resize_osd
 from ocs_ci.ocs import constants
+from ocs_ci.ocs.cluster import get_used_and_total_capacity_in_gibibytes
+from ocs_ci.ocs.ocp import OCP
 from ocs_ci.ocs.resources.pod import (
     get_age_of_cluster_in_days,
     get_mgr_pods,
     get_ceph_tools_pod,
+    delete_pods,
+    get_prometheus_pods,
 )
+from ocs_ci.ocs.resources.storage_cluster import get_storage_size
 from ocs_ci.ocs.ui.validation_ui import ValidationUI
 
 logger = logging.getLogger(__name__)
@@ -36,14 +41,17 @@ class TestConsumptionTrendUI(ManageTest):
         """
         Get the value of 'Estimated days until full' from the UI
 
+        Returns:
+            est_days: (int)
+
         """
         validation_ui_obj = ValidationUI()
         collected_list_of_days_and_avg = (
             validation_ui_obj.odf_storagesystems_consumption_trend()
         )
-        est_days = float(re.search(r"\d+", collected_list_of_days_and_avg[0]).group())
+        est_days = re.search(r"\d+", collected_list_of_days_and_avg[0]).group()
         logger.info(f"'Estimated days until full' from the UI : {est_days}")
-        return est_days
+        return int(est_days)
 
     def get_avg_consumption_from_ui(self):
         """
@@ -51,6 +59,7 @@ class TestConsumptionTrendUI(ManageTest):
 
         Returns:
             average: (float)
+
         """
         validation_ui_obj = ValidationUI()
         collected_list_of_days_and_avg = (
@@ -72,7 +81,8 @@ class TestConsumptionTrendUI(ManageTest):
         5. Calculate the 'Estimated days until full' by using average and available capacity.
 
         Returns:
-            estimated_days_calculated: (float)
+            estimated_days_calculated: (int)
+
         """
         number_of_days = get_age_of_cluster_in_days()
         logger.info(f"Age of the cluster in days: {number_of_days}")
@@ -86,7 +96,7 @@ class TestConsumptionTrendUI(ManageTest):
         logger.info(f"Average of storage consumption per day: {average}")
         estimated_days_calculated = available_capacity / average
         logger.info(f"Estimated days calculated are {estimated_days_calculated}")
-        return estimated_days_calculated
+        return math.floor(estimated_days_calculated)
 
     def test_consumption_trend_card_ui(self, setup_ui_class):
         """
@@ -106,11 +116,9 @@ class TestConsumptionTrendUI(ManageTest):
         logger.info(
             f"Average information from the wizard is: {collected_list_of_days_and_avg[1]}"
         )
-
         assert (
             est_days_txt in collected_list_of_days_and_avg[0]
         ), f"Text information for Estimated days is wrong in {collected_list_of_days_and_avg[0]}"
-
         assert (
             avg_txt in collected_list_of_days_and_avg[1]
         ), f"Text information for Average is wrong in {collected_list_of_days_and_avg[1]}"
@@ -121,20 +129,35 @@ class TestConsumptionTrendUI(ManageTest):
             1. Get the value of storage utilised, total storage, age of the cluster
                 and calculate Average of storage consumption and 'Estimated days until full'.
             2. Compare the above calculated value with the ‘Estimated days until full’ in the widget (UI)
+
         """
         est_days = self.get_est_days_from_ui()
         average = self.get_avg_consumption_from_ui()
         logger.info(f"From the UI, Estimated Days: {est_days} and Average: {average}")
         estimated_days_calculated = self.calculate_est_days_manually()
-        assert round(est_days) == round(
-            estimated_days_calculated
-        ), "Estimated days to fill the cluster is wrongly displayed"
+        first_validation = est_days == estimated_days_calculated
+        # rel_tol 0.1 means upto 10% tolerance, which means that difference between  manual and UI est days is up to 10%
+        second_validation = math.isclose(
+            est_days, estimated_days_calculated, rel_tol=0.1
+        )
+        if first_validation:
+            logger.info(
+                "Manually calculated and UI values are exactly matched for 'Estimated days until full'"
+            )
+        elif second_validation:
+            logger.warning(
+                "Manually calculated and UI values are matched with upto 10% difference for 'Estimated days until full'"
+            )
+        assert (
+            first_validation or second_validation
+        ), "'Estimated days until full' is wrongly displayed in UI"
 
     def test_consumption_trend_with_mgr_failover(self, setup_ui_class):
         """
         Verify storage consumption trend with Mgr failover
             1. Failover active mgr pod, the other mgr will become active now.
             2. Test storage consumption trend from UI is accurate after mgr failover.
+
         """
         logger.info("Get mgr pods objs")
         mgr_objs = get_mgr_pods()
@@ -152,7 +175,7 @@ class TestConsumptionTrendUI(ManageTest):
             deployment_name=active_mgr_deployment_name, replica_count=0
         )
         POD_OBJ.wait_for_delete(resource_name=active_mgr_pod)
-        # Below sleep is madatory for mgr failover, if not the same pod will become active again.
+        # Below sleep is mandatory for mgr failover, if not the same pod will become active again.
         time.sleep(60)
         logger.info(f"Scale down {active_mgr_deployment_name} to 1")
         helpers.modify_deployment_replica_count(
@@ -168,7 +191,81 @@ class TestConsumptionTrendUI(ManageTest):
         average = self.get_avg_consumption_from_ui()
         logger.info(f"From the UI, Estimated Days: {est_days} and Average: {average}")
         estimated_days_calculated = self.calculate_est_days_manually()
+        first_validation = est_days == estimated_days_calculated
+        # rel_tol 0.1 means upto 10% tolerance, which means that difference between  manual and UI est days is up to 10%
+        second_validation = math.isclose(
+            est_days, estimated_days_calculated, rel_tol=0.1
+        )
+        if first_validation:
+            logger.info(
+                "Manually calculated and UI values are exactly matched for 'Estimated days until full'"
+            )
+        elif second_validation:
+            logger.warning(
+                "Manually calculated and UI values are matched with upto 10% difference for 'Estimated days until full'"
+            )
+        assert (
+            first_validation or second_validation
+        ), "'Estimated days until full' is wrongly displayed in UI"
 
-        assert round(est_days) == round(
-            estimated_days_calculated
-        ), "Estimated days to fill the cluster is wrongly displayed"
+    def test_consumption_trend_with_prometheus_failures(self, setup_ui_class):
+        """
+        Fail prometheus and verify the Consumption trend in the ODF dashboard to make sure
+        ‘Estimated days until full’ and 'Average' reflects accurate value.
+
+            1. Fail the prometheus pods by deleting them. New pods will be created automatically.
+            2. When the new prometheus pods  up, Consumption trend should be displayed in the dashboard.
+            3. Check the values for  ‘Estimated days until full’ and ‘Average of storage consumption per day’
+            4. Should show close to the values before deleting the prometheus pod
+
+        """
+        logger.info("Get the value of 'Estimated days until full' from UI")
+        est_days_before = self.get_est_days_from_ui()
+        logger.info(
+            f"The value of 'Estimated days until full' from UI is {est_days_before} before failing prometheus"
+        )
+        average_before = self.get_avg_consumption_from_ui()
+        logger.info(
+            f"'Average of storage consumption per day' from UI is {average_before} before failing prometheus"
+        )
+        logger.info("Bring down the prometheus")
+        list_of_prometheus_pod_obj = get_prometheus_pods()
+        delete_pods(list_of_prometheus_pod_obj)
+        time.sleep(120)
+        est_days_after = self.get_est_days_from_ui()
+        logger.info(
+            f"From the UI, Estimated Days: {est_days_after} after prometheus recovered from failure"
+        )
+        average_after = self.get_avg_consumption_from_ui()
+        logger.info(
+            f"'Average of storage consumption' from UI is {average_after} after prometheus recovered from failure"
+        )
+        # rel_tol 0.1 means upto 10% tolerance which means that difference between  manual and UI est days is up to 10%
+        assert math.isclose(
+            est_days_before, est_days_after, rel_tol=0.1
+        ), "Estimated days until full did not match before and after prometheus fail"
+        assert math.isclose(
+            average_before, average_after, rel_tol=0.1
+        ), "'Average of storage consumption per day' did not match before and after prometheus fail"
+
+    def test_consumption_trend_after_osd_resize(self, setup_ui_class):
+        """
+        Verify consumption trend after OSD resize
+        1. Get the value of 'Estimated days until full' value from the UI.
+        2. Perform OSD resize.
+        3. Verify the new size is reflecting in the consumption trend dashboard or not.
+        4. 'Estimated days until full' value in the UI, should increase after OSD resize.
+
+        """
+        logger.info("Get the value of 'Estimated days until full' from UI")
+        est_days_before = self.get_est_days_from_ui()
+        logger.info("Performing OSD resize")
+        basic_resize_osd(get_storage_size())
+        logger.info("After OSD resize, checking consumption trend UI")
+        logger.info(
+            "Get the value of 'Estimated days until full' from UI after OSD resize"
+        )
+        est_days_after = self.get_est_days_from_ui()
+        assert (
+            est_days_after > est_days_before
+        ), f"'Estimated days until full' {est_days_after} did not increase after OSD resize"
