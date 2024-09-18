@@ -38,7 +38,7 @@ class TestMgrRookModule(ManageTest):
 
         def finalizer():
             toolbox = pod.get_ceph_tools_pod()
-            log.info("Setting orch backed to none and disabling rook module on mgr")
+            log.info("Setting orch backend to none and disabling rook module on mgr")
             toolbox.exec_ceph_cmd('ceph orch set backend ""')
             toolbox.exec_ceph_cmd("ceph mgr module disable rook")
 
@@ -81,9 +81,9 @@ class TestMgrRookModule(ManageTest):
 
         log.info("Enabling rook module on mgr")
         toolbox.exec_ceph_cmd("ceph mgr module enable rook")
-        log.info("Setting orchestrator backed to rook")
+        log.info("Setting orchestrator backend to rook")
         toolbox.exec_ceph_cmd("ceph orch set backend rook")
-        log.info("Validating orch status to verify backed: rook is available")
+        log.info("Validating orch status to verify backend: rook is Available")
         sample = TimeoutSampler(
             timeout=120,
             sleep=3,
