@@ -2990,3 +2990,8 @@ METAIO = os.path.join(TEMPLATE_WORKLOAD_DIR, "helper_scripts/meta_data_io.py")
 FILE_CREATOR_IO = os.path.join(
     TEMPLATE_WORKLOAD_DIR, "helper_scripts/file_creator_io.py"
 )
+
+# workaround: marking disks as ssd
+MC_WORKAROUND_SSD = os.path.join(
+    TEMPLATE_DEPLOYMENT_DIR_OCP, "workaround-ssd-machine-config.yaml"
+)
