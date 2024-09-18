@@ -912,7 +912,7 @@ def storageclass_factory_fixture(
                     )
                     cephfspools.append(
                         {
-                            "pool_name": pool_name,
+                            "pool_name": interface_name,
                             "replica": replica,
                             "compression": compression,
                         }
