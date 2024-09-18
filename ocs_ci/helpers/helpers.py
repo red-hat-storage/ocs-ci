@@ -5209,3 +5209,20 @@ def configure_cephcluster_params_in_storagecluster_cr(params, default_values=Fal
             f' "value": {parameter_value}}}]'
         )
         storagecluster_obj.patch(params=param, format_type="json")
+
+def set_watch_for_node_failure_rook_ceph_operator(value):
+    """
+    Set ROOK_WATCH_FOR_NODE_FAILURE on configmap of rook-ceph-operator
+
+    Args:
+        value (binary): "True" or "False", "True" is default value
+
+    """
+    configmap_obj = OCP(
+        kind=constants.CONFIGMAP,
+        namespace=config.ENV_DATA["cluster_namespace"],
+        resource_name=constants.ROOK_OPERATOR_CONFIGMAP,
+    )
+    logger.info(f"Setting ROOK_WATCH_FOR_NODE_FAILURE to: {value}")
+    params = f'{{"data": {{"ROOK_WATCH_FOR_NODE_FAILURE": "{value}"}}}}'
+    configmap_obj.patch(params=params, format_type="merge")
