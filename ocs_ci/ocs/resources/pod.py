@@ -3927,3 +3927,35 @@ def get_container_images(pod_obj):
         raise ValueError(f"Didn't find images for the pod {pod_obj.name} containers")
 
     return images
+
+def get_age_of_cluster_in_days():
+    """
+    Get age of the cluster in days.
+    1. Get creation time by executing oc cmd on cluster
+    2. Get current time from the ceph tools pod
+    3. Calculate time difference between two times
+    4. Convert the time into days
+
+    Returns:
+        time_diff_in_days: (int) returns number of days the cluster has been running
+
+    """
+
+    cmd = "get namespace kube-system -o jsonpath='{.metadata.creationTimestamp}'"
+    creation_time = OCP().exec_oc_cmd(command=cmd, out_yaml_format=False)
+
+    ct_pod = get_ceph_tools_pod()
+    cephcmd = 'date -u +"%Y-%m-%dT%H:%M:%SZ"'
+    current_time = ct_pod.exec_cmd_on_pod(command=cephcmd, out_yaml_format=False)
+
+    d1 = datetime.fromisoformat(creation_time[:-1])
+    d2 = datetime.fromisoformat(current_time.strip()[:-1])
+    time_difference_in_sec = (d2 - d1).total_seconds()
+    seconds_per_day = 24 * 60 * 60
+    time_diff_in_days = time_difference_in_sec / seconds_per_day
+    if time_diff_in_days == 0:
+        return int(0)
+    elif (time_diff_in_days >= float(0.1)) and (time_diff_in_days <= float(0.99)):
+        return int(1)
+    else:
+        return int(time_diff_in_days)

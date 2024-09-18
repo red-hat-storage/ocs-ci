@@ -1773,6 +1773,17 @@ validation_4_14 = {
     "onboarding_token": ("//*[@class='odf-onboarding-modal__text-area']", By.XPATH),
 }
 
+validation_4_17 = {
+    "locate_average_of_storage_consumption": (
+        "//div[@class='pf-m-flex-1'][1]",
+        By.XPATH,
+    ),
+    "locate_estimated_days_along_with_value": (
+        "//div[@class='pf-m-flex-1'][2]",
+        By.XPATH,
+    ),
+}
+
 topology = {
     "topology_graph": ("//*[@data-kind='graph']", By.XPATH),
     "node_label": ("//*[@class='pf-topology__node__label']", By.XPATH),
@@ -2013,6 +2024,7 @@ locators = {
             **validation_4_12,
             **validation_4_13,
             **validation_4_14,
+            **validation_4_17,
         },
         "block_pool": {**block_pool, **block_pool_4_12, **block_pool_4_13},
         "storageclass": {**storageclass, **storageclass_4_9},
