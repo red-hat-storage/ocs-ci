@@ -2624,6 +2624,12 @@ PATCH_STORAGECLUSTER_TO_ADD_POOL = (
     '-p=\'[{{"op": "add", "path": "/spec/managedResources/cephFilesystems/additionalDataPools/-", "value": '
     '{{"compressionMode": "{compression}", "name": "{pool_name}", "replicated": {{"size": {replica}}}}}}}]\''
 )
+PATCH_STORAGECLUSTER_TO_DELETE_POOL = (
+    f"oc get {STORAGECLUSTER} {DEFAULT_STORAGE_CLUSTER} -o json | "
+    "jq '.spec.managedResources.cephFilesystems.additionalDataPools -="
+    ' [{{"compressionMode": "{compression}", "name": "{pool_name}", "replicated": '
+    '{{"size": {replica}}}}}]\' | oc apply -f -'
+)
 
 # Submariner constants
 SUBMARINER_OPERATOR_NAMESPACE = "submariner-operator"

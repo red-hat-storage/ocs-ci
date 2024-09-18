@@ -834,6 +834,7 @@ def storageclass_factory_fixture(
 
     """
     instances = []
+    cephfspools = []
 
     def factory(
         interface=constants.CEPHBLOCKPOOL,
@@ -909,6 +910,13 @@ def storageclass_factory_fixture(
                         compression=compression,
                         verify=True,
                     )
+                    cephfspools.append(
+                        {
+                            "pool_name": pool_name,
+                            "replica": replica,
+                            "compression": compression,
+                        }
+                    )
                 else:
                     interface_name = helpers.get_cephfs_data_pool_name()
 
@@ -940,6 +948,13 @@ def storageclass_factory_fixture(
         for instance in instances:
             instance.delete()
             instance.ocp.wait_for_delete(instance.name)
+        # cephfs pools need to be deleted separately
+        for pool in cephfspools:
+            helpers.delete_cephfs_storage_pool(
+                pool_name=pool["pool_name"],
+                replica=pool["replica"],
+                compression=pool["compression"],
+            )
 
     request.addfinalizer(finalizer)
     return factory

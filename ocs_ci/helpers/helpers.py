@@ -641,6 +641,28 @@ def create_cephfs_storage_pool(
     return pool_name
 
 
+def delete_cephfs_storage_pool(pool_name, replica, compression):
+    """
+    Delete the cephfs storage pool with the given name, replica and compression
+
+    Args:
+        pool_name (str): The name of the pool
+        replica (int): The replica size of the pool
+        compression (str): Compression type of the pool
+
+    """
+    logger.info(
+        f"Deleting cephfs pool {pool_name} with replica {replica} and compression {compression}"
+    )
+    exec_cmd(
+        constants.PATCH_STORAGECLUSTER_TO_DELETE_POOL.format(
+            compression=compression, pool_name=pool_name, replica=replica
+        )
+        # TODO: add verification that the pool has been deleted after
+        # https://bugzilla.redhat.com/show_bug.cgi?id=2299822 is fixed
+    )
+
+
 def create_ceph_file_system(
     cephfs_name=None, label=None, namespace=constants.OPENSHIFT_STORAGE_NAMESPACE
 ):
