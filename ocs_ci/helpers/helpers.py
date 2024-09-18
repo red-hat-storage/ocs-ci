@@ -633,6 +633,7 @@ def create_cephfs_storage_pool(
             compression=compression, pool_name=pool_name, replica=replica
         )
     )
+    pool_name = f"ocs-storagecluster-cephfilesystem-{pool_name}"
     if verify:
         assert verify_storage_pool_exists(
             pool_name
