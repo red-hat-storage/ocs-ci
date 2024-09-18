@@ -38,7 +38,7 @@ from ocs_ci.ocs.bucket_utils import check_pv_backingstore_type
 from ocs_ci.ocs.resources import pod
 from ocs_ci.helpers.helpers import (
     get_all_storageclass_names,
-    verify_block_pool_exists,
+    verify_storage_pool_exists,
 )
 from ocs_ci.ocs.exceptions import CommandFailed
 
@@ -278,7 +278,7 @@ class ODFAndNativeStorageClientDeploymentOnProvider(object):
             self.storage_clients.verify_native_storageclient()
 
             # Validate cephblockpool created
-            assert verify_block_pool_exists(
+            assert verify_storage_pool_exists(
                 constants.DEFAULT_BLOCKPOOL
             ), f"{constants.DEFAULT_BLOCKPOOL} is not created"
             assert (

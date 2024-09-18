@@ -865,7 +865,7 @@ def storageclass_factory_fixture(
             sc_name (str): Name of the storage class
             replica (int): Replica size for a pool
             compression (str): Compression type option for a pool
-            new_rbd_pool (bool): True if user wants to create new rbd pool for SC
+            new_rbd_pool (bool): True if user wants to create new pool for SC
             pool_name (str): Existing pool name to create the storageclass other
                 then the default rbd pool.
             rbd_thick_provision (bool): True to enable RBD thick provisioning.
@@ -902,7 +902,15 @@ def storageclass_factory_fixture(
                     else:
                         interface_name = pool_name
             elif interface == constants.CEPHFILESYSTEM:
-                interface_name = helpers.get_cephfs_data_pool_name()
+                if new_rbd_pool:
+                    interface_name = helpers.create_cephfs_storage_pool(
+                        pool_name=pool_name,
+                        replica=replica,
+                        compression=compression,
+                        verify=True,
+                    )
+                else:
+                    interface_name = helpers.get_cephfs_data_pool_name()
 
             sc_obj = helpers.create_storage_class(
                 interface_type=interface,

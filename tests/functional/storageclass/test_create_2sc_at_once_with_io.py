@@ -25,19 +25,26 @@ log = logging.getLogger(__name__)
 @skipif_external_mode
 @skipif_ocs_version("<4.6")
 @pytest.mark.polarion_id("OCS-2394")
+@pytest.mark.parametrize(
+    argnames=["rbd_pool"],
+    argvalues=[
+        pytest.param(True, marks=pytest.mark.polarion_id("OCS-2394")),
+        pytest.param(False, marks=pytest.mark.polarion_id("OCS-6221")),
+    ],
+)
 class TestCreate2ScAtOnceWithIo(ManageTest):
     """
-    Create a new 2 Storage Class on a new rbd pool with
-    different replica and compression options
+    Create a new 2 Storage Class on a new pool with
+    different replica and compression options.
     """
 
     def test_new_sc_rep2_rep3_at_once(
-        self, storageclass_factory, pvc_factory, pod_factory
+        self, storageclass_factory, pvc_factory, pod_factory, rbd_pool
     ):
         """
 
         This test function does below,
-        *. Creates 2 Storage Class with creating new rbd pool replica 2 and 3 with compression
+        *. Creates 2 Storage Class with creating new rbd or cephfs pool replica 2 and 3 with compression
         *. Creates PVCs using new Storage Classes
         *. Mount PVC to an app pod
         *. Run IO on an app pod
@@ -46,7 +53,11 @@ class TestCreate2ScAtOnceWithIo(ManageTest):
         """
 
         log.info("Creating storageclasses")
-        interface_type = constants.CEPHBLOCKPOOL
+        if rbd_pool:
+            interface_type = constants.CEPHBLOCKPOOL
+        else:
+            interface_type = constants.CEPHFILESYSTEM
+
         sc_obj1 = storageclass_factory(
             interface=interface_type,
             new_rbd_pool=True,
