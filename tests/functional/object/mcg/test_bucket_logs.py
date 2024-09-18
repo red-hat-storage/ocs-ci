@@ -47,7 +47,7 @@ class TestBucketLogs(MCGTest):
         add_env_vars_to_noobaa_core_class(
             [
                 (
-                    constants.BUCKET_LOG_UPLOADER_INTERVAL_PARAM,
+                    constants.BUCKET_LOG_UPLOADER_DELAY_PARAM,
                     new_interval_in_miliseconds,
                 )
             ]
