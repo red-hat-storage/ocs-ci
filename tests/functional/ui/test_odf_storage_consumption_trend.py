@@ -1,5 +1,6 @@
 import logging
 import re
+import time
 
 from ocs_ci.framework.testlib import (
     ManageTest,
@@ -9,10 +10,21 @@ from ocs_ci.framework.testlib import (
     black_squad,
 )
 from ocs_ci.ocs.cluster import get_used_and_total_capacity_in_gibibytes
-from ocs_ci.ocs.resources.pod import get_age_of_cluster_in_days
+from ocs_ci.helpers import helpers
+from ocs_ci.ocs.ocp import OCP
+from ocs_ci.framework import config
+from ocs_ci.ocs import constants
+from ocs_ci.ocs.resources.pod import (
+    get_age_of_cluster_in_days,
+    get_mgr_pods,
+    get_ceph_tools_pod,
+)
 from ocs_ci.ocs.ui.validation_ui import ValidationUI
 
 logger = logging.getLogger(__name__)
+
+
+POD_OBJ = OCP(kind=constants.POD, namespace=config.ENV_DATA["cluster_namespace"])
 
 
 @tier2
@@ -114,6 +126,49 @@ class TestConsumptionTrendUI(ManageTest):
         average = self.get_avg_consumption_from_ui()
         logger.info(f"From the UI, Estimated Days: {est_days} and Average: {average}")
         estimated_days_calculated = self.calculate_est_days_manually()
+        assert round(est_days) == round(
+            estimated_days_calculated
+        ), "Estimated days to fill the cluster is wrongly displayed"
+
+    def test_consumption_trend_with_mgr_failover(self, setup_ui_class):
+        """
+        Verify storage consumption trend with Mgr failover
+            1. Failover active mgr pod, the other mgr will become active now.
+            2. Test storage consumption trend from UI is accurate after mgr failover.
+        """
+        logger.info("Get mgr pods objs")
+        mgr_objs = get_mgr_pods()
+        toolbox = get_ceph_tools_pod()
+        active_mgr_pod_output = toolbox.exec_cmd_on_pod("ceph mgr stat")
+        active_mgr_pod_suffix = active_mgr_pod_output.get("active_name")
+        logger.info(f"The active MGR pod is {active_mgr_pod_suffix}")
+        active_mgr_deployment_name = "rook-ceph-mgr-" + active_mgr_pod_suffix
+        for obj in mgr_objs:
+            if active_mgr_pod_suffix in obj.name:
+                active_mgr_pod = obj.name
+
+        logger.info(f"Scale down {active_mgr_deployment_name} to 0")
+        helpers.modify_deployment_replica_count(
+            deployment_name=active_mgr_deployment_name, replica_count=0
+        )
+        POD_OBJ.wait_for_delete(resource_name=active_mgr_pod)
+        # Below sleep is madatory for mgr failover, if not the same pod will become active again.
+        time.sleep(60)
+        logger.info(f"Scale down {active_mgr_deployment_name} to 1")
+        helpers.modify_deployment_replica_count(
+            deployment_name=active_mgr_deployment_name, replica_count=1
+        )
+        assert (
+            len(get_mgr_pods()) == 2
+        ), "one of the mgr pod is still down after scale down and up"
+        logger.info("Mgr failovered successfully")
+
+        logger.info("Now the testing will begin for consumption trend UI")
+        est_days = self.get_est_days_from_ui()
+        average = self.get_avg_consumption_from_ui()
+        logger.info(f"From the UI, Estimated Days: {est_days} and Average: {average}")
+        estimated_days_calculated = self.calculate_est_days_manually()
+
         assert round(est_days) == round(
             estimated_days_calculated
         ), "Estimated days to fill the cluster is wrongly displayed"

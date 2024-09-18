@@ -7,6 +7,7 @@ Each pod in the openshift cluster will have a corresponding pod object
 from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timedelta
 import logging
+import math
 import os
 import re
 import yaml
@@ -3953,9 +3954,4 @@ def get_age_of_cluster_in_days():
     time_difference_in_sec = (d2 - d1).total_seconds()
     seconds_per_day = 24 * 60 * 60
     time_diff_in_days = time_difference_in_sec / seconds_per_day
-    if time_diff_in_days == 0:
-        return int(0)
-    elif (time_diff_in_days >= float(0.1)) and (time_diff_in_days <= float(0.99)):
-        return int(1)
-    else:
-        return int(time_diff_in_days)
+    return math.ceil(time_diff_in_days)
