@@ -436,7 +436,7 @@ class OCSUpgrade(object):
             subscription_name = constants.OCS_SUBSCRIPTION
         subscription = OCP(
             resource_name=subscription_name,
-            kind="subscription",
+            kind="subs",
             namespace=config.ENV_DATA["cluster_namespace"],
         )
         current_ocs_source = subscription.data["spec"]["source"]
@@ -447,7 +447,7 @@ class OCSUpgrade(object):
             else constants.OPERATOR_CATALOG_SOURCE_NAME
         )
         patch_subscription_cmd = (
-            f"patch subscription {subscription_name} "
+            f"patch subs {subscription_name} "
             f'-n {self.namespace} --type merge -p \'{{"spec":{{"channel": '
             f'"{channel}", "source": "{ocs_source}"}}}}\''
         )
