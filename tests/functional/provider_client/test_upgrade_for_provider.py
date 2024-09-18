@@ -52,31 +52,9 @@ class TestUpgradeForProviderClient(ManageTest):
         Tests upgrade procedure of OCS cluster
 
         """
-        ocs_version = str(version.get_ocs_version_from_csv()).replace(".stable", "")
-        log.info(f"ocs version: {ocs_version}")
-        log.info(
-            "Validate major version of ocs operator for provider is same as major version of odf client operator"
-        )
-        self.storage_clients.verify_version_of_odf_client_operator()
-        upgrade_in_current_source = config.UPGRADE.get(
-            "upgrade_in_current_source", False
-        )
-        upgrade_ocs = OCSUpgrade(
-            namespace=config.ENV_DATA["cluster_namespace"],
-            version_before_upgrade=ocs_version,
-            ocs_registry_image=config.UPGRADE.get("upgrade_ocs_registry_image"),
-            upgrade_in_current_source=upgrade_in_current_source,
-        )
-        upgrade_version = upgrade_ocs.ocs_registry_image
-        log.info(f"ocs upgrade version: {upgrade_version}")
-        # if Version.coerce(upgrade_version.major) == Version.coerce(
-        #     ocs_version_major
-        # ) and Version.coerce(upgrade_version.minor) > Version.coerce(ocs_version_minor):
         run_ocs_upgrade()
         log.info("Validate post provider ocs upgrade odf client operator also upgraded")
         self.storage_clients.verify_version_of_odf_client_operator()
-        # else:
-        #     log.info("The upgrade request is not for minor upgrade")
 
     @runs_on_provider
     @ocs_upgrade
@@ -130,24 +108,3 @@ class TestUpgradeForProviderClient(ManageTest):
 
         """
         self.test_upgrade_ocp.test_upgrade_ocp()
-
-    @ocs_upgrade
-    def test_testmethod(self):
-        """
-        Tests methods for temporary
-
-        """
-        ocs_version = str(version.get_ocs_version_from_csv()).replace(".stable", "")
-        log.info(f"ocs version: {ocs_version}")
-        upgrade_in_current_source = config.UPGRADE.get(
-            "upgrade_in_current_source", False
-        )
-        upgrade_ocs = OCSUpgrade(
-            namespace=config.ENV_DATA["cluster_namespace"],
-            version_before_upgrade=ocs_version,
-            ocs_registry_image=config.UPGRADE.get("upgrade_ocs_registry_image"),
-            upgrade_in_current_source=upgrade_in_current_source,
-        )
-        log.info(f"upgrade ocs: {upgrade_ocs}")
-        upgrade_version = upgrade_ocs.get_upgrade_version()
-        log.info(f"ocs upgrade version: {upgrade_version}")
