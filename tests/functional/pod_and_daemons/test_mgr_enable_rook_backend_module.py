@@ -38,8 +38,11 @@ class TestMgrRookModule(ManageTest):
 
         def finalizer():
             toolbox = pod.get_ceph_tools_pod()
+            log.info("Setting orch backed to none and disabling rook module on mgr")
             toolbox.exec_ceph_cmd('ceph orch set backend ""')
             toolbox.exec_ceph_cmd("ceph mgr module disable rook")
+
+            log.info("Validating orch status after disabling rook module")
             try:
                 toolbox.exec_ceph_cmd(ceph_cmd="ceph orch status", format=None)
             except CommandFailed as ecf:
