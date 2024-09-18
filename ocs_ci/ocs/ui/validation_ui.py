@@ -677,3 +677,30 @@ class ValidationUI(PageNavigator):
             page_name="client_onboarding_token_page",
         )
         return storage_client_obj
+
+    def odf_storagesystems_consumption_trend(self):
+        """
+        Function to verify changes and validate elements on ODF storage consumption trend for ODF 4.17
+        This will navigate through below order
+        DataFoundation>>Storage>>storagecluster_storagesystem_details>>Block and File page
+        Further it looks for the Consumption trend card
+
+        Returns:
+            list_of_days_and_avg: (list) ex: [Estimated days, Average]
+
+        """
+        self.odf_console_plugin_check()
+        storage_systems_page = (
+            PageNavigator().nav_odf_default_page().nav_storage_systems_tab()
+        )
+        storage_system_details = (
+            storage_systems_page.nav_storagecluster_storagesystem_details()
+        )
+        storage_system_details.nav_details_overview()
+        storage_system_details.nav_details_object()
+
+        if not config.ENV_DATA["mcg_only_deployment"]:
+            list_of_days_and_avg = (
+                storage_system_details.nav_block_and_file().get_estimated_days_from_consumption_trend()
+            )
+            return list_of_days_and_avg
