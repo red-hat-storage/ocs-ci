@@ -27,7 +27,9 @@ from ocs_ci.ocs.resources.pod import (
 from ocs_ci.ocs.node import (
     taint_nodes,
     untaint_nodes,
-    get_worker_nodes, wait_for_nodes_status, get_nodes,
+    get_worker_nodes,
+    wait_for_nodes_status,
+    get_nodes,
 )
 from ocs_ci.utility.retry import retry
 from ocs_ci.ocs.resources import storage_cluster
@@ -37,12 +39,12 @@ from ocs_ci.framework.pytest_customization.marks import (
 )
 from ocs_ci.helpers.sanity_helpers import Sanity
 from ocs_ci.utility import version
-from tests.functional.z_cluster.nodes.test_node_replacement_proactive import delete_and_create_osd_node, \
-    select_osd_node_name
+from tests.functional.z_cluster.nodes.test_node_replacement_proactive import (
+    delete_and_create_osd_node,
+    select_osd_node_name,
+)
 
 logger = logging.getLogger(__name__)
-
-def remove_toleration():
 
 
 @brown_squad
@@ -111,8 +113,7 @@ class TestNonOCSTaintAndTolerations(E2ETest):
 
         request.addfinalizer(finalizer)
 
-
-    def test_non_ocs_taint_and_tolerations(self):
+    def test_non_ocs_taint_and_tolerations(self, nodes):
         """
         Test runs the following steps
         1. Taint ocs nodes with non-ocs taint
@@ -281,8 +282,64 @@ class TestNonOCSTaintAndTolerations(E2ETest):
             number_of_pods_before == number_of_pods_after
         ), "Number of pods didn't match"
 
-        
+        if not (
+            config.ENV_DATA["mcg_only_deployment"] or config.DEPLOYMENT["external_mode"]
+        ):
+            logger.info("Add capacity to check if new osds has toleration")
+            osd_size = storage_cluster.get_osd_size()
+            count = storage_cluster.add_capacity(osd_size)
+            pod = ocp.OCP(
+                kind=constants.POD, namespace=config.ENV_DATA["cluster_namespace"]
+            )
+            if is_flexible_scaling_enabled():
+                replica_count = 1
+            else:
+                replica_count = 3
+            assert pod.wait_for_resource(
+                timeout=300,
+                condition=constants.STATUS_RUNNING,
+                selector=constants.OSD_APP_LABEL,
+                resource_count=count * replica_count,
+            ), "New OSDs failed to reach running state"
+            check_ceph_health_after_add_capacity(ceph_rebalance_timeout=2500)
+
         # Get the node list
         node = get_nodes("worker", num_of_nodes=1)
-        logger.info(f"------------------{node}")
 
+        # Reboot one of the nodes
+        nodes.restart_nodes(node, wait=False)
+
+        # Wait some time after rebooting master
+        waiting_time = 40
+        logger.info(f"Waiting {waiting_time} seconds...")
+        time.sleep(waiting_time)
+
+        # Validate all nodes and services are in READY state and up
+        retry(
+            (CommandFailed, TimeoutError, AssertionError, ResourceWrongStatusException),
+            tries=60,
+            delay=15,
+        )(ocp.wait_for_cluster_connectivity(tries=400))
+        retry(
+            (CommandFailed, TimeoutError, AssertionError, ResourceWrongStatusException),
+            tries=60,
+            delay=15,
+        )(wait_for_nodes_status(timeout=1800))
+
+        # Check cluster is health ok and check toleration on pods
+        self.sanity_helpers.health_check(tries=40)
+        assert wait_for_pods_to_be_running(timeout=900, sleep=15)
+        retry(CommandFailed, tries=5, delay=10,)(
+            check_toleration_on_pods
+        )(toleration_key="xyz")
+
+        # Replace the node
+        osd_node_name = select_osd_node_name()
+        delete_and_create_osd_node(osd_node_name)
+
+        # Check cluster is health ok and check toleration on pods
+        logger.info("Verifying All resources are Running and matches expected result")
+        self.sanity_helpers.health_check(tries=120)
+        retry(CommandFailed, tries=5, delay=10,)(
+            check_toleration_on_pods
+        )(toleration_key="xyz")
