@@ -3749,10 +3749,9 @@ class MDRMultiClusterDROperatorsDeploy(MultiClusterDROperatorsDeploy):
             config.switch_ctx(index)
             logger.info("Creating Resource DataProtectionApplication")
             run_cmd(f"oc create -f {constants.DPA_DISCOVERED_APPS_PATH}")
-        config.switch_ctx(old_ctx)
         # Only on the active hub enable managedserviceaccount-preview
         acm_version = get_acm_version()
-
+        config.switch_acm_ctx()
         logger.info("Getting S3 Secret name from Ramen Config")
         secret_names = self.meta_obj.get_s3_secret_names()
         for secret_name in secret_names:
@@ -3766,6 +3765,7 @@ class MDRMultiClusterDROperatorsDeploy(MultiClusterDROperatorsDeploy):
             logger.info("Skipping Enabling Managed ServiceAccount")
         else:
             self.enable_managed_serviceaccount()
+        config.switch_ctx(old_ctx)
 
     def deploy_multicluster_orchestrator(self):
         super().deploy()
