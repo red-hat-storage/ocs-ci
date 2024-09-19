@@ -157,7 +157,7 @@ class StorageSystemDetails(StorageSystemTab):
         This will fetch information from DataFoundation>>Storage>>Block and File page>>Consumption trend card
 
         Returns:
-            [get_est_days_from_element, get_avg_from_element]: (list)
+            tuple: (get_est_days_from_element, get_avg_from_element)
 
         """
         get_est_days_from_element = self.get_element_text(
@@ -166,4 +166,4 @@ class StorageSystemDetails(StorageSystemTab):
         get_avg_from_element = self.get_element_text(
             self.validation_loc["locate_average_of_storage_consumption"]
         )
-        return [get_est_days_from_element, get_avg_from_element]
+        return (get_est_days_from_element, get_avg_from_element)
