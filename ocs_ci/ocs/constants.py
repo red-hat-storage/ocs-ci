@@ -125,7 +125,11 @@ STATUS_READYTOUSE = "READYTOUSE"
 STATUS_FAILED = "Failed"
 STATUS_FAILEDOVER = "FailedOver"
 STATUS_RELOCATED = "Relocated"
+STATUS_RELOCATING = "Relocating"
 STATUS_CONTAINER_STATUS_UNKNOWN = "ContainerStatusUnknown"
+STATUS_WAITFORUSERTOCLEANUP = "WaitOnUserToCleanUp"
+STATUS_POWERON = "ON"
+STATUS_POWEROFF = "OFF"
 
 # NooBaa statuses
 BS_AUTH_FAILED = "AUTH_FAILED"
@@ -229,6 +233,7 @@ DEFALUT_DEVICE_CLASS = "ssd"
 VM = "vm"
 HOSTED_CLUSTERS = "hostedclusters"
 OPERATOR_KIND = "Operator"
+DRIVER = "Driver"
 
 # Provisioners
 AWS_EFS_PROVISIONER = "openshift.org/aws-efs"
@@ -559,6 +564,10 @@ MANAGED_FUSION_ALERTMANAGER_LABEL = "alertmanager=managed-fusion-alertmanager"
 MANAGED_FUSION_AWS_DATA_GATHER = "name=aws-data-gather"
 MANAGED_FUSION_PROMETHEUS_LABEL = "prometheus=managed-fusion-prometheus"
 UX_BACKEND_SERVER_LABEL = "app=ux-backend-server"
+CEPHFS_NODEPLUGIN_LABEL = "app=openshift-storage.cephfs.csi.ceph.com-nodeplugin"
+RBD_NODEPLUGIN_LABEL = "app=openshift-storage.rbd.csi.ceph.com-nodeplugin"
+CEPHFS_CTRLPLUGIN_LABEL = "app=openshift-storage.cephfs.csi.ceph.com-ctrlplugin"
+RBD_CTRLPLUGIN_LABEL = "app=openshift-storage.rbd.csi.ceph.com-ctrlplugin"
 
 # Noobaa Deployments and Statefulsets
 NOOBAA_OPERATOR_DEPLOYMENT = "noobaa-operator"
@@ -1179,6 +1188,7 @@ RDR_OSD_MODE_GREENFIELD = "greenfield"
 RDR_OSD_MODE_BROWNFIELD = "brownfield"
 RDR_VOLSYNC_CEPHFILESYSTEM_SC = "ocs-storagecluster-cephfs-vrg"
 
+
 # constants
 RBD_INTERFACE = "rbd"
 CEPHFS_INTERFACE = "cephfs"
@@ -1292,6 +1302,25 @@ OPERATOR_CS_QUAY_API_QUERY = (
 OPTIONAL_OPERATORS_SELECTOR = "catalog=optional-operators"
 OCS_OPERATOR_BUNDLE_IMAGE = "quay.io/rhceph-dev/ocs-operator-bundle"
 OCS_CATALOG_SOURCE_NAME = "ocs-catalogsource"
+
+OCS_DEPLOYMENTS = [
+    "csi-addons-controller-manager",
+    "noobaa-operator",
+    "ocs-operator",
+    "odf-console",
+    "odf-operator-controller-manager",
+    "rook-ceph-operator",
+    "ux-backend-server",
+]
+
+OCS_DEPLOYMENTS_4_16 = OCS_DEPLOYMENTS + [
+    "ocs-client-operator-console",
+    "ocs-client-operator-controller-manager",
+    "prometheus-operator",
+]
+OCS_DEPLOYMENTS_4_17 = OCS_DEPLOYMENTS_4_16 + [
+    "ceph-csi-controller-manager",
+]
 
 # OCP related constants
 OPENSHIFT_UPGRADE_INFO_API = (
@@ -1441,6 +1470,7 @@ CLOUD_PLATFORMS = [
     IBMCLOUD_PLATFORM,
     ROSA_PLATFORM,
     OPENSHIFT_DEDICATED_PLATFORM,
+    ROSA_HCP_PLATFORM,
 ]
 MANAGED_SERVICE_PLATFORMS = [
     OPENSHIFT_DEDICATED_PLATFORM,
@@ -1964,6 +1994,7 @@ DEFAULT_INGRESS_CRT_LOCAL_PATH = f"{DATA_DIR}/mcg-{DEFAULT_INGRESS_CRT}"
 SERVICE_CA_CRT = "service-ca.crt"
 SERVICE_MONITORS = "servicemonitors"
 SERVICE_CA_CRT_AWSCLI_PATH = f"/cert/{SERVICE_CA_CRT}"
+AWSCLI_CA_BUNDLE_PATH = "/tmp/ca-bundle.crt"
 AWSCLI_RELAY_POD_NAME = "awscli-relay-pod"
 JAVAS3_POD_NAME = "java-s3"
 SCALECLI_SERVICE_CA_CM_NAME = "scalecli-service-ca"
@@ -2668,6 +2699,9 @@ GITOPS_MANAGEDCLUSTER_SETBINDING_YAML = os.path.join(
 GITOPS_SUBSCRIPTION_YAML = os.path.join(
     TEMPLATE_DIR, "gitops-deployment", "subscription.yaml"
 )
+GITOPS_OPERATORGROUP_YAML = os.path.join(
+    TEMPLATE_DIR, "gitops-deployment", "gitops_og.yaml"
+)
 OADP_NAMESPACE = "openshift-adp"
 OADP_OPERATOR_NAME = "redhat-oadp-operator"
 OADP_SUBSCRIPTION_YAML = os.path.join(
@@ -2812,6 +2846,7 @@ UI_INPUT_RULES_STORAGE_SYSTEM = {
 
 # DR
 DRPC_PATH = os.path.join(TEMPLATE_DIR, "DR", "drpc.yaml")
+PLACEMENT_PATH = os.path.join(TEMPLATE_DIR, "DR", "placement.yaml")
 CLUSTERROLEBINDING_APPSET_PULLMODEL_PATH = os.path.join(
     TEMPLATE_DIR, "DR", "clusterrolebinding_appset_pullmodel.yaml"
 )
@@ -2827,7 +2862,19 @@ PLACEMENT = "Placement"
 GITOPS_CLUSTER_NAMESPACE = "openshift-gitops"
 APPLICATION_ARGOCD = "applications.argoproj.io"
 PLACEMENT_KIND = "placements.cluster.open-cluster-management.io"
+
+DISCOVERED_APPS = "DiscoveredApps"
+DR_OPS_NAMESAPCE = "openshift-dr-ops"
 DPA_DISCOVERED_APPS_PATH = os.path.join(TEMPLATE_DIR, "DR", "dpa_discovered_apps.yaml")
+
+DISABLE_DR_EACH_APP = os.path.join(TEMPLATE_DIR, "DR", "disable_dr_each_app.sh")
+REMOVE_DR_EACH_MANAGED_CLUSTER = os.path.join(TEMPLATE_DIR, "DR", "dr_conf_removal.sh")
+CLUSTERSELECTORPATH = "/spec/predicates/0/requiredClusterSelector/labelSelector/matchExpressions/0/values/0"
+EXPERIMENTAL_ANNOTATION_PATH = (
+    "/metadata/annotations/"
+    "cluster.open-cluster-management.io~1experimental-scheduling-disable"
+)
+
 # CNV
 VIRTUAL_MACHINE_INSTANCES = "vmi"
 
@@ -2942,4 +2989,9 @@ METAIO = os.path.join(TEMPLATE_WORKLOAD_DIR, "helper_scripts/meta_data_io.py")
 # helper script to perform file creation IO on app pod to fill MDS cpu
 FILE_CREATOR_IO = os.path.join(
     TEMPLATE_WORKLOAD_DIR, "helper_scripts/file_creator_io.py"
+)
+
+# workaround: marking disks as ssd
+MC_WORKAROUND_SSD = os.path.join(
+    TEMPLATE_DEPLOYMENT_DIR_OCP, "workaround-ssd-machine-config.yaml"
 )

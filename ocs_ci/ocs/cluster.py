@@ -10,11 +10,13 @@ import base64
 import json
 import logging
 import random
-import re
 import threading
 import yaml
 import time
 import os
+import pandas as pd
+import re
+
 
 from semantic_version import Version
 from ocs_ci.ocs.utils import thread_init_class
@@ -1311,7 +1313,7 @@ def get_osd_utilization():
     return osd_filled
 
 
-def get_ceph_df_detail():
+def get_ceph_df_detail(format="json-pretty", out_yaml_format=True):
     """
     Get ceph osd df detail
 
@@ -1321,7 +1323,111 @@ def get_ceph_df_detail():
     """
     ceph_cmd = "ceph df detail"
     ct_pod = pod.get_ceph_tools_pod()
-    return ct_pod.exec_ceph_cmd(ceph_cmd=ceph_cmd, format="json-pretty")
+    return ct_pod.exec_ceph_cmd(
+        ceph_cmd=ceph_cmd, format=format, out_yaml_format=out_yaml_format
+    )
+
+
+def parse_ceph_df_pools(raw_output: str) -> pd.DataFrame:
+    """
+    Parse the 'ceph df detail' command output and extract the POOLS section into a pandas DataFrame.
+
+    Args:
+        raw_output (str): The raw output string from the 'ceph df detail' command.
+
+    Returns:
+        pd.DataFrame: A pandas DataFrame containing the parsed POOLS section data.
+            The DataFrame includes columns for POOL, ID, PGS, STORED, OBJECTS, USED,
+            %USED, MAX AVAIL, QUOTA OBJECTS, QUOTA BYTES, DIRTY, USED COMPR, and UNDER COMPR.
+
+    Note:
+        This function assumes a specific format for the 'ceph df detail' output.
+        It extracts the POOLS section, processes the header and data rows,
+        and returns a structured DataFrame for further analysis.
+
+    """
+    pools_section = (
+        re.search(r"--- POOLS ---\n(.*)", raw_output, re.DOTALL).group(1).strip()
+    )
+    pools_lines = [line.strip() for line in pools_section.split("\n") if line.strip()]
+    header = [
+        "POOL",
+        "ID",
+        "PGS",
+        "STORED",
+        "(DATA)",
+        "(OMAP)",
+        "OBJECTS",
+        "USED",
+        "(DATA)",
+        "(OMAP)",
+        "%USED",
+        "MAX AVAIL",
+        "QUOTA OBJECTS",
+        "QUOTA BYTES",
+        "DIRTY",
+        "USED COMPR",
+        "UNDER COMPR",
+    ]
+    logger.info(f"Number of columns: {len(header)}")
+    data = []
+    for line in pools_lines[1:]:
+        parts = re.split(r"\s{2,}", line.strip())
+        if len(parts) == len(header):
+            data.append(parts)
+        else:
+            logger.warning(f"Mismatch in column count for line: {line}")
+            logger.warning(f"Expected {len(header)} columns, got {len(parts)}")
+    df = pd.DataFrame(data, columns=header)
+
+    return df
+
+
+def ceph_details_df_to_dict(df: pd.DataFrame) -> dict:
+    """
+    Convert the DataFrame to a dictionary where the POOL column is the key
+    and the rest of the columns form a nested dictionary.
+
+    Args:
+        df (pd.DataFrame): A pandas DataFrame containing Ceph pool information.
+
+    Returns:
+        dict: A dictionary where each key is a pool name, and the corresponding value
+              is a nested dictionary containing the rest of the columns' data for that pool.
+
+    """
+    return {row["POOL"]: row.drop("POOL").to_dict() for _, row in df.iterrows()}
+
+
+def validate_num_of_pgs(expected_pgs: dict[str, int]) -> bool:
+    """
+    Validate the number of PGs for each pool against expected values.
+
+    Args:
+        expected_pgs (dict[pool_name(str), expected_pg_num(int)]): A dictionary where keys
+        are pool names and values are expected PG numbers.
+
+    Returns:
+        bool: True if all pools have the expected number of PGs, False otherwise.
+    """
+    ceph_df_output = get_ceph_df_detail(format=None, out_yaml_format=False)
+    pools_df = parse_ceph_df_pools(ceph_df_output)
+    pools_dict = ceph_details_df_to_dict(pools_df)
+
+    for pool_name, expected_pg_num in expected_pgs.items():
+        if pool_name not in pools_dict:
+            logger.error(f"Pool {pool_name} not found in the cluster.")
+            return False
+
+        actual_pg_num = int(pools_dict[pool_name]["PGS"])
+        if actual_pg_num != expected_pg_num:
+            logger.error(
+                f"Pool {pool_name} has {actual_pg_num} PGs, expected {expected_pg_num}."
+            )
+            return False
+
+    logger.info("All pools have the expected number of PGs.")
+    return True
 
 
 def get_ceph_pool_property(pool_name, prop):
@@ -1679,7 +1785,7 @@ def get_child_nodes_osd_tree(node_id, osd_tree):
 def get_nodes_osd_tree(osd_tree, node_ids=None):
     """
     This function gets the 'ceph osd tree' nodes, which have the ids 'node_ids', and returns
-    them as a list. If 'node_ids' are not passed, it returns all the 'ceph osd tree' nodes.
+    them as a list. If 'node_ids' are not passed, it returns all the 'ceph osd tree' nodes.
 
     Args:
         osd_tree (dict): Dictionary containing the output of 'ceph osd tree'
@@ -1854,7 +1960,7 @@ def check_osd_tree_1az_vmware_flex(osd_tree, number_of_osds):
     #  0   hdd 0.09769         osd.0          up  1.00000 1.00000
     # -5       0.09769     host compute-2
     #  1   hdd 0.09769         osd.1          up  1.00000 1.00000
-    # There will be no racks, and we will have a failure domain 'host'.
+    # There will be no racks, and we will have a failure domain 'host'.
     # When cluster expansion is successfully done, an osd are added in each host.
     # Each host will have one or multiple osds under it
     hosts = osd_tree["nodes"][0]["children"]

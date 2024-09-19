@@ -58,7 +58,7 @@ def craft_s3_command(cmd, mcg_obj=None, api=False, signed_request_creds=None):
         else:
             region = ""
         base_command = (
-            f'sh -c "AWS_CA_BUNDLE={constants.SERVICE_CA_CRT_AWSCLI_PATH} '
+            f'sh -c "AWS_CA_BUNDLE={constants.AWSCLI_CA_BUNDLE_PATH} '
             f"AWS_ACCESS_KEY_ID={mcg_obj.access_key_id} "
             f"AWS_SECRET_ACCESS_KEY={mcg_obj.access_key} "
             f"{region}"
@@ -1493,7 +1493,7 @@ def retrieve_verification_mode():
     if (
         config.ENV_DATA["platform"] == constants.IBMCLOUD_PLATFORM
         and config.ENV_DATA["deployment_type"] == "managed"
-    ):
+    ) or config.ENV_DATA["platform"] == constants.ROSA_HCP_PLATFORM:
         verify = True
     elif config.DEPLOYMENT.get("use_custom_ingress_ssl_cert"):
         verify = get_root_ca_cert()

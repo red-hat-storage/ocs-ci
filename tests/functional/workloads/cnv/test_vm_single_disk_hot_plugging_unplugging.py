@@ -17,7 +17,7 @@ class TestVmOperations(E2ETest):
     Tests for VM operations
     """
 
-    def test_vm_single_disk_hot_plugging_unplugging(self, cnv_workload):
+    def test_vm_single_disk_hot_plugging_unplugging(self, cnv_workload, setup_cnv):
         """
         Test for a single disk Hot Plugging and Hot Unplugging
 

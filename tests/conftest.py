@@ -46,7 +46,12 @@ from ocs_ci.ocs.bucket_utils import (
 )
 from ocs_ci.ocs.constants import FUSION_CONF_DIR
 from ocs_ci.ocs.cnv.virtual_machine import VirtualMachine
-from ocs_ci.ocs.dr.dr_workload import BusyBox, BusyBox_AppSet, CnvWorkload
+from ocs_ci.ocs.dr.dr_workload import (
+    BusyBox,
+    BusyBox_AppSet,
+    CnvWorkload,
+    BusyboxDiscoveredApps,
+)
 from ocs_ci.ocs.exceptions import (
     CommandFailed,
     TimeoutExpiredError,
@@ -159,6 +164,7 @@ from ocs_ci.utility.utils import (
 )
 from ocs_ci.helpers import helpers, dr_helpers, dr_helpers_ui
 from ocs_ci.helpers.helpers import (
+    add_scc_policy,
     create_unique_resource_name,
     create_ocs_object_from_kind_and_name,
     setup_pod_directories,
@@ -1086,6 +1092,7 @@ def pvc_factory_fixture(request, project_factory):
         status=constants.STATUS_BOUND,
         volume_mode=None,
         size_unit="Gi",
+        wait_for_resource_status_timeout=60,
     ):
         """
         Args:
@@ -1108,6 +1115,8 @@ def pvc_factory_fixture(request, project_factory):
             volume_mode (str): Volume mode for PVC.
                 eg: volume_mode='Block' to create rbd `block` type volume
             size_unit (str): PVC size unit, eg: "Mi"
+            wait_for_resource_status_timeout (int): Wait in seconds until the
+                desired PVC status is reached.
 
         Returns:
             object: helpers.create_pvc instance.
@@ -1146,7 +1155,9 @@ def pvc_factory_fixture(request, project_factory):
             assert pvc_obj, "Failed to create PVC"
 
         if status:
-            helpers.wait_for_resource_state(pvc_obj, status)
+            helpers.wait_for_resource_state(
+                pvc_obj, status, timeout=wait_for_resource_status_timeout
+            )
         pvc_obj.storageclass = storageclass
         pvc_obj.project = project
         pvc_obj.access_mode = access_mode
@@ -2709,6 +2720,9 @@ def javasdk_pod_fixture(request, scope_name):
     javas3_pod_dict = templating.load_yaml(constants.JAVA_SDK_S3_POD_YAML)
     javas3_pod_name = create_unique_resource_name(constants.JAVAS3_POD_NAME, scope_name)
     javas3_pod_dict["metadata"]["name"] = javas3_pod_name
+    javas3_pod_dict["metadata"]["namespace"] = ocsci_config.ENV_DATA[
+        "cluster_namespace"
+    ]
     update_container_with_mirrored_image(javas3_pod_dict)
     update_container_with_proxy_env(javas3_pod_dict)
     javas3_pod_obj = Pod(**javas3_pod_dict)
@@ -5639,16 +5653,16 @@ def vault_tenant_sa_setup_factory(request):
 
 
 @pytest.fixture(scope="session")
-def nsfs_interface_session(request):
-    return nsfs_interface_fixture(request)
+def nsfs_interface_session(request, service_account_factory_session):
+    return nsfs_interface_fixture(request, service_account_factory_session)
 
 
 @pytest.fixture(scope="function")
-def nsfs_interface(request):
-    return nsfs_interface_fixture(request)
+def nsfs_interface(request, service_account_factory):
+    return nsfs_interface_fixture(request, service_account_factory)
 
 
-def nsfs_interface_fixture(request):
+def nsfs_interface_fixture(request, service_account_factory):
     created_deployments = []
 
     def nsfs_interface_deployment_factory(pvc_name, pvc_mount_path="/nsfs"):
@@ -5681,6 +5695,17 @@ def nsfs_interface_fixture(request):
         volumes = nsfs_deployment_data["spec"]["template"]["spec"]["volumes"][0]
         volumes["name"] = pvc_name
         volumes["persistentVolumeClaim"]["claimName"] = pvc_name
+
+        # Set a privileged service account for the NSFS deployment
+        proj_obj = ocp.OCP(
+            kind=constants.NAMESPACE,
+            namespace=ocsci_config.ENV_DATA["cluster_namespace"],
+        )
+        sa_acc = service_account_factory(project=proj_obj)
+        add_scc_policy(sa_acc, namespace=ocsci_config.ENV_DATA["cluster_namespace"])
+        nsfs_deployment_data["spec"]["template"]["spec"][
+            "serviceAccountName"
+        ] = sa_acc.name
 
         if ocsci_config.DEPLOYMENT.get("disconnected"):
             update_container_with_mirrored_image(nsfs_deployment_data)
@@ -6401,9 +6426,12 @@ def set_live_must_gather_images(pytestconfig):
             "Live must gather image is not supported in Managed Service platforms"
         )
         return
+    rosa_hcp_platform = (
+        ocsci_config.ENV_DATA["platform"].lower() == constants.ROSA_HCP_PLATFORM
+    )
     # As we cannot use internal build of must gather for IBM Cloud platform
     # we will use live must gather image as a W/A.
-    if live_deployment or managed_ibmcloud_platform:
+    if live_deployment or managed_ibmcloud_platform or rosa_hcp_platform:
         update_live_must_gather_image()
     # For non GAed version of ODF as a W/A we need to use upstream must gather image
     # for IBM Cloud platform
@@ -6839,6 +6867,74 @@ def cnv_dr_workload(request):
 
         if ocsci_config.MULTICLUSTER["multicluster_mode"] == constants.RDR_MODE:
             dr_helpers.wait_for_mirroring_status_ok(replaying_images=total_pvc_count)
+
+        return instances
+
+    def teardown():
+        for instance in instances:
+            try:
+                instance.delete_workload(force=True)
+            except ResourceNotDeleted:
+                raise ResourceNotDeleted("Workload deletion was unsuccessful")
+
+    request.addfinalizer(teardown)
+    return factory
+
+
+@pytest.fixture()
+def discovered_apps_dr_workload(request):
+    """
+    Deploys Discovered App based workload for DR setup
+
+    """
+    instances = []
+
+    def factory(kubeobject=1):
+        """
+        Args:
+            kubeobject (int): Number if Discovered Apps workload with kube object protection to be created
+            recipe (int): Number if Discovered Apps workload with recipe protection to be created
+            pvc_interface (str): 'CephBlockPool' or 'CephFileSystem'.
+                This decides whether a RBD based or CephFS based resource is created. RBD is default.
+
+        Raises:
+            ResourceNotDeleted: In case workload resources not deleted properly
+
+        Returns:
+            list: objects of workload class
+
+        """
+        total_pvc_count = 0
+        workload_key = "dr_workload_discovered_apps_rbd"
+        # TODO: When cephfs is ready
+        # if pvc_interface == constants.CEPHFILESYSTEM:
+        #     workload_key = "dr_workload_discovered_apps_cephfs"
+        for index in range(kubeobject):
+            workload_details = ocsci_config.ENV_DATA[workload_key][index]
+            workload = BusyboxDiscoveredApps(
+                workload_dir=workload_details["workload_dir"],
+                workload_pod_count=workload_details["pod_count"],
+                workload_pvc_count=workload_details["pvc_count"],
+                workload_namespace=workload_details["workload_namespace"],
+                discovered_apps_pvc_selector_key=workload_details[
+                    "dr_workload_app_pvc_selector_key"
+                ],
+                discovered_apps_pvc_selector_value=workload_details[
+                    "dr_workload_app_pvc_selector_value"
+                ],
+                discovered_apps_pod_selector_key=workload_details[
+                    "dr_workload_app_pod_selector_key"
+                ],
+                discovered_apps_pod_selector_value=workload_details[
+                    "dr_workload_app_pod_selector_value"
+                ],
+                workload_placement_name=workload_details[
+                    "dr_workload_app_placement_name"
+                ],
+            )
+            instances.append(workload)
+            total_pvc_count += workload_details["pvc_count"]
+            workload.deploy_workload()
 
         return instances
 
