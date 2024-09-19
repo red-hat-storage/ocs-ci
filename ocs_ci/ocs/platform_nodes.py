@@ -95,6 +95,7 @@ class PlatformNodesFactory:
             "ibm_cloud": IBMCloud,
             "vsphere_ipi": VMWareIPINodes,
             "rosa": AWSNodes,
+            "rosa_hcp": AWSNodes,
             "vsphere_upi": VMWareUPINodes,
             "fusion_aas": AWSNodes,
             "hci_baremetal": IBMCloudBMNodes,
