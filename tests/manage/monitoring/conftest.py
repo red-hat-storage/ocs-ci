@@ -921,9 +921,10 @@ def measure_stop_rgw(measurement_dir, request, rgw_deployments, threading_lock):
             test_file,
             minimal_time=60 * 8,
             pagerduty_service_ids=[get_pagerduty_service_id()],
+            threading_lock=threading_lock
         )
     else:
-        measured_op = measure_operation(stop_rgw, test_file)
+        measured_op = measure_operation(stop_rgw, test_file, threading_lock=threading_lock)
 
     logger.info("Return RGW pods")
     for rgw_deployment in rgw_deployments:
