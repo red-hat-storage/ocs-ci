@@ -10,6 +10,8 @@ from ocs_ci.framework.testlib import (
     ui,
     ignore_leftovers,
     black_squad,
+    skipif_ocp_version,
+    skipif_ocs_version,
 )
 from ocs_ci.helpers import helpers
 from ocs_ci.helpers.osd_resize import basic_resize_osd
@@ -36,7 +38,24 @@ POD_OBJ = OCP(kind=constants.POD, namespace=config.ENV_DATA["cluster_namespace"]
 @ui
 @ignore_leftovers
 @black_squad
+@skipif_ocp_version("<4.17")
+@skipif_ocs_version("<4.17")
 class TestConsumptionTrendUI(ManageTest):
+    """
+    Few test cases in this class requires manual calculations for 'average of storage consumption'
+    and 'estimated days until full'. We derived values from UI, also calculated manually and compared them.
+
+    Note:
+    The values obtained from manual calculations and the UI may exhibit slight differences
+     due to back filling data or background activities.
+    To accommodate this, a tolerance of 10% difference between the manual and UI values is allowed.
+
+    For example, if the manual calculation yields a value of 10 and the UI shows 11 as the average,
+    the test will still pass.
+    However, if the UI value is 12 or greater, the test will fail due to exceeding the 10% tolerance.
+
+    """
+
     def get_est_days_from_ui(self):
         """
         Get the value of 'Estimated days until full' from the UI
@@ -46,10 +65,10 @@ class TestConsumptionTrendUI(ManageTest):
 
         """
         validation_ui_obj = ValidationUI()
-        collected_list_of_days_and_avg = (
+        collected_tpl_of_days_and_avg = (
             validation_ui_obj.odf_storagesystems_consumption_trend()
         )
-        est_days = re.search(r"\d+", collected_list_of_days_and_avg[0]).group()
+        est_days = re.search(r"\d+", collected_tpl_of_days_and_avg[0]).group()
         logger.info(f"'Estimated days until full' from the UI : {est_days}")
         return int(est_days)
 
@@ -62,16 +81,16 @@ class TestConsumptionTrendUI(ManageTest):
 
         """
         validation_ui_obj = ValidationUI()
-        collected_list_of_days_and_avg = (
+        collected_tpl_of_days_and_avg = (
             validation_ui_obj.odf_storagesystems_consumption_trend()
         )
         average = float(
-            re.search(r"-?\d+\.*\d*", collected_list_of_days_and_avg[1]).group()
+            re.search(r"-?\d+\.*\d*", collected_tpl_of_days_and_avg[1]).group()
         )
         logger.info(f"'Average of storage consumption per day' from the UI : {average}")
         return average
 
-    def calculate_est_days_manually(self):
+    def calculate_est_days_and_average_manually(self):
         """
         Calculates the 'Estimated days until full' manually by:
         1. Get the age of the cluster in days
@@ -81,65 +100,65 @@ class TestConsumptionTrendUI(ManageTest):
         5. Calculate the 'Estimated days until full' by using average and available capacity.
 
         Returns:
-            estimated_days_calculated: (int)
+            estimated_days_calculated: (tuple)
 
         """
         number_of_days = get_age_of_cluster_in_days()
         logger.info(f"Age of the cluster in days: {number_of_days}")
-        list_of_used_and_total_capacity = get_used_and_total_capacity_in_gibibytes()
-        used_capacity = list_of_used_and_total_capacity[0]
+        tpl_of_used_and_total_capacity = get_used_and_total_capacity_in_gibibytes()
+        used_capacity = tpl_of_used_and_total_capacity[0]
         logger.info(f"The used capacity from the cluster is: {used_capacity}")
-        total_capacity = list_of_used_and_total_capacity[1]
+        total_capacity = tpl_of_used_and_total_capacity[1]
         available_capacity = total_capacity - used_capacity
         logger.info(f"The available capacity from the cluster is: {available_capacity}")
         average = used_capacity / number_of_days
         logger.info(f"Average of storage consumption per day: {average}")
         estimated_days_calculated = available_capacity / average
-        logger.info(f"Estimated days calculated are {estimated_days_calculated}")
-        return math.floor(estimated_days_calculated)
+        manual_est = math.floor(estimated_days_calculated)
+        logger.info(f"Estimated days calculated are {manual_est}")
+        return (manual_est, average)
 
     def test_consumption_trend_card_ui(self, setup_ui_class):
         """
         Verify the widget for “Consumption trend”
             1. Login to the ODF dashboard and check the widget for “Consumption trend” is displayed or not.
             2. Verify the text information on the widget
+
         """
         validation_ui_obj = ValidationUI()
-        collected_list_of_days_and_avg = (
+        collected_tpl_of_days_and_avg = (
             validation_ui_obj.odf_storagesystems_consumption_trend()
         )
         avg_txt = "Average storage consumption"
         est_days_txt = "Estimated days until full"
         logger.info(
-            f"Estimated days text information from the wizard is: {collected_list_of_days_and_avg[0]}"
+            f"Estimated days text information from the wizard is: {collected_tpl_of_days_and_avg[0]}"
         )
         logger.info(
-            f"Average information from the wizard is: {collected_list_of_days_and_avg[1]}"
+            f"Average information from the wizard is: {collected_tpl_of_days_and_avg[1]}"
         )
         assert (
-            est_days_txt in collected_list_of_days_and_avg[0]
-        ), f"Text information for Estimated days is wrong in {collected_list_of_days_and_avg[0]}"
+            est_days_txt in collected_tpl_of_days_and_avg[0]
+        ), f"Text information for Estimated days is wrong in {collected_tpl_of_days_and_avg[0]}"
         assert (
-            avg_txt in collected_list_of_days_and_avg[1]
-        ), f"Text information for Average is wrong in {collected_list_of_days_and_avg[1]}"
+            avg_txt in collected_tpl_of_days_and_avg[1]
+        ), f"Text information for Average is wrong in {collected_tpl_of_days_and_avg[1]}"
 
     def test_estimated_days_until_full_ui(self, setup_ui_class):
         """
         Verify the accuracy of ‘Estimated days until full’  in the widget
             1. Get the value of storage utilised, total storage, age of the cluster
                 and calculate Average of storage consumption and 'Estimated days until full'.
-            2. Compare the above calculated value with the ‘Estimated days until full’ in the widget (UI)
+            2. Compare the above calculated value with the ‘Estimated days until full’ in the widget (UI
 
         """
         est_days = self.get_est_days_from_ui()
         average = self.get_avg_consumption_from_ui()
         logger.info(f"From the UI, Estimated Days: {est_days} and Average: {average}")
-        estimated_days_calculated = self.calculate_est_days_manually()
-        first_validation = est_days == estimated_days_calculated
+        days_avg_tpl = self.calculate_est_days_and_average_manually()
+        first_validation = est_days == days_avg_tpl[0]
         # rel_tol 0.1 means upto 10% tolerance, which means that difference between  manual and UI est days is up to 10%
-        second_validation = math.isclose(
-            est_days, estimated_days_calculated, rel_tol=0.1
-        )
+        second_validation = math.isclose(est_days, days_avg_tpl[0], rel_tol=0.1)
         if first_validation:
             logger.info(
                 "Manually calculated and UI values are exactly matched for 'Estimated days until full'"
@@ -151,6 +170,32 @@ class TestConsumptionTrendUI(ManageTest):
         assert (
             first_validation or second_validation
         ), "'Estimated days until full' is wrongly displayed in UI"
+
+    def test_average_of_storage_consumption_ui(self, setup_ui_class):
+        """
+        Verify the accuracy of ‘Average of storage consumption per day’  in the widget
+            1. Get the value of Average, total storage, age of the cluster
+                and calculate Average of storage consumption.
+            2. Compare the above calculated value with the ‘Average’ in the widget (UI)
+
+        """
+        average = self.get_avg_consumption_from_ui()
+        logger.info(f"From the UI, Average: {average}")
+        days_avg_tpl = self.calculate_est_days_and_average_manually()
+        first_validation = average == days_avg_tpl[1]
+        # rel_tol 0.1 means upto 10% tolerance, which means that difference between  manual and UI est days is up to 10%
+        second_validation = math.isclose(average, days_avg_tpl[1], rel_tol=0.1)
+        if first_validation:
+            logger.info(
+                "Manually calculated and UI values are exactly matched for 'Average'"
+            )
+        elif second_validation:
+            logger.warning(
+                "Manually calculated and UI values are matched with upto 10% difference for 'Average'"
+            )
+        assert (
+            first_validation or second_validation
+        ), "'Average' is wrongly displayed in UI"
 
     def test_consumption_trend_with_mgr_failover(self, setup_ui_class):
         """
@@ -190,12 +235,10 @@ class TestConsumptionTrendUI(ManageTest):
         est_days = self.get_est_days_from_ui()
         average = self.get_avg_consumption_from_ui()
         logger.info(f"From the UI, Estimated Days: {est_days} and Average: {average}")
-        estimated_days_calculated = self.calculate_est_days_manually()
-        first_validation = est_days == estimated_days_calculated
+        days_avg_tpl = self.calculate_est_days_and_average_manually()
+        first_validation = est_days == days_avg_tpl[0]
         # rel_tol 0.1 means upto 10% tolerance, which means that difference between  manual and UI est days is up to 10%
-        second_validation = math.isclose(
-            est_days, estimated_days_calculated, rel_tol=0.1
-        )
+        second_validation = math.isclose(est_days, days_avg_tpl[0], rel_tol=0.1)
         if first_validation:
             logger.info(
                 "Manually calculated and UI values are exactly matched for 'Estimated days until full'"

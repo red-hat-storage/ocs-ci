@@ -3749,7 +3749,7 @@ def get_used_and_total_capacity_in_gibibytes():
     Convert the storage values from bytes to gibibytes
 
     Returns:
-        [total_used_in_gibibytes, total_capacity_in_gibibytes]: (list) ex: Used capacity and Available capacity
+        tuple: (total_used_in_gibibytes, total_capacity_in_gibibytes) ex: Used capacity, Total capacity
 
     """
     ct_pod = pod.get_ceph_tools_pod()
@@ -3758,4 +3758,4 @@ def get_used_and_total_capacity_in_gibibytes():
     total_capacity = output.get("stats").get("total_bytes")
     total_used_in_gibibytes = total_used / (2**30)
     total_capacity_in_gibibytes = total_capacity / (2**30)
-    return [total_used_in_gibibytes, total_capacity_in_gibibytes]
+    return (total_used_in_gibibytes, total_capacity_in_gibibytes)
