@@ -485,7 +485,7 @@ class StretchCluster(OCS):
         # find out the mons in quorum
         ceph_tools_pod = pod.get_ceph_tools_pod()
 
-        @retry(CommandFailed, tries=10, delay=10)
+        @retry(CommandFailed, tries=8, delay=5)
         def _get_non_quorum_mons():
             """
             Get non quorum mon pods
