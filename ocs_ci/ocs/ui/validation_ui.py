@@ -686,7 +686,7 @@ class ValidationUI(PageNavigator):
         Further it looks for the Consumption trend card
 
         Returns:
-            list_of_days_and_avg: (list) ex: [Estimated days, Average]
+            tuple = tpl_of_days_and_avg  ex: (Estimated days, Average)
 
         """
         self.odf_console_plugin_check()
@@ -700,7 +700,7 @@ class ValidationUI(PageNavigator):
         storage_system_details.nav_details_object()
 
         if not config.ENV_DATA["mcg_only_deployment"]:
-            list_of_days_and_avg = (
+            tpl_of_days_and_avg = (
                 storage_system_details.nav_block_and_file().get_estimated_days_from_consumption_trend()
             )
-            return list_of_days_and_avg
+            return tpl_of_days_and_avg
