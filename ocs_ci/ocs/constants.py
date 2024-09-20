@@ -357,6 +357,43 @@ NATIVE_STORAGE_CLIENT_YAML = os.path.join(
     PROVIDER_CLIENT_DEPLOYMENT_DIR, "native_storage_client.yaml"
 )
 
+PROVIDER_CLUSTER_RESOURCE_KINDS = [
+    "cephblockpoolradosnamespaces",
+    "cephblockpoolradosnamespace",
+    "cephblockpools",
+    "cephblockpool",
+    "cephclients",
+    "cephclient",
+    "cephclusters",
+    "cephcluster",
+    "cephfilesystems",
+    "cephfilesystem",
+    "cephfilesystemsubvolumegroups",
+    "cephfilesystemsubvolumegroup",
+    "cephobjectstores",
+    "cephobjectstore",
+    "cephobjectstoreusers",
+    "cephobjectstoreuser",
+    "localvolumediscoveries",
+    "localvolumediscovery",
+    "localvolumediscoveryresults",
+    "localvolumediscoveryresult",
+    "localvolumes",
+    "localvolume",
+    "localvolumesets",
+    "localvolumeset",
+    "storageclusters",
+    "storagecluster",
+    "storageconsumers",
+    "storageconsumer",
+    "storageprofiles",
+    "storageprofile",
+    "storagerequests",
+    "storagerequest",
+    "storagesystems",
+    "storagesystem",
+]
+
 OCS_CLIENT_OPERATOR_CONTROLLER_MANAGER_PREFIX = "ocs-client-operator-controller-manager"
 OCS_CLIENT_OPERATOR_CONSOLE = "ocs-client-operator-console"
 STORAGE_CLIENT_NAME = "storage-client"
