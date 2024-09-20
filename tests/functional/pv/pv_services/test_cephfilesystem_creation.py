@@ -39,7 +39,7 @@ class TestCephFileSystemCreation(ManageTest):
             else:
                 logger.error("Unable to create the Ceph File System")
             logger.info("Deleting the Cephf Filesystem")
-            cephFS_obj.delete()
+            cephFS_obj.delete(wait=True)
             logger.info("Creating CephFileSystem in the namespace")
             new_cephFS_obj = create_ceph_file_system(
                 cephfs_name="test-ceph-fs", label={"use": "test"}
