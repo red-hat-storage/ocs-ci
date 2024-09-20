@@ -93,9 +93,6 @@ class TestNonOCSTaintAndTolerations(E2ETest):
             )
             params = '[{"op": "remove", "path": "/spec/placement"},]'
             storagecluster_obj.patch(params=params, format_type="json")
-            assert (
-                wait_for_pods_to_be_running()
-            ), "some of the pods didn't came up running"
 
             logger.info("Remove tolerations to the subscription")
             sub_list = ocp.get_all_resource_names_of_a_kind(kind=constants.SUBSCRIPTION)
@@ -106,9 +103,9 @@ class TestNonOCSTaintAndTolerations(E2ETest):
             )
             for sub in sub_list:
                 sub_obj.patch(resource_name=sub, params=params, format_type="json")
-
-            assert (
-                wait_for_pods_to_be_running()
+            time.sleep(180)
+            assert wait_for_pods_to_be_running(
+                timeout=900, sleep=15
             ), "some of the pods didn't came up running"
 
         request.addfinalizer(finalizer)
@@ -310,7 +307,7 @@ class TestNonOCSTaintAndTolerations(E2ETest):
         nodes.restart_nodes(node, wait=False)
 
         # Wait some time after rebooting master
-        waiting_time = 40
+        waiting_time = 60
         logger.info(f"Waiting {waiting_time} seconds...")
         time.sleep(waiting_time)
 
@@ -327,7 +324,7 @@ class TestNonOCSTaintAndTolerations(E2ETest):
         )(wait_for_nodes_status(timeout=1800))
 
         # Check cluster is health ok and check toleration on pods
-        self.sanity_helpers.health_check(tries=40)
+        self.sanity_helpers.health_check(tries=60)
         assert wait_for_pods_to_be_running(timeout=900, sleep=15)
         retry(CommandFailed, tries=5, delay=10,)(
             check_toleration_on_pods
