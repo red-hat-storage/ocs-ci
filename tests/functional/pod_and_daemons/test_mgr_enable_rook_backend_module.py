@@ -19,7 +19,7 @@ log = logging.getLogger(__name__)
 @tier2
 @brown_squad
 @skipif_external_mode
-@skipif_ocs_version("<4.16")
+@skipif_ocs_version("<4.15")
 @bugzilla("2274165")
 @pytest.mark.polarion_id("OCS-6240")
 class TestMgrRookModule(ManageTest):
@@ -78,7 +78,6 @@ class TestMgrRookModule(ManageTest):
 
         """
         toolbox = pod.get_ceph_tools_pod()
-
         log.info("Enabling rook module on mgr")
         toolbox.exec_ceph_cmd("ceph mgr module enable rook")
         log.info("Setting orchestrator backend to rook")
@@ -107,7 +106,7 @@ class TestMgrRookModule(ManageTest):
             timeout=600,
             sleep=30,
             func=run_cmd_verify_cli_output,
-            cmd="ceph crash ls",
+            cmd="ceph crash ls-new",
             expected_output_lst={"mgr"},
             cephtool_cmd=True,
         )
