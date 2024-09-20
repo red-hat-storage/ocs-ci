@@ -93,7 +93,7 @@ class TestPostInstallationState(ManageTest):
         consumer_names = managedservice.get_consumer_names()
         for consumer_name in consumer_names:
             expected_log = (
-                f'successfully Enabled the StorageConsumer resource "{consumer_name}"'
+                f'successfully updated Status for StorageConsumer "{consumer_name}"'
             )
             log_found = False
             for line in log_lines:
