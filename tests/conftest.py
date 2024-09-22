@@ -3283,7 +3283,12 @@ def install_logging(request):
     logging_channel = "stable" if ocp_version >= version.VERSION_4_7 else ocp_version
 
     # Creates namespace openshift-operators-redhat
-    ocp_logging_obj.create_namespace(yaml_file=constants.EO_NAMESPACE_YAML)
+    try:
+        ocp_logging_obj.create_namespace(yaml_file=constants.EO_NAMESPACE_YAML)
+    except CommandFailed as e:
+        if "AlreadyExists" in str(e):
+            # on Rosa HCP the ns created from the deployment
+            log.info("Namespace openshift-operators-redhat already exists")
 
     # Creates an operator-group for elasticsearch
     assert ocp_logging_obj.create_elasticsearch_operator_group(
