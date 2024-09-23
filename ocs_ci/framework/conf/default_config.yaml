@@ -149,7 +149,7 @@ ENV_DATA:
   storage_client_name: "storage-client"
   storage_device_sets_name: "storageDeviceSets"
   sno: false
-  cluster_namespace: 'odf-storage'
+  cluster_namespace: 'openshift-storage'
   client_namespace: 'openshift-storage-client'
   service_namespace: 'openshift-storage'
   local_storage_namespace: 'openshift-local-storage'
@@ -323,7 +323,7 @@ EXTERNAL_MODE:
 UI_SELENIUM:
   browser_type: "chrome"
   chrome_type: "google-chrome"
-  headless: False
+  headless: True
   screenshot: True
   ignore_ssl: True
 
