@@ -153,7 +153,7 @@ class TestKeyRotationWithClusterFull(E2ETest):
         log.info("Triggering noobaa db backup and recovery locally")
         validate_noobaa_db_backup_recovery_locally_system(
             self,
-            bucket_factory,
+            bucket_factory_session,
             noobaa_db_backup_and_recovery_locally,
             warps3,
             mcg_obj_session,
