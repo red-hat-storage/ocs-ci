@@ -246,13 +246,10 @@ class TestBucketLogs(MCGTest):
         # 8. Validate that each operation and its intent are in the final logs
         bucket_logs = blm.get_bucket_logs(logs_bucket)
 
-        # Adapt the list of objects to the format of the logs
-        obj_keys = [f"/{source_bucket}/{obj_key}" for obj_key in obj_keys]
-
         expected_ops = []
         for obj_key in obj_keys:
             for op in ["PUT", "DELETE", "GET", "HEAD"]:
-                expected_ops.append((op, obj_key))
+                expected_ops.append((op, f"{source_bucket}/{obj_key}"))
 
         assert blm.verify_logs_integrity(
             bucket_logs, expected_ops, check_intent=True
