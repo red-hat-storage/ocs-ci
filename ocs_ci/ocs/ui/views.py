@@ -18,8 +18,9 @@ login = {
     "click_login": ("//button[text()='Log in']", By.XPATH),
     "kubeadmin_login_approval": ('a[title="Log in with kube:admin"]', By.CSS_SELECTOR),
     "proceed_to_login_btn": ("button[type='submit']", By.CSS_SELECTOR),
+    # username_my_htpasswd matches for any IDP that has "my_htpasswd" in the name
     "username_my_htpasswd": (
-        'a[title="Log in with my_htpasswd_provider"]',
+        'a[title^="Log in with my_htpasswd"]',
         By.CSS_SELECTOR,
     ),
     "skip_tour": ('button[data-test="tour-step-footer-secondary"]', By.CSS_SELECTOR),

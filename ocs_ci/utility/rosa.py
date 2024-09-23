@@ -1151,3 +1151,65 @@ def label_nodes(cluster_name, machinepool_id, labels, rewrite=False):
     )
     machine_pool.refresh()
     return machine_pool.labels
+
+
+def rosa_create_htpasswd_idp(
+    htpasswd_path, cluster_name=config.ENV_DATA["cluster_name"], idp_name="my_htpasswd"
+):
+    """
+    Creates HTPasswd IDP from htpasswd file
+
+    Args:
+        htpasswd_path (str): Path to htpasswd file
+        cluster_name (str): Cluster name
+        idp_name (str): Name of the IDP
+
+    """
+    cmd = f"rosa create idp --cluster {cluster_name} --type htpasswd --name {idp_name} --from-file {htpasswd_path}"
+    resp = utils.exec_cmd(cmd)
+    if resp.returncode != 0:
+        raise CommandFailed(f"Failed to create IDP from htpasswd file {htpasswd_path}")
+    else:
+        logger.info(f"response\n: {resp.stdout.decode('utf-8').splitlines()}")
+
+
+def rosa_list_idps(cluster_name=config.ENV_DATA["cluster_name"]):
+    """
+    List IDPs
+
+    Args:
+        cluster_name (str): Cluster name
+
+    Returns:
+        dict: Dictionary with IDP names as keys and IDP types as values
+    """
+    cmd = f"rosa list idps --cluster {cluster_name}"
+    resp = utils.exec_cmd(cmd)
+
+    if resp.returncode != 0:
+        raise CommandFailed("Failed to list IDPs")
+    else:
+        logger.info(f"response\n: {resp.stdout}")
+    # at least one line is always returned, so we can safely skip the header
+    name_idp_type = resp.stdout.decode("utf-8").splitlines()[1:]
+    names_to_idp_dict = {item.split()[0]: item.split()[1] for item in name_idp_type}
+    return names_to_idp_dict
+
+
+def rosa_delete_htpasswd_idp(
+    cluster_name=config.ENV_DATA["cluster_name"], idp_name="my_htpasswd"
+):
+    """
+    Deletes IDP
+
+    Args:
+        cluster_name (str): Cluster name
+        idp_name (str): Name of the IDP
+
+    """
+    cmd = f"rosa delete idp {idp_name} --cluster {cluster_name} --yes"
+    resp = utils.exec_cmd(cmd)
+    if resp.returncode != 0:
+        raise CommandFailed("Failed to delete IDP")
+    else:
+        logger.info(f"response\n: {resp.stdout.decode('utf-8').splitlines()}")
