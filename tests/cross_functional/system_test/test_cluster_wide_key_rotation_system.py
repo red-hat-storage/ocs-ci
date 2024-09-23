@@ -96,7 +96,6 @@ class TestKeyRotationWithClusterFull(E2ETest):
         threading_lock,
         bucket_factory_session,
         mcg_obj_session,
-        bucket_factory,
         noobaa_db_backup_and_recovery_locally,
         warps3,
     ):
