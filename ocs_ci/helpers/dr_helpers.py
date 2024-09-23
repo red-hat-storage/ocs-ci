@@ -1662,7 +1662,8 @@ def generate_kubeobject_capture_interval():
     else:
         return capture_interval
 
-def disable_dr_rdr(workload_type):
+
+def disable_dr_rdr():
     """
     Disable DR for the applications
     """
@@ -1675,8 +1676,10 @@ def disable_dr_rdr(workload_type):
         namespace = drpc["metadata"]["namespace"]
         name = drpc["metadata"]["name"]
         logger.info(f"Adding annotation to drpc - {name}")
-        annotation_data = '{"metadata": {"annotations": {' \
-                          '"drplacementcontrol.ramendr.openshift.io/do-not-delete-pvc": "true"}}}'
+        annotation_data = (
+            '{"metadata": {"annotations": {'
+            '"drplacementcontrol.ramendr.openshift.io/do-not-delete-pvc": "true"}}}'
+        )
         cmd = f"oc patch {constants.DRPC} {name} -n {namespace} --type=merge -p '{annotation_data}'"
         run_cmd(cmd)
 
