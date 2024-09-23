@@ -4,8 +4,14 @@ import random
 import string
 from tempfile import NamedTemporaryFile
 
+from ocs_ci.framework import config
 from ocs_ci.ocs import constants, ocp
-from ocs_ci.utility.utils import exec_cmd
+from ocs_ci.utility.rosa import (
+    rosa_create_htpasswd_idp,
+    rosa_delete_htpasswd_idp,
+    rosa_list_idps,
+)
+from ocs_ci.utility.utils import exec_cmd, TimeoutSampler, get_random_str
 
 log = logging.getLogger(__name__)
 
@@ -87,6 +93,13 @@ def user_factory(request, htpasswd_path):
 
     """
     _users = []
+    rosa_depl = config.ENV_DATA["platform"].lower() in [
+        constants.ROSA_HCP_PLATFORM,
+        constants.ROSA_PLATFORM,
+    ]
+    if rosa_depl:
+        idp_name = f"my_htpasswd-{get_random_str(size=3)}"
+        cluster_name = config.ENV_DATA["cluster_name"]
 
     def _factory(
         username=None,
@@ -121,7 +134,17 @@ def user_factory(request, htpasswd_path):
                 for _ in range(random.randint(6, 15))
             )
         add_htpasswd_user(username, password, htpasswd_path)
-        if not _users:
+
+        if rosa_depl:
+            rosa_create_htpasswd_idp(htpasswd_path, cluster_name, idp_name=idp_name)
+            for sample in TimeoutSampler(
+                timeout=300,
+                sleep=10,
+                func=lambda: rosa_list_idps(cluster_name),
+            ):
+                if idp_name in sample.keys():
+                    break
+        elif not _users:
             ocp_obj = ocp.OCP(
                 kind=constants.SECRET, namespace=constants.OPENSHIFT_CONFIG_NAMESPACE
             )
@@ -144,6 +167,12 @@ def user_factory(request, htpasswd_path):
         Delete all users created by the factory
 
         """
+        if rosa_depl:
+            rosa_delete_htpasswd_idp(
+                cluster_name=config.ENV_DATA["cluster_name"], idp_name=idp_name
+            )
+            return
+
         with open(htpasswd_path) as f:
             htpasswd = f.readlines()
         new_htpasswd = [line for line in htpasswd if not line.startswith(tuple(_users))]
