@@ -12,6 +12,7 @@ from ocs_ci.framework.testlib import (
     red_squad,
     skipif_mcg_only,
     tier1,
+    polarion_id,
 )
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.bucket_utils import (
@@ -23,7 +24,6 @@ from ocs_ci.ocs.bucket_utils import (
 from ocs_ci.ocs.ocp import OCP
 from ocs_ci.ocs.resources.bucket_logging_manager import BucketLoggingManager
 from ocs_ci.ocs.resources.pvc import get_all_pvc_objs
-from ocs_ci.utility.utils import TimeoutSampler
 
 logger = logging.getLogger(__name__)
 
@@ -57,10 +57,10 @@ class TestBucketLogs(MCGTest):
     @pytest.mark.parametrize(
         argnames=["use_provided_logs_pvc"],
         argvalues=[
-            pytest.param(False, marks=[bugzilla("2302842")]),
+            pytest.param(False, marks=[polarion_id("OCS-6242"), bugzilla("2302842")]),
             pytest.param(
                 True,
-                marks=[skipif_mcg_only],
+                marks=[polarion_id("OCS-6243"), skipif_mcg_only],
             ),
         ],
         ids=[
@@ -170,10 +170,10 @@ class TestBucketLogs(MCGTest):
     @pytest.mark.parametrize(
         argnames=["use_provided_logs_pvc"],
         argvalues=[
-            pytest.param(False, marks=[bugzilla("2302842")]),
+            pytest.param(False, marks=[polarion_id("OCS-6244"), bugzilla("2302842")]),
             pytest.param(
                 True,
-                marks=[skipif_mcg_only],
+                marks=[polarion_id("OCS-6245"), skipif_mcg_only],
             ),
         ],
         ids=[
