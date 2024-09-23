@@ -1550,13 +1550,9 @@ class Deployment(object):
         performance_profile = config.ENV_DATA.get("performance_profile")
         if performance_profile:
             cluster_data["spec"]["resourceProfile"] = performance_profile
-        # Bluestore-rdr for RDR greenfield deployments: 4.14 onwards until 4.16
+        # Bluestore-rdr for RDR greenfield deployments: 4.14 onwards
         if (
-            (
-                version.VERSION_4_14
-                <= version.get_semantic_ocs_version_from_config()
-                <= version.VERSION_4_16
-            )
+            (version.get_semantic_ocs_version_from_config() >= version.VERSION_4_14)
             and config.multicluster
             and (config.MULTICLUSTER.get("multicluster_mode") == "regional-dr")
             and config.ENV_DATA.get("rdr_osd_deployment_mode")
@@ -2068,13 +2064,9 @@ class Deployment(object):
                     update_ntp_compute_nodes()
                 assert ceph_health_check(namespace=self.namespace, tries=60, delay=10)
 
-        # In case of RDR, check for bluestore-rdr on osds: 4.14 onwards until 4.16
+        # In case of RDR, check for bluestore-rdr on osds: 4.14 onwards
         if (
-            (
-                version.VERSION_4_14
-                <= version.get_semantic_ocs_version_from_config()
-                <= version.VERSION_4_16
-            )
+            (version.get_semantic_ocs_version_from_config() >= version.VERSION_4_14)
             and config.multicluster
             and (config.MULTICLUSTER.get("multicluster_mode") == "regional-dr")
             and config.ENV_DATA.get("rdr_osd_deployment_mode")
