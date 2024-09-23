@@ -692,6 +692,48 @@ class OCP(object):
         token = self.exec_oc_cmd(command, out_yaml_format=False).rstrip()
         return token
 
+    def get_user_name(self):
+        """
+        Get user identity
+
+        Returns:
+            str: user identity
+        """
+        command = "whoami"
+        identity = self.exec_oc_cmd(command, out_yaml_format=False).rstrip()
+        return identity
+
+    def get_user_identities(self):
+        """
+        Get user identities
+        ! Important. We start see new user identity only after the first authentication
+
+        Returns:
+            list: user identities
+        """
+        command = "get identities"
+        identities = self.exec_oc_cmd(command, out_yaml_format=False).rstrip()
+        return identities
+
+    def delete_identity(self, idp_name, user_name):
+        """
+        Delete identity.
+        Users and identities are separate resources. Deleting one does not automatically delete the other.
+        If you only delete the user, the identity remains. This can lead to unexpected behavior, such as
+            The user may still be able to authenticate to the cluster.
+            Records may cause confusion or conflicts
+
+        Args:
+            idp_name (str): identity type to delete
+            user_name (str): username to delete
+
+        Returns:
+            str: output of delete command
+        """
+        command = f"delete identity {idp_name}:{user_name}"
+        status = self.exec_oc_cmd(command, out_yaml_format=False)
+        return status
+
     def wait_for_resource(
         self,
         condition,
