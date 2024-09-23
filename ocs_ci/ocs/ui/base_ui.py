@@ -952,7 +952,7 @@ def login_ui(console_url=None, username=None, password=None):
                         login_loc["username_my_htpasswd"][0],
                     )
                 ),
-                message="'Log in with my_htpasswd_provider' text is not present",
+                message="Title element containing text 'Log in with my_htpasswd' is not present",
             )
         else:
             element = wait.until(
@@ -969,7 +969,7 @@ def login_ui(console_url=None, username=None, password=None):
         take_screenshot("login")
         copy_dom("login")
         logger.warning(
-            "Login with my_htpasswd_provider or kube:admin text not found, trying to login"
+            "Login with my_htpasswd or kube:admin text not found, trying to login"
         )
 
     username_el = wait_for_element_to_be_clickable(login_loc["username"], 60)
