@@ -29,7 +29,7 @@ def get_bucket_used_bytes_metric(bucket_name, threading_lock):
     )
     if len(response.get("data").get("result")) == 0:
         raise ReturnedEmptyResponseException
-    elif response.get("data").get("result")[0].get("value")[1] == 0:
+    elif response.get("data").get("result")[0].get("value")[1] == "0":
         raise ReturnedEmptyResponseException
     else:
         value = response.get("data").get("result")[0].get("value")
