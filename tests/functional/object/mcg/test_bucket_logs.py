@@ -241,22 +241,7 @@ class TestBucketLogs(MCGTest):
         rm_object_recursive(awscli_pod_session, source_bucket, mcg_obj_session)
 
         # 7. Wait for the intermediate logs to be moved to the logs bucket
-
-        logger.info("Waiting for the intermediate logs to move to the logs bucket")
-        try:
-            for sample_logs in TimeoutSampler(
-                timeout=600,
-                sleep=10,
-                func=blm.get_interm_logs,
-                logs_bucket=logs_bucket,
-            ):
-                if not sample_logs:
-                    # An empty result indicates that the logs have been moved
-                    break
-
-        except TimeoutError:
-            logger.error("The interm logs were not moved to the logs bucket in time")
-            raise
+        blm.await_interm_logs_transfer(logs_bucket)
 
         # 8. Validate that each operation and its intent are in the final logs
         bucket_logs = blm.get_bucket_logs(logs_bucket)
@@ -264,29 +249,17 @@ class TestBucketLogs(MCGTest):
         # Adapt the list of objects to the format of the logs
         obj_keys = [f"/{source_bucket}/{obj_key}" for obj_key in obj_keys]
 
-        # Check for missing operations in the logs
-        missing_logs_by_op = {
-            op: [
-                obj_key
-                for obj_key in obj_keys
-                # Check for the intent log
-                if not any(
-                    log["object_key"] == obj_key and log["http_status"] == 102
-                    for log in bucket_logs
-                )
-                # Check for the actual log
-                or not any(
-                    log["object_key"] == obj_key
-                    and str(log["http_status"]).startswith("2")
-                    for log in bucket_logs
-                )
-            ]
-            for op in ["PUT", "DELETE", "GET", "HEAD"]
-        }
+        expected_ops = []
+        for obj_key in obj_keys:
+            for op in ["PUT", "DELETE", "GET", "HEAD"]:
+                expected_ops.append((op, obj_key))
 
-        assert not any(missing_logs_by_op.values()), (
-            "Missing logs detected for some operations:\n"
-            f"{json.dumps(missing_logs_by_op, indent=4)}"
+        assert blm.verify_logs_integrity(
+            bucket_logs, expected_ops, check_intent=True
+        ), (
+            "Some of the expected logs were not found in the final logs"
+            f"Recieved: {json.dumps(bucket_logs, indent=4)}"
+            f"Expectation: {json.dumps(expected_ops, indent=4)}"
         )
 
         logger.info("All the expected logs were found")

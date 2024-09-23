@@ -381,6 +381,40 @@ class BucketLoggingManager:
             logs = [log for log in logs if log["log_bucket"] == logs_bucket]
         return logs
 
+    def await_interm_logs_transfer(self, logs_bucket, timeout=600, sleep=10):
+        """
+        Wait for intermediate logs to be moved from the logging PVC
+        to their final destination in a specified logs bucket
+
+        Args:
+            logs_bucket(str): Name of the logs bucket
+            timeout(int): The maximum time to wait for the logs to be moved
+            sleep(int): Time to sleep between each check
+
+        Raises:
+            TimeoutError: If the logs were not transferred in time
+        """
+
+        logger.info("Waiting for the intermediate logs to move to the logs bucket")
+        try:
+            for sample_logs in TimeoutSampler(
+                timeout=timeout,
+                sleep=sleep,
+                func=self.get_interm_logs,
+                logs_bucket=logs_bucket,
+            ):
+                if not sample_logs:
+                    # An empty result indicates that the logs have been moved
+                    break
+        except TimeoutError:
+            logger.error(
+                (
+                    "The intermediate logs were not transferred to"
+                    f" the logs bucket {logs_bucket} in time"
+                )
+            )
+            raise
+
     def get_bucket_logs(self, logs_bucket, source_bucket=None):
         """
         Get the logs from a logs bucket
@@ -411,6 +445,39 @@ class BucketLoggingManager:
         if source_bucket:
             logs = [log for log in logs if log["source_bucket"] == source_bucket]
         return logs
+
+    def verify_logs_integrity(self, logs, expected_ops, check_intent=False):
+        """
+        Check whether all the expected operations are present in the logs,
+        including intent logs if specified.
+
+        Note that this implementation assumes that each operation was only
+        made once.
+
+        Args:
+            logs (list): A list of dicts, deserialized from the JSON logs
+            expected_ops (list): A list of tuples representing operations.
+                                I.E [('PUT', 'object1'), ('GET', 'object2')]
+            check_intent (bool): Whether to check for intent logs
+
+        Returns:
+            bool: True if all the expected operations are present, False otherwise
+        """
+        # Convert the input into sets of strings with
+        # unified operation-object-success_code format
+        expected_ops_set = set()
+        for op, obj in expected_ops:
+            success_code = "200" if op != "DELETE" else "204"
+            expected_ops_set.add(f"{op}-{obj}-{success_code}")
+        if check_intent:
+            for op, obj in expected_ops:
+                expected_ops_set.append(f"{op}-{obj}-102")
+        logs_set = {
+            f"{log['op']}-{log['object_key']}-{log['http_status']}" for log in logs
+        }
+
+        # Use set comparison to check if all expected operations are present
+        return expected_ops_set.issubset(logs_set)
 
     def _parse_log_file_str(self, log_file_str):
         """
