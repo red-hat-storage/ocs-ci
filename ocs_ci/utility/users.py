@@ -2,6 +2,7 @@ import logging
 import os
 import random
 import string
+import time
 from tempfile import NamedTemporaryFile
 
 from ocs_ci.framework import config
@@ -144,6 +145,10 @@ def user_factory(request, htpasswd_path):
             ):
                 if idp_name in sample.keys():
                     break
+            log.info(
+                "wait another minute for IDP propagate new credentials to management-console"
+            )
+            time.sleep(60)
         elif not _users:
             ocp_obj = ocp.OCP(
                 kind=constants.SECRET, namespace=constants.OPENSHIFT_CONFIG_NAMESPACE

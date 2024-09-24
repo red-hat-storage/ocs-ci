@@ -1189,10 +1189,10 @@ def rosa_list_idps(cluster_name=config.ENV_DATA["cluster_name"]):
     if resp.returncode != 0:
         raise CommandFailed("Failed to list IDPs")
     else:
-        logger.info(f"response\n: {resp.stdout}")
-    # at least one line is always returned, so we can safely skip the header
-    name_idp_type = resp.stdout.decode("utf-8").splitlines()[1:]
-    names_to_idp_dict = {item.split()[0]: item.split()[1] for item in name_idp_type}
+        out_decoded = resp.stdout.decode("utf-8").splitlines()
+        logger.info(f"response\n: {out_decoded}")
+    # at least one line is always returned, so we can safely skip the header - out_decoded[1:]
+    names_to_idp_dict = {item.split()[0]: item.split()[1] for item in out_decoded[1:]}
     return names_to_idp_dict
 
 
