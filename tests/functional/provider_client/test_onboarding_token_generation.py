@@ -28,6 +28,7 @@ from ocs_ci.utility.utils import (
 )
 from ocs_ci.ocs.ocp import OCP
 from ocs_ci.ocs.ui.validation_ui import ValidationUI
+from ocs_ci.framework.pytest_customization.marks import ignore_leftovers
 
 log = logging.getLogger(__name__)
 
@@ -43,6 +44,7 @@ log = logging.getLogger(__name__)
 #     return driver
 
 
+@ignore_leftovers
 @tier4c
 @yellow_squad
 @skipif_ocs_version("<4.15")
