@@ -720,8 +720,8 @@ class OCP(object):
         Delete identity.
         Users and identities are separate resources. Deleting one does not automatically delete the other.
         If you only delete the user, the identity remains. This can lead to unexpected behavior, such as
-            The user may still be able to authenticate to the cluster.
-            Records may cause confusion or conflicts
+        The user may still be able to authenticate to the cluster.
+        Records may cause confusion or conflicts
 
         Args:
             idp_name (str): identity type to delete
