@@ -6,6 +6,7 @@ import time
 from ocs_ci.ocs import ocp, constants
 from ocs_ci.ocs.resources import pod
 from ocs_ci.utility import templating
+from ocs_ci.utility.utils import update_container_with_mirrored_image
 from ocs_ci.ocs.resources.pod import (
     get_ceph_tools_pod,
     get_pods_having_label,
@@ -97,8 +98,8 @@ class TestVolumeRecoveryPostTaint(E2ETest):
             for item in nf_out_json["items"]:
                 if item["spec"]["driver"] == constants.NFRBDDRIVER:
                     if (
-                        nf["spec"]["fenceState"] == "Fenced"
-                        and nf["status"]["result"] == "Succeeded"
+                        item["spec"]["fenceState"] == "Fenced"
+                        and item["status"]["result"] == "Succeeded"
                     ):
                         networkfece_creation = True
                         break
@@ -157,10 +158,15 @@ class TestVolumeRecoveryPostTaint(E2ETest):
             pytest.param(
                 constants.CEPHFILESYSTEM, marks=pytest.mark.polarion_id("OCS-XXXX")
             ),
+            pytest.param(
+                constants.CEPHBLOCKPOOL, marks=pytest.mark.polarion_id("OCS-XXXX")
+            ),
         ],
     )
     def test_networkfence_on_rbd_and_cephfs(
         self,
+        service_account_factory,
+        teardown_factory,
         interface_type,
     ):
         """
@@ -172,18 +178,29 @@ class TestVolumeRecoveryPostTaint(E2ETest):
         5. Remove the taint
         6. Network fence should be deleted and CIDR block listed IP should be removed
         """
-        self.namespace = "default"
         self.interface = interface_type
-        try:
-            pvc_obj = helpers.create_pvc(
-                sc_name=constants.CEPHFILESYSTEM_SC,
-                namespace=self.namespace,
-                pvc_name="logwriter-cephfs-once",
-                size="10Gi",
-                access_mode=constants.ACCESS_MODE_RWO,
-                volume_mode="Filesystem",
-            )
+        pod_name = []
+        taint_node = []
 
+        if self.interface == constants.CEPHBLOCKPOOL:
+            storageclass = constants.CEPHBLOCKPOOL_SC
+            pvc_name = "simple-pvc"
+            volume_mode = constants.VOLUME_MODE_BLOCK
+        elif self.interface == constants.CEPHFILESYSTEM:
+            storageclass = constants.CEPHFILESYSTEM_SC
+            pvc_name = "logwriter-cephfs-once"
+            volume_mode = constants.VOLUME_MODE_FILESYSTEM
+
+        pvc_obj = helpers.create_pvc(
+            sc_name=storageclass,
+            namespace=constants.DEFAULT_NAMESPACE,
+            pvc_name=pvc_name,
+            size="10Gi",
+            access_mode=constants.ACCESS_MODE_RWO,
+            volume_mode=volume_mode,
+        )
+
+        if self.interface == constants.CEPHFILESYSTEM:
             # Create deployment for app pod
             log.info("----Creating deployment ---")
             deployment_data = templating.load_yaml(constants.LOGWRITER_CEPH_FS_POD_YAML)
@@ -191,15 +208,42 @@ class TestVolumeRecoveryPostTaint(E2ETest):
             time.sleep(60)
             log.info("All the workloads pods are successfully up and running")
             pods = get_pods_having_label(
-                label=constants.LOGWRITER_CEPHFS_LABEL, namespace=self.namespace
+                label=constants.LOGWRITER_CEPHFS_LABEL,
+                namespace=constants.DEFAULT_NAMESPACE,
             )
-            pod_name = []
-            taint_node = []
-            for podd in pods:
+        else:
+            service_account_obj = service_account_factory(
+                project=constants.DEFAULT_NAMESPACE
+            )
+            # create simple-app deployment
+            simple_app_data = templating.load_yaml(constants.SIMPLE_APP_POD_YAML)
+            simple_app_data["metadata"]["namespace"] = constants.DEFAULT_NAMESPACE
+            simple_app_data["spec"]["template"]["spec"][
+                "serviceAccountName"
+            ] = service_account_obj.name
+            simple_app_data["spec"]["template"]["spec"]["volumes"][0][
+                "persistentVolumeClaim"
+            ]["claimName"] = pvc_obj.name
+
+            update_container_with_mirrored_image(simple_app_data)
+
+            simple_app_dc = helpers.create_resource(**simple_app_data)
+            teardown_factory(simple_app_dc)
+
+            pods = pod.Pod(
+                **get_pods_having_label(
+                    label="app=simple-app", namespace=constants.DEFAULT_NAMESPACE
+                )[0]
+            )
+            helpers.wait_for_resource_state(
+                resource=pods, state=constants.STATUS_RUNNING, timeout=300
+            )
+        try:
+            for podd in pods if isinstance(pods, list) else [pods]:
                 node_name = podd.get("spec").get("nodeName")
                 pod_name.append(podd.get("metadata").get("name"))
                 taint_node.append(node_name)
-            self.interface = interface_type
+
             log.info(f"Taint worker node {node_name}with nodeshutdown:NoExecute taint")
 
             taint_nodes(
@@ -252,5 +296,171 @@ class TestVolumeRecoveryPostTaint(E2ETest):
                 CIDR_untaint
             ), "CIDR IPs stil exist in blocklist"
             log.info("Volume recovery was successful post tainting the node")
-        except:
-            log.info("failed")
+        except Exception as e:
+            log.info(f"Test case failed with exception {e}")
+
+        finally:
+            if self.interface == constants.CEPHFS_INTERFACE:
+                # Delete deployment
+                cmd_delete_deployment = f"delete dc {constants.LOGWRITER_CEPHFS_LABEL}"
+            else:
+                cmd_delete_deployment = "delete dc simple-app"
+            self.storage_cluster_obj.exec_oc_cmd(cmd_delete_deployment)
+            # Deletion of CEPHFS PVC
+            log.info("Deleting PVC")
+            pvc_obj.delete()
+            pvc_obj.ocp.wait_for_delete(
+                resource_name=pvc_obj.name
+            ), f"PVC {pvc_obj.name} is not deleted"
+            log.info(f"Verified: PVC {pvc_obj.name} is deleted.")
+
+    @pytest.mark.parametrize(
+        argnames=["interface_type"],
+        argvalues=[
+            pytest.param(
+                constants.CEPHFILESYSTEM, marks=pytest.mark.polarion_id("OCS-XXXX")
+            ),
+            pytest.param(
+                constants.CEPHBLOCKPOOL, marks=pytest.mark.polarion_id("OCS-XXXX")
+            ),
+        ],
+    )
+    def test_networkfence_on_rbd_and_cephfs_with_rook_watch_node_failure_disabled(
+        self,
+        service_account_factory,
+        teardown_factory,
+        interface_type,
+    ):
+        """
+        Test runs the following steps
+        1. Create deployment pods
+        2. Taint the node on which deployment pod is running
+        3. Check that network fence is created and CIDR IP is added to blocklist IPs
+        4. Wait for the pod to come up on new node
+        5. Remove the taint
+        6. Network fence should be deleted and CIDR block listed IP should be removed
+        """
+        self.interface = interface_type
+        pod_name = []
+        taint_node = []
+
+        if self.interface == constants.CEPHBLOCKPOOL:
+            storageclass = constants.CEPHBLOCKPOOL_SC
+            pvc_name = "simple-pvc"
+            volume_mode = constants.VOLUME_MODE_BLOCK
+        elif self.interface == constants.CEPHFILESYSTEM:
+            storageclass = constants.CEPHFILESYSTEM_SC
+            pvc_name = "logwriter-cephfs-once"
+            volume_mode = constants.VOLUME_MODE_FILESYSTEM
+
+        pvc_obj = helpers.create_pvc(
+            sc_name=storageclass,
+            namespace=constants.DEFAULT_NAMESPACE,
+            pvc_name=pvc_name,
+            size="10Gi",
+            access_mode=constants.ACCESS_MODE_RWO,
+            volume_mode=volume_mode,
+        )
+
+        if self.interface == constants.CEPHFILESYSTEM:
+            # Create deployment for app pod
+            log.info("----Creating deployment ---")
+            deployment_data = templating.load_yaml(constants.LOGWRITER_CEPH_FS_POD_YAML)
+            helpers.create_resource(**deployment_data)
+            time.sleep(60)
+            log.info("All the workloads pods are successfully up and running")
+            pods = get_pods_having_label(
+                label=constants.LOGWRITER_CEPHFS_LABEL,
+                namespace=constants.DEFAULT_NAMESPACE,
+            )
+        else:
+            service_account_obj = service_account_factory(
+                project=constants.DEFAULT_NAMESPACE
+            )
+            # create simple-app deployment
+            simple_app_data = templating.load_yaml(constants.SIMPLE_APP_POD_YAML)
+            simple_app_data["metadata"]["namespace"] = constants.DEFAULT_NAMESPACE
+            simple_app_data["spec"]["template"]["spec"][
+                "serviceAccountName"
+            ] = service_account_obj.name
+            simple_app_data["spec"]["template"]["spec"]["volumes"][0][
+                "persistentVolumeClaim"
+            ]["claimName"] = pvc_obj.name
+
+            update_container_with_mirrored_image(simple_app_data)
+
+            simple_app_dc = helpers.create_resource(**simple_app_data)
+            teardown_factory(simple_app_dc)
+
+            pods = pod.Pod(
+                **get_pods_having_label(
+                    label="app=simple-app", namespace=constants.DEFAULT_NAMESPACE
+                )[0]
+            )
+            helpers.wait_for_resource_state(
+                resource=pods, state=constants.STATUS_RUNNING, timeout=300
+            )
+        try:
+            for podd in pods if isinstance(pods, list) else [pods]:
+                node_name = podd.get("spec").get("nodeName")
+                pod_name.append(podd.get("metadata").get("name"))
+                taint_node.append(node_name)
+
+            set_watch_for_node_failure_rook_ceph_operator(value="False")
+
+            log.info(f"Taint worker node {node_name}with nodeshutdown:NoExecute taint")
+
+            taint_nodes(
+                nodes=taint_node,
+                taint_label="node.kubernetes.io/out-of-service=nodeshutdown:NoExecute",
+            )
+            log.info(
+                "Inducing a delay of two minutes as rook ceph operator pod might get restarted post node taint"
+            )
+            time.sleep(120)
+
+            rook_operator_pods = get_operator_pods()
+            self.rook_operator_pod = rook_operator_pods[0]
+            self.rook_operator_pod_name = self.rook_operator_pod.name
+            log.info(f"rook operator pod found: {self.rook_operator_pod}")
+            time.sleep(60)
+
+            # Get the node name that has the rook operator pod running on
+            pod_info = self.rook_operator_pod.get()
+            node = pod_info["spec"]["nodeName"]
+            # Wait for network fence to be created
+            if node_name == node:
+                time.sleep(180)
+            else:
+                time.sleep(60)
+
+            # Check if networkfence is created post taint
+            assert (
+                not self.get_all_networkfences()
+            ), "Network fence is created even after setting rook watch node failure to false"
+
+            untaint_node_objs = get_node_objs(taint_node)
+
+            # Untaint the node
+            assert untaint_nodes(
+                taint_label="node.kubernetes.io/out-of-service=nodeshutdown:NoExecute",
+                nodes_to_untaint=untaint_node_objs,
+            ), "Failed to untaint the node"
+
+        except Exception as e:
+            log.info(f"Test case failed with exception {e}")
+
+        finally:
+            if self.interface == constants.CEPHFS_INTERFACE:
+                # Delete deployment
+                cmd_delete_deployment = f"delete dc {constants.LOGWRITER_CEPHFS_LABEL}"
+            else:
+                cmd_delete_deployment = "delete dc simple-app"
+            self.storage_cluster_obj.exec_oc_cmd(cmd_delete_deployment)
+            # Deletion of CEPHFS PVC
+            log.info("Deleting PVC")
+            pvc_obj.delete()
+            pvc_obj.ocp.wait_for_delete(
+                resource_name=pvc_obj.name
+            ), f"PVC {pvc_obj.name} is not deleted"
+            log.info(f"Verified: PVC {pvc_obj.name} is deleted.")
