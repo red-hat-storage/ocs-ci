@@ -162,7 +162,13 @@ def get_and_apply_icsp_from_catalog(image, apply=True, insecure=False):
             and config.ENV_DATA["deployment_type"] == "managed"
         )
         if not managed_ibmcloud:
-            wait_for_machineconfigpool_status("all")
+            num_nodes = (
+                config.ENV_DATA["worker_replicas"]
+                + config.ENV_DATA["master_replicas"]
+                + config.ENV_DATA.get("infra_replicas", 0)
+            )
+            timeout = 2800 if num_nodes > 6 else 1900
+            wait_for_machineconfigpool_status(node_type="all", timeout=timeout)
 
     return icsp_file_dest_location
 
