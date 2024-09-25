@@ -86,7 +86,7 @@ class TestNetSplit:
         argvalues=[
             pytest.param(
                 constants.NETSPLIT_DATA_1_DATA_2,
-                15,
+                30,
                 marks=[
                     pytest.mark.polarion_id("OCS-5069"),
                     pytest.mark.polarion_id("OCS-5071"),
@@ -118,10 +118,10 @@ class TestNetSplit:
             ),
         ],
         ids=[
-            # "Data-1-Data-2",
-            # "Arbiter-Data-1",
+            "Data-1-Data-2",
+            "Arbiter-Data-1",
             "Arbiter-Data-1-and-Arbiter-Data-2",
-            # "Arbiter-Data-1-and-Data-1-Data-2",
+            "Arbiter-Data-1-and-Data-1-Data-2",
         ],
     )
     @pytest.mark.polarion_id("OCS-5850")
@@ -203,8 +203,9 @@ class TestNetSplit:
         ):
             sc_obj.get_out_of_quorum_nodes()
 
-        # note the end time (UTC)
-        if not sc_obj.check_ceph_accessibility(timeout=(duration * 60)):
+        # check for ceph accessibility and note the end time (UTC)
+        timeout = (end_time - datetime.now(timezone.utc)).total_seconds()
+        if not sc_obj.check_ceph_accessibility(timeout=timeout):
             assert recover_from_ceph_stuck(
                 sc_obj
             ), "Something went wrong. not expected. please check rook-ceph logs"
