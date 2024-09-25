@@ -132,6 +132,42 @@ viewing the existing constants and defaults in their respective modules.
 
 It's documented [here](./fixture_usage.md).
 
+## Cluster context
+
+Some platforms and test cases require more clusters during the test run.
+This applies for example to Provider-Client platform where test is executed
+from a client cluster but other clusters like a Provider cluster or more
+clients are accessible during test run through:
+
+- `MultiClusterConfig` in [/ocs\_ci/framework/\_\_init\_\_.py](/ocs_ci/framework/__init__.py)
+  - This class contains methods like `switch_ctx` that can directly manipulate
+with cluster contexts.
+- Cluster context managers in [/ocs\_ci/framework/\_\_init\_\_.py](/ocs_ci/framework/__init__.py)
+  - There are implemented multiple Context managers that aim to simplify the
+work with cluster contexts. Those Cluster context managers define `\_\_enter\_\_`
+and `\_\_exit\_\_` methods so it is possible to use them with `with` statement
+in the code.
+
+For example:
+```python
+from ocs_ci.framework import config
+
+(...)
+
+with config.RunWithFirstConsumerConfigContextIfAvailable():
+    storage_cluster = StorageCluster(
+        namespace=config.ENV_DATA["cluster_namespace"],
+        resource_name=storage_cluster_name,
+    )
+```
+
+In the example is being created an instance of class `StorageCluster`.
+The context manager is designed to change a context to Provider cluster if
+this is executed with Provider cluster available but if there is no Provider
+cluster then no context is changed but the code in the manager is still
+executed. This is done to mark code blocks with correct cluster context but
+without a danger that it affects a test run on on-prem platforms.
+
 ## Other notes
 
 Of course you can import in one line both team base class and marker with
