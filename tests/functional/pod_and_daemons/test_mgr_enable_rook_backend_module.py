@@ -41,7 +41,12 @@ class TestMgrRookModule(ManageTest):
             log.info("Setting orch backend to none and disabling rook module on mgr")
             toolbox.exec_ceph_cmd('ceph orch set backend ""')
             toolbox.exec_ceph_cmd("ceph mgr module disable rook")
-
+            mgr_pods = pod.get_mgr_pods()
+            for mgr_pod in mgr_pods:
+                log.info(
+                    f"Restarting mgr pod:{mgr_pod.name} post disabling rook module"
+                )
+                mgr_pod.delete(wait=True)
             log.info("Validating orch status after disabling rook module")
             try:
                 toolbox.exec_ceph_cmd(ceph_cmd="ceph orch status", format=None)
@@ -52,10 +57,7 @@ class TestMgrRookModule(ManageTest):
                 raise Exception("Mgr rook module is not disabled during teardown")
             finally:
                 log.info("Archive crash if they are raised during the test")
-                crash_check = TimeoutSampler(
-                    timeout=120,
-                    sleep=10,
-                    func=run_cmd_verify_cli_output,
+                crash_check = run_cmd_verify_cli_output(
                     cmd="ceph health detail",
                     expected_output_lst={
                         "HEALTH_WARN",
@@ -63,10 +65,10 @@ class TestMgrRookModule(ManageTest):
                     },
                     cephtool_cmd=True,
                 )
-                if crash_check.wait_for_func_status(True):
+                if crash_check:
                     toolbox.exec_ceph_cmd(ceph_cmd="ceph crash archive-all")
                 else:
-                    log.info("There are no daemon crash warnings")
+                    log.info("There are no daemon crashes during teardown")
 
         request.addfinalizer(finalizer)
 
@@ -106,9 +108,16 @@ class TestMgrRookModule(ManageTest):
             timeout=600,
             sleep=30,
             func=run_cmd_verify_cli_output,
-            cmd="ceph crash ls-new",
-            expected_output_lst={"mgr"},
+            cmd="ceph health detail",
+            expected_output_lst={
+                "HEALTH_WARN",
+                "daemons have recently crashed",
+            },
             cephtool_cmd=True,
         )
         if sample.wait_for_func_status(True):
-            raise Exception("ceph-mgr daemons crashed post enabling rook module")
+            cr_ls = toolbox.exec_ceph_cmd("ceph crash ls-new")
+            raise Exception(
+                f"Daemons other than mgr has crashed: {cr_ls}, failing test and archiving all crashes at teardown."
+                "Please check the archived crash report for details"
+            )
