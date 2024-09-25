@@ -451,9 +451,7 @@ def validate_noobaa_rebuild_system(self, bucket_factory_session, mcg_obj_session
     state_ocp.delete(resource_name=constants.NOOBAA_CORE_STATEFULSET)
 
     # Delete noobaa-db pvc
-    pvc_obj = OCP(
-        kind=constants.PVC, namespace=config.ENV_DATA["cluster_namespace"]
-    )
+    pvc_obj = OCP(kind=constants.PVC, namespace=config.ENV_DATA["cluster_namespace"])
     logger.info("Deleting noobaa-db pvc")
     pvc_obj.delete(resource_name=noobaa_pvc_obj[0].name, wait=True)
     pvc_obj.wait_for_delete(resource_name=noobaa_pvc_obj[0].name, timeout=300)
@@ -514,9 +512,7 @@ def validate_noobaa_rebuild_system(self, bucket_factory_session, mcg_obj_session
     )
 
     # Validate noobaa pods are up and running
-    pod_obj = OCP(
-        kind=constants.POD, namespace=config.ENV_DATA["cluster_namespace"]
-    )
+    pod_obj = OCP(kind=constants.POD, namespace=config.ENV_DATA["cluster_namespace"])
     noobaa_pods = get_noobaa_pods()
     pod_obj.wait_for_resource(
         condition=constants.STATUS_RUNNING,
@@ -553,7 +549,7 @@ def validate_noobaa_rebuild_system(self, bucket_factory_session, mcg_obj_session
 
 def validate_noobaa_db_backup_recovery_locally_system(
     self,
-    bucket_factory,
+    bucket_factory_session,
     noobaa_db_backup_and_recovery_locally,
     warps3,
     mcg_obj_session,
@@ -582,10 +578,14 @@ def validate_noobaa_db_backup_recovery_locally_system(
     """
 
     # create a bucket for warp benchmarking
-    bucket_name = bucket_factory()[0].name
+    bucket_name = bucket_factory_session()[0].name
 
     # Backup and restore noobaa db using fixture
-    noobaa_db_backup_and_recovery_locally()
+    noobaa_db_backup_and_recovery_locally(bucket_factory_session)
+
+    # Verify everything running fine
+    logger.info("Verifying all resources are Running and matches expected result")
+    self.sanity_helpers.health_check(tries=120)
 
     # Run multi client warp benchmarking
     warps3.run_benchmark(
@@ -744,4 +744,3 @@ def verify_osd_used_capacity_greater_than_expected(expected_used_capacity):
             logger.info(f"OSD ID:{osd_id}:{osd_utilization} greater than 85%")
             return True
     return False
-

@@ -78,7 +78,10 @@ def start_noobaa_services(noobaa_endpoint_dc, noobaa_operator_dc):
 
 @pytest.fixture()
 def noobaa_db_backup_and_recovery_locally(
-    request, bucket_factory, awscli_pod_session, mcg_obj_session
+    request,
+    bucket_factory,
+    awscli_pod_session,
+    mcg_obj_session,
 ):
     """
     Test to verify Backup and Restore for Multicloud Object Gateway database locally
