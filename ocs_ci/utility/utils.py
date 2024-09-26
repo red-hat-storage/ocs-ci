@@ -39,6 +39,7 @@ from tempfile import NamedTemporaryFile, mkdtemp, TemporaryDirectory
 from jinja2 import FileSystemLoader, Environment
 from ocs_ci.framework import config
 from ocs_ci.framework import GlobalVariables as GV
+from ocs_ci.helpers.helpers import get_provisioner_label
 from ocs_ci.ocs import constants, defaults
 from ocs_ci.ocs.exceptions import (
     CephHealthException,
@@ -2082,8 +2083,8 @@ def get_csi_versions():
     from ocs_ci.ocs.ocp import OCP
 
     for provisioner in [
-        constants.CSI_CEPHFSPLUGIN_PROVISIONER_LABEL,
-        constants.CSI_RBDPLUGIN_PROVISIONER_LABEL,
+        get_provisioner_label(constants.CEPHFILESYSTEM),
+        get_provisioner_label(constants.CEPHBLOCKPOOL),
     ]:
         ocp_pod_obj = OCP(
             kind=constants.POD,
