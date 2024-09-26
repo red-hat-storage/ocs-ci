@@ -3,6 +3,7 @@ import pytest
 import time
 
 from ocs_ci.framework import config
+from ocs_ci.helpers.helpers import get_provisioner_label
 from ocs_ci.utility import templating, utils
 from ocs_ci.ocs.exceptions import TimeoutExpiredError
 from datetime import datetime
@@ -65,8 +66,8 @@ class TestSCC:
         # Delete csi-provisioner and noobaa db pods
         labels = [
             constants.NOOBAA_DB_LABEL_47_AND_ABOVE,
-            constants.CSI_RBDPLUGIN_PROVISIONER_LABEL,
-            constants.CSI_CEPHFSPLUGIN_PROVISIONER_LABEL,
+            get_provisioner_label(constants.CEPHBLOCKPOOL),
+            get_provisioner_label(constants.CEPHFILESYSTEM),
         ]
         pods = list()
         for label in labels:

@@ -957,12 +957,12 @@ def get_csi_provisioner_pod(interface):
         Pod object: The provisioner pod object based on iterface
     """
     selector = (
-        "app=csi-rbdplugin-provisioner"
+        helpers.get_provisioner_label(constants.CEPHBLOCKPOOL)
         if (
             interface == constants.CEPHBLOCKPOOL
             or interface == constants.CEPHBLOCKPOOL_THICK
         )
-        else "app=csi-cephfsplugin-provisioner"
+        else helpers.get_provisioner_label(constants.CEPHFILESYSTEM)
     )
     ocp_pod_obj = OCP(
         kind=constants.POD,
@@ -1797,7 +1797,7 @@ def get_pod_count(label, namespace=None):
 
 
 def get_cephfsplugin_provisioner_pods(
-    cephfsplugin_provisioner_label=constants.CSI_CEPHFSPLUGIN_PROVISIONER_LABEL,
+    cephfsplugin_provisioner_label=helpers.get_provisioner_label(constants.CEPHFILESYSTEM),
     namespace=None,
 ):
     """
@@ -1820,7 +1820,7 @@ def get_cephfsplugin_provisioner_pods(
 
 
 def get_rbdfsplugin_provisioner_pods(
-    rbdplugin_provisioner_label=constants.CSI_RBDPLUGIN_PROVISIONER_LABEL,
+    rbdplugin_provisioner_label=helpers.get_provisioner_label(constants.CEPHBLOCKPOOL),
     namespace=None,
 ):
     """
@@ -2055,9 +2055,9 @@ def get_plugin_pods(interface, namespace=None):
         list : csi-cephfsplugin pod objects or csi-rbdplugin pod objects
     """
     if interface == constants.CEPHFILESYSTEM:
-        plugin_label = constants.CSI_CEPHFSPLUGIN_LABEL
+        plugin_label = helpers.get_node_plugin_label(constants.CEPHFILESYSTEM)
     if interface == constants.CEPHBLOCKPOOL:
-        plugin_label = constants.CSI_RBDPLUGIN_LABEL
+        plugin_label = helpers.get_node_plugin_label(constants.CEPHBLOCKPOOL)
     namespace = namespace or config.ENV_DATA["cluster_namespace"]
     plugins_info = get_pods_having_label(plugin_label, namespace)
     plugin_pods = [Pod(**plugin) for plugin in plugins_info]
