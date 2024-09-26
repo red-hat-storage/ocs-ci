@@ -20,7 +20,11 @@ from ocs_ci.ocs.exceptions import (
     TimeoutExpiredError,
     UnexpectedBehaviour,
 )
-from ocs_ci.ocs.resources.pod import get_file_path, check_file_existence, delete_pods
+from ocs_ci.ocs.resources.pod import (
+    get_file_path,
+    check_file_existence,
+    delete_pods,
+)
 from ocs_ci.helpers.helpers import fetch_used_size
 from ocs_ci.utility.utils import TimeoutSampler
 
@@ -256,6 +260,10 @@ class TestRbdSpaceReclaim(ManageTest):
         # Delete the pod
         log.info(f"Deleting the pod {pod_obj}")
         delete_pods([pod_obj])
+
+        # Validation of pod deletion
+        log.info(f"Validate the deletion of pod - {pod_obj.name}")
+        pod_obj.ocp.wait_for_delete(resource_name=pod_obj.name)
 
         # Create ReclaimSpaceJob
         reclaim_space_job = pvc_obj.create_reclaim_space_job()
