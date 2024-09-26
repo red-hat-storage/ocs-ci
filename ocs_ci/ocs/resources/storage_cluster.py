@@ -573,6 +573,22 @@ def ocs_install_verification(
         ), f"CSI users {ceph_csi_users} not created in external cluster"
         log.debug("All CSI users exists and have expected caps")
 
+        if config.EXTERNAL_MODE.get("run_as_user"):
+            log.info("Verify ceph user caps for external cluster")
+            ceph_user = config.EXTERNAL_MODE["run_as_user"]
+            is_ceph_user_exists = False
+            for user in ceph_auth_data["auth_dump"]:
+                if user["entity"] == ceph_user:
+                    is_ceph_user_exists = True
+                    user_caps = user["caps"]
+                    assert (
+                        defaults.ceph_user_caps == user_caps
+                    ), f"Mismatch found! Expected {defaults.ceph_user_caps}, but got {user_caps}"
+                    log.debug("ceph user caps {user_caps} are verified")
+            assert (
+                is_ceph_user_exists
+            ), f"{ceph_user} is not created even we ran external script with --run-as-user option"
+
         if config.ENV_DATA.get("rgw-realm"):
             log.info("Verify user is created in realm")
             object_store_user = defaults.EXTERNAL_CLUSTER_OBJECT_STORE_USER
