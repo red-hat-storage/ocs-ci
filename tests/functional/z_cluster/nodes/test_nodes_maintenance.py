@@ -53,7 +53,6 @@ from ocs_ci.helpers.helpers import (
     remove_label_from_worker_node,
     storagecluster_independent_check,
     verify_pdb_mon,
-    get_provisioner_label,
 )
 from ocs_ci.helpers import helpers
 
@@ -171,11 +170,11 @@ class TestNodesMaintenance(ManageTest):
         # check csi-cephfsplugin-provisioner's and csi-rbdplugin-provisioner's
         # are ready, see BZ #2162504
         provis_pods = get_pods_having_label(
-            get_provisioner_label(constants.CEPHFILESYSTEM),
+            helpers.get_provisioner_label(constants.CEPHFILESYSTEM),
             config.ENV_DATA["cluster_namespace"],
         )
         provis_pods += get_pods_having_label(
-            get_provisioner_label(constants.CEPHBLOCKPOOL),
+            helpers.get_provisioner_label(constants.CEPHBLOCKPOOL),
             config.ENV_DATA["cluster_namespace"],
         )
         provis_pod_names = [p["metadata"]["name"] for p in provis_pods]

@@ -1,7 +1,6 @@
 import pytest
 import logging
 
-from ocs_ci.helpers.helpers import get_provisioner_label
 from ocs_ci.utility import metadata_utils
 from ocs_ci.ocs import constants, ocp
 from ocs_ci.helpers import helpers
@@ -991,14 +990,14 @@ class TestMetadata(ManageTest):
         # Check csi-cephfsplugin provisioner and csi-rbdplugin-provisioner pods are up and running
         assert self.pod_obj.wait_for_resource(
             condition=constants.STATUS_RUNNING,
-            selector=get_provisioner_label(constants.CEPHFILESYSTEM),
+            selector=helpers.get_provisioner_label(constants.CEPHFILESYSTEM),
             dont_allow_other_resources=True,
             timeout=60,
         )
 
         assert self.pod_obj.wait_for_resource(
             condition=constants.STATUS_RUNNING,
-            selector=get_provisioner_label(constants.CEPHBLOCKPOOL),
+            selector=helpers.get_provisioner_label(constants.CEPHBLOCKPOOL),
             dont_allow_other_resources=True,
             timeout=60,
         )
