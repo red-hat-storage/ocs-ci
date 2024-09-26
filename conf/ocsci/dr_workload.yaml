@@ -1,6 +1,6 @@
 ENV_DATA:
-  dr_workload_repo_url: "https://github.com/red-hat-storage/ocs-workloads.git"
-  dr_workload_repo_branch: "master"
+  dr_workload_repo_url: "https://github.com/prsurve/ocs-workloads.git"
+  dr_workload_repo_branch: "restructure_rdr"
   dr_workload_subscription_rbd: [
     {name: "busybox-1", workload_dir: "rdr/busybox/rbd/subscription_with_placementrule/app-busybox-1",
      pod_count: 10, pvc_count: 10
