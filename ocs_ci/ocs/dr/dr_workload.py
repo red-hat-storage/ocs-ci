@@ -739,7 +739,7 @@ class CnvWorkload(DRWorkload):
         Deployment specific to cnv workloads
 
         """
-        self._deploy_prereqs()
+        self._deploy_prexreqs()
         self.vm_obj = VirtualMachine(
             vm_name=self.vm_name, namespace=self.workload_namespace
         )
@@ -1294,3 +1294,256 @@ def validate_data_integrity(namespace, path="/mnt/test/hashfile", timeout=600):
                     f"Pod {pod_obj.name}: One or more files or datas are modified"
                 )
             raise ex
+
+
+class CnvWorkloadDiscoveredApps(DRWorkload):
+    """
+    Class handling everything related to CNV workloads covers Discovered Apps`1
+
+    """
+
+    def __init__(self, **kwargs):
+        """
+        Initialize CnvWorkload instance
+
+        """
+        workload_repo_url = config.ENV_DATA["dr_workload_repo_url"]
+        workload_repo_branch = config.ENV_DATA["dr_workload_repo_branch"]
+        super().__init__("cnv", workload_repo_url, workload_repo_branch)
+        self.workload_name = kwargs.get("workload_name")
+        self.vm_name = kwargs.get("vm_name")
+        self.vm_secret_name = kwargs.get("vm_secret")
+        self.vm_secret_obj = []
+        self.vm_obj = None
+        self.vm_username = kwargs.get("vm_username")
+        self.workload_namespace = kwargs.get("workload_namespace", None)
+        self.workload_pod_count = kwargs.get("workload_pod_count")
+        self.workload_pvc_count = kwargs.get("workload_pvc_count")
+        self.dr_policy_name = kwargs.get(
+            "dr_policy_name", config.ENV_DATA.get("dr_policy_name")
+        ) or (dr_helpers.get_all_drpolicy()[0]["metadata"]["name"])
+        self.preferred_primary_cluster = config.ENV_DATA.get(
+            "preferred_primary_cluster"
+        ) or (get_primary_cluster_config().ENV_DATA["cluster_name"])
+        self.target_clone_dir = config.ENV_DATA.get(
+            "target_clone_dir", constants.DR_WORKLOAD_REPO_BASE_DIR
+        )
+        self.cnv_workload_dir = os.path.join(
+            self.target_clone_dir, kwargs.get("workload_dir")
+        )
+        self.drpc_yaml_file = os.path.join(constants.DRPC_PATH)
+        self.workload_dir = kwargs.get("workload_dir")
+        self.cnv_workload_placement_name = kwargs.get("workload_placement_name")
+        self.cnv_workload_pvc_selector = kwargs.get("workload_pvc_selector")
+        self.appset_model = kwargs.get("appset_model", None)
+        self.drpc_yaml_file = os.path.join(constants.DRPC_PATH)
+        self.placement_yaml_file = os.path.join(constants.PLACEMENT_PATH)
+        self.kubeobject_capture_interval = f"{generate_kubeobject_capture_interval()}m"
+        self.protection_type = kwargs.get("protection_type")
+        self.target_clone_dir = config.ENV_DATA.get(
+            "target_clone_dir", constants.DR_WORKLOAD_REPO_BASE_DIR
+        )
+        self.discovered_apps_pvc_selector_key = kwargs.get(
+            "discovered_apps_pvc_selector_key"
+        )
+        self.discovered_apps_pvc_selector_value = kwargs.get(
+            "discovered_apps_pvc_selector_value"
+        )
+        self.discovered_apps_pod_selector_key = kwargs.get(
+            "discovered_apps_pod_selector_key"
+        )
+        self.discovered_apps_pod_selector_value = kwargs.get(
+            "discovered_apps_pod_selector_value"
+        )
+    def deploy_workload(self):
+        """
+
+        Deployment specific to busybox workload for Discovered/Imperative Apps
+
+        """
+        self._deploy_prereqs()
+        for cluster in get_non_acm_cluster_config():
+            config.switch_ctx(cluster.MULTICLUSTER["multicluster_index"])
+            self.create_namespace()
+        config.switch_to_cluster_by_name(self.preferred_primary_cluster)
+        self.workload_path = self.target_clone_dir + "/" + self.workload_dir
+        run_cmd(f"oc create -k {self.workload_path} -n {self.workload_namespace} ")
+        self.check_pod_pvc_status(skip_replication_resources=True)
+        config.switch_acm_ctx()
+        self.create_placement()
+        self.create_dprc()
+        self.verify_workload_deployment()
+
+    def _deploy_prereqs(self):
+        """
+        Perform prerequisites
+
+        """
+        # Clone workload repo
+        clone_repo(
+            url=self.workload_repo_url,
+            location=self.target_clone_dir,
+            branch=self.workload_repo_branch,
+        )
+
+    def create_namespace(self):
+        """
+        Create Namespace for Workload's to run
+        """
+
+        run_cmd(f"oc create namespace {self.workload_namespace}")
+
+    def manage_dr_vm_secrets(self):
+        """
+        Create secrets to access the VMs via SSH. If a secret already exists, delete and recreate it.
+
+        """
+        for cluster in get_non_acm_cluster_config():
+            config.switch_ctx(cluster.MULTICLUSTER["multicluster_index"])
+
+            # Create namespace if it doesn't exist
+            try:
+                create_project(project_name=self.workload_namespace)
+            except CommandFailed as ex:
+                if "(AlreadyExists)" in str(ex):
+                    log.warning("The namespace already exists!")
+
+            # Create or recreate the secret for ssh access
+            try:
+                log.info(
+                    f"Creating secret namespace {self.workload_namespace} for ssh access"
+                )
+                self.vm_secret_obj.append(
+                    create_vm_secret(
+                        secret_name=self.vm_secret_name,
+                        namespace=self.workload_namespace,
+                    )
+                )
+            except CommandFailed as ex:
+                if "(AlreadyExists)" in str(ex):
+                    log.warning(
+                        f"Secret {self.vm_secret_name} already exists in namespace {self.workload_namespace}, "
+                        f"deleting and recreating the secret to fetch the right SSH pub key."
+                    )
+                    ocp.OCP(
+                        kind=constants.SECRET,
+                        namespace=self.workload_namespace,
+                    ).delete(resource_name=self.vm_secret_name, wait=True)
+                    self.vm_secret_obj.append(
+                        create_vm_secret(
+                            secret_name=self.vm_secret_name,
+                            namespace=self.workload_namespace,
+                        )
+                    )
+
+    def create_placement(self):
+        """
+        Create placement CR for discovered Apps
+
+        """
+
+        placement_yaml_data = templating.load_yaml(self.placement_yaml_file)
+        placement_yaml_data["metadata"]["name"] = (
+            self.discovered_apps_placement_name + "-placement-1"
+        )
+        placement_yaml_data["metadata"].setdefault("annotations", {})
+        placement_yaml_data["metadata"]["annotations"][
+            "cluster.open-cluster-management.io/experimental-scheduling-disable"
+        ] = "true"
+        placement_yaml_data["metadata"]["namespace"] = constants.DR_OPS_NAMESAPCE
+        placement_yaml = tempfile.NamedTemporaryFile(
+            mode="w+", prefix="drpc", delete=False
+        )
+        templating.dump_data_to_temp_yaml(placement_yaml_data, placement_yaml.name)
+        log.info(f"Creating Placement for workload {self.workload_name}")
+        run_cmd(f"oc create -f {placement_yaml.name}")
+
+    def create_dprc(self):
+        """
+        Create DRPC for discovered Apps
+
+        """
+        drpc_yaml_data = templating.load_yaml(self.drpc_yaml_file)
+        drpc_yaml_data["spec"].setdefault("kubeObjectProtection", {})
+        drpc_yaml_data["spec"]["kubeObjectProtection"].setdefault("kubeObjectSelector")
+        drpc_yaml_data["spec"].setdefault("protectedNamespaces", []).append(
+            self.workload_namespace
+        )
+        del drpc_yaml_data["spec"]["pvcSelector"]["matchLabels"]
+
+        log.info(self.discovered_apps_pvc_selector_key)
+        drpc_yaml_data["metadata"]["name"] = self.discovered_apps_placement_name
+        drpc_yaml_data["metadata"]["namespace"] = constants.DR_OPS_NAMESAPCE
+        drpc_yaml_data["spec"]["preferredCluster"] = self.preferred_primary_cluster
+        drpc_yaml_data["spec"]["drPolicyRef"]["name"] = self.dr_policy_name
+        drpc_yaml_data["spec"]["placementRef"]["name"] = (
+            self.discovered_apps_placement_name + "-placement-1"
+        )
+        drpc_yaml_data["spec"]["placementRef"]["namespace"] = constants.DR_OPS_NAMESAPCE
+        drcp_data_yaml = tempfile.NamedTemporaryFile(
+            mode="w+", prefix="drpc", delete=False
+        )
+        templating.dump_data_to_temp_yaml(drpc_yaml_data, drcp_data_yaml.name)
+        log.info(drcp_data_yaml.name)
+        drpc_yaml_data["spec"]["pvcSelector"]["matchExpressions"][0][
+            "key"
+        ] = self.discovered_apps_pvc_selector_key
+        drpc_yaml_data["spec"]["pvcSelector"]["matchExpressions"][0]["operator"] = "In"
+        drpc_yaml_data["spec"]["pvcSelector"]["matchExpressions"][0]["values"][
+            0
+        ] = self.discovered_apps_pvc_selector_value
+        drpc_yaml_data["spec"]["protectedNamespaces"][0] = self.workload_namespace
+        drpc_yaml_data["spec"]["kubeObjectProtection"][
+            "captureInterval"
+        ] = self.kubeobject_capture_interval
+        drpc_yaml_data["spec"]["kubeObjectProtection"]["kubeObjectSelector"][
+            "matchExpressions"
+        ][0]["key"] = self.discovered_apps_pod_selector_key
+        drpc_yaml_data["spec"]["kubeObjectProtection"]["kubeObjectSelector"][
+            "matchExpressions"
+        ][0]["operator"] = "In"
+        drpc_yaml_data["spec"]["kubeObjectProtection"]["kubeObjectSelector"][
+            "matchExpressions"
+        ][0]["values"][0] = self.discovered_apps_pod_selector_value
+        drcp_data_yaml = tempfile.NamedTemporaryFile(
+            mode="w+", prefix="drpc", delete=False
+        )
+        templating.dump_data_to_temp_yaml(drpc_yaml_data, drcp_data_yaml.name)
+        log.info("Creating DRPC")
+        run_cmd(f"oc create -f {drcp_data_yaml.name}")
+
+    def verify_workload_deployment(self):
+        """
+        Verify cnv workload deployment
+
+        """
+        config.switch_to_cluster_by_name(self.preferred_primary_cluster)
+        dr_helpers.wait_for_all_resources_creation(
+            self.workload_pvc_count,
+            self.workload_pod_count,
+            self.workload_namespace,
+            discovered_apps=True,
+        )
+        dr_helpers.wait_for_cnv_workload(
+            vm_name=self.vm_name,
+            namespace=self.workload_namespace,
+            phase=constants.STATUS_RUNNING,
+        )
+
+    def check_pod_pvc_status(self, skip_replication_resources=False):
+        """
+        Check for Pod and PVC status
+
+        Args:
+            skip_replication_resources (bool): Skip Volumereplication check
+
+        """
+        config.switch_to_cluster_by_name(self.preferred_primary_cluster)
+        dr_helpers.wait_for_all_resources_creation(
+            self.workload_pvc_count,
+            self.workload_pod_count,
+            self.workload_namespace,
+            skip_replication_resources=skip_replication_resources,
+        )
+
+
