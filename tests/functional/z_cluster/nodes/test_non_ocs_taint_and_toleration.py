@@ -17,7 +17,11 @@ from ocs_ci.framework.testlib import (
     skipif_hci_provider_and_client,
 )
 from ocs_ci.framework import config
-from ocs_ci.ocs.exceptions import CommandFailed, ResourceWrongStatusException
+from ocs_ci.ocs.exceptions import (
+    CommandFailed,
+    ResourceWrongStatusException,
+    TolerationNotFoundException,
+)
 from ocs_ci.ocs.resources.pod import (
     get_all_pods,
     wait_for_pods_to_be_running,
@@ -96,13 +100,16 @@ class TestNonOCSTaintAndTolerations(E2ETest):
 
             logger.info("Remove tolerations to the subscription")
             sub_list = ocp.get_all_resource_names_of_a_kind(kind=constants.SUBSCRIPTION)
-            params = '[{"op": "remove", "path": "/spec/config"},]'
+
             sub_obj = ocp.OCP(
                 namespace=config.ENV_DATA["cluster_namespace"],
                 kind=constants.SUBSCRIPTION,
             )
             for sub in sub_list:
-                sub_obj.patch(resource_name=sub, params=params, format_type="json")
+                subscription_data = sub_obj.get(resource_name=sub)
+                if "config" in subscription_data.get("spec", {}):
+                    params = '[{"op": "remove", "path": "/spec/config"}]'
+                    sub_obj.patch(resource_name=sub, params=params, format_type="json")
             time.sleep(180)
             assert wait_for_pods_to_be_running(
                 timeout=900, sleep=15
@@ -113,9 +120,9 @@ class TestNonOCSTaintAndTolerations(E2ETest):
     def test_non_ocs_taint_and_tolerations(self, nodes):
         """
         Test runs the following steps
-        1. Taint ocs nodes with non-ocs taint
+        1. Taint odf nodes with non-ocs taint
         2. Set tolerations on storagecluster, subscription, configmap and ocsinit
-        3. chek tolerations on all subscription yaml.
+        3. check tolerations on all subscription yaml.
         4. Check toleration on all odf pods.
         5. Add Capacity.
         6. Reboot one of the nodes and check toleration on all odf pods on that node.
@@ -304,10 +311,10 @@ class TestNonOCSTaintAndTolerations(E2ETest):
         node = get_nodes("worker", num_of_nodes=1)
 
         # Reboot one of the nodes
-        nodes.restart_nodes(node, wait=False)
+        nodes.restart_nodes(node)
 
         # Wait some time after rebooting master
-        waiting_time = 60
+        waiting_time = 320
         logger.info(f"Waiting {waiting_time} seconds...")
         time.sleep(waiting_time)
 
@@ -340,3 +347,96 @@ class TestNonOCSTaintAndTolerations(E2ETest):
         retry(CommandFailed, tries=5, delay=10,)(
             check_toleration_on_pods
         )(toleration_key="xyz")
+
+    def test_negative_custom_taint(self, nodes):
+        """
+        Test runs the following steps
+        1. Taint odf nodes with non-ocs taint
+        2. Set toleration in storagecluster yaml.
+        3. Set toleration in wrong subscription yaml.
+        4. Check that toleration is not applied on all subscriptions and pods.
+        5. Check that all pods are not in running state.
+
+        """
+
+        logger.info("Taint all nodes with custom taint")
+        ocs_nodes = get_worker_nodes()
+        taint_nodes(nodes=ocs_nodes, taint_label="xyz=true:NoSchedule")
+
+        resource_name = constants.DEFAULT_CLUSTERNAME
+        if config.DEPLOYMENT["external_mode"]:
+            resource_name = constants.DEFAULT_CLUSTERNAME_EXTERNAL_MODE
+
+        logger.info("Add tolerations to storagecluster")
+        storagecluster_obj = ocp.OCP(
+            resource_name=resource_name,
+            namespace=config.ENV_DATA["cluster_namespace"],
+            kind=constants.STORAGECLUSTER,
+        )
+
+        tolerations = (
+            '{"tolerations": [{"effect": "NoSchedule", "key": "xyz",'
+            '"operator": "Equal", "value": "true"}, '
+            '{"effect": "NoSchedule", "key": "node.ocs.openshift.io/storage", '
+            '"operator": "Equal", "value": "true"}]}'
+        )
+        if config.ENV_DATA["mcg_only_deployment"]:
+            param = f'{{"spec": {{"placement":{{"noobaa-standalone":{tolerations}}}}}}}'
+        elif config.DEPLOYMENT["external_mode"]:
+            param = (
+                f'{{"spec": {{"placement": {{"all": {tolerations}, '
+                f'"noobaa-core": {tolerations}}}}}}}'
+            )
+        else:
+            param = (
+                f'"all": {tolerations}, "csi-plugin": {tolerations}, "csi-provisioner": {tolerations}, '
+                f'"mds": {tolerations}, "metrics-exporter": {tolerations}, "noobaa-core": {tolerations}, '
+                f'"rgw": {tolerations}, "toolbox": {tolerations}'
+            )
+            param = f'{{"spec": {{"placement": {{{param}}}}}}}'
+
+        storagecluster_obj.patch(params=param, format_type="merge")
+        logger.info(f"Successfully added toleration to {storagecluster_obj.kind}")
+
+        logger.info("Add tolerations to the subscription")
+        sub_list = ocp.get_all_resource_names_of_a_kind(kind=constants.SUBSCRIPTION)
+        param = (
+            '{"spec": {"config":  {"tolerations": '
+            '[{"effect": "NoSchedule", "key": "xyz", "operator": "Equal", '
+            '"value": "true"}]}}}'
+        )
+        # Select one subscription other than odf subscription
+        selected_sub = None
+        for sub in sub_list:
+            if sub != constants.ODF_SUBSCRIPTION:
+                selected_sub = sub
+                break
+        if selected_sub:
+            sub_obj = ocp.OCP(
+                resource_name=selected_sub,
+                namespace=config.ENV_DATA["cluster_namespace"],
+                kind=constants.SUBSCRIPTION,
+            )
+            sub_obj.patch(params=param, format_type="merge")
+            logger.info(f"Successfully added toleration to {selected_sub}")
+
+        logger.info("Check custom toleration on all subscriptions")
+        try:
+            check_toleration_on_subscriptions(toleration_key="xyz")
+            raise AssertionError("Toleration was found, but it should not exist.")
+        except TolerationNotFoundException:
+            pass
+        time.sleep(600)
+
+        assert not wait_for_pods_to_be_running(
+            timeout=120, sleep=15
+        ), "Pods are running when they should not be."
+
+        logger.info(
+            "Check custom toleration on all newly created pods under openshift-storage"
+        )
+        try:
+            check_toleration_on_pods(toleration_key="xyz")
+            raise AssertionError("Toleration was found, but it should not exist.")
+        except TolerationNotFoundException:
+            pass
