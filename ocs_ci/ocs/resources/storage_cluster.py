@@ -584,7 +584,7 @@ def ocs_install_verification(
                     assert (
                         defaults.ceph_user_caps == user_caps
                     ), f"Mismatch found! Expected {defaults.ceph_user_caps}, but got {user_caps}"
-                    log.debug("ceph user caps {user_caps} are verified")
+                    log.debug(f"ceph user {ceph_user} caps {user_caps} are verified")
             assert (
                 is_ceph_user_exists
             ), f"{ceph_user} is not created even we ran external script with --run-as-user option"
