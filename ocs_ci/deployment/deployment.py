@@ -541,10 +541,7 @@ class Deployment(object):
         """
         Install IBM Fusion operator
         """
-        if (
-            config.DEPLOYMENT.get("fusion_deployment")
-            and not config.ENV_DATA["skip_ocs_deployment"]
-        ):
+        if config.DEPLOYMENT.get("fusion_deployment"):
             # create catalog source
             create_fusion_catalog_source()
 
@@ -571,15 +568,6 @@ class Deployment(object):
             csv_name = package_manifest.get_current_csv()
             csv = CSV(resource_name=csv_name, namespace=fusion_namespace)
             csv.wait_for_phase("Succeeded", timeout=300)
-
-            # delete catalog source of IBM
-            run_cmd(
-                f"oc delete catalogsource {defaults.FUSION_CATALOG_NAME} -n {constants.MARKETPLACE_NAMESPACE}"
-            )
-            logger.info(
-                f"Sleeping for 30 seconds after deleting catalogsource {defaults.FUSION_CATALOG_NAME}"
-            )
-            time.sleep(30)
 
     def do_deploy_odf_provider_mode(self):
         """
