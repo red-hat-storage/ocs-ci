@@ -5209,3 +5209,41 @@ def configure_cephcluster_params_in_storagecluster_cr(params, default_values=Fal
             f' "value": {parameter_value}}}]'
         )
         storagecluster_obj.patch(params=param, format_type="json")
+
+
+def get_cephfs_sc_name():
+    """
+    Get the cephfs storage class name.
+
+    Returns:
+        str: The cephfs storage class name.
+
+    Raises:
+        ValueError: If the cephfs storage class name hasn't been found.
+    """
+    sc_names = get_all_storageclass_names()
+    cephfs_sc_names = [name for name in sc_names if constants.CEPHFS_INTERFACE in name]
+    if not cephfs_sc_names:
+        raise ValueError(
+            "Didn't find the cephfs storageclass in the storageclass names"
+        )
+    else:
+        return cephfs_sc_names[0]
+
+
+def get_rbd_sc_name():
+    """
+    Get the rbd storage class name.
+
+    Returns:
+        str: The rbd storage class name.
+
+    Raises:
+        ValueError: If the rbd storage class name hasn't been found.
+    """
+    sc_names = get_all_storageclass_names()
+    rbd_sc_names = [name for name in sc_names if constants.RBD_INTERFACE in name]
+    if not rbd_sc_names:
+        raise ValueError("Didn't find the rbd storageclass in the storageclass names")
+    else:
+        return rbd_sc_names[0]
