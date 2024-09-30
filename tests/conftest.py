@@ -7823,7 +7823,7 @@ def scale_noobaa_resources(request):
     def factory(min_ep_count=3, max_ep_count=3, cpu=6, memory="10Gi"):
         storagecluster_obj = OCP(
             kind=constants.STORAGECLUSTER,
-            resource_name=constants.DEFAULT_STORAGE_CLUSTER,
+            resource_name=ocsci_config.ENV_DATA["storage_cluster_name"],
             namespace=constants.OPENSHIFT_STORAGE_NAMESPACE,
         )
 

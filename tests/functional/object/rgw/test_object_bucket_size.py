@@ -90,7 +90,7 @@ def test_object_bucket_size(mcg_obj, bucket_factory, rgw_deployments):
         kind="CephCluster",
         resource_name=f"{constants.DEFAULT_CLUSTERNAME_EXTERNAL_MODE}-cephcluster"
         if config.DEPLOYMENT["external_mode"]
-        else f"{constants.DEFAULT_CLUSTERNAME}-cephcluster",
+        else f"{config.ENV_DATA['storage_cluster_name']}-cephcluster",
     )
     bucket_name = bucket_factory(amount=1, interface="S3")[0].name
     assert not compare_sizes(

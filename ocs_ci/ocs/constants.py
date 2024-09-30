@@ -450,6 +450,11 @@ DEFAULT_STORAGECLASS_RGW = f"{DEFAULT_CLUSTERNAME}-ceph-rgw"
 DEFAULT_STORAGECLASS_RBD_THICK = f"{DEFAULT_CLUSTERNAME}-ceph-rbd-thick"
 DEFAULT_OCS_STORAGECLASS = "default-ocs-storage-class"
 
+SUFFIX_STORAGECLASS_CEPHFS = "-cephfs"
+SUFFIX_STORAGECLASS_RBD = "-ceph-rbd"
+SUFFIX_STORAGECLASS_RGW = "-ceph-rgw"
+SUFFIX_STORAGECLASS_RBD_THICK = "-ceph-rbd-thick"
+
 THIN_CSI_STORAGECLASS = "thin-csi"
 
 # Independent mode default StorageClasses

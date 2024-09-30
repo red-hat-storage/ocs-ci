@@ -56,7 +56,7 @@ class TestOverProvisionLevelPolicyControl(ManageTest):
         def finalizer():
             log.info("Delete overprovisionControl from storage cluster yaml file")
             storagecluster_obj = OCP(
-                resource_name=constants.DEFAULT_CLUSTERNAME,
+                resource_name=config.ENV_DATA["storage_cluster_name"],
                 namespace=config.ENV_DATA["cluster_namespace"],
                 kind=constants.STORAGECLUSTER,
             )
@@ -134,7 +134,7 @@ class TestOverProvisionLevelPolicyControl(ManageTest):
 
         log.info("Add 'overprovisionControl' section to storagecluster yaml file")
         storagecluster_obj = OCP(
-            resource_name=constants.DEFAULT_CLUSTERNAME,
+            resource_name=config.ENV_DATA["storage_cluster_name"],
             namespace=config.ENV_DATA["cluster_namespace"],
             kind=constants.STORAGECLUSTER,
         )

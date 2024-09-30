@@ -682,7 +682,8 @@ def default_storage_class(
                     if sc_data["provisioner"] == constants.RBD_PROVISIONER
                 ][0]
             else:
-                resource_name = constants.DEFAULT_STORAGECLASS_RBD
+                resource_name = f"{config.ENV_DATA['storage_cluster_name']}{constants.SUFFIX_STORAGECLASS_RBD}"
+
     elif interface_type == constants.CEPHFILESYSTEM:
         if custom_storage_class:
             try:
@@ -703,7 +704,8 @@ def default_storage_class(
                     if sc_data["provisioner"] == constants.CEPHFS_PROVISIONER
                 ][0]
             else:
-                resource_name = constants.DEFAULT_STORAGECLASS_CEPHFS
+                resource_name = f"{config.ENV_DATA['storage_cluster_name']}{constants.SUFFIX_STORAGECLASS_CEPHFS}"
+
     base_sc = OCP(kind="storageclass", resource_name=resource_name)
     base_sc.wait_for_resource(
         condition=resource_name,
@@ -5196,7 +5198,7 @@ def configure_cephcluster_params_in_storagecluster_cr(params, default_values=Fal
     storagecluster_obj = ocp.OCP(
         kind=constants.STORAGECLUSTER,
         namespace=config.ENV_DATA["cluster_namespace"],
-        resource_name=constants.DEFAULT_CLUSTERNAME,
+        resource_name=config.ENV_DATA["storage_cluster_name"],
     )
     for parameter in params:
         sc_key = parameter["sc_key"]

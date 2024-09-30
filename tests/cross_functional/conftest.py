@@ -60,7 +60,7 @@ logger = logging.getLogger(__name__)
 def restore_mcg_reconcilation(ocs_storagecluster_obj):
     params = '{"spec": {"multiCloudGateway": {"reconcileStrategy": "manage"}}}'
     ocs_storagecluster_obj.patch(
-        resource_name=constants.DEFAULT_CLUSTERNAME,
+        resource_name=config.ENV_DATA["storage_cluster_name"],
         params=params,
         format_type="merge",
     )
@@ -196,7 +196,7 @@ def noobaa_db_backup_and_recovery_locally(
         # Stop MCG reconcilation
         params = '{"spec": {"multiCloudGateway": {"reconcileStrategy": "ignore"}}}'
         ocs_storagecluster_obj.patch(
-            resource_name=constants.DEFAULT_CLUSTERNAME,
+            resource_name=config.ENV_DATA["storage_cluster_name"],
             params=params,
             format_type="merge",
         )
@@ -294,9 +294,9 @@ def noobaa_db_backup_and_recovery_locally(
 
         # restore MCG reconcilation if not restored already
         if (
-            ocs_storagecluster_obj.get(resource_name=constants.DEFAULT_CLUSTERNAME)[
-                "spec"
-            ]["multiCloudGateway"]["reconcileStrategy"]
+            ocs_storagecluster_obj.get(
+                resource_name=config.ENV_DATA["storage_cluster_name"]
+            )["spec"]["multiCloudGateway"]["reconcileStrategy"]
             != "manage"
         ):
             restore_mcg_reconcilation(ocs_storagecluster_obj)

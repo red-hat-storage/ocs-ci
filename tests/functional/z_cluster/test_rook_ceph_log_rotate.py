@@ -44,7 +44,7 @@ class TestRookCephLogRotate(ManageTest):
         def finalizer():
             log.info("Delete logCollector from storage cluster yaml file")
             storagecluster_obj = OCP(
-                resource_name=constants.DEFAULT_CLUSTERNAME,
+                resource_name=config.ENV_DATA["storage_cluster_name"],
                 namespace=config.ENV_DATA["cluster_namespace"],
                 kind=constants.STORAGECLUSTER,
             )
@@ -158,7 +158,7 @@ class TestRookCephLogRotate(ManageTest):
                 len(re.findall(expected_string, output_cmd))
             )
         storagecluster_obj = OCP(
-            resource_name=constants.DEFAULT_CLUSTERNAME,
+            resource_name=config.ENV_DATA["storage_cluster_name"],
             namespace=config.ENV_DATA["cluster_namespace"],
             kind=constants.STORAGECLUSTER,
         )

@@ -414,7 +414,7 @@ def get_deviceset_pvcs():
     """
     storage_cluster_obj = OCP(
         kind=constants.STORAGECLUSTER,
-        resource_name=constants.DEFAULT_CLUSTERNAME,
+        resource_name=config.ENV_DATA["storage_cluster_name"],
         namespace=config.ENV_DATA["cluster_namespace"],
     )
     ocs_pvc_obj = get_all_pvc_objs(namespace=config.ENV_DATA["cluster_namespace"])

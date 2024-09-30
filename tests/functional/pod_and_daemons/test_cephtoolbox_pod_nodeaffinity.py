@@ -37,7 +37,7 @@ class TestCephtoolboxPod:
             """
             if check_taint_on_nodes():
                 untaint_nodes()
-            resource_name = constants.DEFAULT_CLUSTERNAME
+            resource_name = config.ENV_DATA["storage_cluster_name"]
             if config.DEPLOYMENT["external_mode"]:
                 resource_name = constants.DEFAULT_CLUSTERNAME_EXTERNAL_MODE
             storagecluster_obj = ocp.OCP(
