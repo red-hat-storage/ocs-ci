@@ -115,7 +115,6 @@ class TestKeyRotationWithClusterFull(E2ETest):
         verify_new_key_after_rotation(tries, delays)
 
         # TODO: Custom taints PR 9808 not yet merged. Will include that part once the merge completes.
-
         run_fio_obj = Run_fio_till_cluster_full()
         run_fio_obj.run_cluster_full_fio(
             teardown_project_factory, pvc_factory, pod_factory
@@ -141,6 +140,7 @@ class TestKeyRotationWithClusterFull(E2ETest):
         run_fio_obj.cleanup()
 
         log.info("Triggering noobaa rebuild test")
+
         validate_noobaa_rebuild_system(self, bucket_factory_session, mcg_obj_session)
         log.info("After noobaa rebuild, checking the key rotation time is unchanged")
         verify_key_rotation_time(schedule=schedule)
