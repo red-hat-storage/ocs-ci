@@ -6,7 +6,7 @@ dbglog() {
     # Allow the input to be piped
     declare msg=${1:-$(</dev/stdin)}
 
-    echo -e "${msg}" | tee -a "${BASE_COLLECTION_PATH}"/gather-debug.log
+    echo -e "${msg}" | tee -a "${BASE_COLLECTION_PATH}"/ceph/gather-debug.log
 }
 
 
@@ -22,7 +22,7 @@ TOOL_POD_NAME=$(oc get pods --no-headers -n ${ns} -l app='rook-ceph-tools' | awk
 if [ -z "$TOOL_POD_NAME" ]; then
     dbglog "No tool pod found"
     echo "No tool pod found"
-    exit -1
+    exit 2
 fi
 
 
