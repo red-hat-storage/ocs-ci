@@ -86,6 +86,13 @@ But an example is pasted also here:
 ENV_DATA:
   vpc_id: VPC ID PLACEHOLDER
   subnet_id: SUBNET ID PLACEHOLDER
+  # Subnet id from dict below will be used if user defines worker_availability_zones
+  # This is for multi zone deployment support. So If you have worker_availability_zones and
+  # subnet_ids_per_zone defined in credential conf it will be used instead of subnet_id.
+  subnet_ids_per_zone:
+    "eu-de-1": "PLACEHOLDER_SUBNET_ID"
+    "eu-de-2": "PLACEHOLDER_SUBNET_ID"
+    "eu-de-3": "PLACEHOLDER_SUBNET_ID"
   cos_instance: COS INSTANCE PLACEHOLDER
 AUTH:
   ibmcloud:

@@ -116,6 +116,7 @@ from ocs_ci.ocs.utils import (
 from ocs_ci.utility.deployment import (
     create_external_secret,
     get_and_apply_icsp_from_catalog,
+    workaround_mark_disks_as_ssd,
 )
 from ocs_ci.utility.flexy import load_cluster_info
 from ocs_ci.utility import (
@@ -632,6 +633,9 @@ class Deployment(object):
         """
         self.do_deploy_ocp(log_cli_level)
 
+        if config.ENV_DATA.get("workaround_mark_disks_as_ssd"):
+            workaround_mark_disks_as_ssd()
+
         # TODO: use temporary directory for all temporary files of
         # ocs-deployment, not just here in this particular case
         tmp_path = Path(tempfile.mkdtemp(prefix="ocs-ci-deployment-"))
@@ -759,7 +763,12 @@ class Deployment(object):
             ibmcloud.label_nodes_region()
         # configure Ingress Node Firewall and restrict SSH access to nodes
         if config.ENV_DATA.get("restrict_ssh_access_to_nodes", False):
-            restrict_ssh_access_to_nodes()
+            try:
+                restrict_ssh_access_to_nodes()
+            except Exception as err:
+                logger.warning(
+                    f"Ingress Node Firewall deployment and SSH access to nodes restriction failed: {err}"
+                )
 
     def label_and_taint_nodes(self):
         """
@@ -1541,13 +1550,9 @@ class Deployment(object):
         performance_profile = config.ENV_DATA.get("performance_profile")
         if performance_profile:
             cluster_data["spec"]["resourceProfile"] = performance_profile
-        # Bluestore-rdr for RDR greenfield deployments: 4.14 onwards until 4.16
+        # Bluestore-rdr for RDR greenfield deployments: 4.14 onwards
         if (
-            (
-                version.VERSION_4_14
-                <= version.get_semantic_ocs_version_from_config()
-                <= version.VERSION_4_16
-            )
+            (version.get_semantic_ocs_version_from_config() >= version.VERSION_4_14)
             and config.multicluster
             and (config.MULTICLUSTER.get("multicluster_mode") == "regional-dr")
             and config.ENV_DATA.get("rdr_osd_deployment_mode")
@@ -1592,11 +1597,27 @@ class Deployment(object):
         ceph_threshold_near_full_ratio = config.ENV_DATA.get(
             "ceph_threshold_near_full_ratio"
         )
+
+        osd_maintenance_timeout = config.ENV_DATA.get("osd_maintenance_timeout")
+
+        # For testing: https://issues.redhat.com/browse/RHSTOR-5758
+        skip_upgrade_checks = config.ENV_DATA.get("skip_upgrade_checks")
+        continue_upgrade_after_checks_even_if_not_healthy = config.ENV_DATA.get(
+            "continue_upgrade_after_checks_even_if_not_healthy"
+        )
+        upgrade_osd_requires_healthy_pgs = config.ENV_DATA.get(
+            "upgrade_osd_requires_healthy_pgs"
+        )
+
         set_managed_resources_ceph_cluster = (
             wait_timeout_for_healthy_osd_in_minutes
             or ceph_threshold_backfill_full_ratio
             or ceph_threshold_full_ratio
             or ceph_threshold_near_full_ratio
+            or osd_maintenance_timeout
+            or skip_upgrade_checks is not None
+            or continue_upgrade_after_checks_even_if_not_healthy is not None
+            or upgrade_osd_requires_healthy_pgs is not None
         )
         if set_managed_resources_ceph_cluster:
             cluster_data.setdefault("spec", {}).setdefault(
@@ -1619,6 +1640,26 @@ class Deployment(object):
                 managed_resources_ceph_cluster[
                     "nearFullRatio"
                 ] = ceph_threshold_near_full_ratio
+
+            if osd_maintenance_timeout:
+                managed_resources_ceph_cluster[
+                    "osdMaintenanceTimeout"
+                ] = osd_maintenance_timeout
+
+            if skip_upgrade_checks is not None:
+                managed_resources_ceph_cluster[
+                    "skipUpgradeChecks"
+                ] = skip_upgrade_checks
+
+            if continue_upgrade_after_checks_even_if_not_healthy is not None:
+                managed_resources_ceph_cluster[
+                    "continueUpgradeAfterChecksEvenIfNotHealthy"
+                ] = continue_upgrade_after_checks_even_if_not_healthy
+
+            if upgrade_osd_requires_healthy_pgs is not None:
+                managed_resources_ceph_cluster[
+                    "upgradeOSDRequiresHealthyPGs"
+                ] = upgrade_osd_requires_healthy_pgs
 
         cluster_data_yaml = tempfile.NamedTemporaryFile(
             mode="w+", prefix="cluster_storage", delete=False
@@ -1851,6 +1892,23 @@ class Deployment(object):
         cephcluster = CephClusterExternal()
         cephcluster.cluster_health_check(timeout=300)
 
+    def odf_deployments_check(self):
+        """
+        Check on existance of deployments inspired by upstream check:
+        https://github.com/red-hat-storage/odf-operator/blob/main/hack/install-odf.sh#L34-L44
+        """
+        deployments = constants.OCS_DEPLOYMENTS_4_17
+        ocs_version = version.get_semantic_ocs_version_from_config()
+        if ocs_version == version.VERSION_4_16:
+            deployments = constants.OCS_DEPLOYMENTS_4_16
+        if ocs_version < version.VERSION_4_16:
+            deployments = constants.OCS_DEPLOYMENTS
+        deployments_string = " ".join(deployments)
+        exec_cmd(
+            f"oc wait --timeout=5m --for condition=Available -n {self.namespace} "
+            f"deployment {deployments_string}"
+        )
+
     def deploy_ocs(self):
         """
         Handle OCS deployment, since OCS deployment steps are common to any
@@ -1951,6 +2009,7 @@ class Deployment(object):
                         namespace=constants.OPENSHIFT_STORAGE_EXTENDED_NAMESPACE,
                     )
                 )
+        self.odf_deployments_check()
 
         wait_timeout_for_healthy_osd_in_minutes = config.ENV_DATA.get(
             "wait_timeout_for_healthy_osd_in_minutes"
@@ -2005,13 +2064,9 @@ class Deployment(object):
                     update_ntp_compute_nodes()
                 assert ceph_health_check(namespace=self.namespace, tries=60, delay=10)
 
-        # In case of RDR, check for bluestore-rdr on osds: 4.14 onwards until 4.16
+        # In case of RDR, check for bluestore-rdr on osds: 4.14 onwards
         if (
-            (
-                version.VERSION_4_14
-                <= version.get_semantic_ocs_version_from_config()
-                <= version.VERSION_4_16
-            )
+            (version.get_semantic_ocs_version_from_config() >= version.VERSION_4_14)
             and config.multicluster
             and (config.MULTICLUSTER.get("multicluster_mode") == "regional-dr")
             and config.ENV_DATA.get("rdr_osd_deployment_mode")
@@ -3686,10 +3741,9 @@ class MDRMultiClusterDROperatorsDeploy(MultiClusterDROperatorsDeploy):
             config.switch_ctx(index)
             logger.info("Creating Resource DataProtectionApplication")
             run_cmd(f"oc create -f {constants.DPA_DISCOVERED_APPS_PATH}")
-        config.switch_ctx(old_ctx)
         # Only on the active hub enable managedserviceaccount-preview
+        config.switch_acm_ctx()
         acm_version = get_acm_version()
-
         logger.info("Getting S3 Secret name from Ramen Config")
         secret_names = self.meta_obj.get_s3_secret_names()
         for secret_name in secret_names:
@@ -3703,6 +3757,7 @@ class MDRMultiClusterDROperatorsDeploy(MultiClusterDROperatorsDeploy):
             logger.info("Skipping Enabling Managed ServiceAccount")
         else:
             self.enable_managed_serviceaccount()
+        config.switch_ctx(old_ctx)
 
     def deploy_multicluster_orchestrator(self):
         super().deploy()

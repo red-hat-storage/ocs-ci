@@ -16,7 +16,7 @@ class TestVmOperations(E2ETest):
     Tests for VM operations
     """
 
-    def test_vm_lifecycle_and_io(self, cnv_workload):
+    def test_vm_lifecycle_and_io(self, cnv_workload, setup_cnv):
         """
         This test performs the VM lifecycle operations and IO
 
