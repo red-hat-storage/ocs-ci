@@ -307,15 +307,13 @@ class TestNonOCSTaintAndTolerations(E2ETest):
             ), "New OSDs failed to reach running state"
             check_ceph_health_after_add_capacity(ceph_rebalance_timeout=2500)
 
-        # Get the node list
-        node = get_nodes("worker", num_of_nodes=1)
-
         # Reboot one of the nodes
+        node = get_nodes("worker", num_of_nodes=1)
         nodes.restart_nodes(node)
 
         # Wait some time after rebooting master
         waiting_time = 320
-        logger.info(f"Waiting {waiting_time} seconds...")
+        logger.info(f"Waiting {waiting_time} seconds.")
         time.sleep(waiting_time)
 
         # Validate all nodes and services are in READY state and up
@@ -331,8 +329,8 @@ class TestNonOCSTaintAndTolerations(E2ETest):
         )(wait_for_nodes_status(timeout=1800))
 
         # Check cluster is health ok and check toleration on pods
-        self.sanity_helpers.health_check(tries=60)
         assert wait_for_pods_to_be_running(timeout=900, sleep=15)
+        self.sanity_helpers.health_check(tries=120)
         retry(CommandFailed, tries=5, delay=10,)(
             check_toleration_on_pods
         )(toleration_key="xyz")
@@ -426,7 +424,13 @@ class TestNonOCSTaintAndTolerations(E2ETest):
             raise AssertionError("Toleration was found, but it should not exist.")
         except TolerationNotFoundException:
             pass
-        time.sleep(600)
+        time.sleep(300)
+        pod_list = get_all_pods(
+            namespace=config.ENV_DATA["cluster_namespace"],
+            exclude_selector=True,
+        )
+        for pod in pod_list:
+            pod.delete(wait=False)
 
         assert not wait_for_pods_to_be_running(
             timeout=120, sleep=15
