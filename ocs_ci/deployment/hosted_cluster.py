@@ -14,7 +14,6 @@ from ocs_ci.deployment.helpers.hypershift_base import (
 from ocs_ci.deployment.metallb import MetalLBInstaller
 from ocs_ci.framework import config
 from ocs_ci.helpers import helpers
-from ocs_ci.helpers.helpers import get_node_plugin_label
 from ocs_ci.ocs import constants, ocp
 from ocs_ci.ocs.constants import HCI_PROVIDER_CLIENT_PLATFORMS
 from ocs_ci.ocs.exceptions import (
@@ -1385,7 +1384,7 @@ class HostedODF(HypershiftHostedOCP):
         )
         return ocp.check_resource_existence(
             timeout=self.timeout_check_resources_exist_sec,
-            selector=get_node_plugin_label(constants.CEPHFILESYSTEM),
+            selector=helpers.get_node_plugin_label(constants.CEPHFILESYSTEM),
             should_exist=True,
         )
 
