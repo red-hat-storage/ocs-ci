@@ -26,7 +26,7 @@ from ocs_ci.utility.managedservice import (
     generate_onboarding_token,
     get_storage_provider_endpoint,
 )
-from ocs_ci.utility.utils import exec_cmd
+from ocs_ci.utility.utils import exec_cmd, TimeoutSampler
 
 logger = logging.getLogger(name=__file__)
 rosa = config.AUTH.get("rosa", {})
@@ -70,8 +70,7 @@ def create_cluster(cluster_name, version, region):
     create_account_roles()
     oidc_config_id = None
     if rosa_hcp:
-        create_oidc_config()
-        oidc_config_id = get_latest_oidc_config_id()
+        oidc_config_id = create_oidc_config()
 
     compute_nodes = config.ENV_DATA["worker_replicas"]
     compute_machine_type = config.ENV_DATA["worker_instance_type"]
@@ -414,8 +413,59 @@ def create_oidc_provider(cluster):
 
 
 def create_oidc_config():
+    """
+    Create OIDC config and wait for it to appear in the list
+    ! In a very extreme case, other OIDC config can be created in the same time failing TimeoutSampler and
+    raising TimeoutExpiredError exception
+
+    Returns:
+        str: OIDC config id
+
+    Raises:
+        TimeoutExpiredError: If OIDC config is not created in time
+    """
     cmd = "rosa create oidc-config --mode=auto --yes"
-    utils.run_cmd(cmd, timeout=1200)
+    proc = utils.exec_cmd(cmd, timeout=1200)
+    if proc.returncode != 0:
+        raise CommandFailed(f"Failed to create oidc config: {proc.stderr}")
+
+    for sample in TimeoutSampler(
+        timeout=300,
+        sleep=10,
+        func=get_oidc_config_ids,
+        latest=True,
+    ):
+        if sample[0] in proc.stdout:
+            logger.info("OIDC config created successfully")
+            return sample
+
+
+def delete_oidc_config(oidc_config_id):
+    """
+    Delete OIDC config
+
+    Args:
+        oidc_config_id (str): OIDC config id
+
+    """
+    # check if requested oidc config persisted
+    if oidc_config_id not in get_oidc_config_ids():
+        logger.warning(
+            f"OIDC config {oidc_config_id} is not found in the list of available configs"
+        )
+        return
+
+    cmd = f"rosa delete oidc-config {oidc_config_id} --mode auto --yes"
+    utils.exec_cmd(cmd, timeout=1200)
+    for sample in TimeoutSampler(
+        timeout=300,
+        sleep=10,
+        func=get_oidc_config_ids,
+        latest=False,
+    ):
+        if oidc_config_id not in sample:
+            logger.info("OIDC config deleted successfully")
+            return
 
 
 def get_latest_oidc_config_id():
@@ -425,6 +475,33 @@ def get_latest_oidc_config_id():
         raise CommandFailed(f"Failed to get latest oidc config id: {cmd_res.stderr}")
     logger.info(f"Latest OIDC config id: {cmd_res.stdout}")
     return cmd_res.stdout.strip()
+
+
+def get_oidc_config_ids(latest=False):
+    """
+    Get OIDC config ids. If latest is True, return only the latest OIDC config id.
+
+    Args:
+        latest (bool): If True, return only the latest OIDC config id
+
+    Returns:
+        list: List of OIDC config ids
+    """
+    if latest:
+        cmd = (
+            "rosa list oidc-config -o json | jq -r 'max_by(.creation_timestamp) | .id'"
+        )
+    else:
+        cmd = (
+            "rosa list oidc-config -o json | jq -r 'map(select(has(\"id\"))) | .[].id'"
+        )
+
+    cmd_res = exec_cmd(cmd, shell=True)
+    if cmd_res.returncode != 0:
+        raise CommandFailed(f"Failed to get OIDC config ids: {cmd_res.stderr}")
+
+    logger.info(f"OIDC config id(s), latest='{latest}': {cmd_res.stdout}")
+    return cmd_res.stdout.strip().splitlines()
 
 
 def download_rosa_cli():
