@@ -6277,10 +6277,9 @@ def get_provisioner_label(interface):
     Returns:
         str: Label of the pod
     """
-    from ocs_ci.ocs.cluster import is_hci_cluster
 
     if (
-        is_hci_cluster()
+        config.ENV_DATA["platform"].lower() in constants.HCI_PROVIDER_CLIENT_PLATFORMS
         and version.get_semantic_ocs_version_from_config() >= version.VERSION_4_17
     ):
         if interface == constants.CEPHFILESYSTEM:
@@ -6305,10 +6304,9 @@ def get_node_plugin_label(interface):
     Returns:
         str: Label of the pod
     """
-    from ocs_ci.ocs.cluster import is_hci_cluster
 
     if (
-        is_hci_cluster()
+        config.ENV_DATA["platform"].lower() in constants.HCI_PROVIDER_CLIENT_PLATFORMS
         and version.get_semantic_ocs_version_from_config() >= version.VERSION_4_17
     ):
         if interface == constants.CEPHFILESYSTEM:
