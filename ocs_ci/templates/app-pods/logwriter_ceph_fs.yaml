@@ -1,0 +1,32 @@
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: logwriter-cephfs
+  namespace: default
+  labels:
+    app: logwriter-cephfs
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: logwriter-cephfs
+  template:
+    metadata:
+      labels:
+        app: logwriter-cephfs
+    spec:
+      nodeSelector:
+        node-role.kubernetes.io/worker: ""
+      containers:
+      - name: logwriter
+        image: quay.io/ocsci/logwriter:latest
+        command: ['/opt/logwriter.py', '--fsync', '-d', '-p', '10', '.']
+        workingDir: /mnt/target
+        volumeMounts:
+        - mountPath: /mnt/target
+          name: logwriter-cephfs-volume
+      volumes:
+      - name: logwriter-cephfs-volume
+        persistentVolumeClaim:
+          claimName: logwriter-cephfs-once

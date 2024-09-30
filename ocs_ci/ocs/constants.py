@@ -805,6 +805,12 @@ IBM_BDI_SCC_WORKLOAD_YAML = os.path.join(TEMPLATE_BDI_DIR, "ibm_bdi_scc.yaml")
 
 TILLER_YAML = os.path.join(TEMPLATE_BDI_DIR, "temp_tiller.yaml")
 
+LOGWRITER_CEPH_FS_POD_YAML = os.path.join(
+    TEMPLATE_APP_POD_DIR, "logwriter_ceph_fs.yaml"
+)
+
+SIMPLE_APP_RBD_POD_YAML = os.path.join(TEMPLATE_APP_POD_DIR, "simple-app.yaml")
+
 IBM_BDI_CONFIGURE_WORKLOAD_YAML = os.path.join(
     TEMPLATE_BDI_DIR, "configure-workload.yaml"
 )
@@ -984,6 +990,10 @@ CNV_VM_STANDALONE_DV_YAML = os.path.join(TEMPLATE_CNV_VM_STANDALONE_PVC_DIR, "dv
 CNV_VM_STANDALONE_PVC_VM_YAML = os.path.join(
     TEMPLATE_CNV_VM_STANDALONE_PVC_DIR, "vm.yaml"
 )
+
+# NetworkFence Drivers
+NFCEPHFSDRIVER = "openshift-storage.cephfs.csi.ceph.com"
+NFRBDDRIVER = "openshift-storage.rbd.csi.ceph.com"
 
 METALLB = "metallb-operator"
 METALLB_CONTROLLER_MANAGER_PREFIX = "metallb-operator-controller-manager"
