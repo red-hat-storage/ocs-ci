@@ -27,9 +27,9 @@ from ocs_ci.ocs.bucket_utils import (
 )
 from ocs_ci.ocs.ocp import OCP
 from ocs_ci.ocs.resources import pod
-
 from ocs_ci.ocs.resources.mcg_params import NSFS
 from ocs_ci.ocs.resources.pod import get_mds_pods, wait_for_storage_pods
+from tests.conftest import revert_noobaa_endpoint_scc_class
 
 logger = logging.getLogger(__name__)
 
@@ -39,6 +39,7 @@ logger = logging.getLogger(__name__)
 @skipif_mcg_only
 @ignore_leftovers
 @skipif_ocs_version("<4.10")
+@pytest.mark.usefixtures(revert_noobaa_endpoint_scc_class.__name__)
 class TestNSFSSystem(MCGTest):
     """
     NSFS system test
@@ -186,7 +187,8 @@ class TestNSFSSystem(MCGTest):
             sync_object_directory(
                 podobj=awscli_pod_session,
                 src=f"s3://{nsfs_obj.bucket_name}",
-                target=nsfs_obj.mount_path + "/" + nsfs_obj.bucket_name,
+                # target=nsfs_obj.mount_path + "/" + nsfs_obj.bucket_name,
+                target=nsfs_obj.mounted_bucket_path,
                 signed_request_creds=nsfs_obj.s3_creds,
             )
             compare_directory(
@@ -203,7 +205,8 @@ class TestNSFSSystem(MCGTest):
             sync_object_directory(
                 podobj=awscli_pod_session,
                 src=f"s3://{nsfs_obj.bucket_name}",
-                target=nsfs_obj.mount_path + "/" + nsfs_obj.bucket_name,
+                # target=nsfs_obj.mount_path + "/" + nsfs_obj.bucket_name,
+                target=nsfs_obj.mounted_bucket_path,
                 signed_request_creds=nsfs_obj.s3_creds,
             )
             compare_directory(
@@ -231,7 +234,8 @@ class TestNSFSSystem(MCGTest):
             sync_object_directory(
                 podobj=awscli_pod_session,
                 src=f"s3://{nsfs_obj.bucket_name}",
-                target=nsfs_obj.mount_path + "/" + nsfs_obj.bucket_name,
+                # target=nsfs_obj.mount_path + "/" + nsfs_obj.bucket_name,
+                target=nsfs_obj.mounted_bucket_path,
                 signed_request_creds=nsfs_obj.s3_creds,
             )
             compare_directory(

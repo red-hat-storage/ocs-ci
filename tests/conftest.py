@@ -5914,6 +5914,7 @@ def nsfs_bucket_factory_fixture(
             uid=nsfs_obj.uid,
             ssl=False,
         )
+
         nsfs_s3_resource = boto3.resource(
             "s3",
             verify=False,
@@ -5928,6 +5929,7 @@ def nsfs_bucket_factory_fixture(
         # Create a new NSFS bucket
         # Follow this flow if the bucket should be created on top of an existing directory
         if nsfs_obj.mount_existing_dir:
+
             new_dir_name = helpers.create_unique_resource_name(
                 resource_description="nsfs-bucket", resource_type="dir"
             )
@@ -5961,9 +5963,11 @@ def nsfs_bucket_factory_fixture(
 
         # Otherwise, the new bucket will create a directory for itself
         else:
+
             nsfs_obj.bucket_name = retry(CommandFailed, tries=4, delay=10)(
                 bucket_factory
             )(s3resource=nsfs_s3_resource)[0].name
+
             nsfs_obj.mounted_bucket_path = (
                 f"{nsfs_obj.mount_path}/{nsfs_obj.bucket_name}"
             )
