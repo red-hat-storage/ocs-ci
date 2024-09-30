@@ -28,7 +28,6 @@ from ocs_ci.helpers.proxy import (
     get_cluster_proxies,
     update_container_with_proxy_env,
 )
-from ocs_ci.ocs.cluster import is_hci_cluster
 from ocs_ci.ocs.utils import mirror_image
 from ocs_ci.ocs import constants, defaults, node, ocp, exceptions
 from ocs_ci.ocs.exceptions import (
@@ -5260,6 +5259,8 @@ def get_provisioner_label(interface):
     Returns:
         str: Label of the pod
     """
+    from ocs_ci.ocs.cluster import is_hci_cluster
+
     if (
         is_hci_cluster()
         and version.get_semantic_ocs_version_from_config() >= version.VERSION_4_17
@@ -5286,6 +5287,8 @@ def get_node_plugin_label(interface):
     Returns:
         str: Label of the pod
     """
+    from ocs_ci.ocs.cluster import is_hci_cluster
+
     if (
         is_hci_cluster()
         and version.get_semantic_ocs_version_from_config() >= version.VERSION_4_17
