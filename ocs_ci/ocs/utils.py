@@ -1000,9 +1000,7 @@ def collect_ceph_external(path):
             config.ENV_DATA["cluster_path"], config.RUN["kubeconfig_location"]
         )
         current_dir = Path(__file__).parent.parent.parent
-        script_path = os.path.join(
-            current_dir, "Docker_files", "scripts", "mg_external.sh"
-        )
+        script_path = os.path.join(current_dir, "scripts", "bash", "mg_external.sh")
         run_cmd(
             f"sh {script_path} {os.path.join(path, 'ceph_external')} {kubeconfig_path}",
             timeout=100,
