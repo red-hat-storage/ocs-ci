@@ -40,7 +40,6 @@ from tempfile import NamedTemporaryFile, mkdtemp, TemporaryDirectory
 from jinja2 import FileSystemLoader, Environment
 from ocs_ci.framework import config
 from ocs_ci.framework import GlobalVariables as GV
-from ocs_ci.helpers.helpers import get_provisioner_label
 from ocs_ci.ocs import constants, defaults
 from ocs_ci.ocs.exceptions import (
     CephHealthException,
@@ -2194,6 +2193,7 @@ def get_csi_versions():
     csi_versions = {}
     # importing here to avoid circular imports
     from ocs_ci.ocs.ocp import OCP
+    from ocs_ci.helpers.helpers import get_provisioner_label
 
     for provisioner in [
         get_provisioner_label(constants.CEPHFILESYSTEM),
