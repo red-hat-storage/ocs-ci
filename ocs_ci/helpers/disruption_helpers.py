@@ -50,6 +50,7 @@ class Disruptions:
             # If the platform is Managed Services, then the ceph pods will be present in the provider cluster.
             # Consumer cluster will be the primary cluster context in a multicluster run. Setting 'cluster_kubeconfig'
             # attribute to use as the value of the parameter '--kubeconfig' in the 'oc' commands to get ceph pods.
+            log.info(f"Setting provider kubeconfig for the resource {self.resource}")
             provider_kubeconfig = os.path.join(
                 config.clusters[config.get_provider_index()].ENV_DATA["cluster_path"],
                 config.clusters[config.get_provider_index()].RUN.get(
