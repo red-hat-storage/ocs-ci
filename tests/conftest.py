@@ -5020,6 +5020,7 @@ def use_client_proxy(request):
         ocsci_config.DEPLOYMENT.get("proxy")
         or ocsci_config.DEPLOYMENT.get("disconnected")
         or ocsci_config.ENV_DATA.get("private_link")
+        or ocsci_config.DEPLOYMENT.get("ipv6")
     ) and ocsci_config.ENV_DATA.get("client_http_proxy"):
         log.info(
             f"Configuring client proxy: {ocsci_config.ENV_DATA['client_http_proxy']}"
