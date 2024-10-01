@@ -3851,7 +3851,7 @@ def get_ceph_csi_controller_manager(
     """
     namespace = namespace or config.ENV_DATA["cluster_namespace"]
     ceph_csi_controller_manager = get_pods_having_label(label, namespace)
-    return Pod(**ceph_csi_controller_manager[0])
+    return [Pod(**pod) for pod in ceph_csi_controller_manager]
 
 
 def get_ocs_client_operator_controller_manager(
@@ -3870,4 +3870,4 @@ def get_ocs_client_operator_controller_manager(
     """
     namespace = namespace or config.ENV_DATA["cluster_namespace"]
     ocs_client_operator_controller_manager = get_pods_having_label(label, namespace)
-    return Pod(**ocs_client_operator_controller_manager[0])
+    return [Pod(**pod) for pod in ocs_client_operator_controller_manager]
