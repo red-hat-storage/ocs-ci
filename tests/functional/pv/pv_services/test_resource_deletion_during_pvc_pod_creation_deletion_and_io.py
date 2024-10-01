@@ -373,6 +373,7 @@ class TestResourceDeletionDuringMultipleCreateDeleteOperations(ManageTest):
             }
 
         if is_hci_cluster():
+            del pod_functions["operator"]
             pod_functions["ceph_csi_controller_manager"] = partial(
                 get_ceph_csi_controller_manager
             )
