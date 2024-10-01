@@ -16,6 +16,8 @@ from ocs_ci.utility.workloadfixture import ignore_next_measurement_file
 from ocs_ci.framework.pytest_customization.marks import (
     skipif_managed_service,
     blue_squad,
+    yellow_squad,
+    provider_mode_acceptance,
     mcg,
 )
 
@@ -30,6 +32,8 @@ CPU_USAGE_POD = (
 )
 
 
+@yellow_squad
+@provider_mode_acceptance
 @mcg
 @blue_squad
 @tier1

@@ -638,6 +638,9 @@ ignore_owner = pytest.mark.ignore_owner
 # Marks to identify the cluster type in which the test case should run
 runs_on_provider = pytest.mark.runs_on_provider
 
+# Marks to identify the regression tests for provider-client cluster
+provider_mode_acceptance = pytest.mark.provider_mode_acceptance
+
 current_test_marks = []
 
 

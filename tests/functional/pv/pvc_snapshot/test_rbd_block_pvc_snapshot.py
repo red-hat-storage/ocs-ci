@@ -3,7 +3,11 @@ import pytest
 
 from ocs_ci.ocs import constants
 from ocs_ci.framework import config
-from ocs_ci.framework.pytest_customization.marks import green_squad
+from ocs_ci.framework.pytest_customization.marks import (
+    green_squad,
+    yellow_squad,
+    provider_mode_acceptance,
+)
 from ocs_ci.framework.testlib import (
     skipif_ocs_version,
     ManageTest,
@@ -16,6 +20,8 @@ from ocs_ci.helpers.helpers import wait_for_resource_state, create_pods
 log = logging.getLogger(__name__)
 
 
+@yellow_squad
+@provider_mode_acceptance
 @green_squad
 @tier1
 @skipif_ocs_version("<4.6")

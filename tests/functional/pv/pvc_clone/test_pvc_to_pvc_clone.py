@@ -2,7 +2,11 @@ import logging
 import pytest
 
 from ocs_ci.ocs import constants
-from ocs_ci.framework.pytest_customization.marks import green_squad
+from ocs_ci.framework.pytest_customization.marks import (
+    green_squad,
+    yellow_squad,
+    provider_mode_acceptance,
+)
 from ocs_ci.framework.pytest_customization.marks import skipif_hci_provider_and_client
 from ocs_ci.framework.testlib import (
     skipif_ocs_version,
@@ -53,6 +57,8 @@ class TestClone(ManageTest):
             pod_dict_path=pod_dict_path,
         )
 
+    @yellow_squad
+    @provider_mode_acceptance
     @acceptance
     @pytest.mark.parametrize(
         argnames=["interface_type", "pod_dict_path", "access"],
@@ -155,6 +161,8 @@ class TestClone(ManageTest):
         clone_pod_obj.get_fio_results()
         logger.info(f"IO completed on pod {clone_pod_obj.name}")
 
+    @yellow_squad
+    @provider_mode_acceptance
     @acceptance
     @pytest.mark.polarion_id("OCS-5162")
     @pytest.mark.parametrize(
