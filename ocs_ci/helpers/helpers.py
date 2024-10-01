@@ -4790,7 +4790,7 @@ def flatten_multilevel_dict(d):
     return leaves_list
 
 
-def is_rbd_default_storage_class(custom_sc=None):
+def is_rbd_default_storage_class(sc_name=None):
     """
     Check if RDB is a default storageclass for the cluster
 
@@ -4800,9 +4800,7 @@ def is_rbd_default_storage_class(custom_sc=None):
     Returns:
         bool : True if RBD is set as the  Default storage class for the cluster, False otherwise.
     """
-    default_rbd_sc = (
-        constants.DEFAULT_STORAGECLASS_RBD if custom_sc is None else custom_sc
-    )
+    default_rbd_sc = constants.DEFAULT_STORAGECLASS_RBD if sc_name is None else sc_name
     cmd = (
         f"oc get storageclass {default_rbd_sc} -o=jsonpath='{{.metadata.annotations}}' "
     )
@@ -5183,3 +5181,69 @@ def get_rbd_image_info(rbd_pool, rbd_image_name):
         data["used_size_gib"] = data["used_size"] / bytes_in_gib
 
     return data
+
+
+def configure_cephcluster_params_in_storagecluster_cr(params, default_values=False):
+    """
+    Configure cephcluster block in StorageCluster CR /spec/managedResources/cephCluster/
+
+    Args:
+        params (list) : A list of dictionaries with value for cephCluster in StorageCluster CR
+        default_values(bool): parameters to set in StorageCluster under /spec/managedResources/cephCluster/
+
+    """
+    logger.info("Configure cephcluster block in StorageCluster CR")
+    storagecluster_obj = ocp.OCP(
+        kind=constants.STORAGECLUSTER,
+        namespace=config.ENV_DATA["cluster_namespace"],
+        resource_name=constants.DEFAULT_CLUSTERNAME,
+    )
+    for parameter in params:
+        sc_key = parameter["sc_key"]
+        if default_values:
+            parameter_value = parameter["default_value"]
+        else:
+            parameter_value = parameter["value"]
+        param = (
+            f'[{{"op": "add", "path": "/spec/managedResources/cephCluster/{sc_key}",'
+            f' "value": {parameter_value}}}]'
+        )
+        storagecluster_obj.patch(params=param, format_type="json")
+
+
+def get_cephfs_sc_name():
+    """
+    Get the cephfs storage class name.
+
+    Returns:
+        str: The cephfs storage class name.
+
+    Raises:
+        ValueError: If the cephfs storage class name hasn't been found.
+    """
+    sc_names = get_all_storageclass_names()
+    cephfs_sc_names = [name for name in sc_names if constants.CEPHFS_INTERFACE in name]
+    if not cephfs_sc_names:
+        raise ValueError(
+            "Didn't find the cephfs storageclass in the storageclass names"
+        )
+    else:
+        return cephfs_sc_names[0]
+
+
+def get_rbd_sc_name():
+    """
+    Get the rbd storage class name.
+
+    Returns:
+        str: The rbd storage class name.
+
+    Raises:
+        ValueError: If the rbd storage class name hasn't been found.
+    """
+    sc_names = get_all_storageclass_names()
+    rbd_sc_names = [name for name in sc_names if constants.RBD_INTERFACE in name]
+    if not rbd_sc_names:
+        raise ValueError("Didn't find the rbd storageclass in the storageclass names")
+    else:
+        return rbd_sc_names[0]

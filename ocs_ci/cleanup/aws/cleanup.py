@@ -331,6 +331,7 @@ def delete_buckets(bucket_prefix, hours):
             bucket = boto3.resource("s3").Bucket(bucket_name)
             try:
                 bucket.objects.all().delete()
+                bucket.object_versions.all().delete()
             except Exception as e:
                 logger.error(f"failed to list object in bucket {bucket_name} err:{e}")
             bucket.delete()

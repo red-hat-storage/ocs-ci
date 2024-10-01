@@ -50,7 +50,6 @@ def measure_stop_ceph_mgr(measurement_dir, threading_lock):
         threading_lock=threading_lock,
     )
     mgr_deployments = oc.get(selector=constants.MGR_APP_LABEL)["items"]
-    mgr = mgr_deployments[0]["metadata"]["name"]
 
     def stop_mgr():
         """
@@ -67,12 +66,14 @@ def measure_stop_ceph_mgr(measurement_dir, threading_lock):
         # run_time of operation
         run_time = 60 * 7
         nonlocal oc
-        nonlocal mgr
-        logger.info(f"Downscaling deployment {mgr} to 0")
-        oc.exec_oc_cmd(f"scale --replicas=0 deployment/{mgr}")
+        nonlocal mgr_deployments
+        for mgr_deployment in mgr_deployments:
+            mgr = mgr_deployment["metadata"]["name"]
+            logger.info(f"Downscaling deployment {mgr} to 0")
+            oc.exec_oc_cmd(f"scale --replicas=0 deployment/{mgr}")
         logger.info(f"Waiting for {run_time} seconds")
         time.sleep(run_time)
-        return oc.get(mgr)
+        return mgr_deployments
 
     test_file = os.path.join(measurement_dir, "measure_stop_ceph_mgr.json")
     if config.ENV_DATA["platform"].lower() in constants.MANAGED_SERVICE_PLATFORMS:
@@ -89,9 +90,10 @@ def measure_stop_ceph_mgr(measurement_dir, threading_lock):
         measured_op = measure_operation(
             stop_mgr, test_file, threading_lock=threading_lock
         )
-    logger.info(f"Upscaling deployment {mgr} back to 1")
-    oc.exec_oc_cmd(f"scale --replicas=1 deployment/{mgr}")
-
+    for mgr_deployment in mgr_deployments:
+        mgr = mgr_deployment["metadata"]["name"]
+        logger.info(f"Upscaling deployment {mgr} back to 1")
+        oc.exec_oc_cmd(f"scale --replicas=1 deployment/{mgr}")
     # wait for ceph to return into HEALTH_OK state after mgr deployment
     # is returned back to normal
     ceph_health_check(tries=20, delay=15)

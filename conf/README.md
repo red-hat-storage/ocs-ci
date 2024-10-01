@@ -147,6 +147,10 @@ anywhere else.
 * `sts_enabled` - Enable STS deployment functionality.
 * `metallb_operator` - Enable MetalLB operator installation during OCP deployment.
 * `multi_storagecluster` - Enable multi-storagecluster deployment when set to true.
+* `deploy_hosted_clusters` - Deploy hosted clusters.
+* `ssh_jump_host` - dict containing configuration for SSH jump host
+    * `host` - hostname or IP address of the SSH Jump host
+    * `user` - username for the ssh connection to the SSH jump host
 
 #### REPORTING
 
@@ -320,6 +324,7 @@ higher priority).
       * `hosted_odf_version` - version of ODF to be deployed on hosted clusters
       * `cp_availability_policy` - "HighlyAvailable" or "SingleReplica"; if not provided the default value is "SingleReplica"
 * `wait_timeout_for_healthy_osd_in_minutes` - timeout waiting for healthy OSDs before continuing upgrade (see https://bugzilla.redhat.com/show_bug.cgi?id=2276694 for more details)
+* `osd_maintenance_timeout` - is a duration in minutes that determines how long an entire failureDomain like region/zone/host will be held in noout
 * `odf_provider_mode_deployment` - True if you would like to enable provider mode deployment.
 * `client_subcription_image` - ODF subscription image details for the storageclients.
 * `channel_to_client_subscription` - Channel value for the odf subscription image for storageclients.
@@ -331,6 +336,10 @@ higher priority).
 * `ceph_threshold_near_full_ratio` - Configure nearFullRatio the ceph osd full thresholds value in the StorageCluster CR.
 * `restrict_ssh_access_to_nodes` - Deploy and configure Ingress Node Firewall Operator to restrict SSH access to nodes.
 * `allow_ssh_access_from_subnets` - Defines a list of subnets wit allowed SSH access to nodes.
+* `skip_upgrade_checks` - If set to true Rook won't perform any upgrade checks on Ceph daemons during an upgrade.
+* `continue_upgrade_after_checks_even_if_not_healthy` -  if set to true Rook will continue the OSD daemon upgrade process even if the PGs are not clean.
+* `upgrade_osd_requires_healthy_pgs` - If set to true OSD upgrade process won't start until PGs are healthy.
+* `workaround_mark_disks_as_ssd` - WORKAROUND: mark disks as SSD (not rotational - `0` in `/sys/block/*d*/queue/rotational`)
 
 #### UPGRADE
 

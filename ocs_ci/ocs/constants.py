@@ -125,7 +125,11 @@ STATUS_READYTOUSE = "READYTOUSE"
 STATUS_FAILED = "Failed"
 STATUS_FAILEDOVER = "FailedOver"
 STATUS_RELOCATED = "Relocated"
+STATUS_RELOCATING = "Relocating"
 STATUS_CONTAINER_STATUS_UNKNOWN = "ContainerStatusUnknown"
+STATUS_WAITFORUSERTOCLEANUP = "WaitOnUserToCleanUp"
+STATUS_POWERON = "ON"
+STATUS_POWEROFF = "OFF"
 
 # NooBaa statuses
 BS_AUTH_FAILED = "AUTH_FAILED"
@@ -352,6 +356,43 @@ STORAGE_CLIENT_SUBSCRIPTION_YAML = os.path.join(
 NATIVE_STORAGE_CLIENT_YAML = os.path.join(
     PROVIDER_CLIENT_DEPLOYMENT_DIR, "native_storage_client.yaml"
 )
+
+PROVIDER_CLUSTER_RESOURCE_KINDS = [
+    "cephblockpoolradosnamespaces",
+    "cephblockpoolradosnamespace",
+    "cephblockpools",
+    "cephblockpool",
+    "cephclients",
+    "cephclient",
+    "cephclusters",
+    "cephcluster",
+    "cephfilesystems",
+    "cephfilesystem",
+    "cephfilesystemsubvolumegroups",
+    "cephfilesystemsubvolumegroup",
+    "cephobjectstores",
+    "cephobjectstore",
+    "cephobjectstoreusers",
+    "cephobjectstoreuser",
+    "localvolumediscoveries",
+    "localvolumediscovery",
+    "localvolumediscoveryresults",
+    "localvolumediscoveryresult",
+    "localvolumes",
+    "localvolume",
+    "localvolumesets",
+    "localvolumeset",
+    "storageclusters",
+    "storagecluster",
+    "storageconsumers",
+    "storageconsumer",
+    "storageprofiles",
+    "storageprofile",
+    "storagerequests",
+    "storagerequest",
+    "storagesystems",
+    "storagesystem",
+]
 
 OCS_CLIENT_OPERATOR_CONTROLLER_MANAGER_PREFIX = "ocs-client-operator-controller-manager"
 OCS_CLIENT_OPERATOR_CONSOLE = "ocs-client-operator-console"
@@ -1299,6 +1340,25 @@ OPTIONAL_OPERATORS_SELECTOR = "catalog=optional-operators"
 OCS_OPERATOR_BUNDLE_IMAGE = "quay.io/rhceph-dev/ocs-operator-bundle"
 OCS_CATALOG_SOURCE_NAME = "ocs-catalogsource"
 
+OCS_DEPLOYMENTS = [
+    "csi-addons-controller-manager",
+    "noobaa-operator",
+    "ocs-operator",
+    "odf-console",
+    "odf-operator-controller-manager",
+    "rook-ceph-operator",
+    "ux-backend-server",
+]
+
+OCS_DEPLOYMENTS_4_16 = OCS_DEPLOYMENTS + [
+    "ocs-client-operator-console",
+    "ocs-client-operator-controller-manager",
+    "prometheus-operator",
+]
+OCS_DEPLOYMENTS_4_17 = OCS_DEPLOYMENTS_4_16 + [
+    "ceph-csi-controller-manager",
+]
+
 # OCP related constants
 OPENSHIFT_UPGRADE_INFO_API = (
     "https://api.openshift.com/api/upgrades_info/v1/graph?channel={channel}"
@@ -1447,6 +1507,7 @@ CLOUD_PLATFORMS = [
     IBMCLOUD_PLATFORM,
     ROSA_PLATFORM,
     OPENSHIFT_DEDICATED_PLATFORM,
+    ROSA_HCP_PLATFORM,
 ]
 MANAGED_SERVICE_PLATFORMS = [
     OPENSHIFT_DEDICATED_PLATFORM,
@@ -2822,6 +2883,7 @@ UI_INPUT_RULES_STORAGE_SYSTEM = {
 
 # DR
 DRPC_PATH = os.path.join(TEMPLATE_DIR, "DR", "drpc.yaml")
+PLACEMENT_PATH = os.path.join(TEMPLATE_DIR, "DR", "placement.yaml")
 CLUSTERROLEBINDING_APPSET_PULLMODEL_PATH = os.path.join(
     TEMPLATE_DIR, "DR", "clusterrolebinding_appset_pullmodel.yaml"
 )
@@ -2837,6 +2899,9 @@ PLACEMENT = "Placement"
 GITOPS_CLUSTER_NAMESPACE = "openshift-gitops"
 APPLICATION_ARGOCD = "applications.argoproj.io"
 PLACEMENT_KIND = "placements.cluster.open-cluster-management.io"
+
+DISCOVERED_APPS = "DiscoveredApps"
+DR_OPS_NAMESAPCE = "openshift-dr-ops"
 DPA_DISCOVERED_APPS_PATH = os.path.join(TEMPLATE_DIR, "DR", "dpa_discovered_apps.yaml")
 
 DISABLE_DR_EACH_APP = os.path.join(TEMPLATE_DIR, "DR", "disable_dr_each_app.sh")
@@ -2961,4 +3026,9 @@ METAIO = os.path.join(TEMPLATE_WORKLOAD_DIR, "helper_scripts/meta_data_io.py")
 # helper script to perform file creation IO on app pod to fill MDS cpu
 FILE_CREATOR_IO = os.path.join(
     TEMPLATE_WORKLOAD_DIR, "helper_scripts/file_creator_io.py"
+)
+
+# workaround: marking disks as ssd
+MC_WORKAROUND_SSD = os.path.join(
+    TEMPLATE_DEPLOYMENT_DIR_OCP, "workaround-ssd-machine-config.yaml"
 )
