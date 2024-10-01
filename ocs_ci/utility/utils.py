@@ -2080,10 +2080,11 @@ def get_csi_versions():
     csi_versions = {}
     # importing here to avoid circular imports
     from ocs_ci.ocs.ocp import OCP
+    from ocs_ci.helpers.helpers import get_provisioner_label
 
     for provisioner in [
-        constants.CSI_CEPHFSPLUGIN_PROVISIONER_LABEL,
-        constants.CSI_RBDPLUGIN_PROVISIONER_LABEL,
+        get_provisioner_label(constants.CEPHFILESYSTEM),
+        get_provisioner_label(constants.CEPHBLOCKPOOL),
     ]:
         ocp_pod_obj = OCP(
             kind=constants.POD,

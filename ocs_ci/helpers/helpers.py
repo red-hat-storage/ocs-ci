@@ -5247,3 +5247,57 @@ def get_rbd_sc_name():
         raise ValueError("Didn't find the rbd storageclass in the storageclass names")
     else:
         return rbd_sc_names[0]
+
+
+def get_provisioner_label(interface):
+    """
+    Identify the csi provisioner label based on deployment mode and version
+
+    Args:
+        interface(str): CephFileSystem or CephBlockPool
+
+    Returns:
+        str: Label of the pod
+    """
+
+    if (
+        config.ENV_DATA["platform"].lower() in constants.HCI_PROVIDER_CLIENT_PLATFORMS
+        and version.get_semantic_ocs_version_from_config() >= version.VERSION_4_17
+    ):
+        if interface == constants.CEPHFILESYSTEM:
+            label = constants.CEPHFS_CTRLPLUGIN_LABEL
+        elif interface == constants.CEPHBLOCKPOOL:
+            label = constants.RBD_CTRLPLUGIN_LABEL
+    else:
+        if interface == constants.CEPHFILESYSTEM:
+            label = constants.CSI_CEPHFSPLUGIN_PROVISIONER_LABEL
+        elif interface == constants.CEPHBLOCKPOOL:
+            label = constants.CSI_RBDPLUGIN_PROVISIONER_LABEL
+    return label
+
+
+def get_node_plugin_label(interface):
+    """
+    Identify the csi plugin label based on deployment mode and version
+
+    Args:
+        interface(str): CephFileSystem or CephBlockPool
+
+    Returns:
+        str: Label of the pod
+    """
+
+    if (
+        config.ENV_DATA["platform"].lower() in constants.HCI_PROVIDER_CLIENT_PLATFORMS
+        and version.get_semantic_ocs_version_from_config() >= version.VERSION_4_17
+    ):
+        if interface == constants.CEPHFILESYSTEM:
+            label = constants.CEPHFS_NODEPLUGIN_LABEL
+        elif interface == constants.CEPHBLOCKPOOL:
+            label = constants.RBD_NODEPLUGIN_LABEL
+    else:
+        if interface == constants.CEPHFILESYSTEM:
+            label = constants.CSI_CEPHFSPLUGIN_LABEL
+        elif interface == constants.CEPHBLOCKPOOL:
+            label = constants.CSI_RBDPLUGIN_LABEL
+    return label
