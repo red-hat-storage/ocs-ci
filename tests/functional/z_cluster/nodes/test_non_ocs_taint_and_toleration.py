@@ -7,6 +7,7 @@ from ocs_ci.ocs.cluster import (
     is_flexible_scaling_enabled,
     check_ceph_health_after_add_capacity,
     CephClusterExternal,
+    is_vsphere_ipi_cluster,
 )
 from ocs_ci.framework.testlib import (
     tier4b,
@@ -309,7 +310,12 @@ class TestNonOCSTaintAndTolerations(E2ETest):
 
         # Reboot one of the nodes
         node = get_nodes("worker", num_of_nodes=1)
-        nodes.restart_nodes(node)
+        if is_vsphere_ipi_cluster():
+            nodes.restart_nodes(nodes=node, wait=False)
+            node_names = [n.name for n in node]
+            wait_for_nodes_status(node_names, constants.STATUS_READY, timeout=420)
+        else:
+            nodes.restart_nodes_by_stop_and_start(nodes=node)
 
         # Wait some time after rebooting master
         waiting_time = 320
@@ -330,7 +336,6 @@ class TestNonOCSTaintAndTolerations(E2ETest):
 
         # Check cluster is health ok and check toleration on pods
         assert wait_for_pods_to_be_running(timeout=900, sleep=15)
-        self.sanity_helpers.health_check(tries=120)
         retry(CommandFailed, tries=5, delay=10,)(
             check_toleration_on_pods
         )(toleration_key="xyz")
@@ -341,10 +346,10 @@ class TestNonOCSTaintAndTolerations(E2ETest):
 
         # Check cluster is health ok and check toleration on pods
         logger.info("Verifying All resources are Running and matches expected result")
-        self.sanity_helpers.health_check(tries=120)
         retry(CommandFailed, tries=5, delay=10,)(
             check_toleration_on_pods
         )(toleration_key="xyz")
+        self.sanity_helpers.health_check(tries=120)
 
     def test_negative_custom_taint(self, nodes):
         """
