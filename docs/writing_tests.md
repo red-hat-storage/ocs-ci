@@ -139,13 +139,13 @@ This applies for example to Provider-Client platform where test is executed
 from a client cluster but other clusters like a Provider cluster or more
 clients are accessible during test run through:
 
-- `MultiClusterConfig` in [/ocs\_ci/framework/\_\_init\_\_.py](/ocs_ci/framework/__init__.py)
+- `MultiClusterConfig` in [/ocs\_ci/framework/\_\_init\_\_.py](https://github.com/red-hat-storage/ocs-ci/tree/master/ocs_ci/framework/__init__.py)
   - This class contains methods like `switch_ctx` that can directly manipulate
 with cluster contexts.
-- Cluster context managers in [/ocs\_ci/framework/\_\_init\_\_.py](/ocs_ci/framework/__init__.py)
+- Cluster context managers in [/ocs\_ci/framework/\_\_init\_\_.py](https://github.com/red-hat-storage/ocs-ci/tree/master/ocs_ci/framework/__init__.py)
   - There are implemented multiple Context managers that aim to simplify the
-work with cluster contexts. Those Cluster context managers define `\_\_enter\_\_`
-and `\_\_exit\_\_` methods so it is possible to use them with `with` statement
+work with cluster contexts. Those Cluster context managers define `__enter__`
+and `__exit__` methods so it is possible to use them with `with` statement
 in the code.
 
 For example:
