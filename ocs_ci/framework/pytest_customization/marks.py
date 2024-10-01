@@ -639,7 +639,7 @@ ignore_owner = pytest.mark.ignore_owner
 runs_on_provider = pytest.mark.runs_on_provider
 
 # Marks to identify the regression tests for provider-client cluster
-provider_mode_acceptance = pytest.mark.provider_mode_acceptance
+provider_mode = pytest.mark.provider_mode
 
 current_test_marks = []
 

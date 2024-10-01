@@ -6,8 +6,7 @@ from ocs_ci.ocs import constants
 from ocs_ci.framework import config
 from ocs_ci.framework.pytest_customization.marks import (
     green_squad,
-    yellow_squad,
-    provider_mode_acceptance,
+    provider_mode,
 )
 from ocs_ci.framework.testlib import (
     ManageTest,
@@ -27,8 +26,7 @@ from ocs_ci.helpers.helpers import (
 log = logging.getLogger(__name__)
 
 
-@yellow_squad
-@provider_mode_acceptance
+@provider_mode
 @green_squad
 @tier1
 @pytest.mark.parametrize(

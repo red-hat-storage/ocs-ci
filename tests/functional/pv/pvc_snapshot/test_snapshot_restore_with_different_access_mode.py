@@ -5,8 +5,7 @@ from itertools import cycle
 from ocs_ci.ocs import constants, node
 from ocs_ci.framework.pytest_customization.marks import (
     green_squad,
-    yellow_squad,
-    provider_mode_acceptance,
+    provider_mode,
 )
 from ocs_ci.framework.testlib import (
     skipif_ocs_version,
@@ -22,8 +21,7 @@ from ocs_ci.helpers import helpers
 log = logging.getLogger(__name__)
 
 
-@yellow_squad
-@provider_mode_acceptance
+@provider_mode
 @green_squad
 @tier1
 @skipif_ocs_version("<4.6")
