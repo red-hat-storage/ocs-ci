@@ -37,7 +37,11 @@ class LoadBalancer(object):
         )
         jump_host = (
             config.DEPLOYMENT.get("ssh_jump_host")
-            if (config.DEPLOYMENT.get("disconnected") or config.DEPLOYMENT.get("proxy"))
+            if (
+                config.DEPLOYMENT.get("disconnected")
+                or config.DEPLOYMENT.get("proxy")
+                or config.DEPLOYMENT.get("ipv6")
+            )
             else None
         )
         if jump_host:
