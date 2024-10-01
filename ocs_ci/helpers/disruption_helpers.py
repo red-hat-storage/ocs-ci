@@ -136,6 +136,12 @@ class Disruptions:
         if self.resource == "ocs_provider_server":
             self.resource_obj = [pod.get_ocs_provider_server_pod()]
             self.selector = constants.PROVIDER_SERVER_LABEL
+        if self.resource == "ceph_csi_controller_manager":
+            self.resource_obj = [pod.get_ceph_csi_controller_manager()]
+            self.selector = constants.CEPH_CSI_CONTROLLER_MANAGER_LABEL
+        if self.resource == "ocs_client_operator_controller_manager":
+            self.resource_obj = [pod.get_ocs_client_operator_controller_manager()]
+            self.selector = constants.OCS_CLIENT_OPERATOR_LABEL
 
         self.resource_count = resource_count or len(self.resource_obj)
 
