@@ -26,6 +26,8 @@ from ocs_ci.ocs.resources.pod import (
     get_cephfsplugin_provisioner_pods,
     get_rbdfsplugin_provisioner_pods,
     get_operator_pods,
+    get_ocs_client_operator_controller_manager,
+    get_ceph_csi_controller_manager,
 )
 from ocs_ci.utility.utils import TimeoutSampler
 from ocs_ci.helpers.helpers import (
@@ -369,6 +371,14 @@ class TestResourceDeletionDuringMultipleCreateDeleteOperations(ManageTest):
                 "rbdplugin_provisioner": partial(get_rbdfsplugin_provisioner_pods),
                 "operator": partial(get_operator_pods),
             }
+
+        if is_hci_cluster():
+            pod_functions["ceph_csi_controller_manager"] = partial(
+                get_ceph_csi_controller_manager
+            )
+            pod_functions["ocs_client_operator_controller_manager"] = partial(
+                get_ocs_client_operator_controller_manager
+            )
 
         # Disruption object for each pod type
         disruption_ops = [
