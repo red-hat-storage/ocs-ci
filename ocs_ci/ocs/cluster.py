@@ -3602,3 +3602,21 @@ def bring_down_mds_memory_usage_gradually():
     assert (
         time_elapsed <= 1800
     ), "Memory usage remained high for more than 30 minutes. Failed to bring down the memory usage of MDS"
+
+
+def get_used_and_total_capacity_in_gibibytes():
+    """
+    Get used capacity and total capacity of the cluster from the ceph tools pod
+    Convert the storage values from bytes to gibibytes
+
+    Returns:
+        tuple: (total_used_in_gibibytes, total_capacity_in_gibibytes) ex: Used capacity, Total capacity
+
+    """
+    ct_pod = pod.get_ceph_tools_pod()
+    output = ct_pod.exec_ceph_cmd(ceph_cmd="ceph df")
+    total_used = output.get("stats").get("total_used_raw_bytes")
+    total_capacity = output.get("stats").get("total_bytes")
+    total_used_in_gibibytes = total_used / (2**30)
+    total_capacity_in_gibibytes = total_capacity / (2**30)
+    return (total_used_in_gibibytes, total_capacity_in_gibibytes)
