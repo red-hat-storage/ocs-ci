@@ -147,6 +147,9 @@ anywhere else.
 * `sts_enabled` - Enable STS deployment functionality.
 * `metallb_operator` - Enable MetalLB operator installation during OCP deployment.
 * `multi_storagecluster` - Enable multi-storagecluster deployment when set to true.
+* `ssh_jump_host` - dict containing configuration for SSH jump host
+    * `host` - hostname or IP address of the SSH Jump host
+    * `user` - username for the ssh connection to the SSH jump host
 
 #### REPORTING
 
