@@ -3833,3 +3833,41 @@ def get_pod_used_memory_in_mebibytes(podname):
             if memory_value_with_unit.endswith("Mi"):
                 memory_value = int(memory_value_with_unit.replace("Mi", ""))
                 return memory_value
+
+
+def get_ceph_csi_controller_manager(
+    label=constants.CEPH_CSI_CONTROLLER_MANAGER_LABEL, namespace=None
+):
+    """
+    Get ceph-csi-controller-manager pod from the cluster
+
+    Args:
+        label (str): Label associated with ceph-csi-controller-manager pod
+        namespace (str): Namespace in which ceph-csi-controller-manager pod is residing
+
+    Returns:
+        Pod: Pod object of ceph-csi-controller-manager pod
+
+    """
+    namespace = namespace or config.ENV_DATA["cluster_namespace"]
+    ceph_csi_controller_manager = get_pods_having_label(label, namespace)
+    return Pod(**ceph_csi_controller_manager[0])
+
+
+def get_ocs_client_operator_controller_manager(
+    label=constants.OCS_CLIENT_OPERATOR_LABEL, namespace=None
+):
+    """
+    Get ocs-client-operator-controller-manager pod from the cluster
+
+    Args:
+        label (str): Label associated with ocs-client-operator-controller-manager pod
+        namespace (str): Namespace in which ocs-client-operator-controller-manager pod is residing
+
+    Returns:
+        Pod: Pod object of ocs-client-operator-controller-manager pod
+
+    """
+    namespace = namespace or config.ENV_DATA["cluster_namespace"]
+    ocs_client_operator_controller_manager = get_pods_having_label(label, namespace)
+    return Pod(**ocs_client_operator_controller_manager[0])

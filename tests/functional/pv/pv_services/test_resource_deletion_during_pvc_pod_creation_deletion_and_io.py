@@ -14,6 +14,7 @@ from ocs_ci.framework.testlib import (
 )
 from ocs_ci.framework import config
 from ocs_ci.ocs import constants, node
+from ocs_ci.ocs.cluster import is_hci_cluster
 from ocs_ci.ocs.resources.pvc import delete_pvcs
 from ocs_ci.ocs.resources.pod import (
     get_mds_pods,
@@ -258,6 +259,15 @@ class TestResourceDeletionDuringMultipleCreateDeleteOperations(ManageTest):
                 "osd",
                 "mds",
             ]
+
+        if is_hci_cluster():
+            ceph_csi_pods_to_delete.remove("operator")
+            ceph_csi_pods_to_delete.extend(
+                [
+                    "ceph_csi_controller_manager",
+                    "ocs_client_operator_controller_manager",
+                ]
+            )
 
         (
             pvc_objs,
