@@ -7121,6 +7121,9 @@ def fedora_pod_fixture(request, scope_name):
     helpers.wait_for_resource_state(
         fedora_pod_obj, constants.STATUS_RUNNING, timeout=240
     )
+    fedora_pod_obj.exec_cmd_on_pod(
+        f"cp {constants.SERVICE_CA_CRT_AWSCLI_PATH} {constants.AWSCLI_CA_BUNDLE_PATH}"
+    )
 
     def fedora_pod_cleanup():
         fedora_pod_obj.delete()

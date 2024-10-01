@@ -49,7 +49,7 @@ def craft_s3_command(cmd, mcg_obj=None, api=False, signed_request_creds=None):
     api = "api" if api else ""
     no_ssl = (
         "--no-verify-ssl"
-        if signed_request_creds and signed_request_creds.get("ssl") is False
+        if (signed_request_creds and signed_request_creds.get("ssl")) is False
         else ""
     )
     if mcg_obj:
@@ -64,6 +64,7 @@ def craft_s3_command(cmd, mcg_obj=None, api=False, signed_request_creds=None):
             f"{region}"
             f"aws s3{api} "
             f"--endpoint={mcg_obj.s3_internal_endpoint} "
+            f"{no_ssl} "
         )
         string_wrapper = '"'
     elif signed_request_creds:
@@ -343,10 +344,15 @@ def copy_objects(
     """
 
     logger.info(f"Copying object {src_obj} to {target}")
+    no_ssl = (
+        "--no-verify-ssl"
+        if (signed_request_creds and signed_request_creds.get("ssl")) is False
+        else ""
+    )
     if recursive:
-        retrieve_cmd = f"cp {src_obj} {target} --recursive"
+        retrieve_cmd = f"cp {src_obj} {target} --recursive {no_ssl}"
     else:
-        retrieve_cmd = f"cp {src_obj} {target}"
+        retrieve_cmd = f"cp {src_obj} {target} {no_ssl}"
     if s3_obj:
         secrets = [s3_obj.access_key_id, s3_obj.access_key, s3_obj.s3_internal_endpoint]
     elif signed_request_creds:
