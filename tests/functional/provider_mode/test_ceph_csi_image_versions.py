@@ -40,6 +40,7 @@ class TestCephCSIImageVersions(ManageTest):
 
         request.addfinalizer(finalizer)
 
+    @pytest.mark.polarion_id("OCS-6248")
     def test_client_clusters_csi_image_versions(self):
         """
         The test will perform the following:
