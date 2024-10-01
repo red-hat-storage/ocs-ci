@@ -151,6 +151,7 @@ anywhere else.
 * `ssh_jump_host` - dict containing configuration for SSH jump host
     * `host` - hostname or IP address of the SSH Jump host
     * `user` - username for the ssh connection to the SSH jump host
+* `ipv6` - ipv6 single stack deployment of OCP and ODF.
 
 #### REPORTING
 
