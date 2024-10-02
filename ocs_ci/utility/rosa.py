@@ -43,7 +43,7 @@ def login():
     cmd = f"rosa login --token={token}"
     if ms_env != "production":
         # default MS environment consider is staging
-        cmd += " --url=staging"
+        cmd += " --env=staging"
     logger.info("Logging in to ROSA cli")
     utils.run_cmd(cmd, secrets=[token])
     logger.info("Successfully logged in to ROSA")
