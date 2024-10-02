@@ -13,15 +13,14 @@ dbglog() {
 # Expect base collection path as an exported variable
 # If it is not defined, use PWD instead
 BASE_COLLECTION_PATH=${1:-"$(pwd)"}
-echo $BASE_COLLECTION_PATH
+dbglog  "ceph commands for external cluster will be collected at ${BASE_COLLECTION_PATH}"
 
 KUBECONFIG=${2:-"~/.kube/config"}
-ns=${3:-"openshift-storage"}
+NS=${3:-"openshift-storage"}
 
-TOOL_POD_NAME=$(oc get pods --no-headers -n ${ns} -l app='rook-ceph-tools' | awk '{print $1}')
+TOOL_POD_NAME=$(oc get pods --no-headers -n ${NS} -l app='rook-ceph-tools' | awk '{print $1}')
 if [ -z "$TOOL_POD_NAME" ]; then
     dbglog "No tool pod found"
-    echo "No tool pod found"
     exit 2
 fi
 
@@ -105,14 +104,14 @@ ceph_commands2+=("rados ls --pool=ocs-storagecluster-cephfilesystem-metadata --n
 
 
 # Collecting output of ceph osd config
-for i in $(timeout 120 oc -n "${ns}" exec "${TOOL_POD_NAME}" -- bash -c "ceph osd tree --connect-timeout=15 |  grep up " | awk '{print $4}'); do
-    { timeout 120 oc -n "${ns}" exec "${TOOL_POD_NAME}" -- bash -c "ceph config show $i" >>"${COMMAND_OUTPUT_DIR}/config_$i"; } >>"${COMMAND_ERR_OUTPUT_DIR}"/gather-config-"$i"-debug.log 2>&1 &
+for i in $(timeout 120 oc -n "${NS}" exec "${TOOL_POD_NAME}" -- bash -c "ceph osd tree --connect-timeout=15 |  grep up " | awk '{print $4}'); do
+    { timeout 120 oc -n "${NS}" exec "${TOOL_POD_NAME}" -- bash -c "ceph config show $i" >>"${COMMAND_OUTPUT_DIR}/config_$i"; } >>"${COMMAND_ERR_OUTPUT_DIR}"/gather-config-"$i"-debug.log 2>&1 &
     pids_ceph+=($!)
 done
 # Check if PID array has any values, if so, wait for them to finish
-if [ ${#pids[@]} -ne 0 ]; then
+if [ ${#pids_ceph[@]} -ne 0 ]; then
     echo "Waiting on subprocesses to finish execution."
-    wait "${pids[@]}"
+    wait "${pids_ceph[@]}"
 fi
 
 
@@ -121,15 +120,15 @@ for ((i = 0; i < ${#ceph_commands1[@]}; i++)); do
     dbglog "collecting command output for: ${ceph_commands1[$i]}"
     COMMAND_OUTPUT_FILE=${COMMAND_OUTPUT_DIR}/${ceph_commands1[$i]// /_}
     JSON_COMMAND_OUTPUT_FILE=${COMMAND_JSON_OUTPUT_DIR}/${ceph_commands1[$i]// /_}_--format_json-pretty
-    { timeout 120 oc --kubeconfig="${KUBECONFIG}" -n "${ns}" exec "${TOOL_POD_NAME}" -- bash -c "${ceph_commands1[$i]} --connect-timeout=15" >>"${COMMAND_OUTPUT_FILE}"; } >>"${COMMAND_ERR_OUTPUT_DIR}"/gather-"${ceph_commands1[$i]}"-debug.log 2>&1 &
+    { timeout 120 oc --kubeconfig="${KUBECONFIG}" -n "${NS}" exec "${TOOL_POD_NAME}" -- bash -c "${ceph_commands1[$i]} --connect-timeout=15" >>"${COMMAND_OUTPUT_FILE}"; } >>"${COMMAND_ERR_OUTPUT_DIR}"/gather-"${ceph_commands1[$i]}"-debug.log 2>&1 &
     pids_ceph+=($!)
-    { timeout 120 oc --kubeconfig="${KUBECONFIG}" -n "${ns}" exec "${TOOL_POD_NAME}" -- bash -c "${ceph_commands1[$i]} --connect-timeout=15 --format json-pretty" >>"${JSON_COMMAND_OUTPUT_FILE}"; } >>"${COMMAND_ERR_OUTPUT_DIR}"/gather-"${ceph_commands1[$i]}"-json-debug.log 2>&1 &
+    { timeout 120 oc --kubeconfig="${KUBECONFIG}" -n "${NS}" exec "${TOOL_POD_NAME}" -- bash -c "${ceph_commands1[$i]} --connect-timeout=15 --format json-pretty" >>"${JSON_COMMAND_OUTPUT_FILE}"; } >>"${COMMAND_ERR_OUTPUT_DIR}"/gather-"${ceph_commands1[$i]}"-json-debug.log 2>&1 &
     pids_ceph+=($!)
 done
 # Check if PID array has any values, if so, wait for them to finish
-if [ ${#pids[@]} -ne 0 ]; then
+if [ ${#pids_ceph[@]} -ne 0 ]; then
     echo "Waiting on subprocesses to finish execution."
-    wait "${pids[@]}"
+    wait "${pids_ceph[@]}"
 fi
 
 
@@ -138,14 +137,14 @@ for ((i = 0; i < ${#ceph_commands2[@]}; i++)); do
     dbglog "collecting command output for: ${ceph_commands2[$i]}"
     COMMAND_OUTPUT_FILE=${COMMAND_OUTPUT_DIR}/${ceph_commands2[$i]// /_}
     JSON_COMMAND_OUTPUT_FILE=${COMMAND_JSON_OUTPUT_DIR}/${ceph_commands2[$i]// /_}_--format_json-pretty
-    { timeout 120 oc --kubeconfig="${KUBECONFIG}" -n "${ns}" exec "${TOOL_POD_NAME}" -- bash -c "${ceph_commands2[$i]} --connect-timeout=15" >>"${COMMAND_OUTPUT_FILE}"; } >>"${COMMAND_ERR_OUTPUT_DIR}"/gather-"${ceph_commands2[$i]}"-debug.log 2>&1 &
+    { timeout 120 oc --kubeconfig="${KUBECONFIG}" -n "${NS}" exec "${TOOL_POD_NAME}" -- bash -c "${ceph_commands2[$i]} --connect-timeout=15" >>"${COMMAND_OUTPUT_FILE}"; } >>"${COMMAND_ERR_OUTPUT_DIR}"/gather-"${ceph_commands2[$i]}"-debug.log 2>&1 &
     pids_ceph+=($!)
-    { timeout 120 oc --kubeconfig="${KUBECONFIG}" -n "${ns}" exec "${TOOL_POD_NAME}" -- bash -c "${ceph_commands2[$i]} --connect-timeout=15 --format json-pretty" >>"${JSON_COMMAND_OUTPUT_FILE}"; } >>"${COMMAND_ERR_OUTPUT_DIR}"/gather-"${ceph_commands2[$i]}"-json-debug.log 2>&1 &
+    { timeout 120 oc --kubeconfig="${KUBECONFIG}" -n "${NS}" exec "${TOOL_POD_NAME}" -- bash -c "${ceph_commands2[$i]} --connect-timeout=15 --format json-pretty" >>"${JSON_COMMAND_OUTPUT_FILE}"; } >>"${COMMAND_ERR_OUTPUT_DIR}"/gather-"${ceph_commands2[$i]}"-json-debug.log 2>&1 &
     pids_ceph+=($!)
 done
 
 # Check if PID array has any values, if so, wait for them to finish
-if [ ${#pids[@]} -ne 0 ]; then
+if [ ${#pids_ceph[@]} -ne 0 ]; then
     echo "Waiting on subprocesses to finish execution."
-    wait "${pids[@]}"
+    wait "${pids_ceph[@]}"
 fi
