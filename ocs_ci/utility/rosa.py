@@ -38,7 +38,11 @@ def login():
     Login to ROSA client
     """
     token = ocm["token"]
+    ms_env = config.ENV_DATA.get("ms_env_type", "staging")
     cmd = f"rosa login --token={token}"
+    if ms_env != "production":
+        # default MS environment consider is staging
+        cmd += " --url=staging"
     logger.info("Logging in to ROSA cli")
     utils.run_cmd(cmd, secrets=[token])
     logger.info("Successfully logged in to ROSA")
@@ -424,7 +428,7 @@ def create_oidc_config():
     Raises:
         TimeoutExpiredError: If OIDC config is not created in time
     """
-    cmd = "rosa create oidc-config --mode=auto --yes"
+    cmd = "rosa create oidc-config --managed --mode=auto --yes"
     proc = utils.exec_cmd(cmd, timeout=1200)
     if proc.returncode != 0:
         raise CommandFailed(f"Failed to create oidc config: {proc.stderr}")

@@ -81,6 +81,7 @@ class ROSAOCP(BaseOCPDeployment):
         ):
             rosa.appliance_mode_cluster(self.cluster_name)
         else:
+            rosa.login()
             rosa.create_cluster(self.cluster_name, self.ocp_version, self.region)
 
         kubeconfig_path = os.path.join(
