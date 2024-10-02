@@ -31,13 +31,14 @@ from ocs_ci.utility.utils import exec_cmd, TimeoutSampler
 logger = logging.getLogger(name=__file__)
 rosa = config.AUTH.get("rosa", {})
 rosa_hcp = config.ENV_DATA.get("platform") == "rosa_hcp"
+auth_data = config.AUTH.get("openshiftdedicated", {})
 
 
 def login():
     """
     Login to ROSA client
     """
-    token = ocm["token"]
+    token = auth_data["token"]
     ms_env = config.ENV_DATA.get("ms_env_type", "staging")
     cmd = f"rosa login --token={token}"
     if ms_env != "production":
