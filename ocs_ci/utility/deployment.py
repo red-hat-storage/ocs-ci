@@ -12,7 +12,8 @@ import requests
 
 from ocs_ci.framework import config
 from ocs_ci.ocs import constants
-from ocs_ci.ocs.exceptions import ExternalClusterDetailsException
+from ocs_ci.ocs.exceptions import CommandFailed, ExternalClusterDetailsException
+from ocs_ci.ocs.resources.ocs import OCS
 from ocs_ci.utility import templating
 from ocs_ci.utility.utils import (
     create_directory_path,
@@ -162,7 +163,13 @@ def get_and_apply_icsp_from_catalog(image, apply=True, insecure=False):
             and config.ENV_DATA["deployment_type"] == "managed"
         )
         if not managed_ibmcloud:
-            wait_for_machineconfigpool_status("all")
+            num_nodes = (
+                config.ENV_DATA["worker_replicas"]
+                + config.ENV_DATA["master_replicas"]
+                + config.ENV_DATA.get("infra_replicas", 0)
+            )
+            timeout = 2800 if num_nodes > 6 else 1900
+            wait_for_machineconfigpool_status(node_type="all", timeout=timeout)
 
     return icsp_file_dest_location
 
@@ -200,3 +207,24 @@ def get_ocp_release_image_from_installer():
     for line in proc.stdout.decode().split("\n"):
         if "release image" in line:
             return line.split(" ")[2].strip()
+
+
+def workaround_mark_disks_as_ssd():
+    """
+    This function creates MachineConfig defining new service `workaround-ssd`, which configures all disks as SSD
+    (not rotational).
+    This is useful for example on some Bare metal servers where are SSD disks not properly recognized as SSD, because of
+    wrong RAID controller configuration or issue.
+    """
+    try:
+        logger.info("WORKAROUND: mark disks as ssd (non rotational)")
+        mc_yaml_file = templating.load_yaml(constants.MC_WORKAROUND_SSD)
+        mc_yaml = OCS(**mc_yaml_file)
+        mc_yaml.create()
+        wait_for_machineconfigpool_status("all")
+        logger.info("WORKAROUND: disks marked as ssd (non rotational)")
+    except CommandFailed as err:
+        if "AlreadyExists" in str(err):
+            logger.info("Workaround already applied.")
+        else:
+            raise err

@@ -13,6 +13,7 @@ from selenium.common.exceptions import (
     NoSuchElementException,
     StaleElementReferenceException,
     ElementClickInterceptedException,
+    InvalidSessionIdException,
 )
 from selenium.webdriver.remote.webdriver import WebDriver
 from selenium.webdriver.chrome.options import Options
@@ -1029,9 +1030,14 @@ def close_browser():
 
     """
     logger.info("Close browser")
-    take_screenshot("close_browser")
-    copy_dom("close_browser")
-    SeleniumDriver().quit()
+    try:
+        take_screenshot("close_browser")
+        copy_dom("close_browser")
+        SeleniumDriver().quit()
+    except InvalidSessionIdException:
+        # when browser session is closed unexpectedly or session timeout occurs take_screenshot or copy_dom will fail
+        logger.error("InvalidSessionIdException occurred")
+        pass
     SeleniumDriver.remove_instance()
     time.sleep(10)
     garbage_collector_webdriver()

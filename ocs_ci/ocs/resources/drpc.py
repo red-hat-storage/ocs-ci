@@ -66,6 +66,41 @@ class DRPC(OCP):
             result=True
         ), "PeerReady status is not true, failover or relocate action can not be performed"
 
+    def get_progression_status(self, status_to_check=None):
+        logger.info("Getting progression Status")
+        progression_status = self.get()["status"]["progression"]
+        if status_to_check:
+            logger.info(f"Current progression Status {progression_status}")
+            if progression_status == status_to_check:
+                return True
+            else:
+                return False
+        return progression_status
+
+    def wait_for_progression_status(self, status):
+        logger.info(f"Waiting for Progression status to be {status}")
+        sample = TimeoutSampler(
+            timeout=300,
+            sleep=10,
+            func=self.get_progression_status,
+            status_to_check=status,
+        )
+        assert sample.wait_for_func_status(
+            result=True
+        ), f"Progression status is not expected current status {self.get_progression_status()} expected status {status}"
+
+    def get_last_group_sync_time(self):
+        """
+        Fetch lastGroupSyncTime from DRPC
+
+        Returns:
+            str: lastGroupSyncTime
+
+        """
+        last_group_sync_time = self.get().get("status").get("lastGroupSyncTime")
+        logger.info(f"Current lastGroupSyncTime is {last_group_sync_time}.")
+        return last_group_sync_time
+
 
 def get_drpc_name(namespace, switch_ctx=None):
     """

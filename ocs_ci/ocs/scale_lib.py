@@ -125,8 +125,10 @@ class FioPodScale(object):
 
         logger.info(f"Start creating {pvc_count} PVC of 2 types RBD-RWO & FS-RWX")
         if is_hci_cluster():
-            cephfs_sc_obj = constants.DEFAULT_STORAGECLASS_CLIENT_CEPHFS
-            rbd_sc_obj = constants.DEFAULT_STORAGECLASS_CLIENT_RBD
+            # Since sometimes the client storageclass names are different for different client types,
+            # get the current client storageclass names
+            cephfs_sc_obj = helpers.get_cephfs_sc_name()
+            rbd_sc_obj = helpers.get_rbd_sc_name()
         else:
             cephfs_sc_obj = constants.DEFAULT_STORAGECLASS_CEPHFS
             rbd_sc_obj = constants.DEFAULT_STORAGECLASS_RBD

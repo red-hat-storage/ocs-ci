@@ -15,13 +15,14 @@ logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s - %(levelname)s - %(message)s",
 )
+logger = logging.getLogger(__name__)
 
 
 def log_metadata_operation(operation, file_path, from_metadata, to_metadata):
     log_message = (
         f"{operation} metadata for file {file_path}: {from_metadata} -> {to_metadata}"
     )
-    logging.info(log_message)
+    logger.info(log_message)
 
 
 def create_files(base_path, num_files):
@@ -35,7 +36,7 @@ def create_files(base_path, num_files):
             file_paths.append(file_path)
         return file_paths
     except Exception as e:
-        logging.error(f"Error during file creation: {str(e)}")
+        logger.error(f"Error during file creation: {str(e)}")
         return []
 
 
@@ -44,7 +45,7 @@ def get_extended_attribute(file_path, attr_name):
         attr_value = os.getxattr(file_path, attr_name)
         return attr_value.decode("utf-8")
     except (OSError, IOError) as e:
-        logging.error(f"Error getting extended attribute: {str(e)}")
+        logger.error(f"Error getting extended attribute: {str(e)}")
         return None
 
 
@@ -52,7 +53,7 @@ def set_extended_attribute(file_path, attr_name, attr_value):
     try:
         os.setxattr(file_path, attr_name, attr_value.encode("utf-8"))
     except (OSError, IOError) as e:
-        logging.error(f"Error setting extended attribute: {str(e)}")
+        logger.error(f"Error setting extended attribute: {str(e)}")
 
 
 def perform_metadata_operations(file_path):
@@ -100,7 +101,7 @@ def perform_metadata_operations(file_path):
             fcntl.flock(lock_file, fcntl.LOCK_UN)
 
     except Exception as e:
-        logging.error(f"Error during metadata operations: {str(e)}")
+        logger.error(f"Error during metadata operations: {str(e)}")
 
 
 if __name__ == "__main__":

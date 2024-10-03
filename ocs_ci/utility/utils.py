@@ -5147,3 +5147,19 @@ def compare_dictionaries(
                 differences[key] = (value1, value2)
     log.info(f"Differences: {differences}")
     return differences
+
+
+def extract_image_urls(string_data):
+    """
+    Extract all image URLs from the string.
+
+    Args:
+        string_data (str): The string data that contains the image URLs to extract.
+
+    Returns:
+        list: List of image URLs found in the string, or an empty list if none are found.
+
+    """
+    # Find all URLs that start with 'registry.redhat.io'
+    image_urls = re.findall(r'registry\.redhat\.io[^\s"]+', string_data)
+    return image_urls

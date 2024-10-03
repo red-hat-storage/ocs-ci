@@ -58,7 +58,7 @@ class RGW(object):
             cephobjectstore = cos_ocp_obj.get(
                 resource_name=constants.RGW_ROUTE_EXTERNAL_MODE
             )
-            if config.EXTERNAL_MODE["rgw_secure"]:
+            if config.EXTERNAL_MODE.get("rgw_secure"):
                 endpoint = cephobjectstore["status"]["endpoints"]["secure"][0]
             else:
                 endpoint = cephobjectstore["status"]["endpoints"]["insecure"][0]
