@@ -556,23 +556,22 @@ def validate_noobaa_db_backup_recovery_locally_system(
     """
     Test to verify Backup and Restore for Multicloud Object Gateway database locally
     Backup procedure:
-        * Create a test bucket and write some data
-        * Backup noobaa secrets to local folder OR store it in secret objects
-        * Backup the PostgreSQL database and save it to a local folder
-        * For testing, write new data to show a little data loss between backup and restore
+    1. Create a test bucket and write some data
+    2. Backup noobaa secrets to local folder OR store it in secret objects
+    3. Backup the PostgreSQL database and save it to a local folder
+    4. For testing, write new data to show a little data loss between backup and restore
     Restore procedure:
-        * Stop MCG reconciliation
-        * Stop the NooBaa Service before restoring the NooBaa DB.
-          There will be no object service after this point
-        * Verify that all NooBaa components (except NooBaa DB) have 0 replicas
-        * Login to the NooBaa DB pod and cleanup potential database clients to nbcore
-        * Restore DB from a local folder
-        * Delete current noobaa secrets and restore them from a local folder OR secrets objects.
-        * Restore MCG reconciliation
-        * Start the NooBaa service
-        * Restart the NooBaa DB pod
-        * Check that the old data exists, but not s3://testloss/
-    Run multi client warp benchamrking to verify bug https://bugzilla.redhat.com/show_bug.cgi?id=2141035
+    1. Stop MCG reconciliation
+    2. Stop the NooBaa Service before restoring the NooBaa DB. There will be no object service after this point
+    3. Verify that all NooBaa components (except NooBaa DB) have 0 replicas
+    4. Login to the NooBaa DB pod and cleanup potential database clients to nbcore
+    5. Restore DB from a local folder
+    6. Delete current noobaa secrets and restore them from a local folder OR secrets objects.
+    7. Restore MCG reconciliation
+    8. Start the NooBaa service
+    9. Restart the NooBaa DB pod
+    10. Check that the old data exists, but not s3://testloss/
+    Run multi client warp benchmarking to verify bug https://bugzilla.redhat.com/show_bug.cgi?id=2141035
 
     """
 
