@@ -1656,7 +1656,7 @@ def upgrade_marks_name():
     upgrade_marks_name = []
     for upgrade_mark in upgrade_marks:
         try:
-            upgrade_marks_name.append(upgrade_mark().args[0].name)
+            upgrade_marks_name.append(upgrade_mark().mark.args[1].markname)
         except AttributeError:
             log.error("upgrade mark does not exist")
     return upgrade_marks_name
@@ -7124,6 +7124,9 @@ def fedora_pod_fixture(request, scope_name):
     )
     helpers.wait_for_resource_state(
         fedora_pod_obj, constants.STATUS_RUNNING, timeout=240
+    )
+    fedora_pod_obj.exec_cmd_on_pod(
+        f"cp {constants.SERVICE_CA_CRT_AWSCLI_PATH} {constants.AWSCLI_CA_BUNDLE_PATH}"
     )
 
     def fedora_pod_cleanup():

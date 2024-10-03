@@ -615,9 +615,9 @@ class Deployment(object):
         """
         Deploy Hosted cluster(s)
         """
-        if (
-            config.ENV_DATA.get("clusters", False)
-            and not config.ENV_DATA["skip_ocs_deployment"]
+        if config.ENV_DATA.get("clusters", False) and (
+            not config.ENV_DATA["skip_ocs_deployment"]
+            or config.DEPLOYMENT.get("deploy_hosted_clusters")
         ):
             # imported locally due to a circular dependency
             from ocs_ci.deployment.hosted_cluster import HostedClients
@@ -3742,8 +3742,8 @@ class MDRMultiClusterDROperatorsDeploy(MultiClusterDROperatorsDeploy):
             logger.info("Creating Resource DataProtectionApplication")
             run_cmd(f"oc create -f {constants.DPA_DISCOVERED_APPS_PATH}")
         # Only on the active hub enable managedserviceaccount-preview
-        acm_version = get_acm_version()
         config.switch_acm_ctx()
+        acm_version = get_acm_version()
         logger.info("Getting S3 Secret name from Ramen Config")
         secret_names = self.meta_obj.get_s3_secret_names()
         for secret_name in secret_names:

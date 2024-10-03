@@ -130,6 +130,8 @@ STATUS_CONTAINER_STATUS_UNKNOWN = "ContainerStatusUnknown"
 STATUS_WAITFORUSERTOCLEANUP = "WaitOnUserToCleanUp"
 STATUS_POWERON = "ON"
 STATUS_POWEROFF = "OFF"
+STATUS_STOPPED = "stopped"
+STATUS_STOPPING = "stopping"
 
 # NooBaa statuses
 BS_AUTH_FAILED = "AUTH_FAILED"
@@ -1691,6 +1693,7 @@ ARO_MASTER_SUBNET = "master-subnet"
 ARO_WORKER_SUBNET_ADDRESS_PREFIXES = "10.0.2.0/23"
 ARO_MASTER_SUBNET_ADDRESS_PREFIXES = "10.0.0.0/23"
 CLIENT_OPERATOR_CONFIGMAP = "ocs-client-operator-config"
+CLIENT_OPERATOR_CSI_IMAGES = "ocs-client-operator-csi-images"
 
 # UI Deployment constants
 HTPASSWD_SECRET_NAME = "htpass-secret"

@@ -60,7 +60,11 @@ from ocs_ci.ocs.node import (
     add_disk_stretch_arbiter,
 )
 from ocs_ci.ocs.version import get_ocp_version
-from ocs_ci.utility.version import get_semantic_version, VERSION_4_11
+from ocs_ci.utility.version import (
+    get_semantic_version,
+    VERSION_4_11,
+    get_semantic_ocp_running_version,
+)
 from ocs_ci.helpers.helpers import (
     get_secret_names,
     get_cephfs_name,
@@ -75,7 +79,12 @@ from ocs_ci.utility import (
 )
 from ocs_ci.utility.retry import retry
 from ocs_ci.utility.rgwutils import get_rgw_count
-from ocs_ci.utility.utils import run_cmd, TimeoutSampler, convert_device_size
+from ocs_ci.utility.utils import (
+    run_cmd,
+    TimeoutSampler,
+    convert_device_size,
+    extract_image_urls,
+)
 from ocs_ci.utility.decorators import switch_to_orig_index_at_last
 from ocs_ci.helpers.helpers import storagecluster_independent_check
 
@@ -2707,7 +2716,7 @@ def patch_storage_cluster_for_custom_storage_class(
         return False
 
 
-@retry(AssertionError, 50, 20, 2)
+@retry(AssertionError, 10, 20, 2)
 def validate_serviceexport():
     """
     validate the serviceexport resource
@@ -2890,3 +2899,32 @@ def validate_non_resilient_pool(storage_cluster: StorageCluster) -> bool:
         return True
 
     return False
+
+
+def get_csi_images_for_client_ocp_version(ocp_version=None):
+    """
+    Get the csi images of the specified ocp version
+
+    Args:
+        ocp_version (str): The ocp version of the csi images. If not provided,
+            it will get the current ocp cluster version
+
+    Returns:
+        list: The list of the csi images of the specified ocp version
+
+    """
+    configmap_obj = ocp.OCP(
+        kind=constants.CONFIGMAP,
+        namespace=config.ENV_DATA["cluster_namespace"],
+        resource_name=constants.CLIENT_OPERATOR_CSI_IMAGES,
+    )
+    csi_images = configmap_obj.data.get("data").get("csi-images.yaml")
+
+    if not ocp_version:
+        ocp_version = str(get_semantic_ocp_running_version())
+
+    log.info(f"The cluster ocp version is {ocp_version}")
+    first_str, last_str = f"v{ocp_version}", "version"
+    csi_ocp_version_images = csi_images.split(first_str)[1].split(last_str)[0]
+    csi_ocp_version_images_urls = extract_image_urls(csi_ocp_version_images)
+    return csi_ocp_version_images_urls

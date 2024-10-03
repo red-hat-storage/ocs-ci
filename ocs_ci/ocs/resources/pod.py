@@ -3831,3 +3831,62 @@ def get_pod_used_memory_in_mebibytes(podname):
             if memory_value_with_unit.endswith("Mi"):
                 memory_value = int(memory_value_with_unit.replace("Mi", ""))
                 return memory_value
+
+
+def get_ceph_csi_ctrl_pods(namespace=None):
+    """
+    Fetches info about the ceph csi ctrl pods in the cluster
+
+    Args:
+        namespace (str): Namespace in which ceph cluster lives
+            (default: config.ENV_DATA["cluster_namespace"])
+
+    Returns:
+        list : The list of the ceph csi ctrl pod objects
+
+    """
+    namespace = namespace or config.ENV_DATA["cluster_namespace"]
+    ceph_csi_ctrl_labels = [
+        constants.CEPHFS_NODEPLUGIN_LABEL,
+        constants.RBD_NODEPLUGIN_LABEL,
+        constants.RBD_CTRLPLUGIN_LABEL,
+        constants.CEPHFS_CTRLPLUGIN_LABEL,
+    ]
+    ceph_csi_ctrl_pods_data = []
+    for label in ceph_csi_ctrl_labels:
+        ceph_csi_ctrl_pods_data.extend(get_pods_having_label(label, namespace))
+
+    ceph_csi_ctrl_pods = [Pod(**pod_data) for pod_data in ceph_csi_ctrl_pods_data]
+    return ceph_csi_ctrl_pods
+
+
+def get_container_images(pod_obj):
+    """
+    Get all container images (both containers and initContainers) from the pod object
+
+    Args:
+        pod_obj (Pod): The pod object
+
+    Returns:
+        set: Set of the container images from the pod object
+
+    Raises:
+        ValueError: In case we didn't find the containers or images for the pod
+
+    """
+    containers = pod_obj.data.get("spec", {}).get("containers", [])
+    containers += pod_obj.data.get("spec", {}).get("initContainers", [])
+    if not containers:
+        raise ValueError(f"Didn't find containers for the pod {pod_obj.name}")
+
+    images = set()
+    # Extract images from containers
+    for container in containers:
+        image = container.get("image")
+        if image:
+            images.add(image)
+
+    if not images:
+        raise ValueError(f"Didn't find images for the pod {pod_obj.name} containers")
+
+    return images
