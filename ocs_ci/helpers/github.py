@@ -5,7 +5,6 @@ import platform
 
 from ocs_ci.framework import config
 
-# from ocs_ci.ocs import constants
 from ocs_ci.ocs.exceptions import (
     NotFoundError,
     UnsupportedOSType,
