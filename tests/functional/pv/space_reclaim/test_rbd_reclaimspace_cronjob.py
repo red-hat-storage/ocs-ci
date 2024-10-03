@@ -306,7 +306,7 @@ class TestRbdSpaceReclaim(ManageTest):
         OCP(kind=constants.PVC, namespace=pvc_obj.project.namespace).annotate(
             '"reclaimspace.csiaddons.openshift.io/schedule=@midnight"',
             pvc_obj.name,
-            overwrite=False,
+            overwrite=True,
         )
 
         log.info("Wait for 2 hrs")
