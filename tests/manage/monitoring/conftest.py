@@ -899,8 +899,17 @@ def measure_stop_rgw(measurement_dir, request, rgw_deployments, threading_lock):
         nonlocal rgw_deployments
         for rgw_deployment in rgw_deployments:
             rgw = rgw_deployment["metadata"]["name"]
-            logger.info(f"Downscaling deployment {rgw} to 0")
-            oc.exec_oc_cmd(f"scale --replicas=0 deployment/{rgw}")
+            logger.info(
+                f"Updating readiness probe of deployment {rgw} to make rgw pod down"
+            )
+            cmd = (
+                '[{"op": "replace", "path": "/spec/template/spec/containers/0/readinessProbe", '
+                '"value": {"exec": {"command": ["bash", "-c", "#!/usr/bin/env bash\n\nexit 100"]}}}]'
+            )
+            if not oc.patch(resource_name=rgw, params=cmd, format_type="json"):
+                logger.error(f"Patch command failed to run on deployment {rgw}")
+                raise CommandFailed
+            logger.info(f"Succeeded: {cmd} patched on deployment {rgw}")
         logger.info(f"Waiting for {run_time} seconds")
         time.sleep(run_time)
         return rgw_deployments
@@ -914,15 +923,16 @@ def measure_stop_rgw(measurement_dir, request, rgw_deployments, threading_lock):
             test_file,
             minimal_time=60 * 8,
             pagerduty_service_ids=[get_pagerduty_service_id()],
+            threading_lock=threading_lock
         )
     else:
-        measured_op = measure_operation(stop_rgw, test_file)
+        measured_op = measure_operation(stop_rgw, test_file, threading_lock=threading_lock)
 
     logger.info("Return RGW pods")
     for rgw_deployment in rgw_deployments:
         rgw = rgw_deployment["metadata"]["name"]
-        logger.info(f"Upscaling deployment {rgw} to 1")
-        oc.exec_oc_cmd(f"scale --replicas=1 deployment/{rgw}")
+        logger.info("To bring the pod running delete the deployment")
+        oc.delete(resource_name=rgw)
 
     return measured_op
 
