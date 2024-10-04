@@ -22,7 +22,9 @@ class TestCNVFailoverAndRelocateWithDiscoveredApps:
 
     """
 
-    def test_cnv_failover_and_relocate_discovered_apps(self, discovered_apps_dr_workload_cnv):
+    def test_cnv_failover_and_relocate_discovered_apps(
+        self, discovered_apps_dr_workload_cnv
+    ):
         """
         Tests to verify cnv application failover and Relocate with Discovered Apps
         There are two test cases:
