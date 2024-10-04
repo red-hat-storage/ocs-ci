@@ -336,7 +336,7 @@ class TestNonOCSTaintAndTolerations(E2ETest):
 
         # Check cluster is health ok and check toleration on pods
         assert wait_for_pods_to_be_running(timeout=900, sleep=15)
-        retry(CommandFailed, tries=5, delay=10,)(
+        retry((CommandFailed, TolerationNotFoundException), tries=5, delay=10,)(
             check_toleration_on_pods
         )(toleration_key="xyz")
 
@@ -346,7 +346,7 @@ class TestNonOCSTaintAndTolerations(E2ETest):
 
         # Check cluster is health ok and check toleration on pods
         logger.info("Verifying All resources are Running and matches expected result")
-        retry(CommandFailed, tries=5, delay=10,)(
+        retry((CommandFailed, TolerationNotFoundException), tries=5, delay=10,)(
             check_toleration_on_pods
         )(toleration_key="xyz")
         self.sanity_helpers.health_check(tries=120)
