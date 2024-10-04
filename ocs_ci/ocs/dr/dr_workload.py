@@ -1333,7 +1333,7 @@ class CnvWorkloadDiscoveredApps(DRWorkload):
         )
         self.drpc_yaml_file = os.path.join(constants.DRPC_PATH)
         self.workload_dir = kwargs.get("workload_dir")
-        self.cnv_workload_placement_name = kwargs.get("workload_placement_name")
+        self.discovered_apps_placement_name = kwargs.get("workload_placement_name")
         self.cnv_workload_pvc_selector = kwargs.get("workload_pvc_selector")
         self.appset_model = kwargs.get("appset_model", None)
         self.drpc_yaml_file = os.path.join(constants.DRPC_PATH)
@@ -1365,6 +1365,7 @@ class CnvWorkloadDiscoveredApps(DRWorkload):
         for cluster in get_non_acm_cluster_config():
             config.switch_ctx(cluster.MULTICLUSTER["multicluster_index"])
             self.create_namespace()
+        self.manage_dr_vm_secrets()
         config.switch_to_cluster_by_name(self.preferred_primary_cluster)
         self.workload_path = self.target_clone_dir + "/" + self.workload_dir
         run_cmd(f"oc create -k {self.workload_path} -n {self.workload_namespace} ")
@@ -1373,6 +1374,9 @@ class CnvWorkloadDiscoveredApps(DRWorkload):
         self.create_placement()
         self.create_dprc()
         self.verify_workload_deployment()
+        self.vm_obj = VirtualMachine(
+            vm_name=self.vm_name, namespace=self.workload_namespace
+        )
 
     def _deploy_prereqs(self):
         """
@@ -1545,5 +1549,33 @@ class CnvWorkloadDiscoveredApps(DRWorkload):
             self.workload_namespace,
             skip_replication_resources=skip_replication_resources,
         )
+
+    def delete_workload(self, force=False):
+        """
+        Delete Discovered Apps
+
+        """
+
+        log.info("Deleting DRPC")
+        config.switch_acm_ctx()
+        run_cmd(
+            f"oc delete drpc -n {constants.DR_OPS_NAMESAPCE} {self.discovered_apps_placement_name}"
+        )
+        log.info("Deleting Placement")
+        run_cmd(
+            f"oc delete placement -n {constants.DR_OPS_NAMESAPCE} {self.discovered_apps_placement_name}-placement-1"
+        )
+
+        for cluster in get_non_acm_cluster_config():
+            log.info(f"Deleting Workload from {cluster}")
+            config.switch_ctx(cluster.MULTICLUSTER["multicluster_index"])
+            run_cmd(
+                f"oc delete -k {self.workload_path} -n {self.workload_namespace}",
+                ignore_error=True,
+            )
+            dr_helpers.wait_for_all_resources_deletion(
+                namespace=self.workload_namespace
+            )
+            run_cmd(f"oc delete project {self.workload_namespace}")
 
 
