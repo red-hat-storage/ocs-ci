@@ -1,18 +1,13 @@
 import logging
 
+from ocs_ci.deployment.qe_app_registry import QeAppRegistry
 from ocs_ci.framework import config
 from ocs_ci.ocs import constants, exceptions
-from ocs_ci.ocs.resources.catalog_source import CatalogSource
 from ocs_ci.ocs.resources.csv import CSV, get_csvs_start_with_prefix
 from ocs_ci.ocs.resources.ocs import OCS
-from ocs_ci.ocs.ocp import OCP
 from ocs_ci.ocs.resources.packagemanifest import PackageManifest
 from ocs_ci.utility import templating
-from ocs_ci.utility.utils import (
-    get_ocp_version,
-    TimeoutSampler,
-    wait_for_machineconfigpool_status,
-)
+from ocs_ci.utility.utils import TimeoutSampler
 
 
 logger = logging.getLogger(__name__)
@@ -91,8 +86,10 @@ def deploy_ingress_node_firewall(rules):
     if not inf.check_existing_packagemanifests():
         # Ingress Node Firewall Operator is not available, we have to create QE App Registry Catalog Source
         # and related Image content source policy
-        inf.create_brew_icsp()
-        inf.create_catalog_source()
+        qe_app_registry = QeAppRegistry()
+        qe_app_registry.icsp()
+        qe_app_registry.catalog_source()
+        inf.source = constants.QE_APP_REGISTRY_CATALOG_SOURCE_NAME
     # create openshift-ingress-node-firewall namespace
     inf.create_namespace()
 
@@ -122,30 +119,6 @@ class IngressNodeFirewallInstaller(object):
         self.namespace = constants.INGRESS_NODE_FIREWALL_NAMESPACE
         self.source = constants.OPERATOR_CATALOG_SOURCE_NAME
 
-    def icsp_brew_registry_exists(self):
-        """
-        Check if the ICSP Brew registry exists
-
-        Returns:
-            bool: True if the ICSP Brew registry exists, False otherwise
-        """
-        return OCP(
-            kind=constants.IMAGECONTENTSOURCEPOLICY_KIND, resource_name="brew-registry"
-        ).check_resource_existence(timeout=10, should_exist=True)
-
-    def create_brew_icsp(self):
-        """
-        Apply the ICSP to the cluster
-        """
-        if self.icsp_brew_registry_exists():
-            logger.info("ICSP for Brew registry already exists")
-            return
-        icsp_data = templating.load_yaml(constants.SUBMARINER_DOWNSTREAM_BREW_ICSP)
-        icsp = OCS(**icsp_data)
-        icsp.create()
-        wait_for_machineconfigpool_status(node_type="all")
-        logger.info("ICSP applied successfully")
-
     def check_existing_packagemanifests(self):
         """
         Check if Ingress Node Firewall Operator is available or not.
@@ -159,31 +132,6 @@ class IngressNodeFirewallInstaller(object):
             return True
         except (exceptions.CommandFailed, exceptions.ResourceNotFoundError):
             return False
-
-    def create_catalog_source(self):
-        """
-        Create Catalog source from QE App registry
-
-        """
-        logger.info("Creating Catalog Source for IngressNodeFirewall")
-        catalog_source_data = templating.load_yaml(constants.QE_APP_REGISTRY_SOURCE)
-
-        image_placeholder = catalog_source_data.get("spec").get("image")
-        catalog_source_data.get("spec").update(
-            {"image": image_placeholder.format(get_ocp_version())}
-        )
-        catalog_source = OCS(**catalog_source_data)
-        catalog_source.create()
-
-        catalog_source = CatalogSource(
-            resource_name=constants.QE_APP_REGISTRY_CATALOG_SOURCE_NAME,
-            namespace=constants.MARKETPLACE_NAMESPACE,
-        )
-
-        # wait for catalog source is ready
-        catalog_source.wait_for_state("READY")
-        logger.info("Catalog Source created successfully")
-        self.source = constants.QE_APP_REGISTRY_CATALOG_SOURCE_NAME
 
     def create_namespace(self):
         """
