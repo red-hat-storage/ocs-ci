@@ -739,7 +739,7 @@ class CnvWorkload(DRWorkload):
         Deployment specific to cnv workloads
 
         """
-        self._deploy_prexreqs()
+        self._deploy_prereqs()
         self.vm_obj = VirtualMachine(
             vm_name=self.vm_name, namespace=self.workload_namespace
         )
