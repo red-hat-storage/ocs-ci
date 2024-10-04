@@ -597,6 +597,7 @@ def exec_cmd(
     silent=False,
     use_shell=False,
     cluster_config=None,
+    lock_timeout=7200,
     **kwargs,
 ):
     """
@@ -619,6 +620,7 @@ def exec_cmd(
         use_shell (bool): If True will pass the cmd without splitting
         cluster_config (MultiClusterConfig): In case of multicluster environment this object
                 will be non-null
+        lock_timeout (int): maximum timeout to wait for lock to prevent deadlocks (default 2 hours)
 
     Raises:
         CommandFailed: In case the command execution fails
@@ -668,18 +670,20 @@ def exec_cmd(
                 log.info(f"Found oc plugin {subcmd}")
         cmd = list_insert_at_position(cmd, kube_index, ["--kubeconfig"])
         cmd = list_insert_at_position(cmd, kube_index + 1, [kubepath])
-    if threading_lock and cmd[0] == "oc":
-        threading_lock.acquire()
-    completed_process = subprocess.run(
-        cmd,
-        stdout=subprocess.PIPE,
-        stderr=subprocess.PIPE,
-        stdin=subprocess.PIPE,
-        timeout=timeout,
-        **kwargs,
-    )
-    if threading_lock and cmd[0] == "oc":
-        threading_lock.release()
+    try:
+        if threading_lock and cmd[0] == "oc":
+            threading_lock.acquire(timeout=lock_timeout)
+        completed_process = subprocess.run(
+            cmd,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            stdin=subprocess.PIPE,
+            timeout=timeout,
+            **kwargs,
+        )
+    finally:
+        if threading_lock and cmd[0] == "oc":
+            threading_lock.release()
     masked_stdout = mask_secrets(completed_process.stdout.decode(), secrets)
     if len(completed_process.stdout) > 0:
         log.debug(f"Command stdout: {masked_stdout}")
