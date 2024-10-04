@@ -1352,6 +1352,7 @@ class CnvWorkloadDiscoveredApps(DRWorkload):
         self.discovered_apps_pod_selector_value = kwargs.get(
             "discovered_apps_pod_selector_value"
         )
+
     def deploy_workload(self):
         """
 
@@ -1574,5 +1575,3 @@ class CnvWorkloadDiscoveredApps(DRWorkload):
                 namespace=self.workload_namespace
             )
             run_cmd(f"oc delete project {self.workload_namespace}")
-
-
