@@ -1,4 +1,5 @@
 import argparse
+import faulthandler
 import os
 import re
 import signal
@@ -21,6 +22,9 @@ def signal_term_handler(sig, frame):
     print(f"Got SIGTERM: {sig}")
     if hasattr(framework.config, "RUN"):
         framework.config.RUN["aborted"] = True
+    logdir = framework.config.RUN["log_dir"]
+    with open(os.path.join(logdir, "traceback.log"), "w") as f:
+        faulthandler.dump_traceback(file=f)
     global kill_counter
     if kill_counter:
         print("Second attempt to SIGTERM, exiting process with RC: 143")
@@ -314,6 +318,7 @@ def tokenize_per_cluster_args(args, nclusters):
 
 
 def main(argv=None):
+    faulthandler.enable()
     arguments = argv or sys.argv[1:]
     init_ocsci_conf(arguments)
     for i in range(framework.config.nclusters):
