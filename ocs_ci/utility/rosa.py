@@ -473,6 +473,25 @@ def create_oidc_config():
             return sample[0].strip().decode()
 
 
+def get_oidc_endpoint_url(oidc_config_id):
+    """
+    Get OIDC provider endpoint URL for the given OIDC config id
+
+    Args:
+        oidc_config_id (str): OIDC config id
+
+    Returns:
+        str: OIDC provider id
+    """
+    cmd = f"rosa list oidc-config -o json | jq -r '.[] | select(.id == \"{oidc_config_id}\") | .issuer_url'"
+    cmd_res = exec_cmd(cmd, shell=True)
+    if cmd_res.returncode != 0:
+        raise CommandFailed(f"Failed to get oidc provider id: {cmd_res.stderr}")
+    issuer_url = cmd_res.stdout.strip().decode()
+    logger.info(f"OIDC issuer url: {issuer_url}")
+    return issuer_url
+
+
 def delete_oidc_config(oidc_config_id):
     """
     Delete OIDC config
