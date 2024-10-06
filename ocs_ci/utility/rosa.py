@@ -9,6 +9,7 @@ import os
 import re
 
 from ocs_ci.framework import config
+from ocs_ci.framework.logger_helper import log_step
 from ocs_ci.ocs import constants, ocp
 from ocs_ci.ocs.exceptions import (
     CommandFailed,
@@ -62,10 +63,11 @@ def create_cluster(cluster_name, version, region):
         region (str): Cluster region
 
     """
-
+    aws = AWSUtil()
     rosa_ocp_version = config.DEPLOYMENT["installer_version"]
     # Validate ocp version with rosa ocp supported version
     # Select the valid version if given version is invalid
+    log_step("Get OCP version matched with configuration")
     if not validate_ocp_version(rosa_ocp_version):
         logger.warning(
             f"Given OCP version {rosa_ocp_version} "
@@ -79,10 +81,12 @@ def create_cluster(cluster_name, version, region):
         account_roles_prefix = f"accroleshcp-{date_in_minimal_format}{random_letters}"
     else:
         account_roles_prefix = "ManagedOpenShift"
+    log_step("Creating account roles")
     create_account_roles(account_roles_prefix)
 
     oidc_config_id = None
     if rosa_hcp:
+        log_step("Creating OIDC config")
         oidc_config_id = create_oidc_config()
 
     compute_nodes = config.ENV_DATA["worker_replicas"]
@@ -129,7 +133,6 @@ def create_cluster(cluster_name, version, region):
         ]["private_subnet"].split(",")[0]
         subnet_ids = f"{public_subnet},{private_subnet}"
     elif config.ENV_DATA.get("vpc_name", ""):
-        aws = AWSUtil()
         subnet_ids = ",".join(
             aws.get_cluster_subnet_ids(config.ENV_DATA.get("vpc_name"))
         )
@@ -149,8 +152,8 @@ def create_cluster(cluster_name, version, region):
     if rosa_hcp:
         # with rosa hcp we need operator roles to be created before cluster creation
         prefix = f"oproles-{date_in_minimal_format}{random_letters}"
-        aws = AWSUtil()
         aws_account_id = aws.get_caller_identity()
+        log_step("Creating operator roles and waiting them to be created")
         create_operator_roles(
             prefix=prefix,
             oidc_config_id=oidc_config_id,
@@ -159,7 +162,9 @@ def create_cluster(cluster_name, version, region):
         )
         wait_operator_roles(prefix)
         cmd += f" --operator-roles-prefix {prefix} "
+        cmd += " --hosted-cp "
 
+    log_step("Running create rosa cluster command")
     utils.run_cmd(cmd, timeout=1200)
     if rosa_mode != "auto" and not rosa_hcp:
         logger.info(
@@ -173,7 +178,9 @@ def create_cluster(cluster_name, version, region):
             if status == "waiting" or status == "pending":
                 logger.info(f"Cluster is in {status} state")
                 break
+        log_step("Creating operator roles")
         create_operator_roles(cluster_name)
+        log_step("Creating OIDC provider")
         create_oidc_provider(cluster_name)
 
     logger.info("Waiting for installation of ROSA cluster")
@@ -185,6 +192,7 @@ def create_cluster(cluster_name, version, region):
         if status == "ready":
             logger.info("Cluster was installed")
             break
+    log_step("Retreiving cluster details and storing in metadata.json file")
     cluster_info = ocm.get_cluster_details(cluster_name)
     # Create metadata file to store the cluster name
     cluster_info["clusterName"] = cluster_name
