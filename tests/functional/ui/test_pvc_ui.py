@@ -197,7 +197,12 @@ class TestPvcUserInterface(object):
         else:
             storage_type = constants.WORKLOAD_STORAGE_TYPE_FS
 
-        new_pod.run_io(storage_type, size=(new_size - 1), invalidate=0, rate="1000m")
+        new_pod.run_io(
+            storage_type,
+            size=(new_size - 1),
+            invalidate=0,
+            direct=int(storage_type == "block"),
+        )
 
         get_fio_rw_iops(new_pod)
         logger.info("FIO execution on Pod successfully completed..!!")
