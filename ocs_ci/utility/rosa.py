@@ -101,7 +101,7 @@ def create_cluster(cluster_name, version, region):
         f"rosa create cluster --cluster-name {cluster_name} --region {region} "
         f"--machine-cidr {machine_cidr} --replicas {compute_nodes} "
         f"--compute-machine-type {compute_machine_type} "
-        f"--version {rosa_ocp_version} {multi_az}--sts --yes"
+        f"--version {rosa_ocp_version} {multi_az} --sts --yes --watch"
     )
 
     if oidc_config_id:
@@ -193,6 +193,26 @@ def create_cluster(cluster_name, version, region):
     metadata_file = os.path.join(cluster_path, "metadata.json")
     with open(metadata_file, "w+") as f:
         json.dump(cluster_info, f)
+
+
+def get_machinepools(cluster_name):
+    """
+    Get machinepools of the cluster
+
+    Args:
+        cluster_name (str): Cluster name
+
+    Returns:
+        dict: Machinepools of the cluster
+
+    """
+    cmd = f"rosa list machinepool --cluster {cluster_name} -o json"
+    try:
+        out = utils.exec_cmd(cmd)
+        return json.loads(out)
+    except CommandFailed as ex:
+        logger.error(f"Failed to get machinepools of the cluster {cluster_name}\n{ex}")
+        return {}
 
 
 def appliance_mode_cluster(cluster_name):

@@ -13,6 +13,7 @@ from ocs_ci.deployment.cloud import CloudDeploymentBase
 from ocs_ci.deployment.helpers.rosa_prod_cluster_helpers import ROSAProdEnvCluster
 from ocs_ci.deployment.ocp import OCPDeployment as BaseOCPDeployment
 from ocs_ci.framework import config
+from ocs_ci.ocs.node import wait_for_nodes_status, get_worker_nodes
 from ocs_ci.ocs.resources.pod import get_operator_pods
 from ocs_ci.utility import openshift_dedicated as ocm, rosa
 from ocs_ci.utility.aws import AWS as AWSUtil
@@ -83,6 +84,11 @@ class ROSAOCP(BaseOCPDeployment):
         else:
             rosa.login()
             rosa.create_cluster(self.cluster_name, self.ocp_version, self.region)
+            wait_for_nodes_status(
+                node_names=get_worker_nodes(),
+                status=constants.NODE_READY,
+                timeout=60 * 20,
+            )
 
         kubeconfig_path = os.path.join(
             config.ENV_DATA["cluster_path"], config.RUN["kubeconfig_location"]
