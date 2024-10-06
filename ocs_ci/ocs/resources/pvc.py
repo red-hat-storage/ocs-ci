@@ -668,7 +668,9 @@ def flatten_image(clone_obj):
         clone_obj: Object of clone of which image to be flatten
     """
     image_name = clone_obj.get_rbd_image_name
-    pool_name = constants.DEFAULT_CEPHBLOCKPOOL
+    pool_name = (
+        f"{config.ENV_DATA['storage_cluster_name']}{constants.SUFFIX_CEPHBLOCKPOOL}"
+    )
 
     tool_pod = pod.get_ceph_tools_pod()
     out = tool_pod.exec_ceph_cmd(

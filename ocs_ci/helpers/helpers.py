@@ -116,8 +116,10 @@ def wait_for_resource_state(resource, state, timeout=60):
     if check_cluster_is_compact():
         timeout = 180
     if (
-        resource.name == constants.DEFAULT_STORAGECLASS_CEPHFS
-        or resource.name == constants.DEFAULT_STORAGECLASS_RBD
+        resource.name
+        == f"{config.ENV_DATA['storage_cluster_name']}{constants.SUFFIX_STORAGECLASS_CEPHFS}"
+        or resource.name
+        == f"{config.ENV_DATA['storage_cluster_name']}{constants.SUFFIX_STORAGECLASS_RBD}"
     ):
         logger.info("Attempt to default default Secret or StorageClass")
         return
@@ -728,7 +730,7 @@ def default_thick_storage_class():
     if external:
         resource_name = constants.DEFAULT_EXTERNAL_MODE_STORAGECLASS_RBD_THICK
     else:
-        resource_name = constants.DEFAULT_STORAGECLASS_RBD_THICK
+        resource_name = f"{config.ENV_DATA['storage_cluster_name']}{constants.SUFFIX_STORAGECLASS_RBD_THICK}"
     base_sc = OCP(kind="storageclass", resource_name=resource_name)
     sc = OCS(**base_sc.data)
     return sc
@@ -4802,7 +4804,11 @@ def is_rbd_default_storage_class(sc_name=None):
     Returns:
         bool : True if RBD is set as the  Default storage class for the cluster, False otherwise.
     """
-    default_rbd_sc = constants.DEFAULT_STORAGECLASS_RBD if sc_name is None else sc_name
+    default_rbd_sc = (
+        f"{config.ENV_DATA['storage_cluster_name']}{constants.SUFFIX_STORAGECLASS_RBD}"
+        if sc_name is None
+        else sc_name
+    )
     cmd = (
         f"oc get storageclass {default_rbd_sc} -o=jsonpath='{{.metadata.annotations}}' "
     )

@@ -16,7 +16,13 @@ def test_clone_backingstore(mcg_obj, backingstore_factory):
         constants.BACKINGSTORE_TYPE_AZURE: {"azure": [(1, None)]},
         constants.BACKINGSTORE_TYPE_IBMCOS: {"ibmcos": [(1, None)]},
         constants.BACKINGSTORE_TYPE_PV_POOL: {
-            "pv": [(1, 35, constants.DEFAULT_STORAGECLASS_RBD)]
+            "pv": [
+                (
+                    1,
+                    35,
+                    f"{config.ENV_DATA['storage_cluster_name']}{constants.SUFFIX_STORAGECLASS_RBD}",
+                )
+            ]
         },
     }
     for type, bucketclass_dict in platform_to_bucketclass_dicts.items():

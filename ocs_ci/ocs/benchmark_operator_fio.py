@@ -39,7 +39,7 @@ class BenchmarkOperatorFIO(object):
         jobs="read",
         read_runtime=30,
         bs="4096KiB",
-        storageclass=constants.DEFAULT_STORAGECLASS_RBD,
+        storageclass=f"{config.ENV_DATA['storage_cluster_name']}{constants.SUFFIX_STORAGECLASS_RBD}",
         timeout_completed=2400,
     ):
         """

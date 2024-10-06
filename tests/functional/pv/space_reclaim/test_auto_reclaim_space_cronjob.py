@@ -15,6 +15,7 @@ from ocs_ci.helpers.performance_lib import run_oc_command
 from ocs_ci.helpers import helpers, performance_lib
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.exceptions import PVCNotCreated
+from ocs_ci.framework import config
 
 logger = logging.getLogger(__name__)
 ERRMSG = "Error in command"
@@ -80,7 +81,7 @@ class TestReclaimSpaceCronJob(ManageTest):
         logger.info(f"There are {existing_cronjobs_num} existing cronjobs")
 
         self.pvc_objs_created, _ = helpers.create_multiple_pvcs(
-            sc_name=constants.DEFAULT_STORAGECLASS_RBD,
+            sc_name=f"{config.ENV_DATA['storage_cluster_name']}{constants.SUFFIX_STORAGECLASS_RBD}",
             namespace=self.namespace,
             number_of_pvc=num_of_pvcs,
             size="1Gi",
@@ -132,7 +133,7 @@ class TestReclaimSpaceCronJob(ManageTest):
         # create CephFS PVC and test that no reclaim space job created for it
         try:
             pvc_obj = helpers.create_pvc(
-                sc_name=constants.DEFAULT_STORAGECLASS_CEPHFS,
+                sc_name=f"{config.ENV_DATA['storage_cluster_name']}{constants.SUFFIX_STORAGECLASS_CEPHFS}",
                 size="1Gi",
                 namespace=self.namespace,
             )
@@ -225,7 +226,7 @@ class TestReclaimSpaceCronJob(ManageTest):
 
         try:
             pvc_obj = helpers.create_pvc(
-                sc_name=constants.DEFAULT_STORAGECLASS_RBD,
+                sc_name=f"{config.ENV_DATA['storage_cluster_name']}{constants.SUFFIX_STORAGECLASS_RBD}",
                 size="1Gi",
                 namespace=namespace,
             )

@@ -80,7 +80,7 @@ class MillionFilesOnCephfs(object):
         self.pod_name = pod_info["metadata"]["name"] + str(uuid.uuid4())
         config.RUN["cli_params"]["teardown"] = True
         self.cephfs_pvc = helpers.create_pvc(
-            sc_name=constants.DEFAULT_STORAGECLASS_CEPHFS,
+            sc_name=f"{config.ENV_DATA['storage_cluster_name']}{constants.SUFFIX_STORAGECLASS_CEPHFS}",
             namespace=config.ENV_DATA["cluster_namespace"],
             pvc_name=pvc_name,
             size=SIZE,

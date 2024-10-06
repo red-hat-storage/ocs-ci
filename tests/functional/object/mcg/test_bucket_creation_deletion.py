@@ -15,12 +15,14 @@ from ocs_ci.framework.pytest_customization.marks import (
     mcg,
 )
 from ocs_ci.ocs.bucket_utils import sync_object_directory
-from ocs_ci.ocs.constants import DEFAULT_STORAGECLASS_RBD, AWSCLI_TEST_OBJ_DIR
+from ocs_ci.ocs.constants import AWSCLI_TEST_OBJ_DIR
 from ocs_ci.ocs.exceptions import CommandFailed
 from ocs_ci.ocs.resources.objectbucket import BUCKET_MAP
 from ocs_ci.ocs.resources.pod import get_pod_logs, get_operator_pods
 from ocs_ci.framework.testlib import MCGTest
 from ocs_ci.framework.pytest_customization.marks import skipif_managed_service
+from ocs_ci.framework import config
+from ocs_ci.ocs import constants
 
 logger = logging.getLogger(__name__)
 
@@ -126,7 +128,13 @@ class TestBucketCreationAndDeletion(MCGTest):
                     {
                         "interface": "OC",
                         "backingstore_dict": {
-                            "pv": [(1, 50, DEFAULT_STORAGECLASS_RBD)]
+                            "pv": [
+                                (
+                                    1,
+                                    50,
+                                    f"{config.ENV_DATA['storage_cluster_name']}{constants.SUFFIX_STORAGECLASS_RBD}",
+                                )
+                            ]
                         },
                     },
                 ],
@@ -139,7 +147,13 @@ class TestBucketCreationAndDeletion(MCGTest):
                     {
                         "interface": "CLI",
                         "backingstore_dict": {
-                            "pv": [(1, 50, DEFAULT_STORAGECLASS_RBD)]
+                            "pv": [
+                                (
+                                    1,
+                                    50,
+                                    f"{config.ENV_DATA['storage_cluster_name']}{constants.SUFFIX_STORAGECLASS_RBD}",
+                                )
+                            ]
                         },
                     },
                 ],

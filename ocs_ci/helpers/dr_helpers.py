@@ -297,7 +297,7 @@ def check_mirroring_status_ok(replaying_images=None):
     """
     cbp_obj = ocp.OCP(
         kind=constants.CEPHBLOCKPOOL,
-        resource_name=constants.DEFAULT_CEPHBLOCKPOOL,
+        resource_name=f"{config.ENV_DATA['storage_cluster_name']}{constants.SUFFIX_CEPHBLOCKPOOL}",
         namespace=config.ENV_DATA["cluster_namespace"],
     )
     mirroring_status = cbp_obj.get().get("status").get("mirroringStatus").get("summary")
@@ -869,13 +869,13 @@ def get_backend_volumes_for_pvcs(namespace):
         all_pvcs = get_all_pvc_objs(namespace=namespace)
         for pvc_obj in all_pvcs:
             if pvc_obj.backed_sc in [
-                constants.DEFAULT_STORAGECLASS_RBD,
+                f"{config.ENV_DATA['storage_cluster_name']}{constants.SUFFIX_STORAGECLASS_RBD}",
                 constants.DEFAULT_EXTERNAL_MODE_STORAGECLASS_RBD,
                 constants.DEFAULT_CNV_CEPH_RBD_SC,
             ]:
                 backend_volume = pvc_obj.get_rbd_image_name
             elif pvc_obj.backed_sc in [
-                constants.DEFAULT_STORAGECLASS_CEPHFS,
+                f"{config.ENV_DATA['storage_cluster_name']}{constants.SUFFIX_STORAGECLASS_CEPHFS}",
                 constants.DEFAULT_EXTERNAL_MODE_STORAGECLASS_CEPHFS,
             ]:
                 backend_volume = pvc_obj.get_cephfs_subvolume_name
@@ -902,7 +902,7 @@ def verify_backend_volume_deletion(backend_volumes):
     rbd_pool_name = (
         (config.ENV_DATA.get("rbd_name") or RBD_NAME)
         if config.DEPLOYMENT["external_mode"]
-        else constants.DEFAULT_CEPHBLOCKPOOL
+        else f"{config.ENV_DATA['storage_cluster_name']}{constants.SUFFIX_CEPHBLOCKPOOL}"
     )
     rbd_images = ct_pod.exec_cmd_on_pod(f"rbd ls {rbd_pool_name} --format json")
 

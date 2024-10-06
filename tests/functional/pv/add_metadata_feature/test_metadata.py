@@ -45,7 +45,7 @@ class TestMetadataUnavailable(ManageTest):
         argvalues=[
             pytest.param(
                 "ocs-storagecluster-cephfilesystem",
-                constants.DEFAULT_STORAGECLASS_CEPHFS,
+                f"{config.ENV_DATA['storage_cluster_name']}{constants.SUFFIX_STORAGECLASS_CEPHFS}",
             ),
         ],
     )
@@ -155,7 +155,7 @@ class TestDefaultMetadataDisabled(ManageTest):
         argvalues=[
             pytest.param(
                 "ocs-storagecluster-cephfilesystem",
-                constants.DEFAULT_STORAGECLASS_CEPHFS,
+                f"{config.ENV_DATA['storage_cluster_name']}{constants.SUFFIX_STORAGECLASS_CEPHFS}",
             )
         ],
     )
@@ -285,12 +285,12 @@ class TestMetadata(ManageTest):
         argvalues=[
             pytest.param(
                 "ocs-storagecluster-cephfilesystem",
-                constants.DEFAULT_STORAGECLASS_CEPHFS,
+                f"{config.ENV_DATA['storage_cluster_name']}{constants.SUFFIX_STORAGECLASS_CEPHFS}",
                 marks=pytest.mark.polarion_id("OCS-4676"),
             ),
             pytest.param(
                 "ocs-storagecluster-cephblockpool",
-                constants.DEFAULT_STORAGECLASS_RBD,
+                f"{config.ENV_DATA['storage_cluster_name']}{constants.SUFFIX_STORAGECLASS_RBD}",
                 marks=[
                     pytest.mark.polarion_id("OCS-4679"),
                     pytest.mark.bugzilla("2039269"),
@@ -424,7 +424,7 @@ class TestMetadata(ManageTest):
         argvalues=[
             pytest.param(
                 "ocs-storagecluster-cephfilesystem",
-                constants.DEFAULT_STORAGECLASS_CEPHFS,
+                f"{config.ENV_DATA['storage_cluster_name']}{constants.SUFFIX_STORAGECLASS_CEPHFS}",
             )
         ],
     )
@@ -520,12 +520,12 @@ class TestMetadata(ManageTest):
         argvalues=[
             pytest.param(
                 "ocs-storagecluster-cephfilesystem",
-                constants.DEFAULT_STORAGECLASS_CEPHFS,
+                f"{config.ENV_DATA['storage_cluster_name']}{constants.SUFFIX_STORAGECLASS_CEPHFS}",
                 marks=pytest.mark.polarion_id("OCS-4677"),
             ),
             pytest.param(
                 "ocs-storagecluster-cephblockpool",
-                constants.DEFAULT_STORAGECLASS_RBD,
+                f"{config.ENV_DATA['storage_cluster_name']}{constants.SUFFIX_STORAGECLASS_RBD}",
                 marks=pytest.mark.polarion_id("OCS-4678"),
             ),
         ],
@@ -670,10 +670,11 @@ class TestMetadata(ManageTest):
         argvalues=[
             pytest.param(
                 "ocs-storagecluster-cephfilesystem",
-                constants.DEFAULT_STORAGECLASS_CEPHFS,
+                f"{config.ENV_DATA['storage_cluster_name']}{constants.SUFFIX_STORAGECLASS_CEPHFS}",
             ),
             pytest.param(
-                "ocs-storagecluster-cephblockpool", constants.DEFAULT_STORAGECLASS_RBD
+                "ocs-storagecluster-cephblockpool",
+                f"{config.ENV_DATA['storage_cluster_name']}{constants.SUFFIX_STORAGECLASS_RBD}",
             ),
         ],
     )
@@ -786,7 +787,8 @@ class TestMetadata(ManageTest):
         argnames=["fs", "sc_name"],
         argvalues=[
             pytest.param(
-                "ocs-storagecluster-cephblockpool", constants.DEFAULT_STORAGECLASS_RBD
+                "ocs-storagecluster-cephblockpool",
+                f"{config.ENV_DATA['storage_cluster_name']}{constants.SUFFIX_STORAGECLASS_RBD}",
             ),
         ],
     )

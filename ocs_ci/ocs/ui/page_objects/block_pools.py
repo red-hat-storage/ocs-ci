@@ -8,6 +8,7 @@ from ocs_ci.ocs.ui.page_objects.edit_label_form import EditLabelForm
 from ocs_ci.ocs.ui.page_objects.storage_system_details import StorageSystemDetails
 from ocs_ci.ocs.ui.page_objects.storage_system_tab import StorageSystemTab
 from ocs_ci.utility import version
+from ocs_ci.framework import config
 
 
 class BlockPools(StorageSystemDetails, CreateResourceForm, EditLabelForm, SearchBar):
@@ -55,9 +56,13 @@ class BlockPools(StorageSystemDetails, CreateResourceForm, EditLabelForm, Search
         )
 
     def verify_cephblockpool_status(self, status_exp: str = "Ready"):
-        logger.info(f"Verifying the status of '{constants.DEFAULT_CEPHBLOCKPOOL}'")
+        logger.info(
+            f"Verifying the status of {config.ENV_DATA['storage_cluster_name']}{constants.SUFFIX_CEPHBLOCKPOOL}"
+        )
         cephblockpool_status = self.get_element_text(
-            self.validation_loc[f"{constants.DEFAULT_CEPHBLOCKPOOL}-status"]
+            self.validation_loc[
+                f"{config.ENV_DATA['storage_cluster_name']}{constants.SUFFIX_CEPHBLOCKPOOL}-status"
+            ]
         )
         if not status_exp == cephblockpool_status:
             raise CephHealthException(

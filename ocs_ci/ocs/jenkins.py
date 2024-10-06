@@ -236,7 +236,7 @@ class Jenkins(object):
             if storagecluster_independent_check()
             and config.ENV_DATA["platform"].lower()
             not in constants.HCI_PC_OR_MS_PLATFORM
-            else constants.DEFAULT_STORAGECLASS_RBD
+            else f"{config.ENV_DATA['storage_cluster_name']}{constants.SUFFIX_STORAGECLASS_RBD}"
         )
         for project in self.projects:
             log.info(f"create jenkins pvc on project {project}")
@@ -320,7 +320,7 @@ class Jenkins(object):
         sc_name = (
             constants.DEFAULT_EXTERNAL_MODE_STORAGECLASS_RBD
             if storagecluster_independent_check()
-            else constants.DEFAULT_STORAGECLASS_RBD
+            else f"{config.ENV_DATA['storage_cluster_name']}{constants.SUFFIX_STORAGECLASS_RBD}"
         )
         for i in range(len(tmp_dict["objects"])):
             if tmp_dict["objects"][i]["kind"] == constants.PVC:

@@ -11,7 +11,7 @@ from ocs_ci.ocs.resources.pod import (
 )
 from ocs_ci.ocs.ocp import OCP
 from ocs_ci.ocs.constants import (
-    DEFAULT_CEPHBLOCKPOOL,
+    SUFFIX_CEPHBLOCKPOOL,
     DEFAULT_STORAGE_CLUSTER,
     OPENSHIFT_STORAGE_NAMESPACE,
     OSD_APP_LABEL,
@@ -60,7 +60,7 @@ def get_failures_domain_name() -> list[str]:
     cbp_object = OCP(kind=CEPHBLOCKPOOL, namespace=config.ENV_DATA["cluster_namespace"])
     failure_domains = list()
     cephblockpools_names = list()
-    prefix = DEFAULT_CEPHBLOCKPOOL
+    prefix = f"{config.ENV_DATA['storage_cluster_name']}{SUFFIX_CEPHBLOCKPOOL}"
     items = cbp_object.data.get("items", [])
     for i in range(len(items)):
         name = items[i].get("metadata", {}).get("name")
@@ -206,8 +206,14 @@ def delete_replica1_cephblockpools_cr(cbp_object: OCP):
         cbp_cr_name = cbp_object.data["items"][i]["spec"]["deviceClass"]
         log.info(f"cbp_cr_name: {cbp_cr_name}")
         if cbp_cr_name in get_failure_domains():
-            log.info(f"Deleting {DEFAULT_CEPHBLOCKPOOL}-{cbp_cr_name}")
-            cbp_object.delete(resource_name=(f"{DEFAULT_CEPHBLOCKPOOL}-{cbp_cr_name}"))
+            log.info(
+                f"Deleting {config.ENV_DATA['storage_cluster_name']}{SUFFIX_CEPHBLOCKPOOL}-{cbp_cr_name}"
+            )
+            cbp_object.delete(
+                resource_name=(
+                    f"{config.ENV_DATA['storage_cluster_name']}{SUFFIX_CEPHBLOCKPOOL}-{cbp_cr_name}"
+                )
+            )
 
 
 def modify_replica1_osd_count(new_osd_count):

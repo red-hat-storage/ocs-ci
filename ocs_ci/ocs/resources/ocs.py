@@ -137,8 +137,10 @@ class OCS(object):
         """
         # Avoid accidental delete of default storageclass and secret
         if (
-            self.name == constants.DEFAULT_STORAGECLASS_CEPHFS
-            or self.name == constants.DEFAULT_STORAGECLASS_RBD
+            self.name
+            == f"{config.ENV_DATA['storage_cluster_name']}{constants.SUFFIX_STORAGECLASS_CEPHFS}"
+            or self.name
+            == f"{config.ENV_DATA['storage_cluster_name']}{constants.SUFFIX_STORAGECLASS_RBD}"
         ):
             log.info("Attempt to delete default Secret or StorageClass")
             return

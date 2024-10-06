@@ -142,7 +142,10 @@ class TestPvcUserInterface(object):
 
         # Creating Pod via CLI
         logger.info("Creating Pod")
-        if sc_name in constants.DEFAULT_STORAGECLASS_RBD:
+        if (
+            sc_name
+            in f"{config.ENV_DATA['storage_cluster_name']}{constants.SUFFIX_STORAGECLASS_RBD}"
+        ):
             interface_type = constants.CEPHBLOCKPOOL
         elif sc_name in constants.DEFAULT_EXTERNAL_MODE_STORAGECLASS_RBD:
             interface_type = constants.CEPHBLOCKPOOL

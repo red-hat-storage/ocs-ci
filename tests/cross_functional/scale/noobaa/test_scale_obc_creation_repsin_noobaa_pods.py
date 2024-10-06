@@ -58,7 +58,10 @@ class TestScaleOCBCreation(E2ETest):
                 ],
             ),
             pytest.param(
-                *["noobaa-core", constants.DEFAULT_STORAGECLASS_RGW],
+                *[
+                    "noobaa-core",
+                    f"{config.ENV_DATA['storage_cluster_name']}{constants.SUFFIX_STORAGECLASS_RGW}",
+                ],
                 marks=[
                     on_prem_platform_required,
                     pytest.mark.polarion_id("OCS-2647"),
@@ -66,7 +69,10 @@ class TestScaleOCBCreation(E2ETest):
                 ],
             ),
             pytest.param(
-                *["noobaa-db", constants.DEFAULT_STORAGECLASS_RGW],
+                *[
+                    "noobaa-db",
+                    f"{config.ENV_DATA['storage_cluster_name']}{constants.SUFFIX_STORAGECLASS_RGW}",
+                ],
                 marks=[
                     on_prem_platform_required,
                     pytest.mark.polarion_id("OCS-2648"),

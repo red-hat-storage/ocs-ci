@@ -19,7 +19,7 @@ class RGW(object):
         if storagecluster_independent_check():
             sc_name = constants.DEFAULT_EXTERNAL_MODE_STORAGECLASS_RGW
         else:
-            sc_name = constants.DEFAULT_STORAGECLASS_RGW
+            sc_name = f"{config.ENV_DATA['storage_cluster_name']}{constants.SUFFIX_STORAGECLASS_RGW}"
 
         self.storageclass = OCP(
             kind="storageclass", namespace=namespace, resource_name=sc_name

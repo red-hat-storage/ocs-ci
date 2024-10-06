@@ -298,12 +298,12 @@ def get_sc_name(fixture_name):
         if config.DEPLOYMENT.get("external_mode"):
             storage_class_name = constants.DEFAULT_EXTERNAL_MODE_STORAGECLASS_RBD
         else:
-            storage_class_name = constants.DEFAULT_STORAGECLASS_RBD
+            storage_class_name = f"{config.ENV_DATA['storage_cluster_name']}{constants.SUFFIX_STORAGECLASS_RBD}"
     elif fixture_name.endswith("cephfs"):
         if config.DEPLOYMENT.get("external_mode"):
             storage_class_name = constants.DEFAULT_EXTERNAL_MODE_STORAGECLASS_CEPHFS
         else:
-            storage_class_name = constants.DEFAULT_STORAGECLASS_CEPHFS
+            storage_class_name = f"{config.ENV_DATA['storage_cluster_name']}{constants.SUFFIX_STORAGECLASS_CEPHFS}"
     else:
         raise UnexpectedVolumeType("unexpected volume type, ocs-ci code is wrong")
     return storage_class_name

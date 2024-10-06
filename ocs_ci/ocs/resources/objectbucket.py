@@ -598,7 +598,9 @@ class RGWOCBucket(OCBucket):
                 "storageClassName"
             ] = constants.DEFAULT_EXTERNAL_MODE_STORAGECLASS_RGW
         else:
-            obc_data["spec"]["storageClassName"] = constants.DEFAULT_STORAGECLASS_RGW
+            obc_data["spec"][
+                "storageClassName"
+            ] = f"{config.ENV_DATA['storage_cluster_name']}{constants.SUFFIX_STORAGECLASS_RGW}"
         obc_data["metadata"]["namespace"] = self.namespace
         create_resource(**obc_data)
 

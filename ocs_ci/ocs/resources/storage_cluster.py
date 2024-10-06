@@ -2168,8 +2168,8 @@ def verify_consumer_resources():
             namespace=config.ENV_DATA["cluster_namespace"],
         )
         for sc_claim in [
-            constants.DEFAULT_STORAGECLASS_RBD,
-            constants.DEFAULT_STORAGECLASS_CEPHFS,
+            f"{config.ENV_DATA['storage_cluster_name']}{constants.SUFFIX_STORAGECLASS_RBD}",
+            f"{config.ENV_DATA['storage_cluster_name']}{constants.SUFFIX_STORAGECLASS_CEPHFS}",
         ]:
             sc_claim_phase = storage_class_claim.get_resource(
                 resource_name=sc_claim, column="PHASE"

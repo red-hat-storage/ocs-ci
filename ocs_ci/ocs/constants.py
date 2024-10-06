@@ -441,19 +441,11 @@ OCP_QE_DEVICEPATH_REPO = "https://github.com/anubhav-here/device-by-id-ocp.git"
 SCHEDULERS_CONFIG = "schedulers.config.openshift.io/cluster"
 CONSOLE_CONFIG = "console.v1.operator.openshift.io/cluster"
 
-# Default pools
-DEFAULT_CEPHBLOCKPOOL = "ocs-storagecluster-cephblockpool"
-# Default StorageClass
-DEFAULT_STORAGECLASS_CEPHFS = f"{DEFAULT_CLUSTERNAME}-cephfs"
-DEFAULT_STORAGECLASS_RBD = f"{DEFAULT_CLUSTERNAME}-ceph-rbd"
-DEFAULT_STORAGECLASS_RGW = f"{DEFAULT_CLUSTERNAME}-ceph-rgw"
-DEFAULT_STORAGECLASS_RBD_THICK = f"{DEFAULT_CLUSTERNAME}-ceph-rbd-thick"
-DEFAULT_OCS_STORAGECLASS = "default-ocs-storage-class"
-
 SUFFIX_STORAGECLASS_CEPHFS = "-cephfs"
 SUFFIX_STORAGECLASS_RBD = "-ceph-rbd"
 SUFFIX_STORAGECLASS_RGW = "-ceph-rgw"
 SUFFIX_STORAGECLASS_RBD_THICK = "-ceph-rbd-thick"
+SUFFIX_CEPHBLOCKPOOL = "-cephblockpool"
 
 THIN_CSI_STORAGECLASS = "thin-csi"
 

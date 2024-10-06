@@ -544,9 +544,9 @@ class TestPvcSnapshotPerformance(PASTest):
                 sf_data["spec"]["elasticsearch"] = {"url": self.es["url"]}
 
         if interface == constants.CEPHBLOCKPOOL:
-            storageclass = constants.DEFAULT_STORAGECLASS_RBD
+            storageclass = f"{config.ENV_DATA['storage_cluster_name']}{constants.SUFFIX_STORAGECLASS_RBD}"
         else:
-            storageclass = constants.DEFAULT_STORAGECLASS_CEPHFS
+            storageclass = f"{config.ENV_DATA['storage_cluster_name']}{constants.SUFFIX_STORAGECLASS_CEPHFS}"
         log.info(f"Using {storageclass} Storageclass")
 
         # Setting up the parameters for this test
