@@ -943,6 +943,7 @@ def get_rosa_cli(
     """
     bin_dir = os.path.expanduser(bin_dir or config.RUN["bin_dir"])
     rosa_filename = "rosa"
+    rosa_tarball_name = "rosa_Linux_x86_64.tar.gz"
     rosa_binary_path = os.path.join(bin_dir, rosa_filename)
     if os.path.isfile(rosa_binary_path) and force_download:
         delete_file(rosa_binary_path)
@@ -954,8 +955,10 @@ def get_rosa_cli(
         # record current working directory and switch to BIN_DIR
         previous_dir = os.getcwd()
         os.chdir(bin_dir)
-        url = f"https://github.com/openshift/rosa/releases/download/v{version}/rosa-linux-amd64"
-        download_file(url, rosa_filename)
+        # download rosa binary endpoints were changed to a tarball endpoints
+        url = f"https://github.com/openshift/rosa/releases/download/v{version}/{rosa_tarball_name}"
+        download_file(url, f"/tmp/{rosa_tarball_name}")
+        run_cmd(f"tar xzvf /tmp/{rosa_tarball_name} {rosa_filename}")
         # return to the previous working directory
         os.chdir(previous_dir)
 
