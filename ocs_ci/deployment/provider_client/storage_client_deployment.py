@@ -207,7 +207,7 @@ class ODFAndNativeStorageClientDeploymentOnProvider(object):
 
         # Create storage cluster if not present already
         is_storagecluster = self.storage_cluster_obj.is_exist(
-            resource_name=constants.DEFAULT_STORAGE_CLUSTER
+            resource_name=config.ENV_DATA["storage_cluster_name"]
         )
         if not is_storagecluster:
             if (

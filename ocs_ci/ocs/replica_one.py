@@ -12,7 +12,6 @@ from ocs_ci.ocs.resources.pod import (
 from ocs_ci.ocs.ocp import OCP
 from ocs_ci.ocs.constants import (
     SUFFIX_CEPHBLOCKPOOL,
-    DEFAULT_STORAGE_CLUSTER,
     OPENSHIFT_STORAGE_NAMESPACE,
     OSD_APP_LABEL,
     CEPHBLOCKPOOL,
@@ -225,9 +224,11 @@ def modify_replica1_osd_count(new_osd_count):
         for instance, selecting 2, creates 6 osds
 
     """
-    storage_cluster = OCP(kind=STORAGECLUSTER, name=DEFAULT_STORAGE_CLUSTER)
+    storage_cluster = OCP(
+        kind=STORAGECLUSTER, name=config.ENV_DATA["storage_cluster_name"]
+    )
     storage_cluster.exec_oc_cmd(
-        f"patch storagecluster {DEFAULT_STORAGE_CLUSTER} -n {OPENSHIFT_STORAGE_NAMESPACE} "
+        f"patch storagecluster {config.ENV_DATA['storage_cluster_name']} -n {OPENSHIFT_STORAGE_NAMESPACE} "
         f'--type json --patch \'[{{"op": "replace", "path": '
         f'"/spec/managedResources/cephNonResilientPools/count", "value": {new_osd_count} }}]\''
     )

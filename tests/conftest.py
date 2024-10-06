@@ -4299,7 +4299,8 @@ def snapshot_restore_factory_fixture(request):
         log.info(f"Volume snapshot class name: {vol_snapshot_class}")
 
         if (
-            vol_snapshot_class == constants.DEFAULT_VOLUMESNAPSHOTCLASS_RBD
+            vol_snapshot_class
+            == f"{ocsci_config.ENV_DATA['storage_cluster_name']}{constants.SUFFIX_VOLUMESNAPSHOTCLASS_RBD}"
             or vol_snapshot_class
             == constants.DEFAULT_EXTERNAL_MODE_VOLUMESNAPSHOTCLASS_RBD
             or vol_snapshot_class == constants.DEFAULT_VOLUMESNAPSHOTCLASS_RBD_MS_PC
@@ -4311,7 +4312,8 @@ def snapshot_restore_factory_fixture(request):
             restore_pvc_yaml = restore_pvc_yaml or constants.CSI_RBD_PVC_RESTORE_YAML
             interface = constants.CEPHBLOCKPOOL
         elif (
-            vol_snapshot_class == constants.DEFAULT_VOLUMESNAPSHOTCLASS_CEPHFS
+            vol_snapshot_class
+            == f"{ocsci_config.ENV_DATA['storage_cluster_name']}{constants.SUFFIX_VOLUMESNAPSHOTCLASS_CEPHFS}"
             or vol_snapshot_class
             == constants.DEFAULT_EXTERNAL_MODE_VOLUMESNAPSHOTCLASS_CEPHFS
             or vol_snapshot_class == constants.DEFAULT_VOLUMESNAPSHOTCLASS_CEPHFS_MS_PC
