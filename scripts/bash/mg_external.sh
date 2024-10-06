@@ -1,6 +1,21 @@
 #!/usr/bin/env bash
-
 set -x
+
+# Function to print usage information
+usage() {
+    echo "Usage: $0 [BASE_COLLECTION_PATH] [KUBECONFIG] [NAMESPACE]"
+    echo
+    echo "Parameters:"
+    echo "  BASE_COLLECTION_PATH   Optional. Path where debug logs will be stored. Default is the current directory."
+    echo "  KUBECONFIG            Optional. Path to the kubeconfig file. Default is '~/.kube/config'."
+    echo "  NAMESPACE             Optional. Kubernetes namespace. Default is 'openshift-storage'."
+    exit 0
+}
+
+# Check for help flag
+if [[ "$1" == "-h" || "$1" == "--help" ]]; then
+    usage
+fi
 
 dbglog() {
     # Allow the input to be piped
