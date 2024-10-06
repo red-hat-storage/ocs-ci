@@ -425,8 +425,8 @@ def create_operator_roles(
             "rosa create operator-roles "
             "--hosted-cp "
             f"--prefix={prefix} "
-            f"--oidc-config-id={oidc_config_id}"
-            f"--installer-role-arn=arn:aws:iam::{aws_account_id}:role/{account_roles_prefix}-HCP-ROSA-Installer-Role"
+            f"--oidc-config-id={oidc_config_id} "
+            f"--installer-role-arn=arn:aws:iam::{aws_account_id}:role/{account_roles_prefix}-HCP-ROSA-Installer-Role "
             "--mode auto --yes"
         )
     utils.run_cmd(cmd, timeout=1200)
@@ -470,7 +470,7 @@ def create_oidc_config():
     ):
         if len(sample) and sample[0] in proc.stdout:
             logger.info("OIDC config created successfully")
-            return sample[0]
+            return sample[0].strip().decode()
 
 
 def delete_oidc_config(oidc_config_id):
