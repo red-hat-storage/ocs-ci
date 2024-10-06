@@ -148,7 +148,7 @@ def create_cluster(cluster_name, version, region):
 
     if rosa_hcp:
         # with rosa hcp we need operator roles to be created before cluster creation
-        prefix = f"operatorroles-{date_in_minimal_format}{random_letters}"
+        prefix = f"oproles-{date_in_minimal_format}{random_letters}"
         aws = AWSUtil()
         aws_account_id = aws.get_caller_identity()
         create_operator_roles(
@@ -157,6 +157,7 @@ def create_cluster(cluster_name, version, region):
             aws_account_id=aws_account_id,
             account_roles_prefix=account_roles_prefix,
         )
+        wait_operator_roles(prefix)
         cmd += f" --operator-roles-prefix {prefix} "
 
     utils.run_cmd(cmd, timeout=1200)
@@ -430,6 +431,44 @@ def create_operator_roles(
             "--mode auto --yes"
         )
     utils.run_cmd(cmd, timeout=1200)
+
+
+def get_operator_roles_data(prefix):
+    """
+    Get the operator roles with the given prefix
+
+    Args:
+        prefix (str): role prefix
+
+    Returns:
+        dict: JSON data of operator roles
+
+    """
+    cmd = f"rosa list operator-roles --prefix {prefix} -o json"
+    if "No operator roles available" in utils.exec_cmd(cmd).stdout.decode():
+        return
+    return json.loads(utils.exec_cmd(cmd).stdout)
+
+
+def wait_operator_roles(prefix, wait_minutes=10):
+    """
+    Wait for the operator roles to be created
+
+    Args:
+        prefix (str): role prefix
+        wait_minutes (int): Time in minutes to wait for operator roles to be created
+
+    Returns:
+        bool: True if operator roles are created, False otherwise
+    """
+    for sample in TimeoutSampler(
+        timeout=60 * wait_minutes,
+        sleep=10,
+        func=get_operator_roles_data,
+        prefix=prefix,
+    ):
+        if sample:
+            return True
 
 
 def create_oidc_provider(cluster):
