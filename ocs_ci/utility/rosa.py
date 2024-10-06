@@ -32,6 +32,9 @@ logger = logging.getLogger(name=__file__)
 rosa = config.AUTH.get("rosa", {})
 rosa_hcp = config.ENV_DATA.get("platform") == "rosa_hcp"
 auth_data = config.AUTH.get("openshiftdedicated", {})
+# to trace the leftovers of aws resources - use the date + letters for every role, config, etc.
+date_in_minimal_format = utils.date_in_minimal_format()
+random_letters = utils.get_random_letters(3)
 
 
 def login():
@@ -72,7 +75,12 @@ def create_cluster(cluster_name, version, region):
         rosa_ocp_version = get_latest_rosa_version(version)
         logger.info(f"Using OCP version {rosa_ocp_version}")
 
-    create_account_roles()
+    if rosa_hcp:
+        account_roles_prefix = f"accroleshcp-{date_in_minimal_format}{random_letters}"
+    else:
+        account_roles_prefix = "ManagedOpenShift"
+    create_account_roles(account_roles_prefix)
+
     oidc_config_id = None
     if rosa_hcp:
         oidc_config_id = create_oidc_config()
@@ -140,8 +148,15 @@ def create_cluster(cluster_name, version, region):
 
     if rosa_hcp:
         # with rosa hcp we need operator roles to be created before cluster creation
-        prefix = f"operatorRoles{cluster_name}"
-        create_operator_roles(cluster_name, prefix)
+        prefix = f"operatorroles-{date_in_minimal_format}{random_letters}"
+        aws = AWSUtil()
+        aws_account_id = aws.get_caller_identity()
+        create_operator_roles(
+            prefix=prefix,
+            oidc_config_id=oidc_config_id,
+            aws_account_id=aws_account_id,
+            account_roles_prefix=account_roles_prefix,
+        )
         cmd += f" --operator-roles-prefix {prefix} "
 
     utils.run_cmd(cmd, timeout=1200)
@@ -379,7 +394,6 @@ def create_account_roles(prefix="ManagedOpenShift"):
 
     """
     if config.ENV_DATA.get("platform") == "rosa_hcp":
-        prefix = "RosaHCP"
         hosted_cp_param = "--hosted-cp"
     else:
         hosted_cp_param = ""
@@ -388,7 +402,9 @@ def create_account_roles(prefix="ManagedOpenShift"):
     utils.run_cmd(cmd, timeout=1200)
 
 
-def create_operator_roles(cluster, prefix=""):
+def create_operator_roles(
+    cluster="", prefix="", oidc_config_id="", aws_account_id="", account_roles_prefix=""
+):
     """
     Create the cluster-specific Operator IAM roles. The roles created include the
     relevant prefix for the cluster name
@@ -396,11 +412,23 @@ def create_operator_roles(cluster, prefix=""):
     Args:
         cluster (str): cluster name or cluster id
         prefix (str): role prefix
+        oidc_config_id (str): OIDC config id
+        aws_account_id (str): AWS account id
+        account_roles_prefix (str): account roles prefix
     """
 
     cmd = f"rosa create operator-roles --cluster {cluster} --mode auto --yes"
+    # command with prefix should look another way, to avoid error:
+    # ERR: A cluster key for STS cluster and an operator roles prefix cannot be specified alongside each other
     if prefix:
-        cmd += f" --prefix {prefix}"
+        cmd = (
+            "rosa create operator-roles "
+            "--hosted-cp "
+            f"--prefix={prefix} "
+            f"--oidc-config-id={oidc_config_id}"
+            f"--installer-role-arn=arn:aws:iam::{aws_account_id}:role/{account_roles_prefix}-HCP-ROSA-Installer-Role"
+            "--mode auto --yes"
+        )
     utils.run_cmd(cmd, timeout=1200)
 
 

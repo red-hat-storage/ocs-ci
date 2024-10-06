@@ -1,3 +1,4 @@
+from datetime import datetime
 from functools import reduce
 import base64
 import io
@@ -1532,6 +1533,28 @@ def get_random_str(size=13):
     """
     chars = string.ascii_lowercase + string.digits
     return "".join(random.choice(chars) for _ in range(size))
+
+
+def get_random_letters(size=13):
+    """
+    Generates the random string of 3 characters
+
+    Args:
+        size (int): number of letter characters to generate
+
+    Returns:
+        str: string of random characters of given size
+    """
+    return "".join(random.choice(string.ascii_lowercase) for _ in range(size))
+
+
+def date_in_minimal_format():
+    """
+    Get the current date in a minimal format, such as 61024 for 6 of October 2024
+    :return:
+    """
+    current_date = datetime.now()
+    return f"{current_date.day}{current_date.month}{current_date.year % 100}"
 
 
 def run_async(command):
