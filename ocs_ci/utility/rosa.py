@@ -468,9 +468,9 @@ def create_oidc_config():
         func=get_oidc_config_ids,
         latest=True,
     ):
-        if sample[0] in proc.stdout:
+        if len(sample) and sample[0] in proc.stdout:
             logger.info("OIDC config created successfully")
-            return sample
+            return sample[0]
 
 
 def delete_oidc_config(oidc_config_id):
