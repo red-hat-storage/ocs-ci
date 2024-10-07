@@ -53,7 +53,10 @@ from ocs_ci.utility.version import (
     get_submariner_operator_version,
     get_volsync_operator_version,
 )
-
+from ocs_ci.ocs.exceptions import (
+    ResourceNotFoundError,
+)
+from ocs_ci.ocs.resources.pod import wait_for_pods_to_be_running
 
 log = logging.getLogger(__name__)
 
@@ -1826,6 +1829,13 @@ def collect_pod_container_rpm_package(dir_name):
     ocp_obj = OCP(namespace=cluster_namespace)
     for pod_obj in pods:
         pod_object = pod_obj.get()
+        # avoid resource not found error when pod got respinned inbetween
+        retry(ResourceNotFoundError, tries=2, delay=2, backoff=2)(
+            wait_for_pods_to_be_running
+        )(
+            pods=pod.get_all_pods(namespace=cluster_namespace),
+            raise_pod_not_found_error=True,
+        )
         pod_containers = pod_object.get("spec").get("containers")
         ocp_pod_obj = OCP(kind=constants.POD, namespace=cluster_namespace)
         pod_status = ocp_pod_obj.get_resource_status(pod_obj.name)
