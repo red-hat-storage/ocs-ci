@@ -1,13 +1,19 @@
 DEPLOYMENT:
   allow_lower_instance_requirements: false
-RUN:
-  username: 'cluster-admin'
+  sts_enabled: true
+  force_download_ocm_cli: true
+  force_download_rosa_cli: true
+  ocm_cli_version: '0.1.67'
+  rosa_cli_version: '1.2.45'
 ENV_DATA:
   platform: 'rosa_hcp'
-  deployment_type: 'ipi'
+  rosa_mode: "auto"
   region: 'us-west-2'
   worker_availability_zones:
     - 'us-west-2a'
   worker_replicas: 6
   worker_instance_type: 'm5.2xlarge'
   cluster_namespace: "odf-storage"
+  private_link: false
+  machine_cidr: "10.0.0.0/16"
+  ms_env_type: "staging"

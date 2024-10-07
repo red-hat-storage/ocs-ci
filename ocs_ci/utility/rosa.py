@@ -216,11 +216,70 @@ def get_machinepools(cluster_name):
     """
     cmd = f"rosa list machinepool --cluster {cluster_name} -o json"
     try:
-        out = utils.exec_cmd(cmd)
-        return json.loads(out)
+        res = utils.exec_cmd(cmd)
+        return json.loads(res.stdout.strip().decode())
     except CommandFailed as ex:
         logger.error(f"Failed to get machinepools of the cluster {cluster_name}\n{ex}")
         return {}
+
+
+def get_machinepool_replicas(cluster_name, machinepool_name):
+    """
+    Get machinepool replicas and current replicas
+
+    Args:
+        cluster_name (str): Cluster name
+        machinepool_name (str): Machinepool name
+
+    Returns:
+        dict: {replicas: <num>, current_replicas: <num>}
+
+    """
+    cmd = (
+        f"rosa list machinepool --cluster {cluster_name} -o json | jq '.[] | "
+        f'select(.id == "{machinepool_name}") | '
+        "{replicas: .replicas, current_replicas: .status.current_replicas}'"
+    )
+    try:
+        res = utils.exec_cmd(cmd, shell=True)
+        return json.loads(res.stdout.strip().decode())
+    except CommandFailed as ex:
+        logger.error(
+            f"Failed to get machinepool replicas of the cluster {cluster_name}\n{ex}"
+        )
+        return {}
+
+
+def wait_machinepool_replicas_ready(
+    cluster_name, machinepool_name, replicas, timeout=60 * 20
+):
+    """
+    Wait for machinepool replicas to be ready
+
+    Args:
+        cluster_name (str): Cluster name
+        machinepool_name (str): Machinepool name
+        replicas (int): Number of replicas
+        timeout (int): Timeout in seconds
+
+    Returns:
+        bool: True if machinepool replicas are ready
+
+    Raises:
+        TimeoutExpiredError: If machinepool replicas are not ready in time
+    """
+    for sample in TimeoutSampler(
+        timeout=timeout,
+        sleep=30,
+        func=get_machinepool_replicas,
+        cluster_name=cluster_name,
+        machinepool_name=machinepool_name,
+    ):
+        if (
+            sample.get("replicas") == replicas
+            and sample.get("current_replicas") == replicas
+        ):
+            return True
 
 
 def appliance_mode_cluster(cluster_name):

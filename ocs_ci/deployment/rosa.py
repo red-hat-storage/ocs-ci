@@ -13,7 +13,6 @@ from ocs_ci.deployment.cloud import CloudDeploymentBase
 from ocs_ci.deployment.helpers.rosa_prod_cluster_helpers import ROSAProdEnvCluster
 from ocs_ci.deployment.ocp import OCPDeployment as BaseOCPDeployment
 from ocs_ci.framework import config
-from ocs_ci.ocs.node import wait_for_nodes_status, get_worker_nodes
 from ocs_ci.ocs.resources.pod import get_operator_pods
 from ocs_ci.utility import openshift_dedicated as ocm, rosa
 from ocs_ci.utility.aws import AWS as AWSUtil
@@ -84,9 +83,10 @@ class ROSAOCP(BaseOCPDeployment):
         else:
             rosa.login()
             rosa.create_cluster(self.cluster_name, self.ocp_version, self.region)
-            wait_for_nodes_status(
-                node_names=get_worker_nodes(),
-                status=constants.NODE_READY,
+            rosa.wait_machinepool_replicas_ready(
+                cluster_name=self.cluster_name,
+                machinepool_name="workers",
+                replicas=config.ENV_DATA["worker_replicas"],
                 timeout=60 * 20,
             )
 
@@ -101,6 +101,7 @@ class ROSAOCP(BaseOCPDeployment):
         if config.ENV_DATA["ms_env_type"] == "staging":
             ocm.get_kubeconfig(self.cluster_name, kubeconfig_path)
             ocm.get_kubeadmin_password(self.cluster_name, password_path)
+            config.RUN["username"] = ocm.get_admin_name(self.cluster_name)
         if config.ENV_DATA["ms_env_type"] == "production":
             if config.ENV_DATA.get("appliance_mode"):
                 logger.info(

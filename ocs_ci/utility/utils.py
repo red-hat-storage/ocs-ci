@@ -1553,8 +1553,10 @@ def get_random_letters(size=13):
 
 def date_in_minimal_format():
     """
-    Get the current date in a minimal format, such as 61024 for 6 of October 2024
-    :return:
+    Get the current date in a minimal format, such as 61024 for 6 of October 2024. Suitable to add to resource names.
+
+    Returns:
+        str: The current date in a minimal
     """
     current_date = datetime.now()
     return f"{current_date.day}{current_date.month}{current_date.year % 100}"
