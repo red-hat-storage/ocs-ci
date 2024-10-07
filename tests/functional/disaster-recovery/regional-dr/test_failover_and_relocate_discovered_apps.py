@@ -102,7 +102,7 @@ class TestFailoverAndRelocateWithDiscoveredApps:
 
         logger.info("Checking for lastKubeObjectProtectionTime")
         dr_helpers.verify_last_kubeobject_protection_time(
-            drpc_obj, rdr_workload.kubeobject_capture_interval
+            drpc_obj, rdr_workload.kubeobject_capture_interval_int
         )
 
         dr_helpers.relocate(
