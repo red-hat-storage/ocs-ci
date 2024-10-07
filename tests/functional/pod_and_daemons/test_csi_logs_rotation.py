@@ -4,14 +4,15 @@ import logging
 from ocs_ci.framework.testlib import BaseTest
 from ocs_ci.ocs.resources import pod
 from ocs_ci.ocs.constants import OPENSHIFT_STORAGE_NAMESPACE
-from ocs_ci.framework.pytest_customization.marks import green_squad, tier1
+from ocs_ci.framework.pytest_customization.marks import brown_squad, tier1
 
 log = logging.getLogger(__name__)
 LOGS_DIR_NAME = "/var/lib/rook/openshift-storage.cephfs.csi.ceph.com/log/node-plugin/"
 CURRENT_LOG_NAME = "csi-cephfsplugin.log"
 WAIT_FOR_ROTATION_TIME = 1200  # seconds
 
-@green_squad
+
+@brown_squad
 @tier1
 class TestPodsCsiLogRotation(BaseTest):
     def get_logs_details_on_pod(self, pod_obj):
