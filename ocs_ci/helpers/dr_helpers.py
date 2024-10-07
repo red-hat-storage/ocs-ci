@@ -1754,7 +1754,7 @@ def verify_last_kubeobject_protection_time(drpc_obj, kubeoject_sync_interval):
     ).total_seconds() / 60
     logger.info(f"Time in minutes since the last sync {time_since_last_sync}")
     assert (
-        time_since_last_sync < 3 * kubeoject_sync_interval
+        time_since_last_sync < 2 * kubeoject_sync_interval
     ), "The syncing of Kube Resources is exceeding three times the Kube object sync interval"
     logger.info("Verified lastKubeObjectProtectionTime value within expected range")
     config.switch_ctx(restore_index)
