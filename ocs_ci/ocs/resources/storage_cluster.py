@@ -993,7 +993,7 @@ def verify_storage_cluster():
     """
     Verify storage cluster status
     """
-    with config.RunWithFirstConsumerConfigContextIfAvailable():
+    with config.RunWithProviderConfigContextIfAvailable():
         storage_cluster_name = config.ENV_DATA["storage_cluster_name"]
         log.info("Verifying status of storage cluster: %s", storage_cluster_name)
         storage_cluster = StorageCluster(
