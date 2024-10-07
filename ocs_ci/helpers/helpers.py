@@ -5249,6 +5249,7 @@ def get_rbd_sc_name():
     else:
         return rbd_sc_names[0]
 
+
 def check_pods_status_by_pattern(pattern, namespace, expected_status):
     """
     Check if the pod state is as expected.
