@@ -321,7 +321,7 @@ class HypershiftHostedOCP(HyperShiftBase, MetalLBInstaller, CNVInstaller, Deploy
                 config.ENV_DATA["clusters"].get(self.name).get("hosted_cluster_path")
             )
             self.cluster_kubeconfig = os.path.expanduser(
-                os.path.join(cluster_path, "auth_path", "kubeconfig")
+                os.path.join(cluster_path, "auth", "kubeconfig")
             )
         else:
             # avoid throwing an exception if the cluster path is not found for some reason
