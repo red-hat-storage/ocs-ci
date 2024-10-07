@@ -101,6 +101,22 @@ class DRPC(OCP):
         logger.info(f"Current lastGroupSyncTime is {last_group_sync_time}.")
         return last_group_sync_time
 
+    def get_last_kubeobject_protection_time(self):
+        """
+        Fetch lastKubeObjectProtectionTime from DRPC
+
+        Returns:
+            str: lastKubeObjectProtectionTime
+
+        """
+        last_kubeobject_protection_time = (
+            self.get().get("status").get("lastKubeObjectProtectionTime")
+        )
+        logger.info(
+            f"Current lastKubeObjectProtectionTime is {last_kubeobject_protection_time}."
+        )
+        return last_kubeobject_protection_time
+
 
 def get_drpc_name(namespace, switch_ctx=None):
     """
