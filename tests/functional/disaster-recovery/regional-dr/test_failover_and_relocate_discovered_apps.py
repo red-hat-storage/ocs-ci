@@ -6,6 +6,7 @@ from ocs_ci.framework import config
 from ocs_ci.framework.testlib import acceptance, tier1
 from ocs_ci.framework.pytest_customization.marks import rdr, turquoise_squad
 from ocs_ci.helpers import dr_helpers
+from ocs_ci.ocs import constants
 from ocs_ci.ocs.resources.drpc import DRPC
 
 logger = logging.getLogger(__name__)
@@ -45,14 +46,14 @@ class TestFailoverAndRelocateWithDiscoveredApps:
         scheduling_interval = dr_helpers.get_scheduling_interval(
             rdr_workload.workload_namespace, discovered_apps=True
         )
-        drpc_obj = DRPC(namespace=rdr_workload.workload_namespace)
+        drpc_obj = DRPC(namespace=constants.DR_OPS_NAMESAPCE)
         wait_time = 2 * scheduling_interval  # Time in minutes
         logger.info(f"Waiting for {wait_time} minutes to run IOs")
         sleep(wait_time * 60)
 
         logger.info("Checking for lastKubeObjectProtectionTime")
         dr_helpers.verify_last_kubeobject_protection_time(
-            drpc_obj, rdr_workload.kubeobject_capture_interval
+            drpc_obj, rdr_workload.kubeobject_capture_interval_int
         )
 
         dr_helpers.failover(
