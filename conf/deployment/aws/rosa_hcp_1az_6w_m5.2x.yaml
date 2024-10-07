@@ -11,9 +11,11 @@ ENV_DATA:
   region: 'us-west-2'
   worker_availability_zones:
     - 'us-west-2a'
+  master_replicas: 0
   worker_replicas: 6
   worker_instance_type: 'm5.2xlarge'
   cluster_namespace: "odf-storage"
   private_link: false
   machine_cidr: "10.0.0.0/16"
   ms_env_type: "staging"
+  addon_name: "ocs-converged"

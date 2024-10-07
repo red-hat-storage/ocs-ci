@@ -235,7 +235,7 @@ class ROSA(CloudDeploymentBase):
         except (IndexError, CommandFailed):
             logger.info("Running OCS basic installation")
 
-        # rosa hp is self-managed and doesn't support ODF addon
+        # rosa hcp is self-managed and doesn't support ODF addon
         if config.ENV_DATA.get("platform") != "rosa_hcp":
             rosa.install_odf_addon(self.cluster_name)
 
