@@ -177,7 +177,7 @@ class ROSAOCP(BaseOCPDeployment):
 
 class ROSA(CloudDeploymentBase):
     """
-    Deployment class for ROSA.
+    Deployment class for ROSA and ROSA HCP.
     """
 
     OCPDeployment = ROSAOCP
@@ -225,8 +225,9 @@ class ROSA(CloudDeploymentBase):
 
     def deploy_ocs(self):
         """
-        Deployment of ODF Managed Service addon on ROSA.
+        Deployment of ODF Managed Service addon on ROSA or ODF operator on ROSA HCP.
         """
+        rosa_hcp = config.ENV_DATA.get("platform") == "rosa_hcp"
         ceph_cluster = ocp.OCP(kind="CephCluster", namespace=self.namespace)
         try:
             ceph_cluster.get().get("items")[0]
@@ -236,7 +237,10 @@ class ROSA(CloudDeploymentBase):
             logger.info("Running OCS basic installation")
 
         # rosa hcp is self-managed and doesn't support ODF addon
-        if config.ENV_DATA.get("platform") != "rosa_hcp":
+        if rosa_hcp:
+            logger.info("Running ODF operator installation on ROSA HCP")
+            super(ROSA, self).deploy_ocs()
+        else:
             rosa.install_odf_addon(self.cluster_name)
 
         pod = ocp.OCP(kind=constants.POD, namespace=self.namespace)
