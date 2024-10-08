@@ -236,6 +236,7 @@ VM = "vm"
 HOSTED_CLUSTERS = "hostedclusters"
 OPERATOR_KIND = "Operator"
 DRIVER = "Driver"
+IMAGECONTENTSOURCEPOLICY_KIND = "ImageContentSourcePolicy"
 
 # Provisioners
 AWS_EFS_PROVISIONER = "openshift.org/aws-efs"
@@ -1012,6 +1013,7 @@ METALLB_L2_ADVERTISEMENT_PATH = os.path.join(
 QE_APP_REGISTRY_SOURCE = os.path.join(
     TEMPLATE_DEPLOYMENT_DIR_OCP, "qe-app-registry-catalog-source.yaml"
 )
+QE_APP_REGISTRY_CATALOG_SOURCE_NAME = "qe-app-registry"
 
 # NMState deployment
 NMSTATE_NAMESPACE_YAML = os.path.join(TEMPLATE_DEPLOYMENT_DIR_NMSTATE, "namespace.yaml")
@@ -3018,6 +3020,7 @@ CHUNK = os.path.join(TEMPLATE_WORKLOAD_DIR, "helper_scripts/chunk.py")
 # Ingress Node Firewall related constants
 INGRESS_NODE_FIREWALL_NAMESPACE = "openshift-ingress-node-firewall"
 INGRESS_NODE_FIREWALL_CSV_NAME = "ingress-node-firewall"
+INGRESS_NODE_FIREWALL_OPERATOR_NAME = "ingress-node-firewall"
 INF_NAMESPACE_YAML = os.path.join(TEMPLATE_DEPLOYMENT_DIR_INF, "namespace.yaml")
 INF_OPERATORGROUP_YAML = os.path.join(TEMPLATE_DEPLOYMENT_DIR_INF, "operatorgroup.yaml")
 INF_SUBSCRIPTION_YAML = os.path.join(TEMPLATE_DEPLOYMENT_DIR_INF, "subscription.yaml")
