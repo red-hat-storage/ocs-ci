@@ -621,6 +621,7 @@ NOOBAA_CORE_STATEFULSET = "noobaa-core"
 
 # Noobaa db secret
 NOOBAA_DB_SECRET = "noobaa-db"
+NOOBAA_S3_SERVING_CERT = "noobaa-s3-serving-cert"
 
 # Auth Yaml
 OCSCI_DATA_BUCKET = "ocs-ci-data"
