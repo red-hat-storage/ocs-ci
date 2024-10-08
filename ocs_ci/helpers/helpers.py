@@ -4727,16 +4727,13 @@ def odf_cli_set_log_level(service, log_level, subsystem):
     """
     from pathlib import Path
 
-    if not Path(constants.CLI_TOOL_LOCAL_PATH).exists():
+    if not (Path(config.RUN["bin_dir"]) / "odf-cli").exists():
         retrieve_cli_binary(cli_type="odf")
 
     logger.info(
         f"Setting ceph log level for {service} on {subsystem} to {log_level} using odf-cli tool."
     )
-    cmd = (
-        f"{constants.CLI_TOOL_LOCAL_PATH} --kubeconfig {os.getenv('KUBECONFIG')} "
-        f" set ceph log-level {service} {subsystem} {log_level}"
-    )
+    cmd = f"odf-cli set ceph log-level {service} {subsystem} {log_level}"
 
     logger.info(cmd)
     return exec_cmd(cmd, use_shell=True)
