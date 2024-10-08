@@ -28,6 +28,7 @@ from ocs_ci.helpers.proxy import (
     get_cluster_proxies,
     update_container_with_proxy_env,
 )
+from ocs_ci.ocs.utils import get_non_acm_cluster_config, get_pod_name_by_pattern
 from ocs_ci.ocs.utils import mirror_image
 from ocs_ci.ocs import constants, defaults, node, ocp, exceptions
 from ocs_ci.ocs.exceptions import (
@@ -5247,3 +5248,124 @@ def get_rbd_sc_name():
         raise ValueError("Didn't find the rbd storageclass in the storageclass names")
     else:
         return rbd_sc_names[0]
+
+
+def check_pods_status_by_pattern(pattern, namespace, expected_status):
+    """
+    Check if the pod state is as expected.
+    Args:
+        pattern (str):
+        namespace (str):
+        expected_status (str):
+    Returns:
+        bool: return True if pod in expected status otherwise False
+    """
+    from ocs_ci.ocs.resources.pod import get_pod_obj
+
+    logger.info("Check pods status by pattern")
+    pod_names = get_pod_name_by_pattern(
+        pattern=pattern,
+        namespace=namespace,
+    )
+    if len(pod_names) == 0:
+        logger.info(f"pod pattern {pattern} does not exist in {namespace} namespace")
+        return False
+    pod_objs = []
+    for pod_name in pod_names:
+        pod_obj = get_pod_obj(name=pod_name, namespace=namespace)
+        pod_objs.append(pod_obj)
+    for pod_obj in pod_objs:
+        pod_status = pod_obj.status()
+        if pod_status != expected_status:
+            logger.info(
+                f"The status of pod {pod_obj.name} in namespace {namespace} is "
+                f"{pod_status} while the expected status is {expected_status}"
+            )
+            return False
+    return True
+
+
+def get_volsync_channel():
+    """
+    Get Volsync Channel
+    Returns:
+        str: volsync channel
+    """
+    logger.info("Get Volsync Channel")
+    volsync_product_obj = OCP(kind="packagemanifest", resource_name="volsync-product")
+    last_index = len(volsync_product_obj.data.get("status").get("channels")) - 1
+    volsync_channel = (
+        volsync_product_obj.data.get("status").get("channels")[last_index].get("name")
+    )
+    logger.info(f"volsync channel is {volsync_channel}")
+    return volsync_channel
+
+
+def get_managed_cluster_addons(resource_name, namespace):
+    """
+    Get Managed Cluster Addons obj
+    Args:
+        resource_name (str): resource name
+        namespace (str): namespace
+    Returns:
+        ocp_obj: ocp object of managed cluster addons resource
+    """
+    return OCP(
+        kind=constants.ACM_MANAGEDCLUSTER_ADDONS,
+        resource_name=resource_name,
+        namespace=namespace,
+    )
+
+
+def update_volsync_channel():
+    """
+    Update Volsync Channel.
+    """
+    logger.info("Update Volsync Channel.")
+    if config.ENV_DATA.get("acm_hub_unreleased") is not True:
+        return
+    with config.RunWithPrimaryConfigContext():
+        from ocs_ci.ocs.utils import get_pod_name_by_pattern
+
+        logger.info("Verify volsync-controller-manager pods exist")
+        pods = get_pod_name_by_pattern(
+            pattern="volsync-controller-manager",
+            namespace=constants.OPENSHIFT_OPERATORS,
+        )
+        if len(pods) > 0:
+            logger.info("No volsync-controller-manager pods found")
+            return
+        channel = get_volsync_channel()
+    with config.RunWithAcmConfigContext():
+        non_acm_clusters = get_non_acm_cluster_config()
+        for non_acm_cluster in non_acm_clusters:
+            logger.info(
+                f"Add operator-subscription-channel:{channel} annotation to managed cluster addons CR"
+            )
+            ms_addon = get_managed_cluster_addons(
+                resource_name="volsync",
+                namespace=non_acm_cluster.ENV_DATA.get("cluster_name"),
+            )
+            params = (
+                f"""[{{"op": "add", "path": "/metadata/annotations", """
+                f""""value": {{"operator-subscription-channel": "{channel}"}}}}]"""
+            )
+            ms_addon.patch(
+                resource_name=ms_addon.resource_name,
+                params=params.strip("\n"),
+                format_type="json",
+            )
+    with config.RunWithPrimaryConfigContext():
+        logger.info("Verify volsync-controller-manager pods in Running state")
+        sample = TimeoutSampler(
+            timeout=300,
+            sleep=10,
+            func=check_pods_status_by_pattern,
+            pattern="volsync-controller-manager",
+            namespace=constants.OPENSHIFT_OPERATORS,
+            expected_status=constants.STATUS_RUNNING,
+        )
+        if not sample.wait_for_func_status(result=True):
+            logger.error(
+                f"Pod volsync-controller-manager not in {constants.STATUS_RUNNING} after 300 seconds"
+            )

@@ -2722,6 +2722,7 @@ ACM_LOCAL_CLUSTER = "local-cluster"
 ACM_CLUSTERSET_LABEL = "cluster.open-cluster-management.io/clusterset"
 ACM_ADDONS_NAMESPACE = "open-cluster-management-agent-addon"
 ACM_HUB_OPERATOR_NAME_WITH_NS = f"{ACM_HUB_OPERATOR_NAME}.{ACM_HUB_NAMESPACE}"
+ACM_MANAGEDCLUSTER_ADDONS = "managedclusteraddons.addon.open-cluster-management.io"
 
 # GitOps
 GITOPS_NAMESPACE = "openshift-gitops"
