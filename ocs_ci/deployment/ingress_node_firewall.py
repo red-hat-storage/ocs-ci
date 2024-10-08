@@ -1,9 +1,11 @@
 import logging
 
+from ocs_ci.deployment.qe_app_registry import QeAppRegistry
 from ocs_ci.framework import config
 from ocs_ci.ocs import constants, exceptions
 from ocs_ci.ocs.resources.csv import CSV, get_csvs_start_with_prefix
 from ocs_ci.ocs.resources.ocs import OCS
+from ocs_ci.ocs.resources.packagemanifest import PackageManifest
 from ocs_ci.utility import templating
 from ocs_ci.utility.utils import TimeoutSampler
 
@@ -79,6 +81,15 @@ def deploy_ingress_node_firewall(rules):
 
     """
     inf = IngressNodeFirewallInstaller()
+
+    # check if Ingress Node Firewall Operator is available
+    if not inf.check_existing_packagemanifests():
+        # Ingress Node Firewall Operator is not available, we have to create QE App Registry Catalog Source
+        # and related Image content source policy
+        qe_app_registry = QeAppRegistry()
+        qe_app_registry.icsp()
+        qe_app_registry.catalog_source()
+        inf.source = constants.QE_APP_REGISTRY_CATALOG_SOURCE_NAME
     # create openshift-ingress-node-firewall namespace
     inf.create_namespace()
 
@@ -106,6 +117,21 @@ class IngressNodeFirewallInstaller(object):
 
     def __init__(self):
         self.namespace = constants.INGRESS_NODE_FIREWALL_NAMESPACE
+        self.source = constants.OPERATOR_CATALOG_SOURCE_NAME
+
+    def check_existing_packagemanifests(self):
+        """
+        Check if Ingress Node Firewall Operator is available or not.
+
+        Returns:
+            bool: True if Ingress Node Operator is available, False otherwise
+        """
+        try:
+            pm = PackageManifest(constants.INGRESS_NODE_FIREWALL_OPERATOR_NAME)
+            pm.get(silent=True)
+            return True
+        except (exceptions.CommandFailed, exceptions.ResourceNotFoundError):
+            return False
 
     def create_namespace(self):
         """
@@ -152,6 +178,7 @@ class IngressNodeFirewallInstaller(object):
         """
         logger.info("Creating Subscription for IngressNodeFirewall")
         subscription_yaml_file = templating.load_yaml(constants.INF_SUBSCRIPTION_YAML)
+        subscription_yaml_file["spec"]["source"] = self.source
         subscription_yaml = OCS(**subscription_yaml_file)
         subscription_yaml.create()
         logger.info("IngressNodeFirewall Subscription created successfully")
