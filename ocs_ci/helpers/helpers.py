@@ -5321,39 +5321,27 @@ def update_volsync_channel():
     """
     Update Volsync Channel.
     """
-    logger.info("A1+")
     logger.info("Update Volsync Channel.")
     if config.ENV_DATA.get("acm_hub_unreleased") is not True:
-        logger.info("A2+")
         return
-    logger.info("A3+")
     with config.RunWithPrimaryConfigContext():
         from ocs_ci.ocs.utils import get_pod_name_by_pattern
 
-        logger.info("A4+")
         logger.info("Verify volsync-controller-manager pods exist")
         pods = get_pod_name_by_pattern(
             pattern="volsync-controller-manager",
             namespace=constants.OPENSHIFT_OPERATORS,
         )
-        logger.info("A5+")
         if len(pods) > 0:
-            logger.info("A6+")
             logger.info("No volsync-controller-manager pods found")
             return
-        logger.info("A7+")
         channel = get_volsync_channel()
-        logger.info("A8+")
-    logger.info("A9+")
     with config.RunWithAcmConfigContext():
-        logger.info("A10+")
         non_acm_clusters = get_non_acm_cluster_config()
-        logger.info("A11+")
         for non_acm_cluster in non_acm_clusters:
             logger.info(
                 f"Add operator-subscription-channel:{channel} annotation to managed cluster addons CR"
             )
-            logger.info("A12+")
             ms_addon = get_managed_cluster_addons(
                 resource_name="volsync",
                 namespace=non_acm_cluster.ENV_DATA.get("cluster_name"),
@@ -5367,10 +5355,8 @@ def update_volsync_channel():
                 params=params.strip("\n"),
                 format_type="json",
             )
-            logger.info("A13+")
     with config.RunWithPrimaryConfigContext():
         logger.info("Verify volsync-controller-manager pods in Running state")
-        logger.info("A14+")
         sample = TimeoutSampler(
             timeout=300,
             sleep=10,
@@ -5379,10 +5365,7 @@ def update_volsync_channel():
             namespace=constants.OPENSHIFT_OPERATORS,
             expected_status=constants.STATUS_RUNNING,
         )
-        logger.info("A15+")
         if not sample.wait_for_func_status(result=True):
             logger.error(
                 f"Pod volsync-controller-manager not in {constants.STATUS_RUNNING} after 300 seconds"
             )
-            logger.info("A16+")
-        logger.info("A17+")
