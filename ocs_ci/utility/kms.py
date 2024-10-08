@@ -2246,6 +2246,14 @@ def update_csi_kms_vault_connection_details(update_config):
     run_cmd(f"oc apply -f {resource_data_yaml.name}", timeout=300)
 
 
+def get_kms_details():
+    provider = config.ENV_DATA["KMS_PROVIDER"]
+    try:
+        return kms_map[provider]()
+    except KeyError:
+        raise KMSNotSupported(f"Not a supported KMS deployment , provider: {provider}")
+
+
 def get_kms_deployment():
     provider = config.ENV_DATA["KMS_PROVIDER"]
     if not config.ENV_DATA.get("encryption_at_rest"):

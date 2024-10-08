@@ -8,7 +8,7 @@ from ocs_ci.framework import config
 from ocs_ci.ocs.resources.pvc import get_deviceset_pvcs
 from ocs_ci.ocs.exceptions import UnexpectedBehaviour
 from ocs_ci.utility.retry import retry
-from ocs_ci.utility.kms import get_kms_deployment
+from ocs_ci.utility.kms import get_kms_details
 
 log = logging.getLogger(__name__)
 
@@ -356,7 +356,7 @@ class OSDKeyrotation(KeyRotation):
 class PVKeyrotation(KeyRotation):
     def __init__(self, sc_obj):
         self.sc_obj = sc_obj
-        self.kms = get_kms_deployment()
+        self.kms = get_kms_details()
 
     def annotate_storageclass_key_rotation(self, schedule="@weekly"):
         """
