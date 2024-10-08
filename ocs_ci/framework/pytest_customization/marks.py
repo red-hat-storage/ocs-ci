@@ -86,6 +86,7 @@ deployment = pytest.mark.deployment
 polarion_id = pytest.mark.polarion_id
 bugzilla = pytest.mark.bugzilla
 acm_import = pytest.mark.acm_import
+rdr = pytest.mark.rdr
 
 tier_marks = [
     tier1,
