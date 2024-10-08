@@ -192,7 +192,7 @@ def create_cluster(cluster_name, version, region):
         if status == "ready":
             logger.info("Cluster was installed")
             break
-    log_step("Retreiving cluster details and storing in metadata.json file")
+    log_step("Retrieving cluster details and storing in metadata.json file")
     cluster_info = ocm.get_cluster_details(cluster_name)
     # Create metadata file to store the cluster name
     cluster_info["clusterName"] = cluster_name

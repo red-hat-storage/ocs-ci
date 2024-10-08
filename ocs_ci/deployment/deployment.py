@@ -37,6 +37,7 @@ from ocs_ci.deployment.helpers.lso_helpers import (
 from ocs_ci.deployment.disconnected import prepare_disconnected_ocs_deployment
 from ocs_ci.deployment.encryption import add_in_transit_encryption_to_cluster_data
 from ocs_ci.framework import config, merge_dict
+from ocs_ci.framework.logger_helper import log_step
 from ocs_ci.helpers.dr_helpers import (
     configure_drcluster_for_fencing,
 )
@@ -1050,26 +1051,31 @@ class Deployment(object):
         ui_deployment = config.DEPLOYMENT.get("ui_deployment")
         live_deployment = config.DEPLOYMENT.get("live_deployment")
         arbiter_deployment = config.DEPLOYMENT.get("arbiter_deployment")
+        local_storage = config.DEPLOYMENT.get("local_storage")
 
         if ui_deployment and ui_deployment_conditions():
+            log_step("Start ODF deployment with UI")
             self.deployment_with_ui()
             # Skip the rest of the deployment when deploy via UI
             return
         else:
-            logger.info("Deployment of OCS via OCS operator")
+            log_step("Deployment of OCS via OCS operator")
             self.label_and_taint_nodes()
 
         if config.DEPLOYMENT.get("sts_enabled"):
+            log_step("Create STS role and attach AmazonS3FullAccess Policy")
             role_data = create_and_attach_sts_role()
             self.sts_role_arn = role_data["Role"]["Arn"]
 
         if not live_deployment:
+            log_step("Create catalog source and wait it to be READY")
             create_catalog_source(image)
 
-        if config.DEPLOYMENT.get("local_storage"):
+        if local_storage:
+            log_step("Deploy and setup Local Storage Operator")
             setup_local_storage(storageclass=self.DEFAULT_STORAGECLASS_LSO)
 
-        logger.info("Creating namespace and operator group.")
+        log_step("Creating namespace and operator group")
         # patch OLM YAML with the namespace
         olm_ns_op_group_data = list(templating.load_yaml(constants.OLM_YAML, True))
 
@@ -1084,10 +1090,12 @@ class Deployment(object):
 
             templating.dump_data_to_temp_yaml(olm_ns_op_group_data, constants.OLM_YAML)
 
+        log_step("Create OLM resources: OperatorGroup, Namespace")
         run_cmd(f"oc create -f {constants.OLM_YAML}")
 
         # Create Multus Networks
         if config.ENV_DATA.get("is_multus_enabled"):
+            log_step("Establish Multus Network")
             ocs_version = version.get_semantic_ocs_version_from_config()
             if (
                 config.ENV_DATA.get("multus_create_public_net")
@@ -1192,10 +1200,11 @@ class Deployment(object):
         if managed_ibmcloud:
             ibmcloud.add_deployment_dependencies()
             if not live_deployment:
+                log_step("Create ODF(OCS) secret (mostly for IBM Cloud Storage)")
                 create_ocs_secret(self.namespace)
         if config.ENV_DATA["platform"] == constants.IBMCLOUD_PLATFORM:
             if config.DEPLOYMENT.get("create_ibm_cos_secret", True):
-                logger.info("Creating secret for IBM Cloud Object Storage")
+                log_step("Creating secret for IBM Cloud storage")
                 with open(constants.IBM_COS_SECRET_YAML, "r") as cos_secret_fd:
                     cos_secret_data = yaml.load(cos_secret_fd, Loader=yaml.SafeLoader)
                 key_id = config.AUTH["ibmcloud"]["ibm_cos_access_key_id"]
@@ -1210,8 +1219,10 @@ class Deployment(object):
                 )
                 exec_cmd(f"oc create -f {cos_secret_data_yaml.name}")
         if managed_ibmcloud and live_deployment and not disable_addon:
+            log_step("Deploy ODF addon for IBM cloud managed")
             self.deploy_odf_addon()
             return
+        log_step("Subscribe to ODF(OCS) operator and wait CSV to be 'Succeeded'")
         self.subscribe_ocs()
         operator_selector = get_selector_for_ocs_operator()
         subscription_plan_approval = config.DEPLOYMENT.get("subscription_plan_approval")
@@ -1232,7 +1243,7 @@ class Deployment(object):
             csv = CSV(resource_name=csv_name, namespace=self.namespace)
             if managed_ibmcloud and not live_deployment:
                 if not is_ibm_sa_linked:
-                    logger.info("Sleeping for 60 seconds before applying SA")
+                    logger.info("Wait and apply service accounts")
                     time.sleep(60)
                     link_all_sa_and_secret_and_delete_pods(
                         constants.OCS_SECRET, self.namespace
@@ -1259,10 +1270,12 @@ class Deployment(object):
             templating.dump_data_to_temp_yaml(
                 storage_system_data, constants.STORAGE_SYSTEM_ODF_YAML
             )
+            log_step("Apply StorageSystem CR")
             exec_cmd(f"oc apply -f {constants.STORAGE_SYSTEM_ODF_YAML}")
 
         ocp_version = version.get_semantic_ocp_version_from_config()
         if managed_ibmcloud:
+            log_step("Patching config map to change KUBLET DIR PATH")
             config_map = ocp.OCP(
                 kind="configmap",
                 namespace=self.namespace,
@@ -1272,7 +1285,6 @@ class Deployment(object):
             config_map_patch = (
                 '\'{"data": {"ROOK_CSI_KUBELET_DIR_PATH": "/var/data/kubelet"}}\''
             )
-            logger.info("Patching config map to change KUBLET DIR PATH")
             exec_cmd(
                 f"oc patch configmap -n {self.namespace} "
                 f"{constants.ROOK_OPERATOR_CONFIGMAP} -p {config_map_patch}"
@@ -1284,6 +1296,7 @@ class Deployment(object):
                 custom_sc = yaml.load(custom_sc_fo, Loader=yaml.SafeLoader)
             # set value of DEFAULT_STORAGECLASS to mach the custom storage cls
             self.DEFAULT_STORAGECLASS = custom_sc["metadata"]["name"]
+            log_step(f"Creating custom storage class {self.DEFAULT_STORAGECLASS}")
             run_cmd(f"oc create -f {self.CUSTOM_STORAGE_CLASS_PATH}")
 
         # Set rook log level
@@ -1298,6 +1311,7 @@ class Deployment(object):
             mcg_only_deployment()
             return
 
+        log_step("Setup StorageCluster preferences before applying CR")
         cluster_data = templating.load_yaml(constants.STORAGE_CLUSTER_YAML)
         # Figure out all the OCS modules enabled/disabled
         # CLI parameter --disable-components takes the precedence over
@@ -1350,12 +1364,12 @@ class Deployment(object):
         if device_class:
             deviceset_data["deviceClass"] = device_class
 
-        logger.info(
+        logger.debug(
             "Flexible scaling is available from version 4.7 on LSO cluster with less than 3 zones"
         )
         zone_num = get_az_count()
         if (
-            config.DEPLOYMENT.get("local_storage")
+            local_storage
             and ocs_version >= version.VERSION_4_7
             and zone_num < 3
             and not config.DEPLOYMENT.get("arbiter_deployment")
@@ -1389,7 +1403,7 @@ class Deployment(object):
             ] = self.DEFAULT_STORAGECLASS
 
         # StorageCluster tweaks for LSO
-        if config.DEPLOYMENT.get("local_storage"):
+        if local_storage:
             cluster_data["spec"]["manageNodes"] = False
             cluster_data["spec"]["monDataDirHostPath"] = "/var/lib/rook"
             deviceset_data["name"] = constants.DEFAULT_DEVICESET_LSO_PVC_NAME
@@ -1449,7 +1463,6 @@ class Deployment(object):
                     "requests": {"cpu": 1, "memory": "500Mi"},
                 }
         else:
-            local_storage = config.DEPLOYMENT.get("local_storage")
             platform = config.ENV_DATA.get("platform", "").lower()
             if local_storage and platform == "aws":
                 resources = {
@@ -1588,6 +1601,9 @@ class Deployment(object):
                 cluster_data, {"metadata": {"annotations": rdr_bluestore_annotation}}
             )
         if config.ENV_DATA.get("noobaa_external_pgsql"):
+            log_step(
+                "Creating external pgsql DB for NooBaa and correct StorageCluster data"
+            )
             pgsql_data = config.AUTH["pgsql"]
             user = pgsql_data["username"]
             password = pgsql_data["password"]
@@ -1688,8 +1704,11 @@ class Deployment(object):
             mode="w+", prefix="cluster_storage", delete=False
         )
         templating.dump_data_to_temp_yaml(cluster_data, cluster_data_yaml.name)
+
+        log_step("Create StorageCluster CR")
         run_cmd(f"oc create -f {cluster_data_yaml.name}", timeout=1200)
         if config.DEPLOYMENT["infra_nodes"]:
+            log_step("Labeling infra nodes")
             _ocp = ocp.OCP(kind="node")
             _ocp.exec_oc_cmd(
                 command=f"annotate namespace {config.ENV_DATA['cluster_namespace']} "
