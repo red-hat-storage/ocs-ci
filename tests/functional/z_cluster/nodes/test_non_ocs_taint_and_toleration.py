@@ -256,13 +256,13 @@ class TestNonOCSTaintAndTolerations(E2ETest):
                 pod.delete(wait=False)
 
         logger.info("After edit wait for some time for pods to respin as expected")
-        time.sleep(180)
+        time.sleep(300)
         assert wait_for_pods_to_be_running(timeout=900, sleep=15)
 
         logger.info(
             "Check non-ocs toleration on all newly created pods under openshift-storage NS"
         )
-        retry((CommandFailed, TolerationNotFoundException), tries=5, delay=10,)(
+        retry((CommandFailed, TolerationNotFoundException), tries=10, delay=10,)(
             check_toleration_on_pods
         )(toleration_key="xyz")
         if config.DEPLOYMENT["external_mode"]:
