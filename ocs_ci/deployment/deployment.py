@@ -1252,7 +1252,7 @@ class Deployment(object):
                 mode="w+", prefix="storage_system", delete=False
             )
             templating.dump_data_to_temp_yaml(
-                cos_secret_data, storage_system_odf_yaml.name
+                storage_system_odf_data, storage_system_odf_yaml.name
             )
             exec_cmd(f"oc create -f {storage_system_odf_yaml.name}")
 
