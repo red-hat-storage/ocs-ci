@@ -1091,7 +1091,6 @@ class Deployment(object):
 
             templating.dump_data_to_temp_yaml(olm_ns_op_group_data, constants.OLM_YAML)
 
-        log_step("Create OLM resources: OperatorGroup, Namespace")
         try:
             run_cmd(f"oc create -f {constants.OLM_YAML}")
         except CommandFailed as ex:
