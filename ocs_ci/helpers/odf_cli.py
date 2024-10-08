@@ -20,21 +20,36 @@ class ODFCLIRetriever:
         self.semantic_version = get_semantic_ocs_version_from_config()
         self.local_cli_path = os.path.join(config.RUN["bin_dir"], "odf-cli")
 
+    def check_odf_cli_binary(self):
+        """
+        Check if the ODF CLI binary exists and is executable.
+
+        Returns:
+            bool: True if the binary exists and is executable, False otherwise.
+        """
+        return os.path.isfile(self.local_cli_path) and os.access(
+            self.local_cli_path, os.X_OK
+        )
+
     def retrieve_odf_cli_binary(self):
         """
         Download and set up the ODF-CLI binary.
 
         Raises:
             NotSupportedException: If ODF CLI is not supported on the current version or deployment.
-            AssertionError: If the CLI binary is not found or not executable.
         """
         self._validate_odf_cli_support()
 
-        image = self._get_odf_cli_image()
-        self._extract_cli_binary(image)
-        self._set_executable_permissions()
-        self._verify_cli_binary()
-        self.add_cli_to_path()
+        if not self.check_odf_cli_binary():
+            image = self._get_odf_cli_image()
+            self._extract_cli_binary(image)
+            self._set_executable_permissions()
+            self.add_cli_to_path()
+
+        if not self.check_odf_cli_binary():
+            raise RuntimeError(
+                f"Failed to retrieve and set up ODF CLI binary at {self.local_cli_path}"
+            )
 
     def _validate_odf_cli_support(self):
         if self.semantic_version < VERSION_4_15:
@@ -63,12 +78,10 @@ class ODFCLIRetriever:
         os.chmod(self.local_cli_path, current_permissions | S_IEXEC)
 
     def _verify_cli_binary(self):
-        assert os.path.isfile(
-            self.local_cli_path
-        ), f"ODF CLI file not found at {self.local_cli_path}"
-        assert os.access(
-            self.local_cli_path, os.X_OK
-        ), "The ODF CLI binary does not have execution permissions"
+        if not self.check_odf_cli_binary():
+            raise AssertionError(
+                f"ODF CLI binary not found or not executable at {self.local_cli_path}"
+            )
 
     def add_cli_to_path(self):
         """
@@ -83,15 +96,18 @@ class ODFCLIRetriever:
 
 class ODFCliRunner:
     def __init__(self) -> None:
-        self.binary_name = "odf-cli"
+        self.binary_name = "odf"
 
     def run_command(self, command_args: Union[str, list]) -> str:
         if isinstance(command_args, str):
             full_command = str(self.binary_name + command_args)
-
         elif isinstance(command_args, list):
-            full_command = " ".join(command_args)
-        exec_cmd(full_command)
+            full_command = " ".join([self.binary_name] + command_args)
+
+        output = exec_cmd(full_command)
+        log.info(f"output type: {type(output)}")
+        log.info(f"*Command output*: {output}")
+        return output
 
     def run_help(self):
         return self.run_command(" help")
