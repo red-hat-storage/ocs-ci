@@ -1,5 +1,6 @@
 import logging
 import re
+import pytest
 
 from ocs_ci.ocs.resources.pod import get_mon_pods
 from ocs_ci.helpers.odf_cli import ODFCLIRetriever, ODFCliRunner
@@ -11,14 +12,35 @@ logger = logging.getLogger(__name__)
 @tier1
 @brown_squad
 class TestGetCommands:
-    def test_download_binary(self):
-        self.odf_cli_retriever = ODFCLIRetriever()
-        self.odf_cli_retriever.retrieve_odf_cli_binary()
-        self.odf_cli_runner = ODFCliRunner()
+    @pytest.fixture(scope="function", autouse=True)
+    def odf_cli_setup(self):
+        odf_cli_retriever = ODFCLIRetriever()
+
+        # Check and download ODF CLI binary if needed
+        try:
+            assert odf_cli_retriever.odf_cli_binary
+        except AssertionError:
+            logger.warning("ODF CLI binary not found. Attempting to download...")
+            odf_cli_retriever.retrieve_odf_cli_binary()
+            if not odf_cli_retriever.odf_cli_binary:
+                pytest.fail("Failed to download ODF CLI binary")
+
+        # Check and initialize ODFCliRunner if needed
+        try:
+            self.odf_cli_runner = ODFCliRunner()
+            assert self.odf_cli_runner
+        except AssertionError:
+            logger.warning("ODFCliRunner not initialized. Attempting to initialize...")
+            self.odf_cli_runner = ODFCliRunner()
+            if not self.odf_cli_runner:
+                pytest.fail("Failed to initialize ODFCliRunner")
+
+        logger.info(
+            "ODF CLI binary downloaded and ODFCliRunner initialized successfully"
+        )
 
     @polarion_id("OCS-6237")
     def test_get_health(self):
-
         output = self.odf_cli_runner.run_get_health()
         self.validate_mon_pods(output)
         self.validate_mon_quorum_and_health(output)
