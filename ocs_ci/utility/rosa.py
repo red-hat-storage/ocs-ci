@@ -31,7 +31,7 @@ from ocs_ci.utility.utils import exec_cmd, TimeoutSampler
 
 logger = logging.getLogger(name=__file__)
 rosa = config.AUTH.get("rosa", {})
-rosa_hcp = config.ENV_DATA.get("platform") == "rosa_hcp"
+rosa_hcp = config.ENV_DATA.get("platform") == constants.ROSA_HCP_PLATFORM
 auth_data = config.AUTH.get("openshiftdedicated", {})
 # to trace the leftovers of aws resources - use the date + letters for every role, config, etc.
 date_in_minimal_format = utils.date_in_minimal_format()
@@ -481,7 +481,7 @@ def create_account_roles(prefix="ManagedOpenShift"):
         prefix (str): role prefix
 
     """
-    if config.ENV_DATA.get("platform") == "rosa_hcp":
+    if config.ENV_DATA.get("platform") == constants.ROSA_HCP_PLATFORM:
         hosted_cp_param = "--hosted-cp"
     else:
         hosted_cp_param = ""
