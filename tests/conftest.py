@@ -5429,7 +5429,7 @@ def storageclass_factory_ui_fixture(request, cephblockpool_factory_ui, setup_ui)
         create_new_pool=False,
         encryption=False,
         reclaim_policy=constants.RECLAIM_POLICY_DELETE,
-        default_pool=constants.DEFAULT_BLOCKPOOL,
+        default_pool=f"{ocsci_config.ENV_DATA['storage_cluster_name']}{constants.SUFFIX_CEPHBLOCKPOOL}",
         existing_pool=None,
         backend_path=None,
         vault_namespace=None,

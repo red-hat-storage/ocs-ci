@@ -562,7 +562,11 @@ def default_ceph_block_pool():
     """
     sc_obj = default_storage_class(constants.CEPHBLOCKPOOL)
     cbp_name = sc_obj.get().get("parameters").get("pool")
-    return cbp_name if cbp_name else constants.DEFAULT_BLOCKPOOL
+    return (
+        cbp_name
+        if cbp_name
+        else f"{config.ENV_DATA['storage_cluster_name']}{constants.SUFFIX_CEPHBLOCKPOOL}"
+    )
 
 
 def create_ceph_block_pool(
@@ -3429,7 +3433,10 @@ def run_cmd_verify_cli_output(
 
 
 def check_rbd_image_used_size(
-    pvc_objs, usage_to_compare, rbd_pool=constants.DEFAULT_BLOCKPOOL, expect_match=True
+    pvc_objs,
+    usage_to_compare,
+    rbd_pool=f"{config.ENV_DATA['storage_cluster_name']}{constants.SUFFIX_CEPHBLOCKPOOL}",
+    expect_match=True,
 ):
     """
     Check if RBD image used size of the PVCs are matching with the given value

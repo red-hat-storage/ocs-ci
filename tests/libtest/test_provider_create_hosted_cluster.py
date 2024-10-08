@@ -293,8 +293,8 @@ class TestProviderHosted(object):
         storage_client = StorageClient()
         storage_client.verify_native_storageclient()
         assert verify_block_pool_exists(
-            constants.DEFAULT_BLOCKPOOL
-        ), f"{constants.DEFAULT_BLOCKPOOL} is not created"
+            f"{config.ENV_DATA['storage_cluster_name']}{constants.SUFFIX_CEPHBLOCKPOOL}"
+        ), f"{config.ENV_DATA['storage_cluster_name']}{constants.SUFFIX_CEPHBLOCKPOOL} is not created"
         assert verify_cephblockpool_status(), "the cephblockpool is not in Ready phase"
 
         # Validate radosnamespace created and in 'Ready' status

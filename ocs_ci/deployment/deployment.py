@@ -1237,7 +1237,24 @@ class Deployment(object):
 
         # create storage system
         if ocs_version >= version.VERSION_4_9:
-            exec_cmd(f"oc apply -f {constants.STORAGE_SYSTEM_ODF_YAML}")
+            logger.info("Creating StorageSystem CR")
+            with open(constants.STORAGE_SYSTEM_ODF_YAML, "r") as storage_system_odf:
+                storage_system_odf_data = yaml.load(
+                    storage_system_odf, Loader=yaml.SafeLoader
+                )
+            storage_system_odf_data["metadata"][
+                "name"
+            ] = f"{config.ENV_DATA['storage_cluster_name']}-storagesystem"
+            storage_system_odf_data["spec"]["name"] = config.ENV_DATA[
+                "storage_cluster_name"
+            ]
+            storage_system_odf_yaml = tempfile.NamedTemporaryFile(
+                mode="w+", prefix="storage_system", delete=False
+            )
+            templating.dump_data_to_temp_yaml(
+                cos_secret_data, storage_system_odf_yaml.name
+            )
+            exec_cmd(f"oc create -f {storage_system_odf_yaml.name}")
 
         ocp_version = version.get_semantic_ocp_version_from_config()
         if managed_ibmcloud:

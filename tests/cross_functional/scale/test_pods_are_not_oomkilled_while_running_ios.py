@@ -61,7 +61,7 @@ class TestPodAreNotOomkilledWhileRunningIO(E2ETest):
 
         else:
             pool = (
-                constants.DEFAULT_BLOCKPOOL
+                f"{config.ENV_DATA['storage_cluster_name']}{constants.SUFFIX_CEPHBLOCKPOOL}"
                 if interface == constants.CEPHBLOCKPOOL
                 else constants.DATA_POOL
             )

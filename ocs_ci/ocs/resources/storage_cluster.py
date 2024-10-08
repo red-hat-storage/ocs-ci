@@ -671,7 +671,7 @@ def ocs_install_verification(
         crush_dump = ct_pod.exec_ceph_cmd(ceph_cmd="ceph osd crush dump", format="")
         pool_names = [
             constants.METADATA_POOL,
-            constants.DEFAULT_BLOCKPOOL,
+            f"{config.ENV_DATA['storage_cluster_name']}{constants.SUFFIX_CEPHBLOCKPOOL}",
             constants.DATA_POOL,
         ]
         crush_rules = [

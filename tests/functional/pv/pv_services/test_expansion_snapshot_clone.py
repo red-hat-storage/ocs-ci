@@ -17,6 +17,8 @@ from ocs_ci.framework.testlib import (
     skipif_ocp_version,
     polarion_id,
 )
+from ocs_ci.framework import config
+
 
 log = logging.getLogger(__name__)
 
@@ -86,7 +88,7 @@ class TestExpansionSnapshotClone(ManageTest):
             assert check_rbd_image_used_size(
                 pvc_objs=self.pvcs,
                 usage_to_compare=f"{self.pvc_size}GiB",
-                rbd_pool=constants.DEFAULT_BLOCKPOOL,
+                rbd_pool=f"{config.ENV_DATA['storage_cluster_name']}{constants.SUFFIX_CEPHBLOCKPOOL}",
                 expect_match=True,
             ), "One or more PVCs are not thick provisioned."
 
@@ -153,7 +155,7 @@ class TestExpansionSnapshotClone(ManageTest):
             assert check_rbd_image_used_size(
                 pvc_objs=self.pvcs,
                 usage_to_compare=f"{pvc_size_expand_1}GiB",
-                rbd_pool=constants.DEFAULT_BLOCKPOOL,
+                rbd_pool=f"{config.ENV_DATA['storage_cluster_name']}{constants.SUFFIX_CEPHBLOCKPOOL}",
                 expect_match=True,
             ), "One or more PVCs are not thick provisioned after expansion"
             log.info(
@@ -194,7 +196,7 @@ class TestExpansionSnapshotClone(ManageTest):
             assert check_rbd_image_used_size(
                 pvc_objs=self.pvcs,
                 usage_to_compare=f"{pvc_size_expand_2}GiB",
-                rbd_pool=constants.DEFAULT_BLOCKPOOL,
+                rbd_pool=f"{config.ENV_DATA['storage_cluster_name']}{constants.SUFFIX_CEPHBLOCKPOOL}",
                 expect_match=True,
             ), "One or more PVCs are not thick provisioned after expansion"
             log.info(
@@ -263,7 +265,7 @@ class TestExpansionSnapshotClone(ManageTest):
             assert check_rbd_image_used_size(
                 pvc_objs=restore_objs,
                 usage_to_compare=f"{pvc_size_expand_1}GiB",
-                rbd_pool=constants.DEFAULT_BLOCKPOOL,
+                rbd_pool=f"{config.ENV_DATA['storage_cluster_name']}{constants.SUFFIX_CEPHBLOCKPOOL}",
                 expect_match=True,
             ), "One or more restored PVCs are not thick provisioned"
             log.info("Verified thick provision on restored PVCs")
@@ -273,7 +275,7 @@ class TestExpansionSnapshotClone(ManageTest):
             assert check_rbd_image_used_size(
                 pvc_objs=restore_objs,
                 usage_to_compare=f"{pvc_size_expand_1}GiB",
-                rbd_pool=constants.DEFAULT_BLOCKPOOL,
+                rbd_pool=f"{config.ENV_DATA['storage_cluster_name']}{constants.SUFFIX_CEPHBLOCKPOOL}",
                 expect_match=False,
             ), "One or more restored PVCs are not thin provisioned"
             log.info("Verified: Restored PVCs are not thick provisioned.")
@@ -283,7 +285,7 @@ class TestExpansionSnapshotClone(ManageTest):
             assert check_rbd_image_used_size(
                 pvc_objs=clone_objs,
                 usage_to_compare=f"{pvc_size_expand_2}GiB",
-                rbd_pool=constants.DEFAULT_BLOCKPOOL,
+                rbd_pool=f"{config.ENV_DATA['storage_cluster_name']}{constants.SUFFIX_CEPHBLOCKPOOL}",
                 expect_match=True,
             ), "One or more cloned PVCs are not thick provisioned"
             log.info("Verified thick provision on cloned PVCs.")
@@ -293,7 +295,7 @@ class TestExpansionSnapshotClone(ManageTest):
             assert check_rbd_image_used_size(
                 pvc_objs=clone_objs,
                 usage_to_compare=f"{pvc_size_expand_2}GiB",
-                rbd_pool=constants.DEFAULT_BLOCKPOOL,
+                rbd_pool=f"{config.ENV_DATA['storage_cluster_name']}{constants.SUFFIX_CEPHBLOCKPOOL}",
                 expect_match=False,
             ), "One or more cloned PVCs are not thin provisioned"
             log.info("Verified: Cloned PVCs are not thick provisioned.")
@@ -337,7 +339,7 @@ class TestExpansionSnapshotClone(ManageTest):
             assert check_rbd_image_used_size(
                 pvc_objs=clone_objs,
                 usage_to_compare=f"{pvc_size_expand_3}GiB",
-                rbd_pool=constants.DEFAULT_BLOCKPOOL,
+                rbd_pool=f"{config.ENV_DATA['storage_cluster_name']}{constants.SUFFIX_CEPHBLOCKPOOL}",
                 expect_match=True,
             ), (
                 "One or more cloned PVCs are not thick provisioned after expanding "
@@ -352,7 +354,7 @@ class TestExpansionSnapshotClone(ManageTest):
             assert check_rbd_image_used_size(
                 pvc_objs=clone_objs,
                 usage_to_compare=f"{pvc_size_expand_3}GiB",
-                rbd_pool=constants.DEFAULT_BLOCKPOOL,
+                rbd_pool=f"{config.ENV_DATA['storage_cluster_name']}{constants.SUFFIX_CEPHBLOCKPOOL}",
                 expect_match=False,
             ), (
                 "One or more cloned PVCs are not thin provisioned after expanding "
@@ -366,7 +368,7 @@ class TestExpansionSnapshotClone(ManageTest):
             assert check_rbd_image_used_size(
                 pvc_objs=restore_objs,
                 usage_to_compare=f"{pvc_size_expand_3}GiB",
-                rbd_pool=constants.DEFAULT_BLOCKPOOL,
+                rbd_pool=f"{config.ENV_DATA['storage_cluster_name']}{constants.SUFFIX_CEPHBLOCKPOOL}",
                 expect_match=True,
             ), (
                 "One or more restored PVCs are not thick provisioned after"
@@ -382,7 +384,7 @@ class TestExpansionSnapshotClone(ManageTest):
             assert check_rbd_image_used_size(
                 pvc_objs=restore_objs,
                 usage_to_compare=f"{pvc_size_expand_3}GiB",
-                rbd_pool=constants.DEFAULT_BLOCKPOOL,
+                rbd_pool=f"{config.ENV_DATA['storage_cluster_name']}{constants.SUFFIX_CEPHBLOCKPOOL}",
                 expect_match=False,
             ), (
                 "One or more restored PVCs are not thin provisioned after "
@@ -467,7 +469,7 @@ class TestExpansionSnapshotClone(ManageTest):
             assert check_rbd_image_used_size(
                 pvc_objs=restored_clone_objs,
                 usage_to_compare=f"{pvc_size_expand_3}GiB",
-                rbd_pool=constants.DEFAULT_BLOCKPOOL,
+                rbd_pool=f"{config.ENV_DATA['storage_cluster_name']}{constants.SUFFIX_CEPHBLOCKPOOL}",
                 expect_match=True,
             ), "One or more PVCs cloned from restored PVCs are not thick provisioned"
             log.info(
@@ -479,7 +481,7 @@ class TestExpansionSnapshotClone(ManageTest):
             assert check_rbd_image_used_size(
                 pvc_objs=restored_clone_objs,
                 usage_to_compare=f"{pvc_size_expand_3}GiB",
-                rbd_pool=constants.DEFAULT_BLOCKPOOL,
+                rbd_pool=f"{config.ENV_DATA['storage_cluster_name']}{constants.SUFFIX_CEPHBLOCKPOOL}",
                 expect_match=False,
             ), "One or more PVCs cloned from restored PVCs are not thin provisioned"
             log.info(
@@ -534,7 +536,7 @@ class TestExpansionSnapshotClone(ManageTest):
             assert check_rbd_image_used_size(
                 pvc_objs=restore_objs_new,
                 usage_to_compare=f"{pvc_size_expand_3}GiB",
-                rbd_pool=constants.DEFAULT_BLOCKPOOL,
+                rbd_pool=f"{config.ENV_DATA['storage_cluster_name']}{constants.SUFFIX_CEPHBLOCKPOOL}",
                 expect_match=True,
             ), "One or more restored PVCs are not thick provisioned"
             log.info("Verified thick provision on PVCs restored from the snapshots.")
@@ -544,7 +546,7 @@ class TestExpansionSnapshotClone(ManageTest):
             assert check_rbd_image_used_size(
                 pvc_objs=restore_objs_new,
                 usage_to_compare=f"{pvc_size_expand_3}GiB",
-                rbd_pool=constants.DEFAULT_BLOCKPOOL,
+                rbd_pool=f"{config.ENV_DATA['storage_cluster_name']}{constants.SUFFIX_CEPHBLOCKPOOL}",
                 expect_match=False,
             ), "One or more restored PVCs are not thin provisioned"
             log.info(
