@@ -38,7 +38,7 @@ class QeAppRegistry:
 
     def catalog_source(self):
         """
-        Make sure the Create Catalog source from QE App registry exists on the cluster.
+        Make sure the Catalog source from QE App registry exists on the cluster.
 
         """
         catalog_source = CatalogSource(
