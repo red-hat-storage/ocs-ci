@@ -61,6 +61,8 @@ class TestNoobaaUseNewInternalCertAfterRotation:
         secret_obj.delete(resource_name=NOOBAA_S3_SERVING_CERT)
 
         # Verify the new secret is recreated
+        time.sleep(60)
+        logger.info("Verify new secret created post the deletion")
         nb_endpoint_secret = secret_obj.get(resource_name=NOOBAA_S3_SERVING_CERT)
         creation_timestamp_secret = nb_endpoint_secret.get("metadata").get(
             "creationTimestamp"
