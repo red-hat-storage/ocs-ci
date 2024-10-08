@@ -2592,9 +2592,13 @@ def delete_sts_iam_roles():
     """
     logger.info("Deleting STS IAM Roles")
     cluster_path = config.ENV_DATA["cluster_path"]
-    infra_id = get_infra_id(cluster_path)
     aws = AWS()
-    roles = aws.get_iam_roles(infra_id)
+    if config.ENV_DATA.get("platform") == constants.ROSA_HCP_PLATFORM:
+        role_name = f"{config.ENV_DATA['cluster_name']}"
+        roles = aws.get_iam_roles(role_name)
+    else:
+        infra_id = get_infra_id(cluster_path)
+        roles = aws.get_iam_roles(infra_id)
 
     for role in roles:
         role_name = role["RoleName"]

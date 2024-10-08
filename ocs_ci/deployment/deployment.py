@@ -943,6 +943,7 @@ class Deployment(object):
                 subscription_yaml_data["spec"]["config"]["env"] = [role_arn_data]
             else:
                 subscription_yaml_data["spec"]["config"]["env"].append([role_arn_data])
+        subscription_yaml_data["metadata"]["namespace"] = self.namespace
         subscription_manifest = tempfile.NamedTemporaryFile(
             mode="w+", prefix="subscription_manifest", delete=False
         )
