@@ -77,7 +77,7 @@ setup(
         "junitparser==3.1.0",
         "flaky==3.7.0",
         "ocp-network-split",
-        "pyopenssl==24.0.0",
+        "pyopenssl==24.2.1",
         "pyparsing==2.4.7",
         "mysql-connector-python==8.0.27",
         "pytest-repeat==0.9.3",
