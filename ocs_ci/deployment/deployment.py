@@ -1402,6 +1402,11 @@ class Deployment(object):
                 "storage"
             ] = f"{device_size}Gi"
 
+        if self.platform.lower() == constants.ROSA_HCP_PLATFORM:
+            self.DEFAULT_STORAGECLASS = config.DEPLOYMENT.get(
+                "customized_deployment_storage_class", self.DEFAULT_STORAGECLASS
+            )
+
         # set storage class to OCS default on current platform
         if self.DEFAULT_STORAGECLASS:
             deviceset_data["dataPVCTemplate"]["spec"][

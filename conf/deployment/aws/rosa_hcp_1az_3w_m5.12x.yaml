@@ -6,6 +6,7 @@ DEPLOYMENT:
   ocm_cli_version: '0.1.67'
   rosa_cli_version: '1.2.45'
   live_deployment: true
+  customized_deployment_storage_class: 'gp3-csi'
 ENV_DATA:
   platform: 'rosa_hcp'
   rosa_mode: "auto"
