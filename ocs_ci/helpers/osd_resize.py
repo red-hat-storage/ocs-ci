@@ -22,7 +22,7 @@ from ocs_ci.ocs.resources.storage_cluster import (
     get_deviceset_count,
     resize_osd,
 )
-from ocs_ci.ocs.cluster import check_ceph_osd_tree, CephCluster
+from ocs_ci.ocs.cluster import check_ceph_osd_tree, CephCluster, check_ceph_osd_df_tree
 from ocs_ci.ocs.ui.page_objects.page_navigator import PageNavigator
 from ocs_ci.utility.utils import (
     ceph_health_check,
@@ -60,6 +60,7 @@ def check_resources_state_post_resize_osd(old_osd_pods, old_osd_pvcs, old_osd_pv
         old_osd_pvs (list): The old osd PV objects before resizing the osd
 
     Raises:
+        StorageSizeNotReflectedException: If the OSD pods failed to restart
         ResourceWrongStatusException: If the following occurs:
             1. The OSD pods failed to reach the status Terminated or to be deleted
             2. The old PVC and PV names are not equal to the current PVC and PV names
@@ -75,7 +76,7 @@ def check_resources_state_post_resize_osd(old_osd_pods, old_osd_pvcs, old_osd_pv
         sleep=20,
     )
     if not res:
-        raise ResourceWrongStatusException(
+        raise StorageSizeNotReflectedException(
             "The OSD pods failed to reach the status Terminated or to be deleted"
         )
 
@@ -227,6 +228,10 @@ def check_ceph_state_post_resize_osd():
         raise CephHealthException(ex)
     if not check_ceph_osd_tree():
         raise CephHealthException("The ceph osd tree checks didn't finish successfully")
+    if not check_ceph_osd_df_tree():
+        raise CephHealthException(
+            "The ceph osd df tree output is not formatted correctly"
+        )
 
 
 def base_ceph_verification_steps_post_resize_osd(

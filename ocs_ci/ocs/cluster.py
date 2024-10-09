@@ -3602,3 +3602,134 @@ def bring_down_mds_memory_usage_gradually():
     assert (
         time_elapsed <= 1800
     ), "Memory usage remained high for more than 30 minutes. Failed to bring down the memory usage of MDS"
+
+
+def parse_ceph_table_output(raw_output: str) -> pd.DataFrame:
+    """
+    Parse the Ceph command table output and extract the data into a pandas DataFrame.
+    The function assumes that the first row contains the header, with at least two spaces
+    separating each column value.
+
+    Args:
+        raw_output (str): The raw output string from any Ceph command that provides tabular output.
+
+    Returns:
+        pd.DataFrame: A pandas DataFrame containing the parsed data, where the columns are
+        derived from the header row and the data rows are parsed accordingly.
+
+    """
+    # Known units for sizes (e.g., GiB, TiB, MiB)
+    known_units = ["GiB", "MiB", "KiB", "TiB"]
+
+    # Step 1: Join size values with their units (e.g., '894 GiB' -> '894GiB')
+    for unit in known_units:
+        raw_output = re.sub(rf"(\d+)\s+{unit}", rf"\1{unit}", raw_output)
+
+    # Split the raw output into lines
+    lines = raw_output.strip().split("\n")
+    # Use the first line as the header
+    header_line = lines[0].strip()
+    header = re.split(r"\s{2,}", header_line)
+    logger.info(f"Extracted Header: {header}")
+
+    data_lines = lines[1:]
+    # Now process the collected lines into parts
+    data = []
+    for line in data_lines:
+        # Split by any whitespace
+        parts = re.split(r"\s+", line.strip())
+        if len(parts) >= len(header) - 1:
+            data.append(parts[: len(header)])
+        else:
+            logger.warning(
+                f"Skipping line due to mismatch in number of columns: {line}"
+            )
+
+    # Create DataFrame
+    df = pd.DataFrame(data, columns=header)
+
+    return df
+
+
+def get_ceph_osd_df_tree_weight_and_size():
+    """
+    Extract the 'ID', 'WEIGHT', and 'SIZE' values from the Ceph 'osd df tree' command output.
+
+    Returns:
+        list: A list of dictionaries where each dictionary contains 'ID', 'WEIGHT', and 'SIZE'.
+
+    """
+    ceph_cmd = "ceph osd df tree"
+    ct_pod = storage_cluster.get_ceph_tools_pod()
+    output = ct_pod.exec_ceph_cmd(
+        ceph_cmd=ceph_cmd, format=False, out_yaml_format=False
+    )
+    logger.info(f"ceph osd df tree output = {output}")
+    # Parse the raw output using the modified parse_ceph_osd_df_tree function
+    df = parse_ceph_table_output(output)
+
+    # Initialize the result list
+    result = []
+
+    for _, row in df.iterrows():
+        # Extract WEIGHT and SIZE
+        weight = row["WEIGHT"]
+        if weight == "-":
+            # If the weight value with '-' we need to get the next row value
+            weight = row["CLASS"]
+            size = row["REWEIGHT"]
+        else:
+            weight = row["WEIGHT"]
+            size = row["SIZE"]
+
+        result.append({"ID": row["ID"], "WEIGHT": weight, "SIZE": size})
+
+    return result
+
+
+def check_ceph_osd_df_tree():
+    """
+    Check that the ceph osd df tree output values are correct
+
+    Returns:
+        bool: True, if the ceph osd df tree output values are correct. False, otherwise.
+
+    """
+    logger.info("Verify ceph osd df tree values")
+    storage_size = float(storage_cluster.get_storage_size()[0:-2])
+    ceph_output_lines = get_ceph_osd_df_tree_weight_and_size()
+    logger.info(f"ceph output lines = {ceph_output_lines}")
+
+    for line in ceph_output_lines:
+        osd_id = line["ID"]
+        weight = float(line["WEIGHT"])
+        # Regular expression to match the numeric part and the unit
+        match = re.match(r"(\d+)(\D+)", line["SIZE"])
+        size = float(match.group(1))
+        units = match.group(2)
+        if units.startswith("Gi"):
+            weight = weight * 1024
+        elif units.startswith("Mi"):
+            weight = weight * (1024**2)
+
+        # Check if the weight and size are equal ignoring a small diff
+        diff = size * 0.04
+        if not (size - diff <= weight <= size + diff):
+            logger.warning(
+                f"OSD weight {weight} (converted) does not match the OSD size {size} "
+                f"for OSD ID {osd_id}. Expected OSD weight within [{size - diff}, {size + diff}]"
+            )
+            return False
+        # If it's a regular OSD entry, check if the expected osd size
+        # and the current size are equal ignoring a small diff
+        diff = size * 0.02
+        if not osd_id.startswith("-") and not (
+            size - diff <= storage_size <= size + diff
+        ):
+            logger.warning(
+                f"The storage size {storage_size} does not match the OSD size {size} "
+                f"for OSD ID {osd_id}. Expected storage size within [{size - diff}, {size + diff}]"
+            )
+            return False
+
+    return True
