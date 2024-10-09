@@ -81,6 +81,7 @@ class TestODFTopology(object):
     @tier3
     @bugzilla("2209251")
     @bugzilla("2233027")
+    @bugzilla("2245068")
     @polarion_id("OCS-4901")
     def test_validate_topology_configuration(
         self, setup_ui_class, teardown_depl_busybox, pvc_factory, teardown_factory
@@ -113,6 +114,10 @@ class TestODFTopology(object):
         OCS-4906        Add deployment to ODF cluster and verify that Topology represents added deployment
         OCS-4907        Delete deployment from ODF cluster and verify that Topology represents that deployment
         """
+        logger.info(
+            "Add an unlabeled pod to the openshift-storage ns and "
+            "Check the ODF topology UI and verify that it functions as expected."
+        )
         pvc_obj = pvc_factory(
             interface=constants.CEPHBLOCKPOOL,
             access_mode=constants.ACCESS_MODE_RWO,
