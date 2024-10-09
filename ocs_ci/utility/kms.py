@@ -2247,11 +2247,13 @@ def update_csi_kms_vault_connection_details(update_config):
 
 
 def get_kms_details():
-    provider = config.ENV_DATA["KMS_PROVIDER"]
+    kms_provider = config.ENV_DATA["KMS_PROVIDER"]
     try:
-        return kms_map[provider]()
+        return kms_map[kms_provider]()
     except KeyError:
-        raise KMSNotSupported(f"Not a supported KMS deployment , provider: {provider}")
+        raise KMSNotSupported(
+            f"Not a supported KMS deployment , provider: {kms_provider}"
+        )
 
 
 def get_kms_deployment():
