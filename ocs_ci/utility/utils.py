@@ -2158,9 +2158,11 @@ def get_ocp_version(seperator=None):
             if (
                 config.ENV_DATA["platform"] == constants.IBMCLOUD_PLATFORM
                 and config.ENV_DATA["deployment_type"] == "managed"
-            ):
+            ) or config.ENV_DATA["platform"] == constants.ROSA_HCP_PLATFORM:
                 # In IBM ROKS, there is some issue that openshiftVersion is not available
                 # after fresh deployment. As W/A we are taking the version from config only if not found.
+                # UPD:
+                # seems like ROSA HCP takes more time to propagate version to clusterversion on fresh deployments
                 log.warning(
                     "openshiftVersion key not found! Taking OCP version from config."
                 )
