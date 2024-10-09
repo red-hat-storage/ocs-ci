@@ -152,7 +152,7 @@ def get_all_nodes():
 
 
 def wait_for_nodes_status(
-    node_names=None, status=constants.NODE_READY, timeout=180, sleep=3
+    node_names=None, status=constants.NODE_READY, timeout=360, sleep=3
 ):
     """
     Wait until all nodes are in the given status
