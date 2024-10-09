@@ -1,5 +1,4 @@
 import os
-import shutil
 from stat import S_IEXEC
 from logging import getLogger
 from typing import Union
@@ -18,7 +17,7 @@ log = getLogger(__name__)
 class ODFCLIRetriever:
     def __init__(self):
         self.semantic_version = get_semantic_ocs_version_from_config()
-        self.local_cli_path = os.path.join(config.RUN["bin_dir"], "odf-cli")
+        self.local_cli_path = os.path.join(config.RUN["bin_dir"], "odf")
 
     def check_odf_cli_binary(self):
         """
@@ -51,6 +50,8 @@ class ODFCLIRetriever:
                 f"Failed to retrieve and set up ODF CLI binary at {self.local_cli_path}"
             )
 
+        log.info(f"ODF CLI binary is ready at {self.local_cli_path}")
+
     def _validate_odf_cli_support(self):
         if self.semantic_version < VERSION_4_15:
             raise NotSupportedException(
@@ -70,25 +71,18 @@ class ODFCLIRetriever:
         # Ensure the directory exists
         os.makedirs(local_cli_dir, exist_ok=True)
 
-        # Extract to a temporary directory first
-        temp_dir = os.path.join(local_cli_dir, "temp_odf_cli")
-        os.makedirs(temp_dir, exist_ok=True)
-
         exec_cmd(
             f"oc image extract --registry-config {pull_secret_path} "
             f"{image} --confirm "
-            f"--path /usr/bin/odf:{temp_dir}"
+            f"--path /usr/bin/odf:{local_cli_dir}"
         )
 
-        # Move the extracted binary to the final location
-        extracted_binary = os.path.join(temp_dir, "odf")
-        if os.path.exists(extracted_binary):
-            shutil.move(extracted_binary, self.local_cli_path)
-            log.info(f"Moved ODF CLI binary to {self.local_cli_path}")
-        else:
+        if not os.path.exists(self.local_cli_path):
             raise FileNotFoundError(
-                f"ODF CLI binary not found in extracted files at {temp_dir}"
+                f"ODF CLI binary not found at {self.local_cli_path}"
             )
+
+        log.info(f"Extracted ODF CLI binary to {self.local_cli_path}")
 
     def _set_executable_permissions(self):
         if not os.path.exists(self.local_cli_path):
@@ -109,11 +103,12 @@ class ODFCLIRetriever:
         """
         Add the directory containing the ODF CLI binary to the system PATH.
         """
-        cli_dir = os.path.dirname(self.local_cli_path)
+        cli_dir = os.path.dirname(os.path.abspath(self.local_cli_path))
         current_path = os.environ.get("PATH", "")
         if cli_dir not in current_path:
             os.environ["PATH"] = f"{cli_dir}:{current_path}"
         log.info(f"Added {cli_dir} to PATH")
+        log.info(f"Current PATH: {os.environ['PATH']}")
 
 
 class ODFCliRunner:
