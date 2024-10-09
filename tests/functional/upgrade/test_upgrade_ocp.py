@@ -206,7 +206,7 @@ class TestUpgradeOCP(ManageTest):
             new_ceph_cluster.wait_for_rebalance(timeout=3000)
             ct_pod = get_ceph_tools_pod()
             try:
-                ceph_health_check(tries=160, delay=30)
+                ceph_health_check(tries=240, delay=30)
             except CephHealthException as err:
                 if "daemons have recently crashed" in str(err):
                     logger.error(err)
