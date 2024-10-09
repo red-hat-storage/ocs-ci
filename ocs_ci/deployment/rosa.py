@@ -10,7 +10,10 @@ import os
 from botocore.exceptions import ClientError
 
 from ocs_ci.deployment.cloud import CloudDeploymentBase
-from ocs_ci.deployment.helpers.rosa_prod_cluster_helpers import ROSAProdEnvCluster
+from ocs_ci.deployment.helpers.rosa_cluster_helpers import (
+    ROSAProdEnvCluster,
+    ROSAStageEnvCluster,
+)
 from ocs_ci.deployment.ocp import OCPDeployment as BaseOCPDeployment
 from ocs_ci.framework import config
 from ocs_ci.ocs.resources.pod import get_operator_pods
@@ -90,18 +93,24 @@ class ROSAOCP(BaseOCPDeployment):
                 timeout=60 * 20,
             )
 
-        kubeconfig_path = os.path.join(
-            config.ENV_DATA["cluster_path"], config.RUN["kubeconfig_location"]
-        )
-        password_path = os.path.join(
-            config.ENV_DATA["cluster_path"], config.RUN["password_location"]
-        )
-
         # generate kubeconfig and kubeadmin-password files
         if config.ENV_DATA["ms_env_type"] == "staging":
+            kubeconfig_path = os.path.join(
+                config.ENV_DATA["cluster_path"], config.RUN["kubeconfig_location"]
+            )
+            # password_path = os.path.join(
+            #     config.ENV_DATA["cluster_path"], config.RUN["password_location"]
+            # )
             ocm.get_kubeconfig(self.cluster_name, kubeconfig_path)
-            ocm.get_kubeadmin_password(self.cluster_name, password_path)
-            config.RUN["username"] = ocm.get_admin_name(self.cluster_name)
+            # this default admin password from secret doesn't work for ROSA HCP staging in the management-console
+            # but kubeconfig works for CLI operations
+            # TODO: (remove comments after testing)
+            # ocm.get_kubeadmin_password(self.cluster_name, password_path)
+            # config.RUN["username"] = ocm.get_admin_name(self.cluster_name)
+            rosa_stage_cluster = ROSAStageEnvCluster(self.cluster_name)
+            rosa_stage_cluster.create_admin_and_login()
+            rosa_stage_cluster.generate_kubeadmin_password_file()
+            config.RUN["username"] = rosa_stage_cluster.get_admin_name()
         if config.ENV_DATA["ms_env_type"] == "production":
             if config.ENV_DATA.get("appliance_mode"):
                 logger.info(

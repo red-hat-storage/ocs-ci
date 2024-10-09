@@ -21,3 +21,4 @@ ENV_DATA:
   machine_cidr: "10.0.0.0/16"
   ms_env_type: "staging"
   addon_name: "ocs-converged"
+  persistent-monitoring: false

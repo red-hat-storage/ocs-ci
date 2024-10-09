@@ -2691,7 +2691,10 @@ def create_fusion_catalog_source():
 @retry(CommandFailed, tries=8, delay=3)
 def setup_persistent_monitoring():
     """
-    Change monitoring backend to OCS
+    Change monitoring backend to OCS.
+    See the procedure at:
+    https://docs.redhat.com/en/documentation/red_hat_openshift_data_foundation
+    /4.16/html-single/managing_and_allocating_storage_resources/
     """
     sc = helpers.default_storage_class(interface_type=constants.CEPHBLOCKPOOL)
 
