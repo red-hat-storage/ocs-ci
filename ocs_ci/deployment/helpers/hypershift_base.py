@@ -483,7 +483,7 @@ class HyperShiftBase:
         """
 
         path_abs = os.path.expanduser(hosted_cluster_path)
-        auth_path = os.path.join(path_abs, "auth_path")
+        auth_path = os.path.join(path_abs, "auth")
         os.makedirs(auth_path, exist_ok=True)
         kubeconfig_path = os.path.join(auth_path, "kubeconfig")
 
