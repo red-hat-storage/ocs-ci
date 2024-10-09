@@ -21,6 +21,7 @@ from ocs_ci.ocs.resources.storage_cluster import (
     verify_device_class_in_osd_tree,
     get_deviceset_count,
     resize_osd,
+    check_ceph_osd_df_tree,
 )
 from ocs_ci.ocs.cluster import check_ceph_osd_tree, CephCluster
 from ocs_ci.ocs.ui.page_objects.page_navigator import PageNavigator
@@ -227,6 +228,10 @@ def check_ceph_state_post_resize_osd():
         raise CephHealthException(ex)
     if not check_ceph_osd_tree():
         raise CephHealthException("The ceph osd tree checks didn't finish successfully")
+    if not check_ceph_osd_df_tree():
+        raise CephHealthException(
+            "The ceph osd df tree output is not formatted correctly"
+        )
 
 
 def base_ceph_verification_steps_post_resize_osd(

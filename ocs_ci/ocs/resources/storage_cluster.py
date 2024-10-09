@@ -2929,3 +2929,94 @@ def get_csi_images_for_client_ocp_version(ocp_version=None):
     csi_ocp_version_images = csi_images.split(first_str)[1].split(last_str)[0]
     csi_ocp_version_images_urls = extract_image_urls(csi_ocp_version_images)
     return csi_ocp_version_images_urls
+
+
+def parse_ceph_osd_df_tree_weight_and_size():
+    """
+    Parses the Ceph osd df tree output and returns a list of dictionaries
+    where keys are 'ID', 'WEIGHT', and 'SIZE', and values are the corresponding data from each line.
+
+    Returns:
+        list: A list of dictionaries with 'ID', 'WEIGHT', and 'SIZE' keys.
+
+    """
+    result = []
+    min_line_length = 18
+
+    ceph_cmd = "ceph osd df tree"
+    ct_pod = get_ceph_tools_pod()
+    output = ct_pod.exec_ceph_cmd(
+        ceph_cmd=ceph_cmd, format=False, out_yaml_format=False
+    )
+    log.info(f"ceph osd df tree output = {output}")
+    # Split the output into lines
+    lines = output.strip().split("\n")
+    lines = lines[1:]  # Skip the first line (header)
+
+    for line in lines:
+        parts = re.split(r"\s+", line.strip())  # Split line into parts by spaces
+        if len(parts) < min_line_length:
+            continue  # Skip any lines that don't have enough parts
+
+        # Create a dictionary for the current line with 'ID', 'WEIGHT', and 'SIZE'
+        if parts[0].startswith("-"):
+            entry = {
+                "ID": parts[0],
+                "WEIGHT": parts[1],
+                "SIZE": parts[3] + " " + parts[4],  # Combine size and unit
+            }
+        else:
+            entry = {
+                "ID": parts[0],
+                "WEIGHT": parts[2],
+                "SIZE": parts[4] + " " + parts[5],  # Combine size and unit
+            }
+
+        result.append(entry)
+
+    return result
+
+
+def check_ceph_osd_df_tree():
+    """
+    Check that the ceph osd df tree output values are correct
+
+    Returns:
+        bool: True, if the ceph osd df tree output values are correct. False, otherwise.
+
+    """
+    log.info("Verify ceph osd df tree values")
+    storage_size = float(get_storage_size()[0:-2])
+    ceph_output_lines = parse_ceph_osd_df_tree_weight_and_size()
+
+    for line in ceph_output_lines:
+        osd_id = line["ID"]
+        weight = float(line["WEIGHT"])
+        units = line["SIZE"].split()[1]
+        size = float(line["SIZE"].split()[0])
+        if units.startswith("Gi"):
+            weight = weight * 1024
+        elif units.startswith("Mi"):
+            weight = weight * (1024**2)
+
+        # Check if the weight and size are equal ignoring a small diff
+        diff = size * 0.03
+        if not (size - diff <= weight <= size + diff):
+            log.warning(
+                f"OSD weight {weight} (converted) does not match the OSD size {size} "
+                f"for OSD ID {osd_id}. Expected OSD weight within [{size - diff}, {size + diff}]"
+            )
+            return False
+        # If it's a regular OSD entry, check if the expected osd size
+        # and the current size are equal ignoring a small diff
+        diff = size * 0.02
+        if not osd_id.startswith("-") and not (
+            size - diff <= storage_size <= size + diff
+        ):
+            log.warning(
+                f"The storage size {storage_size} does not match the OSD size {size} "
+                f"for OSD ID {osd_id}. Expected storage size within [{size - diff}, {size + diff}]"
+            )
+            return False
+
+    return True
