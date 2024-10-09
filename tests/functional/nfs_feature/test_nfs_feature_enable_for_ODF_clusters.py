@@ -26,6 +26,7 @@ from ocs_ci.framework.testlib import (
     polarion_id,
     aws_platform_required,
     skipif_external_mode,
+    ignore_leftovers,
 )
 
 from ocs_ci.ocs.resources import pod, ocs
@@ -954,6 +955,7 @@ class TestNfsEnable(ManageTest):
         log.info("Check nfs pv is deleted")
         pv_obj.ocp.wait_for_delete(resource_name=pv_obj.name, timeout=180)
 
+    @ignore_leftovers
     @tier1
     @polarion_id("OCS-4275")
     def test_nfs_volume_with_different_accesss_mode(
