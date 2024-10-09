@@ -31,6 +31,8 @@ from ocs_ci.ocs.ui.odf_topology import (
 )
 from ocs_ci.utility.utils import ceph_health_check
 from ocs_ci.utility import prometheus
+from ocs_ci.helpers import helpers
+from ocs_ci.ocs.ocp import OCP
 
 logger = logging.getLogger(__name__)
 
@@ -81,9 +83,7 @@ class TestODFTopology(object):
     @bugzilla("2233027")
     @polarion_id("OCS-4901")
     def test_validate_topology_configuration(
-        self,
-        setup_ui_class,
-        teardown_depl_busybox,
+        self, setup_ui_class, teardown_depl_busybox, pvc_factory, teardown_factory
     ):
         """
         Test to validate configuration of ODF Topology for internal and external deployments,
@@ -113,7 +113,21 @@ class TestODFTopology(object):
         OCS-4906        Add deployment to ODF cluster and verify that Topology represents added deployment
         OCS-4907        Delete deployment from ODF cluster and verify that Topology represents that deployment
         """
-
+        pvc_obj = pvc_factory(
+            interface=constants.CEPHBLOCKPOOL,
+            access_mode=constants.ACCESS_MODE_RWO,
+            status=constants.STATUS_BOUND,
+            project=OCP(
+                kind="Project", namespace=constants.OPENSHIFT_STORAGE_NAMESPACE
+            ),
+        )
+        pod_obj = helpers.create_pod(
+            interface_type=constants.CEPHBLOCKPOOL,
+            pvc_name=pvc_obj.name,
+            namespace=pvc_obj.namespace,
+            pod_dict_path=constants.NGINX_POD_YAML,
+        )
+        teardown_factory(pod_obj)
         topology_tab = PageNavigator().nav_odf_default_page().nav_topology_tab()
 
         topology_deviation = topology_tab.validate_topology_configuration()
