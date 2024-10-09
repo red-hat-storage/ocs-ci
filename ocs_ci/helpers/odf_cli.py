@@ -1,5 +1,5 @@
 import os
-
+import shutil
 from stat import S_IEXEC
 from logging import getLogger
 from typing import Union
@@ -67,15 +67,37 @@ class ODFCLIRetriever:
         pull_secret_path = download_pull_secret()
         local_cli_dir = os.path.dirname(self.local_cli_path)
 
+        # Ensure the directory exists
+        os.makedirs(local_cli_dir, exist_ok=True)
+
+        # Extract to a temporary directory first
+        temp_dir = os.path.join(local_cli_dir, "temp_odf_cli")
+        os.makedirs(temp_dir, exist_ok=True)
+
         exec_cmd(
             f"oc image extract --registry-config {pull_secret_path} "
             f"{image} --confirm "
-            f"--path {local_cli_dir}:{local_cli_dir}"
+            f"--path /usr/bin/odf:{temp_dir}"
         )
 
+        # Move the extracted binary to the final location
+        extracted_binary = os.path.join(temp_dir, "odf")
+        if os.path.exists(extracted_binary):
+            shutil.move(extracted_binary, self.local_cli_path)
+            log.info(f"Moved ODF CLI binary to {self.local_cli_path}")
+        else:
+            raise FileNotFoundError(
+                f"ODF CLI binary not found in extracted files at {temp_dir}"
+            )
+
     def _set_executable_permissions(self):
+        if not os.path.exists(self.local_cli_path):
+            raise FileNotFoundError(
+                f"ODF CLI binary not found at {self.local_cli_path}"
+            )
         current_permissions = os.stat(self.local_cli_path).st_mode
         os.chmod(self.local_cli_path, current_permissions | S_IEXEC)
+        log.info(f"Set executable permissions for {self.local_cli_path}")
 
     def _verify_cli_binary(self):
         if not self.check_odf_cli_binary():
