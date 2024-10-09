@@ -81,6 +81,7 @@ class TestNSFSSystem(MCGTest):
         for nsfs_obj in nsfs_objs:
             nsfs_bucket_factory(nsfs_obj)
             logger.info(f"Successfully created NSFS bucket: {nsfs_obj.bucket_name}")
+            # logger.info(f"S3 Client Config: {nsfs_obj.s3_client._request_signer._credentials}")
 
         # Put, Get, Copy, Head, list and Delete S3 operations
         for nsfs_obj in nsfs_objs:
@@ -151,7 +152,8 @@ class TestNSFSSystem(MCGTest):
                 pattern=nsfs_obj_pattern,
                 s3_creds=nsfs_obj.s3_creds,
                 result_pod=nsfs_obj.interface_pod,
-                result_pod_path=nsfs_obj.mount_path + "/" + nsfs_obj.bucket_name,
+                # result_pod_path=nsfs_obj.mount_path + "/" + nsfs_obj.bucket_name,
+                result_pod_path=nsfs_obj.mounted_bucket_path,
             )
         pods_to_respin = [
             pod.Pod(
@@ -194,7 +196,8 @@ class TestNSFSSystem(MCGTest):
             compare_directory(
                 awscli_pod=awscli_pod_session,
                 original_dir=f"{test_directory_setup.origin_dir}/{nsfs_obj.bucket_name}",
-                result_dir=nsfs_obj.mount_path + "/" + nsfs_obj.bucket_name,
+                # result_dir=nsfs_obj.mount_path + "/" + nsfs_obj.bucket_name,
+                result_dir=nsfs_obj.mounted_bucket_path,
                 amount=5,
                 pattern=nsfs_obj_pattern,
                 result_pod=nsfs_obj.interface_pod,
@@ -212,7 +215,8 @@ class TestNSFSSystem(MCGTest):
             compare_directory(
                 awscli_pod=awscli_pod_session,
                 original_dir=f"{test_directory_setup.origin_dir}/{nsfs_obj.bucket_name}",
-                result_dir=nsfs_obj.mount_path + "/" + nsfs_obj.bucket_name,
+                # result_dir=nsfs_obj.mount_path + "/" + nsfs_obj.bucket_name,
+                result_dir=nsfs_obj.mounted_bucket_path,
                 amount=5,
                 pattern=nsfs_obj_pattern,
                 result_pod=nsfs_obj.interface_pod,
@@ -241,7 +245,8 @@ class TestNSFSSystem(MCGTest):
             compare_directory(
                 awscli_pod=awscli_pod_session,
                 original_dir=f"{test_directory_setup.origin_dir}/{nsfs_obj.bucket_name}",
-                result_dir=nsfs_obj.mount_path + "/" + nsfs_obj.bucket_name,
+                # result_dir=nsfs_obj.mount_path + "/" + nsfs_obj.bucket_name,
+                result_dir=nsfs_obj.mounted_bucket_path,
                 amount=5,
                 pattern=nsfs_obj_pattern,
                 result_pod=nsfs_obj.interface_pod,
