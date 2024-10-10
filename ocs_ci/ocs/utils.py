@@ -56,7 +56,6 @@ from ocs_ci.utility.version import (
 from ocs_ci.ocs.exceptions import (
     ResourceNotFoundError,
 )
-from ocs_ci.ocs.resources.pod import wait_for_pods_to_be_running
 
 log = logging.getLogger(__name__)
 
@@ -1812,6 +1811,7 @@ def collect_pod_container_rpm_package(dir_name):
     """
     # Import pod here to avoid circular dependency issue
     from ocs_ci.ocs.resources import pod
+    from ocs_ci.ocs.resources.pod import wait_for_pods_to_be_running
 
     timestamp = time.time()
     cluster_namespace = ocsci_config.ENV_DATA["cluster_namespace"]
