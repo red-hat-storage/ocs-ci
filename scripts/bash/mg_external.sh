@@ -3,7 +3,7 @@ set -x
 
 # Function to print usage information
 usage() {
-    echo "Usage: $0 [BASE_COLLECTION_PATH] [KUBECONFIG] [NAMESPACE]"
+    echo "Usage: $0 [BASE_COLLECTION_PATH [KUBECONFIG [NAMESPACE]]]"
     echo
     echo "Parameters:"
     echo "  BASE_COLLECTION_PATH   Optional. Path where debug logs will be stored. Default is the current directory."
