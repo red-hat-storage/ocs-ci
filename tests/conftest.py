@@ -128,6 +128,9 @@ from ocs_ci.utility import (
     users,
     version,
 )
+from ocs_ci.deployment.helpers.odf_deployment_helpers import (
+    configure_virtual_host_style_acess_for_rgw,
+)
 from ocs_ci.utility.environment_check import (
     get_status_before_execution,
     get_status_after_execution,
@@ -8398,3 +8401,14 @@ def setup_cnv(request):
             cnv_obj.uninstall_cnv()
 
     request.addfinalizer(finalizer)
+
+
+@pytest.fixture(scope="session")
+def virtual_host_style_acess_for_rgw_session():
+    """
+    Session scoped fixture to configure Virtual host style access for RGW
+
+    """
+    # This feature is not implemented yet, for more details see https://bugzilla.redhat.com/show_bug.cgi?id=2283643
+    # Access buckets with DNS subdomain style (Virtual host style) for RGW
+    configure_virtual_host_style_acess_for_rgw()
