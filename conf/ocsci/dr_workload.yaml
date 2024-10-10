@@ -68,7 +68,7 @@ ENV_DATA:
       dr_workload_app_placement_name: "busybox-1-placement-cephfs",
       dr_workload_app_pvc_selector: { 'appname': 'busybox_app1_cephfs' }, pod_count: 10, pvc_count: 10
     },
-    { name: "appset-busybox-2", workload_dir: "rdr/busybox/cephfs/AppSet/appset-busybox-1-cephfs.yaml",
+    { name: "appset-busybox-2", workload_dir: "rdr/busybox/cephfs/appset/appset-busybox-1-cephfs.yaml",
       dr_workload_app_placement_name: "busybox-2-placement-cephfs",
       dr_workload_app_pvc_selector: { 'appname': 'busybox_app2_cephfs' }, pod_count: 10, pvc_count: 10
     },
