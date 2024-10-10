@@ -65,9 +65,12 @@ class TestProfileDefaultValuesCheck(ManageTest):
         try:
             exist_performance_profile = storage_cluster.data["spec"]["resourceProfile"]
             curr_prof = storage_cluster.data["spec"]["resourceProfile"]
-            log.info(f"Current performance prfile is {curr_prof}")
+            log.info(f"Current performance profile is {curr_prof}")
         except KeyError:
             # On some occasions, a cluster will be deployed without performance profile, In that case, set it to None.
+            log.info(
+                "If a cluster is deployed without performance profile, set existing_profile value as None"
+            )
             exist_performance_profile = None
             pass
         if exist_performance_profile == self.perf_profile:
@@ -79,7 +82,7 @@ class TestProfileDefaultValuesCheck(ManageTest):
                 f"-n {namespace}  --type merge --patch '{ptch}'"
             )
             run_cmd(ptch_cmd)
-            log.info("Verify storage cluster is on Ready state")
+            log.info("Verify storage cluster is in Ready state")
             verify_storage_cluster()
 
             # Wait up to 600 seconds for performance changes to reflect
@@ -181,6 +184,9 @@ class TestProfileDefaultValuesCheck(ManageTest):
             exist_performance_profile = storage_cluster.data["spec"]["resourceProfile"]
         except KeyError:
             # On some occasions, a cluster will be deployed without performance profile, In that case, set it to None.
+            log.info(
+                "If a cluster is deployed without performance profile, set existing_profile value as None"
+            )
             exist_performance_profile = None
             pass
         if exist_performance_profile == self.perf_profile:

@@ -5376,7 +5376,7 @@ def verify_performance_profile_change(perf_profile):
         perf_profile (str): Applied performance profile
 
     Returns:
-        True: In case performance profile is updated fails otherwise
+        bool: True in case performance profile is updated, False otherwise
     """
     from ocs_ci.ocs.resources.storage_cluster import StorageCluster
 
