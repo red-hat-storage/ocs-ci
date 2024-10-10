@@ -108,8 +108,9 @@ class HostedClients(HyperShiftBase):
         # https://bugzilla.redhat.com/show_bug.cgi?id=2281536#c21
 
         # Create Network Policy
+        storage_client = StorageClient()
         for cluster_name in cluster_names:
-            StorageClient.create_network_policy(
+            storage_client.create_network_policy(
                 namespace_to_create_storage_client=f"clusters-{cluster_name}"
             )
 
