@@ -151,6 +151,10 @@ anywhere else.
 * `ssh_jump_host` - dict containing configuration for SSH jump host
     * `host` - hostname or IP address of the SSH Jump host
     * `user` - username for the ssh connection to the SSH jump host
+* `rosa_cli_version` - ROSA CLI version to be used for ROSA deployment
+* `ocm_cli_version` - OCM CLI version to be used for ROSA deployment
+* `force_download_rosa_cli` - Download the ROSA CLI even if one already exists in the bin_dir
+* `force_download_ocm_cli` - Download the OCM CLI even if one already exists in the bin_dir
 
 #### REPORTING
 

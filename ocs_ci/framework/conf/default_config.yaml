@@ -117,6 +117,8 @@ DEPLOYMENT:
   aws_cred_path: "~/.aws/credentials"
   # STS in CCO manual mode
   sts_enabled: false
+  ocm_cli_version: '0.1.75'
+  rosa_cli_version: '1.2.45'
 
 
 
@@ -234,7 +236,6 @@ ENV_DATA:
   # Managed StorageCluster size in TiB
   size: '20'
   ms_env_type: 'staging'
-  rosa_cli_version: '1.2.16'
   rosa_billing_model: 'standard'
   appliance_mode: true
   ms_osd_pod_memory: "6Gi"

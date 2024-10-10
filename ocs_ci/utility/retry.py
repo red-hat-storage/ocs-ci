@@ -51,3 +51,26 @@ def retry(
         return f_retry
 
     return deco_retry
+
+
+def catch_exceptions(*exceptions):
+    """
+    Catch unhandled exception and log the exception. This wrapper is useful to catch the exception(s) and
+    perform actions after the call to the function.
+    This function is stored in retry.py module because it is related to retrying
+
+    Args:
+        *exceptions: One or more exception classes to catch.
+    """
+
+    def decorator(func):
+        @wraps(func)
+        def wrapper(*args, **kwargs):
+            try:
+                return func(*args, **kwargs)
+            except exceptions as e:
+                logger.warning(f"Exception occurred and caught in {func.__name__}: {e}")
+
+        return wrapper
+
+    return decorator

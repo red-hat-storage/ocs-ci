@@ -1,3 +1,4 @@
+from datetime import datetime
 from functools import reduce
 import base64
 import io
@@ -946,6 +947,7 @@ def get_rosa_cli(
     """
     bin_dir = os.path.expanduser(bin_dir or config.RUN["bin_dir"])
     rosa_filename = "rosa"
+    rosa_tarball_name = "rosa_Linux_x86_64.tar.gz"
     rosa_binary_path = os.path.join(bin_dir, rosa_filename)
     if os.path.isfile(rosa_binary_path) and force_download:
         delete_file(rosa_binary_path)
@@ -957,8 +959,10 @@ def get_rosa_cli(
         # record current working directory and switch to BIN_DIR
         previous_dir = os.getcwd()
         os.chdir(bin_dir)
-        url = f"https://github.com/openshift/rosa/releases/download/v{version}/rosa-linux-amd64"
-        download_file(url, rosa_filename)
+        # download rosa binary endpoints were changed to a tarball endpoints
+        url = f"https://github.com/openshift/rosa/releases/download/v{version}/{rosa_tarball_name}"
+        download_file(url, f"/tmp/{rosa_tarball_name}")
+        run_cmd(f"tar xzvf /tmp/{rosa_tarball_name} {rosa_filename}")
         # return to the previous working directory
         os.chdir(previous_dir)
 
@@ -1536,6 +1540,30 @@ def get_random_str(size=13):
     """
     chars = string.ascii_lowercase + string.digits
     return "".join(random.choice(chars) for _ in range(size))
+
+
+def get_random_letters(size=13):
+    """
+    Generates the random string of 3 characters
+
+    Args:
+        size (int): number of letter characters to generate
+
+    Returns:
+        str: string of random characters of given size
+    """
+    return "".join(random.choice(string.ascii_lowercase) for _ in range(size))
+
+
+def date_in_minimal_format():
+    """
+    Get the current date in a minimal format, such as 61024 for 6 of October 2024. Suitable to add to resource names.
+
+    Returns:
+        str: The current date in a minimal
+    """
+    current_date = datetime.now()
+    return f"{current_date.day}{current_date.month}{current_date.year % 100}"
 
 
 def run_async(command):
@@ -2134,9 +2162,11 @@ def get_ocp_version(seperator=None):
             if (
                 config.ENV_DATA["platform"] == constants.IBMCLOUD_PLATFORM
                 and config.ENV_DATA["deployment_type"] == "managed"
-            ):
+            ) or config.ENV_DATA["platform"] == constants.ROSA_HCP_PLATFORM:
                 # In IBM ROKS, there is some issue that openshiftVersion is not available
                 # after fresh deployment. As W/A we are taking the version from config only if not found.
+                # UPD:
+                # seems like ROSA HCP takes more time to propagate version to clusterversion on fresh deployments
                 log.warning(
                     "openshiftVersion key not found! Taking OCP version from config."
                 )

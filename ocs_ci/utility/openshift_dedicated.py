@@ -15,6 +15,7 @@ from ocs_ci.utility import utils
 
 logger = logging.getLogger(name=__file__)
 openshift_dedicated = config.AUTH.get("openshiftdedicated", {})
+_credentials_cache = {}
 
 
 def login():
@@ -87,6 +88,32 @@ def download_ocm_cli():
     )
 
 
+def get_cached_credentials(cluster):
+    """
+    Get cached credentials for the cluster or fetch if not cached.
+
+    Args:
+        cluster (str): Cluster name.
+
+    Returns:
+        dict: Cluster credentials.
+    """
+    if cluster not in _credentials_cache:
+        _credentials_cache[cluster] = get_credentials(cluster)
+    return _credentials_cache[cluster]
+
+
+def update_cached_credentials(cluster):
+    """
+    Update cached credentials for the cluster.
+
+    Args:
+        cluster (str): Cluster name.
+
+    """
+    _credentials_cache[cluster] = get_credentials(cluster)
+
+
 def get_credentials(cluster):
     """
     Get json with cluster credentials
@@ -108,16 +135,16 @@ def get_credentials(cluster):
 def get_kubeconfig(cluster, path):
     """
     Export kubeconfig to provided path.
+    To get fresh credentials run first update_cached_credentials(cluster)
 
     Args:
         cluster (str): Cluster name.
         path (str): Path where to create kubeconfig file.
-
     """
     path = os.path.expanduser(path)
     basepath = os.path.dirname(path)
     os.makedirs(basepath, exist_ok=True)
-    credentials = get_credentials(cluster)
+    credentials = get_cached_credentials(cluster)
     with open(path, "w+") as fd:
         fd.write(credentials.get("kubeconfig"))
 
@@ -125,18 +152,33 @@ def get_kubeconfig(cluster, path):
 def get_kubeadmin_password(cluster, path):
     """
     Export password for kubeadmin to provided path.
+    To get fresh credentials run first update_cached_credentials(cluster)
 
     Args:
         cluster (str): Cluster name.
         path (str): Path where to create kubeadmin-password file.
-
     """
     path = os.path.expanduser(path)
     basepath = os.path.dirname(path)
     os.makedirs(basepath, exist_ok=True)
-    credentials = get_credentials(cluster)
+    credentials = get_cached_credentials(cluster)
     with open(path, "w+") as fd:
         fd.write(credentials.get("admin").get("password"))
+
+
+def get_admin_name(cluster):
+    """
+    Get admin name for the cluster.
+    To get fresh credentials run first update_cached_credentials(cluster)
+
+    Args:
+        cluster (str): Cluster name.
+
+    Returns:
+        str: Admin name.
+    """
+    credentials = get_cached_credentials(cluster)
+    return credentials.get("admin").get("username")
 
 
 def destroy_cluster(cluster):

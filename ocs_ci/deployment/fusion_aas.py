@@ -7,7 +7,7 @@ on Fusion aaS
 import logging
 import os
 
-from ocs_ci.deployment.helpers.rosa_prod_cluster_helpers import ROSAProdEnvCluster
+from ocs_ci.deployment.helpers.rosa_cluster_helpers import ROSAProdEnvCluster
 from ocs_ci.deployment import rosa as rosa_deployment
 from ocs_ci.framework import config
 from ocs_ci.utility import openshift_dedicated as ocm, rosa
