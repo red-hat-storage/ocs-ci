@@ -93,20 +93,14 @@ class ROSAOCP(BaseOCPDeployment):
                 timeout=60 * 20,
             )
 
-        # generate kubeconfig and kubeadmin-password files
+        logger.info("generate kubeconfig and kubeadmin-password files")
         if config.ENV_DATA["ms_env_type"] == "staging":
             kubeconfig_path = os.path.join(
                 config.ENV_DATA["cluster_path"], config.RUN["kubeconfig_location"]
             )
-            # password_path = os.path.join(
-            #     config.ENV_DATA["cluster_path"], config.RUN["password_location"]
-            # )
             ocm.get_kubeconfig(self.cluster_name, kubeconfig_path)
             # this default admin password from secret doesn't work for ROSA HCP staging in the management-console
-            # but kubeconfig works for CLI operations
-            # TODO: (remove comments after testing)
-            # ocm.get_kubeadmin_password(self.cluster_name, password_path)
-            # config.RUN["username"] = ocm.get_admin_name(self.cluster_name)
+            # but kubeconfig works for CLI operations, creating kubeadmin-password file for CLI operations via rosa cli
             rosa_stage_cluster = ROSAStageEnvCluster(self.cluster_name)
             rosa_stage_cluster.create_admin_and_login()
             rosa_stage_cluster.generate_kubeadmin_password_file()
