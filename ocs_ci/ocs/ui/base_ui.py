@@ -1095,7 +1095,7 @@ def navigate_to_local_cluster(**kwargs):
         acm_dropdown = wait_for_element_to_be_visible(all_clusters_dropdown, timeout)
         acm_dropdown.click()
         local_cluster_item = wait_for_element_to_be_visible(
-            acm_page_loc["local-cluster_dropdown"]
+            acm_page_loc["local-cluster_dropdown_item"]
         )
         logger.info("Navigate to Local Cluster page. Click local cluster item")
         local_cluster_item.click()
