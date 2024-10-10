@@ -110,7 +110,6 @@ class ROSAOCP(BaseOCPDeployment):
             rosa_stage_cluster = ROSAStageEnvCluster(self.cluster_name)
             rosa_stage_cluster.create_admin_and_login()
             rosa_stage_cluster.generate_kubeadmin_password_file()
-            config.RUN["username"] = rosa_stage_cluster.get_admin_name()
         if config.ENV_DATA["ms_env_type"] == "production":
             if config.ENV_DATA.get("appliance_mode"):
                 logger.info(
