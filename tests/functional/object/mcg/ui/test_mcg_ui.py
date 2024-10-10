@@ -7,6 +7,7 @@ from ocs_ci.framework.pytest_customization.marks import (
     black_squad,
     runs_on_provider,
     mcg,
+    provider_mode,
 )
 from ocs_ci.ocs import constants
 from ocs_ci.helpers.helpers import create_unique_resource_name
@@ -296,6 +297,7 @@ class TestObcUserInterface(object):
                 resource_name=obc_name
             )
 
+    @provider_mode
     @ui
     @tier1
     @runs_on_provider
