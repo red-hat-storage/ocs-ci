@@ -17,6 +17,7 @@ from ocs_ci.utility.utils import TimeoutSampler, run_cmd, exec_cmd
 from ocs_ci.ocs import constants, ocp
 from ocs_ci.ocs.exceptions import TimeoutExpiredError, CommandFailed
 from ocs_ci.ocs.resources.packagemanifest import PackageManifest
+from ocs_ci.framework import config
 
 logger = logging.getLogger(__name__)
 
@@ -45,7 +46,7 @@ class QuayOperator(object):
         self.sc_name = (
             constants.DEFAULT_EXTERNAL_MODE_STORAGECLASS_RBD
             if storagecluster_independent_check()
-            else constants.DEFAULT_STORAGECLASS_RBD
+            else f"{config.ENV_DATA['storage_cluster_name']}{constants.SUFFIX_STORAGECLASS_RBD}"
         )
 
     def setup_quay_operator(self, channel=None):

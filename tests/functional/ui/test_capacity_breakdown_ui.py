@@ -156,8 +156,8 @@ class TestCapacityBreakdownUI(ManageTest):
             ceph_blockpool_sc = constants.DEFAULT_EXTERNAL_MODE_STORAGECLASS_RBD
             ceph_filesystem_sc = constants.DEFAULT_EXTERNAL_MODE_STORAGECLASS_CEPHFS
         else:
-            ceph_blockpool_sc = constants.DEFAULT_STORAGECLASS_RBD
-            ceph_filesystem_sc = constants.DEFAULT_STORAGECLASS_CEPHFS
+            ceph_blockpool_sc = f"{config.ENV_DATA['storage_cluster_name']}{constants.SUFFIX_STORAGECLASS_RBD}"
+            ceph_filesystem_sc = f"{config.ENV_DATA['storage_cluster_name']}{constants.SUFFIX_STORAGECLASS_CEPHFS}"
         sc_block_random_num = [
             {ceph_blockpool_sc: constants.ACCESS_MODE_RWO} for _ in range(1, 5)
         ]

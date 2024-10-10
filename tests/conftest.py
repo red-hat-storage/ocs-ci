@@ -4299,7 +4299,8 @@ def snapshot_restore_factory_fixture(request):
         log.info(f"Volume snapshot class name: {vol_snapshot_class}")
 
         if (
-            vol_snapshot_class == constants.DEFAULT_VOLUMESNAPSHOTCLASS_RBD
+            vol_snapshot_class
+            == f"{ocsci_config.ENV_DATA['storage_cluster_name']}{constants.SUFFIX_VOLUMESNAPSHOTCLASS_RBD}"
             or vol_snapshot_class
             == constants.DEFAULT_EXTERNAL_MODE_VOLUMESNAPSHOTCLASS_RBD
             or vol_snapshot_class == constants.DEFAULT_VOLUMESNAPSHOTCLASS_RBD_MS_PC
@@ -4311,7 +4312,8 @@ def snapshot_restore_factory_fixture(request):
             restore_pvc_yaml = restore_pvc_yaml or constants.CSI_RBD_PVC_RESTORE_YAML
             interface = constants.CEPHBLOCKPOOL
         elif (
-            vol_snapshot_class == constants.DEFAULT_VOLUMESNAPSHOTCLASS_CEPHFS
+            vol_snapshot_class
+            == f"{ocsci_config.ENV_DATA['storage_cluster_name']}{constants.SUFFIX_VOLUMESNAPSHOTCLASS_CEPHFS}"
             or vol_snapshot_class
             == constants.DEFAULT_EXTERNAL_MODE_VOLUMESNAPSHOTCLASS_CEPHFS
             or vol_snapshot_class == constants.DEFAULT_VOLUMESNAPSHOTCLASS_CEPHFS_MS_PC
@@ -5427,7 +5429,7 @@ def storageclass_factory_ui_fixture(request, cephblockpool_factory_ui, setup_ui)
         create_new_pool=False,
         encryption=False,
         reclaim_policy=constants.RECLAIM_POLICY_DELETE,
-        default_pool=constants.DEFAULT_BLOCKPOOL,
+        default_pool=f"{ocsci_config.ENV_DATA['storage_cluster_name']}{constants.SUFFIX_CEPHBLOCKPOOL}",
         existing_pool=None,
         backend_path=None,
         vault_namespace=None,
@@ -7826,7 +7828,7 @@ def scale_noobaa_resources(request):
     def factory(min_ep_count=3, max_ep_count=3, cpu=6, memory="10Gi"):
         storagecluster_obj = OCP(
             kind=constants.STORAGECLUSTER,
-            resource_name=constants.DEFAULT_STORAGE_CLUSTER,
+            resource_name=ocsci_config.ENV_DATA["storage_cluster_name"],
             namespace=constants.OPENSHIFT_STORAGE_NAMESPACE,
         )
 
@@ -8050,7 +8052,7 @@ def benchmark_workload_storageutilization(request):
         jobs="read",
         read_runtime=30,
         bs="4096KiB",
-        storageclass=constants.DEFAULT_STORAGECLASS_RBD,
+        storageclass=f"{ocsci_config.ENV_DATA['storage_cluster_name']}{constants.SUFFIX_STORAGECLASS_RBD}",
         timeout_completed=2400,
     ):
         """

@@ -207,7 +207,7 @@ class ODFAndNativeStorageClientDeploymentOnProvider(object):
 
         # Create storage cluster if not present already
         is_storagecluster = self.storage_cluster_obj.is_exist(
-            resource_name=constants.DEFAULT_STORAGE_CLUSTER
+            resource_name=config.ENV_DATA["storage_cluster_name"]
         )
         if not is_storagecluster:
             if (
@@ -279,8 +279,8 @@ class ODFAndNativeStorageClientDeploymentOnProvider(object):
 
             # Validate cephblockpool created
             assert verify_block_pool_exists(
-                constants.DEFAULT_BLOCKPOOL
-            ), f"{constants.DEFAULT_BLOCKPOOL} is not created"
+                f"{config.ENV_DATA['storage_cluster_name']}{constants.SUFFIX_CEPHBLOCKPOOL}"
+            ), f"{config.ENV_DATA['storage_cluster_name']}{constants.SUFFIX_CEPHBLOCKPOOL} is not created"
             assert (
                 verify_cephblockpool_status()
             ), "the cephblockpool is not in Ready phase"

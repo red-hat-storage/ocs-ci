@@ -330,7 +330,8 @@ def backingstore_factory(request, cld_mgr, mcg_obj, cloud_uls_factory):
                             lim_mem,
                         ) = uls_tup
                     if (
-                        storagecluster == constants.DEFAULT_STORAGECLASS_RBD
+                        storagecluster
+                        == f"{config.ENV_DATA['storage_cluster_name']}{constants.SUFFIX_STORAGECLASS_RBD}"
                         and storagecluster_independent_check()
                     ):
                         storagecluster = (
@@ -476,7 +477,7 @@ def clone_bs_dict_from_backingstore(
         pvpool_storageclass = (
             constants.THIN_CSI_STORAGECLASS
             if config.ENV_DATA["mcg_only_deployment"]
-            else constants.DEFAULT_STORAGECLASS_RBD
+            else f"{config.ENV_DATA['storage_cluster_name']}{constants.SUFFIX_STORAGECLASS_RBD}"
         )
         prototype_pvpool_data = protoype_backingstore.data["spec"]["pvPool"]
         num_volumes = prototype_pvpool_data["numVolumes"]

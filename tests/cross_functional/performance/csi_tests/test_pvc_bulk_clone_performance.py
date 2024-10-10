@@ -21,6 +21,7 @@ from ocs_ci.helpers.helpers import (
 )
 from ocs_ci.ocs import constants, scale_lib
 from ocs_ci.ocs.resources import pvc
+from ocs_ci.framework import config
 from ocs_ci.ocs.resources.objectconfigfile import ObjectConfFile
 from ocs_ci.ocs.perfresult import ResultsAnalyse
 
@@ -29,13 +30,13 @@ log = logging.getLogger(__name__)
 Interfaces_info = {
     constants.CEPHBLOCKPOOL: {
         "name": "RBD",
-        "sc_name": constants.DEFAULT_STORAGECLASS_RBD,
+        "sc_name": f"{config.ENV_DATA['storage_cluster_name']}{constants.SUFFIX_STORAGECLASS_RBD}",
         "clone_yaml": constants.CSI_RBD_PVC_CLONE_YAML,
         "accessmode": constants.ACCESS_MODE_RWO,
     },
     constants.CEPHFILESYSTEM: {
         "name": "CephFS",
-        "sc_name": constants.DEFAULT_STORAGECLASS_CEPHFS,
+        "sc_name": f"{config.ENV_DATA['storage_cluster_name']}{constants.SUFFIX_STORAGECLASS_CEPHFS}",
         "clone_yaml": constants.CSI_CEPHFS_PVC_CLONE_YAML,
         "accessmode": constants.ACCESS_MODE_RWX,
     },

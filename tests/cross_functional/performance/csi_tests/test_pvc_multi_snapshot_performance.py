@@ -549,12 +549,12 @@ class TestPvcMultiSnapshotPerformance(PASTest):
 
         # Reading basic snapshot yaml file
         self.snap_yaml = constants.CSI_CEPHFS_SNAPSHOT_YAML
-        self.sc = constants.DEFAULT_VOLUMESNAPSHOTCLASS_CEPHFS
+        self.sc = f"{config.ENV_DATA['storage_cluster_name']}{constants.SUFFIX_VOLUMESNAPSHOTCLASS_CEPHFS}"
         self.fs_type = "cephfs"
         if interface_type == constants.CEPHBLOCKPOOL:
             self.snap_yaml = constants.CSI_RBD_SNAPSHOT_YAML
             self.fs_type = "rbd"
-            self.sc = constants.DEFAULT_VOLUMESNAPSHOTCLASS_RBD
+            self.sc = f"{config.ENV_DATA['storage_cluster_name']}{constants.SUFFIX_VOLUMESNAPSHOTCLASS_RBD}"
         with open(self.snap_yaml, "r") as stream:
             try:
                 self.snap_templ = yaml.safe_load(stream)

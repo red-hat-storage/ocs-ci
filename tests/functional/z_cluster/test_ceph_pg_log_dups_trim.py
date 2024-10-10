@@ -24,6 +24,7 @@ from ocs_ci.ocs.rados_utils import (
 )
 from ocs_ci.ocs.resources.deployment import get_osd_deployments
 from ocs_ci.ocs import constants
+from ocs_ci.framework import config
 
 log = logging.getLogger(__name__)
 
@@ -66,7 +67,9 @@ class TestCephPgLogDupsTrimming(ManageTest):
         pod_obj1.get_fio_results()
         # Get a random pgid
         random_pgid = random.choice(
-            get_specific_pool_pgid(constants.DEFAULT_CEPHBLOCKPOOL)
+            get_specific_pool_pgid(
+                f"{config.ENV_DATA['storage_cluster_name']}{constants.SUFFIX_CEPHBLOCKPOOL}"
+            )
         )
         log.info(f"Selected pgid:{random_pgid} to inject dups")
         # Set osds in maintenance mode for running ceph-objectstore commands

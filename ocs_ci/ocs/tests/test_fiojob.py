@@ -10,6 +10,7 @@ import yaml
 
 from ocs_ci.ocs import constants
 from ocs_ci.ocs import fiojob
+from ocs_ci.framework import config
 
 
 HERE = os.path.abspath(os.path.dirname(__file__))
@@ -186,5 +187,11 @@ def test_get_sc_name_default():
     """
     Checking that we get correct storage class by default.
     """
-    assert fiojob.get_sc_name("foo_rbd") == constants.DEFAULT_STORAGECLASS_RBD
-    assert fiojob.get_sc_name("bar_cephfs") == constants.DEFAULT_STORAGECLASS_CEPHFS
+    assert (
+        fiojob.get_sc_name("foo_rbd")
+        == f"{config.ENV_DATA['storage_cluster_name']}{constants.SUFFIX_STORAGECLASS_RBD}"
+    )
+    assert (
+        fiojob.get_sc_name("bar_cephfs")
+        == f"{config.ENV_DATA['storage_cluster_name']}{constants.SUFFIX_STORAGECLASS_CEPHFS}"
+    )

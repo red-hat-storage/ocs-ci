@@ -8,6 +8,7 @@ from ocs_ci.utility.utils import get_running_ocp_version
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.ui.helpers_ui import get_element_type
 from ocs_ci.utility import version
+from ocs_ci.framework import config
 
 logger = logging.getLogger(__name__)
 
@@ -68,7 +69,8 @@ class PvcUI(PageNavigator):
             and not ocs_version == version.VERSION_4_6
         ):
             if (
-                sc_name != constants.DEFAULT_STORAGECLASS_CEPHFS
+                sc_name
+                != f"{config.ENV_DATA['storage_cluster_name']}{constants.SUFFIX_STORAGECLASS_CEPHFS}"
                 and access_mode == "ReadWriteOnce"
             ):
                 if (
@@ -127,7 +129,8 @@ class PvcUI(PageNavigator):
         logger.info(f"Verifying access mode : {pvc_access_mode_new}")
 
         if (
-            sc_name != constants.DEFAULT_STORAGECLASS_CEPHFS
+            sc_name
+            != f"{config.ENV_DATA['storage_cluster_name']}{constants.SUFFIX_STORAGECLASS_CEPHFS}"
             and access_mode == "ReadWriteOnce"
         ):
             if (

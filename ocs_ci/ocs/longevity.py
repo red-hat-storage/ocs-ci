@@ -62,6 +62,7 @@ from ocs_ci.ocs.node import (
     check_for_zombie_process_on_node,
 )
 from botocore.exceptions import ClientError
+from ocs_ci.framework import config
 
 
 log = logging.getLogger(__name__)
@@ -372,7 +373,10 @@ class Longevity(object):
         # Get pvc objs from namespace
         pvc_objs = get_pvc_objs(pvc_names=pvc_list, namespace=namespace)
         for pvc_obj in pvc_objs:
-            if pvc_obj.backed_sc == constants.DEFAULT_STORAGECLASS_RBD:
+            if (
+                pvc_obj.backed_sc
+                == f"{config.ENV_DATA['storage_cluster_name']}{constants.SUFFIX_STORAGECLASS_RBD}"
+            ):
                 pod_dict = templating.load_yaml(constants.CSI_RBD_POD_YAML)
                 if pvc_obj.get_pvc_vol_mode == "Block":
                     temp_dict = [
@@ -386,7 +390,10 @@ class Longevity(object):
                     ]
                     del pod_dict["spec"]["containers"][0]["volumeMounts"]
                     pod_dict["spec"]["containers"][0]["volumeDevices"] = temp_dict
-            elif pvc_obj.backed_sc == constants.DEFAULT_STORAGECLASS_CEPHFS:
+            elif (
+                pvc_obj.backed_sc
+                == f"{config.ENV_DATA['storage_cluster_name']}{constants.SUFFIX_STORAGECLASS_CEPHFS}"
+            ):
                 pod_dict = templating.load_yaml(constants.CSI_CEPHFS_POD_YAML)
             pod_name = create_unique_resource_name("test", "pod")
             pod_dict["metadata"]["name"] = pod_name

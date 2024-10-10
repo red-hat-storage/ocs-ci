@@ -130,8 +130,8 @@ class FioPodScale(object):
             cephfs_sc_obj = helpers.get_cephfs_sc_name()
             rbd_sc_obj = helpers.get_rbd_sc_name()
         else:
-            cephfs_sc_obj = constants.DEFAULT_STORAGECLASS_CEPHFS
-            rbd_sc_obj = constants.DEFAULT_STORAGECLASS_RBD
+            cephfs_sc_obj = f"{config.ENV_DATA['storage_cluster_name']}{constants.SUFFIX_STORAGECLASS_CEPHFS}"
+            rbd_sc_obj = f"{config.ENV_DATA['storage_cluster_name']}{constants.SUFFIX_STORAGECLASS_RBD}"
 
         # Get pvc_dict_list, append all the pvc.yaml dict to pvc_dict_list
         rbd_pvc_dict_list, cephfs_pvc_dict_list = ([], [])

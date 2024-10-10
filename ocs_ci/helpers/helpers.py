@@ -117,8 +117,10 @@ def wait_for_resource_state(resource, state, timeout=60):
     if check_cluster_is_compact():
         timeout = 180
     if (
-        resource.name == constants.DEFAULT_STORAGECLASS_CEPHFS
-        or resource.name == constants.DEFAULT_STORAGECLASS_RBD
+        resource.name
+        == f"{config.ENV_DATA['storage_cluster_name']}{constants.SUFFIX_STORAGECLASS_CEPHFS}"
+        or resource.name
+        == f"{config.ENV_DATA['storage_cluster_name']}{constants.SUFFIX_STORAGECLASS_RBD}"
     ):
         logger.info("Attempt to default default Secret or StorageClass")
         return
@@ -561,7 +563,11 @@ def default_ceph_block_pool():
     """
     sc_obj = default_storage_class(constants.CEPHBLOCKPOOL)
     cbp_name = sc_obj.get().get("parameters").get("pool")
-    return cbp_name if cbp_name else constants.DEFAULT_BLOCKPOOL
+    return (
+        cbp_name
+        if cbp_name
+        else f"{config.ENV_DATA['storage_cluster_name']}{constants.SUFFIX_CEPHBLOCKPOOL}"
+    )
 
 
 def create_ceph_block_pool(
@@ -683,7 +689,8 @@ def default_storage_class(
                     if sc_data["provisioner"] == constants.RBD_PROVISIONER
                 ][0]
             else:
-                resource_name = constants.DEFAULT_STORAGECLASS_RBD
+                resource_name = f"{config.ENV_DATA['storage_cluster_name']}{constants.SUFFIX_STORAGECLASS_RBD}"
+
     elif interface_type == constants.CEPHFILESYSTEM:
         if custom_storage_class:
             try:
@@ -704,7 +711,8 @@ def default_storage_class(
                     if sc_data["provisioner"] == constants.CEPHFS_PROVISIONER
                 ][0]
             else:
-                resource_name = constants.DEFAULT_STORAGECLASS_CEPHFS
+                resource_name = f"{config.ENV_DATA['storage_cluster_name']}{constants.SUFFIX_STORAGECLASS_CEPHFS}"
+
     base_sc = OCP(kind="storageclass", resource_name=resource_name)
     base_sc.wait_for_resource(
         condition=resource_name,
@@ -727,7 +735,7 @@ def default_thick_storage_class():
     if external:
         resource_name = constants.DEFAULT_EXTERNAL_MODE_STORAGECLASS_RBD_THICK
     else:
-        resource_name = constants.DEFAULT_STORAGECLASS_RBD_THICK
+        resource_name = f"{config.ENV_DATA['storage_cluster_name']}{constants.SUFFIX_STORAGECLASS_RBD_THICK}"
     base_sc = OCP(kind="storageclass", resource_name=resource_name)
     sc = OCS(**base_sc.data)
     return sc
@@ -3198,7 +3206,7 @@ def default_volumesnapshotclass(interface_type):
                         config.ENV_DATA["platform"].lower()
                         in constants.MANAGED_SERVICE_PLATFORMS
                     )
-                    else constants.DEFAULT_VOLUMESNAPSHOTCLASS_RBD
+                    else f"{config.ENV_DATA['storage_cluster_name']}{constants.SUFFIX_VOLUMESNAPSHOTCLASS_RBD}"
                 )
             )
     elif interface_type == constants.CEPHFILESYSTEM:
@@ -3221,7 +3229,7 @@ def default_volumesnapshotclass(interface_type):
                     constants.DEFAULT_VOLUMESNAPSHOTCLASS_CEPHFS_MS_PC
                     if config.ENV_DATA["platform"].lower()
                     in constants.MANAGED_SERVICE_PLATFORMS
-                    else constants.DEFAULT_VOLUMESNAPSHOTCLASS_CEPHFS
+                    else f"{config.ENV_DATA['storage_cluster_name']}{constants.SUFFIX_VOLUMESNAPSHOTCLASS_CEPHFS}"
                 )
             )
     base_snapshot_class = OCP(
@@ -3426,7 +3434,10 @@ def run_cmd_verify_cli_output(
 
 
 def check_rbd_image_used_size(
-    pvc_objs, usage_to_compare, rbd_pool=constants.DEFAULT_BLOCKPOOL, expect_match=True
+    pvc_objs,
+    usage_to_compare,
+    rbd_pool=f"{config.ENV_DATA['storage_cluster_name']}{constants.SUFFIX_CEPHBLOCKPOOL}",
+    expect_match=True,
 ):
     """
     Check if RBD image used size of the PVCs are matching with the given value
@@ -4798,7 +4809,11 @@ def is_rbd_default_storage_class(sc_name=None):
     Returns:
         bool : True if RBD is set as the  Default storage class for the cluster, False otherwise.
     """
-    default_rbd_sc = constants.DEFAULT_STORAGECLASS_RBD if sc_name is None else sc_name
+    default_rbd_sc = (
+        f"{config.ENV_DATA['storage_cluster_name']}{constants.SUFFIX_STORAGECLASS_RBD}"
+        if sc_name is None
+        else sc_name
+    )
     cmd = (
         f"oc get storageclass {default_rbd_sc} -o=jsonpath='{{.metadata.annotations}}' "
     )
@@ -5194,7 +5209,7 @@ def configure_cephcluster_params_in_storagecluster_cr(params, default_values=Fal
     storagecluster_obj = ocp.OCP(
         kind=constants.STORAGECLUSTER,
         namespace=config.ENV_DATA["cluster_namespace"],
-        resource_name=constants.DEFAULT_CLUSTERNAME,
+        resource_name=config.ENV_DATA["storage_cluster_name"],
     )
     for parameter in params:
         sc_key = parameter["sc_key"]

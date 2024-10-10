@@ -789,7 +789,7 @@ def get_rook_version():
     return rook_version
 
 
-def setup_ceph_toolbox(force_setup=False, storage_cluster=None):
+def setup_ceph_toolbox(force_setup=False):
     """
     Setup ceph-toolbox - also checks if toolbox exists, if it exists it
     behaves as noop.
@@ -799,9 +799,7 @@ def setup_ceph_toolbox(force_setup=False, storage_cluster=None):
 
     """
     ocs_version = version.get_semantic_ocs_version_from_config()
-    storage_cluster = (
-        storage_cluster if storage_cluster else constants.DEFAULT_STORAGE_CLUSTER
-    )
+    storage_cluster = ocsci_config.ENV_DATA["storage_cluster_name"]
     if ocsci_config.ENV_DATA["mcg_only_deployment"]:
         log.info("Skipping Ceph toolbox setup due to running in MCG only mode")
         return
