@@ -1005,7 +1005,7 @@ def collect_ceph_external(path):
         script_path = os.path.join(current_dir, "scripts", "bash", "mg_external.sh")
         run_cmd(
             f"sh {script_path} {os.path.join(path, 'ceph_external')} {kubeconfig_path}",
-            timeout=100,
+            timeout=140,
         )
     except Exception as ex:
         log.info(
