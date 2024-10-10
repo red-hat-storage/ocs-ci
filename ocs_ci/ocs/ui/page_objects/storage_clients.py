@@ -23,6 +23,7 @@ class StorageClients(BaseUI):
         Returns:
             str: onboarding_key
         """
+        logger.info("Generating onboarding token from ui")
         self.do_click(self.storage_clients_loc["generate_client_onboarding_ticket"])
         ValidationUI().verify_storage_clients_page()
         if storage_quota and self.ocs_version >= version.VERSION_4_17:
