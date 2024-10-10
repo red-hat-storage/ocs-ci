@@ -3,7 +3,7 @@ import logging
 import pytest
 
 from ocs_ci.framework.pytest_customization.marks import (
-    skipif_hci_client,
+    skipif_providermode_client,
     skipif_mcg_only,
     skipif_disconnected_cluster,
     polarion_id,
@@ -76,7 +76,7 @@ def alerts_expected():
 @tier2
 @black_squad
 @skipif_mcg_only
-@skipif_hci_client
+@skipif_providermode_client
 @polarion_id("OCS-5509")
 @skipif_disconnected_cluster
 def test_runbooks(setup_ui, alerts_expected):

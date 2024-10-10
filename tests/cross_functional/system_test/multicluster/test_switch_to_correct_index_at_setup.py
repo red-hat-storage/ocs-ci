@@ -17,7 +17,7 @@ from ocs_ci.helpers.sanity_helpers import Sanity, SanityManagedService
 from ocs_ci.ocs.constants import (
     MS_CONSUMER_TYPE,
     MS_PROVIDER_TYPE,
-    HCI_CLIENT,
+    PROVIDERMODE_CLIENT,
     HCI_PROVIDER,
     NON_MS_CLUSTER_TYPE,
 )
@@ -68,7 +68,7 @@ class TestSwitchToCorrectIndexAtSetup(ManageTest):
     @hci_provider_and_client_required
     @pytest.mark.parametrize(
         "cluster_type",
-        [HCI_CLIENT, HCI_PROVIDER],
+        [PROVIDERMODE_CLIENT, HCI_PROVIDER],
     )
     def test_switch_to_correct_cluster_with_hci_cluster_types(self, cluster_type):
         """
