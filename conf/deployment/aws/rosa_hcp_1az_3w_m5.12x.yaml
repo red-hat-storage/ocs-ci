@@ -7,6 +7,8 @@ DEPLOYMENT:
   rosa_cli_version: '1.2.45'
   live_deployment: true
   customized_deployment_storage_class: 'gp3-csi'
+RUN:
+  username: "cluster-admin"
 ENV_DATA:
   platform: 'rosa_hcp'
   rosa_mode: "auto"
