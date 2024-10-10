@@ -569,6 +569,15 @@ class Deployment(object):
             csv = CSV(resource_name=csv_name, namespace=fusion_namespace)
             csv.wait_for_phase("Succeeded", timeout=300)
 
+    def do_deploy_fdf(self):
+        """
+        Install IBM Fusion Data Foundation
+        """
+        if config.DEPLOYMENT.get("fdf_deployment"):
+            from ocs_ci.deployment.fusion_data_foundation import deploy_fdf
+
+            deploy_fdf()
+
     def do_deploy_odf_provider_mode(self):
         """
         Deploy ODF in provider mode and setup native client
@@ -687,6 +696,7 @@ class Deployment(object):
         self.do_deploy_ocs()
         self.do_deploy_rdr()
         self.do_deploy_fusion()
+        self.do_deploy_fdf()
         self.do_deploy_odf_provider_mode()
         self.do_deploy_cnv()
         self.do_deploy_hosted_clusters()
