@@ -33,17 +33,6 @@ from ocs_ci.framework.pytest_customization.marks import ignore_leftovers
 log = logging.getLogger(__name__)
 
 
-# @pytest.fixture(scope="class")
-# def setup_ui_class(request):
-#     driver = login_ui()
-
-#     def finalizer():
-#         close_browser()
-
-#     request.addfinalizer(finalizer)
-#     return driver
-
-
 @ignore_leftovers
 @tier4c
 @yellow_squad
@@ -133,7 +122,9 @@ class TestOnboardingTokenGeneration(ManageTest):
         HostedClients().download_hosted_clusters_kubeconfig_files()
 
         assert len(
-            storage_clients.generate_client_onboarding_ticket_ui(storage_quota=8)
+            storage_clients.generate_client_onboarding_ticket_ui(
+                storage_quota=(config.ENV_DATA.get("clusters").get("storage_quota"), 4)
+            )
         ), "Failed to get onboarding key"
         assert HostedODF(cluster_name).get_storage_client_status() == "Connected"
 
