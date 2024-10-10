@@ -882,14 +882,13 @@ class MCG:
         result.stderr = result.stderr.decode()
         return result
 
+    @property
     @retry(
-        (CommandFailed, subprocess.TimeoutExpired),
-        tries=5,
-        delay=15,
+        exception_to_check=(CommandFailed, KeyError, subprocess.TimeoutExpired),
+        tries=10,
+        delay=6,
         backoff=1,
     )
-    @property
-    @retry(exception_to_check=(CommandFailed, KeyError), tries=10, delay=6, backoff=1)
     def status(self):
         """
         Verify the status of NooBaa, and its default backing store and bucket class
