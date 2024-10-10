@@ -11,7 +11,6 @@ from ocs_ci.framework.pytest_customization.marks import (
     tier4a,
     skipif_ocs_version,
     green_squad,
-    cloud_platform_required,
 )
 from ocs_ci.framework import config
 from ocs_ci.ocs import constants
@@ -29,7 +28,6 @@ log = logging.getLogger(__name__)
 @skipif_ocs_version("<4.13")
 @pytest.mark.polarion_id("OCS-4919")
 @green_squad
-@cloud_platform_required
 class TestMonFailuresWithIntransitEncryption:
     @pytest.fixture(autouse=True)
     def teardown_fixture(self, request):
