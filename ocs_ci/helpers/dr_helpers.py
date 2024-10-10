@@ -1699,6 +1699,17 @@ def disable_dr_rdr():
 
 @retry(CommandFailed, tries=10, delay=30, backoff=1)
 def verify_drpc_deletion(cmd, expected_output_lst):
+    """
+    Function to validate drpc deletion
+
+    Args:
+        cmd(str): cli command
+        expected_output_lst(set): A set of strings that need to be included in the command output.
+
+    Returns:
+        bool: True, if all strings are included in the command output, False otherwise.
+
+    """
     drpc_out = exec_cmd(cmd)
     for expected_output in expected_output_lst:
         if expected_output not in drpc_out.stderr.decode():
