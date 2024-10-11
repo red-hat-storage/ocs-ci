@@ -22,7 +22,7 @@ def signal_term_handler(sig, frame):
     print(f"Got SIGTERM: {sig}")
     if hasattr(framework.config, "RUN"):
         framework.config.RUN["aborted"] = True
-    logdir = framework.config.RUN["log_dir"]
+    logdir = os.path.expanduser(framework.config.RUN["log_dir"])
     with open(os.path.join(logdir, "traceback.log"), "w") as f:
         faulthandler.dump_traceback(file=f)
     global kill_counter
