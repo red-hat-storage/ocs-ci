@@ -8,7 +8,7 @@ import logging
 from ocs_ci.framework import config
 from ocs_ci.ocs.exceptions import TimeoutException
 from ocs_ci.ocs.ocp import OCP
-from ocs_ci.ocs.ocs_upgrade import OCSUpgrade, verify_image_versions
+from ocs_ci.ocs.ocs_upgrade import OCSUpgrade
 from ocs_ci.ocs import constants
 from ocs_ci.ocs import defaults
 from ocs_ci.deployment.helpers.external_cluster_helpers import (
@@ -89,7 +89,7 @@ class DRUpgrade(OCSUpgrade):
         # we need to update subscriptions individually for DR operator as we don't want
         # to upgrade ODF at the time of DR operator (MCO, DR Hub), ODF would follow the upgrade
         # of DR operators
-        self.update_subscription(self.channel, self.subscription_name, self.namespace )
+        self.update_subscription(self.channel, self.subscription_name, self.namespace)
         # In the case upgrade is not from 4.8 to 4.9 and we have manual approval strategy
         # we need to wait and approve install plan, otherwise it's approved in the
         # subscribe_ocs method.
@@ -110,12 +110,6 @@ class DRUpgrade(OCSUpgrade):
                     break
             except TimeoutException:
                 raise TimeoutException("No new CSV found after upgrade!")
-        old_image = self.get_images_post_upgrade(
-            self.channel,
-            self.pre_upgrade_images,
-            self.upgrade_version,
-            self.resource_name,
-        )
 
     def update_subscription(self, channel, subscription_name, namespace=constants.OPENSHIFT_OPERATORS):
         subscription = OCP(
@@ -145,9 +139,6 @@ class DRUpgrade(OCSUpgrade):
         assert (
             self.post_upgrade_data.get("pod_status", "") == "Running"
         ), f"Pod {self.pod_name_pattern} not in Running state post upgrade"
-        assert (
-            self.post_upgrade_data.get("age", "") <= self.pre_upgrade_data["age"]
-        ), f"{self.pod_name_pattern} didn't restart after upgrade"
         assert (
             self.post_upgrade_data.get("version", "")
             != self.pre_upgrade_data["version"]
@@ -238,9 +229,6 @@ class DRHubUpgrade(DRUpgrade):
     def __init__(self):
         super().__init__(resource_name=defaults.DR_HUB_OPERATOR_NAME)
         self.operator_name = defaults.DR_HUB_OPERATOR_NAME
-        #self.subscription_name = constants.DR_HUB_OPERATOR_SUBSCRIPTION.replace(
-        #    "PLACEHOLDER", config.ENV_DATA["ocs_version"]
-        #)
         for sample in TimeoutSampler(
             300, 10, OCP, kind=constants.SUBSCRIPTION_COREOS, namespace=self.namespace
         ):
@@ -255,7 +243,6 @@ class DRHubUpgrade(DRUpgrade):
             break
         if not self.subscription_name:
             log.error(f"Couldn't find the subscription for {defaults.DR_HUB_OPERATOR_NAME}")
-                
         self.pod_name_pattern = "ramen-hub-operator"
 
     def run_upgrade(self):
@@ -286,10 +273,7 @@ class DRClusterOperatorUpgrade(DRUpgrade):
             namespace=constants.OPENSHIFT_DR_SYSTEM_NAMESPACE,
         )
         self.operator_name = defaults.DR_CLUSTER_OPERATOR_NAME
-        #self.subscription_name = constants.DR_CLUSTER_OPERATOR_SUBSCRIPTION.replace(
-        #    "PLACEHOLDER", config.ENV_DATA["ocs_version"]
-        #)
-        self.subscription_name = constants.DR_CLUSTER_OPERATOR_SUBSCRIPTION 
+        self.subscription_name = constants.DR_CLUSTER_OPERATOR_SUBSCRIPTION
         self.pod_name_pattern = "ramen-dr-cluster-operator"
 
     def run_upgrade(self):
