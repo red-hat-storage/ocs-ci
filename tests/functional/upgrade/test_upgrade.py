@@ -23,7 +23,6 @@ from ocs_ci.ocs.dr_upgrade import (
     MultiClusterOrchestratorUpgrade,
     DRHubUpgrade,
 )
-from ocs_ci.ocs import constants
 from ocs_ci.utility.reporting import get_polarion_id
 from ocs_ci.utility.utils import is_z_stream_upgrade
 
