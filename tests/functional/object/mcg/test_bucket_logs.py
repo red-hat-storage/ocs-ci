@@ -93,7 +93,6 @@ class TestBucketLogs(MCGTest):
         11. Wait for the nb pods to restart without the mounts
         12. Validate the logs PVC hasn't been deleted
         """
-
         logs_manager = BucketLoggingManager(mcg_obj_session, awscli_pod_session)
 
         provided_logs_pvc = None

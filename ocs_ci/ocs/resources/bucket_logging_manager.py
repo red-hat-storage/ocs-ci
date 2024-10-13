@@ -82,7 +82,7 @@ class BucketLoggingManager:
                 format_type="json",
             )
         except CommandFailed as e:
-            if "already exists" in str(e):
+            if "already exists" in str(e).lower():
                 patch_params[0]["op"] = "replace"
                 self.nb_config_resource.patch(
                     params=json.dumps(patch_params),
@@ -116,7 +116,6 @@ class BucketLoggingManager:
         """
         Unset the guaranteed bucket logs feature
         """
-
         logger.info("Disabling guaranteed bucket logs")
 
         try:
@@ -469,14 +468,17 @@ class BucketLoggingManager:
         for op, obj in expected_ops:
             success_code = "200" if op != "DELETE" else "204"
             expected_ops_set.add(f"{op}-{obj}-{success_code}")
+
+        # The http_status field is 102 for intent logs
         if check_intent:
             for op, obj in expected_ops:
                 expected_ops_set.append(f"{op}-{obj}-102")
+
+        # Parse the logs into a set of strings with the same format
         logs_set = {
             f"{log['op']}-{log['object_key']}-{log['http_status']}" for log in logs
         }
 
-        # Use set comparison to check if all expected operations are present
         return expected_ops_set.issubset(logs_set)
 
     def _parse_log_file_str(self, log_file_str):
