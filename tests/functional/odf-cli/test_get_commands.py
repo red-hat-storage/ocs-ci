@@ -4,13 +4,14 @@ import pytest
 
 from ocs_ci.ocs.resources.pod import get_mon_pods
 from ocs_ci.helpers.odf_cli import ODFCLIRetriever, ODFCliRunner
-from ocs_ci.framework.testlib import tier1, brown_squad, polarion_id
+from ocs_ci.framework.testlib import tier1, brown_squad, polarion_id, skipif_ocs_version
 
 log = logging.getLogger(__name__)
 
 
 @tier1
 @brown_squad
+@skipif_ocs_version("<4.15")
 class TestGetCommands:
     @pytest.fixture(scope="function", autouse=True)
     def odf_cli_setup(self):
