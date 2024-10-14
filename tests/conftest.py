@@ -7092,6 +7092,47 @@ def cnv_workload(request):
     return factory
 
 
+@pytest.fixture()
+def multi_cnv_workload(request, vm_configs, cnv_workload):
+    """
+    Creates multiple VMs with specified configurations using the cnv_workload fixture.
+
+    Args:
+        vm_configs: List of dictionary of vm configurations
+        e.g.
+        vm_configs = [
+        {"volume_interface": constants.VM_VOLUME_PVC, "os": "fedora", "access_mode": "RWO", "sc_name": "sc_Def_Compr"},
+        {"volume_interface": constants.VM_VOLUME_DVT, "os": "fedora", "access_mode": "RWX", "sc_name": "sc_Aggressive"},
+        ]
+
+    Returns:
+        list: objects of cnv workload class
+
+    """
+    created_vms = []
+
+    # Loop through vm_configs and create the VMs using the cnv_workload fixture
+    for config in vm_configs:
+        vm_obj = cnv_workload(
+            volume_interface=config["volume_interface"],
+            access_mode=config["access_mode"],
+            storageclass=config["sc_name"],
+            pvc_size="30Gi",  # Assuming pvc_size is fixed for all
+            source_url=constants.CNV_FEDORA_SOURCE,  # Assuming source_url is the same for all VMs
+            namespace=None,  # Assuming each VM is created in a unique namespace
+        )
+
+        created_vms.extend(vm_obj)
+
+    def teardown():
+        for vm in created_vms:
+            vm.delete()
+
+    request.addfinalizer(teardown)
+
+    return created_vms
+
+
 @pytest.fixture(scope="class")
 def lvm_storageclass_factory_class(request, storageclass_factory_class):
     return lvm_storageclass_factory_fixture(request, storageclass_factory_class)
