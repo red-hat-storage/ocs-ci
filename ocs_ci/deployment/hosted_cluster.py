@@ -38,6 +38,7 @@ from ocs_ci.utility.utils import (
     get_latest_release_version,
 )
 from ocs_ci.utility.version import get_semantic_version
+from ocs_ci.ocs.resources.storage_client import StorageClient
 
 logger = logging.getLogger(__name__)
 
@@ -102,6 +103,16 @@ class HostedClients(HyperShiftBase):
         # stage 3 download all available kubeconfig files
         logger.info("Download kubeconfig for all clusters")
         kubeconfig_paths = self.download_hosted_clusters_kubeconfig_files()
+
+        # Need to create networkpolicy as mentioned in bug 2281536,
+        # https://bugzilla.redhat.com/show_bug.cgi?id=2281536#c21
+
+        # Create Network Policy
+        storage_client = StorageClient()
+        for cluster_name in cluster_names:
+            storage_client.create_network_policy(
+                namespace_to_create_storage_client=f"clusters-{cluster_name}"
+            )
 
         # stage 4 deploy ODF on all hosted clusters if not already deployed
         for cluster_name in cluster_names:
