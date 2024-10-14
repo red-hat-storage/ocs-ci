@@ -10,6 +10,9 @@ from ocs_ci.framework.pytest_customization.marks import (
     green_squad,
 )
 from ocs_ci.ocs.resources.pod import get_ceph_tools_pod
+from ocs_ci.ocs.ocp import OCP
+from ocs_ci.utility.utils import run_cmd
+
 
 logger = logging.getLogger(__name__)
 
@@ -44,8 +47,10 @@ class TestScAndPoolUserInterface(object):
         Test steps
         1. Create storageclass and pool via UI
         2. Check the values of pg_num , it should be equal to osd_pool_default_pg_num
-        3. Create PVC and pod using the new storageclass created
-        4. Run IOs in the PVCs
+        3. Check PG autoscale is ON
+        4. New pool is having non-blank deviceclass
+        5. Create PVC and pod using the new storageclass created
+        6. Run IOs in the PVCs
         """
 
         # Creating SC and pool from UI
@@ -74,6 +79,28 @@ class TestScAndPoolUserInterface(object):
         logger.info(
             f"pg_num of the new pool {pool_name} "
             f"is equal to the osd pool default pg num {osd_pool_default_pg_num}"
+        )
+
+        # Check if the pg-autoscale is ON
+        pool_autoscale_status = ct_pod.exec_ceph_cmd(
+            ceph_cmd="ceph osd pool autoscale-status"
+        )
+        for pool in pool_autoscale_status:
+            if pool["pool_name"] == pool_name:
+                assert pool["pg_autoscale_mode"] == "on", "PG autoscale mode is off"
+        logger.info(f"{pool_name} autoscale mode is on")
+
+        # Check the pool is not none
+        oc_obj = OCP(kind=constants.CEPHBLOCKPOOL)
+        cbp_output = run_cmd(
+            cmd=f"oc get cephblockpool/{pool_name} -n {constants.OPENSHIFT_STORAGE_NAMESPACE} -o yaml"
+        )
+        cbp_output = oc_obj.exec_oc_cmd(
+            command=f"get cephblockpool/{pool_name} -n {constants.OPENSHIFT_STORAGE_NAMESPACE} -o yaml"
+        )
+        assert cbp_output["spec"]["deviceClass"] is not None, "The Deviceclass is none"
+        logger.info(
+            f"The deviceClass of the pool {pool_name} is {cbp_output['spec']['deviceClass']}"
         )
 
         # Create new pvc and pod with the newly created storageclass
