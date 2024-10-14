@@ -10,7 +10,10 @@ import os
 from botocore.exceptions import ClientError
 
 from ocs_ci.deployment.cloud import CloudDeploymentBase
-from ocs_ci.deployment.helpers.rosa_prod_cluster_helpers import ROSAProdEnvCluster
+from ocs_ci.deployment.helpers.rosa_cluster_helpers import (
+    ROSAProdEnvCluster,
+    ROSAStageEnvCluster,
+)
 from ocs_ci.deployment.ocp import OCPDeployment as BaseOCPDeployment
 from ocs_ci.framework import config
 from ocs_ci.ocs.resources.pod import get_operator_pods
@@ -81,19 +84,26 @@ class ROSAOCP(BaseOCPDeployment):
         ):
             rosa.appliance_mode_cluster(self.cluster_name)
         else:
+            rosa.login()
             rosa.create_cluster(self.cluster_name, self.ocp_version, self.region)
+            rosa.wait_machinepool_replicas_ready(
+                cluster_name=self.cluster_name,
+                machinepool_name="workers",
+                replicas=config.ENV_DATA["worker_replicas"],
+                timeout=60 * 20,
+            )
 
-        kubeconfig_path = os.path.join(
-            config.ENV_DATA["cluster_path"], config.RUN["kubeconfig_location"]
-        )
-        password_path = os.path.join(
-            config.ENV_DATA["cluster_path"], config.RUN["password_location"]
-        )
-
-        # generate kubeconfig and kubeadmin-password files
+        logger.info("generate kubeconfig and kubeadmin-password files")
         if config.ENV_DATA["ms_env_type"] == "staging":
+            kubeconfig_path = os.path.join(
+                config.ENV_DATA["cluster_path"], config.RUN["kubeconfig_location"]
+            )
             ocm.get_kubeconfig(self.cluster_name, kubeconfig_path)
-            ocm.get_kubeadmin_password(self.cluster_name, password_path)
+            # this default admin password from secret doesn't work for ROSA HCP staging in the management-console
+            # but kubeconfig works for CLI operations, creating kubeadmin-password file for CLI operations via rosa cli
+            rosa_stage_cluster = ROSAStageEnvCluster(self.cluster_name)
+            rosa_stage_cluster.create_admin_and_login()
+            rosa_stage_cluster.generate_kubeadmin_password_file()
         if config.ENV_DATA["ms_env_type"] == "production":
             if config.ENV_DATA.get("appliance_mode"):
                 logger.info(
@@ -169,7 +179,7 @@ class ROSAOCP(BaseOCPDeployment):
 
 class ROSA(CloudDeploymentBase):
     """
-    Deployment class for ROSA.
+    Deployment class for ROSA and ROSA HCP.
     """
 
     OCPDeployment = ROSAOCP
@@ -217,16 +227,25 @@ class ROSA(CloudDeploymentBase):
 
     def deploy_ocs(self):
         """
-        Deployment of ODF Managed Service addon on ROSA.
+        Deployment of ODF Managed Service addon on ROSA or ODF operator on ROSA HCP.
         """
+        rosa_hcp = config.ENV_DATA.get("platform") == constants.ROSA_HCP_PLATFORM
         ceph_cluster = ocp.OCP(kind="CephCluster", namespace=self.namespace)
         try:
             ceph_cluster.get().get("items")[0]
             logger.warning("OCS cluster already exists")
             return
         except (IndexError, CommandFailed):
-            logger.info("Running OCS basic installation")
-        rosa.install_odf_addon(self.cluster_name)
+            msg = "Running OCS basic installation"
+            msg += " with ODF addon" if not rosa_hcp else " with ODF operator"
+            logger.info(msg)
+
+        # rosa hcp is self-managed and doesn't support ODF addon
+        if rosa_hcp:
+            super(ROSA, self).deploy_ocs()
+        else:
+            rosa.install_odf_addon(self.cluster_name)
+
         pod = ocp.OCP(kind=constants.POD, namespace=self.namespace)
 
         if config.ENV_DATA.get("cluster_type") != "consumer":

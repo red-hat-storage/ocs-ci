@@ -572,7 +572,7 @@ class ConnectivityFail(Exception):
     pass
 
 
-class ROSAProdAdminLoginFailedException(Exception):
+class ROSAAdminLoginFailedException(Exception):
     pass
 
 
