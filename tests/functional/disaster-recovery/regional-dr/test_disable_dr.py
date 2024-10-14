@@ -13,6 +13,7 @@ from ocs_ci.ocs.resources.drpc import DRPC
 logger = logging.getLogger(__name__)
 
 
+@rdr
 @tier1
 @turquoise_squad
 class TestDisableDR:
