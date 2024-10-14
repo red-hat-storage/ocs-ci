@@ -13,7 +13,7 @@ log = logging.getLogger(__name__)
 @brown_squad
 @skipif_ocs_version("<4.15")
 class TestGetCommands:
-    @pytest.fixture(scope="function", autouse=True)
+    @pytest.fixture(scope="session", autouse=True)
     def odf_cli_setup(self):
         odf_cli_retriever = ODFCLIRetriever()
 
