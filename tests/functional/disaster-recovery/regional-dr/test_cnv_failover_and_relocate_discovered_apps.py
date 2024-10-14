@@ -4,7 +4,7 @@ from time import sleep
 from ocs_ci.deployment.cnv import CNVInstaller
 from ocs_ci.framework import config
 from ocs_ci.framework.testlib import acceptance, tier1
-from ocs_ci.framework.pytest_customization.marks import turquoise_squad
+from ocs_ci.framework.pytest_customization.marks import turquoise_squad, rdr
 from ocs_ci.helpers import dr_helpers
 from ocs_ci.helpers.cnv_helpers import run_dd_io
 from ocs_ci.ocs import constants
@@ -13,6 +13,7 @@ from ocs_ci.ocs.dr.dr_workload import validate_data_integrity_vm
 logger = logging.getLogger(__name__)
 
 
+@rdr
 @acceptance
 @tier1
 @turquoise_squad
