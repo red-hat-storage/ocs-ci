@@ -1,19 +1,17 @@
 apiVersion: kubevirt.io/v1
 kind: VirtualMachine
 metadata:
-  name: centos-stream8
+  name: vm-template
   namespace: default
 spec:
   running: true
   template:
     metadata:
       annotations:
-        vm.kubevirt.io/flavor: small
-        vm.kubevirt.io/os: centos-stream8
         vm.kubevirt.io/workload: server
       creationTimestamp: null
       labels:
-        kubevirt.io/domain: centos-stream8
+        kubevirt.io/domain: vm
         kubevirt.io/size: small
     spec:
       architecture: amd64

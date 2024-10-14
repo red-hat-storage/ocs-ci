@@ -115,9 +115,7 @@ class VirtualMachine(Virtctl):
         except CommandFailed as ex:
             if "(AlreadyExists)" in str(ex):
                 logger.warning(f"The namespace: {self.namespace} already exists!")
-        vm_dict_path = (
-            vm_dict_path if vm_dict_path else constants.CNV_VM_STANDALONE_PVC_VM_YAML
-        )
+        vm_dict_path = vm_dict_path if vm_dict_path else constants.CNV_VM_TEMPLATE_YAML
         vm_data = templating.load_yaml(vm_dict_path)
         vm_data["metadata"]["name"] = self._vm_name
         vm_data["metadata"]["namespace"] = self.namespace
@@ -148,7 +146,6 @@ class VirtualMachine(Virtctl):
             wait_for_resource_state(
                 resource=self.pvc_obj, state=constants.STATUS_BOUND, timeout=300
             )
-
         if volume_interface == constants.VM_VOLUME_DV:
             self.dv_obj = create_dv(
                 pvc_size=pvc_size,
@@ -157,9 +154,12 @@ class VirtualMachine(Virtctl):
                 namespace=self.namespace,
                 source_url=source_url,
             )
-            vm_data["spec"]["template"]["spec"]["volumes"][0]["persistentVolumeClaim"][
-                "claimName"
-            ] = self.dv_obj.name
+            del vm_data["spec"]["template"]["spec"]["volumes"][0][
+                "persistentVolumeClaim"
+            ]
+            vm_data["spec"]["template"]["spec"]["volumes"][0]["dataVolume"] = {
+                "name": f"{self.dv_obj.name}"
+            }
 
         if volume_interface == constants.VM_VOLUME_DVT:
             # Define the dataVolumeTemplates content with parameters
@@ -181,9 +181,12 @@ class VirtualMachine(Virtctl):
             vm_data["spec"]["dataVolumeTemplates"].append(
                 {"metadata": metadata, "spec": storage_spec}
             )
-            vm_data["spec"]["template"]["spec"]["volumes"][0]["persistentVolumeClaim"][
-                "claimName"
-            ] = dvt_name
+            del vm_data["spec"]["template"]["spec"]["volumes"][0][
+                "persistentVolumeClaim"
+            ]
+            vm_data["spec"]["template"]["spec"]["volumes"][0]["dataVolume"] = {
+                "name": f"{dvt_name}"
+            }
 
         vm_ocs_obj = create_resource(**vm_data)
         logger.info(f"Successfully created VM: {vm_ocs_obj.name}")
