@@ -22,7 +22,7 @@ class KeyRotation:
         """
         Initializes KeyRotation object with necessary parameters.
         """
-        self.cluster_name = constants.DEFAULT_CLUSTERNAME
+        self.cluster_name = config.ENV_DATA["storage_cluster_name"]
         self.resource_name = constants.STORAGECLUSTER
         self.cluster_namespace = config.ENV_DATA["cluster_namespace"]
 

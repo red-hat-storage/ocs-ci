@@ -76,7 +76,7 @@ class Warp(object):
         pvc_size = "50Gi"
         self.pod_name = "warppod"
         self.pvc_obj = helpers.create_pvc(
-            sc_name=constants.DEFAULT_STORAGECLASS_CEPHFS,
+            sc_name=f"{config.ENV_DATA['storage_cluster_name']}{constants.SUFFIX_STORAGECLASS_CEPHFS}",
             namespace=self.namespace,
             size=pvc_size,
             access_mode=constants.ACCESS_MODE_RWX,

@@ -18,11 +18,14 @@ from ocs_ci.framework.pytest_customization.marks import (
 from ocs_ci.utility.utils import ocsci_log_path
 from ocs_ci.utility import utils, templating
 from ocs_ci.ocs.exceptions import UnexpectedBehaviour
+from ocs_ci.framework import config
 
 log = logging.getLogger(__name__)
 
 # Noobaa storage class
-sc_name = constants.DEFAULT_STORAGECLASS_RGW
+sc_name = (
+    f"{config.ENV_DATA['storage_cluster_name']}{constants.SUFFIX_STORAGECLASS_RGW}"
+)
 # Number of scaled obc count
 scale_obc_count = 100
 # Number of obc creating by batch

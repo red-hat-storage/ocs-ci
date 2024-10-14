@@ -1768,7 +1768,7 @@ def clear_overprovision_spec(ignore_errors=False):
     """
     log.info("Removing overprovisionControl from storage cluster.")
     storagecluster_obj = OCP(
-        resource_name=constants.DEFAULT_CLUSTERNAME,
+        resource_name=config.ENV_DATA["storage_cluster_name"],
         namespace=config.ENV_DATA["cluster_namespace"],
         kind=constants.STORAGECLUSTER,
     )
@@ -1811,7 +1811,7 @@ def set_overprovision_policy(capacity, quota_name, sc_name, label):
     )
 
     storagecluster_obj = OCP(
-        resource_name=constants.DEFAULT_CLUSTERNAME,
+        resource_name=config.ENV_DATA["storage_cluster_name"],
         namespace=config.ENV_DATA["cluster_namespace"],
         kind=constants.STORAGECLUSTER,
     )

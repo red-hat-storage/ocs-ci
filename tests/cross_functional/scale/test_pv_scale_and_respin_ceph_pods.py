@@ -19,6 +19,7 @@ from ocs_ci.ocs.exceptions import (
     PVCNotCreated,
     PodNotCreated,
 )
+from ocs_ci.framework import config
 
 log = logging.getLogger(__name__)
 
@@ -43,8 +44,8 @@ class BasePvcCreateRespinCephPods(E2ETest):
         log.info(
             f"Start creating {number_of_pvc * 4} PVC of 4 types RBD, FS with RWO & RWX"
         )
-        cephfs_sc_obj = constants.DEFAULT_STORAGECLASS_CEPHFS
-        rbd_sc_obj = constants.DEFAULT_STORAGECLASS_RBD
+        cephfs_sc_obj = f"{config.ENV_DATA['storage_cluster_name']}{constants.SUFFIX_STORAGECLASS_CEPHFS}"
+        rbd_sc_obj = f"{config.ENV_DATA['storage_cluster_name']}{constants.SUFFIX_STORAGECLASS_RBD}"
 
         # Get pvc_dict_list, append all the pvc.yaml dict to pvc_dict_list
         rbd_pvc_dict_list, rbd_rwx_pvc_dict_list, cephfs_pvc_dict_list = ([], [], [])

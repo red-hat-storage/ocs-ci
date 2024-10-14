@@ -193,7 +193,7 @@ def uninstall_ocs():
     ns_name = config.ENV_DATA["cluster_namespace"]
     storage_cluster = ocp.OCP(
         kind=constants.STORAGECLUSTER,
-        resource_name=constants.DEFAULT_CLUSTERNAME,
+        resource_name=config.ENV_DATA["storage_cluster_name"],
         namespace=ns_name,
     )
 
@@ -218,7 +218,7 @@ def uninstall_ocs():
     )
 
     log.info("Deleting storageCluster object")
-    storage_cluster.delete(resource_name=constants.DEFAULT_CLUSTERNAME)
+    storage_cluster.delete(resource_name=config.ENV_DATA["storage_cluster_name"])
 
     if cleanup_policy == "delete":
         log.info("Cleanup policy set to delete. checking cleanup pods")

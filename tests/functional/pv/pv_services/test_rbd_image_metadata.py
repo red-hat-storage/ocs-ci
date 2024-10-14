@@ -69,7 +69,7 @@ class TestRbdImageMetadata:
         rbd_pool_name = (
             (config.ENV_DATA.get("rbd_name") or RBD_NAME)
             if config.DEPLOYMENT["external_mode"]
-            else constants.DEFAULT_CEPHBLOCKPOOL
+            else f"{config.ENV_DATA['storage_cluster_name']}{constants.SUFFIX_CEPHBLOCKPOOL}"
         )
         ceph_tool_pod = get_ceph_tools_pod()
         for image in rbd_images:

@@ -21,6 +21,7 @@ from ocs_ci.ocs.resources.ocs import OCS
 from ocs_ci.ocs.utils import get_pod_name_by_pattern
 from ocs_ci.utility import templating
 from ocs_ci.utility.utils import TimeoutSampler
+from ocs_ci.framework import config
 
 log = logging.getLogger(__name__)
 
@@ -82,7 +83,7 @@ class TestElasticsearch:
         sf_data["spec"]["workload"]["args"]["threads"] = 4
         sf_data["spec"]["workload"]["args"][
             "storageclass"
-        ] = constants.DEFAULT_STORAGECLASS_RBD
+        ] = f"{config.ENV_DATA['storage_cluster_name']}{constants.SUFFIX_STORAGECLASS_RBD}"
         sf_data["spec"]["workload"]["args"]["storagesize"] = "100Gi"
 
         # deploy the smallfile workload

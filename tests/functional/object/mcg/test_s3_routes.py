@@ -54,7 +54,7 @@ class TestS3Routes:
                 storagecluster_obj = ocp.OCP(
                     kind=constants.STORAGECLUSTER,
                     namespace=config.ENV_DATA["cluster_namespace"],
-                    resource_name=constants.DEFAULT_CLUSTERNAME,
+                    resource_name=config.ENV_DATA["storage_cluster_name"],
                 )
                 lb_param = '[{"op": "replace", "path": "/spec/multiCloudGateway/denyHTTP", "value": false}]'
                 logger.info(
@@ -117,7 +117,7 @@ class TestS3Routes:
         storagecluster_obj = ocp.OCP(
             kind=constants.STORAGECLUSTER,
             namespace=config.ENV_DATA["cluster_namespace"],
-            resource_name=constants.DEFAULT_CLUSTERNAME,
+            resource_name=config.ENV_DATA["storage_cluster_name"],
         )
         lb_param = (
             '[{"op": "add", "path": "/spec/multiCloudGateway/denyHTTP", "value": true}]'
@@ -169,7 +169,7 @@ class TestS3Routes:
             storagecluster_obj = ocp.OCP(
                 kind=constants.STORAGECLUSTER,
                 namespace=config.ENV_DATA["cluster_namespace"],
-                resource_name=constants.DEFAULT_CLUSTERNAME,
+                resource_name=config.ENV_DATA["storage_cluster_name"],
             )
             try:
                 if storagecluster_obj.data["spec"]["multiCloudGateway"][
@@ -230,7 +230,7 @@ class TestS3Routes:
         storagecluster_obj = ocp.OCP(
             kind=constants.STORAGECLUSTER,
             namespace=config.ENV_DATA["cluster_namespace"],
-            resource_name=constants.DEFAULT_CLUSTERNAME,
+            resource_name=config.ENV_DATA["storage_cluster_name"],
         )
         lb_param = '[{"op": "add", "path": "/spec/multiCloudGateway/disableLoadBalancerService", "value": true}]'
         logger.info("Patching noobaa resource to enable disableLoadBalancerService")

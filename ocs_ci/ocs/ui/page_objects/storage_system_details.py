@@ -2,6 +2,7 @@ from ocs_ci.ocs import constants
 from ocs_ci.ocs.ui.base_ui import logger, BaseUI
 from ocs_ci.ocs.ui.page_objects.storage_system_tab import StorageSystemTab
 from ocs_ci.utility import version
+from ocs_ci.framework import config
 
 
 class StorageSystemDetails(StorageSystemTab):
@@ -98,16 +99,19 @@ class StorageSystemDetails(StorageSystemTab):
         """
 
         logger.info(
-            f"Get the 'Compression status' of '{constants.DEFAULT_CEPHBLOCKPOOL}'"
+            f"Get the 'Compression status' of {config.ENV_DATA['storage_cluster_name']}{constants.SUFFIX_CEPHBLOCKPOOL}"
         )
         compression_status_blockpools_tab = self.get_element_text(
             self.validation_loc["storagesystem-details-compress-state"]
         )
         logger.info(
-            f"Click on '{constants.DEFAULT_CEPHBLOCKPOOL}' link under BlockPools tab"
+            f"Click on {config.ENV_DATA['storage_cluster_name']}{constants.SUFFIX_CEPHBLOCKPOOL} "
+            f"link under BlockPools tab"
         )
         self.do_click(
-            self.validation_loc[constants.DEFAULT_CEPHBLOCKPOOL],
+            self.validation_loc[
+                f"{config.ENV_DATA['storage_cluster_name']}{constants.SUFFIX_CEPHBLOCKPOOL}"
+            ],
             enable_screenshot=True,
         )
         compression_status_blockpools_details = self.get_element_text(

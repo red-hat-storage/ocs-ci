@@ -3037,7 +3037,7 @@ def apply_node_affinity_for_ceph_toolbox(node_name):
         bool: True if node affinity applied successfully
 
     """
-    resource_name = constants.DEFAULT_CLUSTERNAME
+    resource_name = config.ENV_DATA["storage_cluster_name"]
     if config.DEPLOYMENT["external_mode"]:
         resource_name = constants.DEFAULT_CLUSTERNAME_EXTERNAL_MODE
 

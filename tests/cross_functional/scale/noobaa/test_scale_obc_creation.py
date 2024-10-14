@@ -36,7 +36,9 @@ class TestScaleOCBCreation(E2ETest):
 
     namespace = config.ENV_DATA["cluster_namespace"]
     sc_name = constants.NOOBAA_SC
-    sc_rgw_name = constants.DEFAULT_STORAGECLASS_RGW
+    sc_rgw_name = (
+        f"{config.ENV_DATA['storage_cluster_name']}{constants.SUFFIX_STORAGECLASS_RGW}"
+    )
     scale_obc_count = 1000
     num_obc_batch = 50
 

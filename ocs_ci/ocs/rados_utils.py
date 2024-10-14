@@ -279,7 +279,7 @@ class RadosHelper:
 
 
 def verify_cephblockpool_status(
-    pool_name=constants.DEFAULT_BLOCKPOOL,
+    pool_name=f"{config.ENV_DATA['storage_cluster_name']}{constants.SUFFIX_CEPHBLOCKPOOL}",
     namespace=None,
     required_phase=constants.STATUS_READY,
 ):

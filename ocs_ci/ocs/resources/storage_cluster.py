@@ -469,10 +469,12 @@ def ocs_install_verification(
         )
     else:
         if not disable_blockpools and not provider_cluster:
-            sc_rbd = storage_class.get(resource_name=constants.DEFAULT_STORAGECLASS_RBD)
+            sc_rbd = storage_class.get(
+                resource_name=f"{config.ENV_DATA['storage_cluster_name']}{constants.SUFFIX_STORAGECLASS_RBD}"
+            )
         if not disable_cephfs and not provider_cluster:
             sc_cephfs = storage_class.get(
-                resource_name=constants.DEFAULT_STORAGECLASS_CEPHFS
+                resource_name=f"{config.ENV_DATA['storage_cluster_name']}{constants.SUFFIX_STORAGECLASS_CEPHFS}"
             )
     if not disable_blockpools and not provider_cluster:
         if consumer_cluster or client_cluster:
@@ -678,7 +680,7 @@ def ocs_install_verification(
         crush_dump = ct_pod.exec_ceph_cmd(ceph_cmd="ceph osd crush dump", format="")
         pool_names = [
             constants.METADATA_POOL,
-            constants.DEFAULT_BLOCKPOOL,
+            f"{config.ENV_DATA['storage_cluster_name']}{constants.SUFFIX_CEPHBLOCKPOOL}",
             constants.DATA_POOL,
         ]
         crush_rules = [
@@ -981,13 +983,18 @@ def verify_storage_system():
         )
         storage_system_data = storage_system.get()
         storage_system_status = {}
-        for condition in storage_system_data["items"][0]["status"]["conditions"]:
-            storage_system_status[condition["type"]] = condition["status"]
-        log.debug(f"storage system status: {storage_system_status}")
-        assert storage_system_status == constants.STORAGE_SYSTEM_STATUS, (
-            f"Storage System status is not in expected state. Expected {constants.STORAGE_SYSTEM_STATUS}"
-            f" but found {storage_system_status}"
-        )
+        storage_system_status_ok = False
+        for i in range(len(storage_system_data["items"])):
+            for condition in storage_system_data["items"][i]["status"]["conditions"]:
+                storage_system_status[condition["type"]] = condition["status"]
+            log.debug(f"storage system status: {storage_system_status}")
+            if storage_system_status == constants.STORAGE_SYSTEM_STATUS:
+                storage_system_status_ok = True
+        if not storage_system_status_ok:
+            raise Exception(
+                f"Storage System status is not in expected state. Expected {constants.STORAGE_SYSTEM_STATUS}"
+                f" but found {storage_system_status}"
+            )
 
 
 def verify_storage_cluster():
@@ -1441,7 +1448,7 @@ def get_in_transit_encryption_config_state():
     cluster_name = (
         constants.DEFAULT_CLUSTERNAME_EXTERNAL_MODE
         if storagecluster_independent_check()
-        else constants.DEFAULT_CLUSTERNAME
+        else config.ENV_DATA["storage_cluster_name"]
     )
 
     ocp_obj = StorageCluster(
@@ -1478,7 +1485,7 @@ def set_in_transit_encryption(enabled=True):
     cluster_name = (
         constants.DEFAULT_CLUSTERNAME_EXTERNAL_MODE
         if storagecluster_independent_check()
-        else constants.DEFAULT_CLUSTERNAME
+        else config.ENV_DATA["storage_cluster_name"]
     )
 
     ocp_obj = StorageCluster(
@@ -2171,8 +2178,8 @@ def verify_consumer_resources():
             namespace=config.ENV_DATA["cluster_namespace"],
         )
         for sc_claim in [
-            constants.DEFAULT_STORAGECLASS_RBD,
-            constants.DEFAULT_STORAGECLASS_CEPHFS,
+            f"{config.ENV_DATA['storage_cluster_name']}{constants.SUFFIX_STORAGECLASS_RBD}",
+            f"{config.ENV_DATA['storage_cluster_name']}{constants.SUFFIX_STORAGECLASS_CEPHFS}",
         ]:
             sc_claim_phase = storage_class_claim.get_resource(
                 resource_name=sc_claim, column="PHASE"
@@ -2470,7 +2477,7 @@ def get_consumer_storage_provider_endpoint():
     sc_obj = ocp.OCP(
         kind=constants.STORAGECLUSTER,
         namespace=config.ENV_DATA["cluster_namespace"],
-        resource_name=constants.DEFAULT_CLUSTERNAME,
+        resource_name=config.ENV_DATA["storage_cluster_name"],
     )
     return sc_obj.get()["spec"]["externalStorage"]["storageProviderEndpoint"]
 
@@ -2639,7 +2646,7 @@ def patch_storage_cluster_for_custom_storage_class(
     resource_name = (
         constants.DEFAULT_CLUSTERNAME_EXTERNAL_MODE
         if config.DEPLOYMENT["external_mode"]
-        else constants.DEFAULT_CLUSTERNAME
+        else config.ENV_DATA["storage_cluster_name"]
     )
 
     if storage_class_type in ["nfs", "encryption"]:
@@ -2871,7 +2878,9 @@ def set_non_resilient_pool(
     """
     cmd = f'[{{ "op": "replace", "path": "/spec/managedResources/cephNonResilientPools/enable", "value": {enable} }}]'
     storage_cluster.patch(
-        resource_name=constants.DEFAULT_CLUSTERNAME, format_type="json", params=cmd
+        resource_name=config.ENV_DATA["storage_cluster_name"],
+        format_type="json",
+        params=cmd,
     )
 
 
@@ -2887,7 +2896,7 @@ def validate_non_resilient_pool(storage_cluster: StorageCluster) -> bool:
 
     """
     storagecluster_yaml = storage_cluster.get(
-        resource_name=constants.DEFAULT_CLUSTERNAME
+        resource_name=config.ENV_DATA["storage_cluster_name"]
     )
     if (
         str(

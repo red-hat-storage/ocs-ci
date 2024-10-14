@@ -177,7 +177,8 @@ def available_subvolumes(sc_name, toolbox_pod, fs):
 
     """
     if (
-        sc_name == constants.DEFAULT_STORAGECLASS_CEPHFS
+        sc_name
+        == f"{config.ENV_DATA['storage_cluster_name']}{constants.SUFFIX_STORAGECLASS_CEPHFS}"
         or sc_name == constants.DEFAULT_EXTERNAL_MODE_STORAGECLASS_CEPHFS
     ):
         cephfs_subvolumes = toolbox_pod.exec_cmd_on_pod(
@@ -185,7 +186,10 @@ def available_subvolumes(sc_name, toolbox_pod, fs):
         )
         log.info(f"available cephfs subvolumes-----{cephfs_subvolumes}")
         return cephfs_subvolumes
-    elif sc_name == constants.DEFAULT_STORAGECLASS_RBD:
+    elif (
+        sc_name
+        == f"{config.ENV_DATA['storage_cluster_name']}{constants.SUFFIX_STORAGECLASS_RBD}"
+    ):
         rbd_cephblockpool = toolbox_pod.exec_cmd_on_pod(f"rbd ls {fs} --format json")
         log.info(f"available rbd cephblockpool-----{rbd_cephblockpool}")
         return rbd_cephblockpool
@@ -214,13 +218,15 @@ def created_subvolume(available_subvolumes, updated_subvolumes, sc_name):
         if sub_vol not in available_subvolumes:
             created_subvolume = sub_vol
             if (
-                sc_name == constants.DEFAULT_STORAGECLASS_CEPHFS
+                sc_name
+                == f"{config.ENV_DATA['storage_cluster_name']}{constants.SUFFIX_STORAGECLASS_CEPHFS}"
                 or sc_name == constants.DEFAULT_EXTERNAL_MODE_STORAGECLASS_CEPHFS
             ):
                 log.info(f"created sub volume---- {created_subvolume['name']}")
                 return created_subvolume["name"]
             elif (
-                sc_name == constants.DEFAULT_STORAGECLASS_RBD
+                sc_name
+                == f"{config.ENV_DATA['storage_cluster_name']}{constants.SUFFIX_STORAGECLASS_RBD}"
                 or sc_name == constants.DEFAULT_EXTERNAL_MODE_STORAGECLASS_RBD
             ):
                 log.info(f"created sub volume---- {created_subvolume}")
@@ -257,7 +263,8 @@ def fetch_metadata(
 
     """
     if (
-        sc_name == constants.DEFAULT_STORAGECLASS_CEPHFS
+        sc_name
+        == f"{config.ENV_DATA['storage_cluster_name']}{constants.SUFFIX_STORAGECLASS_CEPHFS}"
         or sc_name == constants.DEFAULT_EXTERNAL_MODE_STORAGECLASS_CEPHFS
     ):
         if snapshot:
@@ -273,7 +280,10 @@ def fetch_metadata(
             metadata = toolbox_pod.exec_cmd_on_pod(
                 f"ceph fs subvolume metadata ls {fs} {created_subvol} --group_name=csi --format=json"
             )
-    elif sc_name == constants.DEFAULT_STORAGECLASS_RBD:
+    elif (
+        sc_name
+        == f"{config.ENV_DATA['storage_cluster_name']}{constants.SUFFIX_STORAGECLASS_RBD}"
+    ):
         if snapshot:
             created_subvol = created_subvolume(
                 available_subvolumes, updated_subvolumes, sc_name
@@ -364,10 +374,16 @@ def update_testdata_for_external_modes(
 
     """
     if external_mode:
-        if sc_name == constants.DEFAULT_STORAGECLASS_CEPHFS:
+        if (
+            sc_name
+            == f"{config.ENV_DATA['storage_cluster_name']}{constants.SUFFIX_STORAGECLASS_CEPHFS}"
+        ):
             fs = "fsvol001"
             sc_name = constants.DEFAULT_EXTERNAL_MODE_STORAGECLASS_CEPHFS
-        elif sc_name == constants.DEFAULT_STORAGECLASS_RBD:
+        elif (
+            sc_name
+            == f"{config.ENV_DATA['storage_cluster_name']}{constants.SUFFIX_STORAGECLASS_RBD}"
+        ):
             fs = ""
             sc_name = constants.DEFAULT_EXTERNAL_MODE_STORAGECLASS_RBD
         else:
