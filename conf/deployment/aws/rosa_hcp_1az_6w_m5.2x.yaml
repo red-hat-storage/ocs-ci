@@ -10,6 +10,8 @@ DEPLOYMENT:
 RUN:
   username: "cluster-admin"
 ENV_DATA:
+  # TODO: to change deployment_type from current "ipi" on tier4 adjustments, see issue #10669
+  # deployment_type: 'semi_managed'
   platform: 'rosa_hcp'
   rosa_mode: "auto"
   region: 'us-west-2'
