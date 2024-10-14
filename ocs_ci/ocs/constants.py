@@ -3040,3 +3040,13 @@ FILE_CREATOR_IO = os.path.join(
 MC_WORKAROUND_SSD = os.path.join(
     TEMPLATE_DEPLOYMENT_DIR_OCP, "workaround-ssd-machine-config.yaml"
 )
+
+# Fusion Data Foundation
+FDF_TEMPLATE_DIR = os.path.join(TEMPLATE_DIR, "fusion-data-foundation")
+FDF_IMAGE_TAG_MIRROR_SET = os.path.join(FDF_TEMPLATE_DIR, "image-tag-mirror-set.yaml")
+FDF_IMAGE_DIGEST_MIRROR_SET = os.path.join(
+    FDF_TEMPLATE_DIR, "image-digest-mirror-set.yaml"
+)
+FDF_SERVICE_CR = os.path.join(FDF_TEMPLATE_DIR, "data-foundation-instance.yaml")
+FDF_SPECTRUM_FUSION_CR = os.path.join(FDF_TEMPLATE_DIR, "spectrum-fusion.yaml")
+FDF_NAMESPACE = "ibm-spectrum-fusion-ns"

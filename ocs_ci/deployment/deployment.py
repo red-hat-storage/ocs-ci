@@ -542,10 +542,7 @@ class Deployment(object):
         """
         Install IBM Fusion operator
         """
-        if (
-            config.DEPLOYMENT.get("fusion_deployment")
-            and not config.ENV_DATA["skip_ocs_deployment"]
-        ):
+        if config.DEPLOYMENT.get("fusion_deployment"):
             # create catalog source
             create_fusion_catalog_source()
 
@@ -573,14 +570,14 @@ class Deployment(object):
             csv = CSV(resource_name=csv_name, namespace=fusion_namespace)
             csv.wait_for_phase("Succeeded", timeout=300)
 
-            # delete catalog source of IBM
-            run_cmd(
-                f"oc delete catalogsource {defaults.FUSION_CATALOG_NAME} -n {constants.MARKETPLACE_NAMESPACE}"
-            )
-            logger.info(
-                f"Sleeping for 30 seconds after deleting catalogsource {defaults.FUSION_CATALOG_NAME}"
-            )
-            time.sleep(30)
+    def do_deploy_fdf(self):
+        """
+        Install IBM Fusion Data Foundation
+        """
+        if config.DEPLOYMENT.get("fdf_deployment"):
+            from ocs_ci.deployment.fusion_data_foundation import deploy_fdf
+
+            deploy_fdf()
 
     def do_deploy_odf_provider_mode(self):
         """
@@ -700,6 +697,7 @@ class Deployment(object):
         self.do_deploy_ocs()
         self.do_deploy_rdr()
         self.do_deploy_fusion()
+        self.do_deploy_fdf()
         self.do_deploy_odf_provider_mode()
         self.do_deploy_cnv()
         self.do_deploy_hosted_clusters()
