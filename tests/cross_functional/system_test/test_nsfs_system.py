@@ -83,6 +83,9 @@ class TestNSFSSystem(MCGTest):
             logger.info(f"Successfully created NSFS bucket: {nsfs_obj.bucket_name}")
             # logger.info(f"S3 Client Config: {nsfs_obj.s3_client._request_signer._credentials}")
 
+        # Waiting for the changes to propagate
+        sleep(30)
+
         # Put, Get, Copy, Head, list and Delete S3 operations
         for nsfs_obj in nsfs_objs:
             logger.info(f"Put and Get object operation on {nsfs_obj.bucket_name}")
@@ -189,18 +192,15 @@ class TestNSFSSystem(MCGTest):
             sync_object_directory(
                 podobj=awscli_pod_session,
                 src=f"s3://{nsfs_obj.bucket_name}",
-                # target=nsfs_obj.mount_path + "/" + nsfs_obj.bucket_name,
-                target=nsfs_obj.mounted_bucket_path,
+                target=f"{test_directory_setup.result_dir}/{nsfs_obj.bucket_name}/a",
                 signed_request_creds=nsfs_obj.s3_creds,
             )
             compare_directory(
                 awscli_pod=awscli_pod_session,
                 original_dir=f"{test_directory_setup.origin_dir}/{nsfs_obj.bucket_name}",
-                # result_dir=nsfs_obj.mount_path + "/" + nsfs_obj.bucket_name,
-                result_dir=nsfs_obj.mounted_bucket_path,
+                result_dir=f"{test_directory_setup.result_dir}/{nsfs_obj.bucket_name}/a",
                 amount=5,
                 pattern=nsfs_obj_pattern,
-                result_pod=nsfs_obj.interface_pod,
             )
         logger.info("Partially bringing the ceph cluster down")
         scale_ceph(replica=0)
@@ -208,18 +208,15 @@ class TestNSFSSystem(MCGTest):
             sync_object_directory(
                 podobj=awscli_pod_session,
                 src=f"s3://{nsfs_obj.bucket_name}",
-                # target=nsfs_obj.mount_path + "/" + nsfs_obj.bucket_name,
-                target=nsfs_obj.mounted_bucket_path,
+                target=f"{test_directory_setup.result_dir}/{nsfs_obj.bucket_name}/b",
                 signed_request_creds=nsfs_obj.s3_creds,
             )
             compare_directory(
                 awscli_pod=awscli_pod_session,
                 original_dir=f"{test_directory_setup.origin_dir}/{nsfs_obj.bucket_name}",
-                # result_dir=nsfs_obj.mount_path + "/" + nsfs_obj.bucket_name,
-                result_dir=nsfs_obj.mounted_bucket_path,
+                result_dir=f"{test_directory_setup.result_dir}/{nsfs_obj.bucket_name}/b",
                 amount=5,
                 pattern=nsfs_obj_pattern,
-                result_pod=nsfs_obj.interface_pod,
             )
         logger.info(
             "Scaling the ceph cluster back to normal and validating all storage pods"
@@ -238,18 +235,15 @@ class TestNSFSSystem(MCGTest):
             sync_object_directory(
                 podobj=awscli_pod_session,
                 src=f"s3://{nsfs_obj.bucket_name}",
-                # target=nsfs_obj.mount_path + "/" + nsfs_obj.bucket_name,
-                target=nsfs_obj.mounted_bucket_path,
+                target=f"{test_directory_setup.result_dir}/{nsfs_obj.bucket_name}/c",
                 signed_request_creds=nsfs_obj.s3_creds,
             )
             compare_directory(
                 awscli_pod=awscli_pod_session,
                 original_dir=f"{test_directory_setup.origin_dir}/{nsfs_obj.bucket_name}",
-                # result_dir=nsfs_obj.mount_path + "/" + nsfs_obj.bucket_name,
-                result_dir=nsfs_obj.mounted_bucket_path,
+                result_dir=f"{test_directory_setup.result_dir}/{nsfs_obj.bucket_name}/c",
                 amount=5,
                 pattern=nsfs_obj_pattern,
-                result_pod=nsfs_obj.interface_pod,
             )
 
 
