@@ -62,6 +62,19 @@ def kubeconfig_exists_decorator(func):
     return wrapper
 
 
+def get_binary_hcp_version():
+    """
+    Get hcp version output. Handles hcp 4.16 and 4.17 cmd differences
+
+    Returns:
+        str: hcp version output
+    """
+    try:
+        return exec_cmd("hcp version").stdout.decode("utf-8").strip()
+    except CommandFailed:
+        return exec_cmd("hcp --version").stdout.decode("utf-8").strip()
+
+
 class HyperShiftBase:
     """
     Class to handle HyperShift hosted cluster management
@@ -125,9 +138,8 @@ class HyperShiftBase:
 
         if not (self.hcp_binary_exists() and self.hypershift_binary_exists()):
             raise Exception("Failed to download hcp binary from git")
-
-        hcp_version = exec_cmd("hcp --version").stdout.decode("utf-8").strip()
-        logger.info(f"hcp binary version: {hcp_version}")
+        hcp_version = get_binary_hcp_version()
+        logger.info(f"hcp binary version output: '{hcp_version}'")
 
         shutil.rmtree(temp_dir)
 
