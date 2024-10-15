@@ -51,9 +51,11 @@ def get_asset_from_github(name, owner_repo, release_tag="latest"):
         )
     release_data = json.loads(get_url_content(releases_api_url, auth=github_auth))
 
-    if platform.system() == "Darwin":
+    if platform.system() == "Darwin" and platform.machine() == "x86_64":
         asset_name = "darwin-amd64"
-    elif platform.system() == "Linux":
+    elif platform.system() == "Darwin" and platform.machine() == "arm64":
+        asset_name = "darwin-arm64"
+    elif platform.system() == "Linux" and platform.machine() == "x86_64":
         asset_name = "linux-amd64"
     else:
         raise UnsupportedOSType
