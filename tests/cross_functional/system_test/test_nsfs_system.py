@@ -1,8 +1,6 @@
 import logging
-import uuid
-from time import sleep
-
 import pytest
+import uuid
 
 from ocs_ci.framework import config
 from ocs_ci.framework.testlib import MCGTest, system_test
@@ -29,6 +27,7 @@ from ocs_ci.ocs.ocp import OCP
 from ocs_ci.ocs.resources import pod
 from ocs_ci.ocs.resources.mcg_params import NSFS
 from ocs_ci.ocs.resources.pod import get_mds_pods, wait_for_storage_pods
+from time import sleep
 from tests.conftest import revert_noobaa_endpoint_scc_class
 
 logger = logging.getLogger(__name__)
@@ -43,6 +42,7 @@ logger = logging.getLogger(__name__)
 class TestNSFSSystem(MCGTest):
     """
     NSFS system test
+
     """
 
     @pytest.mark.polarion_id("OCS-3952")
@@ -83,7 +83,7 @@ class TestNSFSSystem(MCGTest):
             logger.info(f"Successfully created NSFS bucket: {nsfs_obj.bucket_name}")
 
         # Waiting for the changes to propagate
-        sleep(30)
+        sleep(60)
 
         # Put, Get, Copy, Head, list and Delete S3 operations
         for nsfs_obj in nsfs_objs:
@@ -154,7 +154,6 @@ class TestNSFSSystem(MCGTest):
                 pattern=nsfs_obj_pattern,
                 s3_creds=nsfs_obj.s3_creds,
                 result_pod=nsfs_obj.interface_pod,
-                # result_pod_path=nsfs_obj.mount_path + "/" + nsfs_obj.bucket_name,
                 result_pod_path=nsfs_obj.mounted_bucket_path,
             )
         pods_to_respin = [
@@ -194,13 +193,13 @@ class TestNSFSSystem(MCGTest):
                 target=f"{test_directory_setup.result_dir}/{nsfs_obj.bucket_name}/a",
                 signed_request_creds=nsfs_obj.s3_creds,
             )
+
             compare_directory(
                 awscli_pod=awscli_pod_session,
                 original_dir=f"{test_directory_setup.origin_dir}/{nsfs_obj.bucket_name}",
                 result_dir=f"{test_directory_setup.result_dir}/{nsfs_obj.bucket_name}/a",
                 amount=5,
                 pattern=nsfs_obj_pattern,
-                result_pod=nsfs_obj.interface_pod,
             )
         logger.info("Partially bringing the ceph cluster down")
         scale_ceph(replica=0)
@@ -217,13 +216,12 @@ class TestNSFSSystem(MCGTest):
                 result_dir=f"{test_directory_setup.result_dir}/{nsfs_obj.bucket_name}/b",
                 amount=5,
                 pattern=nsfs_obj_pattern,
-                result_pod=nsfs_obj.interface_pod,
             )
         logger.info(
             "Scaling the ceph cluster back to normal and validating all storage pods"
         )
         scale_ceph(replica=1)
-        sleep(15)
+        sleep(30)
         wait_for_storage_pods()
 
         logger.info("Performing noobaa db backup/recovery")
@@ -245,7 +243,6 @@ class TestNSFSSystem(MCGTest):
                 result_dir=f"{test_directory_setup.result_dir}/{nsfs_obj.bucket_name}/c",
                 amount=5,
                 pattern=nsfs_obj_pattern,
-                result_pod=nsfs_obj.interface_pod,
             )
 
 
