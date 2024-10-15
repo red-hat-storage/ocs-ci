@@ -197,7 +197,7 @@ from ocs_ci.helpers.longevity_helpers import (
 )
 from ocs_ci.ocs.longevity import start_app_workload
 from ocs_ci.utility.decorators import switch_to_default_cluster_index_at_last
-
+from ocs_ci.helpers.keyrotation_helper import PVKeyrotation
 
 log = logging.getLogger(__name__)
 
@@ -7093,7 +7093,7 @@ def cnv_workload(request):
 
 
 @pytest.fixture()
-def multi_cnv_workload(request, vm_configs, cnv_workload):
+def multi_cnv_workload_setup(namespace, pv_encryption_kms_setup_factory, cnv_workload):
     """
     Creates multiple VMs with specified configurations using the cnv_workload fixture.
 
@@ -7109,7 +7109,79 @@ def multi_cnv_workload(request, vm_configs, cnv_workload):
         list: objects of cnv workload class
 
     """
-    created_vms = []
+
+    """
+    Setup csi-kms-connection-details configmap
+
+    """
+    log.info("Setting up csi-kms-connection-details configmap")
+    kms = pv_encryption_kms_setup_factory(kv_version="v2")
+    log.info("csi-kms-connection-details setup successful")
+
+    # Create an encryption enabled storageclass for RBD
+    sc_obj_def_compr = storageclass_factory(
+        interface=constants.CEPHBLOCKPOOL,
+        encrypted=True,
+        encryption_kms_id=kms.kmsid,
+    )
+
+    sc_obj_aggressive = storageclass_factory(
+        interface=constants.CEPHBLOCKPOOL,
+        encrypted=True,
+        encryption_kms_id=kms.kmsid,
+        compression="aggressive",
+    )
+
+    # Create ceph-csi-kms-token in the tenant namespace
+    kms.vault_path_token = kms.generate_vault_token()
+    kms.create_vault_csi_kms_token(namespace=namespace)
+
+    for sc_obj in [sc_obj_def_compr, sc_obj_aggressive]:
+        pvk_obj = PVKeyrotation(sc_obj)
+        pvk_obj.annotate_storageclass_key_rotation(schedule="*/3 * * * *")
+
+    vm_configs = [
+        {
+            "volume_interface": "PVC",
+            "access_mode": "RWO",
+            "sc_name": sc_obj_def_compr.name,
+        },
+        {
+            "volume_interface": "PVC",
+            "access_mode": "RWO",
+            "sc_name": sc_obj_aggressive.name,
+        },
+        {
+            "volume_interface": "PVC",
+            "access_mode": "RWX",
+            "sc_name": sc_obj_def_compr.name,
+        },
+        {
+            "volume_interface": "PVC",
+            "access_mode": "RWX",
+            "sc_name": sc_obj_aggressive.name,
+        },
+        {
+            "volume_interface": "DVT",
+            "access_mode": "RWO",
+            "sc_name": sc_obj_def_compr.name,
+        },
+        {
+            "volume_interface": "DVT",
+            "access_mode": "RWO",
+            "sc_name": sc_obj_aggressive.name,
+        },
+        {
+            "volume_interface": "DVT",
+            "access_mode": "RWX",
+            "sc_name": sc_obj_def_compr.name,
+        },
+        {
+            "volume_interface": "DVT",
+            "access_mode": "RWX",
+            "sc_name": sc_obj_aggressive.name,
+        },
+    ]
 
     # Loop through vm_configs and create the VMs using the cnv_workload fixture
     for config in vm_configs:
@@ -7121,16 +7193,7 @@ def multi_cnv_workload(request, vm_configs, cnv_workload):
             source_url=constants.CNV_FEDORA_SOURCE,  # Assuming source_url is the same for all VMs
             namespace=None,  # Assuming each VM is created in a unique namespace
         )
-
-        created_vms.extend(vm_obj)
-
-    def teardown():
-        for vm in created_vms:
-            vm.delete()
-
-    request.addfinalizer(teardown)
-
-    return created_vms
+    return vm_obj
 
 
 @pytest.fixture(scope="class")
