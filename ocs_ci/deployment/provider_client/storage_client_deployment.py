@@ -106,7 +106,6 @@ class ODFAndNativeStorageClientDeploymentOnProvider(object):
         nodes = get_all_nodes()
         node_objs = get_node_objs(nodes)
         worker_node_objs = get_nodes(node_type=constants.WORKER_MACHINE)
-        no_of_worker_nodes = len(worker_node_objs)
 
         # Allow hosting cluster domain to be usable by hosted clusters
         path = "/spec/routeAdmission"
@@ -140,19 +139,9 @@ class ODFAndNativeStorageClientDeploymentOnProvider(object):
             log.info("labeling all nodes as storage nodes")
             label_nodes(nodes=node_objs, label=constants.OPERATOR_NODE_LABEL)
             worker_node_objs = get_nodes(node_type=constants.WORKER_MACHINE)
-            no_of_worker_nodes = len(worker_node_objs)
         else:
             log.info("labeling worker nodes as storage nodes")
             label_nodes(nodes=worker_node_objs, label=constants.OPERATOR_NODE_LABEL)
-
-        disks_available_on_worker_nodes_for_cleanup = disks_available_to_cleanup(
-            worker_node_objs[0]
-        )
-        number_of_disks_available = len(disks_available_on_worker_nodes_for_cleanup)
-        log.info(
-            f"disks avilable for cleanup, {disks_available_on_worker_nodes_for_cleanup}"
-            f"number of disks avilable for cleanup, {number_of_disks_available}"
-        )
 
         # Install LSO, create LocalVolumeDiscovery and LocalVolumeSet
         is_local_storage_available = self.sc_obj.is_exist(
@@ -258,7 +247,19 @@ class ODFAndNativeStorageClientDeploymentOnProvider(object):
         is_storagecluster = self.storage_cluster_obj.is_exist(
             resource_name=constants.DEFAULT_STORAGE_CLUSTER
         )
+
         if not is_storagecluster:
+            worker_node_objs = get_nodes(node_type=constants.WORKER_MACHINE)
+            disks_available_on_worker_nodes_for_cleanup = disks_available_to_cleanup(
+                worker_node_objs[0]
+            )
+            number_of_disks_available = len(disks_available_on_worker_nodes_for_cleanup)
+            log.info(
+                f"disks avilable for cleanup, {disks_available_on_worker_nodes_for_cleanup}"
+                f"number of disks avilable for cleanup, {number_of_disks_available}"
+            )
+            no_of_worker_nodes = len(worker_node_objs)
+
             if (
                 self.ocs_version < version.VERSION_4_16
                 and self.ocs_version >= version.VERSION_4_14
