@@ -1508,7 +1508,7 @@ def upgrade_marks_name():
     for upgrade_mark in upgrade_marks:
         try:
             upgrade_marks_name.append(upgrade_mark().mark.args[1].markname)
-        except AttributeError:
+        except (AttributeError, IndexError):
             log.error("upgrade mark does not exist")
     return upgrade_marks_name
 
