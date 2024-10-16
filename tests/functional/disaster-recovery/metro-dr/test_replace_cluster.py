@@ -4,7 +4,7 @@ import time
 
 from concurrent.futures import ThreadPoolExecutor
 from ocs_ci.framework import config
-from ocs_ci.framework.pytest_customization.marks import turquoise_squad, mdr, tier2
+from ocs_ci.framework.pytest_customization.marks import turquoise_squad, mdr, tier4a
 from ocs_ci.helpers.dr_helpers import get_active_acm_index
 from ocs_ci.ocs.node import get_node_objs
 from ocs_ci.ocs.dr.dr_workload import validate_data_integrity
@@ -29,7 +29,7 @@ logger = logging.getLogger(__name__)
 
 
 @mdr
-@tier2
+@tier4a
 @turquoise_squad
 class TestReplaceCluster:
     """
