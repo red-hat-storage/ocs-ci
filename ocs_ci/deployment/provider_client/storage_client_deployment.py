@@ -205,7 +205,56 @@ class ODFAndNativeStorageClientDeploymentOnProvider(object):
             kms = KMS.get_kms_deployment()
             kms.deploy()
 
-        # Create storage cluster if not present already
+        if not config.DEPLOYMENT.get("skip_storage_cluster_creation"):
+            self.create_storage_cluster()
+
+        # Creating toolbox pod
+        if not config.DEPLOYMENT.get("skip_storage_cluster_creation"):
+            setup_ceph_toolbox()
+
+        # Native storageclients are created as part of ODF 4.16 subscription and each of rbd and
+        # cephfs storageclaims gets created automatically with the storageclient creation
+        if not config.DEPLOYMENT.get("skip_storage_cluster_creation"):
+            if self.ocs_version >= version.VERSION_4_16:
+                # Validate native client is created in openshift-storage namespace
+                self.deployment.wait_for_csv(
+                    self.ocs_client_operator, constants.OPENSHIFT_STORAGE_NAMESPACE
+                )
+
+                # Verify native storageclient is created successfully
+                self.storage_clients.verify_native_storageclient()
+
+                # Validate cephblockpool created
+                assert verify_block_pool_exists(
+                    constants.DEFAULT_BLOCKPOOL
+                ), f"{constants.DEFAULT_BLOCKPOOL} is not created"
+                assert (
+                    verify_cephblockpool_status()
+                ), "the cephblockpool is not in Ready phase"
+
+                # Validate radosnamespace created and in 'Ready' status
+                assert (
+                    check_phase_of_rados_namespace()
+                ), "The radosnamespace is not in Ready phase"
+
+                # Validate storageclassrequests created
+                storage_class_classes = get_all_storageclass_names()
+                for storage_class in self.storage_class_claims:
+                    assert (
+                        storage_class in storage_class_classes
+                    ), "Storage classes ae not created as expected"
+
+            else:
+                # Create ODF subscription for storage-client and native client
+                self.storage_clients.create_native_storage_client()
+
+                # Verify native storageclient is created successfully
+                self.storage_clients.verify_native_storageclient()
+
+    def create_storage_cluster(self):
+        """
+        Create storage cluster if not present already.
+        """
         is_storagecluster = self.storage_cluster_obj.is_exist(
             resource_name=constants.DEFAULT_STORAGE_CLUSTER
         )
@@ -262,47 +311,6 @@ class ODFAndNativeStorageClientDeploymentOnProvider(object):
                 self.ocp_obj.exec_oc_cmd(
                     f"apply -f {constants.OCS_STORAGE_CLUSTER_UPDATED_YAML}"
                 )
-
-        # Creating toolbox pod
-        setup_ceph_toolbox()
-
-        # Native storageclients are created as part of ODF 4.16 subscription and each of rbd and
-        # cephfs storageclaims gets created automatically with the storageclient creation
-        if self.ocs_version >= version.VERSION_4_16:
-            # Validate native client is created in openshift-storage namespace
-            self.deployment.wait_for_csv(
-                self.ocs_client_operator, constants.OPENSHIFT_STORAGE_NAMESPACE
-            )
-
-            # Verify native storageclient is created successfully
-            self.storage_clients.verify_native_storageclient()
-
-            # Validate cephblockpool created
-            assert verify_block_pool_exists(
-                constants.DEFAULT_BLOCKPOOL
-            ), f"{constants.DEFAULT_BLOCKPOOL} is not created"
-            assert (
-                verify_cephblockpool_status()
-            ), "the cephblockpool is not in Ready phase"
-
-            # Validate radosnamespace created and in 'Ready' status
-            assert (
-                check_phase_of_rados_namespace()
-            ), "The radosnamespace is not in Ready phase"
-
-            # Validate storageclassrequests created
-            storage_class_classes = get_all_storageclass_names()
-            for storage_class in self.storage_class_claims:
-                assert (
-                    storage_class in storage_class_classes
-                ), "Storage classes ae not created as expected"
-
-        else:
-            # Create ODF subscription for storage-client and native client
-            self.storage_clients.create_native_storage_client()
-
-            # Verify native storageclient is created successfully
-            self.storage_clients.verify_native_storageclient()
 
     def odf_subscription_on_provider(self):
         """
