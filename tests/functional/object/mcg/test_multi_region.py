@@ -200,7 +200,7 @@ class TestMultiRegion(MCGTest):
         bucket = bucket_factory(1, "OC", bucketclass=bucket_class)[0]
         bucketclass_obj = ocp.OCP(
             kind=constants.BUCKETCLASS,
-            namespace=constants.DEFAULT_NAMESPACE,
+            namespace=constants.OPENSHIFT_STORAGE_NAMESPACE,
             resource_name=bucket.bucketclass.name,
         )
         # Patch bucket class to update placement from "Spread" to "Mirror"
