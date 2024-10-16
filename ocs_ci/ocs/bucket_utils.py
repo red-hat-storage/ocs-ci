@@ -25,7 +25,7 @@ from ocs_ci.utility.utils import (
     exec_nb_db_query,
     exec_cmd,
 )
-from ocs_ci.helpers.helpers import create_resource
+from ocs_ci.helpers.helpers import create_resource, storagecluster_independent_check
 from ocs_ci.utility import version
 
 logger = logging.getLogger(__name__)
@@ -52,13 +52,18 @@ def craft_s3_command(cmd, mcg_obj=None, api=False, signed_request_creds=None):
         if (signed_request_creds and signed_request_creds.get("ssl")) is False
         else ""
     )
+
     if mcg_obj:
         if mcg_obj.region:
             region = f"AWS_DEFAULT_REGION={mcg_obj.region} "
         else:
             region = ""
+        if storagecluster_independent_check() and config.EXTERNAL_MODE["rgw_secure"]:
+            AWS_CA_BUNDLE_PATH = constants.AWSCLI_CA_BUNDLE_PATH
+        else:
+            AWS_CA_BUNDLE_PATH = constants.SERVICE_CA_CRT_AWSCLI_PATH
         base_command = (
-            f'sh -c "AWS_CA_BUNDLE={constants.AWSCLI_CA_BUNDLE_PATH} '
+            f'sh -c "AWS_CA_BUNDLE={AWS_CA_BUNDLE_PATH} '
             f"AWS_ACCESS_KEY_ID={mcg_obj.access_key_id} "
             f"AWS_SECRET_ACCESS_KEY={mcg_obj.access_key} "
             f"{region}"
