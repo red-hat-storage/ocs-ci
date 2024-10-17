@@ -3050,3 +3050,5 @@ FDF_IMAGE_DIGEST_MIRROR_SET = os.path.join(
 FDF_SERVICE_CR = os.path.join(FDF_TEMPLATE_DIR, "data-foundation-instance.yaml")
 FDF_SPECTRUM_FUSION_CR = os.path.join(FDF_TEMPLATE_DIR, "spectrum-fusion.yaml")
 FDF_NAMESPACE = "ibm-spectrum-fusion-ns"
+ISF_CATALOG_SOURCE_NAME = "isf-catalog"
+ISF_OPERATOR_SOFTWARE_CATALOG_SOURCE_YAML = "catalog-source.yaml.j2"
