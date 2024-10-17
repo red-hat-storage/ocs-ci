@@ -29,7 +29,8 @@ class ACMUpgrade(object):
         # we need to dynamically find it
         self.version_before_upgrade = self.get_acm_version_before_upgrade()
         self.upgrade_version = config.UPGRADE["upgrade_acm_version"]
-        # In case if we are using registry image
+        # In case if we are using registry image, image
+        # format: brew.registry.redhat.io/rh-osbs/iib:565330 <edit the brew id as per ACM version>
         self.acm_registry_image = config.UPGRADE.get("upgrade_acm_registry_image", "")
         self.zstream_upgrade = False
 
@@ -55,6 +56,7 @@ class ACMUpgrade(object):
             self.upgrade_with_registry()
             self.annotate_mch()
             run_cmd(f"oc create -f {constants.ACM_BREW_ICSP_YAML}")
+            self.upgrade_without_registry()
         else:
             # GA to GA
             self.upgrade_without_registry()
@@ -81,7 +83,8 @@ class ACMUpgrade(object):
         else:
             # This is GA to unreleased version: upgrade to next version
             self.create_catalog_source()
-            patch = f'\'{{"spec": "{constants.ACM_CATSRC_NAME}"}}\''
+            patch = f"\"{{'spec':{{'source': \"{constants.ACM_CATSRC_NAME}\"}}}}\""
+            ' \'{"spec":{"storage":{"emptyDir":{}}}}\' '
             self.acm_patch_subscription(patch)
 
     def annotate_mch(self):

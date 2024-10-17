@@ -3,6 +3,7 @@ This module contains functionality required for CNV installation.
 """
 
 import io
+import json
 import os
 import logging
 import tempfile
@@ -780,3 +781,34 @@ class CNVInstaller(object):
 
         logger.info("Removing the openshift virtualization CRDs")
         self.remove_crds()
+
+    def check_cnv_is_upgradable(self):
+        """
+        This method checks if the cnv operator is upgradable or not
+        """
+        logger.info("Check cnv is installed")
+        assert self.cnv_hyperconverged_installed(), "cnv operator is not installed"
+
+        logger.info("Check cnv is READY")
+        assert self.post_install_verification(
+            raise_exception=False
+        ), "CNV operator is not ready"
+
+        cmd = "oc get hyperconverged kubevirt-hyperconverged -n openshift-cnv -o json | jq '.status.conditions'"
+        cmd_res = exec_cmd(cmd, shell=True)
+        if cmd_res.returncode != 0:
+            logger.error(f"Failed to disable multicluster engine\n{cmd_res.stderr}")
+            return
+        output = cmd_res.stdout.decode("utf-8")
+        logger.info(f"The output is: {output}")
+        data = json.loads(output)
+        upgradeable_present = any(item.get("type") == "Upgradeable" for item in data)
+        return upgradeable_present
+
+    def upgrade_cnv(self):
+        """
+        Upgrade cnv operator
+
+        """
+        if self.check_cnv_is_upgradable():
+            print("cnv operator is upgradeable")
