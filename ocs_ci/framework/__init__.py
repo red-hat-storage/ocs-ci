@@ -6,6 +6,7 @@ You can see documentation here:
 https://docs.pytest.org/en/latest/reference.html
 under section PYTEST_DONT_REWRITE
 """
+
 # Use the new python 3.7 dataclass decorator, which provides an object similar
 # to a namedtuple, but allows type enforcement and defining methods.
 import os
@@ -457,11 +458,13 @@ class MultiClusterConfig:
             self.config_index = config_index
 
         def __enter__(self):
-            config.switch_ctx(self.config_index)
+            if self.config_index != config.cur_index:
+                config.switch_ctx(self.config_index)
             return self
 
         def __exit__(self, exc_type, exc_value, exc_traceback):
-            config.switch_ctx(self.original_config_index)
+            if self.original_config_index != config.cur_index:
+                config.switch_ctx(self.original_config_index)
 
     class RunWithAcmConfigContext(RunWithConfigContext):
         def __init__(self):
@@ -477,6 +480,38 @@ class MultiClusterConfig:
             primary_config = get_primary_cluster_config()
             primary_index = primary_config.MULTICLUSTER.get("multicluster_index")
             super().__init__(primary_index)
+
+    class RunWithProviderConfigContextIfAvailable(RunWithConfigContext):
+        """
+        Context manager that makes sure that a given code block is executed on Provider.
+        If Provider config is not available then run with current config context.
+        """
+
+        def __init__(self):
+            try:
+                switch_index = config.get_provider_index()
+            except ClusterNotFoundException:
+                # if no provider is available then set the switch to current index so that
+                # no switch happens and code runs on current cluster
+                logger.DEBUG("No provider was found - using current cluster")
+                switch_index = config.cur_index
+            super().__init__(switch_index)
+
+    class RunWithFirstConsumerConfigContextIfAvailable(RunWithConfigContext):
+        """
+        Context manager that makes sure that a given code block is executed on First consumer.
+        If Consumer config is not available then run with current config context.
+        """
+
+        def __init__(self):
+            try:
+                switch_index = config.get_consumer_indexes_list()[0]
+            except ClusterNotFoundException:
+                # if no provider is available then set the switch to current index so that
+                # no switch happens and code runs on current cluster
+                logger.DEBUG("No Consumer was found - using current cluster")
+                switch_index = config.cur_index
+            super().__init__(switch_index)
 
 
 config = MultiClusterConfig()
