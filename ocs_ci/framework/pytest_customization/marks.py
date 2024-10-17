@@ -89,6 +89,7 @@ bugzilla = pytest.mark.bugzilla
 jira = pytest.mark.jira
 acm_import = pytest.mark.acm_import
 rdr = pytest.mark.rdr
+mdr = pytest.mark.mdr
 
 tier_marks = [
     tier1,

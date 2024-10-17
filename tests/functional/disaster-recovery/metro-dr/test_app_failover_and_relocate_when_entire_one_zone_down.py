@@ -8,6 +8,7 @@ from ocs_ci.framework.pytest_customization.marks import (
     tier4a,
     turquoise_squad,
     vsphere_platform_required,
+    mdr,
 )
 from ocs_ci.framework import config
 from ocs_ci.ocs.acm.acm import validate_cluster_import
@@ -46,6 +47,7 @@ from ocs_ci.utility import vsphere
 logger = logging.getLogger(__name__)
 
 
+@mdr
 @tier4a
 @turquoise_squad
 @vsphere_platform_required

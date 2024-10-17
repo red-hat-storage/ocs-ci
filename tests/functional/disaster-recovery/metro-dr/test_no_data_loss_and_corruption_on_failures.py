@@ -7,6 +7,7 @@ from ocs_ci.framework.pytest_customization.marks import (
     tier4a,
     turquoise_squad,
     vsphere_platform_required,
+    mdr,
 )
 from ocs_ci.framework import config
 from ocs_ci.ocs.dr.dr_workload import validate_data_integrity
@@ -25,6 +26,7 @@ from ocs_ci.utility.utils import ceph_health_check
 logger = logging.getLogger(__name__)
 
 
+@mdr
 @tier4a
 @turquoise_squad
 @vsphere_platform_required

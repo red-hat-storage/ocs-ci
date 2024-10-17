@@ -3,7 +3,7 @@ import pytest
 import time
 
 from ocs_ci.deployment.cnv import CNVInstaller
-from ocs_ci.framework.pytest_customization.marks import tier2
+from ocs_ci.framework.pytest_customization.marks import tier2, mdr
 from ocs_ci.framework import config
 from ocs_ci.helpers.cnv_helpers import run_dd_io
 from ocs_ci.ocs import constants
@@ -33,6 +33,7 @@ polarion_id_cnv_primary_up = "OCS-5413"
 polarion_id_cnv_primary_down = "OCS-5414"
 
 
+@mdr
 @tier2
 @turquoise_squad
 class TestCnvApplicationMDR:
