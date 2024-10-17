@@ -35,7 +35,7 @@ from ocs_ci.utility.aws import AWSTimeoutException
 from ocs_ci.ocs.resources.storage_cluster import osd_encryption_verification
 from ocs_ci.ocs import osd_operations
 from ocs_ci.ocs.utils import get_pod_name_by_pattern
-
+from ocs_ci.utility.utils import TimeoutSampler
 
 logger = logging.getLogger(__name__)
 
@@ -195,12 +195,15 @@ class TestDiskFailures(ManageTest):
         ), "Not all the pods reached running state"
 
         logger.info("Archive OSD crash if occurred due to detach and attach of volume")
-        is_daemon_recently_crash_warnings = run_cmd_verify_cli_output(
+        crash = TimeoutSampler(
+            timeout=300,
+            sleep=30,
+            func=run_cmd_verify_cli_output,
             cmd="ceph health detail",
             expected_output_lst={"HEALTH_WARN", "daemons have recently crashed"},
             cephtool_cmd=True,
         )
-        if is_daemon_recently_crash_warnings:
+        if crash.wait_for_func_status(True):
             logger.info("Clear all ceph crash warnings")
             # Importing here to avoid shadow by loop variable
             from ocs_ci.ocs.resources import pod
@@ -251,12 +254,15 @@ class TestDiskFailures(ManageTest):
         ), "Not all the pods reached running state"
 
         logger.info("Archive OSD crash if occurred due to detach and attach of volume")
-        is_daemon_recently_crash_warnings = run_cmd_verify_cli_output(
+        crash = TimeoutSampler(
+            timeout=300,
+            sleep=30,
+            func=run_cmd_verify_cli_output,
             cmd="ceph health detail",
             expected_output_lst={"HEALTH_WARN", "daemons have recently crashed"},
             cephtool_cmd=True,
         )
-        if is_daemon_recently_crash_warnings:
+        if crash.wait_for_func_status(True):
             logger.info("Clear all ceph crash warnings")
             # Importing here to avoid shadow by loop variable
             from ocs_ci.ocs.resources import pod
