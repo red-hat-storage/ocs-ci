@@ -677,3 +677,33 @@ class ValidationUI(PageNavigator):
             page_name="client_onboarding_token_page",
         )
         return storage_client_obj
+
+    def verify_performance_modes_options_disabled(self):
+        """
+        Verify performance modes options disabled
+        """
+        self.navigate_installed_operators_page()
+        self.do_click(self.add_capacity_ui_loc["odf_operator"])
+        self.do_click(self.add_capacity_ui_loc["storage_system_tab"])
+        time.sleep(1)
+        logger.info("Click on kebab menu of Storage Systems")
+        self.do_click(self.add_capacity_ui_loc["kebab_storage_cluster"])
+        self.take_screenshot()
+        logger.info("Click on Configure performance under the kebab menu")
+        self.wait_until_expected_text_is_found(
+            locator=self.add_capacity_ui_loc["configure_performance_button"],
+            timeout=10,
+            expected_text="Configure performance",
+        )
+        self.do_click(self.add_capacity_ui_loc["configure_performance_button"])
+        for mode in ("lean_mode", "performance_mode"):
+            try:
+                self.do_click(self.dep_loc["expand_advanced_mode"])
+                self.do_click(self.add_capacity_ui_loc[mode])
+                self.take_screenshot(mode)
+                return False
+            except Exception as e:
+                logger.info(e)
+                self.take_screenshot(mode)
+        self.take_screenshot("verify_modes_done")
+        return True
