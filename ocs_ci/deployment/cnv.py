@@ -10,6 +10,8 @@ import tempfile
 import platform
 import requests
 import zipfile
+import shlex
+import subprocess
 import tarfile
 
 from ocs_ci.framework import config
@@ -37,6 +39,7 @@ from ocs_ci.utility.utils import TimeoutSampler
 from ocs_ci.ocs import ocp
 from ocs_ci.ocs.resources.pod import wait_for_pods_to_be_running
 from ocs_ci.ocs.node import wait_for_nodes_status
+from pkg_resources import parse_version
 
 logger = logging.getLogger(__name__)
 
@@ -782,6 +785,32 @@ class CNVInstaller(object):
         logger.info("Removing the openshift virtualization CRDs")
         self.remove_crds()
 
+    def cnv_patch_subscription(self, patch):
+        patch_cmd = (
+            f"oc -n {self.namespace} patch sub {constants.KUBEVIRT_HYPERCONVERGED} "
+            f"-p {patch} --type merge"
+        )
+        run_cmd(patch_cmd)
+
+    def get_running_cnv_version(self):
+        """
+        Get the currently deployed cnv version
+
+        Returns:
+            string: cnv version
+
+        """
+        occmd = (
+            f"oc get sub {constants.KUBEVIRT_HYPERCONVERGED} -n openshift-cnv -o json"
+        )
+        jq_cmd = "jq -r .status.currentCSV"
+        json_out = subprocess.Popen(shlex.split(occmd), stdout=subprocess.PIPE)
+        cnv_version = subprocess.Popen(
+            shlex.split(jq_cmd), stdin=json_out.stdout, stdout=subprocess.PIPE
+        )
+        json_out.stdout.close()
+        return cnv_version.communicate()[0].decode()
+
     def check_cnv_is_upgradable(self):
         """
         This method checks if the cnv operator is upgradable or not
@@ -794,7 +823,10 @@ class CNVInstaller(object):
             raise_exception=False
         ), "CNV operator is not ready"
 
-        cmd = "oc get hyperconverged kubevirt-hyperconverged -n openshift-cnv -o json | jq '.status.conditions'"
+        cmd = (
+            f"oc get hyperconverged {constants.KUBEVIRT_HYPERCONVERGED} -n openshift-cnv -o json | "
+            "jq '.status.conditions'"
+        )
         cmd_res = exec_cmd(cmd, shell=True)
         if cmd_res.returncode != 0:
             logger.error(f"Failed to disable multicluster engine\n{cmd_res.stderr}")
@@ -810,5 +842,32 @@ class CNVInstaller(object):
         Upgrade cnv operator
 
         """
-        if self.check_cnv_is_upgradable():
-            print("cnv operator is upgradeable")
+        if not self.check_cnv_is_upgradable():
+            logger.info("CNV is not upgradable")
+            return
+
+        logger.info("Currently installed cnv version")
+        print(
+            f" currently installed cnv version: {parse_version(self.get_running_cnv_version())}"
+        )
+
+        self.upgrade_version = config.UPGRADE["upgrade_cnv_version"]
+        print(f"Upgarde cnv version: {parse_version(self.upgrade_version)}")
+
+        # we create catsrc with nightly builds only if config.DEPLOYMENT does not have cnv_latest_stable
+        if not config.DEPLOYMENT.get("cnv_latest_stable"):
+            # Create CNV catalog source
+            self.create_cnv_catalog_source()
+
+        # Update CNV subscription
+        patch = f'\'{{"spec": {{"channel": "nightly-{self.upgrade_version}"}}}}\''
+        self.cnv_patch_subscription(patch)
+        patch = '\'{"spec": {"installPlanApproval": "Automatic"}}\''
+        self.cnv_patch_subscription(patch)
+
+        # Post CNV upgrade checks
+        self.post_install_verification()
+        # Enable software emulation
+        self.enable_software_emulation()
+        # Download and extract the virtctl binary to bin_dir
+        self.download_and_extract_virtctl_binary()
