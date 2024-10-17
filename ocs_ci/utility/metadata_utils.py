@@ -5,6 +5,7 @@ Module that contains all operations related to add metadata feature in a cluster
 
 import logging
 from ocs_ci.framework import config
+from ocs_ci.helpers.helpers import get_provisioner_label
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.resources import pod
 from ocs_ci.utility.retry import retry
@@ -84,14 +85,14 @@ def enable_metadata(
     # Check csi-cephfsplugin provisioner and csi-rbdplugin-provisioner pods are up and running
     assert pod_obj.wait_for_resource(
         condition=constants.STATUS_RUNNING,
-        selector=constants.CSI_CEPHFSPLUGIN_PROVISIONER_LABEL,
+        selector=get_provisioner_label(constants.CEPHFILESYSTEM),
         dont_allow_other_resources=True,
         timeout=60,
     ), "Pods are not in running status"
 
     assert pod_obj.wait_for_resource(
         condition=constants.STATUS_RUNNING,
-        selector=constants.CSI_RBDPLUGIN_PROVISIONER_LABEL,
+        selector=get_provisioner_label(constants.CEPHBLOCKPOOL),
         dont_allow_other_resources=True,
         timeout=60,
     ), "Pods are not in running status"
@@ -144,14 +145,14 @@ def disable_metadata(
     # Check csi-cephfsplugin provisioner and csi-rbdplugin-provisioner pods are up and running
     assert pod_obj.wait_for_resource(
         condition=constants.STATUS_RUNNING,
-        selector=constants.CSI_CEPHFSPLUGIN_PROVISIONER_LABEL,
+        selector=get_provisioner_label(constants.CEPHFILESYSTEM),
         dont_allow_other_resources=True,
         timeout=60,
     ), "Pods are not in running status"
 
     assert pod_obj.wait_for_resource(
         condition=constants.STATUS_RUNNING,
-        selector=constants.CSI_RBDPLUGIN_PROVISIONER_LABEL,
+        selector=get_provisioner_label(constants.CEPHBLOCKPOOL),
         dont_allow_other_resources=True,
         timeout=60,
     ), "Pods are not in running status"
