@@ -1717,13 +1717,13 @@ def verify_drpc_deletion(cmd, expected_output_lst):
     return True
 
 
-def verify_last_kubeobject_protection_time(drpc_obj, kubeoject_sync_interval):
+def verify_last_kubeobject_protection_time(drpc_obj, kubeobject_sync_interval):
     """
     Verifies that the lastKubeObjectProtectionTime for a given DRPC object is within the expected range.
 
     Args:
         drpc_obj (obj): DRPC object
-        kubeoject_sync_interval (int): The KubeObject sync interval in minutes
+        kubeobject_sync_interval (int): The KubeObject sync interval in minutes
 
     Returns:
         str: Current lastKubeObjectProtectionTime
@@ -1756,7 +1756,7 @@ def verify_last_kubeobject_protection_time(drpc_obj, kubeoject_sync_interval):
         f"Time in minutes since the last Kube Object sync {time_since_last_sync}"
     )
     assert (
-        time_since_last_sync < 2 * kubeoject_sync_interval
+        time_since_last_sync < 2 * kubeobject_sync_interval
     ), "The syncing of Kube Resources is exceeding three times the Kube object sync interval"
     logger.info("Verified lastKubeObjectProtectionTime value within expected range")
     config.switch_ctx(restore_index)
