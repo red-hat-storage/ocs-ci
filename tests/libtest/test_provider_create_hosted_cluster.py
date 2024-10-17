@@ -336,4 +336,4 @@ class TestProviderHosted(object):
         from ocs_ci.deployment.cnv import CNVInstaller
 
         cnv_installer_obj = CNVInstaller()
-        cnv_installer_obj.check_cnv_is_upgradable()
+        cnv_installer_obj.upgrade_cnv()
