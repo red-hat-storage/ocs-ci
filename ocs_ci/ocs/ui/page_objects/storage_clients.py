@@ -13,14 +13,35 @@ class StorageClients(BaseUI):
     def __init__(self):
         super().__init__()
 
-    def generate_client_onboarding_ticket(self):
+    def generate_client_onboarding_ticket(self, quota_value=None, quota_tib=None):
         """
-        Generate a client onboarding ticket
+        Generate a client onboarding ticket.
+        Starting with version 4.17, client quota can be specified
+
+        Args:
+            quota_value (int): client's quota in GiB or TiB, unlimited if not defined
+            quota_tib (bool): True if quota is in TiB, False otherwise
 
         Returns:
             str: onboarding_key
         """
+        logger.info("Generating onboarding ticket")
         self.do_click(self.storage_clients_loc["generate_client_onboarding_ticket"])
+        if quota_value:
+            logger.info("Setting client cluster quota")
+            self.do_click(self.storage_clients_loc["custom_quota"])
+            self.do_clear(
+                locator=self.storage_clients_loc["quota_value"],
+            )
+            self.do_send_keys(
+                locator=self.storage_clients_loc["quota_value"],
+                text=quota_value,
+            )
+            if quota_tib:
+                self.do_click(self.storage_clients_loc["choose_units"])
+                self.do_click(self.storage_clients_loc["quota_ti"])
+        logger.info("Confirming token generation")
+        self.do_click(self.storage_clients_loc["confirm_generation"])
         onboarding_key = self.get_element_text(
             self.storage_clients_loc["onboarding_key"]
         )
