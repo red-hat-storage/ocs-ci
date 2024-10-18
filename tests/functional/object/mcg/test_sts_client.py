@@ -3,6 +3,8 @@ import logging
 
 from botocore.exceptions import ClientError
 
+from ocs_ci.ocs.resources.pod import wait_for_noobaa_pods_running
+
 from uuid import uuid4
 from ocs_ci.ocs.resources.bucket_policy import NoobaaAccount
 from ocs_ci.ocs.bucket_utils import (
@@ -159,6 +161,9 @@ class TestSTSClient:
             [(constants.STS_DEFAULT_SESSION_TOKEN_EXPIRY_MS, 600000)]
         )
         logger.info("Changed the sts token expiration time to 10 minutes")
+
+        # make sure all noobaa pods are running after the patch
+        wait_for_noobaa_pods_running()
 
         # create a bucket using noobaa admin creds
         bucket_1 = "first-bucket"
