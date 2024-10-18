@@ -122,7 +122,7 @@ def create_volume_import_source(name=None, url=constants.CNV_CENTOS_SOURCE):
         source_data_obj: The created VolumeImportSource object
 
     """
-    source_data = templating.load_yaml(constants.CNV_VM_STANDALONE_PVC_SOURCE_YAML)
+    source_data = templating.load_yaml(constants.CNV_VM_SOURCE_YAML)
     name = name if name else create_unique_resource_name("source", "volumeimportsource")
     source_data["metadata"]["name"] = name
     source_data["spec"]["source"]["registry"]["url"] = url
@@ -153,7 +153,7 @@ def create_pvc_using_data_source(
         pvc_obj: PVC object
 
     """
-    pvc_data = templating.load_yaml(constants.CNV_VM_STANDALONE_PVC_PVC_YAML)
+    pvc_data = templating.load_yaml(constants.CNV_VM_PVC_YAML)
     pvc_name = create_unique_resource_name("test", "pvc")
     pvc_data["metadata"]["name"] = pvc_name
     pvc_data["metadata"]["namespace"] = namespace
@@ -189,7 +189,7 @@ def create_dv(
         dv_obj: DV object
 
     """
-    dv_data = templating.load_yaml(constants.CNV_VM_STANDALONE_DV_YAML)
+    dv_data = templating.load_yaml(constants.CNV_VM_DV_YAML)
     dv_name = create_unique_resource_name("test", "dv")
     dv_data["metadata"]["name"] = dv_name
     dv_data["metadata"]["namespace"] = namespace
