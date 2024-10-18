@@ -864,6 +864,7 @@ class CNVInstaller(object):
         self.cnv_patch_subscription(patch)
         patch = '\'{"spec": {"installPlanApproval": "Automatic"}}\''
         self.cnv_patch_subscription(patch)
+        wait_for_install_plan_and_approve(self.namespace)
 
         # Post CNV upgrade checks
         self.post_install_verification()
