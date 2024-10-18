@@ -327,13 +327,23 @@ class TestProviderHosted(object):
         acm_hub_upgrade_obj.run_upgrade()
 
     @runs_on_provider
-    # @acm_upgrade
     def test_cnv_upgrade(self):
         """
-        Verify acm upgrade
+        Verify cnv upgrade
         """
         logger.info("Verify cnv upgrade")
         from ocs_ci.deployment.cnv import CNVInstaller
 
         cnv_installer_obj = CNVInstaller()
         cnv_installer_obj.upgrade_cnv()
+
+    @runs_on_provider
+    def test_metallb_upgrade(self):
+        """
+        Verify metallb upgrade
+        """
+        logger.info("Verify metallb upgrade")
+        from ocs_ci.deployment.metallb import MetalLBInstaller
+
+        metallb_installer_obj = MetalLBInstaller()
+        metallb_installer_obj.upgrade_metallb()
