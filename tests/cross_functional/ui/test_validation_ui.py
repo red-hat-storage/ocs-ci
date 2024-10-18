@@ -8,6 +8,7 @@ from ocs_ci.framework.testlib import (
     tier1,
     skipif_ui_not_support,
     skipif_ocs_version,
+    skipif_no_lower_requirements,
     polarion_id,
     ui,
     bugzilla,
@@ -173,3 +174,20 @@ class TestUserInterfaceValidation(object):
             "OCS operator is present in the installed operator tab, expected to see only ODF "
             "operator"
         )
+
+    @ui
+    @tier1
+    @runs_on_provider
+    @skipif_no_lower_requirements
+    @black_squad
+    def test_performance_modes_disabled(self, setup_ui_class_factory):
+        """
+        Verify the lean and performance modes disabled for low requirements cluster in UI
+
+        """
+        setup_ui_class_factory()
+
+        validation_ui_obj = ValidationUI()
+        assert (
+            validation_ui_obj.verify_performance_modes_options_disabled()
+        ), "The performance mode and lean mode are not disabled on low req cluster"
