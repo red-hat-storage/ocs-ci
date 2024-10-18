@@ -55,12 +55,16 @@ class ACMUpgrade(object):
             self.upgrade_with_registry()
             self.annotate_mch()
             run_cmd(f"oc create -f {constants.ACM_BREW_ICSP_YAML}")
+            self.patch_channel()
         else:
             # GA to GA
             self.upgrade_without_registry()
         self.validate_upgrade()
 
     def upgrade_without_registry(self):
+        self.patch_channel()
+
+    def patch_channel(self):
         """
         GA to GA acm upgrade
 
@@ -81,7 +85,7 @@ class ACMUpgrade(object):
         else:
             # This is GA to unreleased version: upgrade to next version
             self.create_catalog_source()
-            patch = f'\'{{"spec": "{constants.ACM_CATSRC_NAME}"}}\''
+            patch = f'\'{{"spec":{{"source": "{constants.ACM_CATSRC_NAME}"}}}}\''
             self.acm_patch_subscription(patch)
 
     def annotate_mch(self):
@@ -116,6 +120,7 @@ class ACMUpgrade(object):
                 [constants.ACM_BREW_REPO, version_tag]
             )
         acm_catsrc["metadata"]["name"] = constants.ACM_CATSRC_NAME
+        acm_catsrc["spec"]["publisher"] = "grpc"
         acm_data_yaml = tempfile.NamedTemporaryFile(
             mode="w+", prefix="acm_catsrc", delete=False
         )
