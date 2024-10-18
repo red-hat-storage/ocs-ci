@@ -60,7 +60,7 @@ class TestRwoPVCFencingUnfencing(ManageTest):
         disrupt_provisioner,
         project_factory,
         multi_pvc_factory,
-        dc_pod_factory,
+        deployment_pod_factory,
     ):
         """
         Identify the nodes and start DeploymentConfig based app pods using
@@ -151,7 +151,7 @@ class TestRwoPVCFencingUnfencing(ManageTest):
 
             for num in range(self.num_of_app_pods_per_node):
                 dc_pods.append(
-                    dc_pod_factory(
+                    deployment_pod_factory(
                         interface=constants.CEPHBLOCKPOOL,
                         pvc=rbd_pvcs.pop(0),
                         node_selector={"nodetype": "app-pod"},
@@ -161,7 +161,7 @@ class TestRwoPVCFencingUnfencing(ManageTest):
                     dc_pods[-1], node_name
                 ), f"Pod {dc_pods[-1].name} is not running on labeled node {node_name}"
                 dc_pods.append(
-                    dc_pod_factory(
+                    deployment_pod_factory(
                         interface=constants.CEPHFILESYSTEM,
                         pvc=cephfs_pvcs.pop(0),
                         node_selector={"nodetype": "app-pod"},
