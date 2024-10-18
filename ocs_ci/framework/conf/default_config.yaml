@@ -350,3 +350,7 @@ MULTICLUSTER:
   acm_cluster: False
   primary_cluster: False
   active_acm_cluster: False
+
+PREUPGRADE_CONFIG:
+  AUTH: null 
+  MULTICLUSTER: null 
