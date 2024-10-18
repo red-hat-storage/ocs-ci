@@ -11,6 +11,7 @@ from ocs_ci.framework.testlib import (
     skipif_hci_provider_and_client,
     skipif_disconnected_cluster,
     skipif_proxy_cluster,
+    skipif_external_mode,
     config,
 )
 from ocs_ci.ocs import constants
@@ -56,6 +57,7 @@ else:
 @skipif_hci_provider_and_client
 @skipif_disconnected_cluster
 @skipif_proxy_cluster
+@skipif_external_mode
 class TestEncryptedPVCNOExpansionOption(ManageTest):
     """
     Test Encrypted Volume Expansion
