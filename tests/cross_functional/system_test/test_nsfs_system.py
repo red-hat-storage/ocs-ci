@@ -221,7 +221,7 @@ class TestNSFSSystem(MCGTest):
             "Scaling the ceph cluster back to normal and validating all storage pods"
         )
         scale_ceph(replica=1)
-        sleep(30)
+        sleep(60)
         wait_for_storage_pods()
 
         logger.info("Performing noobaa db backup/recovery")
