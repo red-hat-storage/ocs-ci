@@ -14,6 +14,7 @@ from ocs_ci.framework.testlib import (
 )
 from ocs_ci.framework import config
 from ocs_ci.ocs import constants, node
+from ocs_ci.ocs.cluster import is_hci_cluster
 from ocs_ci.ocs.resources.pvc import delete_pvcs
 from ocs_ci.ocs.resources.pod import (
     get_mds_pods,
@@ -25,6 +26,8 @@ from ocs_ci.ocs.resources.pod import (
     get_cephfsplugin_provisioner_pods,
     get_rbdfsplugin_provisioner_pods,
     get_operator_pods,
+    get_ocs_client_operator_controller_manager,
+    get_ceph_csi_controller_manager,
 )
 from ocs_ci.utility.utils import TimeoutSampler
 from ocs_ci.helpers.helpers import (
@@ -259,6 +262,15 @@ class TestResourceDeletionDuringMultipleCreateDeleteOperations(ManageTest):
                 "mds",
             ]
 
+        if is_hci_cluster():
+            ceph_csi_pods_to_delete.remove("operator")
+            ceph_csi_pods_to_delete.extend(
+                [
+                    "ceph_csi_controller_manager",
+                    "ocs_client_operator_controller_manager",
+                ]
+            )
+
         (
             pvc_objs,
             pod_objs,
@@ -359,6 +371,15 @@ class TestResourceDeletionDuringMultipleCreateDeleteOperations(ManageTest):
                 "rbdplugin_provisioner": partial(get_rbdfsplugin_provisioner_pods),
                 "operator": partial(get_operator_pods),
             }
+
+        if is_hci_cluster():
+            del pod_functions["operator"]
+            pod_functions["ceph_csi_controller_manager"] = partial(
+                get_ceph_csi_controller_manager
+            )
+            pod_functions["ocs_client_operator_controller_manager"] = partial(
+                get_ocs_client_operator_controller_manager
+            )
 
         # Disruption object for each pod type
         disruption_ops = [
