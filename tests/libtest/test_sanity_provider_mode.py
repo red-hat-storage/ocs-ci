@@ -11,7 +11,7 @@ from ocs_ci.framework.testlib import (
     hci_provider_and_client_required,
 )
 from ocs_ci.utility.utils import switch_to_correct_cluster_at_setup
-from ocs_ci.ocs.constants import HCI_PROVIDER, HCI_CLIENT
+from ocs_ci.ocs.constants import HCI_PROVIDER, PROVIDERMODE_CLIENT
 
 log = logging.getLogger(__name__)
 
@@ -26,16 +26,18 @@ class TestSanityProviderModeWithDefaultParams(ManageTest):
     """
 
     @pytest.fixture(autouse=True)
-    def setup(self, request, create_scale_pods_and_pvcs_using_kube_job_on_hci_clients):
+    def setup(
+        self, request, create_scale_pods_and_pvcs_using_kube_job_on_providermode_clients
+    ):
         """
         Save the original index, and init the sanity instance
         """
         self.orig_index = config.cur_index
         switch_to_correct_cluster_at_setup(request)
-        # Pass the 'create_scale_pods_and_pvcs_using_kube_job_on_hci_clients' factory to the
+        # Pass the 'create_scale_pods_and_pvcs_using_kube_job_on_providermode_clients' factory to the
         # init method and use the default params
         self.sanity_helpers = SanityProviderMode(
-            create_scale_pods_and_pvcs_using_kube_job_on_hci_clients
+            create_scale_pods_and_pvcs_using_kube_job_on_providermode_clients
         )
 
     @pytest.fixture(autouse=True)
@@ -54,7 +56,7 @@ class TestSanityProviderModeWithDefaultParams(ManageTest):
         argnames=["cluster_type"],
         argvalues=[
             pytest.param(*[HCI_PROVIDER]),
-            pytest.param(*[HCI_CLIENT]),
+            pytest.param(*[PROVIDERMODE_CLIENT]),
         ],
     )
     def test_sanity_ms(self, cluster_type):
@@ -86,17 +88,17 @@ class TestSanityProviderModeWithOptionalParams(ManageTest):
     """
 
     @pytest.fixture(autouse=True)
-    def setup(self, create_scale_pods_and_pvcs_using_kube_job_on_hci_clients):
+    def setup(self, create_scale_pods_and_pvcs_using_kube_job_on_providermode_clients):
         """
         Save the original index, and init the sanity instance
         """
         self.orig_index = config.cur_index
 
         first_client_i = config.get_consumer_indexes_list()[0]
-        # Pass the 'create_scale_pods_and_pvcs_using_kube_job_on_hci_clients' factory to the
+        # Pass the 'create_scale_pods_and_pvcs_using_kube_job_on_providermode_clients' factory to the
         # init method and use the optional params
         self.sanity_helpers = SanityProviderMode(
-            create_scale_pods_and_pvcs_using_kube_job_on_hci_clients,
+            create_scale_pods_and_pvcs_using_kube_job_on_providermode_clients,
             scale_count=40,
             pvc_per_pod_count=10,
             start_io=True,
@@ -118,7 +120,7 @@ class TestSanityProviderModeWithOptionalParams(ManageTest):
         request.addfinalizer(finalizer)
 
     def test_sanity_ms_with_optional_params(
-        self, create_scale_pods_and_pvcs_using_kube_job_on_hci_clients
+        self, create_scale_pods_and_pvcs_using_kube_job_on_providermode_clients
     ):
         orig_test_index = config.cur_index
         log.info("Start creating resources for the clients")
