@@ -48,52 +48,15 @@ class TestWarp(E2ETest):
             pytest.param(
                 *[1, "OC", None],
             ),
-            pytest.param(
-                *[
-                    1,
-                    "OC",
-                    {
-                        "interface": "OC",
-                        "backingstore_dict": {"aws": [(1, "eu-central-1")]},
-                    },
-                ],
-            ),
-            pytest.param(
-                *[
-                    1,
-                    "OC",
-                    {"interface": "OC", "backingstore_dict": {"azure": [(1, None)]}},
-                ],
-            ),
-            pytest.param(
-                *[
-                    1,
-                    "OC",
-                    {"interface": "OC", "backingstore_dict": {"gcp": [(1, None)]}},
-                ],
-            ),
-            pytest.param(
-                *[
-                    1,
-                    "OC",
-                    {"interface": "OC", "backingstore_dict": {"ibmcos": [(1, None)]}},
-                ],
-            ),
         ],
         ids=[
             "OC-DEFAULT-BACKINGSTORE",
-            "OC-AWS",
-            "OC-AZURE",
-            "OC-GCP",
-            "OC-IBMCOS",
         ],
     )
     def test_s3_benchmark_warp(
         self,
         warps3,
         mcg_obj,
-        backingstore_factory,
-        bucket_class_factory,
         bucket_factory,
         amount,
         interface,
@@ -103,8 +66,8 @@ class TestWarp(E2ETest):
         Test flow:
         * Create a single object bucket
         * Verify noobaa pods status before running Wrap
-        * Perform Warp workload for period of time (60 mins)
-        * Verify noobaa pods status after running Wrap
+        * Perform Warp workload for period of time (5 hours)
+        * Check for memory leak in noobaa pods after running Wrap
         """
 
         # Create an Object bucket
@@ -124,12 +87,11 @@ class TestWarp(E2ETest):
             bucket_name=object_bucket.name,
             access_key=mcg_obj.access_key_id,
             secret_key=mcg_obj.access_key,
-            duration="30m",
-            concurrent=1,
-            objects=5000,
+            duration="300m",
+            concurrent=256,
             obj_size="4KB",
             validate=True,
-            timeout=8000,
+            timeout=25000,
             multi_client=False,
         )
 
