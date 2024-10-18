@@ -4,7 +4,7 @@ from concurrent.futures import ThreadPoolExecutor
 
 import pytest
 
-from ocs_ci.framework.pytest_customization.marks import tier4a, turquoise_squad
+from ocs_ci.framework.pytest_customization.marks import tier4a, turquoise_squad, mdr
 from ocs_ci.framework import config
 from ocs_ci.ocs.acm.acm import AcmAddClusters, validate_cluster_import
 from ocs_ci.ocs.dr.dr_workload import validate_data_integrity
@@ -44,6 +44,7 @@ from ocs_ci.utility.utils import TimeoutSampler
 logger = logging.getLogger(__name__)
 
 
+@mdr
 @tier4a
 @turquoise_squad
 class TestActiveHubDownAndRestore:

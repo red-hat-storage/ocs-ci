@@ -1,7 +1,7 @@
 import logging
 import pytest
 
-from ocs_ci.framework.pytest_customization.marks import tier1
+from ocs_ci.framework.pytest_customization.marks import tier1, mdr
 from ocs_ci.framework import config
 
 from ocs_ci.ocs.acm.acm import AcmAddClusters
@@ -26,6 +26,7 @@ from ocs_ci.framework.pytest_customization.marks import turquoise_squad
 logger = logging.getLogger(__name__)
 
 
+@mdr
 @tier1
 @turquoise_squad
 class TestMultipleApplicationFailoverAndRelocate:
