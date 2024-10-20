@@ -78,7 +78,7 @@ def create_cluster(cluster_name, version, region):
         logger.info(f"Using OCP version {rosa_ocp_version}")
 
     if rosa_hcp:
-        account_roles_prefix = f"accroleshcp-{date_in_minimal_format}{random_letters}"
+        account_roles_prefix = constants.ACCOUNT_ROLE_PREFIX_ROSA_HCP
     else:
         account_roles_prefix = "ManagedOpenShift"
     log_step("Creating account roles")
@@ -584,9 +584,11 @@ def create_oidc_config():
         TimeoutExpiredError: If OIDC config is not created in time
     """
     cmd = "rosa create oidc-config --managed --mode=auto --yes"
-    proc = utils.exec_cmd(cmd, timeout=1200)
+    proc = exec_cmd(cmd, timeout=1200)
     if proc.returncode != 0:
-        raise CommandFailed(f"Failed to create oidc config: {proc.stderr}")
+        raise CommandFailed(
+            f"Failed to create oidc config: {proc.stderr.decode().strip()}"
+        )
 
     for sample in TimeoutSampler(
         timeout=300,
@@ -594,9 +596,9 @@ def create_oidc_config():
         func=get_oidc_config_ids,
         latest=True,
     ):
-        if len(sample) and sample[0] in proc.stdout:
+        if len(sample) and sample[0] in proc.stdout.decode().strip():
             logger.info("OIDC config created successfully")
-            return sample[0].strip().decode()
+            return sample[0]
 
 
 def get_oidc_endpoint_url(oidc_config_id):
@@ -610,10 +612,12 @@ def get_oidc_endpoint_url(oidc_config_id):
         str: OIDC provider id
     """
     cmd = f"rosa list oidc-config -o json | jq -r '.[] | select(.id == \"{oidc_config_id}\") | .issuer_url'"
-    cmd_res = exec_cmd(cmd, shell=True)
-    if cmd_res.returncode != 0:
-        raise CommandFailed(f"Failed to get oidc provider id: {cmd_res.stderr}")
-    issuer_url = cmd_res.stdout.strip().decode()
+    proc = exec_cmd(cmd, shell=True)
+    if proc.returncode != 0:
+        raise CommandFailed(
+            f"Failed to get oidc provider id: {proc.stderr.decode().strip()}"
+        )
+    issuer_url = proc.stdout.decode().strip()
     logger.info(f"OIDC issuer url: {issuer_url}")
     return issuer_url
 
@@ -648,11 +652,14 @@ def delete_oidc_config(oidc_config_id):
 
 def get_latest_oidc_config_id():
     cmd = "rosa list oidc-config -o json | jq -r 'max_by(.creation_timestamp) | .id'"
-    cmd_res = exec_cmd(cmd, shell=True)
-    if cmd_res.returncode != 0:
-        raise CommandFailed(f"Failed to get latest oidc config id: {cmd_res.stderr}")
-    logger.info(f"Latest OIDC config id: {cmd_res.stdout}")
-    return cmd_res.stdout.strip()
+    proc = exec_cmd(cmd, shell=True)
+    if proc.returncode != 0:
+        raise CommandFailed(
+            f"Failed to get latest oidc config id: {proc.stderr.decode().strip()}"
+        )
+    oidc_config_latest = proc.stdout.decode().strip()
+    logger.info(f"Latest OIDC config id: {oidc_config_latest}")
+    return oidc_config_latest
 
 
 def get_oidc_config_ids(latest=False):
@@ -674,12 +681,15 @@ def get_oidc_config_ids(latest=False):
             "rosa list oidc-config -o json | jq -r 'map(select(has(\"id\"))) | .[].id'"
         )
 
-    cmd_res = exec_cmd(cmd, shell=True)
-    if cmd_res.returncode != 0:
-        raise CommandFailed(f"Failed to get OIDC config ids: {cmd_res.stderr}")
+    proc = exec_cmd(cmd, shell=True)
+    if proc.returncode != 0:
+        raise CommandFailed(
+            f"Failed to get OIDC config ids: {proc.stderr.decode().strip()}"
+        )
 
-    logger.info(f"OIDC config id(s), latest='{latest}': {cmd_res.stdout}")
-    return cmd_res.stdout.strip().splitlines()
+    oidc_configs = proc.stdout.decode().strip()
+    logger.info(f"OIDC config id(s), latest='{latest}': {oidc_configs}")
+    return oidc_configs.splitlines()
 
 
 def download_rosa_cli():
@@ -834,7 +844,29 @@ def delete_operator_roles(cluster_id):
         cluster_id (str): the id of the cluster
     """
     cmd = f"rosa delete operator-roles -c {cluster_id} --mode auto --yes"
-    utils.run_cmd(cmd, timeout=1200)
+    proc = exec_cmd(cmd, timeout=1200)
+    if proc.returncode != 0:
+        raise CommandFailed(
+            f"Failed to delete operator roles: {proc.stderr.decode().strip()}"
+        )
+    logger.info(f"{proc.stdout.decode().strip()}")
+
+
+def delete_account_roles(prefix):
+    """
+    Delete account roles
+
+    Args:
+        prefix (str): role prefix
+
+    """
+    cmd = f"rosa delete account-roles -p {prefix} --mode auto --yes"
+    proc = exec_cmd(cmd, timeout=1200)
+    if proc.returncode != 0:
+        raise CommandFailed(
+            f"Failed to delete account roles: {proc.stderr.decode().strip()}"
+        )
+    logger.info(f"{proc.stdout.decode().strip()}")
 
 
 def get_rosa_cluster_service_id(cluster):
@@ -928,7 +960,12 @@ def delete_oidc_provider(cluster_id):
         cluster_id (str): the id of the cluster
     """
     cmd = f"rosa delete oidc-provider -c {cluster_id} --mode auto --yes"
-    utils.run_cmd(cmd, timeout=1200)
+    proc = exec_cmd(cmd, timeout=1200)
+    if proc.returncode != 0:
+        raise CommandFailed(
+            f"Failed to delete oidc provider: {proc.stderr.decode().strip()}"
+        )
+    logger.info(f"{proc.stdout.decode().strip()}")
 
 
 def is_odf_addon_installed(cluster_name=None):
@@ -1061,3 +1098,48 @@ def edit_addon_installation(
     utils.run_cmd(cmd)
     if wait:
         wait_for_addon_to_be_ready(cluster_name, addon_name)
+
+
+def get_console_url(cluster_name):
+    """
+    Get the console URL of the given cluster
+
+    Args:
+        cluster_name (str): The cluster name
+
+    Returns:
+        str: The console URL
+
+    """
+    cmd = (
+        f"rosa describe cluster --cluster {cluster_name} -o json | jq -r '.console.url'"
+    )
+    proc = exec_cmd(cmd, shell=True)
+    if proc.returncode != 0:
+        raise CommandFailed(
+            f"Failed to get console URL: {proc.stderr.decode().strip()}"
+        )
+    return proc.stdout.decode().strip()
+
+
+def get_associated_oidc_config_id(cluster_name):
+    """
+    Get the associated OIDC config id of the given cluster
+
+    Args:
+        cluster_name (str): The cluster name
+
+    Returns:
+        str: The OIDC config id
+
+    """
+    cmd = (
+        f"rosa describe cluster --cluster {cluster_name} -o json "
+        "| jq -r '.aws.sts.oidc_endpoint_url? "
+        '| split("/") | .[-1] // ""\''
+    )
+    proc = exec_cmd(cmd, shell=True)
+    if proc.returncode != 0:
+        logger.warning(f"Failed to get OIDC config id: {proc.stderr.decode().strip()}")
+        return ""
+    return proc.stdout.decode().strip()

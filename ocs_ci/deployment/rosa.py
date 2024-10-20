@@ -18,7 +18,13 @@ from ocs_ci.deployment.ocp import OCPDeployment as BaseOCPDeployment
 from ocs_ci.framework import config
 from ocs_ci.ocs.resources.pod import get_operator_pods
 from ocs_ci.utility import openshift_dedicated as ocm, rosa
-from ocs_ci.utility.aws import AWS as AWSUtil
+from ocs_ci.utility.aws import AWS as AWSUtil, delete_sts_iam_roles
+from ocs_ci.utility.deployment import create_openshift_install_log_file
+from ocs_ci.utility.rosa import (
+    get_console_url,
+    get_associated_oidc_config_id,
+    delete_account_roles,
+)
 from ocs_ci.utility.utils import (
     ceph_health_check,
     get_ocp_version,
@@ -95,8 +101,9 @@ class ROSAOCP(BaseOCPDeployment):
 
         logger.info("generate kubeconfig and kubeadmin-password files")
         if config.ENV_DATA["ms_env_type"] == "staging":
+            cluster_path = config.ENV_DATA["cluster_path"]
             kubeconfig_path = os.path.join(
-                config.ENV_DATA["cluster_path"], config.RUN["kubeconfig_location"]
+                cluster_path, config.RUN["kubeconfig_location"]
             )
             ocm.get_kubeconfig(self.cluster_name, kubeconfig_path)
             # this default admin password from secret doesn't work for ROSA HCP staging in the management-console
@@ -104,6 +111,8 @@ class ROSAOCP(BaseOCPDeployment):
             rosa_stage_cluster = ROSAStageEnvCluster(self.cluster_name)
             rosa_stage_cluster.create_admin_and_login()
             rosa_stage_cluster.generate_kubeadmin_password_file()
+            console_url = get_console_url(self.cluster_name)
+            create_openshift_install_log_file(cluster_path, console_url)
         if config.ENV_DATA["ms_env_type"] == "production":
             if config.ENV_DATA.get("appliance_mode"):
                 logger.info(
@@ -128,6 +137,7 @@ class ROSAOCP(BaseOCPDeployment):
 
         """
         try:
+            rosa_hcp = config.ENV_DATA.get("platform") == constants.ROSA_HCP_PLATFORM
             cluster_details = ocm.get_cluster_details(self.cluster_name)
             cluster_id = cluster_details.get("id")
             delete_status = rosa.destroy_appliance_mode_cluster(self.cluster_name)
@@ -145,7 +155,14 @@ class ROSAOCP(BaseOCPDeployment):
                 logger.error(err_msg)
                 raise TimeoutExpiredError(err_msg)
             rosa.delete_operator_roles(cluster_id)
+            if rosa_hcp:
+                oidc_config_id = get_associated_oidc_config_id(cluster_id)
+                if oidc_config_id:
+                    rosa.delete_oidc_config(oidc_config_id)
+                # use sts IAM roles for ROSA HCP is mandatory
+                delete_sts_iam_roles()
             rosa.delete_oidc_provider(cluster_id)
+            delete_account_roles(constants.ACCOUNT_ROLE_PREFIX_ROSA_HCP)
         except CommandFailed as err:
             if "There are no subscriptions or clusters with identifier or name" in str(
                 err
