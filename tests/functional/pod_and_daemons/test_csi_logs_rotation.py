@@ -5,7 +5,12 @@ import pytest
 from ocs_ci.framework.testlib import BaseTest
 from ocs_ci.ocs.resources import pod
 from ocs_ci.ocs.constants import OPENSHIFT_STORAGE_NAMESPACE
-from ocs_ci.framework.pytest_customization.marks import brown_squad, tier2
+from ocs_ci.framework.pytest_customization.marks import (
+    brown_squad,
+    tier2,
+    post_upgrade,
+    skipif_ocs_version,
+)
 from ocs_ci.utility.utils import TimeoutSampler
 from ocs_ci.ocs.exceptions import TimeoutExpiredError
 
@@ -16,6 +21,8 @@ SLEEP_BETWEEN_TRIES = 300  # seconds
 
 
 @brown_squad
+@post_upgrade
+@skipif_ocs_version("<4.17")
 @tier2
 class TestPodsCsiLogRotation(BaseTest):
     def check_for_log_rotation_successful(
