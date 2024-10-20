@@ -18,11 +18,11 @@ SLEEP_BETWEEN_TRIES = 300  # seconds
 @brown_squad
 @tier2
 class TestPodsCsiLogRotation(BaseTest):
-    def logs_were_rotated(
+    def check_for_log_rotation_successful(
         self, pod_obj, gz_logs_num, current_log_file_size, logs_dir, log_file_name
     ):
         """
-        Gets csi pod log files details
+        Checks if the logs were rotated successfully
 
         Args:
             pod_obj (obj): Pod which log files should be investigated
@@ -85,7 +85,7 @@ class TestPodsCsiLogRotation(BaseTest):
             for result in TimeoutSampler(
                 WAIT_FOR_ROTATION_TIME,
                 SLEEP_BETWEEN_TRIES,
-                self.logs_were_rotated,
+                self.check_for_log_rotation_successful,
                 pod_obj=pod_obj,
                 gz_logs_num=gz_logs_num,
                 current_log_file_size=current_log_file_size,
