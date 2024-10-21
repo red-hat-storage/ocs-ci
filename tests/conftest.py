@@ -8746,8 +8746,8 @@ def setup_cnv(request):
     cnv_obj = CNVInstaller()
     installed = False
     if not cnv_obj.post_install_verification():
-        cnv_obj.deploy_cnv(check_cnv_deployed=False, check_cnv_ready=False)
         installed = True
+        cnv_obj.deploy_cnv()
 
     def finalizer():
         """
