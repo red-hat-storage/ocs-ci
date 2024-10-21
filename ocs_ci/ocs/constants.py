@@ -79,9 +79,6 @@ TEMPLATE_DEPLOYMENT_CLO = os.path.join(
 TEMPLATE_AUTHENTICATION_DIR = os.path.join(TEMPLATE_DIR, "authentication")
 KREW_INSTALL_DIR = os.path.join(TEMPLATE_DIR, "krew_plugin")
 TEMPLATE_CNV_VM_WORKLOAD_DIR = os.path.join(TEMPLATE_DIR, "cnv-vm-workload")
-TEMPLATE_CNV_VM_STANDALONE_PVC_DIR = os.path.join(
-    TEMPLATE_CNV_VM_WORKLOAD_DIR, "vm-standalone-pvc"
-)
 DATA_DIR = os.getenv("OCSCI_DATA_DIR") or os.path.join(TOP_DIR, "data")
 ROOK_REPO_DIR = os.path.join(DATA_DIR, "rook")
 ROOK_EXAMPLES_DIR = os.path.join(
@@ -977,16 +974,10 @@ CNV_HYPERCONVERGED_YAML = os.path.join(
 CNV_VM_SECRET_YAML = os.path.join(TEMPLATE_DEPLOYMENT_DIR_CNV, "vm-secret.yaml")
 
 # CNV VM workload yamls
-CNV_VM_STANDALONE_PVC_SOURCE_YAML = os.path.join(
-    TEMPLATE_CNV_VM_STANDALONE_PVC_DIR, "source.yaml"
-)
-CNV_VM_STANDALONE_PVC_PVC_YAML = os.path.join(
-    TEMPLATE_CNV_VM_STANDALONE_PVC_DIR, "pvc.yaml"
-)
-CNV_VM_STANDALONE_DV_YAML = os.path.join(TEMPLATE_CNV_VM_STANDALONE_PVC_DIR, "dv.yaml")
-CNV_VM_STANDALONE_PVC_VM_YAML = os.path.join(
-    TEMPLATE_CNV_VM_STANDALONE_PVC_DIR, "vm.yaml"
-)
+CNV_VM_SOURCE_YAML = os.path.join(TEMPLATE_CNV_VM_WORKLOAD_DIR, "source.yaml")
+CNV_VM_PVC_YAML = os.path.join(TEMPLATE_CNV_VM_WORKLOAD_DIR, "pvc.yaml")
+CNV_VM_DV_YAML = os.path.join(TEMPLATE_CNV_VM_WORKLOAD_DIR, "dv.yaml")
+CNV_VM_TEMPLATE_YAML = os.path.join(TEMPLATE_CNV_VM_WORKLOAD_DIR, "vm.yaml")
 
 METALLB = "metallb-operator"
 METALLB_CONTROLLER_MANAGER_PREFIX = "metallb-operator-controller-manager"
@@ -3040,3 +3031,13 @@ FILE_CREATOR_IO = os.path.join(
 MC_WORKAROUND_SSD = os.path.join(
     TEMPLATE_DEPLOYMENT_DIR_OCP, "workaround-ssd-machine-config.yaml"
 )
+
+# Fusion Data Foundation
+FDF_TEMPLATE_DIR = os.path.join(TEMPLATE_DIR, "fusion-data-foundation")
+FDF_IMAGE_TAG_MIRROR_SET = os.path.join(FDF_TEMPLATE_DIR, "image-tag-mirror-set.yaml")
+FDF_IMAGE_DIGEST_MIRROR_SET = os.path.join(
+    FDF_TEMPLATE_DIR, "image-digest-mirror-set.yaml"
+)
+FDF_SERVICE_CR = os.path.join(FDF_TEMPLATE_DIR, "data-foundation-instance.yaml")
+FDF_SPECTRUM_FUSION_CR = os.path.join(FDF_TEMPLATE_DIR, "spectrum-fusion.yaml")
+FDF_NAMESPACE = "ibm-spectrum-fusion-ns"
