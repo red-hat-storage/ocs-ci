@@ -38,6 +38,9 @@ class ROSAEnvCluster:
         self.kubeadmin_password_path = os.path.join(
             config.ENV_DATA["cluster_path"], config.RUN["password_location"]
         )
+        self.username_path = os.path.join(
+            config.ENV_DATA["cluster_path"], "auth", "admin-user"
+        )
 
         # Create "auth" folder if it doesn't exist.
         abs_path = os.path.expanduser(self.kubeconfig_path)
@@ -130,6 +133,16 @@ class ROSAEnvCluster:
         logger.info("It may take up to a minute for the account to become active")
         time.sleep(10)
         self.wait_for_cluster_admin_login_successful()
+        self.create_username_file()
+
+    def create_username_file(self):
+        """
+        Creates a file with the username for the cluster.
+
+        """
+
+        with open(self.username_path, "w+") as fd:
+            fd.write(config.ENV_DATA[self.username_key])
 
     def get_admin_password(self):
         """
