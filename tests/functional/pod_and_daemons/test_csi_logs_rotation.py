@@ -25,7 +25,7 @@ SLEEP_BETWEEN_TRIES = 300  # seconds
 @skipif_ocs_version("<4.17")
 @tier2
 class TestPodsCsiLogRotation(BaseTest):
-    def check_for_log_rotation_successful(
+    def check_for_successful_log_rotation(
         self, pod_obj, gz_logs_num, current_log_file_size, logs_dir, log_file_name
     ):
         """
@@ -41,7 +41,7 @@ class TestPodsCsiLogRotation(BaseTest):
         Returns:
             bool: True if the log files were rotated
         """
-        new_gz_logs_num, new_current_log_file_size = pod_obj.get_logs_details_on_pod(
+        new_gz_logs_num, new_current_log_file_size = pod_obj.get_csi_pod_log_details(
             logs_dir, log_file_name
         )
         log.info(
@@ -67,7 +67,7 @@ class TestPodsCsiLogRotation(BaseTest):
 
         """
         log.info(f"Testing log {log_file_name} rotation on pod {pod_obj.name}")
-        gz_logs_num, current_log_file_size = pod_obj.get_logs_details_on_pod(
+        gz_logs_num, current_log_file_size = pod_obj.get_csi_pod_log_details(
             logs_dir, log_file_name
         )
         log.info(
@@ -82,8 +82,8 @@ class TestPodsCsiLogRotation(BaseTest):
             shell=True,
         )
 
-        time.sleep(10)  # wait fo make sure that the truncate had its effect
-        current_log_file_size = pod_obj.get_logs_details_on_pod(
+        time.sleep(10)  # wait to make sure that the truncate had its effect
+        current_log_file_size = pod_obj.get_csi_pod_log_details(
             logs_dir, log_file_name
         )[1]
         log.info(f"Current log file size after truncate is = {current_log_file_size}")
@@ -92,7 +92,7 @@ class TestPodsCsiLogRotation(BaseTest):
             for result in TimeoutSampler(
                 WAIT_FOR_ROTATION_TIME,
                 SLEEP_BETWEEN_TRIES,
-                self.check_for_log_rotation_successful,
+                self.check_for_successful_log_rotation,
                 pod_obj=pod_obj,
                 gz_logs_num=gz_logs_num,
                 current_log_file_size=current_log_file_size,
@@ -106,13 +106,19 @@ class TestPodsCsiLogRotation(BaseTest):
             assert False, "The logs were not rotated"
 
     @pytest.mark.parametrize(
-        argnames=["pod_selector", "logs_dir", "log_file_name"],
+        argnames=[
+            "pod_selector",
+            "logs_dir",
+            "log_file_name",
+            "additional_log_file_name",
+        ],
         argvalues=[
             pytest.param(
                 *[
                     "csi-cephfsplugin",
                     "/var/lib/rook/openshift-storage.cephfs.csi.ceph.com/log/node-plugin/",
                     "csi-cephfsplugin.log",
+                    "",
                 ],
             ),
             pytest.param(
@@ -120,37 +126,15 @@ class TestPodsCsiLogRotation(BaseTest):
                     "csi-rbdplugin",
                     "/var/lib/rook/openshift-storage.rbd.csi.ceph.com/log/node-plugin/",
                     "csi-rbdplugin.log",
+                    "",
                 ],
             ),
-        ],
-    )
-    def test_pods_csi_log_rotation(self, pod_selector, logs_dir, log_file_name):
-        """
-        Tests that the log files on pod are rotated correctly
-
-        Args:
-            pod_selector (str): Pod selector according to the interface
-            logs_dir (str): Logs directory on this pod
-            log_file_name (str) Current log file name
-
-        """
-
-        csi_interface_plugin_pod_objs = pod.get_all_pods(
-            namespace=OPENSHIFT_STORAGE_NAMESPACE, selector=[pod_selector]
-        )
-
-        # check on the first pod
-        pod_obj = csi_interface_plugin_pod_objs[0]
-        self.pump_logs_and_wait_for_rotation(pod_obj, logs_dir, log_file_name)
-
-    @pytest.mark.parametrize(
-        argnames=["pod_selector", "logs_dir", "log_file_name"],
-        argvalues=[
             pytest.param(
                 *[
                     "csi-cephfsplugin-provisioner",
                     "/var/lib/rook/openshift-storage.cephfs.csi.ceph.com/log/controller-plugin/",
                     "csi-cephfsplugin.log",
+                    "csi-addons.log",
                 ],
             ),
             pytest.param(
@@ -158,12 +142,13 @@ class TestPodsCsiLogRotation(BaseTest):
                     "csi-rbdplugin-provisioner",
                     "/var/lib/rook/openshift-storage.rbd.csi.ceph.com/log/controller-plugin/",
                     "csi-rbdplugin.log",
+                    "csi-addons.log",
                 ],
             ),
         ],
     )
-    def test_provisioner_pods_csi_log_rotation(
-        self, pod_selector, logs_dir, log_file_name
+    def test_pods_csi_log_rotation(
+        self, pod_selector, logs_dir, log_file_name, additional_log_file_name
     ):
         """
         Tests that the both log files on provisioner pod are rotated correctly.
@@ -172,9 +157,9 @@ class TestPodsCsiLogRotation(BaseTest):
             pod_selector (str): Pod selector according to the interface
             logs_dir (str): Logs directory on this pod
             log_file_name (str) Current log file name
+            additional_log_file_name (str) Additional log file name; empty string if is not relevant
 
         """
-        ADDTIONAL_CSI_LOG_FILE = "csi-addons.log"
         csi_interface_plugin_pod_objs = pod.get_all_pods(
             namespace=OPENSHIFT_STORAGE_NAMESPACE, selector=[pod_selector]
         )
@@ -182,4 +167,7 @@ class TestPodsCsiLogRotation(BaseTest):
         # check on the first pod
         pod_obj = csi_interface_plugin_pod_objs[0]
         self.pump_logs_and_wait_for_rotation(pod_obj, logs_dir, log_file_name)
-        self.pump_logs_and_wait_for_rotation(pod_obj, logs_dir, ADDTIONAL_CSI_LOG_FILE)
+        if additional_log_file_name:
+            self.pump_logs_and_wait_for_rotation(
+                pod_obj, logs_dir, additional_log_file_name
+            )

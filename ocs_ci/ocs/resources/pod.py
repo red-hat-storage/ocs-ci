@@ -655,7 +655,7 @@ class Pod(OCS):
         resource_name = resource_name if resource_name else self.name
         return self.ocp.wait_for_delete(resource_name, timeout=timeout)
 
-    def get_logs_details_on_pod(self, logs_dir, log_file_name):
+    def get_csi_pod_log_details(self, logs_dir, log_file_name):
         """
         Gets csi pod log files details
 
