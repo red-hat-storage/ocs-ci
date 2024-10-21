@@ -115,4 +115,9 @@ class TestFailoverAndRelocateWithDiscoveredApps:
             workload_instance=rdr_workload,
         )
 
+        logger.info("Checking for lastKubeObjectProtectionTime post Relocate Operation")
+        dr_helpers.verify_last_kubeobject_protection_time(
+            drpc_obj, rdr_workload.kubeobject_capture_interval_int
+        )
+
         # TODO: Add data integrity checks
