@@ -19,6 +19,7 @@ from ocs_ci.deployment.helpers.external_cluster_helpers import (
     get_external_cluster_client,
 )
 from ocs_ci.deployment.helpers.odf_deployment_helpers import get_required_csvs
+from ocs_ci.helpers.helpers import get_provisioner_label, get_node_plugin_label
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.cluster import CephCluster, CephHealthMonitor
 from ocs_ci.ocs.defaults import (
@@ -177,19 +178,21 @@ def verify_image_versions(old_images, upgrade_version, version_before_upgrade):
     if not config.ENV_DATA.get("mcg_only_deployment"):
         verify_pods_upgraded(
             old_images,
-            selector=constants.CSI_CEPHFSPLUGIN_LABEL,
+            selector=get_node_plugin_label(constants.CEPHFILESYSTEM),
             count=number_of_worker_nodes,
-        )
-        verify_pods_upgraded(
-            old_images, selector=constants.CSI_CEPHFSPLUGIN_PROVISIONER_LABEL, count=2
         )
         verify_pods_upgraded(
             old_images,
-            selector=constants.CSI_RBDPLUGIN_LABEL,
+            selector=get_provisioner_label(constants.CEPHFILESYSTEM),
+            count=2,
+        )
+        verify_pods_upgraded(
+            old_images,
+            selector=get_node_plugin_label(constants.CEPHBLOCKPOOL),
             count=number_of_worker_nodes,
         )
         verify_pods_upgraded(
-            old_images, selector=constants.CSI_RBDPLUGIN_PROVISIONER_LABEL, count=2
+            old_images, selector=get_provisioner_label(constants.CEPHBLOCKPOOL), count=2
         )
     if not (
         config.DEPLOYMENT.get("external_mode")
