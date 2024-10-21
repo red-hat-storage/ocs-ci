@@ -20,17 +20,25 @@ from ocs_ci.utility.utils import (
     load_config_file,
 )
 from ocs_ci.framework.testlib import ManageTest, ocp_upgrade, ignore_leftovers
-from ocs_ci.ocs.cluster import CephCluster, CephHealthMonitor
+from ocs_ci.ocs.cluster import (
+    CephCluster,
+    CephClusterMultiCluster,
+    CephHealthMonitor,
+    MulticlusterCephHealthMonitor,
+)
+from ocs_ci.ocs.utils import is_acm_cluster, get_non_acm_cluster_config
 from ocs_ci.utility.ocp_upgrade import (
     pause_machinehealthcheck,
     resume_machinehealthcheck,
 )
+from ocs_ci.utility.multicluster import MDRClusterUpgradeParametrize
 from ocs_ci.utility.version import (
     get_semantic_ocp_running_version,
     VERSION_4_8,
 )
 from ocs_ci.framework.pytest_customization.marks import (
     purple_squad,
+    multicluster_roles,
 )
 
 logger = logging.getLogger(__name__)
@@ -39,6 +47,7 @@ logger = logging.getLogger(__name__)
 @ignore_leftovers
 @ocp_upgrade
 @purple_squad
+@multicluster_roles(["mdr-all-ocp"])
 class TestUpgradeOCP(ManageTest):
     """
     1. check cluster health
@@ -78,7 +87,9 @@ class TestUpgradeOCP(ManageTest):
                 f" {version_before_upgrade}, new config file will not be loaded"
             )
 
-    def test_upgrade_ocp(self, reduce_and_resume_cluster_load):
+    def test_upgrade_ocp(
+        self, zone_rank, role_rank, config_index, reduce_and_resume_cluster_load
+    ):
         """
         Tests OCS stability when upgrading OCP
 
@@ -86,9 +97,25 @@ class TestUpgradeOCP(ManageTest):
 
         cluster_ver = ocp.run_cmd("oc get clusterversions/version -o yaml")
         logger.debug(f"Cluster versions before upgrade:\n{cluster_ver}")
-        ceph_cluster = CephCluster()
-        with CephHealthMonitor(ceph_cluster):
+        if (
+            config.multicluster
+            and config.MULTICLUSTER["multicluster_mode"] == "metro-dr"
+            and is_acm_cluster(config)
+        ):
+            # Find the ODF cluster in current zone
+            mdr_upgrade = MDRClusterUpgradeParametrize()
+            mdr_upgrade.config_init()
+            local_zone_odf = None
+            for cluster in get_non_acm_cluster_config():
+                if config.ENV_DATA["zone"] == cluster.ENV_DATA["zone"]:
+                    local_zone_odf = cluster
+            ceph_cluster = CephClusterMultiCluster(local_zone_odf)
+            health_monitor = MulticlusterCephHealthMonitor
+        else:
+            ceph_cluster = CephCluster()
+            health_monitor = CephHealthMonitor
 
+        with health_monitor(ceph_cluster):
             ocp_channel = config.UPGRADE.get(
                 "ocp_channel", ocp.get_ocp_upgrade_channel()
             )
@@ -199,7 +226,7 @@ class TestUpgradeOCP(ManageTest):
         # load new config file
         self.load_ocp_version_config_file(ocp_upgrade_version)
 
-        if not config.ENV_DATA["mcg_only_deployment"]:
+        if not config.ENV_DATA["mcg_only_deployment"] and not config.multicluster:
             new_ceph_cluster = CephCluster()
             # Increased timeout because of this bug:
             # https://bugzilla.redhat.com/show_bug.cgi?id=2038690
