@@ -22,9 +22,9 @@ from ocs_ci.utility import openshift_dedicated as ocm, rosa
 from ocs_ci.utility.aws import AWS as AWSUtil, delete_sts_iam_roles
 from ocs_ci.utility.deployment import create_openshift_install_log_file
 from ocs_ci.utility.rosa import (
-    get_console_url,
     get_associated_oidc_config_id,
     delete_account_roles,
+    wait_console_url,
 )
 from ocs_ci.utility.utils import (
     ceph_health_check,
@@ -112,7 +112,7 @@ class ROSAOCP(BaseOCPDeployment):
             rosa_stage_cluster = ROSAStageEnvCluster(self.cluster_name)
             rosa_stage_cluster.create_admin_and_login()
             rosa_stage_cluster.generate_kubeadmin_password_file()
-            console_url = get_console_url(self.cluster_name)
+            console_url = wait_console_url(self.cluster_name)
             create_openshift_install_log_file(cluster_path, console_url)
         if config.ENV_DATA["ms_env_type"] == "production":
             if config.ENV_DATA.get("appliance_mode"):

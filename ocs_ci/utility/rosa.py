@@ -17,6 +17,7 @@ from ocs_ci.ocs.exceptions import (
     UnsupportedPlatformVersionError,
     ConfigurationError,
     ResourceWrongStatusException,
+    TimeoutExpiredError,
 )
 from ocs_ci.utility import openshift_dedicated as ocm
 from ocs_ci.utility import utils
@@ -27,6 +28,7 @@ from ocs_ci.utility.managedservice import (
     generate_onboarding_token,
     get_storage_provider_endpoint,
 )
+from ocs_ci.utility.retry import catch_exceptions
 from ocs_ci.utility.utils import exec_cmd, TimeoutSampler
 
 logger = logging.getLogger(name=__file__)
@@ -63,6 +65,7 @@ def create_cluster(cluster_name, version, region):
         region (str): Cluster region
 
     """
+    create_timeout = 2400
     aws = AWSUtil()
     rosa_ocp_version = config.DEPLOYMENT["installer_version"]
     # Validate ocp version with rosa ocp supported version
@@ -167,7 +170,7 @@ def create_cluster(cluster_name, version, region):
         cmd += " --hosted-cp "
 
     log_step("Running create rosa cluster command")
-    utils.run_cmd(cmd, timeout=1200)
+    utils.run_cmd(cmd, timeout=create_timeout)
     if rosa_mode != "auto" and not rosa_hcp:
         logger.info(
             "Waiting for ROSA cluster status changed to waiting or pending state"
@@ -484,8 +487,8 @@ def create_account_roles(prefix="ManagedOpenShift"):
     entire account.
     - If multiple clusters are deployed with the same role prefix, deleting account roles during the cluster
     destruction stage could lead to:
-        - Loss of Red Hat (RH) support.
-        - Disruption of communication with worker nodes.
+    - Loss of Red Hat (RH) support.
+    - Disruption of communication with worker nodes.
 
     Ensure that role prefixes are uniquely assigned per cluster to maintain cluster integrity and supportability.
 
@@ -653,7 +656,7 @@ def delete_oidc_config(oidc_config_id):
         )
         return
 
-    cmd = f"rosa delete oidc-config {oidc_config_id} --mode auto --yes"
+    cmd = f"rosa delete oidc-config --oidc-config-id {oidc_config_id} --mode auto --yes"
     utils.exec_cmd(cmd, timeout=1200)
     for sample in TimeoutSampler(
         timeout=300,
@@ -1137,6 +1140,34 @@ def get_console_url(cluster_name):
             f"Failed to get console URL: {proc.stderr.decode().strip()}"
         )
     return proc.stdout.decode().strip()
+
+
+@catch_exceptions((CommandFailed, TimeoutExpiredError))
+def wait_console_url(cluster_name, timeout=600, sleep=10):
+    """
+    Wait for the console URL of the cluster to be ready
+
+    Args:
+        cluster_name (str): The cluster name
+        timeout (int): Timeout to wait for the console URL to be ready
+        sleep (int): Time in seconds to sleep between attempts
+
+    Returns:
+        str: The console URL
+
+    Raises:
+        TimeoutExpiredError: In case the console URL is not ready in the given timeout
+
+    """
+    for console_url in TimeoutSampler(
+        timeout=timeout,
+        sleep=sleep,
+        func=get_console_url,
+        cluster_name=cluster_name,
+    ):
+        if console_url and "https" in console_url:
+            logger.info(f"Console URL: {console_url}")
+            return console_url
 
 
 def get_associated_oidc_config_id(cluster_name):
