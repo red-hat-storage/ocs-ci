@@ -350,7 +350,7 @@ class PageNavigator(BaseUI):
 
     def navigate_block_pool_page(self):
         """
-        Navigate to block pools page
+        Navigate to storage pools page
 
         """
         logger.info("Navigate to block pools page")
@@ -360,7 +360,7 @@ class PageNavigator(BaseUI):
             .nav_storagecluster_storagesystem_details()
         )
         storage_system_details.nav_ceph_blockpool()
-        logger.info("Now at Block pool page")
+        logger.info("Now at Storage pool page")
 
     def select_namespace(self, project_name):
         """
