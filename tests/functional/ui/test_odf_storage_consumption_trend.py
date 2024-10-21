@@ -12,6 +12,7 @@ from ocs_ci.framework.testlib import (
     skipif_ocs_version,
     skipif_mcg_only,
     skipif_external_mode,
+    polarion_id,
 )
 from ocs_ci.helpers import helpers
 from ocs_ci.helpers.osd_resize import basic_resize_osd
@@ -70,6 +71,7 @@ class TestConsumptionTrendUI(ManageTest):
                 active_mgr_pod = obj.name
         return (active_mgr_deployment_name, active_mgr_pod)
 
+    @polarion_id("OCS-6259")
     def test_consumption_trend_card_ui(self, setup_ui_class):
         """
         Verify the widget for “Consumption trend”
@@ -96,6 +98,7 @@ class TestConsumptionTrendUI(ManageTest):
             avg_txt in collected_tpl_of_days_and_avg[1]
         ), f"Text information for Average is wrong in {collected_tpl_of_days_and_avg[1]}"
 
+    @polarion_id("OCS-6260")
     def test_estimated_days_until_full_ui(self, setup_ui_class):
         """
         Verify the accuracy of ‘Estimated days until full’  in the widget
@@ -124,6 +127,7 @@ class TestConsumptionTrendUI(ManageTest):
             first_validation or second_validation
         ), "'Estimated days until full' is wrongly displayed in UI"
 
+    @polarion_id("OCS-6261")
     def test_average_of_storage_consumption_ui(self, setup_ui_class):
         """
         Verify the accuracy of ‘Average of storage consumption per day’  in the widget
@@ -151,6 +155,57 @@ class TestConsumptionTrendUI(ManageTest):
             first_validation or second_validation
         ), "'Average' is wrongly displayed in UI"
 
+    @polarion_id("OCS-6262")
+    def test_consumption_trend_with_prometheus_failures(self, setup_ui_class):
+        """
+        Fail prometheus and verify the Consumption trend in the ODF dashboard to make sure
+        ‘Estimated days until full’ and 'Average' reflects accurate value.
+
+            1. Fail the prometheus pods by deleting them. New pods will be created automatically.
+            2. When the new prometheus pods  up, Consumption trend should be displayed in the dashboard.
+            3. Check the values for  ‘Estimated days until full’ and ‘Average of storage consumption per day’
+            4. Should show close to the values before deleting the prometheus pod
+
+        """
+        validation_ui_obj = ValidationUI()
+        logger.info("Get the value of 'Estimated days until full' from UI")
+        est_days_before = validation_ui_obj.get_est_days_from_ui()
+        logger.info(
+            f"The value of 'Estimated days until full' from UI is {est_days_before} before failing prometheus"
+        )
+        average_before = validation_ui_obj.get_avg_consumption_from_ui()
+        logger.info(
+            f"'Average of storage consumption per day' from UI is {average_before} before failing prometheus"
+        )
+        logger.info("Bring down the prometheus")
+        list_of_prometheus_pod_obj = get_prometheus_pods()
+        delete_pods(list_of_prometheus_pod_obj)
+        est_days_after = ""
+        for sampler in TimeoutSampler(
+            timeout=300, sleep=30, func=validation_ui_obj.get_est_days_from_ui
+        ):
+            if sampler:
+                est_days_after = sampler
+                break
+            else:
+                logger.info("dashboard is not ready yet")
+        est_days_after = validation_ui_obj.get_est_days_from_ui()
+        logger.info(
+            f"From the UI, Estimated Days: {est_days_after} after prometheus recovered from failure"
+        )
+        average_after = validation_ui_obj.get_avg_consumption_from_ui()
+        logger.info(
+            f"'Average of storage consumption' from UI is {average_after} after prometheus recovered from failure"
+        )
+        # rel_tol 0.1 means upto 10% tolerance which means that difference between  manual and UI est days is up to 10%
+        assert math.isclose(
+            est_days_before, est_days_after, rel_tol=0.1
+        ), "Estimated days until full did not match before and after prometheus fail"
+        assert math.isclose(
+            average_before, average_after, rel_tol=0.1
+        ), "'Average of storage consumption per day' did not match before and after prometheus fail"
+
+    @polarion_id("OCS-6263")
     def test_consumption_trend_with_mgr_failover(self, setup_ui_class):
         """
         Verify storage consumption trend with Mgr failover
@@ -207,55 +262,7 @@ class TestConsumptionTrendUI(ManageTest):
             first_validation or second_validation
         ), "'Estimated days until full' is wrongly displayed in UI"
 
-    def test_consumption_trend_with_prometheus_failures(self, setup_ui_class):
-        """
-        Fail prometheus and verify the Consumption trend in the ODF dashboard to make sure
-        ‘Estimated days until full’ and 'Average' reflects accurate value.
-
-            1. Fail the prometheus pods by deleting them. New pods will be created automatically.
-            2. When the new prometheus pods  up, Consumption trend should be displayed in the dashboard.
-            3. Check the values for  ‘Estimated days until full’ and ‘Average of storage consumption per day’
-            4. Should show close to the values before deleting the prometheus pod
-
-        """
-        validation_ui_obj = ValidationUI()
-        logger.info("Get the value of 'Estimated days until full' from UI")
-        est_days_before = validation_ui_obj.get_est_days_from_ui()
-        logger.info(
-            f"The value of 'Estimated days until full' from UI is {est_days_before} before failing prometheus"
-        )
-        average_before = validation_ui_obj.get_avg_consumption_from_ui()
-        logger.info(
-            f"'Average of storage consumption per day' from UI is {average_before} before failing prometheus"
-        )
-        logger.info("Bring down the prometheus")
-        list_of_prometheus_pod_obj = get_prometheus_pods()
-        delete_pods(list_of_prometheus_pod_obj)
-        est_days_after = ""
-        for sampler in TimeoutSampler(
-            timeout=300, sleep=30, func=validation_ui_obj.get_est_days_from_ui
-        ):
-            if sampler:
-                est_days_after = sampler
-                break
-            else:
-                logger.info("dashboard is not ready yet")
-        est_days_after = validation_ui_obj.get_est_days_from_ui()
-        logger.info(
-            f"From the UI, Estimated Days: {est_days_after} after prometheus recovered from failure"
-        )
-        average_after = validation_ui_obj.get_avg_consumption_from_ui()
-        logger.info(
-            f"'Average of storage consumption' from UI is {average_after} after prometheus recovered from failure"
-        )
-        # rel_tol 0.1 means upto 10% tolerance which means that difference between  manual and UI est days is up to 10%
-        assert math.isclose(
-            est_days_before, est_days_after, rel_tol=0.1
-        ), "Estimated days until full did not match before and after prometheus fail"
-        assert math.isclose(
-            average_before, average_after, rel_tol=0.1
-        ), "'Average of storage consumption per day' did not match before and after prometheus fail"
-
+    @polarion_id("OCS-6264")
     def test_consumption_trend_after_osd_resize(self, setup_ui_class):
         """
         Verify consumption trend after OSD resize
