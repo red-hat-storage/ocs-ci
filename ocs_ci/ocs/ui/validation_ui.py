@@ -8,7 +8,10 @@ import warnings
 import pandas as pd
 from ocs_ci.framework import config
 from ocs_ci.framework.logger_helper import log_step
-from ocs_ci.ocs.cluster import get_used_and_total_capacity_in_gibibytes
+from ocs_ci.ocs.cluster import (
+    get_used_and_total_capacity_in_gibibytes,
+    get_age_of_cluster_in_days,
+)
 from ocs_ci.ocs.exceptions import UnexpectedODFAccessException
 from ocs_ci.ocs.ui.page_objects.backing_store_tab import BackingStoreTab
 from ocs_ci.ocs.ui.page_objects.namespace_store_tab import NameSpaceStoreTab
@@ -16,7 +19,6 @@ from ocs_ci.ocs.ui.page_objects.overview_tab import OverviewTab
 from ocs_ci.ocs.ui.page_objects.page_navigator import PageNavigator
 from ocs_ci.ocs.ui.page_objects.storage_system_details import StorageSystemDetails
 from ocs_ci.ocs import constants
-from ocs_ci.ocs.resources.pod import get_age_of_cluster_in_days
 from ocs_ci.ocs.resources.storage_cluster import StorageCluster
 from ocs_ci.utility import version
 from ocs_ci.utility.utils import TimeoutSampler
@@ -689,7 +691,7 @@ class ValidationUI(PageNavigator):
         Further it looks for the Consumption trend card
 
         Returns:
-            tuple = tpl_of_days_and_avg  ex: (Estimated days, Average)
+            tuple: tpl_of_days_and_avg  ex: (Estimated days, Average)
 
         """
         self.odf_console_plugin_check()
@@ -717,7 +719,7 @@ class ValidationUI(PageNavigator):
         Get the value of 'Estimated days until full' from the UI
 
         Returns:
-            est_days: (int)
+            int: Estimated days until full from UI
 
         """
         collected_tpl_of_days_and_avg = self.odf_storagesystems_consumption_trend()
@@ -730,7 +732,7 @@ class ValidationUI(PageNavigator):
         Get the value of 'Average storage consumption' from the UI
 
         Returns:
-            average: (float)
+            float: Average of storage consumption per day
 
         """
         collected_tpl_of_days_and_avg = self.odf_storagesystems_consumption_trend()
@@ -750,7 +752,7 @@ class ValidationUI(PageNavigator):
         5. Calculate the 'Estimated days until full' by using average and available capacity.
 
         Returns:
-            estimated_days_calculated: (tuple)
+            tuple: Estimated days until full which calculated manually
 
         """
         number_of_days = get_age_of_cluster_in_days()

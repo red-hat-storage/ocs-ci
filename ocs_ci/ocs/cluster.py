@@ -16,8 +16,9 @@ import time
 import os
 import pandas as pd
 import re
+import math
 
-
+from datetime import datetime
 from semantic_version import Version
 from ocs_ci.ocs.utils import thread_init_class
 
@@ -1363,6 +1364,7 @@ def parse_ceph_df_pools(raw_output: str) -> pd.DataFrame:
         "(OMAP)",
         "%USED",
         "MAX AVAIL",
+        "QUOTA OBJECTS",
         "QUOTA OBJECTS",
         "QUOTA BYTES",
         "DIRTY",
@@ -3759,3 +3761,30 @@ def get_used_and_total_capacity_in_gibibytes():
     total_used_in_gibibytes = total_used / (2**30)
     total_capacity_in_gibibytes = total_capacity / (2**30)
     return (total_used_in_gibibytes, total_capacity_in_gibibytes)
+
+
+def get_age_of_cluster_in_days():
+    """
+    Get age of the cluster in days.
+    1. Get creation time by executing oc cmd on cluster
+    2. Get current time from the ceph tools pod
+    3. Calculate time difference between two times
+    4. Convert the time into days
+
+    Returns:
+        int: returns number of days the cluster has been running
+
+    """
+    cmd = "get namespace kube-system -o jsonpath='{.metadata.creationTimestamp}'"
+    creation_time = OCP().exec_oc_cmd(command=cmd, out_yaml_format=False)
+    logger.info(f"The cluster creation time is: {creation_time}")
+    ct_pod = pod.get_ceph_tools_pod()
+    cephcmd = 'date -u +"%Y-%m-%dT%H:%M:%SZ"'
+    current_time = ct_pod.exec_cmd_on_pod(command=cephcmd, out_yaml_format=False)
+    logger.info(f"Current time in the cluster is: {current_time}")
+    d1 = datetime.fromisoformat(creation_time[:-1])
+    d2 = datetime.fromisoformat(current_time.strip()[:-1])
+    time_difference_in_sec = (d2 - d1).total_seconds()
+    seconds_per_day = 24 * 60 * 60
+    time_diff_in_days = time_difference_in_sec / seconds_per_day
+    return math.ceil(time_diff_in_days)
