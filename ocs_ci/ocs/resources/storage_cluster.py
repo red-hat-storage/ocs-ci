@@ -1006,7 +1006,7 @@ def verify_storage_cluster():
     elif storage_cluster.data["spec"].get("resourceProfile") != storage_cluster.data[
         "status"
     ].get("lastAppliedResourceProfile"):
-        timeout = 1200
+        timeout = 1800
     else:
         timeout = 600
     storage_cluster.wait_for_phase(phase="Ready", timeout=timeout)
