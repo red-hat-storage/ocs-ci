@@ -5,6 +5,7 @@ Helper functions specific for DR
 import json
 import logging
 import tempfile
+from datetime import datetime
 
 from ocs_ci.framework import config
 from ocs_ci.ocs import constants, ocp
@@ -885,6 +886,64 @@ def get_all_drpolicy():
     drpolicy_obj = ocp.OCP(kind=constants.DRPOLICY)
     drpolicy_list = drpolicy_obj.get(all_namespaces=True).get("items")
     return drpolicy_list
+
+
+def verify_last_group_sync_time(
+    drpc_obj, scheduling_interval, initial_last_group_sync_time=None
+):
+    """
+    Verifies that the lastGroupSyncTime for a given DRPC object is within the expected range.
+
+    Args:
+        drpc_obj (obj): DRPC object
+        scheduling_interval (int): The scheduling interval in minutes
+        initial_last_group_sync_time (str): Previous lastGroupSyncTime value (optional).
+
+    Returns:
+        str: Current lastGroupSyncTime
+
+    Raises:
+        AssertionError: If the lastGroupSyncTime is outside the expected range
+            (greater than or equal to three times the scheduling interval)
+
+    """
+    restore_index = config.cur_index
+    config.switch_acm_ctx()
+    if initial_last_group_sync_time:
+        for last_group_sync_time in TimeoutSampler(
+            (3 * scheduling_interval * 60), 15, drpc_obj.get_last_group_sync_time
+        ):
+            if last_group_sync_time:
+                if last_group_sync_time != initial_last_group_sync_time:
+                    logger.info(
+                        f"Verified: Current lastGroupSyncTime {last_group_sync_time} is different from "
+                        f"previous value {initial_last_group_sync_time}"
+                    )
+                    break
+            logger.info(
+                "The value of lastGroupSyncTime in drpc is not updated. Retrying..."
+            )
+    else:
+        last_group_sync_time = drpc_obj.get_last_group_sync_time()
+
+    # Verify lastGroupSyncTime
+    time_format = "%Y-%m-%dT%H:%M:%SZ"
+    last_group_sync_time_formatted = datetime.strptime(
+        last_group_sync_time, time_format
+    )
+    current_time = datetime.strptime(
+        datetime.utcnow().strftime(time_format), time_format
+    )
+    time_since_last_sync = (
+        current_time - last_group_sync_time_formatted
+    ).total_seconds() / 60
+    logger.info(f"Time in minutes since the last sync {time_since_last_sync}")
+    assert (
+        time_since_last_sync < 3 * scheduling_interval
+    ), "The syncing of volumes is exceeding three times the scheduled snapshot interval"
+    logger.info("Verified lastGroupSyncTime value within expected range")
+    config.switch_ctx(restore_index)
+    return last_group_sync_time
 
 
 def get_managed_cluster_node_ips():

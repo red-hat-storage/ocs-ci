@@ -63,6 +63,18 @@ class DRPC(OCP):
             result=True
         ), "PeerReady status is not true, failover or relocate action can not be performed"
 
+    def get_last_group_sync_time(self):
+        """
+        Fetch lastGroupSyncTime from DRPC
+
+        Returns:
+            str: lastGroupSyncTime
+
+        """
+        last_group_sync_time = self.get().get("status").get("lastGroupSyncTime")
+        logger.info(f"Current lastGroupSyncTime is {last_group_sync_time}.")
+        return last_group_sync_time
+
 
 def get_drpc_name(namespace):
     """
