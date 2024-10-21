@@ -3,7 +3,12 @@ import random
 import shutil
 import filecmp
 import logging
-from ocs_ci.framework.pytest_customization.marks import polarion_id, blue_squad, tier2
+from ocs_ci.framework.pytest_customization.marks import (
+    polarion_id,
+    blue_squad,
+    tier2,
+    provider_mode,
+)
 from ocs_ci.framework.testlib import BaseTest
 from ocs_ci.utility.monitoring_tool import (
     check_go_version,
@@ -16,6 +21,7 @@ from ocs_ci.utility.utils import exec_cmd
 logger = logging.getLogger(__name__)
 
 
+@provider_mode
 @tier2
 @blue_squad
 @polarion_id("OCS-4844")

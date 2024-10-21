@@ -52,6 +52,7 @@ from ocs_ci.framework.pytest_customization.marks import (
     red_squad,
     runs_on_provider,
     mcg,
+    provider_mode,
 )
 from ocs_ci.utility import version
 from ocs_ci.utility.retry import retry
@@ -87,6 +88,7 @@ def delete_bucket_policy_verify(s3_obj, bucket_name):
             )
 
 
+@provider_mode
 @mcg
 @red_squad
 @runs_on_provider
@@ -201,6 +203,7 @@ class TestS3BucketPolicy(MCGTest):
                     f"{e.response} received invalid error code {response.error['Code']}"
                 )
 
+    @provider_mode
     @pytest.mark.polarion_id("OCS-2146")
     @tier1
     def test_bucket_policy_actions(self, mcg_obj, bucket_factory):
