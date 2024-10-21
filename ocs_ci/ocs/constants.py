@@ -2293,6 +2293,7 @@ AWS_CLOUDFORMATION_TAG = "aws:cloudformation:stack-name"
 
 # aws prefixes
 ACCOUNT_ROLE_PREFIX_ROSA_HCP = "accroleshcp"
+OPERATOR_ROLE_PREFIX_ROSA_HCP = "oproleshcp"
 
 # aws volume constants
 AWS_VOL_PVC_NAME_TAG = "kubernetes.io/created-for/pvc/name"

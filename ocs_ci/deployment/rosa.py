@@ -16,6 +16,7 @@ from ocs_ci.deployment.helpers.rosa_cluster_helpers import (
 )
 from ocs_ci.deployment.ocp import OCPDeployment as BaseOCPDeployment
 from ocs_ci.framework import config
+from ocs_ci.framework.logger_helper import log_step
 from ocs_ci.ocs.resources.pod import get_operator_pods
 from ocs_ci.utility import openshift_dedicated as ocm, rosa
 from ocs_ci.utility.aws import AWS as AWSUtil, delete_sts_iam_roles
@@ -138,12 +139,14 @@ class ROSAOCP(BaseOCPDeployment):
         """
         try:
             rosa_hcp = config.ENV_DATA.get("platform") == constants.ROSA_HCP_PLATFORM
-            cluster_details = ocm.get_cluster_details(self.cluster_name)
-            cluster_id = cluster_details.get("id")
+            oidc_config_id = (
+                get_associated_oidc_config_id(self.cluster_name) if rosa_hcp else None
+            )
+            log_step(f"Destroying ROSA cluster. Hosted CP: {rosa_hcp}")
             delete_status = rosa.destroy_appliance_mode_cluster(self.cluster_name)
             if not delete_status:
                 ocm.destroy_cluster(self.cluster_name)
-            logger.info("Waiting for ROSA cluster to be uninstalled")
+            log_step("Waiting for ROSA cluster to be uninstalled")
             sample = TimeoutSampler(
                 timeout=14400,
                 sleep=300,
@@ -154,15 +157,24 @@ class ROSAOCP(BaseOCPDeployment):
                 err_msg = f"Failed to delete {self.cluster_name}"
                 logger.error(err_msg)
                 raise TimeoutExpiredError(err_msg)
-            rosa.delete_operator_roles(cluster_id)
+            log_step("Deleting ROSA/aws associated resources")
+            oproles_prefix = (
+                f"{constants.OPERATOR_ROLE_PREFIX_ROSA_HCP}-{self.cluster_name}"
+            )
+            rosa.delete_operator_roles(prefix=oproles_prefix)
             if rosa_hcp:
-                oidc_config_id = get_associated_oidc_config_id(cluster_id)
                 if oidc_config_id:
                     rosa.delete_oidc_config(oidc_config_id)
                 # use sts IAM roles for ROSA HCP is mandatory
                 delete_sts_iam_roles()
-            rosa.delete_oidc_provider(cluster_id)
-            delete_account_roles(constants.ACCOUNT_ROLE_PREFIX_ROSA_HCP)
+            rosa.delete_oidc_provider(self.cluster_name)
+            account_roles_prefix = (
+                f"{constants.ACCOUNT_ROLE_PREFIX_ROSA_HCP}-{self.cluster_name}"
+            )
+            delete_account_roles(account_roles_prefix)
+            logger.info(
+                f"Cluster {self.cluster_name} and associated resources deleted successfully"
+            )
         except CommandFailed as err:
             if "There are no subscriptions or clusters with identifier or name" in str(
                 err

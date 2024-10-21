@@ -38,7 +38,9 @@ class ROSAEnvCluster:
         self.kubeadmin_password_path = os.path.join(
             config.ENV_DATA["cluster_path"], config.RUN["password_location"]
         )
-        self.username_path = os.path.join(config.ENV_DATA["cluster_path"], "auth")
+        self.username_path = os.path.join(
+            config.ENV_DATA["cluster_path"], "auth", "admin-user"
+        )
 
         # Create "auth" folder if it doesn't exist.
         abs_path = os.path.expanduser(self.kubeconfig_path)

@@ -78,7 +78,9 @@ def create_cluster(cluster_name, version, region):
         logger.info(f"Using OCP version {rosa_ocp_version}")
 
     if rosa_hcp:
-        account_roles_prefix = constants.ACCOUNT_ROLE_PREFIX_ROSA_HCP
+        account_roles_prefix = (
+            f"{constants.ACCOUNT_ROLE_PREFIX_ROSA_HCP}-{cluster_name}"
+        )
     else:
         account_roles_prefix = "ManagedOpenShift"
     log_step("Creating account roles")
@@ -151,7 +153,7 @@ def create_cluster(cluster_name, version, region):
 
     if rosa_hcp:
         # with rosa hcp we need operator roles to be created before cluster creation
-        prefix = f"oproles-{date_in_minimal_format}{random_letters}"
+        prefix = f"{constants.OPERATOR_ROLE_PREFIX_ROSA_HCP}-{cluster_name}"
         aws_account_id = aws.get_caller_identity()
         log_step("Creating operator roles and waiting them to be created")
         create_operator_roles(
@@ -475,19 +477,29 @@ def validate_ocp_version(version):
 
 def create_account_roles(prefix="ManagedOpenShift"):
     """
-    Create the required account-wide roles and policies, including Operator policies.
+    Create the necessary account-wide roles and policies, including operator-specific policies.
+
+    **Important:**
+    - Each cluster should have a unique prefix for its account roles, rather than using a common prefix across the
+    entire account.
+    - If multiple clusters are deployed with the same role prefix, deleting account roles during the cluster
+    destruction stage could lead to:
+        - Loss of Red Hat (RH) support.
+        - Disruption of communication with worker nodes.
+
+    Ensure that role prefixes are uniquely assigned per cluster to maintain cluster integrity and supportability.
 
     Args:
         prefix (str): role prefix
 
     """
-    if config.ENV_DATA.get("platform") == constants.ROSA_HCP_PLATFORM:
+    if rosa_hcp:
         hosted_cp_param = "--hosted-cp"
     else:
         hosted_cp_param = ""
 
     cmd = f"rosa create account-roles {hosted_cp_param} --mode auto --prefix {prefix} --yes"
-    utils.run_cmd(cmd, timeout=1200)
+    exec_cmd(cmd, timeout=1200)
 
 
 def create_operator_roles(
@@ -498,17 +510,21 @@ def create_operator_roles(
     relevant prefix for the cluster name
 
     Args:
-        cluster (str): cluster name or cluster id
+        cluster (str): cluster name
         prefix (str): role prefix
         oidc_config_id (str): OIDC config id
         aws_account_id (str): AWS account id
         account_roles_prefix (str): account roles prefix
     """
-
+    prefix = (
+        f"{constants.OPERATOR_ROLE_PREFIX_ROSA_HCP}-{cluster}"
+        if prefix == ""
+        else prefix
+    )
     cmd = f"rosa create operator-roles --cluster {cluster} --mode auto --yes"
     # command with prefix should look another way, to avoid error:
     # ERR: A cluster key for STS cluster and an operator roles prefix cannot be specified alongside each other
-    if prefix:
+    if rosa_hcp:
         cmd = (
             "rosa create operator-roles "
             "--hosted-cp "
@@ -836,14 +852,14 @@ def delete_odf_addon(cluster):
             )
 
 
-def delete_operator_roles(cluster_id):
+def delete_operator_roles(prefix):
     """
-    Delete operator roles of the given cluster
+    Delete operator roles with prefix
 
     Args:
-        cluster_id (str): the id of the cluster
+        prefix (str): prefix. Usually it is cluster name set during 'rosa create operator-roles' command
     """
-    cmd = f"rosa delete operator-roles -c {cluster_id} --mode auto --yes"
+    cmd = f"rosa delete operator-roles --prefix {prefix} --mode auto --yes"
     proc = exec_cmd(cmd, timeout=1200)
     if proc.returncode != 0:
         raise CommandFailed(
@@ -855,6 +871,7 @@ def delete_operator_roles(cluster_id):
 def delete_account_roles(prefix):
     """
     Delete account roles
+    ! Important to not delete account roles if there are any clusters in the account using this prefix
 
     Args:
         prefix (str): role prefix
@@ -952,14 +969,14 @@ def destroy_appliance_mode_cluster(cluster):
     return True
 
 
-def delete_oidc_provider(cluster_id):
+def delete_oidc_provider(cluster_name):
     """
     Delete oidc provider of the given cluster
 
     Args:
-        cluster_id (str): the id of the cluster
+        cluster_name (str): the cluster name
     """
-    cmd = f"rosa delete oidc-provider -c {cluster_id} --mode auto --yes"
+    cmd = f"rosa delete oidc-provider -c {cluster_name} --mode auto --yes"
     proc = exec_cmd(cmd, timeout=1200)
     if proc.returncode != 0:
         raise CommandFailed(
