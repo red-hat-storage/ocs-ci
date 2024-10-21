@@ -136,8 +136,47 @@ def setup_logwriter_workloads(
     request.addfinalizer(finalizer)
 
 
+@pytest.fixture(scope="class")
+def setup_cnv_workload(request, cnv_workload, setup_cnv):
+
+    logger.info("Setting up CNV workload and creating some data")
+    vm_obj = cnv_workload(volume_interface=constants.VM_VOLUME_PVC)[0]
+    vm_obj.run_ssh_cmd(command="dd if=/dev/zero of=/file_1.txt bs=1024 count=102400")
+    md5sum_before = vm_obj.run_ssh_cmd(command="md5sum /file_1.txt")
+
+    def finalizer():
+
+        # check vm data written before the failure for integrity
+        logger.info("Waiting for VM SSH connectivity!")
+        vm_obj.wait_for_ssh_connectivity()
+        md5sum_after = vm_obj.run_ssh_cmd(command="md5sum /file_1.txt")
+        assert (
+            md5sum_before == md5sum_after
+        ), "Data integrity of the file inside VM is not maintained during the failure"
+        logger.info(
+            "Data integrity of the file inside VM is maintained during the failure"
+        )
+
+        # check if new data can be created
+        vm_obj.run_ssh_cmd(
+            command="dd if=/dev/zero of=/file_2.txt bs=1024 count=103600"
+        )
+        logger.info("Successfully created new data inside VM")
+
+        # check if the data can be copied back to local machine
+        vm_obj.scp_from_vm(local_path="/tmp", vm_src_path="/file_1.txt")
+        logger.info("VM data is successfully copied back to local machine")
+
+        # stop the VM
+        vm_obj.stop()
+        logger.info("Stoped the VM successfully")
+
+    request.addfinalizer(finalizer)
+
+
 @turquoise_squad
 @stretchcluster_required
+@pytest.mark.usefixtures("setup_cnv_workload")
 @pytest.mark.usefixtures("setup_logwriter_workloads")
 class TestMonAndOSDFailures:
     """
