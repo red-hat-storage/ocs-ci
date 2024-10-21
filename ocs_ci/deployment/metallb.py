@@ -781,10 +781,8 @@ class MetalLBInstaller:
         else:
             self.create_catalog_source(metallb_version=self.upgrade_version)
 
-        metallb_version_post_upgrade = parse_version(self.get_running_metallb_version())
-        logger.info(
-            f"metallb version post upgrade: {parse_version(metallb_version_post_upgrade)}"
-        )
+        metallb_version_post_upgrade = self.get_running_metallb_version()
+        logger.info(f"metallb version post upgrade: {metallb_version_post_upgrade}")
         assert (
             self.upgrade_version in metallb_version_post_upgrade
         ), "Metallb not updated successfully"
