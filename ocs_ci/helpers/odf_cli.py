@@ -149,3 +149,8 @@ class ODFCliRunner:
             "ERROR",
         ), f"log level {log_level} is not supported"
         return self.run_command(f" operator rook set ROOK_LOG_LEVEL {log_level}")
+
+    def run_set_ceph_log_level(self, service: str, log_level: str, subsystem: str):
+        return self.run_command(
+            f" set ceph log-level {service} {subsystem} {log_level}"
+        )
