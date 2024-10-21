@@ -17,7 +17,6 @@ setup(
     python_requires=">=3.9.18",
     install_requires=[
         "apache-libcloud==3.1.0",
-        "cryptography==43.0.1",
         "docopt==0.6.2",
         "gevent==23.9.1",
         "reportportal-client==3.2.3",
