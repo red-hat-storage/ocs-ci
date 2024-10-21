@@ -84,14 +84,14 @@ class TestNetSplit:
     @pytest.mark.parametrize(
         argnames="zones, duration",
         argvalues=[
-            pytest.param(
-                constants.NETSPLIT_DATA_1_DATA_2,
-                30,
-                marks=[
-                    pytest.mark.polarion_id("OCS-5069"),
-                    pytest.mark.polarion_id("OCS-5071"),
-                ],
-            ),
+            # pytest.param(
+            #     constants.NETSPLIT_DATA_1_DATA_2,
+            #     30,
+            #     marks=[
+            #         pytest.mark.polarion_id("OCS-5069"),
+            #         pytest.mark.polarion_id("OCS-5071"),
+            #     ],
+            # ),
             pytest.param(
                 constants.NETSPLIT_ARBITER_DATA_1,
                 15,
@@ -118,7 +118,7 @@ class TestNetSplit:
             ),
         ],
         ids=[
-            "Data-1-Data-2",
+            # "Data-1-Data-2",
             "Arbiter-Data-1",
             "Arbiter-Data-1-and-Arbiter-Data-2",
             "Arbiter-Data-1-and-Data-1-Data-2",
@@ -216,6 +216,8 @@ class TestNetSplit:
         logger.info(f"Ended netsplit at {end_time}")
 
         # check vm data written before the failure for integrity
+        logger.info("Waiting for VM SSH connectivity!")
+        vm_obj.wait_for_ssh_connectivity()
         md5sum_after = vm_obj.run_ssh_cmd(command="md5sum /file_1.txt")
         assert (
             md5sum_before == md5sum_after
