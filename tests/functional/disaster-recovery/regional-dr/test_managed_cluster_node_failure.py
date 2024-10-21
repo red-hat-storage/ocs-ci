@@ -5,7 +5,7 @@ import pytest
 
 from ocs_ci.framework import config
 from ocs_ci.framework.testlib import tier4, tier4b
-from ocs_ci.framework.pytest_customization.marks import turquoise_squad
+from ocs_ci.framework.pytest_customization.marks import rdr, turquoise_squad
 from ocs_ci.helpers import dr_helpers
 from ocs_ci.helpers.helpers import run_cmd_verify_cli_output
 from ocs_ci.ocs import constants
@@ -24,6 +24,7 @@ from ocs_ci.utility.utils import archive_ceph_crashes, ceph_health_check
 logger = logging.getLogger(__name__)
 
 
+@rdr
 @tier4
 @tier4b
 @turquoise_squad
