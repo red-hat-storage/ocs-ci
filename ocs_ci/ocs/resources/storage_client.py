@@ -144,7 +144,9 @@ class StorageClient:
 
         # Pull storage-client yaml data
         log.info("Pulling storageclient CR data from yaml")
-        storage_client_data = templating.load_yaml(constants.STORAGE_CLIENT_YAML)
+        storage_client_data = templating.load_yaml(
+            constants.PROVIDER_MODE_STORAGE_CLIENT
+        )
         resource_name = storage_client_data["metadata"]["name"]
         log.info(f"the resource name: {resource_name}")
 

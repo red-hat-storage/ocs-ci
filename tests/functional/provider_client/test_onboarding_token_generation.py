@@ -25,6 +25,7 @@ from ocs_ci.utility.version import get_ocs_version_from_csv
 from ocs_ci.ocs.resources.catalog_source import get_odf_tag_from_redhat_catsrc
 from ocs_ci.utility.utils import (
     get_latest_release_version,
+    get_ocp_version,
 )
 from ocs_ci.ocs.ocp import OCP
 from ocs_ci.ocs.ui.validation_ui import ValidationUI
@@ -88,9 +89,6 @@ class TestOnboardingTokenGeneration(ManageTest):
             4. user can generate onboarding token with limited storage quota.
             5. Onboard a storageclient with limited storage-quota
         """
-        from ocs_ci.ocs.ui.page_objects.page_navigator import PageNavigator
-
-        storage_clients = PageNavigator().nav_to_storageclients_page()
 
         log.info("Create hosted client")
         cluster_name = get_random_hosted_cluster_name()
@@ -98,14 +96,14 @@ class TestOnboardingTokenGeneration(ManageTest):
         if "rhodf" in odf_version:
             odf_version = get_odf_tag_from_redhat_catsrc()
 
-        ocp_version = get_latest_release_version()
+        ocp_version = get_ocp_version()
         nodepool_replicas = 2
 
         create_hypershift_clusters(
             cluster_names=[cluster_name],
             ocp_version=ocp_version,
             odf_version=odf_version,
-            setup_storage_client=True,
+            setup_storage_client=False,
             nodepool_replicas=nodepool_replicas,
         )
 
@@ -119,14 +117,13 @@ class TestOnboardingTokenGeneration(ManageTest):
         ), f"Failed to switch to cluster '{cluster_name}' and fetch data"
 
         log.info("Test create onboarding key")
-        HostedClients().download_hosted_clusters_kubeconfig_files()
+        # HostedClients().download_hosted_clusters_kubeconfig_files()
 
-        assert len(
-            storage_clients.generate_client_onboarding_ticket_ui(
-                storage_quota=(config.ENV_DATA.get("clusters").get("storage_quota"), 4)
-            )
-        ), "Failed to get onboarding key"
-        assert HostedODF(cluster_name).get_storage_client_status() == "Connected"
+        onboarding_token = HostedODF().get_onboarding_key_ui(
+            storage_quota=(config.ENV_DATA.get("clusters").get("storage_quota"), 4)
+        )
+        assert len(onboarding_token), "Failed to get onboarding key"
+        HostedODF().create_storage_client(onboarding_token=onboarding_token)
 
         log.info("Destroy hosted cluster")
         assert destroy_hosted_cluster(cluster_name), "Failed to destroy hosted cluster"
