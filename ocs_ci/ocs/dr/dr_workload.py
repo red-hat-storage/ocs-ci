@@ -1237,7 +1237,7 @@ class BusyboxDiscoveredApps(DRWorkload):
 
         run_cmd(f"oc create namespace {self.workload_namespace}")
 
-    def delete_workload(self, force=False):
+    def delete_workload(self):
         """
         Delete Discovered Apps
 
