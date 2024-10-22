@@ -2781,9 +2781,9 @@ class RBDDRDeployOps(object):
         )
         timeout = 10
         ocs_version = version.get_ocs_version_from_csv(only_major_minor=True)
-        if ocs_version <= version.get_semantic_version("4.11"):
+        if ocs_version <= version.get_semantic_version("4.11", only_major_minor=True):
             rbd_sidecar_count = constants.RBD_SIDECAR_COUNT
-        elif ocs_version <= version.get_semantic_version("4.16"):
+        elif ocs_version <= version.get_semantic_version("4.16", only_major_minor=True):
             rbd_sidecar_count = constants.RBD_SIDECAR_COUNT_4_12
         else:
             rbd_sidecar_count = constants.RBD_SIDECAR_COUNT_4_17
