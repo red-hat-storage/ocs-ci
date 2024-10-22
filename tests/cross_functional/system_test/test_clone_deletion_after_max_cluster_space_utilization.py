@@ -94,9 +94,8 @@ class TestCloneDeletion(E2ETest):
         logger.info(
             f"Total capacity size is : {self.ceph_capacity} GiB, "
             f"Free capacity size is : {self.ceph_free_capacity} GiB, "
-            f"Creating {self.num_of_clones} clones of {self.pvc_size} GiB PVC. "
+            f"Creating {self.num_of_clones} clones of {self.pvc_size} GiB PVC with file size of {self.filesize} "
         )
-
         self.pvc_obj = pvc_factory(
             interface=interface_type, size=self.pvc_size, status=constants.STATUS_BOUND
         )
@@ -132,10 +131,10 @@ class TestCloneDeletion(E2ETest):
         )
         clones_list = []
 
-        for clone_num in range(self.num_of_clones + 1):
+        for clone_num in range(self.num_of_clones + 2):
             logger.info(f"Start creation of clone number {clone_num}.")
             cloned_pvc_obj = pvc_clone_factory(
-                self.pvc_obj, storageclass=self.pvc_obj.backed_sc, timeout=600
+                self.pvc_obj, storageclass=self.pvc_obj.backed_sc, timeout=900
             )
             cloned_pvc_obj.reload()
 
