@@ -4,7 +4,7 @@ from ocs_ci.framework.pytest_customization.marks import (
     tier1,
     skipif_ui_not_support,
     skipif_hci_provider_or_client,
-    black_squad,
+    green_squad,
 )
 from ocs_ci.framework.testlib import skipif_ocs_version, ManageTest, ui
 from ocs_ci.ocs.exceptions import (
@@ -76,7 +76,7 @@ class TestPoolUserInterface(ManageTest):
     @ui
     @tier1
     @skipif_ocs_version("<4.8")
-    @black_squad
+    @green_squad
     def test_create_delete_pool(
         self,
         replica,
