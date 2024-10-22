@@ -689,7 +689,7 @@ storage_clients = {
         "//div[@class='pf-v5-c-dropdown request-size-input__unit']/button",
         By.XPATH,
     ),
-    "units_ti": ("li[id=Ti]", by.CSS_SELECTOR),
+    "units_ti": ("li[id=Ti]", By.CSS_SELECTOR),
     "storage_available": ("//span[@data-test='status-text']", By.XPATH),
     "quota_decreased_alert": ("//h4[@class='pf-v5-c-alert__title']", By.XPATH),
     "confirm_quota_change": ("//button[@data-test-id='confirm-action']", By.XPATH),

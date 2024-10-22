@@ -1,6 +1,6 @@
 import logging
 
-from ocs_ci.ocs import constants
+# from ocs_ci.ocs import constants
 from ocs_ci.framework.testlib import (
     skipif_ocs_version,
     ManageTest,

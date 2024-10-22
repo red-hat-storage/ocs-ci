@@ -1,4 +1,5 @@
 import logging
+from selenium.common.exceptions import WebDriverException
 
 from ocs_ci.ocs.ui.base_ui import take_screenshot, copy_dom, BaseUI
 
@@ -125,7 +126,8 @@ class StorageClients(BaseUI):
         )
         try:
             self.do_click(self.storage_clients_loc["edit_quota"])
-        except:
+        except WebDriverException as e:
+            logger.info(e)
             logger.info("Quota changes not possble")
             return False
         if increase_by_one:
@@ -147,6 +149,7 @@ class StorageClients(BaseUI):
             self.do_click(self.storage_clients_loc["confirm_quota_change"])
             logger.info("Quota changes saved")
             return True
-        except:
+        except WebDriverException as e:
+            logger.info(e)
             logger.info("Quota changes could not be saved")
             return False
