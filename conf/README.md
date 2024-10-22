@@ -390,6 +390,8 @@ Upgrade related configuration data.
 * `upgrade_acm_version` - ACM version to which we have to upgrade
 * `upgrade_acm_registry_image` - ACM Image tag from brew which should be used to upgrade
 example: <brew_registry_url>/rh-osbs/iib:565330
+* `upgrade_cnv_version` - cnv version to which we have to upgrade
+* `upgrade_metallb_version` - metallb version to which we have to upgrade
 
 #### AUTH
 
