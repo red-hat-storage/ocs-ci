@@ -2753,7 +2753,7 @@ class IBMCloud(NodesBase):
             wait (bool): True for waiting the instances to stop, False otherwise
 
         """
-        self.ibmcloud.start_nodes(nodes, wait=True)
+        self.ibmcloud.stop_nodes(nodes, wait=True)
 
     def start_nodes(self, nodes, wait=True):
         """

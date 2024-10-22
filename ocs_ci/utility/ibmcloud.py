@@ -345,13 +345,15 @@ class IBMCloud(object):
         Args:
             nodes (list): The OCS objects of the nodes
             wait (bool): True for waiting the instances to start, False otherwise
-
+        
+        Raises:
+            ValueError if the list of nodes is empty
         """
         if not nodes:
             raise ValueError("No nodes found to start")
 
         node_names = [n.name for n in nodes]
-        self.ibmcloud.restart_nodes(nodes)
+        self.restart_nodes(nodes)
 
         if wait:
             # When the node is reachable then the node reaches status Ready.
@@ -368,6 +370,8 @@ class IBMCloud(object):
             nodes (list): The OCS objects of the nodes
             wait (bool): True for waiting the instances to stop, False otherwise
 
+        Raises:
+            ValueError if the list of nodes is empty
         """
         if not nodes:
             raise ValueError("No nodes found to stop")
