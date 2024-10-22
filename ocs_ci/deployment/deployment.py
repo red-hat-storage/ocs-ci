@@ -3635,13 +3635,19 @@ class RDRMultiClusterDROperatorsDeploy(MultiClusterDROperatorsDeploy):
 
         """
 
-        acm_observability_status = bool(
+        acm_observability_readiness_status = bool(
             exec_cmd(
                 "oc get MultiClusterObservability observability -o jsonpath='{.status.conditions[1].status}'"
             )
         )
 
-        if acm_observability_status:
+        acm_observability_install_status = bool(
+            exec_cmd(
+                "oc get MultiClusterObservability observability -o jsonpath='{.status.conditions.status}'"
+            )
+        )
+
+        if acm_observability_readiness_status and acm_observability_install_status:
             logger.info("ACM observability is successfully enabled")
         else:
             logger.error("ACM observability could not be enabled, re-trying...")
