@@ -1,5 +1,7 @@
 import json
 import logging
+import subprocess
+import shlex
 import tempfile
 import time
 
@@ -29,7 +31,9 @@ from ocs_ci.utility.utils import (
     get_ocp_version,
     TimeoutSampler,
     wait_for_machineconfigpool_status,
+    run_cmd,
 )
+from pkg_resources import parse_version
 
 logger = logging.getLogger(__name__)
 
@@ -92,7 +96,9 @@ class MetalLBInstaller:
         )
 
     @retry(CommandFailed, tries=3, delay=15)
-    def create_catalog_source(self):
+    def create_catalog_source(
+        self, metallb_version=config.default_cluster_ctx.ENV_DATA.get("metallb_version")
+    ):
         """
         Create catalog source for MetalLB
 
@@ -103,7 +109,7 @@ class MetalLBInstaller:
         # replace latest version with specific version
         catalog_source_data = templating.load_yaml(QE_APP_REGISTRY_SOURCE)
 
-        metallb_version = config.default_cluster_ctx.ENV_DATA.get("metallb_version")
+        # metallb_version = config.default_cluster_ctx.ENV_DATA.get("metallb_version")
         if not metallb_version:
             metallb_version = get_ocp_version()
 
@@ -698,3 +704,85 @@ class MetalLBInstaller:
         wait_for_machineconfigpool_status(node_type="all")
         logger.info("ICSP applied successfully")
         return self.icsp_brew_registry_exists()
+
+    def metallb_patch_subscription(self, patch):
+        patch_cmd = (
+            f"oc -n {self.namespace_lb} patch sub {constants.METALLB} "
+            f"-p {patch} --type merge"
+        )
+        run_cmd(patch_cmd)
+
+    def get_running_metallb_version(self):
+        """
+        Get the currently deployed cnv version
+
+        Returns:
+            string: metalLB version
+
+        """
+        occmd = f"oc get sub {constants.METALLB} -n {self.namespace_lb} -o json"
+        jq_cmd = "jq -r .status.currentCSV"
+        json_out = subprocess.Popen(shlex.split(occmd), stdout=subprocess.PIPE)
+        metallb_version = subprocess.Popen(
+            shlex.split(jq_cmd), stdin=json_out.stdout, stdout=subprocess.PIPE
+        )
+        json_out.stdout.close()
+        return metallb_version.communicate()[0].decode()
+
+    def upgrade_metallb(self):
+        """
+        Upgrade metalLB operator
+
+        """
+        logger.info("Check if metallb is installed")
+        if not self.metallb_instance_created():
+            logger.error("metalLb operator unavailable")
+            return
+
+        logger.info(
+            f"Currently installed metallb version: {parse_version(self.get_running_metallb_version())}"
+        )
+        self.upgrade_version = config.UPGRADE.get("upgrade_metallb_version")
+        if not self.upgrade_version:
+            self.upgrade_version = get_ocp_version()
+        logger.info(
+            f"Upgarde metallb version to: {parse_version(self.upgrade_version)}"
+        )
+
+        self.catalog_source_name = constants.QE_APP_REGISTRY_CATALOG_SOURCE_NAME
+        catalog_source_data = templating.load_yaml(QE_APP_REGISTRY_SOURCE)
+        # create catsrc
+        if self.catalog_source_created():
+            logger.info(f"Catalog Source {self.catalog_source_name} already exists")
+            # Upgrade image details in the catalogsource
+            image_placeholder = catalog_source_data.get("spec").get("image")
+            catalog_source_data.get("spec").update(
+                {"image": image_placeholder.format(self.upgrade_version)}
+            )
+
+            # install catalog source
+            metallb_catalog_file = tempfile.NamedTemporaryFile(
+                mode="w+", prefix="metallb_catalogsource", delete=False
+            )
+            templating.dump_data_to_temp_yaml(
+                catalog_source_data, metallb_catalog_file.name
+            )
+
+            exec_cmd(f"oc apply -f {metallb_catalog_file.name}", timeout=2400)
+
+            # wait for catalog source is ready
+            metallb_catalog_source = CatalogSource(
+                resource_name=self.catalog_source_name,
+                namespace=MARKETPLACE_NAMESPACE,
+            )
+
+            metallb_catalog_source.wait_for_state("READY")
+
+        else:
+            self.create_catalog_source(metallb_version=self.upgrade_version)
+
+        metallb_version_post_upgrade = self.get_running_metallb_version()
+        logger.info(f"metallb version post upgrade: {metallb_version_post_upgrade}")
+        assert (
+            self.upgrade_version in metallb_version_post_upgrade
+        ), "Metallb not updated successfully"

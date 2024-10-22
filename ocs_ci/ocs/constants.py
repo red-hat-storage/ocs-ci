@@ -1541,15 +1541,15 @@ BALANCED_PROFILE_REQUEST_MEMORY_VALUES = {
 }
 
 PERFORMANCE_PROFILE_REQUEST_CPU_VALUES = {
-    "mgr": "1500m",
-    "mon": "1500m",
+    "mgr": "1500m'",
+    "mon": "1500",
     "osd": "4",
     "mds": "3",
     "rgw": "2",
 }
 PERFORMANCE_PROFILE_REQUEST_MEMORY_VALUES = {
     "mgr": "2Gi",
-    "mon": "3Gi",
+    "mon": "2Gi",
     "osd": "8Gi",
     "mds": "8Gi",
     "rgw": "4Gi",
@@ -1596,7 +1596,7 @@ PERFORMANCE_PROFILE_CPU_LIMIT_VALUES = {
 }
 PERFORMANCE_PROFILE_MEMORY_LIMIT_VALUES = {
     "mgr": "4Gi",
-    "mon": "3Gi",
+    "mon": "2Gi",
     "osd": "8Gi",
     "mds": "8Gi",
     "rgw": "4Gi",
