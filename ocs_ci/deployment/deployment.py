@@ -3643,7 +3643,7 @@ class RDRMultiClusterDROperatorsDeploy(MultiClusterDROperatorsDeploy):
 
         acm_observability_install_status = bool(
             exec_cmd(
-                "oc get MultiClusterObservability observability -o jsonpath='{.status.conditions.status}'"
+                "oc get MultiClusterObservability observability -o jsonpath='{.status.conditions[0].status}'"
             )
         )
 
