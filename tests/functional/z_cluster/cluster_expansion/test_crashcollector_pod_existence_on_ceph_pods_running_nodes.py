@@ -78,7 +78,7 @@ class TestAddNodeCrashCollector(ManageTest):
 
         new_node_name = list(set(get_node_names()) - set(old_nodes))[0]
         new_node = get_node_objs([new_node_name])[0]
-        logger.info(f"New worker node is {new_node_name}")
+        logger.info(f"New worker node is {new_node.name}")
 
         logger.info(f"Checking if the rack/zone of the node {new_node_name} is exist")
         timeout = 120
