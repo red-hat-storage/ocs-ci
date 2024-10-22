@@ -668,7 +668,6 @@ storage_clients = {
         "//div[@class='odf-onboarding-modal__text-area']",
         By.XPATH,
     ),
-    "custom_quota": ("storage-quota-custom", By.ID),
     "quota_value": ("//input[@type='number']", By.XPATH),
     "choose_units": (
         "//div[contains(@class, 'request-size-input__unit')]/button",
@@ -677,6 +676,23 @@ storage_clients = {
     "quota_ti": ("//li[@id='Ti']", By.XPATH),
     "confirm_generation": ("//button[@data-test-id='confirm-action']", By.XPATH),
     "close_token_modal": ("//button[@aria-label='Close']", By.XPATH),
+    "client_name": ("name", By.ID),
+    "cluster_name": ("clusterName", By.ID),
+    "client_quota": ("storageQuota", By.ID),
+    "custom_quota": ("storage-quota-custom", By.ID),
+    "client_kebab_menu": ("//button[@data-test='kebab-button']", By.XPATH),
+    "edit_quota": ("Edit Resource", By.ID),
+    "quota_decrement": ("button[aria-label='Decrement']", By.CSS_SELECTOR),
+    "quota_increment": ("button[aria-label='Increment']", By.CSS_SELECTOR),
+    "new_quota": ("input[type=number]", By.CSS_SELECTOR),
+    "unit_change_button": (
+        "//div[@class='pf-v5-c-dropdown request-size-input__unit']/button",
+        By.XPATH,
+    ),
+    "units_ti": ("li[id=Ti]", by.CSS_SELECTOR),
+    "storage_available": ("//span[@data-test='status-text']", By.XPATH),
+    "quota_decreased_alert": ("//h4[@class='pf-v5-c-alert__title']", By.XPATH),
+    "confirm_quota_change": ("//button[@data-test-id='confirm-action']", By.XPATH),
 }
 
 page_nav = {
