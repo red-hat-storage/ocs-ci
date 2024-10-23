@@ -27,7 +27,7 @@ class TestRegistryImage(E2ETest):
         image_obj = helpers.create_build_from_docker_image(
             namespace=pvc_obj.namespace,
             source_image_label="fio",
-            image_name="registry.redhat.io/fio:latest",
+            image_name="registry.redhat.io/fio",
             install_package="fio",
         )
         image_id = (
