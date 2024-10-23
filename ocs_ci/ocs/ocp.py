@@ -1461,6 +1461,16 @@ def verify_images_upgraded(old_images, object_data):
 
     """
     current_images = get_images(object_data)
+    # from 4.15, noobaa-operator pod has NOOBAA_PSQL_12_IMAGE along with NOOBAA_DB_IMAGE
+    if (
+        "noobaa_psql_12" in current_images
+        and constants.NOOBAA_OPERATOR_DEPLOYMENT
+        in object_data.get("metadata").get("name")
+    ):
+        log.info(
+            f'deleting noobaa_psql_12 image from current images for {object_data.get("metadata").get("name")}'
+        )
+        del current_images["noobaa_psql_12"]
     not_upgraded_images = set(
         [image for image in current_images.values() if image in old_images]
     )
