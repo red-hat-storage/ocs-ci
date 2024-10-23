@@ -5727,6 +5727,11 @@ def nsfs_interface_fixture(request, service_account_factory):
     return nsfs_interface_deployment_factory
 
 
+@pytest.fixture(scope="class")
+def mcg_account_factory_class(request, mcg_obj_session):
+    return mcg_account_factory_fixture(request, mcg_obj_session)
+
+
 @pytest.fixture(scope="function")
 def mcg_account_factory(request, mcg_obj_session):
     return mcg_account_factory_fixture(request, mcg_obj_session)
@@ -6873,7 +6878,7 @@ def cnv_dr_workload(request):
     def teardown():
         for instance in instances:
             try:
-                instance.delete_workload(force=True)
+                instance.delete_workload()
             except ResourceNotDeleted:
                 raise ResourceNotDeleted("Workload deletion was unsuccessful")
 
@@ -6941,7 +6946,7 @@ def discovered_apps_dr_workload(request):
     def teardown():
         for instance in instances:
             try:
-                instance.delete_workload(force=True)
+                instance.delete_workload()
             except ResourceNotDeleted:
                 raise ResourceNotDeleted("Workload deletion was unsuccessful")
 

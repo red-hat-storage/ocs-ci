@@ -655,6 +655,43 @@ class Pod(OCS):
         resource_name = resource_name if resource_name else self.name
         return self.ocp.wait_for_delete(resource_name, timeout=timeout)
 
+    def get_csi_pod_log_details(self, logs_dir, log_file_name):
+        """
+        Gets csi pod log files details
+
+        Args:
+            logs_dir (str): Directory where the logs are looked for
+            log_file_name (str): Current log file name
+
+        Returns:
+            gz_logs_num (int): Number of compressed log files
+            current_log_file_size (int) Size of the current log file
+        """
+
+        all_logs = (
+            self.exec_cmd_on_pod(
+                command=f"-- ls -l {logs_dir}",
+                container_name="log-collector",
+                out_yaml_format=False,
+                shell=True,
+            )
+            .strip()
+            .split("\n")
+        )
+        gz_logs_num = 0
+        current_log_file_size = 0
+
+        for log_file in all_logs[1:]:  # ignore 'total' line
+            file_details = log_file.split()
+            file_name = "".join(file_details[8:])
+            if file_name.startswith(log_file_name) and file_name.endswith(
+                ".gz"
+            ):  # archived compressed log
+                gz_logs_num = gz_logs_num + 1
+            if file_name == log_file_name:  # current log file
+                current_log_file_size = file_details[4]
+        return gz_logs_num, current_log_file_size
+
 
 # Helper functions for Pods
 

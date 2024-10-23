@@ -6,7 +6,7 @@
 apiVersion: v1
 kind: ConfigMap
 metadata:
-  name: mp-custom-allowlist
+  name: observability-metrics-custom-allowlist
   namespace: open-cluster-management-observability
 data:
   metrics_list.yaml: |

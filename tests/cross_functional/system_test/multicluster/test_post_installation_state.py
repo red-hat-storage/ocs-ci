@@ -4,7 +4,7 @@ import pytest
 from ocs_ci.framework import config
 from ocs_ci.ocs import constants, managedservice, ocp
 from ocs_ci.ocs.resources import pod, storage_cluster
-from ocs_ci.framework.pytest_customization.marks import yellow_squad
+from ocs_ci.framework.pytest_customization.marks import yellow_squad, provider_mode
 from ocs_ci.framework.testlib import (
     acceptance,
     provider_client_ms_platform_required,
@@ -78,6 +78,7 @@ class TestPostInstallationState(ManageTest):
                 == consumer_yaml["spec"]["capacity"]
             )
 
+    @provider_mode
     @tier1
     @pytest.mark.polarion_id("OCS-3917")
     @runs_on_provider

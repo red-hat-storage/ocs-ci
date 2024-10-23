@@ -5366,3 +5366,29 @@ def update_volsync_channel():
             logger.error(
                 f"Pod volsync-controller-manager not in {constants.STATUS_RUNNING} after 300 seconds"
             )
+
+
+def verify_performance_profile_change(perf_profile):
+    """
+    Verify that newly applied performance profile got updated in storage cluster
+
+    Args:
+        perf_profile (str): Applied performance profile
+
+    Returns:
+        bool: True in case performance profile is updated, False otherwise
+    """
+    from ocs_ci.ocs.resources.storage_cluster import StorageCluster
+
+    # Importing storage cluster object here to avoid circular dependency
+
+    storage_cluster = StorageCluster(
+        resource_name=config.ENV_DATA["storage_cluster_name"],
+        namespace=config.ENV_DATA["cluster_namespace"],
+    )
+
+    assert (
+        perf_profile == storage_cluster.data["spec"]["resourceProfile"]
+    ), f"Performance profile is not updated successfully to {perf_profile}"
+    logger.info(f"Performance profile successfully got updated to {perf_profile} mode")
+    return True

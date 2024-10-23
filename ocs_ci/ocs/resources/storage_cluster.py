@@ -937,7 +937,7 @@ def verify_ocs_csv(ocs_registry_image=None):
             )
 
 
-@retry(AssertionError, 15, 10, 1)
+@retry(AssertionError, 60, 10, 1)
 def verify_storage_system():
     """
     Verify storage system status
@@ -1006,7 +1006,7 @@ def verify_storage_cluster():
     elif storage_cluster.data["spec"].get("resourceProfile") != storage_cluster.data[
         "status"
     ].get("lastAppliedResourceProfile"):
-        timeout = 1200
+        timeout = 1800
     else:
         timeout = 600
     storage_cluster.wait_for_phase(phase="Ready", timeout=timeout)

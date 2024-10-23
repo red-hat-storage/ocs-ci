@@ -1397,15 +1397,15 @@ BALANCED_PROFILE_REQUEST_MEMORY_VALUES = {
 }
 
 PERFORMANCE_PROFILE_REQUEST_CPU_VALUES = {
-    "mgr": "1500m'",
-    "mon": "1500",
+    "mgr": "1500m",
+    "mon": "1500m",
     "osd": "4",
     "mds": "3",
     "rgw": "2",
 }
 PERFORMANCE_PROFILE_REQUEST_MEMORY_VALUES = {
     "mgr": "2Gi",
-    "mon": "2Gi",
+    "mon": "3Gi",
     "osd": "8Gi",
     "mds": "8Gi",
     "rgw": "4Gi",
@@ -1452,7 +1452,7 @@ PERFORMANCE_PROFILE_CPU_LIMIT_VALUES = {
 }
 PERFORMANCE_PROFILE_MEMORY_LIMIT_VALUES = {
     "mgr": "4Gi",
-    "mon": "2Gi",
+    "mon": "3Gi",
     "osd": "8Gi",
     "mds": "8Gi",
     "rgw": "4Gi",
@@ -2291,6 +2291,10 @@ MIN_NODE_MEMORY = 64 * 10**9
 # aws tags
 AWS_CLOUDFORMATION_TAG = "aws:cloudformation:stack-name"
 
+# aws prefixes
+ACCOUNT_ROLE_PREFIX_ROSA_HCP = "accroleshcp"
+OPERATOR_ROLE_PREFIX_ROSA_HCP = "oproleshcp"
+
 # aws volume constants
 AWS_VOL_PVC_NAME_TAG = "kubernetes.io/created-for/pvc/name"
 AWS_VOL_PV_NAME_TAG = "kubernetes.io/created-for/pv/name"
@@ -3003,6 +3007,9 @@ CCOCTL_LOG_FILE = "ccoctl-service-id.log"
 # Noobaa Secrets
 NOOBAA_BACKEND_SECRET = "noobaa-root-master-key-backend"
 NOOBAA_VOLUME_SECRET = "noobaa-root-master-key-volume"
+
+# Noobaa built in accounts
+NB_OPERATOR_ACC_NAME = "operator@noobaa.io"
 
 # ascii characters
 ENTER_KEY = chr(13)
