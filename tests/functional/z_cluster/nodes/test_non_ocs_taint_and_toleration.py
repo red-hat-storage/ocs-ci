@@ -7,7 +7,6 @@ from ocs_ci.ocs.cluster import (
     is_flexible_scaling_enabled,
     check_ceph_health_after_add_capacity,
     CephClusterExternal,
-    is_vsphere_ipi_cluster,
 )
 from ocs_ci.framework.testlib import (
     tier4b,
@@ -32,9 +31,8 @@ from ocs_ci.ocs.resources.pod import (
 from ocs_ci.ocs.node import (
     taint_nodes,
     untaint_nodes,
-    get_worker_nodes,
     wait_for_nodes_status,
-    get_nodes,
+    get_ocs_nodes,
 )
 from ocs_ci.utility.retry import retry
 from ocs_ci.ocs.resources import storage_cluster
@@ -99,7 +97,7 @@ class TestNonOCSTaintAndTolerations(E2ETest):
             params = '[{"op": "remove", "path": "/spec/placement"},]'
             storagecluster_obj.patch(params=params, format_type="json")
 
-            logger.info("Remove tolerations to the subscription")
+            logger.info("Remove tolerations from subscriptions")
             sub_list = ocp.get_all_resource_names_of_a_kind(kind=constants.SUBSCRIPTION)
 
             sub_obj = ocp.OCP(
@@ -114,30 +112,19 @@ class TestNonOCSTaintAndTolerations(E2ETest):
             time.sleep(180)
             assert wait_for_pods_to_be_running(
                 timeout=900, sleep=15
-            ), "some of the pods didn't came up running"
+            ), "Few pods failed to reach the desired running state"
 
         request.addfinalizer(finalizer)
 
-    def test_non_ocs_taint_and_tolerations(self, nodes):
+    def apply_custom_taint_and_toleration(self):
         """
-        Test runs the following steps
-        1. Taint odf nodes with non-ocs taint
-        2. Set tolerations on storagecluster, subscription, configmap and ocsinit
-        3. check tolerations on all subscription yaml.
-        4. Check toleration on all odf pods.
-        5. Add Capacity.
-        6. Reboot one of the nodes and check toleration on all odf pods on that node.
-        7. Replace one of the nodes and check all odf pods on that node are running.
+        Apply custom taints and tolerations.
 
         """
-
-        number_of_pods_before = len(
-            get_all_pods(namespace=config.ENV_DATA["cluster_namespace"])
-        )
-
         logger.info("Taint all nodes with non-ocs taint")
-        ocs_nodes = get_worker_nodes()
-        taint_nodes(nodes=ocs_nodes, taint_label="xyz=true:NoSchedule")
+        ocs_nodes = get_ocs_nodes()
+        for node in ocs_nodes:
+            taint_nodes(nodes=[node.name], taint_label="xyz=true:NoSchedule")
 
         resource_name = constants.DEFAULT_CLUSTERNAME
         if config.DEPLOYMENT["external_mode"]:
@@ -245,23 +232,50 @@ class TestNonOCSTaintAndTolerations(E2ETest):
 
             configmap_obj.patch(params=params, format_type="merge")
             logger.info(f"Successfully added toleration to {configmap_obj.kind}")
+            if config.ENV_DATA["mcg_only_deployment"]:
+                logger.info("Wait some time after adding toleration for pods respin")
+                waiting_time = 60
+                logger.info(f"Waiting {waiting_time} seconds...")
+                time.sleep(waiting_time)
+                logger.info("Force delete all pods")
+                pod_list = get_all_pods(
+                    namespace=config.ENV_DATA["cluster_namespace"],
+                    exclude_selector=True,
+                )
+                for pod in pod_list:
+                    pod.delete(wait=False)
 
-        if config.ENV_DATA["mcg_only_deployment"]:
-            logger.info("Wait some time after adding toleration for pods respin")
-            waiting_time = 60
-            logger.info(f"Waiting {waiting_time} seconds...")
-            time.sleep(waiting_time)
-            logger.info("Force delete all pods")
-            pod_list = get_all_pods(
-                namespace=config.ENV_DATA["cluster_namespace"],
-                exclude_selector=True,
-            )
-            for pod in pod_list:
-                pod.delete(wait=False)
+    def test_non_ocs_taint_and_tolerations(self, nodes):
+        """
+        Test runs the following steps
+        1. Taint odf nodes with non-ocs taint
+        2. Set tolerations on storagecluster, subscription, configmap and ocsinit
+        3. check tolerations on all subscription yaml.
+        4. Check toleration on all odf pods.
+        5. Add Capacity.
+        6. Reboot one of the nodes and check toleration on all odf pods on that node.
+        7. Replace one of the nodes and check all odf pods on that node are running.
 
-        logger.info("After edit wait for some time for pods to respin as expected")
+        """
+
+        number_of_pods_before = len(
+            get_all_pods(namespace=config.ENV_DATA["cluster_namespace"])
+        )
+
+        logger.info("Apply custom taints and tolerations.")
+        self.apply_custom_taint_and_toleration()
+
+        retry((CommandFailed, TolerationNotFoundException), tries=5, delay=10,)(
+            check_toleration_on_subscriptions
+        )(toleration_key="xyz")
+
+        logger.info(
+            "After adding toleration wait for some time for pods to respin as expected"
+        )
         time.sleep(300)
-        assert wait_for_pods_to_be_running(timeout=900, sleep=15)
+        assert wait_for_pods_to_be_running(
+            timeout=900, sleep=15
+        ), "Few pods failed to reach the desired running state"
 
         logger.info(
             "Check non-ocs toleration on all newly created pods under openshift-storage NS"
@@ -308,19 +322,42 @@ class TestNonOCSTaintAndTolerations(E2ETest):
             ), "New OSDs failed to reach running state"
             check_ceph_health_after_add_capacity(ceph_rebalance_timeout=2500)
 
-        # Reboot one of the nodes
-        node = get_nodes("worker", num_of_nodes=1)
-        if is_vsphere_ipi_cluster():
-            nodes.restart_nodes(nodes=node, wait=False)
-            node_names = [n.name for n in node]
-            wait_for_nodes_status(node_names, constants.STATUS_READY, timeout=420)
-        else:
-            nodes.restart_nodes_by_stop_and_start(nodes=node)
+    def test_reboot_on_tainted_node(self, nodes):
+        """
+        1. Taint odf nodes with non-ocs taint
+        2. Set tolerations on storagecluster, subscription, configmap and ocsinit
+        3. check tolerations on all subscription yaml.
+        4. Check toleration on all odf pods.
+        5. Reboot one of the nodes and check toleration on all odf pods on that node.
 
-        # Wait some time after rebooting master
-        waiting_time = 320
-        logger.info(f"Waiting {waiting_time} seconds.")
-        time.sleep(waiting_time)
+        """
+
+        logger.info("Apply custom taints and tolerations.")
+        self.apply_custom_taint_and_toleration()
+
+        retry((CommandFailed, TolerationNotFoundException), tries=5, delay=10,)(
+            check_toleration_on_subscriptions
+        )(toleration_key="xyz")
+
+        logger.info(
+            "After adding toleration wait for some time for pods to respin as expected"
+        )
+        time.sleep(300)
+        assert wait_for_pods_to_be_running(
+            timeout=900, sleep=15
+        ), "Few pods failed to reach the desired running state"
+
+        logger.info(
+            "Check non-ocs toleration on all newly created pods under openshift-storage NS"
+        )
+        retry((CommandFailed, TolerationNotFoundException), tries=10, delay=10,)(
+            check_toleration_on_pods
+        )(toleration_key="xyz")
+        # Reboot one of the nodes
+        node = get_ocs_nodes(num_of_nodes=1)
+        nodes.restart_nodes(nodes=node, wait=False)
+        node_name = [n.name for n in node]
+        wait_for_nodes_status(node_name, constants.STATUS_READY, timeout=420)
 
         # Validate all nodes and services are in READY state and up
         retry(
@@ -339,10 +376,41 @@ class TestNonOCSTaintAndTolerations(E2ETest):
         retry((CommandFailed, TolerationNotFoundException), tries=5, delay=10,)(
             check_toleration_on_pods
         )(toleration_key="xyz")
+        self.sanity_helpers.health_check(tries=120)
+
+    def test_replacement_of_tainted_node(self):
+        """
+        1. Taint odf nodes with non-ocs taint
+        2. Set tolerations on storagecluster, subscription, configmap and ocsinit
+        3. check tolerations on all subscription yaml.
+        4. Check toleration on all odf pods.
+        5. Replace one of the nodes and check all odf pods on that node are running.
+
+        """
+        logger.info("Apply custom taints and tolerations.")
+        self.apply_custom_taint_and_toleration()
+
+        logger.info(
+            "After adding toleration wait for some time for pods to respin as expected"
+        )
+        time.sleep(300)
+        assert wait_for_pods_to_be_running(
+            timeout=900, sleep=15
+        ), "Few pods failed to reach the desired running state"
+
+        logger.info(
+            "Check non-ocs toleration on all newly created pods under openshift-storage NS"
+        )
+        retry((CommandFailed, TolerationNotFoundException), tries=10, delay=10,)(
+            check_toleration_on_pods
+        )(toleration_key="xyz")
 
         # Replace the node
         osd_node_name = select_osd_node_name()
         delete_and_create_osd_node(osd_node_name)
+        assert wait_for_pods_to_be_running(
+            timeout=900, sleep=15
+        ), "Few pods failed to reach the desired running state"
 
         # Check cluster is health ok and check toleration on pods
         logger.info("Verifying All resources are Running and matches expected result")
@@ -362,10 +430,10 @@ class TestNonOCSTaintAndTolerations(E2ETest):
 
         """
 
-        logger.info("Taint all nodes with custom taint")
-        ocs_nodes = get_worker_nodes()
-        taint_nodes(nodes=ocs_nodes, taint_label="xyz=true:NoSchedule")
-
+        logger.info("Taint all odf nodes with custom taint")
+        ocs_nodes = get_ocs_nodes()
+        for node in ocs_nodes:
+            taint_nodes(nodes=[node.name], taint_label="xyz=true:NoSchedule")
         resource_name = constants.DEFAULT_CLUSTERNAME
         if config.DEPLOYMENT["external_mode"]:
             resource_name = constants.DEFAULT_CLUSTERNAME_EXTERNAL_MODE
@@ -401,14 +469,13 @@ class TestNonOCSTaintAndTolerations(E2ETest):
         storagecluster_obj.patch(params=param, format_type="merge")
         logger.info(f"Successfully added toleration to {storagecluster_obj.kind}")
 
-        logger.info("Add tolerations to the subscription")
+        logger.info("Add tolerations to the subscription other than odf")
         sub_list = ocp.get_all_resource_names_of_a_kind(kind=constants.SUBSCRIPTION)
         param = (
             '{"spec": {"config":  {"tolerations": '
             '[{"effect": "NoSchedule", "key": "xyz", "operator": "Equal", '
             '"value": "true"}]}}}'
         )
-        # Select one subscription other than odf subscription
         selected_sub = None
         for sub in sub_list:
             if sub != constants.ODF_SUBSCRIPTION:
@@ -428,7 +495,7 @@ class TestNonOCSTaintAndTolerations(E2ETest):
             check_toleration_on_subscriptions(toleration_key="xyz")
             raise AssertionError("Toleration was found, but it should not exist.")
         except TolerationNotFoundException:
-            pass
+            logger.info("Toleration not found as expected.")
         time.sleep(300)
         pod_list = get_all_pods(
             namespace=config.ENV_DATA["cluster_namespace"],
@@ -442,10 +509,10 @@ class TestNonOCSTaintAndTolerations(E2ETest):
         ), "Pods are running when they should not be."
 
         logger.info(
-            "Check custom toleration on all newly created pods under openshift-storage"
+            "Validate custom toleration not found on all newly created pods in openshift-storage"
         )
         try:
             check_toleration_on_pods(toleration_key="xyz")
             raise AssertionError("Toleration was found, but it should not exist.")
         except TolerationNotFoundException:
-            pass
+            logger.info("Toleration not found as expected.")
