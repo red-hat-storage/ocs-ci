@@ -1,5 +1,5 @@
 import logging
-import time
+from time import sleep
 
 import pytest
 
@@ -10,6 +10,7 @@ from ocs_ci.helpers import dr_helpers
 from ocs_ci.helpers.helpers import run_cmd_verify_cli_output
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.node import wait_for_nodes_status
+from ocs_ci.ocs.resources.drpc import DRPC
 from ocs_ci.ocs.resources.pod import (
     Pod,
     get_ceph_tools_pod,
@@ -96,7 +97,35 @@ class TestManagedClusterNodeFailure:
         verify the pod is rescheduled on a healthy node and mirroring is working as expected.
 
         """
-        dr_workload(num_of_subscription=1)
+        rbd_workloads = dr_workload(
+            num_of_subscription=1,
+            num_of_appset=1,
+            pvc_interface=constants.CEPHBLOCKPOOL,
+        )
+
+        cephfs_workloads = dr_workload(
+            num_of_subscription=1,
+            num_of_appset=1,
+            pvc_interface=constants.CEPHFILESYSTEM,
+        )
+
+        scheduling_interval = dr_helpers.get_scheduling_interval(
+            rbd_workloads[0].workload_namespace,
+        )
+        wait_time = 1.5 * scheduling_interval  # Time in minutes
+
+        drpc_objs = []
+        for wl in rbd_workloads + cephfs_workloads:
+            if wl.workload_type == constants.SUBSCRIPTION:
+                drpc_obj = DRPC(namespace=wl.workload_namespace)
+            else:
+                drpc_obj = DRPC(
+                    namespace=constants.GITOPS_CLUSTER_NAMESPACE,
+                    resource_name=f"{wl.appset_placement_name}-drpc",
+                )
+
+            drpc_objs.append(drpc_obj)
+
         managed_clusters = get_non_acm_cluster_config()
 
         for cluster in managed_clusters:
@@ -123,7 +152,7 @@ class TestManagedClusterNodeFailure:
             # Wait for pod to be rescheduled. For submariner-gateway, use sleep as it doesn't get rescheduled
             if resource_on_node == "submariner-gateway":
                 logger.info("Waiting for 300 seconds before starting the node")
-                time.sleep(300)
+                sleep(300)
             else:
                 # Wait for pod to reach terminating state or to be deleted
                 assert wait_for_pods_to_be_in_statuses(
@@ -149,6 +178,12 @@ class TestManagedClusterNodeFailure:
                     namespace=value["namespace"], timeout=900
                 ), "Not all the pods reached running state."
             dr_helpers.wait_for_mirroring_status_ok(timeout=600)
+            logger.info(f"Waiting for {wait_time} minutes")
+            sleep(wait_time * 60)
+
+            for obj in drpc_objs:
+                dr_helpers.verify_last_group_sync_time(obj, scheduling_interval)
+            logger.info("Verified lastGroupSyncTime after node failure")
 
     @pytest.mark.parametrize(
         argnames=["resource_on_node"],
@@ -170,7 +205,33 @@ class TestManagedClusterNodeFailure:
         verify the pod is rescheduled on a healthy node and mirroring is working as expected.
 
         """
-        dr_workload(num_of_subscription=1)
+        rbd_workloads = dr_workload(
+            num_of_subscription=1,
+            num_of_appset=1,
+            pvc_interface=constants.CEPHBLOCKPOOL,
+        )
+        cephfs_workloads = dr_workload(
+            num_of_subscription=1,
+            num_of_appset=1,
+            pvc_interface=constants.CEPHFILESYSTEM,
+        )
+
+        scheduling_interval = dr_helpers.get_scheduling_interval(
+            rbd_workloads[0].workload_namespace,
+        )
+        wait_time = 1.5 * scheduling_interval  # Time in minutes
+        drpc_objs = []
+        for wl in rbd_workloads + cephfs_workloads:
+            if wl.workload_type == constants.SUBSCRIPTION:
+                drpc_obj = DRPC(namespace=wl.workload_namespace)
+            else:
+                drpc_obj = DRPC(
+                    namespace=constants.GITOPS_CLUSTER_NAMESPACE,
+                    resource_name=f"{wl.appset_placement_name}-drpc",
+                )
+
+            drpc_objs.append(drpc_obj)
+
         managed_clusters = get_non_acm_cluster_config()
         resources = []
         resources_node = []
@@ -208,7 +269,7 @@ class TestManagedClusterNodeFailure:
             # Sleep for 5 minutes only once
             if resource_on_node == "submariner-gateway" and count == 0:
                 logger.info("Waiting for 300 seconds before starting the nodes")
-                time.sleep(300)
+                sleep(300)
             elif resource_on_node != "submariner-gateway":
                 # Wait for pod to reach terminating state or to be deleted
                 assert wait_for_pods_to_be_in_statuses(
@@ -237,3 +298,9 @@ class TestManagedClusterNodeFailure:
                     namespace=value["namespace"], timeout=900
                 ), "Not all the pods reached running state."
         dr_helpers.wait_for_mirroring_status_ok(timeout=600)
+        logger.info(f"Waiting for {wait_time} minutes")
+        sleep(wait_time * 60)
+
+        for obj in drpc_objs:
+            dr_helpers.verify_last_group_sync_time(obj, scheduling_interval)
+        logger.info("Verified lastGroupSyncTime after node failures")
