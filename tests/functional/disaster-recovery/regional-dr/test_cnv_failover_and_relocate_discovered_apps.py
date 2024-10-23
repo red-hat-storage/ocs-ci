@@ -5,7 +5,7 @@ import pytest
 
 from ocs_ci.deployment.cnv import CNVInstaller
 from ocs_ci.framework import config
-from ocs_ci.framework.testlib import acceptance, tier1
+from ocs_ci.framework.testlib import tier1
 from ocs_ci.framework.pytest_customization.marks import turquoise_squad, rdr
 from ocs_ci.helpers import dr_helpers
 from ocs_ci.helpers.cnv_helpers import run_dd_io
