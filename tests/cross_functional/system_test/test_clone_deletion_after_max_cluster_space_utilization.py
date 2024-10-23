@@ -6,7 +6,6 @@ from ocs_ci.framework.testlib import E2ETest
 from ocs_ci.utility.utils import TimeoutSampler
 from ocs_ci.helpers import helpers
 from ocs_ci.ocs.resources.pvc import flatten_image
-from ocs_ci.ocs.exceptions import TimeoutExpiredError
 from ocs_ci.utility.prometheus import PrometheusAPI
 from ocs_ci.framework.pytest_customization.marks import (
     skipif_external_mode,
@@ -90,7 +89,7 @@ class TestCloneDeletion(E2ETest):
         logger.info(f"pvc size: {self.pvc_size}")
 
         # Converting the filesize from GiB to MB
-        self.filesize = f"{round(self.filesize) * constants.GB2MB}M"
+        self.filesize = f"{round(self.filesize * constants.GB2MB)}M"
         logger.info(
             f"Total capacity size is : {self.ceph_capacity} GiB, "
             f"Free capacity size is : {self.ceph_free_capacity} GiB, "
@@ -131,42 +130,55 @@ class TestCloneDeletion(E2ETest):
         )
         clones_list = []
 
-        for clone_num in range(self.num_of_clones + 2):
-            logger.info(f"Start creation of clone number {clone_num}.")
-            cloned_pvc_obj = pvc_clone_factory(
-                self.pvc_obj, storageclass=self.pvc_obj.backed_sc, timeout=900
-            )
-            cloned_pvc_obj.reload()
-
-            if interface_type == constants.CEPHBLOCKPOOL:
-                # flatten the image
-                flatten_image(cloned_pvc_obj)
-                logger.info(
-                    f"Clone with name {cloned_pvc_obj.name} of size {self.pvc_size}Gi was created."
+        # Function to create clones
+        def create_clones(num_of_clones, start_num=0):
+            for clone_num in range(start_num, start_num + num_of_clones):
+                logger.info(f"Start creation of clone number {clone_num}.")
+                cloned_pvc_obj = pvc_clone_factory(
+                    self.pvc_obj, storageclass=self.pvc_obj.backed_sc, timeout=900
                 )
                 cloned_pvc_obj.reload()
-            else:
+
+                if interface_type == constants.CEPHBLOCKPOOL:
+                    # flatten the image
+                    flatten_image(cloned_pvc_obj)
+                    logger.info(
+                        f"Clone with name {cloned_pvc_obj.name} of size {self.pvc_size}Gi was created."
+                    )
+                    cloned_pvc_obj.reload()
+                else:
+                    logger.info(
+                        f"Clone with name {cloned_pvc_obj.name} of size {self.pvc_size}Gi was created."
+                    )
+                clones_list.append(cloned_pvc_obj)
+
+        # Create the initial set of clones
+        create_clones(self.num_of_clones)
+
+        # Verify if expected alerts are seen; if not, continue creating extra clones
+        while True:
+            logger.info(
+                "Verify 'CephClusterCriticallyFull' ,CephOSDNearFull Alerts are seen "
+            )
+            expected_alerts = ["CephOSDNearFull", "CephOSDCriticallyFull"]
+            prometheus = PrometheusAPI(threading_lock=threading_lock)
+            sample = TimeoutSampler(
+                timeout=180,
+                sleep=10,
+                func=prometheus.verify_alerts_via_prometheus,
+                expected_alerts=expected_alerts,
+                threading_lock=threading_lock,
+            )
+
+            if sample.wait_for_func_status(result=True):
                 logger.info(
-                    f"Clone with name {cloned_pvc_obj.name} of size {self.pvc_size}Gi was created."
+                    "Expected alerts have been detected. Stopping clone creation."
                 )
-            clones_list.append(cloned_pvc_obj)
-
-        logger.info(
-            "Verify 'CephClusterCriticallyFull' ,CephOSDNearFull Alerts are seen "
-        )
-        expected_alerts = ["CephOSDNearFull", "CephOSDCriticallyFull"]
-        prometheus = PrometheusAPI(threading_lock=threading_lock)
-        sample = TimeoutSampler(
-            timeout=600,
-            sleep=10,
-            func=prometheus.verify_alerts_via_prometheus,
-            expected_alerts=expected_alerts,
-            threading_lock=threading_lock,
-        )
-
-        if not sample.wait_for_func_status(result=True):
-            logger.error(f"The alerts {expected_alerts} do not exist after 1200 sec")
-            raise TimeoutExpiredError
+                break
+            else:
+                logger.info("Alerts not found yet. Creating extra clones...")
+                # Continue creating more clones (e.g., in batches of 2)
+                create_clones(2, start_num=len(clones_list))
 
         # Make the cluster out of full by increasing the full ratio.
         logger.info("Change Ceph full_ratio from from 85% to 95%")
