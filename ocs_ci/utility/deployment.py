@@ -250,7 +250,8 @@ def create_openshift_install_log_file(cluster_path, console_url):
         fd.writelines(
             [
                 "W/A for our CI to get URL to the cluster in jenkins job. "
-                "Cluster is deployed via Assisted Installer API!\n"
+                "Cluster is deployed via some kind of managed deployment (Assisted Installer API or ROSA). "
+                "OpenShift Installer (IPI or UPI deployment) were not used!\n"
                 f'time="{formatted_time}" level=info msg="Access the OpenShift web-console here: '
                 f"{console_url}\"\n'",
             ]
