@@ -120,3 +120,21 @@ class StorageConsumer:
                 if job["metadata"]["name"].endswith("status-reporter")
             ][0]
         return cronjob
+
+
+def get_all_client_clusters():
+    """
+    Get client cluster names of all storage consumers
+
+    Returns:
+        array: names of client clusters
+    """
+    ocp_storageconsumers = ocp.OCP(
+        kind=constants.STORAGECONSUMER,
+        namespace=config.cluster_ctx.ENV_DATA["cluster_namespace"],
+    )
+    cluster_names = []
+    storageconsumers_data = ocp_storageconsumers.get().get("items")
+    for storageconsumer in storageconsumers_data:
+        cluster_names.append(storageconsumer["status"]["client"]["clusterName"])
+    return cluster_names
