@@ -1,3 +1,5 @@
+import time
+
 import pytest
 import logging
 
@@ -16,6 +18,7 @@ from ocs_ci.ocs.bucket_utils import (
 from ocs_ci.ocs.exceptions import CommandFailed
 from ocs_ci.utility.retry import retry_until_exception
 from ocs_ci.ocs import constants
+from ocs_ci.framework.pytest_customization.marks import mcg, red_squad
 
 logger = logging.getLogger(__name__)
 
@@ -130,6 +133,8 @@ def new_bucket(request, mcg_obj_session):
     return factory
 
 
+@mcg
+@red_squad
 class TestSTSClient:
     def test_sts_assume_role(
         self,
@@ -166,6 +171,7 @@ class TestSTSClient:
         wait_for_noobaa_pods_running()
 
         # create a bucket using noobaa admin creds
+        time.sleep(300)
         bucket_1 = "first-bucket"
         new_bucket(bucket_1)
         logger.info(f"Created bucket {bucket_1}")

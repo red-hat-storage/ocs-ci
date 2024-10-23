@@ -2825,7 +2825,7 @@ def s3_create_bucket(s3_obj, bucket_name, s3_client=None):
     if s3_client:
         return s3_client.create_bucket(Bucket=bucket_name)
     else:
-        return s3_obj.s3_client.create_bucket(Bucket=bucket_name)
+        return s3_obj.s3_resource.create_bucket(Bucket=bucket_name)
 
 
 def s3_delete_bucket(s3_obj, bucket_name, s3_client=None):
