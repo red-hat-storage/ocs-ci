@@ -3008,6 +3008,9 @@ CCOCTL_LOG_FILE = "ccoctl-service-id.log"
 NOOBAA_BACKEND_SECRET = "noobaa-root-master-key-backend"
 NOOBAA_VOLUME_SECRET = "noobaa-root-master-key-volume"
 
+# Noobaa built in accounts
+NB_OPERATOR_ACC_NAME = "operator@noobaa.io"
+
 # ascii characters
 ENTER_KEY = chr(13)
 
