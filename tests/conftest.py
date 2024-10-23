@@ -180,7 +180,7 @@ from ocs_ci.ocs.jenkins import Jenkins
 from ocs_ci.ocs.amq import AMQ
 from ocs_ci.ocs.elasticsearch import ElasticSearch
 from ocs_ci.ocs.ui.base_ui import login_ui, close_browser
-from ocs_ci.ocs.ui.block_pool import BlockPoolUI
+from ocs_ci.ocs.ui.block_pool import StoragePoolUI
 from ocs_ci.ocs.ui.storageclass import StorageClassUI
 from ocs_ci.ocs.couchbase import CouchBase
 from ocs_ci.helpers.longevity_helpers import (
@@ -5307,55 +5307,57 @@ def pv_encryption_azure_kv_setup_factory(request):
 
 
 @pytest.fixture(scope="class")
-def cephblockpool_factory_ui_class(request, setup_ui_class):
-    return cephblockpool_factory_ui_fixture(request, setup_ui_class)
+def storage_pool_factory_ui_class(request, setup_ui_class):
+    return storage_pool_factory_ui_fixture(request, setup_ui_class)
 
 
 @pytest.fixture(scope="session")
-def cephblockpool_factory_ui_session(request, setup_ui_session):
-    return cephblockpool_factory_ui_fixture(request, setup_ui_session)
+def storage_pool_factory_ui_session(request, setup_ui_session):
+    return storage_pool_factory_ui_fixture(request, setup_ui_session)
 
 
 @pytest.fixture(scope="function")
-def cephblockpool_factory_ui(request, setup_ui):
-    return cephblockpool_factory_ui_fixture(request, setup_ui)
+def storage_pool_factory_ui(request, setup_ui, blockpool=True):
+    return storage_pool_factory_ui_fixture(request, setup_ui, blockpool=True)
 
 
-def cephblockpool_factory_ui_fixture(request, setup_ui):
+def storage_pool_factory_ui_fixture(request, setup_ui, blockpool=True):
     """
-    This funcion create new cephblockpool
+    This funcion create new storage pool
     """
     instances = []
 
     def factory(
         replica=3,
         compression=False,
+        blockpool=True,
     ):
         """
         Args:
             replica (int): size of pool 2,3 supported for now
             compression (bool): True to enable compression otherwise False
+            blockpool: True for cephblockpool, False for filesystem storage pool
         Return:
-            (ocs_ci.ocs.resource.ocs) ocs object of the CephBlockPool.
+            (ocs_ci.ocs.resource.ocs) ocs object of the storage pool.
 
         """
-        blockpool_ui_object = BlockPoolUI()
-        pool_name, pool_status = blockpool_ui_object.create_pool(
-            replica=replica, compression=compression
+        storage_pool_ui_object = StoragePoolUI()
+        pool_name, pool_status = storage_pool_ui_object.create_pool(
+            replica=replica, compression=compression, pool_type_block=blockpool
         )
         if pool_status:
             log.info(
                 f"Pool {pool_name} with replica {replica} and compression"
                 f" {compression} was created and is in ready state"
             )
-            ocs_blockpool_obj = create_ocs_object_from_kind_and_name(
+            ocs_storage_pool_obj = create_ocs_object_from_kind_and_name(
                 kind=constants.CEPHBLOCKPOOL,
                 resource_name=pool_name,
             )
-            instances.append(ocs_blockpool_obj)
-            return ocs_blockpool_obj
+            instances.append(ocs_storage_pool_obj)
+            return ocs_storage_pool_obj
         else:
-            blockpool_ui_object.take_screenshot()
+            storage_pool_ui_object.take_screenshot()
             if pool_name:
                 instances.append(
                     create_ocs_object_from_kind_and_name(
@@ -5378,8 +5380,8 @@ def cephblockpool_factory_ui_fixture(request, setup_ui):
             except CommandFailed:
                 log.warning("Pool is already deleted")
                 continue
-            blockpool_ui_obj = BlockPoolUI()
-            if not blockpool_ui_obj.delete_pool(instance.name):
+            storage_pool_ui_obj = StoragePoolUI()
+            if not storage_pool_ui_obj.delete_pool(instance.name):
                 instance.delete()
                 raise PoolNotDeletedFromUI(
                     f"Could not delete block pool {instances.name} from UI."
@@ -5392,28 +5394,28 @@ def cephblockpool_factory_ui_fixture(request, setup_ui):
 
 @pytest.fixture(scope="class")
 def storageclass_factory_ui_class(
-    request, cephblockpool_factory_ui_class, setup_ui_class
+    request, storage_pool_factory_ui_class, setup_ui_class
 ):
     return storageclass_factory_ui_fixture(
-        request, cephblockpool_factory_ui_class, setup_ui_class
+        request, storage_pool_factory_ui_class, setup_ui_class
     )
 
 
 @pytest.fixture(scope="session")
 def storageclass_factory_ui_session(
-    request, cephblockpool_factory_ui_session, setup_ui_session
+    request, storage_pool_factory_ui_session, setup_ui_session
 ):
     return storageclass_factory_ui_fixture(
-        request, cephblockpool_factory_ui_session, setup_ui_session
+        request, storage_pool_factory_ui_session, setup_ui_session
     )
 
 
 @pytest.fixture(scope="function")
-def storageclass_factory_ui(request, cephblockpool_factory_ui, setup_ui):
-    return storageclass_factory_ui_fixture(request, cephblockpool_factory_ui, setup_ui)
+def storageclass_factory_ui(request, storage_pool_factory_ui, setup_ui):
+    return storageclass_factory_ui_fixture(request, storage_pool_factory_ui, setup_ui)
 
 
-def storageclass_factory_ui_fixture(request, cephblockpool_factory_ui, setup_ui):
+def storageclass_factory_ui_fixture(request, storage_pool_factory_ui, setup_ui):
     """
     The function create new storage class without encryption and creates an encrypted storage class vi UI
     if the flag encryption is set to True
@@ -5450,6 +5452,12 @@ def storageclass_factory_ui_fixture(request, cephblockpool_factory_ui, setup_ui)
 
         """
         global sc_name
+        if provisioner == constants.OCS_PROVISIONERS[1]:
+            pool_type = "cephfs"
+            blockpool = False
+        else:
+            pool_type = "rbd"
+            blockpool = True
         storageclass_ui_object = StorageClassUI()
         if encryption:
             sc_name = storageclass_ui_object.create_encrypted_storage_class_ui(
@@ -5465,13 +5473,16 @@ def storageclass_factory_ui_fixture(request, cephblockpool_factory_ui, setup_ui)
             if existing_pool is None and create_new_pool is False:
                 pool_name = default_pool
             if create_new_pool is True:
-                pool_ocs_obj = cephblockpool_factory_ui(
-                    replica=replica, compression=compression
+                log.info(f"Creating {pool_type} pool with replica {replica}")
+                pool_ocs_obj = storage_pool_factory_ui(
+                    replica=replica, compression=compression, blockpool=blockpool
                 )
                 pool_name = pool_ocs_obj.name
             if existing_pool is not None:
                 pool_name = existing_pool
-            sc_name = storageclass_ui_object.create_storageclass(pool_name)
+            sc_name = storageclass_ui_object.create_storageclass(
+                pool_name, provisioner_type=pool_type
+            )
         if sc_name is None:
             log.error("Storageclass was not created")
             raise StorageclassNotCreated(
@@ -5494,7 +5505,7 @@ def storageclass_factory_ui_fixture(request, cephblockpool_factory_ui, setup_ui)
                 log.warning("Storageclass is already deleted")
                 continue
             storageclass_ui_obj = StorageClassUI()
-            if not storageclass_ui_obj.delete_rbd_storage_class(instance.name):
+            if not storageclass_ui_obj.delete_storage_class(instance.name):
                 instance.delete()
                 raise StorageClassNotDeletedFromUI(
                     f"Could not delete storageclass {instances.name} from UI."
