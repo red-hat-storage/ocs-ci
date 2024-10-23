@@ -58,7 +58,7 @@ class TestScaleOSDsRebootNodes(E2ETest):
     pvc_size = 5
 
     def test_scale_osds_reboot_nodes(
-        self, interface, project_factory, multi_pvc_factory, dc_pod_factory
+        self, interface, project_factory, multi_pvc_factory, deployment_pod_factory
     ):
         """
         Check storage utilization, if its less then runs IO,
@@ -78,7 +78,7 @@ class TestScaleOSDsRebootNodes(E2ETest):
 
                 dc_pod_objs = list()
                 for pvc_obj in pvc_objs:
-                    dc_pod_objs.append(dc_pod_factory(pvc=pvc_obj))
+                    dc_pod_objs.append(deployment_pod_factory(pvc=pvc_obj))
 
                 wait_for_dc_app_pods_to_reach_running_state(dc_pod_objs, timeout=1200)
 
