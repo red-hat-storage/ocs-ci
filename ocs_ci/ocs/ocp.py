@@ -1461,19 +1461,31 @@ def get_images(data, images=None):
     return images
 
 
-def verify_images_upgraded(old_images, object_data):
+def verify_images_upgraded(old_images, object_data, ignore_psql_12_verification=False):
     """
     Verify that all images in ocp object are upgraded.
 
     Args:
        old_images (set): Set with old images.
        object_data (dict): OCP object yaml data.
+       ignore_psql_12_verification (bool): If True, psql 12 image is removed from current_images for verification
 
     Raises:
         NonUpgradedImagesFoundError: In case the images weren't upgraded.
 
     """
     current_images = get_images(object_data)
+    # from 4.15, noobaa-operator pod has NOOBAA_PSQL_12_IMAGE along with NOOBAA_DB_IMAGE
+    if (
+        ignore_psql_12_verification
+        and "noobaa_psql_12" in current_images
+        and constants.NOOBAA_OPERATOR_DEPLOYMENT
+        in object_data.get("metadata").get("name")
+    ):
+        log.info(
+            f'deleting noobaa_psql_12 image from current images for {object_data.get("metadata").get("name")}'
+        )
+        del current_images["noobaa_psql_12"]
     not_upgraded_images = set(
         [image for image in current_images.values() if image in old_images]
     )

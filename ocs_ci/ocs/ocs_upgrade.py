@@ -43,7 +43,7 @@ from ocs_ci.ocs.resources.storage_cluster import (
     mcg_only_install_verification,
     ocs_install_verification,
 )
-from ocs_ci.ocs.utils import setup_ceph_toolbox
+from ocs_ci.ocs.utils import setup_ceph_toolbox, get_expected_nb_db_psql_version
 from ocs_ci.utility import version
 from ocs_ci.utility.reporting import update_live_must_gather_image
 from ocs_ci.utility.rgwutils import get_rgw_count
@@ -153,12 +153,17 @@ def verify_image_versions(old_images, upgrade_version, version_before_upgrade):
             "minCount", constants.MIN_NB_ENDPOINT_COUNT_POST_DEPLOYMENT
         )
         noobaa_pods = default_noobaa_pods + min_endpoints
+    noobaa_db_psql_version = get_expected_nb_db_psql_version()
+    ignore_psql_12_verification = True
+    if int(noobaa_db_psql_version) == constants.NOOBAA_POSTGRES_12_VERSION:
+        ignore_psql_12_verification = False
     try:
         verify_pods_upgraded(
             old_images,
             selector=constants.NOOBAA_APP_LABEL,
             count=noobaa_pods,
             timeout=1020,
+            ignore_psql_12_verification=ignore_psql_12_verification,
         )
     except TimeoutException as ex:
         if upgrade_version >= parse_version("4.7"):
