@@ -94,7 +94,7 @@ class TestPostInstallationState(ManageTest):
         consumer_names = managedservice.get_consumer_names()
         for consumer_name in consumer_names:
             expected_log = (
-                f'successfully Enabled the StorageConsumer resource "{consumer_name}"'
+                f"successfully updated Status for StorageConsumer {consumer_name}"
             )
             log_found = False
             for line in log_lines:
@@ -124,12 +124,18 @@ class TestPostInstallationState(ManageTest):
                     ]
                     == consumer_name
                 ):
-                    found_client = (
-                        f"{cephclient['metadata']['annotations']['ocs.openshift.io.storageclaim']}-"
-                        f"{cephclient['metadata']['annotations']['ocs.openshift.io.cephusertype']}"
-                    )
-                    log.info(f"Ceph client {found_client} for {consumer_name} found")
-                    found_clients.append(found_client)
+                    try:
+                        found_client = (
+                            f"{cephclient['metadata']['annotations']['ocs.openshift.io.storageclaim']}-"
+                            f"{cephclient['metadata']['annotations']['ocs.openshift.io.cephusertype']}"
+                        )
+                        log.info(
+                            f"Ceph client {found_client} for {consumer_name} found"
+                        )
+                        found_clients.append(found_client)
+                    except KeyError as err:
+                        log.error(f"Unexpected structure of cephclient yaml: {err}")
+
             for client in {
                 "rbd-provisioner",
                 "rbd-node",
