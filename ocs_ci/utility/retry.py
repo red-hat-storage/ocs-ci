@@ -53,7 +53,6 @@ def retry(
     return deco_retry
 
 
-
 def catch_exceptions(*exceptions):
     """
     Catch unhandled exception and log the exception. This wrapper is useful to catch the exception(s) and
