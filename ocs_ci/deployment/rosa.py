@@ -16,9 +16,16 @@ from ocs_ci.deployment.helpers.rosa_cluster_helpers import (
 )
 from ocs_ci.deployment.ocp import OCPDeployment as BaseOCPDeployment
 from ocs_ci.framework import config
+from ocs_ci.framework.logger_helper import log_step
 from ocs_ci.ocs.resources.pod import get_operator_pods
 from ocs_ci.utility import openshift_dedicated as ocm, rosa
-from ocs_ci.utility.aws import AWS as AWSUtil
+from ocs_ci.utility.aws import AWS as AWSUtil, delete_sts_iam_roles
+from ocs_ci.utility.deployment import create_openshift_install_log_file
+from ocs_ci.utility.rosa import (
+    get_associated_oidc_config_id,
+    delete_account_roles,
+    wait_console_url,
+)
 from ocs_ci.utility.utils import (
     ceph_health_check,
     get_ocp_version,
@@ -95,8 +102,9 @@ class ROSAOCP(BaseOCPDeployment):
 
         logger.info("generate kubeconfig and kubeadmin-password files")
         if config.ENV_DATA["ms_env_type"] == "staging":
+            cluster_path = config.ENV_DATA["cluster_path"]
             kubeconfig_path = os.path.join(
-                config.ENV_DATA["cluster_path"], config.RUN["kubeconfig_location"]
+                cluster_path, config.RUN["kubeconfig_location"]
             )
             ocm.get_kubeconfig(self.cluster_name, kubeconfig_path)
             # this default admin password from secret doesn't work for ROSA HCP staging in the management-console
@@ -104,6 +112,8 @@ class ROSAOCP(BaseOCPDeployment):
             rosa_stage_cluster = ROSAStageEnvCluster(self.cluster_name)
             rosa_stage_cluster.create_admin_and_login()
             rosa_stage_cluster.generate_kubeadmin_password_file()
+            console_url = wait_console_url(self.cluster_name)
+            create_openshift_install_log_file(cluster_path, console_url)
         if config.ENV_DATA["ms_env_type"] == "production":
             if config.ENV_DATA.get("appliance_mode"):
                 logger.info(
@@ -128,12 +138,15 @@ class ROSAOCP(BaseOCPDeployment):
 
         """
         try:
-            cluster_details = ocm.get_cluster_details(self.cluster_name)
-            cluster_id = cluster_details.get("id")
+            rosa_hcp = config.ENV_DATA.get("platform") == constants.ROSA_HCP_PLATFORM
+            oidc_config_id = (
+                get_associated_oidc_config_id(self.cluster_name) if rosa_hcp else None
+            )
+            log_step(f"Destroying ROSA cluster. Hosted CP: {rosa_hcp}")
             delete_status = rosa.destroy_appliance_mode_cluster(self.cluster_name)
             if not delete_status:
                 ocm.destroy_cluster(self.cluster_name)
-            logger.info("Waiting for ROSA cluster to be uninstalled")
+            log_step("Waiting for ROSA cluster to be uninstalled")
             sample = TimeoutSampler(
                 timeout=14400,
                 sleep=300,
@@ -144,8 +157,24 @@ class ROSAOCP(BaseOCPDeployment):
                 err_msg = f"Failed to delete {self.cluster_name}"
                 logger.error(err_msg)
                 raise TimeoutExpiredError(err_msg)
-            rosa.delete_operator_roles(cluster_id)
-            rosa.delete_oidc_provider(cluster_id)
+            log_step("Deleting ROSA/aws associated resources")
+            oproles_prefix = (
+                f"{constants.OPERATOR_ROLE_PREFIX_ROSA_HCP}-{self.cluster_name}"
+            )
+            rosa.delete_operator_roles(prefix=oproles_prefix)
+            if rosa_hcp:
+                if oidc_config_id:
+                    rosa.delete_oidc_config(oidc_config_id)
+                # use sts IAM roles for ROSA HCP is mandatory
+                delete_sts_iam_roles()
+            rosa.delete_oidc_provider(self.cluster_name)
+            account_roles_prefix = (
+                f"{constants.ACCOUNT_ROLE_PREFIX_ROSA_HCP}-{self.cluster_name}"
+            )
+            delete_account_roles(account_roles_prefix)
+            logger.info(
+                f"Cluster {self.cluster_name} and associated resources deleted successfully"
+            )
         except CommandFailed as err:
             if "There are no subscriptions or clusters with identifier or name" in str(
                 err
