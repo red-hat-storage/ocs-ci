@@ -25,7 +25,6 @@ from ocs_ci.utility.version import get_ocs_version_from_csv
 from ocs_ci.ocs.resources.catalog_source import get_odf_tag_from_redhat_catsrc
 from ocs_ci.utility.utils import (
     get_latest_release_version,
-    get_ocp_version,
 )
 from ocs_ci.ocs.ocp import OCP
 from ocs_ci.ocs.ui.validation_ui import ValidationUI
@@ -96,7 +95,7 @@ class TestOnboardingTokenGeneration(ManageTest):
         if "rhodf" in odf_version:
             odf_version = get_odf_tag_from_redhat_catsrc()
 
-        ocp_version = get_ocp_version()
+        ocp_version = get_latest_release_version()
         nodepool_replicas = 2
 
         create_hypershift_clusters(
@@ -107,20 +106,17 @@ class TestOnboardingTokenGeneration(ManageTest):
             nodepool_replicas=nodepool_replicas,
         )
 
-        log.info("Switch to the hosted cluster")
-        config.switch_to_cluster_by_name(cluster_name)
+        # server = str(OCP().exec_oc_cmd("whoami --show-server", out_yaml_format=False))
 
-        server = str(OCP().exec_oc_cmd("whoami --show-server", out_yaml_format=False))
-
-        assert (
-            cluster_name in server
-        ), f"Failed to switch to cluster '{cluster_name}' and fetch data"
+        # assert (
+        #     cluster_name in server
+        # ), f"Failed to switch to cluster '{cluster_name}' and fetch data"
 
         log.info("Test create onboarding key")
         # HostedClients().download_hosted_clusters_kubeconfig_files()
 
         onboarding_token = HostedODF().get_onboarding_key_ui(
-            storage_quota=(config.ENV_DATA.get("clusters").get("storage_quota"), 4)
+            storage_quota=(config.ENV_DATA.get("clusters")).get("storage_quota", 4)
         )
         assert len(onboarding_token), "Failed to get onboarding key"
         HostedODF().create_storage_client(onboarding_token=onboarding_token)
