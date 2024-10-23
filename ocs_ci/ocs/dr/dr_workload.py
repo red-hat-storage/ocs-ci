@@ -1298,7 +1298,7 @@ def validate_data_integrity(namespace, path="/mnt/test/hashfile", timeout=600):
 
 class CnvWorkloadDiscoveredApps(DRWorkload):
     """
-    Class handling everything related to CNV workloads covers Discovered Apps`1
+    Class handling everything related to CNV workloads covers Discovered Apps
 
     """
 
@@ -1359,7 +1359,7 @@ class CnvWorkloadDiscoveredApps(DRWorkload):
     def deploy_workload(self):
         """
 
-        Deployment specific to busybox workload for Discovered/Imperative Apps
+        Deployment specific to CNV workload for Discovered/Imperative Apps
 
         """
         self._deploy_prereqs()
@@ -1393,7 +1393,7 @@ class CnvWorkloadDiscoveredApps(DRWorkload):
 
     def create_namespace(self):
         """
-        Create Namespace for Workload's to run
+        Create namespace for workloads to run
         """
 
         run_cmd(f"oc create namespace {self.workload_namespace}")
@@ -1551,7 +1551,7 @@ class CnvWorkloadDiscoveredApps(DRWorkload):
             skip_replication_resources=skip_replication_resources,
         )
 
-    def delete_workload(self, force=False):
+    def delete_workload(self):
         """
         Delete Discovered Apps
 

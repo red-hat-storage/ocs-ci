@@ -6975,10 +6975,10 @@ def discovered_apps_dr_workload_cnv(request):
     def factory(pvc_vm=1):
         """
         Args:
-            kubeobject (int): Number if Discovered Apps workload with kube object protection to be created
+            kubeobject (int): Number of Discovered Apps workload with kube object protection to be created
 
         Raises:
-            ResourceNotDeleted: In case workload resources not deleted properly
+            ResourceNotDeletedException: In case workload resources are not deleted
 
         Returns:
             list: objects of workload class

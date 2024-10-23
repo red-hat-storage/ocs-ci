@@ -1,6 +1,8 @@
 import logging
 from time import sleep
 
+import pytest
+
 from ocs_ci.deployment.cnv import CNVInstaller
 from ocs_ci.framework import config
 from ocs_ci.framework.testlib import acceptance, tier1
@@ -14,9 +16,9 @@ logger = logging.getLogger(__name__)
 
 
 @rdr
-@acceptance
 @tier1
 @turquoise_squad
+@pytest.mark.polarion_id("OCS-6266")
 class TestCNVFailoverAndRelocateWithDiscoveredApps:
     """
     Test CNV Failover and Relocate with Discovered Apps
