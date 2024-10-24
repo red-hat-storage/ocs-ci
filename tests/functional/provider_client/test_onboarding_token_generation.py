@@ -42,6 +42,15 @@ log = logging.getLogger(__name__)
 @runs_on_provider
 @skipif_managed_service
 class TestOnboardingTokenGeneration(ManageTest):
+    def setup(self):
+        """
+        This is setup method
+        """
+        self.secret_ocp_obj = ocp.OCP(
+            kind=constants.SECRET, namespace=constants.OPENSHIFT_STORAGE_NAMESPACE
+        )
+        self.hosted_clients = HostedClients()
+
     def test_onboarding_token_generation_option_is_available_in_ui(
         self,
         setup_ui,
@@ -57,14 +66,12 @@ class TestOnboardingTokenGeneration(ManageTest):
             3. check Generate client onboarding token option is available
             4. user can generate onboarding token by selecting this option.
         """
-        secret_ocp_obj = ocp.OCP(
-            kind=constants.SECRET, namespace=constants.OPENSHIFT_STORAGE_NAMESPACE
-        )
+
         for secret_name in {
             constants.ONBOARDING_PRIVATE_KEY,
             constants.MANAGED_ONBOARDING_SECRET,
         }:
-            assert secret_ocp_obj.is_exist(
+            assert self.secret_ocp_obj.is_exist(
                 resource_name=secret_name
             ), f"{secret_name} does not exist in {config.ENV_DATA['cluster_namespace']} namespace"
 
@@ -89,37 +96,31 @@ class TestOnboardingTokenGeneration(ManageTest):
             5. Onboard a storageclient with limited storage-quota
         """
 
-        log.info("Create hosted client")
-        cluster_name = get_random_hosted_cluster_name()
-        odf_version = str(get_ocs_version_from_csv()).replace(".stable", "")
-        if "rhodf" in odf_version:
-            odf_version = get_odf_tag_from_redhat_catsrc()
+        # log.info("Create hosted client")
+        # cluster_name = get_random_hosted_cluster_name()
+        # odf_version = str(get_ocs_version_from_csv()).replace(".stable", "")
+        # if "rhodf" in odf_version:
+        #     odf_version = get_odf_tag_from_redhat_catsrc()
 
-        ocp_version = get_latest_release_version()
-        nodepool_replicas = 2
+        # ocp_version = get_latest_release_version()
+        # nodepool_replicas = 2
 
-        create_hypershift_clusters(
-            cluster_names=[cluster_name],
-            ocp_version=ocp_version,
-            odf_version=odf_version,
-            setup_storage_client=False,
-            nodepool_replicas=nodepool_replicas,
-        )
-
-        # server = str(OCP().exec_oc_cmd("whoami --show-server", out_yaml_format=False))
-
-        # assert (
-        #     cluster_name in server
-        # ), f"Failed to switch to cluster '{cluster_name}' and fetch data"
+        # create_hypershift_clusters(
+        #     cluster_names=[cluster_name],
+        #     ocp_version=ocp_version,
+        #     odf_version=odf_version,
+        #     setup_storage_client=False,
+        #     nodepool_replicas=nodepool_replicas,
+        # )
+        cluster_name = "hcp417-bm1-nyy"
+        self.hosted_odf = HostedODF(cluster_name)
 
         log.info("Test create onboarding key")
-        # HostedClients().download_hosted_clusters_kubeconfig_files()
-
-        onboarding_token = HostedODF().get_onboarding_key_ui(
+        onboarding_token = self.hosted_odf.get_onboarding_key_ui(
             storage_quota=(config.ENV_DATA.get("clusters")).get("storage_quota", 4)
         )
         assert len(onboarding_token), "Failed to get onboarding key"
-        HostedODF().create_storage_client(onboarding_token=onboarding_token)
+        self.hosted_odf.create_storage_client(onboarding_token=onboarding_token)
 
         log.info("Destroy hosted cluster")
         assert destroy_hosted_cluster(cluster_name), "Failed to destroy hosted cluster"
@@ -154,6 +155,8 @@ class TestOnboardingTokenGeneration(ManageTest):
             nodepool_replicas=nodepool_replicas,
         )
 
+        self.hosted_odf = HostedODF(cluster_name)
+
         log.info("Switch to the hosted cluster")
         config.switch_to_cluster_by_name(cluster_name)
 
@@ -164,12 +167,12 @@ class TestOnboardingTokenGeneration(ManageTest):
         ), f"Failed to switch to cluster '{cluster_name}' and fetch data"
 
         log.info("Test create onboarding key")
-        HostedClients().download_hosted_clusters_kubeconfig_files()
+        self.hosted_clients.download_hosted_clusters_kubeconfig_files()
 
         assert len(
-            HostedODF(cluster_name).get_onboarding_key()
+            self.hosted_odf(cluster_name).get_onboarding_key()
         ), "Failed to get onboarding key"
-        assert HostedODF(cluster_name).get_storage_client_status() == "Connected"
+        assert self.hosted_odf(cluster_name).get_storage_client_status() == "Connected"
 
         log.info("Destroy hosted cluster")
         assert destroy_hosted_cluster(cluster_name), "Failed to destroy hosted cluster"
