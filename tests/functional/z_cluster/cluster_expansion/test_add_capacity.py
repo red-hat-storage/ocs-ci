@@ -118,7 +118,7 @@ def add_capacity_test(ui_flag=False):
 
 @ignore_leftovers
 @polarion_id("OCS-1191")
-@pytest.mark.second_to_last
+@pytest.mark.order("second_to_last")
 @skipif_managed_service
 @skipif_aws_i3
 @skipif_bm
@@ -152,7 +152,7 @@ class TestAddCapacity(ManageTest):
 
 @ignore_leftovers
 @polarion_id("OCS-4647")
-@pytest.mark.second_to_last
+@pytest.mark.order("second_to_last")
 @skipif_aws_i3
 @skipif_bm
 @skipif_bmpsi
