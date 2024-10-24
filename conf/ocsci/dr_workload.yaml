@@ -140,5 +140,23 @@ ENV_DATA:
       dr_workload_app_pvc_selector: { "appname": "busybox_app6" }
     },
   ]
+  dr_workload_subscription_placement_cephfs: [
+    { name: "busybox-1", workload_dir: "rdr/busybox/cephfs/subscription_with_placement/app-busybox-1",
+      pod_count: 10, pvc_count: 10, is_placement: True,
+      dr_workload_app_pvc_selector: { "appname": "busybox_app1_cephfs" }
+    },
+    { name: "busybox-2", workload_dir: "rdr/busybox/cephfs/subscription_with_placement/app-busybox-2",
+      pod_count: 10, pvc_count: 10, is_placement: True,
+      dr_workload_app_pvc_selector: { "appname": "busybox_app2_cephfs" }
+    },
+    { name: "busybox-3", workload_dir: "rdr/busybox/cephfs/subscription_with_placement/app-busybox-3",
+      pod_count: 10, pvc_count: 10, is_placement: True,
+      dr_workload_app_pvc_selector: { "appname": "busybox_app3_cephfs" }
+    },
+    { name: "busybox-4", workload_dir: "rdr/busybox/cephfs/subscription_with_placement/app-busybox-4",
+      pod_count: 10, pvc_count: 10, is_placement: True,
+      dr_workload_app_pvc_selector: { "appname": "busybox_app4_cephfs" }
+    },
+  ]
 
   # dr_policy_name: PLACEHOLDER
