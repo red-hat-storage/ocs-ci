@@ -3654,7 +3654,8 @@ def update_container_with_mirrored_image(job_pod_dict):
             container = job_pod_dict["spec"]["containers"][0]
         else:
             container = job_pod_dict["spec"]["template"]["spec"]["containers"][0]
-        container["image"] = mirror_image(container["image"])
+        if "/" in container["image"]:
+            container["image"] = mirror_image(container["image"])
     return job_pod_dict
 
 
