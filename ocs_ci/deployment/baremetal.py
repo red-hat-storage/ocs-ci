@@ -21,7 +21,7 @@ from ocs_ci.framework import config
 from ocs_ci.deployment.ocp import OCPDeployment as BaseOCPDeployment
 from ocs_ci.deployment import assisted_installer
 from ocs_ci.ocs import constants, ocp, exceptions
-from ocs_ci.ocs.exceptions import CommandFailed, RhcosImageNotFound
+from ocs_ci.ocs.exceptions import CommandFailed, RhcosImageNotFound, TimeoutExpiredError
 from ocs_ci.ocs.node import get_nodes
 from ocs_ci.ocs.openshift_ops import OCP
 from ocs_ci.utility import ibmcloud_bm
@@ -1054,7 +1054,17 @@ class BAREMETALAI(BAREMETALBASE):
             expected_node_num = (
                 config.ENV_DATA["master_replicas"] + config.ENV_DATA["worker_replicas"]
             )
-            self.ai_cluster.wait_for_discovered_nodes(expected_node_num)
+            try:
+                self.ai_cluster.wait_for_discovered_nodes(expected_node_num)
+            except TimeoutExpiredError:
+                discovered_hosts = [
+                    host["requested_hostname"]
+                    for host in self.ai_cluster.get_infra_env_hosts()
+                ]
+                for machine in master_nodes + worker_nodes:
+                    if machine not in discovered_hosts:
+                        self.set_pxe_boot_and_reboot(machine)
+                self.ai_cluster.wait_for_discovered_nodes(expected_node_num)
 
             # verify validations info
             self.ai_cluster.verify_validations_info_for_discovered_nodes()

@@ -319,6 +319,13 @@ class AssistedInstallerCluster(object):
                 )
                 break
 
+    def get_infra_env_hosts(self):
+        """
+        Return:
+            list: list of discovered hosts in the Infrastructure Environment
+        """
+        return self.api.get_infra_env_hosts(infra_env_id=self.infra_id)
+
     @retry(HostValidationFailed, tries=5, delay=60, backoff=1)
     def verify_validations_info_for_discovered_nodes(self):
         """
