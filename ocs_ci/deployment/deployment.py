@@ -2655,9 +2655,24 @@ def create_fusion_catalog_source():
     Create catalog source for fusion operator
     """
     logger.info("Adding CatalogSource for IBM Fusion")
-    fusion_catalog_source_data = templating.load_yaml(
-        constants.FUSION_CATALOG_SOURCE_YAML
-    )
+    fusion_pre_ga = config.DEPLOYMENT.get("fusion_pre_ga", False)
+
+    if fusion_pre_ga:
+        render_data = {
+            "sds_version": config.DEPLOYMENT.get("fusion_pre_ga_sds_version"),
+            "image_tag": config.DEPLOYMENT.get("fusion_pre_ga_image"),
+        }
+        catalog_source_name = constants.ISF_CATALOG_SOURCE_NAME
+        _templating = templating.Templating(base_path=constants.FDF_TEMPLATE_DIR)
+        template = _templating.render_template(
+            constants.ISF_OPERATOR_SOFTWARE_CATALOG_SOURCE_YAML, render_data
+        )
+        fusion_catalog_source_data = yaml.load(template, Loader=yaml.Loader)
+    else:
+        catalog_source_name = constants.IBM_OPERATOR_CATALOG_SOURCE_NAME
+        fusion_catalog_source_data = templating.load_yaml(
+            constants.FUSION_CATALOG_SOURCE_YAML
+        )
     fusion_catalog_source_manifest = tempfile.NamedTemporaryFile(
         mode="w+", prefix="fusion_catalog_source_manifest", delete=False
     )
@@ -2666,7 +2681,7 @@ def create_fusion_catalog_source():
     )
     run_cmd(f"oc apply -f {fusion_catalog_source_manifest.name}")
     ibm_catalog_source = CatalogSource(
-        resource_name=constants.IBM_OPERATOR_CATALOG_SOURCE_NAME,
+        resource_name=catalog_source_name,
         namespace=constants.MARKETPLACE_NAMESPACE,
     )
 
