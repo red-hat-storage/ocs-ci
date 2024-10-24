@@ -259,9 +259,17 @@ class AcmAddClusters(AcmPageNavigator):
             enable_screenshot=True,
         )
         if ocs_version >= version.VERSION_4_13 and globalnet:
-            log.info("Enabling globalnet")
-            element = self.find_an_element_by_xpath("//input[@id='globalist-enable']")
-            self.driver.execute_script("arguments[0].click();", element)
+            if config.ENV_DATA.get("enable_globalnet"):
+                log.info(
+                    "Enabling globalnet during submariner installation via ACM console"
+                )
+                element = self.find_an_element_by_xpath(
+                    "//input[@id='globalist-enable']"
+                )
+                self.driver.execute_script("arguments[0].click();", element)
+            else:
+                globalnet = False
+                log.warning("Globalnet value is being set to False")
         else:
             log.error(
                 "Globalnet is not supported with ODF version lower than 4.13 or it's disabled"
