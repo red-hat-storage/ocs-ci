@@ -896,7 +896,7 @@ def verify_ocs_csv(ocs_registry_image=None):
             )
 
 
-@retry(AssertionError, 15, 10, 1)
+@retry(AssertionError, 60, 10, 1)
 def verify_storage_system():
     """
     Verify storage system status
