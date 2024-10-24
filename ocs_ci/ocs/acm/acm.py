@@ -267,6 +267,9 @@ class AcmAddClusters(AcmPageNavigator):
                     "//input[@id='globalist-enable']"
                 )
                 self.driver.execute_script("arguments[0].click();", element)
+            else:
+                globalnet = False
+                log.warning("Globalnet value is being set to False")
         else:
             log.error(
                 "Globalnet is not supported with ODF version lower than 4.13 or it's disabled"
