@@ -297,16 +297,19 @@ class ExternalCluster(object):
         out = self.run_exporter_script(params=params)
         logger.info(f"updated permissions for the user are set as {out}")
 
-    def upload_config_ini_file(self):
+    def upload_config_ini_file(self, params):
         """
-        Upload config.ini fikle that is used for external cluster
+        Upload config.ini file that is used for external cluster
         exporter script --config-file param
+
+        Args:
+            params (str): Parameter to pass to exporter script
 
         Returns:
             str: absolute path to config.ini gile
 
         """
-        script_path = params_to_configini_file()
+        script_path = params_to_configini_file(params=params)
         upload_file(
             self.host, script_path, script_path, self.user, self.password, self.ssh_key
         )
@@ -347,7 +350,7 @@ class ExternalCluster(object):
             and config.ENV_DATA.get("use_config_file")
         ):
             # upload config.ini file to external RHCS cluster
-            config_ini_path = self.upload_config_ini_file()
+            config_ini_path = self.upload_config_ini_file(params)
             cmd = f"{python_version} {script_path} --config-file {config_ini_path}"
         else:
             cmd = f"{python_version} {script_path} {params}"
