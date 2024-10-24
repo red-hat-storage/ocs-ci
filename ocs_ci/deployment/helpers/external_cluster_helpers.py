@@ -36,6 +36,7 @@ from ocs_ci.utility.utils import (
     decode,
     download_file,
     wait_for_machineconfigpool_status,
+    params_to_configini_file,
 )
 
 logger = logging.getLogger(__name__)
@@ -296,6 +297,21 @@ class ExternalCluster(object):
         out = self.run_exporter_script(params=params)
         logger.info(f"updated permissions for the user are set as {out}")
 
+    def upload_config_ini_file(self):
+        """
+        Upload config.ini fikle that is used for external cluster
+        exporter script --config-file param
+
+        Returns:
+            str: absolute path to config.ini gile
+
+        """
+        script_path = params_to_configini_file()
+        upload_file(
+            self.host, script_path, script_path, self.user, self.password, self.ssh_key
+        )
+        return script_path
+
     def run_exporter_script(self, params):
         """
         Runs the exporter script on RHCS cluster
@@ -324,7 +340,17 @@ class ExternalCluster(object):
             python_version = "python"
 
         # run the exporter script on external RHCS cluster
-        cmd = f"{python_version} {script_path} {params}"
+        ocs_version = version.get_semantic_ocs_version_from_config()
+        if (
+            "--upgrade" not in params
+            and ocs_version >= version.VERSION_4_17
+            and config.ENV_DATA.get("use_config_file")
+        ):
+            # upload config.ini file to external RHCS cluster
+            config_ini_path = self.upload_config_ini_file()
+            cmd = f"{python_version} {script_path} --config-file {config_ini_path}"
+        else:
+            cmd = f"{python_version} {script_path} {params}"
         retcode, out, err = self.rhcs_conn.exec_cmd(cmd)
         if retcode != 0 or err != "":
             logger.error(
