@@ -119,6 +119,20 @@ class MCG:
             .get("serviceS3")
             .get("internalDNS")[0]
         )
+        self.sts_endpoint = (
+            get_noobaa.get("items")[0]
+            .get("status")
+            .get("services")
+            .get("serviceSts")
+            .get("externalDNS")[0]
+        )
+        self.sts_internal_endpoint = (
+            get_noobaa.get("items")[0]
+            .get("status")
+            .get("services")
+            .get("serviceSts")
+            .get("internalDNS")[0]
+        )
         self.mgmt_endpoint = (
             get_noobaa.get("items")[0]
             .get("status")
@@ -1094,3 +1108,61 @@ class MCG:
             .get("tiers")[0]
             .get("backingStores")[0]
         )
+
+    def assign_sts_role(self, account_id, role_config):
+        """
+        Assign STS role to a Noobaa account
+
+        Args:
+            account_id (str): Name/email/id of the noobaa account
+            role_config (dict): Role config consisting of role name, role policy etc
+
+        """
+
+        cmd = f"sts assign-role --email {account_id} --role_config '{str(role_config)}'"
+        self.exec_mcg_cmd(
+            cmd=cmd,
+        )
+
+    def remove_sts_role(self, account_id):
+        """
+        Remove STS role from a Noobaa account
+
+        Args:
+            account_id (str): Name/email/id of the noobaa account
+
+        """
+        cmd = f"sts remove-role --email {account_id}"
+        self.exec_mcg_cmd(
+            cmd=cmd,
+        )
+
+    def create_s3client_assumed_role(self, sts_assume_role_creds):
+        """
+        Create a s3 client from the credential generated
+        for the assumed role
+
+        Args:
+            sts_assume_role_creds (dict): Credentials generated during the `aws sts assume-role` operation
+
+        """
+        self.assumed_access_key_id = sts_assume_role_creds.get("Credentials").get(
+            "AccessKeyId"
+        )
+        self.assumed_access_key = sts_assume_role_creds.get("Credentials").get(
+            "SecretAccessKey"
+        )
+        self.assumed_session_token = sts_assume_role_creds.get("Credentials").get(
+            "SessionToken"
+        )
+
+        self.assumed_s3_resource = boto3.resource(
+            "s3",
+            verify=retrieve_verification_mode(),
+            endpoint_url=self.s3_endpoint,
+            aws_access_key_id=self.assumed_access_key_id,
+            aws_secret_access_key=self.assumed_access_key,
+            aws_session_token=self.assumed_session_token,
+        )
+
+        self.assumed_s3_client = self.assumed_s3_resource.meta.client
