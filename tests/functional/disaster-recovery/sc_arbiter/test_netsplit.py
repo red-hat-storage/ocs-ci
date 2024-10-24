@@ -3,7 +3,6 @@ import logging
 import time
 import ocpnetsplit
 
-from ocs_ci.utility.retry import retry
 from ocs_ci.framework.pytest_customization.marks import (
     turquoise_squad,
     tier1,
@@ -13,7 +12,7 @@ from ocs_ci.helpers.stretchcluster_helper import (
     recover_workload_pods_post_recovery,
     recover_from_ceph_stuck,
 )
-from ocs_ci.ocs.exceptions import UnexpectedBehaviour, CommandFailed
+from ocs_ci.ocs.exceptions import UnexpectedBehaviour
 
 from ocs_ci.ocs.resources.stretchcluster import StretchCluster
 from ocs_ci.ocs.exceptions import CephHealthException
@@ -87,7 +86,7 @@ class TestNetSplit:
         argvalues=[
             pytest.param(
                 constants.NETSPLIT_DATA_1_DATA_2,
-                15,
+                30,
                 marks=[
                     pytest.mark.polarion_id("OCS-5069"),
                     pytest.mark.polarion_id("OCS-5071"),
@@ -198,14 +197,15 @@ class TestNetSplit:
 
         # get the nodes which are present in the
         # out of quorum zone
-        if (
-            zones != constants.NETSPLIT_ARBITER_DATA_1
-            or zones != constants.NETSPLIT_ARBITER_DATA_1_AND_ARBITER_DATA_2
-        ):
-            retry(CommandFailed, tries=5, delay=10)(sc_obj.get_out_of_quorum_nodes)()
+        # if (
+        #     zones != constants.NETSPLIT_ARBITER_DATA_1
+        #     and zones != constants.NETSPLIT_ARBITER_DATA_1_AND_ARBITER_DATA_2
+        # ):
+        #     sc_obj.get_out_of_quorum_nodes()
 
-        # note the end time (UTC)
-        if not sc_obj.check_ceph_accessibility(timeout=(duration * 60)):
+        # check for ceph accessibility and note the end time (UTC)
+        timeout = (end_time - datetime.now(timezone.utc)).total_seconds()
+        if not sc_obj.check_ceph_accessibility(timeout=timeout):
             assert recover_from_ceph_stuck(
                 sc_obj
             ), "Something went wrong. not expected. please check rook-ceph logs"
@@ -216,6 +216,8 @@ class TestNetSplit:
         logger.info(f"Ended netsplit at {end_time}")
 
         # check vm data written before the failure for integrity
+        logger.info("Waiting for VM SSH connectivity!")
+        vm_obj.wait_for_ssh_connectivity()
         md5sum_after = vm_obj.run_ssh_cmd(command="md5sum /file_1.txt")
         assert (
             md5sum_before == md5sum_after
