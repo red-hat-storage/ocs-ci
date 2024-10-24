@@ -5,8 +5,6 @@ import logging
 
 from botocore.exceptions import ClientError
 
-from ocs_ci.ocs.resources.pod import wait_for_noobaa_pods_running
-
 from uuid import uuid4
 from ocs_ci.ocs.resources.bucket_policy import NoobaaAccount
 from ocs_ci.ocs.bucket_utils import (
@@ -18,7 +16,7 @@ from ocs_ci.ocs.bucket_utils import (
 from ocs_ci.ocs.exceptions import CommandFailed
 from ocs_ci.utility.retry import retry_until_exception
 from ocs_ci.ocs import constants
-from ocs_ci.framework.pytest_customization.marks import mcg, red_squad
+from ocs_ci.framework.pytest_customization.marks import mcg, red_squad, tier2
 
 logger = logging.getLogger(__name__)
 
@@ -135,6 +133,7 @@ def new_bucket(request, mcg_obj_session):
 
 @mcg
 @red_squad
+@tier2
 class TestSTSClient:
     def test_sts_assume_role(
         self,
@@ -167,11 +166,12 @@ class TestSTSClient:
         )
         logger.info("Changed the sts token expiration time to 10 minutes")
 
-        # make sure all noobaa pods are running after the patch
-        wait_for_noobaa_pods_running()
+        # hardcoded wait for 5 minute. test fails because noobaa takes time
+        # stabilise after pod restarts even though all pods are running
+        logger.info("Wait for 5 minute after patch operation")
+        time.sleep(300)
 
         # create a bucket using noobaa admin creds
-        time.sleep(300)
         bucket_1 = "first-bucket"
         new_bucket(bucket_1)
         logger.info(f"Created bucket {bucket_1}")
@@ -191,8 +191,6 @@ class TestSTSClient:
             "access_key": nb_account_1.access_key,
             "ssl": False,
         }
-        # new_bucket("test-bucket", nb_account_1.s3_client)
-        # logger.info("Created new bucket test-bucket")
 
         # create another noobaa account
         user_2 = f"user-{uuid4().hex}"
