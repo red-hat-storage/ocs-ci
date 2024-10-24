@@ -3855,7 +3855,7 @@ def get_pod_used_memory_in_mebibytes(podname):
         podname: (str)  name of the pod to get used memory of it
 
     Returns:
-        memory_value: (int) the used memory of the pod in Mebibytes (MiB)
+        int:  the used memory of the pod in Mebibytes (MiB)
 
     """
     logger.info("Retrieve raw resource utilization data using oc adm top command")
@@ -3927,3 +3927,24 @@ def get_container_images(pod_obj):
         raise ValueError(f"Didn't find images for the pod {pod_obj.name} containers")
 
     return images
+
+
+def get_prometheus_pods(
+    prometheus_label=constants.PROMETHEUS_POD_LABEL,
+    namespace=constants.MONITORING_NAMESPACE,
+):
+    """
+    Fetches info about prometheus pods in the cluster
+
+    Args:
+        prometheus_label (str): label associated with prometheus pods
+        namespace (str): Namespace in which prometheus pods lives
+
+    Returns:
+        list : of prometheus pod objects
+
+    """
+    namespace = namespace
+    pods_with_label_match = get_pods_having_label(prometheus_label, namespace)
+    prometheus_pod_objs = [Pod(**prometheus) for prometheus in pods_with_label_match]
+    return prometheus_pod_objs
