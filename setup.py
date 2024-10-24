@@ -78,7 +78,7 @@ setup(
         "ocp-network-split",
         "pyopenssl==24.2.1",
         "pyparsing==2.4.7",
-        "mysql-connector-python==8.0.27",
+        "mysql-connector-python==9.1.0",
         "pytest-repeat==0.9.3",
         "pexpect>=4.8.0",
         # googleapis-common-protos 1.56.2 needs to have protobuf<4.0.0>=3.15.0
