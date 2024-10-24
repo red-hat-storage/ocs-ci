@@ -84,14 +84,14 @@ class TestNetSplit:
     @pytest.mark.parametrize(
         argnames="zones, duration",
         argvalues=[
-            # pytest.param(
-            #     constants.NETSPLIT_DATA_1_DATA_2,
-            #     30,
-            #     marks=[
-            #         pytest.mark.polarion_id("OCS-5069"),
-            #         pytest.mark.polarion_id("OCS-5071"),
-            #     ],
-            # ),
+            pytest.param(
+                constants.NETSPLIT_DATA_1_DATA_2,
+                30,
+                marks=[
+                    pytest.mark.polarion_id("OCS-5069"),
+                    pytest.mark.polarion_id("OCS-5071"),
+                ],
+            ),
             pytest.param(
                 constants.NETSPLIT_ARBITER_DATA_1,
                 15,
@@ -118,7 +118,7 @@ class TestNetSplit:
             ),
         ],
         ids=[
-            # "Data-1-Data-2",
+            "Data-1-Data-2",
             "Arbiter-Data-1",
             "Arbiter-Data-1-and-Arbiter-Data-2",
             "Arbiter-Data-1-and-Data-1-Data-2",
@@ -197,11 +197,11 @@ class TestNetSplit:
 
         # get the nodes which are present in the
         # out of quorum zone
-        if (
-            zones != constants.NETSPLIT_ARBITER_DATA_1
-            and zones != constants.NETSPLIT_ARBITER_DATA_1_AND_ARBITER_DATA_2
-        ):
-            sc_obj.get_out_of_quorum_nodes()
+        # if (
+        #     zones != constants.NETSPLIT_ARBITER_DATA_1
+        #     and zones != constants.NETSPLIT_ARBITER_DATA_1_AND_ARBITER_DATA_2
+        # ):
+        #     sc_obj.get_out_of_quorum_nodes()
 
         # check for ceph accessibility and note the end time (UTC)
         timeout = (end_time - datetime.now(timezone.utc)).total_seconds()
