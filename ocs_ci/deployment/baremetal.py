@@ -1164,7 +1164,12 @@ class BAREMETALAI(BAREMETALBASE):
                     f"-P {self.srv_details[machine]['mgmt_password']} "
                     f"-H {self.srv_details[machine]['mgmt_console']} chassis bootdev pxe"
                 )
-                self.helper_node_handler.exec_cmd(cmd=cmd, secrets=secrets)
+                rc, stdout, stderr = self.helper_node_handler.exec_cmd(
+                    cmd=cmd, secrets=secrets
+                )
+                assert (
+                    rc == 0
+                ), f"Command execution failed - rc: {rc}, stdout: '{stdout}', stderr: '{stderr}'"
                 logger.info(
                     "Sleeping for 2 Sec to make sure bootdev pxe is set properly using ipmitool cmd"
                 )
@@ -1178,7 +1183,12 @@ class BAREMETALAI(BAREMETALBASE):
                     f"-P {self.srv_details[machine]['mgmt_password']} "
                     f"-H {self.srv_details[machine]['mgmt_console']} chassis power on"
                 )
-                self.helper_node_handler.exec_cmdrun_cmd(cmd=cmd, secrets=secrets)
+                rc, stdout, stderr = self.helper_node_handler.exec_cmd(
+                    cmd=cmd, secrets=secrets
+                )
+                assert (
+                    rc == 0
+                ), f"Command execution failed - rc: {rc}, stdout: '{stdout}', stderr: '{stderr}'"
 
             elif (
                 self.srv_details[machine].get("mgmt_provider", "ipmitool") == "ibmcloud"
