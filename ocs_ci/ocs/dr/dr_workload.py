@@ -173,6 +173,7 @@ class BusyBox(DRWorkload):
                 drpc_yaml_data["spec"]["pvcSelector"][
                     "matchLabels"
                 ] = self.workload_pvc_selector
+                del drpc_yaml_data["spec"]["kubeObjectProtection"]
                 self.drcp_data_yaml = tempfile.NamedTemporaryFile(
                     mode="w+", prefix="drpc", delete=False
                 )
