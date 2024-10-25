@@ -149,13 +149,12 @@ class AcmAddClusters(AcmPageNavigator):
             else:
                 log.error(f"import of cluster: {cluster_name} failed")
 
-    def install_submariner_ui(self, globalnet=True):
+    def install_submariner_ui(self):
         """
         Installs the Submariner on the ACM Hub cluster and expects 2 OCP clusters to be already imported
         on the Hub Cluster to create a link between them
 
-        Args:
-            globalnet (bool): Globalnet is set to True by default for ODF versions greater than or equal to 4.13
+        The function enables globalbet by default unless conf/ocsci/disable_globalnet.yaml is passed
 
         """
         ocs_version = version.get_semantic_ocs_version_from_config()
@@ -258,22 +257,15 @@ class AcmAddClusters(AcmPageNavigator):
             format_locator(self.page_nav["cluster-name-selection"], cluster_name_b),
             enable_screenshot=True,
         )
+        globalnet = config.ENV_DATA.get("enable_globalnet", True)
         if ocs_version >= version.VERSION_4_13 and globalnet:
-            if config.ENV_DATA.get("enable_globalnet"):
-                log.info(
-                    "Enabling globalnet during submariner installation via ACM console"
-                )
-                element = self.find_an_element_by_xpath(
-                    "//input[@id='globalist-enable']"
-                )
-                self.driver.execute_script("arguments[0].click();", element)
-            else:
-                globalnet = False
-                log.warning("Globalnet value is being set to False")
-        else:
-            log.error(
-                "Globalnet is not supported with ODF version lower than 4.13 or it's disabled"
+            log.info(
+                "Enabling globalnet during submariner installation via ACM console"
             )
+            element = self.find_an_element_by_xpath("//input[@id='globalist-enable']")
+            self.driver.execute_script("arguments[0].click();", element)
+        else:
+            log.info("Globalnet is disabled")
         log.info("Click on Next button")
         self.do_click(self.page_nav["next-btn"])
         log.info("Click on 'Enable NAT-T' to uncheck it")
