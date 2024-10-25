@@ -13,6 +13,7 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 
 import yaml
 from gevent import sleep
+from pathlib import Path
 from libcloud.common.exceptions import BaseHTTPError
 from libcloud.common.types import LibcloudError
 from libcloud.compute.providers import get_driver
@@ -941,6 +942,8 @@ def run_must_gather(log_dir_path, image, command=None, cluster_config=None):
             timeout=must_gather_timeout,
             cluster_config=cluster_config,
         )
+        if config.DEPLOYMENT["external_mode"]:
+            collect_ceph_external(path=log_dir_path)
     except CommandFailed as ex:
         log.error(
             f"Failed during must gather logs! Error: {ex}"
@@ -955,6 +958,30 @@ def run_must_gather(log_dir_path, image, command=None, cluster_config=None):
         )
         export_mg_pods_logs(log_dir_path=log_dir_path)
     return mg_output
+
+
+def collect_ceph_external(path):
+    """
+    Collect ceph commands via cli tool on External mode cluster
+
+    Args:
+        path(str): The destination for saving the ceph files [output ceph commands]
+
+    """
+    try:
+        kubeconfig_path = os.path.join(
+            config.ENV_DATA["cluster_path"], config.RUN["kubeconfig_location"]
+        )
+        current_dir = Path(__file__).parent.parent.parent
+        script_path = os.path.join(current_dir, "scripts", "bash", "mg_external.sh")
+        run_cmd(
+            f"sh {script_path} {os.path.join(path, 'ceph_external')} {kubeconfig_path}",
+            timeout=140,
+        )
+    except Exception as ex:
+        log.info(
+            f"Failed to execute the ceph commands script due to the error {str(ex)}"
+        )
 
 
 def export_mg_pods_logs(log_dir_path):
