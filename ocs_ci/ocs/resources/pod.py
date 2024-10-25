@@ -2337,6 +2337,7 @@ def get_pod_restarts_count(
         if (
             "rook-ceph-osd-prepare" not in p.name
             and "rook-ceph-drain-canary" not in p.name
+            and "ceph-file-controller-detect-version" not in p.name
         ):
             pod_count = ocp_pod_obj.get_resource(p.name, "RESTARTS")
             restart_dict[p.name] = int(pod_count.split()[0])
