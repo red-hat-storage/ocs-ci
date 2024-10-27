@@ -116,3 +116,28 @@ class ODFCliRunner:
             "ERROR",
         ), f"log level {log_level} is not supported"
         return self.run_command(f" operator rook set ROOK_LOG_LEVEL {log_level}")
+
+    def run_set_ceph_log_level(self, service: str, log_level: str, subsystem: str):
+        return self.run_command(
+            f" set ceph log-level {service} {subsystem} {log_level}"
+        )
+
+    def run_set_ceph_fill_thresholds(
+        self, thresholds_name: str | list, value: float | list
+    ):
+        if isinstance(thresholds_name, str) and isinstance(value, float):
+            assert thresholds_name in (
+                "full",
+                "nearfull",
+                "backfillfull",
+            ), "treshold value need to be one of full, nearfull, backfillfull"
+            return self.run_command(f" set {thresholds_name} {value}")
+        if isinstance(thresholds_name, list) and isinstance(value, list):
+            for threshold in thresholds_name:
+                assert threshold in (
+                    "full",
+                    "nearfull",
+                    "backfillfull",
+                ), "treshold value need to be one of full, nearfull, backfillfull"
+            for threshold, value in zip(thresholds_name, value):
+                self.run_command(f" set {threshold} {value}")

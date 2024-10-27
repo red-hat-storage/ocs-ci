@@ -34,20 +34,27 @@ class TestStorageClusterCephFullThresholdsParams(ManageTest):
             "value": "0.81",
             "default_value": "0.8",
             "ceph_key": "backfillfull_ratio",
+            "odf_cli_cmd": "backfillfull",
         },
         {
             "sc_key": "fullRatio",
             "value": "0.86",
             "default_value": "0.85",
             "ceph_key": "full_ratio",
+            "odf_cli_cmd": "full",
         },
         {
             "sc_key": "nearFullRatio",
             "value": "0.77",
             "default_value": "0.75",
             "ceph_key": "nearfull_ratio",
+            "odf_cli_cmd": "nearfull",
         },
     ]
+
+    @pytest.fixture()
+    def setup_odf_cli(self, odf_cli_setup):
+        self.odf_cli_runner = odf_cli_setup
 
     @pytest.fixture(autouse=True)
     def teardown_fixture(self, request):
@@ -63,23 +70,33 @@ class TestStorageClusterCephFullThresholdsParams(ManageTest):
 
         request.addfinalizer(finalizer)
 
-    def test_storagecluster_ceph_full_thresholds_params(self):
+    def configure_ceph_full_thresholds(self):
         """
-        Procedure:
-        1.Configure storagecluster CR
-        2.Wait 2 seconds
-        3.Verify ceph full thresholds parameters on cephcluster CR and storagecluster CR are same
-        4.Verify parameters with ceph CLI 'ceph osd dump'
-        5.Configure the default params on storagecluster [treardown]
-
+        Configure storagecluster CR with custom ceph full thresholds
         """
         configure_cephcluster_params_in_storagecluster_cr(
             params=self.TRESHOLDS, default_values=False
         )
 
-        logger.info("Wait 2 sec the cephcluster will updated")
+        logger.info("Wait 2 sec for the cephcluster to be updated")
         time.sleep(2)
 
+    def configure_ceph_full_thresholds_with_odf_cli(self):
+        """
+        Configure storagecluster CR with custom ceph full thresholds using odf cli
+        """
+        treshholds_name = [d["odf_cli_cmd"] for d in self.TRESHOLDS]
+        logger.info(f"treshholds_name: {treshholds_name}")
+        treshholds_value = [d["value"] for d in self.TRESHOLDS]
+        logger.info(f"treshholds_value: {treshholds_value}")
+        self.odf_cli_runner.run_set_ceph_fill_thresholds(
+            thresholds_name=treshholds_name, value=treshholds_value
+        )
+
+    def validate_ceph_full_thresholds(self):
+        """
+        Validate ceph full thresholds parameters on cephcluster CR, storagecluster CR, and ceph CLI
+        """
         logger.info(
             "Verify upgrade parameters on cephcluster CR and storagecluster CR are same"
         )
@@ -110,3 +127,17 @@ class TestStorageClusterCephFullThresholdsParams(ManageTest):
             raise Exception(
                 "The ceph full thresholds storagecluster parameters are not updated in ceph tool"
             )
+
+    @pytest.mark.parametrize("method", ["odf_cli", "oc"])
+    def test_storagecluster_ceph_full_thresholds_params(self, method, setup_odf_cli):
+        """
+        Procedure:
+        1. Configure storagecluster CR with custom ceph full thresholds
+        2. Validate ceph full thresholds parameters on cephcluster CR, storagecluster CR, and ceph CLI
+        3. Configure the default params on storagecluster [teardown]
+        """
+        if method == "odf_cli":
+            self.configure_ceph_full_thresholds_with_odf_cli()
+        elif method == "oc":
+            self.configure_ceph_full_thresholds()
+        self.validate_ceph_full_thresholds()
