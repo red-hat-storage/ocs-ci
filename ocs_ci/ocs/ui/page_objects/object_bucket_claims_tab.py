@@ -156,10 +156,7 @@ class ObjectBucketClaimsTab(ObjectStorage, CreateResourceForm):
         )
 
         if bucketclass:
-            logger.info("Select BucketClass")
-            self.do_click(self.obc_loc["bucketclass_dropdown"])
-            self.do_send_keys(self.obc_loc["bucketclass_text_field"], bucketclass)
-            self.do_click(self.generic_locators["first_dropdown_option"])
+            self.select_bucket_class(bucketclass)
 
         logger.info("Create OBC")
         self.do_click(self.generic_locators["submit_form"])
