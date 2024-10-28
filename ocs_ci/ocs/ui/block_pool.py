@@ -410,6 +410,8 @@ class BlockPoolUI(PageNavigator):
             bool: True if raw capacity of the blockpool is is same in GUI as obtained from CLI, otherwise False
 
         """
+        import numpy as np
+
         logger.info(
             "Checking if the Block Pool Raw Capacity is same in GUI as obtained from CLI"
         )
@@ -442,9 +444,19 @@ class BlockPoolUI(PageNavigator):
             # created custom round method because the cli is rounding the number after .5 and
             # python function rounds from .5
             # ex. cli is doing 157.5 to 157 where as python round function will do 158
+            value_in_UI = float(used_capacity_in_UI)
+            lower_bound = value_in_UI - 1
+            upper_bound = value_in_UI + 1  # Add 1 to include the upper bound
+            step = 0.1
+
+            range_list = [
+                round(num, 1)
+                for num in np.arange(lower_bound, upper_bound + step, step)
+            ]
             if (
-                (self.custom_round(float(used_capacity_in_CLI)))
-                == self.custom_round(float(used_capacity_in_UI))
+                # adding range of +-1 point to avoid error as mentioned in issue/10750
+                (float(used_capacity_in_CLI))
+                in range_list
             ) and (unit == used_capacity_unit_in_UI):
                 logger.info("UI values did match as per CLI for the Raw Capacity")
                 return True
@@ -471,23 +483,3 @@ class BlockPoolUI(PageNavigator):
             locator=format_locator(self.generic_locators["blockpool_name"], pool_name)
         )
         return True
-
-    def custom_round(self, number):
-        """Rounds a number down for values ending in exactly ".5".
-
-        Args:
-        number: The number to round.
-
-        Returns:
-        The rounded number (down for values ending in ".5").
-        """
-        # Convert the number to a string to check the decimal part
-        number_str = str(number)
-
-        # Check if the decimal part exists and ends in ".5"
-        if "." in number_str and number_str.endswith(".5"):
-            # Round down if it ends in ".5"
-            return int(number)
-        else:
-            # Use regular rounding for other cases
-            return round(number)
