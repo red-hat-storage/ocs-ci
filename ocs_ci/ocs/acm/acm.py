@@ -259,13 +259,13 @@ class AcmAddClusters(AcmPageNavigator):
             enable_screenshot=True,
         )
         if ocs_version >= version.VERSION_4_13 and globalnet:
-            log.info("Enabling globalnet")
+            log.info(
+                "Enabling globalnet during submariner installation via ACM console"
+            )
             element = self.find_an_element_by_xpath("//input[@id='globalist-enable']")
             self.driver.execute_script("arguments[0].click();", element)
         else:
-            log.error(
-                "Globalnet is not supported with ODF version lower than 4.13 or it's disabled"
-            )
+            log.info("Globalnet is disabled")
         log.info("Click on Next button")
         self.do_click(self.page_nav["next-btn"])
         log.info("Click on 'Enable NAT-T' to uncheck it")

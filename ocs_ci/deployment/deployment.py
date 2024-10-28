@@ -398,7 +398,7 @@ class Deployment(object):
                 # if we have Globalnet enabled in case of submariner with RDR
                 # we need to add a flag to storagecluster
                 if (
-                    config.ENV_DATA.get("enable_globalnet", True)
+                    get_primary_cluster_config().ENV_DATA.get("enable_globalnet", True)
                     and config.MULTICLUSTER["multicluster_mode"] == "regional-dr"
                 ):
                     for cluster in get_non_acm_cluster_config():
