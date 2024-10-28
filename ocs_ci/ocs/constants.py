@@ -1055,6 +1055,9 @@ FIO_S3 = os.path.join(TEMPLATE_FIO_DIR, "config_s3.fio")
 # Openshift infra yamls:
 RSYNC_POD_YAML = os.path.join(TEMPLATE_OPENSHIFT_INFRA_DIR, "rsync-pod.yaml")
 MACHINESET_YAML = os.path.join(TEMPLATE_OPENSHIFT_INFRA_DIR, "machine-set.yaml")
+DEPLOYMENT_CONF_OBC_YAML = os.path.join(
+    TEMPLATE_DEPLOYMENT_DIR, "deployment-conf-obc.yaml"
+)
 MACHINESET_YAML_AZURE = os.path.join(
     TEMPLATE_OPENSHIFT_INFRA_DIR, "machineset-azure.yaml"
 )

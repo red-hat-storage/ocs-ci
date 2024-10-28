@@ -171,6 +171,7 @@ from ocs_ci.helpers.helpers import (
     get_current_test_name,
     modify_deployment_replica_count,
     modify_statefulset_replica_count,
+    delete_deployments,
 )
 from ocs_ci.ocs.ceph_debug import CephObjectStoreTool, MonStoreTool, RookCephPlugin
 from ocs_ci.ocs.bucket_utils import get_rgw_restart_counts
@@ -1565,6 +1566,46 @@ def dc_pod_factory(request, pvc_factory, service_account_factory):
         """
         for instance in instances:
             delete_deploymentconfig_pods(instance)
+
+    request.addfinalizer(finalizer)
+    return factory
+
+
+@pytest.fixture(scope="session", autouse=True)
+def obc_deployment_factory_fixture(request):
+    """
+    Creates deployment
+    Calling this fixture creates a new deployment for obc
+    """
+    instances = []
+
+    def factory(
+        namespace=constants.OPENSHIFT_STORAGE_NAMESPACE,
+        replicas=3,
+        number_of_deployments=1,
+    ):
+        """
+        name (str): name of the deployment for obc
+        namespace (str): namespace where the deployment should be running
+        replicas (int) : replicas of the deployment
+
+        """
+        if number_of_deployments > 1:
+            deploy_objs = helpers.create_multiple_deployments(
+                number_of_deployments=number_of_deployments
+            )
+        else:
+            deploy_objs = helpers.create_deployment_for_obc(replicas=replicas)
+
+        instances.append(deploy_objs)
+        return deploy_objs
+
+    def finalizer():
+        """
+        Delete deployments
+        """
+        for instance in instances:
+            delete_deployments(instance)
 
     request.addfinalizer(finalizer)
     return factory

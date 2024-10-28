@@ -518,6 +518,68 @@ def create_multilpe_projects(number_of_project):
     return project_objs
 
 
+def create_deployment_for_obc(
+    namespace=constants.OPENSHIFT_STORAGE_NAMESPACE,
+    replicas=None,
+):
+    """
+    Creates deployments for obcs
+
+    Args:
+        namespace (str): The namespace of the deployment
+        replicas (int) : Number of replicas for deployment
+
+    Returns:
+        deployment_obj (object) : deployment object that was created
+
+    """
+
+    deployment_data = templating.load_yaml(constants.DEPLOYMENT_CONF_OBC_YAML)
+    deployment_data["metadata"]["name"] = create_unique_resource_name(
+        "test", "deployment"
+    )
+    deployment_data["metadata"]["namespace"] = namespace
+    deployment_data["spec"]["replicas"] = replicas or 3
+    assert create_resource(wait=True, **deployment_data), "Failed to create deployment"
+    oc = ocp.OCP(kind=constants.DEPLOYMENT, namespace=namespace)
+    deployment_obj = oc.get(
+        resource_name=deployment_data["metadata"]["name"], out_yaml_format=True
+    )
+    return deployment_obj
+
+
+def create_multiple_deployments(number_of_deployments):
+    """
+    Create one or more deployments for obc
+
+    Args:
+        number_of_deployments (int): Number of deployments to be created
+
+    Returns:
+         list: List of deployment objects
+
+    """
+    dep_objs = [create_deployment_for_obc() for _ in range(number_of_deployments)]
+    return dep_objs
+
+
+def delete_deployments(deployment_objs):
+    """
+    Delete the deployments created for obc
+
+    Args:
+        deployment_objs (list): list of objects to be deleted
+
+    """
+    dc_obj = ocp.OCP(kind="Deployment", namespace=constants.OPENSHIFT_STORAGE_NAMESPACE)
+    for obj in range(len(deployment_objs)):
+        resource_name = deployment_objs[obj].get("metadata").get("name")
+        dc_obj.delete(resource_name=resource_name)
+        assert dc_obj.wait_for_delete(
+            resource_name=resource_name, timeout=100
+        ), "Failed to delete the deployment"
+
+
 def create_secret(interface_type):
     """
     Create a secret

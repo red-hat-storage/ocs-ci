@@ -348,6 +348,15 @@ class PageNavigator(BaseUI):
         self.choose_expanded_mode(mode=True, locator=self.page_nav["Workloads"])
         self.do_click(locator=self.page_nav["Pods"], enable_screenshot=False)
 
+    def navigate_deployments_page(self):
+        """
+        Navigate to Deployments Page
+
+        """
+        logger.info("Navigate to Deployments Page")
+        self.choose_expanded_mode(mode=True, locator=self.page_nav["Workloads"])
+        self.do_click(locator=self.page_nav["Deployments"], enable_screenshot=False)
+
     def navigate_block_pool_page(self):
         """
         Navigate to block pools page

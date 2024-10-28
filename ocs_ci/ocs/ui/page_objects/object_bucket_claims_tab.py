@@ -184,3 +184,74 @@ class ObjectBucketClaimsTab(ObjectStorage, CreateResourceForm):
         self.select_project(config.ENV_DATA["cluster_namespace"])
 
         self.delete_resource(delete_via, obc_name)
+
+    def attach_deployment_to_obc_ui(self, deployment, obc_name):
+        """
+        Attach deployment to obc
+
+        Args:
+            deployment (str): Name of the deployment to attach with
+            obc_name (str): Name of the obc to be attached
+
+        """
+        self.navigate_object_bucket_claims_page()
+        self.select_openshift_storage_default_project()
+        logger.info("Click on search bar")
+        self.do_click(self.generic_locators["search_resource_field"])
+        logger.info("Clear existing text from search bar if any")
+        self.do_clear(self.generic_locators["search_resource_field"])
+        logger.info("Enter the obc to be searched")
+        self.do_send_keys(self.generic_locators["search_resource_field"], text=obc_name)
+        logger.info("Click on the kebab menu")
+        self.do_click(self.obc_loc["kebab_action"])
+        logger.info("Select attach to deployment option")
+        self.do_click(self.obc_loc["attach_to_deployment"])
+        logger.info("Click on the dropdown and search for the existing deployment")
+        odf_deployment_dropdown = self.find_an_element_by_xpath(
+            "/html/body/div[5]/div/div/div/div/div[2]/button"
+        )
+        self.driver.execute_script("arguments[0].click();", odf_deployment_dropdown)
+        self.do_click(self.obc_loc["search_bar"])
+        self.do_send_keys(self.obc_loc["search_bar"], text=deployment)
+        logger.info("Select the deployment and attach it")
+        self.do_click(self.obc_loc["odf_resource_item"])
+        self.do_click(self.obc_loc["attach"])
+
+    def attach_obc_to_deployment_ui(self, deployment, obc_name):
+        """
+        Attach obc to deployment
+
+        Args:
+            deployment (str): Name of the deployment
+            obc_name (str): Name of the obc to attach
+
+        """
+        self.navigate_deployments_page()
+        self.select_openshift_storage_default_project()
+        logger.info("Click on search bar")
+        self.do_click(self.generic_locators["search_resource_field"])
+        logger.info("Clear existing text from search bar if any")
+        self.do_clear(self.generic_locators["search_resource_field"])
+        logger.info("Enter the obc to be searched")
+        self.do_send_keys(
+            self.generic_locators["search_resource_field"], text=deployment
+        )
+        logger.info("Click the kebab menu")
+        self.do_click(self.obc_loc["kebab_action"])
+        logger.info("Add Storage")
+        self.do_click(self.obc_loc["add_storage"])
+        logger.info("Check ObjectBucketClaim option")
+        self.do_click(self.obc_loc["obc_radiobutton"])
+        logger.info("Select use existing claim")
+        self.do_click(self.obc_loc["use_existing_claim"])
+        logger.info("Click on the dropdown menu")
+        obc_dropdown = self.find_an_element_by_xpath(
+            "/html[1]/body[1]/div[2]/div[1]/div[1]/div[1]/div[1]/div[1]/div[1]/main[1]"
+            "/div[1]/div[1]/div[1]/div[1]/div[1]/section[1]/div[1]/form[1]/div[1]/div[1]/div[2]/div[2]/div[1]/button[1]"
+        )
+        self.driver.execute_script("arguments[0].click();", obc_dropdown)
+        logger.info("Search for the existing obc and click on it")
+        self.do_click(self.obc_loc["search_bar"])
+        self.do_send_keys(self.obc_loc["search_bar"], text=obc_name)
+        self.do_click(self.obc_loc["odf_resource_item"])
+        self.do_click(self.generic_locators["submit_form"])
