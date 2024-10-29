@@ -254,6 +254,7 @@ class TestODFTopology(object):
             )
 
     @tier4a
+    @bugzilla("2322173")
     @bugzilla("2242132")
     @ignore_leftovers
     @polarion_id("OCS-4905")
