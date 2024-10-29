@@ -162,7 +162,7 @@ class TestAutomatedRecoveryFromFailedNodes(ManageTest):
         new_ocs_node_names = add_new_node_and_label_it(machineset_name)
         failure_domain = get_failure_domain()
         log.info("Wait for the nodes racks or zones to appear...")
-        wait_for_nodes_racks_or_zones(failure_domain, new_ocs_node_names)
+        wait_for_nodes_racks_or_zones(failure_domain, new_ocs_node_names, timeout=300)
 
         new_ocs_node = get_node_objs(new_ocs_node_names)[0]
         osd_node_in_same_rack_or_zone = get_another_osd_node_in_same_rack_or_zone(
