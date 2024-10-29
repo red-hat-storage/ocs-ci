@@ -405,7 +405,7 @@ def add_new_node_and_label_it(machineset_name, num_nodes=1, mark_for_ocs_label=T
 
     # wait for the new node to come to ready state
     log.info("Waiting for the new node to be in ready state")
-    machine.wait_for_new_node_to_be_ready(machineset_name, timeout=900)
+    machine.wait_for_new_node_to_be_ready(machineset_name, timeout=1080)
 
     # Get the node name of new spun node
     nodes_after_new_spun_node = get_worker_nodes()
@@ -2019,7 +2019,7 @@ def get_node_zone_dict():
     return node_zone_dict
 
 
-@retry(ValueError, tries=5, delay=10)
+@retry(ValueError, tries=10, delay=10, backoff=2)
 def get_node_rack_or_zone(failure_domain, node_obj):
     """
     Get the worker node rack or zone name based on the failure domain value

@@ -2269,7 +2269,7 @@ def wait_for_dc_app_pods_to_reach_running_state(
         for dpod in dpod_list:
             if "-1-deploy" not in dpod.name and dpod.status != exclude_state:
                 helpers.wait_for_resource_state(
-                    dpod, constants.STATUS_RUNNING, timeout=timeout
+                    dpod, constants.STATUS_RUNNING, timeout=180
                 )
 
 

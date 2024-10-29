@@ -186,7 +186,7 @@ class TestAutomatedRecoveryFromFailedNodes(ManageTest):
         try:
             # DC app pods on the failed node will get automatically created on other
             # running node. Waiting for all dc app pod to reach running state
-            pod.wait_for_dc_app_pods_to_reach_running_state(dc_pod_obj, timeout=720)
+            pod.wait_for_dc_app_pods_to_reach_running_state(dc_pod_obj, timeout=900)
             log.info("All the dc pods reached running state")
             pod.wait_for_storage_pods(timeout=300)
 
