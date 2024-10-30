@@ -93,12 +93,13 @@ def get_machines(machine_type=constants.WORKER_MACHINE):
     return machines
 
 
-def delete_machine(machine_name):
+def delete_machine(machine_name, timeout=600):
     """
     Deletes a machine
 
     Args:
         machine_name (str): Name of the machine you want to delete
+        timeout (int): Time to wait for the machine to be deleted
 
     Raises:
         CommandFailed: In case yaml_file and resource_name wasn't provided
@@ -107,7 +108,7 @@ def delete_machine(machine_name):
         kind="machine", namespace=constants.OPENSHIFT_MACHINE_API_NAMESPACE
     )
     log.info(f"Deleting machine {machine_name}")
-    machine_obj.delete(resource_name=machine_name)
+    machine_obj.delete(resource_name=machine_name, timeout=timeout)
 
 
 def get_machine_type(machine_name):
@@ -167,7 +168,11 @@ def delete_machine_and_check_state_of_new_spinned_machine(machine_name):
     machine_type = get_machine_type(machine_name)
     machine_list = get_machines(machine_type=machine_type)
     initial_machine_names = [machine.name for machine in machine_list]
-    delete_machine(machine_name)
+    if config.ENV_DATA.get("worker_replicas") == 0:
+        timeout = 2100
+    else:
+        timeout = 900
+    delete_machine(machine_name, timeout=timeout)
     new_machine_list = get_machines(machine_type=machine_type)
     new_machine = [
         machine
