@@ -683,37 +683,6 @@ class ValidationUI(PageNavigator):
         )
         return storage_client_obj
 
-    def odf_storagesystems_consumption_trend(self):
-        """
-        Function to verify changes and validate elements on ODF storage consumption trend for ODF 4.17
-        This will navigate through below order
-        DataFoundation>>Storage>>storagecluster_storagesystem_details>>Block and File page
-        Further it looks for the Consumption trend card
-
-        Returns:
-            tuple: tpl_of_days_and_avg  ex: (Estimated days, Average)
-
-        """
-        self.odf_console_plugin_check()
-        storage_systems_page = (
-            PageNavigator().nav_odf_default_page().nav_storage_systems_tab()
-        )
-        storage_system_details = (
-            storage_systems_page.nav_storagecluster_storagesystem_details()
-        )
-        storage_system_details.nav_details_overview()
-        storage_system_details.nav_details_object()
-
-        if not config.ENV_DATA["mcg_only_deployment"]:
-            tpl_of_days_and_avg = (
-                storage_system_details.nav_block_and_file().get_estimated_days_from_consumption_trend()
-            )
-            return tpl_of_days_and_avg
-
-        else:
-            logger.error("No data available for MCG-only deployments.")
-            return None
-
     def get_est_days_from_ui(self):
         """
         Get the value of 'Estimated days until full' from the UI
@@ -722,7 +691,11 @@ class ValidationUI(PageNavigator):
             int: Estimated days until full from UI
 
         """
-        collected_tpl_of_days_and_avg = self.odf_storagesystems_consumption_trend()
+        from ocs_ci.ocs.ui.page_objects.block_and_file import BlockAndFile
+
+        collected_tpl_of_days_and_avg = (
+            BlockAndFile().odf_storagesystems_consumption_trend()
+        )
         est_days = re.search(r"\d+", collected_tpl_of_days_and_avg[0]).group()
         logger.info(f"'Estimated days until full' from the UI : {est_days}")
         return int(est_days)
@@ -735,7 +708,11 @@ class ValidationUI(PageNavigator):
             float: Average of storage consumption per day
 
         """
-        collected_tpl_of_days_and_avg = self.odf_storagesystems_consumption_trend()
+        from ocs_ci.ocs.ui.page_objects.block_and_file import BlockAndFile
+
+        collected_tpl_of_days_and_avg = (
+            BlockAndFile().odf_storagesystems_consumption_trend()
+        )
         average = float(
             re.search(r"-?\d+\.*\d*", collected_tpl_of_days_and_avg[1]).group()
         )

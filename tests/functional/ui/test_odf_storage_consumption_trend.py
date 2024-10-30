@@ -25,6 +25,7 @@ from ocs_ci.ocs.resources.pod import (
     get_prometheus_pods,
 )
 from ocs_ci.ocs.resources.storage_cluster import get_storage_size
+from ocs_ci.ocs.ui.page_objects.block_and_file import BlockAndFile
 from ocs_ci.ocs.ui.validation_ui import ValidationUI
 from ocs_ci.utility.utils import TimeoutSampler
 
@@ -79,9 +80,9 @@ class TestConsumptionTrendUI(ManageTest):
             2. Verify the text information on the widget
 
         """
-        validation_ui_obj = ValidationUI()
+        block_and_file_obj = BlockAndFile()
         collected_tpl_of_days_and_avg = (
-            validation_ui_obj.odf_storagesystems_consumption_trend()
+            block_and_file_obj.odf_storagesystems_consumption_trend()
         )
         avg_txt = "Average storage consumption"
         est_days_txt = "Estimated days until full"
