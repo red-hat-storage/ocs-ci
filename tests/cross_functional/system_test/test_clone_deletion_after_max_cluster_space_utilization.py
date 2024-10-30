@@ -7,6 +7,7 @@ from ocs_ci.utility.utils import TimeoutSampler
 from ocs_ci.helpers import helpers
 from ocs_ci.ocs.resources.pvc import flatten_image
 from ocs_ci.utility.prometheus import PrometheusAPI
+from ocs_ci.ocs.exceptions import TimeoutExpiredError
 from ocs_ci.framework.pytest_customization.marks import (
     skipif_external_mode,
     magenta_squad,
@@ -60,6 +61,8 @@ class TestCloneDeletion(E2ETest):
         logger.info("Starting the test setup")
 
         self.num_of_clones = 30
+        self.clones_list = []
+        self.interface_type = interface_type
 
         # Getting the total Storage capacity
         self.ceph_cluster = CephCluster()
@@ -109,6 +112,28 @@ class TestCloneDeletion(E2ETest):
         self.pod_obj.get_fio_results()
         logger.info(f"IO finished on pod {self.pod_obj.name}")
 
+    # Function to create clones
+    def create_clones(self, num_of_clones, pvc_clone_factory, start_num=0):
+        for clone_num in range(start_num, start_num + num_of_clones):
+            logger.info(f"Start creation of clone number {clone_num}.")
+            cloned_pvc_obj = pvc_clone_factory(
+                self.pvc_obj, storageclass=self.pvc_obj.backed_sc, timeout=900
+            )
+            cloned_pvc_obj.reload()
+
+            if self.interface_type == constants.CEPHBLOCKPOOL:
+                # flatten the image
+                flatten_image(cloned_pvc_obj)
+                logger.info(
+                    f"Clone with name {cloned_pvc_obj.name} of size {self.pvc_size}Gi was created."
+                )
+                cloned_pvc_obj.reload()
+            else:
+                logger.info(
+                    f"Clone with name {cloned_pvc_obj.name} of size {self.pvc_size}Gi was created."
+                )
+            self.clones_list.append(cloned_pvc_obj)
+
     @skipif_external_mode
     @magenta_squad
     def test_clone_deletion_after_max_cluster_space_utilization(
@@ -123,40 +148,22 @@ class TestCloneDeletion(E2ETest):
             5. After the cluster is out of full state and IOs started , Try to delete clones.
             6. Clone deletion should be successful and should not give error messages.
         """
+
         # Creating the clones one by one and wait until they bound
         self.timeout = 1800
         logger.info(
             f"Start creating {self.num_of_clones} clones on {interface_type} PVC of size {self.pvc_size} GB."
         )
-        clones_list = []
-
-        # Function to create clones
-        def create_clones(num_of_clones, start_num=0):
-            for clone_num in range(start_num, start_num + num_of_clones):
-                logger.info(f"Start creation of clone number {clone_num}.")
-                cloned_pvc_obj = pvc_clone_factory(
-                    self.pvc_obj, storageclass=self.pvc_obj.backed_sc, timeout=900
-                )
-                cloned_pvc_obj.reload()
-
-                if interface_type == constants.CEPHBLOCKPOOL:
-                    # flatten the image
-                    flatten_image(cloned_pvc_obj)
-                    logger.info(
-                        f"Clone with name {cloned_pvc_obj.name} of size {self.pvc_size}Gi was created."
-                    )
-                    cloned_pvc_obj.reload()
-                else:
-                    logger.info(
-                        f"Clone with name {cloned_pvc_obj.name} of size {self.pvc_size}Gi was created."
-                    )
-                clones_list.append(cloned_pvc_obj)
 
         # Create the initial set of clones
-        create_clones(self.num_of_clones)
+        self.create_clones(self.num_of_clones, pvc_clone_factory)
+
+        # Maximum number of attempts to avoid indefinite looping
+        max_attempts = 5
+        attempt = 0
 
         # Verify if expected alerts are seen; if not, continue creating extra clones
-        while True:
+        while attempt < max_attempts:
             logger.info(
                 "Verify 'CephClusterCriticallyFull' ,CephOSDNearFull Alerts are seen "
             )
@@ -178,7 +185,12 @@ class TestCloneDeletion(E2ETest):
             else:
                 logger.info("Alerts not found yet. Creating extra clones...")
                 # Continue creating more clones (e.g., in batches of 2)
-                create_clones(2, start_num=len(clones_list))
+                self.create_clones(2, start_num=len(self.clones_list))
+                attempt += 1
+
+        if attempt == max_attempts:
+            logger.error("Maximum attempts reached. Expected alerts were not detected.")
+            raise TimeoutExpiredError
 
         # Make the cluster out of full by increasing the full ratio.
         logger.info("Change Ceph full_ratio from from 85% to 95%")
@@ -190,7 +202,7 @@ class TestCloneDeletion(E2ETest):
             f"Start deleting {self.num_of_clones} clones on {interface_type} PVC of size {self.pvc_size} Gi."
         )
 
-        for index, clone in enumerate(clones_list):
+        for index, clone in enumerate(self.clones_list):
             index += 1
             pvc_reclaim_policy = clone.reclaim_policy
             clone.delete()
