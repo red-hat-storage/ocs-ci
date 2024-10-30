@@ -2546,6 +2546,7 @@ def create_and_attach_sts_role():
     namespace = config.ENV_DATA.get("cluster_namespace")
     service_account_name_1 = "noobaa"
     service_account_name_2 = "noobaa-endpoint"
+    service_account_name_3 = "noobaa-core"
     aws_account_id = aws.get_caller_identity()
     resp = exec_cmd("oc get authentication cluster -ojson")
     auth_cluster_dict = json.loads(resp.stdout)
@@ -2568,6 +2569,7 @@ def create_and_attach_sts_role():
                         f"{oidc_provider}:sub": [
                             f"system:serviceaccount:{namespace}:{service_account_name_1}",
                             f"system:serviceaccount:{namespace}:{service_account_name_2}",
+                            f"system:serviceaccount:{namespace}:{service_account_name_3}",
                         ]
                     }
                 },
