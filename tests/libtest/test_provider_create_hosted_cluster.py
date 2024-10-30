@@ -431,3 +431,28 @@ class TestProviderHosted(object):
 
         metallb_installer_obj = MetalLBInstaller()
         metallb_installer_obj.upgrade_metallb()
+
+    @runs_on_provider
+    def test_upgrade(self):
+        """
+        This test is to validate ocp, ocs and other operator
+        upgrades for provider cluster
+        odf upgrade from 4.16 to 4.17 sequence---
+            Upgrade ocp
+            upgrade acm
+            upgrade odf --- odf client should automatically upgrade
+        """
+        from tests.functional.upgrade.test_upgrade_ocp import TestUpgradeOCP
+        from ocs_ci.ocs.ocs_upgrade import run_ocs_upgrade
+
+        storage_client = StorageClient()
+        self.test_upgrade_ocp = TestUpgradeOCP()
+        self.test_upgrade_ocp.test_upgrade_ocp()
+        self.test_acm_upgrade()
+        run_ocs_upgrade()
+        logger.info(
+            "Validate post provider ocs upgrade odf native client operator also upgraded"
+        )
+        storage_client.verify_version_of_odf_client_operator()
+        self.test_cnv_upgrade()
+        self.test_metallb_upgrade()
