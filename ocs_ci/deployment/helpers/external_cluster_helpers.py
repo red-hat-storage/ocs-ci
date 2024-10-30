@@ -167,6 +167,7 @@ class ExternalCluster(object):
             remote_rgw_cert_ca_path,
             self.user,
             self.password,
+            self.ssh_key,
         )
         return remote_rgw_cert_ca_path
 
