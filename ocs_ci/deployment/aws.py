@@ -213,7 +213,7 @@ class AWSIPI(AWSBase):
             release_image = get_ocp_release_image_from_installer()
             cco_image = cco.get_cco_container_image(release_image, pull_secret_path)
             cco.extract_ccoctl_binary(cco_image, pull_secret_path)
-            cco.extract_credentials_requests_aws(
+            cco.extract_credentials_requests(
                 release_image,
                 install_config,
                 pull_secret_path,

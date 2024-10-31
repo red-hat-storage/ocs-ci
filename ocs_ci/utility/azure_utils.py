@@ -228,7 +228,7 @@ class AZURE:
         """
         if not self._resource_client:
             self._resource_client = ResourceManagementClient(
-                credentials=self.credentials, subscription_id=self._subscription_id
+                credential=self.credentials, subscription_id=self._subscription_id
             )
         return self._resource_client
 
