@@ -120,8 +120,6 @@ DEPLOYMENT:
   ocm_cli_version: '0.1.75'
   rosa_cli_version: '1.2.45'
 
-
-
 # Section for reporting configuration
 REPORTING:
   email:
