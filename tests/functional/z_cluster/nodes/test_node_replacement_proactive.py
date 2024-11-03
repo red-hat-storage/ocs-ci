@@ -153,8 +153,11 @@ def delete_and_create_osd_node(osd_node_name):
         else:
             new_node_name = node.delete_and_create_osd_node_ipi(osd_node_name)
 
-    elif config.ENV_DATA["deployment_type"] == "upi":
-        if config.ENV_DATA["platform"].lower() == constants.AWS_PLATFORM:
+    elif config.ENV_DATA["deployment_type"] in ["upi", "cp_managed"]:
+        if config.ENV_DATA["platform"].lower() in [
+            constants.AWS_PLATFORM,
+            constants.ROSA_HCP_PLATFORM,
+        ]:
             new_node_name = node.delete_and_create_osd_node_aws_upi(osd_node_name)
         elif config.ENV_DATA["platform"].lower() == constants.VSPHERE_PLATFORM:
             if is_lso_cluster():
