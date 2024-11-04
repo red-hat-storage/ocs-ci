@@ -572,7 +572,7 @@ class ConnectivityFail(Exception):
     pass
 
 
-class ROSAProdAdminLoginFailedException(Exception):
+class ROSAAdminLoginFailedException(Exception):
     pass
 
 
@@ -721,4 +721,8 @@ class ACMObservabilityNotEnabled(Exception):
 
 
 class ProviderModeNotFoundException(Exception):
+    pass
+
+
+class TolerationNotFoundException(Exception):
     pass

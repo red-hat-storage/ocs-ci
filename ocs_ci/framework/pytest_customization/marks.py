@@ -33,6 +33,7 @@ from ocs_ci.ocs.constants import (
     HCI_PROVIDER,
     BAREMETAL_PLATFORMS,
     AZURE_KV_PROVIDER_NAME,
+    ROSA_HCP_PLATFORM,
 )
 from ocs_ci.utility import version
 from ocs_ci.utility.aws import update_config_from_s3
@@ -87,6 +88,8 @@ polarion_id = pytest.mark.polarion_id
 bugzilla = pytest.mark.bugzilla
 jira = pytest.mark.jira
 acm_import = pytest.mark.acm_import
+rdr = pytest.mark.rdr
+mdr = pytest.mark.mdr
 
 tier_marks = [
     tier1,
@@ -195,9 +198,13 @@ fips_required = pytest.mark.skipif(
     reason="Test runs only on FIPS enabled cluster",
 )
 
-stretchcluster_required = pytest.mark.skipif(
+stretchcluster_required_skipif = pytest.mark.skipif(
     config.DEPLOYMENT.get("arbiter_deployment") is False,
     reason="Test runs only on Stretch cluster with arbiter deployments",
+)
+
+stretchcluster_required = compose(
+    stretchcluster_required_skipif, pytest.mark.stretchcluster_required
 )
 
 sts_deployment_required = pytest.mark.skipif(
@@ -404,6 +411,11 @@ skipif_bmpsi = pytest.mark.skipif(
 skipif_managed_service = pytest.mark.skipif(
     config.ENV_DATA["platform"].lower() in MANAGED_SERVICE_PLATFORMS,
     reason="Test will not run on Managed service cluster",
+)
+
+skipif_rosa_hcp = pytest.mark.skipif(
+    config.ENV_DATA["platform"].lower() == ROSA_HCP_PLATFORM,
+    reason="Test will not run on ROSA HCP cluster",
 )
 
 skipif_openshift_dedicated = pytest.mark.skipif(
@@ -627,6 +639,9 @@ ignore_owner = pytest.mark.ignore_owner
 
 # Marks to identify the cluster type in which the test case should run
 runs_on_provider = pytest.mark.runs_on_provider
+
+# Marks to identify the regression tests for provider-client cluster
+provider_mode = pytest.mark.provider_mode
 
 current_test_marks = []
 

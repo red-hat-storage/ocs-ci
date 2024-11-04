@@ -16,6 +16,7 @@ from ocs_ci.framework.pytest_customization.marks import (
     bugzilla,
     runs_on_provider,
     provider_client_platform_required,
+    provider_mode,
 )
 from ocs_ci.framework.testlib import skipif_ocs_version, tier1
 from ocs_ci.ocs import constants, ocp
@@ -81,6 +82,7 @@ def test_monitoring_enabled(threading_lock):
         assert int(value) >= 0, "bucket status isn't a positive integer or zero"
 
 
+@provider_mode
 @blue_squad
 @tier1
 @pytest.mark.polarion_id("OCS-1265")
@@ -141,6 +143,7 @@ def test_ceph_rbd_metrics_available(threading_lock):
     assert list_of_metrics_without_results == [], msg
 
 
+@provider_mode
 @skipif_mcg_only
 @blue_squad
 @tier1
@@ -260,6 +263,7 @@ def test_monitoring_reporting_ok_when_idle(workload_idle, threading_lock):
     assert all(osd_validations), osds_msg
 
 
+@provider_mode
 @blue_squad
 @tier1
 @runs_on_provider

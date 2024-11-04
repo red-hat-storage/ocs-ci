@@ -13,6 +13,7 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 
 import yaml
 from gevent import sleep
+from pathlib import Path
 from libcloud.common.exceptions import BaseHTTPError
 from libcloud.common.types import LibcloudError
 from libcloud.compute.providers import get_driver
@@ -970,6 +971,8 @@ def run_must_gather(log_dir_path, image, command=None, cluster_config=None):
             timeout=must_gather_timeout,
             cluster_config=cluster_config,
         )
+        if config.DEPLOYMENT["external_mode"]:
+            collect_ceph_external(path=log_dir_path)
     except CommandFailed as ex:
         log.error(
             f"Failed during must gather logs! Error: {ex}"
@@ -984,6 +987,30 @@ def run_must_gather(log_dir_path, image, command=None, cluster_config=None):
         )
         export_mg_pods_logs(log_dir_path=log_dir_path)
     return mg_output
+
+
+def collect_ceph_external(path):
+    """
+    Collect ceph commands via cli tool on External mode cluster
+
+    Args:
+        path(str): The destination for saving the ceph files [output ceph commands]
+
+    """
+    try:
+        kubeconfig_path = os.path.join(
+            config.ENV_DATA["cluster_path"], config.RUN["kubeconfig_location"]
+        )
+        current_dir = Path(__file__).parent.parent.parent
+        script_path = os.path.join(current_dir, "scripts", "bash", "mg_external.sh")
+        run_cmd(
+            f"sh {script_path} {os.path.join(path, 'ceph_external')} {kubeconfig_path}",
+            timeout=140,
+        )
+    except Exception as ex:
+        log.info(
+            f"Failed to execute the ceph commands script due to the error {str(ex)}"
+        )
 
 
 def export_mg_pods_logs(log_dir_path):
@@ -1192,8 +1219,6 @@ def _collect_ocs_logs(
             ocs_must_gather_image_and_tag = mirror_image(
                 ocs_must_gather_image_and_tag, cluster_config
             )
-        if cluster_config.ENV_DATA.get("cluster_type") == constants.HCI_CLIENT:
-            ocs_flags = ocs_flags + " -pc" if ocs_flags else " /usr/bin/gather -pc"
 
         mg_output = run_must_gather(
             ocs_log_dir_path,
@@ -1239,41 +1264,45 @@ def _collect_ocs_logs(
                 log.error(f"Failed to dump noobaa DB! Error: {ex}")
                 sleep(30)
     # Collect ACM logs only from ACM
-    if cluster_config.MULTICLUSTER.get("multicluster_mode", None) == "regional-dr":
-        if cluster_config.MULTICLUSTER.get("acm_cluster", False):
-            log.info("Collecting ACM logs")
-            image_prefix = '"acm_must_gather"'
-            acm_mustgather_path = os.path.join(log_dir_path, "acmlogs")
-            csv_cmd = (
-                f"oc --kubeconfig {cluster_config.RUN['kubeconfig']} "
-                f"get csv -l {constants.ACM_CSV_LABEL} -n open-cluster-management -o json"
-            )
-            jq_cmd = f"jq -r '.items[0].spec.relatedImages[]|select(.name=={image_prefix}).image'"
-            json_out = run_cmd(csv_cmd)
-            out = subprocess.run(
-                shlex.split(jq_cmd), input=json_out.encode(), stdout=subprocess.PIPE
-            )
-            acm_mustgather_image = out.stdout.decode()
-            run_must_gather(
-                acm_mustgather_path, acm_mustgather_image, cluster_config=cluster_config
-            )
+    # Collect this only once, with parallel ocp/ocs log collection, we want to collect acm logs only once
+    if ocs:
+        if cluster_config.MULTICLUSTER.get("multicluster_mode", None) == "regional-dr":
+            if cluster_config.MULTICLUSTER.get("acm_cluster", False):
+                log.info("Collecting ACM logs")
+                image_prefix = '"acm_must_gather"'
+                acm_mustgather_path = os.path.join(log_dir_path, "acmlogs")
+                csv_cmd = (
+                    f"oc --kubeconfig {cluster_config.RUN['kubeconfig']} "
+                    f"get csv -l {constants.ACM_CSV_LABEL} -n open-cluster-management -o json"
+                )
+                jq_cmd = f"jq -r '.items[0].spec.relatedImages[]|select(.name=={image_prefix}).image'"
+                json_out = run_cmd(csv_cmd)
+                out = subprocess.run(
+                    shlex.split(jq_cmd), input=json_out.encode(), stdout=subprocess.PIPE
+                )
+                acm_mustgather_image = out.stdout.decode()
+                run_must_gather(
+                    acm_mustgather_path,
+                    acm_mustgather_image,
+                    cluster_config=cluster_config,
+                )
 
-        submariner_log_path = os.path.join(
-            log_dir_path,
-            "submariner",
-        )
-        run_cmd(f"mkdir -p {submariner_log_path}")
-        cwd = os.getcwd()
-        run_cmd(f"chmod -R 777 {submariner_log_path}")
-        os.chdir(submariner_log_path)
-        submariner_log_collect = (
-            f"subctl gather --kubeconfig {cluster_config.RUN['kubeconfig']}"
-        )
-        log.info("Collecting submariner logs")
-        out = run_cmd(submariner_log_collect)
-        run_cmd(f"chmod -R 777 {submariner_log_path}")
-        os.chdir(cwd)
-        log.info(out)
+            submariner_log_path = os.path.join(
+                log_dir_path,
+                "submariner",
+            )
+            run_cmd(f"mkdir -p {submariner_log_path}")
+            cwd = os.getcwd()
+            run_cmd(f"chmod -R 777 {submariner_log_path}")
+            os.chdir(submariner_log_path)
+            submariner_log_collect = (
+                f"subctl gather --kubeconfig {cluster_config.RUN['kubeconfig']}"
+            )
+            log.info("Collecting submariner logs")
+            out = run_cmd(submariner_log_collect)
+            run_cmd(f"chmod -R 777 {submariner_log_path}")
+            os.chdir(cwd)
+            log.info(out)
 
 
 def collect_ocs_logs(
@@ -1293,21 +1322,48 @@ def collect_ocs_logs(
         ocs_flags (str): flags to ocs must gather command for example ["-- /usr/bin/gather -cs"]
 
     """
-    results = None
+    results = list()
     with ThreadPoolExecutor() as executor:
-        results = [
-            executor.submit(
-                _collect_ocs_logs,
-                cluster,
-                dir_name=dir_name,
-                ocp=ocp,
-                ocs=ocs,
-                mcg=mcg,
-                status_failure=status_failure,
-                ocs_flags=ocs_flags,
-            )
-            for cluster in ocsci_config.clusters
-        ]
+        for cluster in ocsci_config.clusters:
+            if ocp:
+                results.append(
+                    executor.submit(
+                        _collect_ocs_logs,
+                        cluster,
+                        dir_name=dir_name,
+                        ocp=ocp,
+                        ocs=False,
+                        mcg=False,
+                        status_failure=status_failure,
+                        ocs_flags=ocs_flags,
+                    )
+                )
+            if ocs:
+                results.append(
+                    executor.submit(
+                        _collect_ocs_logs,
+                        cluster,
+                        dir_name=dir_name,
+                        ocp=False,
+                        ocs=ocs,
+                        mcg=False,
+                        status_failure=status_failure,
+                        ocs_flags=ocs_flags,
+                    )
+                )
+            if mcg:
+                results.append(
+                    executor.submit(
+                        _collect_ocs_logs,
+                        cluster,
+                        dir_name=dir_name,
+                        ocp=False,
+                        ocs=False,
+                        mcg=mcg,
+                        status_failure=status_failure,
+                        ocs_flags=ocs_flags,
+                    )
+                )
 
     for f in as_completed(results):
         try:
@@ -1624,12 +1680,61 @@ def get_primary_cluster_config():
     Get the primary cluster config object in a DR scenario
 
     Return:
-        framework.config: primary cluster config obhect from config.clusters
+        framework.config: primary cluster config object from config.clusters
 
     """
     for cluster in ocsci_config.clusters:
         if cluster.MULTICLUSTER["primary_cluster"]:
             return cluster
+
+
+def get_recovery_cluster_config():
+    """
+    Get the recovery cluster config object in a DR scenario
+
+    Return:
+        framework.config: primary cluster config obhect from config.clusters
+
+    """
+    for cluster in ocsci_config.clusters:
+        if cluster.MULTICLUSTER.get("recovery_cluster"):
+            return cluster
+
+
+def set_recovery_as_primary():
+    """
+    This function will set recovery cluster as primary cluster
+    after it is imported.
+    """
+    # 1. Popout primary from clusters list
+    cluster = get_primary_cluster_config()
+    ocsci_config.clusters.remove(cluster)
+
+    # 2.Reindexing After removing primary cluster
+    cluster_config_reindex()
+    log.info("Old primary cluster config removed from list")
+
+    # Decrement count from nclusters
+    ocsci_config.nclusters -= 1
+    log.info(f"Number of clusters present in env: {ocsci_config.nclusters}")
+
+    # Switch context to recovery
+    recovery_cluster_config = get_recovery_cluster_config()
+    recovery_cluster_name = recovery_cluster_config.ENV_DATA["cluster_name"]
+    log.info(f"recovery_cluster_name: {recovery_cluster_name}")
+    ocsci_config.switch_to_cluster_by_name(recovery_cluster_name)
+    recovery_cluster_config.MULTICLUSTER["recovery_cluster"] = False
+    recovery_cluster_config.MULTICLUSTER["primary_cluster"] = True
+
+
+def cluster_config_reindex():
+    for cluster in ocsci_config.clusters:
+        current_index = ocsci_config.clusters.index(cluster)
+        if current_index != cluster.MULTICLUSTER["multicluster_index"]:
+            cluster.MULTICLUSTER["multicluster_index"] = current_index
+
+    # switch cobntext to acm
+    ocsci_config.switch_acm_ctx()
 
 
 def thread_init_class(class_init_operations, shutdown):

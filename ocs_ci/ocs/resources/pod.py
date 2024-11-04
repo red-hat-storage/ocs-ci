@@ -34,6 +34,7 @@ from ocs_ci.ocs.exceptions import (
     NotFoundError,
     TimeoutException,
     NoRunningCephToolBoxException,
+    TolerationNotFoundException,
 )
 
 from ocs_ci.ocs.utils import setup_ceph_toolbox, get_pod_name_by_pattern
@@ -653,6 +654,43 @@ class Pod(OCS):
         """
         resource_name = resource_name if resource_name else self.name
         return self.ocp.wait_for_delete(resource_name, timeout=timeout)
+
+    def get_csi_pod_log_details(self, logs_dir, log_file_name):
+        """
+        Gets csi pod log files details
+
+        Args:
+            logs_dir (str): Directory where the logs are looked for
+            log_file_name (str): Current log file name
+
+        Returns:
+            gz_logs_num (int): Number of compressed log files
+            current_log_file_size (int) Size of the current log file
+        """
+
+        all_logs = (
+            self.exec_cmd_on_pod(
+                command=f"-- ls -l {logs_dir}",
+                container_name="log-collector",
+                out_yaml_format=False,
+                shell=True,
+            )
+            .strip()
+            .split("\n")
+        )
+        gz_logs_num = 0
+        current_log_file_size = 0
+
+        for log_file in all_logs[1:]:  # ignore 'total' line
+            file_details = log_file.split()
+            file_name = "".join(file_details[8:])
+            if file_name.startswith(log_file_name) and file_name.endswith(
+                ".gz"
+            ):  # archived compressed log
+                gz_logs_num = gz_logs_num + 1
+            if file_name == log_file_name:  # current log file
+                current_log_file_size = file_details[4]
+        return gz_logs_num, current_log_file_size
 
 
 # Helper functions for Pods
@@ -2432,7 +2470,10 @@ def get_not_running_pods(selector=None, namespace=config.ENV_DATA["cluster_names
     pods_not_running = list()
     for pod in pod_objs:
         status = pod.status()
-        if status != constants.STATUS_RUNNING:
+        if (
+            status != constants.STATUS_RUNNING
+            and status != constants.STATUS_TERMINATING
+        ):
             pods_not_running.append(pod)
 
     return pods_not_running
@@ -2581,26 +2622,80 @@ def check_toleration_on_pods(toleration_key=constants.TOLERATION_KEY):
     Args:
         toleration_key (str): The toleration key to check
 
-    """
+    Raises:
+            TolerationNotFoundException: Exception raised when a required toleration is not found in the pods.
 
+    """
     pod_objs = get_all_pods(
         namespace=config.ENV_DATA["cluster_namespace"],
-        selector=[constants.TOOL_APP_LABEL],
+        selector=[constants.ROOK_CEPH_OSD_PREPARE],
         exclude_selector=True,
     )
-    flag = False
+
+    pods_missing_toleration = []
     for pod_obj in pod_objs:
         resource_name = pod_obj.name
         tolerations = pod_obj.get().get("spec").get("tolerations")
-        for key in tolerations:
-            if key["key"] == toleration_key:
-                flag = True
-        if flag:
-            logger.info(f"The Toleration {toleration_key} exists on {resource_name}")
-        else:
+
+        # Check if any toleration matches the provided key
+        toleration_found = any(tol["key"] == toleration_key for tol in tolerations)
+
+        if not toleration_found:
             logger.error(
                 f"The pod {resource_name} does not have toleration {toleration_key}"
             )
+            pods_missing_toleration.append(resource_name)
+        else:
+            logger.info(f"The Toleration {toleration_key} exists on {resource_name}")
+    if pods_missing_toleration:
+        logger.error(
+            f"Some pods are missing the toleration {toleration_key}: {', '.join(pods_missing_toleration)}"
+        )
+        raise TolerationNotFoundException(
+            f"The following pods do not have toleration {toleration_key}: {', '.join(pods_missing_toleration)}"
+        )
+
+
+def check_toleration_on_subscriptions(toleration_key=constants.TOLERATION_KEY):
+    """
+    Function to check toleration on subscriptions
+
+    Args:
+        toleration_key (str): The toleration key to check
+
+    Raises:
+            TolerationNotFoundException: Exception raised when a required toleration is not found in the pods.
+
+    """
+    sub_list = ocp.get_all_resource_names_of_a_kind(kind=constants.SUBSCRIPTION)
+    subs_missing_toleration = []
+
+    for sub in sub_list:
+        sub_obj = ocp.OCP(
+            resource_name=sub,
+            namespace=config.ENV_DATA["cluster_namespace"],
+            kind=constants.SUBSCRIPTION,
+        )
+        tolerations = sub_obj.get().get("spec").get("config").get("tolerations")
+
+        # Check if any toleration matches the provided key
+        toleration_found = any(tol["key"] == toleration_key for tol in tolerations)
+
+        if not toleration_found:
+            logger.error(
+                f"The subscription {sub} does not have toleration {toleration_key}"
+            )
+            subs_missing_toleration.append(sub)
+        else:
+            logger.info(f"The Toleration {toleration_key} exists on {sub}")
+
+    if subs_missing_toleration:
+        logger.error(
+            f"Some subscriptions are missing the toleration {toleration_key}: {', '.join(subs_missing_toleration)}"
+        )
+        raise TolerationNotFoundException(
+            f"The following subscriptions do not have toleration {toleration_key}: {', '.join(subs_missing_toleration)}"
+        )
 
 
 def run_osd_removal_job(osd_ids=None):
@@ -3750,3 +3845,85 @@ def fetch_rgw_pod_restart_count(namespace=config.ENV_DATA["cluster_namespace"]):
     rgw_pod_restart_count = restart_count_for_rgw_pod[rgw_pod_obj.name]
     logger.info(f"restart count for rgw pod is: {rgw_pod_restart_count}")
     return rgw_pod_restart_count
+
+
+def get_pod_used_memory_in_mebibytes(podname):
+    """
+    Get a pod's used memory in MiB
+
+    Args:
+        podname: (str)  name of the pod to get used memory of it
+
+    Returns:
+        memory_value: (int) the used memory of the pod in Mebibytes (MiB)
+
+    """
+    logger.info("Retrieve raw resource utilization data using oc adm top command")
+    pod_raw_adm_out = pod_resource_utilization_raw_output_from_adm_top()
+    lines = pod_raw_adm_out.strip().split("\n")
+    for line in lines:
+        parts = line.split()
+        if podname in line:
+            memory_value_with_unit = parts[2]
+            if memory_value_with_unit.endswith("Mi"):
+                memory_value = int(memory_value_with_unit.replace("Mi", ""))
+                return memory_value
+
+
+def get_ceph_csi_ctrl_pods(namespace=None):
+    """
+    Fetches info about the ceph csi ctrl pods in the cluster
+
+    Args:
+        namespace (str): Namespace in which ceph cluster lives
+            (default: config.ENV_DATA["cluster_namespace"])
+
+    Returns:
+        list : The list of the ceph csi ctrl pod objects
+
+    """
+    namespace = namespace or config.ENV_DATA["cluster_namespace"]
+    ceph_csi_ctrl_labels = [
+        constants.CEPHFS_NODEPLUGIN_LABEL,
+        constants.RBD_NODEPLUGIN_LABEL,
+        constants.RBD_CTRLPLUGIN_LABEL,
+        constants.CEPHFS_CTRLPLUGIN_LABEL,
+    ]
+    ceph_csi_ctrl_pods_data = []
+    for label in ceph_csi_ctrl_labels:
+        ceph_csi_ctrl_pods_data.extend(get_pods_having_label(label, namespace))
+
+    ceph_csi_ctrl_pods = [Pod(**pod_data) for pod_data in ceph_csi_ctrl_pods_data]
+    return ceph_csi_ctrl_pods
+
+
+def get_container_images(pod_obj):
+    """
+    Get all container images (both containers and initContainers) from the pod object
+
+    Args:
+        pod_obj (Pod): The pod object
+
+    Returns:
+        set: Set of the container images from the pod object
+
+    Raises:
+        ValueError: In case we didn't find the containers or images for the pod
+
+    """
+    containers = pod_obj.data.get("spec", {}).get("containers", [])
+    containers += pod_obj.data.get("spec", {}).get("initContainers", [])
+    if not containers:
+        raise ValueError(f"Didn't find containers for the pod {pod_obj.name}")
+
+    images = set()
+    # Extract images from containers
+    for container in containers:
+        image = container.get("image")
+        if image:
+            images.add(image)
+
+    if not images:
+        raise ValueError(f"Didn't find images for the pod {pod_obj.name} containers")
+
+    return images

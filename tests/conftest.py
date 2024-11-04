@@ -20,6 +20,7 @@ from botocore.exceptions import ClientError
 import pytest
 from collections import namedtuple
 
+from ocs_ci.deployment.cnv import CNVInstaller
 from ocs_ci.deployment import factory as dep_factory
 from ocs_ci.deployment.helpers.hypershift_base import HyperShiftBase
 from ocs_ci.deployment.hosted_cluster import HostedClients
@@ -33,9 +34,10 @@ from ocs_ci.framework.pytest_customization.marks import (
     upgrade_marks,
     ignore_resource_not_found_error_label,
 )
+
 from ocs_ci.helpers.proxy import update_container_with_proxy_env
 from ocs_ci.ocs import constants, defaults, fio_artefacts, node, ocp, platform_nodes
-from ocs_ci.ocs.acm.acm import login_to_acm
+from ocs_ci.ocs.acm.acm import login_to_acm, AcmAddClusters
 from ocs_ci.ocs.awscli_pod import create_awscli_pod, awscli_pod_cleanup
 from ocs_ci.ocs.benchmark_operator_fio import get_file_size, BenchmarkOperatorFIO
 from ocs_ci.ocs.bucket_utils import (
@@ -44,7 +46,12 @@ from ocs_ci.ocs.bucket_utils import (
 )
 from ocs_ci.ocs.constants import FUSION_CONF_DIR
 from ocs_ci.ocs.cnv.virtual_machine import VirtualMachine
-from ocs_ci.ocs.dr.dr_workload import BusyBox, BusyBox_AppSet, CnvWorkload
+from ocs_ci.ocs.dr.dr_workload import (
+    BusyBox,
+    BusyBox_AppSet,
+    CnvWorkload,
+    BusyboxDiscoveredApps,
+)
 from ocs_ci.ocs.exceptions import (
     CommandFailed,
     TimeoutExpiredError,
@@ -155,8 +162,9 @@ from ocs_ci.utility.utils import (
     ceph_health_check_multi_storagecluster_external,
     clone_repo,
 )
-from ocs_ci.helpers import helpers, dr_helpers
+from ocs_ci.helpers import helpers, dr_helpers, dr_helpers_ui
 from ocs_ci.helpers.helpers import (
+    add_scc_policy,
     create_unique_resource_name,
     create_ocs_object_from_kind_and_name,
     setup_pod_directories,
@@ -843,6 +851,7 @@ def storageclass_factory_fixture(
         volume_binding_mode="Immediate",
         allow_volume_expansion=True,
         kernelMountOptions=None,
+        annotations=None,
     ):
         """
         Args:
@@ -868,6 +877,7 @@ def storageclass_factory_fixture(
                 till pod attachment.
             allow_volume_expansion (bool): True to Allows volume expansion
             kernelMountOptions (str): Mount option for security context
+            annotations (dict): dict of annotation to be added to the storageclass.
 
         Returns:
             object: helpers.create_storage_class instance with links to
@@ -906,6 +916,7 @@ def storageclass_factory_fixture(
                 volume_binding_mode=volume_binding_mode,
                 allow_volume_expansion=allow_volume_expansion,
                 kernelMountOptions=kernelMountOptions,
+                annotations=annotations,
             )
             assert sc_obj, f"Failed to create {interface} storage class"
             sc_obj.secret = secret
@@ -1081,6 +1092,7 @@ def pvc_factory_fixture(request, project_factory):
         status=constants.STATUS_BOUND,
         volume_mode=None,
         size_unit="Gi",
+        wait_for_resource_status_timeout=60,
     ):
         """
         Args:
@@ -1103,6 +1115,8 @@ def pvc_factory_fixture(request, project_factory):
             volume_mode (str): Volume mode for PVC.
                 eg: volume_mode='Block' to create rbd `block` type volume
             size_unit (str): PVC size unit, eg: "Mi"
+            wait_for_resource_status_timeout (int): Wait in seconds until the
+                desired PVC status is reached.
 
         Returns:
             object: helpers.create_pvc instance.
@@ -1141,7 +1155,9 @@ def pvc_factory_fixture(request, project_factory):
             assert pvc_obj, "Failed to create PVC"
 
         if status:
-            helpers.wait_for_resource_state(pvc_obj, status)
+            helpers.wait_for_resource_state(
+                pvc_obj, status, timeout=wait_for_resource_status_timeout
+            )
         pvc_obj.storageclass = storageclass
         pvc_obj.project = project
         pvc_obj.access_mode = access_mode
@@ -1640,8 +1656,8 @@ def upgrade_marks_name():
     upgrade_marks_name = []
     for upgrade_mark in upgrade_marks:
         try:
-            upgrade_marks_name.append(upgrade_mark().args[0].name)
-        except AttributeError:
+            upgrade_marks_name.append(upgrade_mark().mark.args[1].markname)
+        except (AttributeError, IndexError):
             log.error("upgrade mark does not exist")
     return upgrade_marks_name
 
@@ -2704,6 +2720,9 @@ def javasdk_pod_fixture(request, scope_name):
     javas3_pod_dict = templating.load_yaml(constants.JAVA_SDK_S3_POD_YAML)
     javas3_pod_name = create_unique_resource_name(constants.JAVAS3_POD_NAME, scope_name)
     javas3_pod_dict["metadata"]["name"] = javas3_pod_name
+    javas3_pod_dict["metadata"]["namespace"] = ocsci_config.ENV_DATA[
+        "cluster_namespace"
+    ]
     update_container_with_mirrored_image(javas3_pod_dict)
     update_container_with_proxy_env(javas3_pod_dict)
     javas3_pod_obj = Pod(**javas3_pod_dict)
@@ -4962,7 +4981,7 @@ def setup_ui_fixture(request):
     return driver
 
 
-@pytest.fixture(scope="function")
+@pytest.fixture(scope="session")
 def setup_acm_ui(request):
     return setup_acm_ui_fixture(request)
 
@@ -5634,16 +5653,16 @@ def vault_tenant_sa_setup_factory(request):
 
 
 @pytest.fixture(scope="session")
-def nsfs_interface_session(request):
-    return nsfs_interface_fixture(request)
+def nsfs_interface_session(request, service_account_factory_session):
+    return nsfs_interface_fixture(request, service_account_factory_session)
 
 
 @pytest.fixture(scope="function")
-def nsfs_interface(request):
-    return nsfs_interface_fixture(request)
+def nsfs_interface(request, service_account_factory):
+    return nsfs_interface_fixture(request, service_account_factory)
 
 
-def nsfs_interface_fixture(request):
+def nsfs_interface_fixture(request, service_account_factory):
     created_deployments = []
 
     def nsfs_interface_deployment_factory(pvc_name, pvc_mount_path="/nsfs"):
@@ -5677,6 +5696,17 @@ def nsfs_interface_fixture(request):
         volumes["name"] = pvc_name
         volumes["persistentVolumeClaim"]["claimName"] = pvc_name
 
+        # Set a privileged service account for the NSFS deployment
+        proj_obj = ocp.OCP(
+            kind=constants.NAMESPACE,
+            namespace=ocsci_config.ENV_DATA["cluster_namespace"],
+        )
+        sa_acc = service_account_factory(project=proj_obj)
+        add_scc_policy(sa_acc, namespace=ocsci_config.ENV_DATA["cluster_namespace"])
+        nsfs_deployment_data["spec"]["template"]["spec"][
+            "serviceAccountName"
+        ] = sa_acc.name
+
         if ocsci_config.DEPLOYMENT.get("disconnected"):
             update_container_with_mirrored_image(nsfs_deployment_data)
 
@@ -5695,6 +5725,11 @@ def nsfs_interface_fixture(request):
 
     request.addfinalizer(nsfs_interface_deployment_cleanup)
     return nsfs_interface_deployment_factory
+
+
+@pytest.fixture(scope="class")
+def mcg_account_factory_class(request, mcg_obj_session):
+    return mcg_account_factory_fixture(request, mcg_obj_session)
 
 
 @pytest.fixture(scope="function")
@@ -6396,9 +6431,12 @@ def set_live_must_gather_images(pytestconfig):
             "Live must gather image is not supported in Managed Service platforms"
         )
         return
+    rosa_hcp_platform = (
+        ocsci_config.ENV_DATA["platform"].lower() == constants.ROSA_HCP_PLATFORM
+    )
     # As we cannot use internal build of must gather for IBM Cloud platform
     # we will use live must gather image as a W/A.
-    if live_deployment or managed_ibmcloud_platform:
+    if live_deployment or managed_ibmcloud_platform or rosa_hcp_platform:
         update_live_must_gather_image()
     # For non GAed version of ODF as a W/A we need to use upstream must gather image
     # for IBM Cloud platform
@@ -6682,6 +6720,89 @@ def dr_workload(request):
     return factory
 
 
+@pytest.fixture(scope="class")
+def dr_workloads_on_managed_clusters(request, setup_acm_ui):
+    """
+    Deploying subscription apps on both primary and secondary managed clusters
+    """
+
+    primary_cluster_instances = []
+    secondary_cluster_instances = []
+
+    def factory(
+        num_of_subscription=1,
+        pvc_interface=constants.CEPHBLOCKPOOL,
+        primary_cluster=None,
+        secondary_cluster=None,
+    ):
+        """
+        Args:
+            num_of_subscription (int): Number of Subscription type workload to be created on each cluster
+            pvc_interface (str): 'CephBlockPool' or 'CephFileSystem'.
+                This decides whether a RBD based or CephFS based resource is created. RBD is default
+            primary_cluster (bool): True if apps to be deployed on primary cluster, false otherwise
+            secondary_cluster (bool): True if apps to be deployed on secondary cluster, false otherwise
+
+        Returns:
+            primary_cluster_instances (list): objects of subscription workload class on primary
+            secondary_cluster_instances (list): objects of subscription workload class on secondary
+
+        """
+        total_pvc_count = 0
+        workload_key = "dr_workload_subscription"
+        if pvc_interface == constants.CEPHFILESYSTEM:
+            workload_key = "dr_workload_subscription_cephfs"
+
+        if primary_cluster:
+            for index in range(num_of_subscription):
+                workload_details = ocsci_config.ENV_DATA[workload_key][index]
+
+                workload = BusyBox(
+                    workload_details=workload_details,
+                    workload_dir=workload_details["workload_dir"],
+                    workload_pod_count=workload_details["pod_count"],
+                    workload_pvc_count=workload_details["pvc_count"],
+                )
+                primary_cluster_instances.append(workload)
+                total_pvc_count += workload_details["pvc_count"]
+                workload.deploy_workloads_on_managed_clusters(
+                    primary_cluster=primary_cluster, secondary_cluster=None
+                )
+
+        if secondary_cluster:
+            for index in range(num_of_subscription):
+                workload_details = ocsci_config.ENV_DATA[workload_key][index]
+
+                workload = BusyBox(
+                    workload_details=workload_details,
+                    workload_dir=workload_details["workload_dir"],
+                    workload_pod_count=workload_details["pod_count"],
+                    workload_pvc_count=workload_details["pvc_count"],
+                )
+                secondary_cluster_instances.append(workload)
+                total_pvc_count += workload_details["pvc_count"]
+                workload.deploy_workloads_on_managed_clusters(
+                    primary_cluster=None, secondary_cluster=secondary_cluster
+                )
+
+        return primary_cluster_instances, secondary_cluster_instances
+
+    def teardown():
+        acm_obj = AcmAddClusters()
+        managed_cluster_instances = [
+            primary_cluster_instances,
+            secondary_cluster_instances,
+        ]
+        app_list = []
+        for cluster_instances in managed_cluster_instances:
+            for apps in cluster_instances:
+                app_list.append(apps.app_name)
+        dr_helpers_ui.delete_application_ui(acm_obj, workloads_to_delete=app_list)
+
+    request.addfinalizer(teardown)
+    return factory
+
+
 @pytest.fixture()
 def cnv_dr_workload(request):
     """
@@ -6757,7 +6878,75 @@ def cnv_dr_workload(request):
     def teardown():
         for instance in instances:
             try:
-                instance.delete_workload(force=True)
+                instance.delete_workload()
+            except ResourceNotDeleted:
+                raise ResourceNotDeleted("Workload deletion was unsuccessful")
+
+    request.addfinalizer(teardown)
+    return factory
+
+
+@pytest.fixture()
+def discovered_apps_dr_workload(request):
+    """
+    Deploys Discovered App based workload for DR setup
+
+    """
+    instances = []
+
+    def factory(kubeobject=1):
+        """
+        Args:
+            kubeobject (int): Number if Discovered Apps workload with kube object protection to be created
+            recipe (int): Number if Discovered Apps workload with recipe protection to be created
+            pvc_interface (str): 'CephBlockPool' or 'CephFileSystem'.
+                This decides whether a RBD based or CephFS based resource is created. RBD is default.
+
+        Raises:
+            ResourceNotDeleted: In case workload resources not deleted properly
+
+        Returns:
+            list: objects of workload class
+
+        """
+        total_pvc_count = 0
+        workload_key = "dr_workload_discovered_apps_rbd"
+        # TODO: When cephfs is ready
+        # if pvc_interface == constants.CEPHFILESYSTEM:
+        #     workload_key = "dr_workload_discovered_apps_cephfs"
+        for index in range(kubeobject):
+            workload_details = ocsci_config.ENV_DATA[workload_key][index]
+            workload = BusyboxDiscoveredApps(
+                workload_dir=workload_details["workload_dir"],
+                workload_pod_count=workload_details["pod_count"],
+                workload_pvc_count=workload_details["pvc_count"],
+                workload_namespace=workload_details["workload_namespace"],
+                discovered_apps_pvc_selector_key=workload_details[
+                    "dr_workload_app_pvc_selector_key"
+                ],
+                discovered_apps_pvc_selector_value=workload_details[
+                    "dr_workload_app_pvc_selector_value"
+                ],
+                discovered_apps_pod_selector_key=workload_details[
+                    "dr_workload_app_pod_selector_key"
+                ],
+                discovered_apps_pod_selector_value=workload_details[
+                    "dr_workload_app_pod_selector_value"
+                ],
+                workload_placement_name=workload_details[
+                    "dr_workload_app_placement_name"
+                ],
+            )
+            instances.append(workload)
+            total_pvc_count += workload_details["pvc_count"]
+            workload.deploy_workload()
+
+        return instances
+
+    def teardown():
+        for instance in instances:
+            try:
+                instance.delete_workload()
             except ResourceNotDeleted:
                 raise ResourceNotDeleted("Workload deletion was unsuccessful")
 
@@ -6937,6 +7126,9 @@ def fedora_pod_fixture(request, scope_name):
     helpers.wait_for_resource_state(
         fedora_pod_obj, constants.STATUS_RUNNING, timeout=240
     )
+    fedora_pod_obj.exec_cmd_on_pod(
+        f"cp {constants.SERVICE_CA_CRT_AWSCLI_PATH} {constants.AWSCLI_CA_BUNDLE_PATH}"
+    )
 
     def fedora_pod_cleanup():
         fedora_pod_obj.delete()
@@ -6992,9 +7184,9 @@ def ceph_objectstore_tool_fixture(request):
     cot_obj = CephObjectStoreTool()
 
     def teardown():
-        deployment_in_debug = cot_obj.deployment_in_debug
-        for deployment_name in list(deployment_in_debug):
-            cot_obj.debug_stop(deployment_name=deployment_name)
+        deployment_in_maintenance = cot_obj.deployment_in_maintenance
+        for deployment_name in list(deployment_in_maintenance):
+            cot_obj.maintenance_stop(deployment_name=deployment_name)
 
     request.addfinalizer(teardown)
 
@@ -7016,9 +7208,9 @@ def ceph_monstore_tool_fixture(request):
     mot_obj = MonStoreTool()
 
     def teardown():
-        deployment_in_debug = mot_obj.deployment_in_debug
-        for deployment_name in list(deployment_in_debug):
-            mot_obj.debug_stop(deployment_name=deployment_name)
+        deployment_in_maintenance = mot_obj.deployment_in_maintenance
+        for deployment_name in list(deployment_in_maintenance):
+            mot_obj.maintenance_stop(deployment_name=deployment_name)
 
     request.addfinalizer(teardown)
 
@@ -8185,3 +8377,29 @@ def run_description():
         if not os.path.isfile(description_path):
             with open(description_path, "w") as file:
                 file.write(f"{run_name}\n")
+
+
+@pytest.fixture(scope="session")
+def setup_cnv(request):
+    """
+    Session scoped fixture to setup and cleanup CNV
+    based on need of the tests
+
+    """
+    cnv_obj = CNVInstaller()
+    installed = False
+    if not cnv_obj.post_install_verification():
+        cnv_obj.deploy_cnv(check_cnv_deployed=False, check_cnv_ready=False)
+        installed = True
+
+    def finalizer():
+        """
+        Clean up CNV deployment
+
+        """
+
+        # Uninstall CNV only if installed by this fixture
+        if installed:
+            cnv_obj.uninstall_cnv()
+
+    request.addfinalizer(finalizer)

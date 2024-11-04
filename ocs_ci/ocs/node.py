@@ -1695,9 +1695,10 @@ def verify_all_nodes_created():
     raise_exception = False
     if config.ENV_DATA["platform"].lower() in constants.MANAGED_SERVICE_PLATFORMS:
         expected_num_nodes += 3
+    elif config.ENV_DATA["platform"].lower() == constants.ROSA_HCP_PLATFORM:
+        pass
     else:
         expected_num_nodes += config.ENV_DATA.get("infra_replicas", 0)
-
     existing_num_nodes = len(get_all_nodes())
 
     # Some nodes will take time to create due to the issue https://issues.redhat.com/browse/SDA-6346
@@ -1719,6 +1720,7 @@ def verify_all_nodes_created():
             constants.VSPHERE_PLATFORM,
             constants.IBMCLOUD_PLATFORM,
             constants.AZURE_PLATFORM,
+            constants.ROSA_HCP_PLATFORM,
         ]
         platforms_to_wait.extend(constants.MANAGED_SERVICE_PLATFORMS)
         if config.ENV_DATA[

@@ -268,24 +268,30 @@ class DeploymentUI(PageNavigator):
 
         self.configure_performance()
 
-        if self.operator_name == OCS_OPERATOR:
-            logger.info(f"Select {constants.LOCAL_BLOCK_RESOURCE} storage class")
-            self.choose_expanded_mode(
-                mode=True, locator=self.dep_loc["storage_class_dropdown_lso"]
-            )
-            self.do_click(locator=self.dep_loc["localblock_sc"], enable_screenshot=True)
-            timeout_next = 30
-        else:
-            timeout_next = 600
-        self.do_click(
-            self.dep_loc["next"], enable_screenshot=True, timeout=timeout_next
+        sample = TimeoutSampler(
+            timeout=700,
+            sleep=40,
+            func=self.wait_next_button_lso,
         )
+        if not sample.wait_for_func_status(result=True):
+            self.take_screenshot()
+            raise TimeoutExpiredError(
+                "Next button on LSO is not clickable after 700 seconds"
+            )
 
         self.configure_encryption()
 
         self.configure_data_protection()
 
         self.create_storage_cluster()
+
+    def wait_next_button_lso(self):
+        try:
+            self.do_click(self.dep_loc["next"], enable_screenshot=True, timeout=20)
+        except Exception as e:
+            logger.error(f"Next button on LSO error: {e}")
+            return False
+        return True
 
     def install_internal_cluster(self):
         """
@@ -394,10 +400,7 @@ class DeploymentUI(PageNavigator):
         Configure Data Protection
 
         """
-        if (
-            self.ocs_version_semantic >= version.VERSION_4_14
-            and self.ocs_version_semantic <= version.VERSION_4_16
-        ):
+        if self.ocs_version_semantic >= version.VERSION_4_14:
             self.do_click(self.dep_loc["next"], enable_screenshot=True)
 
     def enable_taint_nodes(self):

@@ -3,6 +3,7 @@ import time
 
 import pytest
 
+from ocs_ci.framework import config
 from ocs_ci.ocs import constants
 from ocs_ci.framework.pytest_customization.marks import green_squad
 from ocs_ci.framework.testlib import (
@@ -12,7 +13,6 @@ from ocs_ci.framework.testlib import (
     tier2,
     polarion_id,
     skipif_managed_service,
-    skipif_hci_provider_and_client,
     skipif_external_mode,
 )
 from ocs_ci.ocs.exceptions import (
@@ -20,8 +20,12 @@ from ocs_ci.ocs.exceptions import (
     TimeoutExpiredError,
     UnexpectedBehaviour,
 )
-from ocs_ci.ocs.resources.pod import get_file_path, check_file_existence, delete_pods
-from ocs_ci.helpers.helpers import fetch_used_size
+from ocs_ci.ocs.resources.pod import (
+    get_file_path,
+    check_file_existence,
+    delete_pods,
+)
+from ocs_ci.helpers.helpers import fetch_used_size, default_storage_class
 from ocs_ci.utility.utils import TimeoutSampler
 
 log = logging.getLogger(__name__)
@@ -43,11 +47,15 @@ class TestRbdSpaceReclaim(ManageTest):
         """
         self.pool_replica = 3
         pvc_size_gi = 25
-        self.sc_obj = storageclass_factory(
-            interface=constants.CEPHBLOCKPOOL,
-            replica=self.pool_replica,
-            new_rbd_pool=True,
-        )
+        if config.ENV_DATA["platform"] in constants.HCI_PROVIDER_CLIENT_PLATFORMS:
+            self.sc_obj = default_storage_class(interface_type=constants.CEPHBLOCKPOOL)
+        else:
+            self.sc_obj = storageclass_factory(
+                interface=constants.CEPHBLOCKPOOL,
+                replica=self.pool_replica,
+                new_rbd_pool=True,
+            )
+
         self.pvc, self.pod = create_pvcs_and_pods(
             pvc_size=pvc_size_gi,
             access_modes_rbd=[constants.ACCESS_MODE_RWO],
@@ -60,7 +68,6 @@ class TestRbdSpaceReclaim(ManageTest):
     @tier1
     @skipif_external_mode
     @skipif_managed_service
-    @skipif_hci_provider_and_client
     def test_rbd_space_reclaim(self):
         """
         Test to verify RBD space reclamation
@@ -144,7 +151,6 @@ class TestRbdSpaceReclaim(ManageTest):
     @polarion_id("OCS-2774")
     @tier1
     @skipif_managed_service
-    @skipif_hci_provider_and_client
     @skipif_external_mode
     def test_rbd_space_reclaim_no_space(self):
         """
@@ -201,7 +207,6 @@ class TestRbdSpaceReclaim(ManageTest):
     @polarion_id("OCS-3733")
     @tier2
     @skipif_external_mode
-    @skipif_hci_provider_and_client
     def test_no_volume_mounted(self):
         """
         Test reclaimspace job with no volume mounted
@@ -256,6 +261,10 @@ class TestRbdSpaceReclaim(ManageTest):
         # Delete the pod
         log.info(f"Deleting the pod {pod_obj}")
         delete_pods([pod_obj])
+
+        # Validation of pod deletion
+        log.info(f"Validate the deletion of pod - {pod_obj.name}")
+        pod_obj.ocp.wait_for_delete(resource_name=pod_obj.name)
 
         # Create ReclaimSpaceJob
         reclaim_space_job = pvc_obj.create_reclaim_space_job()

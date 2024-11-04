@@ -80,3 +80,26 @@ def switch_to_client_for_function(func, client_index=0):
                 config.switch_ctx(orig_index)
 
     return inner
+
+
+def switch_to_provider_for_function(func):
+    """
+    A decorator for switching to the provider cluster for the function execution.
+    After the function execution, it switches back to the original index.
+
+    Args:
+        func (function): The function we want to decorate
+
+    """
+
+    def inner(*args, **kwargs):
+        orig_index = config.cur_index
+        try:
+            config.switch_to_provider()
+            return func(*args, **kwargs)
+        finally:
+            if config.cur_index != orig_index:
+                logger.info("Switching back to the original cluster")
+                config.switch_ctx(orig_index)
+
+    return inner

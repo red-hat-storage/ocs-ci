@@ -19,7 +19,8 @@ logger = logging.getLogger(__name__)
 
 def change_registry_backend_to_ocs():
     """
-    Function to deploy registry with OCS backend.
+    Function to deploy registry with OCS backend. By default, the image registry may use ephemeral storage,
+    so we overwrite this to utilize ODF(OCS) storage.
 
     Raises:
         AssertionError: When failure in change of registry backend to OCS

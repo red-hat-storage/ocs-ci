@@ -1,3 +1,4 @@
+from datetime import datetime
 from functools import reduce
 import base64
 import io
@@ -597,6 +598,7 @@ def exec_cmd(
     silent=False,
     use_shell=False,
     cluster_config=None,
+    lock_timeout=7200,
     **kwargs,
 ):
     """
@@ -619,6 +621,7 @@ def exec_cmd(
         use_shell (bool): If True will pass the cmd without splitting
         cluster_config (MultiClusterConfig): In case of multicluster environment this object
                 will be non-null
+        lock_timeout (int): maximum timeout to wait for lock to prevent deadlocks (default 2 hours)
 
     Raises:
         CommandFailed: In case the command execution fails
@@ -668,18 +671,20 @@ def exec_cmd(
                 log.info(f"Found oc plugin {subcmd}")
         cmd = list_insert_at_position(cmd, kube_index, ["--kubeconfig"])
         cmd = list_insert_at_position(cmd, kube_index + 1, [kubepath])
-    if threading_lock and cmd[0] == "oc":
-        threading_lock.acquire()
-    completed_process = subprocess.run(
-        cmd,
-        stdout=subprocess.PIPE,
-        stderr=subprocess.PIPE,
-        stdin=subprocess.PIPE,
-        timeout=timeout,
-        **kwargs,
-    )
-    if threading_lock and cmd[0] == "oc":
-        threading_lock.release()
+    try:
+        if threading_lock and cmd[0] == "oc":
+            threading_lock.acquire(timeout=lock_timeout)
+        completed_process = subprocess.run(
+            cmd,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            stdin=subprocess.PIPE,
+            timeout=timeout,
+            **kwargs,
+        )
+    finally:
+        if threading_lock and cmd[0] == "oc":
+            threading_lock.release()
     masked_stdout = mask_secrets(completed_process.stdout.decode(), secrets)
     if len(completed_process.stdout) > 0:
         log.debug(f"Command stdout: {masked_stdout}")
@@ -942,6 +947,7 @@ def get_rosa_cli(
     """
     bin_dir = os.path.expanduser(bin_dir or config.RUN["bin_dir"])
     rosa_filename = "rosa"
+    rosa_tarball_name = "rosa_Linux_x86_64.tar.gz"
     rosa_binary_path = os.path.join(bin_dir, rosa_filename)
     if os.path.isfile(rosa_binary_path) and force_download:
         delete_file(rosa_binary_path)
@@ -953,8 +959,10 @@ def get_rosa_cli(
         # record current working directory and switch to BIN_DIR
         previous_dir = os.getcwd()
         os.chdir(bin_dir)
-        url = f"https://github.com/openshift/rosa/releases/download/v{version}/rosa-linux-amd64"
-        download_file(url, rosa_filename)
+        # download rosa binary endpoints were changed to a tarball endpoints
+        url = f"https://github.com/openshift/rosa/releases/download/v{version}/{rosa_tarball_name}"
+        download_file(url, f"/tmp/{rosa_tarball_name}")
+        run_cmd(f"tar xzvf /tmp/{rosa_tarball_name} {rosa_filename}")
         # return to the previous working directory
         os.chdir(previous_dir)
 
@@ -1532,6 +1540,30 @@ def get_random_str(size=13):
     """
     chars = string.ascii_lowercase + string.digits
     return "".join(random.choice(chars) for _ in range(size))
+
+
+def get_random_letters(size=13):
+    """
+    Generates the random string of 3 characters
+
+    Args:
+        size (int): number of letter characters to generate
+
+    Returns:
+        str: string of random characters of given size
+    """
+    return "".join(random.choice(string.ascii_lowercase) for _ in range(size))
+
+
+def date_in_minimal_format():
+    """
+    Get the current date in a minimal format, such as 61024 for 6 of October 2024. Suitable to add to resource names.
+
+    Returns:
+        str: The current date in a minimal
+    """
+    current_date = datetime.now()
+    return f"{current_date.day}{current_date.month}{current_date.year % 100}"
 
 
 def run_async(command):
@@ -2130,9 +2162,11 @@ def get_ocp_version(seperator=None):
             if (
                 config.ENV_DATA["platform"] == constants.IBMCLOUD_PLATFORM
                 and config.ENV_DATA["deployment_type"] == "managed"
-            ):
+            ) or config.ENV_DATA["platform"] == constants.ROSA_HCP_PLATFORM:
                 # In IBM ROKS, there is some issue that openshiftVersion is not available
                 # after fresh deployment. As W/A we are taking the version from config only if not found.
+                # UPD:
+                # seems like ROSA HCP takes more time to propagate version to clusterversion on fresh deployments
                 log.warning(
                     "openshiftVersion key not found! Taking OCP version from config."
                 )
@@ -2417,7 +2451,7 @@ def wait_for_ceph_health_not_ok(timeout=300, sleep=10):
 
         """
 
-        status = run_ceph_health_cmd(constants.OPENSHIFT_STORAGE_NAMESPACE)
+        status = run_ceph_health_cmd(config.ENV_DATA["cluster_namespace"])
         return str(status).strip() != "HEALTH_OK"
 
     sampler = TimeoutSampler(
@@ -3831,7 +3865,8 @@ def update_container_with_mirrored_image(job_pod_dict):
             container = job_pod_dict["spec"]["containers"][0]
         else:
             container = job_pod_dict["spec"]["template"]["spec"]["containers"][0]
-        container["image"] = mirror_image(container["image"])
+        if "/" in container["image"]:
+            container["image"] = mirror_image(container["image"])
     return job_pod_dict
 
 
@@ -4640,6 +4675,48 @@ def get_pytest_fixture_value(request, fixture_name):
     return request.getfixturevalue(fixture_name)
 
 
+def get_client_type_by_name(cluster_name):
+    """
+    Get the client type by the cluster name
+
+    Args:
+        cluster_name (str): The cluster name
+
+    Returns:
+        str: The client type in lowercase(e.g. kubevirt, agent, non_hosted, etc.,)
+
+    """
+    from ocs_ci.deployment.helpers.hypershift_base import (
+        is_hosted_cluster,
+        get_hosted_cluster_type,
+    )
+
+    if not is_hosted_cluster(cluster_name):
+        return constants.NON_HOSTED_CLUSTER
+
+    return get_hosted_cluster_type(cluster_name)
+
+
+def switch_to_correct_client_type(client_type):
+    """
+    Switch to the correct client type
+
+    Args:
+        client_type (str): The client type(e.g. Kubevirt, Agent, non_hosted, etc.,)
+
+    """
+    client_indices = config.get_consumer_indexes_list()
+    for client_i in client_indices:
+        cluster_name = config.clusters[client_i].ENV_DATA["cluster_name"]
+        if get_client_type_by_name(cluster_name) == client_type:
+            # Switch to the correct client type
+            log.info(f"Switching to the client with the type '{client_type}'")
+            config.switch_ctx(client_i)
+            return
+
+    pytest.skip(f"The client type '{client_type}' does not exist in the run")
+
+
 def switch_to_correct_cluster_at_setup(request):
     """
     Switch to the correct cluster index at setup, according to the 'cluster_type' fixture parameter
@@ -4673,6 +4750,11 @@ def switch_to_correct_cluster_at_setup(request):
     # If the cluster is an MS cluster
     if not config.is_cluster_type_exist(cluster_type):
         pytest.skip(f"The cluster type '{cluster_type}' does not exist in the run")
+
+    client_type = get_pytest_fixture_value(request, "client_type")
+    if cluster_type == constants.HCI_CLIENT and client_type:
+        switch_to_correct_client_type(client_type)
+        return
 
     # Switch to the correct cluster type
     log.info(f"Switching to the cluster with the cluster type '{cluster_type}'")
@@ -4855,7 +4937,7 @@ def get_acm_version(namespace=constants.ACM_HUB_NAMESPACE):
     for csv in csv_list:
         if "advanced-cluster-management" in csv["metadata"]["name"]:
             # extract version string
-            return csv["spec"]["version"]
+            return re.sub(r"-.", "", csv["spec"]["version"])
 
 
 def is_cluster_y_version_upgraded():
@@ -4907,7 +4989,7 @@ def exec_nb_db_query(query):
     nb_db_pod = pod.Pod(
         **pod.get_pods_having_label(
             label=constants.NOOBAA_DB_LABEL_47_AND_ABOVE,
-            namespace=constants.OPENSHIFT_STORAGE_NAMESPACE,
+            namespace=config.ENV_DATA["cluster_namespace"],
         )[0]
     )
 
@@ -4944,7 +5026,7 @@ def get_role_arn_from_sub():
         odf_sub = OCP(
             kind=constants.SUBSCRIPTION,
             resource_name=constants.ODF_SUBSCRIPTION,
-            namespace=constants.OPENSHIFT_STORAGE_NAMESPACE,
+            namespace=config.ENV_DATA["cluster_namespace"],
         )
         for item in odf_sub.get()["spec"]["config"]["env"]:
             if item["name"] == "ROLEARN":
@@ -5100,3 +5182,19 @@ def compare_dictionaries(
                 differences[key] = (value1, value2)
     log.info(f"Differences: {differences}")
     return differences
+
+
+def extract_image_urls(string_data):
+    """
+    Extract all image URLs from the string.
+
+    Args:
+        string_data (str): The string data that contains the image URLs to extract.
+
+    Returns:
+        list: List of image URLs found in the string, or an empty list if none are found.
+
+    """
+    # Find all URLs that start with 'registry.redhat.io'
+    image_urls = re.findall(r'registry\.redhat\.io[^\s"]+', string_data)
+    return image_urls

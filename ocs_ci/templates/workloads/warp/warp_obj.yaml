@@ -1,10 +1,10 @@
 host: "s3.openshift-storage.svc"
 duration: "10m"
-concurrent: 20
+concurrent: 256
 objects: 100
 obj.size: "1.5MiB"
-get-distrib: 2
-put-distrib: 2
-delete-distrib: 1
-stat-distrib: 0
+get-distrib: 3
+put-distrib: 95
+delete-distrib: 0
+stat-distrib: 2
 warp_bin_dir: "/home/warp/warp"

@@ -566,6 +566,8 @@ pvc = {
         "//dd[contains(text(),'{}') and @data-test-id='pvc-capacity']",
         By.XPATH,
     ),
+    "access_mode_button": ("button[class='pf-v5-c-menu-toggle']", By.CSS_SELECTOR),
+    "access_rwx": ("//li//button//*[contains(text(), 'RWX')]", By.XPATH),
 }
 
 pvc_4_6 = {
@@ -1026,6 +1028,10 @@ acm_configuration_4_12 = {
     ),
     "failover-app": ("//button[normalize-space()='Failover application']", By.XPATH),
     "relocate-app": ("//button[normalize-space()='Relocate application']", By.XPATH),
+    "delete-app": ("//button[normalize-space()='Delete application']", By.XPATH),
+    "remove-app-resources": (".//*[@id='remove-app-resources']", By.XPATH),
+    "delete": ("//button[@type='button'][@class='pf-c-button pf-m-danger']", By.XPATH),
+    "no-results-found": ("//*[text()='No results found']", By.XPATH),
     "policy-dropdown": ("#drPolicy-selection", By.CSS_SELECTOR),
     "select-policy": ('//*[text()="{}"]', By.XPATH),
     "target-cluster-dropdown": (

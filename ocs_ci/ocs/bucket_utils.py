@@ -49,7 +49,7 @@ def craft_s3_command(cmd, mcg_obj=None, api=False, signed_request_creds=None):
     api = "api" if api else ""
     no_ssl = (
         "--no-verify-ssl"
-        if signed_request_creds and signed_request_creds.get("ssl") is False
+        if (signed_request_creds and signed_request_creds.get("ssl")) is False
         else ""
     )
     if mcg_obj:
@@ -58,12 +58,13 @@ def craft_s3_command(cmd, mcg_obj=None, api=False, signed_request_creds=None):
         else:
             region = ""
         base_command = (
-            f'sh -c "AWS_CA_BUNDLE={constants.SERVICE_CA_CRT_AWSCLI_PATH} '
+            f'sh -c "AWS_CA_BUNDLE={constants.AWSCLI_CA_BUNDLE_PATH} '
             f"AWS_ACCESS_KEY_ID={mcg_obj.access_key_id} "
             f"AWS_SECRET_ACCESS_KEY={mcg_obj.access_key} "
             f"{region}"
             f"aws s3{api} "
             f"--endpoint={mcg_obj.s3_internal_endpoint} "
+            f"{no_ssl} "
         )
         string_wrapper = '"'
     elif signed_request_creds:
@@ -343,10 +344,15 @@ def copy_objects(
     """
 
     logger.info(f"Copying object {src_obj} to {target}")
+    no_ssl = (
+        "--no-verify-ssl"
+        if (signed_request_creds and signed_request_creds.get("ssl")) is False
+        else ""
+    )
     if recursive:
-        retrieve_cmd = f"cp {src_obj} {target} --recursive"
+        retrieve_cmd = f"cp {src_obj} {target} --recursive {no_ssl}"
     else:
-        retrieve_cmd = f"cp {src_obj} {target}"
+        retrieve_cmd = f"cp {src_obj} {target} {no_ssl}"
     if s3_obj:
         secrets = [s3_obj.access_key_id, s3_obj.access_key, s3_obj.s3_internal_endpoint]
     elif signed_request_creds:
@@ -1493,7 +1499,7 @@ def retrieve_verification_mode():
     if (
         config.ENV_DATA["platform"] == constants.IBMCLOUD_PLATFORM
         and config.ENV_DATA["deployment_type"] == "managed"
-    ):
+    ) or config.ENV_DATA["platform"] == constants.ROSA_HCP_PLATFORM:
         verify = True
     elif config.DEPLOYMENT.get("use_custom_ingress_ssl_cert"):
         verify = get_root_ca_cert()
@@ -2716,3 +2722,20 @@ def list_objects_in_batches(
 
         marker = response.get("Contents", [])[-1]["Key"]
         del response
+
+
+def map_objects_to_owners(mcg_obj, bucket_name, prefix=""):
+    """
+    This method returns a mapping of object key to owner data
+
+    Args:
+        mcg_obj (MCG): MCG object
+        bucket_name (str): Name of the bucket
+        prefix (str): Prefix to list objects
+
+    Returns:
+        dict: a mapping of object key to owner data
+
+    """
+    response = s3_list_objects_v2(mcg_obj, bucket_name, prefix=prefix, fetch_owner=True)
+    return {item["Key"]: item["Owner"] for item in response.get("Contents", [])}

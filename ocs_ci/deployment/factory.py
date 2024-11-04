@@ -83,10 +83,11 @@ class DeploymentFactory(object):
             from .openshift_dedicated import OpenshiftDedicated
 
             self.cls_map["openshiftdedicated_managed"] = OpenshiftDedicated
-        elif self.deployment_platform == constants.ROSA_PLATFORM:
+        elif self.deployment_platform in constants.ROSA_PLATFORMS:
             from .rosa import ROSA
 
             self.cls_map["rosa_managed"] = ROSA
+            self.cls_map["rosa_hcp_ipi"] = ROSA
         elif self.deployment_platform == constants.FUSIONAAS_PLATFORM:
             from .fusion_aas import FUSIONAAS
 

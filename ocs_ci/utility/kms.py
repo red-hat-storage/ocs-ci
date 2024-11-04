@@ -329,6 +329,7 @@ class Vault(KMS):
             config.ENV_DATA, "VAULT_CACERT", defaults.VAULT_DEFAULT_CA_CERT
         )
         ca_data["metadata"]["name"] = self.ca_cert_name
+        ca_data["metadata"]["namespace"] = config.ENV_DATA["cluster_namespace"]
         ca_data["data"]["cert"] = self.ca_cert_base64
         self.create_resource(ca_data, prefix="ca")
 
@@ -344,12 +345,18 @@ class Vault(KMS):
                 constants.EXTERNAL_VAULT_CLIENT_CERT
             )
             client_cert_data["metadata"]["name"] = self.client_cert_name
+            client_cert_data["metadata"]["namespace"] = config.ENV_DATA[
+                "cluster_namespace"
+            ]
             client_cert_data["data"]["cert"] = self.client_cert_base64
             self.create_resource(client_cert_data, prefix="clientcert")
 
             # create client key secert
             client_key_data = templating.load_yaml(constants.EXTERNAL_VAULT_CLIENT_KEY)
             client_key_data["metadata"]["name"] = self.client_key_name
+            client_key_data["metadata"]["namespace"] = config.ENV_DATA[
+                "cluster_namespace"
+            ]
             client_key_data["data"]["key"] = self.client_key_base64
             self.create_resource(client_key_data, prefix="clientkey")
 
@@ -457,7 +464,7 @@ class Vault(KMS):
         if self.vault_sealed():
             logger.info("Vault is sealed, Unsealing now..")
             for i in range(3):
-                kkey = f"UNSEAL_KEY{i+1}"
+                kkey = f"UNSEAL_KEY{i + 1}"
                 self._vault_unseal(self.vault_conf[kkey])
             # Check if vault is unsealed or not
             if self.vault_sealed():
@@ -1640,6 +1647,7 @@ class KMIP(KMS):
         kmip_kms_secret["metadata"]["name"] = helpers.create_unique_resource_name(
             "thales-kmip", type
         )
+        kmip_kms_secret["metadata"]["namespace"] = config.ENV_DATA["cluster_namespace"]
         self.create_resource(kmip_kms_secret, prefix="thales-kmip-secret")
         logger.info(f"KMIP secret {kmip_kms_secret['metadata']['name']} created")
         return kmip_kms_secret["metadata"]["name"]
@@ -2236,6 +2244,16 @@ def update_csi_kms_vault_connection_details(update_config):
     )
     templating.dump_data_to_temp_yaml(csi_kms_conf.data, resource_data_yaml.name)
     run_cmd(f"oc apply -f {resource_data_yaml.name}", timeout=300)
+
+
+def get_kms_details():
+    kms_provider = config.ENV_DATA["KMS_PROVIDER"]
+    try:
+        return kms_map[kms_provider]()
+    except KeyError:
+        raise KMSNotSupported(
+            f"Not a supported KMS deployment , provider: {kms_provider}"
+        )
 
 
 def get_kms_deployment():

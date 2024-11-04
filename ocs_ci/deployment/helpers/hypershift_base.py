@@ -1,9 +1,7 @@
 import logging
 import os
-import random
 import re
 import shutil
-import string
 import tempfile
 import time
 from datetime import datetime
@@ -17,7 +15,14 @@ from ocs_ci.ocs.ocp import OCP
 from ocs_ci.ocs.resources.pod import wait_for_pods_to_be_in_statuses_concurrently
 from ocs_ci.ocs.version import get_ocp_version
 from ocs_ci.utility.retry import retry
-from ocs_ci.utility.utils import exec_cmd, TimeoutSampler, get_latest_release_version
+from ocs_ci.utility.utils import (
+    exec_cmd,
+    TimeoutSampler,
+    get_latest_release_version,
+    get_random_letters,
+)
+from ocs_ci.utility.decorators import switch_to_orig_index_at_last
+from ocs_ci.ocs.utils import get_namespce_name_by_pattern
 
 """
 This module contains the base class for HyperShift hosted cluster management.
@@ -78,9 +83,7 @@ def get_random_hosted_cluster_name():
     hcp_version = "".join([c for c in ocp_version if c.isdigit()][:3])
     match = re.search(r"\d+$", bm_name)
     if match:
-        random_letters = "".join(
-            random.choice(string.ascii_lowercase) for _ in range(3)
-        )
+        random_letters = get_random_letters(3)
         cluster_name = (
             "hcp"
             + hcp_version
@@ -105,6 +108,67 @@ def get_binary_hcp_version():
         return exec_cmd("hcp version").stdout.decode("utf-8").strip()
     except CommandFailed:
         return exec_cmd("hcp --version").stdout.decode("utf-8").strip()
+
+
+@switch_to_orig_index_at_last
+def get_cluster_vm_namespace(cluster_name=None):
+    """
+    Get the cluster virtual machines namespace by the cluster name
+
+    Args:
+        cluster_name (str): The cluster name.
+
+    Returns:
+        str: The cluster virtual machines namespace
+
+    """
+    cluster_name = cluster_name or config.ENV_DATA["cluster_name"]
+    pattern = f"clusters-{cluster_name}"
+    config.switch_to_provider()
+    cluster_vm_namespaces = get_namespce_name_by_pattern(pattern=pattern)
+    assert (
+        cluster_vm_namespaces
+    ), f"Didn't find the cluster namespace for the cluster {cluster_name}"
+
+    return cluster_vm_namespaces[0]
+
+
+@switch_to_orig_index_at_last
+def is_hosted_cluster(cluster_name=None):
+    """
+    Check if the cluster is a hosted cluster
+
+    Args:
+        cluster_name (str): The cluster name
+
+    Returns:
+        bool: True, if the cluster is a hosted cluster. False, otherwise.
+
+    """
+    cluster_name = cluster_name or config.ENV_DATA["cluster_name"]
+    config.switch_to_provider()
+    ocp_obj = OCP(kind=constants.HOSTED_CLUSTERS, namespace="clusters")
+    return ocp_obj.is_exist(resource_name=cluster_name)
+
+
+@switch_to_orig_index_at_last
+def get_hosted_cluster_type(cluster_name=None):
+    """
+    Get the hosted cluster type
+
+    Args:
+        cluster_name (str): The cluster name
+
+    Returns:
+        str: The hosted cluster type in lowercase
+
+    """
+    cluster_name = cluster_name or config.ENV_DATA["cluster_name"]
+    config.switch_to_provider()
+    ocp_hosted_cluster_obj = OCP(
+        kind=constants.HOSTED_CLUSTERS, namespace="clusters", resource_name=cluster_name
+    )
+    return ocp_hosted_cluster_obj.get()["spec"]["platform"]["type"].lower()
 
 
 class HyperShiftBase:
@@ -527,7 +591,7 @@ class HyperShiftBase:
         """
 
         path_abs = os.path.expanduser(hosted_cluster_path)
-        auth_path = os.path.join(path_abs, "auth_path")
+        auth_path = os.path.join(path_abs, "auth")
         os.makedirs(auth_path, exist_ok=True)
         kubeconfig_path = os.path.join(auth_path, "kubeconfig")
 

@@ -1,13 +1,28 @@
 DEPLOYMENT:
   allow_lower_instance_requirements: false
+  sts_enabled: true
+  force_download_ocm_cli: true
+  force_download_rosa_cli: true
+  ocm_cli_version: '0.1.67'
+  rosa_cli_version: '1.2.45'
+  live_deployment: true
+  customized_deployment_storage_class: 'gp3-csi'
 RUN:
-  username: 'cluster-admin'
+  username: "cluster-admin"
 ENV_DATA:
+  # TODO: to change deployment_type from current "ipi" on tier4 adjustments, see issue #10669
+  # deployment_type: 'semi_managed'
   platform: 'rosa_hcp'
-  deployment_type: 'ipi'
+  rosa_mode: "auto"
   region: 'us-west-2'
   worker_availability_zones:
     - 'us-west-2a'
+  master_replicas: 0
   worker_replicas: 6
   worker_instance_type: 'm5.2xlarge'
   cluster_namespace: "odf-storage"
+  private_link: false
+  machine_cidr: "10.0.0.0/16"
+  ms_env_type: "staging"
+  addon_name: "ocs-converged"
+  persistent-monitoring: false

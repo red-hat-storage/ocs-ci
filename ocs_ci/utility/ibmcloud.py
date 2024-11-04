@@ -16,6 +16,7 @@ from json import JSONDecodeError
 from ocs_ci.framework import config
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.defaults import IBM_CLOUD_REGIONS
+from ocs_ci.ocs.ocp import OCP
 from ocs_ci.ocs.exceptions import (
     APIRequestError,
     CommandFailed,
@@ -24,6 +25,7 @@ from ocs_ci.ocs.exceptions import (
     NodeHasNoAttachedVolume,
     TimeoutExpiredError,
 )
+from ocs_ci.ocs.resources.ocs import OCS
 from ocs_ci.utility import version as util_version
 from ocs_ci.utility.utils import get_infra_id, get_ocp_version, run_cmd, TimeoutSampler
 from ocs_ci.ocs.node import get_nodes
@@ -129,6 +131,9 @@ def run_ibmcloud_cmd(cmd, secrets=None, timeout=600, ignore_error=False, **kwarg
         if "Please login" in str(ex):
             login()
             return run_cmd(cmd, secrets, timeout, ignore_error, **kwargs)
+        else:
+            if not ignore_error:
+                raise
 
 
 def get_cluster_details(cluster):
@@ -186,17 +191,26 @@ def create_cluster(cluster_name):
 
     """
     provider = config.ENV_DATA["provider"]
+    worker_availability_zones = config.ENV_DATA.get("worker_availability_zones", [])
+    worker_zones_number = len(worker_availability_zones)
     zone = config.ENV_DATA["zone"]
     flavor = config.ENV_DATA["worker_instance_type"]
     worker_replicas = config.ENV_DATA["worker_replicas"]
+    if worker_zones_number > 1:
+        worker_replicas = 2
     ocp_version = get_ibmcloud_ocp_version()
-
     cmd = (
         f"ibmcloud ks cluster create {provider} --name {cluster_name}"
         f" --flavor {flavor}  --workers {worker_replicas}"
         f" --kube-version {ocp_version}"
     )
+    # Reloading correct number of worker replica for later usage.
+    if worker_zones_number > 1:
+        worker_replicas = int(config.ENV_DATA["worker_replicas"] / worker_zones_number)
     if provider == "vpc-gen2":
+        semantic_ocp_version = util_version.get_semantic_ocp_version_from_config()
+        if semantic_ocp_version >= util_version.VERSION_4_15:
+            cmd += " --disable-outbound-traffic-protection"
         vpc_id = config.ENV_DATA["vpc_id"]
         subnet_id = config.ENV_DATA["subnet_id"]
         cmd += f" --vpc-id {vpc_id} --subnet-id  {subnet_id} --zone {zone}"
@@ -209,11 +223,27 @@ def create_cluster(cluster_name):
     cluster_info = get_cluster_details(cluster_name)
     # Create metadata file to store the cluster name
     cluster_info["clusterName"] = cluster_name
-    cluster_info["clusterID"] = cluster_info["id"]
+    cluster_id = cluster_info["id"]
+    cluster_info["clusterID"] = cluster_id
     cluster_path = config.ENV_DATA["cluster_path"]
     metadata_file = os.path.join(cluster_path, "metadata.json")
     with open(metadata_file, "w+") as f:
         json.dump(cluster_info, f)
+    for worker_zone in worker_availability_zones:
+        if worker_zone == zone:
+            continue
+        subnet = config.ENV_DATA["subnet_ids_per_zone"][worker_zone]
+        cmd = (
+            f"ibmcloud oc zone add {provider} --subnet-id {subnet}  "
+            f"--cluster {cluster_id} --zone {worker_zone} --worker-pool default"
+        )
+        run_ibmcloud_cmd(cmd)
+    if worker_zones_number > 1:
+        cmd = (
+            f"ibmcloud ks worker-pool resize --cluster {cluster_name} --worker-pool "
+            f"default --size-per-zone {worker_replicas}"
+        )
+        run_ibmcloud_cmd(cmd)
     # Temporary increased timeout to 10 hours cause of issue with deployment on
     # IBM cloud
     timeout = 36000
@@ -572,6 +602,285 @@ class IBMCloud(object):
             logger.info(f"volume is deleted successfully: {volume}")
         else:
             logger.info("volume is not deleted")
+
+
+class IBMCloudIPI(object):
+    """
+    Wrapper for Ibm Cloud IPI
+
+    """
+
+    def restart_nodes(self, nodes, wait=True, timeout=900):
+        """
+        Reboot the nodes on IBM Cloud.
+        Args:
+            nodes (list): The worker node instance
+            wait (bool): Wait for the VMs to stop
+            timeout (int): Timeout for the command, defaults to 900 seconds.
+        """
+        logger.info("restarting nodes")
+
+        for node in nodes:
+            cmd = f"ibmcloud is instance-reboot {node.name} -f"
+            out = run_ibmcloud_cmd(cmd)
+            logger.info(f"Node restart command output: {out}")
+
+        if wait:
+            for node in nodes:
+                sample = TimeoutSampler(
+                    timeout=timeout,
+                    sleep=10,
+                    func=self.check_node_status,
+                    node_name=node.name,
+                    node_status=constants.STATUS_RUNNING.lower(),
+                )
+                sample.wait_for_func_status(result=True)
+
+    def start_nodes(self, nodes):
+        """
+        Start the nodes on IBM Cloud
+        Args:
+            nodes (list): The OCS objects of the nodes
+        """
+        # logger.info(nodes)
+        for node in nodes:
+            # logger.info(node.get())
+            cmd = f"ibmcloud is instance-start {node.name}"
+            out = run_ibmcloud_cmd(cmd)
+            logger.info(f"Node start command output: {out}")
+
+    def stop_nodes(self, nodes, force=True, wait=True):
+        """
+        Stop the nodes on IBM Cloud
+        Args:
+            nodes (list): The OCS objects of the nodes
+            force (bool): True for VM ungraceful power off, False for graceful VM shutdown
+            wait (bool): Wait for the VMs to stop
+        """
+        for node in nodes:
+            cmd = f"ibmcloud is instance-stop {node.name} --force={force}"
+            out = run_ibmcloud_cmd(cmd)
+            logger.info(f"Node Stop command output: {out}")
+
+        if wait:
+            for node in nodes:
+                sample = TimeoutSampler(
+                    timeout=300,
+                    sleep=10,
+                    func=self.check_node_status,
+                    node_name=node.name,
+                    node_status=constants.STATUS_STOPPED,
+                )
+                sample.wait_for_func_status(result=True)
+
+    def restart_nodes_by_stop_and_start(
+        self, nodes, wait=True, force=True, timeout=300
+    ):
+        """
+        Restart nodes by stopping and starting VM in IBM Cloud
+        Args:
+            nodes (list): The OCS objects of the nodes
+            wait (bool): True in case wait for status is needed, False otherwise
+            force (bool): True for force instance stop, False otherwise
+            timeout (int): Timeout for the command, defaults to 300 seconds.
+        """
+        logger.info(f"Stopping instances {list(node.name for node in nodes )}")
+        self.stop_nodes(nodes=nodes, force=force)
+        if wait:
+            for node in nodes:
+                sample = TimeoutSampler(
+                    timeout=timeout,
+                    sleep=10,
+                    func=self.check_node_status,
+                    node_name=node.name,
+                    node_status=constants.STATUS_STOPPED,
+                )
+                sample.wait_for_func_status(result=True)
+        logger.info(f"Starting instances {list(node.name for node in nodes )}")
+
+        self.start_nodes(nodes=nodes)
+        if wait:
+            for node in nodes:
+                sample = TimeoutSampler(
+                    timeout=timeout,
+                    sleep=10,
+                    func=self.check_node_status,
+                    node_name=node.name,
+                    node_status=constants.STATUS_RUNNING.lower(),
+                )
+                sample.wait_for_func_status(result=True)
+
+    def check_node_status(self, node_name, node_status):
+        """
+        Check the node status in IBM cloud
+
+        Args:
+            node_name (str): Node name
+            node_status (str): Status of Node Running or Stopped
+
+        Returns:
+            bool: True if status matches else False
+        """
+        try:
+            cmd = f"ibmcloud is instance {node_name} --output json"
+
+            out = run_ibmcloud_cmd(cmd)
+            out = json.loads(out)
+            if out["status"] == node_status:
+                return True
+            else:
+                return False
+        except CommandFailed as cf:
+            if "Instance not found" in str(cf):
+                return True
+        return False
+
+    def restart_nodes_by_stop_and_start_force(self):
+        """
+        Make sure all nodes are up by the end of the test on IBM Cloud.
+        """
+        resource_name = None
+        stop_node_list = []
+        cmd = "ibmcloud is ins --all-resource-groups --output json"
+        out = run_ibmcloud_cmd(cmd)
+        all_resource_grp = json.loads(out)
+        cluster_name = config.ENV_DATA["cluster_name"]
+        for resource_name in all_resource_grp:
+            if cluster_name in resource_name["resource_group"]["name"]:
+                resource_name = resource_name["resource_group"]["name"]
+                break
+        assert resource_name, "Resource Not found"
+        cmd = f"ibmcloud is ins --resource-group-name {resource_name} --output json"
+        out = run_ibmcloud_cmd(cmd)
+        all_instance_output = json.loads(out)
+        for instance_name in all_instance_output:
+            if instance_name["status"] == constants.STATUS_STOPPED:
+                node_obj = OCP(kind="Node", resource_name=instance_name["name"]).get()
+                node_obj_ocs = OCS(**node_obj)
+                stop_node_list.append(node_obj_ocs)
+            if instance_name["status"] == constants.STATUS_STOPPED:
+                node_obj = OCP(kind="Node", resource_name=instance_name["name"]).get()
+                node_obj_ocs = OCS(**node_obj)
+                stop_node_list.append(node_obj_ocs)
+        logger.info("Force stopping node which are in stopping state")
+        self.stop_nodes(nodes=stop_node_list, force=True, wait=True)
+        logger.info("Starting Stopped Node")
+        self.start_nodes(nodes=stop_node_list)
+
+    def terminate_nodes(self, nodes, wait=True):
+        """
+        Terminate the Node in IBMCloud
+        Args:
+            nodes (list): The OCS objects of the nodes
+            wait (bool): True in case wait for status is needed, False otherwise
+        """
+        for node in nodes:
+            cmd = f"ibmcloud is instance-delete {node.name} -f"
+            out = run_ibmcloud_cmd(cmd)
+            logger.info(f"Node deletion command output: {out}")
+            break
+
+        if wait:
+            for node in nodes:
+                sample = TimeoutSampler(
+                    timeout=300,
+                    sleep=10,
+                    func=self.check_node_status,
+                    node_name=node.name,
+                )
+                sample.wait_for_func_status(result=True)
+                break
+
+    def detach_volume(self, volume, node=None):
+        """
+        Detach volume from node on IBM Cloud.
+        Args:
+            volume (str): volume id.
+            node (OCS): worker node object to detach.
+        """
+
+        logger.info(f"volume is : {volume}")
+
+        cmd = f"ibmcloud is volume {volume} --output json"
+        out = run_ibmcloud_cmd(cmd)
+        out = json.loads(out)
+
+        if out["status"] == "available":
+            attachment_id = out["volume_attachments"][0]["id"]
+            cmd = (
+                f"ibmcloud is instance-volume-attachment-update {node.name} {attachment_id} "
+                f"--output json --auto-delete=false"
+            )
+            out = run_ibmcloud_cmd(cmd)
+            out = json.loads(out)
+            logger.info(f"Update command output: {out}")
+            cmd = (
+                f"ibmcloud is instance-volume-attachment-detach {node.name} {attachment_id} "
+                f"--output=json --force"
+            )
+            out = run_ibmcloud_cmd(cmd)
+            logger.info(f"detachment command output: {out}")
+
+    def attach_volume(self, volume, node):
+        """
+        Attach volume to node on IBM Cloud.
+        Args:
+            volume (str): volume id.
+            node (OCS): worker node object to attach.
+        """
+        logger.info(
+            f"attach_volumes:{node.get()['metadata']['labels']['failure-domain.beta.kubernetes.io/zone']}"
+        )
+
+        logger.info(f"volume is : {volume}")
+
+        cmd = f"ibmcloud is volume {volume} --output json"
+        out = run_ibmcloud_cmd(cmd)
+        out = json.loads(out)
+
+        if len(out["volume_attachments"]) == 0:
+
+            logger.info(f"attachment command output: {out}")
+            cmd = f"ibmcloud is instance-volume-attachment-add data-vol-name {node.name} {volume} --output json"
+            out = run_ibmcloud_cmd(cmd)
+            out = json.loads(out)
+            logger.info(f"attachment command output: {out}")
+        else:
+            logger.info(f"volume is already attached to node: {out}")
+
+    def is_volume_attached(self, volume):
+        """
+        Check if volume is attached to node or not.
+
+        Args:
+            volume (str): The volume to check for to attached
+
+        Returns:
+            bool: 'True' if volume is attached otherwise 'False'
+        """
+        logger.info("Checking volume attachment status")
+        cmd = f"ibmcloud is volume {volume} --output json"
+        out = run_ibmcloud_cmd(cmd)
+        out = json.loads(out)
+        return True if len(out["volume_attachments"]) > 0 else False
+
+    def wait_for_volume_attach(self, volume):
+        """
+        Checks volume is attached to node or not
+        Args:
+            volume (str): The volume to wait for to be attached
+        Returns:
+            bool: True if the volume has been attached to the instance, False otherwise
+        """
+        try:
+            for sample in TimeoutSampler(300, 3, self.is_volume_attached, volume):
+                if sample:
+                    return True
+                else:
+                    return False
+        except TimeoutExpiredError:
+            logger.info("Volume is not attached to node")
+            return False
 
 
 def label_nodes_region():

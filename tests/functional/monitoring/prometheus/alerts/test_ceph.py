@@ -10,6 +10,7 @@ from ocs_ci.framework.testlib import (
     skipif_managed_service,
     runs_on_provider,
     blue_squad,
+    provider_mode,
 )
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.cluster import (
@@ -73,6 +74,7 @@ def test_corrupt_pg_alerts(measure_corrupt_pg, threading_lock):
         )
 
 
+@provider_mode
 @blue_squad
 @tier4
 @tier4a

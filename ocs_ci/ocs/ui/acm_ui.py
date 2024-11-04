@@ -125,6 +125,7 @@ class AcmPageNavigator(BaseUI):
             enable_screenshot=True,
         )
 
+    @retry(TimeoutException, tries=10, delay=10, backoff=5)
     def navigate_applications_page(self):
         """
         Navigate to ACM Applications Page
