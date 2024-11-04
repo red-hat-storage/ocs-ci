@@ -390,13 +390,12 @@ class MCG:
             string: S3 endpoint URI
         """
         return (
-            self.s3_internal_endpoint
+            self.s3_external_endpoint
             if (
-                config.DEPLOYMENT.get("disconnected")
-                or config.DEPLOYMENT.get("proxy")
-                or config.ENV_DATA.get("private_link")
+                config.ENV_DATA.get("platform", "").lower()
+                in constants.HCI_PROVIDER_CLIENT_PLATFORMS
             )
-            else self.s3_external_endpoint
+            else self.s3_internal_endpoint
         )
 
     def request_aws_credentials(self):
