@@ -8,7 +8,7 @@ from ocs_ci.framework import config
 from ocs_ci.ocs.resources.pvc import get_deviceset_pvcs
 from ocs_ci.ocs.exceptions import UnexpectedBehaviour
 from ocs_ci.utility.retry import retry
-from ocs_ci.utility.kms import get_kms_deployment
+from ocs_ci.utility.kms import get_kms_details
 
 log = logging.getLogger(__name__)
 
@@ -27,13 +27,27 @@ class KeyRotation:
         self.cluster_namespace = config.ENV_DATA["cluster_namespace"]
 
         if config.DEPLOYMENT["external_mode"]:
-            self.cluster_name_name = constants.DEFAULT_CLUSTERNAME_EXTERNAL_MODE
+            self.cluster_name = constants.DEFAULT_CLUSTERNAME_EXTERNAL_MODE
 
         self.storagecluster_obj = OCP(
             resource_name=self.cluster_name,
             namespace=self.cluster_namespace,
             kind=self.resource_name,
         )
+
+    def set_keyrotation_defaults(self):
+        """
+        Setting Keyrotation Defaults on the cluster.
+        """
+        param = '[{"op":"add","path":"/spec/encryption/keyRotation","value":{"schedule":"@weekly"}}]'
+        self.storagecluster_obj.patch(params=param, format_type="json")
+        self.storagecluster_obj.wait_for_resource(
+            constants.STATUS_READY,
+            self.storagecluster_obj.resource_name,
+            column="PHASE",
+            timeout=180,
+        )
+        self.storagecluster_obj.reload_data()
 
     def _exec_oc_cmd(self, cmd, **kwargs):
         """
@@ -99,10 +113,8 @@ class KeyRotation:
             log.info("Keyrotation is Already in Enabled state.")
             return True
 
-        param = '{"spec":{"encryption":{"keyRotation":{"enable":null}}}}'
-        self.storagecluster_obj.patch(
-            params=param, format_type="merge", resource_name=self.cluster_name
-        )
+        param = '[{"op":"remove","path":"/spec/encryption/keyRotation/enable"}]'
+        self.storagecluster_obj.patch(params=param, format_type="json")
         resource_status = self.storagecluster_obj.wait_for_resource(
             constants.STATUS_READY,
             self.storagecluster_obj.resource_name,
@@ -356,7 +368,7 @@ class OSDKeyrotation(KeyRotation):
 class PVKeyrotation(KeyRotation):
     def __init__(self, sc_obj):
         self.sc_obj = sc_obj
-        self.kms = get_kms_deployment()
+        self.kms = get_kms_details()
 
     def annotate_storageclass_key_rotation(self, schedule="@weekly"):
         """

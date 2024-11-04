@@ -4,7 +4,7 @@ from time import sleep
 import pytest
 
 from ocs_ci.framework import config
-from ocs_ci.framework.pytest_customization.marks import turquoise_squad
+from ocs_ci.framework.pytest_customization.marks import rdr, turquoise_squad
 from ocs_ci.framework.testlib import acceptance, tier1
 from ocs_ci.helpers import dr_helpers
 from ocs_ci.helpers.dr_helpers_ui import (
@@ -23,6 +23,7 @@ if config.RUN.get("rdr_relocate_via_ui"):
     polarion_id_relocate = "OCS-4744"
 
 
+@rdr
 @acceptance
 @tier1
 @turquoise_squad

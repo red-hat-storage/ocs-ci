@@ -4,13 +4,14 @@ from time import sleep
 
 from ocs_ci.framework import config
 from ocs_ci.framework.testlib import acceptance, tier1
-from ocs_ci.framework.pytest_customization.marks import turquoise_squad
+from ocs_ci.framework.pytest_customization.marks import rdr, turquoise_squad
 from ocs_ci.helpers import dr_helpers
 
 
 logger = logging.getLogger(__name__)
 
 
+@rdr
 @acceptance
 @tier1
 @turquoise_squad

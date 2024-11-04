@@ -1,8 +1,8 @@
 ---
 DEPLOYMENT:
   # TODO: Change to lastest-stable-4.18 once we have stable build
-  default_ocs_registry_image: "quay.io/rhceph-dev/ocs-registry:latest-4.18"
-  default_latest_tag: 'latest-4.18'
+  default_ocs_registry_image: "quay.io/rhceph-dev/ocs-registry:latest-stable-4.18"
+  default_latest_tag: 'latest-stable-4.18'
   ocs_csv_channel: "stable-4.18"
   default_ocp_version: '4.18'
 ENV_DATA:

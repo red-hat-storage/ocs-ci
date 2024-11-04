@@ -4,7 +4,6 @@ This module implements functionality for deploying OCP cluster via Assisted Inst
 """
 
 from copy import deepcopy
-from datetime import datetime
 import json
 import logging
 import os
@@ -15,6 +14,7 @@ from ocs_ci.ocs.exceptions import (
     SameNameClusterAlreadyExistsException,
 )
 from ocs_ci.utility import assisted_installer as ai
+from ocs_ci.utility.deployment import create_openshift_install_log_file
 from ocs_ci.utility.utils import download_file, TimeoutSampler
 from ocs_ci.utility.retry import retry
 
@@ -319,6 +319,13 @@ class AssistedInstallerCluster(object):
                 )
                 break
 
+    def get_infra_env_hosts(self):
+        """
+        Return:
+            list: list of discovered hosts in the Infrastructure Environment
+        """
+        return self.api.get_infra_env_hosts(infra_env_id=self.infra_id)
+
     @retry(HostValidationFailed, tries=5, delay=60, backoff=1)
     def verify_validations_info_for_discovered_nodes(self):
         """
@@ -435,21 +442,8 @@ class AssistedInstallerCluster(object):
         Create .openshift_install.log file containing URL to OpenShift console.
         It is used by our CI jobs to show the console URL in build description.
         """
-        # Create metadata file to store the cluster name
-        installer_log_file = os.path.join(self.cluster_path, ".openshift_install.log")
-        formatted_time = datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%SZ")
         cluster_address = self.api.get_cluster_admin_credentials(self.id)["console_url"]
-        logger.info(f"Cluster URL: {cluster_address}")
-        with open(installer_log_file, "a") as fd:
-            fd.writelines(
-                [
-                    "W/A for our CI to get URL to the cluster in jenkins job. "
-                    "Cluster is deployed via Assisted Installer API!\n"
-                    f'time="{formatted_time}" level=info msg="Access the OpenShift web-console here: '
-                    f"{cluster_address}\"\n'",
-                ]
-            )
-        logger.info("Created .openshift_install.log file")
+        create_openshift_install_log_file(self.cluster_path, cluster_address)
 
     def create_kubeconfig_file(self):
         """

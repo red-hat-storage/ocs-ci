@@ -35,6 +35,7 @@ from ocs_ci.utility.utils import (
     TimeoutSampler,
     CommandFailed,
     run_cmd,
+    exec_cmd,
 )
 from ocs_ci.helpers.helpers import run_cmd_verify_cli_output
 
@@ -1321,7 +1322,6 @@ def verify_drpolicy_cli(switch_ctx=None):
 
 @retry(UnexpectedBehaviour, tries=40, delay=5, backoff=5)
 def verify_backup_is_taken():
-
     """
     Function to verify backup is taken
 
@@ -1661,3 +1661,57 @@ def generate_kubeobject_capture_interval():
         return 5
     else:
         return capture_interval
+
+
+def disable_dr_rdr():
+    """
+    Disable DR for the applications
+    """
+    config.switch_acm_ctx()
+
+    # Edit drpc to add annotation
+    drpc_obj = ocp.OCP(kind=constants.DRPC)
+    drpcs = drpc_obj.get(all_namespaces=True).get("items")
+    for drpc in drpcs:
+        namespace = drpc["metadata"]["namespace"]
+        name = drpc["metadata"]["name"]
+        logger.info(f"Adding annotation to drpc - {name}")
+        annotation_data = (
+            '{"metadata": {"annotations": {'
+            '"drplacementcontrol.ramendr.openshift.io/do-not-delete-pvc": "true"}}}'
+        )
+        cmd = f"oc patch {constants.DRPC} {name} -n {namespace} --type=merge -p '{annotation_data}'"
+        run_cmd(cmd)
+
+    # Delete all drpc
+    logger.info("Deleting the drpc...")
+    run_cmd("oc delete drpc --all -A")
+    sample = TimeoutSampler(
+        timeout=300,
+        sleep=5,
+        func=verify_drpc_deletion,
+        cmd="oc get drpc -A",
+        expected_output_lst="No resources found",
+    )
+    if not sample.wait_for_func_status(result=True):
+        raise Exception("All drpcs are not deleted")
+
+
+@retry(CommandFailed, tries=10, delay=30, backoff=1)
+def verify_drpc_deletion(cmd, expected_output_lst):
+    """
+    Function to validate drpc deletion
+
+    Args:
+        cmd(str): cli command
+        expected_output_lst(set): A set of strings that need to be included in the command output.
+
+    Returns:
+        bool: True, if all strings are included in the command output, False otherwise.
+
+    """
+    drpc_out = exec_cmd(cmd)
+    for expected_output in expected_output_lst:
+        if expected_output not in drpc_out.stderr.decode():
+            return False
+    return True

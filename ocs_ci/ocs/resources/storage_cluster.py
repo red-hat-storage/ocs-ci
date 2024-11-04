@@ -937,6 +937,7 @@ def verify_ocs_csv(ocs_registry_image=None):
             )
 
 
+@retry(AssertionError, 60, 10, 1)
 def verify_storage_system():
     """
     Verify storage system status
@@ -1000,15 +1001,13 @@ def verify_storage_cluster():
             resource_name=storage_cluster_name,
             namespace=config.ENV_DATA["cluster_namespace"],
         )
-        log.info(
-            f"Check if StorageCluster: {storage_cluster_name} is in Succeeded phase"
-        )
+        log.info(f"Check if StorageCluster: {storage_cluster_name} is in Succeeded phase")
         if config.ENV_DATA.get("platform") == constants.FUSIONAAS_PLATFORM:
             timeout = 1000
-        elif storage_cluster.data["spec"].get(
-            "resourceProfile"
-        ) != storage_cluster.data["status"].get("lastAppliedResourceProfile"):
-            timeout = 1200
+        elif storage_cluster.data["spec"].get("resourceProfile") != storage_cluster.data[
+            "status"
+        ].get("lastAppliedResourceProfile"):
+            timeout = 1800
         else:
             timeout = 600
         storage_cluster.wait_for_phase(phase="Ready", timeout=timeout)

@@ -88,6 +88,8 @@ polarion_id = pytest.mark.polarion_id
 bugzilla = pytest.mark.bugzilla
 jira = pytest.mark.jira
 acm_import = pytest.mark.acm_import
+rdr = pytest.mark.rdr
+mdr = pytest.mark.mdr
 
 tier_marks = [
     tier1,
@@ -637,6 +639,9 @@ ignore_owner = pytest.mark.ignore_owner
 
 # Marks to identify the cluster type in which the test case should run
 runs_on_provider = pytest.mark.runs_on_provider
+
+# Marks to identify the regression tests for provider-client cluster
+provider_mode = pytest.mark.provider_mode
 
 current_test_marks = []
 

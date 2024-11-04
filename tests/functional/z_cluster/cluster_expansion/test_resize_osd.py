@@ -274,7 +274,7 @@ class TestResizeOSD(ManageTest):
         self.verification_steps_post_resize_osd()
 
     @tier4a
-    @pytest.mark.second
+    @pytest.mark.order("second")
     @ibmcloud_platform_required
     @pytest.mark.parametrize(
         argnames=["size_to_increase"],
@@ -306,7 +306,7 @@ class TestResizeOSD(ManageTest):
     @tier4b
     @tier4c
     @black_squad
-    @pytest.mark.last
+    @pytest.mark.order("last")
     @polarion_id("OCS-5800")
     def test_ui_storage_size_post_resize_osd(self, setup_ui_session):
         """

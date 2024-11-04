@@ -79,9 +79,6 @@ TEMPLATE_DEPLOYMENT_CLO = os.path.join(
 TEMPLATE_AUTHENTICATION_DIR = os.path.join(TEMPLATE_DIR, "authentication")
 KREW_INSTALL_DIR = os.path.join(TEMPLATE_DIR, "krew_plugin")
 TEMPLATE_CNV_VM_WORKLOAD_DIR = os.path.join(TEMPLATE_DIR, "cnv-vm-workload")
-TEMPLATE_CNV_VM_STANDALONE_PVC_DIR = os.path.join(
-    TEMPLATE_CNV_VM_WORKLOAD_DIR, "vm-standalone-pvc"
-)
 DATA_DIR = os.getenv("OCSCI_DATA_DIR") or os.path.join(TOP_DIR, "data")
 ROOK_REPO_DIR = os.path.join(DATA_DIR, "rook")
 ROOK_EXAMPLES_DIR = os.path.join(
@@ -236,6 +233,7 @@ VM = "vm"
 HOSTED_CLUSTERS = "hostedclusters"
 OPERATOR_KIND = "Operator"
 DRIVER = "Driver"
+IMAGECONTENTSOURCEPOLICY_KIND = "ImageContentSourcePolicy"
 
 # Provisioners
 AWS_EFS_PROVISIONER = "openshift.org/aws-efs"
@@ -976,16 +974,10 @@ CNV_HYPERCONVERGED_YAML = os.path.join(
 CNV_VM_SECRET_YAML = os.path.join(TEMPLATE_DEPLOYMENT_DIR_CNV, "vm-secret.yaml")
 
 # CNV VM workload yamls
-CNV_VM_STANDALONE_PVC_SOURCE_YAML = os.path.join(
-    TEMPLATE_CNV_VM_STANDALONE_PVC_DIR, "source.yaml"
-)
-CNV_VM_STANDALONE_PVC_PVC_YAML = os.path.join(
-    TEMPLATE_CNV_VM_STANDALONE_PVC_DIR, "pvc.yaml"
-)
-CNV_VM_STANDALONE_DV_YAML = os.path.join(TEMPLATE_CNV_VM_STANDALONE_PVC_DIR, "dv.yaml")
-CNV_VM_STANDALONE_PVC_VM_YAML = os.path.join(
-    TEMPLATE_CNV_VM_STANDALONE_PVC_DIR, "vm.yaml"
-)
+CNV_VM_SOURCE_YAML = os.path.join(TEMPLATE_CNV_VM_WORKLOAD_DIR, "source.yaml")
+CNV_VM_PVC_YAML = os.path.join(TEMPLATE_CNV_VM_WORKLOAD_DIR, "pvc.yaml")
+CNV_VM_DV_YAML = os.path.join(TEMPLATE_CNV_VM_WORKLOAD_DIR, "dv.yaml")
+CNV_VM_TEMPLATE_YAML = os.path.join(TEMPLATE_CNV_VM_WORKLOAD_DIR, "vm.yaml")
 
 METALLB = "metallb-operator"
 METALLB_CONTROLLER_MANAGER_PREFIX = "metallb-operator-controller-manager"
@@ -1012,6 +1004,7 @@ METALLB_L2_ADVERTISEMENT_PATH = os.path.join(
 QE_APP_REGISTRY_SOURCE = os.path.join(
     TEMPLATE_DEPLOYMENT_DIR_OCP, "qe-app-registry-catalog-source.yaml"
 )
+QE_APP_REGISTRY_CATALOG_SOURCE_NAME = "qe-app-registry"
 
 # NMState deployment
 NMSTATE_NAMESPACE_YAML = os.path.join(TEMPLATE_DEPLOYMENT_DIR_NMSTATE, "namespace.yaml")
@@ -1404,15 +1397,15 @@ BALANCED_PROFILE_REQUEST_MEMORY_VALUES = {
 }
 
 PERFORMANCE_PROFILE_REQUEST_CPU_VALUES = {
-    "mgr": "1500m'",
-    "mon": "1500",
+    "mgr": "1500m",
+    "mon": "1500m",
     "osd": "4",
     "mds": "3",
     "rgw": "2",
 }
 PERFORMANCE_PROFILE_REQUEST_MEMORY_VALUES = {
     "mgr": "2Gi",
-    "mon": "2Gi",
+    "mon": "3Gi",
     "osd": "8Gi",
     "mds": "8Gi",
     "rgw": "4Gi",
@@ -1459,7 +1452,7 @@ PERFORMANCE_PROFILE_CPU_LIMIT_VALUES = {
 }
 PERFORMANCE_PROFILE_MEMORY_LIMIT_VALUES = {
     "mgr": "4Gi",
-    "mon": "2Gi",
+    "mon": "3Gi",
     "osd": "8Gi",
     "mds": "8Gi",
     "rgw": "4Gi",
@@ -1489,6 +1482,7 @@ RHV_PLATFORM = "rhv"
 ROSA_PLATFORM = "rosa"
 FUSIONAAS_PLATFORM = "fusion_aas"
 ROSA_HCP_PLATFORM = "rosa_hcp"
+ROSA_PLATFORMS = [ROSA_PLATFORM, ROSA_HCP_PLATFORM]
 HCI_BAREMETAL = "hci_baremetal"
 HCI_VSPHERE = "hci_vsphere"
 ACM_OCP_DEPLOYMENT = "acm_ocp_deployment"
@@ -2297,6 +2291,10 @@ MIN_NODE_MEMORY = 64 * 10**9
 # aws tags
 AWS_CLOUDFORMATION_TAG = "aws:cloudformation:stack-name"
 
+# aws prefixes
+ACCOUNT_ROLE_PREFIX_ROSA_HCP = "accroleshcp"
+OPERATOR_ROLE_PREFIX_ROSA_HCP = "oproleshcp"
+
 # aws volume constants
 AWS_VOL_PVC_NAME_TAG = "kubernetes.io/created-for/pvc/name"
 AWS_VOL_PV_NAME_TAG = "kubernetes.io/created-for/pv/name"
@@ -2720,6 +2718,7 @@ ACM_LOCAL_CLUSTER = "local-cluster"
 ACM_CLUSTERSET_LABEL = "cluster.open-cluster-management.io/clusterset"
 ACM_ADDONS_NAMESPACE = "open-cluster-management-agent-addon"
 ACM_HUB_OPERATOR_NAME_WITH_NS = f"{ACM_HUB_OPERATOR_NAME}.{ACM_HUB_NAMESPACE}"
+ACM_MANAGEDCLUSTER_ADDONS = "managedclusteraddons.addon.open-cluster-management.io"
 
 # GitOps
 GITOPS_NAMESPACE = "openshift-gitops"
@@ -3009,6 +3008,9 @@ CCOCTL_LOG_FILE = "ccoctl-service-id.log"
 NOOBAA_BACKEND_SECRET = "noobaa-root-master-key-backend"
 NOOBAA_VOLUME_SECRET = "noobaa-root-master-key-volume"
 
+# Noobaa built in accounts
+NB_OPERATOR_ACC_NAME = "operator@noobaa.io"
+
 # ascii characters
 ENTER_KEY = chr(13)
 
@@ -3018,6 +3020,7 @@ CHUNK = os.path.join(TEMPLATE_WORKLOAD_DIR, "helper_scripts/chunk.py")
 # Ingress Node Firewall related constants
 INGRESS_NODE_FIREWALL_NAMESPACE = "openshift-ingress-node-firewall"
 INGRESS_NODE_FIREWALL_CSV_NAME = "ingress-node-firewall"
+INGRESS_NODE_FIREWALL_OPERATOR_NAME = "ingress-node-firewall"
 INF_NAMESPACE_YAML = os.path.join(TEMPLATE_DEPLOYMENT_DIR_INF, "namespace.yaml")
 INF_OPERATORGROUP_YAML = os.path.join(TEMPLATE_DEPLOYMENT_DIR_INF, "operatorgroup.yaml")
 INF_SUBSCRIPTION_YAML = os.path.join(TEMPLATE_DEPLOYMENT_DIR_INF, "subscription.yaml")
@@ -3035,3 +3038,15 @@ FILE_CREATOR_IO = os.path.join(
 MC_WORKAROUND_SSD = os.path.join(
     TEMPLATE_DEPLOYMENT_DIR_OCP, "workaround-ssd-machine-config.yaml"
 )
+
+# Fusion Data Foundation
+FDF_TEMPLATE_DIR = os.path.join(TEMPLATE_DIR, "fusion-data-foundation")
+FDF_IMAGE_TAG_MIRROR_SET = os.path.join(FDF_TEMPLATE_DIR, "image-tag-mirror-set.yaml")
+FDF_IMAGE_DIGEST_MIRROR_SET = os.path.join(
+    FDF_TEMPLATE_DIR, "image-digest-mirror-set.yaml"
+)
+FDF_SERVICE_CR = os.path.join(FDF_TEMPLATE_DIR, "data-foundation-instance.yaml")
+FDF_SPECTRUM_FUSION_CR = os.path.join(FDF_TEMPLATE_DIR, "spectrum-fusion.yaml")
+FDF_NAMESPACE = "ibm-spectrum-fusion-ns"
+ISF_CATALOG_SOURCE_NAME = "isf-catalog"
+ISF_OPERATOR_SOFTWARE_CATALOG_SOURCE_YAML = "catalog-source.yaml.j2"

@@ -223,6 +223,7 @@ class TestCephDefaultValuesCheck(ManageTest):
             f"The cluster's existing values are:{config_data}"
         )
 
+    @post_ocs_upgrade
     def test_check_number_of_pgs(self, project_factory, pvc_factory, pod_factory):
         """
         Testcase to check number of pgs per pool
