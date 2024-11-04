@@ -4,6 +4,7 @@ All DR operators upgrades implemented here ex: MulticlusterOrchestrator, Openshi
 """
 
 import logging
+import time
 
 from ocs_ci.framework import config
 from ocs_ci.ocs.exceptions import TimeoutException
@@ -132,6 +133,7 @@ class DRUpgrade(OCSUpgrade):
             f'"{self.channel}", "source": "{mco_source}"}}}}\''
         )
         subscription.exec_oc_cmd(patch_subscription_cmd, out_yaml_format=False)
+        time.sleep(10)
 
     def validate_upgrade(self):
         # In case of both MCO and DRhub operator, validation steps are similar
@@ -175,7 +177,8 @@ class DRUpgrade(OCSUpgrade):
         # get pre-upgrade csv for MCO
         csv_objs = CSV(namespace=self.namespace)
         for csv in csv_objs.get()["items"]:
-            if self.operator_name in csv["metadata"]["name"]:
+            if (self.operator_name in csv["metadata"]["name"]
+                and self.upgrade_version in csv["metadata"]["name"]):
                 csv_obj = CSV(
                     namespace=self.namespace, resource_name=csv["metadata"]["name"]
                 )
