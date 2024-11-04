@@ -2001,7 +2001,14 @@ class Deployment(object):
             pod = ocp.OCP(kind=constants.POD, namespace=self.namespace)
             cfs = ocp.OCP(kind=constants.CEPHFILESYSTEM, namespace=self.namespace)
             # Check for Ceph pods
-            mon_pod_timeout = 900
+            managed_ibmcloud = (
+                config.ENV_DATA["platform"] == constants.IBMCLOUD_PLATFORM
+                and config.ENV_DATA["deployment_type"] == "managed"
+            )
+            if managed_ibmcloud:
+                mon_pod_timeout = 1800
+            else:
+                mon_pod_timeout = 900
             assert pod.wait_for_resource(
                 condition="Running",
                 selector="app=rook-ceph-mon",
