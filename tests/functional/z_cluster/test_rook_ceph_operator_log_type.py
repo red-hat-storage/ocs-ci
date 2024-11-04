@@ -10,6 +10,7 @@ from ocs_ci.helpers.helpers import (
     get_last_log_time_date,
     check_osd_log_exist_on_rook_ceph_operator_pod,
 )
+from ocs_ci.helpers.odf_cli import ODFCLIRetriever, ODFCliRunner
 from ocs_ci.framework.pytest_customization.marks import brown_squad
 from ocs_ci.framework.testlib import (
     ManageTest,
@@ -52,13 +53,34 @@ class TestRookCephOperatorLogType(ManageTest):
         set_configmap_log_level_rook_ceph_operator(value="INFO")
         ceph_health_check()
 
-    def test_rook_ceph_operator_log_type(self):
+    def set_rook_ceph_operator_log_level(self, value, method):
+        """
+        Set the log level for the rook-ceph operator using either the configmap method
+        or the ODF CLI method, depending on the OCS version.
+        """
+        if method == "odf_cli":
+            # Use ODF CLI method
+            odf_cli_retriever = ODFCLIRetriever()
+            odf_cli_retriever.retrieve_odf_cli_binary()
+            odf_cli_runner = ODFCliRunner()
+            odf_cli_runner.run_rook_set_log_level(value)
+        else:
+            # Use existing configmap method
+            set_configmap_log_level_rook_ceph_operator(value=value)
+
+    @pytest.mark.parametrize(
+        "method",
+        [
+            pytest.param("configmap"),
+            pytest.param("odf_cli"),
+        ],
+    )
+    def test_rook_ceph_operator_log_type(self, method):
         """
         Test the ability to change the log level in rook-ceph operator dynamically
         without rook-ceph operator pod restart.
-
         """
-        set_configmap_log_level_rook_ceph_operator(value="DEBUG")
+        self.set_rook_ceph_operator_log_level("DEBUG", method=method)
         last_log_date_time_obj = get_last_log_time_date()
 
         log.info("Respin OSD pod")
@@ -76,7 +98,7 @@ class TestRookCephOperatorLogType(ManageTest):
         if not sample.wait_for_func_status(result=True):
             raise ValueError("OSD DEBUG Log does not exist")
 
-        set_configmap_log_level_rook_ceph_operator(value="INFO")
+        self.set_rook_ceph_operator_log_level("INFO", method=method)
         last_log_date_time_obj = get_last_log_time_date()
 
         log.info("Respin OSD pod")

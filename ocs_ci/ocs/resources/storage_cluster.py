@@ -1,6 +1,7 @@
 """
 StorageCluster related functionalities
 """
+
 import copy
 import ipaddress
 import logging
@@ -59,7 +60,11 @@ from ocs_ci.ocs.node import (
     add_disk_stretch_arbiter,
 )
 from ocs_ci.ocs.version import get_ocp_version
-from ocs_ci.utility.version import get_semantic_version, VERSION_4_11
+from ocs_ci.utility.version import (
+    get_semantic_version,
+    VERSION_4_11,
+    get_semantic_ocp_running_version,
+)
 from ocs_ci.helpers.helpers import (
     get_secret_names,
     get_cephfs_name,
@@ -74,10 +79,14 @@ from ocs_ci.utility import (
 )
 from ocs_ci.utility.retry import retry
 from ocs_ci.utility.rgwutils import get_rgw_count
-from ocs_ci.utility.utils import run_cmd, TimeoutSampler, convert_device_size
+from ocs_ci.utility.utils import (
+    run_cmd,
+    TimeoutSampler,
+    convert_device_size,
+    extract_image_urls,
+)
 from ocs_ci.utility.decorators import switch_to_orig_index_at_last
 from ocs_ci.helpers.helpers import storagecluster_independent_check
-from ocs_ci.deployment.helpers.mcg_helpers import check_if_mcg_root_secret_public
 
 log = logging.getLogger(__name__)
 
@@ -253,7 +262,7 @@ def ocs_install_verification(
                 constants.MDS_APP_LABEL: 2,
             }
         )
-    elif consumer_cluster or client_cluster:
+    elif client_cluster and (ocs_version < version.VERSION_4_17):
         resources_dict.update(
             {
                 constants.CSI_CEPHFSPLUGIN_LABEL: number_of_worker_nodes,
@@ -302,6 +311,23 @@ def ocs_install_verification(
                 constants.UX_BACKEND_APP_LABEL: 1,
             }
         )
+
+    if ocs_version >= version.VERSION_4_17:
+        resources_dict.update(
+            {
+                constants.CEPH_CSI_CONTROLLER_MANAGER_LABEL: 1,
+            }
+        )
+        # In provider mode, add the new name and label that replaces the provisioner and plugin pods
+        if hci_cluster:
+            resources_dict.update(
+                {
+                    constants.CEPHFS_NODEPLUGIN_LABEL: number_of_worker_nodes,
+                    constants.RBD_NODEPLUGIN_LABEL: number_of_worker_nodes,
+                    constants.CEPHFS_CTRLPLUGIN_LABEL: 2,
+                    constants.RBD_CTRLPLUGIN_LABEL: 2,
+                }
+            )
 
     for label, count in resources_dict.items():
         if label == constants.RGW_APP_LABEL:
@@ -556,7 +582,8 @@ def ocs_install_verification(
             # removes duplicate hostname
             deviceset_pvcs = list(set(deviceset_pvcs))
             if (
-                config.ENV_DATA.get("platform") == constants.BAREMETAL_PLATFORM
+                config.ENV_DATA.get("platform")
+                in [constants.BAREMETAL_PLATFORM, constants.HCI_BAREMETAL]
                 or config.ENV_DATA.get("platform") == constants.AWS_PLATFORM
             ):
                 deviceset_pvcs = [
@@ -774,12 +801,64 @@ def ocs_install_verification(
     ):
         validate_serviceexport()
 
-    # check that noobaa root secrets are not public
-    if not (client_cluster or managed_service):
+    # Verify the owner of CSI deployments and daemonsets
+    csi_owner_name = (
+        constants.CLIENT_OPERATOR_CONFIGMAP
+        if hci_cluster
+        else constants.ROOK_CEPH_OPERATOR
+    )
+
+    if ocs_version >= version.VERSION_4_17 and hci_cluster:
+        provisioner_deployment_and_owner_names = {
+            f"{constants.CEPHFS_PROVISIONER}-ctrlplugin": constants.CEPHFS_PROVISIONER,
+            f"{constants.RBD_PROVISIONER}-ctrlplugin": constants.RBD_PROVISIONER,
+        }
+        nodeplugin_daemonset_and_owner_names = {
+            f"{constants.CEPHFS_PROVISIONER}-nodeplugin": constants.CEPHFS_PROVISIONER,
+            f"{constants.RBD_PROVISIONER}-nodeplugin": constants.RBD_PROVISIONER,
+        }
+        csi_owner_kind = constants.DRIVER
+    else:
+        provisioner_deployment_and_owner_names = {
+            "csi-cephfsplugin-provisioner": csi_owner_name,
+            "csi-rbdplugin-provisioner": csi_owner_name,
+        }
+        nodeplugin_daemonset_and_owner_names = {
+            "csi-cephfsplugin": csi_owner_name,
+            "csi-rbdplugin": csi_owner_name,
+        }
+        csi_owner_kind = constants.CONFIGMAP if hci_cluster else constants.DEPLOYMENT
+    deployment_kind = OCP(kind=constants.DEPLOYMENT, namespace=namespace)
+    daemonset_kind = OCP(kind=constants.DAEMONSET, namespace=namespace)
+    for (
+        provisioner_name,
+        csi_owner_name,
+    ) in provisioner_deployment_and_owner_names.items():
+        provisioner_deployment = deployment_kind.get(resource_name=provisioner_name)
+        owner_references = provisioner_deployment["metadata"].get("ownerReferences")
         assert (
-            check_if_mcg_root_secret_public() is False
-        ), "Seems like MCG root secrets are public, please check"
-        log.info("Noobaa root secrets are not public")
+            len(owner_references) == 1
+        ), f"Found more than 1 or none owner reference for {constants.DEPLOYMENT} {provisioner_name}"
+        assert (
+            owner_references[0].get("kind") == csi_owner_kind
+        ), f"Owner reference of {constants.DEPLOYMENT} {provisioner_name} is not of kind {csi_owner_kind}"
+        assert (
+            owner_references[0].get("name") == csi_owner_name
+        ), f"Owner reference of {constants.DEPLOYMENT} {provisioner_name} is not {csi_owner_name} {csi_owner_kind}"
+    log.info("Verified the ownerReferences CSI provisioner deployments")
+    for plugin_name, csi_owner_name in nodeplugin_daemonset_and_owner_names.items():
+        plugin_daemonset = daemonset_kind.get(resource_name=plugin_name)
+        owner_references = plugin_daemonset["metadata"].get("ownerReferences")
+        assert (
+            len(owner_references) == 1
+        ), f"Found more than 1 or none owner reference for {constants.DAEMONSET} {plugin_name}"
+        assert (
+            owner_references[0].get("kind") == csi_owner_kind
+        ), f"Owner reference of {constants.DAEMONSET} {plugin_name} is not of kind {csi_owner_kind}"
+        assert (
+            owner_references[0].get("name") == csi_owner_name
+        ), f"Owner reference of {constants.DAEMONSET} {plugin_name} is not {csi_owner_name} {csi_owner_kind}"
+    log.info("Verified the ownerReferences CSI plugin daemonsets")
 
 
 def mcg_only_install_verification(ocs_registry_image=None):
@@ -858,6 +937,7 @@ def verify_ocs_csv(ocs_registry_image=None):
             )
 
 
+@retry(AssertionError, 60, 10, 1)
 def verify_storage_system():
     """
     Verify storage system status
@@ -923,6 +1003,10 @@ def verify_storage_cluster():
     log.info(f"Check if StorageCluster: {storage_cluster_name} is in Succeeded phase")
     if config.ENV_DATA.get("platform") == constants.FUSIONAAS_PLATFORM:
         timeout = 1000
+    elif storage_cluster.data["spec"].get("resourceProfile") != storage_cluster.data[
+        "status"
+    ].get("lastAppliedResourceProfile"):
+        timeout = 1800
     else:
         timeout = 600
     storage_cluster.wait_for_phase(phase="Ready", timeout=timeout)
@@ -2633,7 +2717,7 @@ def patch_storage_cluster_for_custom_storage_class(
         return False
 
 
-@retry(AssertionError, 50, 10, 1)
+@retry(AssertionError, 10, 20, 2)
 def validate_serviceexport():
     """
     validate the serviceexport resource
@@ -2679,7 +2763,7 @@ def get_storage_size():
         .get("requests")
         .get("storage")
     )
-    if storage.isdigit or config.DEPLOYMENT.get("local_storage"):
+    if storage.isdigit() or config.DEPLOYMENT.get("local_storage"):
         # In the case of UI deployment of LSO cluster, the value in StorageCluster CR
         # is set to 1, so we can not take OSD size from there. For LSO we will return
         # the size from PVC.
@@ -2728,3 +2812,120 @@ def resize_osd(new_osd_size, check_size=True):
         format_type="json",
     )
     return res
+
+
+def get_client_storage_provider_endpoint():
+    """
+    Get the client "storageProviderEndpoint" from the storage-client
+
+    Returns:
+        str: The client "storageProviderEndpoint"
+
+    """
+    sc_obj = ocp.OCP(
+        kind=constants.STORAGECLIENT,
+        namespace=config.ENV_DATA["cluster_namespace"],
+        resource_name=config.cluster_ctx.ENV_DATA.get("storage_client_name"),
+    )
+    return sc_obj.get()["spec"]["storageProviderEndpoint"]
+
+
+def wait_for_storage_client_connected(timeout=180, sleep=10):
+    """
+    Wait for the storage-client to be in a connected phase
+
+    Args:
+        timeout (int): Time to wait for the storage-client to be in a connected phase
+        sleep (int): Time in seconds to sleep between attempts
+
+    Raises:
+        ResourceWrongStatusException: In case the storage-client didn't reach the desired connected phase
+
+    """
+    sc_obj = OCP(
+        kind=constants.STORAGECLIENT, namespace=config.ENV_DATA["cluster_namespace"]
+    )
+    resource_name = config.ENV_DATA.get(
+        "storage_client_name", constants.STORAGE_CLIENT_NAME
+    )
+    sc_obj.wait_for_resource(
+        resource_name=resource_name,
+        column="PHASE",
+        condition="Connected",
+        timeout=timeout,
+        sleep=sleep,
+    )
+
+
+def set_non_resilient_pool(
+    storage_cluster: StorageCluster, enable: bool = True
+) -> None:
+    """
+    Enable non-resilient ceph settings by patching the storage cluster
+    (Replica-1 feature)
+
+    Args:
+        storage_cluster (StorageCluster): StorageCluster object
+        enable (bool, optional): cephNonResilientPools value *** Setting False is not supported by ODF in 4.14 ***.
+
+    """
+    cmd = f'[{{ "op": "replace", "path": "/spec/managedResources/cephNonResilientPools/enable", "value": {enable} }}]'
+    storage_cluster.patch(
+        resource_name=constants.DEFAULT_CLUSTERNAME, format_type="json", params=cmd
+    )
+
+
+def validate_non_resilient_pool(storage_cluster: StorageCluster) -> bool:
+    """
+    Validate non-resilient pools (replica-1) are enabled in storage cluster
+
+    Args:
+        storage_cluster (StorageCluster): StorageCluster object
+
+    Returns:
+        bool: True if replica-1 enabled, False otherwise
+
+    """
+    storagecluster_yaml = storage_cluster.get(
+        resource_name=constants.DEFAULT_CLUSTERNAME
+    )
+    if (
+        str(
+            storagecluster_yaml["spec"]["managedResources"]["cephNonResilientPools"][
+                "enable"
+            ]
+        ).lower()
+        == "true"
+    ):
+        return True
+
+    return False
+
+
+def get_csi_images_for_client_ocp_version(ocp_version=None):
+    """
+    Get the csi images of the specified ocp version
+
+    Args:
+        ocp_version (str): The ocp version of the csi images. If not provided,
+            it will get the current ocp cluster version
+
+    Returns:
+        list: The list of the csi images of the specified ocp version
+
+    """
+    configmap_obj = ocp.OCP(
+        kind=constants.CONFIGMAP,
+        namespace=config.ENV_DATA["cluster_namespace"],
+        resource_name=constants.CLIENT_OPERATOR_CSI_IMAGES,
+    )
+    csi_images = configmap_obj.data.get("data").get("csi-images.yaml")
+
+    if not ocp_version:
+        ocp_version = str(get_semantic_ocp_running_version())
+
+    log.info(f"The cluster ocp version is {ocp_version}")
+    first_str, last_str = f"v{ocp_version}", "version"
+    csi_ocp_version_images = csi_images.split(first_str)[1].split(last_str)[0]
+    csi_ocp_version_images_urls = extract_image_urls(csi_ocp_version_images)
+    return csi_ocp_version_images_urls

@@ -124,6 +124,10 @@ class ExternalCluster(object):
                 f"--rgw-zone-name {rgw_zone}"
             )
 
+        # remove user 'rgw-admin-ops-user' if it exists since user creation is handled by
+        # external python script with necessary caps
+        self.remove_rgw_user()
+
         out = self.run_exporter_script(params=params)
 
         # encode the exporter script output to base64
@@ -163,6 +167,7 @@ class ExternalCluster(object):
             remote_rgw_cert_ca_path,
             self.user,
             self.password,
+            self.ssh_key,
         )
         return remote_rgw_cert_ca_path
 
@@ -427,6 +432,44 @@ class ExternalCluster(object):
             "ceph config set global rbd_default_map_options ms_mode=secure"
         )
         self.rhcs_conn.exec_cmd(cmds)
+
+    def remove_rgw_user(self, user=None):
+        """
+        Remove RGW user if it exists
+
+        Args:
+            user (str): RGW user name
+
+        """
+        user = user if user else defaults.EXTERNAL_CLUSTER_OBJECT_STORE_USER
+        if self.is_rgw_user_exists(user):
+            logger.info(
+                f"Deleting {user} since rgw user {user} will be created by "
+                f"external python script with all necessary caps"
+            )
+            cmd = f"radosgw-admin user rm --uid={user}"
+            self.rhcs_conn.exec_cmd(cmd)
+        else:
+            logger.debug(
+                f"rgw user {user} doesn't exists and it will be created by external python script"
+            )
+
+    def is_rgw_user_exists(self, user):
+        """
+        Checks whether RGW user exists or not
+
+        Args:
+            user (str): RGW user name
+
+        Returns:
+            bool: True incase user exists, otherwise False
+
+        """
+        cmd = "radosgw-admin user list"
+        _, out, _ = self.rhcs_conn.exec_cmd(cmd)
+        rgw_user_list = json.loads(out)
+        logger.debug(f"RGW users: {rgw_user_list}")
+        return True if user in rgw_user_list else False
 
 
 def generate_exporter_script():

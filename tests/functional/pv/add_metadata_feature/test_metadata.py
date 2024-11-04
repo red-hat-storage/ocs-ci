@@ -65,7 +65,9 @@ class TestMetadataUnavailable(ManageTest):
         fs, sc_name = metadata_utils.update_testdata_for_external_modes(
             sc_name, fs, external_mode=external_mode
         )
-        config_map_obj = ocp.OCP(kind="Configmap", namespace="openshift-storage")
+        config_map_obj = ocp.OCP(
+            kind="Configmap", namespace=config.ENV_DATA["cluster_namespace"]
+        )
         pod_obj = ocp.OCP(kind="Pod", namespace="openshift-storage")
         toolbox = pod.get_ceph_tools_pod()
         project_factory_class(project_name="test-metadata")
@@ -134,9 +136,6 @@ class TestMetadataUnavailable(ManageTest):
         ), f"PVC {pvc_obj.name} is not deleted"
 
 
-@pytest.mark.skip(
-    reason="Skip due to issue https://github.com/red-hat-storage/ocs-ci/issues/8759"
-)
 @tier1
 @skipif_ocs_version("<4.12")
 @skipif_ocp_version("<4.12")
@@ -224,9 +223,6 @@ class TestDefaultMetadataDisabled(ManageTest):
         ), f"PVC {cloned_pvc_obj.name} is not deleted"
 
 
-@pytest.mark.skip(
-    reason="Skip due to issue https://github.com/red-hat-storage/ocs-ci/issues/8759"
-)
 @skipif_ocs_version("<4.12")
 @skipif_ocp_version("<4.12")
 @skipif_managed_service
@@ -260,7 +256,7 @@ class TestMetadata(ManageTest):
         log.info("-----Setup-----")
         self.project_name = "metadata"
         project_factory(project_name=self.project_name)
-        self.namespace = "openshift-storage"
+        self.namespace = config.ENV_DATA["cluster_namespace"]
         self.config_map_obj = ocp.OCP(kind="Configmap", namespace=self.namespace)
         self.pod_obj = ocp.OCP(kind="Pod", namespace=self.namespace)
         self.pv_obj = ocp.OCP(kind=constants.PV, namespace=self.namespace)

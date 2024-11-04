@@ -2244,13 +2244,7 @@ def get_data_volumes(deviceset_pvs):
     aws = AWS()
 
     volume_ids = [
-        "vol-"
-        + pv.get()
-        .get("spec")
-        .get("awsElasticBlockStore")
-        .get("volumeID")
-        .partition("vol-")[-1]
-        for pv in deviceset_pvs
+        pv.get().get("spec").get("csi").get("volumeHandle") for pv in deviceset_pvs
     ]
     return [aws.ec2_resource.Volume(vol_id) for vol_id in volume_ids]
 
@@ -2582,7 +2576,10 @@ def create_and_attach_sts_role():
     }
     logger.info("Trust Data: \n%s", trust_data)
     cluster_path = config.ENV_DATA["cluster_path"]
-    role_name = get_infra_id(cluster_path)
+    if config.ENV_DATA.get("platform") == constants.ROSA_HCP_PLATFORM:
+        role_name = f"{config.ENV_DATA['cluster_name']}"
+    else:
+        role_name = get_infra_id(cluster_path)
     description = f"Role created for {role_name} to support STS"
     role_data = aws.create_iam_role(role_name, description, json.dumps(trust_data))
     aws.attach_role_policy(role_name, policy_arn)
@@ -2595,9 +2592,13 @@ def delete_sts_iam_roles():
     """
     logger.info("Deleting STS IAM Roles")
     cluster_path = config.ENV_DATA["cluster_path"]
-    infra_id = get_infra_id(cluster_path)
     aws = AWS()
-    roles = aws.get_iam_roles(infra_id)
+    if config.ENV_DATA.get("platform") == constants.ROSA_HCP_PLATFORM:
+        role_name = f"{config.ENV_DATA['cluster_name']}"
+        roles = aws.get_iam_roles(role_name)
+    else:
+        infra_id = get_infra_id(cluster_path)
+        roles = aws.get_iam_roles(infra_id)
 
     for role in roles:
         role_name = role["RoleName"]

@@ -65,7 +65,9 @@ class ResourceList(SearchBar):
             self.do_send_keys(self.generic_locators["search_resource_field"], resource)
             self.do_click(
                 format_locator(
-                    self.generic_locators["three_dots_specific_resource"], resource
+                    self.generic_locators["three_dots_specific_resource"],
+                    resource,
+                    resource,
                 ),
                 enable_screenshot=True,
             )

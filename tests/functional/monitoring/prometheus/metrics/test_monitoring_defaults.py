@@ -15,7 +15,8 @@ from ocs_ci.framework.pytest_customization.marks import (
     skipif_mcg_only,
     bugzilla,
     runs_on_provider,
-    hci_provider_and_client_required,
+    provider_client_platform_required,
+    provider_mode,
 )
 from ocs_ci.framework.testlib import skipif_ocs_version, tier1
 from ocs_ci.ocs import constants, ocp
@@ -81,6 +82,7 @@ def test_monitoring_enabled(threading_lock):
         assert int(value) >= 0, "bucket status isn't a positive integer or zero"
 
 
+@provider_mode
 @blue_squad
 @tier1
 @pytest.mark.polarion_id("OCS-1265")
@@ -141,6 +143,7 @@ def test_ceph_rbd_metrics_available(threading_lock):
     assert list_of_metrics_without_results == [], msg
 
 
+@provider_mode
 @skipif_mcg_only
 @blue_squad
 @tier1
@@ -260,21 +263,22 @@ def test_monitoring_reporting_ok_when_idle(workload_idle, threading_lock):
     assert all(osd_validations), osds_msg
 
 
+@provider_mode
 @blue_squad
 @tier1
 @runs_on_provider
-@hci_provider_and_client_required
+@provider_client_platform_required
 @pytest.mark.polarion_id("OCS-5204")
-def test_hci_metrics_available(threading_lock):
+def test_provider_metrics_available(threading_lock):
     """
-    HCI metrics should be provided via OCP Prometheus.
+    Metrics added in provider-client mode should be provided via OCP Prometheus on provider.
     """
     prometheus = PrometheusAPI(threading_lock=threading_lock)
     list_of_metrics_without_results = metrics.get_missing_metrics(
-        prometheus, metrics.hci_metrics
+        prometheus, metrics.provider_metrics
     )
     msg = (
-        "OCS Monitoring should provide some value(s) for tested hci metrics, "
+        "OCS Monitoring should provide some value(s) for tested provider metrics, "
         "so that the list of metrics without results is empty."
     )
     assert list_of_metrics_without_results == [], msg

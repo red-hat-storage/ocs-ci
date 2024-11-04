@@ -7,6 +7,7 @@ import logging
 import os
 import shlex
 import time
+
 from uuid import uuid4
 
 import boto3
@@ -22,6 +23,7 @@ from ocs_ci.utility.utils import (
     TimeoutSampler,
     run_cmd,
     exec_nb_db_query,
+    exec_cmd,
 )
 from ocs_ci.helpers.helpers import create_resource
 from ocs_ci.utility import version
@@ -47,7 +49,7 @@ def craft_s3_command(cmd, mcg_obj=None, api=False, signed_request_creds=None):
     api = "api" if api else ""
     no_ssl = (
         "--no-verify-ssl"
-        if signed_request_creds and signed_request_creds.get("ssl") is False
+        if (signed_request_creds and signed_request_creds.get("ssl")) is False
         else ""
     )
     if mcg_obj:
@@ -56,12 +58,13 @@ def craft_s3_command(cmd, mcg_obj=None, api=False, signed_request_creds=None):
         else:
             region = ""
         base_command = (
-            f'sh -c "AWS_CA_BUNDLE={constants.SERVICE_CA_CRT_AWSCLI_PATH} '
+            f'sh -c "AWS_CA_BUNDLE={constants.AWSCLI_CA_BUNDLE_PATH} '
             f"AWS_ACCESS_KEY_ID={mcg_obj.access_key_id} "
             f"AWS_SECRET_ACCESS_KEY={mcg_obj.access_key} "
             f"{region}"
             f"aws s3{api} "
             f"--endpoint={mcg_obj.s3_endpoint} "
+            f"{no_ssl} "
         )
         string_wrapper = '"'
     elif signed_request_creds:
@@ -109,7 +112,11 @@ def craft_s3cmd_command(cmd, mcg_obj=None, signed_request_creds=None):
             f"s3cmd --access_key={mcg_obj.access_key_id} "
             f"--secret_key={mcg_obj.access_key} "
             f"{region}"
-            f"--host={mcg_obj.s3_endpoint} "
+            f"--host={mcg_obj.
+
+
+
+} "
             f"--host-bucket={mcg_obj.s3_endpoint} "
             f"{no_ssl} "
         )
@@ -274,7 +281,7 @@ def list_objects_from_bucket(
         signed_request_creds (dictionary, optional): the access_key, secret_key,
             endpoint and region to use when willing to send signed aws s3 requests
         timeout (int): timeout for the exec_oc_cmd
-        recurive (bool): If true, list objects recursively using the --recursive option
+        recursive (bool): If true, list objects recursively using the --recursive option
 
     Returns:
         List of objects in a bucket
@@ -286,6 +293,7 @@ def list_objects_from_bucket(
         retrieve_cmd = f"ls {target}"
     if recursive:
         retrieve_cmd += " --recursive"
+
     if s3_obj:
         secrets = [s3_obj.access_key_id, s3_obj.access_key, s3_obj.s3_endpoint]
     elif signed_request_creds:
@@ -340,10 +348,15 @@ def copy_objects(
     """
 
     logger.info(f"Copying object {src_obj} to {target}")
+    no_ssl = (
+        "--no-verify-ssl"
+        if (signed_request_creds and signed_request_creds.get("ssl")) is False
+        else ""
+    )
     if recursive:
-        retrieve_cmd = f"cp {src_obj} {target} --recursive"
+        retrieve_cmd = f"cp {src_obj} {target} --recursive {no_ssl}"
     else:
-        retrieve_cmd = f"cp {src_obj} {target}"
+        retrieve_cmd = f"cp {src_obj} {target} {no_ssl}"
     if s3_obj:
         secrets = [s3_obj.access_key_id, s3_obj.access_key, s3_obj.s3_endpoint]
     elif signed_request_creds:
@@ -711,6 +724,7 @@ def oc_create_google_backingstore(cld_mgr, backingstore_name, uls_name, region):
     """
     bs_data = templating.load_yaml(constants.MCG_BACKINGSTORE_YAML)
     bs_data["metadata"]["name"] = backingstore_name
+    bs_data["metadata"]["namespace"] = config.ENV_DATA["cluster_namespace"]
     bs_data["spec"] = {
         "type": constants.BACKINGSTORE_TYPE_GOOGLE,
         "googleCloudStorage": {
@@ -759,6 +773,7 @@ def oc_create_azure_backingstore(cld_mgr, backingstore_name, uls_name, region):
     """
     bs_data = templating.load_yaml(constants.MCG_BACKINGSTORE_YAML)
     bs_data["metadata"]["name"] = backingstore_name
+    bs_data["metadata"]["namespace"] = config.ENV_DATA["cluster_namespace"]
     bs_data["spec"] = {
         "type": constants.BACKINGSTORE_TYPE_AZURE,
         "azureBlob": {
@@ -863,6 +878,7 @@ def oc_create_rgw_backingstore(cld_mgr, backingstore_name, uls_name, region):
         region (str): which region to create backingstore (should be the same as uls)
 
     """
+
     bs_data = templating.load_yaml(constants.MCG_BACKINGSTORE_YAML)
     bs_data["metadata"]["name"] = backingstore_name
     bs_data["metadata"]["namespace"] = config.ENV_DATA["cluster_namespace"]
@@ -1002,7 +1018,7 @@ def check_pv_backingstore_status(
     Args:
         backingstore_name (str): backingstore name
         namespace (str): backing store's namespace
-        desired_status (str): desired state for the backing store, if None is given then desired
+        desired_status (list): desired state for the backing store, if None is given then desired
         is the Healthy status
 
     Returns:
@@ -1015,10 +1031,50 @@ def check_pv_backingstore_status(
 
     cmd = (
         f"oc get backingstore -n {namespace} {kubeconfig} {backingstore_name} "
-        "-o=jsonpath=`{.status.mode.modeCode}`"
+        "-o=jsonpath='{.status.mode.modeCode}'"
     )
     res = run_cmd(cmd=cmd)
     return True if res in desired_status else False
+
+
+def check_pv_backingstore_type(
+    backingstore_name=constants.DEFAULT_NOOBAA_BACKINGSTORE,
+    namespace=constants.OPENSHIFT_STORAGE_NAMESPACE,
+):
+    """
+    check if existing pv backing store is in READY state
+
+    Args:
+        backingstore_name (str): backingstore name
+        namespace (str): backing store's namespace
+
+    Returns:
+        backingstore_type: type of the backing store
+
+    """
+    kubeconfig = os.getenv("KUBECONFIG")
+    kubeconfig = f"--kubeconfig {kubeconfig}" if kubeconfig else ""
+    namespace = namespace or config.ENV_DATA["cluster_namespace"]
+
+    cmd = (
+        f"oc get backingstore -n {namespace} {kubeconfig} {backingstore_name} "
+        "-o=jsonpath='{.status.phase}'"
+    )
+    res = exec_cmd(cmd=cmd, use_shell=True)
+    if res.returncode != 0:
+        logger.error(f"Failed to fetch backingstore details\n{res.stderr}")
+
+    assert (
+        res.stdout.decode() == constants.STATUS_READY
+    ), f"output is {res.stdout.decode()}, it is not as expected"
+    cmd = (
+        f"oc get backingstore -n {namespace} {kubeconfig} {backingstore_name} "
+        "-o=jsonpath='{.spec.type}'"
+    )
+    res = exec_cmd(cmd=cmd, use_shell=True)
+    if res.returncode != 0:
+        logger.error(f"Failed to fetch backingstore type\n{res.stderr}")
+    return res.stdout.decode()
 
 
 def create_multipart_upload(s3_obj, bucketname, object_key):
@@ -1229,9 +1285,12 @@ def s3_get_object(s3_obj, bucketname, object_key, versionid=""):
         dict : Get object response
 
     """
-    return s3_obj.s3_client.get_object(
-        Bucket=bucketname, Key=object_key, VersionId=versionid
-    )
+    if versionid:
+        return s3_obj.s3_client.get_object(
+            Bucket=bucketname, Key=object_key, VersionId=versionid
+        )
+    else:
+        return s3_obj.s3_client.get_object(Bucket=bucketname, Key=object_key)
 
 
 def s3_delete_object(s3_obj, bucketname, object_key, versionid=None):
@@ -1444,7 +1503,7 @@ def retrieve_verification_mode():
     if (
         config.ENV_DATA["platform"] == constants.IBMCLOUD_PLATFORM
         and config.ENV_DATA["deployment_type"] == "managed"
-    ):
+    ) or config.ENV_DATA["platform"] == constants.ROSA_HCP_PLATFORM:
         verify = True
     elif config.DEPLOYMENT.get("use_custom_ingress_ssl_cert"):
         verify = get_root_ca_cert()
@@ -1513,7 +1572,7 @@ def write_random_objects_in_pod(io_pod, file_dir, amount, pattern="ObjKey-", bs=
         object_key = pattern + "{}".format(i)
         obj_lst.append(object_key)
     command = (
-        f"for i in $(seq 0 {amount-1}); "
+        f"for i in $(seq 0 {amount - 1}); "
         f"do dd if=/dev/urandom of={file_dir}/{pattern}$i bs={bs} count=1 status=none; done"
     )
     io_pod.exec_sh_cmd_on_pod(command=command, sh="sh")
@@ -1739,6 +1798,7 @@ def s3_list_objects_v2(
     max_keys=1000,
     con_token="",
     fetch_owner=False,
+    start_after="",
 ):
     """
     Boto3 client based list object version2
@@ -1751,6 +1811,7 @@ def s3_list_objects_v2(
         max_keys (int): Maximum number of keys returned in the response. Default 1,000 keys.
         con_token (str): Token used to continue the list
         fetch_owner (bool): Unique object Identifier
+        start_after (str): Name of the object after which you want to list
 
     Returns:
         dict : list object v2 response
@@ -1763,6 +1824,7 @@ def s3_list_objects_v2(
         MaxKeys=max_keys,
         ContinuationToken=con_token,
         FetchOwner=fetch_owner,
+        StartAfter=start_after,
     )
 
 
@@ -1975,9 +2037,11 @@ def update_replication_policy(bucket_name, replication_policy_dict):
     replication_policy_patch_dict = {
         "spec": {
             "additionalConfig": {
-                "replicationPolicy": json.dumps(replication_policy_dict)
-                if replication_policy_dict
-                else ""
+                "replicationPolicy": (
+                    json.dumps(replication_policy_dict)
+                    if replication_policy_dict
+                    else ""
+                )
             }
         }
     }
@@ -2623,3 +2687,59 @@ def delete_objects_from_source_and_wait_for_deletion_sync(
         target_bucket.name,
         timeout=timeout,
     ), f"Deletion sync failed to complete in {timeout} seconds"
+
+
+def list_objects_in_batches(
+    mcg_obj, bucket_name, batch_size=1000, yield_individual=True
+):
+    """
+    This method lists objects in a bucket either in batch of mentioned batch_size
+    or individually. This method is helpful when dealing with millions of objects
+    which maybe expensive in terms of typical list operations.
+
+    Args:
+        mcg_obj (MCG): MCG object
+        bucket_name (str): Name of the bucket
+        batch_size (int): Number of objects to list at a time, by default 1000
+        yield_individual (bool): If True, it will yield indviudal objects until all the
+        objects are listed. If False, batch of objects are yielded.
+
+    Returns:
+        yield: indvidual object key or list containing batch of objects
+
+    """
+
+    marker = ""
+
+    while True:
+        response = s3_list_objects_v2(
+            mcg_obj, bucket_name, max_keys=batch_size, start_after=marker
+        )
+        if yield_individual:
+            for obj in response.get("Contents", []):
+                yield obj["Key"]
+        else:
+            yield [{"Key": obj["Key"]} for obj in response.get("Contents", [])]
+
+        if not response.get("IsTruncated", False):
+            break
+
+        marker = response.get("Contents", [])[-1]["Key"]
+        del response
+
+
+def map_objects_to_owners(mcg_obj, bucket_name, prefix=""):
+    """
+    This method returns a mapping of object key to owner data
+
+    Args:
+        mcg_obj (MCG): MCG object
+        bucket_name (str): Name of the bucket
+        prefix (str): Prefix to list objects
+
+    Returns:
+        dict: a mapping of object key to owner data
+
+    """
+    response = s3_list_objects_v2(mcg_obj, bucket_name, prefix=prefix, fetch_owner=True)
+    return {item["Key"]: item["Owner"] for item in response.get("Contents", [])}

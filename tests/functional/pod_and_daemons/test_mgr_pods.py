@@ -1,12 +1,13 @@
 import logging
 
 from ocs_ci.framework.testlib import (
-    tier1,
+    tier4a,
     skipif_ocs_version,
     BaseTest,
     post_upgrade,
     post_ocs_upgrade,
     polarion_id,
+    skipif_external_mode,
 )
 from ocs_ci.ocs import exceptions
 from ocs_ci.ocs.resources import pod
@@ -15,8 +16,9 @@ from ocs_ci.framework.pytest_customization.marks import green_squad
 log = logging.getLogger(__name__)
 
 
-@tier1
+@tier4a
 @skipif_ocs_version("<4.15")
+@skipif_external_mode
 @post_upgrade
 @post_ocs_upgrade
 class TestMgrPods(BaseTest):

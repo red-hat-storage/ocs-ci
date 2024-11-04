@@ -696,6 +696,42 @@ class VSPHERE(object):
         WaitForTask(pi.Destroy())
         logger.info(f"Successfully deleted resource pool {pool}")
 
+    def get_disks(self, vm):
+        """
+        Fetches the information of all disks in a VM
+
+        Args:
+            vm (vim.VirtualMachine): VM instance
+
+        Returns:
+            list: List which contains disk related information
+
+        """
+        disks = []
+        for device in vm.config.hardware.device:
+            if isinstance(device, vim.vm.device.VirtualDisk):
+                backing = device.backing
+                if hasattr(backing, "uuid"):
+                    wwn = getattr(backing, "uuid", "N/A")
+                    disk_info = {
+                        "deviceName": device.deviceInfo.label,
+                        "capacityInKB": device.capacityInKB,
+                        "unitNumber": device.unitNumber,
+                        "datastore": backing.datastore,
+                        "isthinProvisioned": backing.thinProvisioned
+                        if hasattr(backing, "thinProvisioned")
+                        else False,
+                        "uuid": backing.uuid,
+                        "eagerlyScrub": backing.eagerlyScrub,
+                        "fileName": backing.fileName
+                        if hasattr(backing, "fileName")
+                        else "N/A",
+                        "wwn": wwn,
+                    }
+                    disks.append(disk_info)
+        logger.debug(f"Disks on node {vm.name} is {disks}")
+        return disks
+
     def remove_disk(self, vm, identifier, key="unit_number", datastore=True):
         """
         Removes the Disk from VM and datastore. By default, it will delete

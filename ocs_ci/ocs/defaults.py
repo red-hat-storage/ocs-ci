@@ -43,6 +43,7 @@ ODF_OPERATOR_NAME = "odf-operator"
 ROOK_CEPH_OPERATOR = "rook-ceph-operator"
 ODF_PROMETHEUS_OPERATOR = "odf-prometheus-operator"
 ODF_CLIENT_OPERATOR = "ocs-client-operator"
+RECIPE_OPERATOR = "recipe"
 HCI_CLIENT_ODF_OPERATOR_NAME = "ocs-client-operator"
 NOOBAA_OPERATOR = "noobaa-operator"
 MCG_OPERATOR = "mcg-operator"
@@ -53,6 +54,7 @@ FUSION_OPERATOR_NAME = "isf-operator"
 FUSION_CATALOG_NAME = "isf-data-foundation-catalog"
 LIVE_CONTENT_SOURCE = "redhat-operators"
 OCS_CLIENT_OPERATOR_NAME = "ocs-client-operator"
+CEPHCSI_OPERATOR = "cephcsi-operator"
 
 # Noobaa S3 bucket website configurations
 website_config = {
@@ -167,3 +169,4 @@ CRUSH_DEVICE_CLASS = "ssd"
 
 # IBM Cloud
 IBM_CLOUD_LOAD_BALANCER_QUOTA = 50
+IBM_CLOUD_REGIONS = {"us-south", "us-east"}

@@ -85,7 +85,7 @@ class TestPvcClonedStatusOfSmallSizeFiles(E2ETest):
             size=str(self.pvc_size * 1024 * 1024 * 1024),
             restore_pvc_yaml=constants.CSI_CEPHFS_PVC_RESTORE_YAML,
             access_mode=constants.ACCESS_MODE_RWX,
-            timeout=960,
+            timeout=1080,
         )
 
     @bugzilla("2039265")

@@ -66,6 +66,9 @@ class StorageSystemDetails(StorageSystemTab):
         self.nav_ceph_blockpool().verify_cephblockpool_status()
 
     def nav_ceph_blockpool(self):
+        """
+        Navigate to Block pools (for version 4.16 or lower)/Storage pools tab
+        """
         logger.info("Click on 'BlockPools' tab")
         if (
             self.ocp_version_semantic == version.VERSION_4_11

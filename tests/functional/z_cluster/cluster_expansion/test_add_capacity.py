@@ -13,8 +13,10 @@ from ocs_ci.framework.pytest_customization.marks import (
     skipif_no_lso,
     skipif_lso,
     skipif_managed_service,
+    skipif_stretch_cluster,
     skipif_hci_provider_and_client,
     brown_squad,
+    black_squad,
 )
 from ocs_ci.framework.testlib import (
     ignore_leftovers,
@@ -68,7 +70,7 @@ def add_capacity_test(ui_flag=False):
     osd_pod_names_post_expansion = [pod.name for pod in osd_pods_post_expansion]
     restarted_osds = list()
     logger.info(
-        "Checking if existing OSD pods were restarted (deleted) post add capacity (bug 1931601)"
+        "Checking if existing OSD pods were restarted (deleted) post adding capacity (bug 1931601)"
     )
 
     for pod in existing_osd_pod_names:
@@ -111,13 +113,12 @@ def add_capacity_test(ui_flag=False):
         verify_storage_device_class(device_class)
         verify_device_class_in_osd_tree(ct_pod, device_class)
 
-    check_ceph_health_after_add_capacity(ceph_rebalance_timeout=3600)
+    check_ceph_health_after_add_capacity(ceph_rebalance_timeout=5400)
 
 
-@brown_squad
 @ignore_leftovers
 @polarion_id("OCS-1191")
-@pytest.mark.second_to_last
+@pytest.mark.order("second_to_last")
 @skipif_managed_service
 @skipif_aws_i3
 @skipif_bm
@@ -133,6 +134,7 @@ class TestAddCapacity(ManageTest):
     """
 
     @acceptance
+    @brown_squad
     def test_add_capacity_cli(self, reduce_and_resume_cluster_load):
         """
         Add capacity on non-lso cluster via cli on Acceptance suite
@@ -140,6 +142,7 @@ class TestAddCapacity(ManageTest):
         add_capacity_test(ui_flag=False)
 
     @tier1
+    @black_squad
     def test_add_capacity_ui(self, reduce_and_resume_cluster_load):
         """
         Add capacity on non-lso cluster via UI on tier1 suite
@@ -147,10 +150,9 @@ class TestAddCapacity(ManageTest):
         add_capacity_test(ui_flag=True)
 
 
-@brown_squad
 @ignore_leftovers
 @polarion_id("OCS-4647")
-@pytest.mark.second_to_last
+@pytest.mark.order("second_to_last")
 @skipif_aws_i3
 @skipif_bm
 @skipif_bmpsi
@@ -159,12 +161,14 @@ class TestAddCapacity(ManageTest):
 @skipif_managed_service
 @skipif_hci_provider_and_client
 @skipif_no_lso
+@skipif_stretch_cluster
 class TestAddCapacityLSO(ManageTest):
     """
     Add capacity on lso cluster
     """
 
     @acceptance
+    @brown_squad
     def test_add_capacity_lso_cli(self, reduce_and_resume_cluster_load):
         """
         Add capacity on lso cluster via CLI on Acceptance suite
@@ -172,6 +176,7 @@ class TestAddCapacityLSO(ManageTest):
         storage_cluster.add_capacity_lso(ui_flag=False)
 
     @tier1
+    @black_squad
     def test_add_capacity_lso_ui(self, reduce_and_resume_cluster_load):
         """
         Add capacity on lso cluster via UI on tier1 suite

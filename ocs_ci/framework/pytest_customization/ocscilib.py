@@ -334,6 +334,27 @@ def pytest_addoption(parser):
             set for installing lvmo operator and lvmo cluster
             """,
     )
+    parser.addoption(
+        "--disable-environment-checker",
+        dest="disable_environment_checker",
+        action="store_true",
+        default=False,
+        help="Disable environment checks for test cases.",
+    )
+    parser.addoption(
+        "--resource-checker",
+        dest="resource_checker",
+        action="store_true",
+        default=False,
+        help=(
+            "Resource checker checks for the left over resources which are added while running the test cases."
+        ),
+    )
+    parser.addoption(
+        "--kubeconfig",
+        dest="kubeconfig",
+        help=("Kubeconfig location which will be loaded as environmental variable"),
+    )
 
 
 def pytest_configure(config):
@@ -364,6 +385,11 @@ def pytest_configure(config):
                     f"run-{ocsci_config.RUN['run_id']}-cl{i}-config.yaml",
                 )
             )
+            if ocsci_config.DEPLOYMENT.get("multi_storagecluster"):
+                ocsci_config.DEPLOYMENT["external_mode"] = False
+                ocsci_config.ENV_DATA[
+                    "storage_cluster_name"
+                ] = constants.DEFAULT_STORAGE_CLUSTER
             dump_config_to_file(config_file)
             log.info(
                 f"Dump of the consolidated config file is located here: "
@@ -579,7 +605,7 @@ def process_cluster_cli_params(config):
         pytest.exit("--html option must be provided to send email reports")
     get_cli_param(config, "squad_analysis")
     get_cli_param(config, "-m")
-    osd_size = get_cli_param(config, "--osd-size")
+    osd_size = get_cli_param(config, f"--osd-size{suffix}")
     if osd_size:
         ocsci_config.ENV_DATA["device_size"] = osd_size
     ocp_version = get_cli_param(config, "--ocp-version")
@@ -625,6 +651,15 @@ def process_cluster_cli_params(config):
         ocsci_config.RUN["re_trigger_failed_tests"] = os.path.expanduser(
             re_trigger_failed_tests
         )
+    disable_environment_checker = get_cli_param(config, "disable_environment_checker")
+    ocsci_config.RUN["disable_environment_checker"] = disable_environment_checker
+    resource_checker = get_cli_param(config, "resource_checker")
+    ocsci_config.RUN["resource_checker"] = resource_checker
+    custom_kubeconfig_location = get_cli_param(config, "kubeconfig")
+    ocsci_config.RUN["custom_kubeconfig_location"] = custom_kubeconfig_location
+    if custom_kubeconfig_location:
+        os.environ["KUBECONFIG"] = custom_kubeconfig_location
+        ocsci_config.RUN["kubeconfig"] = custom_kubeconfig_location
 
 
 def pytest_collection_modifyitems(session, config, items):
@@ -736,6 +771,30 @@ def pytest_runtest_makereport(item, call):
             collect_performance_stats(test_case_name)
         except Exception:
             log.exception("Failed to collect performance stats")
+
+    if rep.failed:
+        test_name = item.nodeid
+        # Write the failure information to a file
+        with open(
+            f'{ocsci_config.ENV_DATA.get("cluster_path")}/failed_testcases.txt', "a"
+        ) as file:
+            file.write(f"{test_name}\n")
+
+    if rep.passed and rep.when == "call":
+        test_name = item.nodeid
+        # Write the passed information to a file
+        with open(
+            f'{ocsci_config.ENV_DATA.get("cluster_path")}/passed_testcases.txt', "a"
+        ) as file:
+            file.write(f"{test_name}\n")
+
+    if rep.skipped:
+        test_name = item.nodeid
+        # Write the skipped information to a file
+        with open(
+            f'{ocsci_config.ENV_DATA.get("cluster_path")}/skipped_testcases.txt', "a"
+        ) as file:
+            file.write(f"{test_name}\n")
 
 
 def set_log_level(config):

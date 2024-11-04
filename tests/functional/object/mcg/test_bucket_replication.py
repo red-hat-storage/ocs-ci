@@ -10,6 +10,7 @@ from ocs_ci.framework.pytest_customization.marks import (
     red_squad,
     mcg,
     sts_deployment_required,
+    skipif_noobaa_external_pgsql,
 )
 from ocs_ci.ocs.exceptions import CommandFailed
 from ocs_ci.framework.testlib import MCGTest
@@ -360,6 +361,7 @@ class TestReplication(MCGTest):
             mcg_obj_session, first_bucket_name, second_bucket_name, timeout=self.TIMEOUT
         ), f"Objects in the buckets {first_bucket_name} and {second_bucket_name} are not same"
 
+    @skipif_noobaa_external_pgsql
     @pytest.mark.parametrize(
         argnames=["source_bucketclass", "target_bucketclass"],
         argvalues=[

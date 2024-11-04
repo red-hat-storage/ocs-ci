@@ -22,12 +22,13 @@ from itertools import cycle
 from subprocess import PIPE, run
 from uuid import uuid4
 
-
+from ocs_ci.deployment.ocp import download_pull_secret
 from ocs_ci.framework import config
 from ocs_ci.helpers.proxy import (
     get_cluster_proxies,
     update_container_with_proxy_env,
 )
+from ocs_ci.ocs.utils import get_non_acm_cluster_config, get_pod_name_by_pattern
 from ocs_ci.ocs.utils import mirror_image
 from ocs_ci.ocs import constants, defaults, node, ocp, exceptions
 from ocs_ci.ocs.exceptions import (
@@ -49,7 +50,6 @@ from ocs_ci.utility.utils import (
     ocsci_log_path,
     run_cmd,
     update_container_with_mirrored_image,
-    create_directory_path,
     exec_cmd,
     get_ocs_build_number,
 )
@@ -606,30 +606,39 @@ def create_ceph_block_pool(
     return cbp_obj
 
 
-def create_ceph_file_system(pool_name=None):
+def create_ceph_file_system(
+    cephfs_name=None, label=None, namespace=constants.OPENSHIFT_STORAGE_NAMESPACE
+):
     """
     Create a Ceph file system
-    ** This method should not be used anymore **
-    ** This method is for internal testing only **
 
     Args:
-        pool_name (str): The pool name to create
+        cephfs_name (str): The ceph FS name to create
+        label (dict): The label to give to pool
+        namespace (str): The name space in which the ceph FS has to be created
 
     Returns:
         OCS: An OCS instance for the Ceph file system
     """
-    cfs_data = templating.load_yaml(constants.CEPHFILESYSTEM_YAML)
-    cfs_data["metadata"]["name"] = (
-        pool_name if pool_name else create_unique_resource_name("test", "cfs")
+    cephfs_data = templating.load_yaml(constants.CEPHFILESYSTEM_YAML)
+    cephfs_data["metadata"]["name"] = (
+        cephfs_name if cephfs_name else create_unique_resource_name("test", "cfs")
     )
-    cfs_data["metadata"]["namespace"] = config.ENV_DATA["cluster_namespace"]
-    cfs_data = create_resource(**cfs_data)
-    cfs_data.reload()
+    cephfs_data["metadata"]["namespace"] = namespace
+    if label:
+        cephfs_data["metadata"]["labels"] = label
+
+    try:
+        cephfs_data = create_resource(**cephfs_data)
+        cephfs_data.reload()
+    except Exception as e:
+        logger.error(e)
+        raise e
 
     assert validate_cephfilesystem(
-        cfs_data.name
-    ), f"File system {cfs_data.name} does not exist"
-    return cfs_data
+        cephfs_data.name, namespace
+    ), f"File system {cephfs_data.name} does not exist"
+    return cephfs_data
 
 
 def default_storage_class(
@@ -665,6 +674,14 @@ def default_storage_class(
         else:
             if external:
                 resource_name = constants.DEFAULT_EXTERNAL_MODE_STORAGECLASS_RBD
+            elif config.ENV_DATA["platform"].lower() in constants.HCI_PC_OR_MS_PLATFORM:
+                storage_class = OCP(kind="storageclass")
+                # TODO: Select based on storageclient name or namespace in case of multiple storageclients in a cluster
+                resource_name = [
+                    sc_data["metadata"]["name"]
+                    for sc_data in storage_class.get()["items"]
+                    if sc_data["provisioner"] == constants.RBD_PROVISIONER
+                ][0]
             else:
                 resource_name = constants.DEFAULT_STORAGECLASS_RBD
     elif interface_type == constants.CEPHFILESYSTEM:
@@ -678,6 +695,14 @@ def default_storage_class(
         else:
             if external:
                 resource_name = constants.DEFAULT_EXTERNAL_MODE_STORAGECLASS_CEPHFS
+            elif config.ENV_DATA["platform"].lower() in constants.HCI_PC_OR_MS_PLATFORM:
+                storage_class = OCP(kind="storageclass")
+                # TODO: Select based on storageclient name or namespace in case of multiple storageclients in a cluster
+                resource_name = [
+                    sc_data["metadata"]["name"]
+                    for sc_data in storage_class.get()["items"]
+                    if sc_data["provisioner"] == constants.CEPHFS_PROVISIONER
+                ][0]
             else:
                 resource_name = constants.DEFAULT_STORAGECLASS_CEPHFS
     base_sc = OCP(kind="storageclass", resource_name=resource_name)
@@ -722,6 +747,7 @@ def create_storage_class(
     volume_binding_mode="Immediate",
     allow_volume_expansion=True,
     kernelMountOptions=None,
+    annotations=None,
 ):
     """
     Create a storage class
@@ -745,6 +771,7 @@ def create_storage_class(
             pod attachment.
         allow_volume_expansion(bool): True to create sc with volume expansion
         kernelMountOptions (str): Mount option for security context
+        annotations(dict): dict of annotations to be added to the storageclass.
     Returns:
         OCS: An OCS instance for the storage class
     """
@@ -795,6 +822,9 @@ def create_storage_class(
             f"csi.storage.k8s.io/{key}-secret-namespace"
         ] = config.ENV_DATA["cluster_namespace"]
 
+    if annotations:
+        sc_data["metadata"]["annotations"] = annotations
+
     sc_data["parameters"]["clusterID"] = config.ENV_DATA["cluster_namespace"]
     sc_data["reclaimPolicy"] = reclaim_policy
     sc_data["volumeBindingMode"] = volume_binding_mode
@@ -815,6 +845,7 @@ def create_pvc(
     do_reload=True,
     access_mode=constants.ACCESS_MODE_RWO,
     volume_mode=None,
+    volume_name=None,
 ):
     """
     Create a PVC
@@ -828,6 +859,8 @@ def create_pvc(
         do_reload (bool): True for wait for reloading PVC after its creation, False otherwise
         access_mode (str): The access mode to be used for the PVC
         volume_mode (str): Volume mode for rbd RWX pvc i.e. 'Block'
+        volume_name (str): Persistent Volume name
+
 
     Returns:
         PVC: PVC instance
@@ -843,6 +876,8 @@ def create_pvc(
         pvc_data["spec"]["resources"]["requests"]["storage"] = size
     if volume_mode:
         pvc_data["spec"]["volumeMode"] = volume_mode
+    if volume_name:
+        pvc_data["spec"]["volumeName"] = volume_name
     ocs_obj = pvc.PVC(**pvc_data)
     created_pvc = ocs_obj.create(do_reload=do_reload)
     assert created_pvc, f"Failed to create resource {pvc_name}"
@@ -962,7 +997,7 @@ def verify_block_pool_exists(pool_name):
     logger.info(f"Verifying that block pool {pool_name} exists")
     ct_pod = pod.get_ceph_tools_pod()
     try:
-        for pools in TimeoutSampler(60, 3, ct_pod.exec_ceph_cmd, "ceph osd lspools"):
+        for pools in TimeoutSampler(180, 3, ct_pod.exec_ceph_cmd, "ceph osd lspools"):
             logger.info(f"POOLS are {pools}")
             for pool in pools:
                 if pool_name in pool.get("poolname"):
@@ -1026,7 +1061,7 @@ def get_cephfs_data_pool_name():
     return out[0]["data_pools"][0]
 
 
-def validate_cephfilesystem(fs_name):
+def validate_cephfilesystem(fs_name, namespace=config.ENV_DATA["cluster_namespace"]):
     """
     Verify CephFileSystem exists at Ceph and OCP
 
@@ -1037,9 +1072,7 @@ def validate_cephfilesystem(fs_name):
         bool: True if CephFileSystem is created at Ceph and OCP side else
            will return False with valid msg i.e Failure cause
     """
-    cfs = ocp.OCP(
-        kind=constants.CEPHFILESYSTEM, namespace=config.ENV_DATA["cluster_namespace"]
-    )
+    cfs = ocp.OCP(kind=constants.CEPHFILESYSTEM, namespace=namespace)
     ct_pod = pod.get_ceph_tools_pod()
     ceph_validate = False
     ocp_validate = False
@@ -2851,6 +2884,28 @@ def modify_deployment_replica_count(
     return ocp_obj.patch(resource_name=deployment_name, params=params)
 
 
+def modify_deploymentconfig_replica_count(
+    deploymentconfig_name, replica_count, namespace=None
+):
+    """
+    Function to modify deploymentconfig replica count,
+    i.e to scale up or down deploymentconfig
+
+    Args:
+        deploymentcofig_name (str): Name of deploymentconfig
+        replica_count (int): replica count to be changed to
+        namespace (str): namespace where the deploymentconfig exists
+
+    Returns:
+        bool: True in case if changes are applied. False otherwise
+
+    """
+    namespace = namespace or config.ENV_DATA["cluster_namespace"]
+    dc_ocp_obj = ocp.OCP(kind=constants.DEPLOYMENTCONFIG, namespace=namespace)
+    params = f'{{"spec": {{"replicas": {replica_count}}}}}'
+    return dc_ocp_obj.patch(resource_name=deploymentconfig_name, params=params)
+
+
 def modify_job_parallelism_count(
     job_name, count, namespace=config.ENV_DATA["cluster_namespace"]
 ):
@@ -3122,29 +3177,53 @@ def default_volumesnapshotclass(interface_type):
     """
     external = config.DEPLOYMENT["external_mode"]
     if interface_type == constants.CEPHBLOCKPOOL:
-        resource_name = (
-            constants.DEFAULT_EXTERNAL_MODE_VOLUMESNAPSHOTCLASS_RBD
-            if external
-            else (
-                constants.DEFAULT_VOLUMESNAPSHOTCLASS_RBD_MS_PC
-                if (
-                    config.ENV_DATA["platform"].lower()
-                    in constants.HCI_PC_OR_MS_PLATFORM
+        if (
+            config.ENV_DATA["platform"].lower()
+            in constants.HCI_PROVIDER_CLIENT_PLATFORMS
+        ):
+            sc_obj = OCP(kind=constants.STORAGECLASS)
+            # TODO: Select based on storageclient name or namespace in case of multiple storageclients in a cluster
+            resource_name = [
+                sc_data["metadata"]["name"]
+                for sc_data in sc_obj.get()["items"]
+                if sc_data["provisioner"] == constants.RBD_PROVISIONER
+            ][0]
+        else:
+            resource_name = (
+                constants.DEFAULT_EXTERNAL_MODE_VOLUMESNAPSHOTCLASS_RBD
+                if external
+                else (
+                    constants.DEFAULT_VOLUMESNAPSHOTCLASS_RBD_MS_PC
+                    if (
+                        config.ENV_DATA["platform"].lower()
+                        in constants.MANAGED_SERVICE_PLATFORMS
+                    )
+                    else constants.DEFAULT_VOLUMESNAPSHOTCLASS_RBD
                 )
-                else constants.DEFAULT_VOLUMESNAPSHOTCLASS_RBD
             )
-        )
     elif interface_type == constants.CEPHFILESYSTEM:
-        resource_name = (
-            constants.DEFAULT_EXTERNAL_MODE_VOLUMESNAPSHOTCLASS_CEPHFS
-            if external
-            else (
-                constants.DEFAULT_VOLUMESNAPSHOTCLASS_CEPHFS_MS_PC
-                if config.ENV_DATA["platform"].lower()
-                in constants.HCI_PC_OR_MS_PLATFORM
-                else constants.DEFAULT_VOLUMESNAPSHOTCLASS_CEPHFS
+        if (
+            config.ENV_DATA["platform"].lower()
+            in constants.HCI_PROVIDER_CLIENT_PLATFORMS
+        ):
+            sc_obj = OCP(kind=constants.STORAGECLASS)
+            # TODO: Select based on storageclient name or namespace in case of multiple storageclients in a cluster
+            resource_name = [
+                sc_data["metadata"]["name"]
+                for sc_data in sc_obj.get()["items"]
+                if sc_data["provisioner"] == constants.CEPHFS_PROVISIONER
+            ][0]
+        else:
+            resource_name = (
+                constants.DEFAULT_EXTERNAL_MODE_VOLUMESNAPSHOTCLASS_CEPHFS
+                if external
+                else (
+                    constants.DEFAULT_VOLUMESNAPSHOTCLASS_CEPHFS_MS_PC
+                    if config.ENV_DATA["platform"].lower()
+                    in constants.MANAGED_SERVICE_PLATFORMS
+                    else constants.DEFAULT_VOLUMESNAPSHOTCLASS_CEPHFS
+                )
             )
-        )
     base_snapshot_class = OCP(
         kind=constants.VOLUMESNAPSHOTCLASS, resource_name=resource_name
     )
@@ -4419,6 +4498,30 @@ def get_s3_credentials_from_secret(secret_name):
     return access_key, secret_key
 
 
+def get_noobaa_db_credentials_from_secret():
+    """
+    Get credentials details i.e., user and password
+    from noobaa-db secret
+
+    Returns:
+        user_name: Username for the db
+        password: Password for the db
+
+    """
+    ocp_secret_obj = OCP(
+        kind=constants.SECRET, namespace=config.ENV_DATA["cluster_namespace"]
+    )
+    nb_db_secret = ocp_secret_obj.get(resource_name=constants.NOOBAA_DB_SECRET)
+
+    base64_user_name = nb_db_secret["data"]["user"]
+    base64_password = nb_db_secret["data"]["password"]
+
+    user_name = base64.b64decode(base64_user_name).decode("utf-8")
+    password = base64.b64decode(base64_password).decode("utf-8")
+
+    return user_name, password
+
+
 def verify_pvc_size(pod_obj, expected_size):
     """
     Verify PVC size is as expected or not.
@@ -4546,30 +4649,18 @@ def retrieve_cli_binary(cli_type="mcg"):
     if cli_type == "mcg":
         local_cli_path = constants.NOOBAA_OPERATOR_LOCAL_CLI_PATH
     elif cli_type == "odf":
-        local_cli_path = constants.CLI_TOOL_LOCAL_PATH
+        local_cli_path = os.path.join(config.RUN["bin_dir"], "odf-cli")
     local_cli_dir = os.path.dirname(local_cli_path)
     live_deployment = config.DEPLOYMENT["live_deployment"]
     if live_deployment and semantic_version >= version.VERSION_4_13:
         if semantic_version >= version.VERSION_4_15:
-            image = f"{constants.ODF_CLI_OFFICIAL_IMAGE}:v{semantic_version}"
+            image = f"{constants.ODF_CLI_OFFICIAL_IMAGE}:v{semantic_version}.0"
         else:
             image = f"{constants.MCG_CLI_OFFICIAL_IMAGE}:v{semantic_version}"
     else:
         image = f"{constants.MCG_CLI_DEV_IMAGE}:{ocs_build}"
 
-    pull_secret_path = os.path.join(constants.DATA_DIR, "pull-secret")
-
-    # create DATA_DIR if it doesn't exist
-    if not os.path.exists(constants.DATA_DIR):
-        create_directory_path(constants.DATA_DIR)
-
-    if not os.path.isfile(pull_secret_path):
-        logger.info(f"Extracting pull-secret and placing it under {pull_secret_path}")
-        exec_cmd(
-            f"oc get secret pull-secret -n {constants.OPENSHIFT_CONFIG_NAMESPACE} -ojson | "
-            f"jq -r '.data.\".dockerconfigjson\"|@base64d' > {pull_secret_path}",
-            shell=True,
-        )
+    pull_secret_path = download_pull_secret()
     exec_cmd(
         f"oc image extract --registry-config {pull_secret_path} "
         f"{image} --confirm "
@@ -4636,16 +4727,13 @@ def odf_cli_set_log_level(service, log_level, subsystem):
     """
     from pathlib import Path
 
-    if not Path(constants.CLI_TOOL_LOCAL_PATH).exists():
+    if not (Path(config.RUN["bin_dir"]) / "odf-cli").exists():
         retrieve_cli_binary(cli_type="odf")
 
     logger.info(
         f"Setting ceph log level for {service} on {subsystem} to {log_level} using odf-cli tool."
     )
-    cmd = (
-        f"{constants.CLI_TOOL_LOCAL_PATH} --kubeconfig {os.getenv('KUBECONFIG')} "
-        f" set ceph log-level {service} {subsystem} {log_level}"
-    )
+    cmd = f"odf-cli set ceph log-level {service} {subsystem} {log_level}"
 
     logger.info(cmd)
     return exec_cmd(cmd, use_shell=True)
@@ -4698,3 +4786,609 @@ def flatten_multilevel_dict(d):
         else:
             leaves_list.append(value)
     return leaves_list
+
+
+def is_rbd_default_storage_class(sc_name=None):
+    """
+    Check if RDB is a default storageclass for the cluster
+
+    Args:
+        custom_sc: custom storageclass name.
+
+    Returns:
+        bool : True if RBD is set as the  Default storage class for the cluster, False otherwise.
+    """
+    default_rbd_sc = constants.DEFAULT_STORAGECLASS_RBD if sc_name is None else sc_name
+    cmd = (
+        f"oc get storageclass {default_rbd_sc} -o=jsonpath='{{.metadata.annotations}}' "
+    )
+    try:
+        check_annotations = json.loads(run_cmd(cmd))
+    except json.decoder.JSONDecodeError:
+        logger.error("Error to get annotation value from storageclass.")
+        return False
+
+    if check_annotations.get("storageclass.kubernetes.io/is-default-class") == "true":
+        logger.info(f"Storageclass {default_rbd_sc} is a default  RBD StorageClass.")
+        return True
+
+    logger.error("Storageclass {default_rbd_sc} is not a default  RBD StorageClass.")
+    return False
+
+
+def get_network_attachment_definitions(
+    nad_name, namespace=config.ENV_DATA["cluster_namespace"]
+):
+    """
+    Get NetworkAttachmentDefinition obj
+
+    Args:
+        nad_name (str): network_attachment_definition name
+        namespace (str): Namespace of the resource
+    Returns:
+        network_attachment_definitions (obj) : network_attachment_definitions object
+
+    """
+    return OCP(
+        kind=constants.NETWORK_ATTACHEMENT_DEFINITION,
+        namespace=namespace,
+        resource_name=nad_name,
+    )
+
+
+def add_route_public_nad():
+    """
+    Add route section to network_attachment_definitions object
+
+    """
+    nad_obj = get_network_attachment_definitions(
+        nad_name=config.ENV_DATA.get("multus_public_net_name"),
+        namespace=config.ENV_DATA.get("multus_public_net_namespace"),
+    )
+    nad_config_str = nad_obj.data["spec"]["config"]
+    nad_config_dict = json.loads(nad_config_str)
+    nad_config_dict["ipam"]["routes"] = [
+        {"dst": config.ENV_DATA["multus_destination_route"]}
+    ]
+    nad_config_dict_string = json.dumps(nad_config_dict)
+    logger.info("Creating Multus public network")
+    public_net_data = templating.load_yaml(constants.MULTUS_PUBLIC_NET_YAML)
+    public_net_data["metadata"]["name"] = config.ENV_DATA.get("multus_public_net_name")
+    public_net_data["metadata"]["namespace"] = config.ENV_DATA.get(
+        "multus_public_net_namespace"
+    )
+    public_net_data["spec"]["config"] = nad_config_dict_string
+    public_net_yaml = tempfile.NamedTemporaryFile(
+        mode="w+", prefix="multus_public", delete=False
+    )
+    templating.dump_data_to_temp_yaml(public_net_data, public_net_yaml.name)
+    run_cmd(f"oc apply -f {public_net_yaml.name}")
+
+
+def reset_all_osd_pods():
+    """
+    Reset all osd pods
+
+    """
+    from ocs_ci.ocs.resources.pod import get_osd_pods
+
+    osd_pod_objs = get_osd_pods()
+    for osd_pod_obj in osd_pod_objs:
+        osd_pod_obj.delete()
+
+
+def enable_csi_disable_holder_pods():
+    """
+    Enable CSI_DISABLE_HOLDER_PODS in rook-ceph-operator-config config-map
+
+    """
+    configmap_obj = OCP(
+        kind=constants.CONFIGMAP,
+        namespace=config.ENV_DATA["cluster_namespace"],
+        resource_name=constants.ROOK_OPERATOR_CONFIGMAP,
+    )
+    value = "true"
+    params = f'{{"data": {{"CSI_DISABLE_HOLDER_PODS": "{value}"}}}}'
+    configmap_obj.patch(params=params, format_type="merge")
+
+
+def delete_csi_holder_pods():
+    """
+
+    Drain/schedule worker nodes and reset csi-holder-pods
+
+    Procedure:
+    1.Cordon worker node-X
+    2.Drain worker node-X
+    3.Reset csi-cephfsplugin-holder and csi-rbdplugin-holder pods on node-X
+    4.schedule node-X
+    5.Verify all node-X in Ready state
+
+    """
+    from ocs_ci.ocs.utils import get_pod_name_by_pattern
+    from ocs_ci.ocs.node import drain_nodes, schedule_nodes
+
+    pods_csi_cephfsplugin_holder = get_pod_name_by_pattern("csi-cephfsplugin-holder")
+    pods_csi_rbdplugin_holder = get_pod_name_by_pattern("csi-rbdplugin-holder")
+    pods_csi_holder = pods_csi_cephfsplugin_holder + pods_csi_rbdplugin_holder
+    worker_pods_dict = dict()
+    from ocs_ci.ocs.resources.pod import get_pod_obj
+
+    for pod_name in pods_csi_holder:
+        pod_obj = get_pod_obj(
+            name=pod_name, namespace=config.ENV_DATA["cluster_namespace"]
+        )
+        if pod_obj.pod_data["spec"]["nodeName"] in worker_pods_dict:
+            worker_pods_dict[pod_obj.pod_data["spec"]["nodeName"]].append(pod_obj)
+        else:
+            worker_pods_dict[pod_obj.pod_data["spec"]["nodeName"]] = [pod_obj]
+
+    for worker_node_name, csi_pod_objs in worker_pods_dict.items():
+        run_cmd(f"oc adm cordon {worker_node_name}")
+        drain_nodes([worker_node_name])
+        for csi_pod_obj in csi_pod_objs:
+            csi_pod_obj.delete()
+        schedule_nodes([worker_node_name])
+
+
+def configure_node_network_configuration_policy_on_all_worker_nodes():
+    """
+    Configure NodeNetworkConfigurationPolicy CR on each worker node in cluster
+
+    """
+    from ocs_ci.ocs.node import get_worker_nodes
+
+    # This function require changes for compact mode
+    logger.info("Configure NodeNetworkConfigurationPolicy on all worker nodes")
+    worker_node_names = get_worker_nodes()
+    for worker_node_name in worker_node_names:
+        worker_network_configuration = config.ENV_DATA["baremetal"]["servers"][
+            worker_node_name
+        ]
+        node_network_configuration_policy = templating.load_yaml(
+            constants.NODE_NETWORK_CONFIGURATION_POLICY
+        )
+        node_network_configuration_policy["spec"]["nodeSelector"][
+            "kubernetes.io/hostname"
+        ] = worker_node_name
+        node_network_configuration_policy["metadata"][
+            "name"
+        ] = worker_network_configuration["node_network_configuration_policy_name"]
+        node_network_configuration_policy["spec"]["desiredState"]["interfaces"][0][
+            "ipv4"
+        ]["address"][0]["ip"] = worker_network_configuration[
+            "node_network_configuration_policy_ip"
+        ]
+        node_network_configuration_policy["spec"]["desiredState"]["interfaces"][0][
+            "ipv4"
+        ]["address"][0]["prefix-length"] = worker_network_configuration[
+            "node_network_configuration_policy_prefix_length"
+        ]
+        node_network_configuration_policy["spec"]["desiredState"]["routes"]["config"][
+            0
+        ]["destination"] = worker_network_configuration[
+            "node_network_configuration_policy_destination_route"
+        ]
+        public_net_yaml = tempfile.NamedTemporaryFile(
+            mode="w+", prefix="multus_public", delete=False
+        )
+        templating.dump_data_to_temp_yaml(
+            node_network_configuration_policy, public_net_yaml.name
+        )
+        run_cmd(f"oc create -f {public_net_yaml.name}")
+
+
+def get_daemonsets_names(namespace=config.ENV_DATA["cluster_namespace"]):
+    """
+    Get all daemonspaces in namespace
+
+    Args:
+        namespace (str): namespace
+
+    Returns:
+        list: all daemonset names in the namespace
+
+    """
+    daemonset_names = list()
+    daemonset_objs = OCP(
+        kind=constants.DAEMONSET,
+        namespace=namespace,
+    )
+    for daemonset_obj in daemonset_objs.data.get("items"):
+        daemonset_names.append(daemonset_obj["metadata"]["name"])
+    return daemonset_names
+
+
+def get_daemonsets_obj(name, namespace=config.ENV_DATA["cluster_namespace"]):
+    """
+    Get daemonset obj
+    Args:
+        name (str): the name of daemeonset
+        namespace (str): the namespace of daemonset
+
+    Returns:
+        ocp_obj: daemonset ocp obj
+
+    """
+    return OCP(kind=constants.DAEMONSET, namespace=namespace, resource_name=name)
+
+
+def delete_csi_holder_daemonsets():
+    """
+    Delete csi holder daemonsets
+
+    """
+    daemonset_names = get_daemonsets_names()
+    for daemonset_name in daemonset_names:
+        if "holder" in daemonset_name:
+            daemonsets_obj = get_daemonsets_obj(daemonset_name)
+            daemonsets_obj.delete(resource_name=daemonset_name)
+
+
+def verify_pod_pattern_does_not_exist(pattern, namespace):
+    """
+    Verify csi-holder pods do not exist
+
+    Args:
+        pattern (str): the pattern of pod
+        namespace (str): the namespace of pod
+
+    Returns:
+        bool: if pod with pattern exist return False otherwise return True
+
+    """
+    from ocs_ci.ocs.utils import get_pod_name_by_pattern
+
+    return len(get_pod_name_by_pattern(pattern=pattern, namespace=namespace)) == 0
+
+
+def verify_csi_holder_pods_do_not_exist():
+    """
+    Verify csi holder pods do not exist
+
+    Raises:
+        TimeoutExpiredError: if csi-holder pod exist raise Exception
+
+    """
+    sample = TimeoutSampler(
+        timeout=300,
+        sleep=10,
+        func=verify_pod_pattern_does_not_exist,
+        pattern="holder",
+        namespace=config.ENV_DATA["cluster_namespace"],
+    )
+    if not sample.wait_for_func_status(result=True):
+        raise TimeoutExpiredError(
+            "The csi holder pod exist even though we deleted the daemonset after 300 seconds"
+        )
+
+
+def upgrade_multus_holder_design():
+    """
+    Upgrade  multus holder design from ODF4.15 to ODF4.16
+
+    """
+    if not config.ENV_DATA.get("multus_delete_csi_holder_pods"):
+        return
+    if config.ENV_DATA.get("multus_create_public_net"):
+        add_route_public_nad()
+        from ocs_ci.deployment.nmstate import NMStateInstaller
+
+        logger.info("Install NMState operator and create an instance")
+        nmstate_obj = NMStateInstaller()
+        nmstate_obj.running_nmstate()
+        configure_node_network_configuration_policy_on_all_worker_nodes()
+    reset_all_osd_pods()
+    enable_csi_disable_holder_pods()
+    delete_csi_holder_pods()
+    delete_csi_holder_daemonsets()
+    verify_csi_holder_pods_do_not_exist()
+
+
+def wait_for_reclaim_space_cronjob(reclaim_space_cron_job, schedule):
+    """
+    Wait for reclaim space cronjbo
+
+    Args:
+        reclaim_space_cron_job (obj): The reclaim space cron job
+        schedule (str): Reclaim space cron job schedule
+
+    Raises:
+        UnexpectedBehaviour: In case reclaim space cron job doesn't reach the desired state
+    """
+
+    try:
+        for reclaim_space_cron_job_yaml in TimeoutSampler(
+            timeout=120, sleep=5, func=reclaim_space_cron_job.get
+        ):
+            result = reclaim_space_cron_job_yaml["spec"]["schedule"]
+            if result == f"@{schedule}":
+                logger.info(
+                    f"ReclaimSpaceCronJob {reclaim_space_cron_job.name} succeeded"
+                )
+                break
+            else:
+                logger.info(
+                    f"Waiting for the @{schedule} result of the ReclaimSpaceCronJob {reclaim_space_cron_job.name}. "
+                    f"Present value of result is {result}"
+                )
+    except TimeoutExpiredError:
+        raise UnexpectedBehaviour(
+            f"ReclaimSpaceJob {reclaim_space_cron_job.name} is not successful. "
+            f"Yaml output: {reclaim_space_cron_job.get()}"
+        )
+
+
+def wait_for_reclaim_space_job(reclaim_space_job):
+    """
+    Wait for reclaim space cronjbo
+
+    Args:
+        reclaim_space_job (obj): The reclaim space job
+
+    Raises:
+        UnexpectedBehaviour: In case reclaim space job doesn't reach the Succeeded state
+    """
+
+    try:
+        for reclaim_space_job_yaml in TimeoutSampler(
+            timeout=120, sleep=5, func=reclaim_space_job.get
+        ):
+            result = reclaim_space_job_yaml.get("status", {}).get("result")
+            if result == "Succeeded":
+                logger.info(f"ReclaimSpaceJob {reclaim_space_job.name} succeeded")
+                break
+            else:
+                logger.info(
+                    f"Waiting for the Succeeded result of the ReclaimSpaceJob {reclaim_space_job.name}. "
+                    f"Present value of result is {result}"
+                )
+    except TimeoutExpiredError:
+        raise UnexpectedBehaviour(
+            f"ReclaimSpaceJob {reclaim_space_job.name} is not successful. Yaml output: {reclaim_space_job.get()}"
+        )
+
+
+def get_rbd_image_info(rbd_pool, rbd_image_name):
+    """
+    Get RBD image information. (e.g provisioned size, used size, image ,   )
+
+    Args:
+        rbd_pool(str) : pool name
+        rbd_image_name(str) : name of rbd image
+
+    Returns:
+        dict :  rbd image information e.g, provisioned size, used size etc.
+    """
+    ct_pod = pod.get_ceph_tools_pod()
+
+    cmd = f"rbd du -p {rbd_pool} {rbd_image_name}"
+
+    cmd_out = ct_pod.exec_ceph_cmd(ceph_cmd=cmd, format="json")
+
+    data = next(
+        (volume for volume in cmd_out["images"] if volume["name"] == rbd_image_name),
+        None,
+    )
+
+    if data:
+        # Conversion constant: 1 GiB = 1024^3 bytes
+        bytes_in_gib = 1024**3
+
+        data["provisioned_size_gib"] = data["provisioned_size"] / bytes_in_gib
+        data["used_size_gib"] = data["used_size"] / bytes_in_gib
+
+    return data
+
+
+def configure_cephcluster_params_in_storagecluster_cr(params, default_values=False):
+    """
+    Configure cephcluster block in StorageCluster CR /spec/managedResources/cephCluster/
+
+    Args:
+        params (list) : A list of dictionaries with value for cephCluster in StorageCluster CR
+        default_values(bool): parameters to set in StorageCluster under /spec/managedResources/cephCluster/
+
+    """
+    logger.info("Configure cephcluster block in StorageCluster CR")
+    storagecluster_obj = ocp.OCP(
+        kind=constants.STORAGECLUSTER,
+        namespace=config.ENV_DATA["cluster_namespace"],
+        resource_name=constants.DEFAULT_CLUSTERNAME,
+    )
+    for parameter in params:
+        sc_key = parameter["sc_key"]
+        if default_values:
+            parameter_value = parameter["default_value"]
+        else:
+            parameter_value = parameter["value"]
+        param = (
+            f'[{{"op": "add", "path": "/spec/managedResources/cephCluster/{sc_key}",'
+            f' "value": {parameter_value}}}]'
+        )
+        storagecluster_obj.patch(params=param, format_type="json")
+
+
+def get_cephfs_sc_name():
+    """
+    Get the cephfs storage class name.
+
+    Returns:
+        str: The cephfs storage class name.
+
+    Raises:
+        ValueError: If the cephfs storage class name hasn't been found.
+    """
+    sc_names = get_all_storageclass_names()
+    cephfs_sc_names = [name for name in sc_names if constants.CEPHFS_INTERFACE in name]
+    if not cephfs_sc_names:
+        raise ValueError(
+            "Didn't find the cephfs storageclass in the storageclass names"
+        )
+    else:
+        return cephfs_sc_names[0]
+
+
+def get_rbd_sc_name():
+    """
+    Get the rbd storage class name.
+
+    Returns:
+        str: The rbd storage class name.
+
+    Raises:
+        ValueError: If the rbd storage class name hasn't been found.
+    """
+    sc_names = get_all_storageclass_names()
+    rbd_sc_names = [name for name in sc_names if constants.RBD_INTERFACE in name]
+    if not rbd_sc_names:
+        raise ValueError("Didn't find the rbd storageclass in the storageclass names")
+    else:
+        return rbd_sc_names[0]
+
+
+def check_pods_status_by_pattern(pattern, namespace, expected_status):
+    """
+    Check if the pod state is as expected.
+    Args:
+        pattern (str):
+        namespace (str):
+        expected_status (str):
+    Returns:
+        bool: return True if pod in expected status otherwise False
+    """
+    from ocs_ci.ocs.resources.pod import get_pod_obj
+
+    logger.info("Check pods status by pattern")
+    pod_names = get_pod_name_by_pattern(
+        pattern=pattern,
+        namespace=namespace,
+    )
+    if len(pod_names) == 0:
+        logger.info(f"pod pattern {pattern} does not exist in {namespace} namespace")
+        return False
+    pod_objs = []
+    for pod_name in pod_names:
+        pod_obj = get_pod_obj(name=pod_name, namespace=namespace)
+        pod_objs.append(pod_obj)
+    for pod_obj in pod_objs:
+        pod_status = pod_obj.status()
+        if pod_status != expected_status:
+            logger.info(
+                f"The status of pod {pod_obj.name} in namespace {namespace} is "
+                f"{pod_status} while the expected status is {expected_status}"
+            )
+            return False
+    return True
+
+
+def get_volsync_channel():
+    """
+    Get Volsync Channel
+    Returns:
+        str: volsync channel
+    """
+    logger.info("Get Volsync Channel")
+    volsync_product_obj = OCP(kind="packagemanifest", resource_name="volsync-product")
+    last_index = len(volsync_product_obj.data.get("status").get("channels")) - 1
+    volsync_channel = (
+        volsync_product_obj.data.get("status").get("channels")[last_index].get("name")
+    )
+    logger.info(f"volsync channel is {volsync_channel}")
+    return volsync_channel
+
+
+def get_managed_cluster_addons(resource_name, namespace):
+    """
+    Get Managed Cluster Addons obj
+    Args:
+        resource_name (str): resource name
+        namespace (str): namespace
+    Returns:
+        ocp_obj: ocp object of managed cluster addons resource
+    """
+    return OCP(
+        kind=constants.ACM_MANAGEDCLUSTER_ADDONS,
+        resource_name=resource_name,
+        namespace=namespace,
+    )
+
+
+def update_volsync_channel():
+    """
+    Update Volsync Channel.
+    """
+    logger.info("Update Volsync Channel.")
+    if config.ENV_DATA.get("acm_hub_unreleased") is not True:
+        return
+    with config.RunWithPrimaryConfigContext():
+        from ocs_ci.ocs.utils import get_pod_name_by_pattern
+
+        logger.info("Verify volsync-controller-manager pods exist")
+        pods = get_pod_name_by_pattern(
+            pattern="volsync-controller-manager",
+            namespace=constants.OPENSHIFT_OPERATORS,
+        )
+        if len(pods) > 0:
+            logger.info("No volsync-controller-manager pods found")
+            return
+        channel = get_volsync_channel()
+    with config.RunWithAcmConfigContext():
+        non_acm_clusters = get_non_acm_cluster_config()
+        for non_acm_cluster in non_acm_clusters:
+            logger.info(
+                f"Add operator-subscription-channel:{channel} annotation to managed cluster addons CR"
+            )
+            ms_addon = get_managed_cluster_addons(
+                resource_name="volsync",
+                namespace=non_acm_cluster.ENV_DATA.get("cluster_name"),
+            )
+            params = (
+                f"""[{{"op": "add", "path": "/metadata/annotations", """
+                f""""value": {{"operator-subscription-channel": "{channel}"}}}}]"""
+            )
+            ms_addon.patch(
+                resource_name=ms_addon.resource_name,
+                params=params.strip("\n"),
+                format_type="json",
+            )
+    with config.RunWithPrimaryConfigContext():
+        logger.info("Verify volsync-controller-manager pods in Running state")
+        sample = TimeoutSampler(
+            timeout=300,
+            sleep=10,
+            func=check_pods_status_by_pattern,
+            pattern="volsync-controller-manager",
+            namespace=constants.OPENSHIFT_OPERATORS,
+            expected_status=constants.STATUS_RUNNING,
+        )
+        if not sample.wait_for_func_status(result=True):
+            logger.error(
+                f"Pod volsync-controller-manager not in {constants.STATUS_RUNNING} after 300 seconds"
+            )
+
+
+def verify_performance_profile_change(perf_profile):
+    """
+    Verify that newly applied performance profile got updated in storage cluster
+
+    Args:
+        perf_profile (str): Applied performance profile
+
+    Returns:
+        bool: True in case performance profile is updated, False otherwise
+    """
+    from ocs_ci.ocs.resources.storage_cluster import StorageCluster
+
+    # Importing storage cluster object here to avoid circular dependency
+
+    storage_cluster = StorageCluster(
+        resource_name=config.ENV_DATA["storage_cluster_name"],
+        namespace=config.ENV_DATA["cluster_namespace"],
+    )
+
+    assert (
+        perf_profile == storage_cluster.data["spec"]["resourceProfile"]
+    ), f"Performance profile is not updated successfully to {perf_profile}"
+    logger.info(f"Performance profile successfully got updated to {perf_profile} mode")
+    return True

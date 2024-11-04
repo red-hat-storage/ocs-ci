@@ -3,7 +3,10 @@ import logging
 import pytest
 
 from ocs_ci.ocs import constants
-from ocs_ci.framework.pytest_customization.marks import green_squad
+from ocs_ci.framework.pytest_customization.marks import (
+    green_squad,
+    provider_mode,
+)
 from ocs_ci.framework.testlib import (
     skipif_ocs_version,
     ManageTest,
@@ -17,6 +20,7 @@ from ocs_ci.helpers import helpers
 log = logging.getLogger(__name__)
 
 
+@provider_mode
 @green_squad
 @tier1
 @acceptance
@@ -136,7 +140,9 @@ class TestPvcSnapshot(ManageTest):
             pvc_name=restore_pvc_name,
             restore_pvc_yaml=restore_pvc_yaml,
         )
-        helpers.wait_for_resource_state(restore_pvc_obj, constants.STATUS_BOUND)
+        helpers.wait_for_resource_state(
+            restore_pvc_obj, constants.STATUS_BOUND, timeout=90
+        )
         restore_pvc_obj.reload()
         teardown_factory(restore_pvc_obj)
 

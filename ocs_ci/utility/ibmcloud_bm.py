@@ -75,9 +75,10 @@ class IBMCloudBM(object):
             return run_cmd(cmd, secrets, timeout, ignore_error, **kwargs)
         except CommandFailed as ex:
             login_error_messages = [
-                "Error: Failed to get",
+                "Failed to get",
                 "Access Denied",
                 "Please login",
+                "token is expired",
             ]
             # Check if we need to re-login to IBM Cloud account
             if any([error_msg in str(ex) for error_msg in login_error_messages]):

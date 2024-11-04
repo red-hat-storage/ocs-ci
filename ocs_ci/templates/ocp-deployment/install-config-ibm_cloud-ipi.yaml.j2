@@ -8,13 +8,26 @@ compute:
   platform:
     ibmcloud:
       type: {{ worker_instance_type | default('bx2-16x64') }}
+{% if worker_availability_zones %}
+      zones:
+{% for zone in worker_availability_zones %}
+      - {{ zone }}
+{% endfor %}
+{% endif %}
   replicas: {{ worker_replicas | default(3) }}
 controlPlane:
   architecture: amd64
   hyperthreading: Enabled
   name: master
   platform:
-    ibmcloud: {}
+    ibmcloud:
+      type: {{ master_instance_type | default('bx2-4x16') }}
+{% if master_availability_zones %}
+      zones:
+{% for zone in master_availability_zones %}
+      - {{ zone }}
+{% endfor %}
+{% endif %}
   replicas: {{ master_replicas | default(3) }}
 metadata:
   creationTimestamp: null
@@ -34,5 +47,18 @@ fips: {{ fips }}
 platform:
   ibmcloud:
     region: {{ region | default('us-south') }}
+{% if custom_vpc %}
+    resourceGroupName: {{ cluster_name }}-{{ cluster_id }}
+    networkResourceGroupName: {{ cluster_name }}-{{ cluster_id }}
+    vpcName: {{ cluster_name }}-{{ cluster_id }}-vpc
+    controlPlaneSubnets:
+{% for control_plane_subnet in control_plane_subnets %}
+      - {{ control_plane_subnet }}
+{% endfor %}
+    computeSubnets:
+{% for compute_subnet in compute_subnets %}
+      - {{ compute_subnet }}
+{% endfor %}
+{% endif %}
 publish: External
 pullSecret: ''

@@ -187,11 +187,20 @@ def measure_operation(
     return results
 
 
-def ignore_next_measurement_file():
+def ignore_next_measurement_file(err, name, test, plugin):
     """
     Sets config.RUN["ignore_next_measurement_file"] to True. This is supposed
     to be used in monitoring tests that are marked as @flaky to make sure that
     the measurement is done again.
+
+    Reference to the description of flaky rerun_filter function:
+        https://github.com/box/flaky/blob/d29ca76d5a72845428a0716c74f8fa0d40d98532/flaky/flaky_decorator.py#L16
+
+    Args:
+        err (tuple): Information about the test failure (from sys.exc_info())
+        name (str): The test name
+        test (function): The test that has raised an error
+        plugin (function): The flaky plugin.
     """
     config.RUN["ignore_next_measurement_file"] = True
     return True

@@ -354,8 +354,8 @@ def get_missing_metrics(
     return metrics_without_results
 
 
-# hci metrics available via OCS monitoring
-hci_metrics = (
+# metrics available via OCS monitoring on provider in provider-client mode
+provider_metrics = (
     "ocs_storage_client_last_heartbeat",
     "ocs_storage_provider_operator_version",
     "ocs_storage_client_operator_version",

@@ -10,11 +10,13 @@ import base64
 import json
 import logging
 import random
-import re
 import threading
 import yaml
 import time
 import os
+import pandas as pd
+import re
+
 
 from semantic_version import Version
 from ocs_ci.ocs.utils import thread_init_class
@@ -57,7 +59,10 @@ from ocs_ci.ocs.resources.ocs import OCS
 from ocs_ci.ocs.resources.pvc import PVC
 from ocs_ci.utility.connection import Connection
 from ocs_ci.utility.lvmo_utils import get_lvm_cluster_name
-from ocs_ci.ocs.resources.pod import get_mds_pods, wait_for_pods_to_be_running
+from ocs_ci.ocs.resources.pod import (
+    get_mds_pods,
+    wait_for_pods_to_be_in_statuses,
+)
 from ocs_ci.utility.decorators import switch_to_orig_index_at_last
 
 logger = logging.getLogger(__name__)
@@ -1308,7 +1313,7 @@ def get_osd_utilization():
     return osd_filled
 
 
-def get_ceph_df_detail():
+def get_ceph_df_detail(format="json-pretty", out_yaml_format=True):
     """
     Get ceph osd df detail
 
@@ -1318,7 +1323,111 @@ def get_ceph_df_detail():
     """
     ceph_cmd = "ceph df detail"
     ct_pod = pod.get_ceph_tools_pod()
-    return ct_pod.exec_ceph_cmd(ceph_cmd=ceph_cmd, format="json-pretty")
+    return ct_pod.exec_ceph_cmd(
+        ceph_cmd=ceph_cmd, format=format, out_yaml_format=out_yaml_format
+    )
+
+
+def parse_ceph_df_pools(raw_output: str) -> pd.DataFrame:
+    """
+    Parse the 'ceph df detail' command output and extract the POOLS section into a pandas DataFrame.
+
+    Args:
+        raw_output (str): The raw output string from the 'ceph df detail' command.
+
+    Returns:
+        pd.DataFrame: A pandas DataFrame containing the parsed POOLS section data.
+            The DataFrame includes columns for POOL, ID, PGS, STORED, OBJECTS, USED,
+            %USED, MAX AVAIL, QUOTA OBJECTS, QUOTA BYTES, DIRTY, USED COMPR, and UNDER COMPR.
+
+    Note:
+        This function assumes a specific format for the 'ceph df detail' output.
+        It extracts the POOLS section, processes the header and data rows,
+        and returns a structured DataFrame for further analysis.
+
+    """
+    pools_section = (
+        re.search(r"--- POOLS ---\n(.*)", raw_output, re.DOTALL).group(1).strip()
+    )
+    pools_lines = [line.strip() for line in pools_section.split("\n") if line.strip()]
+    header = [
+        "POOL",
+        "ID",
+        "PGS",
+        "STORED",
+        "(DATA)",
+        "(OMAP)",
+        "OBJECTS",
+        "USED",
+        "(DATA)",
+        "(OMAP)",
+        "%USED",
+        "MAX AVAIL",
+        "QUOTA OBJECTS",
+        "QUOTA BYTES",
+        "DIRTY",
+        "USED COMPR",
+        "UNDER COMPR",
+    ]
+    logger.info(f"Number of columns: {len(header)}")
+    data = []
+    for line in pools_lines[1:]:
+        parts = re.split(r"\s{2,}", line.strip())
+        if len(parts) == len(header):
+            data.append(parts)
+        else:
+            logger.warning(f"Mismatch in column count for line: {line}")
+            logger.warning(f"Expected {len(header)} columns, got {len(parts)}")
+    df = pd.DataFrame(data, columns=header)
+
+    return df
+
+
+def ceph_details_df_to_dict(df: pd.DataFrame) -> dict:
+    """
+    Convert the DataFrame to a dictionary where the POOL column is the key
+    and the rest of the columns form a nested dictionary.
+
+    Args:
+        df (pd.DataFrame): A pandas DataFrame containing Ceph pool information.
+
+    Returns:
+        dict: A dictionary where each key is a pool name, and the corresponding value
+              is a nested dictionary containing the rest of the columns' data for that pool.
+
+    """
+    return {row["POOL"]: row.drop("POOL").to_dict() for _, row in df.iterrows()}
+
+
+def validate_num_of_pgs(expected_pgs: dict[str, int]) -> bool:
+    """
+    Validate the number of PGs for each pool against expected values.
+
+    Args:
+        expected_pgs (dict[pool_name(str), expected_pg_num(int)]): A dictionary where keys
+        are pool names and values are expected PG numbers.
+
+    Returns:
+        bool: True if all pools have the expected number of PGs, False otherwise.
+    """
+    ceph_df_output = get_ceph_df_detail(format=None, out_yaml_format=False)
+    pools_df = parse_ceph_df_pools(ceph_df_output)
+    pools_dict = ceph_details_df_to_dict(pools_df)
+
+    for pool_name, expected_pg_num in expected_pgs.items():
+        if pool_name not in pools_dict:
+            logger.error(f"Pool {pool_name} not found in the cluster.")
+            return False
+
+        actual_pg_num = int(pools_dict[pool_name]["PGS"])
+        if actual_pg_num != expected_pg_num:
+            logger.error(
+                f"Pool {pool_name} has {actual_pg_num} PGs, expected {expected_pg_num}."
+            )
+            return False
+
+    logger.info("All pools have the expected number of PGs.")
+    return True
 
 
 def get_ceph_pool_property(pool_name, prop):
@@ -1676,7 +1785,7 @@ def get_child_nodes_osd_tree(node_id, osd_tree):
 def get_nodes_osd_tree(osd_tree, node_ids=None):
     """
     This function gets the 'ceph osd tree' nodes, which have the ids 'node_ids', and returns
-    them as a list. If 'node_ids' are not passed, it returns all the 'ceph osd tree' nodes.
+    them as a list. If 'node_ids' are not passed, it returns all the 'ceph osd tree' nodes.
 
     Args:
         osd_tree (dict): Dictionary containing the output of 'ceph osd tree'
@@ -1851,7 +1960,7 @@ def check_osd_tree_1az_vmware_flex(osd_tree, number_of_osds):
     #  0   hdd 0.09769         osd.0          up  1.00000 1.00000
     # -5       0.09769     host compute-2
     #  1   hdd 0.09769         osd.1          up  1.00000 1.00000
-    # There will be no racks, and we will have a failure domain 'host'.
+    # There will be no racks, and we will have a failure domain 'host'.
     # When cluster expansion is successfully done, an osd are added in each host.
     # Each host will have one or multiple osds under it
     hosts = osd_tree["nodes"][0]["children"]
@@ -2173,18 +2282,19 @@ def validate_existence_of_blocking_pdb():
     pdb_obj_get = pdb_obj.get()
     osd_pdb = []
     for pdb in pdb_obj_get.get("items"):
-        if not any(
-            osd in pdb["metadata"]["name"]
-            for osd in [constants.MDS_PDB, constants.MON_PDB]
-        ):
+        # blocking OSD PDBs are in the format of rook-ceph-osd-zone-data-1
+        if constants.OSD_PDB in pdb["metadata"]["name"]:
             osd_pdb.append(pdb)
     blocking_pdb_exist = False
     for osd in range(len(osd_pdb)):
         allowed_disruptions = osd_pdb[osd].get("status").get("disruptionsAllowed")
         maximum_unavailable = osd_pdb[osd].get("spec").get("maxUnavailable")
-        if allowed_disruptions & maximum_unavailable != 1:
-            logger.info("Blocking PDBs are created")
+        if allowed_disruptions & (maximum_unavailable != 1):
+            logger.info(
+                f"Blocking PDB {osd_pdb[osd].get('metadata').get('name')} are created"
+            )
             blocking_pdb_exist = True
+            return blocking_pdb_exist
         else:
             logger.info(
                 f"No blocking PDBs created, OSD PDB is {osd_pdb[osd].get('metadata').get('name')}"
@@ -3086,6 +3196,7 @@ def get_mds_standby_replay_info():
         - "node_ip": The IP address of the node running the standby-replay MDS daemon.
         - "mds_daemon": The name of the MDS daemon.
         - "standby_replay_pod": The name of the standby replay pod.
+        - "standby_replay_pod_obj": The object of standby replay pod.
     """
     ct_pod = pod.get_ceph_tools_pod()
     ceph_mdsmap = ct_pod.exec_ceph_cmd("ceph fs status")
@@ -3127,11 +3238,18 @@ def get_mds_standby_replay_info():
             f"Unable to determine IP address of node running standby-replay MDS pod '{standby_replay_pod.name}'"
         )
         return None
-
+    node_name = standby_replay_pod.data["spec"].get("nodeName")
+    if not node_name:
+        logger.error(
+            f"Unable to determine Name of the node running standby-replay MDS pod '{standby_replay_pod.name}'"
+        )
+        return None
     return {
         "node_ip": node_ip,
         "mds_daemon": ceph_daemon_name,
         "standby_replay_pod": standby_replay_pod.name,
+        "node_name": node_name,
+        "standby_replay_pod_obj": standby_replay_pod,
     }
 
 
@@ -3215,7 +3333,7 @@ def client_cluster_health_check():
     """
     wait_for_cluster_connectivity(tries=120, delay=5)
     logger.info("Checking the cluster health")
-    wait_for_nodes_status(timeout=300, sleep=10)
+    wait_for_nodes_status(timeout=420, sleep=10)
 
     logger.info("Checking that there are no extra Ceph pods on the cluster")
     mon_pods = pod.get_mon_pods()
@@ -3235,21 +3353,19 @@ def client_cluster_health_check():
         )
 
     logger.info("Wait for the pods to be running")
-    res = wait_for_pods_to_be_running(timeout=300, sleep=20)
+    expected_statuses = [constants.STATUS_RUNNING, constants.STATUS_COMPLETED]
+    exclude_pod_name_prefixes = ["rook-ceph-tools"]
+    res = wait_for_pods_to_be_in_statuses(
+        expected_statuses=expected_statuses,
+        exclude_pod_name_prefixes=exclude_pod_name_prefixes,
+        timeout=480,
+        sleep=20,
+    )
     if not res:
         raise ResourceWrongStatusException("Not all the pods in running state")
 
     logger.info("Checking that the storageclient is connected")
-    sc_obj = OCP(
-        kind=constants.STORAGECLIENT, namespace=config.ENV_DATA["cluster_namespace"]
-    )
-    sc_obj.wait_for_resource(
-        resource_name=config.cluster_ctx.ENV_DATA.get("storage_client_name"),
-        column="PHASE",
-        condition="Connected",
-        timeout=180,
-        sleep=10,
-    )
+    storage_cluster.wait_for_storage_client_connected()
 
     logger.info("The client cluster health check passed successfully")
 
@@ -3314,3 +3430,175 @@ def check_cephcluster_status(
             f' {cc_resource["status"]["ceph"]["health"]}'
         )
         raise CephHealthException()
+
+
+def ceph_config_set_debug(debug_level):
+    """
+    This function will be useful to set default debug level for mds i.e 1/5
+
+    Args:
+        debug_level (str): The debug level to set in ceph config
+        ex: debug_level='1/5'
+
+    """
+    logger.info(f"Setting debug level with user defined value {debug_level}")
+    ceph_tools_pod = pod.get_ceph_tools_pod()
+    ceph_tools_pod.exec_cmd_on_pod("ceph config set mds debug_mds " + debug_level)
+
+
+def ceph_health_detail():
+    """
+    Get ceph health detail
+
+    Returns:
+        str: the output of the cmd
+    """
+    ceph_tools_pod = pod.get_ceph_tools_pod()
+    return ceph_tools_pod.exec_cmd_on_pod("ceph health detail", out_yaml_format=False)
+
+
+def get_active_mds_info():
+
+    """Return information about the active Ceph MDS.
+
+    Returns:
+        dict: A dictionary containing information about the active MDS daemon,
+        including the following keys in case of success, otherwise None.
+        - "node_ip": The IP address of the node running the active MDS daemon.
+        - "mds_daemon": The name of the MDS daemon.
+        - "active_pod": The name of the active pod.
+        - "node_name": The name of the node where active mds pod is running.
+    """
+
+    ct_pod = pod.get_ceph_tools_pod()
+    ceph_mdsmap = ct_pod.exec_ceph_cmd("ceph fs status")
+    logger.info("Find ceph daemon state as 'active'")
+    ceph_daemon_name = next(
+        (
+            daemon["name"]
+            for daemon in ceph_mdsmap["mdsmap"]
+            if daemon["state"] == "active"
+        ),
+        None,
+    )
+
+    if ceph_daemon_name is None:
+        logger.error("No active MDS daemon found")
+        return None
+
+    logger.info(f"Found active MDS daemon: {ceph_daemon_name}")
+
+    logger.info("Find ceph MDS pod name where the active MDS daemon is running.")
+    mds_pods = get_mds_pods()
+    active_pod = next((pod for pod in mds_pods if ceph_daemon_name in pod.name), None)
+
+    if active_pod is None:
+        logger.error(
+            f"No active MDS Pod found with running daemon '{ceph_daemon_name}'"
+        )
+        return None
+
+    logger.info(f"Found active MDS pod: {active_pod.name}")
+    logger.info("Get the node IP of active mds running pod")
+    node_ip = active_pod.data["status"].get("hostIP")
+    if not node_ip:
+        logger.error(
+            f"Unable to determine IP address of node running active MDS pod '{active_pod.name}'"
+        )
+        return None
+    logger.info("Get the node name of of active mds  running pod")
+    node_name = active_pod.data["spec"].get("nodeName")
+    if not node_name:
+        logger.error(
+            f"Unable to determine Name of the node running active MDS pod '{active_pod.name}'"
+        )
+        return None
+
+    return {
+        "node_ip": node_ip,
+        "mds_daemon": ceph_daemon_name,
+        "active_pod": active_pod.name,
+        "node_name": node_name,
+        "active_pod_obj": active_pod,
+    }
+
+
+def clear_active_mds_load():
+    """
+    This function executes a ceph cmd to fail active mds daemon instantly.
+    So that the existing load on active mds will be cleared off immediately.
+
+    """
+    ct_pod = pod.get_ceph_tools_pod()
+    ct_pod.exec_ceph_cmd("ceph mds fail 0")
+
+
+def get_active_mds_memory_utilisation_in_percentage():
+    """
+    This function gets total and used memory of active mds in Mebibytes and calculates the value in percentage.
+
+    Returns:
+         int: mds used memory in percentage
+
+    """
+    active_mds_pod_obj = get_active_mds_info()["active_pod_obj"]
+    get_total_memory = active_mds_pod_obj.get_memory(container_name="mds")
+    total_memory_in_mebibytes = int(get_total_memory[:-2]) * 1024
+    used_memory = pod.get_pod_used_memory_in_mebibytes(active_mds_pod_obj.name)
+    utilisation_in_percentage = (used_memory / total_memory_in_mebibytes) * 100
+    return utilisation_in_percentage
+
+
+def get_standby_replay_mds_memory_utilisation_in_percentage():
+    """
+    This function gets total and used memory of active mds in Mebibytes and calculates the value in percentage.
+
+    Returns:
+         int: mds used memory in percentage
+
+    """
+    standby_replay_mds_pod_obj = get_mds_standby_replay_info()["standby_replay_pod_obj"]
+    get_total_memory = standby_replay_mds_pod_obj.get_memory(container_name="mds")
+    total_memory_in_mebibytes = int(get_total_memory[:-2]) * 1024
+    used_memory = pod.get_pod_used_memory_in_mebibytes(standby_replay_mds_pod_obj.name)
+    utilisation_in_percentage = (used_memory / total_memory_in_mebibytes) * 100
+    return utilisation_in_percentage
+
+
+def bring_down_mds_memory_usage_gradually():
+    """
+    This function will monitor the mds memory usage for 18 minutes to make sure it is <=10%.
+    Even if the memory usage is still high after 18 mins,
+    it will fail the mds daemon and look for the same <=10% in memory utilisation.
+    This will repeat the process until the time_elapsed reaches 30mins
+    And it breaks if memory utilisation reduced in between.
+
+    """
+    logger.info("Continue monitoring mds memory usage until it get reduced to 10%")
+    time_interval = 180
+    time_elapsed = 0
+    while time_elapsed <= 1800:
+        logger.info("Check memory usage and sleep if usage is higher than 10%")
+        if (
+            get_active_mds_memory_utilisation_in_percentage() >= 10
+            or get_standby_replay_mds_memory_utilisation_in_percentage() >= 10
+        ):
+            if time_elapsed <= 900:
+                logger.info("Memory usage is high. Sleeping for 3 minutes...")
+                time.sleep(time_interval)
+                time_elapsed += time_interval
+            else:
+                clear_active_mds_load()
+                logger.info("clearing the existing load on MDS by failing mds daemon ")
+                logger.info(
+                    "Failed MDS.0 daemon to clear load. Sleeping for 3 minutes..."
+                )
+                time.sleep(time_interval)
+                continue
+        else:
+            logger.info("Memory usage is within the acceptable limits.")
+            break
+
+    assert (
+        time_elapsed <= 1800
+    ), "Memory usage remained high for more than 30 minutes. Failed to bring down the memory usage of MDS"

@@ -32,7 +32,7 @@ from ocs_ci.ocs.node import get_nodes
 from ocs_ci.ocs.resources.catalog_source import CatalogSource, disable_specific_source
 from ocs_ci.ocs.resources.csv import CSV, check_all_csvs_are_succeeded
 from ocs_ci.ocs.resources.install_plan import wait_for_install_plan_and_approve
-from ocs_ci.ocs.resources.pod import verify_pods_upgraded
+from ocs_ci.ocs.resources.pod import get_noobaa_pods, verify_pods_upgraded
 from ocs_ci.ocs.resources.packagemanifest import (
     get_selector_for_ocs_operator,
     PackageManifest,
@@ -134,11 +134,15 @@ def verify_image_versions(old_images, upgrade_version, version_before_upgrade):
     verify_pods_upgraded(old_images, selector=constants.OPERATOR_LABEL)
     default_noobaa_pods = 3
     noobaa_pods = default_noobaa_pods
+    noobaa_pod_obj = get_noobaa_pods()
     if (
         config.ENV_DATA.get("mcg_only_deployment")
         and config.ENV_DATA["platform"].lower() == constants.VSPHERE_PLATFORM
     ):
         default_noobaa_pods = 4
+    for pod in noobaa_pod_obj:
+        if "pv-backingstore" in pod.name:
+            default_noobaa_pods += 1
     if upgrade_version >= parse_version("4.7"):
         noobaa = OCP(kind="noobaa", namespace=config.ENV_DATA["cluster_namespace"])
         resource = noobaa.get()["items"][0]
@@ -153,11 +157,12 @@ def verify_image_versions(old_images, upgrade_version, version_before_upgrade):
             old_images,
             selector=constants.NOOBAA_APP_LABEL,
             count=noobaa_pods,
+            timeout=1020,
         )
     except TimeoutException as ex:
         if upgrade_version >= parse_version("4.7"):
             log.info(
-                "Nooba pods didn't match. Trying once more with max noobaa endpoints!"
+                "Noobaa pods didn't match. Trying once more with max noobaa endpoints!"
                 f"Exception: {ex}"
             )
             noobaa_pods = default_noobaa_pods + max_endpoints
@@ -335,8 +340,10 @@ class OCSUpgrade(object):
             and config.ENV_DATA["deployment_type"] == "managed"
         )
         use_upstream_mg_image = managed_ibmcloud_platform and not upgrade_in_same_source
-        if (live_deployment and upgrade_in_same_source) or (
-            managed_ibmcloud_platform and not use_upstream_mg_image
+        if (
+            (live_deployment and upgrade_in_same_source)
+            or (managed_ibmcloud_platform and not use_upstream_mg_image)
+            or config.ENV_DATA.get("platform") == constants.ROSA_HCP_PLATFORM
         ):
             update_live_must_gather_image()
         elif use_upstream_mg_image:
@@ -781,6 +788,15 @@ def run_ocs_upgrade(
         # in pending state
         is_all_csvs_succeeded = check_all_csvs_are_succeeded(namespace=namespace)
         assert is_all_csvs_succeeded, "Not all CSV's are in succeeded state"
+        if not config.DEPLOYMENT["external_mode"]:
+            upgrade_version = version.get_semantic_version(upgrade_version, True)
+        if (
+            config.ENV_DATA.get("is_multus_enabled")
+            and upgrade_version == version.VERSION_4_16
+        ):
+            from ocs_ci.helpers.helpers import upgrade_multus_holder_design
+
+            upgrade_multus_holder_design()
 
         ocs_install_verification(
             timeout=600,

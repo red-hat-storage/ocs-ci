@@ -1,6 +1,8 @@
 import argparse
+import faulthandler
 import os
 import re
+import signal
 import sys
 import time
 
@@ -11,6 +13,30 @@ from ocs_ci import framework
 from ocs_ci.ocs.constants import OCP_VERSION_CONF_DIR, OCS_VERSION_CONF_DIR
 from ocs_ci.ocs.exceptions import MissingRequiredConfigKeyError
 from ocs_ci.utility import utils
+
+
+kill_counter = 0
+
+
+def signal_term_handler(sig, frame):
+    print(f"Got SIGTERM: {sig}")
+    if hasattr(framework.config, "RUN"):
+        framework.config.RUN["aborted"] = True
+    logdir = os.path.expanduser(framework.config.RUN["log_dir"])
+    with open(os.path.join(logdir, "traceback.log"), "w") as f:
+        faulthandler.dump_traceback(file=f)
+    global kill_counter
+    if kill_counter:
+        print("Second attempt to SIGTERM, exiting process with RC: 143")
+        sys.exit(143)
+    else:
+        pid = os.getpid()
+        print(f"Killing run-ci process {pid} with SIGINT to allow fixtures finalize!")
+        kill_counter += 1
+        os.kill(pid, signal.SIGINT)
+
+
+signal.signal(signal.SIGTERM, signal_term_handler)
 
 
 def check_config_requirements():
@@ -107,13 +133,13 @@ def process_ocsci_conf(arguments):
         action="store",
         choices=[
             "4.99",
-            "4.10",
-            "4.11",
             "4.12",
             "4.13",
             "4.14",
             "4.15",
             "4.16",
+            "4.17",
+            "4.18",
         ],
     )
     parser.add_argument("--ocs-registry-image")
@@ -133,6 +159,19 @@ def process_ocsci_conf(arguments):
 
     args, unknown = parser.parse_known_args(args=arguments)
     load_config(args.ocsci_conf)
+    if unknown:
+        for each_arg in unknown:
+            if each_arg.startswith("--cluster-path"):
+                if "=" in each_arg:
+                    framework.config.ENV_DATA["cluster_path"] = each_arg.split("=", 1)[
+                        1
+                    ]
+                else:
+                    cluster_path_position = unknown.index("--cluster-path")
+                    framework.config.ENV_DATA["cluster_path"] = unknown[
+                        cluster_path_position + 1
+                    ]
+                break
     ocs_version = args.ocs_version or framework.config.ENV_DATA.get("ocs_version")
     ocp_version = args.ocp_version or framework.config.ENV_DATA.get("ocp_version")
     ocs_registry_image = framework.config.DEPLOYMENT.get("ocs_registry_image")
@@ -279,6 +318,7 @@ def tokenize_per_cluster_args(args, nclusters):
 
 
 def main(argv=None):
+    faulthandler.enable()
     arguments = argv or sys.argv[1:]
     init_ocsci_conf(arguments)
     for i in range(framework.config.nclusters):

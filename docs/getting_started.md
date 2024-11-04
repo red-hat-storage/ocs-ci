@@ -4,10 +4,10 @@
 
 ## Prerequisites
 
-1. Python version >= 3.8.1
+1. Python version >= 3.9.18 < 3.12
 2. Following dependency packages for fedora/centos for successfully installing modules in virtualenv
    - gcc, git, openssl-devel, python3-devel or python specific version packages
-   depends on Python version installed e.g. python38-devel (or similar packages for ubuntu).
+   depends on Python version installed e.g. python39-devel (or similar packages for ubuntu).
 3. Configure AWS Account credentials when testing with AWS platforms,
    check default section in `~/.aws/credentials` for access/secret key
    [check aws-configuration](https://docs.aws.amazon.com/cli/latest/userguide/cli-configure-files.html).
@@ -82,28 +82,14 @@ necessary dependencies
     [https://github.com/red-hat-storage/ocs-ci](https://github.com/red-hat-storage/ocs-ci)
     via cmd `git clone git@github.com:red-hat-storage/ocs-ci.git`.
 2. Go to ocs-ci folder `cd ocs-ci`.
-3. Setup a python 3.8 virtual environment. This is actually quite easy to do
+3. Setup a python 3.9 virtual environment. This is actually quite easy to do
     now. Use hidden `.venv` or normal `venv` folder for virtual env as we are
     ignoring this in flake8 configuration in tox.
 
-    * `python3.8 -m venv <path/to/venv>`
+    * `python3.9 -m venv <path/to/venv>`
     * `source <path/to/.venv>/bin/activate`
 
 4. Upgrade pip and setuptools with `pip install --upgrade pip setuptools`
-
-** On Python3.8, there is a bug on numpy with setuptools 65.6.0 https://github.com/numpy/numpy/issues/22623
-WA : `pip install setuptools==65.5.0`
-
-Expected Error:
-```
-  from . import ccompiler
-  File "ocs-ci/venv/lib/python3.8/site-packages/numpy/distutils/ccompiler.py", line 20, in <module>
-    from numpy.distutils import log
-  File "ocs-ci/venv/lib/python3.8/site-packages/numpy/distutils/log.py", line 4, in <module>
-    from distutils.log import Log as old_Log
-  ImportError: cannot import name 'Log' from 'distutils.log' /
-    (ocs-ci/venv/lib/python3.8/site-packages/setuptools/_distutils/log.py)
-```
 5. Install requirements with `pip install -r requirements.txt`
 6. Install pre-config to enforce commits sign-offs, flake8 compliance and more
 

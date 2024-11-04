@@ -157,6 +157,12 @@ to the pytest.
 * `--install-lvmo` - Deploy LVMCluster, will skip ODF deployment.
 * `--lvmo-disks` - Number of disks to add to SNO deployment.
 * `--lvmo-disks-size` - Size of disks to add to SNO deployment.
+* `--disable-environment-checker` - Disable the leftover checks in existing flow.
+* `--resource-checker` - This will identify the leftover which was created by test cases. This is
+    similar to environment-checker, only difference is resource-checker will track the resources
+    created during test case run whereas environment-checker will track all resources in
+    cluster irrespective of who created.
+* `--kubeconfig` - Location of kubeconfig.
 
 ## Examples
 

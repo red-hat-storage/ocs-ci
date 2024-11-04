@@ -24,6 +24,7 @@ from ocs_ci.ocs.ocp import OCP
 from ocs_ci.ocs.resources.ocs import OCS
 from ocs_ci.ocs import constants, exceptions, ocp, defaults
 from ocs_ci.utility import version
+from ocs_ci.utility.retry import retry
 from ocs_ci.utility.utils import TimeoutSampler, convert_device_size, get_az_count
 from ocs_ci.ocs import machine
 from ocs_ci.ocs.resources import pod
@@ -42,7 +43,7 @@ from ocs_ci.utility.rosa import (
     wait_for_addon_to_be_ready,
 )
 from ocs_ci.utility.decorators import switch_to_orig_index_at_last
-
+from ocs_ci.utility.vsphere import VSPHERE
 
 log = logging.getLogger(__name__)
 
@@ -796,6 +797,7 @@ def get_compute_node_names(no_replace=False):
         constants.BAREMETAL_PLATFORM,
         constants.BAREMETALPSI_PLATFORM,
         constants.IBM_POWER_PLATFORM,
+        constants.HCI_BAREMETAL,
     ]:
         if no_replace:
             return [
@@ -1347,7 +1349,9 @@ def node_replacement_verification_steps_ceph_side(
     if new_osd_node_name:
         wait_for_nodes_status([new_osd_node_name])
         log.info(f"New osd node name is: {new_osd_node_name}")
-        if new_osd_node_name not in ceph_osd_status:
+        node_names = [osd["host name"] for osd in ceph_osd_status["OSDs"]]
+        log.info(f"Node names from ceph osd status: {node_names}")
+        if new_osd_node_name not in node_names:
             log.warning("new osd node name not found in 'ceph osd status' output")
             return False
         if new_osd_node_name not in osd_node_names:
@@ -1691,9 +1695,10 @@ def verify_all_nodes_created():
     raise_exception = False
     if config.ENV_DATA["platform"].lower() in constants.MANAGED_SERVICE_PLATFORMS:
         expected_num_nodes += 3
+    elif config.ENV_DATA["platform"].lower() == constants.ROSA_HCP_PLATFORM:
+        pass
     else:
         expected_num_nodes += config.ENV_DATA.get("infra_replicas", 0)
-
     existing_num_nodes = len(get_all_nodes())
 
     # Some nodes will take time to create due to the issue https://issues.redhat.com/browse/SDA-6346
@@ -1705,10 +1710,17 @@ def verify_all_nodes_created():
         wait_time = 1200
 
     if expected_num_nodes != existing_num_nodes:
+        if (
+            config.ENV_DATA["platform"].lower() == constants.VSPHERE_PLATFORM
+            and config.ENV_DATA["deployment_type"] == "ipi"
+        ):
+            power_on_ocp_node_vms()
+
         platforms_to_wait = [
             constants.VSPHERE_PLATFORM,
             constants.IBMCLOUD_PLATFORM,
             constants.AZURE_PLATFORM,
+            constants.ROSA_HCP_PLATFORM,
         ]
         platforms_to_wait.extend(constants.MANAGED_SERVICE_PLATFORMS)
         if config.ENV_DATA[
@@ -1750,6 +1762,30 @@ def verify_all_nodes_created():
             f"Expected number of nodes is {expected_num_nodes} but "
             f"created during deployment is {existing_num_nodes}"
         )
+
+
+def power_on_ocp_node_vms():
+    """
+    Power on OCP node VM's, this function will directly interact with vCenter.
+    This function will make sure all cluster node VM's are powered on.
+    """
+    vsp = VSPHERE(
+        config.ENV_DATA["vsphere_server"],
+        config.ENV_DATA["vsphere_user"],
+        config.ENV_DATA["vsphere_password"],
+    )
+    vms_dc = vsp.get_all_vms_in_dc(config.ENV_DATA["vsphere_datacenter"])
+    cluster_name = config.ENV_DATA["cluster_name"]
+    vms_ipi = []
+    for vm in vms_dc:
+        if cluster_name in vm.name and "rhcos-generated" not in vm.name:
+            vms_ipi.append(vm)
+            log.debug(vm.name)
+
+    for vm in vms_ipi:
+        power_status = vsp.get_vm_power_status(vm)
+        if power_status == constants.VM_POWERED_OFF:
+            vsp.start_vms(vms=[vm])
 
 
 def add_node_to_lvd_and_lvs(node_name):
@@ -1983,6 +2019,7 @@ def get_node_zone_dict():
     return node_zone_dict
 
 
+@retry(ValueError, tries=5, delay=10)
 def get_node_rack_or_zone(failure_domain, node_obj):
     """
     Get the worker node rack or zone name based on the failure domain value
@@ -1995,9 +2032,13 @@ def get_node_rack_or_zone(failure_domain, node_obj):
         str: The worker node rack/zone name
 
     """
-    return (
+    node_rack_or_zone = (
         get_node_zone(node_obj) if failure_domain == "zone" else get_node_rack(node_obj)
     )
+    if node_rack_or_zone:
+        return node_rack_or_zone
+    else:
+        raise ValueError
 
 
 def get_node_rack_or_zone_dict(failure_domain):
@@ -2577,9 +2618,11 @@ def check_for_zombie_process_on_node(node_name=None):
     for node_obj in node_obj_list:
         debug_cmd = (
             f"debug nodes/{node_obj.name} --to-namespace={config.ENV_DATA['cluster_namespace']} "
-            '-- chroot /host /bin/bash -c "ps -A -ostat,pid,ppid | grep -e "[zZ]""'
+            '-- chroot /host /bin/bash -c "ps -A -ostat,pid,ppid | grep -e [zZ]"'
         )
-        out = node_obj.ocp.exec_oc_cmd(command=debug_cmd, out_yaml_format=False)
+        out = node_obj.ocp.exec_oc_cmd(
+            command=debug_cmd, ignore_error=True, out_yaml_format=False
+        )
         if not out:
             log.info(f"No Zombie process found on the node: {node_obj.name}")
         else:
@@ -2945,3 +2988,101 @@ def verify_crypt_device_present_onnode(node, vol_handle):
 
     log.info(f"Crypt device for volume handle {vol_handle} present on the node: {node}")
     return True
+
+
+def get_node_by_internal_ip(internal_ip):
+    """
+    Get the node object by the node internal ip.
+
+    Args:
+        internal_ip (str): The node internal ip to search for
+
+    Returns:
+        ocs_ci.ocs.resources.ocs.OCS: The node object with the given internal ip.
+            If not found, it returns None.
+
+    """
+    node_objs = get_node_objs()
+    for n in node_objs:
+        if get_node_internal_ip(n) == internal_ip:
+            return n
+
+    return None
+
+
+def get_worker_node_where_ceph_toolbox_not_running():
+    """
+    This function get a list of all worker nodes
+    and compare each worker node name with the node name of ceph tool box running.
+
+    Returns:
+        List of worker nodes other than the node where ceph tool box is already running.
+
+    """
+    ct_pod_running_node_name = get_ceph_tools_running_node()
+    worker_nodes = get_worker_nodes()
+    log.info(
+        f"List of all worker nodes available in the cluster currently {worker_nodes}"
+    )
+    other_nodes = [node for node in worker_nodes if node != ct_pod_running_node_name]
+    log.info(f"List of worker nodes where ceph tools pod is not running: {other_nodes}")
+    return other_nodes
+
+
+def apply_node_affinity_for_ceph_toolbox(node_name):
+    """
+    Apply node affinity for ceph toolbox pod.
+
+    Args:
+        node_name = node name which need to be added in the node affinity
+
+    Returns:
+        bool: True if node affinity applied successfully
+
+    """
+    resource_name = constants.DEFAULT_CLUSTERNAME
+    if config.DEPLOYMENT["external_mode"]:
+        resource_name = constants.DEFAULT_CLUSTERNAME_EXTERNAL_MODE
+
+    storagecluster_obj = ocp.OCP(
+        resource_name=resource_name,
+        namespace=config.ENV_DATA["cluster_namespace"],
+        kind=constants.STORAGECLUSTER,
+    )
+    nodeaffinity = (
+        f'{{"toolbox": {{"nodeAffinity": {{"requiredDuringSchedulingIgnoredDuringExecution": '
+        f'{{"nodeSelectorTerms": [{{"matchExpressions": [{{"key": "kubernetes.io/hostname",'
+        f'"operator": "In",'
+        f'"values": ["{node_name}"]}}]}}]}}}}}}}}'
+    )
+    param = f'{{"spec": {{"placement": {nodeaffinity}}}}}'
+    ct_pod = pod.get_ceph_tools_pod(skip_creating_pod=True)
+    ct_pod_name = ct_pod.name
+    storagecluster_obj.patch(params=param, format_type="merge")
+    log.info(
+        f"Successfully applied node affinity for ceph toolbox pod with {node_name}"
+    )
+    ct_pod.ocp.wait_for_delete(ct_pod_name)
+    log.info(
+        "Identify on which node the ceph toolbox is running after failover due to node affinity"
+    )
+    ct_new_pod_running_node_name = get_ceph_tools_running_node()
+    if node_name == ct_new_pod_running_node_name:
+        log.info(
+            f"ceph toolbox pod failovered to the new node {ct_new_pod_running_node_name}"
+            f" given in node affinity successfully "
+        )
+        return True
+
+
+def get_ceph_tools_running_node():
+    """
+    Get node name where the ceph tools pod is currently running
+
+    Returns:
+         str: name of the node where ceph tools is running
+
+    """
+    ct_pod = pod.get_ceph_tools_pod(wait=True, skip_creating_pod=True)
+    ct_pod_running_node = ct_pod.data["spec"].get("nodeName")
+    return ct_pod_running_node

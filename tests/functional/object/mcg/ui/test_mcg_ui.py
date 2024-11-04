@@ -7,6 +7,7 @@ from ocs_ci.framework.pytest_customization.marks import (
     black_squad,
     runs_on_provider,
     mcg,
+    provider_mode,
 )
 from ocs_ci.ocs import constants
 from ocs_ci.helpers.helpers import create_unique_resource_name
@@ -56,22 +57,29 @@ class TestStoreUserInterface(object):
 
     @ui
     @tier1
+    @runs_on_provider
     @skipif_disconnected_cluster
     @pytest.mark.parametrize(
         argnames=["kind", "provider", "region"],
         argvalues=[
             pytest.param(
-                *["backingstore", "aws", "us-east-2"],
+                *["BackingStore", "aws", "us-east-2"],
                 marks=pytest.mark.polarion_id("OCS-2549"),
             ),
             pytest.param(
-                *["namespacestore", "aws", "us-east-2"],
+                *["NamespaceStore", "aws", "us-east-2"],
                 marks=pytest.mark.polarion_id("OCS-2547"),
             ),
         ],
     )
     def test_store_creation_and_deletion(
-        self, setup_ui_class, cld_mgr, cloud_uls_factory, kind, provider, region
+        self,
+        setup_ui_class_factory,
+        cld_mgr,
+        cloud_uls_factory,
+        kind,
+        provider,
+        region,
     ):
         """
         Test creation and deletion of MCG stores via the UI
@@ -84,14 +92,16 @@ class TestStoreUserInterface(object):
         5. Verify store has been deleted via 'oc' cmd
 
         """
+        setup_ui_class_factory()
+
         log_step(
             "Navigate to Data Foundation / Object Storage / (Backing Store | Namespace Store)"
         )
         object_storage = PageNavigator().nav_object_storage()
 
-        if kind == "backingstore":
+        if kind == "BackingStore":
             store_tab = object_storage.nav_backing_store_tab()
-        elif kind == "namespacestore":
+        elif kind == "NamespaceStore":
             store_tab = object_storage.nav_namespace_store_tab()
         else:
             raise IncorrectUiOptionRequested(f"Unknown store kind {kind}")
@@ -99,21 +109,20 @@ class TestStoreUserInterface(object):
         log_step("Create store with given parameters")
         uls_name = list(cloud_uls_factory({provider: [(1, region)]})[provider])[0]
         store_name = create_unique_resource_name(
-            resource_description="ui", resource_type=kind
+            resource_description="ui", resource_type=kind.lower()
         )
 
-        resource_page = store_tab.create_store(
+        resource_page, store_ready = store_tab.create_store_verify_state(
+            kind=kind,
             store_name=store_name,
             provider=provider,
             region=region,
             secret=cld_mgr.aws_client.secret.name,
             uls_name=uls_name,
         )
-
-        log_step("Verify via UI that status of the store is ready")
-        assert resource_page.verify_current_page_resource_status(
-            constants.STATUS_READY
-        ), f"Created {kind} was not ready in time"
+        assert (
+            store_ready
+        ), f"Created kind='{kind}' name='{store_name}' was not ready in time"
 
         log_step("Delete resource via UI")
         store_tab = resource_page.nav_resource_list_via_breadcrumbs()
@@ -288,8 +297,10 @@ class TestObcUserInterface(object):
                 resource_name=obc_name
             )
 
+    @provider_mode
     @ui
     @tier1
+    @runs_on_provider
     @bugzilla("2097772")
     @pytest.mark.parametrize(
         argnames=["storageclass", "bucketclass", "delete_via", "verify_ob_removal"],
@@ -324,7 +335,12 @@ class TestObcUserInterface(object):
         ],
     )
     def test_obc_creation_and_deletion(
-        self, setup_ui_class, storageclass, bucketclass, delete_via, verify_ob_removal
+        self,
+        setup_ui_class_factory,
+        storageclass,
+        bucketclass,
+        delete_via,
+        verify_ob_removal,
     ):
         """
         Test creation and deletion of an OBC via the UI
@@ -332,6 +348,8 @@ class TestObcUserInterface(object):
         The test covers BZ #2097772 Introduce tooltips for contextual information
         The test covers BZ #2175685 RGW OBC creation via the UI is blocked by "Address form errors to proceed"
         """
+        setup_ui_class_factory()
+
         obc_name = create_unique_resource_name(
             resource_description="ui", resource_type="obc"
         )

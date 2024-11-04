@@ -4,7 +4,7 @@ from ocs_ci.framework.pytest_customization.marks import (
     tier1,
     skipif_ui_not_support,
     skipif_hci_provider_or_client,
-    black_squad,
+    green_squad,
 )
 from ocs_ci.framework.testlib import skipif_ocs_version, ManageTest, ui
 from ocs_ci.ocs.exceptions import (
@@ -19,6 +19,7 @@ from ocs_ci.ocs.cluster import (
     validate_replica_data,
     check_pool_compression_replica_ceph_level,
 )
+from ocs_ci.ocs.ui.block_pool import BlockPoolUI
 
 logger = logging.getLogger(__name__)
 
@@ -75,7 +76,7 @@ class TestPoolUserInterface(ManageTest):
     @ui
     @tier1
     @skipif_ocs_version("<4.8")
-    @black_squad
+    @green_squad
     def test_create_delete_pool(
         self,
         replica,
@@ -84,6 +85,7 @@ class TestPoolUserInterface(ManageTest):
         storage,
         pvc,
         pod,
+        setup_ui,
     ):
         """
         test create delete pool has the following workflow
@@ -117,6 +119,17 @@ class TestPoolUserInterface(ManageTest):
 
         # Getting IO results
         get_fio_rw_iops(self.pod_obj)
+
+        # Checking the raw capcity is loaded on the UI or not.
+        blockpool_ui_object = BlockPoolUI()
+        assert blockpool_ui_object.pool_raw_capacity_loaded(
+            self.pool_name
+        ), "Block pool raw capacity is not visible on UI"
+
+        # Cross checking the raw capacity of the blockpool between CLI and UI
+        assert blockpool_ui_object.cross_check_raw_capacity(
+            self.pool_name
+        ), "Block pool raw capacity did not matched with UI"
 
         # Checking Results for compression and replication
         if compression:

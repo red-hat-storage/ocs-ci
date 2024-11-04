@@ -12,6 +12,7 @@ from ocs_ci.utility import version
 from ocs_ci.utility.deployment import get_ocp_release_image_from_installer
 from ocs_ci.utility.utils import (
     exec_cmd,
+    get_glibc_version,
 )
 
 logger = logging.getLogger(__name__)
@@ -28,13 +29,8 @@ def configure_cloud_credential_operator():
     ccoctl_path = os.path.join(bin_dir, "ccoctl")
     if not os.path.isfile(ccoctl_path):
         pull_secret_path = os.path.join(constants.DATA_DIR, "pull-secret")
-        # W/A of the issue https://github.com/red-hat-storage/ocs-ci/issues/9674
-        if version.get_semantic_ocp_version_from_config() == version.VERSION_4_16:
-            # use direct cco image till issue https://github.com/red-hat-storage/ocs-ci/issues/9674 is fixed
-            cco_image = constants.CCO_IMAGE
-        else:
-            release_image = get_ocp_release_image_from_installer()
-            cco_image = get_cco_container_image(release_image, pull_secret_path)
+        release_image = get_ocp_release_image_from_installer()
+        cco_image = get_cco_container_image(release_image, pull_secret_path)
 
         extract_ccoctl_binary(cco_image, pull_secret_path)
 
@@ -107,7 +103,11 @@ def create_service_id(cluster_name, cluster_path, credentials_requests_dir):
         f"ccoctl ibmcloud create-service-id --credentials-requests-dir {credentials_requests_dir} "
         f"--name {cluster_name} --output-dir {cluster_path}"
     )
-    exec_cmd(cmd)
+    completed_process = exec_cmd(cmd)
+    stderr = completed_process.stderr
+    if stderr:
+        with open(os.path.join(cluster_path, constants.CCOCTL_LOG_FILE), "+w") as fd:
+            fd.write(stderr.decode())
 
 
 def delete_service_id(cluster_name, credentials_requests_dir):
@@ -157,8 +157,25 @@ def extract_ccoctl_binary(cco_image, pull_secret_path):
     bin_dir = config.RUN["bin_dir"]
     ccoctl_path = os.path.join(bin_dir, "ccoctl")
     if not os.path.isfile(ccoctl_path):
-        extract_cmd = f"oc image extract {cco_image} --file='/usr/bin/ccoctl' -a {pull_secret_path}"
-        exec_cmd(extract_cmd)
+        try:
+            glibc_version = get_glibc_version()
+            if version.get_semantic_version(
+                glibc_version
+            ) < version.get_semantic_version("2.34"):
+                ccoctl_version = "ccoctl.rhel8"
+            else:
+                ccoctl_version = "ccoctl.rhel9"
+            extract_cmd = f"oc image extract {cco_image} --file='/usr/bin/{ccoctl_version}' -a {pull_secret_path}"
+            exec_cmd(extract_cmd)
+            os.rename(f"{ccoctl_version}", "ccoctl")
+        except Exception as e:
+            logger.warning(
+                f"Failed to get ccoctl version. Fetching the default version "
+                f"of ccoctl. Exception: {e}"
+            )
+            extract_cmd = f"oc image extract {cco_image} --file='/usr/bin/ccoctl' -a {pull_secret_path}"
+            exec_cmd(extract_cmd)
+
         chmod_cmd = "chmod 775 ccoctl"
         exec_cmd(chmod_cmd)
         shutil.move("ccoctl", ccoctl_path)

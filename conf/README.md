@@ -98,6 +98,7 @@ anywhere else.
 * `openshift_install_timeout` - Time (in seconds) to wait before timing out during OCP installation
 * `local_storage` - Deploy OCS with the local storage operator (aka LSO) (Default: false)
 * `local_storage_storagedeviceset_count` - This option allows one to control `spec.storageDeviceSets[0].count` of LSO backed StorageCluster.
+* `lso_standalone_deployment` - This option allows to deploy LSO separately (without actually deploying ODF)
 * `optional_operators_image` - If provided, it is used for LSO installation on unreleased OCP version
 * `disconnected` - Set if the cluster is deployed in a disconnected environment
 * `proxy` - Set if the cluster is deployed in a proxy environment
@@ -144,7 +145,16 @@ anywhere else.
 * `skip_ocp_installer_destroy` - Skip OCP installer to destroy the cluster -
   useful for enforcing force deploy steps only.
 * `sts_enabled` - Enable STS deployment functionality.
+* `metallb_operator` - Enable MetalLB operator installation during OCP deployment.
 * `multi_storagecluster` - Enable multi-storagecluster deployment when set to true.
+* `deploy_hosted_clusters` - Deploy hosted clusters.
+* `ssh_jump_host` - dict containing configuration for SSH jump host
+    * `host` - hostname or IP address of the SSH Jump host
+    * `user` - username for the ssh connection to the SSH jump host
+* `rosa_cli_version` - ROSA CLI version to be used for ROSA deployment
+* `ocm_cli_version` - OCM CLI version to be used for ROSA deployment
+* `force_download_rosa_cli` - Download the ROSA CLI even if one already exists in the bin_dir
+* `force_download_ocm_cli` - Download the OCM CLI even if one already exists in the bin_dir
 
 #### REPORTING
 
@@ -300,6 +310,40 @@ higher priority).
             * `private_gw` - GW for the private interface
             * `root_disk_id` - ID of the root disk
             * `root_disk_sn` - Serial number of the root disk
+            * `node_network_configuration_policy_name` - The NodeNetworkConfigurationPolicy CR name
+            * `node_network_configuration_policy_ip` - The ip address of NodeNetworkConfigurationPolicy CR
+            * `node_network_configuration_policy_prefix_length` - The subnetmask of NodeNetworkConfigurationPolicy CR
+            * `node_network_configuration_policy_destination_route` - The destination route of NodeNetworkConfigurationPolicy CR
+* `hcp_version` - version of HCP client to be deployed on machine running the tests
+* `metallb_version` - MetalLB operator version to install
+* `install_hypershift_upstream` - Install hypershift from upstream or not (Default: false). Necessary for unreleased OCP/CNV versions
+* `clusters` - section for hosted clusters
+    * `<cluster name>` - name of the cluster
+      * `hosted_cluster_path` - path to the cluster directory to store auth_path, credentials files or cluster related files
+      * `ocp_version` - OCP version of the hosted cluster (e.g. "4.15.13")
+      * `cpu_cores_per_hosted_cluster` - number of CPU cores per hosted cluster
+      * `memory_per_hosted_cluster` - amount of memory per hosted cluster
+      * `nodepool_replicas` - number of replicas of nodepool for each cluster
+      * `hosted_odf_registry` - registry for hosted ODF
+      * `hosted_odf_version` - version of ODF to be deployed on hosted clusters
+      * `cp_availability_policy` - "HighlyAvailable" or "SingleReplica"; if not provided the default value is "SingleReplica"
+* `wait_timeout_for_healthy_osd_in_minutes` - timeout waiting for healthy OSDs before continuing upgrade (see https://bugzilla.redhat.com/show_bug.cgi?id=2276694 for more details)
+* `osd_maintenance_timeout` - is a duration in minutes that determines how long an entire failureDomain like region/zone/host will be held in noout
+* `odf_provider_mode_deployment` - True if you would like to enable provider mode deployment.
+* `client_subcription_image` - ODF subscription image details for the storageclients.
+* `channel_to_client_subscription` - Channel value for the odf subscription image for storageclients.
+* `custom_vpc` - Applicable only for IMB Cloud IPI deployment where we want to create custom VPC and networking
+  with specific Address prefixes to prevent /18 CIDR to be used.
+* `ip_prefix` - Applicable only for IMB Cloud IPI deployment when custom_vpc, if not specified: 27 prefix will be used.
+* `ceph_threshold_backfill_full_ratio` - Configure backfillFullRatio the ceph osd full thresholds value in the StorageCluster CR.
+* `ceph_threshold_full_ratio` - Configure fullRatio the ceph osd full thresholds value in the StorageCluster CR.
+* `ceph_threshold_near_full_ratio` - Configure nearFullRatio the ceph osd full thresholds value in the StorageCluster CR.
+* `restrict_ssh_access_to_nodes` - Deploy and configure Ingress Node Firewall Operator to restrict SSH access to nodes.
+* `allow_ssh_access_from_subnets` - Defines a list of subnets wit allowed SSH access to nodes.
+* `skip_upgrade_checks` - If set to true Rook won't perform any upgrade checks on Ceph daemons during an upgrade.
+* `continue_upgrade_after_checks_even_if_not_healthy` -  if set to true Rook will continue the OSD daemon upgrade process even if the PGs are not clean.
+* `upgrade_osd_requires_healthy_pgs` - If set to true OSD upgrade process won't start until PGs are healthy.
+* `workaround_mark_disks_as_ssd` - WORKAROUND: mark disks as SSD (not rotational - `0` in `/sys/block/*d*/queue/rotational`)
 
 #### UPGRADE
 
