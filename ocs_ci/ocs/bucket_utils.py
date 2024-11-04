@@ -112,11 +112,7 @@ def craft_s3cmd_command(cmd, mcg_obj=None, signed_request_creds=None):
             f"s3cmd --access_key={mcg_obj.access_key_id} "
             f"--secret_key={mcg_obj.access_key} "
             f"{region}"
-            f"--host={mcg_obj.
-
-
-
-} "
+            f"--host={mcg_obj.s3_endpoint}"
             f"--host-bucket={mcg_obj.s3_endpoint} "
             f"{no_ssl} "
         )
