@@ -3705,7 +3705,7 @@ def check_ceph_osd_df_tree():
         osd_id = line["ID"]
         weight = float(line["WEIGHT"])
         # Regular expression to match the numeric part and the unit
-        match = re.match(r"(\d+)(\D+)", line["SIZE"])
+        match = re.match(r"([0-9.]+)([a-zA-Z]+)", line["SIZE"])
         size = float(match.group(1))
         units = match.group(2)
         if units.startswith("Ti"):
