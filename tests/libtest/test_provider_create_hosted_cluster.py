@@ -18,7 +18,7 @@ from ocs_ci.framework.pytest_customization.marks import (
     libtest,
     purple_squad,
     runs_on_provider,
-    acm_upgrade,
+    ocp_upgrade,
 )
 from ocs_ci.ocs.ocp import OCP
 from ocs_ci.ocs.resources.catalog_source import get_odf_tag_from_redhat_catsrc
@@ -399,7 +399,6 @@ class TestProviderHosted(object):
             deploy_hyperconverged=True,
         )
     @runs_on_provider
-    @acm_upgrade
     def test_acm_upgrade(self):
         """
         Verify acm upgrade
@@ -433,6 +432,7 @@ class TestProviderHosted(object):
         metallb_installer_obj.upgrade_metallb()
 
     @runs_on_provider
+    @ocp_upgrade
     def test_upgrade(self):
         """
         This test is to validate ocp, ocs and other operator
@@ -444,10 +444,11 @@ class TestProviderHosted(object):
         """
         from tests.functional.upgrade.test_upgrade_ocp import TestUpgradeOCP
         from ocs_ci.ocs.ocs_upgrade import run_ocs_upgrade
+        from tests.conftest import reduce_and_resume_cluster_load
 
         storage_client = StorageClient()
         self.test_upgrade_ocp = TestUpgradeOCP()
-        self.test_upgrade_ocp.test_upgrade_ocp()
+        self.test_upgrade_ocp.test_upgrade_ocp(reduce_and_resume_cluster_load)
         self.test_acm_upgrade()
         run_ocs_upgrade()
         logger.info(
