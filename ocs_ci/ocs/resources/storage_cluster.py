@@ -796,9 +796,10 @@ def ocs_install_verification(
             verify_device_class_in_osd_tree(ct_pod, device_class)
 
     # RDR with globalnet submariner
-    if (
-        config.MULTICLUSTER["multicluster_mode"] == "regional-dr" and
-        get_primary_cluster_config().ENV_DATA.get("enable_globalnet", True)
+    if config.MULTICLUSTER[
+        "multicluster_mode"
+    ] == "regional-dr" and get_primary_cluster_config().ENV_DATA.get(
+        "enable_globalnet", True
     ):
         validate_serviceexport()
 
