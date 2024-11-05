@@ -397,9 +397,10 @@ class Deployment(object):
                         ocs_install_verification(ocs_registry_image=ocs_registry_image)
                 # if we have Globalnet enabled in case of submariner with RDR
                 # we need to add a flag to storagecluster
-                if (
-                    config.ENV_DATA.get("enable_globalnet", True)
-                    and config.MULTICLUSTER["multicluster_mode"] == "regional-dr"
+                if config.MULTICLUSTER[
+                    "multicluster_mode"
+                ] == "regional-dr" and get_primary_cluster_config().ENV_DATA.get(
+                    "enable_globalnet", True
                 ):
                     for cluster in get_non_acm_cluster_config():
                         config.switch_ctx(cluster.MULTICLUSTER["multicluster_index"])

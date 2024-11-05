@@ -59,6 +59,7 @@ from ocs_ci.ocs.node import (
     get_provider_internal_node_ips,
     add_disk_stretch_arbiter,
 )
+from ocs_ci.ocs.utils import get_primary_cluster_config
 from ocs_ci.ocs.version import get_ocp_version
 from ocs_ci.utility.version import (
     get_semantic_version,
@@ -795,9 +796,10 @@ def ocs_install_verification(
             verify_device_class_in_osd_tree(ct_pod, device_class)
 
     # RDR with globalnet submariner
-    if (
-        config.ENV_DATA.get("enable_globalnet", True)
-        and config.MULTICLUSTER.get("multicluster_mode") == "regional-dr"
+    if config.MULTICLUSTER[
+        "multicluster_mode"
+    ] == "regional-dr" and get_primary_cluster_config().ENV_DATA.get(
+        "enable_globalnet", True
     ):
         validate_serviceexport()
 
