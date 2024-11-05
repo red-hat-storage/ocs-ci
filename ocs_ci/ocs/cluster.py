@@ -3696,7 +3696,8 @@ def check_ceph_osd_df_tree():
 
     """
     logger.info("Verify ceph osd df tree values")
-    storage_size = float(storage_cluster.get_storage_size()[0:-2])
+    storage_size_param = storage_cluster.get_storage_size()
+    logger.info(f"storage size = {storage_size_param}")
     ceph_output_lines = get_ceph_osd_df_tree_weight_and_size()
     logger.info(f"ceph output lines = {ceph_output_lines}")
 
@@ -3707,11 +3708,18 @@ def check_ceph_osd_df_tree():
         match = re.match(r"(\d+)(\D+)", line["SIZE"])
         size = float(match.group(1))
         units = match.group(2)
-        if units.startswith("Gi"):
+        if units.startswith("Ti"):
+            storage_size = convert_device_size(storage_size_param, "TB", 1024)
+        elif units.startswith("Gi"):
+            storage_size = convert_device_size(storage_size_param, "GB", 1024)
             weight = weight * 1024
         elif units.startswith("Mi"):
+            storage_size = convert_device_size(storage_size_param, "MB", 1024)
             weight = weight * (1024**2)
+        else:
+            storage_size = float(storage_size_param[0:-2])
 
+        logger.info(f"OSD size = {size}, weight = {weight}")
         # Check if the weight and size are equal ignoring a small diff
         diff = size * 0.04
         if not (size - diff <= weight <= size + diff):
