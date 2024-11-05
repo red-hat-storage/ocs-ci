@@ -203,6 +203,8 @@ ENV_DATA:
   opm_owner_repo: "operator-framework/operator-registry"
   # opm tool release tag (particular version or "latest") to be downloaded
   opm_release_tag: "latest"
+  # virtctl tool github owner and repository (used in api url for downloading opm tool)
+  virtctl_owner_repo: "kubevirt/kubevirt"
   # vault environment variables
   vault_deploy_mode: external
   KMS_PROVIDER: vault

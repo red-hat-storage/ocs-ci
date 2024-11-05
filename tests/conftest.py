@@ -36,6 +36,7 @@ from ocs_ci.framework.pytest_customization.marks import (
 )
 
 from ocs_ci.helpers.proxy import update_container_with_proxy_env
+from ocs_ci.helpers.virtctl import get_virtctl_tool
 from ocs_ci.ocs import constants, defaults, fio_artefacts, node, ocp, platform_nodes
 from ocs_ci.ocs.acm.acm import login_to_acm, AcmAddClusters
 from ocs_ci.ocs.awscli_pod import create_awscli_pod, awscli_pod_cleanup
@@ -8504,3 +8505,8 @@ def enable_guaranteed_bucket_logging_fixture(request, pvc_factory):
 
     request.addfinalizer(cleanup)
     return factory
+
+
+@pytest.fixture(scope="session")
+def virtctl_binary():
+    get_virtctl_tool()
