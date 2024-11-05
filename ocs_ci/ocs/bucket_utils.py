@@ -2812,6 +2812,7 @@ def sts_assume_role(
         access_key_id_assumed_user (str): Access key id of the assumed user
         mcg_obj (MCG): MCG object
         signed_request_creds (dict): a dictionary containing AWS S3 creds for a signed request
+
     Returns:
         Dict: Representing the output of the command which on successful execution
         consists of new credentials
@@ -2840,9 +2841,9 @@ def s3_create_bucket(s3_obj, bucket_name, s3_client=None):
 
     """
     if s3_client:
-        return s3_client.create_bucket(Bucket=bucket_name)
+        s3_client.create_bucket(Bucket=bucket_name)
     else:
-        return s3_obj.s3_resource.create_bucket(Bucket=bucket_name)
+        s3_obj.s3_resource.create_bucket(Bucket=bucket_name)
 
 
 def s3_delete_bucket(s3_obj, bucket_name, s3_client=None):
@@ -2856,9 +2857,9 @@ def s3_delete_bucket(s3_obj, bucket_name, s3_client=None):
 
     """
     if s3_client:
-        return s3_client.delete_bucket(Bucket=bucket_name)
+        s3_client.delete_bucket(Bucket=bucket_name)
     else:
-        return s3_obj.s3_client.delete_bucket(Bucket=bucket_name)
+        s3_obj.s3_client.delete_bucket(Bucket=bucket_name)
 
 
 def s3_list_buckets(s3_obj, s3_client=None):
@@ -2870,7 +2871,7 @@ def s3_list_buckets(s3_obj, s3_client=None):
         s3_client (S3.Client): Any s3 client resource
 
     Returns:
-        List of buckets
+        List: List of buckets
 
     """
 
@@ -2880,3 +2881,31 @@ def s3_list_buckets(s3_obj, s3_client=None):
         response = s3_obj.s3_client.list_buckets()
 
     return [bucket["Name"] for bucket in response["Buckets"]]
+
+
+def create_s3client_from_assume_role_creds(mcg_obj, assume_role_creds):
+    """
+    Create s3client from the creds passed and endpoint fetched from MCG object
+
+    Args:
+        mcg_obj (MCG): MCG object
+        creds (Dict): Dictionary representing the credentials
+
+    Returns:
+        Boto3 s3 client object
+
+    """
+
+    assumed_access_key_id = assume_role_creds.get("Credentials").get("AccessKeyId")
+    assumed_access_key = assume_role_creds.get("Credentials").get("SecretAccessKey")
+    assumed_session_token = assume_role_creds.get("Credentials").get("SessionToken")
+
+    assumed_s3_resource = boto3.resource(
+        "s3",
+        verify=retrieve_verification_mode(),
+        endpoint_url=mcg_obj.s3_endpoint,
+        aws_access_key_id=assumed_access_key_id,
+        aws_secret_access_key=assumed_access_key,
+        aws_session_token=assumed_session_token,
+    )
+    return assumed_s3_resource.meta.client

@@ -7422,8 +7422,8 @@ def add_env_vars_to_noobaa_endpoint_fixture(request, mcg_obj_session):
             format_type="json",
         )
 
-        # # Reset the noobaa-core pod to apply the changes
-        # mcg_obj_session.reset_core_pod()
+    # Reset noobaa endpoint pods
+    mcg_obj_session.reset_endpoint_pods()
 
     def finalizer():
         """
@@ -7459,8 +7459,8 @@ def add_env_vars_to_noobaa_endpoint_fixture(request, mcg_obj_session):
                 format_type="json",
             )
 
-        # Reset the noobaa-core pod to apply the changes
-        # mcg_obj_session.reset_core_pod()
+        # Reset noobaa endpoint pods
+        mcg_obj_session.reset_endpoint_pods()
 
     request.addfinalizer(finalizer)
     return add_env_vars_to_noobaa_endpoint_implementation
@@ -8619,3 +8619,42 @@ def enable_guaranteed_bucket_logging_fixture(request, pvc_factory):
 @pytest.fixture(scope="session")
 def virtctl_binary():
     get_virtctl_tool()
+
+
+@pytest.fixture()
+def nb_assign_user_role_fixture(request, mcg_obj_session):
+
+    email = None
+
+    def factory(user_email, role_name, principal="*"):
+        """
+        Assign assume role policy to the user
+
+        Args:
+            user_email (str): Name/id/email of the user
+            role_name (str): Name of the role
+
+        """
+        nonlocal email
+        email = user_email
+        noobaa_assume_role_policy = (
+            f'{{"role_name": "{role_name}","assume_role_policy": '
+            f'{{"version": "2024-07-16","statement": [{{"action": ["sts:AssumeRole"],'
+            f'"effect": "allow","principal": ["{principal}"]}}]}}}}'
+        )
+
+        mcg_obj_session.assign_sts_role(user_email, noobaa_assume_role_policy)
+
+    def teardown():
+        """
+        Remove role from the user
+
+        """
+        try:
+            mcg_obj_session.remove_sts_role(email)
+        except CommandFailed as e:
+            if "No such account email" not in e.args[0]:
+                raise
+
+    request.addfinalizer(teardown)
+    return factory

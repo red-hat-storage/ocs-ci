@@ -137,6 +137,9 @@ class NoobaaAccount(object):
         """
         Delete the noobaa account
 
+        Returns:
+            Response for noobaa `delete_account` api call
+
         """
         params_dict = {"email": self.email_id}
         return self.mcg.send_rpc_query(
