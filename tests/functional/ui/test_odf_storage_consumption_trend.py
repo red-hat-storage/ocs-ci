@@ -25,7 +25,7 @@ from ocs_ci.ocs.resources.pod import (
     get_prometheus_pods,
 )
 from ocs_ci.ocs.resources.storage_cluster import get_storage_size
-from ocs_ci.ocs.ui.page_objects.block_and_file import BlockAndFile
+from ocs_ci.ocs.ui.page_objects.page_navigator import PageNavigator
 from ocs_ci.ocs.ui.validation_ui import ValidationUI
 from ocs_ci.utility.utils import TimeoutSampler
 
@@ -80,9 +80,16 @@ class TestConsumptionTrendUI(ManageTest):
             2. Verify the text information on the widget
 
         """
-        block_and_file_obj = BlockAndFile()
+        block_and_file_page = (
+            PageNavigator()
+            .nav_odf_default_page()
+            .nav_storage_systems_tab()
+            .nav_storagecluster_storagesystem_details()
+            .nav_block_and_file()
+        )
+
         collected_tpl_of_days_and_avg = (
-            block_and_file_obj.odf_storagesystems_consumption_trend()
+            block_and_file_page.odf_storagesystems_consumption_trend()
         )
         avg_txt = "Average storage consumption"
         est_days_txt = "Estimated days until full"
@@ -109,8 +116,15 @@ class TestConsumptionTrendUI(ManageTest):
 
         """
         validation_ui_obj = ValidationUI()
-        est_days = validation_ui_obj.get_est_days_from_ui()
-        average = validation_ui_obj.get_avg_consumption_from_ui()
+        block_and_file_page = (
+            PageNavigator()
+            .nav_odf_default_page()
+            .nav_storage_systems_tab()
+            .nav_storagecluster_storagesystem_details()
+            .nav_block_and_file()
+        )
+        est_days = block_and_file_page.get_est_days_from_ui()
+        average = block_and_file_page.get_avg_consumption_from_ui()
         logger.info(f"From the UI, Estimated Days: {est_days} and Average: {average}")
         days_avg_tpl = validation_ui_obj.calculate_est_days_and_average_manually()
         first_validation = est_days == days_avg_tpl[0]
@@ -138,7 +152,14 @@ class TestConsumptionTrendUI(ManageTest):
 
         """
         validation_ui_obj = ValidationUI()
-        average = validation_ui_obj.get_avg_consumption_from_ui()
+        block_and_file_page = (
+            PageNavigator()
+            .nav_odf_default_page()
+            .nav_storage_systems_tab()
+            .nav_storagecluster_storagesystem_details()
+            .nav_block_and_file()
+        )
+        average = block_and_file_page.get_avg_consumption_from_ui()
         logger.info(f"From the UI, Average: {average}")
         days_avg_tpl = validation_ui_obj.calculate_est_days_and_average_manually()
         first_validation = average == days_avg_tpl[1]
@@ -168,33 +189,38 @@ class TestConsumptionTrendUI(ManageTest):
             4. Should show close to the values before deleting the prometheus pod
 
         """
-        validation_ui_obj = ValidationUI()
+        block_and_file_page = (
+            PageNavigator()
+            .nav_odf_default_page()
+            .nav_storage_systems_tab()
+            .nav_storagecluster_storagesystem_details()
+            .nav_block_and_file()
+        )
         logger.info("Get the value of 'Estimated days until full' from UI")
-        est_days_before = validation_ui_obj.get_est_days_from_ui()
+        est_days_before = block_and_file_page.get_est_days_from_ui()
         logger.info(
             f"The value of 'Estimated days until full' from UI is {est_days_before} before failing prometheus"
         )
-        average_before = validation_ui_obj.get_avg_consumption_from_ui()
+        average_before = block_and_file_page.get_avg_consumption_from_ui()
         logger.info(
             f"'Average of storage consumption per day' from UI is {average_before} before failing prometheus"
         )
         logger.info("Bring down the prometheus")
         list_of_prometheus_pod_obj = get_prometheus_pods()
         delete_pods(list_of_prometheus_pod_obj)
-        est_days_after = ""
-        for sampler in TimeoutSampler(
-            timeout=300, sleep=30, func=validation_ui_obj.get_est_days_from_ui
+        est_days_after = None
+        for est_days_after in TimeoutSampler(
+            timeout=300, sleep=30, func=block_and_file_page.get_est_days_from_ui
         ):
-            if sampler:
-                est_days_after = sampler
+            if est_days_after > 0:
                 break
             else:
                 logger.info("dashboard is not ready yet")
-        est_days_after = validation_ui_obj.get_est_days_from_ui()
+
         logger.info(
             f"From the UI, Estimated Days: {est_days_after} after prometheus recovered from failure"
         )
-        average_after = validation_ui_obj.get_avg_consumption_from_ui()
+        average_after = block_and_file_page.get_avg_consumption_from_ui()
         logger.info(
             f"'Average of storage consumption' from UI is {average_after} after prometheus recovered from failure"
         )
@@ -215,6 +241,13 @@ class TestConsumptionTrendUI(ManageTest):
 
         """
         validation_ui_obj = ValidationUI()
+        block_and_file_page = (
+            PageNavigator()
+            .nav_odf_default_page()
+            .nav_storage_systems_tab()
+            .nav_storagecluster_storagesystem_details()
+            .nav_block_and_file()
+        )
         (
             active_mgr_deployment_name_before_failover,
             active_mgr_pod_before_failover,
@@ -225,15 +258,14 @@ class TestConsumptionTrendUI(ManageTest):
             deployment_name=active_mgr_deployment_name_before_failover, replica_count=0
         )
         POD_OBJ.wait_for_delete(resource_name=active_mgr_pod_before_failover)
-        # Below sleep is mandatory for mgr failover, if not the same pod will become active again.
 
-        check_failover = (
-            lambda: logger.info("Mgr Failover succeed")
-            if active_mgr_deployment_name_before_failover != self.get_active_mgr()[0]
-            else None
-        )
+        def _check_failover():
+            if active_mgr_deployment_name_before_failover != self.get_active_mgr()[0]:
+                logger.info("Mgr Failover succeed")
 
-        TimeoutSampler(timeout=120, sleep=15, func=check_failover)
+        _check_failover()
+
+        TimeoutSampler(timeout=120, sleep=15, func=_check_failover)
         logger.info(f"Scale down {active_mgr_deployment_name_before_failover} to 1")
         helpers.modify_deployment_replica_count(
             deployment_name=active_mgr_deployment_name_before_failover, replica_count=1
@@ -244,8 +276,8 @@ class TestConsumptionTrendUI(ManageTest):
         logger.info("Mgr failovered successfully")
 
         logger.info("Now the testing will begin for consumption trend UI")
-        est_days = validation_ui_obj.get_est_days_from_ui()
-        average = validation_ui_obj.get_avg_consumption_from_ui()
+        est_days = block_and_file_page.get_est_days_from_ui()
+        average = block_and_file_page.get_avg_consumption_from_ui()
         logger.info(f"From the UI, Estimated Days: {est_days} and Average: {average}")
         days_avg_tpl = validation_ui_obj.calculate_est_days_and_average_manually()
         first_validation = est_days == days_avg_tpl[0]
@@ -273,16 +305,30 @@ class TestConsumptionTrendUI(ManageTest):
         4. 'Estimated days until full' value in the UI, should increase after OSD resize.
 
         """
-        validation_ui_obj = ValidationUI()
+        block_and_file_page = (
+            PageNavigator()
+            .nav_odf_default_page()
+            .nav_storage_systems_tab()
+            .nav_storagecluster_storagesystem_details()
+            .nav_block_and_file()
+        )
         logger.info("Get the value of 'Estimated days until full' from UI")
-        est_days_before = validation_ui_obj.get_est_days_from_ui()
+        est_days_before = block_and_file_page.get_est_days_from_ui()
         logger.info("Performing OSD resize")
         basic_resize_osd(get_storage_size())
         logger.info("After OSD resize, checking consumption trend UI")
-        logger.info(
-            "Get the value of 'Estimated days until full' from UI after OSD resize"
-        )
-        est_days_after = validation_ui_obj.get_est_days_from_ui()
-        assert (
-            est_days_after > est_days_before
-        ), f"'Estimated days until full' {est_days_after} did not increase after OSD resize"
+        est_days_after = None
+        for est_days_after in TimeoutSampler(
+            timeout=300, sleep=30, func=block_and_file_page.get_est_days_from_ui
+        ):
+            logger.info(
+                "Get the value of 'Estimated days until full' from UI after OSD resize"
+            )
+            if est_days_after > est_days_before:
+                break
+            else:
+                logger.warning("dashboard is not ready yet")
+        else:
+            raise AssertionError(
+                f"'Estimated days until full' {est_days_after} did not increase after OSD resize."
+            )

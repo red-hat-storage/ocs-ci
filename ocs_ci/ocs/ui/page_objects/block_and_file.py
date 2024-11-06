@@ -1,10 +1,10 @@
+import re
 import time
 
 from ocs_ci.framework import config
 from ocs_ci.ocs.ui.helpers_ui import format_locator, logger
 from ocs_ci.ocs.ui.page_objects.storage_system_details import StorageSystemDetails
 from ocs_ci.ocs.ui.workload_ui import PvcCapacityDeploymentList, compare_mem_usage
-from ocs_ci.ocs.ui.validation_ui import ValidationUI
 
 
 class BlockAndFile(StorageSystemDetails):
@@ -186,8 +186,6 @@ class BlockAndFile(StorageSystemDetails):
 
     def get_estimated_days_from_consumption_trend(self):
         """
-        This will get the web element xpaths from views.py and try to get text from those elements
-
         This will fetch information from DataFoundation>>Storage>>Block and File page>>Consumption trend card
 
         Returns:
@@ -213,23 +211,44 @@ class BlockAndFile(StorageSystemDetails):
             tuple: tpl_of_days_and_avg  ex: (Estimated days, Average)
 
         """
-        ValidationUI().odf_console_plugin_check()
-        storage_systems_page = (
-            ValidationUI().nav_odf_default_page().nav_storage_systems_tab()
-        )
-        # PageNavigator().nav_odf_default_page().nav_storage_systems_tab()
-        storage_system_details = (
-            storage_systems_page.nav_storagecluster_storagesystem_details()
-        )
-        storage_system_details.nav_details_overview()
-        storage_system_details.nav_details_object()
 
         if not config.ENV_DATA["mcg_only_deployment"]:
-            tpl_of_days_and_avg = (
-                storage_system_details.nav_block_and_file().get_estimated_days_from_consumption_trend()
-            )
+            tpl_of_days_and_avg = self.get_estimated_days_from_consumption_trend()
             return tpl_of_days_and_avg
 
         else:
             logger.error("No data available for MCG-only deployments.")
             return None
+
+    def get_est_days_from_ui(self):
+        """
+        Get the value of 'Estimated days until full' from the UI
+
+        Returns:
+            int: Estimated days until full from UI
+
+        """
+
+        collected_tpl_of_days_and_avg = (
+            BlockAndFile().odf_storagesystems_consumption_trend()
+        )
+        est_days = re.search(r"\d+", collected_tpl_of_days_and_avg[0]).group()
+        logger.info(f"'Estimated days until full' from the UI : {est_days}")
+        return int(est_days)
+
+    def get_avg_consumption_from_ui(self):
+        """
+        Get the value of 'Average storage consumption' from the UI
+
+        Returns:
+            float: Average of storage consumption per day
+
+        """
+        collected_tpl_of_days_and_avg = (
+            BlockAndFile().odf_storagesystems_consumption_trend()
+        )
+        average = float(
+            re.search(r"-?\d+\.*\d*", collected_tpl_of_days_and_avg[1]).group()
+        )
+        logger.info(f"'Average of storage consumption per day' from the UI : {average}")
+        return average

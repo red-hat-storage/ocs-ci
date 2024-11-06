@@ -1,7 +1,6 @@
 import logging
 import math
 import pytest
-import re
 import time
 import warnings
 
@@ -682,42 +681,6 @@ class ValidationUI(PageNavigator):
             page_name="client_onboarding_token_page",
         )
         return storage_client_obj
-
-    def get_est_days_from_ui(self):
-        """
-        Get the value of 'Estimated days until full' from the UI
-
-        Returns:
-            int: Estimated days until full from UI
-
-        """
-        from ocs_ci.ocs.ui.page_objects.block_and_file import BlockAndFile
-
-        collected_tpl_of_days_and_avg = (
-            BlockAndFile().odf_storagesystems_consumption_trend()
-        )
-        est_days = re.search(r"\d+", collected_tpl_of_days_and_avg[0]).group()
-        logger.info(f"'Estimated days until full' from the UI : {est_days}")
-        return int(est_days)
-
-    def get_avg_consumption_from_ui(self):
-        """
-        Get the value of 'Average storage consumption' from the UI
-
-        Returns:
-            float: Average of storage consumption per day
-
-        """
-        from ocs_ci.ocs.ui.page_objects.block_and_file import BlockAndFile
-
-        collected_tpl_of_days_and_avg = (
-            BlockAndFile().odf_storagesystems_consumption_trend()
-        )
-        average = float(
-            re.search(r"-?\d+\.*\d*", collected_tpl_of_days_and_avg[1]).group()
-        )
-        logger.info(f"'Average of storage consumption per day' from the UI : {average}")
-        return average
 
     def calculate_est_days_and_average_manually(self):
         """
