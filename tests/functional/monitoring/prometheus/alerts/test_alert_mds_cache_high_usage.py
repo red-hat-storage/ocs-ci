@@ -4,7 +4,7 @@ import time
 
 from concurrent.futures import ThreadPoolExecutor
 from ocs_ci.framework.pytest_customization.marks import blue_squad
-from ocs_ci.framework.testlib import E2ETest, tier2
+from ocs_ci.framework.testlib import E2ETest, tier2, ignore_leftovers
 from ocs_ci.framework import config
 from ocs_ci.helpers import helpers
 from ocs_ci.ocs import constants
@@ -76,6 +76,7 @@ def run_metadata_io_with_cephfs(dc_pod_factory):
 
 @tier2
 @blue_squad
+@ignore_leftovers
 class TestMdsMemoryAlerts(E2ETest):
     @pytest.fixture(scope="function", autouse=True)
     def teardown(self, request):
