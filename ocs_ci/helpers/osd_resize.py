@@ -61,9 +61,7 @@ def check_resources_state_post_resize_osd(old_osd_pods, old_osd_pvcs, old_osd_pv
 
     Raises:
         StorageSizeNotReflectedException: If the OSD pods failed to restart
-        ResourceWrongStatusException: If the following occurs:
-            1. The OSD pods failed to reach the status Terminated or to be deleted
-            2. The old PVC and PV names are not equal to the current PVC and PV names
+        ResourceWrongStatusException: The old PVC and PV names are not equal to the current PVC and PV names
 
     """
     old_osd_pods_count = len(old_osd_pods)
