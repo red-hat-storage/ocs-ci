@@ -1,10 +1,13 @@
 import logging
 import pytest
+
+
 from ocs_ci.framework.pytest_customization.marks import (
     tier1,
     skipif_ui_not_support,
     skipif_hci_provider_or_client,
     green_squad,
+    bugzilla,
 )
 from ocs_ci.framework.testlib import skipif_ocs_version, ManageTest, ui
 from ocs_ci.ocs.exceptions import (
@@ -18,8 +21,13 @@ from ocs_ci.ocs.cluster import (
     validate_compression,
     validate_replica_data,
     check_pool_compression_replica_ceph_level,
+    validate_num_of_pgs,
 )
 from ocs_ci.ocs.ui.block_pool import BlockPoolUI
+from ocs_ci.ocs.resources.pod import get_ceph_tools_pod
+from ocs_ci.ocs.ocp import OCP
+from ocs_ci.utility.utils import run_cmd
+
 
 logger = logging.getLogger(__name__)
 
@@ -34,6 +42,7 @@ need_to_delete = []
         pytest.param(*[3, False], marks=pytest.mark.polarion_id("OCS-2588")),
         pytest.param(*[2, True], marks=pytest.mark.polarion_id("OCS-2587")),
         pytest.param(*[2, False], marks=pytest.mark.polarion_id("OCS-2586")),
+        pytest.param(*[2, False], marks=pytest.mark.polarion_id("OCS-6255")),
     ],
 )
 @skipif_hci_provider_or_client
@@ -143,3 +152,75 @@ class TestPoolUserInterface(ManageTest):
             raise PoolNotReplicatedAsNeeded(
                 f"Pool {self.pool_name} not replicated to size {replica}"
             )
+
+    @ui
+    @tier1
+    @green_squad
+    @bugzilla("2253013")
+    @skipif_ocs_version("<4.16")
+    def test_sc_and_pool_ui_and_validate_pg_num(
+        self,
+        namespace,
+        storage,
+        pvc,
+        pod,
+        setup_ui,
+        replica,
+        compression,
+    ):
+        """
+        Test steps
+        1. Create storageclass and pool via UI
+        2. Check the values of pg_num , it should be equal to osd_pool_default_pg_num
+        3. Check PG autoscale is ON
+        4. New pool is having non-blank deviceclass
+        5. Create PVC and pod using the new storageclass created
+        6. Run IOs in the PVCs
+        """
+
+        # Check pg_num and osd_pool_default_pg_num matches
+        ct_pod = get_ceph_tools_pod()
+        osd_pool_default_pg_num = ct_pod.exec_ceph_cmd(
+            ceph_cmd="ceph config get mon osd_pool_default_pg_num"
+        )
+        logger.info(f"The osd pool default pg num value is {osd_pool_default_pg_num}")
+        expected_pgs = {
+            f"{self.pool_name}": osd_pool_default_pg_num,
+        }
+        assert validate_num_of_pgs(
+            expected_pgs
+        ), "pg_num is not equal to the osd pool default pg num"
+        logger.info(
+            f"pg_num of the new pool {self.pool_name} "
+            f"is equal to the osd pool default pg num {osd_pool_default_pg_num}"
+        )
+
+        # Check if the pg-autoscale is ON
+        pool_autoscale_status = ct_pod.exec_ceph_cmd(
+            ceph_cmd="ceph osd pool autoscale-status"
+        )
+        for pool in pool_autoscale_status:
+            if pool["pool_name"] == self.pool_name:
+                assert pool["pg_autoscale_mode"] == "on", "PG autoscale mode is off"
+        logger.info(f"{self.pool_name} autoscale mode is on")
+
+        # Check the pool is not none
+        oc_obj = OCP(kind=constants.CEPHBLOCKPOOL)
+        cbp_output = run_cmd(
+            cmd=f"oc get cephblockpool/{self.pool_name} -n {constants.OPENSHIFT_STORAGE_NAMESPACE} -o yaml"
+        )
+        cbp_output = oc_obj.exec_oc_cmd(
+            command=f"get cephblockpool/{self.pool_name} -n {constants.OPENSHIFT_STORAGE_NAMESPACE} -o yaml"
+        )
+        assert cbp_output["spec"]["deviceClass"] is not None, "The Deviceclass is none"
+        logger.info(
+            f"The deviceClass of the pool {self.pool_name} is {cbp_output['spec']['deviceClass']}"
+        )
+
+        # Run IOs
+        self.pod_obj.run_io(
+            storage_type=constants.CEPHFILESYSTEM,
+            size="100M",
+            io_direction="write",
+            runtime=10,
+        )
