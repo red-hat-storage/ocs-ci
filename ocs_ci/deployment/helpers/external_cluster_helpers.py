@@ -127,6 +127,10 @@ class ExternalCluster(object):
         # external python script with necessary caps
         self.remove_rgw_user()
 
+        if config.EXTERNAL_MODE.get("run_as_user"):
+            ceph_user = config.EXTERNAL_MODE["run_as_user"]
+            params = f"{params} --run-as-user {ceph_user}"
+
         out = self.run_exporter_script(params=params)
 
         # encode the exporter script output to base64
