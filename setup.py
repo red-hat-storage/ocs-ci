@@ -88,6 +88,7 @@ setup(
         "psutil==5.9.0",
         "azure-identity==1.12.0",
         "azure-mgmt-storage==21.0.0",
+        "pytest-jira==0.3.21",
     ],
     entry_points={
         "console_scripts": [
