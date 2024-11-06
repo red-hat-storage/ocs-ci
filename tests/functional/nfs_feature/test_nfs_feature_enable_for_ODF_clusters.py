@@ -1275,7 +1275,7 @@ class TestNfsEnable(ManageTest):
 
         finally:
             # Delete deployment
-            cmd_delete_deployment = "delete dc nfs-test-pod"
+            cmd_delete_deployment = "delete deployment nfs-test-pod"
             self.storage_cluster_obj.exec_oc_cmd(cmd_delete_deployment)
 
             pv_obj = nfs_pvc_obj.backed_pv_obj
