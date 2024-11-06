@@ -103,6 +103,10 @@ class ExternalCluster(object):
                 f"{ceph_fs_name} --restricted-auth-permission true"
             )
 
+        if config.EXTERNAL_MODE.get("run_as_user"):
+            ceph_user = config.EXTERNAL_MODE["run_as_user"]
+            params = f"{params} --run-as-user {ceph_user}"
+
         out = self.run_exporter_script(params=params)
 
         # encode the exporter script output to base64
