@@ -1,7 +1,5 @@
 from datetime import datetime
 import logging
-import time
-
 
 from ocs_ci.ocs.constants import SECRET, NOOBAA_S3_SERVING_CERT
 from ocs_ci.ocs.exceptions import UnexpectedBehaviour
@@ -16,9 +14,33 @@ from ocs_ci.framework.pytest_customization.marks import (
 )
 from ocs_ci.ocs.ocp import OCP
 from ocs_ci.ocs.resources.pod import get_noobaa_endpoint_pods
+from ocs_ci.utility.retry import retry
 
 
 logger = logging.getLogger(__name__)
+
+
+@retry(UnexpectedBehaviour, tries=10, delay=3, backoff=1)
+def get_validity_time_of_certificate(noobaa_endpoint_pods, cmd, old_validity=None):
+    """
+    Number of attempts to retry to get the validity of certificate
+
+    """
+
+    new_cmd_output = noobaa_endpoint_pods[0].exec_sh_cmd_on_pod(command=cmd)
+    # Get the validity time of certificate
+    cmd_output = new_cmd_output.split(",")
+    cmd_output = cmd_output[0].split("\n")
+    new_validity = cmd_output[7].split(",")[0] + cmd_output[8].split(",")[0]
+    if new_validity == old_validity:
+        logger.warn(
+            f"New certificate not created post the deletion of secret {NOOBAA_S3_SERVING_CERT}, retrying again"
+        )
+        raise UnexpectedBehaviour(
+            f"New certificate not created post the deletion of secret {NOOBAA_S3_SERVING_CERT}"
+        )
+    logger.info("New certificate created")
+    return new_validity, new_cmd_output
 
 
 @mcg
@@ -47,23 +69,26 @@ class TestNoobaaUseNewInternalCertAfterRotation:
         cmd_output = old_cmd_output.split(",")
         cmd_output = cmd_output[0].split("\n")
         validity = cmd_output[7].split(",")[0] + cmd_output[8].split(",")[0]
+        logger.info(f"The validity time of certificate: {validity}")
 
         # Get the time now
         time_format = "%Y-%m-%dT%H:%M:%S.%fZ"
         reg_format_date = datetime.utcnow().isoformat() + "Z"
         reg_format_date = datetime.strptime(reg_format_date, time_format)
+        logger.info(f"The current time in utc-iso-format: {reg_format_date}")
 
         # Delete the generated secret for the service
-        secret_obj = OCP(kind=SECRET, namespace=config.ENV_DATA["cluster_namespace"])
         logger.info(
-            f"Delete the generate secret {NOOBAA_S3_SERVING_CERT} for the service"
+            f"Delete the generated secret {NOOBAA_S3_SERVING_CERT} for the service"
         )
+        secret_obj = OCP(kind=SECRET, namespace=config.ENV_DATA["cluster_namespace"])
         secret_obj.delete(resource_name=NOOBAA_S3_SERVING_CERT)
 
         # Verify the new secret is recreated
-        time.sleep(60)
         logger.info("Verify new secret created post the deletion")
-        nb_endpoint_secret = secret_obj.get(resource_name=NOOBAA_S3_SERVING_CERT)
+        nb_endpoint_secret = secret_obj.get(
+            resource_name=NOOBAA_S3_SERVING_CERT, retry=10
+        )
         creation_timestamp_secret = nb_endpoint_secret.get("metadata").get(
             "creationTimestamp"
         )
@@ -72,29 +97,20 @@ class TestNoobaaUseNewInternalCertAfterRotation:
             creation_timestamp_secret, time_format
         )
         time_diff = reg_format_date - creation_timestamp_secret
-        if time_diff.total_seconds() < 7200:
-            logger.info(f"New secret {NOOBAA_S3_SERVING_CERT} created")
-        else:
-            raise UnexpectedBehaviour(
-                f"Failed to recreate new secret: {nb_endpoint_secret}"
-            )
+        assert (
+            time_diff.total_seconds() < 7200
+        ), f"Failed to recreate new secret: {nb_endpoint_secret}"
+        logger.info(f"New secret {NOOBAA_S3_SERVING_CERT} created")
 
         # After deleting old secret, verify the new secret created new internal certificate
         # Examine the validity time of certificate
-        time.sleep(180)
-        new_cmd_output = noobaa_endpoint_pods[0].exec_sh_cmd_on_pod(command=cmd)
-        # Get the validity time of certificate
-        cmd_output = new_cmd_output.split(",")
-        cmd_output = cmd_output[0].split("\n")
-        new_validity = cmd_output[7].split(",")[0] + cmd_output[8].split(",")[0]
+        new_validity, new_cmd_output = get_validity_time_of_certificate(
+            noobaa_endpoint_pods, cmd, validity
+        )
 
         # Compare the validity time of new certificate and old certificate
-        if validity == new_validity:
-            logger.error(
-                f"New certificate not created, old_certificate: {old_cmd_output}\n new_certificate: {new_cmd_output}\n"
-            )
-            raise UnexpectedBehaviour(
-                f"New certificate not created post the deletion of secret {NOOBAA_S3_SERVING_CERT}"
-            )
-        else:
-            logger.info("New certificate created")
+        assert validity != new_validity, (
+            f"New certificate not created. Old certificate output: {old_cmd_output}\n"
+            f"New certificate output: {new_cmd_output}\n"
+        )
+        logger.info("New certificate created successfully.")
