@@ -1,0 +1,3 @@
+---
+EXTERNAL_MODE:
+  run_as_user: "custom.client.healthcheck-cluster-1"
