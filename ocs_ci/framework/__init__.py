@@ -493,7 +493,7 @@ class MultiClusterConfig:
             except ClusterNotFoundException:
                 # if no provider is available then set the switch to current index so that
                 # no switch happens and code runs on current cluster
-                logger.DEBUG("No provider was found - using current cluster")
+                logger.debug("No provider was found - using current cluster")
                 switch_index = config.cur_index
             super().__init__(switch_index)
 
@@ -509,7 +509,7 @@ class MultiClusterConfig:
             except ClusterNotFoundException:
                 # if no provider is available then set the switch to current index so that
                 # no switch happens and code runs on current cluster
-                logger.DEBUG("No Consumer was found - using current cluster")
+                logger.debug("No Consumer was found - using current cluster")
                 switch_index = config.cur_index
             super().__init__(switch_index)
 
