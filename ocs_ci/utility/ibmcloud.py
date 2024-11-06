@@ -345,9 +345,10 @@ class IBMCloud(object):
         Args:
             nodes (list): The OCS objects of the nodes
             wait (bool): True for waiting the instances to start, False otherwise
-        
+
         Raises:
-            ValueError if the list of nodes is empty
+            ValueError: if the list of nodes is empty
+
         """
         if not nodes:
             raise ValueError("No nodes found to start")
@@ -371,7 +372,8 @@ class IBMCloud(object):
             wait (bool): True for waiting the instances to stop, False otherwise
 
         Raises:
-            ValueError if the list of nodes is empty
+            ValueError: if the list of nodes is empty
+
         """
         if not nodes:
             raise ValueError("No nodes found to stop")
