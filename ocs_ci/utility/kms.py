@@ -133,14 +133,14 @@ class Vault(KMS):
         self.vault_kube_auth_namespace = None
         self.vault_cwd_kms_sa_name = constants.VAULT_CWD_KMS_SA_NAME
 
-    @staticmethod
-    def set_vault_token():
+    @classmethod
+    def set_vault_token(cls):
         """
-        This is a static method fucntion that will set the token value.
+        This is a class method that will set the token value.
         """
-        if Vault.vault_path_token is None:
-            Vault.vault_path_token = Vault.generate_vault_token()
-        return Vault.vault_path_token
+        if cls.vault_path_token is None:
+            cls.vault_path_token = cls.generate_vault_token()
+        return cls.vault_path_token
 
     def deploy(self):
         """
