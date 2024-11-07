@@ -103,6 +103,7 @@ setup(
     entry_points={
         "console_scripts": [
             "run-ci=ocs_ci.framework.main:main",
+            "run-ci-deploy=ocs_ci.framework.deploy:main",
             "report-version=ocs_ci.ocs.version:main",
             "ci-cleanup=ocs_ci.cleanup.aws.cleanup:cluster_cleanup",
             "ci-pause=ocs_ci.pause.pause:cluster_pause",
