@@ -92,7 +92,7 @@ class TestSTSClient:
 
         # create a bucket using noobaa admin creds
         bucket_1 = "first-bucket"
-        retry(CommandFailed, tries=5, delay=5)(new_bucket)(bucket_name=bucket_1)
+        retry(ClientError, tries=5, delay=5)(new_bucket)(bucket_name=bucket_1)
         logger.info(f"Created bucket {bucket_1}")
 
         # create a noobaa account
