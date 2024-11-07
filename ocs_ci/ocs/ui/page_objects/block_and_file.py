@@ -5,6 +5,7 @@ from ocs_ci.framework import config
 from ocs_ci.ocs.ui.helpers_ui import format_locator, logger
 from ocs_ci.ocs.ui.page_objects.storage_system_details import StorageSystemDetails
 from ocs_ci.ocs.ui.workload_ui import PvcCapacityDeploymentList, compare_mem_usage
+from ocs_ci.utility.utils import TimeoutSampler
 
 
 class BlockAndFile(StorageSystemDetails):
@@ -192,6 +193,7 @@ class BlockAndFile(StorageSystemDetails):
             tuple: (get_est_days_from_element, get_avg_from_element)
 
         """
+
         get_est_days_from_element = self.get_element_text(
             self.validation_loc["locate_estimated_days_along_with_value"]
         )
@@ -213,9 +215,18 @@ class BlockAndFile(StorageSystemDetails):
         """
 
         if not config.ENV_DATA["mcg_only_deployment"]:
-            tpl_of_days_and_avg = self.get_estimated_days_from_consumption_trend()
-            return tpl_of_days_and_avg
+            for tpl_of_days_and_avg in TimeoutSampler(
+                timeout=300,
+                sleep=30,
+                func=self.get_estimated_days_from_consumption_trend,
+            ):
 
+                if re.search(
+                    r"(?=.*\d)(?=.*[a-zA-Z])", tpl_of_days_and_avg[0]
+                ) and re.search(r"(?=.*\d)(?=.*[a-zA-Z])", tpl_of_days_and_avg[1]):
+                    return tpl_of_days_and_avg
+                else:
+                    logger.warning("Dashboard is not yet ready yet after osd resize")
         else:
             logger.error("No data available for MCG-only deployments.")
             return None
