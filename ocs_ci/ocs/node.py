@@ -931,10 +931,18 @@ def delete_and_create_osd_node_ipi(osd_node_name):
     new_machine_name = machine.delete_machine_and_check_state_of_new_spinned_machine(
         machine_name
     )
-    machineset_name = machine.get_machineset_from_machine_name(new_machine_name)
-    log.info("Waiting for new worker node to be in ready state")
-    machine.wait_for_new_node_to_be_ready(machineset_name)
-    new_node_name = get_node_from_machine_name(new_machine_name)
+    if config.ENV_DATA.get("worker_replicas") == 0:
+        new_node_name = get_node_from_machine_name(new_machine_name)
+        log.info("Waiting for new worker node to be in ready state")
+        wait_for_nodes_status(
+            [new_node_name], constants.STATUS_READY, timeout=900, sleep=20
+        )
+    else:
+        machineset_name = machine.get_machineset_from_machine_name(new_machine_name)
+        log.info("Waiting for new worker node to be in ready state")
+        machine.wait_for_new_node_to_be_ready(machineset_name)
+        new_node_name = get_node_from_machine_name(new_machine_name)
+
     if not is_node_labeled(new_node_name):
         log.info("Adding ocs label to newly created worker node")
         node_obj = ocp.OCP(kind="node")
