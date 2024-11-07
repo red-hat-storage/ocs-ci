@@ -25,6 +25,8 @@ class TestDeviceReplacementInStretchCluster:
         setup_logwriter_cephfs_workload_factory,
         setup_logwriter_rbd_workload_factory,
         logreader_workload_factory,
+        cnv_workload,
+        setup_cnv,
     ):
         """
         Test device replacement in stretch cluster while logwriter workload
@@ -53,6 +55,13 @@ class TestDeviceReplacementInStretchCluster:
         )
         logger.info("All the workloads pods are successfully up and running")
 
+        # setup vm and write some data to the VM instance
+        vm_obj = cnv_workload(volume_interface=constants.VM_VOLUME_PVC)[0]
+        vm_obj.run_ssh_cmd(
+            command="dd if=/dev/zero of=/file_1.txt bs=1024 count=102400"
+        )
+        md5sum_before = vm_obj.run_ssh_cmd(command="md5sum /file_1.txt")
+
         start_time = datetime.now(timezone.utc)
 
         sc_obj.get_logfile_map(label=constants.LOGWRITER_CEPHFS_LABEL)
@@ -66,6 +75,29 @@ class TestDeviceReplacementInStretchCluster:
         end_time = datetime.now(timezone.utc)
         sc_obj.post_failure_checks(start_time, end_time, wait_for_read_completion=False)
         logger.info("Successfully verified with post failure checks for the workloads")
+
+        # check vm data written before the failure for integrity
+        md5sum_after = vm_obj.run_ssh_cmd(command="md5sum /file_1.txt")
+        assert (
+            md5sum_before == md5sum_after
+        ), "Data integrity of the file inside VM is not maintained during the device replacement"
+        logger.info(
+            "Data integrity of the file inside VM is maintained during the device replacement"
+        )
+
+        # check if new data can be created
+        vm_obj.run_ssh_cmd(
+            command="dd if=/dev/zero of=/file_2.txt bs=1024 count=103600"
+        )
+        logger.info("Successfully created new data inside VM")
+
+        # check if the data can be copied back to local machine
+        vm_obj.scp_from_vm(local_path="/tmp", vm_src_path="/file_1.txt")
+        logger.info("VM data is successfully copied back to local machine")
+
+        # stop the VM
+        vm_obj.stop()
+        logger.info("Stoped the VM successfully")
 
         sc_obj.cephfs_logreader_job.delete()
         logger.info(sc_obj.cephfs_logreader_pods)
