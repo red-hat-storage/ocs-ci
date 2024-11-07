@@ -946,7 +946,7 @@ def run_must_gather(log_dir_path, image, command=None, cluster_config=None):
             timeout=must_gather_timeout,
             cluster_config=cluster_config,
         )
-        if config.DEPLOYMENT["external_mode"]:
+        if ocsci_config.DEPLOYMENT["external_mode"]:
             collect_ceph_external(path=log_dir_path)
     except CommandFailed as ex:
         log.error(
@@ -974,7 +974,8 @@ def collect_ceph_external(path):
     """
     try:
         kubeconfig_path = os.path.join(
-            config.ENV_DATA["cluster_path"], config.RUN["kubeconfig_location"]
+            ocsci_config.ENV_DATA["cluster_path"],
+            ocsci_config.RUN["kubeconfig_location"],
         )
         current_dir = Path(__file__).parent.parent.parent
         script_path = os.path.join(current_dir, "scripts", "bash", "mg_external.sh")
