@@ -19,7 +19,7 @@ from ocs_ci.framework import config
 from ocs_ci.framework.logger_helper import log_step
 from ocs_ci.ocs.resources.pod import get_operator_pods
 from ocs_ci.utility import openshift_dedicated as ocm, rosa
-from ocs_ci.utility.aws import AWS as AWSUtil, delete_sts_iam_roles
+from ocs_ci.utility.aws import AWS as AWSUtil, delete_sts_iam_roles, delete_subnet_tags
 from ocs_ci.utility.deployment import create_openshift_install_log_file
 from ocs_ci.utility.rosa import (
     get_associated_oidc_config_id,
@@ -138,10 +138,13 @@ class ROSAOCP(BaseOCPDeployment):
 
         """
         try:
+            aws = AWSUtil()
             rosa_hcp = config.ENV_DATA.get("platform") == constants.ROSA_HCP_PLATFORM
             oidc_config_id = (
                 get_associated_oidc_config_id(self.cluster_name) if rosa_hcp else None
             )
+            cluster_id = ocm.get_cluster_details(self.cluster_name).get("id")
+            subnet_ids = aws.get_cluster_subnet_ids(cluster_name=self.cluster_name)
             log_step(f"Destroying ROSA cluster. Hosted CP: {rosa_hcp}")
             delete_status = rosa.destroy_appliance_mode_cluster(self.cluster_name)
             if not delete_status:
@@ -151,7 +154,6 @@ class ROSAOCP(BaseOCPDeployment):
                 timeout=14400,
                 sleep=300,
                 func=self.cluster_present,
-                cluster_name=self.cluster_name,
             )
             if not sample.wait_for_func_status(result=False):
                 err_msg = f"Failed to delete {self.cluster_name}"
@@ -167,6 +169,7 @@ class ROSAOCP(BaseOCPDeployment):
                     rosa.delete_oidc_config(oidc_config_id)
                 # use sts IAM roles for ROSA HCP is mandatory
                 delete_sts_iam_roles()
+                delete_subnet_tags(f"kubernetes.io/cluster/{cluster_id}", subnet_ids)
             rosa.delete_oidc_provider(self.cluster_name)
             account_roles_prefix = (
                 f"{constants.ACCOUNT_ROLE_PREFIX_ROSA_HCP}-{self.cluster_name}"
@@ -185,22 +188,17 @@ class ROSAOCP(BaseOCPDeployment):
             else:
                 raise
 
-    def cluster_present(self, cluster_name):
+    def cluster_present(self):
         """
-        Check if the cluster is present in the cluster list, regardless of its
-        state.
-
-        Args:
-            cluster_name (str): name which identifies the cluster
+        Check if the cluster is present in the cluster list, regardless of its state.
 
         Returns:
-            bool: True if a cluster with the given name exists,
-                False otherwise
+            bool: True if a cluster with the given name exists, False otherwise
 
         """
         cluster_list = ocm.list_cluster()
         for cluster in cluster_list:
-            if cluster[0] == cluster_name:
+            if cluster[0] == self.cluster_name:
                 logger.info(f"Cluster found: {cluster[0]}")
                 return True
         return False
