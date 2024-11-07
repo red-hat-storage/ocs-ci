@@ -1120,6 +1120,10 @@ def get_openshift_client(
                     "No backups exist and new binary was unable to be verified."
                 )
 
+        if not os.path.exists("kubectl"):
+            log.info("Creating kubectl link to oc binary.")
+            os.link("oc", "kubectl")
+
         # return to the previous working directory
         os.chdir(previous_dir)
 
