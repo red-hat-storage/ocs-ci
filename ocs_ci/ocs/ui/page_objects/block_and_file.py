@@ -240,9 +240,7 @@ class BlockAndFile(StorageSystemDetails):
 
         """
 
-        collected_tpl_of_days_and_avg = (
-            BlockAndFile().odf_storagesystems_consumption_trend()
-        )
+        collected_tpl_of_days_and_avg = self.odf_storagesystems_consumption_trend()
         est_days = re.search(r"\d+", collected_tpl_of_days_and_avg[0]).group()
         logger.info(f"'Estimated days until full' from the UI : {est_days}")
         return int(est_days)
@@ -255,9 +253,7 @@ class BlockAndFile(StorageSystemDetails):
             float: Average of storage consumption per day
 
         """
-        collected_tpl_of_days_and_avg = (
-            BlockAndFile().odf_storagesystems_consumption_trend()
-        )
+        collected_tpl_of_days_and_avg = self.odf_storagesystems_consumption_trend()
         average = float(
             re.search(r"-?\d+\.*\d*", collected_tpl_of_days_and_avg[1]).group()
         )
