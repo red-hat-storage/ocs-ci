@@ -259,13 +259,11 @@ class TestConsumptionTrendUI(ManageTest):
         )
         POD_OBJ.wait_for_delete(resource_name=active_mgr_pod_before_failover)
 
-        def _check_failover():
+        def check_failover():
             if active_mgr_deployment_name_before_failover != self.get_active_mgr()[0]:
                 logger.info("Mgr Failover succeed")
 
-        _check_failover()
-
-        TimeoutSampler(timeout=120, sleep=15, func=_check_failover)
+        TimeoutSampler(timeout=120, sleep=15, func=check_failover)
         logger.info(f"Scale down {active_mgr_deployment_name_before_failover} to 1")
         helpers.modify_deployment_replica_count(
             deployment_name=active_mgr_deployment_name_before_failover, replica_count=1
