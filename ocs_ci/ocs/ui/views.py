@@ -693,6 +693,7 @@ storage_clients = {
     "storage_available": ("//span[@data-test='status-text']", By.XPATH),
     "quota_decreased_alert": ("//h4[@class='pf-v5-c-alert__title']", By.XPATH),
     "confirm_quota_change": ("//button[@data-test-id='confirm-action']", By.XPATH),
+    "available_storage": (),
 }
 
 page_nav = {

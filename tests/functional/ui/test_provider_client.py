@@ -1,6 +1,7 @@
 import logging
 
 # from ocs_ci.ocs import constants
+import ocs_ci.ocs.resources.pod as pod
 from ocs_ci.framework.testlib import (
     skipif_ocs_version,
     ManageTest,
@@ -78,3 +79,18 @@ class TestOnboardingTokenGenerationWithQuota(ManageTest):
                 assert storage_clients_page.edit_quota(
                     client_cluster_name=client, increase_by_one=True
                 )
+
+    def test_available_capacity_in_quota_edit_popup(self):
+        """
+        Test that Quota edit popup shows correct value of
+        Available capacity
+        """
+        storage_clients_page = PageNavigator().nav_to_storageclients_page()
+        ceph_pod = pod.get_ceph_tools_pod()
+        ceph_status = ceph_pod.exec_ceph_cmd(ceph_cmd="ceph df")
+        ceph_capacity_bytes = ceph_status["stats"]["total_avail_bytes"]
+        ui_capacity = storage_clients_page.get_available_storage_from_quota_edit_popup()
+        if "TiB" in ui_capacity:
+            ui_capacity_num = float(ui_capacity.split(" ")[0])
+            ceph_capacity_tib = ceph_capacity_bytes / 2**40
+            assert (ui_capacity_num - ceph_capacity_tib) ** 2 < 0.1

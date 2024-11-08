@@ -153,3 +153,21 @@ class StorageClients(BaseUI):
             logger.info(e)
             logger.info("Quota changes could not be saved")
             return False
+
+    def get_available_storage_from_quota_edit_popup(self):
+        """
+        Get the value of available storage
+        from Edit quota popup
+
+        Returns:
+            str: available storage
+        """
+        self.do_click(
+            self.get_elements(self.storage_clients_loc["client_kebab_menu"])[0]
+        )
+        av_capacity_text = self.get_element_text(
+            self.storage_clients_loc["available_storage"]
+        )
+        # Text is expected to be 'Available capacity (ocs-storagecluster): N TiB'
+        split_capacity_text = av_capacity_text.split(" ")
+        return f"{split_capacity_text[-2]} {split_capacity_text[-1]}"
