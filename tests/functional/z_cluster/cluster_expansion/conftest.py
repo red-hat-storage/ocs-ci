@@ -54,6 +54,7 @@ def add_nodes():
                         node_type=constants.RHCOS,
                         num_nodes=node_count,
                         mark_for_ocs_label=ocs_nodes,
+                        storage_nodes=True,
                     )
                 )
             else:
