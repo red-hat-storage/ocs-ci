@@ -196,7 +196,7 @@ higher priority).
 * `monitoring_enabled` - For testing OCS monitoring based on Prometheus (Default: false)
 * `persistent-monitoring` - Change monitoring backend to OCS (Default: true)
 * `platform` - Platform the cluster was created in or will be created in
-* `deployment_type` - 'ipi' or 'upi', Installer provisioned installation or user provisioned installation, 'cp_managed' for managed control plane nodes, e.g. ROSA HCP
+* `deployment_type` - 'ipi' or 'upi', Installer provisioned installation or user provisioned installation, 'managed_cp' for managed control plane nodes deployments, e.g. ROSA HCP
 * `region` - Platform region the cluster nodes are created in
 * `base_domain` - Base domain used for routing
 * `master_instance_type` - Instance type used for master nodes

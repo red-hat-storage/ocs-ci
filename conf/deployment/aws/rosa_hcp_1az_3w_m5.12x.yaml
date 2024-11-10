@@ -11,13 +11,14 @@ RUN:
   username: "cluster-admin"
 ENV_DATA:
   platform: 'rosa_hcp'
-  deployment_type: 'cp_managed'
+  deployment_type: 'managed_cp'
   rosa_mode: "auto"
   region: 'us-west-2'
   worker_availability_zones:
     - 'us-west-2a'
   master_replicas: 0
   worker_replicas: 3
+  machine_pool: "workers"
   worker_instance_type: 'm5.12xlarge'
   cluster_namespace: "odf-storage"
   private_link: false

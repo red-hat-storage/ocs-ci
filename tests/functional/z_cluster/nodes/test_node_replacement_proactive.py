@@ -128,7 +128,7 @@ def delete_and_create_osd_node(osd_node_name):
     old_osd_ids = node.get_node_osd_ids(osd_node_name)
 
     old_osd_node_names = node.get_osd_running_nodes()
-
+    dt = config.ENV_DATA["deployment_type"]
     # If the cluster is an MS provider cluster, and we also have MS consumer clusters in the run
     if is_ms_provider_cluster() and config.is_consumer_exist():
         pytest.skip(
@@ -144,7 +144,7 @@ def delete_and_create_osd_node(osd_node_name):
         f"results of this test run are all invalid."
     )
 
-    if config.ENV_DATA["deployment_type"] in ["ipi", "managed"]:
+    if dt in [constants.IPI_DEPL_TYPE, constants.MANAGED_DEPL_TYPE]:
         if is_lso_cluster():
             # TODO: Implement functionality for Internal-Attached devices mode
             # once ocs-ci issue #4545 is resolved
@@ -153,11 +153,8 @@ def delete_and_create_osd_node(osd_node_name):
         else:
             new_node_name = node.delete_and_create_osd_node_ipi(osd_node_name)
 
-    elif config.ENV_DATA["deployment_type"] in ["upi", "cp_managed"]:
-        if config.ENV_DATA["platform"].lower() in [
-            constants.AWS_PLATFORM,
-            constants.ROSA_HCP_PLATFORM,
-        ]:
+    elif dt == constants.UPI_DEPL_TYPE:
+        if config.ENV_DATA["platform"].lower() == constants.AWS_PLATFORM:
             new_node_name = node.delete_and_create_osd_node_aws_upi(osd_node_name)
         elif config.ENV_DATA["platform"].lower() == constants.VSPHERE_PLATFORM:
             if is_lso_cluster():
@@ -168,6 +165,8 @@ def delete_and_create_osd_node(osd_node_name):
                 new_node_name = node.delete_and_create_osd_node_vsphere_upi(
                     osd_node_name, use_existing_node=False
                 )
+    elif dt == constants.MANAGED_CP_DEPL_TYPE:
+        new_node_name = node.delete_and_create_osd_node_managed_cp(osd_node_name)
     else:
         log.error(msg_invalid)
         pytest.fail(msg_invalid)
