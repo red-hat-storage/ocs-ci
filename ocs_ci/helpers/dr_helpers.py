@@ -1730,7 +1730,7 @@ def verify_last_kubeobject_protection_time(drpc_obj, kubeobject_sync_interval):
 
     Raises:
         AssertionError: If the lastKubeObjectProtectionTime is outside the expected range
-            (greater than or equal to three times the scheduling interval)
+            (greater than or equal to two times the scheduling interval)
 
     """
     restore_index = config.cur_index
