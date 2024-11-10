@@ -935,7 +935,7 @@ def delete_and_create_osd_node_ipi(osd_node_name):
         new_node_name = get_node_from_machine_name(new_machine_name)
         log.info("Waiting for new worker node to be in ready state")
         wait_for_nodes_status(
-            [new_node_name], constants.STATUS_READY, timeout=900, sleep=20
+            [new_node_name], constants.STATUS_READY, timeout=600, sleep=20
         )
     else:
         machineset_name = machine.get_machineset_from_machine_name(new_machine_name)
@@ -951,6 +951,13 @@ def delete_and_create_osd_node_ipi(osd_node_name):
         )
         log.info(f"Successfully labeled {new_node_name} with OCS storage label")
 
+    log.info(f"Wait for the old machine {machine_name} to be deleted")
+    if config.ENV_DATA.get("worker_replicas") == 0:
+        timeout = 1200
+    else:
+        timeout = 420
+    ocp_obj = OCP(kind="machine", namespace=constants.OPENSHIFT_MACHINE_API_NAMESPACE)
+    ocp_obj.wait_for_delete(resource_name=machine_name, timeout=timeout, sleep=30)
     return new_node_name
 
 
