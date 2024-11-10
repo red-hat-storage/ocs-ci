@@ -7023,7 +7023,7 @@ def discovered_apps_dr_workload_cnv(request):
     def teardown():
         for instance in instances:
             try:
-                instance.delete_workload(force=True)
+                instance.delete_workload()
             except ResourceNotDeleted:
                 raise ResourceNotDeleted("Workload deletion was unsuccessful")
 
