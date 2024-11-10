@@ -15,21 +15,25 @@ logger = logging.getLogger(__name__)
 @dataclass
 class NodeConf:
     """
-    Dataclass for nodes configuration applicable via ROSA MachinePool;
-    This called NodeConf to avoid confusion and reuse established concept, to pass node_conf object to create a node
+    Dataclass for nodes configuration applicable via ROSA MachinePool.
+    This class is named `NodeConf` to avoid confusion and to reuse established concepts.
+    The `node_conf` object can be passed to create a node.
 
-    It validates key:value pairs and returns a dictionary with the provided parameters
-    Usage:
-    node_conf_data = {
-    "instance_typer": "m5.large",
-    "machinepool": "mypool",
-    "multi_availability_zone": ""
-    }
-    nd = NodeConf(**node_conf_data)
+    This class validates key-value pairs and returns a dictionary with the provided parameters.
+
+    Usage example:
+        ```
+        node_conf_data = {
+            "instance_type": "m5.large",
+            "machinepool": "mypool",
+            "multi_availability_zone": ""
+        }
+        node_conf = NodeConf(**node_conf_data)
+        ```
 
     Raises:
-        TypeError: If the provided keys are invalid
-        ValueError: If the provided values are invalid
+        TypeError: If the provided keys are invalid.
+        ValueError: If the provided values are invalid.
     """
 
     enable_autoscaling: Optional[str] = None
