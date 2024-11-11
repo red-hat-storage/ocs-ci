@@ -17,7 +17,7 @@ from ocs_ci.ocs import constants
 from ocs_ci.utility.utils import TimeoutSampler, mirror_image
 from ocs_ci.utility import templating
 from ocs_ci.helpers import helpers
-
+from ocs_ci.ocs.resources.pod import get_pod_obj, get_pod_logs
 
 log = logging.getLogger(__name__)
 
@@ -123,6 +123,7 @@ class BenchmarkOperatorFIO(object):
         """
         log.info("Run make deploy command")
         bo_image = "quay.io/ocsci/benchmark-operator:testing"
+        pattern_pod_name = "benchmark-controller-manager"
         if config.DEPLOYMENT.get("disconnected"):
             bo_image = mirror_image(bo_image)
         run(
@@ -136,13 +137,24 @@ class BenchmarkOperatorFIO(object):
             timeout=100,
             sleep=5,
             func=self.pods_expected_status,
-            pattern="benchmark-controller-manager",
+            pattern=pattern_pod_name,
             expected_num_pods=1,
             expected_status=constants.STATUS_RUNNING,
         )
         if not sample.wait_for_func_status(result=True):
+            pod_names = get_pod_name_by_pattern(
+                pattern=pattern_pod_name, namespace=BMO_NS
+            )
+            for pod_name in pod_names:
+                controller_pod_obj = get_pod_obj(name=pod_name, namespace=BMO_NS)
+                describe_controller_pod = controller_pod_obj.describe()
+                log_controller_pod = get_pod_logs(
+                    pod_name=pod_name, namespace=BMO_NS, all_containers=True
+                )
             raise TimeoutExpiredError(
-                "benchmark-controller-manager pod did not move to running state after 40 sec"
+                f"benchmark-controller-manager pod did not move to running state after 100 sec\n"
+                f"describe benchmark-controller-manager pod: {describe_controller_pod}\n"
+                f"log benchmark-controller-manager pod: {log_controller_pod}\n"
             )
 
     def create_benchmark_operator(self):
