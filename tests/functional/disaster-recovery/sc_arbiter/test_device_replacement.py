@@ -26,6 +26,7 @@ class TestDeviceReplacementInStretchCluster:
         setup_logwriter_rbd_workload_factory,
         logreader_workload_factory,
         cnv_workload,
+        setup_cnv,
     ):
         """
         Test device replacement in stretch cluster while logwriter workload
