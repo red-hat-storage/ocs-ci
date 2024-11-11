@@ -611,6 +611,15 @@ class Deployment(object):
         ):
             CNVInstaller().deploy_cnv()
 
+    def do_deploy_metallb(self):
+        """
+        Deploy MetalLB
+        """
+        if config.DEPLOYMENT.get("metallb_operator"):
+            from ocs_ci.deployment.metallb import MetalLBInstaller
+
+            MetalLBInstaller().deploy_lb()
+
     def do_deploy_hosted_clusters(self):
         """
         Deploy Hosted cluster(s)
@@ -701,6 +710,7 @@ class Deployment(object):
         self.do_deploy_fdf()
         self.do_deploy_odf_provider_mode()
         self.do_deploy_cnv()
+        self.do_deploy_metallb()
         self.do_deploy_hosted_clusters()
 
     def get_rdr_conf(self):
