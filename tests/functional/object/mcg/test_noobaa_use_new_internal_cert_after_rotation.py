@@ -101,5 +101,5 @@ class TestNoobaaUseNewInternalCertAfterRotation:
         # After deleting old secret, verify the new secret created new internal certificate
         # Examine the validity time of certificate
         noobaa_endpoint_pods = get_noobaa_endpoint_pods()
-        new_validity = verify_cert_validity((noobaa_endpoint_pods, old_validity))
+        new_validity = verify_cert_validity(noobaa_endpoint_pods, old_validity)
         logger.info(f"The validity time of certificate: {new_validity}")
