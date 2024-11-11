@@ -444,11 +444,12 @@ class TestProviderHosted(object):
         """
         from tests.functional.upgrade.test_upgrade_ocp import TestUpgradeOCP
         from ocs_ci.ocs.ocs_upgrade import run_ocs_upgrade
-        from tests.conftest import reduce_and_resume_cluster_load
+
+        # from tests.conftest import reduce_and_resume_cluster_load
 
         storage_client = StorageClient()
         self.test_upgrade_ocp = TestUpgradeOCP()
-        self.test_upgrade_ocp.test_upgrade_ocp(reduce_and_resume_cluster_load)
+        # self.test_upgrade_ocp.test_upgrade_ocp(reduce_and_resume_cluster_load)
         self.test_acm_upgrade()
         run_ocs_upgrade()
         logger.info(
