@@ -26,7 +26,10 @@ from ocs_ci.ocs.exceptions import (
     UnsupportedPlatformError,
 )
 from ocs_ci.ocs.ocp import OCP
-from ocs_ci.ocs.resources.pod import get_pods_having_label, Pod
+from ocs_ci.ocs.resources.pod import (
+    get_pods_having_label,
+    Pod,
+)
 from ocs_ci.utility import templating, version
 from ocs_ci.utility.retry import retry
 from ocs_ci.utility.utils import (
@@ -117,6 +120,20 @@ class MCG:
             .get("status")
             .get("services")
             .get("serviceS3")
+            .get("internalDNS")[0]
+        )
+        self.sts_endpoint = (
+            get_noobaa.get("items")[0]
+            .get("status")
+            .get("services")
+            .get("serviceSts")
+            .get("externalDNS")[0]
+        )
+        self.sts_internal_endpoint = (
+            get_noobaa.get("items")[0]
+            .get("status")
+            .get("services")
+            .get("serviceSts")
             .get("internalDNS")[0]
         )
         self.mgmt_endpoint = (
@@ -959,6 +976,37 @@ class MCG:
         )
         wait_for_resource_state(self.core_pod, constants.STATUS_RUNNING)
 
+    def reset_endpoint_pods(self):
+        """
+        Delete the noobaa endpoint pod and wait for it to come up again
+
+        """
+
+        from ocs_ci.ocs.resources.pod import wait_for_pods_by_label_count
+
+        endpoint_pods = [
+            Pod(**pod_data)
+            for pod_data in get_pods_having_label(
+                constants.NOOBAA_ENDPOINT_POD_LABEL, self.namespace
+            )
+        ]
+        for pod in endpoint_pods:
+            pod.delete(wait=True)
+
+        wait_for_pods_by_label_count(
+            label=constants.NOOBAA_ENDPOINT_POD_LABEL,
+            exptected_count=len(endpoint_pods),
+        )
+
+        endpoint_pods = [
+            Pod(**pod_data)
+            for pod_data in get_pods_having_label(
+                constants.NOOBAA_ENDPOINT_POD_LABEL, self.namespace
+            )
+        ]
+        for pod in endpoint_pods:
+            wait_for_resource_state(pod, constants.STATUS_RUNNING)
+
     def get_noobaa_admin_credentials_from_secret(self):
         """
         Get the NooBaa admin credentials from the OCP secret
@@ -1093,4 +1141,32 @@ class MCG:
             .get("placementPolicy")
             .get("tiers")[0]
             .get("backingStores")[0]
+        )
+
+    def assign_sts_role(self, account_id, role_config):
+        """
+        Assign STS role to a Noobaa account
+
+        Args:
+            account_id (str): Name/email/id of the noobaa account
+            role_config (dict): Role config consisting of role name, role policy etc
+
+        """
+
+        cmd = f"sts assign-role --email {account_id} --role_config '{str(role_config)}'"
+        self.exec_mcg_cmd(
+            cmd=cmd,
+        )
+
+    def remove_sts_role(self, account_id):
+        """
+        Remove STS role from a Noobaa account
+
+        Args:
+            account_id (str): Name/email/id of the noobaa account
+
+        """
+        cmd = f"sts remove-role --email {account_id}"
+        self.exec_mcg_cmd(
+            cmd=cmd,
         )
