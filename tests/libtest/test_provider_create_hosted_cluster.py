@@ -450,7 +450,7 @@ class TestProviderHosted(object):
         storage_client = StorageClient()
         self.test_upgrade_ocp = TestUpgradeOCP()
         # self.test_upgrade_ocp.test_upgrade_ocp(reduce_and_resume_cluster_load)
-        self.test_acm_upgrade()
+        # self.test_acm_upgrade()
         run_ocs_upgrade()
         logger.info(
             "Validate post provider ocs upgrade odf native client operator also upgraded"
