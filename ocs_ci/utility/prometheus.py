@@ -402,8 +402,13 @@ class PrometheusAPI(object):
         TODO: find proper way how to generate/load cert files.
         """
         if config.DEPLOYMENT.get("use_custom_ingress_ssl_cert"):
-            self._cacert = get_root_ca_cert()
-            return
+            cert_provider = config.DEPLOYMENT.get("custom_ssl_cert_provider")
+            if cert_provider == constants.SSL_CERT_PROVIDER_OCS_QE_CA:
+                self._cacert = get_root_ca_cert()
+                return
+            elif cert_provider == constants.SSL_CERT_PROVIDER_LETS_ENCRYPT:
+                self._cacert = True
+                return
         kubeconfig_path = os.path.join(
             config.ENV_DATA["cluster_path"], config.RUN["kubeconfig_location"]
         )

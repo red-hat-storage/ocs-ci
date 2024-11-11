@@ -99,6 +99,8 @@ setup(
         "psycopg2-binary==2.9.9",
         "azure-keyvault-secrets==4.8.0",
         "pytest-jira==0.3.21",
+        "certbot==3.0.0",
+        "certbot-dns-route53==3.0.0",
     ],
     entry_points={
         "console_scripts": [

@@ -108,6 +108,8 @@ DEPLOYMENT:
   ingress_ssl_cert: "data/ingress-cert.crt"
   ingress_ssl_key: "data/ingress-cert.key"
   ingress_ssl_ca_cert: "data/ca.crt"
+  custom_ssl_cert_provider: 'ocs-qe-ca'
+  certbot_dns_plugin: 'dns-route53'
   api_ssl_cert: "data/api-cert.crt"
   api_ssl_key: "data/api-cert.key"
   api_ssl_ca_cert: "data/ca.crt"
