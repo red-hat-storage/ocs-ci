@@ -36,6 +36,7 @@ from ocs_ci.deployment.helpers.lso_helpers import (
 )
 from ocs_ci.deployment.disconnected import prepare_disconnected_ocs_deployment
 from ocs_ci.deployment.encryption import add_in_transit_encryption_to_cluster_data
+from ocs_ci.deployment.metallb import MetalLBInstaller
 from ocs_ci.framework import config, merge_dict
 from ocs_ci.framework.logger_helper import log_step
 from ocs_ci.helpers.dr_helpers import (
@@ -616,8 +617,6 @@ class Deployment(object):
         Deploy MetalLB
         """
         if config.DEPLOYMENT.get("metallb_operator"):
-            from ocs_ci.deployment.metallb import MetalLBInstaller
-
             MetalLBInstaller().deploy_lb()
 
     def do_deploy_hosted_clusters(self):
