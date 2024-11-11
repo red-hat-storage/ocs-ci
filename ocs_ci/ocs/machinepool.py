@@ -2,12 +2,12 @@ import json
 import shlex
 import logging
 
+from dataclasses import dataclass, asdict, field
+from typing import Optional, Dict, List
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.exceptions import CommandFailed
 from ocs_ci.utility.utils import exec_cmd
 from ocs_ci.utility.utils import TimeoutSampler
-from dataclasses import dataclass, asdict, field
-from typing import Optional, Dict, List
 
 logger = logging.getLogger(__name__)
 
@@ -22,14 +22,14 @@ class NodeConf:
     This class validates key-value pairs and returns a dictionary with the provided parameters.
 
     Usage example:
-        ```
-        node_conf_data = {
-            "instance_type": "m5.large",
-            "machinepool": "mypool",
-            "multi_availability_zone": ""
-        }
-        node_conf = NodeConf(**node_conf_data)
-        ```
+    ```
+    node_conf_data = {
+    "instance_type": "m5.large",
+    "machinepool": "mypool",
+    "multi_availability_zone": ""
+    }
+    node_conf = NodeConf(**node_conf_data)
+    ```
 
     Raises:
         TypeError: If the provided keys are invalid.
