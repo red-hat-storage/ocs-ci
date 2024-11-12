@@ -5487,13 +5487,14 @@ def apply_custom_taint_and_toleration(taint_label):
     )
 
     tolerations = (
-        f'{{"tolerations": [{{"effect": "NoSchedule", "key": "{taint_label}",'
-        f'"operator": "Equal", "value": "true"}}, '
-        '{{"effect": "NoSchedule", "key": "node.ocs.openshift.io/storage", '
-        '"operator": "Equal", "value": "true"}}]}}'
+        '{"tolerations": [{"effect": "NoSchedule", "key": "'
+        + taint_label
+        + '", "operator": "Equal", "value": "true"}, '
+        '{"effect": "NoSchedule", "key": "node.ocs.openshift.io/storage", "operator": "Equal", "value": "true"}'
+        "]}"
     )
     if config.ENV_DATA["mcg_only_deployment"]:
-        param = f'{{"spec": {{"placement":{{"noobaa-standalone":{tolerations}}}}}}}'
+        param = f'{{"spec": {{"placement":{{"noobaa-standalone": {tolerations}}}}}}}'
     elif config.DEPLOYMENT["external_mode"]:
         param = (
             f'{{"spec": {{"placement": {{"all": {tolerations}, '
@@ -5535,6 +5536,7 @@ def apply_custom_taint_and_toleration(taint_label):
             if sub == constants.ODF_SUBSCRIPTION:
                 sub_obj.patch(resource_name=sub, params=param, format_type="merge")
                 logger.info(f"Successfully added toleration to {sub}")
+
     if (
         not config.ENV_DATA["mcg_only_deployment"]
         and version.get_semantic_ocs_version_from_config() < version.VERSION_4_16
