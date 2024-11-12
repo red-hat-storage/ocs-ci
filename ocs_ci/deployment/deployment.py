@@ -1423,7 +1423,15 @@ class Deployment(object):
         ocs_version = version.get_semantic_ocs_version_from_config()
         disable_noobaa = config.COMPONENTS.get("disable_noobaa", False)
         noobaa_cmd_arg = f"--param ignoreNoobaa={str(disable_noobaa).lower()}"
-        device_size = int(config.ENV_DATA.get("device_size", defaults.DEVICE_SIZE))
+        device_size = int(
+            config.ENV_DATA.get("device_size", defaults.DEVICE_SIZE_IBM_CLOUD_MANAGED)
+        )
+        if device_size < defaults.DEVICE_SIZE_IBM_CLOUD_MANAGED:
+            logger.warning(
+                f"OSD size provided is less than the minimum required 512Gi."
+                f" Setting OSD device size to {defaults.DEVICE_SIZE_IBM_CLOUD_MANAGED}"
+            )
+            device_size = defaults.DEVICE_SIZE_IBM_CLOUD_MANAGED
         osd_size_arg = f"--param osdSize={device_size}Gi"
         cmd = (
             f"ibmcloud ks cluster addon enable openshift-data-foundation --cluster {clustername} -f --version "
