@@ -7092,108 +7092,80 @@ def cnv_workload(request):
     return factory
 
 
-@pytest.fixture()
-def multi_cnv_workload_setup(namespace, pv_encryption_kms_setup_factory, cnv_workload):
+@pytest.fixture
+def multi_cnv_workload(
+    pv_encryption_kms_setup_factory, storageclass_factory, cnv_workload
+):
     """
-    Creates multiple VMs with specified configurations using the cnv_workload fixture.
+    Create a cnv factory. Calling this fixture Creates multiple VMs
+    with specified configurations using the cnv_workload fixture.
+    """
 
-    Args:
-        vm_configs: List of dictionary of vm configurations
-        e.g.
+    def factory(namespace=None):
+
+        """
+        Args:
+            namespace:
+
+        Returns:
+            list: objects of cnv workload class
+
+        """
+        vm_list = []
+
+        """
+        Setup csi-kms-connection-details configmap
+
+        """
+        log.info("Setting up csi-kms-connection-details configmap")
+        kms = pv_encryption_kms_setup_factory(kv_version="v2")
+        log.info("csi-kms-connection-details setup successful")
+
+        # Create an encryption enabled storageclass for RBD
+        sc_obj_def_compr = storageclass_factory(
+            interface=constants.CEPHBLOCKPOOL,
+            encrypted=True,
+            encryption_kms_id=kms.kmsid,
+        )
+
+        sc_obj_aggressive = storageclass_factory(
+            interface=constants.CEPHBLOCKPOOL,
+            encrypted=True,
+            encryption_kms_id=kms.kmsid,
+            compression="aggressive",
+        )
+
         vm_configs = [
-        {"volume_interface": constants.VM_VOLUME_PVC, "os": "fedora", "access_mode": "RWO", "sc_name": "sc_Def_Compr"},
-        {"volume_interface": constants.VM_VOLUME_DVT, "os": "fedora", "access_mode": "RWX", "sc_name": "sc_Aggressive"},
+            {
+                "volume_interface": constants.VM_VOLUME_PVC,
+                "access_mode": constants.ACCESS_MODE_RWX,
+                "sc_name": sc_obj_def_compr.name,
+            },
         ]
 
-    Returns:
-        list: objects of cnv workload class
+        # Create ceph-csi-kms-token in the tenant namespace
+        kms.vault_path_token = kms.generate_vault_token()
+        kms.create_vault_csi_kms_token(namespace=namespace)
 
-    """
+        for sc_obj in [sc_obj_def_compr, sc_obj_aggressive]:
+            pvk_obj = PVKeyrotation(sc_obj)
+            pvk_obj.annotate_storageclass_key_rotation(schedule="*/3 * * * *")
 
-    """
-    Setup csi-kms-connection-details configmap
+        # Loop through vm_configs and create the VMs using the cnv_workload fixture
+        for config in vm_configs:
+            vm_obj = cnv_workload(
+                volume_interface=config["volume_interface"],
+                access_mode=config["access_mode"],
+                storageclass=config["sc_name"],
+                pvc_size="30Gi",  # Assuming pvc_size is fixed for all
+                source_url=constants.CNV_FEDORA_SOURCE,  # Assuming source_url is the same for all VMs
+                namespace=namespace,
+            )
+            vm_list.extend(vm_obj)
 
-    """
-    log.info("Setting up csi-kms-connection-details configmap")
-    kms = pv_encryption_kms_setup_factory(kv_version="v2")
-    log.info("csi-kms-connection-details setup successful")
+        return vm_list
 
-    # Create an encryption enabled storageclass for RBD
-    sc_obj_def_compr = storageclass_factory(
-        interface=constants.CEPHBLOCKPOOL,
-        encrypted=True,
-        encryption_kms_id=kms.kmsid,
-    )
-
-    sc_obj_aggressive = storageclass_factory(
-        interface=constants.CEPHBLOCKPOOL,
-        encrypted=True,
-        encryption_kms_id=kms.kmsid,
-        compression="aggressive",
-    )
-
-    # Create ceph-csi-kms-token in the tenant namespace
-    kms.vault_path_token = kms.generate_vault_token()
-    kms.create_vault_csi_kms_token(namespace=namespace)
-
-    for sc_obj in [sc_obj_def_compr, sc_obj_aggressive]:
-        pvk_obj = PVKeyrotation(sc_obj)
-        pvk_obj.annotate_storageclass_key_rotation(schedule="*/3 * * * *")
-
-    vm_configs = [
-        {
-            "volume_interface": "PVC",
-            "access_mode": "RWO",
-            "sc_name": sc_obj_def_compr.name,
-        },
-        {
-            "volume_interface": "PVC",
-            "access_mode": "RWO",
-            "sc_name": sc_obj_aggressive.name,
-        },
-        {
-            "volume_interface": "PVC",
-            "access_mode": "RWX",
-            "sc_name": sc_obj_def_compr.name,
-        },
-        {
-            "volume_interface": "PVC",
-            "access_mode": "RWX",
-            "sc_name": sc_obj_aggressive.name,
-        },
-        {
-            "volume_interface": "DVT",
-            "access_mode": "RWO",
-            "sc_name": sc_obj_def_compr.name,
-        },
-        {
-            "volume_interface": "DVT",
-            "access_mode": "RWO",
-            "sc_name": sc_obj_aggressive.name,
-        },
-        {
-            "volume_interface": "DVT",
-            "access_mode": "RWX",
-            "sc_name": sc_obj_def_compr.name,
-        },
-        {
-            "volume_interface": "DVT",
-            "access_mode": "RWX",
-            "sc_name": sc_obj_aggressive.name,
-        },
-    ]
-
-    # Loop through vm_configs and create the VMs using the cnv_workload fixture
-    for config in vm_configs:
-        vm_obj = cnv_workload(
-            volume_interface=config["volume_interface"],
-            access_mode=config["access_mode"],
-            storageclass=config["sc_name"],
-            pvc_size="30Gi",  # Assuming pvc_size is fixed for all
-            source_url=constants.CNV_FEDORA_SOURCE,  # Assuming source_url is the same for all VMs
-            namespace=None,  # Assuming each VM is created in a unique namespace
-        )
-    return vm_obj
+    return factory
 
 
 @pytest.fixture(scope="class")
