@@ -38,7 +38,6 @@ from ocs_ci.ocs.utils import (
 )
 
 from ocs_ci.ocs.node import taint_nodes, get_ocs_nodes
-from ocs_ci.ocs.resources.pod import get_all_pods
 from ocs_ci.ocs import constants, defaults, node, ocp, exceptions
 from ocs_ci.ocs.exceptions import (
     CommandFailed,
@@ -5469,6 +5468,9 @@ def apply_custom_taint_and_toleration(taint_label):
         taint_label (str): The taint label to apply.
 
     """
+    # Importing storage cluster object here to avoid circular dependency
+    from ocs_ci.ocs.resources.pod import get_all_pods
+
     logger.info(f"Taint all nodes with non-ocs taint: {taint_label}")
     ocs_nodes = get_ocs_nodes()
     for nodes in ocs_nodes:
