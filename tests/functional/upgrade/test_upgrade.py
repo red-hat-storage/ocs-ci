@@ -42,9 +42,7 @@ def test_worker_node_abrupt_shutdown(teardown, upgrade_stats):
 
 @purple_squad
 @pytest.mark.polarion_id("OCS-1575")
-def test_worker_node_permanent_shutdown(
-    teardown, upgrade_stats, upgrade_stats=upgrade_stats
-):
+def test_worker_node_permanent_shutdown(teardown, upgrade_stats):
     """
     Test OCS upgrade with disruption of shutting down worker node
 
