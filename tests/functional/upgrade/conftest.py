@@ -654,3 +654,14 @@ def fs_md5(fs_pod):
     )
     log.info(f"Ceph FS md5: {md5}")
     return md5
+
+
+@pytest.fixture(scope="session")
+def upgrade_stats():
+    """
+
+    Returns:
+        dict: List of statistics gathered during performed upgrade.
+
+    """
+    return {"odf_upgrade": {}, "ocp_upgrade": {}}

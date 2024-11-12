@@ -567,6 +567,7 @@ class OCSUpgrade(object):
 
 def run_ocs_upgrade(
     operation=None,
+    upgrade_stats=None,
     *operation_args,
     **operation_kwargs,
 ):
@@ -575,6 +576,8 @@ def run_ocs_upgrade(
 
     Args:
         operation: (function): Function to run
+        upgrade_stats: (dict): Dictionary where can be stored statistics
+            gathered during the upgrade
         operation_args: (iterable): Function's arguments
         operation_kwargs: (map): Function's keyword arguments
 
@@ -597,6 +600,10 @@ def run_ocs_upgrade(
         f"is not higher or equal to the version you currently running: "
         f"{upgrade_ocs.version_before_upgrade}"
     )
+
+    # Update values CSI_RBD_PLUGIN_UPDATE_STRATEGY_MAX_UNAVAILABLE and CSI_CEPHFS_PLUGIN_UPDATE_STRATEGY_MAX_UNAVAILABLE
+    # in rook-ceph-operator-config configmap
+    set_update_strategy()
 
     # create external cluster object
     if config.DEPLOYMENT["external_mode"]:
@@ -638,6 +645,7 @@ def run_ocs_upgrade(
         upgrade_ocs.set_upgrade_images()
         live_deployment = config.DEPLOYMENT["live_deployment"]
         disable_addon = config.DEPLOYMENT.get("ibmcloud_disable_addon")
+        start_time = time.time()
         if (
             config.ENV_DATA["platform"] == constants.IBMCLOUD_PLATFORM
             and live_deployment
@@ -727,6 +735,11 @@ def run_ocs_upgrade(
                     break
             except TimeoutException:
                 raise TimeoutException("No new CSV found after upgrade!")
+        stop_time = time.time()
+        time_taken = stop_time - start_time
+        log.info(f"Upgrade took {time_taken} seconds to complete")
+        if upgrade_stats:
+            upgrade_stats["odf_upgrade"]["upgrade_time"] = time_taken
         old_image = upgrade_ocs.get_images_post_upgrade(
             channel, pre_upgrade_images, upgrade_version
         )
@@ -813,7 +826,7 @@ def ocs_odf_upgrade_ui():
     Pass proper versions and upgrade_ui.yaml while running this function for validation to pass
 
     """
-
+    set_update_strategy()
     login_ui()
     val_obj = ValidationUI()
     pagenav_obj = ValidationUI()
@@ -858,3 +871,44 @@ def ocs_odf_upgrade_ui():
     val_obj.take_screenshot()
     pagenav_obj.odf_overview_ui()
     pagenav_obj.odf_storagesystems_ui()
+
+
+def set_update_strategy(rbd_max_unavailable=None, cephfs_max_unavailable=None):
+    """
+    Update rook-ceph-operator-config configmap with parameters:
+    CSI_RBD_PLUGIN_UPDATE_STRATEGY_MAX_UNAVAILABLE and CSI_CEPHFS_PLUGIN_UPDATE_STRATEGY_MAX_UNAVAILABLE.
+    If values are not provided as parameters of this function then values are taken
+    from ocs-ci config. If the values are not set in ocs-ci config or function
+    parameters then they are updated.
+
+    Args:
+        rbd_max_unavailable (int, str): Value of CSI_RBD_PLUGIN_UPDATE_STRATEGY_MAX_UNAVAILABLE
+            to be updated in rook-ceph-operator-config configmap.
+        cephfs_max_unavailable (int, str): Value of CSI_CEPHFS_PLUGIN_UPDATE_STRATEGY_MAX_UNAVAILABLE
+            to be updated in rook-ceph-operator-config configmap.
+
+    """
+    rbd_max = rbd_max_unavailable or config.ENV_DATA.get(
+        "csi_rbd_plugin_update_strategy_max_unavailable"
+    )
+    cephfs_max = cephfs_max_unavailable or config.ENV_DATA.get(
+        "csi_cephfs_plugin_update_strategy_max_unavailable"
+    )
+    if rbd_max:
+        config_map_patch = f'\'{"data": {"CSI_RBD_PLUGIN_UPDATE_STRATEGY_MAX_UNAVAILABLE": "{rbd_max}"}}\''
+        exec_cmd(
+            f"oc patch configmap -n {self.namespace} "
+            f"{constants.ROOK_OPERATOR_CONFIGMAP} -p {config_map_patch}"
+        )
+        logger.info(
+            f"CSI_RBD_PLUGIN_UPDATE_STRATEGY_MAX_UNAVAILABLE is set to {rbd_max}"
+        )
+    if cephfs_max:
+        config_map_patch = f'\'{"data": {"CSI_CEPHFS_PLUGIN_UPDATE_STRATEGY_MAX_UNAVAILABLE": "{cephfs_max}"}}\''
+        exec_cmd(
+            f"oc patch configmap -n {self.namespace} "
+            f"{constants.ROOK_OPERATOR_CONFIGMAP} -p {config_map_patch}"
+        )
+        logger.info(
+            f"CSI_CEPHFS_PLUGIN_UPDATE_STRATEGY_MAX_UNAVAILABLE is set to {rbd_max}"
+        )
