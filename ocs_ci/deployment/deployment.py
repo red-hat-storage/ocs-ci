@@ -36,6 +36,7 @@ from ocs_ci.deployment.helpers.lso_helpers import (
 )
 from ocs_ci.deployment.disconnected import prepare_disconnected_ocs_deployment
 from ocs_ci.deployment.encryption import add_in_transit_encryption_to_cluster_data
+from ocs_ci.deployment.metallb import MetalLBInstaller
 from ocs_ci.framework import config, merge_dict
 from ocs_ci.framework.logger_helper import log_step
 from ocs_ci.helpers.dr_helpers import (
@@ -611,6 +612,13 @@ class Deployment(object):
         ):
             CNVInstaller().deploy_cnv()
 
+    def do_deploy_metallb(self):
+        """
+        Deploy MetalLB
+        """
+        if config.DEPLOYMENT.get("metallb_operator"):
+            MetalLBInstaller().deploy_lb()
+
     def do_deploy_hosted_clusters(self):
         """
         Deploy Hosted cluster(s)
@@ -701,6 +709,7 @@ class Deployment(object):
         self.do_deploy_fdf()
         self.do_deploy_odf_provider_mode()
         self.do_deploy_cnv()
+        self.do_deploy_metallb()
         self.do_deploy_hosted_clusters()
 
     def get_rdr_conf(self):
