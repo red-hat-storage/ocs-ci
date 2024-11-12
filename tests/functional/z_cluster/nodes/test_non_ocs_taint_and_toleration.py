@@ -1,7 +1,10 @@
 import logging
+import random
+
 import pytest
 import time
 
+from ocs_ci.helpers.helpers import apply_custom_taint_and_toleration
 from ocs_ci.ocs import ocp, constants
 from ocs_ci.ocs.cluster import (
     is_flexible_scaling_enabled,
@@ -41,7 +44,6 @@ from ocs_ci.framework.pytest_customization.marks import (
     brown_squad,
 )
 from ocs_ci.helpers.sanity_helpers import Sanity
-from ocs_ci.utility import version
 from tests.functional.z_cluster.nodes.test_node_replacement_proactive import (
     delete_and_create_osd_node,
     select_osd_node_name,
@@ -116,135 +118,6 @@ class TestNonOCSTaintAndTolerations(E2ETest):
 
         request.addfinalizer(finalizer)
 
-    def apply_custom_taint_and_toleration(self):
-        """
-        Apply custom taints and tolerations.
-
-        """
-        logger.info("Taint all nodes with non-ocs taint")
-        ocs_nodes = get_ocs_nodes()
-        for node in ocs_nodes:
-            taint_nodes(nodes=[node.name], taint_label="xyz=true:NoSchedule")
-
-        resource_name = constants.DEFAULT_CLUSTERNAME
-        if config.DEPLOYMENT["external_mode"]:
-            resource_name = constants.DEFAULT_CLUSTERNAME_EXTERNAL_MODE
-
-        logger.info("Add tolerations to storagecluster")
-        storagecluster_obj = ocp.OCP(
-            resource_name=resource_name,
-            namespace=config.ENV_DATA["cluster_namespace"],
-            kind=constants.STORAGECLUSTER,
-        )
-
-        tolerations = (
-            '{"tolerations": [{"effect": "NoSchedule", "key": "xyz",'
-            '"operator": "Equal", "value": "true"}, '
-            '{"effect": "NoSchedule", "key": "node.ocs.openshift.io/storage", '
-            '"operator": "Equal", "value": "true"}]}'
-        )
-        if config.ENV_DATA["mcg_only_deployment"]:
-            param = f'{{"spec": {{"placement":{{"noobaa-standalone":{tolerations}}}}}}}'
-        elif config.DEPLOYMENT["external_mode"]:
-            param = (
-                f'{{"spec": {{"placement": {{"all": {tolerations}, '
-                f'"noobaa-core": {tolerations}}}}}}}'
-            )
-        else:
-            if version.get_semantic_ocs_version_from_config() < version.VERSION_4_16:
-                param = (
-                    f'{{"spec": {{"placement": {{"all": {tolerations}, "mds": {tolerations}, '
-                    f'"noobaa-core": {tolerations}, "rgw": {tolerations}}}}}}}'
-                )
-            else:
-                param = (
-                    f'"all": {tolerations}, "csi-plugin": {tolerations}, "csi-provisioner": {tolerations}, '
-                    f'"mds": {tolerations}, "metrics-exporter": {tolerations}, "noobaa-core": {tolerations}, '
-                    f'"rgw": {tolerations}, "toolbox": {tolerations}'
-                )
-            param = f'{{"spec": {{"placement": {{{param}}}}}}}'
-
-        storagecluster_obj.patch(params=param, format_type="merge")
-        logger.info(f"Successfully added toleration to {storagecluster_obj.kind}")
-
-        logger.info("Add tolerations to the subscription")
-        sub_list = ocp.get_all_resource_names_of_a_kind(kind=constants.SUBSCRIPTION)
-        param = (
-            '{"spec": {"config":  {"tolerations": '
-            '[{"effect": "NoSchedule", "key": "xyz", "operator": "Equal", '
-            '"value": "true"}]}}}'
-        )
-        sub_obj = ocp.OCP(
-            namespace=config.ENV_DATA["cluster_namespace"],
-            kind=constants.SUBSCRIPTION,
-        )
-        if version.get_semantic_ocs_version_from_config() < version.VERSION_4_16:
-            for sub in sub_list:
-                sub_obj.patch(resource_name=sub, params=param, format_type="merge")
-                logger.info(f"Successfully added toleration to {sub}")
-        else:
-            for sub in sub_list:
-                if sub == constants.ODF_SUBSCRIPTION:
-                    sub_obj.patch(resource_name=sub, params=param, format_type="merge")
-                    logger.info(f"Successfully added toleration to {sub}")
-
-        retry(
-            CommandFailed,
-            tries=5,
-            delay=10,
-        )(
-            check_toleration_on_subscriptions
-        )(toleration_key="xyz")
-
-        if (
-            not config.ENV_DATA["mcg_only_deployment"]
-            and version.get_semantic_ocs_version_from_config() < version.VERSION_4_16
-        ):
-            logger.info("Add tolerations to the ocsinitializations.ocs.openshift.io")
-            param = (
-                '{"spec":  {"tolerations": '
-                '[{"effect": "NoSchedule", "key": "xyz", "operator": "Equal", '
-                '"value": "true"}]}}'
-            )
-            ocsini_obj = ocp.OCP(
-                resource_name=constants.OCSINIT,
-                namespace=config.ENV_DATA["cluster_namespace"],
-                kind=constants.OCSINITIALIZATION,
-            )
-            ocsini_obj.patch(params=param, format_type="merge")
-            logger.info(f"Successfully added toleration to {ocsini_obj.kind}")
-
-            logger.info("Add tolerations to the configmap rook-ceph-operator-config")
-            configmap_obj = ocp.OCP(
-                kind=constants.CONFIGMAP,
-                namespace=config.ENV_DATA["cluster_namespace"],
-                resource_name=constants.ROOK_OPERATOR_CONFIGMAP,
-            )
-            toleration = (
-                '\n- key: xyz\n  operator: Equal\n  value: "true"\n  effect: NoSchedule'
-            )
-            toleration = toleration.replace('"', '\\"').replace("\n", "\\n")
-
-            params = (
-                f'{{"data": {{"CSI_PLUGIN_TOLERATIONS": "{toleration}", '
-                f'"CSI_PROVISIONER_TOLERATIONS": "{toleration}"}}}}'
-            )
-
-            configmap_obj.patch(params=params, format_type="merge")
-            logger.info(f"Successfully added toleration to {configmap_obj.kind}")
-            if config.ENV_DATA["mcg_only_deployment"]:
-                logger.info("Wait some time after adding toleration for pods respin")
-                waiting_time = 60
-                logger.info(f"Waiting {waiting_time} seconds...")
-                time.sleep(waiting_time)
-                logger.info("Force delete all pods")
-                pod_list = get_all_pods(
-                    namespace=config.ENV_DATA["cluster_namespace"],
-                    exclude_selector=True,
-                )
-                for pod in pod_list:
-                    pod.delete(wait=False)
-
     def test_non_ocs_taint_and_tolerations(self, nodes):
         """
         Test runs the following steps
@@ -253,8 +126,6 @@ class TestNonOCSTaintAndTolerations(E2ETest):
         3. check tolerations on all subscription yaml.
         4. Check toleration on all odf pods.
         5. Add Capacity.
-        6. Reboot one of the nodes and check toleration on all odf pods on that node.
-        7. Replace one of the nodes and check all odf pods on that node are running.
 
         """
 
@@ -263,11 +134,7 @@ class TestNonOCSTaintAndTolerations(E2ETest):
         )
 
         logger.info("Apply custom taints and tolerations.")
-        self.apply_custom_taint_and_toleration()
-
-        retry((CommandFailed, TolerationNotFoundException), tries=5, delay=10,)(
-            check_toleration_on_subscriptions
-        )(toleration_key="xyz")
+        apply_custom_taint_and_toleration(taint_label="xyz")
 
         logger.info(
             "After adding toleration wait for some time for pods to respin as expected"
@@ -276,6 +143,10 @@ class TestNonOCSTaintAndTolerations(E2ETest):
         assert wait_for_pods_to_be_running(
             timeout=900, sleep=15
         ), "Few pods failed to reach the desired running state"
+
+        retry((CommandFailed, TolerationNotFoundException), tries=5, delay=10,)(
+            check_toleration_on_subscriptions
+        )(toleration_key="xyz")
 
         logger.info(
             "Check non-ocs toleration on all newly created pods under openshift-storage NS"
@@ -333,7 +204,7 @@ class TestNonOCSTaintAndTolerations(E2ETest):
         """
 
         logger.info("Apply custom taints and tolerations.")
-        self.apply_custom_taint_and_toleration()
+        apply_custom_taint_and_toleration(taint_label="xyz")
 
         retry((CommandFailed, TolerationNotFoundException), tries=5, delay=10,)(
             check_toleration_on_subscriptions
@@ -354,7 +225,8 @@ class TestNonOCSTaintAndTolerations(E2ETest):
             check_toleration_on_pods
         )(toleration_key="xyz")
         # Reboot one of the nodes
-        node = get_ocs_nodes(num_of_nodes=1)
+        node = get_ocs_nodes()
+        node = random.choice(node)
         nodes.restart_nodes(nodes=node, wait=False)
         node_name = [n.name for n in node]
         wait_for_nodes_status(node_name, constants.STATUS_READY, timeout=420)
@@ -388,7 +260,7 @@ class TestNonOCSTaintAndTolerations(E2ETest):
 
         """
         logger.info("Apply custom taints and tolerations.")
-        self.apply_custom_taint_and_toleration()
+        apply_custom_taint_and_toleration(taint_label="xyz")
 
         logger.info(
             "After adding toleration wait for some time for pods to respin as expected"
