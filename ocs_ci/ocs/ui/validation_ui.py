@@ -1,23 +1,27 @@
 import logging
-import warnings
+import math
+import pytest
 import time
+import warnings
 
 import pandas as pd
-import pytest
-from selenium.common.exceptions import TimeoutException
+from ocs_ci.framework import config
+from ocs_ci.framework.logger_helper import log_step
+from ocs_ci.ocs.cluster import (
+    get_used_and_total_capacity_in_gibibytes,
+    get_age_of_cluster_in_days,
+)
 from ocs_ci.ocs.exceptions import UnexpectedODFAccessException
 from ocs_ci.ocs.ui.page_objects.backing_store_tab import BackingStoreTab
 from ocs_ci.ocs.ui.page_objects.namespace_store_tab import NameSpaceStoreTab
 from ocs_ci.ocs.ui.page_objects.overview_tab import OverviewTab
 from ocs_ci.ocs.ui.page_objects.page_navigator import PageNavigator
 from ocs_ci.ocs.ui.page_objects.storage_system_details import StorageSystemDetails
-from ocs_ci.utility import version
-from ocs_ci.utility.utils import TimeoutSampler
-from ocs_ci.framework import config
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.resources.storage_cluster import StorageCluster
-from ocs_ci.framework.logger_helper import log_step
-
+from ocs_ci.utility import version
+from ocs_ci.utility.utils import TimeoutSampler
+from selenium.common.exceptions import TimeoutException
 
 logger = logging.getLogger(__name__)
 
@@ -677,3 +681,31 @@ class ValidationUI(PageNavigator):
             page_name="client_onboarding_token_page",
         )
         return storage_client_obj
+
+    def calculate_est_days_and_average_manually(self):
+        """
+        Calculates the 'Estimated days until full' manually by:
+        1. Get the age of the cluster in days
+        2. Get used capacity of the cluster
+        3. Get total capacity of the cluster
+        4. Calculate average consumption of the storage per day
+        5. Calculate the 'Estimated days until full' by using average and available capacity.
+
+        Returns:
+            tuple: Estimated days until full which calculated manually
+
+        """
+        number_of_days = get_age_of_cluster_in_days()
+        logger.info(f"Age of the cluster in days: {number_of_days}")
+        tpl_of_used_and_total_capacity = get_used_and_total_capacity_in_gibibytes()
+        used_capacity = tpl_of_used_and_total_capacity[0]
+        logger.info(f"The used capacity from the cluster is: {used_capacity}")
+        total_capacity = tpl_of_used_and_total_capacity[1]
+        available_capacity = total_capacity - used_capacity
+        logger.info(f"The available capacity from the cluster is: {available_capacity}")
+        average = used_capacity / number_of_days
+        logger.info(f"Average of storage consumption per day: {average}")
+        estimated_days_calculated = available_capacity / average
+        manual_est = math.floor(estimated_days_calculated)
+        logger.info(f"Estimated days calculated are {manual_est}")
+        return (manual_est, average)
