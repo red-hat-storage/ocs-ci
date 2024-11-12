@@ -1,4 +1,3 @@
-
 """
 Helper functions file for OCS QE
 """
@@ -5261,12 +5260,15 @@ def get_rbd_sc_name():
 def check_pods_status_by_pattern(pattern, namespace, expected_status):
     """
     Check if the pod state is as expected.
+
     Args:
         pattern (str):
         namespace (str):
         expected_status (str):
+
     Returns:
         bool: return True if pod in expected status otherwise False
+
     """
     from ocs_ci.ocs.resources.pod import get_pod_obj
 
@@ -5296,8 +5298,10 @@ def check_pods_status_by_pattern(pattern, namespace, expected_status):
 def get_volsync_channel():
     """
     Get Volsync Channel
+
     Returns:
         str: volsync channel
+
     """
     logger.info("Get Volsync Channel")
     volsync_product_obj = OCP(kind="packagemanifest", resource_name="volsync-product")
@@ -5312,11 +5316,14 @@ def get_volsync_channel():
 def get_managed_cluster_addons(resource_name, namespace):
     """
     Get Managed Cluster Addons obj
+
     Args:
         resource_name (str): resource name
         namespace (str): namespace
+
     Returns:
         ocp_obj: ocp object of managed cluster addons resource
+
     """
     return OCP(
         kind=constants.ACM_MANAGEDCLUSTER_ADDONS,
@@ -5328,6 +5335,7 @@ def get_managed_cluster_addons(resource_name, namespace):
 def update_volsync_channel():
     """
     Update Volsync Channel.
+
     """
     logger.info("Update Volsync Channel.")
     if config.ENV_DATA.get("acm_hub_unreleased") is not True:
@@ -5450,13 +5458,16 @@ def verify_performance_profile_change(perf_profile):
     logger.info(f"Performance profile successfully got updated to {perf_profile} mode")
     return True
 
-def apply_custom_taint_and_toleration(self, taint_label):
+
+def apply_custom_taint_and_toleration(taint_label):
     """
     Apply custom taints and tolerations.
     1. Taint ocs nodes with non-ocs taint
     2. Set custom tolerations on storagecluster, subscription, configmap and ocsinit
+
     Args:
         taint_label (str): The taint label to apply.
+
     """
     logger.info(f"Taint all nodes with non-ocs taint: {taint_label}")
     ocs_nodes = get_ocs_nodes()
@@ -5567,4 +5578,3 @@ def apply_custom_taint_and_toleration(self, taint_label):
             )
             for pod_obj in pod_list:
                 pod_obj.delete(wait=False)
-
