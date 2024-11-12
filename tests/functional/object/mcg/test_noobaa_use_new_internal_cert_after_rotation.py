@@ -34,7 +34,7 @@ def get_validity_time_of_certificate(noobaa_endpoint_pods):
         "'/-BEGIN CERTIFICATE-/,/-END CERTIFICATE-/p' | openssl x509 -text -noout"
     )
     new_cmd_output = noobaa_endpoint_pods[0].exec_sh_cmd_on_pod(command=cmd)
-    logger.info("Certificate validity info: {new_cmd_output}")
+    logger.info(f"Certificate validity info: {new_cmd_output}")
     # Get the validity time of certificate
     cmd_output = new_cmd_output.split(",")
     cmd_output = cmd_output[0].split("\n")
@@ -101,5 +101,7 @@ class TestNoobaaUseNewInternalCertAfterRotation:
         # After deleting old secret, verify the new secret created new internal certificate
         # Examine the validity time of certificate
         noobaa_endpoint_pods = get_noobaa_endpoint_pods()
-        new_validity = verify_cert_validity(noobaa_endpoint_pods, old_validity)
-        logger.info(f"The validity time of certificate: {new_validity}")
+        assert verify_cert_validity(
+            noobaa_endpoint_pods, old_validity
+        ), "New certificate is not created post the deletion of the secret"
+        logger.info("New certificate created post the deletion of the secret")
