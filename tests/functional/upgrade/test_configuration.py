@@ -2,11 +2,14 @@ import logging
 
 import pytest
 
+from ocs_ci.framework import config
 from ocs_ci.framework.pytest_customization.marks import (
     pre_upgrade,
     post_upgrade,
     brown_squad,
 )
+from ocs_ci.ocs import constants
+from ocs_ci.ocs.ocp import OCP
 from ocs_ci.ocs.resources import pod
 
 log = logging.getLogger(__name__)
@@ -67,7 +70,7 @@ def test_max_unavaialable_rbd(upgrade_stats):
     Test that the number of unavailable RBD daemonset plugin pods during ODF
     upgrade corresponds to the value set in rook-ceph-operator-config configmap.
     """
-    configmap = ocp.OCP(
+    configmap = OCP(
         kind=constants.CONFIGMAP,
         namespace=config.ENV_DATA["cluster_namespace"],
         resource_name=constants.ROOK_OPERATOR_CONFIGMAP,
@@ -80,12 +83,12 @@ def test_max_unavaialable_rbd(upgrade_stats):
 
 @post_upgrade
 @pytest.mark.polarion_id()
-def test_max_unavaialable_rbd(upgrade_stats):
+def test_max_unavaialable_cephfs(upgrade_stats):
     """
     Test that the number of unavailable CephFS daemonset plugin pods during ODF
     upgrade corresponds to the value set in rook-ceph-operator-config configmap.
     """
-    configmap = ocp.OCP(
+    configmap = OCP(
         kind=constants.CONFIGMAP,
         namespace=config.ENV_DATA["cluster_namespace"],
         resource_name=constants.ROOK_OPERATOR_CONFIGMAP,
