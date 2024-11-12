@@ -37,6 +37,7 @@ PROMETHEUS_ROUTE = "prometheus-k8s"
 
 # Default device size in Gigs
 DEVICE_SIZE = 100
+DEVICE_SIZE_IBM_CLOUD_MANAGED = 512
 
 OCS_OPERATOR_NAME = "ocs-operator"
 ODF_OPERATOR_NAME = "odf-operator"
