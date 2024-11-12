@@ -31,6 +31,7 @@ from ocs_ci.ocs.ocp import get_images, OCP
 from ocs_ci.ocs.node import get_nodes
 from ocs_ci.ocs.resources.catalog_source import CatalogSource, disable_specific_source
 from ocs_ci.ocs.resources.csv import CSV, check_all_csvs_are_succeeded
+from ocs_ci.ocs.resources.daemonset import DaemonSet
 from ocs_ci.ocs.resources.install_plan import wait_for_install_plan_and_approve
 from ocs_ci.ocs.resources.pod import get_noobaa_pods, verify_pods_upgraded
 from ocs_ci.ocs.resources.packagemanifest import (
@@ -604,6 +605,17 @@ def run_ocs_upgrade(
     # Update values CSI_RBD_PLUGIN_UPDATE_STRATEGY_MAX_UNAVAILABLE and CSI_CEPHFS_PLUGIN_UPDATE_STRATEGY_MAX_UNAVAILABLE
     # in rook-ceph-operator-config configmap
     set_update_strategy()
+    if upgrade_stats:
+        cephfs_daemonset = DaemonSet(
+            resource_name="csi-cephfsplugin",
+            namespace=config.ENV_DATA["cluster_namespace"],
+        )
+        rbd_daemonset = DaemonSet(
+            resource_name="csi-rbdplugin",
+            namespace=config.ENV_DATA["cluster_namespace"],
+        )
+        upgrade_stats["odf_upgrade"]["rbd_max_unavailable"] = 0
+        upgrade_stats["odf_upgrade"]["cephfs_max_unavailable"] = 0
 
     # create external cluster object
     if config.DEPLOYMENT["external_mode"]:
@@ -729,6 +741,33 @@ def run_ocs_upgrade(
             channel=channel,
             csv_name_pre_upgrade=csv_name_pre_upgrade,
         ):
+            if upgrade_stats:
+                rbd_daemonset_status = rbd_daemonset.get_status()
+                cephfs_daemonset_status = cephfs_daemonset.get_status()
+                rbd_unavailable = (
+                    rbd_daemonset_status["desiredNumberScheduled"]
+                    - rbd_daemonset_status["numberReady"]
+                )
+                cephfs_unavailable = (
+                    cephfs_daemonset_status["desiredNumberScheduled"]
+                    - cephfs_daemonset_status["numberReady"]
+                )
+                if (
+                    rbd_unavailable
+                    > upgrade_stats["odf_upgrade"]["rbd_max_unavailable"]
+                ):
+                    upgrade_stats["odf_upgrade"][
+                        "rbd_max_unavailable"
+                    ] = rbd_unavailable
+                if (
+                    cephfs_unavailable
+                    > upgrade_stats["odf_upgrade"]["cephfs_max_unavailable"]
+                ):
+                    upgrade_stats["odf_upgrade"][
+                        "cephfs_max_unavailable"
+                    ] = cephfs_unavailable
+                log.debug(f"rbd daemonset status: {rbd_daemonset_status}")
+                log.debug(f"cephfs daemonset status: {cephfs_daemonset_status}")
             try:
                 if sample:
                     log.info("Upgrade success!")
@@ -904,7 +943,7 @@ def set_update_strategy(rbd_max_unavailable=None, cephfs_max_unavailable=None):
             f"CSI_RBD_PLUGIN_UPDATE_STRATEGY_MAX_UNAVAILABLE is set to {rbd_max}"
         )
     if cephfs_max:
-        config_map_patch = f'\'{"data": {"CSI_CEPHFS_PLUGIN_UPDATE_STRATEGY_MAX_UNAVAILABLE": "{cephfs_max}"}}\''
+        config_map_patch = f'\'\{"data": \{"CSI_CEPHFS_PLUGIN_UPDATE_STRATEGY_MAX_UNAVAILABLE": "{cephfs_max}"\}\}\''
         exec_cmd(
             f"oc patch configmap -n {self.namespace} "
             f"{constants.ROOK_OPERATOR_CONFIGMAP} -p {config_map_patch}"

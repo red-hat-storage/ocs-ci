@@ -58,3 +58,39 @@ def test_crush_map_unchanged(pre_upgrade_crush_map):
     upgrade.
     """
     pre_upgrade_crush_map == get_crush_map()
+
+
+@post_upgrade
+@pytest.mark.polarion_id()
+def test_max_unavaialable_rbd(upgrade_stats):
+    """
+    Test that the number of unavailable RBD daemonset plugin pods during ODF
+    upgrade corresponds to the value set in rook-ceph-operator-config configmap.
+    """
+    configmap = ocp.OCP(
+        kind=constants.CONFIGMAP,
+        namespace=config.ENV_DATA["cluster_namespace"],
+        resource_name=constants.ROOK_OPERATOR_CONFIGMAP,
+    ).get()
+    config_value = configmap.get("data").get(
+        "CSI_RBD_PLUGIN_UPDATE_STRATEGY_MAX_UNAVAILABLE"
+    )
+    assert config_value == upgrade_stats["odf_upgrade"]["max_unavailable_rbd"]
+
+
+@post_upgrade
+@pytest.mark.polarion_id()
+def test_max_unavaialable_rbd(upgrade_stats):
+    """
+    Test that the number of unavailable CephFS daemonset plugin pods during ODF
+    upgrade corresponds to the value set in rook-ceph-operator-config configmap.
+    """
+    configmap = ocp.OCP(
+        kind=constants.CONFIGMAP,
+        namespace=config.ENV_DATA["cluster_namespace"],
+        resource_name=constants.ROOK_OPERATOR_CONFIGMAP,
+    ).get()
+    config_value = configmap.get("data").get(
+        "CSI_CEPHFS_PLUGIN_UPDATE_STRATEGY_MAX_UNAVAILABLE"
+    )
+    assert config_value == upgrade_stats["odf_upgrade"]["max_unavailable_cephfs"]
