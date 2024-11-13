@@ -14,7 +14,7 @@ from ocs_ci.deployment.helpers.hypershift_base import (
 from ocs_ci.deployment.metallb import MetalLBInstaller
 from ocs_ci.framework import config
 from ocs_ci.helpers import helpers
-from ocs_ci.ocs import constants, ocp
+from ocs_ci.ocs import constants, defaults, ocp
 from ocs_ci.ocs.constants import HCI_PROVIDER_CLIENT_PLATFORMS
 from ocs_ci.ocs import defaults
 from ocs_ci.ocs.exceptions import (
@@ -196,18 +196,13 @@ class HostedClients(HyperShiftBase):
             bool: True if the config has hosted ODF image, False otherwise
 
         """
-        regestry_exists = (
-            config.ENV_DATA.get("clusters")
-            .get(cluster_name)
-            .get("hosted_odf_registry", False)
-        )
         version_exists = (
             config.ENV_DATA.get("clusters")
             .get(cluster_name)
             .get("hosted_odf_version", False)
         )
 
-        return regestry_exists and version_exists
+        return version_exists
 
     def storage_installation_requested(self, cluster_name):
         """
@@ -1054,22 +1049,14 @@ class HostedODF(HypershiftHostedOCP):
                 "OCS version is not set in the config file, should be set in format similar to '4.14.5-8'"
                 "in the 'hosted_odf_version' key in the 'ENV_DATA.clusters.<name>' section of the config file. "
             )
-        if (
-            not config.ENV_DATA.get("clusters")
-            .get(self.name)
-            .get("hosted_odf_registry")
-        ):
-            raise ValueError(
-                "OCS registry is not set in the config file, should be set in format similar to "
-                "'quay.io/rhceph-dev/ocs-registry' in the 'hosted_odf_registry' key in the 'ENV_DATA.clusters.<name>' "
-                "section of the config file. "
-            )
 
         odf_version = (
             config.ENV_DATA.get("clusters").get(self.name).get("hosted_odf_version")
         )
         odf_registry = (
-            config.ENV_DATA.get("clusters").get(self.name).get("hosted_odf_registry")
+            config.ENV_DATA.get("clusters")
+            .get(self.name)
+            .get("hosted_odf_registry", defaults.HOSTED_ODF_REGISTRY_DEFAULT)
         )
 
         logger.info(
