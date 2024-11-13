@@ -957,7 +957,12 @@ def delete_and_create_osd_node_ipi(osd_node_name):
     else:
         timeout = 420
     ocp_obj = OCP(kind="machine", namespace=constants.OPENSHIFT_MACHINE_API_NAMESPACE)
-    ocp_obj.wait_for_delete(resource_name=machine_name, timeout=timeout, sleep=30)
+    ocp_obj.wait_for_delete(
+        resource_name=machine_name,
+        timeout=timeout,
+        sleep=30,
+        ignore_command_failed_exception=True,
+    )
     return new_node_name
 
 
