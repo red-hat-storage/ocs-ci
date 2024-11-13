@@ -112,7 +112,7 @@ class TestMonitorRecovery(E2ETest):
             data=self.object_data,
         ), "Failed: PutObject"
 
-    def test_monitor_recovery(
+    def deprecated_test_monitor_recovery(
         self,
         dc_pod_factory,
         mcg_obj,

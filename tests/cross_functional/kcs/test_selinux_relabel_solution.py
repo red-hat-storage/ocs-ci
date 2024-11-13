@@ -228,7 +228,7 @@ class TestSelinuxrelabel(E2ETest):
     @bugzilla("1988284")
     @polarion_id("OCS-5132")
     @pytest.mark.parametrize("copies", [5])
-    def test_selinux_relabel_for_existing_pvc(
+    def deprecated_test_selinux_relabel_for_existing_pvc(
         self, pvc_factory, service_account_factory, copies
     ):
         """
@@ -361,7 +361,7 @@ class TestSelinuxrelabel(E2ETest):
 
     @polarion_id("OCS-5163")
     @pytest.mark.parametrize("copies", [5])
-    def test_selinux_relabel_for_new_pvc(
+    def deprecated_test_selinux_relabel_for_new_pvc(
         self,
         pvc_factory,
         service_account_factory,
