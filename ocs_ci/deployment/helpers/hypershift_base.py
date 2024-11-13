@@ -10,6 +10,7 @@ from ocs_ci.deployment.helpers.icsp_parser import parse_ICSP_json_to_mirrors_fil
 from ocs_ci.deployment.ocp import download_pull_secret
 from ocs_ci.framework import config
 from ocs_ci.ocs import constants
+from ocs_ci.ocs import defaults
 from ocs_ci.ocs.exceptions import CommandFailed
 from ocs_ci.ocs.ocp import OCP
 from ocs_ci.ocs.resources.pod import wait_for_pods_to_be_in_statuses_concurrently
@@ -340,9 +341,9 @@ class HyperShiftBase:
     def create_kubevirt_ocp_cluster(
         self,
         name: str = None,
-        nodepool_replicas: int = 2,
-        memory: str = "12Gi",
-        cpu_cores: int = 6,
+        nodepool_replicas: int = defaults.HYPERSHIFT_NODEPOOL_REPLICAS_DEFAULT,
+        memory: str = defaults.HYPERSHIFT_MEMORY_DEFAULT,
+        cpu_cores: int = defaults.HYPERSHIFT_CPU_CORES_DEFAULT,
         root_volume_size: str = 40,
         ocp_version=None,
         cp_availability_policy=None,
