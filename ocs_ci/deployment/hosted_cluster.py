@@ -29,6 +29,7 @@ from ocs_ci.ocs.resources.pod import (
     wait_for_pods_to_be_in_statuses_concurrently,
 )
 from ocs_ci.utility import templating, version
+from ocs_ci.utility.deployment import get_ocp_ga_version
 from ocs_ci.utility.managedservice import generate_onboarding_token
 from ocs_ci.utility.retry import retry
 from ocs_ci.utility.utils import (
@@ -410,7 +411,10 @@ class HypershiftHostedOCP(HyperShiftBase, MetalLBInstaller, CNVInstaller, Deploy
             deploy_acm_hub, deploy_cnv, deploy_metallb, download_hcp_binary
         )
 
-        ocp_version = config.ENV_DATA["clusters"].get(self.name).get("ocp_version")
+        ocp_version = str(config.ENV_DATA["clusters"][self.name].get("ocp_version"))
+        if ocp_version and len(ocp_version.split(".")) == 2:
+            # if ocp_version is provided in form x.y, we need to get the full form x.y.z
+            ocp_version = get_ocp_ga_version(ocp_version)
         cpu_cores_per_hosted_cluster = (
             config.ENV_DATA["clusters"]
             .get(self.name)
