@@ -21,6 +21,7 @@ from ocs_ci.ocs.resources.pod import (
     get_operator_pods,
     get_osd_pods,
     delete_pods,
+    get_prometheus_pods,
 )
 from ocs_ci.utility.utils import ceph_health_check
 from ocs_ci.utility import prometheus
@@ -211,6 +212,21 @@ class TestMdsMemoryAlerts(E2ETest):
             if osd_pod_running_node_name == active_mds_node_name:
                 delete_pods([pod_obj])
         log.info("Validating the alert after the OSD pod restart")
+        assert self.active_mds_alert_values(threading_lock)
+
+    @pytest.mark.polarion_id("OCS-5576")
+    def test_mds_cache_alert_after_recovering_prometheus_from_failures(
+        self, run_metadata_io_with_cephfs, threading_lock
+    ):
+        """
+        This test function verifies the mds cache alert and fails the prometheus.
+        It also verifies the alert after recovering prometheus from failures.
+
+        """
+        assert self.active_mds_alert_values(threading_lock)
+        log.info("Bring down the prometheus")
+        list_of_prometheus_pod_obj = get_prometheus_pods()
+        delete_pods(list_of_prometheus_pod_obj)
         assert self.active_mds_alert_values(threading_lock)
 
     @pytest.mark.polarion_id("OCS-5577")
