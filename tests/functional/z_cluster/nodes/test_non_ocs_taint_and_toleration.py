@@ -227,9 +227,8 @@ class TestNonOCSTaintAndTolerations(E2ETest):
         # Reboot one of the nodes
         node = get_ocs_nodes()
         node = random.choice(node)
-        nodes.restart_nodes(nodes=node, wait=False)
-        node_name = [n.name for n in node]
-        wait_for_nodes_status(node_name, constants.STATUS_READY, timeout=420)
+        nodes.restart_nodes(nodes=[node], wait=False)
+        wait_for_nodes_status([node.name], constants.STATUS_READY, timeout=420)
 
         # Validate all nodes and services are in READY state and up
         retry(
