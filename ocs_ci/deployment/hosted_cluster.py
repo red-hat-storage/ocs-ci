@@ -24,7 +24,8 @@ from ocs_ci.framework.logger_helper import log_step
 from ocs_ci.framework import config as ocsci_config, Config, config
 from ocs_ci.helpers import helpers
 from ocs_ci.ocs import constants, defaults, ocp
-from ocs_ci.ocs.constants import HCI_PROVIDER_CLIENT_PLATFORMS, FUSION_CONF_DIR
+from ocs_ci.ocs.constants import HCI_PROVIDER_CLIENT_PLATFORMS
+from ocs_ci.ocs import defaults
 from ocs_ci.ocs.exceptions import (
     ProviderModeNotFoundException,
     CommandFailed,
