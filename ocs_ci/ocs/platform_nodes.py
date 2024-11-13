@@ -24,6 +24,7 @@ from ocs_ci.ocs.exceptions import (
     NotAllNodesCreated,
     RebootEventNotFoundException,
     ResourceWrongStatusException,
+    VMIndexNotFoundException,
     VolumePathNotFoundException,
 )
 from ocs_ci.framework import config, merge_dict
@@ -2010,21 +2011,39 @@ class VSPHEREUPINode(VMWareNodes):
             vm_name (str): The VM name
 
         """
-        if vm_name.startswith("compute-"):
-            module = "compute_vm"
-        else:
-            module = "control_plane_vm"
-        instance = f"{vm_name}.{config.ENV_DATA.get('cluster_name')}.{config.ENV_DATA.get('base_domain')}"
+        module, vm_index = self.get_vm_module_and_index(vm_name)
 
         os.chdir(self.terraform_data_dir)
         logger.info(f"Modifying terraform state file of the removed vm {vm_name}")
-        self.terraform.change_statefile(
-            module=module,
-            resource_type="vsphere_virtual_machine",
-            resource_name="vm",
-            instance=instance,
-        )
+        self.terraform.change_statefile(module=module, vm_index=vm_index)
         os.chdir(self.previous_dir)
+
+    def get_vm_module_and_index(self, vm_name):
+        """
+        Gets the VM module and index for the node
+
+        Args:
+            vm_name (str): VM name
+
+        Returns:
+            tuple: which contains module and vm_index
+
+        """
+        if vm_name.startswith("compute-"):
+            module = "compute_vm"
+            search_str = "compute-"
+        else:
+            module = "control_plane_vm"
+            search_str = "control-plane-"
+
+        # get the VM index
+        pattern = rf"{search_str}(\d+)"
+        match = re.search(pattern, vm_name)
+        if match:
+            vm_index = match.group(1)
+        else:
+            raise VMIndexNotFoundException
+        return module, vm_index
 
     def change_terraform_tfvars_after_remove_vm(self, num_nodes_removed=1):
         """
