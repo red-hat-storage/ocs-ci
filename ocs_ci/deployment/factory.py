@@ -87,7 +87,7 @@ class DeploymentFactory(object):
             from .rosa import ROSA
 
             self.cls_map["rosa_managed"] = ROSA
-            self.cls_map["rosa_hcp_ipi"] = ROSA
+            self.cls_map["rosa_hcp_managed_cp"] = ROSA
         elif self.deployment_platform == constants.FUSIONAAS_PLATFORM:
             from .fusion_aas import FUSIONAAS
 

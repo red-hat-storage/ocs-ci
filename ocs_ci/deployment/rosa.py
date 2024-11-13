@@ -9,6 +9,7 @@ import os
 
 from botocore.exceptions import ClientError
 
+from ocs_ci.ocs.machinepool import MachinePool
 from ocs_ci.deployment.cloud import CloudDeploymentBase
 from ocs_ci.deployment.helpers.rosa_cluster_helpers import (
     ROSAProdEnvCluster,
@@ -82,7 +83,7 @@ class ROSAOCP(BaseOCPDeployment):
         Deployment specific to OCP cluster on a ROSA Managed Service platform.
 
         Args:
-            log_cli_level (str): openshift installer's log level
+            log_level (str): openshift installer's log level
 
         """
         if (
@@ -93,11 +94,11 @@ class ROSAOCP(BaseOCPDeployment):
         else:
             rosa.login()
             rosa.create_cluster(self.cluster_name, self.ocp_version, self.region)
-            rosa.wait_machinepool_replicas_ready(
-                cluster_name=self.cluster_name,
-                machinepool_name="workers",
-                replicas=config.ENV_DATA["worker_replicas"],
-                timeout=60 * 20,
+            machinepool_details = MachinePool.get_machinepool_details(
+                self.cluster_name, config.ENV_DATA["machine_pool"]
+            )
+            machinepool_details.wait_replicas_ready(
+                target_replicas=config.ENV_DATA["worker_replicas"], timeout=1200
             )
 
         logger.info("generate kubeconfig and kubeadmin-password files")

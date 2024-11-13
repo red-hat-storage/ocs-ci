@@ -10,6 +10,7 @@ import boto3
 from botocore.exceptions import WaiterError
 import yaml
 import ovirtsdk4.types as types
+from string_utils import random_string
 
 from ocs_ci.deployment.terraform import Terraform
 from ocs_ci.deployment.vmware import (
@@ -25,8 +26,14 @@ from ocs_ci.ocs.exceptions import (
     RebootEventNotFoundException,
     ResourceWrongStatusException,
     VolumePathNotFoundException,
+    UnsupportedOSType,
+    UnavailableResourceException,
 )
 from ocs_ci.framework import config, merge_dict
+from ocs_ci.ocs.machinepool import (
+    MachinePools,
+    NodeConf,
+)
 from ocs_ci.utility import templating
 from ocs_ci.utility.csr import approve_pending_csr
 from ocs_ci.utility.load_balancer import LoadBalancer
@@ -96,7 +103,7 @@ class PlatformNodesFactory:
             "ibm_cloud": IBMCloud,
             "vsphere_ipi": VMWareIPINodes,
             "rosa": AWSNodes,
-            "rosa_hcp": AWSNodes,
+            "rosa_hcp": ROSAHCPNode,
             "vsphere_upi": VMWareUPINodes,
             "fusion_aas": AWSNodes,
             "hci_baremetal": IBMCloudBMNodes,
@@ -119,6 +126,10 @@ class PlatformNodesFactory:
             == constants.HOSTED_CLUSTER_KUBEVIRT
         ):
             platform = "kubevirt_vm"
+
+        if config.ENV_DATA["platform"] == constants.ROSA_HCP_PLATFORM:
+            if config.ENV_DATA["deployment_type"] == "managed_cp":
+                platform = "rosa_hcp"
 
         if config.ENV_DATA["platform"] == constants.IBMCLOUD_PLATFORM:
             if config.ENV_DATA["deployment_type"] == "ipi":
@@ -3459,3 +3470,109 @@ class IBMCloudIPI(object):
         raise NotImplementedError(
             "wait for nodes to stop or terminate functionality is not implemented"
         )
+
+
+class ROSAHCPNode(AWSNodes):
+    """
+    ROSA HCP Nodes class
+
+    """
+
+    def __init__(self, node_conf=None, node_type=None):
+        self.node_conf = node_conf
+        self.node_type = node_type
+        super(ROSAHCPNode, self).__init__()
+
+    def create_and_attach_nodes_to_cluster(
+        self, node_conf, node_type=constants.RHCOS, num_nodes=None
+    ):
+        """
+        Create nodes and attach them to cluster
+        Use this function if you want to do both creation/attachment in a single call
+        (attachment is skipped due to AWSNodes logic for non-"upi" deployment)
+
+        Args:
+            node_conf (dict): node configuration - custom dict that we use in rosa create/edit machinepool
+            e.g.
+            {'machinepool': '<mp_name>',
+            'instance_type': '<m5.xlarge>',
+            'subnet': '<subnet_id>',
+            'availability_zone': '<az>',
+            'disk_size': <300Gb def for m5.xlarge>,
+            'enable_autoscaling': <False by default>,
+            'labels': '<coma separated string of key=value>',
+            'multi-availability-zone': <False by default>,
+            'tags': '<coma separated string of key=value:ScheduleType>',
+            }
+            node_type (str): type of node to be created
+            num_nodes (int): Number of node instances to be created
+
+        """
+        if node_type != constants.RHCOS:
+            raise UnsupportedOSType(
+                "Only RHCOS is supported for ROSA HCP. Check up "
+                "https://docs.redhat.com/en/documentation/red_hat_openshift_service_on_aws/4/html/"
+                "tutorials/getting-started-with-rosa#underlying-node-operating-system"
+            )
+        if num_nodes is None:
+            raise ValueError("num_nodes must be provided")
+
+        node_conf = node_conf or {}
+
+        node_list = self.create_nodes(node_conf, node_type, num_nodes)
+        # attach nodes will be skipped due to AWSNodes logic for non-"upi" deployment
+        self.attach_nodes_to_cluster(node_list)
+
+    def create_nodes(self, node_conf, node_type, num_nodes):
+        """
+        Create nodes by creating or updating a machine pool.
+
+        Args:
+            node_conf (dict): Node configuration for machine pool.
+            node_type (str): Type of node to be created.
+            num_nodes (int): Number of node instances to create.
+
+        Returns:
+            list: List of AWSNode objects (no known use case for this for non UPI deploymen, which is ROSA HCP,
+            implemented due to common create_nodes signature)
+        """
+        node_list = []
+        cluster_name = config.ENV_DATA.get("cluster_name")
+        node_conf = NodeConf(**node_conf)
+        machine_pool_id = node_conf.get("machinepool")
+        machine_pools = MachinePools(cluster_name=cluster_name)
+        machine_pool = machine_pools.filter(id=machine_pool_id, pick_first=True)
+
+        if (
+            machine_pool.exist
+            and node_conf.get("instance_type")
+            and machine_pool.instance_type != node_conf.get("instance_type")
+        ):
+            raise UnavailableResourceException(
+                f"MachinePool '{machine_pool_id}' "
+                "found with different instance type. "
+                "The test brakes logic, aborting test."
+            )
+        elif machine_pool.exist and machine_pool.instance_type == node_conf.get(
+            "instance_type"
+        ):
+            logger.info(f"MachinePool '{machine_pool_id}' found. Updating MachinePool")
+            node_conf["replicas"] = machine_pool.replicas + num_nodes
+            machine_pools.edit_machine_pool(node_conf, wait_ready=True)
+        elif not machine_pool.exist:
+            logger.info(
+                f"MachinePool '{machine_pool_id}' not found. Creating new MachinePool"
+            )
+            # create random machinepool name if not provided
+            node_conf["machinepool"] = machine_pool_id or "mp_" + random_string(3)
+            node_conf["instance_type"] = (
+                node_conf.get("instance_type")
+                or config.ENV_DATA["worker_instance_type"]
+            )
+            machine_pools.create_machine_pool(node_conf, num_nodes)
+
+        node_conf["zone"] = self.az.get_zone_number()
+        for _ in range(num_nodes):
+            node_list.append(ROSAHCPNode(node_conf, constants.RHCOS))
+
+        return node_list

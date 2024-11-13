@@ -20,6 +20,7 @@ from ocs_ci.ocs.exceptions import (
     ResourceNotFoundError,
     NotFoundError,
 )
+from ocs_ci.ocs.machinepool import MachinePools
 from ocs_ci.ocs.ocp import OCP
 from ocs_ci.ocs.resources.ocs import OCS
 from ocs_ci.ocs import constants, exceptions, ocp, defaults
@@ -469,6 +470,51 @@ def add_new_node_and_label_upi(
     if node_type == constants.RHEL_OS:
         set_selinux_permissions(workers=new_spun_nodes)
 
+    if mark_for_ocs_label:
+        node_obj = ocp.OCP(kind="node")
+        for new_spun_node in new_spun_nodes:
+            node_obj.add_label(
+                resource_name=new_spun_node, label=constants.OPERATOR_NODE_LABEL
+            )
+            log.info(f"Successfully labeled {new_spun_node} with OCS storage label")
+    return new_spun_nodes
+
+
+def add_new_nodes_and_label_them_rosa_hcp(
+    node_type, num_nodes, mark_for_ocs_label=True, node_conf=None, **kwargs
+):
+    """
+    Add a new nodes on ROSA HCP platform and label them
+    Function does not modify node_conf
+
+    Args:
+        node_type (str): Type of node, RHEL or RHCOS
+        num_nodes (int): number of nodes to add
+        mark_for_ocs_label (bool): True if label the new node
+        node_conf (dict): The node configurations. Should follow the structure of machinepools.py:NodeConf class
+
+    """
+    # node_conf is not set in this function, relying on default node_conf values,
+    # creating additional node(s) in the same machinepool, in case we need to create a node in a new machinepool,
+    # we need to set the node_conf with all requested params
+    node_conf = node_conf or {}
+    if kwargs.get("storage_nodes") and not node_conf:
+        node_conf = {
+            "machinepool": config.ENV_DATA.get("machine_pool"),
+            "instance_type": config.ENV_DATA.get("worker_instance_type"),
+        }
+
+    initial_nodes = get_worker_nodes()
+    from ocs_ci.ocs.platform_nodes import PlatformNodesFactory
+
+    plt = PlatformNodesFactory()
+    node_util = plt.get_nodes_platform()
+
+    node_util.create_and_attach_nodes_to_cluster(node_conf, node_type, num_nodes)
+    nodes_after_exp = get_worker_nodes()
+    wait_for_nodes_status(node_names=get_worker_nodes(), status=constants.NODE_READY)
+
+    new_spun_nodes = list(set(nodes_after_exp) - set(initial_nodes))
     if mark_for_ocs_label:
         node_obj = ocp.OCP(kind="node")
         for new_spun_node in new_spun_nodes:
@@ -946,6 +992,64 @@ def delete_and_create_osd_node_ipi(osd_node_name):
     return new_node_name
 
 
+def delete_and_create_osd_node_managed_cp(osd_node_name):
+    """
+    Function developed to delete and create OSD node in Control Plane managed cluster (e.g. ROSA HCP).
+    Once the node is deleted, the new node will automatically be created by the machinepool managed cluster.
+
+    Args:
+        osd_node_name (str): the name of the osd node
+
+    Returns:
+        str: The new node name
+    """
+    log.info("Going to unschedule, drain and delete %s node", osd_node_name)
+    node_names_before_delete = get_node_names()
+    node_num_before_delete = len(node_names_before_delete)
+    machine_start_timeout = 60 * 20
+    node_start_timeout = 60 * 10
+
+    unschedule_nodes([osd_node_name])
+    drain_nodes([osd_node_name])
+
+    from ocs_ci.ocs.platform_nodes import PlatformNodesFactory
+
+    plt = PlatformNodesFactory()
+    node_util = plt.get_nodes_platform()
+
+    # in ROSA HCP there is no Machine API Operator (MAO), instead it has logic close to AWS IPI, implemented via
+    # rosa machinepool:
+    # 1. Stopped node will trigger MachinePool to create a new instance
+    # 2. After EC2 instance has stopped we need to terminate it
+    # 2.1. EC2 instance will terminate itself after 1 hour if not terminated manually
+    osd_node_objs = get_node_objs([osd_node_name])
+    node_util.stop_nodes(osd_node_objs)
+    node_util.terminate_nodes(osd_node_objs)
+    machne_pools = MachinePools(config.ENV_DATA["cluster_name"])
+    mp_filtered = machne_pools.filter(id=config.ENV_DATA["machine_pool"])
+    mp_filtered.wait_replicas_ready(
+        target_replicas=node_num_before_delete, timeout=machine_start_timeout
+    )
+
+    node_names_after_delete = get_node_names()
+    new_node_names = list(set(node_names_after_delete) - set(node_names_before_delete))
+    new_node_name = new_node_names[0]
+    wait_for_nodes_status(
+        node_names=new_node_names,
+        status=constants.NODE_READY,
+        timeout=node_start_timeout,
+    )
+    if not is_node_labeled(new_node_name):
+        log.info("Adding ocs label to newly created worker node")
+        node_obj = ocp.OCP(kind=constants.NODE)
+        node_obj.add_label(
+            resource_name=new_node_name, label=constants.OPERATOR_NODE_LABEL
+        )
+        log.info(f"Successfully labeled {new_node_names} with OCS storage label")
+
+    return new_node_name
+
+
 def delete_and_create_osd_node_aws_upi(osd_node_name):
     """
     Unschedule, drain and delete osd node, and creating a new osd node.
@@ -1347,7 +1451,6 @@ def node_replacement_verification_steps_ceph_side(
     log.info(f"osd node names: {osd_node_names}")
 
     if new_osd_node_name:
-        wait_for_nodes_status([new_osd_node_name])
         log.info(f"New osd node name is: {new_osd_node_name}")
         node_names = [osd["host name"] for osd in ceph_osd_status["OSDs"]]
         log.info(f"Node names from ceph osd status: {node_names}")
