@@ -16,6 +16,7 @@ from ocs_ci.framework import config
 from ocs_ci.helpers import helpers
 from ocs_ci.ocs import constants, ocp
 from ocs_ci.ocs.constants import HCI_PROVIDER_CLIENT_PLATFORMS
+from ocs_ci.ocs import defaults
 from ocs_ci.ocs.exceptions import (
     ProviderModeNotFoundException,
     CommandFailed,
@@ -415,16 +416,23 @@ class HypershiftHostedOCP(HyperShiftBase, MetalLBInstaller, CNVInstaller, Deploy
         if ocp_version and len(ocp_version.split(".")) == 2:
             # if ocp_version is provided in form x.y, we need to get the full form x.y.z
             ocp_version = get_ocp_ga_version(ocp_version)
+        # use default value 6 for cpu_cores_per_hosted_cluster as used in create_kubevirt_ocp_cluster()
         cpu_cores_per_hosted_cluster = (
             config.ENV_DATA["clusters"]
             .get(self.name)
-            .get("cpu_cores_per_hosted_cluster")
+            .get("cpu_cores_per_hosted_cluster", defaults.HYPERSHIFT_CPU_CORES_DEFAULT)
         )
+        # use default value 12Gi for memory_per_hosted_cluster as used in create_kubevirt_ocp_cluster()
         memory_per_hosted_cluster = (
-            config.ENV_DATA["clusters"].get(self.name).get("memory_per_hosted_cluster")
+            config.ENV_DATA["clusters"]
+            .get(self.name)
+            .get("memory_per_hosted_cluster", defaults.HYPERSHIFT_MEMORY_DEFAULT)
         )
+        # use default value 2 for nodepool_replicas as used in create_kubevirt_ocp_cluster()
         nodepool_replicas = (
-            config.ENV_DATA["clusters"].get(self.name).get("nodepool_replicas")
+            config.ENV_DATA["clusters"]
+            .get(self.name)
+            .get("nodepool_replicas", defaults.HYPERSHIFT_NODEPOOL_REPLICAS_DEFAULT)
         )
         cp_availability_policy = (
             config.ENV_DATA["clusters"].get(self.name).get("cp_availability_policy")
