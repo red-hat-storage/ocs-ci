@@ -1026,7 +1026,7 @@ def delete_and_create_osd_node_managed_cp(osd_node_name):
     node_util.stop_nodes(osd_node_objs)
     node_util.terminate_nodes(osd_node_objs)
     machne_pools = MachinePools(config.ENV_DATA["cluster_name"])
-    mp_filtered = machne_pools.filter(id=config.ENV_DATA["machine_pool"])
+    mp_filtered = machne_pools.filter(machinepool_id=config.ENV_DATA["machine_pool"])
     mp_filtered.wait_replicas_ready(
         target_replicas=node_num_before_delete, timeout=machine_start_timeout
     )
