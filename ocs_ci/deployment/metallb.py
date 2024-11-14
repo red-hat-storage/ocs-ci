@@ -32,6 +32,7 @@ from ocs_ci.utility.utils import (
     TimeoutSampler,
     wait_for_machineconfigpool_status,
     run_cmd,
+    get_running_ocp_version,
 )
 from pkg_resources import parse_version
 
@@ -744,7 +745,7 @@ class MetalLBInstaller:
         )
         self.upgrade_version = config.UPGRADE.get("upgrade_metallb_version")
         if not self.upgrade_version:
-            self.upgrade_version = get_ocp_version()
+            self.upgrade_version = get_running_ocp_version()
         logger.info(
             f"Upgarde metallb version to: {parse_version(self.upgrade_version)}"
         )
