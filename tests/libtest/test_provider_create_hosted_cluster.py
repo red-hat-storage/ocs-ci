@@ -24,7 +24,7 @@ from ocs_ci.ocs.ocp import OCP
 from ocs_ci.ocs.resources.catalog_source import get_odf_tag_from_redhat_catsrc
 from ocs_ci.utility.utils import (
     get_latest_release_version,
-    get_ocp_version,
+    get_running_ocp_version,
 )
 from ocs_ci.utility.version import get_ocs_version_from_csv
 from ocs_ci.framework import config as ocsci_config
@@ -463,5 +463,5 @@ class TestProviderHosted(object):
         self.test_metallb_upgrade()
 
     def test_fun(self):
-        ocp_version = get_ocp_version()
+        ocp_version = get_running_ocp_version()
         logger.info(f"ocp version is: {ocp_version}")
