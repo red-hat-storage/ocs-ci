@@ -946,6 +946,10 @@ SCALECLI_SERVICE_CA_YAML = os.path.join(
 
 SCALECLI_POD_YAML = os.path.join(TEMPLATE_MCG_DIR, "scalecli_pod.yaml")
 
+STRESS_CLI_SERVICE_CA_YAML = os.path.join(
+    TEMPLATE_MCG_DIR, "stress-cli-service-ca-configmap.yaml"
+)
+
 AWSCLI_SERVICE_CA_YAML = os.path.join(
     TEMPLATE_MCG_DIR, "aws-cli-service-ca-configmap.yaml"
 )
@@ -957,6 +961,8 @@ AWSCLI_MULTIARCH_POD_YAML = os.path.join(TEMPLATE_APP_POD_DIR, "awscli_multiarch
 S3CLI_MULTIARCH_STS_YAML = os.path.join(TEMPLATE_MCG_DIR, "s3cli-sts.yaml")
 
 S3CLI_STS_NAME = "s3cli"
+
+STRESS_CLI_STS_YAML = os.path.join(TEMPLATE_MCG_DIR, "stress-cli-sts.yaml")
 
 JAVA_SDK_S3_POD_YAML = os.path.join(TEMPLATE_APP_POD_DIR, "java_sdk_s3_pod.yaml")
 
@@ -1915,6 +1921,7 @@ REVISION_ANNOTATION = "deployment.kubernetes.io/revision"
 MASTER_LABEL = "node-role.kubernetes.io/master"
 WORKER_LABEL = "node-role.kubernetes.io/worker"
 APP_LABEL = "node-role.kubernetes.io/app"
+STRESS_CLI_APP_LABEL = "app=stress-cli"
 S3CLI_APP_LABEL = "app=s3cli"
 OSD_NODE_LABEL = "node.ocs.openshift.io/osd=''"
 OCS_OSD_DEPLOYER_CSV_LABEL = "operators.coreos.com/ocs-osd-deployer.openshift-storage"
@@ -2232,6 +2239,7 @@ AWSCLI_CA_BUNDLE_PATH = "/tmp/ca-bundle.crt"
 AWSCLI_RELAY_POD_NAME = "awscli-relay-pod"
 JAVAS3_POD_NAME = "java-s3"
 SCALECLI_SERVICE_CA_CM_NAME = "scalecli-service-ca"
+STRESSCLI_SERVICE_CA_CM_NAME = "stress-cli-service-ca"
 AWSCLI_SERVICE_CA_CONFIGMAP_NAME = "awscli-service-ca"
 AWSCLI_TEST_OBJ_DIR = "/test_objects/"
 MCG_CLI_DEV_IMAGE = "quay.io/rhceph-dev/mcg-cli"
