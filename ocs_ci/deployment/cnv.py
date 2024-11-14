@@ -868,7 +868,6 @@ class CNVInstaller(object):
         print(
             f" currently installed cnv version: {parse_version(self.get_running_cnv_version())}"
         )
-
         self.upgrade_version = config.UPGRADE.get("upgrade_cnv_version")
         if not self.upgrade_version:
             self.upgrade_version = get_ocp_version()
