@@ -9,10 +9,9 @@ from ocs_ci.framework.pytest_customization.marks import (
     stretchcluster_required,
 )
 from ocs_ci.helpers.stretchcluster_helper import (
-    recover_workload_pods_post_recovery,
+    check_for_logwriter_workload_pods,
     recover_from_ceph_stuck,
 )
-from ocs_ci.ocs.exceptions import UnexpectedBehaviour
 
 from ocs_ci.ocs.resources.stretchcluster import StretchCluster
 from ocs_ci.ocs.exceptions import CephHealthException
@@ -25,7 +24,6 @@ from ocs_ci.ocs.resources.pvc import get_pvc_objs
 from ocs_ci.ocs.resources.pod import (
     wait_for_pods_to_be_in_statuses,
     get_ceph_tools_pod,
-    get_not_running_pods,
 )
 
 logger = logging.getLogger(__name__)
@@ -35,29 +33,6 @@ logger = logging.getLogger(__name__)
 @stretchcluster_required
 @turquoise_squad
 class TestNetSplit:
-    def check_for_logwriter_workload_pods(
-        self,
-        sc_obj,
-    ):
-
-        try:
-            sc_obj.get_logwriter_reader_pods(label=constants.LOGWRITER_CEPHFS_LABEL)
-            sc_obj.get_logwriter_reader_pods(
-                label=constants.LOGREADER_CEPHFS_LABEL,
-                statuses=[constants.STATUS_RUNNING, constants.STATUS_COMPLETED],
-            )
-            sc_obj.get_logwriter_reader_pods(
-                label=constants.LOGWRITER_RBD_LABEL, exp_num_replicas=2
-            )
-        except UnexpectedBehaviour:
-
-            logger.info("some pods are not running, so trying the work-around")
-            pods_not_running = get_not_running_pods(
-                namespace=constants.STRETCH_CLUSTER_NAMESPACE
-            )
-            recover_workload_pods_post_recovery(sc_obj, pods_not_running)
-        logger.info("All the workloads pods are successfully up and running")
-
     @pytest.fixture()
     def init_sanity(self, request):
         """
@@ -86,7 +61,7 @@ class TestNetSplit:
         argvalues=[
             pytest.param(
                 constants.NETSPLIT_DATA_1_DATA_2,
-                30,
+                15,
                 marks=[
                     pytest.mark.polarion_id("OCS-5069"),
                     pytest.mark.polarion_id("OCS-5071"),
@@ -177,7 +152,7 @@ class TestNetSplit:
         md5sum_before = vm_obj.run_ssh_cmd(command="md5sum /file_1.txt")
 
         # note all the pod names
-        self.check_for_logwriter_workload_pods(sc_obj)
+        check_for_logwriter_workload_pods(sc_obj)
 
         # note the file names created and each file start write time
         # note the file names created
@@ -248,7 +223,7 @@ class TestNetSplit:
         sc_obj.post_failure_checks(start_time, end_time, wait_for_read_completion=False)
 
         # check for any data loss
-        self.check_for_logwriter_workload_pods(sc_obj)
+        check_for_logwriter_workload_pods(sc_obj)
         assert sc_obj.check_for_data_loss(
             constants.LOGWRITER_CEPHFS_LABEL
         ), "[CephFS] Data is lost"
