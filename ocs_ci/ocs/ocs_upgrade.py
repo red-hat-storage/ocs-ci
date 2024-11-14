@@ -448,6 +448,8 @@ class OCSUpgrade(object):
         kind_name = (
             "subscription.operators.coreos.com"
             if config.multicluster
+            else "sub"
+            if config.ENV_DATA["cluster_type"].lower() == constants.HCI_PROVIDER
             else "subscription"
         )
         subscription = OCP(
