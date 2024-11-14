@@ -16,7 +16,6 @@ from ocs_ci.framework import config
 from ocs_ci.helpers import helpers
 from ocs_ci.ocs import constants, defaults, ocp
 from ocs_ci.ocs.constants import HCI_PROVIDER_CLIENT_PLATFORMS
-from ocs_ci.ocs import defaults
 from ocs_ci.ocs.exceptions import (
     ProviderModeNotFoundException,
     CommandFailed,
