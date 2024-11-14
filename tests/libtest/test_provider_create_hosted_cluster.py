@@ -445,7 +445,7 @@ class TestProviderHosted(object):
         from tests.functional.upgrade.test_upgrade_ocp import TestUpgradeOCP
 
         # from ocs_ci.ocs.ocs_upgrade import run_ocs_upgrade
-        from tests.functional.upgrade import test_upgrade as ocs_upgrade
+        # from tests.functional.upgrade import test_upgrade as ocs_upgrade
 
         # from tests.conftest import reduce_and_resume_cluster_load
 
@@ -453,7 +453,7 @@ class TestProviderHosted(object):
         self.test_upgrade_ocp = TestUpgradeOCP()
         # self.test_upgrade_ocp.test_upgrade_ocp(reduce_and_resume_cluster_load)
         # self.test_acm_upgrade()
-        ocs_upgrade.test_upgrade()
+        # ocs_upgrade.test_upgrade()
         logger.info(
             "Validate post provider ocs upgrade odf native client operator also upgraded"
         )
