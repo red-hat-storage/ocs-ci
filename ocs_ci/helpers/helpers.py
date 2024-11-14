@@ -5457,14 +5457,14 @@ def verify_performance_profile_change(perf_profile):
     return True
 
 
-def apply_custom_taint_and_toleration(taint_label):
+def apply_custom_taint_and_toleration(taint_label="xyz"):
     """
     Apply custom taints and tolerations.
     1. Taint ocs nodes with non-ocs taint
     2. Set custom tolerations on storagecluster, subscription, configmap and ocsinit
 
     Args:
-        taint_label (str): The taint label to apply.
+        taint_label (str): The taint label to apply (default is "xyz").
 
     """
     # Importing storage cluster object here to avoid circular dependency

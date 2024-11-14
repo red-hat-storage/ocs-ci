@@ -134,7 +134,7 @@ class TestNonOCSTaintAndTolerations(E2ETest):
         )
 
         logger.info("Apply custom taints and tolerations.")
-        apply_custom_taint_and_toleration(taint_label="xyz")
+        apply_custom_taint_and_toleration()
 
         logger.info(
             "After adding toleration wait for some time for pods to respin as expected"
@@ -204,7 +204,7 @@ class TestNonOCSTaintAndTolerations(E2ETest):
         """
 
         logger.info("Apply custom taints and tolerations.")
-        apply_custom_taint_and_toleration(taint_label="xyz")
+        apply_custom_taint_and_toleration()
 
         retry((CommandFailed, TolerationNotFoundException), tries=5, delay=10,)(
             check_toleration_on_subscriptions
@@ -259,7 +259,7 @@ class TestNonOCSTaintAndTolerations(E2ETest):
 
         """
         logger.info("Apply custom taints and tolerations.")
-        apply_custom_taint_and_toleration(taint_label="xyz")
+        apply_custom_taint_and_toleration()
 
         logger.info(
             "After adding toleration wait for some time for pods to respin as expected"
