@@ -892,7 +892,13 @@ class OCP(object):
 
         return False
 
-    def wait_for_delete(self, resource_name="", timeout=60, sleep=3):
+    def wait_for_delete(
+        self,
+        resource_name="",
+        timeout=60,
+        sleep=3,
+        ignore_command_failed_exception=False,
+    ):
         """
         Wait for a resource to be deleted
 
@@ -901,6 +907,9 @@ class OCP(object):
                 for (e.g.my-pv1)
             timeout (int): Time in seconds to wait
             sleep (int): Sampling time in seconds
+            ignore_command_failed_exception (bool): If True, it will ignore the CommandFailed Exception
+                if it differs from the "NotFound" exception and wait until the given timeout. If False, it will
+                raise the CommandFailed Exception if it differs from the "NotFound" exception.
 
         Raises:
             CommandFailed: If failed to verify the resource deletion
@@ -920,6 +929,10 @@ class OCP(object):
                 if "NotFound" in str(ex):
                     log.info(f"{self.kind} {resource_name} got deleted successfully")
                     return True
+                elif ignore_command_failed_exception:
+                    log.warning(
+                        f"Failed to get the resource {resource_name} due to the exception: {str(ex)}"
+                    )
                 else:
                     raise ex
 
