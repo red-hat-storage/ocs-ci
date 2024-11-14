@@ -5582,3 +5582,117 @@ def apply_custom_taint_and_toleration(taint_label="xyz"):
             )
             for pod_obj in pod_list:
                 pod_obj.delete(wait=False)
+
+
+def get_reclaimspacecronjob_for_pvc(pvc_obj):
+    """
+    Retrieve the ReclaimSpaceCronJob object associated with a given PVC.
+
+    Args:
+        pvc_obj (object): PersistentVolumeClaim (PVC) object.
+
+    Returns:
+        object: OCP object representing the ReclaimSpaceCronJob associated with the PVC.
+
+    Raises:
+        ValueError: If the PVC does not have the required annotation for ReclaimSpaceCronJob.
+    """
+    # Reload PVC object if annotations are missing
+    if "annotations" not in pvc_obj.data["metadata"]:
+        pvc_obj.reload()
+
+    # Retrieve the CronJob name from annotations
+    cron_job_name = pvc_obj.data["metadata"]["annotations"].get(
+        "reclaimspace.csiaddons.openshift.io/cronjob"
+    )
+    if not cron_job_name:
+        logger.error(f"PVC '{pvc_obj.name}' lacks annotation for reclaimspace cronjob.")
+        raise ValueError("PVC has no annotation for reclaimspace cronjob")
+
+    logger.info(f"Found ReclaimSpaceCronJob '{cron_job_name}' for PVC '{pvc_obj.name}'")
+
+    # Create and return the CronJob object
+    return OCP(
+        kind=constants.RECLAIMSPACECRONJOB,
+        namespace=pvc_obj.namespace,
+        resource_name=cron_job_name,
+    )
+
+
+def change_reclaimspacecronjob_state_for_pvc(pvc_objs, suspend=True):
+    """
+    Enable or disable the ReclaimSpace operation for the PVC's ReclaimSpaceCronJob.
+
+    Args:
+        pvc_objs (list): List of PersistentVolumeClaim (PVC) objects.
+        suspend (bool): If True, disables ReclaimSpace; if False, enables ReclaimSpace.
+
+    Returns:
+        bool: True if the operation was successfully applied to all PVCs.
+    """
+    action = "Disabling" if suspend else "Enabling"
+
+    for pvc_obj in pvc_objs:
+        logger.info(f"{action} ReclaimSpace operation for PVC '{pvc_obj.name}'")
+
+        # Retrieve the associated CronJob object
+        cron_obj = get_reclaimspacecronjob_for_pvc(pvc_obj)
+
+        # Update the annotation state
+        state_value = "unmanaged" if suspend else "managed"
+        cron_obj.annotate(f"csiaddons.openshift.io/state={state_value}", overwrite=True)
+        logger.debug(
+            f"Annotation 'csiaddons.openshift.io/state' set to '{state_value}' for PVC '{pvc_obj.name}'"
+        )
+
+        # Patch the 'suspend' state in the CronJob spec
+        if suspend:
+            suspend_patch = '[{"op": "add", "path": "/spec/suspend", "value": true}]'
+            logger.info(
+                f"'suspend' set to True in ReclaimSpaceCronJob for PVC '{pvc_obj.name}'"
+            )
+        else:
+            suspend_patch = '[{"op": "remove", "path": "/spec/suspend"}]'
+            logger.info(
+                f"'suspend' removed from ReclaimSpaceCronJob for PVC '{pvc_obj.name}'"
+            )
+
+        cron_obj.patch(params=suspend_patch, format_type="json")
+
+    return True
+
+
+def verify_reclaimspacecronjob_suspend_state_for_pvc(pvc_obj):
+    """
+    Verify the suspend state of the ReclaimSpaceCronJob associated with the given PVC.
+
+    Args:
+        pvc_obj (object): PersistentVolumeClaim (PVC) object.
+
+    Returns:
+        bool: True if the suspend state is True and the state annotation is 'unmanaged', False otherwise.
+    """
+    # Retrieve the ReclaimSpaceCronJob object for the PVC
+    reclaimspace_cronjob = get_reclaimspacecronjob_for_pvc(pvc_obj)
+
+    # Extract and log the suspend state
+    suspend_state = reclaimspace_cronjob.data["spec"].get("suspend", False)
+    logger.info(
+        f"ReclaimSpaceCronJob suspend state for PVC '{pvc_obj.name}' is '{suspend_state}'"
+    )
+
+    # Extract and log the state annotation
+    state_annotation = reclaimspace_cronjob.data["metadata"]["annotations"].get(
+        "csiaddons.openshift.io/state"
+    )
+    logger.info(
+        f"Annotation 'csiaddons.openshift.io/state' is '{state_annotation}' for PVC '{pvc_obj.name}'"
+    )
+
+    # Verify the suspend state and annotation
+    if suspend_state and state_annotation == "unmanaged":
+        logger.info(f"ReclaimSpace operation is disabled for PVC '{pvc_obj.name}'")
+        return True
+
+    logger.info(f"ReclaimSpace operation is enabled for PVC '{pvc_obj.name}'")
+    return False
