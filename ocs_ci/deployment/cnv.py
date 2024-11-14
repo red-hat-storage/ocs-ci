@@ -30,7 +30,7 @@ from ocs_ci.ocs import constants
 from ocs_ci.utility.utils import (
     run_cmd,
     exec_cmd,
-    get_ocp_version,
+    get_running_ocp_version,
 )
 from ocs_ci.ocs import exceptions
 from ocs_ci.ocs.resources.catalog_source import CatalogSource
@@ -870,7 +870,7 @@ class CNVInstaller(object):
         )
         self.upgrade_version = config.UPGRADE.get("upgrade_cnv_version")
         if not self.upgrade_version:
-            self.upgrade_version = get_ocp_version()
+            self.upgrade_version = get_running_ocp_version()
         print(f"Upgarde cnv version: {parse_version(self.upgrade_version)}")
 
         # we create catsrc with nightly builds only if config.DEPLOYMENT does not have cnv_latest_stable
