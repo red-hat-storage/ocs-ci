@@ -94,3 +94,15 @@ class TestOnboardingTokenGenerationWithQuota(ManageTest):
             ui_capacity_num = float(ui_capacity.split(" ")[0])
             ceph_capacity_tib = ceph_capacity_bytes / 2**40
             assert (ui_capacity_num - ceph_capacity_tib) ** 2 < 0.1
+
+    def test_quota_values_in_ui(self):
+        """
+        Test that all storage clients have correct quota value in the UI
+        """
+        storage_clients_page = PageNavigator().nav_to_storageclients_page()
+        client_clusters = storageconsumer.get_all_client_clusters()
+        for client in client_clusters:
+            quota_ui = storage_clients_page.get_client_quota_from_ui(client)
+            quota_cli = storageconsumer.get_storageconsumer_quota(client)
+            assert quota_ui == quota_cli, f"Quota in the UI: {quota_ui}, "
+            "quota in the CLI: {quota_cli}"

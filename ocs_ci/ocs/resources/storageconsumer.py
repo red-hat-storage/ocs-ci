@@ -138,3 +138,23 @@ def get_all_client_clusters():
     for storageconsumer in storageconsumers_data:
         cluster_names.append(storageconsumer["status"]["client"]["clusterName"])
     return cluster_names
+
+
+def get_storageconsumer_quota(cluster_name):
+    """
+    Get the quota value from storageconsumer details
+    Args:
+        clustername(str): name of the client cluster
+    Returns"
+        str: quota value
+    """
+    ocp_storageconsumers = ocp.OCP(
+        kind=constants.STORAGECONSUMER,
+        namespace=config.cluster_ctx.ENV_DATA["cluster_namespace"],
+    )
+    storageconsumers_data = ocp_storageconsumers.get().get("items")
+    for storageconsumer in storageconsumers_data:
+        if storageconsumer["status"]["client"]["clusterName"] == cluster_name:
+            if "storageQuotaInGiB" not in storageconsumer["spec"]:
+                return "Unlimited"
+            return storageconsumer["spec"]["storageQuotaInGiB"]
