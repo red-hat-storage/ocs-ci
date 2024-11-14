@@ -1944,6 +1944,7 @@ def query_nb_db_psql_version():
         UnexpectedBehaviour: If the NooBaa DB version could not be extracted from the
                              NooBaa DB pod
     """
+
     try:
         raw_output = exec_nb_db_query("SELECT version();")[0]
     except IndexError:
@@ -1953,14 +1954,14 @@ def query_nb_db_psql_version():
 
 def get_expected_nb_db_psql_version():
     """
-    Get the expected NooBaa DB version from the NooBaa CR
+        Get the expected NooBaa DB version from the NooBaa CR
 
-    Returns:
-        str: The expected NooBaa DB version
+        Returns:
+            str: The expected NooBaa DB version
 
     Raises:
-        ResourceNotFoundError: If the NooBaa CR was not found
-        UnexpectedBehaviour: If the NooBaa DB version could not be extracted from the
+            ResourceNotFoundError: If the NooBaa CR was not found
+            UnexpectedBehaviour: If the NooBaa DB version could not be extracted from the
     """
 
     nb_cr_obj = OCP(

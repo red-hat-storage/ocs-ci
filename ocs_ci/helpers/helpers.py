@@ -28,8 +28,9 @@ from ocs_ci.helpers.proxy import (
     get_cluster_proxies,
     update_container_with_proxy_env,
 )
-from ocs_ci.ocs.utils import get_non_acm_cluster_config, get_pod_name_by_pattern
 from ocs_ci.ocs.utils import (
+    get_non_acm_cluster_config,
+    get_pod_name_by_pattern,
     mirror_image,
     get_expected_nb_db_psql_version,
     get_nb_db_psql_version_from_image,
