@@ -10,7 +10,7 @@ from ocs_ci.framework.pytest_customization.marks import (
 )
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.ocp import OCP
-from ocs_ci.ocs.resources import pod
+from ocs_ci.ocs.resources import daeomonset, pod
 
 log = logging.getLogger(__name__)
 
@@ -97,3 +97,89 @@ def test_max_unavaialable_cephfs(upgrade_stats):
         "CSI_CEPHFS_PLUGIN_UPDATE_STRATEGY_MAX_UNAVAILABLE"
     )
     assert config_value == upgrade_stats["odf_upgrade"]["max_unavailable_cephfs"]
+
+
+@pytest.fixture(scope="function")
+def rook_operator_configmap_cleanup(request):
+    """
+    Restore values of CSI_RBD_PLUGIN_UPDATE_STRATEGY_MAX_UNAVAILABLE and
+    CSI_CEPHFS_PLUGIN_UPDATE_STRATEGY_MAX_UNAVAILABLE parameters in
+    rook-ceph-operator-config configmap after a test.
+    """
+    configmap = OCP(
+        kind=constants.CONFIGMAP,
+        namespace=config.ENV_DATA["cluster_namespace"],
+        resource_name=constants.ROOK_OPERATOR_CONFIGMAP,
+    ).get()
+    rbd_max = configmap.get("data", {}).get(
+        "CSI_RBD_PLUGIN_UPDATE_STRATEGY_MAX_UNAVAILABLE"
+    )
+    cephfs_max = configmap.get("data", {}).get(
+        "CSI_CEPHFS_PLUGIN_UPDATE_STRATEGY_MAX_UNAVAILABLE"
+    )
+
+    def restore_values():
+        """
+        Restore values of CSI_RBD_PLUGIN_UPDATE_STRATEGY_MAX_UNAVAILABLE and
+        CSI_CEPHFS_PLUGIN_UPDATE_STRATEGY_MAX_UNAVAILABLE to original values.
+        Remove them if they were not set.
+        """
+        if rbd_max is None:
+            params = '[{"op": "remove", "path": "/data/CSI_RBD_PLUGIN_UPDATE_STRATEGY_MAX_UNAVAILABLE"}]'
+            configmap.patch(params=params, format_type="json")
+        else:
+            config_map_patch = (
+                f'\'\\{"data": \\{"{paramter_name}": "{value_to_set}"\\}\\}\''
+            )
+            params = f'{{"data": {{"CSI_RBD_PLUGIN_UPDATE_STRATEGY_MAX_UNAVAILABLE": "{rbd_max}"}}}}'
+            ocs_storagecluster_obj.patch(
+                params=params,
+                format_type="merge",
+            )
+        if cephfs_max is None:
+            params = '[{"op": "remove", "path": "/data/CSI_CEPHFS_PLUGIN_UPDATE_STRATEGY_MAX_UNAVAILABLE"}]'
+            configmap.patch(params=params, format_type="json")
+        else:
+            config_map_patch = (
+                f'\'\\{"data": \\{"{paramter_name}": "{value_to_set}"\\}\\}\''
+            )
+            params = f'{{"data": {{"CSI_CEPHFS_PLUGIN_UPDATE_STRATEGY_MAX_UNAVAILABLE": "{cephfs_max}"}}}}'
+            ocs_storagecluster_obj.patch(
+                params=params,
+                format_type="merge",
+            )
+
+    request.addfinalizer(restore_values)
+
+
+@pytest.mark.parametrize(
+    argnames=["daemonset", "value_to_set", "expected_value"],
+    argvalues=[
+        pytest.param("csi-rbdplugin", 2, 2, marks=[tier1, pytest.mark.polarion_id("")]),
+        pytest.param(
+            "csi-cephfsplugin", 2, 2, marks=[tier1, pytest.mark.polarion_id("")]
+        ),
+        pytest.param("csi-rbdplugin", 2, 2, marks=[tier1, pytest.mark.polarion_id("")]),
+        pytest.param(
+            "csi-cephfsplugin", 2, 2, marks=[tier1, pytest.mark.polarion_id("")]
+        ),
+    ],
+)
+def test_update_strategy_config_change(rook_operator_configmap_cleanup):
+    """
+    Test that tested value added to configmap rook-ceph-operator-config is
+    reflected in respective daemonset.
+    """
+    if daemonset == "csi-rbdplugin":
+        parameter_name = "CSI_RBD_PLUGIN_UPDATE_STRATEGY_MAX_UNAVAILABLE"
+    elif daemonset == "csi-cephfsplugin":
+        parameter_name = "CSI_CEPHFS_PLUGIN_UPDATE_STRATEGY_MAX_UNAVAILABLE"
+
+    config_map_patch = f'\'\\{"data": \\{"{paramter_name}": "{value_to_set}"\\}\\}\''
+    exec_cmd(
+        f"oc patch configmap -n {config.ENV_DATA['cluster_namespace']} "
+        f"{constants.ROOK_OPERATOR_CONFIGMAP} -p {config_map_patch}"
+    )
+    ds_obj = daeomnset.DaemonSet(resource_name=daemonset)
+    results = ds_object.get_update_strategy()
+    assert str(expected_value) == str(results["rollingUpdate"]["maxUnavailable"])

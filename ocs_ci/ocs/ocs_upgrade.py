@@ -934,7 +934,7 @@ def set_update_strategy(rbd_max_unavailable=None, cephfs_max_unavailable=None):
         "csi_cephfs_plugin_update_strategy_max_unavailable"
     )
     if rbd_max:
-        config_map_patch = f'\'\\{"data": \\{"CSI_RBD_PLUGIN_UPDATE_STRATEGY_MAX_UNAVAILABLE": "{rbd_max}"\\}\\}\''
+        config_map_patch = f'\'{{"data": {{"CSI_RBD_PLUGIN_UPDATE_STRATEGY_MAX_UNAVAILABLE": "{rbd_max}"}}}}\''
         exec_cmd(
             f"oc patch configmap -n {self.namespace} "
             f"{constants.ROOK_OPERATOR_CONFIGMAP} -p {config_map_patch}"
@@ -943,7 +943,7 @@ def set_update_strategy(rbd_max_unavailable=None, cephfs_max_unavailable=None):
             f"CSI_RBD_PLUGIN_UPDATE_STRATEGY_MAX_UNAVAILABLE is set to {rbd_max}"
         )
     if cephfs_max:
-        config_map_patch = f'\'\\{"data": \\{"CSI_CEPHFS_PLUGIN_UPDATE_STRATEGY_MAX_UNAVAILABLE": "{cephfs_max}"\\}\\}\''
+        config_map_patch = f'\'{{"data": {{"CSI_CEPHFS_PLUGIN_UPDATE_STRATEGY_MAX_UNAVAILABLE": "{cephfs_max}"}}}}\''
         exec_cmd(
             f"oc patch configmap -n {self.namespace} "
             f"{constants.ROOK_OPERATOR_CONFIGMAP} -p {config_map_patch}"
