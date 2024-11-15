@@ -171,7 +171,7 @@ def test_update_strategy_config_change(rook_operator_configmap_cleanup):
     elif daemonset == "csi-cephfsplugin":
         parameter_name = "CSI_CEPHFS_PLUGIN_UPDATE_STRATEGY_MAX_UNAVAILABLE"
 
-    config_map_patch = f'\'\\{"data": \\{"{paramter_name}": "{value_to_set}"\\}\\}\''
+    config_map_patch = f'\'{{"data": {{"{paramter_name}": "{value_to_set}"}}}}\''
     exec_cmd(
         f"oc patch configmap -n {config.ENV_DATA['cluster_namespace']} "
         f"{constants.ROOK_OPERATOR_CONFIGMAP} -p {config_map_patch}"

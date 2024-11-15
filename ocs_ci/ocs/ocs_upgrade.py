@@ -936,7 +936,7 @@ def set_update_strategy(rbd_max_unavailable=None, cephfs_max_unavailable=None):
     if rbd_max:
         config_map_patch = f'\'{{"data": {{"CSI_RBD_PLUGIN_UPDATE_STRATEGY_MAX_UNAVAILABLE": "{rbd_max}"}}}}\''
         exec_cmd(
-            f"oc patch configmap -n {self.namespace} "
+            f"oc patch configmap -n {config.ENV_DATA['cluster_namespace']} "
             f"{constants.ROOK_OPERATOR_CONFIGMAP} -p {config_map_patch}"
         )
         logger.info(
@@ -945,7 +945,7 @@ def set_update_strategy(rbd_max_unavailable=None, cephfs_max_unavailable=None):
     if cephfs_max:
         config_map_patch = f'\'{{"data": {{"CSI_CEPHFS_PLUGIN_UPDATE_STRATEGY_MAX_UNAVAILABLE": "{cephfs_max}"}}}}\''
         exec_cmd(
-            f"oc patch configmap -n {self.namespace} "
+            f"oc patch configmap -n {config.ENV_DATA['cluster_namespace']} "
             f"{constants.ROOK_OPERATOR_CONFIGMAP} -p {config_map_patch}"
         )
         logger.info(
