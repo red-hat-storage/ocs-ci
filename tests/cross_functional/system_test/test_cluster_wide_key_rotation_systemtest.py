@@ -1,7 +1,6 @@
 import logging
 import pytest
 
-from ocs_ci.framework import config
 from ocs_ci.framework.pytest_customization.marks import (
     system_test,
     magenta_squad,
@@ -9,8 +8,6 @@ from ocs_ci.framework.pytest_customization.marks import (
 )
 from ocs_ci.framework.testlib import E2ETest
 from ocs_ci.helpers.e2e_helpers import (
-    validate_noobaa_rebuild_system,
-    validate_noobaa_db_backup_recovery_locally_system,
     Run_fio_till_cluster_full,
 )
 from ocs_ci.helpers.keyrotation_helper import (
@@ -18,11 +15,11 @@ from ocs_ci.helpers.keyrotation_helper import (
     enable_key_rotation,
     set_key_rotation_time,
     verify_new_key_after_rotation,
+    OSDKeyrotation,
 )
 from ocs_ci.helpers.osd_resize import basic_resize_osd, get_storage_size
 from ocs_ci.helpers.sanity_helpers import Sanity
-from ocs_ci.ocs import constants, warp
-from ocs_ci.ocs.ocp import OCP
+from ocs_ci.ocs import warp
 
 log = logging.getLogger(__name__)
 
@@ -58,27 +55,6 @@ class TestKeyRotationWithClusterFull(E2ETest):
         self.sanity_helpers = Sanity()
         self.sanity_helpers.health_check()
 
-    def noobaa_rebuild_cleanup(self):
-        """
-        Cleanup function which clears all the noobaa rebuild entries.
-
-        """
-        # Get the deployment replica count
-        deploy_obj = OCP(
-            kind=constants.DEPLOYMENT,
-            namespace=config.ENV_DATA["cluster_namespace"],
-        )
-        noobaa_deploy_obj = deploy_obj.get(
-            resource_name=constants.NOOBAA_OPERATOR_DEPLOYMENT
-        )
-        if noobaa_deploy_obj["spec"]["replicas"] != 1:
-            log.info(
-                f"Scaling back {constants.NOOBAA_OPERATOR_DEPLOYMENT} deployment to replica: 1"
-            )
-            deploy_obj.exec_oc_cmd(
-                f"scale deployment {constants.NOOBAA_OPERATOR_DEPLOYMENT} --replicas=1"
-            )
-
     @pytest.fixture()
     def warps3(self, request):
         warps3 = warp.Warp()
@@ -99,15 +75,19 @@ class TestKeyRotationWithClusterFull(E2ETest):
         bucket_factory_session,
         mcg_obj_session,
         noobaa_db_backup_and_recovery_locally,
+        validate_noobaa_rebuild_system,
+        validate_noobaa_db_backup_recovery_locally_system,
         warps3,
     ):
         time_interval_to_rotate_key_in_minutes = str(5)
         tries = 10
         delays = int(time_interval_to_rotate_key_in_minutes) * 60 / tries
+        schedule = f"*/{time_interval_to_rotate_key_in_minutes} * * * *"
         log.info("Enabling the key rotation if not done")
         enable_key_rotation()
         log.info("Setting the key rotation time by editing storage cluster")
         set_key_rotation_time(time_interval_to_rotate_key_in_minutes)
+        OSDKeyrotation().set_keyrotation_schedule(schedule)
         schedule = f"*/{time_interval_to_rotate_key_in_minutes} * * * *"
         log.info("Verifying the key rotation time set properly or not")
         verify_key_rotation_time(schedule=schedule)
@@ -128,7 +108,6 @@ class TestKeyRotationWithClusterFull(E2ETest):
         )
         verify_new_key_after_rotation(tries, delays)
 
-        # TODO:OSD-resize feature dropped from 4.16 release. It is supported only from 4.17 onwards.
         log.info("Performing OSD resize")
         basic_resize_osd(get_storage_size())
         log.info("After OSD resize, checking the key rotation time is unchanged")
@@ -141,7 +120,7 @@ class TestKeyRotationWithClusterFull(E2ETest):
 
         log.info("Triggering noobaa rebuild test")
 
-        validate_noobaa_rebuild_system(self, bucket_factory_session, mcg_obj_session)
+        validate_noobaa_rebuild_system(bucket_factory_session, mcg_obj_session)
         log.info("After noobaa rebuild, checking the key rotation time is unchanged")
         verify_key_rotation_time(schedule=schedule)
         log.info(
@@ -149,12 +128,10 @@ class TestKeyRotationWithClusterFull(E2ETest):
         )
         verify_new_key_after_rotation(tries, delays)
         log.info("Starting noobaa rebuild cleanup activity")
-        self.noobaa_rebuild_cleanup()
 
         log.info("Triggering noobaa db backup and recovery locally")
 
         validate_noobaa_db_backup_recovery_locally_system(
-            self,
             bucket_factory_session,
             noobaa_db_backup_and_recovery_locally,
             warps3,
