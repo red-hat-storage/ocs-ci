@@ -129,7 +129,7 @@ def rook_operator_configmap_cleanup(request):
             configmap.patch(params=params, format_type="json")
         else:
             config_map_patch = (
-                f'\'\\{"data": \\{"{paramter_name}": "{value_to_set}"\\}\\}\''
+                f'\'{{"data": {{"{paramter_name}": "{value_to_set}"}}}}\''
             )
             params = f'{{"data": {{"CSI_RBD_PLUGIN_UPDATE_STRATEGY_MAX_UNAVAILABLE": "{rbd_max}"}}}}'
             ocs_storagecluster_obj.patch(
@@ -141,7 +141,7 @@ def rook_operator_configmap_cleanup(request):
             configmap.patch(params=params, format_type="json")
         else:
             config_map_patch = (
-                f'\'\\{"data": \\{"{paramter_name}": "{value_to_set}"\\}\\}\''
+                f'\'{{"data": {{"{paramter_name}": "{value_to_set}"}}}}\''
             )
             params = f'{{"data": {{"CSI_CEPHFS_PLUGIN_UPDATE_STRATEGY_MAX_UNAVAILABLE": "{cephfs_max}"}}}}'
             ocs_storagecluster_obj.patch(
@@ -155,10 +155,6 @@ def rook_operator_configmap_cleanup(request):
 @pytest.mark.parametrize(
     argnames=["daemonset", "value_to_set", "expected_value"],
     argvalues=[
-        pytest.param("csi-rbdplugin", 2, 2, marks=[tier1, pytest.mark.polarion_id("")]),
-        pytest.param(
-            "csi-cephfsplugin", 2, 2, marks=[tier1, pytest.mark.polarion_id("")]
-        ),
         pytest.param("csi-rbdplugin", 2, 2, marks=[tier1, pytest.mark.polarion_id("")]),
         pytest.param(
             "csi-cephfsplugin", 2, 2, marks=[tier1, pytest.mark.polarion_id("")]
