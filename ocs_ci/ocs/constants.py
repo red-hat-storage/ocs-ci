@@ -146,6 +146,9 @@ BUCKET_REPLICATOR_DELAY_PARAM = CONFIG_JS_PREFIX + "BUCKET_REPLICATOR_DELAY"
 BUCKET_LOG_REPLICATOR_DELAY_PARAM = CONFIG_JS_PREFIX + "BUCKET_LOG_REPLICATOR_DELAY"
 LIFECYCLE_INTERVAL_PARAM = CONFIG_JS_PREFIX + "LIFECYCLE_INTERVAL"
 BUCKET_LOG_UPLOADER_DELAY_PARAM = CONFIG_JS_PREFIX + "BUCKET_LOG_UPLOADER_DELAY"
+STS_DEFAULT_SESSION_TOKEN_EXPIRY_MS = (
+    CONFIG_JS_PREFIX + "STS_DEFAULT_SESSION_TOKEN_EXPIRY_MS"
+)
 
 # Resources / Kinds
 CEPHFILESYSTEM = "CephFileSystem"
@@ -235,6 +238,7 @@ HOSTED_CLUSTERS = "hostedclusters"
 OPERATOR_KIND = "Operator"
 DRIVER = "Driver"
 IMAGECONTENTSOURCEPOLICY_KIND = "ImageContentSourcePolicy"
+NOOBAA_ACCOUNT = "NoobaaAccount"
 
 # Provisioners
 AWS_EFS_PROVISIONER = "openshift.org/aws-efs"
@@ -608,6 +612,7 @@ CEPHFS_NODEPLUGIN_LABEL = "app=openshift-storage.cephfs.csi.ceph.com-nodeplugin"
 RBD_NODEPLUGIN_LABEL = "app=openshift-storage.rbd.csi.ceph.com-nodeplugin"
 CEPHFS_CTRLPLUGIN_LABEL = "app=openshift-storage.cephfs.csi.ceph.com-ctrlplugin"
 RBD_CTRLPLUGIN_LABEL = "app=openshift-storage.rbd.csi.ceph.com-ctrlplugin"
+PROMETHEUS_POD_LABEL = "app.kubernetes.io/name=prometheus"
 
 # Noobaa Deployments and Statefulsets
 NOOBAA_OPERATOR_DEPLOYMENT = "noobaa-operator"
@@ -617,6 +622,7 @@ NOOBAA_CORE_STATEFULSET = "noobaa-core"
 
 # Noobaa db secret
 NOOBAA_DB_SECRET = "noobaa-db"
+NOOBAA_S3_SERVING_CERT = "noobaa-s3-serving-cert"
 
 # Auth Yaml
 OCSCI_DATA_BUCKET = "ocs-ci-data"
@@ -1519,6 +1525,15 @@ BAREMETAL_PLATFORMS = [
     HCI_BAREMETAL,
     IBM_POWER_PLATFORM,
 ]
+
+IPI_DEPL_TYPE = "ipi"
+UPI_DEPL_TYPE = "upi"
+MANAGED_DEPL_TYPE = "managed"
+LOCAL_DEPL_TYPE = "local"
+GLOBAL_DEPL_TYPE = "global"
+MANAGED_CP_DEPL_TYPE = "managed_cp"
+DEPLOYMENT_TYPES = [IPI_DEPL_TYPE, UPI_DEPL_TYPE, MANAGED_DEPL_TYPE, LOCAL_DEPL_TYPE]
+
 DEFAULT_AWS_REGION = "us-east-2"
 
 HCI_PROVIDER_CLIENT_PLATFORMS = [
@@ -3053,3 +3068,8 @@ FDF_SPECTRUM_FUSION_CR = os.path.join(FDF_TEMPLATE_DIR, "spectrum-fusion.yaml")
 FDF_NAMESPACE = "ibm-spectrum-fusion-ns"
 ISF_CATALOG_SOURCE_NAME = "isf-catalog"
 ISF_OPERATOR_SOFTWARE_CATALOG_SOURCE_YAML = "catalog-source.yaml.j2"
+
+CREATE = "create"
+EDIT = "edit"
+DELETE = "delete"
+MACHINE_POOL_ACTIONS = [CREATE, EDIT, DELETE]

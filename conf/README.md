@@ -196,7 +196,7 @@ higher priority).
 * `monitoring_enabled` - For testing OCS monitoring based on Prometheus (Default: false)
 * `persistent-monitoring` - Change monitoring backend to OCS (Default: true)
 * `platform` - Platform the cluster was created in or will be created in
-* `deployment_type` - 'ipi' or 'upi', Installer provisioned installation or user provisioned installation
+* `deployment_type` - 'ipi' or 'upi', Installer provisioned installation or user provisioned installation, 'managed_cp' for managed control plane nodes deployments, e.g. ROSA HCP
 * `region` - Platform region the cluster nodes are created in
 * `base_domain` - Base domain used for routing
 * `master_instance_type` - Instance type used for master nodes
@@ -320,10 +320,10 @@ higher priority).
 * `clusters` - section for hosted clusters
     * `<cluster name>` - name of the cluster
       * `hosted_cluster_path` - path to the cluster directory to store auth_path, credentials files or cluster related files
-      * `ocp_version` - OCP version of the hosted cluster (e.g. "4.15.13")
-      * `cpu_cores_per_hosted_cluster` - number of CPU cores per hosted cluster
-      * `memory_per_hosted_cluster` - amount of memory per hosted cluster
-      * `nodepool_replicas` - number of replicas of nodepool for each cluster
+      * `ocp_version` - OCP version of the hosted cluster in form x.y or x.y.z (e.g. "4.15.13" or "4.17")
+      * `cpu_cores_per_hosted_cluster` - number of CPU cores per hosted cluster (default: 6)
+      * `memory_per_hosted_cluster` - amount of memory per hosted cluster (default: 12Gi)
+      * `nodepool_replicas` - number of replicas of nodepool for each cluster (default: 2)
       * `hosted_odf_registry` - registry for hosted ODF
       * `hosted_odf_version` - version of ODF to be deployed on hosted clusters
       * `cp_availability_policy` - "HighlyAvailable" or "SingleReplica"; if not provided the default value is "SingleReplica"

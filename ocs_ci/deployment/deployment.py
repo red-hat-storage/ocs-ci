@@ -36,6 +36,7 @@ from ocs_ci.deployment.helpers.lso_helpers import (
 )
 from ocs_ci.deployment.disconnected import prepare_disconnected_ocs_deployment
 from ocs_ci.deployment.encryption import add_in_transit_encryption_to_cluster_data
+from ocs_ci.deployment.metallb import MetalLBInstaller
 from ocs_ci.framework import config, merge_dict
 from ocs_ci.framework.logger_helper import log_step
 from ocs_ci.helpers.dr_helpers import (
@@ -611,6 +612,13 @@ class Deployment(object):
         ):
             CNVInstaller().deploy_cnv()
 
+    def do_deploy_metallb(self):
+        """
+        Deploy MetalLB
+        """
+        if config.DEPLOYMENT.get("metallb_operator"):
+            MetalLBInstaller().deploy_lb()
+
     def do_deploy_hosted_clusters(self):
         """
         Deploy Hosted cluster(s)
@@ -701,6 +709,7 @@ class Deployment(object):
         self.do_deploy_fdf()
         self.do_deploy_odf_provider_mode()
         self.do_deploy_cnv()
+        self.do_deploy_metallb()
         self.do_deploy_hosted_clusters()
 
     def get_rdr_conf(self):
@@ -1756,7 +1765,15 @@ class Deployment(object):
         ocs_version = version.get_semantic_ocs_version_from_config()
         disable_noobaa = config.COMPONENTS.get("disable_noobaa", False)
         noobaa_cmd_arg = f"--param ignoreNoobaa={str(disable_noobaa).lower()}"
-        device_size = int(config.ENV_DATA.get("device_size", defaults.DEVICE_SIZE))
+        device_size = int(
+            config.ENV_DATA.get("device_size", defaults.DEVICE_SIZE_IBM_CLOUD_MANAGED)
+        )
+        if device_size < defaults.DEVICE_SIZE_IBM_CLOUD_MANAGED:
+            logger.warning(
+                f"OSD size provided is less than the minimum required 512Gi."
+                f" Setting OSD device size to {defaults.DEVICE_SIZE_IBM_CLOUD_MANAGED}"
+            )
+            device_size = defaults.DEVICE_SIZE_IBM_CLOUD_MANAGED
         osd_size_arg = f"--param osdSize={device_size}Gi"
         cmd = (
             f"ibmcloud ks cluster addon enable openshift-data-foundation --cluster {clustername} -f --version "
@@ -3658,13 +3675,19 @@ class RDRMultiClusterDROperatorsDeploy(MultiClusterDROperatorsDeploy):
 
         """
 
-        acm_observability_status = bool(
+        acm_observability_readiness_status = bool(
             exec_cmd(
                 "oc get MultiClusterObservability observability -o jsonpath='{.status.conditions[1].status}'"
             )
         )
 
-        if acm_observability_status:
+        acm_observability_install_status = bool(
+            exec_cmd(
+                "oc get MultiClusterObservability observability -o jsonpath='{.status.conditions[0].status}'"
+            )
+        )
+
+        if acm_observability_readiness_status and acm_observability_install_status:
             logger.info("ACM observability is successfully enabled")
         else:
             logger.error("ACM observability could not be enabled, re-trying...")
