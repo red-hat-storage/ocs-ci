@@ -7,10 +7,11 @@ from ocs_ci.framework.pytest_customization.marks import (
     pre_upgrade,
     post_upgrade,
     brown_squad,
+    tier1,
 )
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.ocp import OCP
-from ocs_ci.ocs.resources import daeomonset, pod
+from ocs_ci.ocs.resources import daemonset, pod
 
 log = logging.getLogger(__name__)
 
@@ -128,11 +129,8 @@ def rook_operator_configmap_cleanup(request):
             params = '[{"op": "remove", "path": "/data/CSI_RBD_PLUGIN_UPDATE_STRATEGY_MAX_UNAVAILABLE"}]'
             configmap.patch(params=params, format_type="json")
         else:
-            config_map_patch = (
-                f'\'{{"data": {{"{paramter_name}": "{value_to_set}"}}}}\''
-            )
             params = f'{{"data": {{"CSI_RBD_PLUGIN_UPDATE_STRATEGY_MAX_UNAVAILABLE": "{rbd_max}"}}}}'
-            ocs_storagecluster_obj.patch(
+            configmap.patch(
                 params=params,
                 format_type="merge",
             )
@@ -140,11 +138,8 @@ def rook_operator_configmap_cleanup(request):
             params = '[{"op": "remove", "path": "/data/CSI_CEPHFS_PLUGIN_UPDATE_STRATEGY_MAX_UNAVAILABLE"}]'
             configmap.patch(params=params, format_type="json")
         else:
-            config_map_patch = (
-                f'\'{{"data": {{"{paramter_name}": "{value_to_set}"}}}}\''
-            )
             params = f'{{"data": {{"CSI_CEPHFS_PLUGIN_UPDATE_STRATEGY_MAX_UNAVAILABLE": "{cephfs_max}"}}}}'
-            ocs_storagecluster_obj.patch(
+            configmap.patch(
                 params=params,
                 format_type="merge",
             )
@@ -161,7 +156,9 @@ def rook_operator_configmap_cleanup(request):
         ),
     ],
 )
-def test_update_strategy_config_change(rook_operator_configmap_cleanup):
+def test_update_strategy_config_change(
+    daemonset, value_to_set, expected_value, rook_operator_configmap_cleanup
+):
     """
     Test that tested value added to configmap rook-ceph-operator-config is
     reflected in respective daemonset.
@@ -176,6 +173,6 @@ def test_update_strategy_config_change(rook_operator_configmap_cleanup):
         f"oc patch configmap -n {config.ENV_DATA['cluster_namespace']} "
         f"{constants.ROOK_OPERATOR_CONFIGMAP} -p {config_map_patch}"
     )
-    ds_obj = daeomnset.DaemonSet(resource_name=daemonset)
-    results = ds_object.get_update_strategy()
+    ds_obj = daemonset.DaemonSet(resource_name=daemonset)
+    results = ds_obj.get_update_strategy()
     assert str(expected_value) == str(results["rollingUpdate"]["maxUnavailable"])
