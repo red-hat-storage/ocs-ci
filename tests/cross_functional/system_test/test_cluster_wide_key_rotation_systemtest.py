@@ -13,7 +13,6 @@ from ocs_ci.helpers.e2e_helpers import (
 from ocs_ci.helpers.keyrotation_helper import (
     verify_key_rotation_time,
     enable_key_rotation,
-    set_key_rotation_time,
     verify_new_key_after_rotation,
     OSDKeyrotation,
 )
@@ -86,7 +85,6 @@ class TestKeyRotationWithClusterFull(E2ETest):
         log.info("Enabling the key rotation if not done")
         enable_key_rotation()
         log.info("Setting the key rotation time by editing storage cluster")
-        set_key_rotation_time(time_interval_to_rotate_key_in_minutes)
         OSDKeyrotation().set_keyrotation_schedule(schedule)
         schedule = f"*/{time_interval_to_rotate_key_in_minutes} * * * *"
         log.info("Verifying the key rotation time set properly or not")
