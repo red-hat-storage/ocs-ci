@@ -668,18 +668,6 @@ def enable_key_rotation():
     ), "Keyrotation is not enabled in the noobaa object."
 
 
-def set_key_rotation_time(value):
-    """
-    This function will edit the storage cluster and add the value in key rotation schedule
-    Args:
-         value (str): number of minutes
-
-    """
-    osd_keyrotation = OSDKeyrotation()
-    schedule = f"*/{value} * * * *"
-    osd_keyrotation.set_keyrotation_schedule(schedule)
-
-
 def verify_key_rotation_time(schedule):
     """
     Verify Key rotation schedule changed at storage cluster, rook and Noobaa object.
