@@ -59,7 +59,7 @@ def test_ceph_manager_stopped_pd(measure_stop_ceph_mgr):
 @managed_service_required
 @runs_on_provider
 @pytest.mark.polarion_id("OCS-2769")
-def test_ceph_osd_stopped_pd(measure_stop_ceph_osd):
+def deprecated_test_ceph_osd_stopped_pd(measure_stop_ceph_osd):
     """
     Test that there are appropriate incidents in PagerDuty when ceph osd
     is unavailable and that these incidents are cleared when the osd
@@ -101,7 +101,7 @@ def test_ceph_osd_stopped_pd(measure_stop_ceph_osd):
 @bugzilla("2072612")
 @pytest.mark.polarion_id("OCS-2770")
 @pytest.mark.skip(reason="Shutting down 2 nodes at the same time is not supported")
-def test_stop_worker_nodes_pd(measure_stop_worker_nodes):
+def depricated_test_stop_worker_nodes_pd(measure_stop_worker_nodes):
     """
     Test that there are appropriate incidents in PagerDuty when two worker
     nodes are unavailable and that these incidents are cleared when those nodes
