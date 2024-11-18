@@ -68,19 +68,26 @@ class TestCephfsFsyncConsistency(ManageTest):
         helpers.wait_for_resource_state(
             pod_obj_server, state=constants.STATUS_RUNNING, timeout=300
         )
-        storage_path = pod_obj_client.get_storage_path()
-        fsync_log = f"{storage_path}/fsync.log"
-        test_file = f"{storage_path}/testfile.txt"
-        client_write_output = pod_obj_client.exec_cmd_on_pod(
-            command=f"echo 'Testing fsync operation' > {test_file} && sync && "
-            f"echo 'fsync done by Pod Client' >> {fsync_log}",
+        # storage_path = pod_obj_client.get_storage_path()
+        command_client = (
+            "bash -c "
+            + '"for i in {1..2500}; do '
+            + "echo "
+            + "'Test sync '"
+            + "  >> /var/lib/www/html/shared_file.html"
+            + " && sync; "
+            + 'done"'
+        )
+        pod_obj_client.exec_cmd_on_pod(
+            command=command_client,
             out_yaml_format=False,
         )
+        command_server = "bash -c " + '"cat ' + ' /var/lib/www/html/shared_file.html"'
         server_read_output = pod_obj_server.exec_cmd_on_pod(
-            command=f"cat {test_file} && echo 'Read successful by Pod Server'",
+            command=command_server,
             out_yaml_format=False,
         )
-        logger.info(
-            f"client write: {client_write_output}\n"
-            f"server read: {server_read_output}"
-        )
+        count = server_read_output.count("Test sync")
+        assert (
+            count == 2500
+        ), f"Expected 2500 occurrences of 'Test sync', but found {count}"
