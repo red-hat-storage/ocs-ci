@@ -179,6 +179,8 @@ def test_update_strategy_config_change(
         f"oc patch configmap -n {config.ENV_DATA['cluster_namespace']} "
         f"{constants.ROOK_OPERATOR_CONFIGMAP} -p {config_map_patch}"
     )
-    ds_obj = DaemonSet(resource_name=daemonset)
+    ds_obj = DaemonSet(
+        resource_name=daemonset, namespace=config.ENV_DATA["cluster_namespace"]
+    )
     results = ds_obj.get_update_strategy()
     assert str(expected_value) == str(results["rollingUpdate"]["maxUnavailable"])
