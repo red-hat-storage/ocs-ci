@@ -698,10 +698,10 @@ def rook_operator_configmap_cleanup(request):
             try:
                 params = '[{"op": "remove", "path": "/data/CSI_RBD_PLUGIN_UPDATE_STRATEGY_MAX_UNAVAILABLE"}]'
                 configmap.patch(params=params, format_type="json")
-            except CommandFailed as ex:
+            except CommandFailed as e:
                 log.warning(
                     "delete failed - it is possible that "
-                    "CSI_RBD_PLUGIN_UPDATE_STRATEGY_MAX_UNAVAILABLE was removed earlier"
+                    f"CSI_RBD_PLUGIN_UPDATE_STRATEGY_MAX_UNAVAILABLE was removed earlier: {e}"
                 )
         else:
             params = f'{{"data": {{"CSI_RBD_PLUGIN_UPDATE_STRATEGY_MAX_UNAVAILABLE": "{rbd_max}"}}}}'
@@ -716,7 +716,7 @@ def rook_operator_configmap_cleanup(request):
             except CommandFailed as ex:
                 log.warning(
                     "delete failed - it is possible that "
-                    "CSI_CEPHFS_PLUGIN_UPDATE_STRATEGY_MAX_UNAVAILABLE was removed earlier"
+                    f"CSI_CEPHFS_PLUGIN_UPDATE_STRATEGY_MAX_UNAVAILABLE was removed earlier: {e}"
                 )
         else:
             params = f'{{"data": {{"CSI_CEPHFS_PLUGIN_UPDATE_STRATEGY_MAX_UNAVAILABLE": "{cephfs_max}"}}}}'
