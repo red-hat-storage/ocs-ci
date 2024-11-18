@@ -713,7 +713,7 @@ def rook_operator_configmap_cleanup(request):
             try:
                 params = '[{"op": "remove", "path": "/data/CSI_CEPHFS_PLUGIN_UPDATE_STRATEGY_MAX_UNAVAILABLE"}]'
                 configmap.patch(params=params, format_type="json")
-            except CommandFailed as ex:
+            except CommandFailed as e:
                 log.warning(
                     "delete failed - it is possible that "
                     f"CSI_CEPHFS_PLUGIN_UPDATE_STRATEGY_MAX_UNAVAILABLE was removed earlier: {e}"
