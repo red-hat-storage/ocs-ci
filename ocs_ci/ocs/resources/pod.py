@@ -2333,11 +2333,15 @@ def get_pod_restarts_count(
     restart_dict = {}
     ocp_pod_obj = OCP(kind=constants.POD, namespace=namespace)
     for p in list_of_pods:
-        # we don't want to compare osd-prepare and canary pods as they get created freshly when an osd need to be added.
-        if (
-            "rook-ceph-osd-prepare" not in p.name
-            and "rook-ceph-drain-canary" not in p.name
-        ):
+        # we don't want to compare osd-prepare and canary pods as they get
+        # created freshly when an osd need to be added. Also skip check on ceph-file-controller-detect-version
+        # as it's a temp. pod.
+        exclude_names = (
+            "rook-ceph-osd-prepare",
+            "rook-ceph-drain-canary",
+            "ceph-file-controller-detect-version",
+        )
+        if all(exclude_name not in p.name for exclude_name in exclude_names):
             pod_count = ocp_pod_obj.get_resource(p.name, "RESTARTS")
             restart_dict[p.name] = int(pod_count.split()[0])
     logger.info(f"get_pod_restarts_count: restarts dict = {restart_dict}")
