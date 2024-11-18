@@ -68,6 +68,7 @@ def test_crush_map_unchanged(pre_upgrade_crush_map):
 
 @post_upgrade
 @pytest.mark.polarion_id()
+@brown_squad
 def test_max_unavaialable_rbd(upgrade_stats):
     """
     Test that the number of unavailable RBD daemonset plugin pods during ODF
@@ -86,6 +87,7 @@ def test_max_unavaialable_rbd(upgrade_stats):
 
 @post_upgrade
 @pytest.mark.polarion_id()
+@brown_squad
 def test_max_unavaialable_cephfs(upgrade_stats):
     """
     Test that the number of unavailable CephFS daemonset plugin pods during ODF
@@ -158,6 +160,7 @@ def rook_operator_configmap_cleanup(request):
         ),
     ],
 )
+@brown_squad
 def test_update_strategy_config_change(
     daemonset, value_to_set, expected_value, rook_operator_configmap_cleanup
 ):
