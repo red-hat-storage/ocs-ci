@@ -11,7 +11,9 @@ from ocs_ci.framework.pytest_customization.marks import (
 )
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.ocp import OCP
-from ocs_ci.ocs.resources import daemonset, pod
+from ocs_ci.ocs.resources import pod
+from ocs_ci.ocs.resources.daemonset import DaemonSet
+from ocs_ci.utility.utils import exec_cmd
 
 log = logging.getLogger(__name__)
 
@@ -168,11 +170,11 @@ def test_update_strategy_config_change(
     elif daemonset == "csi-cephfsplugin":
         parameter_name = "CSI_CEPHFS_PLUGIN_UPDATE_STRATEGY_MAX_UNAVAILABLE"
 
-    config_map_patch = f'\'{{"data": {{"{paramter_name}": "{value_to_set}"}}}}\''
+    config_map_patch = f'\'{{"data": {{"{parameter_name}": "{value_to_set}"}}}}\''
     exec_cmd(
         f"oc patch configmap -n {config.ENV_DATA['cluster_namespace']} "
         f"{constants.ROOK_OPERATOR_CONFIGMAP} -p {config_map_patch}"
     )
-    ds_obj = daemonset.DaemonSet(resource_name=daemonset)
+    ds_obj = DaemonSet(resource_name=daemonset)
     results = ds_obj.get_update_strategy()
     assert str(expected_value) == str(results["rollingUpdate"]["maxUnavailable"])
