@@ -104,54 +104,6 @@ def test_max_unavaialable_cephfs(upgrade_stats):
     assert config_value == upgrade_stats["odf_upgrade"]["max_unavailable_cephfs"]
 
 
-@pytest.fixture(scope="function")
-def rook_operator_configmap_cleanup(request):
-    """
-    Restore values of CSI_RBD_PLUGIN_UPDATE_STRATEGY_MAX_UNAVAILABLE and
-    CSI_CEPHFS_PLUGIN_UPDATE_STRATEGY_MAX_UNAVAILABLE parameters in
-    rook-ceph-operator-config configmap after a test.
-    """
-    configmap = OCP(
-        kind=constants.CONFIGMAP,
-        namespace=config.ENV_DATA["cluster_namespace"],
-        resource_name=constants.ROOK_OPERATOR_CONFIGMAP,
-    )
-    configmap_data = configmap.get()
-    rbd_max = configmap_data.get("data", {}).get(
-        "CSI_RBD_PLUGIN_UPDATE_STRATEGY_MAX_UNAVAILABLE"
-    )
-    cephfs_max = configmap_data.get("data", {}).get(
-        "CSI_CEPHFS_PLUGIN_UPDATE_STRATEGY_MAX_UNAVAILABLE"
-    )
-
-    def restore_values():
-        """
-        Restore values of CSI_RBD_PLUGIN_UPDATE_STRATEGY_MAX_UNAVAILABLE and
-        CSI_CEPHFS_PLUGIN_UPDATE_STRATEGY_MAX_UNAVAILABLE to original values.
-        Remove them if they were not set.
-        """
-        if rbd_max is None:
-            params = '[{"op": "remove", "path": "/data/CSI_RBD_PLUGIN_UPDATE_STRATEGY_MAX_UNAVAILABLE"}]'
-            configmap.patch(params=params, format_type="json")
-        else:
-            params = f'{{"data": {{"CSI_RBD_PLUGIN_UPDATE_STRATEGY_MAX_UNAVAILABLE": "{rbd_max}"}}}}'
-            configmap.patch(
-                params=params,
-                format_type="merge",
-            )
-        if cephfs_max is None:
-            params = '[{"op": "remove", "path": "/data/CSI_CEPHFS_PLUGIN_UPDATE_STRATEGY_MAX_UNAVAILABLE"}]'
-            configmap.patch(params=params, format_type="json")
-        else:
-            params = f'{{"data": {{"CSI_CEPHFS_PLUGIN_UPDATE_STRATEGY_MAX_UNAVAILABLE": "{cephfs_max}"}}}}'
-            configmap.patch(
-                params=params,
-                format_type="merge",
-            )
-
-    request.addfinalizer(restore_values)
-
-
 @pytest.mark.parametrize(
     argnames=["daemonset", "value_to_set", "expected_value"],
     argvalues=[
