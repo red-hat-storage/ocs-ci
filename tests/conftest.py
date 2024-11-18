@@ -7141,6 +7141,21 @@ def multi_cnv_workload(
                 "access_mode": constants.ACCESS_MODE_RWX,
                 "sc_name": sc_obj_def_compr.name,
             },
+            {
+                "volume_interface": "PVC",
+                "access_mode": constants.ACCESS_MODE_RWX,
+                "sc_name": sc_obj_aggressive.name,
+            },
+            {
+                "volume_interface": "DVT",
+                "access_mode": constants.ACCESS_MODE_RWX,
+                "sc_name": sc_obj_def_compr.name,
+            },
+            {
+                "volume_interface": "DVT",
+                "access_mode": constants.ACCESS_MODE_RWX,
+                "sc_name": sc_obj_aggressive.name,
+            },
         ]
 
         # Create ceph-csi-kms-token in the tenant namespace
