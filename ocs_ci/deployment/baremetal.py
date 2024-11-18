@@ -1349,6 +1349,12 @@ def clean_disk(worker, namespace=constants.DEFAULT_NAMESPACE):
             logger.info(out)
             out = ocp_obj.exec_oc_debug_cmd(
                 node=worker.name,
+                cmd_list=[f"blockdev --rereadpt /dev/{lsblk_device['name']}"],
+                namespace=namespace,
+            )
+            logger.info(out)
+            out = ocp_obj.exec_oc_debug_cmd(
+                node=worker.name,
                 cmd_list=[f"sgdisk --zap-all /dev/{lsblk_device['name']}"],
                 namespace=namespace,
             )
@@ -1378,6 +1384,12 @@ def clean_disk(worker, namespace=constants.DEFAULT_NAMESPACE):
             out = ocp_obj.exec_oc_debug_cmd(
                 node=worker.name,
                 cmd_list=dd_cmd2,
+                namespace=namespace,
+            )
+            logger.info(out)
+            out = ocp_obj.exec_oc_debug_cmd(
+                node=worker.name,
+                cmd_list=[f"dd if=/dev/zero of=\"/dev/{lsblk_device['name']}\""],
                 namespace=namespace,
             )
             logger.info(out)
