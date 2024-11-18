@@ -115,11 +115,12 @@ def rook_operator_configmap_cleanup(request):
         kind=constants.CONFIGMAP,
         namespace=config.ENV_DATA["cluster_namespace"],
         resource_name=constants.ROOK_OPERATOR_CONFIGMAP,
-    ).get()
-    rbd_max = configmap.get("data", {}).get(
+    )
+    configmap_data = configmap.get()
+    rbd_max = configmap_data.get("data", {}).get(
         "CSI_RBD_PLUGIN_UPDATE_STRATEGY_MAX_UNAVAILABLE"
     )
-    cephfs_max = configmap.get("data", {}).get(
+    cephfs_max = configmap_data.get("data", {}).get(
         "CSI_CEPHFS_PLUGIN_UPDATE_STRATEGY_MAX_UNAVAILABLE"
     )
 
