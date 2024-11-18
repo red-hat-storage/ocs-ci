@@ -1354,6 +1354,34 @@ def clean_disk(worker, namespace=constants.DEFAULT_NAMESPACE):
             )
             logger.info(out)
 
+            # Wipe a large portion of the start and end of the disk to remove metadata at multiple places on the disk
+            mb = 100
+            dd_cmd = [
+                f"dd if=/dev/zero of=\"/dev/{lsblk_device['name']}\" bs=1M  count={mb} oflag=direct,dsync"
+            ]
+            out = ocp_obj.exec_oc_debug_cmd(
+                node=worker.name,
+                cmd_list=dd_cmd,
+                namespace=namespace,
+            )
+            logger.info(out)
+            blkdev_size = ocp_obj.exec_oc_debug_cmd(
+                node=worker.name,
+                cmd_list=[f"blockdev --getsz /dev/{lsblk_device['name']}"],
+                namespace=namespace,
+            )
+            blkdev_size = int(blkdev_size)
+            dd_cmd2 = [
+                f"dd if=/dev/zero of=\"/dev/{lsblk_device['name']}\" bs=512 count={2048 * mb} "
+                f"seek={blkdev_size - (2048 * mb)}"
+            ]
+            out = ocp_obj.exec_oc_debug_cmd(
+                node=worker.name,
+                cmd_list=dd_cmd2,
+                namespace=namespace,
+            )
+            logger.info(out)
+
 
 class BaremetalPSIUPI(Deployment):
     """
