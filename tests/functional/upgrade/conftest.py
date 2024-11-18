@@ -695,8 +695,14 @@ def rook_operator_configmap_cleanup(request):
         Remove them if they were not set.
         """
         if rbd_max is None:
-            params = '[{"op": "remove", "path": "/data/CSI_RBD_PLUGIN_UPDATE_STRATEGY_MAX_UNAVAILABLE"}]'
-            configmap.patch(params=params, format_type="json")
+            try:
+                params = '[{"op": "remove", "path": "/data/CSI_RBD_PLUGIN_UPDATE_STRATEGY_MAX_UNAVAILABLE"}]'
+                configmap.patch(params=params, format_type="json")
+            except CommandFailed as ex:
+                log.warning(
+                    "delete failed - it is possible that "
+                    "CSI_RBD_PLUGIN_UPDATE_STRATEGY_MAX_UNAVAILABLE was removed earlier"
+                )
         else:
             params = f'{{"data": {{"CSI_RBD_PLUGIN_UPDATE_STRATEGY_MAX_UNAVAILABLE": "{rbd_max}"}}}}'
             configmap.patch(
@@ -704,8 +710,14 @@ def rook_operator_configmap_cleanup(request):
                 format_type="merge",
             )
         if cephfs_max is None:
-            params = '[{"op": "remove", "path": "/data/CSI_CEPHFS_PLUGIN_UPDATE_STRATEGY_MAX_UNAVAILABLE"}]'
-            configmap.patch(params=params, format_type="json")
+            try:
+                params = '[{"op": "remove", "path": "/data/CSI_CEPHFS_PLUGIN_UPDATE_STRATEGY_MAX_UNAVAILABLE"}]'
+                configmap.patch(params=params, format_type="json")
+            except CommandFailed as ex:
+                log.warning(
+                    "delete failed - it is possible that "
+                    "CSI_CEPHFS_PLUGIN_UPDATE_STRATEGY_MAX_UNAVAILABLE was removed earlier"
+                )
         else:
             params = f'{{"data": {{"CSI_CEPHFS_PLUGIN_UPDATE_STRATEGY_MAX_UNAVAILABLE": "{cephfs_max}"}}}}'
             configmap.patch(
