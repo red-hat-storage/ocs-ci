@@ -67,7 +67,7 @@ def test_crush_map_unchanged(pre_upgrade_crush_map):
 
 
 @post_upgrade
-@pytest.mark.polarion_id()
+@pytest.mark.polarion_id("OCS-6275")
 @brown_squad
 def test_max_unavaialable_rbd(upgrade_stats):
     """
@@ -86,7 +86,7 @@ def test_max_unavaialable_rbd(upgrade_stats):
 
 
 @post_upgrade
-@pytest.mark.polarion_id()
+@pytest.mark.polarion_id("OCS-6278")
 @brown_squad
 def test_max_unavaialable_cephfs(upgrade_stats):
     """
@@ -155,9 +155,11 @@ def rook_operator_configmap_cleanup(request):
 @pytest.mark.parametrize(
     argnames=["daemonset", "value_to_set", "expected_value"],
     argvalues=[
-        pytest.param("csi-rbdplugin", 2, 2, marks=[tier1, pytest.mark.polarion_id("")]),
         pytest.param(
-            "csi-cephfsplugin", 2, 2, marks=[tier1, pytest.mark.polarion_id("")]
+            "csi-rbdplugin", 2, 2, marks=[tier1, pytest.mark.polarion_id("OCS-6276")]
+        ),
+        pytest.param(
+            "csi-cephfsplugin", 2, 2, marks=[tier1, pytest.mark.polarion_id("OCS-6277")]
         ),
     ],
 )
