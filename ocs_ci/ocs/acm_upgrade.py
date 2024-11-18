@@ -13,7 +13,11 @@ from ocs_ci.ocs import constants
 from ocs_ci.framework import config
 from ocs_ci.ocs.ocp import OCP
 from ocs_ci.utility import templating
-from ocs_ci.utility.utils import get_ocp_version, get_running_acm_version, run_cmd
+from ocs_ci.utility.utils import (
+    get_running_ocp_version,
+    get_running_acm_version,
+    run_cmd,
+)
 
 
 logger = logging.getLogger(__name__)
@@ -114,9 +118,9 @@ class ACMUpgrade(object):
             raw_msg = resp.json()["raw_messages"]
             # TODO: Find way to get ocp version before upgrade
             version_tag = raw_msg[0]["msg"]["pipeline"]["index_image"][
-                f"v{get_ocp_version()}"
+                f"v{get_running_ocp_version()}"
             ].split(":")[1]
-            acm_catsrc["spec"]["image"] = ":".jon(
+            acm_catsrc["spec"]["image"] = ":".join(
                 [constants.ACM_BREW_REPO, version_tag]
             )
         acm_catsrc["metadata"]["name"] = constants.ACM_CATSRC_NAME
