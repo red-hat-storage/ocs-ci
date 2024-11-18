@@ -927,7 +927,7 @@ class Vault(KMS):
                 raise NotFoundError("Vault key not found")
 
         # Check for NOOBAA key
-        if any(constants.VAULT_NOOBAA_ROOT_SECRET_PATH in k for k in kvlist):
+        if any(constants.NOOBAA_BACKEND_SECRET in k for k in kvlist):
             logger.info("Found Noobaa root secret path")
         else:
             logger.error("Noobaa root secret path not found")
