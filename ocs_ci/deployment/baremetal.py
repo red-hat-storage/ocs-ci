@@ -1391,6 +1391,7 @@ def clean_disk(worker, namespace=constants.DEFAULT_NAMESPACE):
                 node=worker.name,
                 cmd_list=[f"dd if=/dev/zero of=\"/dev/{lsblk_device['name']}\""],
                 namespace=namespace,
+                timeout=5400,
             )
             logger.info(out)
 
