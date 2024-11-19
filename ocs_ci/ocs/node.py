@@ -1782,7 +1782,7 @@ def wait_for_new_osd_node(old_osd_node_names, timeout=600):
         return None
 
 
-def add_disk_to_node(node_obj, disk_size=None):
+def add_disk_to_node(node_obj, disk_size=None, ssd=False):
     """
     Add a new disk to a node
 
@@ -1790,6 +1790,7 @@ def add_disk_to_node(node_obj, disk_size=None):
         node_obj (ocs_ci.ocs.resources.ocs.OCS): The node object
         disk_size (int): The size of the new disk to attach. If not specified,
             the disk size will be equal to the size of the previous disk.
+        ssd (bool): if True, mark disk as SSD
 
     """
     from ocs_ci.ocs.platform_nodes import PlatformNodesFactory
@@ -1801,7 +1802,7 @@ def add_disk_to_node(node_obj, disk_size=None):
         pv_objs = get_pv_objs_in_sc(sc_name=constants.LOCAL_BLOCK_RESOURCE)
         disk_size = get_pv_size(pv_objs[-1])
 
-    node_util.create_and_attach_volume(node=node_obj, size=disk_size)
+    node_util.create_and_attach_volume(node=node_obj, size=disk_size, ssd=ssd)
 
 
 def verify_all_nodes_created():

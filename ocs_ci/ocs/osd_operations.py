@@ -197,7 +197,7 @@ def osd_device_replacement(nodes, cli_tool=False):
 
         # If we use LSO, we need to create and attach a new disk manually
         if cluster.is_lso_cluster():
-            node.add_disk_to_node(osd_node)
+            node.add_disk_to_node(osd_node, ssd=True)
 
         if ocp_version < version.VERSION_4_6:
             # Delete the rook ceph operator pod to trigger reconciliation

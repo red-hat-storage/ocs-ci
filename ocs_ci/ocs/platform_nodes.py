@@ -461,17 +461,18 @@ class VMWareNodes(NodesBase):
             vm=vm, identifier=volume, key="volume_path", datastore=delete_from_backend
         )
 
-    def create_and_attach_volume(self, node, size):
+    def create_and_attach_volume(self, node, size, ssd=False):
         """
         Create a new volume and attach it to the given VM
 
         Args:
             node (OCS): The OCS object representing the node
             size (int): The size in GB for the new volume
+            ssd (bool): if True, mark disk as SSD
 
         """
         vm = self.get_vms([node])[0]
-        self.vsphere.add_disk(vm, size)
+        self.vsphere.add_disk(vm=vm, size=size, ssd=ssd)
 
     def attach_volume(self, node, volume):
         raise NotImplementedError(
