@@ -1781,7 +1781,7 @@ def compare_directory(
     return all(comparisons)
 
 
-def s3_copy_object(s3_obj, bucketname, source, object_key):
+def s3_copy_object(s3_obj, bucketname, source, object_key, metadata=""):
     """
     Boto3 client based copy object
 
@@ -1796,7 +1796,7 @@ def s3_copy_object(s3_obj, bucketname, source, object_key):
 
     """
     return s3_obj.s3_client.copy_object(
-        Bucket=bucketname, CopySource=source, Key=object_key
+        Bucket=bucketname, CopySource=source, Key=object_key, Metadata=metadata
     )
 
 
