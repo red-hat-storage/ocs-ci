@@ -128,6 +128,16 @@ ceph_csi_users = [
     "client.csi-rbd-provisioner",
 ]
 
+# External cluster ceph user caps
+ceph_user_caps = {
+    "mgr": "allow command config",
+    "mon": "allow r, allow command quorum_status, allow command version",
+    "osd": (
+        "profile rbd-read-only, allow rwx pool=default.rgw.meta, allow r pool=.rgw.root, "
+        "allow rw pool=default.rgw.control, allow rx pool=default.rgw.log, allow x pool=default.rgw.buckets.index"
+    ),
+}
+
 # Hpcs related defaults
 #
 # To be used for adding additional hpcs connections
