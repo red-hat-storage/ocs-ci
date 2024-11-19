@@ -472,10 +472,20 @@ class CNVInstaller(object):
         logger.info("Performing virtctl binary compatibility check...")
         os_type = platform.system()
         os_machine_type = platform.machine()
+        if os_type == "Darwin":
+            os_type = "mac"
+        if os_machine_type == "arm64":
+            os_machine_type = "arm 64"
         virtctl_download_url = self.get_virtctl_download_url(
             os_type=os_type, os_machine_type=os_machine_type
         )
-        os_machine_type = "amd64" if os_machine_type == "x86_64" else os_machine_type
+        os_machine_type = (
+            "amd64"
+            if os_machine_type == "x86_64"
+            else "arm64"
+            if os_machine_type == "arm 64"
+            else os_machine_type
+        )
         if (
             not virtctl_download_url
             or (os_type.lower() not in virtctl_download_url)
@@ -499,6 +509,10 @@ class CNVInstaller(object):
         """
         os_type = platform.system()
         os_machine_type = platform.machine()
+        if os_type == "Darwin":
+            os_type = "mac"
+        if os_machine_type == "arm64":
+            os_machine_type = "arm 64"
         self.check_virtctl_compatibility()
 
         # Prepare bin directory for virtctl

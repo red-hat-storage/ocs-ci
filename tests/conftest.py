@@ -52,6 +52,7 @@ from ocs_ci.ocs.dr.dr_workload import (
     BusyBox_AppSet,
     CnvWorkload,
     BusyboxDiscoveredApps,
+    CnvWorkloadDiscoveredApps,
 )
 from ocs_ci.ocs.exceptions import (
     CommandFailed,
@@ -6946,6 +6947,74 @@ def discovered_apps_dr_workload(request):
                     "dr_workload_app_placement_name"
                 ],
             )
+            instances.append(workload)
+            total_pvc_count += workload_details["pvc_count"]
+            workload.deploy_workload()
+
+        return instances
+
+    def teardown():
+        for instance in instances:
+            try:
+                instance.delete_workload()
+            except ResourceNotDeleted:
+                raise ResourceNotDeleted("Workload deletion was unsuccessful")
+
+    request.addfinalizer(teardown)
+    return factory
+
+
+@pytest.fixture()
+def discovered_apps_dr_workload_cnv(request):
+    """
+    Deploys CNV Discovered App based workload for DR setup
+
+    """
+
+    instances = []
+
+    def factory(pvc_vm=1):
+        """
+        Args:
+            kubeobject (int): Number of Discovered Apps workload with kube object protection to be created
+
+        Raises:
+            ResourceNotDeletedException: In case workload resources are not deleted
+
+        Returns:
+            list: objects of workload class
+
+        """
+        total_pvc_count = 0
+        workload_key = "dr_cnv_discovered_apps"
+        for index in range(pvc_vm):
+            workload_details = ocsci_config.ENV_DATA[workload_key][index]
+            workload = CnvWorkloadDiscoveredApps(
+                workload_dir=workload_details["workload_dir"],
+                workload_pod_count=workload_details["pod_count"],
+                workload_pvc_count=workload_details["pvc_count"],
+                workload_namespace=workload_details["workload_namespace"],
+                discovered_apps_pvc_selector_key=workload_details[
+                    "dr_workload_app_pvc_selector_key"
+                ],
+                discovered_apps_pvc_selector_value=workload_details[
+                    "dr_workload_app_pvc_selector_value"
+                ],
+                discovered_apps_pod_selector_key=workload_details[
+                    "dr_workload_app_pod_selector_key"
+                ],
+                discovered_apps_pod_selector_value=workload_details[
+                    "dr_workload_app_pod_selector_value"
+                ],
+                workload_placement_name=workload_details[
+                    "dr_workload_app_placement_name"
+                ],
+                vm_secret=workload_details["vm_secret"],
+                vm_username=workload_details["vm_username"],
+                workload_name=workload_details["name"],
+                vm_name=workload_details["vm_name"],
+            )
+
             instances.append(workload)
             total_pvc_count += workload_details["pvc_count"]
             workload.deploy_workload()

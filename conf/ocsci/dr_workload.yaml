@@ -158,5 +158,19 @@ ENV_DATA:
       dr_workload_app_pvc_selector: { "appname": "busybox_app4_cephfs" }
     },
   ]
+  dr_cnv_discovered_apps: [
+    {
+      name: "vm-discovered-1", workload_dir: "rdr/cnv-workload/vm-resources/vm-workload-1",
+      pod_count: 1, pvc_count: 1,
+      dr_workload_app_pod_selector_key: "appname",
+      dr_workload_app_pod_selector_value: "kubevirt",
+      dr_workload_app_pvc_selector_key: "appname",
+      dr_workload_app_pvc_selector_value: "kubevirt",
+      workload_namespace: "cnv-dict-1",
+      dr_workload_app_placement_name: "cnv-dict-1",
+      vm_name: "vm-workload-1",
+      vm_secret: "vm-secret-1", vm_username: "cirros",
+    }
+  ]
 
   # dr_policy_name: PLACEHOLDER
