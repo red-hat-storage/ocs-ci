@@ -261,9 +261,12 @@ def create_optional_operators_catalogsource_non_ga(force=False):
     if config.DEPLOYMENT.get("optional_operators_image"):
         for _dict in optional_operators_data:
             if _dict.get("kind").lower() == "catalogsource":
-                _dict["spec"]["image"] = config.DEPLOYMENT.get(
-                    "optional_operators_image"
-                )
+                if not config.DEPLOYMENT.get("optional_operators_image"):
+                    _dict["spec"]["image"] = ocp_ga_version
+                else:
+                    _dict["spec"]["image"] = config.DEPLOYMENT.get(
+                        "optional_operators_image"
+                    )
     if config.DEPLOYMENT.get("disconnected"):
         # in case of disconnected environment, we have to mirror all the
         # optional_operators images
