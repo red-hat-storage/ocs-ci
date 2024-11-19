@@ -1999,7 +1999,7 @@ alerting = {
 locators = {
     "4.18": {
         "login": {**login, **login_4_11, **login_4_14},
-        "page": {**page_nav, **page_nav_4_10, **page_nav_4_14},
+        "page": {**page_nav, **page_nav_4_10, **page_nav_4_14, **page_nav_4_17},
         "generic": generic_locators,
         "add_capacity": {**add_capacity, **add_capacity_4_11, **add_capacity_4_12},
         "deployment": {
@@ -2048,6 +2048,7 @@ locators = {
         "topology": topology,
         "mcg_stores": mcg_stores,
         "alerting": alerting,
+        "storage_clients": storage_clients,
     },
     "4.17": {
         "login": {**login, **login_4_11, **login_4_14},
