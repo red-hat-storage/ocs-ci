@@ -65,9 +65,9 @@ class DRUpgrade(OCSUpgrade):
             ocs_registry_image,
             upgrade_in_current_source,
         )
+        self.upgrade_version = self.get_upgrade_version()
 
     def run_upgrade(self):
-        self.upgrade_version = self.get_upgrade_version()
         assert self.get_parsed_versions()[1] >= self.get_parsed_versions()[0], (
             f"Version you would like to upgrade to: {self.upgrade_version} "
             f"is not higher or equal to the version you currently running: "
