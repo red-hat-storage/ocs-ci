@@ -8682,19 +8682,11 @@ def enable_rbd_metrics(request):
 
     def restore_exclude_perf_counters_enabled():
         ct_pod.exec_ceph_cmd(
-            'ceph config set mgr mgr/prometheus/exclude_perf_counters ""',
-            out_yaml_format=False,
-        )
-        ct_pod.exec_ceph_cmd(
             f'ceph config set mgr mgr/prometheus/exclude_perf_counters "{exclude_perf_counters_enabled}"',
             out_yaml_format=False,
         )
 
     def restore_ceph_rbd_metrics_settings():
-        ct_pod.exec_ceph_cmd(
-            'ceph config set mgr mgr/prometheus/rbd_stats_pools ""',
-            out_yaml_format=False,
-        )
         ct_pod.exec_ceph_cmd(
             f'ceph config set mgr mgr/prometheus/rbd_stats_pools "{pools_enabled}"',
             out_yaml_format=False,
