@@ -96,22 +96,22 @@ class TestOnboardingTokenGeneration(ManageTest):
             5. Onboard a storageclient with limited storage-quota
         """
 
-        # log.info("Create hosted client")
-        # cluster_name = get_random_hosted_cluster_name()
-        # odf_version = str(get_ocs_version_from_csv()).replace(".stable", "")
-        # if "rhodf" in odf_version:
-        #     odf_version = get_odf_tag_from_redhat_catsrc()
+        log.info("Create hosted client")
+        cluster_name = "hcp417-bm1-nyy"
+        odf_version = str(get_ocs_version_from_csv()).replace(".stable", "")
+        if "rhodf" in odf_version:
+            odf_version = get_odf_tag_from_redhat_catsrc()
 
-        # ocp_version = get_latest_release_version()
-        # nodepool_replicas = 2
+        ocp_version = get_latest_release_version()
+        nodepool_replicas = 2
 
-        # create_hypershift_clusters(
-        #     cluster_names=[cluster_name],
-        #     ocp_version=ocp_version,
-        #     odf_version=odf_version,
-        #     setup_storage_client=False,
-        #     nodepool_replicas=nodepool_replicas,
-        # )
+        create_hypershift_clusters(
+            cluster_names=[cluster_name],
+            ocp_version=ocp_version,
+            odf_version=odf_version,
+            setup_storage_client=False,
+            nodepool_replicas=nodepool_replicas,
+        )
         cluster_name = "hcp417-bm1-nyy"
         self.hosted_odf = HostedODF(cluster_name)
 
