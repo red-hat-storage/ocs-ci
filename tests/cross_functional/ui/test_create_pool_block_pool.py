@@ -84,7 +84,8 @@ class TestPoolUserInterface(ManageTest):
 
     @ui
     @tier1
-    @skipif_ocs_version("<4.8")
+    @bugzilla("2253013")
+    @skipif_ocs_version("<4.16")
     @green_squad
     def test_create_delete_pool(
         self,
@@ -104,6 +105,9 @@ class TestPoolUserInterface(ManageTest):
         .* Create POD based on the PVC
         .* Run IO on the POD
         .* Check replication and compression
+        .* Check the values of pg_num , it should be equal to osd_pool_default_pg_num
+        .* Check PG autoscale is ON
+        .* New pool is having non-blank deviceclass
 
         """
 
@@ -153,31 +157,6 @@ class TestPoolUserInterface(ManageTest):
                 f"Pool {self.pool_name} not replicated to size {replica}"
             )
 
-    @ui
-    @tier1
-    @green_squad
-    @bugzilla("2253013")
-    @skipif_ocs_version("<4.16")
-    def test_sc_and_pool_ui_and_validate_pg_num(
-        self,
-        namespace,
-        storage,
-        pvc,
-        pod,
-        setup_ui,
-        replica,
-        compression,
-    ):
-        """
-        Test steps
-        1. Create storageclass and pool via UI
-        2. Check the values of pg_num , it should be equal to osd_pool_default_pg_num
-        3. Check PG autoscale is ON
-        4. New pool is having non-blank deviceclass
-        5. Create PVC and pod using the new storageclass created
-        6. Run IOs in the PVCs
-        """
-
         # Check pg_num and osd_pool_default_pg_num matches
         ct_pod = get_ceph_tools_pod()
         osd_pool_default_pg_num = ct_pod.exec_ceph_cmd(
@@ -215,12 +194,4 @@ class TestPoolUserInterface(ManageTest):
         assert cbp_output["spec"]["deviceClass"] is not None, "The Deviceclass is none"
         logger.info(
             f"The deviceClass of the pool {self.pool_name} is {cbp_output['spec']['deviceClass']}"
-        )
-
-        # Run IOs
-        self.pod_obj.run_io(
-            storage_type=constants.CEPHFILESYSTEM,
-            size="100M",
-            io_direction="write",
-            runtime=10,
         )
