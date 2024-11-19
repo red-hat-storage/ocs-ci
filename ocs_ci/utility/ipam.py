@@ -109,9 +109,12 @@ class IPAM(object):
 
         """
         # release the IP
-        endpoint = os.path.join("http://", self.ipam, "api/removeHost.php?")
+        if not config.DEPLOYMENT.get("ipv6"):
+            endpoint = os.path.join("http://", self.ipam, "api/removeHost.php?")
+        else:
+            endpoint = os.path.join("https://", self.ipam, "api/removeHost.php?")
         payload = {"apiapp": self.apiapp, "apitoken": self.token, "host": hostname}
-        res = requests.post(endpoint, data=payload)
+        res = requests.post(endpoint, data=payload, verify=False)
         if res.status_code == 200:
             logger.info(f"Successfully released {hostname} IP from IPAM server")
         else:
