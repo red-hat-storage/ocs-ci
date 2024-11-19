@@ -24,8 +24,13 @@ from ocs_ci.framework import config as ocsci_config, config
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.external_ceph import RolesContainer, Ceph, CephNode
 from ocs_ci.ocs.clients import WinNode
-from ocs_ci.ocs.exceptions import CommandFailed, ExternalClusterDetailsException
-from ocs_ci.ocs.ocp import OCP
+from ocs_ci.ocs.exceptions import (
+    CommandFailed,
+    ExternalClusterDetailsException,
+    ResourceNotFoundError,
+    UnexpectedBehaviour,
+)
+from ocs_ci.ocs.ocp import OCP, get_images
 from ocs_ci.ocs.openstack import CephVMNode
 from ocs_ci.ocs.parallel import parallel
 from ocs_ci.ocs.resources.ocs import OCS
@@ -34,6 +39,7 @@ from ocs_ci.utility.prometheus import PrometheusAPI
 from ocs_ci.utility.retry import retry
 from ocs_ci.utility.utils import (
     create_directory_path,
+    exec_nb_db_query,
     mirror_image,
     run_cmd,
     get_oadp_version,
@@ -1890,3 +1896,89 @@ def get_dr_operator_versions():
             if submariner_operator_version:
                 versions_dic["submariner_version"] = submariner_operator_version
     return versions_dic
+
+
+def get_nb_db_psql_version_from_image():
+    """
+    Get the NooBaa DB PostgreSQL version from the image name in the NooBaa DB statefulset
+
+    Returns:
+       str: The NooBaa DB PostgreSQL version
+
+    Raises:
+        ResourceNotFoundError: If the NooBaa DB statefulset is not available
+        UnexpectedBehaviour: If the NooBaa DB version could not be extracted from the
+                             NooBaa DB statefulset image
+
+    """
+    nb_db_sts_obj = OCP(
+        kind=constants.STATEFULSET,
+        namespace=ocsci_config.ENV_DATA["cluster_namespace"],
+        resource_name=constants.NOOBAA_DB_STATEFULSET,
+    )
+    if not nb_db_sts_obj.data:
+        raise ResourceNotFoundError(
+            f"NooBaa DB statefulset {constants.NOOBAA_DB_STATEFULSET} not found"
+        )
+
+    try:
+        images = get_images(nb_db_sts_obj.data)
+        psql_img = next(iter(images.values()))  # Only one image is expected
+        re_match = re.search(r"postgresql-(\d+(\.\d+)*)", psql_img)
+        return re_match.group(1)
+    except Exception as e:
+        raise UnexpectedBehaviour(
+            f"Failed to extract the NooBaa DB version from its stateful set: {e}"
+        )
+
+
+def query_nb_db_psql_version():
+    """
+    Query the NooBaa DB for its PostgreSQL version
+
+    Returns:
+        str: The NooBaa DB version
+
+    Raises:
+        ResourceNotFoundError: If the NooBaa DB pod was not found
+        UnexpectedBehaviour: If the NooBaa DB version could not be extracted from the
+                             NooBaa DB pod
+    """
+
+    try:
+        raw_output = exec_nb_db_query("SELECT version();")[0]
+    except IndexError:
+        raise UnexpectedBehaviour("Failed to query the NooBaa DB for its version")
+    return re.search(r"PostgreSQL (\S+)", raw_output).group(1)
+
+
+def get_expected_nb_db_psql_version():
+    """
+        Get the expected NooBaa DB version from the NooBaa CR
+
+        Returns:
+            str: The expected NooBaa DB version
+
+    Raises:
+            ResourceNotFoundError: If the NooBaa CR was not found
+            UnexpectedBehaviour: If the NooBaa DB version could not be extracted from the
+    """
+
+    nb_cr_obj = OCP(
+        kind=constants.NOOBAA_RESOURCE_NAME,
+        namespace=ocsci_config.ENV_DATA["cluster_namespace"],
+        resource_name=constants.NOOBAA_RESOURCE_NAME,
+    )
+    if not nb_cr_obj:
+        raise ResourceNotFoundError(
+            f"NooBaa CR {constants.NOOBAA_RESOURCE_NAME} not found"
+        )
+
+    try:
+        psql_image = nb_cr_obj.data["spec"]["dbImage"]
+        re_match = re.search(r"postgresql-(\d+(\.\d+)*)", psql_image)
+        return re_match.group(1)
+    except Exception as e:
+        raise UnexpectedBehaviour(
+            f"Failed to extract the NooBaa DB version from the NooBaa CR: {e}"
+        )

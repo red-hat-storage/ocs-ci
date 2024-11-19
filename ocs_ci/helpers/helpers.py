@@ -28,11 +28,18 @@ from ocs_ci.helpers.proxy import (
     get_cluster_proxies,
     update_container_with_proxy_env,
 )
-from ocs_ci.ocs.utils import get_non_acm_cluster_config, get_pod_name_by_pattern
-from ocs_ci.ocs.utils import mirror_image
+from ocs_ci.ocs.utils import (
+    get_non_acm_cluster_config,
+    get_pod_name_by_pattern,
+    mirror_image,
+    get_expected_nb_db_psql_version,
+    get_nb_db_psql_version_from_image,
+    query_nb_db_psql_version,
+)
 from ocs_ci.ocs import constants, defaults, node, ocp, exceptions
 from ocs_ci.ocs.exceptions import (
     CommandFailed,
+    ResourceNotFoundError,
     ResourceWrongStatusException,
     TimeoutExpiredError,
     UnavailableBuildException,
@@ -5366,6 +5373,52 @@ def update_volsync_channel():
             logger.error(
                 f"Pod volsync-controller-manager not in {constants.STATUS_RUNNING} after 300 seconds"
             )
+
+
+def verify_nb_db_psql_version(check_image_name_version=True):
+    """
+    Verify that the NooBaa DB PostgreSQL version matches the expectation
+    that is derived from the NooBaa CR.
+
+    Args:
+        check_image_name_version (bool): If True, also check that the
+                                         version from the name of the image
+                                         in the NooBaa DB Statefulset
+                                         matches the one queried from the DB.
+
+    Raises:
+        AssertionError: If the NooBaa DB PostgreSQL version doesn't match the
+                        NooBaa CR expectation.
+        UnexpectedBehaviour: If the parsing or extraction of the versions fails
+                             due to changes in the CRs.
+    """
+
+    try:
+        expected_version = version.get_semantic_version(
+            get_expected_nb_db_psql_version(), only_major=True
+        )
+        version_from_query = version.get_semantic_version(
+            query_nb_db_psql_version(), only_major=True
+        )
+
+        if check_image_name_version:
+            version_from_image = version.get_semantic_version(
+                get_nb_db_psql_version_from_image(), only_major=True
+            )
+            assert version_from_image == version_from_query, (
+                f"NooBaa DB PostgreSQL version mismatch between the image and the DB query. "
+                f"Image: {version_from_image}, Query: {version_from_query}"
+            )
+
+        assert version_from_query == expected_version, (
+            f"NooBaa DB PostgreSQL version doesn't match the NooBaa CR expectation. "
+            f"Expected version: {expected_version}, Actual version: {version_from_query}"
+        )
+
+    except ResourceNotFoundError:
+        logger.warning(
+            "NooBaa DB PostgreSQL version couldn't be verified as one or more resources are missing."
+        )
 
 
 def verify_performance_profile_change(perf_profile):

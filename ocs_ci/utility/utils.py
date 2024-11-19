@@ -46,6 +46,7 @@ from ocs_ci.ocs.exceptions import (
     ClientDownloadError,
     CommandFailed,
     ConfigurationError,
+    ResourceNotFoundError,
     TagNotFoundException,
     TimeoutException,
     TimeoutExpiredError,
@@ -4986,16 +4987,25 @@ def exec_nb_db_query(query):
     Returns:
         list of str: The query result rows
 
+    Raises:
+        ResourceNotFoundError: If no NooBaa DB pod is found
+
     """
     # importing here to avoid circular imports
     from ocs_ci.ocs.resources import pod
 
-    nb_db_pod = pod.Pod(
-        **pod.get_pods_having_label(
-            label=constants.NOOBAA_DB_LABEL_47_AND_ABOVE,
-            namespace=config.ENV_DATA["cluster_namespace"],
-        )[0]
-    )
+    try:
+        nb_db_pod = pod.Pod(
+            **pod.get_pods_having_label(
+                label=constants.NOOBAA_DB_LABEL_47_AND_ABOVE,
+                namespace=config.ENV_DATA["cluster_namespace"],
+            )[0]
+        )
+    except IndexError:
+        raise ResourceNotFoundError(
+            f"The NooBaa DB pod with label {constants.NOOBAA_DB_LABEL_47_AND_ABOVE} "
+            f"was not found in namespace {config.ENV_DATA['cluster_namespace']}"
+        )
 
     response = nb_db_pod.exec_cmd_on_pod(
         command=f'psql -U postgres -d nbcore -c "{query}"',

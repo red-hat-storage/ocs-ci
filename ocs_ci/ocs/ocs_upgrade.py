@@ -7,6 +7,7 @@ import time
 
 from selenium.webdriver.common.by import By
 from ocs_ci.framework import config
+from ocs_ci.helpers.helpers import verify_nb_db_psql_version
 from ocs_ci.deployment.deployment import (
     create_catalog_source,
     create_ocs_secret,
@@ -753,6 +754,8 @@ def run_ocs_upgrade(
         upgrade_ocs.get_parsed_versions()[1],
         upgrade_ocs.version_before_upgrade,
     )
+
+    verify_nb_db_psql_version()
 
     # update external secrets
     if config.DEPLOYMENT["external_mode"]:
