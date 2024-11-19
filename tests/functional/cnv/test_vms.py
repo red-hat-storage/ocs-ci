@@ -1,6 +1,7 @@
 import logging
 import pytest
 from ocs_ci.framework.testlib import E2ETest
+from ocs_ci.framework.pytest_customization.marks import magenta_squad
 
 logger = logging.getLogger(__name__)
 
@@ -20,6 +21,7 @@ class TestCNVVM(E2ETest):
 
         logger.info("All vms created successfully")
 
+    @magenta_squad
     def test_cnv_vms(self, setup):
         """
         Tests to verify configuration for non-GS like environment
