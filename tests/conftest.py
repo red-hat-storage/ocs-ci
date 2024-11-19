@@ -69,7 +69,7 @@ from ocs_ci.ocs.exceptions import (
 from ocs_ci.ocs.mcg_workload import mcg_job_factory as mcg_job_factory_implementation
 from ocs_ci.ocs.node import get_node_objs, schedule_nodes
 from ocs_ci.ocs.ocp import OCP
-from ocs_ci.ocs.resources import pvc
+from ocs_ci.ocs.resources import pvc, pod
 from ocs_ci.ocs.resources.bucket_logging_manager import BucketLoggingManager
 from ocs_ci.ocs.resources.bucket_policy import gen_bucket_policy
 from ocs_ci.ocs.resources.mcg_replication_policy import AwsLogBasedReplicationPolicy
@@ -8663,6 +8663,10 @@ def nb_assign_user_role_fixture(request, mcg_obj_session):
 
 @pytest.fixture(scope="session")
 def enable_rbd_metrics(request):
+    # this fixture is used to enable rbd metrics in prometheus and not relevant for other types of deployments
+    if not ocsci_config.DEPLOYMENT.get("external_mode"):
+        return
+
     ct_pod = pod.get_ceph_tools_pod()
     pools_enabled = ct_pod.exec_ceph_cmd(
         "ceph config get mgr mgr/prometheus/rbd_stats_pools", out_yaml_format=False
