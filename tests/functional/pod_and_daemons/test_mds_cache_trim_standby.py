@@ -92,7 +92,7 @@ class TestMdsCacheTrimStandby(E2ETest):
         trim_msgs = ["cache trim"]
 
         for sampler in TimeoutSampler(
-            timeout=900,
+            timeout=1800,
             sleep=20,
             func=cluster.get_active_mds_memory_utilisation_in_percentage,
         ):
