@@ -263,3 +263,21 @@ def set_resource_group_name(install_config, name):
         install_config_data["platform"]["azure"]["resourceGroupName"] = name
     with open(install_config, "w") as f:
         yaml.dump(install_config_data, f)
+
+
+def delete_oidc_resource_group(name, region, subscription_id):
+    """
+    Delete the Azure resources that ccoctl created.
+
+    Args:
+        name (str): Name used to tag any created cloud resources
+        region (str): Region to create cloud resources
+        subscription_id (str): Service Principal Subscription ID
+
+    """
+    logger.info("Deleting OIDC resource group")
+    cmd = (
+        f"ccoctl azure delete --name={name} --region={region} "
+        f"--subscription-id={subscription_id} --delete-oidc-resource-group"
+    )
+    exec_cmd(cmd)
