@@ -1860,3 +1860,49 @@ def validate_noobaa_db_backup_recovery_locally_system(
         logger.info(f"No {search_string} errors are found in the noobaa pod logs")
 
     return factory
+
+
+@pytest.fixture(scope="session")
+def setup_stress_testing_bucket(bucket_factory_session, rgw_bucket_factory_session):
+    """
+    This session scoped fixture is for setting up the buckets for the stress testing
+    in MCG. This creates buckets of type AWS, AZURE, PV-POOL, RGW.
+
+    """
+
+    def factory():
+
+        bucket_configs = {
+            "aws": {
+                "interface": "CLI",
+                "backingstore_dict": {"aws": [(1, "eu-central-1")]},
+            },
+            "azure": {
+                "interface": "CLI",
+                "backingstore_dict": {"azure": [(1, None)]},
+            },
+            "pv-pool": {
+                "interface": "CLI",
+                "backingstore_dict": {
+                    "pv": [(1, 50, constants.DEFAULT_STORAGECLASS_RBD)]
+                },
+            },
+            "rgw": None,
+        }
+
+        bucket_objects = dict()
+
+        for type, bucketclass_dict in bucket_configs.items():
+            if type == "rgw":
+                bucket = rgw_bucket_factory_session(interface="rgw-oc")[0]
+            else:
+                bucket = bucket_factory_session(
+                    interface="CLI", bucketclass=bucketclass_dict
+                )[0]
+
+            logger.info(f"BUCKET CREATION: Created bucket {bucket.name} of type {type}")
+            bucket_objects[type] = bucket
+
+        return bucket_objects
+
+    return factory
