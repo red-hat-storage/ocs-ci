@@ -306,7 +306,7 @@ class ExternalCluster(object):
             params (str): Parameter to pass to exporter script
 
         Returns:
-            str: absolute path to config.ini gile
+            str: absolute path to config.ini file
 
         """
         script_path = params_to_configini_file(params=params)
@@ -345,7 +345,7 @@ class ExternalCluster(object):
         # run the exporter script on external RHCS cluster
         ocs_version = version.get_semantic_ocs_version_from_config()
         # if condition is for the new feature introduced in
-        # 4.17 in OCSQE-2249 where the this covers the test case
+        # 4.17 in OCSQE-2249 where this covers the test case
         # with polarian id OCS-6196
         if (
             "--upgrade" not in params
