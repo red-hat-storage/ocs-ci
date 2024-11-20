@@ -2693,6 +2693,28 @@ class IBMCloud(NodesBase):
         super(IBMCloud, self).__init__()
         self.ibmcloud = ibmcloud.IBMCloud()
 
+    def stop_nodes(self, nodes, wait=True):
+        """
+        Stop nodes on IBM Cloud
+
+        Args:
+            nodes (list): The OCS objects of the nodes
+            wait (bool): True for waiting the instances to stop, False otherwise
+
+        """
+        self.ibmcloud.stop_nodes(nodes, wait=wait)
+
+    def start_nodes(self, nodes, wait=True):
+        """
+        Start nodes on IBM Cloud
+
+        Args:
+            nodes (list): The OCS objects of the nodes
+            wait (bool): True for waiting the instances to start, False otherwise
+
+        """
+        self.ibmcloud.start_nodes(nodes, wait=wait)
+
     def restart_nodes(self, nodes, timeout=900, wait=True):
         """
         Restart all the ibmcloud vm instances

@@ -24,6 +24,7 @@ from ocs_ci.ocs.exceptions import (
     NodeHasNoAttachedVolume,
     TimeoutExpiredError,
 )
+from ocs_ci.ocs.node import wait_for_nodes_status
 from ocs_ci.utility import version as util_version
 from ocs_ci.utility.utils import get_infra_id, get_ocp_version, run_cmd, TimeoutSampler
 from ocs_ci.ocs.node import get_nodes
@@ -334,6 +335,58 @@ class IBMCloud(object):
     """
     Wrapper for Ibm Cloud
     """
+
+    def start_nodes(self, nodes, wait=True):
+        """
+        Start nodes on IBM Cloud.
+
+        Args:
+            nodes (list): The OCS objects of the nodes
+            wait (bool): True for waiting the instances to start, False otherwise
+
+        Raises:
+            ValueError: if the list of nodes is empty
+
+        """
+        if not nodes:
+            raise ValueError("No nodes found to start")
+
+        node_names = [n.name for n in nodes]
+        self.restart_nodes(nodes)
+
+        if wait:
+            # When the node is reachable then the node reaches status Ready.
+            logger.info(f"Waiting for nodes: {node_names} to reach ready state")
+            wait_for_nodes_status(
+                node_names=node_names, status=constants.NODE_READY, timeout=180, sleep=5
+            )
+
+    def stop_nodes(self, nodes, wait=True):
+        """
+        Stop nodes on IBM Cloud
+
+        Args:
+            nodes (list): The OCS objects of the nodes
+            wait (bool): True for waiting the instances to stop, False otherwise
+
+        Raises:
+            ValueError: if the list of nodes is empty
+
+        """
+        if not nodes:
+            raise ValueError("No nodes found to stop")
+
+        cmd = "oc debug node/{} -- chroot /host shutdown"
+        node_names = [n.name for n in nodes]
+        for node in node_names:
+            run_cmd(cmd.format(node))
+
+        if wait:
+            # When the node is reachable then the node reaches status Ready.
+            logger.info(f"Waiting for nodes: {node_names} to reach not ready state")
+            wait_for_nodes_status(
+                node_names, constants.NODE_NOT_READY, timeout=180, sleep=5
+            )
 
     def restart_nodes(self, nodes, timeout=900, wait=True):
         """
