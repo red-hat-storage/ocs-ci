@@ -1590,26 +1590,4 @@ def validate_noobaa_db_backup_recovery_locally_system(
                 ), f"[Error] {search_string} found in the noobaa pod logs"
         logger.info(f"No {search_string} errors are found in the noobaa pod logs")
 
-    def finalizer():
-        """
-        Cleanup function which clears all the noobaa rebuild entries.
-
-        """
-        # Get the deployment replica count
-        deploy_obj = OCP(
-            kind=constants.DEPLOYMENT,
-            namespace=config.ENV_DATA["cluster_namespace"],
-        )
-        noobaa_deploy_obj = deploy_obj.get(
-            resource_name=constants.NOOBAA_OPERATOR_DEPLOYMENT
-        )
-        if noobaa_deploy_obj["spec"]["replicas"] != 1:
-            logger.info(
-                f"Scaling back {constants.NOOBAA_OPERATOR_DEPLOYMENT} deployment to replica: 1"
-            )
-            deploy_obj.exec_oc_cmd(
-                f"scale deployment {constants.NOOBAA_OPERATOR_DEPLOYMENT} --replicas=1"
-            )
-
-    request.addfinalizer(finalizer)
     return factory
