@@ -67,9 +67,9 @@ class TestRGWAndKafkaNotifications(E2ETest):
     def test_fixture_amq(self, request):
         self.amq = AMQ()
 
-        self.kafka_topic = (
-            self.kafkadrop_pod
-        ) = self.kafkadrop_svc = self.kafkadrop_route = None
+        self.kafka_topic = self.kafkadrop_pod = self.kafkadrop_svc = (
+            self.kafkadrop_route
+        ) = None
 
         def teardown():
             if self.kafka_topic:

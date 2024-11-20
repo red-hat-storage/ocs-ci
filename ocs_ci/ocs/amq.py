@@ -1,6 +1,7 @@
 """
 AMQ Class to run amq specific tests
 """
+
 import logging
 import os
 import tempfile
@@ -666,9 +667,9 @@ class AMQ(object):
 
         # Update commonConfig with kafka-bootstrap server details
         driver_kafka = templating.load_yaml(constants.AMQ_DRIVER_KAFKA_YAML)
-        driver_kafka[
-            "commonConfig"
-        ] = f"bootstrap.servers=my-cluster-kafka-bootstrap.{kafka_namespace}.svc.cluster.local:9092"
+        driver_kafka["commonConfig"] = (
+            f"bootstrap.servers=my-cluster-kafka-bootstrap.{kafka_namespace}.svc.cluster.local:9092"
+        )
         json_file = f"{self.dir}/driver_kafka"
         templating.dump_data_to_json(driver_kafka, json_file)
         cmd = f"cp {json_file} {benchmark_pod_name}-driver:/"

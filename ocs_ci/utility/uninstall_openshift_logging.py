@@ -1,6 +1,7 @@
 """
 Function to teardown the openshift-logging
 """
+
 import logging
 
 from ocs_ci.ocs import constants, ocp

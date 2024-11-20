@@ -3460,7 +3460,6 @@ def ceph_health_detail():
 
 
 def get_active_mds_info():
-
     """Return information about the active Ceph MDS.
 
     Returns:

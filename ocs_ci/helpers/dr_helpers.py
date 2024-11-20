@@ -1528,7 +1528,6 @@ def apply_drpolicy_to_workload(workload, drcluster_name):
 
 
 def replace_cluster(workload, primary_cluster_name, secondary_cluster_name):
-
     """
     Function to do core replace cluster task
 

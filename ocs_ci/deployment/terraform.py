@@ -2,6 +2,7 @@
 This module contains terraform specific methods and classes needed
 for deployment on vSphere platform
 """
+
 import os
 import logging
 

@@ -1,6 +1,7 @@
 """
 General OCS object
 """
+
 import logging
 import tempfile
 
@@ -253,9 +254,11 @@ def get_ocs_csv():
             ver < VERSION_4_9
             or config.ENV_DATA["platform"] == constants.FUSIONAAS_PLATFORM
         )
-        else constants.OCS_CLIENT_OPERATOR
-        if config.ENV_DATA["platform"] in constants.HCI_PROVIDER_CLIENT_PLATFORMS
-        else defaults.ODF_OPERATOR_NAME
+        else (
+            constants.OCS_CLIENT_OPERATOR
+            if config.ENV_DATA["platform"] in constants.HCI_PROVIDER_CLIENT_PLATFORMS
+            else defaults.ODF_OPERATOR_NAME
+        )
     )
     namespace = config.ENV_DATA["cluster_namespace"]
     operator_name = f"{operator_base}.{namespace}"

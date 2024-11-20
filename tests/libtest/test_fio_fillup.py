@@ -1,6 +1,7 @@
 """
 Module to perform IOs with several weights
 """
+
 import pytest
 import logging
 

@@ -111,7 +111,6 @@ class TestApplicationFailoverAndRelocateWhenZoneDown:
         nodes_multicluster,
         dr_workload,
     ):
-
         """
         Tests to verify failover and relocate all apps in a single zone after a zone disruption
 
@@ -250,9 +249,11 @@ class TestApplicationFailoverAndRelocateWhenZoneDown:
                         namespace=wl.workload_namespace,
                         workload_type=wl.workload_type,
                         switch_ctx=get_passive_acm_index(),
-                        workload_placement_name=wl.appset_placement_name
-                        if wl.workload_type != constants.SUBSCRIPTION
-                        else None,
+                        workload_placement_name=(
+                            wl.appset_placement_name
+                            if wl.workload_type != constants.SUBSCRIPTION
+                            else None
+                        ),
                     )
                 )
                 time.sleep(60)
@@ -357,9 +358,11 @@ class TestApplicationFailoverAndRelocateWhenZoneDown:
                         namespace=wl.workload_namespace,
                         workload_type=wl.workload_type,
                         switch_ctx=get_passive_acm_index(),
-                        workload_placement_name=wl.appset_placement_name
-                        if wl.workload_type != constants.SUBSCRIPTION
-                        else None,
+                        workload_placement_name=(
+                            wl.appset_placement_name
+                            if wl.workload_type != constants.SUBSCRIPTION
+                            else None
+                        ),
                     )
                 )
                 time.sleep(60)

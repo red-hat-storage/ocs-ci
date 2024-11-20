@@ -3,6 +3,7 @@ This module implements the OCS deployment for IBM Power platform
 Base code in deployment.py contains the required changes to keep
 code duplication to minimum. Only destroy_ocs is retained here.
 """
+
 import json
 import logging
 import subprocess

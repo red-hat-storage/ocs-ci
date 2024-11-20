@@ -2,6 +2,7 @@
 This module contains platform specific methods and classes for deployment
 on vSphere platform
 """
+
 import glob
 import json
 import logging
@@ -142,9 +143,9 @@ class VSPHEREBASE(Deployment):
 
         self.ocp_version = get_ocp_version()
         config.ENV_DATA["ocp_version"] = self.ocp_version
-        config.ENV_DATA[
-            "ocp_version_object"
-        ] = version.get_semantic_ocp_version_from_config()
+        config.ENV_DATA["ocp_version_object"] = (
+            version.get_semantic_ocp_version_from_config()
+        )
         config.ENV_DATA["version_4_9_object"] = version.VERSION_4_9
 
         self.wait_time = 90
@@ -1773,9 +1774,9 @@ class VSPHEREAI(VSPHEREBASE):
             mac_role_mapping = {
                 res["instances"][0]["attributes"]["network_interface"][0][
                     "mac_address"
-                ]: "master"
-                if "module.control_plane_vm" in res["module"]
-                else "worker"
+                ]: (
+                    "master" if "module.control_plane_vm" in res["module"] else "worker"
+                )
                 for res in tfstate["resources"]
                 if res["type"] == "vsphere_virtual_machine"
             }
@@ -1931,7 +1932,7 @@ class VSPHEREAI(VSPHEREBASE):
             terraform.initialize()
             terraform.destroy(tfvars)
             os.chdir(previous_dir)
-        except (exceptions.CommandFailed) as err:
+        except exceptions.CommandFailed as err:
             logger.warning(
                 f"Failed to destroy cluster resources via Terraform: {err}\n"
                 "(ignoring the failure and continuing the destroy process to remove other resources)"

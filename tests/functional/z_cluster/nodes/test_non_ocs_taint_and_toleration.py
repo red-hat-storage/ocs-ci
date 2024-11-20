@@ -157,7 +157,11 @@ class TestNonOCSTaintAndTolerations(E2ETest):
                     sub_obj.patch(resource_name=sub, params=param, format_type="merge")
                     logger.info(f"Successfully added toleration to {sub}")
 
-        retry(CommandFailed, tries=5, delay=10,)(
+        retry(
+            CommandFailed,
+            tries=5,
+            delay=10,
+        )(
             check_toleration_on_subscriptions
         )(toleration_key="xyz")
 
@@ -218,7 +222,11 @@ class TestNonOCSTaintAndTolerations(E2ETest):
         logger.info(
             "Check non-ocs toleration on all newly created pods under openshift-storage NS"
         )
-        retry(CommandFailed, tries=5, delay=10,)(
+        retry(
+            CommandFailed,
+            tries=5,
+            delay=10,
+        )(
             check_toleration_on_pods
         )(toleration_key="xyz")
         if config.DEPLOYMENT["external_mode"]:

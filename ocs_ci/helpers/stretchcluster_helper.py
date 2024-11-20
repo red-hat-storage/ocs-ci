@@ -17,7 +17,6 @@ logger = logging.getLogger(__name__)
 
 
 def recover_workload_pods_post_recovery(sc_obj, pods_not_running):
-
     """
     There seems to be a known issue https://bugzilla.redhat.com/show_bug.cgi?id=2244353
     and this will apply the workaround to resolve that issue

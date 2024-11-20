@@ -1686,29 +1686,29 @@ class Deployment(object):
                 "cephCluster"
             ]
             if wait_timeout_for_healthy_osd_in_minutes:
-                managed_resources_ceph_cluster[
-                    "waitTimeoutForHealthyOSDInMinutes"
-                ] = wait_timeout_for_healthy_osd_in_minutes
+                managed_resources_ceph_cluster["waitTimeoutForHealthyOSDInMinutes"] = (
+                    wait_timeout_for_healthy_osd_in_minutes
+                )
             if ceph_threshold_backfill_full_ratio:
-                managed_resources_ceph_cluster[
-                    "backfillFullRatio"
-                ] = ceph_threshold_backfill_full_ratio
+                managed_resources_ceph_cluster["backfillFullRatio"] = (
+                    ceph_threshold_backfill_full_ratio
+                )
             if ceph_threshold_full_ratio:
                 managed_resources_ceph_cluster["fullRatio"] = ceph_threshold_full_ratio
             if ceph_threshold_near_full_ratio:
-                managed_resources_ceph_cluster[
-                    "nearFullRatio"
-                ] = ceph_threshold_near_full_ratio
+                managed_resources_ceph_cluster["nearFullRatio"] = (
+                    ceph_threshold_near_full_ratio
+                )
 
             if osd_maintenance_timeout:
-                managed_resources_ceph_cluster[
-                    "osdMaintenanceTimeout"
-                ] = osd_maintenance_timeout
+                managed_resources_ceph_cluster["osdMaintenanceTimeout"] = (
+                    osd_maintenance_timeout
+                )
 
             if skip_upgrade_checks is not None:
-                managed_resources_ceph_cluster[
-                    "skipUpgradeChecks"
-                ] = skip_upgrade_checks
+                managed_resources_ceph_cluster["skipUpgradeChecks"] = (
+                    skip_upgrade_checks
+                )
 
             if continue_upgrade_after_checks_even_if_not_healthy is not None:
                 managed_resources_ceph_cluster[
@@ -1716,9 +1716,9 @@ class Deployment(object):
                 ] = continue_upgrade_after_checks_even_if_not_healthy
 
             if upgrade_osd_requires_healthy_pgs is not None:
-                managed_resources_ceph_cluster[
-                    "upgradeOSDRequiresHealthyPGs"
-                ] = upgrade_osd_requires_healthy_pgs
+                managed_resources_ceph_cluster["upgradeOSDRequiresHealthyPGs"] = (
+                    upgrade_osd_requires_healthy_pgs
+                )
 
         cluster_data_yaml = tempfile.NamedTemporaryFile(
             mode="w+", prefix="cluster_storage", delete=False
@@ -1907,9 +1907,9 @@ class Deployment(object):
 
             # Setting up custom storageclass names for 'encryption' service
             if cluster_data["spec"].get("encryption", {}).get("enable"):
-                cluster_data["spec"]["encryption"][
-                    "storageClassName"
-                ] = storageclassnames["encryption"]
+                cluster_data["spec"]["encryption"]["storageClassName"] = (
+                    storageclassnames["encryption"]
+                )
 
         # Enable in-transit encryption.
         if config.ENV_DATA.get("in_transit_encryption"):
@@ -2078,7 +2078,11 @@ class Deployment(object):
             if config.DEPLOYMENT.get("multi_storagecluster"):
                 self.deploy_with_external_mode()
                 # Checking external cephcluster health
-                retry((CephHealthException, CommandFailed), tries=5, delay=20,)(
+                retry(
+                    (CephHealthException, CommandFailed),
+                    tries=5,
+                    delay=20,
+                )(
                     check_cephcluster_status(
                         desired_phase="Connected",
                         desired_health="HEALTH_OK",
@@ -2461,10 +2465,10 @@ class Deployment(object):
             tries=10,
             delay=2,
         )(package_manifest.get_current_csv)(channel, constants.ACM_HUB_OPERATOR_NAME)
-        acm_hub_subscription_yaml_data["spec"][
-            "startingCSV"
-        ] = package_manifest.get_current_csv(
-            channel=channel, csv_pattern=constants.ACM_HUB_OPERATOR_NAME
+        acm_hub_subscription_yaml_data["spec"]["startingCSV"] = (
+            package_manifest.get_current_csv(
+                channel=channel, csv_pattern=constants.ACM_HUB_OPERATOR_NAME
+            )
         )
 
         acm_hub_subscription_manifest = tempfile.NamedTemporaryFile(
@@ -3746,9 +3750,9 @@ class RDRMultiClusterDROperatorsDeploy(MultiClusterDROperatorsDeploy):
         multiclusterobservability_yaml_data = templating.load_yaml(
             constants.MULTICLUSTEROBSERVABILITY_PATH
         )
-        multiclusterobservability_yaml_data["spec"]["storageConfig"][
-            "storageClass"
-        ] = defaultstorageclass[0]
+        multiclusterobservability_yaml_data["spec"]["storageConfig"]["storageClass"] = (
+            defaultstorageclass[0]
+        )
         multiclusterobservability_data_yaml = tempfile.NamedTemporaryFile(
             mode="w+", prefix="multiclusterobservability", delete=False
         )

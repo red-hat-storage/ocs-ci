@@ -1,6 +1,7 @@
 """
 This module contains the vSphere related methods
 """
+
 import logging
 import os
 import ssl
@@ -730,14 +731,16 @@ class VSPHERE(object):
                         "capacityInKB": device.capacityInKB,
                         "unitNumber": device.unitNumber,
                         "datastore": backing.datastore,
-                        "isthinProvisioned": backing.thinProvisioned
-                        if hasattr(backing, "thinProvisioned")
-                        else False,
+                        "isthinProvisioned": (
+                            backing.thinProvisioned
+                            if hasattr(backing, "thinProvisioned")
+                            else False
+                        ),
                         "uuid": backing.uuid,
                         "eagerlyScrub": backing.eagerlyScrub,
-                        "fileName": backing.fileName
-                        if hasattr(backing, "fileName")
-                        else "N/A",
+                        "fileName": (
+                            backing.fileName if hasattr(backing, "fileName") else "N/A"
+                        ),
                         "wwn": wwn,
                     }
                     disks.append(disk_info)

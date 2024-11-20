@@ -1090,7 +1090,14 @@ def measure_stop_worker_nodes(request, measurement_dir, nodes, threading_lock):
             "Nodes were not found: they were probably recreated. Check ceph health below"
         )
     # Validate all nodes are in READY state and up
-    retry((CommandFailed, ResourceWrongStatusException,), tries=60, delay=15,)(
+    retry(
+        (
+            CommandFailed,
+            ResourceWrongStatusException,
+        ),
+        tries=60,
+        delay=15,
+    )(
         wait_for_nodes_status
     )(timeout=900)
 

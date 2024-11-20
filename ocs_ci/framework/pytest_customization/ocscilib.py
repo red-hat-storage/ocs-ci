@@ -6,6 +6,7 @@ The basic configuration is done in run_ocsci.py module casue we need to load
 all the config before pytest run. This run_ocsci.py is just a wrapper for
 pytest which proccess config and passes all params to pytest.
 """
+
 import logging
 import os
 import pandas as pd
@@ -387,9 +388,9 @@ def pytest_configure(config):
             )
             if ocsci_config.DEPLOYMENT.get("multi_storagecluster"):
                 ocsci_config.DEPLOYMENT["external_mode"] = False
-                ocsci_config.ENV_DATA[
-                    "storage_cluster_name"
-                ] = constants.DEFAULT_STORAGE_CLUSTER
+                ocsci_config.ENV_DATA["storage_cluster_name"] = (
+                    constants.DEFAULT_STORAGE_CLUSTER
+                )
             dump_config_to_file(config_file)
             log.info(
                 f"Dump of the consolidated config file is located here: "

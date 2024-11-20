@@ -3,6 +3,7 @@ Defaults module. All the defaults used by OSCCI framework should
 reside in this module.
 PYTEST_DONT_REWRITE - avoid pytest to rewrite, keep this msg here please!
 """
+
 import os
 
 from ocs_ci.ocs import constants

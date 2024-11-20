@@ -2,6 +2,7 @@
 Util for environment check before and after test to compare and find stale
 leftovers
 """
+
 import copy
 import logging
 import yaml

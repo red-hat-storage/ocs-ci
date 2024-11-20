@@ -374,24 +374,22 @@ class AbstractTopologyView(ABC, TopologySidebar):
         df = self.topology_df
         for index, row in df.iterrows():
             entity_name = row["entity_name"]
-            df.loc[
-                df["entity_name"] == entity_name, "entity_status"
-            ] = self._get_status_of_entity(entity_name)
+            df.loc[df["entity_name"] == entity_name, "entity_status"] = (
+                self._get_status_of_entity(entity_name)
+            )
             df.loc[df["entity_name"] == entity_name, "status_xpath"] = format_locator(
                 self.topology_loc["node_status_class_axis"], entity_name
             )[0]
-            df.loc[
-                df["entity_name"] == entity_name, "select_node_xpath"
-            ] = format_locator(self.topology_loc["select_entity"], entity_name)[0]
+            df.loc[df["entity_name"] == entity_name, "select_node_xpath"] = (
+                format_locator(self.topology_loc["select_entity"], entity_name)[0]
+            )
             # navigate_into_xpath is applicable only for node level, since we can not navigate into deployment
             if "navigate_into_xpath" in df.columns:
-                df.loc[
-                    df["entity_name"] == entity_name, "navigate_into_xpath"
-                ] = format_locator(
-                    self.topology_loc["enter_into_entity_arrow"], entity_name
-                )[
-                    0
-                ]
+                df.loc[df["entity_name"] == entity_name, "navigate_into_xpath"] = (
+                    format_locator(
+                        self.topology_loc["enter_into_entity_arrow"], entity_name
+                    )[0]
+                )
             time.sleep(0.1)
 
     def initiate_topology_df(self, reinit: bool = True):
@@ -694,9 +692,9 @@ class TopologyTab(DataFoundationDefaultTab, AbstractTopologyView):
 
         if node_selected != another_random_node:
             logger.error("search bar navigate to another node check failed")
-            topology_deviation[
-                "search_bar_navigate_to_another_node_check_failed"
-            ] = True
+            topology_deviation["search_bar_navigate_to_another_node_check_failed"] = (
+                True
+            )
 
         topology_ui_df = self.get_topology_df()
 

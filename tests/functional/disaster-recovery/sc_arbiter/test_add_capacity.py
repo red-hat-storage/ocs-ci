@@ -86,7 +86,6 @@ class TestAddCapacityStretchCluster:
         logreader_workload_factory,
         iterations,
     ):
-
         """
         Test cluster exapnsion and health when add capacity is performed
         continuously

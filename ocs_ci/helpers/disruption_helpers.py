@@ -147,9 +147,9 @@ class Disruptions:
         if self.cluster_kubeconfig:
             # Setting 'cluster_kubeconfig' attribute to use as the value of the
             # parameter '--kubeconfig' in the 'oc' commands.
-            self.resource_obj[
-                resource_id
-            ].ocp.cluster_kubeconfig = self.cluster_kubeconfig
+            self.resource_obj[resource_id].ocp.cluster_kubeconfig = (
+                self.cluster_kubeconfig
+            )
             pod_ocp.cluster_kubeconfig = self.cluster_kubeconfig
         self.resource_obj[resource_id].delete(force=True)
         assert pod_ocp.wait_for_resource(

@@ -474,7 +474,6 @@ class TestBucketIO(MCGTest):
         change_the_noobaa_log_level,
         test_directory_setup,
     ):
-
         """
         This test checks if the activity logs are being logged
         in the activitylogs table for every object upload and

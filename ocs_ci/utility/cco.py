@@ -1,6 +1,7 @@
 """
 Cloud Credential Operator utility functions
 """
+
 import logging
 import os
 import shutil

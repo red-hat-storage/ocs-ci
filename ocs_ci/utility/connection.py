@@ -132,8 +132,10 @@ class Connection(object):
             stderr = err.read()
         logger.debug(f"retcode: {retcode}")
         masked_stdout = mask_secrets(stdout, secrets)
-        logger.info(f"stdout: {masked_stdout}") if self.stdout else logger.debug(
-            f"stdout: {masked_stdout}"
+        (
+            logger.info(f"stdout: {masked_stdout}")
+            if self.stdout
+            else logger.debug(f"stdout: {masked_stdout}")
         )
         masked_stderr = mask_secrets(stderr, secrets)
         logger.debug(f"stderr: {masked_stderr}")

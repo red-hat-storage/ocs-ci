@@ -101,9 +101,11 @@ class TestReplaceCluster:
                         namespace=wl.workload_namespace,
                         workload_type=wl.workload_type,
                         switch_ctx=get_active_acm_index(),
-                        workload_placement_name=wl.appset_placement_name
-                        if wl.workload_type != constants.SUBSCRIPTION
-                        else None,
+                        workload_placement_name=(
+                            wl.appset_placement_name
+                            if wl.workload_type != constants.SUBSCRIPTION
+                            else None
+                        ),
                     )
                 )
                 time.sleep(10)
@@ -144,9 +146,11 @@ class TestReplaceCluster:
                         preferred_cluster=secondary_cluster_name,
                         namespace=wl.workload_namespace,
                         switch_ctx=get_active_acm_index(),
-                        workload_placement_name=wl.appset_placement_name
-                        if wl.workload_type != constants.SUBSCRIPTION
-                        else None,
+                        workload_placement_name=(
+                            wl.appset_placement_name
+                            if wl.workload_type != constants.SUBSCRIPTION
+                            else None
+                        ),
                     )
                 )
                 time.sleep(5)
