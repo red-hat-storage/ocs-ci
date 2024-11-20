@@ -30,22 +30,22 @@ class TestNodeDrainDuringFailoverRelocate:
     """
 
     @pytest.mark.parametrize(
-        argnames=["workload_type", "pod_to_select_node"],
+        argnames=["pvc_interface", "pod_to_select_node"],
         argvalues=[
             pytest.param(
-                *[constants.SUBSCRIPTION, "rbd_mirror"],
+                *[constants.CEPHBLOCKPOOL, "rbd_mirror"],
                 marks=pytest.mark.polarion_id("OCS-4441"),
             ),
             pytest.param(
-                *[constants.SUBSCRIPTION, "ramen_dr_cluster_operator"],
+                *[constants.CEPHBLOCKPOOL, "ramen_dr_cluster_operator"],
                 marks=pytest.mark.polarion_id("OCS-4443"),
             ),
             pytest.param(
-                *[constants.APPLICATION_SET, "rbd_mirror"],
+                *[constants.CEPHFILESYSTEM, "rbd_mirror"],
                 marks=pytest.mark.polarion_id("OCS-4442"),
             ),
             pytest.param(
-                *[constants.APPLICATION_SET, "ramen_dr_cluster_operator"],
+                *[constants.CEPHFILESYSTEM, "ramen_dr_cluster_operator"],
                 marks=pytest.mark.polarion_id("OCS-4444"),
             ),
         ],
@@ -53,7 +53,7 @@ class TestNodeDrainDuringFailoverRelocate:
     def test_node_drain_during_failover_and_relocate(
         self,
         dr_workload,
-        workload_type,
+        pvc_interface,
         pod_to_select_node,
         nodes_multicluster,
         node_restart_teardown,
@@ -63,29 +63,37 @@ class TestNodeDrainDuringFailoverRelocate:
         Tests cases to verify that the failover and relocate operations are not affected when node is drained
 
         """
-        if workload_type == constants.SUBSCRIPTION:
-            rdr_workload = dr_workload(num_of_subscription=1)[0]
-        else:
-            rdr_workload = dr_workload(num_of_subscription=0, num_of_appset=1)[0]
+        rdr_workload = dr_workload(
+            num_of_subscription=1, num_of_appset=1, pvc_interface=pvc_interface
+        )
 
         primary_cluster_name = dr_helpers.get_current_primary_cluster_name(
-            rdr_workload.workload_namespace, workload_type
+            rdr_workload[0].workload_namespace, rdr_workload[0].workload_type
         )
         config.switch_to_cluster_by_name(primary_cluster_name)
         primary_cluster_index = config.cur_index
         primary_cluster_nodes = get_node_objs()
         secondary_cluster_name = dr_helpers.get_current_secondary_cluster_name(
-            rdr_workload.workload_namespace, workload_type
+            rdr_workload[0].workload_namespace, rdr_workload[0].workload_type
         )
 
+        if pvc_interface == constants.CEPHFILESYSTEM:
+            # Verify the creation of ReplicationDestination resources on secondary cluster
+            config.switch_to_cluster_by_name(secondary_cluster_name)
+            for wl in rdr_workload:
+                dr_helpers.wait_for_replication_destinations_creation(
+                    wl.workload_pvc_count, wl.workload_namespace
+                )
+
         scheduling_interval = dr_helpers.get_scheduling_interval(
-            rdr_workload.workload_namespace, workload_type
+            rdr_workload[0].workload_namespace, rdr_workload[0].workload_type
         )
         wait_time = 2 * scheduling_interval  # Time in minutes
         logger.info(f"Waiting for {wait_time} minutes to run IOs")
         sleep(wait_time * 60)
 
         # Stop primary cluster nodes
+        config.switch_to_cluster_by_name(primary_cluster_name)
         logger.info(f"Stopping nodes of primary cluster: {primary_cluster_name}")
         nodes_multicluster[primary_cluster_index].stop_nodes(primary_cluster_nodes)
 
@@ -118,22 +126,24 @@ class TestNodeDrainDuringFailoverRelocate:
 
         # Failover operation
         config.switch_to_cluster_by_name(primary_cluster_name)
-        dr_helpers.failover(
-            secondary_cluster_name,
-            rdr_workload.workload_namespace,
-            workload_type,
-            rdr_workload.appset_placement_name
-            if workload_type != constants.SUBSCRIPTION
-            else None,
-        )
+        for wl in rdr_workload:
+            dr_helpers.failover(
+                secondary_cluster_name,
+                wl.workload_namespace,
+                wl.workload_type,
+                wl.appset_placement_name
+                if wl.workload_type != constants.SUBSCRIPTION
+                else None,
+            )
 
         # Verify resources creation on secondary cluster
         config.switch_to_cluster_by_name(secondary_cluster_name)
-        dr_helpers.wait_for_all_resources_creation(
-            rdr_workload.workload_pvc_count,
-            rdr_workload.workload_pod_count,
-            rdr_workload.workload_namespace,
-        )
+        for wl in rdr_workload:
+            dr_helpers.wait_for_all_resources_creation(
+                wl.workload_pvc_count,
+                wl.workload_pod_count,
+                wl.workload_namespace,
+            )
 
         # Verify the result of node drain operation
         node_drain_operaton.result()
@@ -159,11 +169,26 @@ class TestNodeDrainDuringFailoverRelocate:
         ceph_health_check()
 
         # Verify resources deletion from primary cluster
-        dr_helpers.wait_for_all_resources_deletion(rdr_workload.workload_namespace)
+        for wl in rdr_workload:
+            dr_helpers.wait_for_all_resources_deletion(wl.workload_namespace)
 
-        dr_helpers.wait_for_mirroring_status_ok(
-            replaying_images=rdr_workload.workload_pvc_count
-        )
+        if pvc_interface == constants.CEPHBLOCKPOOL:
+            dr_helpers.wait_for_mirroring_status_ok(
+                replaying_images=sum([wl.workload_pvc_count for wl in rdr_workload])
+            )
+
+        if pvc_interface == constants.CEPHFILESYSTEM:
+            for wl in rdr_workload:
+                # Verify the deletion of ReplicationDestination resources on secondary cluster
+                config.switch_to_cluster_by_name(secondary_cluster_name)
+                dr_helpers.wait_for_replication_destinations_deletion(
+                    wl.workload_namespace
+                )
+                # Verify the creation of ReplicationDestination resources on primary cluster
+                config.switch_to_cluster_by_name(primary_cluster_name)
+                dr_helpers.wait_for_replication_destinations_creation(
+                    wl.workload_pvc_count, wl.workload_namespace
+                )
 
         logger.info(f"Waiting for {wait_time} minutes to run IOs")
         sleep(wait_time * 60)
@@ -195,30 +220,47 @@ class TestNodeDrainDuringFailoverRelocate:
         sleep(2)
 
         # Perform relocate
-        dr_helpers.relocate(
-            primary_cluster_name,
-            rdr_workload.workload_namespace,
-            workload_type,
-            rdr_workload.appset_placement_name
-            if workload_type != constants.SUBSCRIPTION
-            else None,
-        )
+        for wl in rdr_workload:
+            dr_helpers.relocate(
+                primary_cluster_name,
+                wl.workload_namespace,
+                wl.workload_type,
+                wl.appset_placement_name
+                if wl.workload_type != constants.SUBSCRIPTION
+                else None,
+            )
 
         # Verify resources deletion from secondary cluster
         config.switch_to_cluster_by_name(secondary_cluster_name)
-        dr_helpers.wait_for_all_resources_deletion(rdr_workload.workload_namespace)
+        for wl in rdr_workload:
+            dr_helpers.wait_for_all_resources_deletion(wl.workload_namespace)
 
         # Verify resources creation on primary cluster (preferredCluster)
         config.switch_to_cluster_by_name(primary_cluster_name)
-        dr_helpers.wait_for_all_resources_creation(
-            rdr_workload.workload_pvc_count,
-            rdr_workload.workload_pod_count,
-            rdr_workload.workload_namespace,
-        )
+        for wl in rdr_workload:
+            dr_helpers.wait_for_all_resources_creation(
+                wl.workload_pvc_count,
+                wl.workload_pod_count,
+                wl.workload_namespace,
+            )
 
-        dr_helpers.wait_for_mirroring_status_ok(
-            replaying_images=rdr_workload.workload_pvc_count
-        )
+        if pvc_interface == constants.CEPHBLOCKPOOL:
+            dr_helpers.wait_for_mirroring_status_ok(
+                replaying_images=sum([wl.workload_pvc_count for wl in rdr_workload])
+            )
+
+        if pvc_interface == constants.CEPHFILESYSTEM:
+            for wl in rdr_workload:
+                # Verify the deletion of ReplicationDestination resources on primary cluster
+                config.switch_to_cluster_by_name(primary_cluster_name)
+                dr_helpers.wait_for_replication_destinations_deletion(
+                    wl.workload_namespace
+                )
+                # Verify the creation of ReplicationDestination resources on secondary cluster
+                config.switch_to_cluster_by_name(secondary_cluster_name)
+                dr_helpers.wait_for_replication_destinations_creation(
+                    wl.workload_pvc_count, wl.workload_namespace
+                )
 
         # Verify the result of node drain operation
         node_drain_operaton.result()
