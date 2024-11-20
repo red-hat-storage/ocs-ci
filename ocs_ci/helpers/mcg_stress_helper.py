@@ -1,10 +1,49 @@
 import logging
+import concurrent.futures
 
+from ocs_ci.ocs.resources.objectbucket import OBC
 from ocs_ci.ocs.resources.bucket_policy import NoobaaAccount
 from ocs_ci.ocs.resources.mcg_lifecycle_policies import LifecyclePolicy, ExpirationRule
-from ocs_ci.ocs.bucket_utils import s3_copy_object, list_objects_from_bucket
+from ocs_ci.ocs.bucket_utils import (
+    s3_copy_object,
+    list_objects_from_bucket,
+    sync_object_directory,
+)
 
 logger = logging.getLogger(__name__)
+
+
+def upload_objs_to_buckets(mcg_obj, pod_obj, buckets):
+    """
+    This will upload objects present in the stress-cli pod
+    to the buckets provided concurrently
+
+    Args:
+        mcg_obj (MCG): MCG object
+        pod_obj (Pod): Pod object
+        buckets (Dict): Map of bucket type and bucket object
+
+    """
+    src_path = "/complex_directory/dir_0_0/dir_1_0/dir_2_0/dir_3_0/dir_4_0/dir_5_0/dir_6_0/dir_7_0/dir_8_0/dir_9_0/"
+
+    with concurrent.futures.ThreadPoolExecutor() as executor:
+        futures = list()
+        for type, bucket in buckets.items():
+            if type == "rgw":
+                s3_obj = OBC(bucket.name)
+            else:
+                s3_obj = mcg_obj
+            logger.info(f"OBJECT UPLOAD: Uploading objects to the bucket {bucket.name}")
+            future = executor.submit(
+                sync_object_directory, pod_obj, src_path, f"s3://{bucket.name}", s3_obj
+            )
+            futures.append(future)
+
+        logger.info(
+            "OBJECT UPLOAD: Waiting for the objects upload to complete for all the buckets"
+        )
+        for future in concurrent.futures.as_completed(futures):
+            future.result()
 
 
 def run_noobaa_metadata_intense_ops(mcg_obj, pod_obj, bucket_factory, bucket_name):
