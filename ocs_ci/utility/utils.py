@@ -5225,10 +5225,10 @@ def params_to_configini_file(params):
         params (str): Parameter to pass to be converted into config.ini file.
 
     Returns:
-        config_ini_file.name (str): Path to the config.ini file.
+        str: Path to the config.ini file.
+
     """
     data = "[Configurations]\n"
-    import re
 
     pattern = r"--([\w-]+) ([.:\w-]+)"
     matches = re.finditer(pattern, params, re.MULTILINE)
@@ -5245,6 +5245,6 @@ def params_to_configini_file(params):
     )
     with open(config_ini_file.name, "w") as fd:
         fd.write(data)
-    log.info(f"config.ini fike for cluster is located at {config_ini_file.name}")
+    log.info(f"config.ini file for cluster is located at {config_ini_file.name}")
 
     return config_ini_file.name
