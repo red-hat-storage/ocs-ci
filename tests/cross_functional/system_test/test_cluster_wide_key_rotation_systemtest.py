@@ -27,24 +27,6 @@ log = logging.getLogger(__name__)
 @system_test
 @ignore_leftovers
 class TestKeyRotationWithClusterFull(E2ETest):
-    """
-    1. Set cluster wide keyrotation period to every 5 mins by editing storage cluster and capture the keys details
-     for OSDs, Noobaa.
-    2.  Set custom taints to all the worker nodes and make sure #1 and #2 still exists after rebooting the pods.
-      a) Apply custom taint to all nodes
-      b)  Add toleration in  storagecluster CR and odf-operator subscription.
-      c) Verify toleration applied in ODF subscription and Storage Cluster CR are reflecting for other subscriptions,
-         Ceph and nooba components or not.
-      d) Verify the pods in all nodes are running as per taints applied.
-      e) Restart all ocs the pods on all nodes.
-
-    3. Fill the cluster till the full ratio limits (85%) by running IO from multiple pods and verify key rotation.
-    4. Once the cluster reaches read-only state, resize the OSD and verify key rotation.
-    5. Run noobaa_rebuild test and verify key rotation still works as it is.
-    6. Run noobaa-db backup and recovery locally. Verify key rotation.
-
-    """
-
     @pytest.fixture(autouse=True)
     def init_sanity(self):
         """
@@ -65,6 +47,9 @@ class TestKeyRotationWithClusterFull(E2ETest):
         request.addfinalizer(teardown)
         return warps3
 
+    def teardown(self):
+        OSDKeyrotation().set_keyrotation_schedule("@weekly")
+
     def test_cluster_wide_encryption_key_rotation_system(
         self,
         teardown_project_factory,
@@ -78,6 +63,23 @@ class TestKeyRotationWithClusterFull(E2ETest):
         validate_noobaa_db_backup_recovery_locally_system,
         warps3,
     ):
+        """
+        1. Set cluster wide keyrotation period to every 5 mins by editing storage cluster and capture the keys details
+         for OSDs, Noobaa.
+        2.  Set custom taints to all the worker nodes and make sure #1 and #2 still exists after rebooting the pods.
+          a) Apply custom taint to all nodes
+          b)  Add toleration in  storagecluster CR and odf-operator subscription.
+          c) Verify toleration applied in ODF subscription and Storage Cluster CR are reflecting for other
+            subscriptions ,Ceph and nooba components or not.
+          d) Verify the pods in all nodes are running as per taints applied.
+          e) Restart all ocs the pods on all nodes.
+
+        3. Fill the cluster till the full ratio limits (85%) by running IO from multiple pods and verify key rotation.
+        4. Once the cluster reaches read-only state, resize the OSD and verify key rotation.
+        5. Run noobaa_rebuild test and verify key rotation still works as it is.
+        6. Run noobaa-db backup and recovery locally. Verify key rotation.
+
+        """
         time_interval_to_rotate_key_in_minutes = str(5)
         tries = 10
         delays = int(time_interval_to_rotate_key_in_minutes) * 60 / tries
