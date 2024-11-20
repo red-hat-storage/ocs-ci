@@ -2764,7 +2764,7 @@ class IBMCloud(NodesBase):
             wait (bool): True for waiting the instances to start, False otherwise
 
         """
-        self.ibmcloud.start_nodes(nodes, wait=True)
+        self.ibmcloud.start_nodes(nodes, wait=wait)
 
     def restart_nodes(self, nodes, timeout=900, wait=True):
         """
