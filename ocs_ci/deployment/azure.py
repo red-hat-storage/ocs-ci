@@ -3,6 +3,7 @@
 This module contains platform specific methods and classes for deployment
 on Azure platform.
 """
+
 import json
 import logging
 import os
@@ -133,6 +134,22 @@ class AZUREIPI(AZUREBase):
             tls_source_dir = os.path.join(output_dir, "tls")
             tls_target_dir = os.path.join(cluster_path, "tls")
             shutil.move(tls_source_dir, tls_target_dir)
+
+    def destroy_cluster(self, log_level="DEBUG"):
+        """
+        Destroy OCP cluster specific to Azure IPI
+
+        Args:
+            log_level (str): log level openshift-installer (default: DEBUG)
+
+        """
+        if config.DEPLOYMENT.get("sts_enabled"):
+            cco.delete_oidc_resource_group(
+                self.cluster_name,
+                config.ENV_DATA["region"],
+                config.AUTH["azure_auth"]["subscription_id"],
+            )
+        super(AZUREIPI, self).destroy_cluster(log_level)
 
     # For Azure IPI there is no need to implement custom:
     # - deploy_ocp() method (as long as we don't tweak host network)
