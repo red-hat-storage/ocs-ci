@@ -632,7 +632,7 @@ class AWS(object):
             cluster_name (str): Cluster name
 
         Returns:
-            string of space separated subnet ids
+            list: Subnet IDs str list
 
         """
         subnets = self.ec2_client.describe_subnets(
@@ -2616,3 +2616,18 @@ def delete_sts_iam_roles():
                 role_name, instance_profile["InstanceProfileName"]
             )
         aws.delete_iam_role(role_name)
+
+
+def delete_subnet_tags(tag, *subnet_ids):
+    """
+    Delete tag from subnet(s)
+    Default AWS account limitation is 50 tags per subnet
+
+    Args:
+        tag (str): Tag to delete
+        subnet_ids (str): One or more subnet IDs from which to delete the tag.
+    """
+    subnet_ids = [subnet_ids] if isinstance(subnet_ids, str) else list(subnet_ids)
+    logger.info(f"Deleting tag {tag} from subnet(s) {subnet_ids}")
+    aws = AWS()
+    aws.ec2_client.delete_tags(Resources=subnet_ids, Tags=[{"Key": tag}])
