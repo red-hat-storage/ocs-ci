@@ -1,4 +1,6 @@
 import logging
+import time
+
 import pytest
 
 from ocs_ci.framework.pytest_customization.marks import (
@@ -19,7 +21,6 @@ from ocs_ci.framework.testlib import (
     tier1,
     E2ETest,
 )
-from ocs_ci.utility.users import login, logout, get_server_url
 from ocs_ci.utility.utils import ceph_health_check
 
 
@@ -82,11 +83,10 @@ class TestUnprivilegedUserODFAccess(E2ETest):
     def test_unprivileged_user_odf_access(self, user_factory, login_factory):
         # create a user without any role
         user = user_factory()
-        logger.info(f"user created: {user[0]} password: {user[1]}")
-
-        # wait user credentials are ready
-        login(get_server_url(), user[0], user[1])
-        logout()
+        logger.info(
+            f"user created: {user[0]} password: {user[1]}, wait additional 10 sec to get user active"
+        )
+        time.sleep(10)
 
         # login with the user created
         login_factory(user[0], user[1])
