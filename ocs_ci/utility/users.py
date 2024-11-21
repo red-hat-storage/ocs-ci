@@ -6,10 +6,11 @@ import string
 import time
 
 from tempfile import NamedTemporaryFile
-from retry import retry
+from ocs_ci.utility.retry import retry, catch_exceptions
 from ocs_ci.framework import config
 from ocs_ci.ocs import constants, ocp
 from ocs_ci.ocs.exceptions import CommandFailed
+from ocs_ci.ocs.ocp import OCP
 from ocs_ci.utility.rosa import (
     rosa_create_htpasswd_idp,
     rosa_delete_htpasswd_idp,
@@ -218,15 +219,16 @@ def login(server_url, user, password):
 
     """
 
-    cmd = f"oc login {shlex.quote(server_url)} -u {shlex.quote(user)} -p {shlex.quote(password)}"
-    exec_cmd(cmd, shell=True)
+    cmd = f"login {shlex.quote(server_url)} -u {shlex.quote(user)} -p {shlex.quote(password)}"
+    OCP().exec_oc_cmd(cmd, skip_tls_verify=True, out_yaml_format=False)
     log.info(f"Logged in as {user}")
 
 
+@catch_exceptions(CommandFailed)
 def logout():
     """
     Logout from the cluster.
 
     """
-    exec_cmd("logout")
+    exec_cmd("oc logout")
     log.info("Logged out")
