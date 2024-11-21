@@ -500,7 +500,8 @@ class BaseUI:
             module_loc (tuple): locator of the module of the page awaited to be loaded
         """
 
-        @retry(TimeoutException)
+        # IndexError when dom is empty due to page not loaded yet
+        @retry(TimeoutException, IndexError)
         def get_page_hash():
             """
             Get dom html hash
