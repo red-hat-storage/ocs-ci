@@ -7,6 +7,7 @@ from ocs_ci.framework.pytest_customization.marks import (
     black_squad,
     runs_on_provider,
     mcg,
+    skipif_ibm_cloud_managed,
 )
 from ocs_ci.ocs import constants
 from ocs_ci.helpers.helpers import create_unique_resource_name
@@ -57,6 +58,7 @@ class TestStoreUserInterface(object):
     @ui
     @tier1
     @skipif_disconnected_cluster
+    @skipif_ibm_cloud_managed
     @pytest.mark.parametrize(
         argnames=["kind", "provider", "region"],
         argvalues=[
