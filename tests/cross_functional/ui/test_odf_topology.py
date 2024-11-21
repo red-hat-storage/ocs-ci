@@ -18,6 +18,7 @@ from ocs_ci.framework.pytest_customization.marks import (
     ui,
     skipif_hci_provider_or_client,
     runs_on_provider,
+    jira,
 )
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.node import get_nodes, get_node_names
@@ -254,6 +255,7 @@ class TestODFTopology(object):
             )
 
     @tier4a
+    @jira("DFBUGS-418")
     @bugzilla("2242132")
     @ignore_leftovers
     @polarion_id("OCS-4905")
