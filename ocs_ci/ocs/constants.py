@@ -1046,7 +1046,7 @@ NODE_NETWORK_CONFIGURATION_POLICY = os.path.join(
     TEMPLATE_DEPLOYMENT_DIR, "node_network_configuration_policy.yaml"
 )
 NETWORK_ATTACHEMENT_DEFINITION = "network-attachment-definitions.k8s.cni.cncf.io"
-
+VSPHERE_MULTUS_INTERFACE = "ens224"
 
 OPERATOR_SOURCE_NAME = "ocs-operatorsource"
 
