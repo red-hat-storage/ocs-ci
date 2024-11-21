@@ -501,7 +501,7 @@ class BaseUI:
         """
 
         # IndexError when dom is empty due to page not loaded yet
-        @retry(TimeoutException, IndexError)
+        @retry((TimeoutException, IndexError))
         def get_page_hash():
             """
             Get dom html hash

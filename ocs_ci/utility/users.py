@@ -1,12 +1,15 @@
 import logging
 import os
 import random
+import shlex
 import string
 import time
-from tempfile import NamedTemporaryFile
 
+from tempfile import NamedTemporaryFile
+from retry import retry
 from ocs_ci.framework import config
 from ocs_ci.ocs import constants, ocp
+from ocs_ci.ocs.exceptions import CommandFailed
 from ocs_ci.utility.rosa import (
     rosa_create_htpasswd_idp,
     rosa_delete_htpasswd_idp,
@@ -188,3 +191,42 @@ def user_factory(request, htpasswd_path):
 
     request.addfinalizer(_finalizer)
     return _factory
+
+
+@retry(CommandFailed, tries=5, delay=5, backoff=1)
+def get_server_url():
+    """
+    Get server URL.
+
+    Returns:
+        str: Server URL
+
+    """
+    cmd = f"oc whoami --show-server --kubeconfig={os.getenv('KUBECONFIG')}"
+    return exec_cmd(cmd, shell=True).stdout.decode().strip()
+
+
+@retry(CommandFailed, tries=5, delay=5, backoff=1)
+def login(server_url, user, password):
+    """
+    Login to the cluster using provided username and password.
+
+    Args:
+        server_url (str): Server URL
+        user (str): Username
+        password (str): Password
+
+    """
+
+    cmd = f"oc login {shlex.quote(server_url)} -u {shlex.quote(user)} -p {shlex.quote(password)}"
+    exec_cmd(cmd, shell=True)
+    log.info(f"Logged in as {user}")
+
+
+def logout():
+    """
+    Logout from the cluster.
+
+    """
+    exec_cmd("logout")
+    log.info("Logged out")
