@@ -3289,6 +3289,8 @@ def install_logging(request):
         if "AlreadyExists" in str(e):
             # on Rosa HCP the ns created from the deployment
             log.info("Namespace openshift-operators-redhat already exists")
+        else:
+            raise
 
     # Creates an operator-group for elasticsearch
     assert ocp_logging_obj.create_elasticsearch_operator_group(
