@@ -143,9 +143,9 @@ class VSPHEREBASE(Deployment):
 
         self.ocp_version = get_ocp_version()
         config.ENV_DATA["ocp_version"] = self.ocp_version
-        config.ENV_DATA["ocp_version_object"] = (
-            version.get_semantic_ocp_version_from_config()
-        )
+        config.ENV_DATA[
+            "ocp_version_object"
+        ] = version.get_semantic_ocp_version_from_config()
         config.ENV_DATA["version_4_9_object"] = version.VERSION_4_9
 
         self.wait_time = 90
@@ -1075,7 +1075,12 @@ class VSPHEREUPI(VSPHEREBASE):
 
             os.chdir(self.previous_dir)
             if not self.sno:
-
+                vsphere = VSPHERE(
+                    config.ENV_DATA["vsphere_server"],
+                    config.ENV_DATA["vsphere_user"],
+                    config.ENV_DATA["vsphere_password"],
+                )
+                vsphere.add_interface_to_vm(vm_name="compute-0")
                 # Update kubeconfig with proxy-url (if client_http_proxy
                 # configured) to redirect client access through proxy server.
                 update_kubeconfig_with_proxy_url_for_client(self.kubeconfig)
