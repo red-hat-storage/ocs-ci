@@ -325,7 +325,11 @@ class TestSelinuxrelabel(E2ETest):
         )
 
         # Check SeLinux Relabeling is set to false
-        retry(AssertionError, tries=5, delay=10,)(
+        retry(
+            AssertionError,
+            tries=5,
+            delay=10,
+        )(
             check_selinux_relabeling
         )(pod_obj=self.pod_obj)
         log.info(f"SeLinux Relabeling is not happening for the pvc {self.pvc_obj.name}")

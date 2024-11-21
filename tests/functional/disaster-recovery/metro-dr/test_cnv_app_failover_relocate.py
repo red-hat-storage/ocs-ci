@@ -143,9 +143,11 @@ class TestCnvApplicationMDR:
                 failover_cluster=secondary_cluster_name,
                 namespace=cnv_wl.workload_namespace,
                 workload_type=cnv_wl.workload_type,
-                workload_placement_name=cnv_wl.cnv_workload_placement_name
-                if cnv_wl.workload_type != constants.SUBSCRIPTION
-                else None,
+                workload_placement_name=(
+                    cnv_wl.cnv_workload_placement_name
+                    if cnv_wl.workload_type != constants.SUBSCRIPTION
+                    else None
+                ),
             )
 
         # Verify VM and its resources in secondary managed cluster
@@ -231,9 +233,11 @@ class TestCnvApplicationMDR:
                 preferred_cluster=secondary_cluster_name,
                 namespace=cnv_wl.workload_namespace,
                 workload_type=cnv_wl.workload_type,
-                workload_placement_name=cnv_wl.cnv_workload_placement_name
-                if cnv_wl.workload_type != constants.SUBSCRIPTION
-                else None,
+                workload_placement_name=(
+                    cnv_wl.cnv_workload_placement_name
+                    if cnv_wl.workload_type != constants.SUBSCRIPTION
+                    else None
+                ),
             )
 
         set_current_secondary_cluster_context(

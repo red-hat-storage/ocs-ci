@@ -1,6 +1,7 @@
 """
 Helper functions specific for CNV
 """
+
 import os
 import base64
 import logging

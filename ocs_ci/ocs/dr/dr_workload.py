@@ -221,10 +221,10 @@ class BusyBox(DRWorkload):
         for cluster in clusters:
             # load workload-repo namespace.yaml
             workload_ns_yaml_data = templating.load_yaml(self.namespace_yaml_file)
-            workload_ns_yaml_data["metadata"][
-                "name"
-            ] = helpers.create_unique_resource_name(
-                resource_type="namespace", resource_description="busybox-workloads"
+            workload_ns_yaml_data["metadata"]["name"] = (
+                helpers.create_unique_resource_name(
+                    resource_type="namespace", resource_description="busybox-workloads"
+                )
             )
             templating.dump_data_to_temp_yaml(
                 workload_ns_yaml_data, self.namespace_yaml_file
@@ -232,10 +232,10 @@ class BusyBox(DRWorkload):
 
             # load placementrule
             placementrule_yaml_data = templating.load_yaml(self.placementrule_yaml_file)
-            placementrule_yaml_data["metadata"][
-                "name"
-            ] = helpers.create_unique_resource_name(
-                resource_type="placementrule", resource_description="busybox"
+            placementrule_yaml_data["metadata"]["name"] = (
+                helpers.create_unique_resource_name(
+                    resource_type="placementrule", resource_description="busybox"
+                )
             )
             templating.dump_data_to_temp_yaml(
                 placementrule_yaml_data, self.placementrule_yaml_file
@@ -272,19 +272,19 @@ class BusyBox(DRWorkload):
 
             # load subscription.yaml
             subscription_yaml_data = templating.load_yaml(self.subscription_yaml_file)
-            subscription_yaml_data["metadata"][
-                "name"
-            ] = helpers.create_unique_resource_name(
-                resource_type="subscription", resource_description="busybox"
+            subscription_yaml_data["metadata"]["name"] = (
+                helpers.create_unique_resource_name(
+                    resource_type="subscription", resource_description="busybox"
+                )
             )
             subscription_yaml_data["spec"]["channel"] = (
                 git_ns_yaml_data["metadata"]["name"]
                 + "/"
                 + channel_yaml_data["metadata"]["name"]
             )
-            subscription_yaml_data["spec"]["placement"]["placementRef"][
-                "name"
-            ] = placementrule_yaml_data["metadata"]["name"]
+            subscription_yaml_data["spec"]["placement"]["placementRef"]["name"] = (
+                placementrule_yaml_data["metadata"]["name"]
+            )
             templating.dump_data_to_temp_yaml(
                 subscription_yaml_data, self.subscription_yaml_file
             )
@@ -822,9 +822,9 @@ class CnvWorkload(DRWorkload):
                             "labelSelector"
                         ].get("matchLabels", {})
                         if "cluster.open-cluster-management.io/placement" in labels:
-                            labels[
-                                "cluster.open-cluster-management.io/placement"
-                            ] = self.cnv_workload_placement_name
+                            labels["cluster.open-cluster-management.io/placement"] = (
+                                self.cnv_workload_placement_name
+                            )
 
                 if self.appset_model == "pull":
                     # load appset_yaml_file, add "annotations" key and add values to it

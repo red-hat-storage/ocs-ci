@@ -77,9 +77,11 @@ class TestSequentialRelocate:
                         preferred_cluster=secondary_cluster_name,
                         namespace=wl.workload_namespace,
                         workload_type=wl.workload_type,
-                        workload_placement_name=wl.appset_placement_name
-                        if wl.workload_type == constants.APPLICATION_SET
-                        else None,
+                        workload_placement_name=(
+                            wl.appset_placement_name
+                            if wl.workload_type == constants.APPLICATION_SET
+                            else None
+                        ),
                     )
                 )
                 time.sleep(5)

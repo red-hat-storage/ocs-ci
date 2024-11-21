@@ -1,6 +1,7 @@
 """
 This module will install OCP on RHEL nodes
 """
+
 import logging
 import os
 

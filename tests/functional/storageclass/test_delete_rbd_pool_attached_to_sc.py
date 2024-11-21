@@ -144,7 +144,6 @@ class TestDeleteRbdPool(ManageTest):
         pvc_factory,
         pod_factory,
     ):
-
         """
         1. Create storageclass with the pool.
         2. Check that in pool list and page the storageclass is there.

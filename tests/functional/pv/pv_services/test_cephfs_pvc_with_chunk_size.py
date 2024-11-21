@@ -40,7 +40,6 @@ class TestCephfsWithChunkIo(E2ETest):
         log.info("Ceph mds debug level has been set to default 1/5")
 
     def test_cephfs_with_large_chunk_io(self, dc_pod_factory):
-
         """
         This function facilitates
         1. Create PVC with Cephfs

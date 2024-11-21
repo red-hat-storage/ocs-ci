@@ -570,14 +570,14 @@ def run_cmd_multicluster(
                 f"Switched the context to cluster:{cluster.ENV_DATA['cluster_name']}"
             )
             try:
-                completed_process[
-                    cluster.MULTICLUSTER["multicluster_index"]
-                ] = exec_cmd(
-                    cmd,
-                    secrets=secrets,
-                    timeout=timeout,
-                    ignore_error=ignore_error,
-                    **kwargs,
+                completed_process[cluster.MULTICLUSTER["multicluster_index"]] = (
+                    exec_cmd(
+                        cmd,
+                        secrets=secrets,
+                        timeout=timeout,
+                        ignore_error=ignore_error,
+                        **kwargs,
+                    )
                 )
             except CommandFailed:
                 # In case of failure, restore the cluster context to where we started

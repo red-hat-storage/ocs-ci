@@ -1,6 +1,7 @@
 """
 Pillowfight Class to run various workloads and scale tests
 """
+
 import logging
 import tempfile
 import re

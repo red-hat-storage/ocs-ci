@@ -242,9 +242,9 @@ class AssistedInstallerCluster(object):
         }
 
         if self.static_network_config:
-            infra_env_configuration[
-                "static_network_config"
-            ] = self.static_network_config
+            infra_env_configuration["static_network_config"] = (
+                self.static_network_config
+            )
 
         infra_data = self.api.create_infra_env(infra_env_configuration)
         self.infra_id = infra_data["id"]

@@ -312,9 +312,9 @@ class ValidationUI(PageNavigator):
         odf_overview_tab = self.nav_odf_default_page().nav_overview_tab()
 
         log_step("Verify if Overview tab is active")
-        res_dict[
-            "overview_tab_is_active_1"
-        ] = odf_overview_tab.validate_overview_tab_active()
+        res_dict["overview_tab_is_active_1"] = (
+            odf_overview_tab.validate_overview_tab_active()
+        )
 
         log_step("Ensure used raw capacity string in System Capacity card")
         res_dict["system_raw_capacity_check_bz_2185042"] = self.check_element_text(
@@ -322,9 +322,9 @@ class ValidationUI(PageNavigator):
         )
 
         log_step("Verify if Storage System popup works")
-        res_dict[
-            "storage_system_status_popup_present"
-        ] = odf_overview_tab.wait_storagesystem_popup()
+        res_dict["storage_system_status_popup_present"] = (
+            odf_overview_tab.wait_storagesystem_popup()
+        )
         odf_overview_tab.open_storage_popup_from_status_card()
 
         log_step("Ensure that Block and File status, on Storage System popup is Ready")
@@ -343,9 +343,9 @@ class ValidationUI(PageNavigator):
             log_step(
                 "Verify only one Block Pool present on Storage System details page"
             )
-            res_dict[
-                "blockpools_tabs_bz_2096513"
-            ] = storage_system_details_page.check_only_one_block_pools_tab()
+            res_dict["blockpools_tabs_bz_2096513"] = (
+                storage_system_details_page.check_only_one_block_pools_tab()
+            )
 
         log_step("Navigate Storage System via breadcrumb")
         storage_systems_tab = (
@@ -356,9 +356,9 @@ class ValidationUI(PageNavigator):
         odf_overview_tab = storage_systems_tab.nav_overview_tab()
 
         log_step("Verify if System Capacity Card is present")
-        res_dict[
-            "system_capacity_card_present"
-        ] = odf_overview_tab.validate_system_capacity_card_present()
+        res_dict["system_capacity_card_present"] = (
+            odf_overview_tab.validate_system_capacity_card_present()
+        )
 
         if not config.DEPLOYMENT["external_mode"]:
             log_step("Navigate to Storage System details via System Capacity Card")
@@ -369,9 +369,7 @@ class ValidationUI(PageNavigator):
             log_step(
                 "Verify if Storage System details breadcrumb is present and link works"
             )
-            res_dict[
-                "storagesystem-details-via-system-capacity-card-link-works"
-            ] = (
+            res_dict["storagesystem-details-via-system-capacity-card-link-works"] = (
                 storage_system_details_page.is_storage_system_details_breadcrumb_present()
             )
 
@@ -383,9 +381,9 @@ class ValidationUI(PageNavigator):
             odf_overview_tab = storage_systems_tab.nav_overview_tab()
 
         log_step("Verify if Performance Card is present and link works")
-        res_dict[
-            "performance_card_header_present"
-        ] = odf_overview_tab.validate_performance_card_header_present()
+        res_dict["performance_card_header_present"] = (
+            odf_overview_tab.validate_performance_card_header_present()
+        )
 
         log_step("Navigate to Storage System details via Performance Card")
         storage_system_details_page = (
@@ -395,9 +393,9 @@ class ValidationUI(PageNavigator):
         log_step(
             "Verify if Storage System details breadcrumb is present and link works"
         )
-        res_dict[
-            "storagesystem-details-via-performance-card-link-works"
-        ] = storage_system_details_page.is_storage_system_details_breadcrumb_present()
+        res_dict["storagesystem-details-via-performance-card-link-works"] = (
+            storage_system_details_page.is_storage_system_details_breadcrumb_present()
+        )
 
         storage_system_details_page.nav_storage_systems_via_breadcrumb()
 
@@ -423,9 +421,9 @@ class ValidationUI(PageNavigator):
         log_step(
             "Verify if Backing Store is present and link to Backing Store resource works"
         )
-        res_dict[
-            "backing_store_status_ready"
-        ] = backing_store_tab.validate_backing_store_ready()
+        res_dict["backing_store_status_ready"] = (
+            backing_store_tab.validate_backing_store_ready()
+        )
 
         log_step("Navigate to Backing Store tab via breadcrumb")
         backing_store_tab.nav_backing_store_list_breadcrumb()
@@ -455,9 +453,9 @@ class ValidationUI(PageNavigator):
             namespace_store_tab = NameSpaceStoreTab()
         else:
             namespace_store_tab = bucket_class_tab.nav_namespace_store_tab()
-        res_dict[
-            "namespace_store_tab_works"
-        ] = namespace_store_tab.is_namespace_store_tab_active()
+        res_dict["namespace_store_tab_works"] = (
+            namespace_store_tab.is_namespace_store_tab_active()
+        )
 
         log_step("Navigate to ODF Overview tab via tab bar")
         # Starting from ODF 4.13 Object Storage is implemented as a separate page and navigate via Overview tab
@@ -472,9 +470,9 @@ class ValidationUI(PageNavigator):
                 namespace_store_tab.nav_odf_default_page().nav_overview_tab()
             )
 
-        res_dict[
-            "overview_tab_is_active_2"
-        ] = odf_overview_tab.validate_overview_tab_active()
+        res_dict["overview_tab_is_active_2"] = (
+            odf_overview_tab.validate_overview_tab_active()
+        )
         logger.info("Navigated back to ODF tab under Storage. Check results below:")
 
         res_pd = pd.DataFrame.from_dict(res_dict, orient="index", columns=["check"])

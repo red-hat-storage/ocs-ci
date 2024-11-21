@@ -284,12 +284,12 @@ class TestPvcSnapshotPerformance(PASTest):
                 start_time=start_time,
             )
 
-            test_results["create"][
-                "csi_time"
-            ] = performance_lib.measure_csi_snapshot_creation_time(
-                interface=self.interface,
-                snapshot_id=self.snap_uid,
-                start_time=start_time,
+            test_results["create"]["csi_time"] = (
+                performance_lib.measure_csi_snapshot_creation_time(
+                    interface=self.interface,
+                    snapshot_id=self.snap_uid,
+                    start_time=start_time,
+                )
             )
 
             test_results["create"]["speed"] = int(
@@ -337,7 +337,7 @@ class TestPvcSnapshotPerformance(PASTest):
             helpers.wait_for_resource_state(
                 restore_pvc_obj,
                 constants.STATUS_BOUND,
-                timeout=3600  # setting this to 60 Min.
+                timeout=3600,  # setting this to 60 Min.
                 # since it can be take long time to restore, and we want it to finished.
             )
             restore_pvc_obj.reload()
@@ -642,10 +642,12 @@ class TestPvcSnapshotPerformance(PASTest):
                 f' {test_results["creation_time"]} seconds'
             )
 
-            test_results[
-                "csi_creation_time"
-            ] = performance_lib.measure_csi_snapshot_creation_time(
-                interface=interface, snapshot_id=self.snap_uid, start_time=start_time
+            test_results["csi_creation_time"] = (
+                performance_lib.measure_csi_snapshot_creation_time(
+                    interface=interface,
+                    snapshot_id=self.snap_uid,
+                    start_time=start_time,
+                )
             )
             log.info(
                 f"Snapshot with name {snap_name} and id {self.snap_uid} csi creation time is"

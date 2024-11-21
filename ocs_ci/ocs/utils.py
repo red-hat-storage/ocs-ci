@@ -1876,9 +1876,9 @@ def get_dr_operator_versions():
                 get_odf_multicluster_orchestrator_version()
             )
             if odf_multicluster_orchestrator_version:
-                versions_dic[
-                    "odf_multicluster_orchestrator_version"
-                ] = odf_multicluster_orchestrator_version
+                versions_dic["odf_multicluster_orchestrator_version"] = (
+                    odf_multicluster_orchestrator_version
+                )
         with ocsci_config.RunWithPrimaryConfigContext():
             oadp_operator_version = get_oadp_version()
             if oadp_operator_version:

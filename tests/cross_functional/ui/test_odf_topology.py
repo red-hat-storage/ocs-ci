@@ -317,16 +317,16 @@ class TestODFTopology(object):
         topology_tab = PageNavigator().nav_odf_default_page().nav_topology_tab()
         topology_tab.nodes_view.read_presented_topology()
 
-        test_checks[
-            "cluster_in_danger_state_check_pass"
-        ] = topology_tab.nodes_view.is_cluster_in_danger()
+        test_checks["cluster_in_danger_state_check_pass"] = (
+            topology_tab.nodes_view.is_cluster_in_danger()
+        )
         if not test_checks["cluster_in_danger_state_check_pass"]:
             take_screenshot("cluster_in_danger_state_check")
             logger.error("cluster is not in danger, when one Worker node is down")
 
-        test_checks[
-            "ceph_node_down_alert_found_check_pass"
-        ] = topology_tab.is_node_down_alert_in_alerts_ui(read_canvas_alerts=True)
+        test_checks["ceph_node_down_alert_found_check_pass"] = (
+            topology_tab.is_node_down_alert_in_alerts_ui(read_canvas_alerts=True)
+        )
         if not test_checks["ceph_node_down_alert_found_check_pass"]:
             logger.error("CephNodeDown alert has not been found after node went down")
 
@@ -335,10 +335,10 @@ class TestODFTopology(object):
                 f"check that any random idle node '{random_node_idle.name}' "
                 "do not show CephNodeDown when conditions not met"
             )
-            test_checks[
-                "ceph_node_down_alert_found_on_idle_node_check_pass"
-            ] = not topology_tab.is_node_down_alert_in_alerts_ui(
-                entity=random_node_idle.name
+            test_checks["ceph_node_down_alert_found_on_idle_node_check_pass"] = (
+                not topology_tab.is_node_down_alert_in_alerts_ui(
+                    entity=random_node_idle.name
+                )
             )
 
             if not test_checks["ceph_node_down_alert_found_on_idle_node_check_pass"]:
@@ -364,9 +364,9 @@ class TestODFTopology(object):
         )
         time.sleep(min_wait_for_update * 60)
 
-        test_checks[
-            "ceph_node_down_alert_found_after_node_turned_on_check_pass"
-        ] = not topology_tab.is_node_down_alert_in_alerts_ui(read_canvas_alerts=True)
+        test_checks["ceph_node_down_alert_found_after_node_turned_on_check_pass"] = (
+            not topology_tab.is_node_down_alert_in_alerts_ui(read_canvas_alerts=True)
+        )
         if not test_checks[
             "ceph_node_down_alert_found_after_node_turned_on_check_pass"
         ]:

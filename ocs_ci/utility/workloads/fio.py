@@ -11,6 +11,7 @@ This module implements few functions::
 Note: The above mentioned functions will be invoked from Workload.setup()
 and Workload.run() methods along with user provided parameters.
 """
+
 import logging
 from time import sleep
 

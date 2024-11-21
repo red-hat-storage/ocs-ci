@@ -2,6 +2,7 @@
 This module contains platform specific methods and classes for deployment
 on AWS platform
 """
+
 import logging
 import os
 import shutil

@@ -1,6 +1,7 @@
 """
 Module to perform FIO benchmark
 """
+
 import os
 
 import logging

@@ -1,6 +1,7 @@
 """
 DRPlacementControl related functionalities
 """
+
 import logging
 
 from ocs_ci.framework import config
@@ -31,9 +32,11 @@ class DRPC(OCP):
 
         super(DRPC, self).__init__(
             namespace=namespace,
-            resource_name=resource_name
-            if resource_name
-            else get_drpc_name(namespace, switch_ctx=switch_ctx),
+            resource_name=(
+                resource_name
+                if resource_name
+                else get_drpc_name(namespace, switch_ctx=switch_ctx)
+            ),
             kind=constants.DRPC,
             *args,
             **kwargs,

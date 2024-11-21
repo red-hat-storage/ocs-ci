@@ -1,6 +1,7 @@
 """
 Defaults module for AWS cleanup
 """
+
 import sys
 
 AWS_REGION = "us-east-2"

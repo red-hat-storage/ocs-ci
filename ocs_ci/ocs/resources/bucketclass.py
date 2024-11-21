@@ -192,9 +192,11 @@ def bucket_class_factory(
                     "rule_id": replication_policy_tuple[0],
                     "destination_bucket": replication_policy_tuple[1],
                     "filter": {
-                        "prefix": replication_policy_tuple[2]
-                        if replication_policy_tuple[2] is not None
-                        else ""
+                        "prefix": (
+                            replication_policy_tuple[2]
+                            if replication_policy_tuple[2] is not None
+                            else ""
+                        )
                     },
                 }
             ]

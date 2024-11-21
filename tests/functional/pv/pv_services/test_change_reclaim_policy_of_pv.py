@@ -210,8 +210,10 @@ class TestChangeReclaimPolicyOfPv(ManageTest):
         # Verify reclaim policy of all PVs
         for pv_obj in pvs:
             policy = pv_obj.get().get("spec").get("persistentVolumeReclaimPolicy")
-            retain_pvs.append(pv_obj) if policy == "Retain" else (
-                delete_pvs.append(pv_obj)
+            (
+                retain_pvs.append(pv_obj)
+                if policy == "Retain"
+                else (delete_pvs.append(pv_obj))
             )
             if pv_obj in changed_pvs:
                 assert policy == reclaim_policy_to, (

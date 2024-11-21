@@ -107,9 +107,11 @@ class TestCnvApplicationRDR:
                 failover_cluster=secondary_cluster_name,
                 namespace=cnv_wl.workload_namespace,
                 workload_type=cnv_wl.workload_type,
-                workload_placement_name=cnv_wl.cnv_workload_placement_name
-                if cnv_wl.workload_type != constants.SUBSCRIPTION
-                else None,
+                workload_placement_name=(
+                    cnv_wl.cnv_workload_placement_name
+                    if cnv_wl.workload_type != constants.SUBSCRIPTION
+                    else None
+                ),
             )
 
         # Verify VM and its resources on secondary managed cluster
@@ -187,9 +189,11 @@ class TestCnvApplicationRDR:
                 preferred_cluster=primary_cluster_name,
                 namespace=cnv_wl.workload_namespace,
                 workload_type=cnv_wl.workload_type,
-                workload_placement_name=cnv_wl.cnv_workload_placement_name
-                if cnv_wl.workload_type != constants.SUBSCRIPTION
-                else None,
+                workload_placement_name=(
+                    cnv_wl.cnv_workload_placement_name
+                    if cnv_wl.workload_type != constants.SUBSCRIPTION
+                    else None
+                ),
             )
 
         # Verify resources deletion from secondary managed cluster

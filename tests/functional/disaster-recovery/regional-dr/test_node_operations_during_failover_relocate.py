@@ -122,9 +122,11 @@ class TestNodeDrainDuringFailoverRelocate:
             secondary_cluster_name,
             rdr_workload.workload_namespace,
             workload_type,
-            rdr_workload.appset_placement_name
-            if workload_type != constants.SUBSCRIPTION
-            else None,
+            (
+                rdr_workload.appset_placement_name
+                if workload_type != constants.SUBSCRIPTION
+                else None
+            ),
         )
 
         # Verify resources creation on secondary cluster
@@ -199,9 +201,11 @@ class TestNodeDrainDuringFailoverRelocate:
             primary_cluster_name,
             rdr_workload.workload_namespace,
             workload_type,
-            rdr_workload.appset_placement_name
-            if workload_type != constants.SUBSCRIPTION
-            else None,
+            (
+                rdr_workload.appset_placement_name
+                if workload_type != constants.SUBSCRIPTION
+                else None
+            ),
         )
 
         # Verify resources deletion from secondary cluster

@@ -301,7 +301,11 @@ def verify_cephblockpool_status(
         "-o=jsonpath='{.status.phase}'"
     )
 
-    phase = retry((CommandFailed), tries=20, delay=10,)(
+    phase = retry(
+        (CommandFailed),
+        tries=20,
+        delay=10,
+    )(
         run_cmd
     )(cmd=cmd)
 

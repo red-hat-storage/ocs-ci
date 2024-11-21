@@ -183,9 +183,11 @@ class TestApplicationFailoverAndRelocate:
                 failover_cluster=secondary_cluster_name,
                 namespace=workload.workload_namespace,
                 workload_type=workload_type,
-                workload_placement_name=workload.appset_placement_name
-                if workload_type != constants.SUBSCRIPTION
-                else None,
+                workload_placement_name=(
+                    workload.appset_placement_name
+                    if workload_type != constants.SUBSCRIPTION
+                    else None
+                ),
             )
 
         # Verify application are running in other managedcluster
@@ -262,9 +264,11 @@ class TestApplicationFailoverAndRelocate:
                 preferred_cluster=secondary_cluster_name,
                 namespace=workload.workload_namespace,
                 workload_type=workload_type,
-                workload_placement_name=workload.appset_placement_name
-                if workload_type != constants.SUBSCRIPTION
-                else None,
+                workload_placement_name=(
+                    workload.appset_placement_name
+                    if workload_type != constants.SUBSCRIPTION
+                    else None
+                ),
             )
 
         # Verify resources deletion from previous primary or current secondary cluster

@@ -1,6 +1,7 @@
 """
 All the flexy related classes and functionality lives here
 """
+
 import base64
 import binascii
 import json

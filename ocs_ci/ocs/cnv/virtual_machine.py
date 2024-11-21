@@ -1,6 +1,7 @@
 """
 Virtual machine class
 """
+
 import yaml
 import logging
 
@@ -87,7 +88,6 @@ class VirtualMachine(Virtctl):
         verify=True,
         vm_dict_path=None,
     ):
-
         """
         Create a Virtual Machine (VM) in the specified namespace using a standalone Persistent Volume Claim (PVC)
 

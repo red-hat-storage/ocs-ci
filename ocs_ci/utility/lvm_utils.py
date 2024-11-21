@@ -13,10 +13,12 @@ def lvcreate(osd, lv_name, vg_name, size):
 
 
 def make_partition(osd, device, start=None, end=None, gpt=False):
-    osd.exec_command(
-        cmd="sudo parted --script %s mklabel gpt" % device
-    ) if gpt else osd.exec_command(
-        cmd="sudo parted --script %s mkpart primary %s %s" % (device, start, end)
+    (
+        osd.exec_command(cmd="sudo parted --script %s mklabel gpt" % device)
+        if gpt
+        else osd.exec_command(
+            cmd="sudo parted --script %s mkpart primary %s %s" % (device, start, end)
+        )
     )
 
 

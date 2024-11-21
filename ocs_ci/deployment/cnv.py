@@ -482,9 +482,7 @@ class CNVInstaller(object):
         os_machine_type = (
             "amd64"
             if os_machine_type == "x86_64"
-            else "arm64"
-            if os_machine_type == "arm 64"
-            else os_machine_type
+            else "arm64" if os_machine_type == "arm 64" else os_machine_type
         )
         if (
             not virtctl_download_url

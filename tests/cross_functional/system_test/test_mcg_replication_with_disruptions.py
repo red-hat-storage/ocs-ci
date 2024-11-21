@@ -56,7 +56,6 @@ logger = logging.getLogger(__name__)
 @skipif_external_mode
 @skipif_mcg_only
 class TestMCGReplicationWithDisruptions(E2ETest):
-
     """
     The objectives of this test case are:
     1) To verify that namespace buckets can be replicated across MCG clusters

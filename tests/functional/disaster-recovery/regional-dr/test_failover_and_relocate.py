@@ -171,9 +171,11 @@ class TestFailoverAndRelocate:
                     secondary_cluster_name,
                     wl.workload_namespace,
                     wl.workload_type,
-                    wl.appset_placement_name
-                    if wl.workload_type == constants.APPLICATION_SET
-                    else None,
+                    (
+                        wl.appset_placement_name
+                        if wl.workload_type == constants.APPLICATION_SET
+                        else None
+                    ),
                 )
 
         # Verify resources creation on secondary cluster (failoverCluster)
@@ -265,9 +267,11 @@ class TestFailoverAndRelocate:
                     primary_cluster_name,
                     wl.workload_namespace,
                     wl.workload_type,
-                    wl.appset_placement_name
-                    if wl.workload_type == constants.APPLICATION_SET
-                    else None,
+                    (
+                        wl.appset_placement_name
+                        if wl.workload_type == constants.APPLICATION_SET
+                        else None
+                    ),
                 )
 
         # Verify resources deletion from secondary cluster

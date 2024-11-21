@@ -39,9 +39,9 @@ class NodeConf:
     enable_autoscaling: Optional[str] = None
     min_replicas: Optional[int] = None
     max_replicas: Optional[int] = None
-    replicas: Optional[
-        int
-    ] = None  # replicas are historically a separate parameter in node related functions of create_node functions
+    replicas: Optional[int] = (
+        None  # replicas are historically a separate parameter in node related functions of create_node functions
+    )
     instance_type: str = None
     machinepool: str = None  # machinepool id (machinepool name)
     subnet: Optional[str] = None

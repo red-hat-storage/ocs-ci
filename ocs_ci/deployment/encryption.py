@@ -1,6 +1,7 @@
 """
 This module provides functions for encryption configuration during deployment
 """
+
 import logging
 
 from ocs_ci.framework import config

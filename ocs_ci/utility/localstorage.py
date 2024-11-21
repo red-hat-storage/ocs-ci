@@ -1,6 +1,7 @@
 """
 This module contains local-storage related methods
 """
+
 import json
 import logging
 import os
