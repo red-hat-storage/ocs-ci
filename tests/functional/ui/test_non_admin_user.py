@@ -19,6 +19,7 @@ from ocs_ci.framework.testlib import (
     tier1,
     E2ETest,
 )
+from ocs_ci.utility.users import login, logout, get_server_url
 from ocs_ci.utility.utils import ceph_health_check
 
 
@@ -82,6 +83,10 @@ class TestUnprivilegedUserODFAccess(E2ETest):
         # create a user without any role
         user = user_factory()
         logger.info(f"user created: {user[0]} password: {user[1]}")
+
+        # wait user credentials are ready
+        login(get_server_url(), user[0], user[1])
+        logout()
 
         # login with the user created
         login_factory(user[0], user[1])
