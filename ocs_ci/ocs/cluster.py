@@ -368,7 +368,10 @@ class CephCluster(object):
 
         """
         if not self.mcg_obj.status:
-            raise exceptions.NoobaaHealthException("Cluster health is NOT OK")
+            raise exceptions.NoobaaHealthException(
+                "Noobaa is not in HEALTHY state. Please check noobaa, noobaa-default-backing-store"
+                " and noobaa-default-bucket-class status"
+            )
 
     def wait_for_noobaa_health_ok(self, tries=60, delay=5):
         """
