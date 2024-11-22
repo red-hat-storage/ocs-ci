@@ -1689,6 +1689,7 @@ MIRROR_OPENSHIFT_USER_FILE = "mirror_openshift_user"
 MIRROR_OPENSHIFT_PASSWORD_FILE = "mirror_openshift_password"
 NOOBAA_POSTGRES_CONFIGMAP = "noobaa-postgres-config"
 NOOBAA_POSTGRES_SECRET = "noobaa-pgsql-secret"
+NOOBAA_POSTGRES_12_VERSION = 12
 ROOK_CEPH_OPERATOR = "rook-ceph-operator"
 ROOK_CEPH_CSI_CONFIG = "rook-ceph-csi-config"
 PDBSTATEMAP = "rook-ceph-pdbstatemap"

@@ -2166,7 +2166,9 @@ def wait_for_noobaa_pods_running(timeout=300, sleep=10):
     sampler.wait_for_func_status(True)
 
 
-def verify_pods_upgraded(old_images, selector, count=1, timeout=720):
+def verify_pods_upgraded(
+    old_images, selector, count=1, timeout=720, ignore_psql_12_verification=False
+):
     """
     Verify that all pods do not have old image.
 
@@ -2175,6 +2177,7 @@ def verify_pods_upgraded(old_images, selector, count=1, timeout=720):
        selector (str): Selector (e.g. app=ocs-osd)
        count (int): Number of resources for selector.
        timeout (int): Timeout in seconds to wait for pods to be upgraded.
+       ignore_psql_12_verification (bool): If True, psql 12 image is removed from current_images for verification
 
     Raises:
         TimeoutException: If the pods didn't get upgraded till the timeout.
@@ -2202,7 +2205,7 @@ def verify_pods_upgraded(old_images, selector, count=1, timeout=720):
                 )
             for pod in pods:
                 pod_obj = pod.get()
-                verify_images_upgraded(old_images, pod_obj)
+                verify_images_upgraded(old_images, pod_obj, ignore_psql_12_verification)
                 current_pod_images = get_images(pod_obj)
                 for container_name, container_image in current_pod_images.items():
                     if container_name not in pod_images:
