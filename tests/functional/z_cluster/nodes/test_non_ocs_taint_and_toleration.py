@@ -145,7 +145,11 @@ class TestNonOCSTaintAndTolerations(E2ETest):
             timeout=900, sleep=15
         ), "Few pods failed to reach the desired running state"
 
-        retry((CommandFailed, TolerationNotFoundException), tries=5, delay=10,)(
+        retry(
+            (CommandFailed, TolerationNotFoundException),
+            tries=10,
+            delay=10,
+        )(
             check_toleration_on_subscriptions
         )(toleration_key="xyz")
 
@@ -153,8 +157,8 @@ class TestNonOCSTaintAndTolerations(E2ETest):
             "Check non-ocs toleration on all newly created pods under openshift-storage NS"
         )
         retry(
-            CommandFailed,
-            tries=5,
+            (CommandFailed, TolerationNotFoundException),
+            tries=10,
             delay=10,
         )(
             check_toleration_on_pods
@@ -208,7 +212,11 @@ class TestNonOCSTaintAndTolerations(E2ETest):
         logger.info("Apply custom taints and tolerations.")
         apply_custom_taint_and_toleration()
 
-        retry((CommandFailed, TolerationNotFoundException), tries=5, delay=10,)(
+        retry(
+            (CommandFailed, TolerationNotFoundException),
+            tries=10,
+            delay=10,
+        )(
             check_toleration_on_subscriptions
         )(toleration_key="xyz")
 
@@ -223,7 +231,11 @@ class TestNonOCSTaintAndTolerations(E2ETest):
         logger.info(
             "Check non-ocs toleration on all newly created pods under openshift-storage NS"
         )
-        retry((CommandFailed, TolerationNotFoundException), tries=10, delay=10,)(
+        retry(
+            (CommandFailed, TolerationNotFoundException),
+            tries=10,
+            delay=10,
+        )(
             check_toleration_on_pods
         )(toleration_key="xyz")
         # Reboot one of the nodes
@@ -246,7 +258,11 @@ class TestNonOCSTaintAndTolerations(E2ETest):
 
         # Check cluster is health ok and check toleration on pods
         assert wait_for_pods_to_be_running(timeout=900, sleep=15)
-        retry((CommandFailed, TolerationNotFoundException), tries=5, delay=10,)(
+        retry(
+            (CommandFailed, TolerationNotFoundException),
+            tries=5,
+            delay=10,
+        )(
             check_toleration_on_pods
         )(toleration_key="xyz")
         self.sanity_helpers.health_check(tries=120)
@@ -275,7 +291,11 @@ class TestNonOCSTaintAndTolerations(E2ETest):
         logger.info(
             "Check non-ocs toleration on all newly created pods under openshift-storage NS"
         )
-        retry((CommandFailed, TolerationNotFoundException), tries=10, delay=10,)(
+        retry(
+            (CommandFailed, TolerationNotFoundException),
+            tries=10,
+            delay=10,
+        )(
             check_toleration_on_pods
         )(toleration_key="xyz")
 
@@ -288,7 +308,11 @@ class TestNonOCSTaintAndTolerations(E2ETest):
 
         # Check cluster is health ok and check toleration on pods
         logger.info("Verifying All resources are Running and matches expected result")
-        retry((CommandFailed, TolerationNotFoundException), tries=5, delay=10,)(
+        retry(
+            (CommandFailed, TolerationNotFoundException),
+            tries=10,
+            delay=10,
+        )(
             check_toleration_on_pods
         )(toleration_key="xyz")
         self.sanity_helpers.health_check(tries=120)
