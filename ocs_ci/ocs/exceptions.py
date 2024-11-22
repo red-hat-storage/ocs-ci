@@ -726,3 +726,7 @@ class ProviderModeNotFoundException(Exception):
 
 class TolerationNotFoundException(Exception):
     pass
+
+
+class VMIndexNotFoundException(Exception):
+    pass
