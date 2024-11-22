@@ -59,7 +59,6 @@ logger = logging.getLogger(__name__)
 @skipif_managed_service
 @skipif_hci_provider_and_client
 @bugzilla("1992472")
-@pytest.mark.polarion_id("OCS-2705")
 class TestNonOCSTaintAndTolerations(E2ETest):
     """
     Test to test non ocs taints on ocs nodes
@@ -118,6 +117,8 @@ class TestNonOCSTaintAndTolerations(E2ETest):
 
         request.addfinalizer(finalizer)
 
+    @pytest.mark.polarion_id("OCS-2705")
+    @pytest.mark.polarion_id("OCS-5981")
     def test_non_ocs_taint_and_tolerations(self, nodes):
         """
         Test runs the following steps
@@ -193,6 +194,7 @@ class TestNonOCSTaintAndTolerations(E2ETest):
             ), "New OSDs failed to reach running state"
             check_ceph_health_after_add_capacity(ceph_rebalance_timeout=2500)
 
+    @pytest.mark.polarion_id("OCS-5985")
     def test_reboot_on_tainted_node(self, nodes):
         """
         1. Taint odf nodes with non-ocs taint
@@ -249,6 +251,7 @@ class TestNonOCSTaintAndTolerations(E2ETest):
         )(toleration_key="xyz")
         self.sanity_helpers.health_check(tries=120)
 
+    @pytest.mark.polarion_id("OCS-5986")
     def test_replacement_of_tainted_node(self):
         """
         1. Taint odf nodes with non-ocs taint
@@ -290,6 +293,7 @@ class TestNonOCSTaintAndTolerations(E2ETest):
         )(toleration_key="xyz")
         self.sanity_helpers.health_check(tries=120)
 
+    @pytest.mark.polarion_id("OCS-5983")
     def test_negative_custom_taint(self, nodes):
         """
         Test runs the following steps
