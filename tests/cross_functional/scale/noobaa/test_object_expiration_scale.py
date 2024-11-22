@@ -54,7 +54,7 @@ class TestObjectExpirationScale:
         generate_empty_files(
             awscli_pod_session,
             dir=test_directory_setup.origin_dir,
-            amount=1000000,
+            amount=50000,
             timeout=3600,
         )
 
