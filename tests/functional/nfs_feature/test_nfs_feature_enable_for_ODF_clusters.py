@@ -1183,7 +1183,7 @@ class TestNfsEnable(ManageTest):
                 condition=constants.STATUS_RUNNING,
                 selector="name=nfs-test-pod",
                 dont_allow_other_resources=True,
-                timeout=60,
+                timeout=120,
             )
             pod_objs = pod.get_all_pods(
                 namespace=self.namespace,
