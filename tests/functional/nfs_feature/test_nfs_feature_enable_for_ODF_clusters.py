@@ -1190,6 +1190,7 @@ class TestNfsEnable(ManageTest):
                 selector=["nfs-test-pod"],
                 selector_label="name",
             )
+            log.info(f"pod objects are: {pod_objs}")
 
             pod_obj = pod_objs[0]
             log.info(f"pod obj name----{pod_obj.name}")
