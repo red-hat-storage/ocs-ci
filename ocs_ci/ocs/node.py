@@ -2135,6 +2135,7 @@ def get_node_rack_or_zone(failure_domain, node_obj):
         str: The worker node rack/zone name
 
     """
+    node_obj.reload()
     node_rack_or_zone = (
         get_node_zone(node_obj) if failure_domain == "zone" else get_node_rack(node_obj)
     )
