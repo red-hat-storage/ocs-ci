@@ -1604,6 +1604,14 @@ class VSPHEREIPI(VSPHEREBASE):
             template_folder = get_infra_id(self.cluster_path)
         else:
             logger.warning("metadata.json file doesn't exist.")
+        vsphere = VSPHERE(
+            config.ENV_DATA["vsphere_server"],
+            config.ENV_DATA["vsphere_user"],
+            config.ENV_DATA["vsphere_password"],
+        )
+        all_vms = vsphere.get_vms_by_string(config.ENV_DATA["cluster_name"])
+        for vm in all_vms:
+            vsphere.remove_disks_with_main_disk(vm)
 
         try:
             run_cmd(
