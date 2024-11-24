@@ -19,6 +19,7 @@ import hcl2
 import yaml
 import re
 import shutil
+from pytest import fail
 
 from ocs_ci.deployment.helpers.vsphere_helpers import VSPHEREHELPERS
 from ocs_ci.deployment.helpers.prechecks import VSpherePreChecks
@@ -1626,6 +1627,22 @@ class VSPHEREIPI(VSPHEREBASE):
             template_folder = get_infra_id(self.cluster_path)
         else:
             logger.warning("metadata.json file doesn't exist.")
+        vsphere = VSPHERE(
+            config.ENV_DATA["vsphere_server"],
+            config.ENV_DATA["vsphere_user"],
+            config.ENV_DATA["vsphere_password"],
+        )
+        all_vms = vsphere.get_vms_by_string(config.ENV_DATA["cluster_name"])
+        vsphere.stop_vms(all_vms)
+        try:
+            for vm in all_vms:
+                vsphere.remove_disks_with_main_disk(vm)
+        except Exception as e:
+            # Failing the test but letting it to continue
+            try:
+                fail(f"Removing disks in destroy fail with the error {e}")
+            except:
+                pass
 
         try:
             run_cmd(
