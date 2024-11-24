@@ -85,11 +85,11 @@ def delete_ipi_nodes(vsphere, cluster_name):
 
     vms_ipi = []
     for vm in vms_dc:
-        if cluster_name in vm.name:
+        if cluster_name in vm.name and "generated-zone" not in vm.name:
             vms_ipi.append(vm)
             logger.info(vm.name)
     if vms_ipi:
-        vsphere.destroy_vms(vms_ipi)
+        vsphere.destroy_vms(vms_ipi, remove_disks=True)
 
 
 def get_vsphere_connection(server, user, password):
