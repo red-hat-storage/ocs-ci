@@ -35,7 +35,7 @@ from ocs_ci.utility.aws import AWSTimeoutException
 from ocs_ci.ocs.resources.storage_cluster import osd_encryption_verification
 from ocs_ci.ocs import osd_operations
 from ocs_ci.ocs.utils import get_pod_name_by_pattern
-from ocs_ci.utility.utils import TimeoutSampler
+from ocs_ci.utility.utils import TimeoutSampler, ceph_health_check
 
 logger = logging.getLogger(__name__)
 
@@ -129,6 +129,9 @@ class TestDiskFailures(ManageTest):
             logger.info("Deleting the ocs-osd-removal pods")
             pod_names = get_pod_name_by_pattern("ocs-osd-removal-job-")
             delete_pods(get_pod_objs(pod_names))
+
+            assert ceph_health_check(), "Ceph cluster health is not OK"
+            logger.info("Ceph cluster health is OK during teardown")
 
         request.addfinalizer(finalizer)
 
