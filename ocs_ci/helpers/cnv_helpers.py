@@ -174,9 +174,11 @@ def create_dv(
     pvc_size="30Gi",
     source_url=constants.CNV_CENTOS_SOURCE,
     namespace=constants.CNV_NAMESPACE,
+    source_pvc_name=None,
+    source_pvc_ns=None,
 ):
     """
-    Create a PVC using a specified data source
+    Create a DV using a specified data source
 
     Args:
         access_mode (str): The access mode for the volume. Default is `constants.ACCESS_MODE_RWX`
@@ -190,18 +192,40 @@ def create_dv(
         dv_obj: DV object
 
     """
-    dv_data = templating.load_yaml(constants.CNV_VM_DV_YAML)
     dv_name = create_unique_resource_name("test", "dv")
+    if source_pvc_name and source_pvc_ns:
+        dv_data = templating.load_yaml(constants.CNV_VM_DV_CLONE_YAML)
+        dv_data["spec"]["source"]["pvc"]["name"] = source_pvc_name
+        dv_data["spec"]["source"]["pvc"]["namespace"] = source_pvc_ns
+    else:
+        dv_data = templating.load_yaml(constants.CNV_VM_DV_YAML)
+        dv_data["spec"]["storage"]["accessModes"] = [access_mode]
+        dv_data["spec"]["storage"]["resources"]["requests"]["storage"] = pvc_size
+        dv_data["spec"]["storage"]["storageClassName"] = sc_name
+        dv_data["spec"]["source"]["registry"]["url"] = source_url
     dv_data["metadata"]["name"] = dv_name
     dv_data["metadata"]["namespace"] = namespace
-    dv_data["spec"]["storage"]["accessModes"] = [access_mode]
-    dv_data["spec"]["storage"]["resources"]["requests"]["storage"] = pvc_size
-    dv_data["spec"]["storage"]["storageClassName"] = sc_name
-    dv_data["spec"]["source"]["registry"]["url"] = source_url
     dv_data_obj = create_resource(**dv_data)
     logger.info(f"Successfully created DV - {dv_data_obj.name}")
 
     return dv_data_obj
+
+
+def create_role(source_ns, dest_ns):
+    dv_cr_name = create_unique_resource_name("cr", "dv")
+    dv_rb_name = create_unique_resource_name("rb", "dv")
+    dv_cr_data = templating.load_yaml(constants.CNV_VM_DV_CLUSTER_ROLE_YAML)
+    dv_rb_data = templating.load_yaml(constants.CNV_VM_DV_ROLE_BIND_YAML)
+    dv_cr_data["metadata"]["name"] = dv_cr_name
+    dv_rb_data["metadata"]["name"] = dv_rb_name
+    dv_rb_data["metadata"]["namespace"] = source_ns
+    dv_rb_data["subjects"][0]["namespace"] = dest_ns
+    dv_rb_data["roleRef"]["name"] = dv_cr_name
+    dv_cr_data_obj = create_resource(**dv_cr_data)
+    logger.info(f"Successfully created DV cluster role - {dv_cr_data_obj.name}")
+    dv_rb_data_obj = create_resource(**dv_rb_data)
+    logger.info(f"Successfully created DV role binding - {dv_rb_data_obj.name}")
+    return dv_cr_data_obj, dv_rb_data_obj
 
 
 def get_pvc_from_vm(vm_obj):

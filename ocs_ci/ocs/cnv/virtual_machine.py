@@ -10,6 +10,7 @@ from ocs_ci.helpers.cnv_helpers import (
     create_volume_import_source,
     create_vm_secret,
     create_dv,
+    create_role,
 )
 
 from ocs_ci.helpers.helpers import (
@@ -22,6 +23,7 @@ from ocs_ci.ocs.ocp import OCP
 from ocs_ci.ocs.cnv.virtctl import Virtctl
 from ocs_ci.ocs.cnv.virtual_machine_instance import VirtualMachineInstance
 from ocs_ci.ocs import constants
+from ocs_ci.ocs.resources import pvc
 from ocs_ci.utility import templating
 from ocs_ci.utility.utils import TimeoutSampler
 from ocs_ci.ocs.exceptions import UsernameNotFoundException, CommandFailed
@@ -58,6 +60,11 @@ class VirtualMachine(Virtctl):
         self.ns_obj = None
         self.pvc_obj = None
         self.dv_obj = None
+        self.source_pvc = ""
+        self.sc_name = ""
+        self.source_pvc_size = ""
+        self.source_pvc_access_mode = ""
+        self.dv_cr_data_obj = self.dv_rb_data_obj = None
         self.secret_obj = None
         self.volumeimportsource_obj = None
         self.volume_interface = ""
@@ -109,6 +116,9 @@ class VirtualMachine(Virtctl):
 
         """
         self.volume_interface = volume_interface
+        self.sc_name = sc_name
+        self.source_pvc_size = pvc_size
+        self.source_pvc_access_mode = access_mode
         # Create namespace if it doesn't exist
         try:
             self.ns_obj = create_project(project_name=self.namespace)
@@ -143,6 +153,7 @@ class VirtualMachine(Virtctl):
             vm_data["spec"]["template"]["spec"]["volumes"][0]["persistentVolumeClaim"][
                 "claimName"
             ] = self.pvc_obj.name
+            self.source_pvc = self.pvc_obj.name
             wait_for_resource_state(
                 resource=self.pvc_obj, state=constants.STATUS_BOUND, timeout=300
             )
@@ -154,6 +165,7 @@ class VirtualMachine(Virtctl):
                 namespace=self.namespace,
                 source_url=source_url,
             )
+            self.source_pvc = self.dv_obj.name
             del vm_data["spec"]["template"]["spec"]["volumes"][0][
                 "persistentVolumeClaim"
             ]
@@ -181,11 +193,111 @@ class VirtualMachine(Virtctl):
             vm_data["spec"]["dataVolumeTemplates"].append(
                 {"metadata": metadata, "spec": storage_spec}
             )
+            self.source_pvc = dvt_name
             del vm_data["spec"]["template"]["spec"]["volumes"][0][
                 "persistentVolumeClaim"
             ]
             vm_data["spec"]["template"]["spec"]["volumes"][0]["dataVolume"] = {
                 "name": f"{dvt_name}"
+            }
+
+        vm_ocs_obj = create_resource(**vm_data)
+        logger.info(f"Successfully created VM: {vm_ocs_obj.name}")
+
+        if verify:
+            self.verify_vm(verify_ssh=ssh)
+
+    def clone_vm(
+        self,
+        source_vm_obj,
+        volume_interface,
+        ssh=True,
+        verify=True,
+    ):
+
+        self.volume_interface = source_vm_obj.volume_interface
+        self.sc_name = source_vm_obj.sc_name
+        self.source_pvc_size = source_vm_obj.source_pvc_size
+        self.source_pvc_access_mode = source_vm_obj.source_pvc_access_mode
+        # Create namespace if it doesn't exist
+        try:
+            self.ns_obj = create_project(project_name=self.namespace)
+        except CommandFailed as ex:
+            if "(AlreadyExists)" in str(ex):
+                logger.warning(f"The namespace: {self.namespace} already exists!")
+        vm_data = templating.load_yaml(constants.CNV_VM_TEMPLATE_YAML)
+        vm_data["metadata"]["name"] = self._vm_name
+        vm_data["metadata"]["namespace"] = self.namespace
+        if ssh:
+            self.secret_obj = create_vm_secret(namespace=self.namespace)
+            ssh_secret_dict = [
+                {
+                    "sshPublicKey": {
+                        "propagationMethod": {"noCloud": {}},
+                        "source": {"secret": {"secretName": f"{self.secret_obj.name}"}},
+                    }
+                }
+            ]
+            vm_data["spec"]["template"]["spec"]["accessCredentials"] = ssh_secret_dict
+
+        if volume_interface == constants.VM_VOLUME_PVC:
+            self.pvc_obj = pvc.create_pvc_clone(
+                sc_name=self.sc_name,
+                parent_pvc=source_vm_obj.source_pvc,
+                clone_yaml=constants.CSI_RBD_PVC_CLONE_YAML,
+                namespace=self.namespace,
+                storage_size=self.source_pvc_size,
+                access_mode=self.source_pvc_access_mode,
+                volume_mode=constants.VOLUME_MODE_BLOCK,
+            )
+            vm_data["spec"]["template"]["spec"]["volumes"][0]["persistentVolumeClaim"][
+                "claimName"
+            ] = self.pvc_obj.name
+
+        if volume_interface == constants.VM_VOLUME_DV:
+            self.dv_obj = create_dv(
+                source_pvc_name=source_vm_obj.source_pvc,
+                source_pvc_ns=source_vm_obj.namespace,
+                namespace=self.namespace,
+            )
+            del vm_data["spec"]["template"]["spec"]["volumes"][0][
+                "persistentVolumeClaim"
+            ]
+            vm_data["spec"]["template"]["spec"]["volumes"][0]["dataVolume"] = {
+                "name": self.dv_obj.name
+            }
+
+        if volume_interface == constants.VM_VOLUME_DVT:
+            # Define the dataVolumeTemplates content with parameters
+            dvt_name = create_unique_resource_name("clone", "dvt")
+            self.dv_cr_data_obj, self.dv_rb_data_obj = create_role(
+                source_ns=source_vm_obj.namespace, dest_ns=self.namespace
+            )
+            vm_data["spec"]["dataVolumeTemplates"] = []
+            metadata = {
+                "name": dvt_name,
+            }
+            storage_spec = {
+                "storage": {
+                    "accessModes": [self.source_pvc_access_mode],
+                    "resources": {"requests": {"storage": self.source_pvc_size}},
+                },
+                "source": {
+                    "pvc": {
+                        "namespace": source_vm_obj.namespace,
+                        "name": source_vm_obj.source_pvc,
+                    }
+                },
+            }
+
+            vm_data["spec"]["dataVolumeTemplates"].append(
+                {"metadata": metadata, "spec": storage_spec}
+            )
+            del vm_data["spec"]["template"]["spec"]["volumes"][0][
+                "persistentVolumeClaim"
+            ]
+            vm_data["spec"]["template"]["spec"]["volumes"][0]["dataVolume"] = {
+                "name": dvt_name
             }
 
         vm_ocs_obj = create_resource(**vm_data)

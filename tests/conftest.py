@@ -7092,6 +7092,54 @@ def cnv_workload(request):
     return factory
 
 
+@pytest.fixture()
+def clone_vm_workload(request):
+    """
+    Deploys CNV based workloads
+
+    """
+    clone_vms = []
+
+    def factory(
+        vm_obj,
+        volume_interface=None,
+        namespace=None,
+    ):
+        """
+        Args:
+            volume_interface (str): The type of volume interface to use. Default is `constants.VM_VOLUME_PVC`.
+            access_mode (str): The access mode for the volume. Default is `constants.ACCESS_MODE_RWX`
+            storageclass (str): The name of the storage class to use. Default is `constants.DEFAULT_CNV_CEPH_RBD_SC`.
+            pvc_size (str): The size of the PVC. Default is "30Gi".
+            source_url (str): The URL of the vm registry image. Default is `constants.CNV_CENTOS_SOURCE`.
+            namespace (str, optional): The namespace to create the vm on. Default, creates a unique namespace.
+
+        Returns:
+            list: objects of cnv workload class
+
+        """
+        clone_vm_name = create_unique_resource_name("clone", "vm")
+        clone_vm_wl = VirtualMachine(vm_name=clone_vm_name, namespace=namespace)
+        volume_iface = volume_interface if volume_interface else vm_obj.volume_interface
+        clone_vm_wl.clone_vm(
+            source_vm_obj=vm_obj,
+            volume_interface=volume_iface,
+        )
+        clone_vms.append(clone_vm_wl)
+        return clone_vms
+
+    def teardown():
+        """
+        Cleans up the CNV workloads
+
+        """
+        for cnv_wl in clone_vms:
+            cnv_wl.delete()
+
+    request.addfinalizer(teardown)
+    return factory
+
+
 @pytest.fixture(scope="class")
 def lvm_storageclass_factory_class(request, storageclass_factory_class):
     return lvm_storageclass_factory_fixture(request, storageclass_factory_class)
