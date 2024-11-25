@@ -25,7 +25,7 @@ log = logging.getLogger(__name__)
 @runs_on_provider
 @bugzilla("2033284")
 @pytest.mark.polarion_id("OCS-2766")
-def test_ceph_manager_stopped_pd(measure_stop_ceph_mgr):
+def deprecated_test_ceph_manager_stopped_pd(measure_stop_ceph_mgr):
     """
     Test that there is appropriate incident in PagerDuty when ceph manager
     is unavailable and that this incident is cleared when the manager
@@ -134,7 +134,7 @@ def depricated_test_stop_worker_nodes_pd(measure_stop_worker_nodes):
 @managed_service_required
 @runs_on_provider
 @pytest.mark.polarion_id("OCS-3716")
-def test_ceph_monitor_stopped_pd(measure_stop_ceph_mon):
+def deprecated_test_ceph_monitor_stopped_pd(measure_stop_ceph_mon):
     """
     Test that there are appropriate incidents in PagerDuty when ceph monitor
     is unavailable and that these incidents are cleared when the monitor
@@ -175,7 +175,7 @@ def test_ceph_monitor_stopped_pd(measure_stop_ceph_mon):
 @bugzilla("2076670")
 @pytest.mark.polarion_id("OCS-3717")
 @pytest.mark.parametrize("create_mon_quorum_loss", [True])
-def test_ceph_mons_quorum_lost_pd(measure_stop_ceph_mon):
+def deprecated_test_ceph_mons_quorum_lost_pd(measure_stop_ceph_mon):
     """
     Test that there are appropriate incidents in PagerDuty when ceph monitors
     except one are unavailable and that these incidents are cleared when the
