@@ -405,7 +405,7 @@ class TestNonOCSTaintAndTolerations(E2ETest):
 
         assert not wait_for_pods_to_be_running(
             timeout=120, sleep=15
-        ), "Pods are running when they should not be."
+        ), "All pods are running when they should not be. Some pods should be in pending state."
 
         logger.info(
             "Validate custom toleration not found on all newly created pods in openshift-storage"
