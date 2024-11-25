@@ -60,6 +60,7 @@ def recover_workload_pods_post_recovery(sc_obj, pods_not_running=None):
 
     # fetch the not running pods
     if not pods_not_running:
+        logger.info("Fetching pods that are not running or terminating")
         pods_not_running = get_not_running_pods(
             namespace=constants.STRETCH_CLUSTER_NAMESPACE
         )
@@ -82,7 +83,6 @@ def recover_workload_pods_post_recovery(sc_obj, pods_not_running=None):
 
     pod_names = [pod.name for pod in pods_not_running]
     logger.info(f"These are the pods not running: {pod_names}")
-    scaled_down = []
 
     workload_labels = [
         constants.LOGWRITER_CEPHFS_LABEL,
@@ -94,26 +94,26 @@ def recover_workload_pods_post_recovery(sc_obj, pods_not_running=None):
         for pod in pods_not_running:
 
             # Delete any pod that is in Error or ContainerStatusUnknown status
-            if pod.status() in [
-                constants.STATUS_CONTAINER_STATUS_UNKNOWN,
-                constants.STATUS_ERROR,
-            ]:
-                logger.info(
-                    f"Pod {pod.name} in either {constants.STATUS_CONTAINER_STATUS_UNKNOWN} "
-                    f"or {constants.STATUS_ERROR}. hence deleting the pod"
-                )
-                pod.delete()
-                continue
-
-            # Get the pod describe output to verify the error
             try:
+                if pod.status() in [
+                    constants.STATUS_CONTAINER_STATUS_UNKNOWN,
+                    constants.STATUS_ERROR,
+                ]:
+                    logger.info(
+                        f"Pod {pod.name} in either {constants.STATUS_CONTAINER_STATUS_UNKNOWN} "
+                        f"or {constants.STATUS_ERROR}. hence deleting the pod"
+                    )
+                    pod.delete()
+                    continue
+
+                # Get the pod describe output to verify the error
                 logger.info(f"Fetching the `oc describe` output for pod {pod.name}")
                 desc_out = OCP(
                     namespace=constants.STRETCH_CLUSTER_NAMESPACE,
                 ).exec_oc_cmd(command=f"describe pod {pod.name}", out_yaml_format=False)
             except CommandFailed as e:
                 if "NotFound" in e.args[0]:
-                    raise UnexpectedBehaviour
+                    continue
                 else:
                     raise e
 
@@ -136,7 +136,11 @@ def recover_workload_pods_post_recovery(sc_obj, pods_not_running=None):
                         timeout=300,
                         namespace=constants.STRETCH_CLUSTER_NAMESPACE,
                     )
-                    scaled_down.append(constants.LOGWRITER_CEPHFS_LABEL)
+                    modify_deployment_replica_count(
+                        deployment_name=constants.LOGWRITER_CEPHFS_NAME,
+                        replica_count=4,
+                        namespace=constants.STRETCH_CLUSTER_NAMESPACE,
+                    )
                     break
 
                 elif (
@@ -155,7 +159,11 @@ def recover_workload_pods_post_recovery(sc_obj, pods_not_running=None):
                         timeout=300,
                         namespace=constants.STRETCH_CLUSTER_NAMESPACE,
                     )
-                    scaled_down.append(constants.LOGREADER_CEPHFS_LABEL)
+                    modify_job_parallelism_count(
+                        job_name=constants.LOGREADER_CEPHFS_NAME,
+                        count=4,
+                        namespace=constants.STRETCH_CLUSTER_NAMESPACE,
+                    )
                     break
 
                 elif (
@@ -174,33 +182,12 @@ def recover_workload_pods_post_recovery(sc_obj, pods_not_running=None):
                         timeout=300,
                         namespace=constants.STRETCH_CLUSTER_NAMESPACE,
                     )
-                    scaled_down.append(constants.LOGWRITER_RBD_LABEL)
+                    modify_statefulset_replica_count(
+                        statefulset_name=constants.LOGWRITER_RBD_NAME,
+                        replica_count=2,
+                        namespace=constants.STRETCH_CLUSTER_NAMESPACE,
+                    )
                     break
-
-    # for all the scaled down workloads we scale them up
-    # one by one
-    for label in scaled_down:
-        if label == constants.LOGWRITER_CEPHFS_LABEL:
-            logger.info("Scaling up logwriter deployment now")
-            modify_deployment_replica_count(
-                deployment_name=constants.LOGWRITER_CEPHFS_NAME,
-                replica_count=4,
-                namespace=constants.STRETCH_CLUSTER_NAMESPACE,
-            )
-        elif label == constants.LOGWRITER_RBD_LABEL:
-            logger.info("Scaling up logwriter rbd statefulset now")
-            modify_statefulset_replica_count(
-                statefulset_name=constants.LOGWRITER_RBD_NAME,
-                replica_count=2,
-                namespace=constants.STRETCH_CLUSTER_NAMESPACE,
-            )
-        elif label == constants.LOGREADER_CEPHFS_LABEL:
-            logger.info("Scaling up logwriter job now")
-            modify_job_parallelism_count(
-                job_name=constants.LOGREADER_CEPHFS_NAME,
-                count=4,
-                namespace=constants.STRETCH_CLUSTER_NAMESPACE,
-            )
 
     # fetch workload pod details now and make sure all of them are running
     logger.info("Checking if the logwriter pods are up and running now")
