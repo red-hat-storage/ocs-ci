@@ -119,7 +119,7 @@ class TestMCGReplicationWithDisruptions(E2ETest):
         )
         logger.info(f"Written objects: {written_random_objects}")
 
-        compare_bucket_object_list(
+        assert compare_bucket_object_list(
             mcg_obj_session, source_bucket_name, target_bucket_name
         )
         logger.info("Uni-directional bucket replication working as expected")
@@ -144,7 +144,7 @@ class TestMCGReplicationWithDisruptions(E2ETest):
             pattern="second-write-",
         )
         logger.info(f"Written objects: {written_random_objects}")
-        compare_bucket_object_list(
+        assert compare_bucket_object_list(
             mcg_obj_session, source_bucket_name, target_bucket_name
         )
         logger.info("Bi directional bucket replication working as expected")
@@ -176,7 +176,7 @@ class TestMCGReplicationWithDisruptions(E2ETest):
         )
         logger.info(f"Written objects: {written_random_objects}")
 
-        compare_bucket_object_list(
+        assert compare_bucket_object_list(
             mcg_obj_session, source_bucket_name, target_bucket_name
         )
         logger.info(
@@ -206,7 +206,7 @@ class TestMCGReplicationWithDisruptions(E2ETest):
             pod_names=pod_names, namespace=config.ENV_DATA["cluster_namespace"]
         )
 
-        compare_bucket_object_list(
+        assert compare_bucket_object_list(
             mcg_obj_session, source_bucket_name, target_bucket_name
         )
         logger.info("Object sync works after the RGW pod restarted!!")
@@ -236,7 +236,7 @@ class TestMCGReplicationWithDisruptions(E2ETest):
         )
         logger.info("Nodes rebooted successfully!!")
 
-        compare_bucket_object_list(
+        assert compare_bucket_object_list(
             mcg_obj_session, source_bucket_name, target_bucket_name
         )
         logger.info("Objects sync works even when the cluster is rebooted")
