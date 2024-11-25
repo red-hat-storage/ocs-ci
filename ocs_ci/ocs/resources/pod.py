@@ -3571,12 +3571,13 @@ def restart_pods_in_statuses(
     logger.info("Finish restarting the pods")
 
 
-def base_wait_for_ceph_cmd_execute_successfully(timeout=300):
+def base_wait_for_ceph_cmd_execute_successfully(timeout=300, sleep=20):
     """
     Wait for a Ceph command to execute successfully
 
     Args:
         timeout (int): The time to wait for a Ceph command to execute successfully
+        sleep (int): Time to sleep between the iterations
 
     Returns:
         bool: True, if the Ceph command executed successfully. False, otherwise
@@ -3584,7 +3585,7 @@ def base_wait_for_ceph_cmd_execute_successfully(timeout=300):
     """
     try:
         for res in TimeoutSampler(
-            timeout=timeout, sleep=10, func=check_ceph_cmd_execute_successfully
+            timeout=timeout, sleep=sleep, func=check_ceph_cmd_execute_successfully
         ):
             if res:
                 return True
@@ -3970,7 +3971,7 @@ def get_ceph_tool_pods(ceph_tool_label=constants.TOOL_APP_LABEL, namespace=None)
 
 
 def wait_for_ceph_cmd_execute_successfully(
-    timeout=300, num_of_retries=1, restart_tool_pod_before_retry=True
+    timeout=300, sleep=20, num_of_retries=1, restart_tool_pod_before_retry=True
 ):
     """
     Wait for the Ceph command to execute successfully in the given timeout and number of retries.
@@ -3979,6 +3980,7 @@ def wait_for_ceph_cmd_execute_successfully(
 
     Args:
         timeout (int): The time to wait for a Ceph command to execute successfully
+        sleep (int): Time to sleep between the iterations
         num_of_retries (int): The number of retries to wait for the Ceph command to execute successfully.
         restart_tool_pod_before_retry (bool): If True, restart the rook-ceph-tool pod before the next retry.
             False, otherwise.
@@ -3987,9 +3989,11 @@ def wait_for_ceph_cmd_execute_successfully(
         bool: True, if the Ceph command executed successfully. False, otherwise
 
     """
+    logger.info("Wait for the ceph command to execute successfully")
+
     for num_of_retry in range(num_of_retries):
         logger.info(f"num of retries = {num_of_retry}")
-        res = base_wait_for_ceph_cmd_execute_successfully(timeout=timeout)
+        res = base_wait_for_ceph_cmd_execute_successfully(timeout=timeout, sleep=sleep)
         if res:
             return True
         if num_of_retry < 1:
