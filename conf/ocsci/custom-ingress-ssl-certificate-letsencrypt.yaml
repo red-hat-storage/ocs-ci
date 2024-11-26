@@ -1,0 +1,4 @@
+---
+DEPLOYMENT:
+  use_custom_ingress_ssl_cert: true
+  custom_ssl_cert_provider: "letsencrypt"

@@ -133,6 +133,10 @@ anywhere else.
 * `ingress_ssl_key` - Path for the key for custom ingress ssl certificate. (default: `data/ingress-cert.key`)
 * `ingress_ssl_ca_cert` - Path for the CA certificate used for signing the ingress_ssl_cert. (default: `data/ca.crt`)
 * `cert_signing_service_url` - Automatic Certification Authority signing service URL.
+* `custom_ssl_cert_provider` - Provider for ssl certificate, options: `ocs-qe-ca`, `letsencrypt` (default: `ocs-qe-ca`)
+    `ocs-qe-ca` option requires `cert_signing_service_url` parameter
+    `letsencrypt` option requires `certbot_dns_plugin` parameter
+* `certbot_dns_plugin` - Certbot DNS plugin for certificate signed by Let's Encrypt, options: `dns-route53` (default: `dns-route53`)
 * `proxy_http_proxy`, `proxy_https_proxy` - proxy configuration used for installation of cluster behind proxy (vSphere deployment via Flexy)
 * `disconnected_http_proxy`, `disconnected_https_proxy`, `disconnected_no_proxy` - proxy configuration used for installation of disconnect cluster (vSphere deployment via Flexy)
 * `disconnected_env_skip_image_mirroring` - skip index image prune and mirroring on disconnected environment (this expects that all the required images will be mirrored outside of ocs-ci)
