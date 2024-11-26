@@ -133,7 +133,9 @@ class DRUpgrade(OCSUpgrade):
             f'"{self.channel}", "source": "{mco_source}"}}}}\''
         )
         subscription.exec_oc_cmd(patch_subscription_cmd, out_yaml_format=False)
-        time.sleep(10)
+        # Deliberately sleeping here as there are so many places down the line 
+        # where ocs-ci will check CSV and it fails as changes take some time to reflect
+        time.sleep(20)
 
     def validate_upgrade(self):
         # In case of both MCO and DRhub operator, validation steps are similar
@@ -174,11 +176,10 @@ class DRUpgrade(OCSUpgrade):
                         resource_name=p.get()["metadata"]["name"]
                     )
 
-        # get pre-upgrade csv for MCO
+        # get pre-upgrade csv
         csv_objs = CSV(namespace=self.namespace)
         for csv in csv_objs.get()["items"]:
-            if (self.operator_name in csv["metadata"]["name"]
-                and self.upgrade_version in csv["metadata"]["name"]):
+            if self.operator_name in csv["metadata"]["name"]:
                 csv_obj = CSV(
                     namespace=self.namespace, resource_name=csv["metadata"]["name"]
                 )
@@ -186,10 +187,19 @@ class DRUpgrade(OCSUpgrade):
                     self.pre_upgrade_data["version"] = csv_obj.get_resource(
                         resource_name=csv_obj.resource_name, column="VERSION"
                     )
+                    try:
+                        self.pre_upgrade_data["version"]
+                    except KeyError:
+                        log.error(f"Couldn't capture Pre-upgrade CSV version for {self.operator_name}")
                 if self.upgrade_phase == "post_upgrade":
-                    self.post_upgrade_data["version"] = csv_obj.get_resource(
-                        resource_name=csv_obj.resource_name, column="VERSION"
-                    )
+                    if self.upgrade_version in csv["metadata"]["name"]:
+                        self.post_upgrade_data["version"] = csv_obj.get_resource(
+                            resource_name=csv_obj.resource_name, column="VERSION"
+                        )
+                    try:
+                        self.post_upgrade_data["version"]
+                    except KeyError:
+                        log.error(f"Couldn't capture Post upgrade CSV version for {self.operator_name}")
         # Make sure all csvs are in succeeded state
         check_all_csvs_are_succeeded(namespace=self.namespace)
 
