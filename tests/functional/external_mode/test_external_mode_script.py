@@ -3,6 +3,7 @@ import filecmp
 
 from ocs_ci.framework.pytest_customization.marks import (
     skipif_ocs_version,
+    external_mode_required,
     post_ocs_upgrade,
 )
 from ocs_ci.framework.testlib import (
@@ -18,6 +19,7 @@ log = logging.getLogger(__name__)
 @brown_squad
 @tier1
 @skipif_ocs_version("<4.18")
+@external_mode_required
 class TestExternalModeScript(ManageTest):
     """
     Test module related to the external mode script

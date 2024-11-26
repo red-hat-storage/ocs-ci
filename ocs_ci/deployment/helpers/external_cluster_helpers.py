@@ -10,6 +10,7 @@ import tempfile
 
 from ocs_ci.framework import config
 from ocs_ci.ocs import defaults, constants
+from ocs_ci.ocs.ocp import OCP
 from ocs_ci.ocs.exceptions import (
     ExternalClusterExporterRunFailed,
     ExternalClusterRGWEndPointMissing,
@@ -34,8 +35,6 @@ from ocs_ci.utility.utils import (
     download_file,
     wait_for_machineconfigpool_status,
 )
-from ocs_ci.ocs.ocp import OCP
-
 
 logger = logging.getLogger(__name__)
 
@@ -488,7 +487,7 @@ def get_exporter_script_from_configmap():
 
     """
     logger.info(
-        f"Get the exporter script for configmap: {constants.EXTERNAL_CLUSTER_SCRIPT_CONFIG}"
+        f"Get the exporter script from configmap: {constants.EXTERNAL_CLUSTER_SCRIPT_CONFIG}"
     )
     config_map = OCP(
         kind="configmap",
