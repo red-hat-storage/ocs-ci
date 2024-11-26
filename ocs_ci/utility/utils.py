@@ -860,7 +860,31 @@ def get_openshift_installer(
         log.debug(f"Installer exists ({installer_binary_path}), skipping download.")
         # TODO: check installer version
     else:
-        version = expose_ocp_version(version)
+        try:
+            version = expose_ocp_version(version)
+        except Exception as e:
+            log.error(
+                f"Failed to download the openshift installer {version}. Exception '{e}'"
+            )
+            # check given version is GA'ed or not
+            version_major_minor = str(
+                version_module.get_semantic_version(version, only_major_minor=True)
+            )
+            # For GA'ed version, check for N, N-1 and N-2 versions
+            for current_version_count in range(3):
+                previous_version = version_module.get_previous_version(
+                    version_major_minor, current_version_count
+                )
+                log.debug(
+                    f"previous version with count {current_version_count} is {previous_version}"
+                )
+                if is_ocp_version_gaed(previous_version):
+                    # Download GA'ed version
+                    version = expose_ocp_version(f"{previous_version}-ga")
+                    break
+                else:
+                    log.debug(f"version {previous_version} is not GA'ed")
+
         log.info(f"Downloading openshift installer ({version}).")
         prepare_bin_dir()
         # record current working directory and switch to BIN_DIR
