@@ -7102,16 +7102,16 @@ def multi_cnv_workload(
     """
 
     def factory(namespace=None):
-
         """
         Args:
             namespace:
 
         Returns:
-            list: objects of cnv workload class
+            lists: objects of cnv workload class with default comp and aggressive compression
 
         """
-        vm_list = []
+        vm_list_agg_compr = []
+        vm_list_default_compr = []
 
         """
         Setup csi-kms-connection-details configmap
@@ -7126,6 +7126,7 @@ def multi_cnv_workload(
             interface=constants.CEPHBLOCKPOOL,
             encrypted=True,
             encryption_kms_id=kms.kmsid,
+            new_rbd_pool=True,
         )
 
         sc_obj_aggressive = storageclass_factory(
@@ -7133,8 +7134,8 @@ def multi_cnv_workload(
             encrypted=True,
             encryption_kms_id=kms.kmsid,
             compression="aggressive",
+            new_rbd_pool=True,
         )
-
         vm_configs = [
             {
                 "volume_interface": constants.VM_VOLUME_PVC,
@@ -7145,6 +7146,11 @@ def multi_cnv_workload(
                 "volume_interface": "PVC",
                 "access_mode": constants.ACCESS_MODE_RWX,
                 "sc_name": sc_obj_aggressive.name,
+            },
+            {
+                "volume_interface": "PVC",
+                "access_mode": constants.ACCESS_MODE_RWO,
+                "sc_name": sc_obj_def_compr.name,
             },
             {
                 "volume_interface": "DVT",
@@ -7176,9 +7182,17 @@ def multi_cnv_workload(
                 source_url=constants.CNV_FEDORA_SOURCE,  # Assuming source_url is the same for all VMs
                 namespace=namespace,
             )
-            vm_list.extend(vm_obj)
-
-        return vm_list
+            vm_obj = vm_obj[-1]
+            if config["sc_name"] == sc_obj_aggressive.name:
+                vm_list_agg_compr.append(vm_obj)
+            else:
+                vm_list_default_compr.append(vm_obj)
+        return (
+            vm_list_default_compr,
+            vm_list_agg_compr,
+            sc_obj_aggressive,
+            sc_obj_def_compr,
+        )
 
     return factory
 
