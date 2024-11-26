@@ -4,7 +4,7 @@ import pytest
 from ocs_ci.framework.testlib import (
     ocs_upgrade,
 )
-from ocs_ci.ocs.ocs_upgrade import OCSUpgrade, run_ocs_upgrade
+from ocs_ci.ocs.ocs_upgrade import run_ocs_upgrade
 from ocs_ci.framework.testlib import (
     skipif_ocs_version,
     skipif_ocp_version,
@@ -16,10 +16,9 @@ from ocs_ci.framework.testlib import (
 from ocs_ci.framework.testlib import ManageTest, ocp_upgrade
 from ocs_ci.ocs.resources.storage_client import StorageClient
 from tests.functional.upgrade.test_upgrade_ocp import TestUpgradeOCP
-from ocs_ci.framework import config
-from ocs_ci.utility import version
-
-# from semantic_version import Version
+from ocs_ci.deployment.metallb import MetalLBInstaller
+from ocs_ci.deployment.cnv import CNVInstaller
+from ocs_ci.ocs.acm_upgrade import ACMUpgrade
 
 log = logging.getLogger(__name__)
 
@@ -33,6 +32,9 @@ class TestUpgradeForProviderClient(ManageTest):
     def setup(self):
         self.storage_clients = StorageClient()
         self.test_upgrade_ocp = TestUpgradeOCP()
+        self.metallb_installer_obj = MetalLBInstaller()
+        self.cnv_installer_obj = CNVInstaller()
+        self.acm_hub_upgrade_obj = ACMUpgrade()
 
     @pytest.fixture()
     def teardown(request, nodes):
@@ -41,70 +43,27 @@ class TestUpgradeForProviderClient(ManageTest):
             Make sure all nodes are up again
 
             """
-            # nodes.restart_nodes_by_stop_and_start_teardown()
-            # request.addfinalizer(finalizer)
-            pass
-
-    @runs_on_provider
-    @ocs_upgrade
-    def test_ocs_minor_version_upgrade_for_provider(self):
-        """
-        Tests upgrade procedure of OCS cluster
-
-        """
-        run_ocs_upgrade()
-        log.info("Validate post provider ocs upgrade odf client operator also upgraded")
-        self.storage_clients.verify_version_of_odf_client_operator()
-
-    @runs_on_provider
-    @ocs_upgrade
-    def test_ocs_major_version_upgrade_for_provider(self):
-        """
-        Tests upgrade procedure of OCS cluster
-        odf upgrade from 4.16 to 4.17 sequence---
-            Upgrade ocp
-            upgrade acm
-            upgrade odf --- odf client should automatically upgrade
-        """
-        log.info(
-            "Validate major version of ocs operator for provider is same as major version of odf client operator"
-        )
-        ocp_version = version.get_semantic_ocp_version_from_config()
-        ocs_version = version.get_semantic_ocs_version_from_config()
-        log.debug(f"Cluster versions before upgrade:\n{ocp_version}")
-        log.debug(f"ocs versions before upgrade:\n{ocs_version}")
-        upgrade_in_current_source = config.UPGRADE.get(
-            "upgrade_in_current_source", False
-        )
-        upgrade_ocs = OCSUpgrade(
-            namespace=config.ENV_DATA["cluster_namespace"],
-            version_before_upgrade=ocs_version,
-            ocs_registry_image=config.UPGRADE.get("upgrade_ocs_registry_image"),
-            upgrade_in_current_source=upgrade_in_current_source,
-        )
-        upgrade_version = upgrade_ocs.get_upgrade_version()
-        log.info(f"upgrade to ocs version: {upgrade_version}")
-        # if Version.coerce(
-        #     version.get_semantic_version(ocp_version, only_major_minor=True)
-        # ) >= Version.coerce(
-        #     version.get_semantic_version(upgrade_version, only_major_minor=True)
-        # ):
-        run_ocs_upgrade()
-        log.info("Validate post provider ocs upgrade odf client operator also upgraded")
-        self.storage_clients.verify_version_of_odf_client_operator()
-        # else:
-        #     self.test_upgrade_ocp.test_upgrade_ocp()
-        #     run_ocs_upgrade()
-        #     log.info(
-        #         "Validate post provider ocs upgrade odf client operator also upgraded"
-        #     )
-        #     self.storage_clients.verify_version_of_odf_client_operator()
+            nodes.restart_nodes_by_stop_and_start_teardown()
+            request.addfinalizer(finalizer)
 
     @runs_on_provider
     @ocp_upgrade
-    def test_ocp_upgrade_for_provider_without_hcp_cluster(self):
+    @ocs_upgrade
+    def test_ocp_ocs_upgrade_for_provider(self):
         """
-        This test is to validate ocp minor version upgrade for provider
-
+        This test is to validate ocp and ocs upgrade for provider
+        upgrades for provider cluster
+        eg: odf upgrade from 4.16 to 4.17 sequence---
+            Upgrade ocp
+            upgrade acm
+            upgrade cnv
+            upgrade metalLB
+            upgrade odf --- odf client should automatically upgraded
+            for GA to GA upgrade
         """
         self.test_upgrade_ocp.test_upgrade_ocp()
+        self.acm_hub_upgrade_obj.run_upgrade()
+        self.cnv_installer_obj.upgrade_cnv()
+        self.metallb_installer_obj.upgrade_metallb()
+        run_ocs_upgrade()
+        self.storage_clients.verify_version_of_odf_client_operator()
