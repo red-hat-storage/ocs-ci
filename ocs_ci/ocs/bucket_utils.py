@@ -596,7 +596,9 @@ def download_objects_using_s3cmd(
     ), "Failed to download objects"
 
 
-def rm_object_recursive(podobj, target, mcg_obj, option="", timeout=600):
+
+def rm_object_recursive(podobj, target, mcg_obj, option="", prefix=None, timeout=600):
+
     """
     Remove bucket objects with --recursive option
 
@@ -609,7 +611,12 @@ def rm_object_recursive(podobj, target, mcg_obj, option="", timeout=600):
         option (str): Extra s3 remove command option
 
     """
-    rm_command = f"rm s3://{target} --recursive {option}"
+
+    rm_command = (
+        f"rm s3://{target} --recursive {option}"
+        if not prefix
+        else f"rm s3://{target}/{prefix} --recursive {option}"
+    )
     podobj.exec_cmd_on_pod(
         command=craft_s3_command(rm_command, mcg_obj),
         out_yaml_format=False,
