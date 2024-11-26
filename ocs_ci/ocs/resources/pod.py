@@ -3951,9 +3951,9 @@ def get_prometheus_pods(
     return prometheus_pod_objs
 
 
-def get_ceph_tool_pods(ceph_tool_label=constants.TOOL_APP_LABEL, namespace=None):
+def get_all_ceph_tool_pods(ceph_tool_label=constants.TOOL_APP_LABEL, namespace=None):
     """
-    Fetches info about the ceph tools pods in the cluster
+    Get all the ceph tool pods in the cluster
 
     Args:
         ceph_tool_label (str): label associated with ceph tool pods
@@ -3963,6 +3963,7 @@ def get_ceph_tool_pods(ceph_tool_label=constants.TOOL_APP_LABEL, namespace=None)
 
     Returns:
         list : List of the ceph tool pod objects
+
     """
     namespace = namespace or config.ENV_DATA["cluster_namespace"]
     ceph_tools = get_pods_having_label(ceph_tool_label, namespace)
@@ -4002,8 +4003,8 @@ def wait_for_ceph_cmd_execute_successfully(
 
         if restart_tool_pod_before_retry:
             try:
-                logger.info("Trying to restart the rook-ceph-tools pod...")
-                ceph_tool_pods = get_ceph_tool_pods()
+                logger.info("Trying to restart the rook-ceph-tool pods...")
+                ceph_tool_pods = get_all_ceph_tool_pods()
                 delete_pods(ceph_tool_pods, wait=True)
             except CommandFailed as ex:
                 logger.warning(ex)
