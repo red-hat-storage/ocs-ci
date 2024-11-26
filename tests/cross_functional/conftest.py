@@ -1892,6 +1892,7 @@ def setup_stress_testing_bucket(bucket_factory_session, rgw_bucket_factory_sessi
 
         bucket_objects = dict()
 
+        logger.info("Creating buckets for stress testing")
         for type, bucketclass_dict in bucket_configs.items():
             if type == "rgw":
                 bucket = rgw_bucket_factory_session(interface="rgw-oc")[0]
