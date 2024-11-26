@@ -239,6 +239,7 @@ OPERATOR_KIND = "Operator"
 DRIVER = "Driver"
 IMAGECONTENTSOURCEPOLICY_KIND = "ImageContentSourcePolicy"
 NOOBAA_ACCOUNT = "NoobaaAccount"
+EXTERNAL_CLUSTER_SCRIPT_CONFIG = "rook-ceph-external-cluster-script-config"
 
 # Provisioners
 AWS_EFS_PROVISIONER = "openshift.org/aws-efs"
