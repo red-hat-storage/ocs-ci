@@ -1327,9 +1327,10 @@ def clean_disk(worker, namespace=constants.DEFAULT_NAMESPACE):
     ocp_obj = ocp.OCP()
     disks_available_on_worker_nodes_for_cleanup = disks_available_to_cleanup(worker)
 
+    # Get the name and size in bytes of the disks
     out = ocp_obj.exec_oc_debug_cmd(
         node=worker.name,
-        cmd_list=["lsblk -nd -e252,7 --output NAME --json"],
+        cmd_list=["lsblk -nd -e252,7 --output NAME,SIZE -b --json"],
         namespace=namespace,
     )
     lsblk_output = json.loads(str(out))
@@ -1346,6 +1347,7 @@ def clean_disk(worker, namespace=constants.DEFAULT_NAMESPACE):
                 cmd_list=[f"wipefs -a -f /dev/{lsblk_device['name']}"],
                 namespace=namespace,
             )
+
             logger.info(out)
             out = ocp_obj.exec_oc_debug_cmd(
                 node=worker.name,
@@ -1353,6 +1355,32 @@ def clean_disk(worker, namespace=constants.DEFAULT_NAMESPACE):
                 namespace=namespace,
             )
             logger.info(out)
+
+            # Write different portion because bluestore replicates its metadata at multiple places on the device
+            # (at 0 / 1Gb / 10Gb / 100Gb / 1000Gb etc.)
+
+            # Get the size of disk in bytes
+            disk_size_bytes = int(lsblk_device["size"])
+
+            # Start offset as 1GiB
+            dd_seek_bytes = 1073741824
+            dd_seek_offsets = []
+
+            # Get byte values in 1Gb / 10Gb / 100Gb etc. Applicable when 'bs' in dd command is 1
+            while dd_seek_bytes < disk_size_bytes:
+                dd_seek_offsets.append(dd_seek_bytes)
+                dd_seek_bytes = dd_seek_bytes * 10
+
+            for dd_seek in dd_seek_offsets:
+                dd_cmd = [
+                    f"dd if=/dev/zero of=\"/dev/{lsblk_device['name']}\" bs=1 count=204800 seek={dd_seek}"
+                ]
+                out = ocp_obj.exec_oc_debug_cmd(
+                    node=worker.name,
+                    cmd_list=dd_cmd,
+                    namespace=namespace,
+                )
+                logger.info(out)
 
 
 class BaremetalPSIUPI(Deployment):
