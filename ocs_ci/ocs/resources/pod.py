@@ -2683,10 +2683,12 @@ def check_toleration_on_subscriptions(toleration_key=constants.TOLERATION_KEY):
             namespace=config.ENV_DATA["cluster_namespace"],
             kind=constants.SUBSCRIPTION,
         )
-        tolerations = sub_obj.get().get("spec").get("config").get("tolerations")
+        tolerations = (
+            sub_obj.get().get("spec", {}).get("config", {}).get("tolerations", [])
+        )
 
         # Check if any toleration matches the provided key
-        toleration_found = any(tol["key"] == toleration_key for tol in tolerations)
+        toleration_found = any(tol.get("key") == toleration_key for tol in tolerations)
 
         if not toleration_found:
             logger.error(

@@ -36,6 +36,7 @@ from ocs_ci.ocs.utils import (
     get_nb_db_psql_version_from_image,
     query_nb_db_psql_version,
 )
+
 from ocs_ci.ocs import constants, defaults, node, ocp, exceptions
 from ocs_ci.ocs.exceptions import (
     CommandFailed,
@@ -5257,12 +5258,15 @@ def get_rbd_sc_name():
 def check_pods_status_by_pattern(pattern, namespace, expected_status):
     """
     Check if the pod state is as expected.
+
     Args:
         pattern (str):
         namespace (str):
         expected_status (str):
+
     Returns:
         bool: return True if pod in expected status otherwise False
+
     """
     from ocs_ci.ocs.resources.pod import get_pod_obj
 
@@ -5292,8 +5296,10 @@ def check_pods_status_by_pattern(pattern, namespace, expected_status):
 def get_volsync_channel():
     """
     Get Volsync Channel
+
     Returns:
         str: volsync channel
+
     """
     logger.info("Get Volsync Channel")
     volsync_product_obj = OCP(kind="packagemanifest", resource_name="volsync-product")
@@ -5308,11 +5314,14 @@ def get_volsync_channel():
 def get_managed_cluster_addons(resource_name, namespace):
     """
     Get Managed Cluster Addons obj
+
     Args:
         resource_name (str): resource name
         namespace (str): namespace
+
     Returns:
         ocp_obj: ocp object of managed cluster addons resource
+
     """
     return OCP(
         kind=constants.ACM_MANAGEDCLUSTER_ADDONS,
@@ -5324,6 +5333,7 @@ def get_managed_cluster_addons(resource_name, namespace):
 def update_volsync_channel():
     """
     Update Volsync Channel.
+
     """
     logger.info("Update Volsync Channel.")
     if config.ENV_DATA.get("acm_hub_unreleased") is not True:
@@ -5445,3 +5455,130 @@ def verify_performance_profile_change(perf_profile):
     ), f"Performance profile is not updated successfully to {perf_profile}"
     logger.info(f"Performance profile successfully got updated to {perf_profile} mode")
     return True
+
+
+def apply_custom_taint_and_toleration(taint_label="xyz"):
+    """
+    Apply custom taints and tolerations.
+    1. Taint ocs nodes with non-ocs taint
+    2. Set custom tolerations on storagecluster, subscription, configmap and ocsinit
+
+    Args:
+        taint_label (str): The taint label to apply (default is "xyz").
+
+    """
+    # Importing storage cluster object here to avoid circular dependency
+    from ocs_ci.ocs.resources.pod import get_all_pods
+    from ocs_ci.ocs.node import taint_nodes, get_ocs_nodes
+
+    logger.info(f"Taint all nodes with non-ocs taint: {taint_label}")
+    ocs_nodes = get_ocs_nodes()
+    for nodes in ocs_nodes:
+        taint_nodes(nodes=[nodes.name], taint_label=f"{taint_label}=true:NoSchedule")
+
+    resource_name = constants.DEFAULT_CLUSTERNAME
+    if config.DEPLOYMENT["external_mode"]:
+        resource_name = constants.DEFAULT_CLUSTERNAME_EXTERNAL_MODE
+    logger.info("Add tolerations to storagecluster")
+    storagecluster_obj = ocp.OCP(
+        resource_name=resource_name,
+        namespace=config.ENV_DATA["cluster_namespace"],
+        kind=constants.STORAGECLUSTER,
+    )
+
+    tolerations = (
+        '{"tolerations": [{"effect": "NoSchedule", "key": "'
+        + taint_label
+        + '", "operator": "Equal", "value": "true"}, '
+        '{"effect": "NoSchedule", "key": "node.ocs.openshift.io/storage", "operator": "Equal", "value": "true"}'
+        "]}"
+    )
+    if config.ENV_DATA["mcg_only_deployment"]:
+        param = f'{{"spec": {{"placement":{{"noobaa-standalone": {tolerations}}}}}}}'
+    elif config.DEPLOYMENT["external_mode"]:
+        param = (
+            f'{{"spec": {{"placement": {{"all": {tolerations}, '
+            f'"noobaa-core": {tolerations}}}}}}}'
+        )
+    else:
+        if version.get_semantic_ocs_version_from_config() < version.VERSION_4_16:
+            param = (
+                f'{{"spec": {{"placement": {{"all": {tolerations}, "mds": {tolerations}, '
+                f'"noobaa-core": {tolerations}, "rgw": {tolerations}}}}}}}'
+            )
+        else:
+            param = (
+                f'"all": {tolerations}, "csi-plugin": {tolerations}, "csi-provisioner": {tolerations}, '
+                f'"mds": {tolerations}, "metrics-exporter": {tolerations}, "noobaa-core": {tolerations}, '
+                f'"rgw": {tolerations}, "toolbox": {tolerations}'
+            )
+        param = f'{{"spec": {{"placement": {{{param}}}}}}}'
+
+    storagecluster_obj.patch(params=param, format_type="merge")
+    logger.info(f"Successfully added toleration to {storagecluster_obj.kind}")
+
+    logger.info("Add tolerations to the subscription")
+    sub_list = ocp.get_all_resource_names_of_a_kind(kind=constants.SUBSCRIPTION)
+    param = (
+        f'{{"spec": {{"config":  {{"tolerations": [{{"effect": "NoSchedule", "key": "{taint_label}", '
+        f'"operator": "Equal", "value": "true"}}]}}}}}}'
+    )
+    sub_obj = ocp.OCP(
+        namespace=config.ENV_DATA["cluster_namespace"],
+        kind=constants.SUBSCRIPTION,
+    )
+    if version.get_semantic_ocs_version_from_config() < version.VERSION_4_16:
+        for sub in sub_list:
+            sub_obj.patch(resource_name=sub, params=param, format_type="merge")
+            logger.info(f"Successfully added toleration to {sub}")
+    else:
+        for sub in sub_list:
+            if sub == constants.ODF_SUBSCRIPTION:
+                sub_obj.patch(resource_name=sub, params=param, format_type="merge")
+                logger.info(f"Successfully added toleration to {sub}")
+
+    if (
+        not config.ENV_DATA["mcg_only_deployment"]
+        and version.get_semantic_ocs_version_from_config() < version.VERSION_4_16
+    ):
+        logger.info("Add tolerations to the ocsinitializations.ocs.openshift.io")
+        param = (
+            f'{{"spec":  {{"tolerations": [{{"effect": "NoSchedule", "key": "{taint_label}", "operator": "Equal", '
+            f'"value": "true"}}]}}}}'
+        )
+        ocsini_obj = ocp.OCP(
+            resource_name=constants.OCSINIT,
+            namespace=config.ENV_DATA["cluster_namespace"],
+            kind=constants.OCSINITIALIZATION,
+        )
+        ocsini_obj.patch(params=param, format_type="merge")
+        logger.info(f"Successfully added toleration to {ocsini_obj.kind}")
+
+        logger.info("Add tolerations to the configmap rook-ceph-operator-config")
+        configmap_obj = ocp.OCP(
+            kind=constants.CONFIGMAP,
+            namespace=config.ENV_DATA["cluster_namespace"],
+            resource_name=constants.ROOK_OPERATOR_CONFIGMAP,
+        )
+        toleration = f'\n- key: {taint_label}\n  operator: Equal\n  value: "true"\n  effect: NoSchedule'
+        toleration = toleration.replace('"', '\\"').replace("\n", "\\n")
+
+        params = (
+            f'{{"data": {{"CSI_PLUGIN_TOLERATIONS": "{toleration}", '
+            f'"CSI_PROVISIONER_TOLERATIONS": "{toleration}"}}}}'
+        )
+
+        configmap_obj.patch(params=params, format_type="merge")
+        logger.info(f"Successfully added toleration to {configmap_obj.kind}")
+        if config.ENV_DATA["mcg_only_deployment"]:
+            logger.info("Wait some time after adding toleration for pods respin")
+            waiting_time = 60
+            logger.info(f"Waiting {waiting_time} seconds...")
+            time.sleep(waiting_time)
+            logger.info("Force delete all pods")
+            pod_list = get_all_pods(
+                namespace=config.ENV_DATA["cluster_namespace"],
+                exclude_selector=True,
+            )
+            for pod_obj in pod_list:
+                pod_obj.delete(wait=False)
