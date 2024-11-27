@@ -49,7 +49,7 @@ class TestUpgradeForProviderClient(ManageTest):
     @runs_on_provider
     @ocp_upgrade
     @ocs_upgrade
-    def test_ocp_ocs_upgrade_for_provider(self):
+    def test_ocp_ocs_upgrade_for_provider(self, reduce_and_resume_cluster_load):
         """
         This test is to validate ocp and ocs upgrade for provider
         upgrades for provider cluster
