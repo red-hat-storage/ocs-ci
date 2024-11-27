@@ -144,7 +144,6 @@ anywhere else.
 * `disconnected_false_gateway` - false gateway used to make cluster effectively disconnected
 * `customized_deployment_storage_class` - Customize the storage class type in the deployment.
 * `ibmcloud_disable_addon` - Disable OCS addon
-* `in_transit_encryption` - Enable in-transit encryption.
 * `sc_encryption` - Enable StorageClass encryption.
 * `skip_ocp_installer_destroy` - Skip OCP installer to destroy the cluster -
   useful for enforcing force deploy steps only.
@@ -234,6 +233,7 @@ higher priority).
 * `rhcos_ami` - AMI to use for RHCOS workers, for UPI deployments
 * `skip_ntp_configuration` - Skip NTP configuration during flexy deployment (Default: false)
 * `encryption_at_rest` - Enable encryption at rest (OCS >= 4.6 only) (Default: false)
+* `in_transit_encryption` - Enable in-transit encryption.
 * `fips` - Enable FIPS (Default: false)
 * `master_num_cpus` - Number of CPUs for each master node
 * `worker_num_cpus` - Number of CPUs for each worker node
