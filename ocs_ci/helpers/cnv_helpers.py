@@ -178,15 +178,16 @@ def create_dv(
     source_pvc_ns=None,
 ):
     """
-    Create a DV using a specified data source
+    Create/Clones a DV using a specified data source
 
     Args:
         access_mode (str): The access mode for the volume. Default is `constants.ACCESS_MODE_RWX`
         sc_name (str): The name of the storage class to use. Default is `constants.DEFAULT_CNV_CEPH_RBD_SC`.
         pvc_size (str): The size of the PVC. Default is "30Gi".
         source_url (str): The URL of the vm registry image. Default is `constants.CNV_CENTOS_SOURCE`.
-        namespace (str, optional): The namespace to create the vm on.
-
+        namespace (str, optional): The namespace to create the DV on.
+        source_pvc_name (str, optional): PVC name of source vm used for cloning.
+        source_pvc_ns (str, optional):  PVC namespace of source vm used for cloning.
 
     Returns:
         dv_obj: DV object
@@ -209,23 +210,6 @@ def create_dv(
     logger.info(f"Successfully created DV - {dv_data_obj.name}")
 
     return dv_data_obj
-
-
-def create_role(source_ns, dest_ns):
-    dv_cr_name = create_unique_resource_name("cr", "dv")
-    dv_rb_name = create_unique_resource_name("rb", "dv")
-    dv_cr_data = templating.load_yaml(constants.CNV_VM_DV_CLUSTER_ROLE_YAML)
-    dv_rb_data = templating.load_yaml(constants.CNV_VM_DV_ROLE_BIND_YAML)
-    dv_cr_data["metadata"]["name"] = dv_cr_name
-    dv_rb_data["metadata"]["name"] = dv_rb_name
-    dv_rb_data["metadata"]["namespace"] = source_ns
-    dv_rb_data["subjects"][0]["namespace"] = dest_ns
-    dv_rb_data["roleRef"]["name"] = dv_cr_name
-    dv_cr_data_obj = create_resource(**dv_cr_data)
-    logger.info(f"Successfully created DV cluster role - {dv_cr_data_obj.name}")
-    dv_rb_data_obj = create_resource(**dv_rb_data)
-    logger.info(f"Successfully created DV role binding - {dv_rb_data_obj.name}")
-    return dv_cr_data_obj, dv_rb_data_obj
 
 
 def get_pvc_from_vm(vm_obj):

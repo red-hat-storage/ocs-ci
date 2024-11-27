@@ -46,7 +46,7 @@ from ocs_ci.ocs.bucket_utils import (
     put_bucket_policy,
 )
 from ocs_ci.ocs.constants import FUSION_CONF_DIR
-from ocs_ci.ocs.cnv.virtual_machine import VirtualMachine
+from ocs_ci.ocs.cnv.virtual_machine import VirtualMachine, VmCloner
 from ocs_ci.ocs.dr.dr_workload import (
     BusyBox,
     BusyBox_AppSet,
@@ -7095,10 +7095,10 @@ def cnv_workload(request):
 @pytest.fixture()
 def clone_vm_workload(request):
     """
-    Deploys CNV based workloads
+    Clones VM workloads
 
     """
-    clone_vms = []
+    cloned_vms = []
 
     def factory(
         vm_obj,
@@ -7107,34 +7107,31 @@ def clone_vm_workload(request):
     ):
         """
         Args:
+            vm_obj (VirtualMachine): Object of source vm to clone
             volume_interface (str): The type of volume interface to use. Default is `constants.VM_VOLUME_PVC`.
-            access_mode (str): The access mode for the volume. Default is `constants.ACCESS_MODE_RWX`
-            storageclass (str): The name of the storage class to use. Default is `constants.DEFAULT_CNV_CEPH_RBD_SC`.
-            pvc_size (str): The size of the PVC. Default is "30Gi".
-            source_url (str): The URL of the vm registry image. Default is `constants.CNV_CENTOS_SOURCE`.
             namespace (str, optional): The namespace to create the vm on. Default, creates a unique namespace.
 
         Returns:
-            list: objects of cnv workload class
+            list: objects of VM clone class
 
         """
         clone_vm_name = create_unique_resource_name("clone", "vm")
-        clone_vm_wl = VirtualMachine(vm_name=clone_vm_name, namespace=namespace)
+        clone_vm_obj = VmCloner(vm_name=clone_vm_name, namespace=namespace)
         volume_iface = volume_interface if volume_interface else vm_obj.volume_interface
-        clone_vm_wl.clone_vm(
+        clone_vm_obj.clone_vm_workload(
             source_vm_obj=vm_obj,
             volume_interface=volume_iface,
         )
-        clone_vms.append(clone_vm_wl)
-        return clone_vms
+        cloned_vms.append(clone_vm_obj)
+        return cloned_vms
 
     def teardown():
         """
-        Cleans up the CNV workloads
+        Cleans up cloned vm workloads
 
         """
-        for cnv_wl in clone_vms:
-            cnv_wl.delete()
+        for vm_wl in cloned_vms:
+            vm_wl.delete()
 
     request.addfinalizer(teardown)
     return factory
