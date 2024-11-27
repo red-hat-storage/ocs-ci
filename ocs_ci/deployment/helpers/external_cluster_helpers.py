@@ -7,17 +7,19 @@ import json
 import logging
 import re
 import tempfile
+import uuid
 
 from ocs_ci.framework import config
 from ocs_ci.ocs import defaults
 from ocs_ci.ocs.exceptions import (
+    ExternalClusterCephfsMissing,
+    ExternalClusterCephSSHAuthDetailsMissing,
     ExternalClusterExporterRunFailed,
+    ExternalClusterRBDNamespaceCreationFailed,
     ExternalClusterRGWEndPointMissing,
     ExternalClusterRGWEndPointPortMissing,
-    ExternalClusterCephSSHAuthDetailsMissing,
-    ExternalClusterObjectStoreUserCreationFailed,
-    ExternalClusterCephfsMissing,
     ExternalClusterNodeRoleNotFound,
+    ExternalClusterObjectStoreUserCreationFailed,
 )
 from ocs_ci.ocs.resources import pod
 from ocs_ci.ocs.resources.csv import get_csv_name_start_with_prefix
@@ -131,6 +133,12 @@ class ExternalCluster(object):
         if config.EXTERNAL_MODE.get("run_as_user"):
             ceph_user = config.EXTERNAL_MODE["run_as_user"]
             params = f"{params} --run-as-user {ceph_user}"
+
+        if config.EXTERNAL_MODE.get("use_rbd_namespace"):
+            rbd_namespace = config.EXTERNAL_MODE.get(
+                "rbd_namespace"
+            ) or self.create_rbd_namespace(rbd=rbd_name)
+            params = f"{params} --rados-namespace {rbd_namespace}"
 
         out = self.run_exporter_script(params=params)
 
@@ -474,6 +482,30 @@ class ExternalCluster(object):
         rgw_user_list = json.loads(out)
         logger.debug(f"RGW users: {rgw_user_list}")
         return True if user in rgw_user_list else False
+
+    def create_rbd_namespace(self, rbd, namespace=None):
+        """
+        Create RBD namespace
+
+        Args:
+            rbd (str): RBD pool name where namespace has to create
+            namespace (str): Name of RBD namespace
+
+        Returns:
+            str: RBD Namepsace name
+
+        Raises:
+            ExternalClusterRBDNamespaceCreationFailed: In case fails to create RBD namespace
+
+        """
+        namespace = namespace or f"rbd_namespace_{uuid.uuid4().hex[:8]}"
+        logger.info(f"creating RBD namespace {namespace}")
+        cmd = f"rbd namespace create {rbd}/{namespace}"
+        retcode, out, err = self.rhcs_conn.exec_cmd(cmd)
+        if retcode != 0:
+            logger.error(f"Failed to create RBD namespace in {rbd}. Error: {err}")
+            raise ExternalClusterRBDNamespaceCreationFailed
+        return namespace
 
 
 def generate_exporter_script():
