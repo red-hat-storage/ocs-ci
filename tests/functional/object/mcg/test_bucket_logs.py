@@ -248,7 +248,7 @@ class TestBucketLogs(MCGTest):
         expected_ops = []
         for obj_key in obj_keys:
             for op in ["PUT", "DELETE", "GET", "HEAD"]:
-                expected_ops.append((op, f"{source_bucket}/{obj_key}"))
+                expected_ops.append((op, f"/{source_bucket}/{obj_key}"))
 
         assert blm.verify_logs_integrity(
             bucket_logs, expected_ops, check_intent=True
