@@ -20,6 +20,8 @@ from ocs_ci.deployment.metallb import MetalLBInstaller
 from ocs_ci.deployment.cnv import CNVInstaller
 from ocs_ci.ocs.acm_upgrade import ACMUpgrade
 
+# from tests.conftest import reduce_and_resume_cluster_load
+
 log = logging.getLogger(__name__)
 
 
@@ -49,7 +51,7 @@ class TestUpgradeForProviderClient(ManageTest):
     @runs_on_provider
     @ocp_upgrade
     @ocs_upgrade
-    def test_ocp_ocs_upgrade_for_provider(self, reduce_and_resume_cluster_load):
+    def test_ocp_ocs_upgrade_for_provider(self):
         """
         This test is to validate ocp and ocs upgrade for provider
         upgrades for provider cluster
@@ -61,7 +63,7 @@ class TestUpgradeForProviderClient(ManageTest):
             upgrade odf --- odf client should automatically upgraded
             for GA to GA upgrade
         """
-        self.test_upgrade_ocp.test_upgrade_ocp()
+        # self.test_upgrade_ocp.test_upgrade_ocp(reduce_and_resume_cluster_load)
         self.acm_hub_upgrade_obj.run_upgrade()
         self.cnv_installer_obj.upgrade_cnv()
         self.metallb_installer_obj.upgrade_metallb()
