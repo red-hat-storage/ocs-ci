@@ -98,6 +98,7 @@ from ocs_ci.ocs.resources.namespacestore import (
 )
 from ocs_ci.ocs.resources.bucketclass import (
     bucket_class_factory as bucketclass_factory_implementation,
+    BucketClass,
 )
 from ocs_ci.ocs.resources.cloud_manager import CloudManager
 from ocs_ci.ocs.resources.cloud_uls import (
@@ -3100,7 +3101,7 @@ def bucket_factory_fixture(
                 buckets
 
         """
-        if bucketclass:
+        if isinstance(bucketclass, dict):
             interface = bucketclass["interface"]
 
         current_call_created_buckets = []
@@ -3111,7 +3112,9 @@ def bucket_factory_fixture(
             )
 
         bucketclass = (
-            bucketclass if bucketclass is None else bucket_class_factory(bucketclass)
+            bucketclass
+            if bucketclass is None or isinstance(bucketclass, BucketClass)
+            else bucket_class_factory(bucketclass)
         )
 
         for _ in range(amount):
