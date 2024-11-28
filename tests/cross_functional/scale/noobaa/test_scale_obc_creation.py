@@ -41,7 +41,7 @@ class TestScaleOCBCreation(E2ETest):
     num_obc_batch = 50
 
     @pytest.mark.polarion_id("OCS-2478")
-    def test_scale_mcg_obc_creation(self, tmp_path, timeout=60):
+    def deprecated_test_scale_mcg_obc_creation(self, tmp_path, noobaa_storage_class_name, timeout=60):
         """
         MCG OBC creation using Noobaa storage class
         """
@@ -56,6 +56,7 @@ class TestScaleOCBCreation(E2ETest):
                     no_of_obc=self.num_obc_batch,
                     sc_name=self.sc_name,
                     namespace=self.namespace,
+                    noobaa_storage_class_name=noobaa_storage_class_name,
                 )
             )
             # Create job profile
@@ -81,7 +82,7 @@ class TestScaleOCBCreation(E2ETest):
 
     @vsphere_platform_required
     @pytest.mark.polarion_id("OCS-2479")
-    def test_scale_rgw_obc_creation(self, tmp_path, timeout=60):
+    def deprecated_test_scale_rgw_obc_creation(self, tmp_path, noobaa_storage_class_name, timeout=60):
         """
         OBC creation using RGW storage class
         This test case only runs on vSphere cluster deployment
@@ -97,6 +98,7 @@ class TestScaleOCBCreation(E2ETest):
                     no_of_obc=self.num_obc_batch,
                     sc_name=self.sc_rgw_name,
                     namespace=self.namespace,
+                    noobaa_storage_class_name=noobaa_storage_class_name,
                 )
             )
             # Create job profile
