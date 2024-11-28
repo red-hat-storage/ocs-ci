@@ -32,7 +32,10 @@ from ocs_ci.utility.aws import update_config_from_s3
 from ocs_ci.utility.utils import load_auth_config
 from botocore.exceptions import EndpointConnectionError
 from ocs_ci.ocs.bucket_utils import create_aws_bs_using_cli
-from ocs_ci.deployment.helpers.mcg_helpers import check_if_mcg_root_secret_public
+from ocs_ci.deployment.helpers.mcg_helpers import (
+    check_if_mcg_root_secret_public,
+    check_if_mcg_secrets_in_env,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -362,6 +365,26 @@ def test_noobaa_root_secret():
         check_if_mcg_root_secret_public() is False
     ), "Seems like MCG root secrets are exposed publicly, please check"
     logger.info("MCG root secrets are not exposed to public")
+
+
+@mcg
+@post_upgrade
+@red_squad
+@bugzilla("")
+@polarion_id("")
+@runs_on_provider
+@tier1
+def test_noobaa_secret_in_env_variable():
+    """
+    This test verifies if the noobaa secrets are used in env variables
+    except for the POSTGRES/POSTGRESQL
+
+    """
+
+    assert (
+        not check_if_mcg_secrets_in_env()
+    ), "Seems like MCG secrets are used as env variable, please check"
+    logger.info("MCG secrets are not used as env variables")
 
 
 @mcg
