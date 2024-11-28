@@ -19,7 +19,7 @@ log = logging.getLogger(__name__)
     reason="Skipped due to issue https://github.com/openshift/svt/issues/697"
 )
 class TestRegistryWorkload:
-    def test_registry_workload(self, iterations=5):
+    def deprecated_test_registry_workload(self, iterations=5):
         """
         https://github.com/openshift/svt/blob/master/openshift_performance/ose3_perf/scripts/build_test-README.md
         The build_test.py scripts is a flexible tool for driving builds in OpenShift.
