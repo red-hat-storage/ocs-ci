@@ -1010,7 +1010,8 @@ def collect_ceph_external(path):
         current_dir = Path(__file__).parent.parent.parent
         script_path = os.path.join(current_dir, "scripts", "bash", "mg_external.sh")
         run_cmd(
-            f"sh {script_path} {os.path.join(path, 'ceph_external')} {kubeconfig_path}",
+            f"sh {script_path} {os.path.join(path, 'ceph_external')} {kubeconfig_path} "
+            f"{ocsci_config.ENV_DATA['cluster_namespace']}",
             timeout=140,
         )
     except Exception as ex:
