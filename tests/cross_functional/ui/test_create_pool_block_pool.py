@@ -164,7 +164,7 @@ class TestPoolUserInterface(ManageTest):
         )
         logger.info(f"The osd pool default pg num value is {osd_pool_default_pg_num}")
         expected_pgs = {
-            f"{self.pool_name}": osd_pool_default_pg_num,
+            self.pool_name: osd_pool_default_pg_num,
         }
         assert validate_num_of_pgs(
             expected_pgs
