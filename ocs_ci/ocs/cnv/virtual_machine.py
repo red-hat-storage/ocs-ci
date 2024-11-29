@@ -130,6 +130,9 @@ class VirtualMachine(Virtctl):
         if verify:
             self.verify_vm(verify_ssh=True)
 
+    def create_windows_vm(self):
+        pass
+
     def _prepare_vm_data(self):
         """
         Prepares the VM data.
@@ -617,7 +620,7 @@ class VirtualMachine(Virtctl):
             self.ns_obj.delete_project(project_name=self.namespace)
 
 
-class VmCloner(VirtualMachine):
+class VMCloner(VirtualMachine):
     """
     Class for handling cloning of a Virtual Machine.
     Inherits from VirtualMachine to have access to its attributes and methods.
@@ -632,7 +635,7 @@ class VmCloner(VirtualMachine):
         self.source_pvc_name = ""
         self.dv_cr_data_obj = self.dv_rb_data_obj = None
 
-    def clone_vm_workload(self, source_vm_obj, volume_interface, ssh=True, verify=True):
+    def clone_vm(self, source_vm_obj, volume_interface, ssh=True, verify=True):
         """
         Clone an existing virtual machine.
 
@@ -640,8 +643,7 @@ class VmCloner(VirtualMachine):
             source_vm_obj (VirtualMachine): The source VM object to clone.
             volume_interface (str): The volume interface to use.
             ssh (bool): Whether to verify SSH connectivity.
-            verify (bool): Whether to verify the VM status after cloning.
-
+            verify (bool): Whether to verify the VM status after cloning
         """
         self.source_vm_obj = source_vm_obj
         self.source_pvc_name = source_vm_obj.pvc_name
@@ -673,7 +675,6 @@ class VmCloner(VirtualMachine):
     def _clone_vm_pvc(self, vm_data):
         """
         Clone the PVC based on the source VM's PVC details.
-
         """
         self.pvc_obj = pvc.create_pvc_clone(
             sc_name=self.sc_name,
@@ -692,7 +693,6 @@ class VmCloner(VirtualMachine):
     def _clone_vm_data_volume(self, vm_data):
         """
         Clone the DataVolume for the VM based on the source VM's details.
-
         """
         self.dv_obj = create_dv(
             source_pvc_name=self.source_pvc_name,
@@ -706,11 +706,9 @@ class VmCloner(VirtualMachine):
     def _configure_dvt_clone(self, vm_data):
         """
         Clone the DataVolumeTemplate for the VM based on the source VM's details.
-
         """
         dvt_name = create_unique_resource_name("clone", "dvt")
         self._create_role()
-
         vm_data["spec"]["dataVolumeTemplates"] = []
         metadata = {
             "name": dvt_name,
@@ -727,7 +725,6 @@ class VmCloner(VirtualMachine):
                 }
             },
         }
-
         vm_data["spec"]["dataVolumeTemplates"].append(
             {"metadata": metadata, "spec": storage_spec}
         )
@@ -738,21 +735,20 @@ class VmCloner(VirtualMachine):
     def _create_role(self):
         """
         Creates ClusterRole and RoleBinding for authorizing DVT based cloning
-
         """
         dv_cr_name = create_unique_resource_name("cr", "dvt")
         dv_rb_name = create_unique_resource_name("rb", "dvt")
         dv_cr_data = templating.load_yaml(constants.CNV_VM_DV_CLUSTER_ROLE_YAML)
-        dv_rb_data = templating.load_yaml(constants.CNV_VM_DV_ROLE_BIND_YAML)
         dv_cr_data["metadata"]["name"] = dv_cr_name
-        dv_rb_data["metadata"]["name"] = dv_rb_name
-        dv_rb_data["metadata"]["namespace"] = self.source_ns
-        dv_rb_data["subjects"][0]["namespace"] = self.namespace
-        dv_rb_data["roleRef"]["name"] = dv_cr_name
         self.dv_cr_data_obj = create_resource(**dv_cr_data)
         logger.info(
             f"Successfully created DV cluster role - {self.dv_cr_data_obj.name}"
         )
+        dv_rb_data = templating.load_yaml(constants.CNV_VM_DV_ROLE_BIND_YAML)
+        dv_rb_data["metadata"]["name"] = dv_rb_name
+        dv_rb_data["metadata"]["namespace"] = self.source_ns
+        dv_rb_data["subjects"][0]["namespace"] = self.namespace
+        dv_rb_data["roleRef"]["name"] = dv_cr_name
         self.dv_rb_data_obj = create_resource(**dv_rb_data)
         logger.info(
             f"Successfully created DV role binding - {self.dv_rb_data_obj.name}"
@@ -761,7 +757,6 @@ class VmCloner(VirtualMachine):
     def delete(self):
         """
         Delete the cloned VirtualMachine
-
         """
         if self.secret_obj:
             self.secret_obj.delete()
@@ -772,7 +767,7 @@ class VmCloner(VirtualMachine):
         elif self.volume_interface == constants.VM_VOLUME_DV:
             self.dv_obj.delete()
         elif self.volume_interface == constants.VM_VOLUME_DVT:
-            self.dv_cr_data_obj.delete()
             self.dv_rb_data_obj.delete()
+            self.dv_cr_data_obj.delete()
         if self.ns_obj:
             self.ns_obj.delete_project(project_name=self.namespace)

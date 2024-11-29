@@ -46,7 +46,7 @@ from ocs_ci.ocs.bucket_utils import (
     put_bucket_policy,
 )
 from ocs_ci.ocs.constants import FUSION_CONF_DIR
-from ocs_ci.ocs.cnv.virtual_machine import VirtualMachine, VmCloner
+from ocs_ci.ocs.cnv.virtual_machine import VirtualMachine, VMCloner
 from ocs_ci.ocs.dr.dr_workload import (
     BusyBox,
     BusyBox_AppSet,
@@ -7116,9 +7116,9 @@ def clone_vm_workload(request):
 
         """
         clone_vm_name = create_unique_resource_name("clone", "vm")
-        clone_vm_obj = VmCloner(vm_name=clone_vm_name, namespace=namespace)
+        clone_vm_obj = VMCloner(vm_name=clone_vm_name, namespace=namespace)
         volume_iface = volume_interface if volume_interface else vm_obj.volume_interface
-        clone_vm_obj.clone_vm_workload(
+        clone_vm_obj.clone_vm(
             source_vm_obj=vm_obj,
             volume_interface=volume_iface,
         )
