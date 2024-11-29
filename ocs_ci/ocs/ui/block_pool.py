@@ -40,6 +40,7 @@ class StoragePoolUI(PageNavigator):
         self.do_click(self.bp_loc["create_block_pool"])
         if pool_type_block and self.ocs_version_semantic >= version.VERSION_4_17:
             self.do_click(self.bp_loc["pool_type_block"])
+            logger.info("Block pool was chosen")
         self.do_send_keys(self.bp_loc["new_pool_name"], pool_name)
         self.do_click(self.bp_loc["first_select_replica"])
         if replica == 2:

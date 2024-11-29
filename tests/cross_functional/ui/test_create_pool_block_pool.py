@@ -5,6 +5,7 @@ from ocs_ci.framework.pytest_customization.marks import (
     skipif_ui_not_support,
     skipif_hci_provider_or_client,
     green_squad,
+    polarion_id,
 )
 from ocs_ci.framework.testlib import skipif_ocs_version, ManageTest, ui
 from ocs_ci.ocs.exceptions import (
@@ -155,3 +156,19 @@ class TestPoolUserInterface(ManageTest):
             raise PoolNotReplicatedAsNeeded(
                 f"Pool {self.pool_name} not replicated to size {replica}"
             )
+
+    @ui
+    @tier1
+    @skipif_ocs_version("<4.17")
+    @polarion_id("OCS-6213")
+    def test_create_cephfs_pool_and_check_type(self, setup_ui):
+        """
+        Test creates a cephfs storage pool with replica 2
+        and checks its attributes in UI
+        """
+        storage_pool_ui_object = StoragePoolUI()
+        storage_pool_ui_object.create_pool(
+            replica=2, compression=False, pool_type_block=False
+        )
+        pool_type_in_ui = storage_pool_ui_object.check_pool_volume_type(self.pool_name)
+        assert pool_type_in_ui == constants.VOLUME_MODE_FILESYSTEM
