@@ -5,7 +5,6 @@ from ocs_ci.framework.pytest_customization.marks import (
     skipif_ui_not_support,
     skipif_hci_provider_or_client,
     green_squad,
-    polarion_id,
 )
 from ocs_ci.framework.testlib import skipif_ocs_version, ManageTest, ui
 from ocs_ci.ocs.exceptions import (
@@ -56,15 +55,18 @@ class TestPoolUserInterface(ManageTest):
     def storage(self, storageclass_factory_ui, replica, compression, pool_type="rbd"):
         if pool_type == "rbd":
             provisioner = constants.OCS_PROVISIONERS[0]
+            blockpool = True
         else:
             logger.info(f"Choosing provisioner: {constants.OCS_PROVISIONERS[1]}")
             provisioner = constants.OCS_PROVISIONERS[1]
+            blockpool = False
         self.sc_obj = storageclass_factory_ui(
             create_new_pool=True,
             replica=replica,
             compression=compression,
             vol_binding_mode="Immediate",
             provisioner=provisioner,
+            blockpool=blockpool,
         )
         self.pool_name = self.sc_obj.get()["parameters"]["pool"]
 
@@ -93,12 +95,12 @@ class TestPoolUserInterface(ManageTest):
         self,
         replica,
         compression,
+        pool_type,
         namespace,
         storage,
         pvc,
         pod,
         setup_ui,
-        pool_type,
     ):
         """
         test create delete pool has the following workflow
