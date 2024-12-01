@@ -500,7 +500,7 @@ def add_new_nodes_and_label_them_rosa_hcp(
     node_conf = node_conf or {}
     if kwargs.get("storage_nodes") and not node_conf:
         node_conf = {
-            "machinepool": config.ENV_DATA.get("machine_pool"),
+            "machinepool_id": config.ENV_DATA.get("machine_pool"),
             "instance_type": config.ENV_DATA.get("worker_instance_type"),
         }
 
