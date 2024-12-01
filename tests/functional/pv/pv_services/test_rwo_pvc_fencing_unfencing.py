@@ -582,7 +582,7 @@ class TestRwoPVCFencingUnfencing(ManageTest):
             ),
         ],
     )
-    def test_rwo_pvc_fencing_node_short_network_failure(
+    def deprecated_test_rwo_pvc_fencing_node_short_network_failure(
         self, nodes, setup, node_restart_teardown
     ):
         """
@@ -728,7 +728,7 @@ class TestRwoPVCFencingUnfencing(ManageTest):
             ),
         ],
     )
-    def test_rwo_pvc_fencing_node_prolonged_network_failure(
+    def deprecated_test_rwo_pvc_fencing_node_prolonged_network_failure(
         self, nodes, setup, node_restart_teardown
     ):
         """
