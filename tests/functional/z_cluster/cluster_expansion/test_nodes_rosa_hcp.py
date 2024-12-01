@@ -7,6 +7,7 @@ from ocs_ci.framework.pytest_customization.marks import (
     rosa_hcp_required,
     tier4a,
     polarion_id,
+    brown_squad,
 )
 from ocs_ci.framework.testlib import ManageTest
 from ocs_ci.ocs.cluster import CephCluster
@@ -71,6 +72,7 @@ class TestAddDifferentInstanceTypeNode(ManageTest):
         request.addfinalizer(finalizer)
 
     @tier4a
+    @brown_squad
     @rosa_hcp_required
     @polarion_id("OCS-6270")
     def test_add_ocs_node_non_default_machinepool(self, setup, add_nodes):
