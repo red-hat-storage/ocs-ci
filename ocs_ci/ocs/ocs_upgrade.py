@@ -644,6 +644,7 @@ def run_ocs_upgrade(
     csv_name_pre_upgrade = upgrade_ocs.get_csv_name_pre_upgrade()
     pre_upgrade_images = upgrade_ocs.get_pre_upgrade_image(csv_name_pre_upgrade)
     upgrade_ocs.load_version_config_file(upgrade_version)
+    start_time = time.time()
     if config.DEPLOYMENT.get("disconnected") and not config.DEPLOYMENT.get(
         "disconnected_env_skip_image_mirroring"
     ):
@@ -657,7 +658,6 @@ def run_ocs_upgrade(
         upgrade_ocs.set_upgrade_images()
         live_deployment = config.DEPLOYMENT["live_deployment"]
         disable_addon = config.DEPLOYMENT.get("ibmcloud_disable_addon")
-        start_time = time.time()
         if (
             config.ENV_DATA["platform"] == constants.IBMCLOUD_PLATFORM
             and live_deployment

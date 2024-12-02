@@ -82,7 +82,7 @@ def test_max_unavaialable_rbd(upgrade_stats):
     config_value = configmap.get("data").get(
         "CSI_RBD_PLUGIN_UPDATE_STRATEGY_MAX_UNAVAILABLE"
     )
-    assert config_value == upgrade_stats["odf_upgrade"]["max_unavailable_rbd"]
+    assert config_value == upgrade_stats["odf_upgrade"]["rbd_max_unavailable"]
 
 
 @post_upgrade
@@ -101,7 +101,7 @@ def test_max_unavaialable_cephfs(upgrade_stats):
     config_value = configmap.get("data").get(
         "CSI_CEPHFS_PLUGIN_UPDATE_STRATEGY_MAX_UNAVAILABLE"
     )
-    assert config_value == upgrade_stats["odf_upgrade"]["max_unavailable_cephfs"]
+    assert config_value == upgrade_stats["odf_upgrade"]["cephfs_max_unavailable"]
 
 
 @pytest.mark.parametrize(
