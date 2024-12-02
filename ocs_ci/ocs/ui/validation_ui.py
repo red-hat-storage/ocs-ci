@@ -98,7 +98,11 @@ class ValidationUI(PageNavigator):
         )
 
         logger.info("Verify Details tab on OCS operator")
-        strings_details_tab = ["Description", "Succeeded", "openshift-storage"]
+        strings_details_tab = [
+            "Description",
+            "Succeeded",
+            config.ENV_DATA["cluster_namespace"],
+        ]
         self.verify_page_contain_strings(
             strings_on_page=strings_details_tab, page_name="details_tab"
         )
