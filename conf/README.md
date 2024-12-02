@@ -416,6 +416,12 @@ Configuration specific to external Ceph cluster
 * `external_cluster_details` - base64 encoded data of json output from exporter script
 * `rgw_secure` - boolean parameter which defines if external Ceph cluster RGW is secured using SSL
 * `rgw_cert_ca` - url pointing to CA certificate used to sign certificate for RGW with SSL
+* `ssh_jump_host` - configuration of jump host as a map, if required or None
+    * `host` - fqdn or IP of the jump host
+    * `user` - username used for connecting to the jump host
+    * `private_key` - Private key used for connecting to the jump host
+    * `password` - Password used for connecting to the jump host
+        (only one of `private_key` and `password` is required)
 
 ##### login
 
