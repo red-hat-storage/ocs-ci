@@ -596,9 +596,7 @@ def download_objects_using_s3cmd(
     ), "Failed to download objects"
 
 
-
 def rm_object_recursive(podobj, target, mcg_obj, option="", prefix=None, timeout=600):
-
     """
     Remove bucket objects with --recursive option
 
