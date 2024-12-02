@@ -34,8 +34,8 @@ class TestVmSnapshotClone(E2ETest):
         """
         file_paths = ["/source_file.txt", "/new_file.txt"]
         volume_interface = [
-            # constants.VM_VOLUME_PVC,
-            # constants.VM_VOLUME_DV,
+            constants.VM_VOLUME_PVC,
+            constants.VM_VOLUME_DV,
             constants.VM_VOLUME_DVT,
         ]
         for index, vl_if in enumerate(volume_interface):
