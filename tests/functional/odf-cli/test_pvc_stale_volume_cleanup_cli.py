@@ -1,4 +1,6 @@
 import logging
+from subprocess import CompletedProcess
+
 import pytest
 
 from ocs_ci.framework.testlib import (
@@ -74,6 +76,9 @@ class TestSubvolumesCommand(ManageTest):
         assert len(stale_volumes) == 0  # No stale volumes available
 
     def parse_subvolume_ls_output(self, output):
+        if isinstance(output, CompletedProcess):
+            output = output.stdout.decode("utf-8")
+
         subvolumes = []
         subvolumes_list = output.strip().split("\n")[1:]
         for item in subvolumes_list:
