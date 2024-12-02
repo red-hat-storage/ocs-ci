@@ -918,7 +918,7 @@ def set_update_strategy(rbd_max_unavailable=None, cephfs_max_unavailable=None):
     CSI_RBD_PLUGIN_UPDATE_STRATEGY_MAX_UNAVAILABLE and CSI_CEPHFS_PLUGIN_UPDATE_STRATEGY_MAX_UNAVAILABLE.
     If values are not provided as parameters of this function then values are taken
     from ocs-ci config. If the values are not set in ocs-ci config or function
-    parameters then they are updated.
+    parameters then they are not updated.
 
     Args:
         rbd_max_unavailable (int, str): Value of CSI_RBD_PLUGIN_UPDATE_STRATEGY_MAX_UNAVAILABLE
