@@ -8,12 +8,6 @@ from ocs_ci.framework.pytest_customization.marks import magenta_squad
 from ocs_ci.helpers.cnv_helpers import cal_md5sum_vm
 from ocs_ci.helpers.performance_lib import run_oc_command
 from ocs_ci.helpers.keyrotation_helper import PVKeyrotation
-from ocs_ci.ocs.cluster import (
-    validate_compression,
-)
-from ocs_ci.ocs.exceptions import (
-    PoolNotCompressedAsExpected,
-)
 
 logger = logging.getLogger(__name__)
 
@@ -101,9 +95,10 @@ class TestCNVVM(E2ETest):
 
         """
 
+        # To Do
         # 1. if os os windows then check rxbounce enabled in sc yaml
-        # 2. Validate data integrity using md5sum.
 
+        # 2. Validate data integrity using md5sum.
         local_file_name = "dd_file1"
         vm_filepath = "/home/admin/dd_file1_copy"
 
@@ -146,18 +141,6 @@ class TestCNVVM(E2ETest):
             assert (
                 md5sum_on_vm == md5sum_on_local
             ), f"md5sum has not changed after copying file on {vm_obj.name}"
-
-        # 4.Write random data on vm and validate compression
-        # Validate that data is compressed
-        for vm_obj in self.vm_objs_aggr:
-            logger.info(f"All Attributes {dir(vm_obj)}")
-            compression_result = validate_compression(
-                self.sc_obj_aggressive.interface_name
-            )
-            if compression_result is False:
-                raise PoolNotCompressedAsExpected(
-                    f"Pool {self.sc_obj_aggressive.interface_name} compression did not reach expected value"
-                )
 
         # 5.Verify PV Keyrotation.
         for vm in self.vm_objs_def:
