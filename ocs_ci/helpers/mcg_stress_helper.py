@@ -11,6 +11,8 @@ from ocs_ci.ocs.bucket_utils import (
     sync_object_directory,
     rm_object_recursive,
     s3_list_objects_v2,
+    list_objects_in_batches,
+    s3_delete_objects,
 )
 
 logger = logging.getLogger(__name__)
@@ -25,9 +27,12 @@ def upload_objs_to_buckets(mcg_obj, pod_obj, buckets, iteration_no, event=None):
         mcg_obj (MCG): MCG object
         pod_obj (Pod): Pod object
         buckets (Dict): Map of bucket type and bucket object
+        iteration_no (int): Integer value representing iteration
+        event (threading.Event()): Event object to signal the execution
+            completion
 
     """
-    src_path = "/complex_directory/dir_0_0/dir_1_0/dir_2_0/dir_3_0/"
+    src_path = "/complex_directory/"
 
     logger.info(f"Uploading objects to all the buckets under prefix {iteration_no}")
     try:
@@ -47,7 +52,7 @@ def upload_objs_to_buckets(mcg_obj, pod_obj, buckets, iteration_no, event=None):
                     src_path,
                     f"s3://{bucket.name}/{iteration_no}/",
                     s3_obj,
-                    timeout=1200,
+                    timeout=20000,
                 )
                 futures.append(future)
 
@@ -67,6 +72,19 @@ def upload_objs_to_buckets(mcg_obj, pod_obj, buckets, iteration_no, event=None):
 def run_noobaa_metadata_intense_ops(
     mcg_obj, pod_obj, bucket_factory, bucket, iteration_no, event=None
 ):
+    """
+    Perfrom metdata intense operations to stress Noobaa
+
+    Args:
+        mcg_obj (MCG): MCG object
+        pod_obj (Pod): Noobaa stress CLI pod object
+        bucket_factory (fixture): Pytest fixture for creating bucket
+        bucket (tuple): Tuple consisting of backend storage type and bucket object
+        iteration_no (int): Iteration number or prefix from where should delete objects
+        event (threading.Event()): Event object to signal the execution
+            completion
+
+    """
     bucket_type, bucket_obj = bucket
     bucket_name = bucket_obj.name
 
@@ -126,6 +144,7 @@ def run_noobaa_metadata_intense_ops(
             target=bucket_name,
             prefix=iteration_no,
             s3_obj=s3_obj,
+            timeout=6000,
             recursive=True,
         )
         while True:
@@ -207,9 +226,11 @@ def delete_objs_from_bucket(pod_obj, bucket, iteration_no, event=None):
 
     Args:
         pod_obj (Pod): Noobaa stress CLI pod object
-        mcg_obj (MCG): MCG object
-        bucket_name (str): Name of the bucket
+        bucket (Tuple): Tuple consisting of backend storage type and bucket object
         iteration_no (int): Iteration number or prefix from where should delete objects
+        event (threading.Event()): Event object to signal the execution
+            completion
+
     """
     bucket_type, bucket_obj = bucket
     bucket_name = bucket_obj.name
@@ -227,6 +248,7 @@ def delete_objs_from_bucket(pod_obj, bucket, iteration_no, event=None):
         bucket_name,
         mcg_obj,
         prefix=iteration_no,
+        timeout=6000,
     )
     logger.info(
         f"Successfully completed object deletion operation on bucket {bucket_name} under prefix {iteration_no}"
@@ -238,9 +260,11 @@ def list_objs_from_bucket(bucket, iteration_no, event=None):
     List objects from bucket
 
     Args:
-        mcg_obj (MCG): MCG object
-        bucket_name (str): Name of the bucket
+        bucket (Tuple): Tuple consisting of backend storage type and bucket object
         iteration_no (int): Iteration number or prefix from where should list objects
+        event (threading.Event()): Event object to signal the execution
+            completion
+
     """
     bucket_type, bucket_obj = bucket
     bucket_name = bucket_obj.name
@@ -270,10 +294,12 @@ def download_objs_from_bucket(pod_obj, bucket, target_dir, iteration_no, event=N
 
     Args:
         pod_obj (Pod): Noobaa stress CLI pod object
-        mcg_obj (MCG): MCG object
-        bucket_name (str): Name of the bucket
+        bucket (Tuple): Tuple consisting of backend storage type and bucket object
         target_dir (str): Target directory to download objects
         iteration_no (int): Iteration number or prefix from where should download objects
+        event (threading.Event()): Event object to signal the execution
+            completion
+
     """
     bucket_type, bucket_obj = bucket
     bucket_name = bucket_obj.name
@@ -291,6 +317,7 @@ def download_objs_from_bucket(pod_obj, bucket, target_dir, iteration_no, event=N
             f"s3://{bucket_name}/{iteration_no}",
             target_dir,
             mcg_obj,
+            timeout=6000,
         )
 
         if event.is_set():
@@ -298,3 +325,31 @@ def download_objs_from_bucket(pod_obj, bucket, target_dir, iteration_no, event=N
                 f"Successfully completed object download operation on bucket {bucket_name} under prefix {iteration_no}"
             )
             break
+
+
+def delete_objects_in_batches(bucket, batch_size):
+    """
+    Delete objects from the bucket in batches
+
+    Args:
+        bucket (tuple): Tuple consisting of backend storage type and bucket object
+        batch_size (int): Number of objects to delete at a time
+
+    """
+    bucket_type, bucket_obj = bucket
+    bucket_name = bucket_obj.name
+    if bucket_type.upper() == "RGW":
+        mcg_obj = OBC(bucket_name)
+    else:
+        mcg_obj = MCG()
+
+    logger.info(f"Deleting objects in bucket {bucket_name} in batches of {batch_size}")
+    total_objs_deleted = 0
+    for obj_batch in list_objects_in_batches(
+        mcg_obj, bucket_name, batch_size=batch_size, yield_individual=False
+    ):
+        s3_delete_objects(mcg_obj, bucket_name, obj_batch)
+        total_objs_deleted += batch_size
+        logger.info(
+            f"Total objects deleted {total_objs_deleted} in bucket {bucket_name}"
+        )
