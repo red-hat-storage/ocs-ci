@@ -40,7 +40,6 @@ if [ -z "$TOOL_POD_NAME" ]; then
 fi
 
 
-gather_common_ceph_resources "${BASE_COLLECTION_PATH}"
 CEPH_COLLECTION_PATH="${BASE_COLLECTION_PATH}/ceph"
 COMMAND_OUTPUT_DIR=${CEPH_COLLECTION_PATH}/must_gather_commands
 COMMAND_JSON_OUTPUT_DIR=${CEPH_COLLECTION_PATH}/must_gather_commands_json_output
