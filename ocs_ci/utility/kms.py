@@ -100,6 +100,9 @@ class Vault(KMS):
     A class which handles deployment and other
     configs related to vault
 
+    HCP is enterprise vault, clusters are deployed on AWS platform can communicate with no error.
+    for vsphere we use our community vault
+
     """
 
     # creating class variable (shared across all instances)
