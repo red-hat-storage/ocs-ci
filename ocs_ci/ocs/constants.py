@@ -240,6 +240,8 @@ DRIVER = "Driver"
 IMAGECONTENTSOURCEPOLICY_KIND = "ImageContentSourcePolicy"
 NOOBAA_ACCOUNT = "NoobaaAccount"
 EXTERNAL_CLUSTER_SCRIPT_CONFIG = "rook-ceph-external-cluster-script-config"
+ENCRYPTIONKEYROTATIONCRONJOB = "encryptionkeyrotationcronjobs.csiaddons.openshift.io"
+ENCRYPTIONKEYROTATIONJOB = "encryptionkeyrotationjobs.csiaddons.openshift.io"
 
 # Provisioners
 AWS_EFS_PROVISIONER = "openshift.org/aws-efs"
