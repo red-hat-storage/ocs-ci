@@ -1,4 +1,7 @@
 #!/usr/bin/env bash
+
+# redirect the debugging output to stdout
+exec 2>&1
 set -x
 
 # Function to print usage information
