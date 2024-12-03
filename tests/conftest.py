@@ -7104,7 +7104,7 @@ def multi_cnv_workload(
     def factory(namespace=None):
         """
         Args:
-            namespace:
+            namespace (str, optional): The namespace to create the vm on.
 
         Returns:
             lists: objects of cnv workload class with default comp and aggressive compression
@@ -7113,10 +7113,11 @@ def multi_cnv_workload(
         vm_list_agg_compr = []
         vm_list_default_compr = []
 
-        """
-        Setup csi-kms-connection-details configmap
+        namespace = (
+            namespace if namespace else create_unique_resource_name("vm", "namespace")
+        )
 
-        """
+        # Setup csi-kms-connection-details configmap
         log.info("Setting up csi-kms-connection-details configmap")
         kms = pv_encryption_kms_setup_factory(kv_version="v2")
         log.info("csi-kms-connection-details setup successful")
@@ -7143,22 +7144,22 @@ def multi_cnv_workload(
                 "sc_name": sc_obj_def_compr.name,
             },
             {
-                "volume_interface": "PVC",
+                "volume_interface": constants.VM_VOLUME_PVC,
                 "access_mode": constants.ACCESS_MODE_RWX,
                 "sc_name": sc_obj_aggressive.name,
             },
             {
-                "volume_interface": "PVC",
+                "volume_interface": constants.VM_VOLUME_PVC,
                 "access_mode": constants.ACCESS_MODE_RWO,
                 "sc_name": sc_obj_def_compr.name,
             },
             {
-                "volume_interface": "DVT",
+                "volume_interface": constants.VM_VOLUME_DVT,
                 "access_mode": constants.ACCESS_MODE_RWX,
                 "sc_name": sc_obj_def_compr.name,
             },
             {
-                "volume_interface": "DVT",
+                "volume_interface": constants.VM_VOLUME_DVT,
                 "access_mode": constants.ACCESS_MODE_RWX,
                 "sc_name": sc_obj_aggressive.name,
             },

@@ -8,6 +8,7 @@ from ocs_ci.framework.pytest_customization.marks import magenta_squad
 from ocs_ci.helpers.cnv_helpers import cal_md5sum_vm
 from ocs_ci.helpers.performance_lib import run_oc_command
 from ocs_ci.helpers.keyrotation_helper import PVKeyrotation
+from ocs_ci.utility.utils import run_cmd
 
 logger = logging.getLogger(__name__)
 
@@ -31,42 +32,6 @@ class TestCNVVM(E2ETest):
         ) = multi_cnv_workload(namespace=proj_obj.namespace)
 
         logger.info("All vms created successfully")
-
-    def create_file_with_dd(self, file_name, size_in_mb):
-        """
-        Creates files on local machine of specified size
-        Args:
-            file_name : File name to be create
-            size_in_mb: Size of file
-
-        Returns:
-
-            file_path(str) : Path of the created file
-        """
-        try:
-            # Define the file path
-            file_path = str(os.path.abspath(file_name))
-
-            # Command to create a file with the specified size using dd
-            subprocess.run(
-                [
-                    "dd",
-                    "if=/dev/zero",
-                    f"of={file_path}",
-                    "bs=1M",
-                    f"count={size_in_mb}",
-                ],
-                check=True,
-                text=True,
-            )
-            logger.info(
-                f"File '{file_name}' of size {size_in_mb}MB created successfully."
-            )
-            return file_path
-
-        except subprocess.CalledProcessError as e:
-            logger.info(f"Failed to create the file: {e}")
-            return None
 
     def get_md5sum(self, file_path):
         """
@@ -92,18 +57,27 @@ class TestCNVVM(E2ETest):
     def test_cnv_vms(self, setup):
         """
         Tests to verify configuration for non-GS like environment
+        Steps:
+        1. Validate data integrity using md5sum.
+            a. create file locally and take md5sum
+            b. copy same file to vm and take md5sum
+            c. Validate both are same or not
+        2. Validate pvc level key rotation
+
 
         """
 
         # To Do
-        # 1. if os os windows then check rxbounce enabled in sc yaml
+        # 1. if os is windows then check rxbounce enabled in sc yaml
 
         # 2. Validate data integrity using md5sum.
-        local_file_name = "dd_file1"
+        file_name = "/tmp/dd_file"
         vm_filepath = "/home/admin/dd_file1_copy"
 
         # Create file locally
-        file_path = self.create_file_with_dd(local_file_name, 2048)
+        file_path = str(os.path.abspath(file_name))
+        cmd = f"dd if=/dev/zero of={file_path} bs=1M count=2048"
+        run_cmd(cmd)
 
         # Calculate the MD5 checksum
         if file_path:
@@ -142,7 +116,7 @@ class TestCNVVM(E2ETest):
                 md5sum_on_vm == md5sum_on_local
             ), f"md5sum has not changed after copying file on {vm_obj.name}"
 
-        # 5.Verify PV Keyrotation.
+        # 3.Verify PV Keyrotation.
         for vm in self.vm_objs_def:
             pvk_obj = PVKeyrotation(self.sc_obj_def_compr)
             assert pvk_obj.wait_till_keyrotation(
@@ -164,3 +138,7 @@ class TestCNVVM(E2ETest):
             assert pvk_obj.wait_till_keyrotation(
                 volume_handle
             ), f"Failed to rotate Key for the PVC {vm.pvc_obj.name}"
+
+        # 4.Stop all VMs
+        for vm_obj in self.vm_objs_def + self.vm_objs_aggr:
+            vm_obj.stop()
