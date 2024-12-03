@@ -19,6 +19,7 @@ from ocs_ci.deployment.helpers.external_cluster_helpers import (
 from ocs_ci.ocs.resources import pod
 from ocs_ci.ocs.resources.csv import CSV, check_all_csvs_are_succeeded
 from ocs_ci.ocs.resources.install_plan import wait_for_install_plan_and_approve
+from ocs_ci.ocs.resources.packagemanifest import PackageManifest
 from ocs_ci.utility.utils import TimeoutSampler
 
 
@@ -42,8 +43,10 @@ class DRUpgrade(OCSUpgrade):
         resource_name=None,
     ):
         if not version_before_upgrade:
-            if config.PREUPGRADE_CONFIG.get('ENV_DATA').get("ocs_version", ''):
-                version_before_upgrade = config.PREUPGRADE_CONFIG['ENV_DATA'].get("ocs_version")
+            if config.PREUPGRADE_CONFIG.get("ENV_DATA").get("ocs_version", ""):
+                version_before_upgrade = config.PREUPGRADE_CONFIG["ENV_DATA"].get(
+                    "ocs_version"
+                )
             else:
                 version_before_upgrade = config.ENV_DATA.get("ocs_version")
         if not ocs_registry_image:
@@ -112,7 +115,9 @@ class DRUpgrade(OCSUpgrade):
             except TimeoutException:
                 raise TimeoutException("No new CSV found after upgrade!")
 
-    def update_subscription(self, channel, subscription_name, namespace=constants.OPENSHIFT_OPERATORS):
+    def update_subscription(
+        self, channel, subscription_name, namespace=constants.OPENSHIFT_OPERATORS
+    ):
         subscription = OCP(
             resource_name=subscription_name,
             kind="subscription.operators.coreos.com",
@@ -133,9 +138,36 @@ class DRUpgrade(OCSUpgrade):
             f'"{self.channel}", "source": "{mco_source}"}}}}\''
         )
         subscription.exec_oc_cmd(patch_subscription_cmd, out_yaml_format=False)
-        # Deliberately sleeping here as there are so many places down the line 
+        # Deliberately sleeping here as there are so many places down the line
         # where ocs-ci will check CSV and it fails as changes take some time to reflect
-        time.sleep(20)
+        time.sleep(60)
+
+    def check_if_upgrade_completed(self, channel, csv_name_pre_upgrade):
+        """
+        Check if DR operator finished it's upgrade
+
+        Args:
+            channel: (str): DR operator subscription channel
+            csv_name_pre_upgrade: (str): DR operator name
+
+        Returns:
+            bool: True if upgrade completed, False otherwise
+
+        """
+        if not check_all_csvs_are_succeeded(self.namespace):
+            log.warning("One of CSV is still not upgraded!")
+            return False
+        package_manifest = PackageManifest(
+            resource_name=self.operator_name,
+            subscription_plan_approval=self.subscription_plan_approval,
+        )
+        csv_name_post_upgrade = package_manifest.get_current_csv(channel)
+        if csv_name_post_upgrade == csv_name_pre_upgrade:
+            log.info(f"CSV is still: {csv_name_post_upgrade}")
+            return False
+        else:
+            log.info(f"CSV now upgraded to: {csv_name_post_upgrade}")
+            return True
 
     def validate_upgrade(self):
         # In case of both MCO and DRhub operator, validation steps are similar
@@ -190,7 +222,9 @@ class DRUpgrade(OCSUpgrade):
                     try:
                         self.pre_upgrade_data["version"]
                     except KeyError:
-                        log.error(f"Couldn't capture Pre-upgrade CSV version for {self.operator_name}")
+                        log.error(
+                            f"Couldn't capture Pre-upgrade CSV version for {self.operator_name}"
+                        )
                 if self.upgrade_phase == "post_upgrade":
                     if self.upgrade_version in csv["metadata"]["name"]:
                         self.post_upgrade_data["version"] = csv_obj.get_resource(
@@ -199,7 +233,9 @@ class DRUpgrade(OCSUpgrade):
                     try:
                         self.post_upgrade_data["version"]
                     except KeyError:
-                        log.error(f"Couldn't capture Post upgrade CSV version for {self.operator_name}")
+                        log.error(
+                            f"Couldn't capture Post upgrade CSV version for {self.operator_name}"
+                        )
         # Make sure all csvs are in succeeded state
         check_all_csvs_are_succeeded(namespace=self.namespace)
 
@@ -255,7 +291,9 @@ class DRHubUpgrade(DRUpgrade):
                     self.subscription_name = found_subscription_name
             break
         if not self.subscription_name:
-            log.error(f"Couldn't find the subscription for {defaults.DR_HUB_OPERATOR_NAME}")
+            log.error(
+                f"Couldn't find the subscription for {defaults.DR_HUB_OPERATOR_NAME}"
+            )
         self.pod_name_pattern = "ramen-hub-operator"
 
     def run_upgrade(self):
