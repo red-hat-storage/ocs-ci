@@ -4,6 +4,7 @@ from ocs_ci.framework.testlib import config, tier1
 from ocs_ci.ocs import constants
 from ocs_ci.helpers.keyrotation_helper import PVKeyrotation
 from ocs_ci.helpers.helpers import create_pods
+from ocs_ci.framework.pytest_customization.marks import green_squad
 
 log = logging.getLogger(__name__)
 
@@ -22,6 +23,7 @@ else:
 
 
 @tier1
+@green_squad
 @pytest.mark.parametrize(
     argnames=argnames,
     argvalues=argvalues,
@@ -77,7 +79,7 @@ class TestDisablePVKeyrotaionOperation:
                 f"{constants.ACCESS_MODE_RWO}-Block",
             ],
             wait_each=True,
-            project=self.proj_obj
+            project=self.proj_obj,
         )
 
         self.pod_objs = create_pods(
