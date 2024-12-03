@@ -9,6 +9,7 @@ from ocs_ci.framework.testlib import (
     red_squad,
     mcg,
 )
+from ocs_ci.framework import config
 from ocs_ci.ocs import constants
 from ocs_ci.helpers.helpers import retrieve_cli_binary
 from ocs_ci.utility.utils import run_cmd, get_random_str
@@ -27,11 +28,12 @@ class TestCustomCredsUsingMcgCli(MCGTest):
         """
         Update noobaa account with custom credential values
         """
+        namespace = config.ENV_DATA["cluster_namespace"]
         output = run_cmd(
             cmd=f"{mcg_cli} account credentials {account_name} "
             + f"--access-key={access_key} "
             + f"--secret-key={secret_key} "
-            + "-n openshift-storage",
+            + f"-n {namespace}",
             ignore_error=True,
         )
         logger.info(output)
