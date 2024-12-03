@@ -369,6 +369,7 @@ class PVKeyrotation(KeyRotation):
     def __init__(self, sc_obj):
         self.sc_obj = sc_obj
         self.kms = get_kms_details()
+        self.all_pvc_key_data = None
 
     def annotate_storageclass_key_rotation(self, schedule="@weekly"):
         """
@@ -420,3 +421,78 @@ class PVKeyrotation(KeyRotation):
             assert False
 
         return True
+
+    def set_keyrotation_state_by_annotation(self, enable: bool):
+        """
+        Enables or disables key rotation by annotating the StorageClass.
+        """
+        state = "true" if enable else "false"
+        annotation = f"keyrotation.csiaddons.openshift.io/enable={state}"
+        self.sc_obj.annotate(annotation=annotation)
+        log.info(
+            f"Key rotation {'enabled' if enable else 'disabled'} for the StorageClass."
+        )
+
+    def set_keyrotation_state_by_rbac_user(self, pvc_obj, suspend_state=True):
+        """
+        Updates key rotation CronJob state for a PVC.
+        """
+        cron_job = self.get_keyrotation_cronjob_for_pvc(pvc_obj)
+        state = "unmanaged" if suspend_state else "managed"
+        cron_job.annotate(f"csiaddons.openshift.io/state={state}", overwrite=True)
+
+        log.info(f"Updated CronJob annotation for PVC '{pvc_obj.name}' to '{state}'")
+
+        suspend_patch = (
+            '[{"op": "add", "path": "/spec/suspend", "value": true}]'
+            if suspend_state
+            else '[{"op": "remove", "path": "/spec/suspend"}]'
+        )
+        cron_job.patch(params=suspend_patch, format_type="json")
+        log.info(f"'suspend' {'enabled' if suspend_state else 'removed'} for CronJob.")
+
+    def get_keyrotation_cronjob_for_pvc(self, pvc_obj):
+        """
+        Retrieves the key rotation CronJob associated with a PVC.
+        """
+        pvc_obj.reload_if_missing_annotation("annotations")
+        cron_job_name = pvc_obj.data["metadata"]["annotations"].get(
+            "reclaimspace.csiaddons.openshift.io/cronjob"
+        )
+        if not cron_job_name:
+            log.error(f"PVC '{pvc_obj.name}' lacks reclaimspace cronjob annotation.")
+            raise ValueError("Missing reclaimspace cronjob annotation")
+
+        log.info(f"Found CronJob '{cron_job_name}' for PVC '{pvc_obj.name}'")
+        return OCP(
+            kind=constants.RECLAIMSPACECRONJOB,
+            namespace=pvc_obj.namespace,
+            resource_name=cron_job_name,
+        )
+
+    def get_pvc_keys_data(self, pvc_objs):
+        """
+        Retrieves key data for PVCs.
+        """
+        return {
+            pvc.name: {
+                "device_handle": pvc.get_pv_volume_handle_name(),
+                "vault_key": self.kms.get_pv_secret(pvc.get_pv_volume_handle_name()),
+            }
+            for pvc in pvc_objs
+        }
+
+    @retry(UnexpectedBehaviour, tries=5, delay=20)
+    def wait_till_all_pv_keyrotation_on_vault_kms(self, pvc_objs):
+        """
+        Waits for all PVC keys to be rotated in the Vault KMS.
+        """
+        if not self.all_pvc_key_data:
+            self.all_pvc_key_data = self.get_pvc_keys_data(pvc_objs)
+            raise UnexpectedBehaviour("Initializing PVC vault key data")
+
+        new_pvc_keys = self.get_pvc_keys_data(pvc_objs)
+        if self.all_pvc_key_data == new_pvc_keys:
+            raise UnexpectedBehaviour("PVC keys have not rotated yet.")
+
+        log.info("PVC keys rotated successfully.")
