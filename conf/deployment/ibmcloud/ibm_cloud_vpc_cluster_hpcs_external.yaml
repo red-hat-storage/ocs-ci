@@ -7,7 +7,7 @@ ENV_DATA:
   platform: 'ibm_cloud'
   deployment_type: 'managed'
   region: 'eu-de'
-  zone: 'eu-de-3'
+  worker_availability_zone: 'eu-de-3'
   provider: "vpc-gen2"
   worker_instance_type: "bx2.16x64"
   master_replicas: 0
