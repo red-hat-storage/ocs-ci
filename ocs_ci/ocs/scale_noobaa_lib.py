@@ -56,6 +56,9 @@ def construct_obc_creation_yaml_bulk_for_kube_job(
 
 
 def fetch_noobaa_storage_class_name():
+    """
+    Function to fetch noobaa storage class name from the Storage Cluster
+    """
     try:
         sc_name_fetched = exec_cmd(
             "oc get storageclass -o json | "
