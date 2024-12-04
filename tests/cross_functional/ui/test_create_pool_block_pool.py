@@ -1,7 +1,7 @@
 import logging
 import pytest
 
-
+from ocs_ci.framework import config
 from ocs_ci.framework.pytest_customization.marks import (
     tier1,
     skipif_ui_not_support,
@@ -186,10 +186,10 @@ class TestPoolUserInterface(ManageTest):
         # Check the pool is not none
         oc_obj = OCP(kind=constants.CEPHBLOCKPOOL)
         cbp_output = run_cmd(
-            cmd=f"oc get cephblockpool/{self.pool_name} -n {constants.OPENSHIFT_STORAGE_NAMESPACE} -o yaml"
+            cmd=f"oc get cephblockpool/{self.pool_name} -n {config.ENV_DATA['cluster_namespace']} -o yaml"
         )
         cbp_output = oc_obj.exec_oc_cmd(
-            command=f"get cephblockpool/{self.pool_name} -n {constants.OPENSHIFT_STORAGE_NAMESPACE} -o yaml"
+            command=f"get cephblockpool/{self.pool_name} -n {config.ENV_DATA['cluster_namespace']} -o yaml"
         )
         assert cbp_output["spec"]["deviceClass"] is not None, "The Deviceclass is none"
         logger.info(
