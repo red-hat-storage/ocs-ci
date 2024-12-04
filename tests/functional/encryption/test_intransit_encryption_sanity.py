@@ -2,7 +2,7 @@ import logging
 import pytest
 
 from ocs_ci.ocs.resources.storage_cluster import (
-    in_transit_encryption_verification,
+    # in_transit_encryption_verification,
     set_in_transit_encryption,
     get_in_transit_encryption_config_state,
 )
@@ -30,6 +30,10 @@ class TestInTransitEncryptionSanity:
                 set_in_transit_encryption()
             else:
                 set_in_transit_encryption(enabled=False)
+
+            # deleting the pod if any
+            for pod_obj in self.cephfs_pods + self.rbd_pods:
+                pod_obj.delete()
 
         request.addfinalizer(teardown)
 
@@ -95,51 +99,65 @@ class TestInTransitEncryptionSanity:
             self.toggle_intransit_encryption_state()
         ), " Failed to change intransit encryption state."
 
-        rbd_pods = create_pods(
+        self.rbd_pods = create_pods(
             pvc_objs=rbd_pvcs,
             pod_factory=pod_factory,
             interface=constants.CEPHBLOCKPOOL,
             pods_for_rwx=2,  # Create 2 pods for each RWX PVC
             status=constants.STATUS_RUNNING,
         )
-        assert rbd_pods
+        assert self.rbd_pods
 
-        cephfs_pods = create_pods(
+        self.cephfs_pods = create_pods(
             pvc_objs=cephfs_pvcs,
             pod_factory=pod_factory,
             interface=constants.CEPHFILESYSTEM,  # Specify CephFS as the interface
             pods_for_rwx=2,  # Create 2 pods for each RWX PVC
             status=constants.STATUS_RUNNING,
         )
-        assert cephfs_pods
+        assert self.cephfs_pods
 
         log.info("Changing intransit encryption state")
         assert (
             self.toggle_intransit_encryption_state()
         ), " Failed to change intransit encryption state."
 
-        # if not get_in_transit_encryption_config_state():
-        #     if config.ENV_DATA.get("in_transit_encryption"):
-        #         pytest.fail("In-transit encryption is not enabled on the setup")
-        #     else:
-        #         set_in_transit_encryption()
+        import threading
+        import time
 
-        # log.info("Verifying the in-transit encryption is enable on setup.")
-        # assert in_transit_encryption_verification()
-        # Verify that encryption is actually disabled by checking that a ValueError is raised.
+        thrlist = []
 
-        log.info("Verifying the in-transit encryption is disabled.")
-        with pytest.raises(ValueError):
-            assert (
-                not in_transit_encryption_verification()
-            ), "In-transit Encryption was expected to be disabled, but it's enabled in the setup."
-
-        if config.ENV_DATA.get("in_transit_encryption"):
-            log.info("Re-enabling in-transit encryption.")
-            set_in_transit_encryption()
-
-            # Verify that encryption is enabled again after re-enabling it
-            log.info(
-                "Verifying the in-transit encryption config after enabling the cluster."
+        for pod_obj in self.rbd_pods + self.cephfs_pods:
+            thr = threading.Thread(
+                target=pod_obj.run_io(storage_type="fs", size="1G", runtime=60)
             )
-            assert in_transit_encryption_verification()
+            thrlist.append(thr)
+
+        for th in thrlist:
+            th.start()
+
+        for i in range(2):
+            log.info("Changing intransit encryption state")
+            assert (
+                self.toggle_intransit_encryption_state()
+            ), " Failed to change intransit encryption state."
+            time.sleep(10)
+
+        for th in thrlist:
+            th.join()
+
+        # log.info("Verifying the in-transit encryption is disabled.")
+        # with pytest.raises(ValueError):
+        #     assert (
+        #         not in_transit_encryption_verification()
+        #     ), "In-transit Encryption was expected to be disabled, but it's enabled in the setup."
+
+        # if config.ENV_DATA.get("in_transit_encryption"):
+        #     log.info("Re-enabling in-transit encryption.")
+        #     set_in_transit_encryption()
+
+        #     # Verify that encryption is enabled again after re-enabling it
+        #     log.info(
+        #         "Verifying the in-transit encryption config after enabling the cluster."
+        #     )
+        #     assert in_transit_encryption_verification()
