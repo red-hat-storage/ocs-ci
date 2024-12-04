@@ -229,7 +229,7 @@ def create_cluster(cluster_name):
     provider = config.ENV_DATA["provider"]
     worker_availability_zones = config.ENV_DATA.get("worker_availability_zones", [])
     worker_zones_number = len(worker_availability_zones)
-    zone = config.ENV_DATA["zone"]
+    zone = config.ENV_DATA["worker_availability_zone"]
     flavor = config.ENV_DATA["worker_instance_type"]
     worker_replicas = config.ENV_DATA["worker_replicas"]
     if worker_zones_number > 1:
