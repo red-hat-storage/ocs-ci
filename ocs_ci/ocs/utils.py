@@ -1281,22 +1281,36 @@ def _collect_ocs_logs(
                 acm_mustgather_path, acm_mustgather_image, cluster_config=cluster_config
             )
 
-        submariner_log_path = os.path.join(
-            log_dir_path,
-            "submariner",
-        )
-        run_cmd(f"mkdir -p {submariner_log_path}")
-        cwd = os.getcwd()
-        run_cmd(f"chmod -R 777 {submariner_log_path}")
-        os.chdir(submariner_log_path)
-        submariner_log_collect = (
-            f"subctl gather --kubeconfig {cluster_config.RUN['kubeconfig']}"
-        )
-        log.info("Collecting submariner logs")
-        out = run_cmd(submariner_log_collect)
-        run_cmd(f"chmod -R 777 {submariner_log_path}")
-        os.chdir(cwd)
-        log.info(out)
+            # We want to skip submariner log collection if it's in import clusters phase
+            if not cluster_config.ENV_DATA.get(
+                "import_clusters_to_acm", False
+            ) or cluster_config.ENV_DATA.get("submariner_source", ""):
+                try:
+                    run_cmd("subctl")
+                except (CommandFailed, FileNotFoundError):
+                    log.debug("subctl binary not found, downloading now...")
+                    # Importing here to avoid circular import error
+                    from ocs_ci.deployment.acm import Submariner
+
+                    submariner = Submariner()
+                    submariner.download_binary()
+
+                submariner_log_path = os.path.join(
+                    log_dir_path,
+                    "submariner",
+                )
+                run_cmd(f"mkdir -p {submariner_log_path}")
+                cwd = os.getcwd()
+                run_cmd(f"chmod -R 777 {submariner_log_path}")
+                os.chdir(submariner_log_path)
+                submariner_log_collect = (
+                    f"subctl gather --kubeconfig {cluster_config.RUN['kubeconfig']}"
+                )
+                log.info("Collecting submariner logs")
+                out = run_cmd(submariner_log_collect)
+                run_cmd(f"chmod -R 777 {submariner_log_path}")
+                os.chdir(cwd)
+                log.info(out)
 
 
 def collect_ocs_logs(
