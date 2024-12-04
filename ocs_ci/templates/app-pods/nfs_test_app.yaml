@@ -26,6 +26,8 @@ spec:
         image: fedora
         command: ['/bin/bash', '-ce', 'tail -f /dev/null']
         imagePullPolicy: IfNotPresent
+        securityContext:
+          capabilities: {}
         volumeMounts:
         - mountPath: /mnt
           name: vol
