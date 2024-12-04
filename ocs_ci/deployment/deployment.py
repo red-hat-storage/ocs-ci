@@ -1089,7 +1089,7 @@ class Deployment(object):
         # patch OLM YAML with the namespace
         olm_ns_op_group_data = list(templating.load_yaml(constants.OLM_YAML, True))
 
-        if self.namespace != config.ENV_DATA["cluster_namespace"]:
+        if self.namespace != constants.OPENSHIFT_STORAGE_NAMESPACE:
 
             for cr in olm_ns_op_group_data:
                 if cr["kind"] == "Namespace":
