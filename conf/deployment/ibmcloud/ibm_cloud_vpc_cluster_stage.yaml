@@ -23,5 +23,6 @@ AUTH:
 #    account_id: ACCOUNT ID PLACEHOLDER
 #    ibm_cos_access_key_id: KEY PLACEHOLDER
 #    ibm_cos_secret_access_key: SECRET PLACEHOLDER
-#DEPLOYMENT:
-#  ocs_secret_dockerconfigjson: BASE64 OF QUAY SECRET PLACEHOLDER
+DEPLOYMENT:
+  cnv_latest_stable: true
+  # ocs_secret_dockerconfigjson: BASE64 OF QUAY SECRET PLACEHOLDER
