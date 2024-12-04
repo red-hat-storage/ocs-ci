@@ -1,0 +1,28 @@
+
+# This is the basic config for IBM cloud usage
+---
+ENV_DATA:
+  platform: 'ibm_cloud'
+  deployment_type: 'managed'
+  region: 'eu-de'
+  worker_availability_zone: 'eu-de-1'
+  provider: "vpc-gen2"
+  worker_instance_type: "bx2.16x64"
+  master_replicas: 0
+  worker_replicas: 3
+  worker_availability_zones:
+    - 'eu-de-1'
+  rhel_workers: true
+  # Following values needs to be set in separate config and passed to ocs-ci in
+  # order to deploy OCP/OCS cluster on IBM Cloud
+  # vpc_id: VPC ID PLACEHOLDER
+  # subnet_id: SUBNET ID PLACEHOLDER
+  # cos_instance: COS INSTANCE PLACEHOLDER
+#AUTH:
+#  ibmcloud:
+#    api_key: IBM CLOUD API KEY PLACEHOLDER
+#    account_id: ACCOUNT ID PLACEHOLDER
+#    ibm_cos_access_key_id: KEY PLACEHOLDER
+#    ibm_cos_secret_access_key: SECRET PLACEHOLDER
+#DEPLOYMENT:
+#  ocs_secret_dockerconfigjson: BASE64 OF QUAY SECRET PLACEHOLDER
