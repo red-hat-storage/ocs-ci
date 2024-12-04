@@ -39,7 +39,7 @@ class TestDisableReclaimSpaceOperation:
             wait_each=True,
         )
 
-    @retry(UnexpectedBehaviour, tries=3, delay=5)
+    @retry(UnexpectedBehaviour, tries=3, delay=10)
     def wait_till_expected_image_size(self, pvc_obj, expected_size):
         """Wait until the RBD image size matches the expected size."""
         rbd_image_name = pvc_obj.get_rbd_image_name
