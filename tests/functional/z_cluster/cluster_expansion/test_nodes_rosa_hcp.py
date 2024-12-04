@@ -15,7 +15,7 @@ from ocs_ci.ocs.machinepool import NodeConf, MachinePools
 from ocs_ci.ocs.node import unschedule_nodes, schedule_nodes, get_node_pods
 from ocs_ci.ocs import node
 from ocs_ci.ocs.resources.pod import get_osd_pods
-from ocs_ci.utility.utils import get_random_str
+from ocs_ci.utility.utils import get_random_str, ceph_health_check
 
 log = logging.getLogger(__name__)
 
@@ -92,6 +92,8 @@ class TestAddDifferentInstanceTypeNode(ManageTest):
 
         instance_types = ["m5.xlarge", "m5.4xlarge", "m5.8xlarge", "m5.12xlarge"]
         cluster_name = config.ENV_DATA["cluster_name"]
+        namespace = config.ENV_DATA["cluster_namespace"]
+        ceph_health_tries = 40
         machine_pools = MachinePools(cluster_name=cluster_name)
         machine_pool = machine_pools.filter(
             machinepool_id=config.ENV_DATA["machine_pool"], pick_first=True
@@ -114,6 +116,7 @@ class TestAddDifferentInstanceTypeNode(ManageTest):
         unschedule_nodes([self.osd_node_name])
         self.osd_pod.delete(wait=True)
 
+        ceph_health_check(namespace=namespace, tries=ceph_health_tries, delay=60)
         ceph_cluster_obj = CephCluster()
         assert ceph_cluster_obj.wait_for_rebalance(
             timeout=3600
