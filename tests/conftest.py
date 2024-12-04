@@ -8405,11 +8405,17 @@ def create_hypershift_clusters():
                 hosted_odf_version: <version>
                 setup_storage_client: <bool>
                 nodepool_replicas: <replicas>
+                storage_quota (int): storage quota, default value unlimited
 
     """
 
     def factory(
-        cluster_names, ocp_version, odf_version, setup_storage_client, nodepool_replicas
+        cluster_names,
+        ocp_version,
+        odf_version,
+        setup_storage_client,
+        nodepool_replicas,
+        storage_quota,
     ):
         """
         Factory function implementing the fixture
@@ -8420,10 +8426,16 @@ def create_hypershift_clusters():
             odf_version (str): ODF version
             setup_storage_client (bool): Setup storage client
             nodepool_replicas (int): Nodepool replicas; supported values are 2,3
+            storage_quota (int): storage quota, default value unlimited
 
         """
+        ocs_version = version.get_semantic_ocs_version_from_config()
         hosted_cluster_conf_on_provider = {"ENV_DATA": {"clusters": {}}}
-
+        if ocs_version >= version.VERSION_4_17:
+            storage_quota = storage_quota
+        else:
+            storage_quota = None
+            logging.info(f"storage quota allocated: {storage_quota}")
         for cluster_name in cluster_names:
             hosted_cluster_conf_on_provider["ENV_DATA"]["clusters"][cluster_name] = {
                 "hosted_cluster_path": f"~/clusters/{cluster_name}/openshift-cluster-dir",
@@ -8434,6 +8446,7 @@ def create_hypershift_clusters():
                 "hosted_odf_version": odf_version,
                 "setup_storage_client": setup_storage_client,
                 "nodepool_replicas": nodepool_replicas,
+                "storage_quota": storage_quota,
             }
 
         log.info(

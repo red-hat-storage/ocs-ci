@@ -1147,6 +1147,8 @@ class HostedODF(HypershiftHostedOCP):
         )
         if "latest" in hosted_odf_version:
             hosted_odf_version = hosted_odf_version.split("-")[-1]
+        elif len(hosted_odf_version) > 4:
+            hosted_odf_version = hosted_odf_version[:4]
 
         subscription_data["spec"]["channel"] = f"stable-{str(hosted_odf_version)}"
 
