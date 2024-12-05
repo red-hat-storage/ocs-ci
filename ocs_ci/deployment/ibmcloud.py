@@ -19,6 +19,7 @@ from ocs_ci.ocs.exceptions import (
     LeftoversExistError,
     VolumesExistError,
 )
+from ocs_ci.ocs.resources.backingstore import get_backingstore
 from ocs_ci.ocs.resources.pvc import (
     scale_down_pods_and_remove_pvcs,
 )
@@ -203,6 +204,7 @@ class IBMCloudIPI(CloudDeploymentBase):
         resource_group = self.get_resource_group()
         if resource_group:
             try:
+                self.delete_bucket()
                 scale_down_pods_and_remove_pvcs(self.DEFAULT_STORAGECLASS)
             except Exception as err:
                 logger.warning(
@@ -234,6 +236,25 @@ class IBMCloudIPI(CloudDeploymentBase):
         finally:
             logger.info("Force cleaning up Service IDs and Account Policies leftovers")
             ibmcloud.cleanup_policies_and_service_ids(self.cluster_name)
+
+    def delete_bucket(self):
+        """
+        Deletes the COS bucket
+        """
+        api_key = config.AUTH["ibmcloud"]["api_key"]
+        service_instance_id = config.AUTH["ibmcloud"]["cos_instance_crn"]
+        endpoint_url = constants.IBM_COS_GEO_ENDPOINT_TEMPLATE.format(
+            config.ENV_DATA.get("region", "us-east").lower()
+        )
+        backingstore = get_backingstore()
+        bucket_name = backingstore["spec"]["ibmCos"]["targetBucket"]
+        logger.debug(f"bucket name from backingstore: {bucket_name}")
+        cos = ibmcloud.IBMCloudObjectStorage(
+            api_key=api_key,
+            service_instance_id=service_instance_id,
+            endpoint_url=endpoint_url,
+        )
+        cos.delete_bucket(bucket_name=bucket_name)
 
     def manually_create_iam_for_vpc(self):
         """
