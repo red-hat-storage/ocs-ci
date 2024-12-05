@@ -277,7 +277,7 @@ class TestBucketIO(MCGTest):
     @tier2
     @performance
     @skip_inconsistent
-    def depricated_test_data_reduction_performance(
+    def deprecated_test_data_reduction_performance(
         self, mcg_obj, awscli_pod, bucket_factory
     ):
         """
