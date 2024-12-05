@@ -1090,7 +1090,7 @@ def check_pv_backingstore_status(
 
 def check_pv_backingstore_type(
     backingstore_name=constants.DEFAULT_NOOBAA_BACKINGSTORE,
-    namespace=constants.OPENSHIFT_STORAGE_NAMESPACE,
+    namespace=config.ENV_DATA["cluster_namespace"],
 ):
     """
     check if existing pv backing store is in READY state
