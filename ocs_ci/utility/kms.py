@@ -136,10 +136,11 @@ class Vault(KMS):
         self.vault_kube_auth_namespace = None
         self.vault_cwd_kms_sa_name = constants.VAULT_CWD_KMS_SA_NAME
 
-    @staticmethod
-    def set_vault_token(self):
+    def get_vault_token(self):
         """
-        This is a static method that will set the token value.
+        Get the Vault token value. Generate it first if it does not already exist.
+        Returns:
+            str: Vault token
         """
         if self.vault_path_token is None:
             self.vault_path_token = self.generate_vault_token()
@@ -593,7 +594,7 @@ class Vault(KMS):
             raise VaultOperationError(
                 f"Failed to create policy f{self.vault_policy_name}"
             )
-        self.vault_path_token = self.set_vault_token(self)
+        self.vault_path_token = self.get_vault_token(self)
 
     def generate_vault_token(self):
         """
