@@ -25,10 +25,12 @@ from ocs_ci.utility.version import get_ocs_version_from_csv
 from ocs_ci.ocs.resources.catalog_source import get_odf_tag_from_redhat_catsrc
 from ocs_ci.utility.utils import (
     get_latest_release_version,
+    get_running_ocp_version,
 )
 from ocs_ci.ocs.ocp import OCP
 from ocs_ci.ocs.ui.validation_ui import ValidationUI
 from ocs_ci.framework.pytest_customization.marks import ignore_leftovers
+
 
 log = logging.getLogger(__name__)
 
@@ -97,13 +99,14 @@ class TestOnboardingTokenGeneration(ManageTest):
         """
 
         log.info("Create hosted client")
-        cluster_name = "hcp417-bm1-nyy"
+        cluster_name = get_random_hosted_cluster_name()
         odf_version = str(get_ocs_version_from_csv()).replace(".stable", "")
         if "rhodf" in odf_version:
             odf_version = get_odf_tag_from_redhat_catsrc()
 
-        ocp_version = get_latest_release_version()
+        ocp_version = get_running_ocp_version()
         nodepool_replicas = 2
+        storage_quota = 8
 
         create_hypershift_clusters(
             cluster_names=[cluster_name],
@@ -111,13 +114,13 @@ class TestOnboardingTokenGeneration(ManageTest):
             odf_version=odf_version,
             setup_storage_client=False,
             nodepool_replicas=nodepool_replicas,
+            storage_quota=storage_quota,
         )
-        cluster_name = "hcp417-bm1-nyy"
         self.hosted_odf = HostedODF(cluster_name)
 
         log.info("Test create onboarding key")
         onboarding_token = self.hosted_odf.get_onboarding_key_ui(
-            storage_quota=(config.ENV_DATA.get("clusters")).get("storage_quota", 4)
+            storage_quota=storage_quota
         )
         assert len(onboarding_token), "Failed to get onboarding key"
         self.hosted_odf.create_storage_client(onboarding_token=onboarding_token)
