@@ -134,6 +134,7 @@ class TestRawBlockPV(ManageTest):
                     storage_type=storage_type,
                     size=f"{random.randint(10,200)}M",
                     invalidate=0,
+                    direct=1,
                 )
             for pod in pvc_gb_pods:
                 log.info(f"running io on pod {pod.name}")
@@ -142,6 +143,7 @@ class TestRawBlockPV(ManageTest):
                     storage_type=storage_type,
                     size=f"{random.randint(1,5)}G",
                     invalidate=0,
+                    direct=1,
                 )
             for pod in pvc_tb_pods:
                 log.info(f"running io on pod {pod.name}")
@@ -150,6 +152,7 @@ class TestRawBlockPV(ManageTest):
                     storage_type=storage_type,
                     size=f"{random.randint(10,15)}G",
                     invalidate=0,
+                    direct=1,
                 )
 
         for pod in pods:
