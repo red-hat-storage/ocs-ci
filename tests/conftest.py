@@ -6611,15 +6611,20 @@ def dr_workload(request):
         """
         ctx.append(switch_ctx)
         total_pvc_count = 0
-        workload_key = "dr_workload_subscription"
-        if pvc_interface == constants.CEPHFILESYSTEM:
-            workload_key = "dr_workload_subscription_cephfs"
+
+        if pvc_interface == constants.CEPHBLOCKPOOL:
+            interface = constants.RBD_INTERFACE
+        else:
+            interface = constants.CEPHFS_INTERFACE
 
         if num_of_appset > 0 and appset_model is None:
             ocs_version = version.get_semantic_ocs_version_from_config()
             appset_model = "pull" if ocs_version >= version.VERSION_4_16 else "push"
 
         for index in range(num_of_subscription):
+            workload_key = "dr_workload_subscription"
+            if ocsci_config.MULTICLUSTER["multicluster_mode"] == constants.RDR_MODE:
+                workload_key += f"_{interface}"
             workload_details = ocsci_config.ENV_DATA[workload_key][index]
             workload = BusyBox(
                 workload_dir=workload_details["workload_dir"],
@@ -6631,7 +6636,10 @@ def dr_workload(request):
             workload.deploy_workload()
 
         for index in range(num_of_appset):
-            workload_details = ocsci_config.ENV_DATA["dr_workload_appset"][index]
+            workload_key = "dr_workload_appset"
+            if ocsci_config.MULTICLUSTER["multicluster_mode"] == constants.RDR_MODE:
+                workload_key += f"_{interface}"
+            workload_details = ocsci_config.ENV_DATA[workload_key][index]
             workload = BusyBox_AppSet(
                 workload_dir=workload_details["workload_dir"],
                 workload_pod_count=workload_details["pod_count"],
@@ -6645,24 +6653,24 @@ def dr_workload(request):
             instances.append(workload)
             total_pvc_count += workload_details["pvc_count"]
             workload.deploy_workload()
-        if ocsci_config.MULTICLUSTER["multicluster_mode"] == constants.RDR_MODE:
-            if pvc_interface != constants.CEPHFILESYSTEM:
-                dr_helpers.wait_for_mirroring_status_ok(
-                    replaying_images=total_pvc_count
-                )
+        if (
+            ocsci_config.MULTICLUSTER["multicluster_mode"] == constants.RDR_MODE
+            and pvc_interface == constants.CEPHBLOCKPOOL
+        ):
+            dr_helpers.wait_for_mirroring_status_ok(replaying_images=total_pvc_count)
         return instances
 
     def teardown():
-        failed_to_delete = False
+        failed_to_delete = []
         for instance in instances:
             try:
-                instance.delete_workload(switch_ctx=ctx[0], force=True)
+                instance.delete_workload(switch_ctx=ctx[0])
             except ResourceNotDeleted:
-                failed_to_delete = True
+                failed_to_delete.append(instance.workload_namespace)
 
         if failed_to_delete:
             raise ResourceNotDeleted(
-                "Workload deletion was unsuccessful. Leftover resources were removed from the managed clusters."
+                f"Deletion failed for the workload in following namespaces: {failed_to_delete}"
             )
 
     request.addfinalizer(teardown)
@@ -6742,7 +6750,7 @@ def cnv_dr_workload(request):
     def teardown():
         for instance in instances:
             try:
-                instance.delete_workload(force=True)
+                instance.delete_workload()
             except ResourceNotDeleted:
                 raise ResourceNotDeleted("Workload deletion was unsuccessful")
 

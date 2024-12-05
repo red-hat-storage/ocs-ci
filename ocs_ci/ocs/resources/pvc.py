@@ -157,6 +157,18 @@ class PVC(OCS):
         return self.backed_pv_obj.get()["spec"]["csi"]["volumeAttributes"]["imageName"]
 
     @property
+    def get_cephfs_subvolume_name(self):
+        """
+        Fetch subvolume name associated with the CephFS PVC
+
+        Returns:
+            str: Subvolume name associated with the CephFS PVC
+        """
+        return self.backed_pv_obj.get()["spec"]["csi"]["volumeAttributes"][
+            "subvolumeName"
+        ]
+
+    @property
     def get_pv_volume_handle_name(self):
         """
         Fetch volume handle name from PV

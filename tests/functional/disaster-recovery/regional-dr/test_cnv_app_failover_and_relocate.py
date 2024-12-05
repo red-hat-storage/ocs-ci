@@ -5,7 +5,7 @@ import pytest
 
 from ocs_ci.deployment.cnv import CNVInstaller
 from ocs_ci.framework import config
-from ocs_ci.framework.pytest_customization.marks import tier1, turquoise_squad
+from ocs_ci.framework.pytest_customization.marks import rdr, tier1, turquoise_squad
 from ocs_ci.helpers import dr_helpers
 from ocs_ci.helpers.cnv_helpers import run_dd_io
 from ocs_ci.ocs import constants
@@ -17,6 +17,7 @@ from ocs_ci.utility.utils import ceph_health_check
 logger = logging.getLogger(__name__)
 
 
+@rdr
 @tier1
 @turquoise_squad
 class TestCnvApplicationRDR:
