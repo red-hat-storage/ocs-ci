@@ -10,8 +10,11 @@ import os
 import re
 import requests
 import time
+import ibm_boto3
 import ipaddress
+
 from copy import copy
+from ibm_botocore.client import Config as IBMBotocoreConfig, ClientError
 from json import JSONDecodeError
 from ocs_ci.framework import config
 from ocs_ci.ocs import constants
@@ -956,3 +959,112 @@ def find_free_network_subnets(subnet_cidr, network_prefix=27):
         if is_free:
             logger.info(f"Free set of subnets found: {possible_subnets}")
             return possible_subnets
+
+
+class IBMCloudObjectStorage:
+    """
+    IBM Cloud Object Storage (COS) class
+    """
+
+    def __init__(self, api_key, service_instance_id, endpoint_url):
+        """
+        Initialize all necessary parameters
+
+        Args:
+            api_key (str): API key for IBM Cloud Object Storage (COS)
+            service_instance_id (str): Service instance ID for COS
+            endpoint_url (str): COS endpoint URL
+
+        """
+        self.cos_api_key_id = api_key
+        self.cos_instance_crn = service_instance_id
+        self.cos_endpoint = endpoint_url
+        # create client
+        self.cos_client = ibm_boto3.client(
+            "s3",
+            ibm_api_key_id=self.cos_api_key_id,
+            ibm_service_instance_id=self.cos_instance_crn,
+            config=IBMBotocoreConfig(signature_version="oauth"),
+            endpoint_url=self.cos_endpoint,
+        )
+
+    def get_bucket_objects(self, bucket_name):
+        """
+        Fetches the objects in a bucket
+
+        Args:
+            bucket_name (str): Name of the bucket
+
+        Returns:
+            list: List of objects in a bucket
+
+        """
+        bucket_objects = []
+        logger.info(f"Retrieving bucket contents from {bucket_name}")
+        try:
+            objects = self.cos_client.list_objects(Bucket=bucket_name)
+            for obj in objects.get("Contents", []):
+                bucket_objects.append(obj["Key"])
+        except ClientError as ce:
+            logger.error(f"CLIENT ERROR: {ce}")
+        except Exception as e:
+            logger.error(f"Unable to retrieve bucket contents: {e}")
+        logger.info(f"bucket objects: {bucket_objects}")
+        return bucket_objects
+
+    def delete_objects(self, bucket_name):
+        """
+        Delete objects in a bucket
+
+        Args:
+            bucket_name (str): Name of the bucket
+
+        """
+        objects = self.get_bucket_objects(bucket_name)
+        if objects:
+            try:
+                # Form the delete request
+                delete_request = {"Objects": [{"Key": obj} for obj in objects]}
+                response = self.cos_client.delete_objects(
+                    Bucket=bucket_name, Delete=delete_request
+                )
+                logger.info(f"Deleted items for {bucket_name}")
+                logger.debug(json.dumps(response.get("Deleted"), indent=4))
+            except ClientError as ce:
+                logger.error(f"CLIENT ERROR: {ce}")
+            except Exception as e:
+                logger.error(f"Unable to delete objects: {e}")
+
+    def delete_bucket(self, bucket_name):
+        """
+        Delete the bucket
+
+        Args:
+            bucket_name (str): Name of the bucket
+
+        """
+        logger.info(f"Deleting bucket: {bucket_name}")
+        try:
+            self.delete_objects(bucket_name=bucket_name)
+            self.cos_client.delete_bucket(Bucket=bucket_name)
+            logger.info(f"Bucket: {bucket_name} deleted!")
+        except ClientError as ce:
+            logger.error(f"CLIENT ERROR: {ce}")
+        except Exception as e:
+            logger.error(f"Unable to delete bucket: {e}")
+
+    def get_buckets(self):
+        """
+        Fetches the buckets
+        """
+        buckets = []
+        logger.info("Retrieving list of buckets")
+        try:
+            buckets = self.cos_client.list_buckets()
+            for bucket in buckets["Buckets"]:
+                buckets.append(bucket["Name"])
+        except ClientError as ce:
+            logger.error(f"CLIENT ERROR: {ce}")
+        except Exception as e:
+            logger.error(f"Unable to retrieve list buckets: {e}")
+        return buckets
