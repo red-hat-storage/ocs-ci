@@ -2,6 +2,7 @@ import base64
 import boto3
 import logging
 
+from ocs_ci.framework import config
 from ocs_ci.framework.pytest_customization.marks import (
     tier2,
     bugzilla,
@@ -15,7 +16,6 @@ from ocs_ci.ocs.resources.bucket_policy import HttpResponseParser
 from ocs_ci.ocs.ocp import OCP
 import botocore.exceptions as boto3exception
 from ocs_ci.ocs.constants import (
-    OPENSHIFT_STORAGE_NAMESPACE,
     SECRET,
 )
 from ocs_ci.ocs.exceptions import UnexpectedBehaviour
@@ -41,7 +41,7 @@ def test_bucket_delete_using_obc_creds(mcg_obj, bucket_factory):
     logger.info("Creating OBC")
     bucket = bucket_factory(amount=1, interface="OC")[0].name
     # Fetch OBC credentials
-    secret_ocp_obj = OCP(kind=SECRET, namespace=OPENSHIFT_STORAGE_NAMESPACE)
+    secret_ocp_obj = OCP(kind=SECRET, namespace=config.ENV_DATA["cluster_namespace"])
     obc_secret_obj = secret_ocp_obj.get(bucket)
     obc_access_key = base64.b64decode(
         obc_secret_obj.get("data").get("AWS_ACCESS_KEY_ID")
