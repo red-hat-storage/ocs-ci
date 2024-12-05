@@ -186,6 +186,7 @@ from ocs_ci.helpers.helpers import (
     get_current_test_name,
     modify_deployment_replica_count,
     modify_statefulset_replica_count,
+    create_network_fence_class,
 )
 from ocs_ci.ocs.ceph_debug import CephObjectStoreTool, MonStoreTool, RookCephPlugin
 from ocs_ci.ocs.bucket_utils import get_rgw_restart_counts
@@ -7910,7 +7911,7 @@ def setup_logwriter_workload(request, teardown_factory):
 
     """
 
-    def factory(pvc, logwriter_path):
+    def factory(pvc, logwriter_path, zone_aware=True):
         """
         Args:
             pvc (PVC): PVC object
@@ -7929,6 +7930,10 @@ def setup_logwriter_workload(request, teardown_factory):
         dc_data["spec"]["template"]["spec"]["volumes"][0]["persistentVolumeClaim"][
             "claimName"
         ] = pvc.name
+
+        if not zone_aware:
+            dc_data["spec"]["template"]["spec"].pop("topologySpreadConstraints")
+
         logwriter_dc = helpers.create_resource(**dc_data)
         teardown_factory(logwriter_dc)
 
@@ -7963,7 +7968,7 @@ def logreader_workload_factory(request, teardown_factory):
 
 
 def setup_logreader_workload(request, teardown_factory):
-    def factory(pvc, logreader_path, duration=30):
+    def factory(pvc, logreader_path, duration=30, zone_aware=True):
         """
         Args:
             pvc (PVC): PVC object
@@ -7988,6 +7993,10 @@ def setup_logreader_workload(request, teardown_factory):
         job_data["spec"]["template"]["spec"]["containers"][0]["command"][
             2
         ] = f"/opt/logreader.py -t {duration} *.log -d"
+
+        if not zone_aware:
+            job_data["spec"]["template"]["spec"].pop("topologySpreadConstraints")
+
         logreader_job = helpers.create_resource(**job_data)
         teardown_factory(logreader_job)
 
@@ -8063,7 +8072,7 @@ def setup_logwriter_cephfs_workload(
 
     """
 
-    def factory(read_duration=30):
+    def factory(read_duration=30, **kwargs):
         """
         Args:
             read_duration (int): Time duration in minutes
@@ -8078,10 +8087,10 @@ def setup_logwriter_cephfs_workload(
             project_name=setup_stretch_cluster_project
         )
         logwriter_workload = logwriter_workload_factory(
-            pvc=pvc, logwriter_path=logwriter_path
+            pvc=pvc, logwriter_path=logwriter_path, **kwargs
         )
         logreader_workload = logreader_workload_factory(
-            pvc=pvc, logreader_path=logreader_path, duration=read_duration
+            pvc=pvc, logreader_path=logreader_path, duration=read_duration, **kwargs
         )
         return logwriter_workload, logreader_workload
 
@@ -8117,22 +8126,31 @@ def setup_logwriter_rbd_workload(
 
     """
 
-    logwriter_sts_path = constants.LOGWRITER_STS_PATH
-    sts_data = templating.load_yaml(logwriter_sts_path)
-    sts_data["metadata"]["namespace"] = setup_stretch_cluster_project.namespace
-    logwriter_sts = helpers.create_resource(**sts_data)
-    teardown_factory(logwriter_sts)
-    logwriter_sts_pods = [
-        pod["metadata"]["name"]
-        for pod in get_pods_having_label(
-            label="app=logwriter-rbd", namespace=setup_stretch_cluster_project.namespace
-        )
-    ]
-    wait_for_pods_to_be_running(
-        namespace=setup_stretch_cluster_project.namespace, pod_names=logwriter_sts_pods
-    )
+    def factory(zone_aware=True):
 
-    return logwriter_sts
+        logwriter_sts_path = constants.LOGWRITER_STS_PATH
+        sts_data = templating.load_yaml(logwriter_sts_path)
+        sts_data["metadata"]["namespace"] = setup_stretch_cluster_project.namespace
+        if not zone_aware:
+            sts_data["spec"]["template"]["spec"].pop("topologySpreadConstraints")
+
+        logwriter_sts = helpers.create_resource(**sts_data)
+        teardown_factory(logwriter_sts)
+        logwriter_sts_pods = [
+            pod["metadata"]["name"]
+            for pod in get_pods_having_label(
+                label="app=logwriter-rbd",
+                namespace=setup_stretch_cluster_project.namespace,
+            )
+        ]
+        wait_for_pods_to_be_running(
+            namespace=setup_stretch_cluster_project.namespace,
+            pod_names=logwriter_sts_pods,
+        )
+
+        return logwriter_sts
+
+    return factory
 
 
 @pytest.fixture()
@@ -9082,3 +9100,38 @@ def set_encryption_at_teardown(request):
 
     # Add the teardown function to the request's finalizer
     request.addfinalizer(teardown)
+
+
+@pytest.fixture(scope="session")
+def setup_network_fence_class(request):
+    """
+    Setup NetworkFenceClass CRD for ODF if not present
+
+    """
+    try:
+        network_fence_class = OCP(
+            kind=constants.NETWORK_FENCE_CLASS,
+            namespace=ocsci_config.ENV_DATA["cluster_namespace"],
+            resource_name=constants.ODF_NETWORK_FENCE_CLASS,
+        )
+        created_by_fixture = False
+        if not network_fence_class.get(dont_raise=True):
+            create_network_fence_class()
+            created_by_fixture = True
+        else:
+            log.info(
+                f"NetworkFenceClass {network_fence_class.resource_name} already exists!"
+            )
+    finally:
+
+        def finalizer():
+            """
+            Delete the NFC CRD if created by fixture
+
+            """
+            if created_by_fixture:
+                network_fence_class.delete(
+                    resource_name=constants.ODF_NETWORK_FENCE_CLASS
+                )
+
+        request.addfinalizer(finalizer)
