@@ -118,6 +118,15 @@ class TestOnboardingTokenGeneration(ManageTest):
         )
         self.hosted_odf = HostedODF(cluster_name)
 
+        log.info("Switch to the hosted cluster")
+        config.switch_to_cluster_by_name(cluster_name)
+
+        server = str(OCP().exec_oc_cmd("whoami --show-server", out_yaml_format=False))
+
+        assert (
+            cluster_name in server
+        ), f"Failed to switch to cluster '{cluster_name}' and fetch data"
+
         log.info("Test create onboarding key")
         onboarding_token = self.hosted_odf.get_onboarding_key_ui(
             storage_quota=storage_quota
