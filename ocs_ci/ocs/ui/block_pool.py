@@ -13,9 +13,9 @@ from ocs_ci.utility import version
 logger = logging.getLogger(__name__)
 
 
-class BlockPoolUI(PageNavigator):
+class StoragePoolUI(PageNavigator):
     """
-    User Interface Selenium for Block Pools page
+    User Interface Selenium for Storage Pools page
 
     """
 
@@ -24,7 +24,7 @@ class BlockPoolUI(PageNavigator):
 
     def create_pool(self, replica, compression, pool_type_block=True):
         """
-        Create block pool via UI
+        Create storage pool via UI
 
         Args:
             pool_type_block: True if type of storage pool is block, False otherwise
@@ -35,11 +35,12 @@ class BlockPoolUI(PageNavigator):
             array: pool name (str) pool status (bool) #pool can be created with failure status
 
         """
-        pool_name = create_unique_resource_name("test", "rbd-pool")
+        pool_name = create_unique_resource_name("test", "storage-pool")
         self.navigate_block_pool_page()
         self.do_click(self.bp_loc["create_block_pool"])
         if pool_type_block and self.ocs_version_semantic >= version.VERSION_4_17:
             self.do_click(self.bp_loc["pool_type_block"])
+            logger.info("Block pool was chosen")
         self.do_send_keys(self.bp_loc["new_pool_name"], pool_name)
         self.do_click(self.bp_loc["first_select_replica"])
         if replica == 2:
@@ -205,7 +206,7 @@ class BlockPoolUI(PageNavigator):
         self.navigate_block_pool_page()
         self.do_click((f"a[data-test={pool_name}]", By.CSS_SELECTOR))
         pool_volume_type = self.get_element_text(self.bp_loc["block_pool_volume_type"])
-        logger.info(f"Pool name {pool_name} existence is {pool_volume_type}")
+        logger.info(f"Pool name {pool_name} has type {pool_volume_type}")
         return pool_volume_type
 
     def check_pool_replicas(self, pool_name):
@@ -222,7 +223,7 @@ class BlockPoolUI(PageNavigator):
         self.navigate_block_pool_page()
         self.do_click((f"a[data-test={pool_name}]", By.CSS_SELECTOR))
         block_pool_replica = self.get_element_text(self.bp_loc["block_pool_replica"])
-        logger.info(f"Pool name {pool_name} existence is {block_pool_replica}")
+        logger.info(f"Pool name {pool_name} has replica {block_pool_replica}")
         return int(block_pool_replica)
 
     def check_pool_used_capacity(self, pool_name):
