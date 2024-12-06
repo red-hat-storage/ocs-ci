@@ -29,6 +29,7 @@ from ocs_ci.ocs.constants import (
     VM_DEFAULT_NETWORK,
     VM_DEFAULT_NETWORK_ADAPTER,
 )
+from ocs_ci.framework import config
 from ocs_ci.utility.utils import TimeoutSampler
 
 logger = logging.getLogger(__name__)
@@ -1742,3 +1743,50 @@ class VSPHERE(object):
         volume_path = vstorage_object.config.backing.filePath
         logger.debug(f"File path for volume {volume_id} is `{volume_path}`")
         return volume_path
+
+    def add_interface_to_vm(
+        self, vm_name, network_name="VM Network", adapter_type="vmxnet3"
+    ):
+        pool = config.ENV_DATA["cluster_name"]
+        dc = config.ENV_DATA["vsphere_datacenter"]
+        cluster = config.ENV_DATA["vsphere_cluster"]
+        vm = self.get_vm_in_pool_by_name(vm_name, dc, cluster, pool)
+        if not vm:
+            raise Exception(f"VM '{vm_name}' not found.")
+        content = self.get_content
+        container = content.viewManager.CreateContainerView(
+            content.rootFolder, [vim.Network], True
+        )
+        for conf in container.view:
+            if conf.name == network_name:
+                network = conf
+                break
+        if not network:
+            raise Exception(f"Network '{network_name}' not found.")
+        device_spec = vim.vm.device.VirtualDeviceSpec()
+        device_spec.operation = vim.vm.device.VirtualDeviceSpec.Operation.add
+        if adapter_type == "vmxnet3":
+            nic = vim.vm.device.VirtualVmxnet3()
+        # Set the network backing
+        nic.backing = vim.vm.device.VirtualEthernetCard.NetworkBackingInfo()
+        nic.backing.network = network
+        nic.backing.deviceName = network_name
+        # Specify the adapter type
+        nic.key = -100  # Temporary key; vSphere assigns a unique key
+        nic.deviceInfo = vim.Description()
+        nic.deviceInfo.summary = f"{adapter_type} adapter connected to {network_name}"
+        device_spec.device = nic
+        # Create a VM configuration spec
+        spec = vim.vm.ConfigSpec()
+        spec.deviceChange = [device_spec]
+        # Reconfigure the VM
+        task = vm.ReconfigVM_Task(spec=spec)
+        logger.info(
+            f"Adding {adapter_type} adapter to VM '{vm_name}' on network '{network_name}'..."
+        )
+        result = WaitForTask(task)
+        if result is None:
+            raise Exception(
+                f"Task for configuring network for {vm_name} did not complete successfully."
+            )
+        logger.info(f"Network adapter added to {vm_name} successfully.")
