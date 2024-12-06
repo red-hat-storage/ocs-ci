@@ -4342,6 +4342,24 @@ def get_mon_db_size_in_kb(mon_pod_obj):
     return mon_db_size_kb
 
 
+def get_noobaa_db_size():
+    """
+    Get noobaa db size
+
+    Returns:
+        str: Noobaa db size
+
+    """
+    noobaa_db_pod_obj = pod.get_noobaa_pods(
+        noobaa_label=constants.NOOBAA_DB_LABEL_47_AND_ABOVE
+    )
+    cmd_out = noobaa_db_pod_obj[0].exec_cmd_on_pod(
+        command="df -h /var/lib/pgsql/", out_yaml_format=False
+    )
+    df_out = cmd_out.split()
+    return df_out[2]
+
+
 def get_noobaa_db_used_space():
     """
     Get noobaa db size
