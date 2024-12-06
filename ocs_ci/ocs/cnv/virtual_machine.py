@@ -130,9 +130,6 @@ class VirtualMachine(Virtctl):
         if verify:
             self.verify_vm(verify_ssh=True)
 
-    def create_windows_vm(self):
-        pass
-
     def _prepare_vm_data(self):
         """
         Prepares the VM data.
@@ -156,6 +153,9 @@ class VirtualMachine(Virtctl):
     def _add_ssh_key_to_vm(self, vm_data):
         """
         Add SSH key to VM data.
+
+        Args:
+            vm_data (dict): The VM data to modify
         """
         self.secret_obj = create_vm_secret(namespace=self.namespace)
         ssh_secret_dict = [
@@ -173,10 +173,8 @@ class VirtualMachine(Virtctl):
         Creates VolumeSource and PersistentVolumeClaim
 
         Args:
-            vm_data (dict): The VM data to modify.
-
+            vm_data (dict): The VM data to modify
         """
-        # Creating a new VIS and PVC
         self.volumeimportsource_obj = create_volume_import_source(url=self.source_url)
         self.pvc_obj = create_pvc_using_data_source(
             source_name=self.volumeimportsource_obj.name,
@@ -186,7 +184,6 @@ class VirtualMachine(Virtctl):
             namespace=self.namespace,
         )
         wait_for_resource_state(self.pvc_obj, state=constants.STATUS_BOUND, timeout=300)
-
         self.pvc_name = self.pvc_obj.name
         vm_data["spec"]["template"]["spec"]["volumes"][0]["persistentVolumeClaim"] = {
             "claimName": self.pvc_obj.name
@@ -194,12 +191,11 @@ class VirtualMachine(Virtctl):
 
     def _create_vm_data_volume(self, vm_data):
         """
-        Create a DataVolume
+        Creates a DataVolume
 
         Args:
             vm_data (dict): The VM data to modify.
         """
-        # Creates a new DataVolume
         self.dv_obj = create_dv(
             pvc_size=self.pvc_size,
             sc_name=self.sc_name,
@@ -207,7 +203,6 @@ class VirtualMachine(Virtctl):
             namespace=self.namespace,
             source_url=self.source_url,
         )
-
         self.pvc_name = self.dv_obj.name
         vm_data["spec"]["template"]["spec"]["volumes"][0]["dataVolume"] = {
             "name": self.dv_obj.name
@@ -222,6 +217,11 @@ class VirtualMachine(Virtctl):
 
         """
         dvt_name = create_unique_resource_name("test", "dvt")
+        self.dv_obj = OCP(
+            resource_name=dvt_name,
+            kind=constants.VM_VOLUME_DV,
+            namespace=self.namespace,
+        )
         storage_spec = {
             "storage": {
                 "accessModes": [self.pvc_access_mode],
@@ -243,11 +243,24 @@ class VirtualMachine(Virtctl):
 
     def verify_vm(self, verify_ssh=False):
         """
-        Verifies vm status and ssh connectivity if ssh is configured
+        Verifies vm status, its volume and ssh connectivity if ssh is configured
         """
+        self.verify_dv()
         self.wait_for_vm_status(status=constants.VM_RUNNING)
         if verify_ssh:
             self.wait_for_ssh_connectivity(timeout=1200)
+
+    def verify_dv(self):
+        """
+        Verifies DV/DVT based volume is in succeeded state
+        """
+        if self.dv_obj:
+            self.dv_obj.wait_for_resource(
+                condition="Succeeded",
+                resource_name=self.dv_obj.name,
+                column="PHASE",
+                timeout=300,
+            )
 
     def get(self, out_yaml_format=True):
         """
@@ -613,9 +626,13 @@ class VirtualMachine(Virtctl):
         self.vm_ocp_obj.wait_for_delete(resource_name=self._vm_name, timeout=180)
         if self.volume_interface == constants.VM_VOLUME_PVC:
             self.pvc_obj.delete()
+            self.pvc_obj.ocp.wait_for_delete(
+                resource_name=self.pvc_obj.name, timeout=180
+            )
             self.volumeimportsource_obj.delete()
         elif self.volume_interface == constants.VM_VOLUME_DV:
             self.dv_obj.delete()
+            self.dv_obj.ocp.wait_for_delete(resource_name=self.dv_obj.name, timeout=180)
         if self.ns_obj:
             self.ns_obj.delete_project(project_name=self.namespace)
 
@@ -631,7 +648,6 @@ class VMCloner(VirtualMachine):
         Initializes cloned vm obj
         """
         super().__init__(vm_name=vm_name, namespace=namespace)
-        self.source_vm_obj = None
         self.source_pvc_name = ""
         self.dv_cr_data_obj = self.dv_rb_data_obj = None
 
@@ -644,8 +660,8 @@ class VMCloner(VirtualMachine):
             volume_interface (str): The volume interface to use.
             ssh (bool): Whether to verify SSH connectivity.
             verify (bool): Whether to verify the VM status after cloning
+
         """
-        self.source_vm_obj = source_vm_obj
         self.source_pvc_name = source_vm_obj.pvc_name
         self.source_ns = source_vm_obj.namespace
         self.volume_interface = source_vm_obj.volume_interface
@@ -675,6 +691,10 @@ class VMCloner(VirtualMachine):
     def _clone_vm_pvc(self, vm_data):
         """
         Clone the PVC based on the source VM's PVC details.
+
+        Args:
+            vm_data: The VM data to modify.
+
         """
         self.pvc_obj = pvc.create_pvc_clone(
             sc_name=self.sc_name,
@@ -693,6 +713,10 @@ class VMCloner(VirtualMachine):
     def _clone_vm_data_volume(self, vm_data):
         """
         Clone the DataVolume for the VM based on the source VM's details.
+
+        Args:
+            vm_data: The VM data to modify.
+
         """
         self.dv_obj = create_dv(
             source_pvc_name=self.source_pvc_name,
@@ -706,8 +730,17 @@ class VMCloner(VirtualMachine):
     def _configure_dvt_clone(self, vm_data):
         """
         Clone the DataVolumeTemplate for the VM based on the source VM's details.
+
+        Args:
+            vm_data: The VM data to modify.
+
         """
         dvt_name = create_unique_resource_name("clone", "dvt")
+        self.dv_obj = OCP(
+            resource_name=dvt_name,
+            kind=constants.VM_VOLUME_DV,
+            namespace=self.namespace,
+        )
         self._create_role()
         vm_data["spec"]["dataVolumeTemplates"] = []
         metadata = {
@@ -764,8 +797,12 @@ class VMCloner(VirtualMachine):
         self.vm_ocp_obj.wait_for_delete(resource_name=self._vm_name, timeout=180)
         if self.volume_interface == constants.VM_VOLUME_PVC:
             self.pvc_obj.delete()
+            self.pvc_obj.ocp.wait_for_delete(
+                resource_name=self.pvc_obj.name, timeout=180
+            )
         elif self.volume_interface == constants.VM_VOLUME_DV:
             self.dv_obj.delete()
+            self.dv_obj.ocp.wait_for_delete(resource_name=self.dv_obj.name, timeout=180)
         elif self.volume_interface == constants.VM_VOLUME_DVT:
             self.dv_rb_data_obj.delete()
             self.dv_cr_data_obj.delete()
