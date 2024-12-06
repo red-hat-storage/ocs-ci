@@ -70,7 +70,7 @@ from ocs_ci.ocs.exceptions import (
 from ocs_ci.ocs.mcg_workload import mcg_job_factory as mcg_job_factory_implementation
 from ocs_ci.ocs.node import get_node_objs, schedule_nodes
 from ocs_ci.ocs.ocp import OCP
-from ocs_ci.ocs.resources import pvc
+from ocs_ci.ocs.resources import pvc, pod
 from ocs_ci.ocs.resources.bucket_logging_manager import BucketLoggingManager
 from ocs_ci.ocs.resources.bucket_policy import gen_bucket_policy
 from ocs_ci.ocs.resources.mcg_replication_policy import AwsLogBasedReplicationPolicy
@@ -8739,3 +8739,55 @@ def nb_assign_user_role_fixture(request, mcg_obj_session):
 
     request.addfinalizer(teardown)
     return factory
+
+
+@pytest.fixture(scope="session")
+def enable_rbd_metrics(request):
+    # this fixture is used to enable rbd metrics in prometheus and not relevant for other types of deployments
+    if not ocsci_config.DEPLOYMENT.get("external_mode"):
+        return
+
+    ct_pod = pod.get_ceph_tools_pod()
+    pools_enabled = ct_pod.exec_ceph_cmd(
+        "ceph config get mgr mgr/prometheus/rbd_stats_pools", out_yaml_format=False
+    )
+    pools_enabled = ",".join(pools_enabled)
+    log.info(f"pools_enabled: {pools_enabled}")
+
+    exclude_perf_counters_enabled = ct_pod.exec_ceph_cmd(
+        "ceph config get mgr mgr/prometheus/exclude_perf_counters",
+        out_yaml_format=False,
+    )
+    log.info(f"exclude_perf_counters_enabled: {exclude_perf_counters_enabled}")
+
+    def restore_exclude_perf_counters_enabled():
+        ct_pod.exec_ceph_cmd(
+            f'ceph config set mgr mgr/prometheus/exclude_perf_counters "{exclude_perf_counters_enabled}"',
+            out_yaml_format=False,
+        )
+
+    def restore_ceph_rbd_metrics_settings():
+        ct_pod.exec_ceph_cmd(
+            f'ceph config set mgr mgr/prometheus/rbd_stats_pools "{pools_enabled}"',
+            out_yaml_format=False,
+        )
+
+    default_pool = (
+        constants.DEFAULT_CEPHBLOCKPOOL_EXTERNAL
+        if ocsci_config.DEPLOYMENT["external_mode"]
+        else constants.DEFAULT_CEPHBLOCKPOOL
+    )
+
+    # set all pools to be monitored by prometheus
+    if not (default_pool in pools_enabled or "*" in pools_enabled):
+        ct_pod.exec_ceph_cmd(
+            'ceph config set mgr mgr/prometheus/rbd_stats_pools "*"',
+            out_yaml_format=False,
+        )
+        request.addfinalizer(restore_ceph_rbd_metrics_settings)
+    if "true" in exclude_perf_counters_enabled:
+        ct_pod.exec_ceph_cmd(
+            'ceph config set mgr mgr/prometheus/exclude_perf_counters "false"',
+            out_yaml_format=False,
+        )
+        request.addfinalizer(restore_exclude_perf_counters_enabled)
