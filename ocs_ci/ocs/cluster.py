@@ -19,6 +19,8 @@ import re
 
 
 from semantic_version import Version
+
+from ocs_ci.ocs.resources.storage_cluster import get_storage_cluster
 from ocs_ci.ocs.utils import thread_init_class
 
 import ocs_ci.ocs.resources.pod as pod
@@ -51,7 +53,7 @@ from ocs_ci.utility.utils import (
 from ocs_ci.ocs.node import get_node_ip_addresses, wait_for_nodes_status
 from ocs_ci.ocs.utils import get_pod_name_by_pattern
 from ocs_ci.framework import config
-from ocs_ci.ocs import ocp, constants, exceptions
+from ocs_ci.ocs import ocp, constants, exceptions, defaults
 from ocs_ci.ocs.exceptions import PoolNotFound
 from ocs_ci.ocs.resources.pvc import get_all_pvc_objs
 from ocs_ci.ocs.ocp import OCP, wait_for_cluster_connectivity
@@ -3602,3 +3604,87 @@ def bring_down_mds_memory_usage_gradually():
     assert (
         time_elapsed <= 1800
     ), "Memory usage remained high for more than 30 minutes. Failed to bring down the memory usage of MDS"
+
+
+def get_active_mds_count():
+    """
+    Get the active mds count from the system
+
+    Returns:
+         int: active_mds_count
+
+    """
+    cephfs = ocp.OCP(
+        kind=constants.CEPHFILESYSTEM,
+        namespace=config.ENV_DATA["cluster_namespace"],
+    )
+    fs_data = cephfs.get(defaults.CEPHFILESYSTEM_NAME)
+    mds_active_count = fs_data.get("spec").get("metadataServer").get("activeCount")
+    return mds_active_count
+
+
+def adjust_active_mds_count(target_count):
+    """
+    Adjust the activeMetadataServers count for the Storage cluster to the target_count.
+    The function will increase or decrease the count to match the target value.
+
+    Args:
+        target_count (int): The desired count for activeMetadataServers.
+
+    """
+
+    # Retrieve the current activeMetadataServers count
+    current_count = get_active_mds_count()
+    sc = get_storage_cluster(namespace=config.ENV_DATA["cluster_namespace"])
+    resource_name = sc.get()["items"][0]["metadata"]["name"]
+
+    if current_count < target_count:
+        # Increment mds pods
+        while current_count < target_count:
+            current_count += 1
+            param = (
+                f'{{"spec": {{"managedResources": {{"cephFilesystems": '
+                f'{{"activeMetadataServers": {current_count}}}}}}}}}'
+            )
+            sc.patch(resource_name=resource_name, params=param, format_type="merge")
+            current_params = sc.get(resource_name=resource_name)
+            current_count = current_params["spec"]["managedResources"][
+                "cephFilesystems"
+            ]["activeMetadataServers"]
+
+    elif current_count > target_count:
+        # Decrement mds pods
+        while current_count > target_count:
+            current_count -= 1
+            param = (
+                f'{{"spec": {{"managedResources": {{"cephFilesystems": '
+                f'{{"activeMetadataServers": {current_count}}}}}}}}}'
+            )
+            sc.patch(resource_name=resource_name, params=param, format_type="merge")
+            current_params = sc.get(resource_name=resource_name)
+            current_count = current_params["spec"]["managedResources"][
+                "cephFilesystems"
+            ]["activeMetadataServers"]
+
+    else:
+        logger.info(
+            "The current count is already equal to the target count. No changes needed."
+        )
+
+
+def get_active_mds_pods():
+    """
+    Gets active mds pods.
+
+    Returns:
+        dict: mds pod names
+
+    """
+    ct_pod = pod.get_ceph_tools_pod()
+    ceph_mdsmap = ct_pod.exec_ceph_cmd("ceph fs status")
+    # Extract the mdsmap list from the data
+    mdsmap = ceph_mdsmap["mdsmap"]
+
+    # Filter and get the names of active MDS pods
+    active_mds_names = [mds["name"] for mds in mdsmap if mds["state"] == "active"]
+    return active_mds_names
