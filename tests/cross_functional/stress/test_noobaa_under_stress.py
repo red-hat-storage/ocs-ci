@@ -11,6 +11,7 @@ from ocs_ci.helpers.mcg_stress_helper import (
     list_objs_from_bucket,
     download_objs_from_bucket,
     delete_objects_in_batches,
+    run_background_cluster_checks,
 )
 
 logger = logging.getLogger(__name__)
@@ -29,6 +30,8 @@ class TestNoobaaUnderStress:
         rgw_obj_session,
         stress_test_directory_setup,
         bucket_factory,
+        scale_noobaa_resources_session,
+        scale_noobaa_db_pod_pv_size,
     ):
         """
         Stress Noobaa by performing bulk s3 operations. This consists mainly 3 stages
@@ -51,6 +54,13 @@ class TestNoobaaUnderStress:
             nb_stress_cli_pod,
             self.base_setup_buckets,
             iteration_no=0,
+        )
+
+        bg_event = Event()
+        bg_executor = ThreadPoolExecutor(max_workers=1)
+
+        bg_future = bg_executor.submit(
+            run_background_cluster_checks, scale_noobaa_db_pod_pv_size, event=bg_event
         )
 
         # Iterate and stress the cluster with object upload
@@ -162,3 +172,6 @@ class TestNoobaaUnderStress:
             logger.info("Waiting for all the delete object operations to complete")
             for future in futures:
                 future.result()
+
+        bg_event.set()
+        bg_future.result()
