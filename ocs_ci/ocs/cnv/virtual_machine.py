@@ -10,6 +10,7 @@ from ocs_ci.helpers.cnv_helpers import (
     create_volume_import_source,
     create_vm_secret,
     create_dv,
+    clone_dv,
 )
 
 from ocs_ci.helpers.helpers import (
@@ -104,7 +105,8 @@ class VirtualMachine(Virtctl):
             access_mode (str): The access mode for the volume. Default is `constants.ACCESS_MODE_RWX`
             sc_name (str): The name of the storage class to use. Default is `constants.DEFAULT_CNV_CEPH_RBD_SC`.
             pvc_size (str): The size of the PVC. Default is "30Gi".
-            source_url (str): The URL of the vm registry image. Default is `constants.CNV_CENTOS_SOURCE`.
+            source_url (str): The URL of the vm registry image. Default is `constants.CNV_CENTOS_SOURCE`
+
         """
         self.volume_interface = volume_interface
         self.sc_name = sc_name
@@ -156,6 +158,7 @@ class VirtualMachine(Virtctl):
 
         Args:
             vm_data (dict): The VM data to modify
+
         """
         self.secret_obj = create_vm_secret(namespace=self.namespace)
         ssh_secret_dict = [
@@ -174,6 +177,7 @@ class VirtualMachine(Virtctl):
 
         Args:
             vm_data (dict): The VM data to modify
+
         """
         self.volumeimportsource_obj = create_volume_import_source(url=self.source_url)
         self.pvc_obj = create_pvc_using_data_source(
@@ -195,6 +199,7 @@ class VirtualMachine(Virtctl):
 
         Args:
             vm_data (dict): The VM data to modify.
+
         """
         self.dv_obj = create_dv(
             pvc_size=self.pvc_size,
@@ -213,7 +218,7 @@ class VirtualMachine(Virtctl):
         Configures DataVolumeTemplate on vm template provided.
 
         Args:
-            vm_data: The VM data to modify.
+            vm_data (dict): The VM data to modify.
 
         """
         dvt_name = create_unique_resource_name("test", "dvt")
@@ -693,12 +698,12 @@ class VMCloner(VirtualMachine):
         Clone the PVC based on the source VM's PVC details.
 
         Args:
-            vm_data: The VM data to modify.
+            vm_data (dict): The VM data to modify.
 
         """
         self.pvc_obj = pvc.create_pvc_clone(
             sc_name=self.sc_name,
-            parent_pvc=self.source_pvc_name,  # Using the source VM's PVC for cloning
+            parent_pvc=self.source_pvc_name,
             clone_yaml=constants.CSI_RBD_PVC_CLONE_YAML,
             namespace=self.namespace,
             storage_size=self.pvc_size,
@@ -715,13 +720,13 @@ class VMCloner(VirtualMachine):
         Clone the DataVolume for the VM based on the source VM's details.
 
         Args:
-            vm_data: The VM data to modify.
+            vm_data (dict): The VM data to modify.
 
         """
-        self.dv_obj = create_dv(
+        self.dv_obj = clone_dv(
             source_pvc_name=self.source_pvc_name,
             source_pvc_ns=self.source_ns,
-            namespace=self.namespace,
+            destination_ns=self.namespace,
         )
         vm_data["spec"]["template"]["spec"]["volumes"][0]["dataVolume"] = {
             "name": self.dv_obj.name
@@ -732,7 +737,7 @@ class VMCloner(VirtualMachine):
         Clone the DataVolumeTemplate for the VM based on the source VM's details.
 
         Args:
-            vm_data: The VM data to modify.
+            vm_data (dict): The VM data to modify.
 
         """
         dvt_name = create_unique_resource_name("clone", "dvt")
