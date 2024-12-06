@@ -9285,6 +9285,10 @@ def benchmark_workload_storageutilization(request):
 
 @pytest.fixture()
 def scale_noobaa_db_pod_pv_size(request):
+    return scale_noobaa_db_pv(request)
+
+
+def scale_noobaa_db_pv(request):
     """
     This fixtue helps to scale the noobaa db pv size.
     follows KCS: https://access.redhat.com/solutions/6976547

@@ -1,6 +1,9 @@
 import logging
 import concurrent.futures
+import time
 
+from ocs_ci.helpers.helpers import get_noobaa_db_size, get_noobaa_db_used_space
+from ocs_ci.ocs import constants
 from ocs_ci.ocs.resources.mcg import MCG
 from ocs_ci.ocs.resources.objectbucket import OBC
 from ocs_ci.ocs.resources.bucket_policy import NoobaaAccount
@@ -14,11 +17,20 @@ from ocs_ci.ocs.bucket_utils import (
     list_objects_in_batches,
     s3_delete_objects,
 )
+from ocs_ci.utility.retry import retry
+from ocs_ci.ocs.cluster import CephCluster
+from ocs_ci.ocs.exceptions import (
+    NoobaaHealthException,
+    CephHealthException,
+    CommandFailed,
+)
 
 logger = logging.getLogger(__name__)
 
 
-def upload_objs_to_buckets(mcg_obj, pod_obj, buckets, iteration_no, event=None):
+def upload_objs_to_buckets(
+    mcg_obj, pod_obj, buckets, iteration_no, event=None, multiplier=1
+):
     """
     This will upload objects present in the stress-cli pod
     to the buckets provided concurrently
@@ -46,15 +58,16 @@ def upload_objs_to_buckets(mcg_obj, pod_obj, buckets, iteration_no, event=None):
                 logger.info(
                     f"OBJECT UPLOAD: Uploading objects to the bucket {bucket.name}"
                 )
-                future = executor.submit(
-                    sync_object_directory,
-                    pod_obj,
-                    src_path,
-                    f"s3://{bucket.name}/{iteration_no}/",
-                    s3_obj,
-                    timeout=20000,
-                )
-                futures.append(future)
+                for i in range(multiplier):
+                    future = executor.submit(
+                        sync_object_directory,
+                        pod_obj,
+                        src_path,
+                        f"s3://{bucket.name}/{iteration_no}/{i+1}/",
+                        s3_obj,
+                        timeout=20000,
+                    )
+                    futures.append(future)
 
             logger.info(
                 "OBJECT UPLOAD: Waiting for the objects upload to complete for all the buckets"
@@ -353,3 +366,81 @@ def delete_objects_in_batches(bucket, batch_size):
         logger.info(
             f"Total objects deleted {total_objs_deleted} in bucket {bucket_name}"
         )
+
+
+def run_background_cluster_checks(scale_noobaa_db_pv, event=None):
+    """
+    Run background checks to verify noobaa health
+    and cluster health overall
+
+        1. Check Noobaa Health
+        2. Check Ceph Health
+        3. Check Noobaa db usage
+        4. Check for any alerts
+        5. Memory and CPU utilization
+
+    """
+    ceph_cluster = CephCluster()
+
+    @retry(NoobaaHealthException, tries=10, delay=60)
+    def check_noobaa_health():
+
+        while True:
+
+            ceph_cluster.noobaa_health_check()
+            logger.info("BACKGROUND CHECK: Noobaa is healthy... rechecking in 1 minute")
+            time.sleep(60)
+
+            if event.is_set():
+                logger.info("BACKGROUND CHECK: Stopping the Noobaa health check")
+                break
+
+    @retry(CephHealthException, tries=10, delay=60)
+    def check_ceph_health():
+
+        while True:
+
+            if ceph_cluster.get_ceph_health() == constants.CEPH_HEALTH_ERROR:
+                raise CephHealthException
+            logger.info("BACKGROUND CHECK: Ceph is healthy... rechecking in 1 minute")
+            time.sleep(60)
+
+            if event.is_set():
+                logger.info("BACKGROUND CHECK: Stopping the Ceph health check")
+                break
+
+    @retry(CommandFailed, tries=10, delay=60)
+    def check_noobaa_db_size():
+
+        while True:
+
+            nb_db_pv_used = get_noobaa_db_used_space()
+            nb_db_pv_size = get_noobaa_db_size()
+            used_percent = int((nb_db_pv_used * 100) / nb_db_pv_size)
+            if used_percent > 85:
+                logger.info(
+                    f"BACKGROUND CHECK: Noobaa db is {used_percent} percentage. Increasing the noobaa db by 50%"
+                )
+                new_size = int(nb_db_pv_size + int(nb_db_pv_size.split("G")[0]) / 2)
+                scale_noobaa_db_pv(pvc_size=new_size)
+                logger.info(
+                    f"BACKGROUND CHECK: Scaled noobaa db to new size {new_size}"
+                )
+            logger.info(
+                f"BACKGROUND CHECK: Current noobaa db usage is at {used_percent}%... Rechecking in 5 minutes..."
+            )
+            time.sleep(300)
+
+            if event.is_set():
+                logger.info("BACKGROUND CHECK: Stopping the Noobaa db size check")
+                break
+
+    logger.info("Initiating background ops")
+    executor = concurrent.futures.ThreadPoolExecutor(max_workers=3)
+    futures_obj = list()
+    futures_obj.append(executor.submit(check_noobaa_health))
+    futures_obj.append(executor.submit(check_ceph_health))
+    futures_obj.append(executor.submit(check_noobaa_db_size))
+
+    for future in futures_obj:
+        future.result()
