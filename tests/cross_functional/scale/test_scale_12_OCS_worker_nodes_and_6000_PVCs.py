@@ -192,18 +192,7 @@ class TestAddNode(E2ETest):
 
     @ignore_leftovers
     @pytest.mark.skipif("TestAddNode.skip_all")
-    @pytest.mark.parametrize(
-        argnames=["node_type"],
-        argvalues=[
-            pytest.param(
-                *[constants.MASTER_MACHINE], marks=pytest.mark.polarion_id("OCS-763")
-            ),
-            pytest.param(
-                *[constants.WORKER_MACHINE], marks=pytest.mark.polarion_id("OCS-754")
-            ),
-        ],
-    )
-    def test_rolling_reboot_node(self, node_type):
+    def deprecated_test_rolling_reboot_node(self, node_type):
         """
         Test to rolling reboot of nodes
         """

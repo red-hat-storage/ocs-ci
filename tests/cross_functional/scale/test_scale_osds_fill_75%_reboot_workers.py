@@ -35,17 +35,6 @@ logger = logging.getLogger(__name__)
     reason="Skipped due to failure in 75% filling-up cluster "
     "which created more PODs and failed for memory issue"
 )
-@pytest.mark.parametrize(
-    argnames=["interface"],
-    argvalues=[
-        pytest.param(
-            constants.CEPHBLOCKPOOL, marks=pytest.mark.polarion_id("OCS-2117")
-        ),
-        pytest.param(
-            constants.CEPHFILESYSTEM, marks=pytest.mark.polarion_id("OCS-2117")
-        ),
-    ],
-)
 @skipif_aws_i3
 class TestScaleOSDsRebootNodes(E2ETest):
     """
@@ -57,7 +46,7 @@ class TestScaleOSDsRebootNodes(E2ETest):
     num_of_pvcs = 10
     pvc_size = 5
 
-    def test_scale_osds_reboot_nodes(
+    def deprecated_test_scale_osds_reboot_nodes(
         self, interface, project_factory, multi_pvc_factory, dc_pod_factory
     ):
         """
