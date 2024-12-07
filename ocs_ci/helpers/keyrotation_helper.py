@@ -8,7 +8,7 @@ from ocs_ci.framework import config
 from ocs_ci.ocs.resources.pvc import get_deviceset_pvcs
 from ocs_ci.ocs.exceptions import UnexpectedBehaviour
 from ocs_ci.utility.retry import retry
-from ocs_ci.utility.kms import get_kms_details
+from ocs_ci.utility.kms import get_kms_details, is_kms_enabled
 
 log = logging.getLogger(__name__)
 
@@ -113,7 +113,7 @@ class KeyRotation:
             log.info("Keyrotation is Already in Enabled state.")
             return True
 
-        param = '[{"op":"remove","path":"/spec/encryption/keyRotation/enable"}]'
+        param = '[{"op": "add", "path": "/spec/encryption/keyRotation/enable", "value": true}]'
         self.storagecluster_obj.patch(params=param, format_type="json")
         resource_status = self.storagecluster_obj.wait_for_resource(
             constants.STATUS_READY,
@@ -276,6 +276,13 @@ class OSDKeyrotation(KeyRotation):
         super().__init__()
         self.deviceset = self._get_deviceset()
 
+        # get the kms config for the OSD keyrotation
+        if is_kms_enabled(dont_raise=True) and (
+            config.ENV_DATA.get("KMS_PROVIDER")
+            in [constants.VAULT_KMS_PROVIDER, constants.HPCS_KMS_PROVIDER]
+        ):
+            self.kms = get_kms_details()
+
     def _get_deviceset(self):
         """
         Listing deviceset for OSD.
@@ -362,6 +369,53 @@ class OSDKeyrotation(KeyRotation):
             assert False
 
         log.info("Keyrotation is sucessfully done for the all OSD.")
+        return True
+
+    def verify_osd_keyrotation_for_kms(self, tries=10, delay=10):
+        """_summary_
+
+        Raises:
+            UnexpectedBehaviour: _description_
+
+        Returns:
+            _type_: _description_
+        """
+
+        old_keys = {}
+
+        for dev in self.deviceset:
+            old_keys[dev] = self.kms.get_osd_secret(dev)
+
+        # Noobaa Secret
+        old_keys[constants.NOOBAA_BACKEND_SECRET] = self.kms.get_noobaa_secret()
+        
+        log.info(f"OSD and NooBaa keys before Rotation : {old_keys}")
+
+        @retry(UnexpectedBehaviour, tries=tries, delay=delay)
+        def compare_keys():
+            new_keys = {}
+            for dev in self.deviceset:
+                new_keys[dev] = self.kms.get_osd_secret(dev)
+
+            new_keys[constants.NOOBAA_BACKEND_SECRET] = self.kms.get_noobaa_secret()
+
+            unmatched_keys = []
+            for key in old_keys:
+                if old_keys[key] == new_keys[key]:
+                    log.info(f"Vault key for {key} is not yet rotated ")
+                    unmatched_keys.append(key)
+                    
+            if unmatched_keys:
+                raise UnexpectedBehaviour(f"These component keys are not rotated in vault : {','.join(unmatched_keys)}")
+
+            log.info(f"New OSD and Noobaa keys are rotated : {new_keys}")
+
+        try:
+            compare_keys()
+        except UnexpectedBehaviour:
+            log.info("OSD and Noobaa  Keys are not rotated.")
+            return False
+        
         return True
 
 
