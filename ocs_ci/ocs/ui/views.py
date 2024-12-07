@@ -860,6 +860,12 @@ acm_page_nav_419 = {
     "all-clusters-view": ("//span[contains(text(),'All Clusters')]", By.XPATH),
     "Clusters_page": ("(//a[normalize-space()='Clusters'])[1]", By.XPATH),
 }
+if ibm_cloud_managed:
+    if ibm_cloud_managed:
+        acm_page_nav["Clusters_page"] = acm_page_nav_419["Clusters_page"] = (
+            "Cluster list",
+            By.LINK_TEXT,
+        )
 
 acm_configuration = {
     "cluster-sets": ("//a[normalize-space()='Cluster sets']", By.XPATH),
