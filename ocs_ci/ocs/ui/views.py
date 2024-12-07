@@ -787,6 +787,8 @@ acm_page_nav = {
     "modal_dialog_close_button": ("//button[@aria-label='Close']", By.XPATH),
     "Policies": ("a[data-test-id='horizontal-link-Policies']", By.CSS_SELECTOR),
 }
+if ibm_cloud_managed:
+    acm_page_nav["Clusters_page"] = ("Cluster list", By.LINK_TEXT)
 
 acm_configuration = {
     "cluster-sets": ("//a[normalize-space()='Cluster sets']", By.XPATH),
