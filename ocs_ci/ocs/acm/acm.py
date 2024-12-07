@@ -20,6 +20,7 @@ from ocs_ci.ocs.acm.acm_constants import (
     ACM_PAGE_TITLE,
     ACM_2_7_MULTICLUSTER_URL,
     ACM_PAGE_TITLE_2_7_ABOVE,
+    ACM_PAGE_TITLE_2_7_ABOVE_IBM_CLOUD_MANAGED,
 )
 from ocs_ci.ocs.ocp import OCP, get_ocp_url
 from ocs_ci.framework import config
@@ -631,10 +632,18 @@ def login_to_acm():
             "Check if login to OCP console is successful or not"
         )
 
+    ibm_cloud_managed = (
+        config.ENV_DATA["platform"] == constants.IBMCLOUD_PLATFORM
+        and config.ENV_DATA["deployment_type"] == "managed"
+    )
     if compare_versions(cmp_str):
-        page_title = ACM_PAGE_TITLE_2_7_ABOVE
+        if ibm_cloud_managed:
+            page_title = ACM_PAGE_TITLE_2_7_ABOVE_IBM_CLOUD_MANAGED
+        else:
+            page_title = ACM_PAGE_TITLE_2_7_ABOVE
     else:
         page_title = ACM_PAGE_TITLE
+    log.info(f"Validating page title to be: {page_title}")
     validate_page_title(title=page_title)
     log.info("Successfully logged into RHACM console")
     side_navigation_toggle_btn = wait_for_element_to_be_clickable(
