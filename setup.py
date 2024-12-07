@@ -111,6 +111,7 @@ setup(
         "marshmallow==3.26.1",
         "zope.event==6.0",
         "xattr==1.3.0",
+        "pyotp==2.9.0",
     ],
     entry_points={
         "console_scripts": [
