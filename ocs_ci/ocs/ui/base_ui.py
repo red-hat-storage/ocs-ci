@@ -6,6 +6,8 @@ import gc
 import time
 import zipfile
 from functools import reduce
+
+import pyotp
 from selenium import webdriver
 from selenium.common.exceptions import (
     TimeoutException,
@@ -911,6 +913,21 @@ class SeleniumDriver(WebDriver):
             logger.info("SeleniumDriver instance attr not found")
 
 
+def generate_otp_token(secret):
+    """
+    Generate OTP token for specific OTP secret
+
+    Args:
+        secret (string): OTP secret phrase
+
+    Returns:
+        str: OTP token
+
+    """
+    totp = pyotp.TOTP(secret)
+    return totp.now()
+
+
 @retry(
     exception_to_check=(TimeoutException, WebDriverException, AttributeError),
     tries=3,
@@ -918,7 +935,7 @@ class SeleniumDriver(WebDriver):
     backoff=2,
     func=garbage_collector_webdriver,
 )
-def login_ui(console_url=None, username=None, password=None):
+def login_ui(console_url=None, username=None, password=None, otp_secret=None, **kwargs):
     """
     Login to OpenShift Console
 
@@ -926,11 +943,21 @@ def login_ui(console_url=None, username=None, password=None):
         console_url (str): ocp console url
         username(str): User which is other than admin user,
         password(str): Password of user other than admin user
+        otp_secret(str): Secret for OTP 2F authentication from which we generate token
 
     return:
         driver (Selenium WebDriver)
 
     """
+    ibm_cloud_managed = (
+        config.ENV_DATA["platform"] == constants.IBMCLOUD_PLATFORM
+        and config.ENV_DATA["deployment_type"] == "managed"
+    )
+    if ibm_cloud_managed:
+        # Those data are required for UI testing for IBM Managed ROKS
+        username = config.AUTH["ibmcloud"]["username"]
+        password = config.AUTH["ibmcloud"]["password"]
+        otp_secret = config.AUTH["ibmcloud"]["otp_secret"]
     default_console = False
     if not console_url:
         console_url = get_ocp_url()
@@ -948,6 +975,26 @@ def login_ui(console_url=None, username=None, password=None):
     driver.get(console_url)
     # Validate proceeding to the login console before taking any action:
     proceed_to_login_console()
+    if ibm_cloud_managed:
+        username_el = wait_for_element_to_be_clickable(login_loc["username"], 60)
+        username_el.send_keys(username)
+        continue_login_el = wait_for_element_to_be_clickable(
+            login_loc["continue_button"], 60
+        )
+        continue_login_el.click()
+        password_el = wait_for_element_to_be_clickable(login_loc["password"], 60)
+        password_el.send_keys(password)
+        click_login_el = wait_for_element_to_be_clickable(login_loc["click_login"], 60)
+        click_login_el.click()
+        login_2fa_input_el = wait_for_element_to_be_clickable(
+            login_loc["login_2fa_input"], 60
+        )
+        login_2fa_input_el.send_keys(generate_otp_token(otp_secret))
+        click_2fa_verify_el = wait_for_element_to_be_clickable(
+            login_loc["login_2fa_verify"], 60
+        )
+        click_2fa_verify_el.click()
+        return driver
 
     try:
         wait = WebDriverWait(driver, 15)
