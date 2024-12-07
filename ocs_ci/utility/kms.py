@@ -1298,6 +1298,85 @@ class Vault(KMS):
 
         return secret
 
+    def get_osd_secret(self, device_handle):
+        """Fetch the OSD encryption key for the given device handle from Vault.
+
+        Args:
+            device_handle (str): The device handle for which to retrieve the OSD secret.
+
+        Returns:
+            str: The OSD encryption secret if found, otherwise None.
+        """
+        if not self.vault_backend_path:
+            self.get_vault_backend_path()
+
+        secret_key = f"rook-ceph-osd-encryption-key-{device_handle}"
+
+        # Construct the Vault command
+        cmd = f"vault kv get -format=json {self.vault_backend_path}/{secret_key}"
+
+        try:
+            # Execute the command and capture the output
+            out = subprocess.check_output(
+                shlex.split(cmd), stderr=subprocess.STDOUT, text=True
+            )
+
+            # Parse the JSON response
+            json_out = json.loads(out)
+
+            # Retrieve the secret
+            # secret_key = f"rook-ceph-osd-encryption-key-{device_handle}"
+            secret = json_out.get("data", {}).get(secret_key)
+
+            if not secret:
+                logger.error(
+                    f"Secret for key '{secret_key}' not found in Vault response."
+                )
+                return None
+
+            return secret
+        except subprocess.CalledProcessError as e:
+            logger.error(f"Error executing Vault command: {e.output.strip()}")
+        except json.JSONDecodeError as e:
+            logger.error(f"Invalid JSON output from Vault command. : {e}")
+
+        return None
+
+    def get_noobaa_secret(self):
+        """Fetches the NooBaa backend secret from the Vault.
+
+        Returns:
+            str: The NooBaa backend secret.
+        """
+        # Construct the Vault command
+        cmd = f"vault kv get -format=json {self.vault_backend_path}/{constants.NOOBAA_BACKEND_SECRET}"
+
+        try:
+            # Execute the command and capture the output
+            out = subprocess.check_output(
+                shlex.split(cmd), stderr=subprocess.STDOUT, text=True
+            )
+
+            # Parse the JSON response
+            json_out = json.loads(out)
+
+            # Retrieve the secret
+            secret = json_out["data"].get(json_out["data"].get("active_root_key"))
+
+            if not secret:
+                logger.error(
+                    f"Secret for key '{constants.NOOBAA_BACKEND_SECRET}' not found in Vault response."
+                )
+                return None
+
+            return secret
+        except subprocess.CalledProcessError as e:
+            logger.error(f"Error executing Vault command: {e.output.strip()}")
+        except json.JSONDecodeError as e:
+            logger.error(f"Invalid JSON output from Vault command. {e}")
+
+        return None
+
 
 class HPCS(KMS):
     """
