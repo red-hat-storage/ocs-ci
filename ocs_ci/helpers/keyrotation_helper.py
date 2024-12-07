@@ -388,7 +388,7 @@ class OSDKeyrotation(KeyRotation):
 
         # Noobaa Secret
         old_keys[constants.NOOBAA_BACKEND_SECRET] = self.kms.get_noobaa_secret()
-        
+
         log.info(f"OSD and NooBaa keys before Rotation : {old_keys}")
 
         @retry(UnexpectedBehaviour, tries=tries, delay=delay)
@@ -404,9 +404,11 @@ class OSDKeyrotation(KeyRotation):
                 if old_keys[key] == new_keys[key]:
                     log.info(f"Vault key for {key} is not yet rotated ")
                     unmatched_keys.append(key)
-                    
+
             if unmatched_keys:
-                raise UnexpectedBehaviour(f"These component keys are not rotated in vault : {','.join(unmatched_keys)}")
+                raise UnexpectedBehaviour(
+                    f"These component keys are not rotated in vault : {','.join(unmatched_keys)}"
+                )
 
             log.info(f"New OSD and Noobaa keys are rotated : {new_keys}")
 
@@ -415,7 +417,7 @@ class OSDKeyrotation(KeyRotation):
         except UnexpectedBehaviour:
             log.info("OSD and Noobaa  Keys are not rotated.")
             return False
-        
+
         return True
 
 
