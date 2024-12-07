@@ -28,6 +28,24 @@ login = {
     ),
     "skip_tour": ('button[data-test="tour-step-footer-secondary"]', By.CSS_SELECTOR),
 }
+
+ibm_cloud_managed = (
+    config.ENV_DATA["platform"] == constants.IBMCLOUD_PLATFORM
+    and config.ENV_DATA["deployment_type"] == "managed"
+)
+login_ibm_cloud = {
+    "continue_button": ("continue-button", By.ID),
+    "login_page_title": "IBMid - Sign in or create an IBMid",
+    "login_2fa_input": ("mfa-authenticate-totp-input-verification-code", By.ID),
+    "login_2fa_verify": ("mfa-authenticate-totp-button-verify", By.ID),
+    "ocp_page": "Overview · Red Hat OpenShift Container Platform",
+    "username": ("username", By.ID),
+    "password": ("password", By.ID),
+    "click_login": ("signinbutton", By.ID),
+}
+if ibm_cloud_managed:
+    login.update(login_ibm_cloud)
+
 azure_managed = ""
 if (
     config.ENV_DATA["platform"] == constants.AZURE_PLATFORM
