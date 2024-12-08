@@ -2921,3 +2921,111 @@ def create_s3client_from_assume_role_creds(mcg_obj, assume_role_creds):
         aws_session_token=assumed_session_token,
     )
     return assumed_s3_resource.meta.client
+
+
+def put_bucket_versioning_via_awscli(
+    mcg_obj, awscli_pod, bucket_name, status="Enabled"
+):
+    """
+    Put bucket versioning using AWS CLI
+
+    Args:
+        mcg_obj (MCG): MCG object
+        awscli_pod (Pod): Pod object where AWS CLI is installed
+        bucket_name (str): Name of the bucket
+        status (str): Status of the versioning
+
+    """
+    awscli_pod.exec_cmd_on_pod(
+        command=craft_s3_command(
+            f"put-bucket-versioning --bucket {bucket_name} --versioning-configuration Status={status}",
+            mcg_obj=mcg_obj,
+            api=True,
+        )
+    )
+
+
+def upload_obj_versions(mcg_obj, awscli_pod, bucket_name, obj_key, amount=1, size="1M"):
+    """
+    Upload multiple random data versions to a given object key and return their ETag values
+
+    Args:
+        mcg_obj (MCG): MCG object
+        awscli_pod (Pod): Pod object where AWS CLI is installed
+        bucket_name (str): Name of the bucket
+        obj_key (str): Object key
+        amount (int): Number of versions to create
+        size (str): Size of the object. I.E 1M
+
+    Returns:
+        list: List of ETag values of versions in latest to oldest order
+    """
+    file_dir = f"/tmp/{uuid4()}"
+    awscli_pod.exec_cmd_on_pod(f"mkdir {file_dir}")
+
+    etags = []
+
+    for i in range(amount):
+        file_path = f"{file_dir}/{obj_key}_{i}"
+        awscli_pod.exec_cmd_on_pod(
+            command=f"dd if=/dev/urandom of={file_path} bs={size} count=1"
+        )
+        # Use debug and redirect it to stdout to get
+        # the uploaded object's ETag in the response
+        resp = awscli_pod.exec_cmd_on_pod(
+            command=craft_s3_command(
+                f"cp {file_path} s3://{bucket_name}/{obj_key} --debug 2>&1",
+                mcg_obj=mcg_obj,
+            ),
+            out_yaml_format=False,
+        )
+
+        # Parse the ETag from the response
+        # Filter the line containing the JSON
+        line = next(filter(lambda line: "ETag" in line, resp.splitlines()))
+        json_start = line.index("{")
+        json_str = line[json_start:]
+
+        # Fix quotes to read as dict
+        json_str = json_str.replace("'", '"')
+        json_str = json_str.replace('""', '"')
+
+        # Convert to dict and extract the ETag
+        new_etag = json.loads(json_str).get("ETag")
+
+        # Later versions should precede the older ones
+        # this achieves the expected order of versions
+        # we'd get from list-object-versions
+        etags.insert(0, new_etag)
+
+    return etags
+
+
+def get_obj_versions(mcg_obj, awscli_pod, bucket_name, obj_key):
+    """
+    Get object versions using AWS CLI
+
+    Args:
+        mcg_obj (MCG): MCG object
+        awscli_pod (Pod): Pod object where AWS CLI is installed
+        bucket_name (str): Name of the bucket
+        obj_key (str): Object key
+
+    Returns:
+        list: List of ETag values of the uploaded objects
+    """
+    etags = []
+    resp = awscli_pod.exec_cmd_on_pod(
+        command=craft_s3_command(
+            f"list-object-versions --bucket {bucket_name} --prefix {obj_key}",
+            mcg_obj=mcg_obj,
+            api=True,
+        ),
+        out_yaml_format=False,
+    )
+    etags = []
+
+    if resp and "Versions" in resp:
+        raw_etags = [version["ETag"] for version in json.loads(resp)["Versions"]]
+        etags = [etag.strip('"') for etag in raw_etags]
+    return etags
