@@ -41,6 +41,7 @@ def ibm_cleanup():
 
 def delete_buckets(hours):
     """ """
+    status = []
     config.ENV_DATA["cluster_path"] = "/"
     config.ENV_DATA["cluster_name"] = "cluster"
     ibm_cloud_ipi_obj = IBMCloudIPI()
@@ -50,28 +51,34 @@ def delete_buckets(hours):
         try:
             ibm_cloud_ipi_obj.delete_bucket(bucket_delete)
         except Exception as e:
-            logger.info(f"Failed to delete {bucket_delete}\nerror: {e}")
+            log = f"Failed to delete {bucket_delete}\nerror: {e}"
+            logger.info(log)
+            status.append(log)
+    if len(status) > 0:
+        raise Exception(status)
 
 
 def buckets_to_delete(buckets, hours):
-    """ """
+    """
+    Buckets to Delete
+
+    Args:
+
+    """
     buckets_delete = []
     current_time = datetime.utcnow()
     for bucket in buckets:
-        try:
-            bucket_name = bucket["Name"]
-            creation_date = datetime.strptime(
-                bucket["CreationDate"], "%Y-%m-%dT%H:%M:%S.%fZ"
-            )
-            # Check if the bucket matches any prefix rule
-            hours_bucket = hours
-            for prefix, max_age_hours in defaults.BUCKET_PREFIXES_SPECIAL_RULES.items():
-                if re.match(prefix, bucket_name):
-                    hours_bucket = max_age_hours
-            if hours_bucket == "never":
-                continue
-            if current_time - creation_date > timedelta(hours=int(hours_bucket)):
-                buckets_delete.append(bucket_name)
-        except Exception as e:
-            logger.error(e)
-    return buckets_delete
+        bucket_name = bucket["Name"]
+        creation_date = datetime.strptime(
+            bucket["CreationDate"], "%Y-%m-%dT%H:%M:%S.%fZ"
+        )
+        # Check if the bucket matches any prefix rule
+        hours_bucket = hours
+        for prefix, max_age_hours in defaults.BUCKET_PREFIXES_SPECIAL_RULES.items():
+            if re.match(prefix, bucket_name):
+                hours_bucket = max_age_hours
+        if hours_bucket == "never":
+            continue
+        if current_time - creation_date > timedelta(hours=int(hours_bucket)):
+            buckets_delete.append(bucket_name)
+    return buckets_delete[:10]
