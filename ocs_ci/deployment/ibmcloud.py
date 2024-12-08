@@ -574,6 +574,10 @@ class IBMCloudIPI(CloudDeploymentBase):
                 )
 
     def get_bucket_list(self):
+        """
+        Get Buckets in 'ODF-QE-IBM-COS'
+
+        """
         cmd = "ibmcloud resource service-instance 'ODF-QE-IBM-COS' --output json"
         proc = exec_cmd(cmd)
         instance_objs = json.loads(proc.stdout)
@@ -584,6 +588,13 @@ class IBMCloudIPI(CloudDeploymentBase):
         return json.loads(proc.stdout).get("Buckets")
 
     def delete_bucket(self, bucket_name):
+        """
+        Delete Bucket
+
+        Args:
+            bucket_name (str): bucket name
+
+        """
         cmd = f"ibmcloud cos bucket-location-get --bucket {bucket_name}"
         proc = exec_cmd(cmd)
         match = re.search(r"Region: (\w+)", proc.stdout.decode("utf-8"))
