@@ -7,6 +7,7 @@ on IBM Cloud Platform.
 import json
 import logging
 import os
+import re
 
 from ocs_ci.deployment.cloud import CloudDeploymentBase, IPIOCPDeployment
 from ocs_ci.deployment.ocp import OCPDeployment as BaseOCPDeployment
@@ -576,3 +577,30 @@ class IBMCloudIPI(CloudDeploymentBase):
                 ibmcloud.attach_subnet_to_public_gateway(
                     subnet_name, gateway_name, vpc_name
                 )
+
+    def get_bucket_list(self):
+        cmd = "ibmcloud resource service-instance 'ODF-QE-IBM-COS' --output json"
+        proc = exec_cmd(cmd)
+        instance_objs = json.loads(proc.stdout)
+        cmd = f"ibmcloud cos config crn --crn {instance_objs[0]['guid']}"
+        exec_cmd(cmd)
+        cmd = "ibmcloud cos buckets --output json"
+        proc = exec_cmd(cmd)
+        return json.loads(proc.stdout).get("Buckets")
+
+    def delete_bucket(self, bucket_name):
+        cmd = f"ibmcloud cos bucket-location-get --bucket {bucket_name}"
+        proc = exec_cmd(cmd)
+        match = re.search(r"Region: (\w+)", proc.stdout.decode("utf-8"))
+        region = match.group(1)
+        cmd = f"ibmcloud cos objects --bucket {bucket_name} --region {region} --output json"
+        proc = exec_cmd(cmd)
+        objects = json.loads(proc.stdout).get("Contents")
+        for object in objects:
+            cmd = (
+                f"ibmcloud cos object-delete --bucket {bucket_name} "
+                f"--key {object.get('Key')} --region {region} --force"
+            )
+            exec_cmd(cmd)
+        cmd = f"ibmcloud cos bucket-delete --bucket {bucket_name} --region {region} --force"
+        exec_cmd(cmd)
