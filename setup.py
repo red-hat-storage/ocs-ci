@@ -114,6 +114,7 @@ setup(
             "vsphere-cleanup=ocs_ci.cleanup.vsphere.cleanup:vsphere_cleanup",
             "ocs-build=ocs_ci.utility.ocs_build:main",
             "get-ssl-cert=ocs_ci.utility.ssl_certs:main",
+            "ibm-cleanup=ocs_ci.cleanup.ibm.cleanup:ibm_cleanup",
         ],
     },
     zip_safe=True,
