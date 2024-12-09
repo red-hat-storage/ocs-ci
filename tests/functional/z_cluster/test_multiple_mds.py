@@ -32,15 +32,16 @@ class TestMultipleMds:
     @pytest.fixture(autouse=True)
     def teardown(self, request):
         """
-        Make sure mds pod count is set to original
+        Make sure mds pod count is set to original.
 
         """
 
         def finalizer():
-            assert adjust_active_mds_count(1), "Failed to set active mds count to 1"
+            adjust_active_mds_count(1), "Failed to set active mds count to 1"
 
         request.addfinalizer(finalizer)
 
+    @pytest.fixture(autouse=True)
     def init_sanity(self):
         """
         Initialize Sanity instance
@@ -87,16 +88,10 @@ class TestMultipleMds:
             standby_replay == new_active_mds_count
         ), "Standby replay mds counts did not increased"
 
-        # Get active mds node name for replacement
-        active_mds_pod = get_active_mds_pods()
-        selected_pod = random.choice(active_mds_pod)
-        selected_pod = pod.get_pod_name_by_pattern(selected_pod[0])
-        selected_pod_obj = pod.get_pod_obj(
-            name=selected_pod, namespace=config.ENV_DATA["cluster_namespace"]
-        )
-        active_mds_node_name = selected_pod_obj.data["spec"].get("nodeName")
-
         # Replace node
+        active_mds_pods = get_active_mds_pods()
+        active_mds_pod = random.choice(active_mds_pods)
+        active_mds_node_name = active_mds_pod.data["spec"].get("nodeName")
         log.info(f"Replacing active mds node : {active_mds_node_name}")
         delete_and_create_osd_node(active_mds_node_name)
 
@@ -127,16 +122,17 @@ class TestMultipleMds:
         4. Fail one active mds pod [out of two] and standby pod changes to active.
 
         """
+
         original_active_count = get_active_mds_count()
 
         # Scale up active mds pods from 1 to 2.
         new_active_mds_count = original_active_count + 1
         adjust_active_mds_count(new_active_mds_count)
 
-        # Get active mds node name for replacement
+        # Get active mds node name
         active_mds_pods = get_active_mds_pods()
         active_mds_pod = random.choice(active_mds_pods)
-        active_mds_pod_name = pod.get_pod_name_by_pattern(active_mds_pod[0])
+        active_mds_pod_name = active_mds_pod.name
         selected_pod_obj = pod.get_pod_obj(
             name=active_mds_pod_name, namespace=config.ENV_DATA["cluster_namespace"]
         )
