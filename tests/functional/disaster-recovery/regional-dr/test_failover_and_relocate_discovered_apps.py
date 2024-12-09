@@ -12,6 +12,7 @@ from ocs_ci.ocs.resources.drpc import DRPC
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.resources.pod import wait_for_pods_to_be_running
 from ocs_ci.utility.utils import ceph_health_check
+from ocs_ci.ocs import constants
 
 logger = logging.getLogger(__name__)
 
@@ -61,6 +62,38 @@ class TestFailoverAndRelocateWithDiscoveredApps:
         pvc_interface,
         nodes_multicluster,
     ):
+    @pytest.mark.parametrize(
+        argnames=["primary_cluster_down", "pvc_interface"],
+        argvalues=[
+            # pytest.param(
+            #     False,
+            #     constants.CEPHBLOCKPOOL,
+            #     # marks=pytest.mark.polarion_id(polarion_id_primary_up),
+            #     id="primary_up-rbd",
+            # ),
+            # pytest.param(
+            #     True,
+            #     constants.CEPHBLOCKPOOL,
+            #     # marks=pytest.mark.polarion_id(polarion_id_primary_down),
+            #     id="primary_down-rbd",
+            # ),
+            pytest.param(
+                False,
+                constants.CEPHFILESYSTEM,
+                # marks=pytest.mark.polarion_id(polarion_id_primary_up_cephfs),
+                id="primary_up-cephfs",
+            ),
+            # pytest.param(
+            #     True,
+            #     constants.CEPHFILESYSTEM,
+            #     # marks=pytest.mark.polarion_id(polarion_id_primary_down_cephfs),
+            #     id="primary_down-cephfs",
+            # ),
+        ],
+    )
+
+    def test_failover_and_relocate_discovered_apps(self, discovered_apps_dr_workload, primary_cluster_down,
+        pvc_interface,):
         """
         Tests to verify application failover and Relocate with Discovered Apps
         There are two test cases:
@@ -160,6 +193,7 @@ class TestFailoverAndRelocateWithDiscoveredApps:
             timeout=1200,
             discovered_apps=True,
             vrg_name=rdr_workload.discovered_apps_placement_name,
+
         )
 
         if pvc_interface == constants.CEPHFILESYSTEM:
@@ -219,7 +253,7 @@ class TestFailoverAndRelocateWithDiscoveredApps:
             rdr_workload.workload_namespace,
             timeout=1200,
             discovered_apps=True,
-            vrg_name=rdr_workload.discovered_apps_placement_name,
+
         )
 
         if pvc_interface == constants.CEPHFILESYSTEM:
@@ -228,7 +262,8 @@ class TestFailoverAndRelocateWithDiscoveredApps:
                 rdr_workload.workload_namespace
             )
             # Verify the creation of ReplicationDestination resources on primary cluster
-            config.switch_to_cluster_by_name(primary_cluster_name_after_failover)
+            config.switch_to_cluster_by_name(secondary_cluster_name)
             dr_helpers.wait_for_replication_destinations_creation(
                 rdr_workload.workload_pvc_count, rdr_workload.workload_namespace
             )
+        # TODO: Add data integrity checks
