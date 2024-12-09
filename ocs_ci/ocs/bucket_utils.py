@@ -1566,7 +1566,8 @@ def retrieve_verification_mode():
         verify = True
     elif (
         config.DEPLOYMENT.get("use_custom_ingress_ssl_cert")
-        and config.DEPLOYMENT["custom_ssl_cert_provider"] == "ocs-ci-ca"
+        and config.DEPLOYMENT["custom_ssl_cert_provider"]
+        == constants.SSL_CERT_PROVIDER_OCS_QE_CA
     ):
         verify = get_root_ca_cert()
     else:
