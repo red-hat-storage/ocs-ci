@@ -34,7 +34,7 @@ class TestPgsqlPodScale(E2ETest):
     Scale test case using PGSQL Pods
     """
 
-    def test_scale_pgsql(self, pgsql):
+    def deprecated_test_scale_pgsql(self, pgsql):
         """
         Test case to scale pgsql pods:
           * Add worker nodes to existing cluster

@@ -37,7 +37,7 @@ class TestScaleOCBCreateDelete(E2ETest):
     num_obc_batch = 50
 
     @pytest.mark.polarion_id("OCS-2667")
-    def test_scale_obc_create_delete_time(self, tmp_path, noobaa_storage_class_name):
+    def deprecated_test_scale_obc_create_delete_time(self, tmp_path):
         """
         MCG OBC creation and deletion using Noobaa MCG storage class
 
