@@ -245,28 +245,35 @@ class AcmAddClusters(AcmPageNavigator):
             log.info("Globalnet is disabled")
         log.info("Click on Next button")
         self.do_click(self.page_nav["next-btn"])
-        log.info("Click on 'Enable NAT-T' to uncheck it")
-        self.do_click(self.page_nav["nat-t-checkbox"])
-        log.info(
-            "Increase the gateway count to 3 by clicking twice on the gateway count add button"
+        acm_version = ".".join(get_running_acm_version().split(".")[:2])
+        increase_gateway = False
+        if compare_versions(f"{acm_version}>=2.12"):
+            increase_gateway = True
+        ibm_cloud_managed = (
+            config.ENV_DATA["platform"] == constants.IBMCLOUD_PLATFORM
+            and config.ENV_DATA["deployment_type"] == "managed"
         )
-        self.do_click(self.page_nav["gateway-count-btn"])
-        self.do_click(self.page_nav["gateway-count-btn"])
-        if config.ENV_DATA.get("submariner_release_type") == "unreleased":
-            self.submariner_unreleased_downstream_info()
-        log.info("Click on Next button")
-        self.do_click(self.page_nav["next-btn"])
-        log.info("Click on 'Enable NAT-T' to uncheck it [2]")
-        self.do_click(self.page_nav["nat-t-checkbox"])
-        log.info(
-            "Increase the gateway count to 3 by clicking twice on the gateway count add button [2]"
-        )
-        self.do_click(self.page_nav["gateway-count-btn"])
-        self.do_click(self.page_nav["gateway-count-btn"])
-        if config.ENV_DATA.get("submariner_release_type") == "unreleased":
-            self.submariner_unreleased_downstream_info()
-        log.info("Click on Next button [2]")
-        self.do_click(self.page_nav["next-btn"])
+        increase_gateway_number = 2
+        if ibm_cloud_managed:
+            increase_gateway_number = 1
+        for cluster_nr in range(1, 3):
+            if not ibm_cloud_managed:
+                log.info(
+                    f"Click on 'Enable NAT-T' to uncheck it for cluster [{cluster_nr}]"
+                )
+                self.do_click(self.page_nav["nat-t-checkbox"])
+            if increase_gateway:
+                log.info(
+                    f"Increase the gateway count by {increase_gateway_number} clicking"
+                    f" gateway count add button for cluster [{cluster_nr}]"
+                )
+                for _ in range(increase_gateway_number):
+                    self.do_click(self.page_nav["gateway-count-btn"])
+            if config.ENV_DATA.get("submariner_release_type") == "unreleased":
+                self.submariner_unreleased_downstream_info()
+            self.take_screenshot()
+            log.info("Click on Next button for cluster [{cluster_nr}]")
+            self.do_click(self.page_nav["next-btn"])
         if ocs_version >= version.VERSION_4_13 and globalnet:
             check_globalnet = self.get_element_text(self.page_nav["check-globalnet"])
             assert (
