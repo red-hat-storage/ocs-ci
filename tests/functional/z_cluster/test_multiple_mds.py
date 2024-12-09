@@ -1,11 +1,13 @@
 """
-A test for multiple mds support
+Test cases for multiple mds support
 """
+
 import logging
 import random
 
 import pytest
 
+from ocs_ci.framework.pytest_customization.marks import brown_squad, tier4c
 from ocs_ci.helpers.helpers import verify_storagecluster_nodetopology
 from ocs_ci.framework import config
 from ocs_ci.ocs.cluster import (
@@ -23,6 +25,8 @@ from tests.functional.z_cluster.nodes.test_node_replacement_proactive import (
 log = logging.getLogger(__name__)
 
 
+@brown_squad
+@tier4c
 class TestMultipleMds:
     """
     Tests for support multiple mds
