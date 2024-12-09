@@ -22,7 +22,7 @@ from ocs_ci.helpers.helpers import (
 from ocs_ci.ocs.ocp import OCP
 from ocs_ci.ocs.cnv.virtctl import Virtctl
 from ocs_ci.ocs.cnv.virtual_machine_instance import VirtualMachineInstance
-from ocs_ci.ocs import constants
+from ocs_ci.ocs import constants, ocp
 from ocs_ci.ocs.resources import pvc
 from ocs_ci.utility import templating
 from ocs_ci.utility.utils import TimeoutSampler
@@ -66,6 +66,7 @@ class VirtualMachine(Virtctl):
         self.pvc_access_mode = ""
         self.source_url = ""
         self.source_ns = ""
+        self.dvt_name = ""
         self.secret_obj = None
         self.volumeimportsource_obj = None
         self.volume_interface = ""
@@ -221,12 +222,7 @@ class VirtualMachine(Virtctl):
             vm_data (dict): The VM data to modify.
 
         """
-        dvt_name = create_unique_resource_name("test", "dvt")
-        self.dv_obj = OCP(
-            resource_name=dvt_name,
-            kind=constants.VM_VOLUME_DV,
-            namespace=self.namespace,
-        )
+        self.dvt_name = create_unique_resource_name("test", "dvt")
         storage_spec = {
             "storage": {
                 "accessModes": [self.pvc_access_mode],
@@ -235,22 +231,21 @@ class VirtualMachine(Virtctl):
             },
             "source": {"registry": {"url": self.source_url}},
         }
-
-        metadata = {"name": dvt_name}
+        metadata = {"name": self.dvt_name}
         vm_data["spec"]["dataVolumeTemplates"] = [
             {"metadata": metadata, "spec": storage_spec}
         ]
-
-        self.pvc_name = dvt_name
+        self.pvc_name = self.dvt_name
         vm_data["spec"]["template"]["spec"]["volumes"][0]["dataVolume"] = {
-            "name": dvt_name
+            "name": self.dvt_name
         }
 
     def verify_vm(self, verify_ssh=False):
         """
         Verifies vm status, its volume and ssh connectivity if ssh is configured
         """
-        self.verify_dv()
+        if self.volume_interface == constants.VM_VOLUME_DV or constants.VM_VOLUME_DVT:
+            self.verify_dv()
         self.wait_for_vm_status(status=constants.VM_RUNNING)
         if verify_ssh:
             self.wait_for_ssh_connectivity(timeout=1200)
@@ -259,13 +254,16 @@ class VirtualMachine(Virtctl):
         """
         Verifies DV/DVT based volume is in succeeded state
         """
-        if self.dv_obj:
-            self.dv_obj.wait_for_resource(
-                condition="Succeeded",
-                resource_name=self.dv_obj.name,
-                column="PHASE",
-                timeout=300,
-            )
+        assert ocp.OCP(kind="dv", namespace=self.namespace).wait_for_resource(
+            condition="Succeeded",
+            resource_name=(
+                self.dv_obj.name
+                if self.volume_interface == constants.VM_VOLUME_DV
+                else self.dvt_name
+            ),
+            column="PHASE",
+            timeout=300,
+        ), "VM Data Volume not in Succeeded state"
 
     def get(self, out_yaml_format=True):
         """
@@ -674,7 +672,7 @@ class VMCloner(VirtualMachine):
         self.pvc_size = source_vm_obj.pvc_size
         self.pvc_access_mode = source_vm_obj.pvc_access_mode
 
-        # Use methods from the parent class
+        # Using methods from the parent class
         self._create_namespace_if_not_exists()
         vm_data = self._prepare_vm_data()
         if ssh:
@@ -740,16 +738,11 @@ class VMCloner(VirtualMachine):
             vm_data (dict): The VM data to modify.
 
         """
-        dvt_name = create_unique_resource_name("clone", "dvt")
-        self.dv_obj = OCP(
-            resource_name=dvt_name,
-            kind=constants.VM_VOLUME_DV,
-            namespace=self.namespace,
-        )
+        self.dvt_name = create_unique_resource_name("clone", "dvt")
         self._create_role()
         vm_data["spec"]["dataVolumeTemplates"] = []
         metadata = {
-            "name": dvt_name,
+            "name": self.dvt_name,
         }
         storage_spec = {
             "storage": {
@@ -767,7 +760,7 @@ class VMCloner(VirtualMachine):
             {"metadata": metadata, "spec": storage_spec}
         )
         vm_data["spec"]["template"]["spec"]["volumes"][0]["dataVolume"] = {
-            "name": dvt_name
+            "name": self.dvt_name
         }
 
     def _create_role(self):
