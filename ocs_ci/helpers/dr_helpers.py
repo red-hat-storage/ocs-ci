@@ -507,29 +507,37 @@ def check_vrg_existence(namespace):
         return False
 
 
-def check_vrg_state(state, namespace):
+def check_vrg_state(state, namespace, resource_name=""):
     """
     Check if VRG in the given namespace is in expected state
 
     Args:
         state (str): The VRG state to check for (e.g. 'primary', 'secondary')
         namespace (str): the namespace of the VRG resources
+        resource_name (str): Name of VRG resource
 
     Returns:
         bool: True if VRG is in expected state or was deleted, False otherwise
 
     """
-    vrg_obj = ocp.OCP(kind=constants.VOLUME_REPLICATION_GROUP, namespace=namespace)
-    vrg_list = vrg_obj.get().get("items")
+    vrg_obj = ocp.OCP(kind=constants.VOLUME_REPLICATION_GROUP, namespace=namespace, resource_name=resource_name)
+    if resource_name:
+        vrg_list = vrg_obj.get()
+    else:
+        vrg_list = vrg_obj.get().get("items")
 
     # Skip state check if resource was deleted
     if len(vrg_list) == 0 and state.lower() == "secondary":
         logger.info("VRG resource not found, skipping state check")
         return True
+    if resource_name:
+        vrg_list_index = vrg_list
+    else:
+        vrg_list_index = vrg_list[0]
 
-    vrg_name = vrg_list[0]["metadata"]["name"]
-    desired_state = vrg_list[0]["spec"]["replicationState"]
-    current_state = vrg_list[0]["status"]["state"]
+    vrg_name = vrg_list_index["metadata"]["name"]
+    desired_state = vrg_list_index["spec"]["replicationState"]
+    current_state = vrg_list_index["status"]["state"]
     logger.info(
         f"VRG: {vrg_name} desired state is {desired_state}, current state is {current_state}"
     )
@@ -544,7 +552,7 @@ def check_vrg_state(state, namespace):
 
 
 def wait_for_replication_resources_creation(
-    vr_count, namespace, timeout, discovered_apps=False
+    vr_count, namespace, timeout, discovered_apps=False, vrg_name=""
 ):
     """
     Wait for replication resources to be created
@@ -555,6 +563,7 @@ def wait_for_replication_resources_creation(
         timeout (int): time in seconds to wait for VR or ReplicationSource resources to be created
             or reach expected state
         discovered_apps (bool): If true then deployed workload is discovered_apps
+        vrg_name (str): Name of VRG
 
     Raises:
         TimeoutExpiredError: In case replication resources not created
@@ -610,6 +619,7 @@ def wait_for_replication_resources_creation(
         func=check_vrg_state,
         state="primary",
         namespace=vrg_namespace,
+        resource_name=vrg_name
     )
     if not sample.wait_for_func_status(result=True):
         error_msg = "VRG hasn't reached expected state primary within the time limit."
@@ -617,7 +627,7 @@ def wait_for_replication_resources_creation(
         raise TimeoutExpiredError(error_msg)
 
 
-def wait_for_replication_resources_deletion(namespace, timeout, check_state=True):
+def wait_for_replication_resources_deletion(namespace, timeout, check_state=True, vrg_name=""):
     """
     Wait for replication resources to be deleted
 
@@ -626,6 +636,7 @@ def wait_for_replication_resources_deletion(namespace, timeout, check_state=True
         timeout (int): time in seconds to wait for resources to reach expected
             state or deleted
         check_state (bool): True for checking resources state before deletion, False otherwise
+        vrg_name (str): Name of VRG
 
     Raises:
         TimeoutExpiredError: In case replication resources not deleted
@@ -661,6 +672,7 @@ def wait_for_replication_resources_deletion(namespace, timeout, check_state=True
             func=check_vrg_state,
             state="secondary",
             namespace=namespace,
+            resource_name=vrg_name
         )
         if not sample.wait_for_func_status(result=True):
             error_msg = (
@@ -697,6 +709,7 @@ def wait_for_all_resources_creation(
     timeout=900,
     skip_replication_resources=False,
     discovered_apps=False,
+    vrg_name="",
 ):
     """
     Wait for workload and replication resources to be created
@@ -708,6 +721,7 @@ def wait_for_all_resources_creation(
         timeout (int): time in seconds to wait for resource creation
         skip_replication_resources (bool): if true vr status wont't be check
         discovered_apps (bool): If true then deployed workload is discovered_apps
+        vrg_name (str): Name of vrg
 
 
     """
@@ -729,7 +743,7 @@ def wait_for_all_resources_creation(
     )
     if not skip_replication_resources:
         wait_for_replication_resources_creation(
-            pvc_count, namespace, timeout, discovered_apps
+            pvc_count, namespace, timeout, discovered_apps, vrg_name
         )
 
 
@@ -743,6 +757,7 @@ def wait_for_all_resources_deletion(
         namespace (str): the namespace of the workload
         check_replication_resources_state (bool): True for checking replication resources state, False otherwise
         timeout (int): time in seconds to wait for resource deletion
+        vrg_name (str): Name of vrg
 
     """
     logger.info("Waiting for all pods to be deleted")
