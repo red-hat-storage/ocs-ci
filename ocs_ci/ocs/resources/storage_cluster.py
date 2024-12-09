@@ -2931,3 +2931,28 @@ def get_csi_images_for_client_ocp_version(ocp_version=None):
     csi_ocp_version_images = csi_images.split(first_str)[1].split(last_str)[0]
     csi_ocp_version_images_urls = extract_image_urls(csi_ocp_version_images)
     return csi_ocp_version_images_urls
+
+
+def get_storageclass_with_rbd_namespace(rbd_namespace):
+    """
+    Get the storage class with the specified rbd namespace
+
+    Args:
+        rbd_namespace (str): The rbd namespace to search in the storage classes
+
+    Returns:
+        dict: The storage class with the specified rbd namespace. If not found, it returns None.
+
+    """
+    storage_classes = get_all_storageclass()
+    for sc in storage_classes:
+        parameters_list = sc.get("parameters")
+        if any([rbd_namespace in param for param in parameters_list.values()]):
+            log.info(
+                f"Found the storageclass {sc['metadata']['name']} with the "
+                f"rbd namespace {rbd_namespace}"
+            )
+            return sc
+
+    log.warning(f"Didn't find the storageclass with the rbd namespace {rbd_namespace}")
+    return None
