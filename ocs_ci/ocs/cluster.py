@@ -3829,7 +3829,7 @@ def get_age_of_cluster_in_days():
 
 def get_active_mds_count():
     """
-    Get the active mds count from the system
+    Get the active mds count from the system.
 
     Returns:
          int: active_mds_count
@@ -3901,7 +3901,7 @@ def adjust_active_mds_count(target_count):
 
 def get_active_mds_pods():
     """
-    Gets active mds pod objs
+    Gets active mds pods objs.
 
     Returns:
         dict: mds pod objs
@@ -3921,3 +3921,4 @@ def get_active_mds_pods():
         if any(daemon_name in pod.name for daemon_name in ceph_daemon_name)
     ]
     return active_mds_pods
+
