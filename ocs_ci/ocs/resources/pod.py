@@ -796,7 +796,7 @@ def get_ceph_tools_pod(
         cluster_kubeconfig = config.ENV_DATA.get("provider_kubeconfig", "")
 
     if cluster_kubeconfig:
-        namespace = constants.OPENSHIFT_STORAGE_NAMESPACE
+        namespace = config.ENV_DATA["cluster_namespace"]
     else:
         namespace = namespace or config.ENV_DATA["cluster_namespace"]
 
@@ -1574,7 +1574,7 @@ def run_io_and_verify_mount_point(pod_obj, bs="10M", count="950"):
 
 def get_pods_having_label(
     label,
-    namespace=constants.OPENSHIFT_STORAGE_NAMESPACE,
+    namespace=config.ENV_DATA["cluster_namespace"],
     retry=0,
     cluster_config=None,
     statuses=None,
@@ -3718,7 +3718,7 @@ def get_mon_pod_by_pvc_name(pvc_name: str):
     return Pod(**mon_pod_ocp)
 
 
-def get_debug_pods(debug_nodes, namespace=constants.OPENSHIFT_STORAGE_NAMESPACE):
+def get_debug_pods(debug_nodes, namespace=config.ENV_DATA["cluster_namespace"]):
     """
     Get debug pods created for the nodes in debug
 
@@ -3743,7 +3743,7 @@ def get_debug_pods(debug_nodes, namespace=constants.OPENSHIFT_STORAGE_NAMESPACE)
 
 
 def wait_for_pods_deletion(
-    label, timeout=120, sleep=5, namespace=constants.OPENSHIFT_STORAGE_NAMESPACE
+    label, timeout=120, sleep=5, namespace=config.ENV_DATA["cluster_namespace"]
 ):
     """
     Wait for the pods with particular label to be deleted

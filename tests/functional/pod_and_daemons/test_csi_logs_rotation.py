@@ -2,9 +2,9 @@ import time
 import logging
 import pytest
 
+from ocs_ci.framework import config
 from ocs_ci.framework.testlib import BaseTest
 from ocs_ci.ocs.resources import pod
-from ocs_ci.ocs.constants import OPENSHIFT_STORAGE_NAMESPACE
 from ocs_ci.framework.pytest_customization.marks import (
     brown_squad,
     tier2,
@@ -161,7 +161,7 @@ class TestPodsCsiLogRotation(BaseTest):
 
         """
         csi_interface_plugin_pod_objs = pod.get_all_pods(
-            namespace=OPENSHIFT_STORAGE_NAMESPACE, selector=[pod_selector]
+            namespace=config.ENV_DATA["cluster_namespace"], selector=[pod_selector]
         )
 
         # check on the first pod

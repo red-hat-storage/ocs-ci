@@ -122,9 +122,7 @@ class TestODFTopology(object):
             interface=constants.CEPHBLOCKPOOL,
             access_mode=constants.ACCESS_MODE_RWO,
             status=constants.STATUS_BOUND,
-            project=OCP(
-                kind="Project", namespace=constants.OPENSHIFT_STORAGE_NAMESPACE
-            ),
+            project=OCP(kind="Project", namespace=config.ENV_DATA["cluster_namespace"]),
         )
         pod_obj = helpers.create_pod(
             interface_type=constants.CEPHBLOCKPOOL,
