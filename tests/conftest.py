@@ -530,7 +530,7 @@ def pytest_collection_modifyitems(session, config, items):
         # across the tests as Y stream upgrade will reload the config of target version
         for cluster in ocsci_config.clusters:
             for k in cluster.__dataclass_fields__.keys():
-                if k != 'PREUPGRADE_CONFIG':
+                if k != "PREUPGRADE_CONFIG":
                     cluster.PREUPGRADE_CONFIG[k] = deepcopy(getattr(cluster, k))
 
 
