@@ -3888,4 +3888,3 @@ def get_active_mds_pods():
         if any(daemon_name in pod.name for daemon_name in ceph_daemon_name)
     ]
     return active_mds_pods
-
