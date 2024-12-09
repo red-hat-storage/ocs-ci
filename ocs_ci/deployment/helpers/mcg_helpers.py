@@ -135,7 +135,9 @@ def check_if_mcg_secrets_in_env():
                 env["name"].split("_")[0] != "POSTGRES"
                 and env["name"].split("_")[0] != "POSTGRESQL"
             ) and ("valueFrom" in env and "secretKeyRef" in env["valueFrom"]):
-                logger.info(env)
+                logger.info(
+                    f"Non-psql secrets are referenced in the noobaa app env variable under {env}"
+                )
                 return True
         return False
 

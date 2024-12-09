@@ -370,8 +370,8 @@ def test_noobaa_root_secret():
 @mcg
 @post_upgrade
 @red_squad
-@bugzilla("")
-@polarion_id("")
+@bugzilla("2152143")
+@polarion_id("OCS-6296")
 @runs_on_provider
 @tier1
 def test_noobaa_secret_in_env_variable():
