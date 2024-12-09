@@ -334,7 +334,13 @@ class AcmAddClusters(AcmPageNavigator):
         This is a mandatory pre-check for Regional DR.
 
         """
-
+        timeout = 600
+        ibm_cloud_managed = (
+            config.ENV_DATA["platform"] == constants.IBMCLOUD_PLATFORM
+            and config.ENV_DATA["deployment_type"] == "managed"
+        )
+        if ibm_cloud_managed:
+            timeout = 2100
         self.navigate_clusters_page()
         cluster_sets_page = self.wait_until_expected_text_is_found(
             locator=self.page_nav["cluster-sets"],
@@ -360,34 +366,34 @@ class AcmAddClusters(AcmPageNavigator):
         assert self.wait_until_expected_text_is_found(
             locator=self.page_nav["connection-status-1"],
             expected_text="Healthy",
-            timeout=600,
+            timeout=timeout,
         ), "Connection status 1 is unhealthy for Submariner"
         assert self.wait_until_expected_text_is_found(
             locator=self.page_nav["connection-status-2"],
             expected_text="Healthy",
-            timeout=600,
+            timeout=timeout,
         ), "Connection status 2 is unhealthy for Submariner"
         log.info("Checking agent status of both the imported clusters")
         assert self.wait_until_expected_text_is_found(
             locator=self.page_nav["agent-status-1"],
             expected_text="Healthy",
-            timeout=600,
+            timeout=timeout,
         ), "Agent status 1 is unhealthy for Submariner"
         assert self.wait_until_expected_text_is_found(
             locator=self.page_nav["agent-status-2"],
             expected_text="Healthy",
-            timeout=600,
+            timeout=timeout,
         ), "Agent status 2 is unhealthy for Submariner"
         log.info("Checking if nodes of both the imported clusters are labeled or not")
         assert self.wait_until_expected_text_is_found(
             locator=self.page_nav["node-label-1"],
             expected_text="Nodes labeled",
-            timeout=600,
+            timeout=timeout,
         ), "First gateway node label check did not pass for Submariner"
         assert self.wait_until_expected_text_is_found(
             locator=self.page_nav["node-label-2"],
             expected_text="Nodes labeled",
-            timeout=600,
+            timeout=timeout,
         ), "Second gateway node label check did not pass for Submariner"
         self.take_screenshot()
         log.info("Submariner is healthy, check passed")
