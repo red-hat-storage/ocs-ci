@@ -472,7 +472,7 @@ class BucketLoggingManager:
         # The http_status field is 102 for intent logs
         if check_intent:
             for op, obj in expected_ops:
-                expected_ops_set.append(f"{op}-{obj}-102")
+                expected_ops_set.add(f"{op}-{obj}-102")
 
         # Parse the logs into a set of strings with the same format
         logs_set = {
