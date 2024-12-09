@@ -24,7 +24,7 @@ from ocs_ci.deployment.cnv import CNVInstaller
 from ocs_ci.deployment import factory as dep_factory
 from ocs_ci.deployment.helpers.hypershift_base import HyperShiftBase
 from ocs_ci.deployment.hosted_cluster import HostedClients
-from ocs_ci.framework import config as ocsci_config, Config
+from ocs_ci.framework import config as ocsci_config, Config, config
 import ocs_ci.framework.pytest_customization.marks
 from ocs_ci.framework.pytest_customization.marks import (
     deployment,
@@ -5698,6 +5698,9 @@ def nsfs_interface_fixture(request, service_account_factory):
         nsfs_deployment_data["metadata"]["name"] = create_unique_resource_name(
             "nsfs-interface", "deployment"
         )
+        nsfs_deployment_data["metadata"]["namespace"] = ocsci_config.ENV_DATA[
+            "cluster_namespace"
+        ]
         uid = nsfs_deployment_data["metadata"]["name"].split("-")[-1]
         nsfs_deployment_data["spec"]["selector"]["matchLabels"]["app"] += f"-{uid}"
         nsfs_deployment_data["spec"]["template"]["metadata"]["labels"][
@@ -8026,7 +8029,7 @@ def scale_noobaa_resources(request):
         storagecluster_obj = OCP(
             kind=constants.STORAGECLUSTER,
             resource_name=constants.DEFAULT_STORAGE_CLUSTER,
-            namespace=constants.OPENSHIFT_STORAGE_NAMESPACE,
+            namespace=config.ENV_DATA["cluster_namespace"],
         )
 
         scale_endpoint_pods_param = (
@@ -8343,7 +8346,7 @@ def scale_noobaa_db_pod_pv_size(request):
                 get_pods_having_label(
                     label=label,
                     retry=5,
-                    namespace=constants.OPENSHIFT_STORAGE_NAMESPACE,
+                    namespace=config.ENV_DATA["cluster_namespace"],
                 )
             )
 
@@ -8368,7 +8371,7 @@ def scale_noobaa_db_pod_pv_size(request):
                 get_pods_having_label(
                     label=label,
                     retry=5,
-                    namespace=constants.OPENSHIFT_STORAGE_NAMESPACE,
+                    namespace=config.ENV_DATA["cluster_namespace"],
                 )
             )
 

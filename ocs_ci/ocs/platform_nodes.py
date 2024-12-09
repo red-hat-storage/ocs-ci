@@ -3536,7 +3536,7 @@ class ROSAHCPNode(AWSNodes):
         Args:
             node_conf (dict): node configuration - custom dict that we use in rosa create/edit machinepool
             e.g.
-            {'machinepool': '<mp_name>',
+            {'machinepool_id': '<mp_name>',
             'instance_type': '<m5.xlarge>',
             'subnet': '<subnet_id>',
             'availability_zone': '<az>',
@@ -3556,8 +3556,6 @@ class ROSAHCPNode(AWSNodes):
                 "https://docs.redhat.com/en/documentation/red_hat_openshift_service_on_aws/4/html/"
                 "tutorials/getting-started-with-rosa#underlying-node-operating-system"
             )
-        if num_nodes is None:
-            raise ValueError("num_nodes must be provided")
 
         node_conf = node_conf or {}
 
@@ -3575,15 +3573,18 @@ class ROSAHCPNode(AWSNodes):
             num_nodes (int): Number of node instances to create.
 
         Returns:
-            list: List of AWSNode objects (no known use case for this for non UPI deploymen, which is ROSA HCP,
-            implemented due to common create_nodes signature)
+            list: List of (ROSAHCPNode) objects created by this method.
         """
         node_list = []
         cluster_name = config.ENV_DATA.get("cluster_name")
         node_conf = NodeConf(**node_conf)
-        machine_pool_id = node_conf.get("machinepool")
+        machinepool_id = node_conf.get("machinepool_id")
         machine_pools = MachinePools(cluster_name=cluster_name)
-        machine_pool = machine_pools.filter(id=machine_pool_id, pick_first=True)
+        machine_pool = machine_pools.filter(
+            machinepool_id=machinepool_id,
+            instance_type=node_conf.get("instance_type"),
+            pick_first=True,
+        )
 
         if (
             machine_pool.exist
@@ -3591,30 +3592,32 @@ class ROSAHCPNode(AWSNodes):
             and machine_pool.instance_type != node_conf.get("instance_type")
         ):
             raise UnavailableResourceException(
-                f"MachinePool '{machine_pool_id}' "
+                f"MachinePool '{machinepool_id}' "
                 "found with different instance type. "
                 "The test brakes logic, aborting test."
             )
         elif machine_pool.exist and machine_pool.instance_type == node_conf.get(
             "instance_type"
         ):
-            logger.info(f"MachinePool '{machine_pool_id}' found. Updating MachinePool")
+            logger.info(f"MachinePool '{machinepool_id}' found. Updating MachinePool")
             node_conf["replicas"] = machine_pool.replicas + num_nodes
             machine_pools.edit_machine_pool(node_conf, wait_ready=True)
         elif not machine_pool.exist:
             logger.info(
-                f"MachinePool '{machine_pool_id}' not found. Creating new MachinePool"
+                f"MachinePool '{machinepool_id}' not found. Creating new MachinePool"
             )
             # create random machinepool name if not provided
-            node_conf["machinepool"] = machine_pool_id or "mp_" + random_string(3)
+            node_conf["machinepool_id"] = machinepool_id or "mp_" + random_string(3)
             node_conf["instance_type"] = (
                 node_conf.get("instance_type")
                 or config.ENV_DATA["worker_instance_type"]
             )
-            machine_pools.create_machine_pool(node_conf, num_nodes)
+            node_conf["replicas"] = num_nodes
+            machine_pools.create_machine_pool(node_conf)
 
         node_conf["zone"] = self.az.get_zone_number()
         for _ in range(num_nodes):
+            # adding created nodes to the list of a nodes returned by this method
             node_list.append(ROSAHCPNode(node_conf, constants.RHCOS))
 
         return node_list

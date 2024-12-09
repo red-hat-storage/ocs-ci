@@ -55,6 +55,7 @@ class TestScaleOCBCreateDelete(E2ETest):
                     no_of_obc=self.num_obc_batch,
                     sc_name=constants.NOOBAA_SC,
                     namespace=self.namespace,
+                    noobaa_storage_class_name=noobaa_storage_class_name,
                 )
             )
             # Create job profile

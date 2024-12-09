@@ -1,9 +1,8 @@
 import logging
 
-
+from ocs_ci.framework import config
 from ocs_ci.ocs.ocp import OCP
 from ocs_ci.ocs.resources.ocs import OCS
-from ocs_ci.ocs import constants
 from ocs_ci.ocs.bucket_utils import (
     verify_s3_object_integrity,
     write_random_objects_in_pod,
@@ -45,7 +44,7 @@ class TestVirtualHostedBuckets:
         # create a route for the bucket create above
         s3_route_data = OCP(
             kind="route",
-            namespace=constants.OPENSHIFT_STORAGE_NAMESPACE,
+            namespace=config.ENV_DATA["cluster_namespace"],
             resource_name="s3",
         ).get()
         host_base = f'{s3_route_data["spec"]["host"]}'

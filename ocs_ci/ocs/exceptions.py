@@ -288,6 +288,10 @@ class ExternalClusterCephSSHAuthDetailsMissing(Exception):
     pass
 
 
+class ExternalClusterRBDNamespaceCreationFailed(Exception):
+    pass
+
+
 class CredReqSecretNotFound(Exception):
     pass
 

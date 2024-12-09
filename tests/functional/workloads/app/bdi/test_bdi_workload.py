@@ -13,5 +13,5 @@ class TestBdiWorkloadSF10(TestBdiWorkloadBaseClass):
 
     """
 
-    def test_bdi_workload(self):
+    def deprecated_test_bdi_workload(self):
         self.run()

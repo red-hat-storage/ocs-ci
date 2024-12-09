@@ -4,6 +4,8 @@ import pytest
 import yaml
 
 from tempfile import NamedTemporaryFile
+
+from ocs_ci.framework import config
 from ocs_ci.framework.pytest_customization.marks import bugzilla, green_squad
 from ocs_ci.framework.testlib import (
     skipif_ocp_version,
@@ -66,7 +68,7 @@ class TestCRRsourcesValidation(ManageTest):
         cr_resource_yaml,
         non_editable_patches,
         editable_patches,
-        namespace="openshift-storage",
+        namespace=config.ENV_DATA["cluster_namespace"],
     ):
         """
         Test that cr object is not editable once created

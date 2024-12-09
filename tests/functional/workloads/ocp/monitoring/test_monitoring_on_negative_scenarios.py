@@ -465,8 +465,18 @@ class TestMonitoringBackedByOCS(E2ETest):
         # Get the mgr pod obj
         mgr_pod_obj = pod.get_mgr_pods()
 
+        # Get active mgr pod
+        toolbox = pod.get_ceph_tools_pod()
+        active_mgr_pod_output = toolbox.exec_cmd_on_pod("ceph mgr stat")
+        active_mgr_pod_suffix = active_mgr_pod_output.get("active_name")
+        log.info(f"The active MGR pod is {active_mgr_pod_suffix}")
+        for obj in mgr_pod_obj:
+            if active_mgr_pod_suffix in obj.name:
+                active_mgr_pod_obj = obj
+        log.info(f"The active MGR pod name is  {active_mgr_pod_obj.name}")
+
         # Get the node where the mgr pod is hosted
-        mgr_node_obj = pod.get_pod_node(mgr_pod_obj[0])
+        mgr_node_obj = pod.get_pod_node(active_mgr_pod_obj)
 
         # Reboot the node where the mgr pod is hosted
         nodes.restart_nodes([mgr_node_obj])

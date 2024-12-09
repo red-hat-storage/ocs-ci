@@ -384,6 +384,11 @@ azure_kv_config_required = pytest.mark.skipif(
     reason="Azure KV config required to run the test.",
 )
 
+rosa_hcp_required = pytest.mark.skipif(
+    config.ENV_DATA["platform"].lower() != ROSA_HCP_PLATFORM,
+    reason="Test runs ONLY on ROSA HCP cluster",
+)
+
 external_mode_required = pytest.mark.skipif(
     config.DEPLOYMENT.get("external_mode") is not True,
     reason="Test will run on External Mode cluster only",

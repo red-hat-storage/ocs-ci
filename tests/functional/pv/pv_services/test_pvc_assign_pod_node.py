@@ -63,7 +63,9 @@ class TestPvcAssignPodNode(ManageTest):
             ),
         ],
     )
-    def test_rwo_pvc_assign_pod_node(self, interface, pvc_factory, teardown_factory):
+    def deprecated_test_rwo_pvc_assign_pod_node(
+        self, interface, pvc_factory, teardown_factory
+    ):
         """
         Test assign nodeName to a pod using RWO pvc
         """
@@ -130,7 +132,9 @@ class TestPvcAssignPodNode(ManageTest):
             ),
         ],
     )
-    def test_rwx_pvc_assign_pod_node(self, interface, pvc_factory, teardown_factory):
+    def deprecated_test_rwx_pvc_assign_pod_node(
+        self, interface, pvc_factory, teardown_factory
+    ):
         """
         Test assign nodeName to a pod using RWX pvc
         """

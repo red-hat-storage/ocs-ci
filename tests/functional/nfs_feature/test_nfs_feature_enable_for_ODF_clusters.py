@@ -64,7 +64,7 @@ class TestDefaultNfsDisabled(ManageTest):
 
         """
         storage_cluster_obj = ocp.OCP(
-            kind="Storagecluster", namespace="openshift-storage"
+            kind="Storagecluster", namespace=config.ENV_DATA["cluster_namespace"]
         )
         # Checks cephnfs resources not available by default
         cephnfs_resource = storage_cluster_obj.exec_oc_cmd("get cephnfs")
@@ -125,7 +125,7 @@ class TestNfsEnable(ManageTest):
         """
         self = request.node.cls
         log.info("-----Setup-----")
-        self.namespace = "openshift-storage"
+        self.namespace = config.ENV_DATA["cluster_namespace"]
         self.storage_cluster_obj = ocp.OCP(
             kind="Storagecluster", namespace=self.namespace
         )

@@ -5,6 +5,7 @@ import time
 
 from datetime import timedelta
 
+from ocs_ci.framework import config
 from ocs_ci.ocs.resources import pod
 from ocs_ci.ocs.node import get_nodes_having_label, get_ocs_nodes, get_node_objs
 from ocs_ci.ocs.resources.ocs import OCS
@@ -542,7 +543,7 @@ class StretchCluster(OCS):
         Reset connection scores for all the mon's
 
         """
-        mon_pods = get_mon_pods(namespace=constants.OPENSHIFT_STORAGE_NAMESPACE)
+        mon_pods = get_mon_pods(namespace=config.ENV_DATA["cluster_namespace"])
         for pod_obj in mon_pods:
             mon_pod_id = get_mon_pod_id(pod_obj)
             cmd = f"ceph daemon mon.{mon_pod_id} connection scores reset"

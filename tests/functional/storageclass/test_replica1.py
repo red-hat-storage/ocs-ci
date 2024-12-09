@@ -25,7 +25,6 @@ from ocs_ci.ocs.constants import (
     VOLUME_MODE_BLOCK,
     CSI_RBD_RAW_BLOCK_POD_YAML,
     DEFALUT_DEVICE_CLASS,
-    OPENSHIFT_STORAGE_NAMESPACE,
 )
 from ocs_ci.helpers.helpers import create_pvc
 from ocs_ci.utility.utils import validate_dict_values, compare_dictionaries
@@ -92,7 +91,9 @@ class TestReplicaOne:
 
         for osd in osd_names:
             pod = OCP(
-                kind=POD, namespace=OPENSHIFT_STORAGE_NAMESPACE, resource_name=osd
+                kind=POD,
+                namespace=config.ENV_DATA["cluster_namespace"],
+                resource_name=osd,
             )
             pod.wait_for_resource(condition=STATUS_RUNNING, column="STATUS")
 
@@ -103,7 +104,9 @@ class TestReplicaOne:
         yield
         log.info("Teardown function called")
         storage_cluster = replica1_setup
-        cephblockpools = OCP(kind=CEPHBLOCKPOOL, namespace=OPENSHIFT_STORAGE_NAMESPACE)
+        cephblockpools = OCP(
+            kind=CEPHBLOCKPOOL, namespace=config.ENV_DATA["cluster_namespace"]
+        )
         set_non_resilient_pool(storage_cluster, enable=False)
         delete_replica_1_sc()
         log.info("StorageClass Deleted")

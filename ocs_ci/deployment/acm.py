@@ -86,6 +86,8 @@ class Submariner(object):
         self.dr_only_list = []
 
     def deploy(self):
+        # Download subctl binary in any case.
+        self.download_binary()
         if self.source == "upstream":
             self.deploy_upstream()
         elif self.source == "downstream":
@@ -94,7 +96,6 @@ class Submariner(object):
             raise Exception(f"The Submariner source: {self.source} is not recognized")
 
     def deploy_upstream(self):
-        self.download_binary()
         self.submariner_configure_upstream()
 
     def deploy_downstream(self):

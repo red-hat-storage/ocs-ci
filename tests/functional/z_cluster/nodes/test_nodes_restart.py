@@ -112,6 +112,7 @@ class TestNodesRestart(ManageTest):
         ocp_nodes = get_node_objs()
         for node in ocp_nodes:
             nodes.restart_nodes(nodes=[node], wait=False)
+            pod.wait_for_ceph_cmd_execute_successfully(timeout=420, num_of_retries=2)
             self.sanity_helpers.health_check(cluster_check=False, tries=60)
 
         retry(CommandFailed, tries=8, delay=40, backoff=1)(

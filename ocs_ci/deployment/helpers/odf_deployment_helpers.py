@@ -37,4 +37,7 @@ def get_required_csvs():
     if ocs_version >= version.VERSION_4_17:
         operators_4_17_additions = [defaults.CEPHCSI_OPERATOR]
         ocs_operator_names.extend(operators_4_17_additions)
+    if ocs_version >= version.VERSION_4_18:
+        operators_4_18_additions = [defaults.ODF_DEPENDENCIES]
+        ocs_operator_names.extend(operators_4_18_additions)
     return ocs_operator_names

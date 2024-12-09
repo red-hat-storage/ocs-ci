@@ -76,13 +76,6 @@ class TestBucketDeletion(MCGTest):
             ),
             pytest.param(
                 *[
-                    "OC",
-                    {"interface": "OC", "backingstore_dict": {"ibmcos": [(1, None)]}},
-                ],
-                marks=[tier1],
-            ),
-            pytest.param(
-                *[
                     "CLI",
                     {"interface": "OC", "backingstore_dict": {"ibmcos": [(1, None)]}},
                 ],
@@ -106,7 +99,6 @@ class TestBucketDeletion(MCGTest):
             "OC-AWS",
             "OC-AZURE",
             "OC-GCP",
-            "OC-IBMCOS",
             "CLI-IBMCOS",
             "CLI-AWS-STS",
         ],

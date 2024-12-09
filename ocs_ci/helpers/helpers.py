@@ -615,7 +615,7 @@ def create_ceph_block_pool(
 
 
 def create_ceph_file_system(
-    cephfs_name=None, label=None, namespace=constants.OPENSHIFT_STORAGE_NAMESPACE
+    cephfs_name=None, label=None, namespace=config.ENV_DATA["cluster_namespace"]
 ):
     """
     Create a Ceph file system

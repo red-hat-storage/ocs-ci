@@ -373,7 +373,7 @@ class TestPvPool:
         # the backingstore has reached Rejected state
         pv_bs_obj = OCP(
             kind=constants.BACKINGSTORE,
-            namespace=constants.OPENSHIFT_STORAGE_NAMESPACE,
+            namespace=config.ENV_DATA["cluster_namespace"],
             resource_name=pv_backingstore.name,
         )
         assert pv_bs_obj.wait_for_resource(
