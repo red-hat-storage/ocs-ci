@@ -460,7 +460,10 @@ def ocs_install_verification(
         sc_cephfs = storage_class.get(
             resource_name=custom_sc[constants.OCS_COMPONENTS_MAP["cephfs"]]
         )
-
+    elif config.EXTERNAL_MODE.get("use_rbd_namespace"):
+        sc_rbd = storage_class.get(
+            resource_name=constants.DEFAULT_EXTERNAL_MODE_STORAGECLASS_RBD_NAMESPACE
+        )
     elif config.DEPLOYMENT["external_mode"]:
         sc_rbd = storage_class.get(
             resource_name=constants.DEFAULT_EXTERNAL_MODE_STORAGECLASS_RBD
