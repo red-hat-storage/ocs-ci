@@ -25,12 +25,13 @@ def add_nodes():
     Test for adding worker nodes to the cluster while IOs
     """
 
-    def factory(ocs_nodes=False, node_count=3, taint_label=None):
+    def factory(ocs_nodes=False, node_count=3, taint_label=None, node_conf=None):
         """
         Args:
             ocs_nodes (bool): True if new nodes are OCS, False otherwise
             node_count (int): Number of nodes to be added
             taint_label (str): Taint label to be added
+            node_conf (NodeConf): Node configuration
 
         """
 
@@ -55,6 +56,7 @@ def add_nodes():
                         num_nodes=node_count,
                         mark_for_ocs_label=ocs_nodes,
                         storage_nodes=True,
+                        node_conf=node_conf,
                     )
                 )
             else:
