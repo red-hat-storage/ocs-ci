@@ -3,6 +3,7 @@ import time
 import pytest
 import re
 
+from ocs_ci.ocs.constants import MANAGED_SERVICE_PLATFORMS
 from ocs_ci.ocs.resources.storage_cluster import verify_storage_cluster
 from ocs_ci.utility.utils import TimeoutSampler
 from ocs_ci.ocs.cluster import ceph_health_check
@@ -134,7 +135,10 @@ class TestRookCephLogRotate(ManageTest):
             pod.get_ceph_daemon_id(pod.get_mon_pods()[0]),
             "ceph-mon.",
         ]
-        if config.ENV_DATA["platform"].lower() in constants.CLOUD_PLATFORMS:
+        if config.ENV_DATA["platform"].lower() in (
+            *constants.CLOUD_PLATFORMS,
+            *MANAGED_SERVICE_PLATFORMS,
+        ):
             self.podtype_id["rgw"] = [
                 pod.get_rgw_pods,
                 pod.get_ceph_daemon_id(pod.get_rgw_pods()[0]),
