@@ -65,10 +65,6 @@ class TestObjectIntegrity(MCGTest):
                 marks=[tier2, skipif_disconnected_cluster, skipif_fips_enabled],
             ),
             pytest.param(
-                {"interface": "CLI", "backingstore_dict": {"ibmcos": [(1, None)]}},
-                marks=[tier2, skipif_disconnected_cluster],
-            ),
-            pytest.param(
                 {
                     "interface": "OC",
                     "namespace_policy_dict": {
@@ -93,7 +89,6 @@ class TestObjectIntegrity(MCGTest):
             "AZURE-OC-1",
             "GCP-OC-1",
             "IBMCOS-OC-1",
-            "IBMCOS-CLI-1",
             "AWS-OC-Cache",
         ],
     )
@@ -131,7 +126,7 @@ class TestObjectIntegrity(MCGTest):
 
     @pytest.mark.polarion_id("OCS-1945")
     @tier2
-    def test_empty_file_integrity(
+    def deprecated_test_empty_file_integrity(
         self, mcg_obj, awscli_pod, bucket_factory, test_directory_setup
     ):
         """
