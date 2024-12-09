@@ -244,7 +244,7 @@ class VirtualMachine(Virtctl):
         """
         Verifies vm status, its volume and ssh connectivity if ssh is configured
         """
-        if self.volume_interface == constants.VM_VOLUME_DV or constants.VM_VOLUME_DVT:
+        if self.volume_interface in (constants.VM_VOLUME_DV, constants.VM_VOLUME_DVT):
             self.verify_dv()
         self.wait_for_vm_status(status=constants.VM_RUNNING)
         if verify_ssh:
