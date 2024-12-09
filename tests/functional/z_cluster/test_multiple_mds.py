@@ -4,6 +4,7 @@ Test cases for multiple mds support
 
 import logging
 import random
+import time
 
 import pytest
 
@@ -63,12 +64,8 @@ class TestMultipleMds:
         """
         original_active_count = get_active_mds_count()
 
-        # Scale up active mds pods from 1 to 2.
-        new_active_mds_count = original_active_count + 1
-        adjust_active_mds_count(new_active_mds_count)
-
-        # Scale up active mds pods from 2 to 3.
-        new_active_mds_count = original_active_count + 1
+        # Scale up active mds pods from 1 to 2 and then 2 to 3
+        new_active_mds_count = original_active_count + 2
         adjust_active_mds_count(new_active_mds_count)
 
         # Verify active and standby-replay mds counts.
@@ -78,7 +75,6 @@ class TestMultipleMds:
         ceph_mdsmap = ceph_mdsmap["mdsmap"]
         # Counting active MDS daemons
         active_count = sum(1 for mds in ceph_mdsmap if mds["state"] == "active")
-
         standby_replay = sum(
             1 for mds in ceph_mdsmap if mds["state"] == "standby-replay"
         )
@@ -158,7 +154,6 @@ class TestMultipleMds:
         ceph_mdsmap = ceph_mdsmap["mdsmap"]
         # Counting active MDS daemons
         active_count = sum(1 for mds in ceph_mdsmap if mds["state"] == "active")
-
         standby_replay = sum(
             1 for mds in ceph_mdsmap if mds["state"] == "standby-replay"
         )
@@ -176,6 +171,8 @@ class TestMultipleMds:
         rand = random.randint(0, 1)
         ct_pod = pod.get_ceph_tools_pod()
         ct_pod.exec_ceph_cmd(f"ceph mds fail {rand}")
+        time.sleep(60)
+
         # Verify active and standby-replay mds counts.
         ct_pod = pod.get_ceph_tools_pod()
         ceph_mdsmap = ct_pod.exec_ceph_cmd("ceph fs status")
@@ -183,7 +180,6 @@ class TestMultipleMds:
         ceph_mdsmap = ceph_mdsmap["mdsmap"]
         # Counting active MDS daemons
         active_count = sum(1 for mds in ceph_mdsmap if mds["state"] == "active")
-
         standby_replay = sum(
             1 for mds in ceph_mdsmap if mds["state"] == "standby-replay"
         )
