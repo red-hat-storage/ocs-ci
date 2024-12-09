@@ -24,6 +24,24 @@ login = {
     ),
     "skip_tour": ('button[data-test="tour-step-footer-secondary"]', By.CSS_SELECTOR),
 }
+
+ibm_cloud_managed = (
+    config.ENV_DATA["platform"] == constants.IBMCLOUD_PLATFORM
+    and config.ENV_DATA["deployment_type"] == "managed"
+)
+login_ibm_cloud = {
+    "continue_button": ("continue-button", By.ID),
+    "login_page_title": "IBMid - Sign in or create an IBMid",
+    "login_2fa_input": ("mfa-authenticate-totp-input-verification-code", By.ID),
+    "login_2fa_verify": ("mfa-authenticate-totp-button-verify", By.ID),
+    "ocp_page": "Overview · Red Hat OpenShift Container Platform",
+    "username": ("username", By.ID),
+    "password": ("password", By.ID),
+    "click_login": ("signinbutton", By.ID),
+}
+if ibm_cloud_managed:
+    login.update(login_ibm_cloud)
+
 azure_managed = ""
 if (
     config.ENV_DATA["platform"] == constants.AZURE_PLATFORM
@@ -754,6 +772,8 @@ acm_page_nav = {
     "modal_dialog_close_button": ("//button[@aria-label='Close']", By.XPATH),
     "Policies": ("a[data-test-id='horizontal-link-Policies']", By.CSS_SELECTOR),
 }
+if ibm_cloud_managed:
+    acm_page_nav["Clusters_page"] = ("Cluster list", By.LINK_TEXT)
 
 acm_configuration = {
     "cluster-sets": ("//a[normalize-space()='Cluster sets']", By.XPATH),

@@ -192,7 +192,7 @@ def create_cluster(cluster_name):
     provider = config.ENV_DATA["provider"]
     worker_availability_zones = config.ENV_DATA.get("worker_availability_zones", [])
     worker_zones_number = len(worker_availability_zones)
-    zone = config.ENV_DATA["zone"]
+    zone = config.ENV_DATA["worker_availability_zone"]
     flavor = config.ENV_DATA["worker_instance_type"]
     worker_replicas = config.ENV_DATA["worker_replicas"]
     if worker_zones_number > 1:
@@ -211,7 +211,10 @@ def create_cluster(cluster_name):
         if semantic_ocp_version >= util_version.VERSION_4_15:
             cmd += " --disable-outbound-traffic-protection"
         vpc_id = config.ENV_DATA["vpc_id"]
-        subnet_id = config.ENV_DATA["subnet_id"]
+        subnet_id = config.ENV_DATA.get("subnet_id")
+        subnet_ids_per_zone = config.ENV_DATA.get("subnet_ids_per_zone", {}).get(zone)
+        if subnet_ids_per_zone:
+            subnet_id = subnet_ids_per_zone
         cmd += f" --vpc-id {vpc_id} --subnet-id  {subnet_id} --zone {zone}"
         cos_instance = config.ENV_DATA["cos_instance"]
         cmd += f" --cos-instance {cos_instance}"
