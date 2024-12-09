@@ -8,6 +8,8 @@ from ocs_ci.helpers import helpers
 from ocs_ci.ocs import cluster, constants
 from ocs_ci.utility import prometheus
 from ocs_ci.utility.utils import ceph_health_check_base
+from ocs_ci.framework import config
+from ocs_ci.ocs.ocp import OCP
 
 log = logging.getLogger(__name__)
 
@@ -27,12 +29,18 @@ def run_file_creator_io_with_cephfs(dc_pod_factory):
     interface = constants.CEPHFILESYSTEM
     log.info("Checking for Ceph Health OK")
     ceph_health_check_base()
+    ocp_project = OCP(
+        kind=constants.NAMESPACE, namespace=config.ENV_DATA["cluster_namespace"]
+    )
 
-    for dc_pod in range(10):
+    for dc_pod in range(12):
         log.info(f"Creating {interface} based PVC")
         log.info("Creating fedora dc pod")
         pod_obj = dc_pod_factory(
-            size="15", access_mode=access_mode, interface=interface
+            size="15",
+            access_mode=access_mode,
+            interface=interface,
+            project=ocp_project,
         )
         log.info("Copying file_creator_io.py to fedora pod ")
         cmd = f"oc cp {file} {pod_obj.namespace}/{pod_obj.name}:/"
@@ -108,4 +116,5 @@ class TestMdsCpuAlerts(E2ETest):
             "File creation IO started in the background."
             " Script will look for MDSCPUUsageHigh  alert"
         )
+
         assert active_mds_alert_values(threading_lock)
