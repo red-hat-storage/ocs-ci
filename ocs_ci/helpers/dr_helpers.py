@@ -520,7 +520,11 @@ def check_vrg_state(state, namespace, resource_name=""):
         bool: True if VRG is in expected state or was deleted, False otherwise
 
     """
-    vrg_obj = ocp.OCP(kind=constants.VOLUME_REPLICATION_GROUP, namespace=namespace, resource_name=resource_name)
+    vrg_obj = ocp.OCP(
+        kind=constants.VOLUME_REPLICATION_GROUP,
+        namespace=namespace,
+        resource_name=resource_name,
+    )
     if resource_name:
         vrg_list = vrg_obj.get()
     else:
@@ -626,7 +630,7 @@ def wait_for_replication_resources_creation(
         func=check_vrg_state,
         state="primary",
         namespace=vrg_namespace,
-        resource_name=vrg_name
+        resource_name=vrg_name,
     )
     if not sample.wait_for_func_status(result=True):
         error_msg = "VRG hasn't reached expected state primary within the time limit."
@@ -683,7 +687,7 @@ def wait_for_replication_resources_deletion(
             func=check_vrg_state,
             state="secondary",
             namespace=vrg_namespace,
-            resource_name=vrg_name
+            resource_name=vrg_name,
         )
         if not sample.wait_for_func_status(result=True):
             error_msg = (
