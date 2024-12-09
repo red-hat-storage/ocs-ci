@@ -1,5 +1,13 @@
 import logging
 
+
+from ocs_ci.framework.pytest_customization.marks import (
+    mcg,
+    red_squad,
+    bugzilla,
+    polarion_id,
+    tier2,
+)
 from ocs_ci.framework import config
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.ocp import OCP
@@ -9,8 +17,13 @@ from ocs_ci.ocs.resources.pod import get_pod_logs, get_noobaa_operator_pod
 logger = logging.getLogger(__name__)
 
 
+@mcg
+@red_squad
 class TestBucketClass:
 
+    @tier2
+    @bugzilla("2272084")
+    @polarion_id("OCS-6295")
     def test_bucketclass_modification(
         self,
         bucket_factory,
@@ -33,12 +46,13 @@ class TestBucketClass:
         bucket = bucket_factory(interface="CLI", bucketclass=bucketclass_dict)[0]
 
         # write some object data to the bucket
-        logger.info("Writing some objects to the bucket")
+        logger.info(f"Writing some objects to the bucket {bucket.name}")
         write_random_test_objects_to_bucket(
             awscli_pod,
             bucket.name,
             test_directory_setup.origin_dir,
             amount=1,
+            pattern="FirstWrite-",
             mcg_obj=mcg_obj,
         )
 
@@ -51,7 +65,9 @@ class TestBucketClass:
 
         # modify the existing bucketclass placement policy to Mirror from Spread
         # and add new backingstore under backingstores
-        logger.info("Updating bucketclass")
+        logger.info(
+            f"Changing bucketclass {bucket.bucketclass.name} placement policy from Spread to Mirror"
+        )
         obc_obj = OCP(
             kind=constants.BUCKETCLASS,
             namespace=config.ENV_DATA["cluster_namespace"],
@@ -63,9 +79,28 @@ class TestBucketClass:
             f' {{"op": "replace", "path": "/spec/placementPolicy/tiers/0/placement", "value": "Mirror"}}]',
             format_type="json",
         )
+        obc_obj.wait_for_resource(
+            condition=constants.STATUS_READY, column="PHASE", timeout=180
+        )
+
+        # Perform IO after the bucketclass is updated
+        logger.info(
+            f"Writing some new objects to the bucket {bucket.name} after bucketclass is modified"
+        )
+        write_random_test_objects_to_bucket(
+            awscli_pod,
+            bucket.name,
+            test_directory_setup.origin_dir,
+            amount=1,
+            pattern="SecondWrite-",
+            mcg_obj=mcg_obj,
+        )
 
         # create new bucket on top of updated bucketclass and write some data
+        logger.info("Creating new bucket using the update bucketclass")
         new_bucket = bucket_factory(bucketclass=bucket.bucketclass)[0]
+        logger.info(f"Created bucket {new_bucket.name}")
+        logger.info(f"Writing some object to the new bucket {new_bucket.name}")
         write_random_test_objects_to_bucket(
             awscli_pod,
             new_bucket.name,
