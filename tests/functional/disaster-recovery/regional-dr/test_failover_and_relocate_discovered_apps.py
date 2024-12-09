@@ -1,6 +1,7 @@
 import logging
 from time import sleep
 
+import pytest
 
 from ocs_ci.framework import config
 from ocs_ci.framework.testlib import acceptance, tier1, skipif_ocs_version
@@ -8,6 +9,7 @@ from ocs_ci.framework.pytest_customization.marks import rdr, turquoise_squad
 from ocs_ci.helpers import dr_helpers
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.resources.drpc import DRPC
+from ocs_ci.ocs import constants
 
 logger = logging.getLogger(__name__)
 
@@ -23,7 +25,38 @@ class TestFailoverAndRelocateWithDiscoveredApps:
 
     """
 
-    def test_failover_and_relocate_discovered_apps(self, discovered_apps_dr_workload):
+    @pytest.mark.parametrize(
+        argnames=["primary_cluster_down", "pvc_interface"],
+        argvalues=[
+            # pytest.param(
+            #     False,
+            #     constants.CEPHBLOCKPOOL,
+            #     # marks=pytest.mark.polarion_id(polarion_id_primary_up),
+            #     id="primary_up-rbd",
+            # ),
+            # pytest.param(
+            #     True,
+            #     constants.CEPHBLOCKPOOL,
+            #     # marks=pytest.mark.polarion_id(polarion_id_primary_down),
+            #     id="primary_down-rbd",
+            # ),
+            pytest.param(
+                False,
+                constants.CEPHFILESYSTEM,
+                # marks=pytest.mark.polarion_id(polarion_id_primary_up_cephfs),
+                id="primary_up-cephfs",
+            ),
+            # pytest.param(
+            #     True,
+            #     constants.CEPHFILESYSTEM,
+            #     # marks=pytest.mark.polarion_id(polarion_id_primary_down_cephfs),
+            #     id="primary_down-cephfs",
+            # ),
+        ],
+    )
+
+    def test_failover_and_relocate_discovered_apps(self, discovered_apps_dr_workload, primary_cluster_down,
+        pvc_interface,):
         """
         Tests to verify application failover and Relocate with Discovered Apps
         There are two test cases:
@@ -32,7 +65,7 @@ class TestFailoverAndRelocateWithDiscoveredApps:
 
         """
 
-        rdr_workload = discovered_apps_dr_workload()[0]
+        rdr_workload = discovered_apps_dr_workload(pvc_interface=pvc_interface)[0]
 
         primary_cluster_name_before_failover = (
             dr_helpers.get_current_primary_cluster_name(
@@ -51,6 +84,12 @@ class TestFailoverAndRelocateWithDiscoveredApps:
         wait_time = 2 * scheduling_interval  # Time in minutes
         logger.info(f"Waiting for {wait_time} minutes to run IOs")
         sleep(wait_time * 60)
+        if pvc_interface == constants.CEPHFILESYSTEM:
+            # Verify the creation of ReplicationDestination resources on secondary cluster
+            config.switch_to_cluster_by_name(secondary_cluster_name)
+            dr_helpers.wait_for_replication_destinations_creation(
+                rdr_workload.workload_pvc_count, rdr_workload.workload_namespace
+            )
 
         logger.info("Checking for lastKubeObjectProtectionTime")
         dr_helpers.verify_last_kubeobject_protection_time(
@@ -79,10 +118,22 @@ class TestFailoverAndRelocateWithDiscoveredApps:
             rdr_workload.workload_pvc_count,
             rdr_workload.workload_pod_count,
             rdr_workload.workload_namespace,
+            timeout=1200,
             discovered_apps=True,
             vrg_name=rdr_workload.discovered_apps_placement_name,
+
         )
 
+        if pvc_interface == constants.CEPHFILESYSTEM:
+            config.switch_to_cluster_by_name(secondary_cluster_name)
+            dr_helpers.wait_for_replication_destinations_deletion(
+                rdr_workload.workload_namespace
+            )
+            # Verify the creation of ReplicationDestination resources on primary cluster
+            config.switch_to_cluster_by_name(primary_cluster_name_before_failover)
+            dr_helpers.wait_for_replication_destinations_creation(
+                rdr_workload.workload_pvc_count, rdr_workload.workload_namespace
+            )
         # Doing Relocate
         primary_cluster_name_after_failover = (
             dr_helpers.get_current_primary_cluster_name(
@@ -122,4 +173,25 @@ class TestFailoverAndRelocateWithDiscoveredApps:
             drpc_obj, rdr_workload.kubeobject_capture_interval_int
         )
 
+        # Verify resources creation on secondary cluster (failoverCluster)
+        config.switch_to_cluster_by_name(primary_cluster_name_before_failover)
+        dr_helpers.wait_for_all_resources_creation(
+            rdr_workload.workload_pvc_count,
+            rdr_workload.workload_pod_count,
+            rdr_workload.workload_namespace,
+            timeout=1200,
+            discovered_apps=True,
+
+        )
+
+        if pvc_interface == constants.CEPHFILESYSTEM:
+            config.switch_to_cluster_by_name(primary_cluster_name_before_failover)
+            dr_helpers.wait_for_replication_destinations_deletion(
+                rdr_workload.workload_namespace
+            )
+            # Verify the creation of ReplicationDestination resources on primary cluster
+            config.switch_to_cluster_by_name(secondary_cluster_name)
+            dr_helpers.wait_for_replication_destinations_creation(
+                rdr_workload.workload_pvc_count, rdr_workload.workload_namespace
+            )
         # TODO: Add data integrity checks
