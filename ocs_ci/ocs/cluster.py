@@ -3893,6 +3893,8 @@ def adjust_active_mds_count(target_count):
         )
 
     # Retrieve the current activeMetadataServers count again
+    logger.info("Sleeping 1 minute")
+    time.sleep(60)
     current_count = get_active_mds_count()
     assert (
         target_count == current_count
