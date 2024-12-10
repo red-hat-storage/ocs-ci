@@ -197,7 +197,7 @@ from ocs_ci.helpers.longevity_helpers import (
 )
 from ocs_ci.ocs.longevity import start_app_workload
 from ocs_ci.utility.decorators import switch_to_default_cluster_index_at_last
-
+from ocs_ci.helpers.keyrotation_helper import PVKeyrotation
 
 log = logging.getLogger(__name__)
 
@@ -7092,6 +7092,112 @@ def cnv_workload(request):
             cnv_wl.delete()
 
     request.addfinalizer(teardown)
+    return factory
+
+
+@pytest.fixture
+def multi_cnv_workload(
+    pv_encryption_kms_setup_factory, storageclass_factory, cnv_workload
+):
+    """
+    Create a cnv factory. Calling this fixture Creates multiple VMs
+    with specified configurations using the cnv_workload fixture.
+    """
+
+    def factory(namespace=None):
+        """
+        Args:
+            namespace (str, optional): The namespace to create the vm on.
+
+        Returns:
+            lists: objects of cnv workload class with default comp and aggressive compression
+
+        """
+        vm_list_agg_compr = []
+        vm_list_default_compr = []
+
+        namespace = (
+            namespace if namespace else create_unique_resource_name("vm", "namespace")
+        )
+
+        # Setup csi-kms-connection-details configmap
+        log.info("Setting up csi-kms-connection-details configmap")
+        kms = pv_encryption_kms_setup_factory(kv_version="v2")
+        log.info("csi-kms-connection-details setup successful")
+
+        # Create an encryption enabled storageclass for RBD
+        sc_obj_def_compr = storageclass_factory(
+            interface=constants.CEPHBLOCKPOOL,
+            encrypted=True,
+            encryption_kms_id=kms.kmsid,
+            new_rbd_pool=True,
+        )
+
+        sc_obj_aggressive = storageclass_factory(
+            interface=constants.CEPHBLOCKPOOL,
+            encrypted=True,
+            encryption_kms_id=kms.kmsid,
+            compression="aggressive",
+            new_rbd_pool=True,
+        )
+        vm_configs = [
+            {
+                "volume_interface": constants.VM_VOLUME_PVC,
+                "access_mode": constants.ACCESS_MODE_RWX,
+                "sc_name": sc_obj_def_compr.name,
+            },
+            {
+                "volume_interface": constants.VM_VOLUME_PVC,
+                "access_mode": constants.ACCESS_MODE_RWX,
+                "sc_name": sc_obj_aggressive.name,
+            },
+            {
+                "volume_interface": constants.VM_VOLUME_PVC,
+                "access_mode": constants.ACCESS_MODE_RWO,
+                "sc_name": sc_obj_def_compr.name,
+            },
+            {
+                "volume_interface": constants.VM_VOLUME_DVT,
+                "access_mode": constants.ACCESS_MODE_RWX,
+                "sc_name": sc_obj_def_compr.name,
+            },
+            {
+                "volume_interface": constants.VM_VOLUME_DVT,
+                "access_mode": constants.ACCESS_MODE_RWX,
+                "sc_name": sc_obj_aggressive.name,
+            },
+        ]
+
+        # Create ceph-csi-kms-token in the tenant namespace
+        kms.vault_path_token = kms.generate_vault_token()
+        kms.create_vault_csi_kms_token(namespace=namespace)
+
+        for sc_obj in [sc_obj_def_compr, sc_obj_aggressive]:
+            pvk_obj = PVKeyrotation(sc_obj)
+            pvk_obj.annotate_storageclass_key_rotation(schedule="*/3 * * * *")
+
+        # Loop through vm_configs and create the VMs using the cnv_workload fixture
+        for config in vm_configs:
+            vm_obj = cnv_workload(
+                volume_interface=config["volume_interface"],
+                access_mode=config["access_mode"],
+                storageclass=config["sc_name"],
+                pvc_size="30Gi",  # Assuming pvc_size is fixed for all
+                source_url=constants.CNV_FEDORA_SOURCE,  # Assuming source_url is the same for all VMs
+                namespace=namespace,
+            )
+            vm_obj = vm_obj[-1]
+            if config["sc_name"] == sc_obj_aggressive.name:
+                vm_list_agg_compr.append(vm_obj)
+            else:
+                vm_list_default_compr.append(vm_obj)
+        return (
+            vm_list_default_compr,
+            vm_list_agg_compr,
+            sc_obj_aggressive,
+            sc_obj_def_compr,
+        )
+
     return factory
 
 
