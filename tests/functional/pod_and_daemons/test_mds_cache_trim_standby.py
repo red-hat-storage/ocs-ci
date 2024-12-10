@@ -1,0 +1,87 @@
+import logging
+import pytest
+
+from ocs_ci.framework.pytest_customization.marks import (
+    brown_squad,
+    skipif_ocs_version,
+    bugzilla,
+)
+from ocs_ci.framework.testlib import E2ETest, tier2, skipif_external_mode
+from ocs_ci.helpers.e2e_helpers import run_metadata_io_with_cephfs
+from ocs_ci.ocs import cluster
+from ocs_ci.ocs.resources.pod import get_pod_logs
+from ocs_ci.utility.utils import TimeoutSampler
+
+log = logging.getLogger(__name__)
+
+
+@tier2
+@bugzilla("2141422")
+@brown_squad
+@skipif_ocs_version("<4.15")
+@skipif_external_mode
+class TestMdsCacheTrimStandby(E2ETest):
+    @pytest.fixture(scope="function", autouse=True)
+    def teardown(self, request):
+        def finalizer():
+            """
+            This function will call a function to clear the mds memory usage gradually
+
+            """
+            cluster.bring_down_mds_memory_usage_gradually()
+
+        request.addfinalizer(finalizer)
+
+    @pytest.mark.polarion_id("OCS-6280")
+    def test_mds_cache_trim_on_standby_replay(self, dc_pod_factory):
+        """
+        Verifies whether the MDS cache is trimmed or not in standby-replay mode.
+
+        """
+        run_metadata_io_with_cephfs(dc_pod_factory, no_of_io_pods=5)
+        log.info(
+            "Starting metadata IO in the background. Monitoring for MDS cache alerts."
+        )
+
+        trim_msgs = ["cache trim"]
+        cache_warning = "MDSs report oversized cache"
+
+        for sampler in TimeoutSampler(
+            timeout=1800,
+            sleep=20,
+            func=cluster.get_active_mds_memory_utilisation_in_percentage,
+        ):
+            if sampler > 75:
+                break
+            else:
+                log.warning("MDS memory consumption is not yet reached target")
+
+        active_mds_mem_util = cluster.get_active_mds_memory_utilisation_in_percentage()
+        sr_mds_mem_util = (
+            cluster.get_standby_replay_mds_memory_utilisation_in_percentage()
+        )
+
+        log.info(f"Active MDS memory utilization: {active_mds_mem_util}%")
+        log.info(f"Standby-replay MDS memory utilization: {sr_mds_mem_util}%")
+        ceph_health_detail = cluster.ceph_health_detail()
+
+        standby_replay_mds_log = get_pod_logs(
+            pod_name=cluster.get_mds_standby_replay_info()["standby_replay_pod"]
+        )
+
+        cache_trim_validation = [
+            msg for msg in trim_msgs if msg in standby_replay_mds_log
+        ]
+
+        assert (
+            cache_trim_validation
+        ), f"Cache trim messages not found in standby-replay MDS logs: {standby_replay_mds_log}"
+
+        log.info("MDS cache trim is happening on standby-replay MDS")
+
+        if cache_warning not in ceph_health_detail:
+            log.info("No cache oversized warnings detected in Ceph health details.")
+        elif cache_warning in standby_replay_mds_log:
+            raise AssertionError(
+                f"Cache oversized warning found in standby-replay MDS: {ceph_health_detail}"
+            )
