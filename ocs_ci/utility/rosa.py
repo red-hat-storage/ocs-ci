@@ -19,6 +19,7 @@ from ocs_ci.ocs.exceptions import (
     ResourceWrongStatusException,
     TimeoutExpiredError,
 )
+from ocs_ci.ocs.machinepool import MachinePools, NodeConf
 from ocs_ci.utility import openshift_dedicated as ocm
 from ocs_ci.utility import utils
 
@@ -1112,3 +1113,41 @@ def get_associated_oidc_config_id(cluster_name):
         logger.warning(f"Failed to get OIDC config id: {proc.stderr.decode().strip()}")
         return ""
     return proc.stdout.decode().strip()
+
+
+def label_nodes(cluster_name, machinepool_id, labels, rewrite=False):
+    """
+    Label nodes of the given cluster.
+    ! Important
+    This method rewrites existing behavior of labeling nodes in the cluster, it appends the labels to the existing
+    labels, but not rewrite them. This prevents the issue of accidental overwriting the existing labels.
+
+    Args:
+        cluster_name (str): The cluster name
+        machinepool_id (str): The machinepool id
+        labels (str): The labels to apply
+        rewrite (bool): If True, rewrite the labels. False, otherwise.
+
+    Returns:
+        str: The output of the command
+    """
+    machine_pools = MachinePools(cluster_name)
+    machine_pool = machine_pools.filter(machinepool_id="workers", pick_first=True)
+    if not rewrite:
+        labels_dict = machine_pool.labels
+        logger.info(f"Existing labels: {labels_dict}")
+        # convert to comma separated string
+        if labels_dict:
+            labels = (
+                ",".join([f"{key}={value}" for key, value in labels_dict.items()])
+                + ","
+                + labels
+            )
+        else:
+            labels = labels
+    machine_pools.edit_machine_pool(
+        NodeConf(**{"machinepool_id": machinepool_id, "labels": labels}),
+        wait_ready=False,
+    )
+    machine_pool.refresh()
+    return machine_pool.labels
