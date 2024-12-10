@@ -1120,29 +1120,7 @@ def label_nodes(cluster_name, machinepool_id, labels, rewrite=False):
     Label nodes of the given cluster.
     ! Important
     This method rewrites existing behavior of labeling nodes in the cluster, it appends the labels to the existing
-    labels, but not rewrite them. This prevents the issue of overwriting the existing labels.
-
-    For reference, existing labels are:
-
-    beta.kubernetes.io/arch: amd64
-    beta.kubernetes.io/instance-type: m5.12xlarge
-    beta.kubernetes.io/os: linux
-    cluster.ocs.openshift.io/openshift-storage: ""
-    failure-domain.beta.kubernetes.io/region: us-west-2
-    failure-domain.beta.kubernetes.io/zone: us-west-2a
-    hypershift.openshift.io/managed: "true"
-    hypershift.openshift.io/nodePool: <cluster-name>-workers
-    kubernetes.io/arch: amd64
-    kubernetes.io/hostname: ip-<...>.us-west-2.compute.internal
-    kubernetes.io/os: linux
-    node-role.kubernetes.io/worker: ""
-    node.kubernetes.io/instance-type: m5.12xlarge
-    node.openshift.io/os_id: rhcos
-    topology.ebs.csi.aws.com/zone: us-west-2a
-    topology.k8s.aws/zone-id: usw2-az1
-    topology.kubernetes.io/region: us-west-2
-    topology.kubernetes.io/zone: us-west-2a
-    topology.rook.io/rack: rack2
+    labels, but not rewrite them. This prevents the issue of accidental overwriting the existing labels.
 
     Args:
         cluster_name (str): The cluster name
