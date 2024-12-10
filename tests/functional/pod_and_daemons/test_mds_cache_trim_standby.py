@@ -2,7 +2,7 @@ import logging
 import pytest
 
 from ocs_ci.framework.pytest_customization.marks import (
-    magenta_squad,
+    brown_squad,
     skipif_ocs_version,
     bugzilla,
 )
@@ -17,7 +17,7 @@ log = logging.getLogger(__name__)
 
 @tier2
 @bugzilla("2141422")
-@magenta_squad
+@brown_squad
 @skipif_ocs_version("<4.15")
 @skipif_external_mode
 class TestMdsCacheTrimStandby(E2ETest):
