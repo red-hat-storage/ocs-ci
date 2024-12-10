@@ -21,7 +21,7 @@ from ocs_ci.ocs.ocp import OCP
 logger = logging.getLogger(__name__)
 
 
-def create_namespace(yaml_file):
+def create_namespace(yaml_file, skip_resource_exists=False):
     """
     Creation of namespace "openshift-operators-redhat"
     for Elasticsearch-operator and "openshift-logging"
@@ -29,6 +29,7 @@ def create_namespace(yaml_file):
 
     Args:
         yaml_file (str): Path to yaml file to create namespace
+        skip_resource_exists: Skip the namespace creation if it already exists
 
     Example:
         create_namespace(yaml_file=constants.EO_NAMESPACE_YAML)
@@ -38,11 +39,20 @@ def create_namespace(yaml_file):
     namespaces = ocp.OCP(kind=constants.NAMESPACES)
 
     logger.info("Creating Namespace.........")
-    assert namespaces.create(yaml_file=yaml_file), "Failed to create namespace"
+    try:
+        assert namespaces.create(yaml_file=yaml_file), "Failed to create namespace"
+    except CommandFailed as e:
+        if "AlreadyExists" in str(e) and skip_resource_exists:
+            # on Rosa HCP the ns created from the deployment
+            logger.warning("Namespace already exists")
+        else:
+            raise
     logger.info("Successfully created Namespace")
 
 
-def create_elasticsearch_operator_group(yaml_file, resource_name):
+def create_elasticsearch_operator_group(
+    yaml_file, resource_name, skip_resource_exists=False
+):
     """
     Creation of operator-group for Elastic-search operator
 
@@ -51,6 +61,7 @@ def create_elasticsearch_operator_group(yaml_file, resource_name):
             elastic-search
         resource_name (str): Name of the operator group to create for
             elastic-search
+        skip_resource_exists: Skip the resource creation if it already exists
 
     Returns:
         bool: True if operator group for elastic search is created
@@ -69,7 +80,14 @@ def create_elasticsearch_operator_group(yaml_file, resource_name):
         namespace=constants.OPENSHIFT_OPERATORS_REDHAT_NAMESPACE,
     )
 
-    es_operator_group.create(yaml_file=yaml_file)
+    try:
+        es_operator_group.create(yaml_file=yaml_file)
+    except CommandFailed as e:
+        if "AlreadyExists" in str(e) and skip_resource_exists:
+            logger.warning("Operator group already exists")
+            return True
+        else:
+            raise
     try:
         es_operator_group.get(resource_name, out_yaml_format=True)
         logger.info("The Operator group is created successfully")
@@ -79,7 +97,7 @@ def create_elasticsearch_operator_group(yaml_file, resource_name):
     return True
 
 
-def set_rbac(yaml_file, resource_name):
+def set_rbac(yaml_file, resource_name, skip_resource_exists=False):
     """
     Setting Role Based Access Control to grant Prometheus
     permission to access the openshift-operators-redhat namespace
@@ -89,7 +107,7 @@ def set_rbac(yaml_file, resource_name):
             (ROLE BASED ACCESS CONTROL)
         resource_name (str): Name of the resource for which we give RBAC
             permissions
-
+        skip_resource_exists: Skip the resource creation if it already exists
     Returns:
         bool: True if RBAC is set successfully,
             false otherwise
@@ -107,7 +125,14 @@ def set_rbac(yaml_file, resource_name):
         namespace=constants.OPENSHIFT_OPERATORS_REDHAT_NAMESPACE,
     )
 
-    rbac_role.create(yaml_file=yaml_file, out_yaml_format=False)
+    try:
+        rbac_role.create(yaml_file=yaml_file, out_yaml_format=False)
+    except CommandFailed as e:
+        if "AlreadyExists" in str(e) and skip_resource_exists:
+            logger.warning("RBAC role already exists")
+            return True
+        else:
+            raise
     try:
         rbac_role.get(resource_name, out_yaml_format=True)
         rbac_rolebinding.get(resource_name, out_yaml_format=True)
@@ -151,7 +176,7 @@ def get_elasticsearch_subscription():
     return bool(es_sub)
 
 
-def create_clusterlogging_operator_group(yaml_file):
+def create_clusterlogging_operator_group(yaml_file, skip_resource_exists=False):
     """
     Creation of operator-group for clusterlogging
     operator.
@@ -159,8 +184,7 @@ def create_clusterlogging_operator_group(yaml_file):
     Args:
         yaml_file (str): Path to yaml file to create operator group for
             cluster-logging operator
-        resource_name (str): Name of the operator group to create for
-            cluster-logging operator
+        skip_resource_exists: Skip the resource creation if it already exists
 
     Returns:
         bool: True if operator group for cluster-logging is created
@@ -174,8 +198,14 @@ def create_clusterlogging_operator_group(yaml_file):
     operator_group = ocp.OCP(
         kind=constants.OPERATOR_GROUP, namespace=constants.OPENSHIFT_LOGGING_NAMESPACE
     )
-
-    operator_group.create(yaml_file=yaml_file)
+    try:
+        operator_group.create(yaml_file=yaml_file)
+    except CommandFailed as e:
+        if "AlreadyExists" in str(e) and skip_resource_exists:
+            logger.warning("Operator group already exists")
+            return True
+        else:
+            raise
     try:
         operator_group.get(out_yaml_format=True)
         logger.info("The Operator group is created successfully")
