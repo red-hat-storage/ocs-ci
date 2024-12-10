@@ -818,6 +818,36 @@ class VSPHERE(object):
             if hasattr(device.backing, "fileName") and device.unitNumber != 0
         ]
 
+    def remove_disks_with_main_disk(self, vm):
+        """
+        Removes all disks for a VM
+
+        Args:
+            vm (vim.VirtualMachine): VM instance
+
+        """
+        extra_disk_unit_numbers = self.get_used_unit_number_with_all_unit_number(vm)
+        if extra_disk_unit_numbers:
+            for each_disk_unit_number in extra_disk_unit_numbers:
+                self.remove_disk(vm=vm, identifier=each_disk_unit_number)
+
+    def get_used_unit_number_with_all_unit_number(self, vm):
+        """
+        Gets the used unit numbers including main disk for a VM
+
+        Args:
+            vm (vim.VirtualMachine): VM instance
+
+        Returns:
+            list: list of unit numbers
+
+        """
+        return [
+            device.unitNumber
+            for device in vm.config.hardware.device
+            if hasattr(device.backing, "fileName")
+        ]
+
     def check_folder_exists(self, name, cluster, dc):
         """
         Checks whether folder exists in Templates
@@ -1742,3 +1772,27 @@ class VSPHERE(object):
         volume_path = vstorage_object.config.backing.filePath
         logger.debug(f"File path for volume {volume_id} is `{volume_path}`")
         return volume_path
+
+    def get_vms_by_string(self, str_to_match):
+        """
+        Gets the VM's with search string
+
+        Args:
+            str_to_match (str): String to match VM's
+
+        Returns:
+            list: VM instance
+
+        """
+
+        content = self.get_content
+        container = content.rootFolder
+        view_type = [vim.VirtualMachine]
+        recursive = True
+
+        container_view = content.viewManager.CreateContainerView(
+            container, view_type, recursive
+        )
+        vms = [vm for vm in container_view.view if str_to_match in vm.name]
+        container_view.Destroy()
+        return vms
