@@ -271,7 +271,7 @@ class ODFAndNativeStorageClientDeploymentOnProvider(object):
         if self.ocs_version >= version.VERSION_4_16:
             # Validate native client is created in openshift-storage namespace
             self.deployment.wait_for_csv(
-                self.ocs_client_operator, constants.OPENSHIFT_STORAGE_NAMESPACE
+                self.ocs_client_operator, config.ENV_DATA["cluster_namespace"]
             )
 
             # Verify native storageclient is created successfully

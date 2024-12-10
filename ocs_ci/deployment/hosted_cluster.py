@@ -917,7 +917,7 @@ class HostedODF(HypershiftHostedOCP):
              str: onboarding token key
         """
         secret_ocp_obj = ocp.OCP(
-            kind=constants.SECRET, namespace=constants.OPENSHIFT_STORAGE_NAMESPACE
+            kind=constants.SECRET, namespace=config.ENV_DATA["cluster_namespace"]
         )
 
         key = (
@@ -1160,7 +1160,7 @@ class HostedODF(HypershiftHostedOCP):
         """
         Get the provider address
         """
-        ocp = OCP(namespace=constants.OPENSHIFT_STORAGE_NAMESPACE)
+        ocp = OCP(namespace=config.ENV_DATA["cluster_namespace"])
         storage_provider_endpoint = ocp.exec_oc_cmd(
             (
                 "get storageclusters.ocs.openshift.io -o jsonpath={'.items[*].status.storageProviderEndpoint'}"
@@ -1210,7 +1210,7 @@ class HostedODF(HypershiftHostedOCP):
         else:
             ocp = OCP(
                 kind=constants.STORAGECLAIM,
-                namespace=constants.OPENSHIFT_STORAGE_NAMESPACE,
+                namespace=config.ENV_DATA["cluster_namespace"],
                 cluster_kubeconfig=self.cluster_kubeconfig,
             )
 
@@ -1297,7 +1297,7 @@ class HostedODF(HypershiftHostedOCP):
         else:
             ocp = OCP(
                 kind=constants.STORAGECLAIM,
-                namespace=constants.OPENSHIFT_STORAGE_NAMESPACE,
+                namespace=config.ENV_DATA["cluster_namespace"],
                 cluster_kubeconfig=self.cluster_kubeconfig,
             )
 

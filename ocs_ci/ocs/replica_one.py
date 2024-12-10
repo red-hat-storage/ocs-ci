@@ -13,7 +13,6 @@ from ocs_ci.ocs.ocp import OCP
 from ocs_ci.ocs.constants import (
     DEFAULT_CEPHBLOCKPOOL,
     DEFAULT_STORAGE_CLUSTER,
-    OPENSHIFT_STORAGE_NAMESPACE,
     OSD_APP_LABEL,
     CEPHBLOCKPOOL,
     STORAGECLASS,
@@ -141,7 +140,9 @@ def scaledown_deployment(deployment_names: list[str]) -> None:
 
     """
     log.info("Starts Scaledown deployments")
-    deployment_obj = OCP(kind=DEPLOYMENT, namespace=OPENSHIFT_STORAGE_NAMESPACE)
+    deployment_obj = OCP(
+        kind=DEPLOYMENT, namespace=config.ENV_DATA["cluster_namespace"]
+    )
     for deployment in deployment_names:
         deployment_obj.exec_oc_cmd(f"scale deployment {deployment} --replicas=0")
         log.info(f"scaling to 0: {deployment}")
@@ -221,7 +222,7 @@ def modify_replica1_osd_count(new_osd_count):
     """
     storage_cluster = OCP(kind=STORAGECLUSTER, name=DEFAULT_STORAGE_CLUSTER)
     storage_cluster.exec_oc_cmd(
-        f"patch storagecluster {DEFAULT_STORAGE_CLUSTER} -n {OPENSHIFT_STORAGE_NAMESPACE} "
+        f"patch storagecluster {DEFAULT_STORAGE_CLUSTER} -n {config.ENV_DATA['cluster_namespace']} "
         f'--type json --patch \'[{{"op": "replace", "path": '
         f'"/spec/managedResources/cephNonResilientPools/count", "value": {new_osd_count} }}]\''
     )
