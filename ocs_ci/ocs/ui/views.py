@@ -690,7 +690,9 @@ page_nav = {
     "volumesnapshotclasses_page": ("VolumeSnapshotClasses", By.LINK_TEXT),
     "volumesnapshotcontents_page": ("VolumeSnapshotContents", By.LINK_TEXT),
     "object_buckets_tab": (
-        "//a[normalize-space()='Object Buckets'] | //span[normalize-space()='Object Buckets']/..",
+        "//a[normalize-space()='Object Buckets'] "
+        "| //span[normalize-space()='Object Buckets']/.. "
+        "| //span[normalize-space()='Buckets']/..",
         By.XPATH,
     ),
     "object_storage": ("//a[normalize-space()='Object Storage']", By.XPATH),
