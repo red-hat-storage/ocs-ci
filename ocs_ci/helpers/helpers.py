@@ -662,17 +662,27 @@ def default_storage_class(
     Returns:
         OCS: Existing StorageClass Instance
     """
+    from ocs_ci.ocs.resources.storage_cluster import (
+        get_storageclass_names_from_storagecluster_spec,
+        get_storageclass_with_rbd_namespace,
+    )
+
     external = config.DEPLOYMENT["external_mode"]
     custom_storage_class = config.ENV_DATA.get("custom_default_storageclass_names")
     if custom_storage_class:
-        from ocs_ci.ocs.resources.storage_cluster import (
-            get_storageclass_names_from_storagecluster_spec,
-        )
-
         resources = get_storageclass_names_from_storagecluster_spec()
 
     if interface_type == constants.CEPHBLOCKPOOL:
-        if custom_storage_class:
+        rbd_namespace = config.EXTERNAL_MODE.get("rbd_namespace")
+        if rbd_namespace:
+            sc_rbd_ns_data = get_storageclass_with_rbd_namespace(rbd_namespace)
+            if not sc_rbd_ns_data:
+                raise ValueError(
+                    f"Didn't find the storage class for the rbd namespace {rbd_namespace}"
+                )
+
+            resource_name = sc_rbd_ns_data["metadata"]["name"]
+        elif custom_storage_class:
             try:
                 resource_name = resources[constants.OCS_COMPONENTS_MAP["blockpools"]]
             except KeyError:
