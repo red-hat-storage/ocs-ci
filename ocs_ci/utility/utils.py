@@ -27,6 +27,7 @@ from shutil import which, move, rmtree
 import pexpect
 import pytest
 import unicodedata
+import tempfile
 
 import hcl2
 import requests
@@ -5236,3 +5237,38 @@ def extract_image_urls(string_data):
     # Find all URLs that start with 'registry.redhat.io'
     image_urls = re.findall(r'registry\.redhat\.io[^\s"]+', string_data)
     return image_urls
+
+
+def params_to_configini_file(params):
+    """
+    This function will create a config ini file for the params given.
+    Use case:
+        can be used in external-cluster-exporter script --config-file argument
+
+    Args:
+        params (str): Parameter to pass to be converted into config.ini file.
+
+    Returns:
+        str: Path to the config.ini file.
+
+    """
+    data = "[Configurations]\n"
+
+    pattern = r"--([\w-]+) ([.:\w-]+)"
+    matches = re.finditer(pattern, params, re.MULTILINE)
+    for match in matches:
+        arg, val = match.groups()
+        line = f"{arg} = {val}\n"
+        data += line
+    data = data.strip()
+    config_ini_file = tempfile.NamedTemporaryFile(
+        mode="w+",
+        prefix="external-cluster-config-",
+        suffix=".ini",
+        delete=False,
+    )
+    with open(config_ini_file.name, "w") as fd:
+        fd.write(data)
+    log.info(f"config.ini file for cluster is located at {config_ini_file.name}")
+
+    return config_ini_file.name
