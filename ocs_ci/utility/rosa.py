@@ -94,11 +94,6 @@ def create_cluster(cluster_name, version, region):
         log_step("Creating OIDC config")
         oidc_config_id = create_oidc_config()
 
-    if (node_labels := config.ENV_DATA.get("node_labels")) and len(node_labels):
-        labels_param = f" --worker-mp-labels {node_labels} "
-    else:
-        labels_param = ""
-
     compute_nodes = config.ENV_DATA["worker_replicas"]
     compute_machine_type = config.ENV_DATA["worker_instance_type"]
     multi_az = "--multi-az " if config.ENV_DATA.get("multi_availability_zones") else ""
@@ -113,7 +108,7 @@ def create_cluster(cluster_name, version, region):
         subnet_section_name = "rosahcp_subnet_ids_per_region_default"
     cmd = (
         f"rosa create cluster --cluster-name {cluster_name} --region {region} "
-        f"--machine-cidr {machine_cidr} --replicas {compute_nodes} {labels_param}"
+        f"--machine-cidr {machine_cidr} --replicas {compute_nodes} "
         f"--compute-machine-type {compute_machine_type} "
         f"--version {rosa_ocp_version} {multi_az} --sts --yes --watch"
     )
@@ -1116,4 +1111,23 @@ def get_associated_oidc_config_id(cluster_name):
     if proc.returncode != 0:
         logger.warning(f"Failed to get OIDC config id: {proc.stderr.decode().strip()}")
         return ""
+    return proc.stdout.decode().strip()
+
+
+def label_nodes(cluster_name, machinepool_id, labels):
+    """
+    Label nodes of the given cluster
+
+    Args:
+        cluster_name (str): The cluster name
+        machinepool_id (str): The machinepool id
+        labels (dict): The labels to apply
+
+    Returns:
+        str: The output of the command
+    """
+    cmd = f"rosa edit machinepool --cluster={cluster_name} --labels {labels} {machinepool_id}"
+    proc = utils.exec_cmd(cmd)
+    if proc.returncode != 0:
+        raise CommandFailed(f"Failed to label nodes: {proc.stderr.decode().strip()}")
     return proc.stdout.decode().strip()
