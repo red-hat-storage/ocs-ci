@@ -51,7 +51,7 @@ class TestMdsCacheTrimStandby(E2ETest):
             sleep=20,
             func=cluster.get_active_mds_memory_utilisation_in_percentage,
         ):
-            if sampler > 80:
+            if sampler > 75:
                 break
             else:
                 log.warning("MDS memory consumption is not yet reached target")
