@@ -94,6 +94,11 @@ def create_cluster(cluster_name, version, region):
         log_step("Creating OIDC config")
         oidc_config_id = create_oidc_config()
 
+    if (node_labels := config.ENV_DATA.get("node_labels")) and len(node_labels):
+        labels_param = f" --worker-mp-labels {node_labels} "
+    else:
+        labels_param = ""
+
     compute_nodes = config.ENV_DATA["worker_replicas"]
     compute_machine_type = config.ENV_DATA["worker_instance_type"]
     multi_az = "--multi-az " if config.ENV_DATA.get("multi_availability_zones") else ""
@@ -108,7 +113,7 @@ def create_cluster(cluster_name, version, region):
         subnet_section_name = "rosahcp_subnet_ids_per_region_default"
     cmd = (
         f"rosa create cluster --cluster-name {cluster_name} --region {region} "
-        f"--machine-cidr {machine_cidr} --replicas {compute_nodes} "
+        f"--machine-cidr {machine_cidr} --replicas {compute_nodes} {labels_param}"
         f"--compute-machine-type {compute_machine_type} "
         f"--version {rosa_ocp_version} {multi_az} --sts --yes --watch"
     )
