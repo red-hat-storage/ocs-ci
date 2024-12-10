@@ -904,7 +904,7 @@ def destroy_rosa_cluster(cluster, best_effort=True):
         best_effort (bool): If True (true), ignore errors and continue with the deletion of the cluster
     """
     external_id = get_cluster_details(cluster)["external_id"]
-    cmd = f"ocm delete cluster {external_id} -p best_effort={str(best_effort).lower()} --yes"
+    cmd = f"ocm delete cluster {external_id} -p best_effort={str(best_effort).lower()}"
     proc = exec_cmd(cmd, timeout=1200)
     if proc.returncode != 0:
         raise CommandFailed(f"Failed to delete cluster: {proc.stderr.decode().strip()}")
