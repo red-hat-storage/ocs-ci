@@ -19,6 +19,7 @@ from ocs_ci.ocs.exceptions import (
     ResourceWrongStatusException,
     TimeoutExpiredError,
 )
+from ocs_ci.ocs.machinepool import MachinePools, NodeConf
 from ocs_ci.utility import openshift_dedicated as ocm
 from ocs_ci.utility import utils
 
@@ -1114,20 +1115,57 @@ def get_associated_oidc_config_id(cluster_name):
     return proc.stdout.decode().strip()
 
 
-def label_nodes(cluster_name, machinepool_id, labels):
+def label_nodes(cluster_name, machinepool_id, labels, rewrite=False):
     """
-    Label nodes of the given cluster
+    Label nodes of the given cluster.
+    ! Important
+    This method rewrites existing behavior of labeling nodes in the cluster, it appends the labels to the existing
+    labels, but not rewrite them. This prevents the issue of overwriting the existing labels.
+
+    For reference, existing labels are:
+
+    beta.kubernetes.io/arch: amd64
+    beta.kubernetes.io/instance-type: m5.12xlarge
+    beta.kubernetes.io/os: linux
+    cluster.ocs.openshift.io/openshift-storage: ""
+    failure-domain.beta.kubernetes.io/region: us-west-2
+    failure-domain.beta.kubernetes.io/zone: us-west-2a
+    hypershift.openshift.io/managed: "true"
+    hypershift.openshift.io/nodePool: <cluster-name>-workers
+    kubernetes.io/arch: amd64
+    kubernetes.io/hostname: ip-<...>.us-west-2.compute.internal
+    kubernetes.io/os: linux
+    node-role.kubernetes.io/worker: ""
+    node.kubernetes.io/instance-type: m5.12xlarge
+    node.openshift.io/os_id: rhcos
+    topology.ebs.csi.aws.com/zone: us-west-2a
+    topology.k8s.aws/zone-id: usw2-az1
+    topology.kubernetes.io/region: us-west-2
+    topology.kubernetes.io/zone: us-west-2a
+    topology.rook.io/rack: rack2
 
     Args:
         cluster_name (str): The cluster name
         machinepool_id (str): The machinepool id
-        labels (dict): The labels to apply
+        labels (str): The labels to apply
+        rewrite (bool): If True, rewrite the labels. False, otherwise.
 
     Returns:
         str: The output of the command
     """
-    cmd = f"rosa edit machinepool --cluster={cluster_name} --labels {labels} {machinepool_id}"
-    proc = utils.exec_cmd(cmd)
-    if proc.returncode != 0:
-        raise CommandFailed(f"Failed to label nodes: {proc.stderr.decode().strip()}")
-    return proc.stdout.decode().strip()
+    machine_pools = MachinePools(cluster_name)
+    machine_pool = machine_pools.filter(machinepool_id="workers", pick_first=True)
+    if not rewrite:
+        labels_dict = machine_pool.labels
+        # convert to comma separated string
+        labels = (
+            ",".join([f"{key}={value}" for key, value in labels_dict.items()])
+            + ","
+            + labels
+        )
+    machine_pools.edit_machine_pool(
+        NodeConf(**{"machinepool_id": machinepool_id, "labels": labels}),
+        wait_ready=False,
+    )
+    machine_pool.refresh()
+    return machine_pool.labels
