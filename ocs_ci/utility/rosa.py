@@ -1157,12 +1157,16 @@ def label_nodes(cluster_name, machinepool_id, labels, rewrite=False):
     machine_pool = machine_pools.filter(machinepool_id="workers", pick_first=True)
     if not rewrite:
         labels_dict = machine_pool.labels
+        logger.info(f"Existing labels: {labels_dict}")
         # convert to comma separated string
-        labels = (
-            ",".join([f"{key}={value}" for key, value in labels_dict.items()])
-            + ","
-            + labels
-        )
+        if labels_dict:
+            labels = (
+                ",".join([f"{key}={value}" for key, value in labels_dict.items()])
+                + ","
+                + labels
+            )
+        else:
+            labels = labels
     machine_pools.edit_machine_pool(
         NodeConf(**{"machinepool_id": machinepool_id, "labels": labels}),
         wait_ready=False,
