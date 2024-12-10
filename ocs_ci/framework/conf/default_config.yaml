@@ -277,6 +277,9 @@ ENV_DATA:
   #RDR Green field
   rdr_osd_deployment_mode: "greenfield"
 
+  # Label nodes with specific labels, used for example fot ODF deployment on ROSA HCP
+  node_labels: ""
+
   # Assisted Installer related settings
 
 # This section is related to upgrade
