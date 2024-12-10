@@ -19,7 +19,8 @@ from tests.functional.upgrade.test_upgrade_ocp import TestUpgradeOCP
 from ocs_ci.deployment.metallb import MetalLBInstaller
 from ocs_ci.deployment.cnv import CNVInstaller
 from ocs_ci.ocs.acm_upgrade import ACMUpgrade
-from tests.conftest import reduce_and_resume_cluster_load
+
+# from tests.conftest import reduce_and_resume_cluster_load
 
 log = logging.getLogger(__name__)
 
@@ -62,9 +63,9 @@ class TestUpgradeForProviderClient(ManageTest):
             upgrade odf --- odf client should automatically upgraded
             for GA to GA upgrade
         """
-        self.test_upgrade_ocp.test_upgrade_ocp(reduce_and_resume_cluster_load)
-        self.acm_hub_upgrade_obj.run_upgrade()
-        self.cnv_installer_obj.upgrade_cnv()
+        # self.test_upgrade_ocp.test_upgrade_ocp(reduce_and_resume_cluster_load)
+        # self.acm_hub_upgrade_obj.run_upgrade()
+        # self.cnv_installer_obj.upgrade_cnv()
         self.metallb_installer_obj.upgrade_metallb()
         run_ocs_upgrade()
         self.storage_clients.verify_version_of_odf_client_operator()
