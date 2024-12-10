@@ -1368,7 +1368,6 @@ def parse_ceph_df_pools(raw_output: str) -> pd.DataFrame:
         "%USED",
         "MAX AVAIL",
         "QUOTA OBJECTS",
-        "QUOTA OBJECTS",
         "QUOTA BYTES",
         "DIRTY",
         "USED COMPR",
@@ -1415,6 +1414,7 @@ def validate_num_of_pgs(expected_pgs: dict[str, int]) -> bool:
     Returns:
         bool: True if all pools have the expected number of PGs, False otherwise.
     """
+
     ceph_df_output = get_ceph_df_detail(format=None, out_yaml_format=False)
     pools_df = parse_ceph_df_pools(ceph_df_output)
     pools_dict = ceph_details_df_to_dict(pools_df)
