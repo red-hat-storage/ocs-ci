@@ -502,6 +502,43 @@ obc = {
         'button[data-test="namespacestore-create-button"]',
         By.CSS_SELECTOR,
     ),
+    "kebab_action": (
+        "//button[contains(@class, 'pf-v5-c-menu-toggle pf-m-plain')]",
+        By.XPATH,
+    ),
+    "attach_to_deployment": (
+        'button[id="ATTACH_DEPLOYMENT"]',
+        By.CSS_SELECTOR,
+    ),
+    "attach": (
+        'button[data-test="attach-action"]',
+        By.CSS_SELECTOR,
+    ),
+    "odf_deployment_dropdown": (".text-muted", By.CSS_SELECTOR),
+    "search_bar": (
+        'input[id="search-bar"], input[value=""]',
+        By.CSS_SELECTOR,
+    ),
+    "odf_resource_item": (
+        'a[data-test="dropdown-menu-item-link"]',
+        By.CSS_SELECTOR,
+    ),
+    "add_storage": (
+        'li[data-test-action="Add storage"]',
+        By.CSS_SELECTOR,
+    ),
+    "obc_radiobutton": (
+        'input[name="ObjectBucketClaim"]',
+        By.CSS_SELECTOR,
+    ),
+    "use_existing_claim": (
+        'input[id="exists"]',
+        By.CSS_SELECTOR,
+    ),
+    "select_obc_dropdown": (
+        'button[id="class="pf-v5-c-dropdown__toggle"]',
+        By.CSS_SELECTOR,
+    ),
 }
 
 pvc = {
@@ -700,6 +737,7 @@ page_nav = {
     "dashboards_page": ("Dashboards", By.LINK_TEXT),
     "Workloads": ("//button[text()='Workloads']", By.XPATH),
     "Pods": ("Pods", By.LINK_TEXT),
+    "Deployments": ("Deployments", By.LINK_TEXT),
     "quickstarts": ('a[href="/quickstart"]', By.CSS_SELECTOR),
     "block_pool_link": (
         'a[data-test-id="horizontal-link-Block Pools"]',
