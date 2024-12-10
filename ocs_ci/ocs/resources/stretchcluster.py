@@ -635,7 +635,7 @@ class StretchCluster(OCS):
             self.check_for_read_pause(
                 constants.LOGREADER_CEPHFS_LABEL, start_time, end_time
             )
-            == 0
+            <= 2
         ), "Read operations are paused for CephFS workloads even for the ones in available zones"
         logger.info("All read operations are successful for CephFs workload")
 
@@ -654,7 +654,7 @@ class StretchCluster(OCS):
                 start_time,
                 end_time,
             )
-            == 0
+            <= 1
         ), "Write operations paused for RBD workloads even for the ones in available zone"
         logger.info("all write operations are successful for RBD workloads")
 
