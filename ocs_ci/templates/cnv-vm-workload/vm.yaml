@@ -36,8 +36,6 @@ spec:
               model: virtio
           networkInterfaceMultiqueue: true
           rng: {}
-        machine:
-          type: pc-q35-rhel9.2.0
         memory:
           guest: 2Gi
         resources: {}
@@ -47,9 +45,7 @@ spec:
           pod: {}
       terminationGracePeriodSeconds: 180
       volumes:
-        -  name: rootdisk
-           persistentVolumeClaim:
-             claimName: sample-vm-pvc
+        - name: rootdisk
         - cloudInitNoCloud:
             userData: |-
               #cloud-config
