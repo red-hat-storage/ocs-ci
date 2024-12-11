@@ -2,6 +2,7 @@ import logging
 
 import pytest
 
+from ocs_ci.framework import config
 from ocs_ci.framework.pytest_customization.marks import (
     tier1,
     tier4a,
@@ -200,7 +201,7 @@ class TestMultiRegion(MCGTest):
         bucket = bucket_factory(1, "OC", bucketclass=bucket_class)[0]
         bucketclass_obj = ocp.OCP(
             kind=constants.BUCKETCLASS,
-            namespace=constants.OPENSHIFT_STORAGE_NAMESPACE,
+            namespace=config.ENV_DATA["cluster_namespace"],
             resource_name=bucket.bucketclass.name,
         )
         # Patch bucket class to update placement from "Spread" to "Mirror"
