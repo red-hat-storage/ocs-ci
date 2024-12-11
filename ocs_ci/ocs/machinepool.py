@@ -137,6 +137,7 @@ class MachinePool:
     exist: bool = field(
         default=False
     )  # not a part of the data fetched from the cluster
+    labels: Dict[str, str] = field(default_factory=dict)
 
     def __post_init__(self):
         """Automatically populate fields by fetching machine pool details."""
@@ -173,7 +174,15 @@ class MachinePool:
                 "id"
             ),  # this parameter is different in node_conf and data fetched from machinepool
             cluster_name=cluster_name,
+            labels=data.get("labels", {}),
         )
+
+    def refresh(self):
+        """Refresh the machine pool details."""
+        details = self.get_machinepool_details(self.cluster_name, self.machinepool_id)
+        if details:
+            self.__dict__.update(details.__dict__)
+            self.exist = True
 
     def get_machinepool_updated_replicas(self) -> Dict[str, int]:
         """
@@ -463,10 +472,6 @@ def build_machinepool_cmd_base(cluster_name, node_conf, action):
             raise ValueError(
                 "When 'enable_autoscaling' is True, 'min_replicas' and 'max_replicas' are required."
             )
-    elif node_conf.get("replicas") is None:
-        raise ValueError(
-            "Parameter 'replicas' is required when autoscaling is disabled."
-        )
 
     cmd = f"rosa {action} machinepool --cluster {cluster_name} "
 
