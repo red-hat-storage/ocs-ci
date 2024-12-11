@@ -7092,13 +7092,22 @@ def cnv_workload(request):
     return factory
 
 
-@pytest.fixture
+@pytest.fixture()
 def multi_cnv_workload(
     pv_encryption_kms_setup_factory, storageclass_factory, cnv_workload
 ):
     """
-    Create a cnv factory. Calling this fixture Creates multiple VMs
-    with specified configurations using the cnv_workload fixture.
+    Fixture to create virtual machines (VMs) with specific configurations.
+
+    This fixture sets up multiple VMs with varying storage configurations as specified
+    in the `vm_configs` yaml. Each VM configuration includes the volume interface type,
+    access mode, and the storage class to be used.
+
+    The configurations applied to the VMs are:
+    - Volume interface: `VM_VOLUME_PVC` or `VM_VOLUME_DVT`
+    - Access mode: `ACCESS_MODE_RWX` or `ACCESS_MODE_RWO`
+    - Storage class: Custom storage classes, including default compression and aggressive profiles.
+
     """
 
     def factory(namespace=None):
@@ -7137,62 +7146,63 @@ def multi_cnv_workload(
             compression="aggressive",
             new_rbd_pool=True,
         )
-        vm_configs = [
-            {
-                "volume_interface": constants.VM_VOLUME_PVC,
-                "access_mode": constants.ACCESS_MODE_RWX,
-                "sc_name": sc_obj_def_compr.name,
-            },
-            {
-                "volume_interface": constants.VM_VOLUME_PVC,
-                "access_mode": constants.ACCESS_MODE_RWX,
-                "sc_name": sc_obj_aggressive.name,
-            },
-            {
-                "volume_interface": constants.VM_VOLUME_PVC,
-                "access_mode": constants.ACCESS_MODE_RWO,
-                "sc_name": sc_obj_def_compr.name,
-            },
-            {
-                "volume_interface": constants.VM_VOLUME_DVT,
-                "access_mode": constants.ACCESS_MODE_RWX,
-                "sc_name": sc_obj_def_compr.name,
-            },
-            {
-                "volume_interface": constants.VM_VOLUME_DVT,
-                "access_mode": constants.ACCESS_MODE_RWX,
-                "sc_name": sc_obj_aggressive.name,
-            },
-        ]
+
+        # Patch the storage class to match the configuration of
+        # ocs-storagecluster-ceph-rbd-virtualization storage class.
+        storage_classes = [sc_obj_def_compr, sc_obj_aggressive]
+        parameter_patch = (
+            ' \'{"parameters": {"mapOptions": "krbd:rxbounce", "mounter": "rbd"}}\''
+        )
+        for sc in storage_classes:
+            try:
+                run_cmd(
+                    f"oc patch storageclass {sc.name} "
+                    f"-p {parameter_patch} "
+                    f"--request-timeout=120s"
+                )
+                log.info(f"Successfully patched parameters for storage class: {sc}")
+            except Exception as e:
+                log.info(f"Failed to patch storage class {sc}: {e}")
+                continue
 
         # Create ceph-csi-kms-token in the tenant namespace
         kms.vault_path_token = kms.generate_vault_token()
         kms.create_vault_csi_kms_token(namespace=namespace)
 
-        for sc_obj in [sc_obj_def_compr, sc_obj_aggressive]:
+        for sc_obj in storage_classes:
             pvk_obj = PVKeyrotation(sc_obj)
             pvk_obj.annotate_storageclass_key_rotation(schedule="*/3 * * * *")
 
+        # Load VMconfigs from cnv_vm_workload yaml
+        vm_configs = templating.load_yaml(constants.CNV_VM_WORKLOADS)
+
         # Loop through vm_configs and create the VMs using the cnv_workload fixture
-        for config in vm_configs:
+        for index, config in enumerate(vm_configs["vm_configs"]):
+            # Determine the storage class based on the compression type
+            if config["sc_compression"] == "default":
+                storageclass = sc_obj_def_compr.name
+            elif config["sc_compression"] == "aggressive":
+                storageclass = sc_obj_aggressive.name
+            else:
+                raise ValueError(
+                    f"Unknown storage class compression type: {config['sc_name']}"
+                )
+
             vm_obj = cnv_workload(
                 volume_interface=config["volume_interface"],
                 access_mode=config["access_mode"],
-                storageclass=config["sc_name"],
+                storageclass=storageclass,
                 pvc_size="30Gi",  # Assuming pvc_size is fixed for all
                 source_url=constants.CNV_FEDORA_SOURCE,  # Assuming source_url is the same for all VMs
                 namespace=namespace,
-            )
-            vm_obj = vm_obj[-1]
-            if config["sc_name"] == sc_obj_aggressive.name:
+            )[index]
+            if config["sc_compression"] == "aggressive":
                 vm_list_agg_compr.append(vm_obj)
             else:
                 vm_list_default_compr.append(vm_obj)
         return (
             vm_list_default_compr,
             vm_list_agg_compr,
-            sc_obj_aggressive,
-            sc_obj_def_compr,
         )
 
     return factory
