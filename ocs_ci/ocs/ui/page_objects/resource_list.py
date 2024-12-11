@@ -1,5 +1,4 @@
 from ocs_ci.ocs.ui.helpers_ui import format_locator
-from ocs_ci.ocs.ui.page_objects.buckets_tab import BucketsTab
 from ocs_ci.ocs.ui.page_objects.searchbar import SearchBar
 from ocs_ci.ocs.ui.base_ui import logger
 from ocs_ci.utility import version
@@ -83,6 +82,8 @@ class ResourceList(SearchBar):
         logger.info(f"Confirm {resource} Deletion")
         # same PopUp both for OBC and OB
         # check if we are on the Bucket page, it has different UI starting from 4.18
+        from ocs_ci.ocs.ui.page_objects.buckets_tab import BucketsTab
+
         if (
             isinstance(self, BucketsTab)
             and self.ocp_version_semantic >= version.VERSION_4_18

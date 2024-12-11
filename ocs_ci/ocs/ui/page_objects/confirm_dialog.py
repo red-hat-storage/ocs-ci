@@ -1,5 +1,4 @@
 from ocs_ci.ocs.ui.base_ui import BaseUI
-from ocs_ci.ocs.ui.helpers_ui import format_locator
 
 
 class ConfirmDialog(BaseUI):
@@ -32,6 +31,8 @@ class ConfirmDialog(BaseUI):
         """
         Type the resource name in the dialog
         """
+        from ocs_ci.ocs.ui.helpers_ui import format_locator
+
         self.clear_input_gradually(
             format_locator(self.generic_locators["confirm_dilog_input"], resource_name)
         )
