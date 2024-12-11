@@ -11,6 +11,7 @@ from ocs_ci.framework.pytest_customization.marks import (
     stretchcluster_required,
     turquoise_squad,
 )
+from ocs_ci.helpers.cnv_helpers import cal_md5sum_vm
 from ocs_ci.helpers.helpers import modify_deployment_replica_count
 from ocs_ci.helpers.stretchcluster_helper import recover_workload_pods_post_recovery
 from ocs_ci.ocs.exceptions import UnexpectedBehaviour
@@ -142,14 +143,14 @@ def setup_cnv_workload(request, cnv_workload, setup_cnv):
     logger.info("Setting up CNV workload and creating some data")
     vm_obj = cnv_workload(volume_interface=constants.VM_VOLUME_PVC)[0]
     vm_obj.run_ssh_cmd(command="dd if=/dev/zero of=/file_1.txt bs=1024 count=102400")
-    md5sum_before = vm_obj.run_ssh_cmd(command="md5sum /file_1.txt")
+    md5sum_before = cal_md5sum_vm(vm_obj, file_path="/file_1.txt")
 
     def finalizer():
 
         # check vm data written before the failure for integrity
         logger.info("Waiting for VM SSH connectivity!")
         vm_obj.wait_for_ssh_connectivity()
-        md5sum_after = vm_obj.run_ssh_cmd(command="md5sum /file_1.txt")
+        md5sum_after = cal_md5sum_vm(vm_obj, file_path="/file_1.txt")
         assert (
             md5sum_before == md5sum_after
         ), "Data integrity of the file inside VM is not maintained during the failure"
