@@ -1,0 +1,8 @@
+apiVersion: operators.coreos.com/v1alpha1
+kind: CatalogSource
+metadata:
+  name: mce-catalogsource
+  namespace: openshift-marketplace
+spec:
+  image: PLACE_HOLDER2.13.0-DOWNSTREAM-2024-12-09-22-26-41
+  sourceType: grpc
