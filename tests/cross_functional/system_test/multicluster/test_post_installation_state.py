@@ -57,7 +57,7 @@ class TestPostInstallationState(ManageTest):
     @acceptance
     @pc_or_ms_provider_required
     @pytest.mark.polarion_id("OCS-3910")
-    def test_consumers_capacity(self):
+    def deprecated_test_consumers_capacity(self):
         """
         Test each storageconsumer's capacity and requested capacity.
         Now only 1Ti value is possible. If more options get added, the test
@@ -107,7 +107,7 @@ class TestPostInstallationState(ManageTest):
     @tier1
     @pytest.mark.polarion_id("OCS-3918")
     @runs_on_provider
-    def test_ceph_clients(self):
+    def deprecated_test_ceph_clients(self):
         """
         Test that for every consumer there are  the following cephclients in
         the provider cluster: rbd provisioner, rbd node, cephfs provisioner,
