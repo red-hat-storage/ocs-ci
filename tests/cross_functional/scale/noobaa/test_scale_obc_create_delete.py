@@ -40,7 +40,6 @@ class TestScaleOCBCreateDelete(E2ETest):
     def deprecated_test_scale_obc_create_delete_time(
         self, tmp_path, noobaa_storage_class_name
     ):
-
         """
         MCG OBC creation and deletion using Noobaa MCG storage class
 
