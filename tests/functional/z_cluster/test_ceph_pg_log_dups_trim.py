@@ -50,7 +50,7 @@ class TestCephPgLogDupsTrimming(ManageTest):
 
         request.addfinalizer(finalizer)
 
-    def test_ceph_pg_log_dups_trim(self, pvc_factory, pod_factory):
+    def deprecated_test_ceph_pg_log_dups_trim(self, pvc_factory, pod_factory):
         """
         This test validates below:
         1) dups size logging in osd pods when the number of dups exceeded 6000

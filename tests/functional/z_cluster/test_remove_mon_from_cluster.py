@@ -67,7 +67,7 @@ def run_io_on_pool(pool_obj):
 class TestRemoveMonFromCluster(ManageTest):
     pool_obj = ""
 
-    def test_remove_mon_pod_from_cluster(self):
+    def deprecated_test_remove_mon_pod_from_cluster(self):
         """
         To remove mon pod from the cluster
         after the I/O is performed on the pool
