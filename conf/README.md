@@ -416,6 +416,8 @@ Configuration specific to external Ceph cluster
 * `external_cluster_details` - base64 encoded data of json output from exporter script
 * `rgw_secure` - boolean parameter which defines if external Ceph cluster RGW is secured using SSL
 * `rgw_cert_ca` - url pointing to CA certificate used to sign certificate for RGW with SSL
+* `use_rbd_namespace` - boolean parameter to use RBD namespace in pool
+* `rbd_namespace` - Name of RBD namespace to use in pool
 
 ##### login
 

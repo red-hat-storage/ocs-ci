@@ -1,5 +1,6 @@
 import logging
 
+from ocs_ci.framework import config
 from ocs_ci.utility import utils
 from ocs_ci.framework.pytest_customization.marks import (
     vsphere_platform_required,
@@ -40,7 +41,7 @@ class TestNoobaaDbPgExpansion:
 
         try:
             ceph_toolbox = get_ceph_tools_pod(
-                namespace=constants.OPENSHIFT_STORAGE_NAMESPACE
+                namespace=config.ENV_DATA["cluster_namespace"]
             )
         except (AssertionError, CephToolBoxNotFoundException) as ex:
             raise CommandFailed(ex)
@@ -74,7 +75,7 @@ class TestNoobaaDbPgExpansion:
 
         # Verify default backingstore is in ready state or not
         default_bs = OCP(
-            kind=constants.BACKINGSTORE, namespace=constants.OPENSHIFT_STORAGE_NAMESPACE
+            kind=constants.BACKINGSTORE, namespace=config.ENV_DATA["cluster_namespace"]
         ).get(resource_name=constants.DEFAULT_NOOBAA_BACKINGSTORE)
         assert (
             default_bs["status"]["phase"] == constants.STATUS_READY

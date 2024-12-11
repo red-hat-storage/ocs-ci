@@ -1090,7 +1090,7 @@ def check_pv_backingstore_status(
 
 def check_pv_backingstore_type(
     backingstore_name=constants.DEFAULT_NOOBAA_BACKINGSTORE,
-    namespace=constants.OPENSHIFT_STORAGE_NAMESPACE,
+    namespace=config.ENV_DATA["cluster_namespace"],
 ):
     """
     check if existing pv backing store is in READY state
@@ -1566,7 +1566,8 @@ def retrieve_verification_mode():
         verify = True
     elif (
         config.DEPLOYMENT.get("use_custom_ingress_ssl_cert")
-        and config.DEPLOYMENT["custom_ssl_cert_provider"] == "ocs-ci-ca"
+        and config.DEPLOYMENT["custom_ssl_cert_provider"]
+        == constants.SSL_CERT_PROVIDER_OCS_QE_CA
     ):
         verify = get_root_ca_cert()
     else:

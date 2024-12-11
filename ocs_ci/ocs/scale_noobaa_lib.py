@@ -10,9 +10,9 @@ from ocs_ci.ocs import constants, ocp, platform_nodes
 from ocs_ci.ocs.utils import oc_get_all_obc_names
 from ocs_ci.ocs.resources import pod
 from ocs_ci.ocs.utils import get_pod_name_by_pattern
-from ocs_ci.ocs.exceptions import UnexpectedBehaviour
+from ocs_ci.ocs.exceptions import UnexpectedBehaviour, CommandFailed
 from ocs_ci.ocs.node import get_node_objs, wait_for_nodes_status
-from ocs_ci.utility.utils import ceph_health_check, run_cmd
+from ocs_ci.utility.utils import ceph_health_check, run_cmd, exec_cmd
 from ocs_ci.ocs.ocp import OCP
 from ocs_ci.ocs import hsbench
 
@@ -20,7 +20,9 @@ log = logging.getLogger(__name__)
 hsbenchs3 = hsbench.HsBench()
 
 
-def construct_obc_creation_yaml_bulk_for_kube_job(no_of_obc, sc_name, namespace):
+def construct_obc_creation_yaml_bulk_for_kube_job(
+    no_of_obc, sc_name, namespace, noobaa_storage_class_name
+):
     """
     Constructing obc.yaml file to create bulk of obc's using kube_job
 
@@ -28,11 +30,15 @@ def construct_obc_creation_yaml_bulk_for_kube_job(no_of_obc, sc_name, namespace)
         no_of_obc(int): Bulk obc count
         sc_name (str): storage class name using for obc creation
         namespace(str): Namespace uses to create bulk of obc
+        noobaa_storage_class_name (str): Noobaa storage class name fetched once per session run via fixture
+
     Returns:
 
          obc_dict_list (list): List of all obc.yaml dicts
 
     """
+
+    sc_name = noobaa_storage_class_name if noobaa_storage_class_name else sc_name
 
     # Construct obc.yaml for the no_of_obc count
     # append all the obc.yaml dict to obc_dict_list and return the list
@@ -47,6 +53,24 @@ def construct_obc_creation_yaml_bulk_for_kube_job(no_of_obc, sc_name, namespace)
         obc_dict_list.append(obc_data)
 
     return obc_dict_list
+
+
+def fetch_noobaa_storage_class_name():
+    """
+    Function to fetch noobaa storage class name from the Storage Cluster
+    """
+    try:
+        sc_name_fetched = exec_cmd(
+            "oc get storageclass -o json | "
+            "jq -r '.items[] | "
+            f'select(.parameters.bucketclass == "{constants.DEFAULT_NOOBAA_BUCKETCLASS}") | '
+            ".metadata.name'",
+            shell=True,
+        ).stdout.strip()
+    except CommandFailed as e:
+        log.error(f"Failed to get noobaa storageclass name: {e}")
+        raise
+    return sc_name_fetched
 
 
 def check_all_obc_reached_bound_state_in_kube_job(

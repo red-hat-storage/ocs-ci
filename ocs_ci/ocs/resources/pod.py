@@ -757,7 +757,9 @@ def get_all_pods(
     return pod_objs
 
 
-def get_ceph_tools_pod(skip_creating_pod=False, wait=False, namespace=None):
+def get_ceph_tools_pod(
+    skip_creating_pod=False, wait=False, namespace=None, get_running_pods=True
+):
     """
     Get the Ceph tools pod
 
@@ -766,6 +768,8 @@ def get_ceph_tools_pod(skip_creating_pod=False, wait=False, namespace=None):
             if it doesn't exist
         wait (bool): True if you want to wait for the tool pods to be Running
         namespace: Namespace of OCS
+        get_running_pods (bool): If True, get only the ceph tool pods in a Running status.
+            If False, get the ceph tool pods even if they are not in a Running status.
 
     Returns:
         Pod object: The Ceph tools pod object
@@ -792,7 +796,7 @@ def get_ceph_tools_pod(skip_creating_pod=False, wait=False, namespace=None):
         cluster_kubeconfig = config.ENV_DATA.get("provider_kubeconfig", "")
 
     if cluster_kubeconfig:
-        namespace = constants.OPENSHIFT_STORAGE_NAMESPACE
+        namespace = config.ENV_DATA["cluster_namespace"]
     else:
         namespace = namespace or config.ENV_DATA["cluster_namespace"]
 
@@ -838,6 +842,10 @@ def get_ceph_tools_pod(skip_creating_pod=False, wait=False, namespace=None):
 
         if not ct_pod_items:
             raise CephToolBoxNotFoundException
+
+        if not get_running_pods:
+            # Return the ceph tool pod objects even if they are not running
+            return ct_pod_items
 
         # In the case of node failure, the CT pod will be recreated with the old
         # one in status Terminated. Therefore, need to filter out the Terminated pod
@@ -1566,7 +1574,7 @@ def run_io_and_verify_mount_point(pod_obj, bs="10M", count="950"):
 
 def get_pods_having_label(
     label,
-    namespace=constants.OPENSHIFT_STORAGE_NAMESPACE,
+    namespace=config.ENV_DATA["cluster_namespace"],
     retry=0,
     cluster_config=None,
     statuses=None,
@@ -3580,12 +3588,13 @@ def restart_pods_in_statuses(
     logger.info("Finish restarting the pods")
 
 
-def wait_for_ceph_cmd_execute_successfully(timeout=300):
+def base_wait_for_ceph_cmd_execute_successfully(timeout=300, sleep=20):
     """
     Wait for a Ceph command to execute successfully
 
     Args:
         timeout (int): The time to wait for a Ceph command to execute successfully
+        sleep (int): Time to sleep between the iterations
 
     Returns:
         bool: True, if the Ceph command executed successfully. False, otherwise
@@ -3593,7 +3602,7 @@ def wait_for_ceph_cmd_execute_successfully(timeout=300):
     """
     try:
         for res in TimeoutSampler(
-            timeout=timeout, sleep=10, func=check_ceph_cmd_execute_successfully
+            timeout=timeout, sleep=sleep, func=check_ceph_cmd_execute_successfully
         ):
             if res:
                 return True
@@ -3718,7 +3727,7 @@ def get_mon_pod_by_pvc_name(pvc_name: str):
     return Pod(**mon_pod_ocp)
 
 
-def get_debug_pods(debug_nodes, namespace=constants.OPENSHIFT_STORAGE_NAMESPACE):
+def get_debug_pods(debug_nodes, namespace=config.ENV_DATA["cluster_namespace"]):
     """
     Get debug pods created for the nodes in debug
 
@@ -3743,7 +3752,7 @@ def get_debug_pods(debug_nodes, namespace=constants.OPENSHIFT_STORAGE_NAMESPACE)
 
 
 def wait_for_pods_deletion(
-    label, timeout=120, sleep=5, namespace=constants.OPENSHIFT_STORAGE_NAMESPACE
+    label, timeout=120, sleep=5, namespace=config.ENV_DATA["cluster_namespace"]
 ):
     """
     Wait for the pods with particular label to be deleted
@@ -3957,3 +3966,47 @@ def get_prometheus_pods(
     pods_with_label_match = get_pods_having_label(prometheus_label, namespace)
     prometheus_pod_objs = [Pod(**prometheus) for prometheus in pods_with_label_match]
     return prometheus_pod_objs
+
+
+def wait_for_ceph_cmd_execute_successfully(
+    timeout=300, sleep=20, num_of_retries=1, restart_tool_pod_before_retry=True
+):
+    """
+    Wait for the Ceph command to execute successfully in the given timeout and number of retries.
+    For, example, if the timeout is 300 and 'num_of_retries' is 2, we will wait 600 seconds
+    for the ceph command to execute successfully.
+
+    Args:
+        timeout (int): The time to wait for a Ceph command to execute successfully
+        sleep (int): Time to sleep between the iterations
+        num_of_retries (int): The number of retries to wait for the Ceph command to execute successfully.
+        restart_tool_pod_before_retry (bool): If True, restart the rook-ceph-tool pod before the next retry.
+            False, otherwise.
+
+    Returns:
+        bool: True, if the Ceph command executed successfully. False, otherwise
+
+    """
+    logger.info("Wait for the ceph command to execute successfully")
+
+    for num_of_retry in range(num_of_retries):
+        logger.info(f"num of retries = {num_of_retry}")
+        res = base_wait_for_ceph_cmd_execute_successfully(timeout=timeout, sleep=sleep)
+        if res:
+            return True
+        if num_of_retry < 1:
+            # Continue to the next iteration if we didn't reach the first retry
+            continue
+
+        if restart_tool_pod_before_retry:
+            try:
+                logger.info("Trying to restart the rook-ceph-tool pods...")
+                ceph_tool_pod = get_ceph_tools_pod(get_running_pods=False)
+                delete_pods([ceph_tool_pod], wait=False)
+            except CommandFailed as ex:
+                logger.warning(ex)
+
+    logger.warning(
+        f"The ceph command failed to execute successfully after {num_of_retries} retries"
+    )
+    return False

@@ -489,3 +489,17 @@ def clone_bs_dict_from_backingstore(
         raise UnknownCloneTypeException(prototype_bs_platform_name)
 
     return clone_bs_dict
+
+
+def get_backingstore():
+    """
+    Fetches the backingstore
+
+    Returns:
+        dict: backingstore details
+
+    """
+    backingstore = OCP(
+        kind=constants.BACKINGSTORE, namespace=config.ENV_DATA["cluster_namespace"]
+    )
+    return backingstore.get(resource_name=constants.DEFAULT_NOOBAA_BACKINGSTORE)

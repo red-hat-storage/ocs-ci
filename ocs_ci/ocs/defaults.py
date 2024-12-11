@@ -57,6 +57,7 @@ FUSION_CATALOG_NAME = "isf-data-foundation-catalog"
 LIVE_CONTENT_SOURCE = "redhat-operators"
 OCS_CLIENT_OPERATOR_NAME = "ocs-client-operator"
 CEPHCSI_OPERATOR = "cephcsi-operator"
+ODF_DEPENDENCIES = "odf-dependencies"
 
 # Noobaa S3 bucket website configurations
 website_config = {

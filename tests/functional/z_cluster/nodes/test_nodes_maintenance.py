@@ -27,7 +27,7 @@ from ocs_ci.ocs.node import (
 )
 from ocs_ci.ocs.cluster import validate_existence_of_blocking_pdb
 from ocs_ci.framework import config
-from ocs_ci.framework.pytest_customization.marks import brown_squad
+from ocs_ci.framework.pytest_customization.marks import brown_squad, skipif_rosa_hcp
 from ocs_ci.framework.testlib import (
     tier1,
     tier2,
@@ -128,7 +128,10 @@ class TestNodesMaintenance(ManageTest):
         argnames=["node_type"],
         argvalues=[
             pytest.param(*["worker"], marks=pytest.mark.polarion_id("OCS-1269")),
-            pytest.param(*["master"], marks=pytest.mark.polarion_id("OCS-1272")),
+            pytest.param(
+                *["master"],
+                marks=[pytest.mark.polarion_id("OCS-1272"), skipif_rosa_hcp],
+            ),
         ],
     )
     def test_node_maintenance(

@@ -127,8 +127,9 @@ class TestFailoverAndRelocate:
         logger.info(f"Waiting for {wait_time} minutes to run IOs")
         sleep(wait_time * 60)
 
+        before_failover_last_group_sync_time = []
         for obj in drpc_objs:
-            before_failover_last_group_sync_time = (
+            before_failover_last_group_sync_time.append(
                 dr_helpers.verify_last_group_sync_time(obj, scheduling_interval)
             )
         logger.info("Verified lastGroupSyncTime before failover.")
@@ -230,21 +231,23 @@ class TestFailoverAndRelocate:
                 replaying_images=sum([wl.workload_pvc_count for wl in workloads])
             )
 
-        after_failover_last_group_sync_time = []
-        for obj in drpc_objs:
-            after_failover_last_group_sync_time.append(
-                dr_helpers.verify_last_group_sync_time(
-                    obj, scheduling_interval, before_failover_last_group_sync_time
-                )
-            )
-        logger.info("Verified lastGroupSyncTime after failover.")
-
         if config.RUN.get("rdr_relocate_via_ui"):
             config.switch_acm_ctx()
             verify_failover_relocate_status_ui(acm_obj)
 
         logger.info(f"Waiting for {wait_time} minutes to run IOs")
         sleep(wait_time * 60)
+
+        post_failover_last_group_sync_time = []
+        for obj, initial_last_group_sync_time in zip(
+            drpc_objs, before_failover_last_group_sync_time
+        ):
+            post_failover_last_group_sync_time.append(
+                dr_helpers.verify_last_group_sync_time(
+                    obj, scheduling_interval, initial_last_group_sync_time
+                )
+            )
+        logger.info("Verified lastGroupSyncTime after failover.")
 
         # Relocate action
         for wl in workloads:
@@ -312,8 +315,10 @@ class TestFailoverAndRelocate:
                 acm_obj, action=constants.ACTION_RELOCATE
             )
 
-        for obj in drpc_objs:
+        for obj, initial_last_group_sync_time in zip(
+            drpc_objs, post_failover_last_group_sync_time
+        ):
             dr_helpers.verify_last_group_sync_time(
-                obj, scheduling_interval, after_failover_last_group_sync_time
+                obj, scheduling_interval, initial_last_group_sync_time
             )
         logger.info("Verified lastGroupSyncTime after relocate.")

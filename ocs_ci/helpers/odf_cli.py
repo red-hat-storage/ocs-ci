@@ -116,10 +116,19 @@ class ODFCliRunner:
         self.binary_name = "odf"
 
     def run_command(self, command_args: Union[str, list]) -> str:
+        # by default Operator namespace is set to 'openshift-storage' in ODF CLI,
+        # when -n <storage_ns> is not passed the command will fail if the namespace is not 'openshift-storage'
         if isinstance(command_args, str):
-            full_command = str(self.binary_name + command_args)
+            full_command = str(
+                self.binary_name
+                + f' -n {config.ENV_DATA["cluster_namespace"]} '
+                + command_args
+            )
         elif isinstance(command_args, list):
-            full_command = " ".join([self.binary_name] + command_args)
+            full_command = " ".join(
+                [self.binary_name, "-n", config.ENV_DATA["cluster_namespace"]]
+                + command_args
+            )
 
         output = exec_cmd(full_command)
         log.info(f"output type: {type(output)}")
