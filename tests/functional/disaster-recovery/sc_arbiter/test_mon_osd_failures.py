@@ -138,10 +138,10 @@ def setup_logwriter_workloads(
 
 
 @pytest.fixture(scope="class")
-def setup_cnv_workload(request, cnv_workload, setup_cnv):
+def setup_cnv_workload(request, cnv_workload_class, setup_cnv):
 
     logger.info("Setting up CNV workload and creating some data")
-    vm_obj = cnv_workload(volume_interface=constants.VM_VOLUME_PVC)[0]
+    vm_obj = cnv_workload_class(volume_interface=constants.VM_VOLUME_PVC)[0]
     vm_obj.run_ssh_cmd(command="dd if=/dev/zero of=/file_1.txt bs=1024 count=102400")
     md5sum_before = cal_md5sum_vm(vm_obj, file_path="/file_1.txt")
 
