@@ -1,4 +1,5 @@
 import pytest
+
 from ocs_ci.ocs.resources.pod import get_fio_rw_iops
 from ocs_ci.ocs import constants
 from ocs_ci.framework.pytest_customization.marks import green_squad
@@ -21,11 +22,11 @@ class TestIOMultiplePods(ManageTest):
     Run IO on multiple pods in parallel
     """
 
-    num_of_pvcs = 10
+    num_of_pvcs = 6
     pvc_size = 5
 
     @pytest.fixture()
-    def pods(self, interface, pod_factory, multi_pvc_factory):
+    def pods(self, interface, multi_pvc_factory, pod_factory, dc_pod_factory):
         """
         Prepare multiple pods for the test
 
@@ -38,8 +39,12 @@ class TestIOMultiplePods(ManageTest):
         )
 
         pod_objs = list()
-        for pvc_obj in pvc_objs:
-            pod_objs.append(pod_factory(pvc=pvc_obj))
+        for pvc_obj in pvc_objs[: len(pvc_objs) // 2]:
+            pod_objs.append(dc_pod_factory(interface=interface, pvc=pvc_obj))
+
+        for pvc_obj in pvc_objs[len(pvc_objs) // 2 :]:
+            pod_objs.append(pod_factory(interface=interface, pvc=pvc_obj))
+
         return pod_objs
 
     def test_run_io_multiple_pods(self, pods):
@@ -47,7 +52,7 @@ class TestIOMultiplePods(ManageTest):
         Run IO on multiple pods in parallel
         """
         for pod in pods:
-            pod.run_io("fs", f"{self.pvc_size - 1}G")
+            pod.run_io(storage_type="fs", size="1G")
 
         for pod in pods:
             get_fio_rw_iops(pod)
