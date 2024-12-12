@@ -32,6 +32,7 @@ class TestNoobaaUnderStress:
         bucket_factory,
         scale_noobaa_resources_session,
         scale_noobaa_db_pod_pv_size,
+        threading_lock,
     ):
         """
         Stress Noobaa by performing bulk s3 operations. This consists mainly 3 stages
@@ -60,7 +61,10 @@ class TestNoobaaUnderStress:
         bg_executor = ThreadPoolExecutor(max_workers=1)
 
         bg_future = bg_executor.submit(
-            run_background_cluster_checks, scale_noobaa_db_pod_pv_size, event=bg_event
+            run_background_cluster_checks,
+            scale_noobaa_db_pod_pv_size,
+            event=bg_event,
+            threading_lock=threading_lock,
         )
 
         # Iterate and stress the cluster with object upload
@@ -87,6 +91,7 @@ class TestNoobaaUnderStress:
                     self.base_setup_buckets,
                     iteration_no=i,
                     event=event,
+                    multiplier=i,
                 )
             )
 
