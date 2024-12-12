@@ -46,7 +46,7 @@ from ocs_ci.ocs.bucket_utils import (
     put_bucket_policy,
 )
 from ocs_ci.ocs.constants import FUSION_CONF_DIR
-from ocs_ci.ocs.cnv.virtual_machine import VirtualMachine
+from ocs_ci.ocs.cnv.virtual_machine import VirtualMachine, VMCloner
 from ocs_ci.ocs.dr.dr_workload import (
     BusyBox,
     BusyBox_AppSet,
@@ -7090,6 +7090,51 @@ def cnv_workload(request):
         """
         for cnv_wl in cnv_workloads:
             cnv_wl.delete()
+
+    request.addfinalizer(teardown)
+    return factory
+
+
+@pytest.fixture()
+def clone_vm_workload(request):
+    """
+    Clones VM workloads
+
+    """
+    cloned_vms = []
+
+    def factory(
+        vm_obj,
+        volume_interface=None,
+        namespace=None,
+    ):
+        """
+        Args:
+            vm_obj (VirtualMachine): Object of source vm to clone
+            volume_interface (str): The type of volume interface to use. Default is `constants.VM_VOLUME_PVC`.
+            namespace (str, optional): The namespace to create the vm on. Default, creates a unique namespace.
+
+        Returns:
+            list: objects of VM clone class
+
+        """
+        clone_vm_name = create_unique_resource_name("clone", "vm")
+        clone_vm_obj = VMCloner(vm_name=clone_vm_name, namespace=namespace)
+        volume_iface = volume_interface if volume_interface else vm_obj.volume_interface
+        clone_vm_obj.clone_vm(
+            source_vm_obj=vm_obj,
+            volume_interface=volume_iface,
+        )
+        cloned_vms.append(clone_vm_obj)
+        return cloned_vms
+
+    def teardown():
+        """
+        Cleans up cloned vm workloads
+
+        """
+        for vm_wl in cloned_vms:
+            vm_wl.delete()
 
     request.addfinalizer(teardown)
     return factory

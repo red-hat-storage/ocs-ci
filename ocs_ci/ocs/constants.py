@@ -987,6 +987,13 @@ CNV_VM_SECRET_YAML = os.path.join(TEMPLATE_DEPLOYMENT_DIR_CNV, "vm-secret.yaml")
 CNV_VM_SOURCE_YAML = os.path.join(TEMPLATE_CNV_VM_WORKLOAD_DIR, "source.yaml")
 CNV_VM_PVC_YAML = os.path.join(TEMPLATE_CNV_VM_WORKLOAD_DIR, "pvc.yaml")
 CNV_VM_DV_YAML = os.path.join(TEMPLATE_CNV_VM_WORKLOAD_DIR, "dv.yaml")
+CNV_VM_DV_CLONE_YAML = os.path.join(TEMPLATE_CNV_VM_WORKLOAD_DIR, "clone_dv.yaml")
+CNV_VM_DV_CLUSTER_ROLE_YAML = os.path.join(
+    TEMPLATE_CNV_VM_WORKLOAD_DIR, "dv_cluster_role.yaml"
+)
+CNV_VM_DV_ROLE_BIND_YAML = os.path.join(
+    TEMPLATE_CNV_VM_WORKLOAD_DIR, "dv_role_binding.yaml"
+)
 CNV_VM_TEMPLATE_YAML = os.path.join(TEMPLATE_CNV_VM_WORKLOAD_DIR, "vm.yaml")
 
 METALLB = "metallb-operator"
