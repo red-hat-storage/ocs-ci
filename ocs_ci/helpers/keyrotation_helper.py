@@ -647,27 +647,6 @@ class PVKeyrotation(KeyRotation):
         log.info("Completed key rotation state changes for all specified PVCs.")
         return True
 
-def enable_key_rotation():
-    """
-    Enable Key rotation and verify its status for Noobaa and Storage cluster.
-
-    """
-    osd_keyrotation = OSDKeyrotation()
-    noobaa_keyrotation = NoobaaKeyrotation()
-    osd_keyrotation.enable_keyrotation()
-    noobaa_keyrotation.enable_keyrotation()
-
-    assert (
-        osd_keyrotation.is_keyrotation_enable()
-    ), "Encryption Key rotation is not enabled for OSDs"
-    assert (
-        noobaa_keyrotation.is_keyrotation_enable
-    ), "Keyrotation is not enabled in the storagecluster object."
-    assert (
-        noobaa_keyrotation.is_noobaa_keyrotation_enable
-    ), "Keyrotation is not enabled in the noobaa object."
-
-
 def verify_key_rotation_time(schedule):
     """
     Verify Key rotation schedule changed at storage cluster, rook and Noobaa object.
