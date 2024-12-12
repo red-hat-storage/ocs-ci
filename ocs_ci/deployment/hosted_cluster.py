@@ -360,7 +360,9 @@ class HostedClients(HyperShiftBase):
             hosted_odf.do_deploy()
 
 
-class HypershiftHostedOCP(HyperShiftBase, MetalLBInstaller, CNVInstaller, Deployment):
+class HypershiftHostedOCP(
+    HyperShiftBase, MetalLBInstaller, CNVInstaller, Deployment, MCEInstaller
+):
     def __init__(self, name):
         Deployment.__init__(self)
         HyperShiftBase.__init__(self)
@@ -388,6 +390,7 @@ class HypershiftHostedOCP(HyperShiftBase, MetalLBInstaller, CNVInstaller, Deploy
         deploy_acm_hub=True,
         deploy_metallb=True,
         download_hcp_binary=True,
+        deploy_mce=True,
     ):
         """
         Deploy hosted OCP cluster on provisioned Provider platform
@@ -408,7 +411,7 @@ class HypershiftHostedOCP(HyperShiftBase, MetalLBInstaller, CNVInstaller, Deploy
             deploy_acm_hub = False
 
         self.deploy_dependencies(
-            deploy_acm_hub, deploy_cnv, deploy_metallb, download_hcp_binary
+            deploy_acm_hub, deploy_cnv, deploy_metallb, download_hcp_binary, deploy_mce
         )
 
         ocp_version = str(config.ENV_DATA["clusters"][self.name].get("ocp_version"))
