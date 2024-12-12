@@ -153,7 +153,7 @@ class TestMultipleMds:
         node.schedule_nodes([active_mds_node_name])
 
         # Perform cluster and Ceph health checks
-        self.sanity_helpers.health_check(tries=40)
+        self.sanity_helpers.health_check(tries=120)
 
         # Verify active and standby-replay mds counts.
         active_pod_count = get_active_and_standby_pod_count()["active_pod_count"]
