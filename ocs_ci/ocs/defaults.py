@@ -3,6 +3,7 @@ Defaults module. All the defaults used by OSCCI framework should
 reside in this module.
 PYTEST_DONT_REWRITE - avoid pytest to rewrite, keep this msg here please!
 """
+
 import os
 
 from ocs_ci.ocs import constants
@@ -37,6 +38,7 @@ PROMETHEUS_ROUTE = "prometheus-k8s"
 
 # Default device size in Gigs
 DEVICE_SIZE = 100
+DEVICE_SIZE_IBM_CLOUD_MANAGED = 512
 
 OCS_OPERATOR_NAME = "ocs-operator"
 ODF_OPERATOR_NAME = "odf-operator"
@@ -54,6 +56,8 @@ FUSION_OPERATOR_NAME = "isf-operator"
 FUSION_CATALOG_NAME = "isf-data-foundation-catalog"
 LIVE_CONTENT_SOURCE = "redhat-operators"
 OCS_CLIENT_OPERATOR_NAME = "ocs-client-operator"
+CEPHCSI_OPERATOR = "cephcsi-operator"
+ODF_DEPENDENCIES = "odf-dependencies"
 
 # Noobaa S3 bucket website configurations
 website_config = {
@@ -169,3 +173,9 @@ CRUSH_DEVICE_CLASS = "ssd"
 # IBM Cloud
 IBM_CLOUD_LOAD_BALANCER_QUOTA = 50
 IBM_CLOUD_REGIONS = {"us-south", "us-east"}
+
+# HyperShift defaults
+HYPERSHIFT_NODEPOOL_REPLICAS_DEFAULT = 2
+HYPERSHIFT_MEMORY_DEFAULT = "12Gi"
+HYPERSHIFT_CPU_CORES_DEFAULT = 6
+HOSTED_ODF_REGISTRY_DEFAULT = "quay.io/rhceph-dev/ocs-registry"

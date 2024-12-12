@@ -183,7 +183,6 @@ class TestObjectExpiration:
         noobaa_db_backup_and_recovery,
         node_drain_teardown,
     ):
-
         """
         Test object expiration feature when there are some sort of disruption to the noobaa
         like node drain, node restart, nb db recovery etc

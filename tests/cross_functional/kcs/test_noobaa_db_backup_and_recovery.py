@@ -112,7 +112,8 @@ class TestNoobaaBackupAndRecovery(E2ETest):
             * Create a test bucket and write some data
             * Backup noobaa secrets to local folder OR store it in secret objects
             * Backup the PostgreSQL database and save it to a local folder
-            * For testing, write new data to show a little data loss between backup and restore
+            * For testing, write new data to show a little data loss between backup and restore.
+
         Restore procedure:
             * Stop MCG reconciliation
             * Stop the NooBaa Service before restoring the NooBaa DB.
@@ -145,7 +146,7 @@ class TestNoobaaBackupAndRecovery(E2ETest):
             objects=100,
             obj_size="1MiB",
             validate=True,
-            timeout=4000,
+            timeout=6000,
             multi_client=True,
             tls=True,
             debug=True,

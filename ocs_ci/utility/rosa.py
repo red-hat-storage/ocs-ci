@@ -9,6 +9,7 @@ import os
 import re
 
 from ocs_ci.framework import config
+from ocs_ci.framework.logger_helper import log_step
 from ocs_ci.ocs import constants, ocp
 from ocs_ci.ocs.exceptions import (
     CommandFailed,
@@ -16,7 +17,9 @@ from ocs_ci.ocs.exceptions import (
     UnsupportedPlatformVersionError,
     ConfigurationError,
     ResourceWrongStatusException,
+    TimeoutExpiredError,
 )
+from ocs_ci.ocs.machinepool import MachinePools, NodeConf
 from ocs_ci.utility import openshift_dedicated as ocm
 from ocs_ci.utility import utils
 
@@ -26,17 +29,28 @@ from ocs_ci.utility.managedservice import (
     generate_onboarding_token,
     get_storage_provider_endpoint,
 )
+from ocs_ci.utility.retry import catch_exceptions
+from ocs_ci.utility.utils import exec_cmd, TimeoutSampler
 
 logger = logging.getLogger(name=__file__)
 rosa = config.AUTH.get("rosa", {})
+rosa_hcp = config.ENV_DATA.get("platform") == constants.ROSA_HCP_PLATFORM
+auth_data = config.AUTH.get("openshiftdedicated", {})
+# to trace the leftovers of aws resources - use the date + letters for every role, config, etc.
+date_in_minimal_format = utils.date_in_minimal_format()
+random_letters = utils.get_random_letters(3)
 
 
 def login():
     """
     Login to ROSA client
     """
-    token = ocm["token"]
+    token = auth_data["token"]
+    ms_env = config.ENV_DATA.get("ms_env_type", "staging")
     cmd = f"rosa login --token={token}"
+    if ms_env != "production":
+        # default MS environment consider is staging
+        cmd += " --env=staging"
     logger.info("Logging in to ROSA cli")
     utils.run_cmd(cmd, secrets=[token])
     logger.info("Successfully logged in to ROSA")
@@ -52,10 +66,12 @@ def create_cluster(cluster_name, version, region):
         region (str): Cluster region
 
     """
-
+    create_timeout = 2400
+    aws = AWSUtil()
     rosa_ocp_version = config.DEPLOYMENT["installer_version"]
     # Validate ocp version with rosa ocp supported version
     # Select the valid version if given version is invalid
+    log_step("Get OCP version matched with configuration")
     if not validate_ocp_version(rosa_ocp_version):
         logger.warning(
             f"Given OCP version {rosa_ocp_version} "
@@ -65,7 +81,20 @@ def create_cluster(cluster_name, version, region):
         rosa_ocp_version = get_latest_rosa_version(version)
         logger.info(f"Using OCP version {rosa_ocp_version}")
 
-    create_account_roles()
+    if rosa_hcp:
+        account_roles_prefix = (
+            f"{constants.ACCOUNT_ROLE_PREFIX_ROSA_HCP}-{cluster_name}"
+        )
+    else:
+        account_roles_prefix = "ManagedOpenShift"
+    log_step("Creating account roles")
+    create_account_roles(account_roles_prefix)
+
+    oidc_config_id = None
+    if rosa_hcp:
+        log_step("Creating OIDC config")
+        oidc_config_id = create_oidc_config()
+
     compute_nodes = config.ENV_DATA["worker_replicas"]
     compute_machine_type = config.ENV_DATA["worker_instance_type"]
     multi_az = "--multi-az " if config.ENV_DATA.get("multi_availability_zones") else ""
@@ -75,12 +104,18 @@ def create_cluster(cluster_name, version, region):
     subnet_section_name = "ms_subnet_ids_per_region_" + config.ENV_DATA.get(
         "subnet_type", "default"
     )
+    if rosa_hcp:
+        # For ROSA HCP we have only one subnet id's pair. Hence we can use default subnet id's.
+        subnet_section_name = "rosahcp_subnet_ids_per_region_default"
     cmd = (
         f"rosa create cluster --cluster-name {cluster_name} --region {region} "
         f"--machine-cidr {machine_cidr} --replicas {compute_nodes} "
         f"--compute-machine-type {compute_machine_type} "
-        f"--version {rosa_ocp_version} {multi_az}--sts --yes"
+        f"--version {rosa_ocp_version} {multi_az} --sts --yes --watch"
     )
+
+    if oidc_config_id:
+        cmd += f" --oidc-config-id {oidc_config_id}"
     if rosa_mode == "auto":
         cmd += " --mode auto"
 
@@ -92,8 +127,18 @@ def create_cluster(cluster_name, version, region):
     # if parameters are not defined then existing byo-vpc will be used
     if config.ENV_DATA.get("subnet_ids", ""):
         subnet_ids = config.ENV_DATA.get("subnet_ids")
+    elif rosa_hcp:
+        # we have only one subnet id's pair, for ROSA HCP we need a pair of public and private subnet-ids
+        # ROSA CLI identifies public vs. private subnets based on routing
+        # in future we may want to change indexes and pick-up approach
+        public_subnet = config.ENV_DATA["rosahcp_subnet_ids_per_region_default"][
+            "us-west-2"
+        ]["public_subnet"].split(",")[0]
+        private_subnet = config.ENV_DATA["rosahcp_subnet_ids_per_region_default"][
+            "us-west-2"
+        ]["private_subnet"].split(",")[0]
+        subnet_ids = f"{public_subnet},{private_subnet}"
     elif config.ENV_DATA.get("vpc_name", ""):
-        aws = AWSUtil()
         subnet_ids = ",".join(
             aws.get_cluster_subnet_ids(config.ENV_DATA.get("vpc_name"))
         )
@@ -109,8 +154,25 @@ def create_cluster(cluster_name, version, region):
 
     if private_link:
         cmd += " --private-link "
-    utils.run_cmd(cmd, timeout=1200)
-    if rosa_mode != "auto":
+
+    if rosa_hcp:
+        # with rosa hcp we need operator roles to be created before cluster creation
+        prefix = f"{constants.OPERATOR_ROLE_PREFIX_ROSA_HCP}-{cluster_name}"
+        aws_account_id = aws.get_caller_identity()
+        log_step("Creating operator roles and waiting them to be created")
+        create_operator_roles(
+            prefix=prefix,
+            oidc_config_id=oidc_config_id,
+            aws_account_id=aws_account_id,
+            account_roles_prefix=account_roles_prefix,
+        )
+        wait_operator_roles(prefix)
+        cmd += f" --operator-roles-prefix {prefix} "
+        cmd += " --hosted-cp "
+
+    log_step("Running create rosa cluster command")
+    utils.run_cmd(cmd, timeout=create_timeout)
+    if rosa_mode != "auto" and not rosa_hcp:
         logger.info(
             "Waiting for ROSA cluster status changed to waiting or pending state"
         )
@@ -122,7 +184,9 @@ def create_cluster(cluster_name, version, region):
             if status == "waiting" or status == "pending":
                 logger.info(f"Cluster is in {status} state")
                 break
+        log_step("Creating operator roles")
         create_operator_roles(cluster_name)
+        log_step("Creating OIDC provider")
         create_oidc_provider(cluster_name)
 
     logger.info("Waiting for installation of ROSA cluster")
@@ -134,6 +198,7 @@ def create_cluster(cluster_name, version, region):
         if status == "ready":
             logger.info("Cluster was installed")
             break
+    log_step("Retrieving cluster details and storing in metadata.json file")
     cluster_info = ocm.get_cluster_details(cluster_name)
     # Create metadata file to store the cluster name
     cluster_info["clusterName"] = cluster_name
@@ -337,27 +402,101 @@ def validate_ocp_version(version):
 
 def create_account_roles(prefix="ManagedOpenShift"):
     """
-    Create the required account-wide roles and policies, including Operator policies.
+    Create the necessary account-wide roles and policies, including operator-specific policies.
+
+    **Important:**
+    - Each cluster should have a unique prefix for its account roles, rather than using a common prefix across the
+    entire account.
+    - If multiple clusters are deployed with the same role prefix, deleting account roles during the cluster
+    destruction stage could lead to:
+    - Loss of Red Hat (RH) support.
+    - Disruption of communication with worker nodes.
+
+    Ensure that role prefixes are uniquely assigned per cluster to maintain cluster integrity and supportability.
 
     Args:
         prefix (str): role prefix
 
     """
-    cmd = f"rosa create account-roles --mode auto" f" --prefix {prefix}  --yes"
-    utils.run_cmd(cmd, timeout=1200)
+    if rosa_hcp:
+        hosted_cp_param = "--hosted-cp"
+    else:
+        hosted_cp_param = ""
+
+    cmd = f"rosa create account-roles {hosted_cp_param} --mode auto --prefix {prefix} --yes"
+    exec_cmd(cmd, timeout=1200)
 
 
-def create_operator_roles(cluster):
+def create_operator_roles(
+    cluster="", prefix="", oidc_config_id="", aws_account_id="", account_roles_prefix=""
+):
     """
     Create the cluster-specific Operator IAM roles. The roles created include the
     relevant prefix for the cluster name
 
     Args:
-        cluster (str): cluster name or cluster id
+        cluster (str): cluster name
+        prefix (str): role prefix
+        oidc_config_id (str): OIDC config id
+        aws_account_id (str): AWS account id
+        account_roles_prefix (str): account roles prefix
+    """
+    prefix = (
+        f"{constants.OPERATOR_ROLE_PREFIX_ROSA_HCP}-{cluster}"
+        if prefix == ""
+        else prefix
+    )
+    cmd = f"rosa create operator-roles --cluster {cluster} --mode auto --yes"
+    # command with prefix should look another way, to avoid error:
+    # ERR: A cluster key for STS cluster and an operator roles prefix cannot be specified alongside each other
+    if rosa_hcp:
+        cmd = (
+            "rosa create operator-roles "
+            "--hosted-cp "
+            f"--prefix={prefix} "
+            f"--oidc-config-id={oidc_config_id} "
+            f"--installer-role-arn=arn:aws:iam::{aws_account_id}:role/{account_roles_prefix}-HCP-ROSA-Installer-Role "
+            "--mode auto --yes"
+        )
+    utils.run_cmd(cmd, timeout=1200)
+
+
+def get_operator_roles_data(prefix):
+    """
+    Get the operator roles with the given prefix
+
+    Args:
+        prefix (str): role prefix
+
+    Returns:
+        dict: JSON data of operator roles
 
     """
-    cmd = f"rosa create operator-roles --cluster {cluster}" f" --mode auto --yes"
-    utils.run_cmd(cmd, timeout=1200)
+    cmd = f"rosa list operator-roles --prefix {prefix} -o json"
+    if "No operator roles available" in utils.exec_cmd(cmd).stdout.decode():
+        return
+    return json.loads(utils.exec_cmd(cmd).stdout)
+
+
+def wait_operator_roles(prefix, wait_minutes=10):
+    """
+    Wait for the operator roles to be created
+
+    Args:
+        prefix (str): role prefix
+        wait_minutes (int): Time in minutes to wait for operator roles to be created
+
+    Returns:
+        bool: True if operator roles are created, False otherwise
+    """
+    for sample in TimeoutSampler(
+        timeout=60 * wait_minutes,
+        sleep=10,
+        func=get_operator_roles_data,
+        prefix=prefix,
+    ):
+        if sample:
+            return True
 
 
 def create_oidc_provider(cluster):
@@ -373,6 +512,127 @@ def create_oidc_provider(cluster):
     utils.run_cmd(cmd, timeout=1200)
 
 
+def create_oidc_config():
+    """
+    Create OIDC config and wait for it to appear in the list
+    ! In a very extreme case, other OIDC config can be created in the same time failing TimeoutSampler and
+    raising TimeoutExpiredError exception
+
+    Returns:
+        str: OIDC config id
+
+    Raises:
+        TimeoutExpiredError: If OIDC config is not created in time
+    """
+    cmd = "rosa create oidc-config --managed --mode=auto --yes"
+    proc = exec_cmd(cmd, timeout=1200)
+    if proc.returncode != 0:
+        raise CommandFailed(
+            f"Failed to create oidc config: {proc.stderr.decode().strip()}"
+        )
+
+    for sample in TimeoutSampler(
+        timeout=300,
+        sleep=10,
+        func=get_oidc_config_ids,
+        latest=True,
+    ):
+        if len(sample) and sample[0] in proc.stdout.decode().strip():
+            logger.info("OIDC config created successfully")
+            return sample[0]
+
+
+def get_oidc_endpoint_url(oidc_config_id):
+    """
+    Get OIDC provider endpoint URL for the given OIDC config id
+
+    Args:
+        oidc_config_id (str): OIDC config id
+
+    Returns:
+        str: OIDC provider id
+    """
+    cmd = f"rosa list oidc-config -o json | jq -r '.[] | select(.id == \"{oidc_config_id}\") | .issuer_url'"
+    proc = exec_cmd(cmd, shell=True)
+    if proc.returncode != 0:
+        raise CommandFailed(
+            f"Failed to get oidc provider id: {proc.stderr.decode().strip()}"
+        )
+    issuer_url = proc.stdout.decode().strip()
+    logger.info(f"OIDC issuer url: {issuer_url}")
+    return issuer_url
+
+
+def delete_oidc_config(oidc_config_id):
+    """
+    Delete OIDC config
+
+    Args:
+        oidc_config_id (str): OIDC config id
+
+    """
+    # check if requested oidc config persisted
+    if oidc_config_id not in get_oidc_config_ids():
+        logger.warning(
+            f"OIDC config {oidc_config_id} is not found in the list of available configs"
+        )
+        return
+
+    cmd = f"rosa delete oidc-config --oidc-config-id {oidc_config_id} --mode auto --yes"
+    utils.exec_cmd(cmd, timeout=1200)
+    for sample in TimeoutSampler(
+        timeout=300,
+        sleep=10,
+        func=get_oidc_config_ids,
+        latest=False,
+    ):
+        if oidc_config_id not in sample:
+            logger.info("OIDC config deleted successfully")
+            return
+
+
+def get_latest_oidc_config_id():
+    cmd = "rosa list oidc-config -o json | jq -r 'max_by(.creation_timestamp) | .id'"
+    proc = exec_cmd(cmd, shell=True)
+    if proc.returncode != 0:
+        raise CommandFailed(
+            f"Failed to get latest oidc config id: {proc.stderr.decode().strip()}"
+        )
+    oidc_config_latest = proc.stdout.decode().strip()
+    logger.info(f"Latest OIDC config id: {oidc_config_latest}")
+    return oidc_config_latest
+
+
+def get_oidc_config_ids(latest=False):
+    """
+    Get OIDC config ids. If latest is True, return only the latest OIDC config id.
+
+    Args:
+        latest (bool): If True, return only the latest OIDC config id
+
+    Returns:
+        list: List of OIDC config ids
+    """
+    if latest:
+        cmd = (
+            "rosa list oidc-config -o json | jq -r 'max_by(.creation_timestamp) | .id'"
+        )
+    else:
+        cmd = (
+            "rosa list oidc-config -o json | jq -r 'map(select(has(\"id\"))) | .[].id'"
+        )
+
+    proc = exec_cmd(cmd, shell=True)
+    if proc.returncode != 0:
+        raise CommandFailed(
+            f"Failed to get OIDC config ids: {proc.stderr.decode().strip()}"
+        )
+
+    oidc_configs = proc.stdout.decode().strip()
+    logger.info(f"OIDC config id(s), latest='{latest}': {oidc_configs}")
+    return oidc_configs.splitlines()
+
+
 def download_rosa_cli():
     """
     Method to download OCM cli
@@ -386,7 +646,7 @@ def download_rosa_cli():
         and config.DEPLOYMENT["force_download_rosa_cli"]
     )
     return utils.get_rosa_cli(
-        config.ENV_DATA["rosa_cli_version"], force_download=force_download
+        config.DEPLOYMENT["rosa_cli_version"], force_download=force_download
     )
 
 
@@ -517,15 +777,38 @@ def delete_odf_addon(cluster):
             )
 
 
-def delete_operator_roles(cluster_id):
+def delete_operator_roles(prefix):
     """
-    Delete operator roles of the given cluster
+    Delete operator roles with prefix
 
     Args:
-        cluster_id (str): the id of the cluster
+        prefix (str): prefix. Usually it is cluster name set during 'rosa create operator-roles' command
     """
-    cmd = f"rosa delete operator-roles -c {cluster_id} --mode auto --yes"
-    utils.run_cmd(cmd, timeout=1200)
+    cmd = f"rosa delete operator-roles --prefix {prefix} --mode auto --yes"
+    proc = exec_cmd(cmd, timeout=1200)
+    if proc.returncode != 0:
+        raise CommandFailed(
+            f"Failed to delete operator roles: {proc.stderr.decode().strip()}"
+        )
+    logger.info(f"{proc.stdout.decode().strip()}")
+
+
+def delete_account_roles(prefix):
+    """
+    Delete account roles
+    ! Important to not delete account roles if there are any clusters in the account using this prefix
+
+    Args:
+        prefix (str): role prefix
+
+    """
+    cmd = f"rosa delete account-roles -p {prefix} --mode auto --yes"
+    proc = exec_cmd(cmd, timeout=1200)
+    if proc.returncode != 0:
+        raise CommandFailed(
+            f"Failed to delete account roles: {proc.stderr.decode().strip()}"
+        )
+    logger.info(f"{proc.stdout.decode().strip()}")
 
 
 def get_rosa_cluster_service_id(cluster):
@@ -611,15 +894,20 @@ def destroy_appliance_mode_cluster(cluster):
     return True
 
 
-def delete_oidc_provider(cluster_id):
+def delete_oidc_provider(cluster_name):
     """
     Delete oidc provider of the given cluster
 
     Args:
-        cluster_id (str): the id of the cluster
+        cluster_name (str): the cluster name
     """
-    cmd = f"rosa delete oidc-provider -c {cluster_id} --mode auto --yes"
-    utils.run_cmd(cmd, timeout=1200)
+    cmd = f"rosa delete oidc-provider -c {cluster_name} --mode auto --yes"
+    proc = exec_cmd(cmd, timeout=1200)
+    if proc.returncode != 0:
+        raise CommandFailed(
+            f"Failed to delete oidc provider: {proc.stderr.decode().strip()}"
+        )
+    logger.info(f"{proc.stdout.decode().strip()}")
 
 
 def is_odf_addon_installed(cluster_name=None):
@@ -752,3 +1040,114 @@ def edit_addon_installation(
     utils.run_cmd(cmd)
     if wait:
         wait_for_addon_to_be_ready(cluster_name, addon_name)
+
+
+def get_console_url(cluster_name):
+    """
+    Get the console URL of the given cluster
+
+    Args:
+        cluster_name (str): The cluster name
+
+    Returns:
+        str: The console URL
+
+    """
+    cmd = (
+        f"rosa describe cluster --cluster {cluster_name} -o json | jq -r '.console.url'"
+    )
+    proc = exec_cmd(cmd, shell=True)
+    if proc.returncode != 0:
+        raise CommandFailed(
+            f"Failed to get console URL: {proc.stderr.decode().strip()}"
+        )
+    return proc.stdout.decode().strip()
+
+
+@catch_exceptions((CommandFailed, TimeoutExpiredError))
+def wait_console_url(cluster_name, timeout=600, sleep=10):
+    """
+    Wait for the console URL of the cluster to be ready
+
+    Args:
+        cluster_name (str): The cluster name
+        timeout (int): Timeout to wait for the console URL to be ready
+        sleep (int): Time in seconds to sleep between attempts
+
+    Returns:
+        str: The console URL
+
+    Raises:
+        TimeoutExpiredError: In case the console URL is not ready in the given timeout
+
+    """
+    for console_url in TimeoutSampler(
+        timeout=timeout,
+        sleep=sleep,
+        func=get_console_url,
+        cluster_name=cluster_name,
+    ):
+        if console_url and "https" in console_url:
+            logger.info(f"Console URL: {console_url}")
+            return console_url
+
+
+def get_associated_oidc_config_id(cluster_name):
+    """
+    Get the associated OIDC config id of the given cluster
+
+    Args:
+        cluster_name (str): The cluster name
+
+    Returns:
+        str: The OIDC config id
+
+    """
+    cmd = (
+        f"rosa describe cluster --cluster {cluster_name} -o json "
+        "| jq -r '.aws.sts.oidc_endpoint_url? "
+        '| split("/") | .[-1] // ""\''
+    )
+    proc = exec_cmd(cmd, shell=True)
+    if proc.returncode != 0:
+        logger.warning(f"Failed to get OIDC config id: {proc.stderr.decode().strip()}")
+        return ""
+    return proc.stdout.decode().strip()
+
+
+def label_nodes(cluster_name, machinepool_id, labels, rewrite=False):
+    """
+    Label nodes of the given cluster.
+    ! Important
+    This method rewrites existing behavior of labeling nodes in the cluster, it appends the labels to the existing
+    labels, but not rewrite them. This prevents the issue of accidental overwriting the existing labels.
+
+    Args:
+        cluster_name (str): The cluster name
+        machinepool_id (str): The machinepool id
+        labels (str): The labels to apply
+        rewrite (bool): If True, rewrite the labels. False, otherwise.
+
+    Returns:
+        str: The output of the command
+    """
+    machine_pools = MachinePools(cluster_name)
+    machine_pool = machine_pools.filter(machinepool_id="workers", pick_first=True)
+    if not rewrite:
+        labels_dict = machine_pool.labels
+        logger.info(f"Existing labels: {labels_dict}")
+        # convert to comma separated string
+        if labels_dict:
+            labels = (
+                ",".join([f"{key}={value}" for key, value in labels_dict.items()])
+                + ","
+                + labels
+            )
+        else:
+            labels = labels
+    machine_pools.edit_machine_pool(
+        NodeConf(**{"machinepool_id": machinepool_id, "labels": labels}),
+        wait_ready=False,
+    )
+    machine_pool.refresh()
+    return machine_pool.labels

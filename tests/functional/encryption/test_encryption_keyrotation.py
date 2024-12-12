@@ -35,8 +35,7 @@ class TestEncryptionKeyrotation:
 
         def finalizer():
             kr_obj = KeyRotation()
-            kr_obj.set_keyrotation_schedule("@weekly")
-            kr_obj.enable_keyrotation()
+            kr_obj.set_keyrotation_defaults()
 
         request.addfinalizer(finalizer)
 
@@ -55,6 +54,7 @@ class TestEncryptionKeyrotation:
             7. Change the keyrotation value to default.
         """
         osd_keyrotation = OSDKeyrotation()
+        osd_keyrotation.set_keyrotation_defaults()
 
         # Disable keyrotation and verify its enable status at rook and storagecluster end.
         log.info("Disabling the Keyrotation in storagecluster Spec.")
@@ -143,6 +143,7 @@ class TestEncryptionKeyrotation:
 
         # Get the noobaa object.
         noobaa_keyrotation = NoobaaKeyrotation()
+        noobaa_keyrotation.set_keyrotation_defaults()
 
         # Disable keyrotation and verify its disable status at noobaa and storagecluster end.
         noobaa_keyrotation.disable_keyrotation()

@@ -30,9 +30,10 @@ class AddReplaceDeviceUI(PageNavigator):
             self.do_click(self.add_capacity_ui_loc["ocs_operator"])
             self.do_click(self.add_capacity_ui_loc["storage_cluster_tab"])
         time.sleep(1)
-        self.do_click(
-            self.add_capacity_ui_loc["kebab_storage_cluster"], avoid_stale=True
-        )
+        logger.info("Click on kebab menu of Storage Systems")
+        self.do_click(self.add_capacity_ui_loc["kebab_storage_cluster"])
+        self.take_screenshot()
+        logger.info("Click on Add Capacity button under the kebab menu")
         self.wait_until_expected_text_is_found(
             locator=self.add_capacity_ui_loc["add_capacity_button"],
             timeout=10,

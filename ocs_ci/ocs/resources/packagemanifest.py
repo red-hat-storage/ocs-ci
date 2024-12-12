@@ -1,6 +1,7 @@
 """
 Package manifest related functionalities
 """
+
 import logging
 
 from ocs_ci.framework import config

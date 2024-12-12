@@ -7,7 +7,10 @@ import requests
 from selenium.webdriver.support.wait import WebDriverWait
 from selenium.webdriver.support import expected_conditions as ec
 from selenium.webdriver.common.by import By
-from selenium.common.exceptions import NoSuchElementException
+from selenium.common.exceptions import (
+    NoSuchElementException,
+)
+
 from ocs_ci.helpers.helpers import create_unique_resource_name
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.acm.acm_constants import (
@@ -21,7 +24,11 @@ from ocs_ci.ocs.ocp import OCP, get_ocp_url
 from ocs_ci.framework import config
 from ocs_ci.ocs.resources.pod import wait_for_pods_to_be_running
 from ocs_ci.ocs.ui.helpers_ui import format_locator
-from ocs_ci.ocs.utils import get_non_acm_cluster_config, get_primary_cluster_config
+from ocs_ci.ocs.utils import (
+    get_non_acm_cluster_config,
+    get_primary_cluster_config,
+    get_recovery_cluster_config,
+)
 from ocs_ci.utility.utils import (
     TimeoutSampler,
     get_ocp_version,
@@ -56,6 +63,7 @@ class AcmAddClusters(AcmPageNavigator):
     def __init__(self):
         super().__init__()
         self.page_nav = self.acm_page_nav
+        self.driver = SeleniumDriver()
 
     def import_cluster_ui(self, cluster_name, kubeconfig_location):
         """
@@ -234,7 +242,11 @@ class AcmAddClusters(AcmPageNavigator):
         log.info("Click on 'Submariner add-ons' tab")
         self.do_click(self.page_nav["submariner-tab"])
         log.info("Click on 'Install Submariner add-ons' button")
-        self.do_click(self.page_nav["install-submariner-btn"], timeout=120)
+        self.do_click(
+            self.page_nav["install-submariner-btn"],
+            enable_screenshot=True,
+            avoid_stale=True,
+        )
         log.info("Click on 'Target clusters'")
         self.do_click(self.page_nav["target-clusters"])
         log.info(f"Select 1st cluster which is {cluster_name_a}")
@@ -247,13 +259,13 @@ class AcmAddClusters(AcmPageNavigator):
             enable_screenshot=True,
         )
         if ocs_version >= version.VERSION_4_13 and globalnet:
-            log.info("Enabling globalnet")
+            log.info(
+                "Enabling globalnet during submariner installation via ACM console"
+            )
             element = self.find_an_element_by_xpath("//input[@id='globalist-enable']")
             self.driver.execute_script("arguments[0].click();", element)
         else:
-            log.error(
-                "Globalnet is not supported with ODF version lower than 4.13 or it's disabled"
-            )
+            log.info("Globalnet is disabled")
         log.info("Click on Next button")
         self.do_click(self.page_nav["next-btn"])
         log.info("Click on 'Enable NAT-T' to uncheck it")
@@ -625,3 +637,24 @@ def import_clusters_with_acm():
         )
     else:
         import_clusters_via_cli(clusters)
+
+
+def import_recovery_clusters_with_acm():
+    """
+    Run Procedure of: detecting acm, login to ACM console, import recoevry cluster
+
+    """
+    clusters_env = get_clusters_env()
+    recovery_index = get_recovery_cluster_config().MULTICLUSTER["multicluster_index"]
+    log.info(clusters_env)
+    kubeconfig_recovery = copy_kubeconfig(
+        file=clusters_env.get(f"kubeconfig_location_c{recovery_index}"), return_str=True
+    )
+
+    cluster_name_recoevry = clusters_env.get(f"cluster_name_{recovery_index}")
+    clusters = ((cluster_name_recoevry, kubeconfig_recovery),)
+    verify_running_acm()
+
+    import_clusters_via_cli(clusters)
+
+    return cluster_name_recoevry

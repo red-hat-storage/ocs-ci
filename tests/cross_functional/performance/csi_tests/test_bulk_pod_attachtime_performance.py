@@ -2,6 +2,7 @@
 Test to verify performance of attaching number of pods as a bulk, each pod attached to one pvc only
 The test results will be uploaded to the ES server
 """
+
 import json
 import logging
 import pytest
@@ -110,7 +111,6 @@ class TestBulkPodAttachPerformance(PASTest):
     )
     @polarion_id("OCS-1620")
     def test_bulk_pod_attach_performance(self, interface_type, bulk_size):
-
         """
         Measures pods attachment time in bulk_size bulk
 

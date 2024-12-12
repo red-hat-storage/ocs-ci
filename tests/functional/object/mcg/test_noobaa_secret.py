@@ -1,8 +1,14 @@
+import re
+
 import pytest
 import json
 import logging
 import boto3
 
+from ocs_ci.ocs.resources.pod import (
+    get_noobaa_operator_pod,
+    search_pattern_in_pod_logs,
+)
 from ocs_ci.utility import templating
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.resources.backingstore import BackingStore
@@ -19,6 +25,7 @@ from ocs_ci.framework.pytest_customization.marks import (
     runs_on_provider,
     mcg,
     post_upgrade,
+    tier1,
 )
 from ocs_ci.ocs.exceptions import CommandFailed
 from ocs_ci.utility.aws import update_config_from_s3
@@ -343,7 +350,7 @@ class TestNoobaaSecrets:
 @bugzilla("2219522")
 @polarion_id("OCS-5205")
 @runs_on_provider
-@tier2
+@tier1
 def test_noobaa_root_secret():
     """
     This test verifies if the noobaa root secret is publicly
@@ -355,3 +362,31 @@ def test_noobaa_root_secret():
         check_if_mcg_root_secret_public() is False
     ), "Seems like MCG root secrets are exposed publicly, please check"
     logger.info("MCG root secrets are not exposed to public")
+
+
+@mcg
+@red_squad
+@tier1
+@bugzilla("2277186")
+@polarion_id("OCS-6184")
+def test_operator_logs_for_secret():
+    """
+    This test verifies if secrets are exposed
+    in noobaa operator logs
+
+    """
+
+    # get the noobaa operator logs filtered
+    pattern = r"Identity:\S+ Secret:\S+"
+    filtered_log = search_pattern_in_pod_logs(
+        pod_name=get_noobaa_operator_pod().name, pattern=pattern
+    )
+
+    # check if secrets are exposed in the noobaa operator logs
+    for log_line in filtered_log:
+        matches = re.findall(pattern, log_line)
+        for match in matches:
+            assert (
+                match == "Identity:**** Secret:****"
+            ), f"Looks like secrets are exposed in the noobaa operator logs. {match}"
+    logger.info("Secrets are not exposed in the operator logs")

@@ -6,6 +6,9 @@ from ocs_ci.ocs import constants
 from ocs_ci.ocs.exceptions import CommandFailed
 from ocs_ci.framework import config
 from ocs_ci.ocs.resources.pvc import get_deviceset_pvcs
+from ocs_ci.ocs.exceptions import UnexpectedBehaviour
+from ocs_ci.utility.retry import retry
+from ocs_ci.utility.kms import get_kms_details
 
 log = logging.getLogger(__name__)
 
@@ -24,13 +27,27 @@ class KeyRotation:
         self.cluster_namespace = config.ENV_DATA["cluster_namespace"]
 
         if config.DEPLOYMENT["external_mode"]:
-            self.cluster_name_name = constants.DEFAULT_CLUSTERNAME_EXTERNAL_MODE
+            self.cluster_name = constants.DEFAULT_CLUSTERNAME_EXTERNAL_MODE
 
         self.storagecluster_obj = OCP(
             resource_name=self.cluster_name,
             namespace=self.cluster_namespace,
             kind=self.resource_name,
         )
+
+    def set_keyrotation_defaults(self):
+        """
+        Setting Keyrotation Defaults on the cluster.
+        """
+        param = '[{"op":"add","path":"/spec/encryption/keyRotation","value":{"schedule":"@weekly"}}]'
+        self.storagecluster_obj.patch(params=param, format_type="json")
+        self.storagecluster_obj.wait_for_resource(
+            constants.STATUS_READY,
+            self.storagecluster_obj.resource_name,
+            column="PHASE",
+            timeout=180,
+        )
+        self.storagecluster_obj.reload_data()
 
     def _exec_oc_cmd(self, cmd, **kwargs):
         """
@@ -96,10 +113,8 @@ class KeyRotation:
             log.info("Keyrotation is Already in Enabled state.")
             return True
 
-        param = '{"spec":{"encryption":{"keyRotation":{"enable":null}}}}'
-        self.storagecluster_obj.patch(
-            params=param, format_type="merge", resource_name=self.cluster_name
-        )
+        param = '[{"op":"remove","path":"/spec/encryption/keyRotation/enable"}]'
+        self.storagecluster_obj.patch(params=param, format_type="json")
         resource_status = self.storagecluster_obj.wait_for_resource(
             constants.STATUS_READY,
             self.storagecluster_obj.resource_name,
@@ -259,7 +274,13 @@ class OSDKeyrotation(KeyRotation):
         Initializes RookKeyrotation object.
         """
         super().__init__()
-        self.deviceset = [pvc.name for pvc in get_deviceset_pvcs()]
+        self.deviceset = self._get_deviceset()
+
+    def _get_deviceset(self):
+        """
+        Listing deviceset for OSD.
+        """
+        return [pvc.name for pvc in get_deviceset_pvcs()]
 
     def is_osd_keyrotation_enabled(self):
         """
@@ -306,3 +327,96 @@ class OSDKeyrotation(KeyRotation):
         dmcrypt_key = self._exec_oc_cmd(cmd=cmd, out_yaml_format=False)
         log.info(f"dmcrypt-key of device {device} is {dmcrypt_key}")
         return dmcrypt_key
+
+    def verify_keyrotation(self, old_keys, tries=10, delay=20):
+        """
+        Verify Keyrotation is suceeded for all OSD devices.
+
+        Args:
+            old_keys (dict): osd devices and their keys.
+
+        Returns:
+            bool: True if all OSD keyrotation is happend, orherwise False.
+        """
+        log.info("Verifying OSD keyrotation is happening")
+
+        @retry(UnexpectedBehaviour, tries=tries, delay=delay)
+        def compare_old_with_new_keys():
+            for device in self._get_deviceset():
+                osd_keys_after_rotation = self.get_osd_dm_crypt(device)
+                log.info(
+                    f"Fetching New Key for device {device}: {osd_keys_after_rotation}"
+                )
+                if old_keys[device] == osd_keys_after_rotation:
+                    log.info(f"Keyrotation Still not happend for device {device}")
+                    raise UnexpectedBehaviour(
+                        f"Keyrotation is not happened for the device {device}"
+                    )
+                log.info(f"Keyrotation is happend for device {device}")
+            return True
+
+        try:
+            compare_old_with_new_keys()
+        except UnexpectedBehaviour:
+            log.error("Key rotation is Not happend after schedule is passed. ")
+            assert False
+
+        log.info("Keyrotation is sucessfully done for the all OSD.")
+        return True
+
+
+class PVKeyrotation(KeyRotation):
+    def __init__(self, sc_obj):
+        self.sc_obj = sc_obj
+        self.kms = get_kms_details()
+
+    def annotate_storageclass_key_rotation(self, schedule="@weekly"):
+        """
+        Annotate Storageclass To enable keyrotation for encrypted PV
+        """
+        annot_str = f"keyrotation.csiaddons.openshift.io/schedule='{schedule}'"
+        log.info(f"Adding annotation to the storage class:  {annot_str}")
+        self.sc_obj.annotate(annotation=annot_str)
+
+    @retry(UnexpectedBehaviour, tries=5, delay=20)
+    def compare_keys(self, device_handle, old_key):
+        """
+        Compares the current key with the rotated key.
+
+        Args:
+            device_handle (str): The handle or identifier for the device.
+            old_key (str): The current key before rotation.
+
+        Returns:
+            bool: True if the key has rotated successfully.
+
+        Raises:
+            UnexpectedBehaviour: If the keys have not rotated.
+        """
+        rotated_key = self.kms.get_pv_secret(device_handle)
+        if old_key == rotated_key:
+            raise UnexpectedBehaviour(
+                f"Keys are not rotated for device handle {device_handle}"
+            )
+        log.info(f"PV key rotated with new key : {rotated_key}")
+        return True
+
+    def wait_till_keyrotation(self, device_handle):
+        """
+        Waits until the key rotation occurs for a given device handle.
+
+        Args:
+            device_handle (str): The handle or identifier for the device whose key
+                rotation is to be checked.
+
+        Returns:
+            bool: True if the key rotation is successful, otherwise False.
+        """
+        old_key = self.kms.get_pv_secret(device_handle)
+        try:
+            self.compare_keys(device_handle, old_key)
+        except UnexpectedBehaviour:
+            log.error(f"Keys are not rotated for device handle {device_handle}")
+            assert False
+
+        return True

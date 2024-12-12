@@ -27,7 +27,6 @@ logger = logging.getLogger(__name__)
 @tier2
 @skipif_ocs_version("<4.10")
 class TestS3PrefixList:
-
     """
     Test S3 prefix list operations
     """

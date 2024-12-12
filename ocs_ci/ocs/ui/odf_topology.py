@@ -24,7 +24,6 @@ logger = logging.getLogger(__name__)
 
 
 class TopologyUiStr:
-
     """
     Class-helper to visualize Topology configuration saved in dataframe gathered with Selenium driver.
     """
@@ -40,10 +39,10 @@ class TopologyUiStr:
             ].copy()
             nodes_len = len(self.__topology)
             for i in range(nodes_len):
-                selected_columns_nodes_and_nested.at[
-                    i, "nested_deployments"
-                ] = selected_columns_nodes_and_nested.at[i, "nested_deployments"].drop(
-                    ["status_xpath", "select_node_xpath"], axis=1
+                selected_columns_nodes_and_nested.at[i, "nested_deployments"] = (
+                    selected_columns_nodes_and_nested.at[i, "nested_deployments"].drop(
+                        ["status_xpath", "select_node_xpath"], axis=1
+                    )
                 )
         else:
             selected_columns_nodes_and_nested = self.__topology[
@@ -145,9 +144,9 @@ def get_node_details_cli(node_name) -> dict:
     )
     node_details["kubelet_version"] = node_status.get("nodeInfo").get("kubeletVersion")
     node_details["provider_ID"] = node.get().get("spec")["providerID"]
-    node_details[
-        "annotations_number"
-    ] = f"{len(node_metadata.get('annotations'))} annotation"
+    node_details["annotations_number"] = (
+        f"{len(node_metadata.get('annotations'))} annotation"
+    )
     node_details["external_id"] = "-"
     node_details["created"] = get_creation_ts_with_offset(node_metadata)
     if config.ENV_DATA["platform"].lower() in ON_PREM_PLATFORMS:
@@ -192,9 +191,9 @@ def get_deployment_details_cli(deployment_name) -> dict:
         deployment_details["labels"] = ""
     else:
         deployment_details["labels"] = node_metadata.get("labels")
-    deployment_details[
-        "annotation"
-    ] = f"{len(node_metadata.get('annotations'))} annotation"
+    deployment_details["annotation"] = (
+        f"{len(node_metadata.get('annotations'))} annotation"
+    )
     deployment_details["owner"] = node_metadata.get("ownerReferences")[0].get("name")
     deployment_details["created_at"] = get_creation_ts_with_offset(node_metadata)
 
@@ -285,11 +284,7 @@ class OdfTopologyHelper:
 
             # for the depl such as rook-ceph-crashcollector-a7.a1.7434.ip4.static.sl-reverse.com there is an exclusion -
             # deployment name will be trimmed by '.com' and it will become the prefix of the pod name
-            if (
-                not pods_names
-                and "rook-ceph-crashcollector" in depl_name
-                and ".com" in depl_name
-            ):
+            if "rook-ceph-crashcollector" in depl_name and ".com" in depl_name:
                 ocp = OCP(namespace=config.ENV_DATA["cluster_namespace"])
                 pods_names_all = str(
                     ocp.exec_oc_cmd(

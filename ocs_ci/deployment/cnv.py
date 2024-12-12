@@ -13,7 +13,7 @@ import tarfile
 
 from ocs_ci.framework import config
 from ocs_ci.ocs.resources.ocs import OCS
-from ocs_ci.ocs.ocp import OCP
+from ocs_ci.ocs.ocp import OCP, switch_to_default_rook_cluster_project
 from ocs_ci.ocs.resources.packagemanifest import PackageManifest
 from ocs_ci.ocs.constants import (
     CNV_NAMESPACE_YAML,
@@ -472,10 +472,18 @@ class CNVInstaller(object):
         logger.info("Performing virtctl binary compatibility check...")
         os_type = platform.system()
         os_machine_type = platform.machine()
+        if os_type == "Darwin":
+            os_type = "mac"
+        if os_machine_type == "arm64":
+            os_machine_type = "arm 64"
         virtctl_download_url = self.get_virtctl_download_url(
             os_type=os_type, os_machine_type=os_machine_type
         )
-        os_machine_type = "amd64" if os_machine_type == "x86_64" else os_machine_type
+        os_machine_type = (
+            "amd64"
+            if os_machine_type == "x86_64"
+            else "arm64" if os_machine_type == "arm 64" else os_machine_type
+        )
         if (
             not virtctl_download_url
             or (os_type.lower() not in virtctl_download_url)
@@ -499,6 +507,10 @@ class CNVInstaller(object):
         """
         os_type = platform.system()
         os_machine_type = platform.machine()
+        if os_type == "Darwin":
+            os_type = "mac"
+        if os_machine_type == "arm64":
+            os_machine_type = "arm 64"
         self.check_virtctl_compatibility()
 
         # Prepare bin directory for virtctl
@@ -648,3 +660,135 @@ class CNVInstaller(object):
             logger.error(f"Failed to disable multicluster engine\n{cmd_res.stderr}")
             return
         logger.info(cmd_res.stdout.decode("utf-8").splitlines())
+
+    def check_if_any_vm_and_vmi(self, namespace=None):
+        """
+        Checks if any VMs and VM instances are running
+
+        Args:
+            namespace (str): namespace to check
+
+        Returns:
+            True if any VMs or VMi else False
+
+        """
+
+        vm_obj = OCP(kind=constants.VIRTUAL_MACHINE, namespace=namespace)
+        vmi_obj = OCP(kind=constants.VIRTUAL_MACHINE_INSTANCE, namespace=namespace)
+
+        return vm_obj.get(
+            out_yaml_format=False, all_namespaces=not namespace, dont_raise=True
+        ) or vmi_obj.get(
+            out_yaml_format=False, all_namespaces=not namespace, dont_raise=True
+        )
+
+    def remove_hyperconverged(self):
+        """
+        Remove HyperConverged CR
+
+        """
+        hyperconverged_obj = OCP(
+            kind=constants.HYPERCONVERGED,
+            resource_name=constants.KUBEVIRT_HYPERCONVERGED,
+            namespace=self.namespace,
+        )
+        hyperconverged_obj.delete(resource_name=constants.KUBEVIRT_HYPERCONVERGED)
+        logger.info(
+            f"Deleted {constants.HYPERCONVERGED} {constants.KUBEVIRT_HYPERCONVERGED}"
+        )
+
+    def remove_cnv_subscription(self):
+        """
+        Remove CNV subscription
+
+        """
+        cnv_sub = OCP(
+            kind=constants.SUBSCRIPTION,
+            resource_name=constants.KUBEVIRT_HYPERCONVERGED,
+            namespace=self.namespace,
+        )
+        cnv_sub.delete(resource_name=constants.KUBEVIRT_HYPERCONVERGED)
+        logger.info(f"Deleted subscription {constants.KUBEVIRT_HYPERCONVERGED}")
+
+    def remove_cnv_csv(self):
+        """
+        Remove CNV ClusterServiceVersion
+
+        """
+        cnv_csv = OCP(
+            kind=constants.CLUSTER_SERVICE_VERSION,
+            selector=constants.CNV_SELECTOR,
+            namespace=self.namespace,
+        )
+        cnv_csv.delete(resource_name=cnv_csv.get()["items"][0]["metadata"]["name"])
+        logger.info(f"Deleted ClusterServiceVersion {constants.CNV_OPERATORNAME}")
+
+    def remove_cnv_operator(self):
+        """
+        Remove CNV operator
+
+        """
+        cnv_operator = OCP(
+            kind=constants.OPERATOR_KIND, resource_name=constants.CNV_OPERATORNAME
+        )
+        cnv_operator.delete(resource_name=constants.CNV_OPERATORNAME)
+        logger.info(f"Deleted operator {constants.CNV_OPERATORNAME}")
+
+    def remove_crds(self):
+        """
+        Remove openshift virtualization CRDs
+
+        """
+        OCP().exec_oc_cmd(
+            command=f"delete crd -n {self.namespace} -l {constants.CNV_SELECTOR}"
+        )
+        logger.info("Deleted all the openshift virtualization CRDs")
+
+    def remove_namespace(self):
+        """
+        Remove openshift virtualization namespace
+
+        """
+        cnv_namespace = OCP()
+        switch_to_default_rook_cluster_project()
+        cnv_namespace.delete_project(constants.CNV_NAMESPACE)
+        logger.info(f"Deleted the namespace {constants.CNV_NAMESPACE}")
+
+    def uninstall_cnv(self, check_cnv_installed=True):
+        """
+        Uninstall CNV deployment
+
+        Args:
+            check_cnv_installed (bool): True if want to check if CNV installed
+
+        """
+        if check_cnv_installed:
+            if not self.cnv_hyperconverged_installed():
+                logger.info("CNV is not installed, skipping the cleanup...")
+                return
+
+        assert not self.check_if_any_vm_and_vmi(), (
+            "Vm or Vmi instances are found in the cluster,"
+            "Please make sure all VMs and VM instances are removed"
+        )
+        logger.info(
+            "No VM or VM instances are found in the cluster, proceeding with the uninstallation"
+        )
+
+        logger.info("Removing the virtualization hyperconverged")
+        self.remove_hyperconverged()
+
+        logger.info("Removing the virtualization subscription")
+        self.remove_cnv_subscription()
+
+        logger.info("Removing the virtualization CSV")
+        self.remove_cnv_csv()
+
+        logger.info("Removing the virtualization Operator")
+        self.remove_cnv_operator()
+
+        logger.info("Removing the namespace")
+        self.remove_namespace()
+
+        logger.info("Removing the openshift virtualization CRDs")
+        self.remove_crds()

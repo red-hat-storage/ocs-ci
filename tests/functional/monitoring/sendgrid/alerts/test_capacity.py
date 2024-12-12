@@ -17,7 +17,7 @@ log = logging.getLogger(__name__)
 @tier2
 @managed_service_required
 @skipif_ms_provider
-def test_capacity_workload_alerts(
+def deprecated_test_capacity_workload_alerts(
     notification_emails_required, workload_storageutilization_97p_rbd
 ):
     """

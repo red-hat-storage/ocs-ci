@@ -81,10 +81,33 @@ class OCP(object):
         self._data = {}
         self.selector = selector
         self.field_selector = field_selector
-        self.cluster_kubeconfig = cluster_kubeconfig
+        # In provider mode multicluster run, certain kind of resources are available in the provider cluster only.
+        # Setting cluster_kubeconfig of provider cluster in such cases will enable running "oc" commands seamlessly even
+        # when dealing with two instances of this class simultaneously despite the cluster context. This is achievable
+        # because all the methods use "exec_oc_cmd" method to run "oc" commmands. Primary cluster context being a
+        # client cluster, the test cases need not switch context to provider cluster before initializing a resource of
+        # the kinds listed in constants.PROVIDER_CLUSTER_RESOURCE_KINDS
+        if (
+            (not cluster_kubeconfig)
+            and config.multicluster
+            and config.ENV_DATA.get("odf_provider_mode_deployment", False)
+            and kind.lower() in constants.PROVIDER_CLUSTER_RESOURCE_KINDS
+        ):
+            provider_cluster_index = config.get_provider_index()
+            provider_kubeconfig_path = os.path.join(
+                config.clusters[provider_cluster_index].ENV_DATA["cluster_path"],
+                config.clusters[provider_cluster_index].RUN.get("kubeconfig_location"),
+            )
+            self.cluster_kubeconfig = provider_kubeconfig_path
+            # TODO : self.cluster_context = provider_cluster_index, remove cluster_kubeconfig check in if condition
+        else:
+            self.cluster_kubeconfig = cluster_kubeconfig
         self.threading_lock = threading_lock
         self.silent = silent
         self.skip_tls_verify = skip_tls_verify
+        # TODO: Set cluster_context based on the conditions of setting cluster_kubeconfig. Currently, setting
+        #  cluster_context expects the current context to be the cluster where the resource is present.
+        #  This cannot deal with simultaneous usage of two instances in two different clusters.
         self.cluster_context = config.cluster_ctx.MULTICLUSTER.get("multicluster_index")
 
     @property
@@ -373,9 +396,47 @@ class OCP(object):
         command = "create "
         if yaml_file:
             command += f"-f {yaml_file}"
+            if config.RUN["resource_checker"]:
+                yaml_dct = load_yaml(yaml_file)
+                kind = yaml_dct["kind"]
+                if kind == "PersistentVolume":
+                    config.RUN["RESOURCE_DICT_TEST"]["pv"].append(
+                        yaml_dct["metadata"]["name"]
+                    )
+                if kind == "Pod":
+                    config.RUN["RESOURCE_DICT_TEST"]["pod"].append(
+                        yaml_dct["metadata"]["name"]
+                    )
+                if kind == "StorageClass":
+                    config.RUN["RESOURCE_DICT_TEST"]["sc"].append(
+                        yaml_dct["metadata"]["name"]
+                    )
+                if kind == "PersistentVolumeClaim":
+                    config.RUN["RESOURCE_DICT_TEST"]["pvc"].append(
+                        yaml_dct["metadata"]["name"]
+                    )
+                if kind == "Namespace":
+                    config.RUN["RESOURCE_DICT_TEST"]["namespace"].append(
+                        yaml_dct["metadata"]["name"]
+                    )
+                if kind == "volumesnapshot":
+                    config.RUN["RESOURCE_DICT_TEST"]["vs"].append(
+                        yaml_dct["metadata"]["name"]
+                    )
+                if kind == "CephFileSystem":
+                    config.RUN["RESOURCE_DICT_TEST"]["cephfs"].append(
+                        yaml_dct["metadata"]["name"]
+                    )
+                if kind == "CephBlockPool":
+                    config.RUN["RESOURCE_DICT_TEST"]["cephbp"].append(
+                        yaml_dct["metadata"]["name"]
+                    )
+
         elif resource_name:
             # e.g "oc namespace my-project"
             command += f"{self.kind} {resource_name}"
+            if config.RUN["resource_checker"]:
+                config.RUN["RESOURCE_DICT_TEST"][self.kind] = resource_name
         if out_yaml_format:
             command += " -o yaml"
         output = self.exec_oc_cmd(command)
@@ -528,9 +589,11 @@ class OCP(object):
             bool: True in case project creation succeeded, False otherwise
         """
         ocp = OCP(kind="namespace")
-        exec_output = run_cmd(
-            f"oc new-project {project_name}", threading_lock=self.threading_lock
-        )
+        if config.RUN["custom_kubeconfig_location"]:
+            cmd = f'oc --kubeconfig {config.RUN["custom_kubeconfig_location"]} new-project {project_name}'
+        else:
+            cmd = f"oc new-project {project_name}"
+        exec_output = run_cmd(cmd, threading_lock=self.threading_lock)
         if any(
             pattern in exec_output
             for pattern in [
@@ -829,7 +892,13 @@ class OCP(object):
 
         return False
 
-    def wait_for_delete(self, resource_name="", timeout=60, sleep=3):
+    def wait_for_delete(
+        self,
+        resource_name="",
+        timeout=60,
+        sleep=3,
+        ignore_command_failed_exception=False,
+    ):
         """
         Wait for a resource to be deleted
 
@@ -838,6 +907,9 @@ class OCP(object):
                 for (e.g.my-pv1)
             timeout (int): Time in seconds to wait
             sleep (int): Sampling time in seconds
+            ignore_command_failed_exception (bool): If True, it will ignore the CommandFailed Exception
+                if it differs from the "NotFound" exception and wait until the given timeout. If False, it will
+                raise the CommandFailed Exception if it differs from the "NotFound" exception.
 
         Raises:
             CommandFailed: If failed to verify the resource deletion
@@ -857,6 +929,10 @@ class OCP(object):
                 if "NotFound" in str(ex):
                     log.info(f"{self.kind} {resource_name} got deleted successfully")
                     return True
+                elif ignore_command_failed_exception:
+                    log.warning(
+                        f"Failed to get the resource {resource_name} due to the exception: {str(ex)}"
+                    )
                 else:
                     raise ex
 
@@ -1385,19 +1461,31 @@ def get_images(data, images=None):
     return images
 
 
-def verify_images_upgraded(old_images, object_data):
+def verify_images_upgraded(old_images, object_data, ignore_psql_12_verification=False):
     """
     Verify that all images in ocp object are upgraded.
 
     Args:
        old_images (set): Set with old images.
        object_data (dict): OCP object yaml data.
+       ignore_psql_12_verification (bool): If True, psql 12 image is removed from current_images for verification
 
     Raises:
         NonUpgradedImagesFoundError: In case the images weren't upgraded.
 
     """
     current_images = get_images(object_data)
+    # from 4.15, noobaa-operator pod has NOOBAA_PSQL_12_IMAGE along with NOOBAA_DB_IMAGE
+    if (
+        ignore_psql_12_verification
+        and "noobaa_psql_12" in current_images
+        and constants.NOOBAA_OPERATOR_DEPLOYMENT
+        in object_data.get("metadata").get("name")
+    ):
+        log.info(
+            f'deleting noobaa_psql_12 image from current images for {object_data.get("metadata").get("name")}'
+        )
+        del current_images["noobaa_psql_12"]
     not_upgraded_images = set(
         [image for image in current_images.values() if image in old_images]
     )

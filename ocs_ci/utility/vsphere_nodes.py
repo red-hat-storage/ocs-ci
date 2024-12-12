@@ -2,6 +2,7 @@
 Module that contains operations related to vSphere nodes in a cluster
 This module directly interacts with VM nodes
 """
+
 import errno
 import logging
 import os

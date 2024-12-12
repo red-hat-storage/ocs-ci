@@ -4,7 +4,7 @@ import pytest
 
 from ocs_ci.ocs import node, constants
 from ocs_ci.framework import config
-from ocs_ci.framework.pytest_customization.marks import brown_squad
+from ocs_ci.framework.pytest_customization.marks import brown_squad, jira
 from ocs_ci.framework.testlib import (
     tier4a,
     ignore_leftovers,
@@ -35,7 +35,7 @@ from ocs_ci.utility.aws import AWSTimeoutException
 from ocs_ci.ocs.resources.storage_cluster import osd_encryption_verification
 from ocs_ci.ocs import osd_operations
 from ocs_ci.ocs.utils import get_pod_name_by_pattern
-
+from ocs_ci.utility.utils import TimeoutSampler, ceph_health_check
 
 logger = logging.getLogger(__name__)
 
@@ -84,7 +84,7 @@ class TestDiskFailures(ManageTest):
             else:
                 assert nodes.wait_for_volume_attach(data_volume), (
                     f"Volume {data_volume} failed to be re-attached to worker "
-                    f"node {worker_node}"
+                    f"node {worker_node.name}"
                 )
 
     @pytest.fixture(autouse=True)
@@ -130,6 +130,9 @@ class TestDiskFailures(ManageTest):
             pod_names = get_pod_name_by_pattern("ocs-osd-removal-job-")
             delete_pods(get_pod_objs(pod_names))
 
+            assert ceph_health_check(), "Ceph cluster health is not OK"
+            logger.info("Ceph cluster health is OK during teardown")
+
         request.addfinalizer(finalizer)
 
     @pytest.fixture(autouse=True)
@@ -140,7 +143,9 @@ class TestDiskFailures(ManageTest):
         """
         self.sanity_helpers = Sanity()
 
+    @jira("DFBUGS-849")
     @skipif_managed_service
+    @skipif_ibm_cloud
     @skipif_hci_provider_and_client
     @cloud_platform_required
     @pytest.mark.polarion_id("OCS-1085")
@@ -195,12 +200,15 @@ class TestDiskFailures(ManageTest):
         ), "Not all the pods reached running state"
 
         logger.info("Archive OSD crash if occurred due to detach and attach of volume")
-        is_daemon_recently_crash_warnings = run_cmd_verify_cli_output(
+        crash = TimeoutSampler(
+            timeout=300,
+            sleep=30,
+            func=run_cmd_verify_cli_output,
             cmd="ceph health detail",
             expected_output_lst={"HEALTH_WARN", "daemons have recently crashed"},
             cephtool_cmd=True,
         )
-        if is_daemon_recently_crash_warnings:
+        if crash.wait_for_func_status(True):
             logger.info("Clear all ceph crash warnings")
             # Importing here to avoid shadow by loop variable
             from ocs_ci.ocs.resources import pod
@@ -251,12 +259,15 @@ class TestDiskFailures(ManageTest):
         ), "Not all the pods reached running state"
 
         logger.info("Archive OSD crash if occurred due to detach and attach of volume")
-        is_daemon_recently_crash_warnings = run_cmd_verify_cli_output(
+        crash = TimeoutSampler(
+            timeout=300,
+            sleep=30,
+            func=run_cmd_verify_cli_output,
             cmd="ceph health detail",
             expected_output_lst={"HEALTH_WARN", "daemons have recently crashed"},
             cephtool_cmd=True,
         )
-        if is_daemon_recently_crash_warnings:
+        if crash.wait_for_func_status(True):
             logger.info("Clear all ceph crash warnings")
             # Importing here to avoid shadow by loop variable
             from ocs_ci.ocs.resources import pod

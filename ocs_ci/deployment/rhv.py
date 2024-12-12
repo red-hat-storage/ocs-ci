@@ -2,6 +2,7 @@
 This module contains platform specific methods and classes for deployment
 on Red Hat Virtualization (RHV) platform
 """
+
 import logging
 
 from ocs_ci.deployment.on_prem import OnPremDeploymentBase, IPIOCPDeployment

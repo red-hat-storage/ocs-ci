@@ -1,0 +1,4 @@
+# Config file to use RBD namespace in a pool
+---
+EXTERNAL_MODE:
+  use_rbd_namespace: True

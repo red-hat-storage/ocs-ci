@@ -1,6 +1,7 @@
 """
 Postgresql workload class
 """
+
 import logging
 import random
 import time

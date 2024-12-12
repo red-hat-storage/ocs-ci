@@ -6,6 +6,7 @@ You can see documentation here:
 https://docs.pytest.org/en/latest/reference.html
 under section PYTEST_DONT_REWRITE
 """
+
 # Use the new python 3.7 dataclass decorator, which provides an object similar
 # to a namedtuple, but allows type enforcement and defining methods.
 import os
@@ -450,6 +451,104 @@ class MultiClusterConfig:
         self.switch_ctx(
             self.get_cluster_type_indices_list(cluster_type)[num_of_cluster]
         )
+
+    class RunWithConfigContext(object):
+        def __init__(self, config_index):
+            self.original_config_index = config.cur_index
+            self.config_index = config_index
+
+        def __enter__(self):
+            if self.config_index != config.cur_index:
+                config.switch_ctx(self.config_index)
+            return self
+
+        def __exit__(self, exc_type, exc_value, exc_traceback):
+            if self.original_config_index != config.cur_index:
+                config.switch_ctx(self.original_config_index)
+
+    class RunWithAcmConfigContext(RunWithConfigContext):
+        def __init__(self):
+            from ocs_ci.ocs.utils import get_all_acm_indexes
+
+            acm_index = get_all_acm_indexes()[0]
+            super().__init__(acm_index)
+
+    class RunWithPrimaryConfigContext(RunWithConfigContext):
+        def __init__(self):
+            from ocs_ci.ocs.utils import get_primary_cluster_config
+
+            primary_config = get_primary_cluster_config()
+            primary_index = primary_config.MULTICLUSTER.get("multicluster_index")
+            super().__init__(primary_index)
+
+    class RunWithProviderConfigContextIfAvailable(RunWithConfigContext):
+        """
+        Context manager that makes sure that a given code block is executed on Provider.
+        If Provider config is not available then run with current config context.
+        """
+
+        def __init__(self):
+            try:
+                switch_index = config.get_provider_index()
+            except ClusterNotFoundException:
+                # if no provider is available then set the switch to current index so that
+                # no switch happens and code runs on current cluster
+                logger.debug("No provider was found - using current cluster")
+                switch_index = config.cur_index
+            super().__init__(switch_index)
+
+    class RunWithFirstConsumerConfigContextIfAvailable(RunWithConfigContext):
+        """
+        Context manager that makes sure that a given code block is executed on First consumer.
+        If Consumer config is not available then run with current config context.
+        """
+
+        def __init__(self):
+            try:
+                switch_index = config.get_consumer_indexes_list()[0]
+            except ClusterNotFoundException:
+                # if no provider is available then set the switch to current index so that
+                # no switch happens and code runs on current cluster
+                logger.debug("No Consumer was found - using current cluster")
+                switch_index = config.cur_index
+            super().__init__(switch_index)
+
+    def insert_cluster_config(self, index, new_config):
+        """
+        Insert a new cluster configuration at the given index
+
+        Args:
+            index (int): The index at which to insert the new configuration
+            new_config (Config): The new configuration to insert
+
+        """
+        self.clusters.insert(index, new_config)
+        self.nclusters += 1
+        self._refresh_ctx()
+
+    def remove_cluster(self, index):
+        """
+        Remove the cluster at the given index
+
+        Args:
+            index (int): The index of the cluster to remove
+        """
+        self.clusters.pop(index)
+        self.nclusters -= 1
+        self._refresh_ctx()
+
+    def remove_cluster_by_name(self, cluster_name):
+        """
+        Remove the cluster by the cluster name
+
+        Args:
+            cluster_name (str): The cluster name to remove
+
+        Raises:
+            ClusterNotFoundException: In case it didn't find the cluster
+
+        """
+        self.remove_cluster(self.get_cluster_index_by_name(cluster_name))
 
 
 config = MultiClusterConfig()

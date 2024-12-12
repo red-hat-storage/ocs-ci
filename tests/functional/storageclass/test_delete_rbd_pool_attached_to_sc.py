@@ -11,6 +11,7 @@ from ocs_ci.framework.pytest_customization.marks import (
     ignore_resource_not_found_error_label,
     tier1,
     green_squad,
+    skipif_ibm_cloud_managed,
 )
 from ocs_ci.framework.testlib import ManageTest
 from ocs_ci.ocs import constants
@@ -143,7 +144,6 @@ class TestDeleteRbdPool(ManageTest):
         pvc_factory,
         pod_factory,
     ):
-
         """
         1. Create storageclass with the pool.
         2. Check that in pool list and page the storageclass is there.
@@ -184,6 +184,7 @@ class TestDeleteRbdPool(ManageTest):
 
     @tier1
     @skipif_external_mode
+    @skipif_ibm_cloud_managed
     @pytest.mark.parametrize(
         argnames=["replica", "compression", "volume_binding_mode", "pvc_status"],
         argvalues=[

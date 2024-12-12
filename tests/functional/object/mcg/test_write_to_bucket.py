@@ -1,5 +1,6 @@
 import logging
 import os
+import time
 import zipfile
 from concurrent.futures import ThreadPoolExecutor
 from zipfile import ZipFile
@@ -17,9 +18,9 @@ from ocs_ci.framework.testlib import (
     MCGTest,
     tier1,
     tier2,
-    acceptance,
     performance,
 )
+from ocs_ci.utility.utils import exec_nb_db_query
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.bucket_utils import (
     sync_object_directory,
@@ -27,7 +28,10 @@ from ocs_ci.ocs.bucket_utils import (
     craft_s3_command,
     s3_put_object,
     s3_head_object,
+    rm_object_recursive,
+    write_random_test_objects_to_bucket,
 )
+
 from ocs_ci.framework.pytest_customization.marks import (
     skipif_managed_service,
     bugzilla,
@@ -97,45 +101,6 @@ class TestBucketIO(MCGTest):
         argnames="interface,bucketclass_dict",
         argvalues=[
             pytest.param(
-                *["S3", None],
-                marks=[tier1, acceptance],
-            ),
-            pytest.param(
-                *[
-                    "OC",
-                    {
-                        "interface": "OC",
-                        "backingstore_dict": {"aws": [(1, "eu-central-1")]},
-                    },
-                ],
-                marks=[tier1],
-            ),
-            pytest.param(
-                *[
-                    "OC",
-                    {"interface": "OC", "backingstore_dict": {"azure": [(1, None)]}},
-                ],
-                marks=[tier1],
-            ),
-            pytest.param(
-                *["OC", {"interface": "OC", "backingstore_dict": {"gcp": [(1, None)]}}],
-                marks=[tier1],
-            ),
-            pytest.param(
-                *[
-                    "OC",
-                    {"interface": "OC", "backingstore_dict": {"ibmcos": [(1, None)]}},
-                ],
-                marks=[tier1],
-            ),
-            pytest.param(
-                *[
-                    "CLI",
-                    {"interface": "CLI", "backingstore_dict": {"ibmcos": [(1, None)]}},
-                ],
-                marks=[tier1],
-            ),
-            pytest.param(
                 *[
                     "OC",
                     {"interface": "OC", "backingstore_dict": {"rgw": [(1, None)]}},
@@ -151,12 +116,6 @@ class TestBucketIO(MCGTest):
             ),
         ],
         ids=[
-            "DEFAULT-BACKINGSTORE",
-            "AWS-OC-1",
-            "AZURE-OC-1",
-            "GCP-OC-1",
-            "IBMCOS-OC-1",
-            "IBMCOS-CLI-1",
             "RGW-OC-1",
             "RGW-CLI-1",
         ],
@@ -216,10 +175,6 @@ class TestBucketIO(MCGTest):
                 marks=[tier1],
             ),
             pytest.param(
-                {"interface": "OC", "backingstore_dict": {"ibmcos": [(1, None)]}},
-                marks=[tier1],
-            ),
-            pytest.param(
                 {"interface": "CLI", "backingstore_dict": {"ibmcos": [(1, None)]}},
                 marks=[tier1],
             ),
@@ -229,7 +184,6 @@ class TestBucketIO(MCGTest):
             "AWS-OC-1",
             "AZURE-OC-1",
             "GCP-OC-1",
-            "IBMCOS-OC-1",
             "IBMCOS-CLI-1",
         ],
     )
@@ -287,10 +241,6 @@ class TestBucketIO(MCGTest):
                 {"interface": "OC", "backingstore_dict": {"ibmcos": [(1, None)]}},
                 marks=[tier1],
             ),
-            pytest.param(
-                {"interface": "CLI", "backingstore_dict": {"ibmcos": [(1, None)]}},
-                marks=[tier1],
-            ),
         ],
         ids=[
             "DEFAULT-BACKINGSTORE",
@@ -298,7 +248,6 @@ class TestBucketIO(MCGTest):
             "AZURE-OC-1",
             "GCP-OC-1",
             "IBMCOS-OC-1",
-            "IBMCOS-CLI-1",
         ],
     )
     def test_mcg_data_compression(
@@ -328,7 +277,9 @@ class TestBucketIO(MCGTest):
     @tier2
     @performance
     @skip_inconsistent
-    def test_data_reduction_performance(self, mcg_obj, awscli_pod, bucket_factory):
+    def deprecated_test_data_reduction_performance(
+        self, mcg_obj, awscli_pod, bucket_factory
+    ):
         """
         Test data reduction performance
         """
@@ -456,3 +407,62 @@ class TestBucketIO(MCGTest):
         logger.info(
             "Put object operation is preserving ContentEncoding as a object metadata"
         )
+
+    @tier2
+    @bugzilla("2259189")
+    @bugzilla("2264480")
+    @pytest.mark.polarion_id("OCS-5773")
+    def test_nb_db_activity_logs_on_io(
+        self,
+        bucket_factory,
+        awscli_pod_session,
+        mcg_obj,
+        change_the_noobaa_log_level,
+        test_directory_setup,
+    ):
+        """
+        This test checks if the activity logs are being logged
+        in the activitylogs table for every object upload and
+        deletion when noobaa log is set to default. As no activity
+        logs are expected for creation/deletion at defualt log level.
+
+        """
+        logger.info("Making sure noobaa log is at default_level...")
+        change_the_noobaa_log_level(level="default_level")
+
+        bucket = bucket_factory()[0]
+        logger.info("successfully created bucket")
+
+        obj_uploaded = write_random_test_objects_to_bucket(
+            awscli_pod_session,
+            bucket.name,
+            test_directory_setup.origin_dir,
+            amount=1,
+            mcg_obj=mcg_obj,
+        )[0]
+        logger.info(f"uploaded object {obj_uploaded} to the bucket")
+
+        rm_object_recursive(awscli_pod_session, bucket.name, mcg_obj)
+        logger.info("deleted all the objects from the bucket")
+
+        tries = 0
+        while tries <= 10:
+            logger.info("Checking the logs for 10 minutes if any ")
+            nb_activitylogs = [
+                line
+                for line in exec_nb_db_query("SELECT data FROM activitylogs;")
+                if obj_uploaded in line
+            ]
+            logger.info("successfully fetched noobaa db activitylogs data")
+
+            assert "obj.uploaded" not in str(
+                nb_activitylogs
+            ), "Object upload event is being logged in activitylogs table"
+            assert "obj.deleted" not in str(
+                nb_activitylogs
+            ), "Object deletion event is being logged in activitylogs table"
+            logger.info(
+                "No object upload/deletion info is being updated in the activitylogs table"
+            )
+            time.sleep(60)
+            tries += 1

@@ -1,6 +1,7 @@
 """
 Test to run PGSQL performance marker workload
 """
+
 import logging
 import pytest
 

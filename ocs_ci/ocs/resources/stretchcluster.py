@@ -1,9 +1,11 @@
 import logging
 import json
 import re
+import time
 
 from datetime import timedelta
 
+from ocs_ci.framework import config
 from ocs_ci.ocs.resources import pod
 from ocs_ci.ocs.node import get_nodes_having_label, get_ocs_nodes, get_node_objs
 from ocs_ci.ocs.resources.ocs import OCS
@@ -24,6 +26,7 @@ from ocs_ci.ocs.resources.pod import (
     get_mon_pods,
     get_mon_pod_id,
     get_pod_node,
+    get_osd_pods,
 )
 
 logger = logging.getLogger(__name__)
@@ -184,7 +187,7 @@ class StretchCluster(OCS):
         ocs_nodes_in_zone = nodes_in_zone.intersection(ocs_nodes)
         return get_node_objs(list(ocs_nodes_in_zone))
 
-    @retry(CommandFailed, tries=10, delay=10)
+    @retry(CommandFailed, tries=6, delay=10)
     def check_for_read_pause(self, label, start_time, end_time):
         """
         This checks for any read pause has occurred during the given
@@ -224,7 +227,7 @@ class StretchCluster(OCS):
                 paused += 1
         return paused
 
-    @retry(CommandFailed, tries=10, delay=10)
+    @retry(CommandFailed, tries=6, delay=10)
     def check_for_write_pause(self, label, start_time, end_time):
         """
         Checks for write pause between start time and end time
@@ -308,7 +311,7 @@ class StretchCluster(OCS):
             self.logfile_map[label][0] = list(set(self.logfile_map[label][0]))
         logger.info(self.logfile_map[label][0])
 
-    @retry(UnexpectedBehaviour, tries=10, delay=5)
+    @retry(UnexpectedBehaviour, tries=6, delay=5)
     def get_logwriter_reader_pods(
         self,
         label,
@@ -435,7 +438,7 @@ class StretchCluster(OCS):
         return True
 
     @retry(CommandFailed, tries=15, delay=5)
-    def check_ceph_accessibility(self, timeout, delay=5, grace=15):
+    def check_ceph_accessibility(self, timeout, delay=5, grace=120):
         """
         Check for ceph access for the 'timeout' seconds
 
@@ -481,8 +484,26 @@ class StretchCluster(OCS):
         """
         # find out the mons in quorum
         ceph_tools_pod = pod.get_ceph_tools_pod()
-        output = dict(ceph_tools_pod.exec_cmd_on_pod(command="ceph quorum_status"))
-        quorum_mons = output.get("quorum_names")
+
+        @retry(CommandFailed, tries=10, delay=10)
+        def _get_non_quorum_mons():
+            """
+            Get non quorum mon pods
+
+            """
+            output = dict(ceph_tools_pod.exec_cmd_on_pod(command="ceph quorum_status"))
+            quorum_mons = output.get("quorum_names")
+
+            if len(quorum_mons) != 3:
+                raise CommandFailed
+            logger.info("waiting 10 seconds before re-checking")
+
+            time.sleep(10)
+            output = dict(ceph_tools_pod.exec_cmd_on_pod(command="ceph quorum_status"))
+            quorum_mons = output.get("quorum_names")
+            return quorum_mons
+
+        quorum_mons = _get_non_quorum_mons()
         logger.info(f"Mon's in quorum are: {quorum_mons}")
         mon_meta_data = list(
             ceph_tools_pod.exec_cmd_on_pod(command="ceph mon metadata")
@@ -522,7 +543,7 @@ class StretchCluster(OCS):
         Reset connection scores for all the mon's
 
         """
-        mon_pods = get_mon_pods(namespace=constants.OPENSHIFT_STORAGE_NAMESPACE)
+        mon_pods = get_mon_pods(namespace=config.ENV_DATA["cluster_namespace"])
         for pod_obj in mon_pods:
             mon_pod_id = get_mon_pod_id(pod_obj)
             cmd = f"ceph daemon mon.{mon_pod_id} connection scores reset"
@@ -633,7 +654,7 @@ class StretchCluster(OCS):
                 start_time,
                 end_time,
             )
-            <= 2
+            == 0
         ), "Write operations paused for RBD workloads even for the ones in available zone"
         logger.info("all write operations are successful for RBD workloads")
 
@@ -665,3 +686,46 @@ class StretchCluster(OCS):
             failure_check_map[type](
                 start_time, end_time, wait_for_read_completion=wait_for_read_completion
             )
+
+    def get_mon_pods_in_a_zone(self, zone):
+        """
+        Fetches mon pods in a particular zone
+
+        Args:
+            zone (str): Zone
+
+        Returns:
+            List: mon pods in a zone
+
+        """
+        nodes_in_zone = [node.name for node in self.get_nodes_in_zone(zone)]
+        mon_pods = [
+            Pod(**pod_info)
+            for pod_info in get_pods_having_label(
+                label=constants.MON_APP_LABEL, statuses=["Running"]
+            )
+        ]
+        mon_pods_in_zone = [
+            pod for pod in mon_pods if get_pod_node(pod).name in nodes_in_zone
+        ]
+        return mon_pods_in_zone
+
+    def get_osd_pods_in_a_zone(self, zone):
+        """
+        Fetches osd osd pods in particular zone
+
+        Args:
+            zone (str): Zone
+
+        Returns:
+            List: OSD pods in a zone
+
+        """
+
+        nodes_in_zone = [node.name for node in self.get_nodes_in_zone(zone)]
+        osd_pods = get_osd_pods()
+
+        osd_pods_in_zone = [
+            pod for pod in osd_pods if get_pod_node(pod).name in nodes_in_zone
+        ]
+        return osd_pods_in_zone

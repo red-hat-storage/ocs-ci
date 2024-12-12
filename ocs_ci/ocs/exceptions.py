@@ -288,6 +288,10 @@ class ExternalClusterCephSSHAuthDetailsMissing(Exception):
     pass
 
 
+class ExternalClusterRBDNamespaceCreationFailed(Exception):
+    pass
+
+
 class CredReqSecretNotFound(Exception):
     pass
 
@@ -572,7 +576,7 @@ class ConnectivityFail(Exception):
     pass
 
 
-class ROSAProdAdminLoginFailedException(Exception):
+class ROSAAdminLoginFailedException(Exception):
     pass
 
 
@@ -663,6 +667,10 @@ class VSLMNotFoundException(Exception):
     pass
 
 
+class VolumePathNotFoundException(Exception):
+    pass
+
+
 class OperationFailedToCompleteException(Exception):
     pass
 
@@ -712,5 +720,17 @@ class APIRequestError(Exception):
     pass
 
 
+class ACMObservabilityNotEnabled(Exception):
+    pass
+
+
 class ProviderModeNotFoundException(Exception):
+    pass
+
+
+class TolerationNotFoundException(Exception):
+    pass
+
+
+class VMIndexNotFoundException(Exception):
     pass

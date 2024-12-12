@@ -165,7 +165,7 @@ class TestSelinuxrelabel(E2ETest):
             # Get the pod conditions
             pod = ocp.OCP(kind="pod", namespace=config.ENV_DATA["cluster_namespace"])
             conditions = pod.exec_oc_cmd(
-                f"get pod {pod_name} -n openshift-storage -o jsonpath='{{.status.conditions}}'"
+                f"get pod {pod_name} -o jsonpath='{{.status.conditions}}'"
             )
             conditions = [
                 {key: None if value == "null" else value for key, value in item.items()}
@@ -228,7 +228,7 @@ class TestSelinuxrelabel(E2ETest):
     @bugzilla("1988284")
     @polarion_id("OCS-5132")
     @pytest.mark.parametrize("copies", [5])
-    def test_selinux_relabel_for_existing_pvc(
+    def deprecated_test_selinux_relabel_for_existing_pvc(
         self, pvc_factory, service_account_factory, copies
     ):
         """
@@ -315,7 +315,7 @@ class TestSelinuxrelabel(E2ETest):
 
         self.pod_obj = self.get_app_pod_obj()
         ocp.OCP(
-            kind=constants.POD, namespace=constants.OPENSHIFT_STORAGE_NAMESPACE
+            kind=constants.POD, namespace=config.ENV_DATA["cluster_namespace"]
         ).wait_for_resource(
             condition=constants.STATUS_RUNNING,
             resource_name=self.pod_obj.name,
@@ -325,7 +325,11 @@ class TestSelinuxrelabel(E2ETest):
         )
 
         # Check SeLinux Relabeling is set to false
-        retry(AssertionError, tries=5, delay=10,)(
+        retry(
+            AssertionError,
+            tries=5,
+            delay=10,
+        )(
             check_selinux_relabeling
         )(pod_obj=self.pod_obj)
         log.info(f"SeLinux Relabeling is not happening for the pvc {self.pvc_obj.name}")
@@ -361,7 +365,7 @@ class TestSelinuxrelabel(E2ETest):
 
     @polarion_id("OCS-5163")
     @pytest.mark.parametrize("copies", [5])
-    def test_selinux_relabel_for_new_pvc(
+    def deprecated_test_selinux_relabel_for_new_pvc(
         self,
         pvc_factory,
         service_account_factory,

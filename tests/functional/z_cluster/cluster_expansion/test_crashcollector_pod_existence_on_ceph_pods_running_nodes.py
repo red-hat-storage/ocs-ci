@@ -6,6 +6,7 @@ from ocs_ci.framework.pytest_customization.marks import (
     skipif_hci_provider_and_client,
     skipif_bm,
     brown_squad,
+    skipif_compact_mode,
 )
 from ocs_ci.ocs.node import drain_nodes, schedule_nodes, is_node_rack_or_zone_exist
 from ocs_ci.helpers.helpers import get_failure_domin
@@ -41,6 +42,7 @@ logger = logging.getLogger(__name__)
 @skipif_external_mode
 @skipif_managed_service
 @skipif_hci_provider_and_client
+@skipif_compact_mode
 @pytest.mark.polarion_id("OCS-2594")
 class TestAddNodeCrashCollector(ManageTest):
     """
@@ -78,7 +80,7 @@ class TestAddNodeCrashCollector(ManageTest):
 
         new_node_name = list(set(get_node_names()) - set(old_nodes))[0]
         new_node = get_node_objs([new_node_name])[0]
-        logger.info(f"New worker node is {new_node_name}")
+        logger.info(f"New worker node is {new_node.name}")
 
         logger.info(f"Checking if the rack/zone of the node {new_node_name} is exist")
         timeout = 120

@@ -1,6 +1,7 @@
 """
 CSV related functionalities
 """
+
 import logging
 
 from ocs_ci.ocs.ocp import OCP

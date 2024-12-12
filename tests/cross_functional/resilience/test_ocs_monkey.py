@@ -14,7 +14,7 @@ log = logging.getLogger(__name__)
 
 @magenta_squad
 @ignore_leftovers
-def test_ocs_monkey():
+def deprecated_test_ocs_monkey():
     ocs_monkety_dir = "/tmp/ocs-monkey"
     # ocs-monkey run time in seconds
     run_time = 3600

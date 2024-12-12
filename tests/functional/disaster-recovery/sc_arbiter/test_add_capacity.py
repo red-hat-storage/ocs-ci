@@ -66,7 +66,7 @@ class TestAddCapacityStretchCluster:
         ), "OSD weights are not balanced"
         logger.info("OSD weights are balanced")
 
-    @pytest.mark.last
+    @pytest.mark.order("last")
     @pytest.mark.parametrize(
         argnames=["iterations"],
         argvalues=[
@@ -86,7 +86,6 @@ class TestAddCapacityStretchCluster:
         logreader_workload_factory,
         iterations,
     ):
-
         """
         Test cluster exapnsion and health when add capacity is performed
         continuously

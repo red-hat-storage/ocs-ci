@@ -7,6 +7,7 @@ import logging
 import os
 import shlex
 import time
+
 from uuid import uuid4
 
 import boto3
@@ -22,6 +23,7 @@ from ocs_ci.utility.utils import (
     TimeoutSampler,
     run_cmd,
     exec_nb_db_query,
+    exec_cmd,
 )
 from ocs_ci.helpers.helpers import create_resource
 from ocs_ci.utility import version
@@ -47,7 +49,7 @@ def craft_s3_command(cmd, mcg_obj=None, api=False, signed_request_creds=None):
     api = "api" if api else ""
     no_ssl = (
         "--no-verify-ssl"
-        if signed_request_creds and signed_request_creds.get("ssl") is False
+        if (signed_request_creds and signed_request_creds.get("ssl")) is False
         else ""
     )
     if mcg_obj:
@@ -56,12 +58,13 @@ def craft_s3_command(cmd, mcg_obj=None, api=False, signed_request_creds=None):
         else:
             region = ""
         base_command = (
-            f'sh -c "AWS_CA_BUNDLE={constants.SERVICE_CA_CRT_AWSCLI_PATH} '
+            f'sh -c "AWS_CA_BUNDLE={constants.AWSCLI_CA_BUNDLE_PATH} '
             f"AWS_ACCESS_KEY_ID={mcg_obj.access_key_id} "
             f"AWS_SECRET_ACCESS_KEY={mcg_obj.access_key} "
             f"{region}"
             f"aws s3{api} "
             f"--endpoint={mcg_obj.s3_internal_endpoint} "
+            f"{no_ssl} "
         )
         string_wrapper = '"'
     elif signed_request_creds:
@@ -80,6 +83,61 @@ def craft_s3_command(cmd, mcg_obj=None, api=False, signed_request_creds=None):
         string_wrapper = '"'
     else:
         base_command = f"aws s3{api} --no-sign-request "
+        string_wrapper = ""
+
+    return f"{base_command}{cmd}{string_wrapper}"
+
+
+def craft_sts_command(cmd, mcg_obj=None, signed_request_creds=None):
+    """
+    Crafts the AWS CLI STS command including the
+    login credentials and command to be ran
+
+    Args:
+        cmd: The AWSCLI STS command to run
+        mcg_obj: An MCG class instance
+        signed_request_creds: a dictionary containing AWS S3 creds for a signed request
+
+    Returns:
+        str: The crafted command, ready to be executed on the pod
+
+    """
+
+    no_ssl = (
+        "--no-verify-ssl"
+        if signed_request_creds and signed_request_creds.get("ssl") is False
+        else ""
+    )
+    if mcg_obj:
+        if mcg_obj.region:
+            region = f"AWS_DEFAULT_REGION={mcg_obj.region} "
+        else:
+            region = ""
+        base_command = (
+            f'sh -c "AWS_CA_BUNDLE={constants.SERVICE_CA_CRT_AWSCLI_PATH} '
+            f"AWS_ACCESS_KEY_ID={mcg_obj.access_key_id} "
+            f"AWS_SECRET_ACCESS_KEY={mcg_obj.access_key} "
+            f"{region}"
+            f"aws sts "
+            f"--endpoint={mcg_obj.sts_internal_endpoint} "
+        )
+        string_wrapper = '"'
+    elif signed_request_creds:
+        if signed_request_creds.get("region"):
+            region = f'AWS_DEFAULT_REGION={signed_request_creds.get("region")} '
+        else:
+            region = ""
+        base_command = (
+            f'sh -c "AWS_ACCESS_KEY_ID={signed_request_creds.get("access_key_id")} '
+            f'AWS_SECRET_ACCESS_KEY={signed_request_creds.get("access_key")} '
+            f"{region}"
+            f"aws sts "
+            f'--endpoint={signed_request_creds.get("endpoint")} '
+            f"{no_ssl} "
+        )
+        string_wrapper = '"'
+    else:
+        base_command = "aws sts --no-sign-request "
         string_wrapper = ""
 
     return f"{base_command}{cmd}{string_wrapper}"
@@ -274,7 +332,7 @@ def list_objects_from_bucket(
         signed_request_creds (dictionary, optional): the access_key, secret_key,
             endpoint and region to use when willing to send signed aws s3 requests
         timeout (int): timeout for the exec_oc_cmd
-        recurive (bool): If true, list objects recursively using the --recursive option
+        recursive (bool): If true, list objects recursively using the --recursive option
 
     Returns:
         List of objects in a bucket
@@ -286,6 +344,7 @@ def list_objects_from_bucket(
         retrieve_cmd = f"ls {target}"
     if recursive:
         retrieve_cmd += " --recursive"
+
     if s3_obj:
         secrets = [s3_obj.access_key_id, s3_obj.access_key, s3_obj.s3_internal_endpoint]
     elif signed_request_creds:
@@ -340,10 +399,15 @@ def copy_objects(
     """
 
     logger.info(f"Copying object {src_obj} to {target}")
+    no_ssl = (
+        "--no-verify-ssl"
+        if (signed_request_creds and signed_request_creds.get("ssl")) is False
+        else ""
+    )
     if recursive:
-        retrieve_cmd = f"cp {src_obj} {target} --recursive"
+        retrieve_cmd = f"cp {src_obj} {target} --recursive {no_ssl}"
     else:
-        retrieve_cmd = f"cp {src_obj} {target}"
+        retrieve_cmd = f"cp {src_obj} {target} {no_ssl}"
     if s3_obj:
         secrets = [s3_obj.access_key_id, s3_obj.access_key, s3_obj.s3_internal_endpoint]
     elif signed_request_creds:
@@ -711,6 +775,7 @@ def oc_create_google_backingstore(cld_mgr, backingstore_name, uls_name, region):
     """
     bs_data = templating.load_yaml(constants.MCG_BACKINGSTORE_YAML)
     bs_data["metadata"]["name"] = backingstore_name
+    bs_data["metadata"]["namespace"] = config.ENV_DATA["cluster_namespace"]
     bs_data["spec"] = {
         "type": constants.BACKINGSTORE_TYPE_GOOGLE,
         "googleCloudStorage": {
@@ -759,6 +824,7 @@ def oc_create_azure_backingstore(cld_mgr, backingstore_name, uls_name, region):
     """
     bs_data = templating.load_yaml(constants.MCG_BACKINGSTORE_YAML)
     bs_data["metadata"]["name"] = backingstore_name
+    bs_data["metadata"]["namespace"] = config.ENV_DATA["cluster_namespace"]
     bs_data["spec"] = {
         "type": constants.BACKINGSTORE_TYPE_AZURE,
         "azureBlob": {
@@ -863,6 +929,7 @@ def oc_create_rgw_backingstore(cld_mgr, backingstore_name, uls_name, region):
         region (str): which region to create backingstore (should be the same as uls)
 
     """
+
     bs_data = templating.load_yaml(constants.MCG_BACKINGSTORE_YAML)
     bs_data["metadata"]["name"] = backingstore_name
     bs_data["metadata"]["namespace"] = config.ENV_DATA["cluster_namespace"]
@@ -1002,7 +1069,7 @@ def check_pv_backingstore_status(
     Args:
         backingstore_name (str): backingstore name
         namespace (str): backing store's namespace
-        desired_status (str): desired state for the backing store, if None is given then desired
+        desired_status (list): desired state for the backing store, if None is given then desired
         is the Healthy status
 
     Returns:
@@ -1015,10 +1082,50 @@ def check_pv_backingstore_status(
 
     cmd = (
         f"oc get backingstore -n {namespace} {kubeconfig} {backingstore_name} "
-        "-o=jsonpath=`{.status.mode.modeCode}`"
+        "-o=jsonpath='{.status.mode.modeCode}'"
     )
     res = run_cmd(cmd=cmd)
     return True if res in desired_status else False
+
+
+def check_pv_backingstore_type(
+    backingstore_name=constants.DEFAULT_NOOBAA_BACKINGSTORE,
+    namespace=config.ENV_DATA["cluster_namespace"],
+):
+    """
+    check if existing pv backing store is in READY state
+
+    Args:
+        backingstore_name (str): backingstore name
+        namespace (str): backing store's namespace
+
+    Returns:
+        backingstore_type: type of the backing store
+
+    """
+    kubeconfig = os.getenv("KUBECONFIG")
+    kubeconfig = f"--kubeconfig {kubeconfig}" if kubeconfig else ""
+    namespace = namespace or config.ENV_DATA["cluster_namespace"]
+
+    cmd = (
+        f"oc get backingstore -n {namespace} {kubeconfig} {backingstore_name} "
+        "-o=jsonpath='{.status.phase}'"
+    )
+    res = exec_cmd(cmd=cmd, use_shell=True)
+    if res.returncode != 0:
+        logger.error(f"Failed to fetch backingstore details\n{res.stderr}")
+
+    assert (
+        res.stdout.decode() == constants.STATUS_READY
+    ), f"output is {res.stdout.decode()}, it is not as expected"
+    cmd = (
+        f"oc get backingstore -n {namespace} {kubeconfig} {backingstore_name} "
+        "-o=jsonpath='{.spec.type}'"
+    )
+    res = exec_cmd(cmd=cmd, use_shell=True)
+    if res.returncode != 0:
+        logger.error(f"Failed to fetch backingstore type\n{res.stderr}")
+    return res.stdout.decode()
 
 
 def create_multipart_upload(s3_obj, bucketname, object_key):
@@ -1445,11 +1552,23 @@ def obc_io_create_delete(mcg_obj, awscli_pod, bucket_factory):
 
 def retrieve_verification_mode():
     if (
-        config.ENV_DATA["platform"] == constants.IBMCLOUD_PLATFORM
-        and config.ENV_DATA["deployment_type"] == "managed"
+        (
+            config.ENV_DATA["platform"] == constants.IBMCLOUD_PLATFORM
+            and config.ENV_DATA["deployment_type"] == "managed"
+        )
+        or config.ENV_DATA["platform"] == constants.ROSA_HCP_PLATFORM
+        or (
+            config.DEPLOYMENT.get("use_custom_ingress_ssl_cert")
+            and config.DEPLOYMENT["custom_ssl_cert_provider"]
+            == constants.SSL_CERT_PROVIDER_LETS_ENCRYPT
+        )
     ):
         verify = True
-    elif config.DEPLOYMENT.get("use_custom_ingress_ssl_cert"):
+    elif (
+        config.DEPLOYMENT.get("use_custom_ingress_ssl_cert")
+        and config.DEPLOYMENT["custom_ssl_cert_provider"]
+        == constants.SSL_CERT_PROVIDER_OCS_QE_CA
+    ):
         verify = get_root_ca_cert()
     else:
         verify = constants.DEFAULT_INGRESS_CRT_LOCAL_PATH
@@ -1742,6 +1861,7 @@ def s3_list_objects_v2(
     max_keys=1000,
     con_token="",
     fetch_owner=False,
+    start_after="",
 ):
     """
     Boto3 client based list object version2
@@ -1754,6 +1874,7 @@ def s3_list_objects_v2(
         max_keys (int): Maximum number of keys returned in the response. Default 1,000 keys.
         con_token (str): Token used to continue the list
         fetch_owner (bool): Unique object Identifier
+        start_after (str): Name of the object after which you want to list
 
     Returns:
         dict : list object v2 response
@@ -1766,6 +1887,7 @@ def s3_list_objects_v2(
         MaxKeys=max_keys,
         ContinuationToken=con_token,
         FetchOwner=fetch_owner,
+        StartAfter=start_after,
     )
 
 
@@ -1978,9 +2100,11 @@ def update_replication_policy(bucket_name, replication_policy_dict):
     replication_policy_patch_dict = {
         "spec": {
             "additionalConfig": {
-                "replicationPolicy": json.dumps(replication_policy_dict)
-                if replication_policy_dict
-                else ""
+                "replicationPolicy": (
+                    json.dumps(replication_policy_dict)
+                    if replication_policy_dict
+                    else ""
+                )
             }
         }
     }
@@ -2626,3 +2750,174 @@ def delete_objects_from_source_and_wait_for_deletion_sync(
         target_bucket.name,
         timeout=timeout,
     ), f"Deletion sync failed to complete in {timeout} seconds"
+
+
+def list_objects_in_batches(
+    mcg_obj, bucket_name, batch_size=1000, yield_individual=True
+):
+    """
+    This method lists objects in a bucket either in batch of mentioned batch_size
+    or individually. This method is helpful when dealing with millions of objects
+    which maybe expensive in terms of typical list operations.
+
+    Args:
+        mcg_obj (MCG): MCG object
+        bucket_name (str): Name of the bucket
+        batch_size (int): Number of objects to list at a time, by default 1000
+        yield_individual (bool): If True, it will yield indviudal objects until all the
+        objects are listed. If False, batch of objects are yielded.
+
+    Returns:
+        yield: indvidual object key or list containing batch of objects
+
+    """
+
+    marker = ""
+
+    while True:
+        response = s3_list_objects_v2(
+            mcg_obj, bucket_name, max_keys=batch_size, start_after=marker
+        )
+        if yield_individual:
+            for obj in response.get("Contents", []):
+                yield obj["Key"]
+        else:
+            yield [{"Key": obj["Key"]} for obj in response.get("Contents", [])]
+
+        if not response.get("IsTruncated", False):
+            break
+
+        marker = response.get("Contents", [])[-1]["Key"]
+        del response
+
+
+def map_objects_to_owners(mcg_obj, bucket_name, prefix=""):
+    """
+    This method returns a mapping of object key to owner data
+
+    Args:
+        mcg_obj (MCG): MCG object
+        bucket_name (str): Name of the bucket
+        prefix (str): Prefix to list objects
+
+    Returns:
+        dict: a mapping of object key to owner data
+
+    """
+    response = s3_list_objects_v2(mcg_obj, bucket_name, prefix=prefix, fetch_owner=True)
+    return {item["Key"]: item["Owner"] for item in response.get("Contents", [])}
+
+
+def sts_assume_role(
+    pod_obj,
+    role_name,
+    access_key_id_assumed_user,
+    role_session_name=None,
+    mcg_obj=None,
+    signed_request_creds=None,
+):
+    """
+    Aws s3 assume role of an User
+
+    Args:
+        role_name (str): Role name of a role attached to the assumed user
+        access_key_id_assumed_user (str): Access key id of the assumed user
+        mcg_obj (MCG): MCG object
+        signed_request_creds (dict): a dictionary containing AWS S3 creds for a signed request
+
+    Returns:
+        Dict: Representing the output of the command which on successful execution
+        consists of new credentials
+
+    """
+    if not role_session_name:
+        role_session_name = f"role-session-{uuid4().hex}"
+    cmd = (
+        f"assume-role --role-arn arn:aws:sts::{access_key_id_assumed_user}:role/{role_name} "
+        f"--role-session-name {role_session_name}"
+    )
+    cmd = craft_sts_command(
+        cmd, mcg_obj=mcg_obj, signed_request_creds=signed_request_creds
+    )
+    return pod_obj.exec_cmd_on_pod(command=cmd)
+
+
+def s3_create_bucket(s3_obj, bucket_name, s3_client=None):
+    """
+    AWS s3 create bucket
+
+    Args:
+        s3_obj (MCG): MCG object
+        bucket_name (str): Name of the bucket
+        s3_client (S3.Client): Any S3 client resource
+
+    """
+    if s3_client:
+        s3_client.create_bucket(Bucket=bucket_name)
+    else:
+        s3_obj.s3_resource.create_bucket(Bucket=bucket_name)
+
+
+def s3_delete_bucket(s3_obj, bucket_name, s3_client=None):
+    """
+    AWS s3 delete bucket
+
+    Args:
+        s3_obj (MCG): MCG object
+        bucket_name (str): Name of the bucket
+        s3_client (S3.Client): Any s3 client resource
+
+    """
+    if s3_client:
+        s3_client.delete_bucket(Bucket=bucket_name)
+    else:
+        s3_obj.s3_client.delete_bucket(Bucket=bucket_name)
+
+
+def s3_list_buckets(s3_obj, s3_client=None):
+    """
+    AWS S3 list buckets
+
+    Args:
+        s3_obj (MCG): MCG object
+        s3_client (S3.Client): Any s3 client resource
+
+    Returns:
+        List: List of buckets
+
+    """
+
+    if s3_client:
+        response = s3_client.list_buckets()
+    else:
+        response = s3_obj.s3_client.list_buckets()
+
+    return [bucket["Name"] for bucket in response["Buckets"]]
+
+
+def create_s3client_from_assume_role_creds(mcg_obj, assume_role_creds):
+    """
+    Create s3client from the creds passed and endpoint fetched from MCG object
+
+    Args:
+        mcg_obj (MCG): MCG object
+        creds (Dict): Dictionary representing the credentials
+
+    Returns:
+        Boto3 s3 client object
+
+    """
+
+    assumed_access_key_id = assume_role_creds.get("Credentials").get("AccessKeyId")
+    assumed_access_key = assume_role_creds.get("Credentials").get("SecretAccessKey")
+    assumed_session_token = assume_role_creds.get("Credentials").get("SessionToken")
+
+    assumed_s3_resource = boto3.resource(
+        "s3",
+        verify=retrieve_verification_mode(),
+        endpoint_url=mcg_obj.s3_endpoint,
+        aws_access_key_id=assumed_access_key_id,
+        aws_secret_access_key=assumed_access_key,
+        aws_session_token=assumed_session_token,
+    )
+    return assumed_s3_resource.meta.client

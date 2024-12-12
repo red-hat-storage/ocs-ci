@@ -2,7 +2,10 @@ import logging
 import pytest
 
 from ocs_ci.ocs import constants
-from ocs_ci.framework.pytest_customization.marks import green_squad
+from ocs_ci.framework.pytest_customization.marks import (
+    green_squad,
+    provider_mode,
+)
 from ocs_ci.framework.pytest_customization.marks import skipif_hci_provider_and_client
 from ocs_ci.framework.testlib import (
     skipif_ocs_version,
@@ -10,6 +13,7 @@ from ocs_ci.framework.testlib import (
     tier1,
     acceptance,
     skipif_ocp_version,
+    config,
 )
 from ocs_ci.ocs.resources import pvc
 from ocs_ci.ocs.resources import pod
@@ -52,6 +56,7 @@ class TestClone(ManageTest):
             pod_dict_path=pod_dict_path,
         )
 
+    @provider_mode
     @acceptance
     @pytest.mark.parametrize(
         argnames=["interface_type", "pod_dict_path", "access"],
@@ -106,7 +111,9 @@ class TestClone(ManageTest):
             sc_name, parent_pvc, clone_yaml, namespace
         )
         teardown_factory(cloned_pvc_obj)
-        helpers.wait_for_resource_state(cloned_pvc_obj, constants.STATUS_BOUND)
+        helpers.wait_for_resource_state(
+            cloned_pvc_obj, constants.STATUS_BOUND, timeout=300
+        )
         cloned_pvc_obj.reload()
 
         # Create and attach pod to the pvc
@@ -152,6 +159,7 @@ class TestClone(ManageTest):
         clone_pod_obj.get_fio_results()
         logger.info(f"IO completed on pod {clone_pod_obj.name}")
 
+    @provider_mode
     @acceptance
     @pytest.mark.polarion_id("OCS-5162")
     @pytest.mark.parametrize(
@@ -219,6 +227,7 @@ class TestClone(ManageTest):
             volume_mode=snapshot_obj.parent_volume_mode,
             access_mode=constants.ACCESS_MODE_ROX,
             status=constants.STATUS_BOUND,
+            timeout=300,
         )
         teardown_factory(restore_snapshot_obj)
 
@@ -311,11 +320,13 @@ class TestClone(ManageTest):
         ), f"File {file_name} does not exist"
         logger.info(f"File {file_name} exists in {self.pod_obj.name}")
 
+        cephfs_name = config.ENV_DATA.get("cephfs_name") or helpers.get_cephfs_name()
+
         # Checking out subvolumes before taking snapshot
         logger.info("Checking subvolumes before snapshots.")
         toolbox = pod.get_ceph_tools_pod()
         subvolumes_before_snapshot = toolbox.exec_ceph_cmd(
-            "ceph fs subvolume ls ocs-storagecluster-cephfilesystem --group_name csi"
+            f"ceph fs subvolume ls {cephfs_name} --group_name csi"
         )
         logger.info(f"Subvolumes before snapshots are:\n{subvolumes_before_snapshot}")
 
@@ -333,6 +344,7 @@ class TestClone(ManageTest):
             volume_mode=snapshot_obj.parent_volume_mode,
             access_mode=constants.ACCESS_MODE_ROX,
             status=constants.STATUS_BOUND,
+            timeout=300,
         )
         teardown_factory(restore_snapshot_obj)
 
@@ -340,7 +352,7 @@ class TestClone(ManageTest):
         logger.info("Checking subvolumes before snapshots.")
         toolbox = pod.get_ceph_tools_pod()
         subvolumes_after_snapshot = toolbox.exec_ceph_cmd(
-            "ceph fs subvolume ls ocs-storagecluster-cephfilesystem --group_name csi"
+            f"ceph fs subvolume ls {cephfs_name} --group_name csi"
         )
         logger.info(f"Subvolumes before snapshots are:\n{subvolumes_after_snapshot}")
         assert (
@@ -443,11 +455,13 @@ class TestClone(ManageTest):
         ), f"File {file_name} does not exist"
         logger.info(f"File {file_name} exists in {self.pod_obj.name}")
 
+        cephfs_name = config.ENV_DATA.get("cephfs_name") or helpers.get_cephfs_name()
+
         # Checking out subvolumes before taking snapshot
         logger.info("Checking subvolumes before snapshots.")
         toolbox = pod.get_ceph_tools_pod()
         subvolumes_before_snapshot = toolbox.exec_ceph_cmd(
-            "ceph fs subvolume ls ocs-storagecluster-cephfilesystem --group_name csi"
+            f"ceph fs subvolume ls {cephfs_name} --group_name csi"
         )
         logger.info(f"Subvolumes before snapshots are:\n{subvolumes_before_snapshot}")
 
@@ -470,6 +484,7 @@ class TestClone(ManageTest):
             access_mode=constants.ACCESS_MODE_ROX,
             status=constants.STATUS_BOUND,
             restore_pvc_name="first-rwx-snapshot-restore-to-rox-mode-00",
+            timeout=300,
         )
         teardown_factory(restore_snapshot_obj)
 
@@ -477,7 +492,7 @@ class TestClone(ManageTest):
         logger.info("Checking subvolumes after snapshots.")
         toolbox = pod.get_ceph_tools_pod()
         subvolumes_after_snapshot = toolbox.exec_ceph_cmd(
-            "ceph fs subvolume ls ocs-storagecluster-cephfilesystem --group_name csi"
+            f"ceph fs subvolume ls {cephfs_name} --group_name csi"
         )
         logger.info(f"Subvolumes after snapshots are:\n{subvolumes_after_snapshot}")
         assert (
@@ -527,7 +542,7 @@ class TestClone(ManageTest):
         logger.info("Checking subvolumes after PVC clone.")
         toolbox = pod.get_ceph_tools_pod()
         subvolumes_after_pvc_clone = toolbox.exec_ceph_cmd(
-            "ceph fs subvolume ls ocs-storagecluster-cephfilesystem --group_name csi"
+            f"ceph fs subvolume ls {cephfs_name} --group_name csi"
         )
         logger.info(f"Subvolumes after PVC clone are:\n{subvolumes_after_pvc_clone}")
         assert (

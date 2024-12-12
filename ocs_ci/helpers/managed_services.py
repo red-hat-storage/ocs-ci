@@ -1,6 +1,7 @@
 """
 Managed Services related functionalities
 """
+
 import logging
 import re
 
@@ -28,6 +29,7 @@ from ocs_ci.ocs.resources.pvc import get_all_pvc_objs
 from ocs_ci.utility.utils import convert_device_size, TimeoutSampler
 from ocs_ci.utility.aws import AWS
 import ocs_ci.ocs.cluster
+from ocs_ci.utility import version
 
 log = logging.getLogger(__name__)
 
@@ -235,7 +237,7 @@ def verify_osd_distribution_on_provider():
         # 4Ti is the size of OSD
         assert (
             osd_count == int(size) / 4
-        ), f"Zone {zone} does not have {size/4} osd, but {osd_count}"
+        ), f"Zone {zone} does not have {size / 4} osd, but {osd_count}"
 
 
 def verify_storageclient(
@@ -263,10 +265,11 @@ def verify_storageclient(
         else storageclient_obj.get()["items"][0]
     )
     storageclient_name = storageclient["metadata"]["name"]
+
     provider_name = provider_name or config.ENV_DATA.get("provider_name", "")
     endpoint_actual = get_storage_provider_endpoint(provider_name)
     assert storageclient["spec"]["storageProviderEndpoint"] == endpoint_actual, (
-        f"The value of storageProviderEndpoint is not correct in the storageclient {storageclient['metadata']['name']}."
+        f"The value of storageProviderEndpoint is not correct in storageclient {storageclient['metadata']['name']}."
         f" Value in storageclient is {storageclient['spec']['storageProviderEndpoint']}. "
         f"Value in the provider cluster {provider_name} is {endpoint_actual}"
     )
@@ -297,26 +300,35 @@ def get_storageclassclaims_of_storageclient(storageclient_name):
          List: OCS objects of kind Storageclassclaim
 
     """
+    ocs_version = version.get_semantic_ocs_version_from_config()
     sc_claims = get_all_storageclassclaims()
-    return [
-        sc_claim
-        for sc_claim in sc_claims
-        if sc_claim.data["spec"]["storageClient"]["name"] == storageclient_name
-    ]
+    for sc_claim in sc_claims:
+        if ocs_version >= version.VERSION_4_16:
+            sc_claim.data["spec"]["storageClient"] == storageclient_name
+        else:
+            sc_claim.data["spec"]["storageClient"]["name"] == storageclient_name
+    return sc_claim
 
 
-def get_all_storageclassclaims():
+def get_all_storageclassclaims(namespace=None):
     """
-    Get all storageclassclaims
+    Get all storageclassclaims/storageclaims
+    <storageclassclaim changed to storageclaim from ODF 4.16 >
 
     Returns:
-         List: OCS objects of kind Storageclassclaim
+         List: OCS objects of kind Storageclassclaim/storageclaim
 
     """
-    sc_claim_obj = OCP(
-        kind=constants.STORAGECLASSCLAIM, namespace=config.ENV_DATA["cluster_namespace"]
-    )
-    sc_claims_data = sc_claim_obj.get()["items"]
+    if not namespace:
+        namespace = config.ENV_DATA["cluster_namespace"]
+
+    ocs_version = version.get_semantic_ocs_version_from_config()
+    if ocs_version >= version.VERSION_4_16:
+        sc_claim_obj = OCP(kind=constants.STORAGECLAIM, namespace=namespace)
+    else:
+        sc_claim_obj = OCP(kind=constants.STORAGECLASSCLAIM, namespace=namespace)
+    sc_claims_data = sc_claim_obj.get(retry=6, wait=30)["items"]
+    log.info(f"storage claims: {sc_claims_data}")
     return [OCS(**claim_data) for claim_data in sc_claims_data]
 
 
@@ -329,6 +341,7 @@ def verify_storageclient_storageclass_claims(storageclient):
 
     """
     sc_claim_objs = get_storageclassclaims_of_storageclient(storageclient)
+    log.info(f"storageclaims: {sc_claim_objs}")
 
     # Wait for the storageclassclaims to be in Ready state
     for sc_claim in sc_claim_objs:

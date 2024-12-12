@@ -51,7 +51,7 @@ class PageNavigator(BaseUI):
                 self.storage_class = "standard_sc"
             else:
                 self.storage_class = "standard_csi_sc"
-        self.page_has_loaded(5, 2, self.page_nav["page_navigator_sidebar"])
+        self.page_has_loaded(30, 2, self.page_nav["page_navigator_sidebar"])
 
     def navigate_OCP_home_page(self):
         """
@@ -188,13 +188,17 @@ class PageNavigator(BaseUI):
         logger.info("Navigate to Installed Operators Page")
         self.choose_expanded_mode(mode=True, locator=self.page_nav["Operators"])
         self.page_has_loaded(retries=25, sleep_time=1)
+        logger.info("Click on Installed Operators Page")
         self.do_click(
-            self.page_nav["installed_operators_page"], enable_screenshot=False
+            self.page_nav["installed_operators_page"],
+            enable_screenshot=True,
+            avoid_stale=True,
         )
         self.page_has_loaded(retries=25, sleep_time=1)
         if self.ocp_version_full >= version.VERSION_4_9:
             self.do_click(self.page_nav["drop_down_projects"])
             self.do_click(self.page_nav["choose_all_projects"])
+        logger.info("Successfully navigated to Installed Operators Page")
 
     def navigate_to_ocs_operator_page(self):
         """
@@ -206,6 +210,19 @@ class PageNavigator(BaseUI):
 
         logger.info("Enter the OCS operator page")
         self.do_click(self.generic_locators["ocs_operator"], enable_screenshot=False)
+
+    def navigate_to_mco_operator_page(self):
+        """
+        Navigate to the ODF Multicluster Orchestrator Operator page
+
+        """
+        self.navigate_installed_operators_page()
+        logger.info("Select 'ODF Multicluster Orchestrator' project")
+        self.select_namespace("openshift-operators")
+        logger.info("Enter the MCO operator page")
+        self.do_click(
+            self.generic_locators["openshift-operators"], enable_screenshot=False
+        )
 
     def navigate_persistentvolumes_page(self):
         """
@@ -443,7 +460,7 @@ class PageNavigator(BaseUI):
 
         logger.info("Navigate to Storage Client Page")
         self.choose_expanded_mode(mode=True, locator=self.page_nav["Storage"])
-        self.page_has_loaded(retries=120, sleep_time=10)
+        self.page_has_loaded(retries=120)
         self.do_click(
             locator=self.page_nav["storageclients_page"], enable_screenshot=False
         )

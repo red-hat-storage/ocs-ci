@@ -116,6 +116,11 @@ def bucket_class_factory(
         else:
             interface = "OC"
 
+        if "timeout" in bucket_class_dict:
+            timeout = bucket_class_dict["timeout"]
+        else:
+            timeout = 600
+
         namespace_policy = {}
         backingstores = None
         namespacestores = None
@@ -167,7 +172,7 @@ def bucket_class_factory(
             backingstores = [
                 backingstore
                 for backingstore in backingstore_factory(
-                    interface, bucket_class_dict["backingstore_dict"]
+                    interface, bucket_class_dict["backingstore_dict"], timeout=timeout
                 )
             ]
         else:
@@ -187,9 +192,11 @@ def bucket_class_factory(
                     "rule_id": replication_policy_tuple[0],
                     "destination_bucket": replication_policy_tuple[1],
                     "filter": {
-                        "prefix": replication_policy_tuple[2]
-                        if replication_policy_tuple[2] is not None
-                        else ""
+                        "prefix": (
+                            replication_policy_tuple[2]
+                            if replication_policy_tuple[2] is not None
+                            else ""
+                        )
                     },
                 }
             ]
