@@ -738,3 +738,7 @@ class VMIndexNotFoundException(Exception):
 
 class HostNameNotFoundInOSDStatus(Exception):
     pass
+
+
+class ActiveMdsValueNotMatch(Exception):
+    pass
