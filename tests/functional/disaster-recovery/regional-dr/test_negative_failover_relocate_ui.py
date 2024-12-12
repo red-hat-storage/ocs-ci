@@ -5,11 +5,12 @@ from time import sleep
 
 from ocs_ci.framework import config
 from ocs_ci.framework.pytest_customization.marks import (
+    rdr,
     rdr_ui_failover_config_required,
     rdr_ui_relocate_config_required,
+    turquoise_squad,
 )
 from ocs_ci.framework.testlib import tier3, skipif_ocs_version
-from ocs_ci.framework.pytest_customization.marks import turquoise_squad
 from ocs_ci.helpers import dr_helpers
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.acm.acm import AcmAddClusters
@@ -22,6 +23,7 @@ from ocs_ci.helpers.dr_helpers_ui import (
 logger = logging.getLogger(__name__)
 
 
+@rdr
 @tier3
 @turquoise_squad
 @skipif_ocs_version("<4.13")

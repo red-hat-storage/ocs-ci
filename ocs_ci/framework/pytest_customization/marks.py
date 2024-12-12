@@ -87,6 +87,7 @@ polarion_id = pytest.mark.polarion_id
 bugzilla = pytest.mark.bugzilla
 jira = pytest.mark.jira
 acm_import = pytest.mark.acm_import
+rdr = pytest.mark.rdr
 
 tier_marks = [
     tier1,

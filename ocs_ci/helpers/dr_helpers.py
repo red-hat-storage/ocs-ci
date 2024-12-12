@@ -5,15 +5,17 @@ Helper functions specific for DR
 import json
 import logging
 import tempfile
+from datetime import datetime
 
 from ocs_ci.framework import config
 from ocs_ci.ocs import constants, ocp
+from ocs_ci.ocs.defaults import RBD_NAME
 from ocs_ci.ocs.exceptions import (
     TimeoutExpiredError,
     UnexpectedBehaviour,
 )
 from ocs_ci.ocs.resources.drpc import DRPC
-from ocs_ci.ocs.resources.pod import get_all_pods
+from ocs_ci.ocs.resources.pod import get_all_pods, get_ceph_tools_pod
 from ocs_ci.ocs.resources.pv import get_all_pvs
 from ocs_ci.ocs.resources.pvc import get_all_pvc_objs
 from ocs_ci.ocs.node import gracefully_reboot_nodes
@@ -774,30 +776,102 @@ def wait_for_replication_destinations_deletion(namespace, timeout=900):
     sample.wait_for_func_value(0)
 
 
-def get_image_uuids(namespace):
+def get_backend_volumes_for_pvcs(namespace):
     """
-    Gets all image UUIDs associated with the PVCs in the given namespace
+    Gets list of RBD images or CephFS subvolumes associated with the PVCs in the given namespace
 
     Args:
-        namespace (str): the namespace of the VR resources
+        namespace (str): The namespace of the PVC resources
 
     Returns:
-        list: List of all image UUIDs
+        list: List of RBD images or CephFS subvolumes
 
     """
-    image_uuids = []
+    backend_volumes = []
     for cluster in get_non_acm_cluster_config():
         config.switch_ctx(cluster.MULTICLUSTER["multicluster_index"])
-        logger.info(
-            f"Fetching image UUIDs from cluster: {cluster.ENV_DATA['cluster_name']}"
-        )
+        logger.info(f"Fetching backend volume names for PVCs in namespace: {namespace}")
         all_pvcs = get_all_pvc_objs(namespace=namespace)
         for pvc_obj in all_pvcs:
-            if pvc_obj.backed_sc != constants.RDR_VOLSYNC_CEPHFILESYSTEM_SC:
-                image_uuids.append(pvc_obj.image_uuid)
-    image_uuids = list(set(image_uuids))
-    logger.info(f"All image UUIDs from managed clusters: {image_uuids}")
-    return image_uuids
+            if pvc_obj.backed_sc in [
+                constants.DEFAULT_STORAGECLASS_RBD,
+                constants.DEFAULT_EXTERNAL_MODE_STORAGECLASS_RBD,
+                constants.DEFAULT_CNV_CEPH_RBD_SC,
+            ]:
+                backend_volume = pvc_obj.get_rbd_image_name
+            elif pvc_obj.backed_sc in [
+                constants.DEFAULT_STORAGECLASS_CEPHFS,
+                constants.DEFAULT_EXTERNAL_MODE_STORAGECLASS_CEPHFS,
+            ]:
+                backend_volume = pvc_obj.get_cephfs_subvolume_name
+
+            backend_volumes.append(backend_volume)
+
+    backend_volumes = list(set(backend_volumes))
+    logger.info(f"Found {len(backend_volumes)} backend volumes: {backend_volumes}")
+    return backend_volumes
+
+
+def verify_backend_volume_deletion(backend_volumes):
+    """
+    Check whether RBD images/CephFS subvolumes are deleted in the backend.
+
+    Args:
+        backend_volumes (list): List of RBD images or CephFS subvolumes
+
+    Returns:
+        bool: True if volumes are deleted and False if volumes are not deleted
+
+    """
+    ct_pod = get_ceph_tools_pod()
+    rbd_pool_name = (
+        (config.ENV_DATA.get("rbd_name") or RBD_NAME)
+        if config.DEPLOYMENT["external_mode"]
+        else constants.DEFAULT_CEPHBLOCKPOOL
+    )
+    rbd_images = ct_pod.exec_cmd_on_pod(f"rbd ls {rbd_pool_name} --format json")
+
+    fs_name = ct_pod.exec_ceph_cmd("ceph fs ls")[0]["name"]
+    cephfs_cmd_output = ct_pod.exec_cmd_on_pod(
+        f"ceph fs subvolume ls {fs_name} --group_name csi"
+    )
+    cephfs_subvolumes = [subvolume["name"] for subvolume in cephfs_cmd_output]
+
+    ceph_volumes = rbd_images + cephfs_subvolumes
+    logger.info(f"All backend volumes present in the cluster: {ceph_volumes}")
+    not_deleted_volumes = []
+    for backend_volume in backend_volumes:
+        if backend_volume in ceph_volumes:
+            not_deleted_volumes.append(backend_volume)
+    if not_deleted_volumes:
+        logger.info(
+            f"The following backend volumes were not deleted: {not_deleted_volumes}"
+        )
+
+    return len(not_deleted_volumes) == 0
+
+
+def wait_for_backend_volume_deletion(backend_volumes, timeout=600):
+    """
+    Verify that RBD image/CephFS subvolume are deleted in the backend.
+
+    Args:
+        backend_volumes (list): List of RBD images or CephFS subvolumes
+        timeout (int): time in seconds to wait
+
+    Raises:
+        TimeoutExpiredError: In case backend volumes are not deleted
+    """
+    sample = TimeoutSampler(
+        timeout=timeout,
+        sleep=5,
+        func=verify_backend_volume_deletion,
+        backend_volumes=backend_volumes,
+    )
+    if not sample.wait_for_func_status(result=True):
+        error_msg = "Backend RBD images or CephFS subvolumes were not deleted"
+        logger.error(error_msg)
+        raise TimeoutExpiredError(error_msg)
 
 
 def get_all_drpolicy():
@@ -812,6 +886,64 @@ def get_all_drpolicy():
     drpolicy_obj = ocp.OCP(kind=constants.DRPOLICY)
     drpolicy_list = drpolicy_obj.get(all_namespaces=True).get("items")
     return drpolicy_list
+
+
+def verify_last_group_sync_time(
+    drpc_obj, scheduling_interval, initial_last_group_sync_time=None
+):
+    """
+    Verifies that the lastGroupSyncTime for a given DRPC object is within the expected range.
+
+    Args:
+        drpc_obj (obj): DRPC object
+        scheduling_interval (int): The scheduling interval in minutes
+        initial_last_group_sync_time (str): Previous lastGroupSyncTime value (optional).
+
+    Returns:
+        str: Current lastGroupSyncTime
+
+    Raises:
+        AssertionError: If the lastGroupSyncTime is outside the expected range
+            (greater than or equal to three times the scheduling interval)
+
+    """
+    restore_index = config.cur_index
+    config.switch_acm_ctx()
+    if initial_last_group_sync_time:
+        for last_group_sync_time in TimeoutSampler(
+            (3 * scheduling_interval * 60), 15, drpc_obj.get_last_group_sync_time
+        ):
+            if last_group_sync_time:
+                if last_group_sync_time != initial_last_group_sync_time:
+                    logger.info(
+                        f"Verified: Current lastGroupSyncTime {last_group_sync_time} is different from "
+                        f"previous value {initial_last_group_sync_time}"
+                    )
+                    break
+            logger.info(
+                "The value of lastGroupSyncTime in drpc is not updated. Retrying..."
+            )
+    else:
+        last_group_sync_time = drpc_obj.get_last_group_sync_time()
+
+    # Verify lastGroupSyncTime
+    time_format = "%Y-%m-%dT%H:%M:%SZ"
+    last_group_sync_time_formatted = datetime.strptime(
+        last_group_sync_time, time_format
+    )
+    current_time = datetime.strptime(
+        datetime.utcnow().strftime(time_format), time_format
+    )
+    time_since_last_sync = (
+        current_time - last_group_sync_time_formatted
+    ).total_seconds() / 60
+    logger.info(f"Time in minutes since the last sync {time_since_last_sync}")
+    assert (
+        time_since_last_sync < 3 * scheduling_interval
+    ), "The syncing of volumes is exceeding three times the scheduled snapshot interval"
+    logger.info("Verified lastGroupSyncTime value within expected range")
+    config.switch_ctx(restore_index)
+    return last_group_sync_time
 
 
 def get_managed_cluster_node_ips():
