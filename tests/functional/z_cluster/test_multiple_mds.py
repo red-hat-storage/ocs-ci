@@ -12,9 +12,10 @@ from ocs_ci.framework.pytest_customization.marks import brown_squad, tier4c
 from ocs_ci.helpers.helpers import verify_storagecluster_nodetopology
 from ocs_ci.framework import config
 from ocs_ci.ocs.cluster import (
-    adjust_active_mds_count,
-    get_active_mds_count,
+    adjust_active_mds_count_storagecluster,
+    get_active_mds_count_cephfilesystem,
     get_active_mds_pods,
+    get_active_and_standby_pod_count,
 )
 from ocs_ci.ocs.resources import pod
 from ocs_ci.helpers.sanity_helpers import Sanity
@@ -22,6 +23,7 @@ from ocs_ci.ocs import node
 from tests.functional.z_cluster.nodes.test_node_replacement_proactive import (
     delete_and_create_osd_node,
 )
+
 
 log = logging.getLogger(__name__)
 
@@ -42,7 +44,9 @@ class TestMultipleMds:
         """
 
         def finalizer():
-            adjust_active_mds_count(1), "Failed to set active mds count to 1"
+            adjust_active_mds_count_storagecluster(
+                1
+            ), "Failed to set active mds count to 1"
 
         request.addfinalizer(finalizer)
 
@@ -62,30 +66,25 @@ class TestMultipleMds:
         4. Make sure all the active mds pods come to active state.
 
         """
-        original_active_count = get_active_mds_count()
+        original_active_count_cephfilesystem = get_active_mds_count_cephfilesystem()
 
         # Scale up active mds pods from 1 to 2 and then 2 to 3
-        new_active_mds_count = original_active_count + 2
-        adjust_active_mds_count(new_active_mds_count)
+        new_active_mds_count = original_active_count_cephfilesystem + 2
+        adjust_active_mds_count_storagecluster(new_active_mds_count)
 
         # Verify active and standby-replay mds counts.
-        ct_pod = pod.get_ceph_tools_pod()
-        ceph_mdsmap = ct_pod.exec_ceph_cmd("ceph fs status")
-        # Extract the mdsmap list from the data
-        ceph_mdsmap = ceph_mdsmap["mdsmap"]
-        # Counting active MDS daemons
-        active_count = sum(1 for mds in ceph_mdsmap if mds["state"] == "active")
-        standby_replay = sum(
-            1 for mds in ceph_mdsmap if mds["state"] == "standby-replay"
-        )
+        active_pod_count = get_active_and_standby_pod_count()["active_pod_count"]
+        standby_replay_count = get_active_and_standby_pod_count()[
+            "standby_replay_count"
+        ]
 
-        log.info(f"Number of active MDS daemons:{active_count}")
-        log.info(f"Number of standby MDS daemons:{standby_replay}")
+        log.info(f"Number of active MDS daemons:{active_pod_count}")
+        log.info(f"Number of standby MDS daemons:{standby_replay_count}")
         assert (
-            active_count == new_active_mds_count
+            active_pod_count == new_active_mds_count
         ), "Active mds counts did not increased"
         assert (
-            standby_replay == new_active_mds_count
+            standby_replay_count == new_active_mds_count
         ), "Standby replay mds counts did not increased"
 
         # Replace node
@@ -107,11 +106,20 @@ class TestMultipleMds:
             verify_storagecluster_nodetopology
         ), "Storagecluster node topology is having an entry of non ocs node"
 
+        # Perform cluster and Ceph health checks
+        self.sanity_helpers.health_check(tries=120)
+
+        # Verify active and standby-replay mds counts after node replacement
+        active_pod_count = get_active_and_standby_pod_count()["active_pod_count"]
+        standby_replay_count = get_active_and_standby_pod_count()[
+            "standby_replay_count"
+        ]
+
         assert (
-            active_count == new_active_mds_count
+            active_pod_count == new_active_mds_count
         ), "Active mds counts did not match after node replacement"
         assert (
-            standby_replay == new_active_mds_count
+            standby_replay_count == new_active_mds_count
         ), "Standby replay mds counts did not match after node replacement"
 
     def test_fault_tolerance_multiple_mds(self):
@@ -123,11 +131,11 @@ class TestMultipleMds:
 
         """
 
-        original_active_count = get_active_mds_count()
+        original_active_count_cephfilesystem = get_active_mds_count_cephfilesystem()
 
         # Scale up active mds pods from 1 to 2.
-        new_active_mds_count = original_active_count + 1
-        adjust_active_mds_count(new_active_mds_count)
+        new_active_mds_count = original_active_count_cephfilesystem + 1
+        adjust_active_mds_count_storagecluster(new_active_mds_count)
 
         # Get active mds node name
         active_mds_pods = get_active_mds_pods()
@@ -148,23 +156,18 @@ class TestMultipleMds:
         self.sanity_helpers.health_check(tries=40)
 
         # Verify active and standby-replay mds counts.
-        ct_pod = pod.get_ceph_tools_pod()
-        ceph_mdsmap = ct_pod.exec_ceph_cmd("ceph fs status")
-        # Extract the mdsmap list from the data
-        ceph_mdsmap = ceph_mdsmap["mdsmap"]
-        # Counting active MDS daemons
-        active_count = sum(1 for mds in ceph_mdsmap if mds["state"] == "active")
-        standby_replay = sum(
-            1 for mds in ceph_mdsmap if mds["state"] == "standby-replay"
-        )
+        active_pod_count = get_active_and_standby_pod_count()["active_pod_count"]
+        standby_replay_count = get_active_and_standby_pod_count()[
+            "standby_replay_count"
+        ]
 
-        log.info(f"Number of active MDS daemons:{active_count}")
-        log.info(f"Number of standby MDS daemons:{standby_replay}")
+        log.info(f"Number of active MDS daemons:{active_pod_count}")
+        log.info(f"Number of standby MDS daemons:{standby_replay_count}")
         assert (
-            active_count == new_active_mds_count
+            active_pod_count == new_active_mds_count
         ), "Active mds counts did not increased"
         assert (
-            standby_replay == new_active_mds_count
+            standby_replay_count == new_active_mds_count
         ), "Standby replay mds counts did not increased"
 
         # Fail one active mds pod [out of two]
@@ -174,21 +177,16 @@ class TestMultipleMds:
         time.sleep(60)
 
         # Verify active and standby-replay mds counts.
-        ct_pod = pod.get_ceph_tools_pod()
-        ceph_mdsmap = ct_pod.exec_ceph_cmd("ceph fs status")
-        # Extract the mdsmap list from the data
-        ceph_mdsmap = ceph_mdsmap["mdsmap"]
-        # Counting active MDS daemons
-        active_count = sum(1 for mds in ceph_mdsmap if mds["state"] == "active")
-        standby_replay = sum(
-            1 for mds in ceph_mdsmap if mds["state"] == "standby-replay"
-        )
+        active_pod_count = get_active_and_standby_pod_count()["active_pod_count"]
+        standby_replay_count = get_active_and_standby_pod_count()[
+            "standby_replay_count"
+        ]
 
-        log.info(f"Number of active MDS daemons:{active_count}")
-        log.info(f"Number of standby MDS daemons:{standby_replay}")
+        log.info(f"Number of active MDS daemons:{active_pod_count}")
+        log.info(f"Number of standby MDS daemons:{standby_replay_count}")
         assert (
-            active_count == new_active_mds_count
+            active_pod_count == new_active_mds_count
         ), "Active mds counts did not increased"
         assert (
-            standby_replay == new_active_mds_count
+            standby_replay_count == new_active_mds_count
         ), "Standby replay mds counts did not increased"
