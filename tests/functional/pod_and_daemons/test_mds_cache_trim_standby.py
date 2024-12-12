@@ -37,6 +37,17 @@ class TestMdsCacheTrimStandby(E2ETest):
         """
         Verifies whether the MDS cache is trimmed or not in standby-replay mode.
 
+        Steps:
+        1. Run metadata IO on at least 5 pods, so that the memory consumption will be rapid and high.
+        2. When mds memory utilisation reached 75% [it is similar to 150% of cache utilisation], there is a possibility
+        to trigger MDS cache oversized warning.
+        3. Now, the script look for such warnings in ceph health.
+        4. If found the warning, it identifies whether the warning is from Active or standby mds
+         by searching the warning in the mds pod logs.
+        5. After that, it identifies whether the cache trim is happening or not on stand by MDS.
+        6. Test case passes if MDS cache oversized warning not found in Standby mds and
+          if cache trim is happening in Standby mds pod.
+
         """
         run_metadata_io_with_cephfs(dc_pod_factory, no_of_io_pods=5)
         log.info(
