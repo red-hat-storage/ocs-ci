@@ -7048,8 +7048,25 @@ def discovered_apps_dr_workload_cnv(request):
     return factory
 
 
+@pytest.fixture(scope="class")
+def cnv_workload_class(request):
+    """
+    Class scoped fixture to deploy CNV workload
+
+    """
+    return cnv_workload_factory(request)
+
+
 @pytest.fixture()
 def cnv_workload(request):
+    """
+    Function scoped fixture to deploy CNV workload
+
+    """
+    return cnv_workload_factory(request)
+
+
+def cnv_workload_factory(request):
     """
     Deploys CNV based workloads
 
