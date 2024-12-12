@@ -100,6 +100,11 @@ class ROSAOCP(BaseOCPDeployment):
             machinepool_details.wait_replicas_ready(
                 target_replicas=config.ENV_DATA["worker_replicas"], timeout=1200
             )
+            if node_labels := config.ENV_DATA.get("node_labels"):
+                if machinepool_id := config.ENV_DATA.get("machine_pool"):
+                    rosa.label_nodes(
+                        self.cluster_name, machinepool_id, node_labels, rewrite=False
+                    )
 
         logger.info("generate kubeconfig and kubeadmin-password files")
         if config.ENV_DATA["ms_env_type"] == "staging":
