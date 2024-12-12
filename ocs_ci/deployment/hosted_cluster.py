@@ -402,6 +402,9 @@ class HypershiftHostedOCP(HyperShiftBase, MetalLBInstaller, CNVInstaller, Deploy
         if not config.ENV_DATA["platform"].lower() in HCI_PROVIDER_CLIENT_PLATFORMS:
             raise ProviderModeNotFoundException()
 
+        if not config.ENV_DATA.get("deploy_acm_hub_cluster", True):
+            deploy_acm_hub = False
+
         self.deploy_dependencies(
             deploy_acm_hub, deploy_cnv, deploy_metallb, download_hcp_binary
         )
