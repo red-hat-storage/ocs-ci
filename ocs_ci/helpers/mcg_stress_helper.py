@@ -1,8 +1,11 @@
 import logging
 import concurrent.futures
 import time
+import textwrap
 
-from ocs_ci.helpers.helpers import get_noobaa_db_size, get_noobaa_db_used_space
+from tabulate import tabulate
+
+from ocs_ci.helpers.helpers import get_noobaa_db_size, get_noobaa_db_usage_percent
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.resources.mcg import MCG
 from ocs_ci.ocs.resources.objectbucket import OBC
@@ -24,6 +27,8 @@ from ocs_ci.ocs.exceptions import (
     CephHealthException,
     CommandFailed,
 )
+from ocs_ci.ocs.resources.pod import pod_resource_utilization_raw_output_from_adm_top
+from ocs_ci.utility.prometheus import PrometheusAPI
 
 logger = logging.getLogger(__name__)
 
@@ -368,7 +373,7 @@ def delete_objects_in_batches(bucket, batch_size):
         )
 
 
-def run_background_cluster_checks(scale_noobaa_db_pv, event=None):
+def run_background_cluster_checks(scale_noobaa_db_pv, event=None, threading_lock=None):
     """
     Run background checks to verify noobaa health
     and cluster health overall
@@ -381,6 +386,19 @@ def run_background_cluster_checks(scale_noobaa_db_pv, event=None):
 
     """
     ceph_cluster = CephCluster()
+    prometheus_api = PrometheusAPI(threading_lock=threading_lock)
+    prometheus_alert_list = list()
+
+    logger.info(
+        "\n"
+        "\nNow starting background check operations to check the following"
+        "\n1. Nooba Health"
+        "\n2. Ceph Health"
+        "\n3. Noobaa DB usage"
+        "\n4. Prometheus Alerts"
+        "\n5. Memory and CPU utilization for Noobaa pods"
+        "\n"
+    )
 
     @retry(NoobaaHealthException, tries=10, delay=60)
     def check_noobaa_health():
@@ -388,12 +406,17 @@ def run_background_cluster_checks(scale_noobaa_db_pv, event=None):
         while True:
 
             ceph_cluster.noobaa_health_check()
-            logger.info("BACKGROUND CHECK: Noobaa is healthy... rechecking in 1 minute")
-            time.sleep(60)
+            logger.info(
+                "\n"
+                "\n[BACKGROUND CHECK]"
+                "\nNoobaa is healthy... rechecking in 1 minute"
+                "\n"
+            )
 
             if event.is_set():
-                logger.info("BACKGROUND CHECK: Stopping the Noobaa health check")
+                logger.info("[BACKGROUND CHECK] Stopping the Noobaa health check")
                 break
+            time.sleep(60)
 
     @retry(CephHealthException, tries=10, delay=60)
     def check_ceph_health():
@@ -402,45 +425,109 @@ def run_background_cluster_checks(scale_noobaa_db_pv, event=None):
 
             if ceph_cluster.get_ceph_health() == constants.CEPH_HEALTH_ERROR:
                 raise CephHealthException
-            logger.info("BACKGROUND CHECK: Ceph is healthy... rechecking in 1 minute")
-            time.sleep(60)
+            logger.info(
+                "\n"
+                "\n[BACKGROUND CHECK]"
+                "\nCeph is healthy... rechecking in 1 minute"
+                "\n"
+            )
 
             if event.is_set():
-                logger.info("BACKGROUND CHECK: Stopping the Ceph health check")
+                logger.info("[BACKGROUND CHECK] Stopping the Ceph health check")
                 break
+            time.sleep(60)
 
     @retry(CommandFailed, tries=10, delay=60)
     def check_noobaa_db_size():
 
         while True:
-
-            nb_db_pv_used = get_noobaa_db_used_space()
-            nb_db_pv_size = get_noobaa_db_size()
-            used_percent = int((nb_db_pv_used * 100) / nb_db_pv_size)
+            used_percent = int(get_noobaa_db_usage_percent().split("%")[0])
+            nb_db_pv_size = int(get_noobaa_db_size().split("G")[0])
             if used_percent > 85:
                 logger.info(
-                    f"BACKGROUND CHECK: Noobaa db is {used_percent} percentage. Increasing the noobaa db by 50%"
+                    f"\n"
+                    f"\n[BACKGROUND CHECK]"
+                    f"\nNoobaa db is {used_percent} percentage. Increasing the noobaa db by 50%"
+                    f"\n"
                 )
-                new_size = int(nb_db_pv_size + int(nb_db_pv_size.split("G")[0]) / 2)
+                new_size = int(nb_db_pv_size + (nb_db_pv_size // 2))
                 scale_noobaa_db_pv(pvc_size=new_size)
                 logger.info(
-                    f"BACKGROUND CHECK: Scaled noobaa db to new size {new_size}"
+                    f"\n"
+                    f"\n[BACKGROUND CHECK]"
+                    f"\nScaled noobaa db to new size {new_size}"
+                    f"\n"
                 )
             logger.info(
-                f"BACKGROUND CHECK: Current noobaa db usage is at {used_percent}%... Rechecking in 5 minutes..."
+                f"\n"
+                f"\n[BACKGROUND CHECK]"
+                f"\nCurrent noobaa db usage is at {used_percent}%... Rechecking in 5 minutes..."
+                f"\n"
             )
-            time.sleep(300)
 
             if event.is_set():
-                logger.info("BACKGROUND CHECK: Stopping the Noobaa db size check")
+                logger.info("[BACKGROUND CHECK] Stopping the Noobaa db size check")
                 break
+            time.sleep(300)
 
-    logger.info("Initiating background ops")
-    executor = concurrent.futures.ThreadPoolExecutor(max_workers=3)
+    def check_prometheus_alerts():
+
+        while True:
+
+            prometheus_api.prometheus_log(prometheus_alert_list)
+            alert_tab = list()
+            alert_printed = list()
+            alert_tab.append(["Alert Name", "Description", "State"])
+            for alert in prometheus_alert_list:
+                if alert["labels"]["alertname"] in alert_printed:
+                    continue
+                alert_tab.append(
+                    [
+                        alert["labels"]["alertname"].strip(),
+                        "\n".join(
+                            textwrap.wrap(alert["annotations"]["description"], width=50)
+                        ),
+                        alert["state"],
+                    ]
+                )
+                alert_printed.append(alert["labels"]["alertname"])
+            logger.info(
+                f"\n"
+                f"\n[BACKGROUND CHECK]"
+                f"\nThese are the alerts so far in Prometheus: "
+                f"\n{tabulate(alert_tab[1:], headers=alert_tab[0], tablefmt='grid')}"
+                f"\n"
+            )
+
+            if event.is_set():
+                logger.info("[BACKGROUND CHECK] Stopping Prometheus alert logging")
+                break
+            time.sleep(300)
+
+    def check_noobaa_pod_resource_utilization():
+
+        while True:
+            logger.info(
+                f"\n"
+                f"\n[BACKGROUND CHECK]"
+                f"\nCurrent noobaa pod resource utilization: "
+                f"\n{pod_resource_utilization_raw_output_from_adm_top(selector=constants.NOOBAA_APP_LABEL)}"
+                f"\n"
+            )
+
+            if event.is_set():
+                logger.info(
+                    "[BACKGROUND CHECK] Stopping noobaa pod resource utilization checks"
+                )
+                break
+            time.sleep(300)
+
+    executor = concurrent.futures.ThreadPoolExecutor(max_workers=5)
     futures_obj = list()
     futures_obj.append(executor.submit(check_noobaa_health))
     futures_obj.append(executor.submit(check_ceph_health))
     futures_obj.append(executor.submit(check_noobaa_db_size))
-
+    futures_obj.append(executor.submit(check_prometheus_alerts))
+    futures_obj.append(executor.submit(check_noobaa_pod_resource_utilization))
     for future in futures_obj:
         future.result()
