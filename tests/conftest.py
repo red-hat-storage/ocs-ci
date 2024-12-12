@@ -8745,21 +8745,24 @@ def setup_cnv(request):
     """
     cnv_obj = CNVInstaller()
     installed = False
-    if not cnv_obj.post_install_verification():
-        installed = True
-        cnv_obj.deploy_cnv()
+    try:
+        if not cnv_obj.post_install_verification():
+            installed = True
+            cnv_obj.deploy_cnv()
 
-    def finalizer():
-        """
-        Clean up CNV deployment
+    finally:
 
-        """
+        def finalizer():
+            """
+            Clean up CNV deployment
 
-        # Uninstall CNV only if installed by this fixture
-        if installed:
-            cnv_obj.uninstall_cnv()
+            """
 
-    request.addfinalizer(finalizer)
+            # Uninstall CNV only if installed by this fixture
+            if installed:
+                cnv_obj.uninstall_cnv()
+
+        request.addfinalizer(finalizer)
 
 
 @pytest.fixture(scope="class")
