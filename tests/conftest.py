@@ -7203,6 +7203,8 @@ def multi_cnv_workload(
         return (
             vm_list_default_compr,
             vm_list_agg_compr,
+            sc_obj_def_compr,
+            sc_obj_aggressive,
         )
 
     return factory

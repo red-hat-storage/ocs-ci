@@ -30,9 +30,30 @@ class TestCNVVM(E2ETest):
         (
             self.vm_objs_def,
             self.vm_objs_aggr,
+            self.sc_obj_def_compr,
+            self.sc_obj_aggressive,
         ) = multi_cnv_workload(namespace=proj_obj.namespace)
 
         logger.info("All vms created successfully")
+
+    def verify_keyrotation(self, vm_objs, sc_obj):
+        for vm in vm_objs:
+            if vm.volume_interface == constants.VM_VOLUME_PVC:
+                pvk_obj = PVKeyrotation(sc_obj)
+                volume_name = vm.pvc_obj.get().get("spec", {}).get("volumeName")
+                volume_handle = None
+                for line in run_oc_command(
+                    f"describe pv {volume_name}", namespace=vm.namespace
+                ):
+                    if "VolumeHandle:" in line:
+                        volume_handle = line.split()[1]
+                        break
+                if not volume_handle:
+                    logger.error(f"Cannot get volume handle for pv {volume_name}")
+                    raise Exception("Cannot get volume handle")
+                assert pvk_obj.wait_till_keyrotation(
+                    volume_handle
+                ), f"Failed to rotate Key for the PVC {vm.pvc_obj.name}"
 
     @magenta_squad
     @workloads
@@ -57,7 +78,7 @@ class TestCNVVM(E2ETest):
 
         all_vm_list = self.vm_objs_def + self.vm_objs_aggr
 
-        # 2. Validate data integrity using md5sum.
+        # 2.Validate data integrity using md5sum.
         file_name = "/tmp/dd_file"
         vm_filepath = "/home/admin/dd_file1_copy"
 
@@ -68,7 +89,7 @@ class TestCNVVM(E2ETest):
         # Calculate the MD5 checksum
         if file_name:
             cmd = f"md5sum {file_name}"
-            md5sum_on_local = run_cmd(cmd)
+            md5sum_on_local = run_cmd(cmd).split()[0]
             if md5sum_on_local:
                 logger.info(f"MD5 checksum of the file: {md5sum_on_local}")
             else:
@@ -95,42 +116,11 @@ class TestCNVVM(E2ETest):
             ), f"md5sum has changed after copying file on {vm_obj.name}"
 
         # 3.Verify PV Keyrotation.
-        volume_interface = [
-            constants.VM_VOLUME_PVC,
-            constants.VM_VOLUME_DVT,
-        ]
+        # Process VMs with default compression
+        self.verify_keyrotation(self.vm_objs_def, self.sc_obj_def_compr)
 
-        for vl_if in volume_interface:
-            if vl_if == constants.VM_VOLUME_PVC:
-                for vm_group in [self.vm_objs_def, self.vm_objs_aggr]:
-                    for vm in vm_group:
-                        pvk_obj = PVKeyrotation(vm.pvc_obj.storageclass)
-                        if vm_group is self.vm_objs_def:
-                            volume_handle = vm.pvc_obj.get_pv_volume_handle_name
-                        else:
-                            volume_name = (
-                                vm.pvc_obj.get().get("spec", {}).get("volumeName")
-                            )
-                            volume_handle = next(
-                                (
-                                    line.split()[1]
-                                    for line in run_oc_command(
-                                        f"describe pv {volume_name}",
-                                        namespace=vm.namespace,
-                                    )
-                                    if "VolumeHandle:" in line
-                                ),
-                                None,
-                            )
-                            if volume_handle is None:
-                                logger.error(
-                                    f"Cannot get volume handle for PV {volume_name}"
-                                )
-                                raise Exception("Cannot get volume handle")
-
-                        assert pvk_obj.wait_till_keyrotation(
-                            volume_handle
-                        ), f"Failed to rotate Key for the PVC {vm.pvc_obj.name}"
+        # Process VMs with aggressive compression
+        self.verify_keyrotation(self.vm_objs_aggr, self.sc_obj_aggressive)
 
         # 4.Stop all VMs
         for vm_obj in all_vm_list:
