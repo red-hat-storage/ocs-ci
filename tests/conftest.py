@@ -24,7 +24,7 @@ from ocs_ci.deployment.cnv import CNVInstaller
 from ocs_ci.deployment import factory as dep_factory
 from ocs_ci.deployment.helpers.hypershift_base import HyperShiftBase
 from ocs_ci.deployment.hosted_cluster import HostedClients
-from ocs_ci.framework import config as ocsci_config, Config
+from ocs_ci.framework import config as ocsci_config, Config, config
 import ocs_ci.framework.pytest_customization.marks
 from ocs_ci.framework.pytest_customization.marks import (
     deployment,
@@ -46,7 +46,7 @@ from ocs_ci.ocs.bucket_utils import (
     put_bucket_policy,
 )
 from ocs_ci.ocs.constants import FUSION_CONF_DIR
-from ocs_ci.ocs.cnv.virtual_machine import VirtualMachine
+from ocs_ci.ocs.cnv.virtual_machine import VirtualMachine, VMCloner
 from ocs_ci.ocs.dr.dr_workload import (
     BusyBox,
     BusyBox_AppSet,
@@ -3268,6 +3268,7 @@ def install_logging(request):
     * The teardown will uninstall cluster-logging from the cluster
 
     """
+    rosa_hcp_depl = config.ENV_DATA.get("platform") == constants.ROSA_HCP_PLATFORM
 
     def finalizer():
         uninstall_cluster_logging()
@@ -3291,18 +3292,15 @@ def install_logging(request):
     logging_channel = "stable" if ocp_version >= version.VERSION_4_7 else ocp_version
 
     # Creates namespace openshift-operators-redhat
-    try:
-        ocp_logging_obj.create_namespace(yaml_file=constants.EO_NAMESPACE_YAML)
-    except CommandFailed as e:
-        if "AlreadyExists" in str(e):
-            # on Rosa HCP the ns created from the deployment
-            log.info("Namespace openshift-operators-redhat already exists")
-        else:
-            raise
+    ocp_logging_obj.create_namespace(
+        yaml_file=constants.EO_NAMESPACE_YAML, skip_resource_exists=rosa_hcp_depl
+    )
 
     # Creates an operator-group for elasticsearch
     assert ocp_logging_obj.create_elasticsearch_operator_group(
-        yaml_file=constants.EO_OG_YAML, resource_name="openshift-operators-redhat"
+        yaml_file=constants.EO_OG_YAML,
+        resource_name="openshift-operators-redhat",
+        skip_resource_exists=rosa_hcp_depl,
     )
 
     # Set RBAC policy on the project
@@ -3325,11 +3323,13 @@ def install_logging(request):
     )
 
     # Creates a namespace openshift-logging
-    ocp_logging_obj.create_namespace(yaml_file=constants.CL_NAMESPACE_YAML)
+    ocp_logging_obj.create_namespace(
+        yaml_file=constants.CL_NAMESPACE_YAML, skip_resource_exists=rosa_hcp_depl
+    )
 
     # Creates an operator-group for cluster-logging
     assert ocp_logging_obj.create_clusterlogging_operator_group(
-        yaml_file=constants.CL_OG_YAML
+        yaml_file=constants.CL_OG_YAML, skip_resource_exists=rosa_hcp_depl
     )
 
     # Creates subscription for cluster-logging
@@ -5698,6 +5698,9 @@ def nsfs_interface_fixture(request, service_account_factory):
         nsfs_deployment_data["metadata"]["name"] = create_unique_resource_name(
             "nsfs-interface", "deployment"
         )
+        nsfs_deployment_data["metadata"]["namespace"] = ocsci_config.ENV_DATA[
+            "cluster_namespace"
+        ]
         uid = nsfs_deployment_data["metadata"]["name"].split("-")[-1]
         nsfs_deployment_data["spec"]["selector"]["matchLabels"]["app"] += f"-{uid}"
         nsfs_deployment_data["spec"]["template"]["metadata"]["labels"][
@@ -7206,7 +7209,50 @@ def multi_cnv_workload(
             sc_obj_def_compr,
             sc_obj_aggressive,
         )
+	return factory
 
+@pytest.fixture()
+def clone_vm_workload(request):
+    """
+    Clones VM workloads
+
+    """
+    cloned_vms = []
+
+    def factory(
+        vm_obj,
+        volume_interface=None,
+        namespace=None,
+    ):
+        """
+        Args:
+            vm_obj (VirtualMachine): Object of source vm to clone
+            volume_interface (str): The type of volume interface to use. Default is `constants.VM_VOLUME_PVC`.
+            namespace (str, optional): The namespace to create the vm on. Default, creates a unique namespace.
+
+        Returns:
+            list: objects of VM clone class
+
+        """
+        clone_vm_name = create_unique_resource_name("clone", "vm")
+        clone_vm_obj = VMCloner(vm_name=clone_vm_name, namespace=namespace)
+        volume_iface = volume_interface if volume_interface else vm_obj.volume_interface
+        clone_vm_obj.clone_vm(
+            source_vm_obj=vm_obj,
+            volume_interface=volume_iface,
+        )
+        cloned_vms.append(clone_vm_obj)
+        return cloned_vms
+
+    def teardown():
+        """
+        Cleans up cloned vm workloads
+
+        """
+        for vm_wl in cloned_vms:
+            vm_wl.delete()
+
+    request.addfinalizer(teardown)
     return factory
 
 
@@ -8144,7 +8190,7 @@ def scale_noobaa_resources(request):
         storagecluster_obj = OCP(
             kind=constants.STORAGECLUSTER,
             resource_name=constants.DEFAULT_STORAGE_CLUSTER,
-            namespace=constants.OPENSHIFT_STORAGE_NAMESPACE,
+            namespace=config.ENV_DATA["cluster_namespace"],
         )
 
         scale_endpoint_pods_param = (
@@ -8461,7 +8507,7 @@ def scale_noobaa_db_pod_pv_size(request):
                 get_pods_having_label(
                     label=label,
                     retry=5,
-                    namespace=constants.OPENSHIFT_STORAGE_NAMESPACE,
+                    namespace=config.ENV_DATA["cluster_namespace"],
                 )
             )
 
@@ -8486,7 +8532,7 @@ def scale_noobaa_db_pod_pv_size(request):
                 get_pods_having_label(
                     label=label,
                     retry=5,
-                    namespace=constants.OPENSHIFT_STORAGE_NAMESPACE,
+                    namespace=config.ENV_DATA["cluster_namespace"],
                 )
             )
 

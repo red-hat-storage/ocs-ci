@@ -28,46 +28,50 @@ def teardown(request, nodes):
 
 @purple_squad
 @pytest.mark.polarion_id("OCS-1579")
-def test_worker_node_abrupt_shutdown(teardown):
+def test_worker_node_abrupt_shutdown(teardown, upgrade_stats):
     """
     Test OCS upgrade with disruption of shutting down worker node,
     for 5.5 minutes
 
     """
     log.info("Starting disruptive function: test_worker_node_abrupt_shutdown")
-    run_ocs_upgrade(operation=worker_node_shutdown, abrupt=True)
+    run_ocs_upgrade(
+        operation=worker_node_shutdown, abrupt=True, upgrade_stats=upgrade_stats
+    )
 
 
 @purple_squad
 @pytest.mark.polarion_id("OCS-1575")
-def test_worker_node_permanent_shutdown(teardown):
+def test_worker_node_permanent_shutdown(teardown, upgrade_stats):
     """
     Test OCS upgrade with disruption of shutting down worker node
 
     """
     log.info("Starting disruptive function: test_worker_node_permanent_shutdown")
-    run_ocs_upgrade(operation=worker_node_shutdown, abrupt=False)
+    run_ocs_upgrade(
+        operation=worker_node_shutdown, abrupt=False, upgrade_stats=upgrade_stats
+    )
 
 
 @purple_squad
 @pytest.mark.polarion_id("OCS-1558")
-def test_osd_reboot(teardown):
+def test_osd_reboot(teardown, upgrade_stats):
     """
     OCS Upgrade with node reboot: with 1 OSD going down and back up while upgrade is running
 
     """
 
     log.info("Starting disruptive function: test_osd_reboot")
-    run_ocs_upgrade(operation=osd_node_reboot)
+    run_ocs_upgrade(operation=osd_node_reboot, upgrade_stats=upgrade_stats)
 
 
 @purple_squad
 @ocs_upgrade
 @polarion_id(get_polarion_id(upgrade=True))
-def test_upgrade():
+def test_upgrade(upgrade_stats):
     """
     Tests upgrade procedure of OCS cluster
 
     """
 
-    run_ocs_upgrade()
+    run_ocs_upgrade(upgrade_stats=upgrade_stats)

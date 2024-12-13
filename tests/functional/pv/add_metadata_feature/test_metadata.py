@@ -68,7 +68,7 @@ class TestMetadataUnavailable(ManageTest):
         config_map_obj = ocp.OCP(
             kind="Configmap", namespace=config.ENV_DATA["cluster_namespace"]
         )
-        pod_obj = ocp.OCP(kind="Pod", namespace="openshift-storage")
+        pod_obj = ocp.OCP(kind="Pod", namespace=config.ENV_DATA["cluster_namespace"])
         toolbox = pod.get_ceph_tools_pod()
         project_factory_class(project_name="test-metadata")
         enable_metadata = '{"data":{"CSI_ENABLE_METADATA": "true"}}'
@@ -179,8 +179,10 @@ class TestDefaultMetadataDisabled(ManageTest):
         fs, sc_name = metadata_utils.update_testdata_for_external_modes(
             sc_name, fs, external_mode=external_mode
         )
-        config_map_obj = ocp.OCP(kind="Configmap", namespace="openshift-storage")
-        pod_obj = ocp.OCP(kind="Pod", namespace="openshift-storage")
+        config_map_obj = ocp.OCP(
+            kind="Configmap", namespace=config.ENV_DATA["cluster_namespace"]
+        )
+        pod_obj = ocp.OCP(kind="Pod", namespace=config.ENV_DATA["cluster_namespace"])
         toolbox = pod.get_ceph_tools_pod()
         # enable metadata flag not available by default
         metadata_flag = config_map_obj.exec_oc_cmd(
