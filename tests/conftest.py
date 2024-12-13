@@ -7180,26 +7180,26 @@ def multi_cnv_workload(
         vm_configs = templating.load_yaml(constants.CNV_VM_WORKLOADS)
 
         # Loop through vm_configs and create the VMs using the cnv_workload fixture
-        for index, config in enumerate(vm_configs["vm_configs"]):
+        for index, vm_config in enumerate(vm_configs["vm_configs"]):
             # Determine the storage class based on the compression type
-            if config["sc_compression"] == "default":
+            if vm_config["sc_compression"] == "default":
                 storageclass = sc_obj_def_compr.name
-            elif config["sc_compression"] == "aggressive":
+            elif vm_config["sc_compression"] == "aggressive":
                 storageclass = sc_obj_aggressive.name
             else:
                 raise ValueError(
-                    f"Unknown storage class compression type: {config['sc_name']}"
+                    f"Unknown storage class compression type: {vm_config['sc_name']}"
                 )
 
             vm_obj = cnv_workload(
-                volume_interface=config["volume_interface"],
-                access_mode=config["access_mode"],
+                volume_interface=vm_config["volume_interface"],
+                access_mode=vm_config["access_mode"],
                 storageclass=storageclass,
                 pvc_size="30Gi",  # Assuming pvc_size is fixed for all
                 source_url=constants.CNV_FEDORA_SOURCE,  # Assuming source_url is the same for all VMs
                 namespace=namespace,
             )[index]
-            if config["sc_compression"] == "aggressive":
+            if vm_config["sc_compression"] == "aggressive":
                 vm_list_agg_compr.append(vm_obj)
             else:
                 vm_list_default_compr.append(vm_obj)
@@ -7209,7 +7209,9 @@ def multi_cnv_workload(
             sc_obj_def_compr,
             sc_obj_aggressive,
         )
-	return factory
+
+    return factory
+
 
 @pytest.fixture()
 def clone_vm_workload(request):
