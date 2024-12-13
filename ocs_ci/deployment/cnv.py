@@ -138,7 +138,9 @@ class CNVInstaller(object):
             cnv_subscription_yaml_data, cnv_subscription_manifest.name
         )
         logger.info("Creating subscription for CNV operator")
-        run_cmd(f"oc create -f {cnv_subscription_manifest.name}")
+        retry(exceptions.CommandFailed, tries=15, delay=60, backoff=1)(run_cmd)(
+            f"oc apply -f {cnv_subscription_manifest.name}"
+        )
         self.wait_for_the_resource_to_discover(
             kind=constants.SUBSCRIPTION_WITH_ACM,
             namespace=self.namespace,
