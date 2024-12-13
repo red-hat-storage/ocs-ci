@@ -24,6 +24,7 @@ from ocs_ci.ocs.cnv.virtctl import Virtctl
 from ocs_ci.ocs.cnv.virtual_machine_instance import VirtualMachineInstance
 from ocs_ci.ocs import constants, ocp
 from ocs_ci.ocs.resources import pvc
+from ocs_ci.ocs.resources.pvc import PVC
 from ocs_ci.utility import templating
 from ocs_ci.utility.utils import TimeoutSampler
 from ocs_ci.ocs.exceptions import UsernameNotFoundException, CommandFailed
@@ -93,6 +94,7 @@ class VirtualMachine(Virtctl):
         access_mode=constants.ACCESS_MODE_RWX,
         pvc_size="30Gi",
         source_url=constants.CNV_CENTOS_SOURCE,
+        pvc_obj=None,
         ssh=True,
         verify=True,
     ):
@@ -107,6 +109,7 @@ class VirtualMachine(Virtctl):
             sc_name (str): The name of the storage class to use. Default is `constants.DEFAULT_CNV_CEPH_RBD_SC`.
             pvc_size (str): The size of the PVC. Default is "30Gi".
             source_url (str): The URL of the vm registry image. Default is `constants.CNV_CENTOS_SOURCE`
+            pvc_obj (obj, optional): PVC object to use existing pvc as a backend volume to VM
 
         """
         self.volume_interface = volume_interface
@@ -121,7 +124,12 @@ class VirtualMachine(Virtctl):
             self._add_ssh_key_to_vm(vm_data)
 
         if volume_interface == constants.VM_VOLUME_PVC:
-            self._create_vm_pvc(vm_data=vm_data)
+            if pvc_obj:
+                vm_data["spec"]["template"]["spec"]["volumes"][0][
+                    "persistentVolumeClaim"
+                ] = {"claimName": pvc_obj.name}
+            else:
+                self._create_vm_pvc(vm_data=vm_data)
         elif volume_interface == constants.VM_VOLUME_DV:
             self._create_vm_data_volume(vm_data=vm_data)
         elif volume_interface == constants.VM_VOLUME_DVT:
@@ -279,6 +287,20 @@ class VirtualMachine(Virtctl):
         return self.vm_ocp_obj.get(
             resource_name=self._vm_name, out_yaml_format=out_yaml_format
         )
+
+    def get_vm_pvc_obj(self):
+        """
+        Retrieves VM PVC obj
+
+        Returns:
+            obj: PVC object
+
+        """
+        ocp_pvc_obj = OCP(kind=constants.PVC, namespace=self.namespace).get(
+            resource_name=self.pvc_name
+        )
+        pvc_obj = PVC(**ocp_pvc_obj)
+        return pvc_obj
 
     def get_os_username(self):
         """
