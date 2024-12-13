@@ -390,9 +390,8 @@ class OCSUpgrade(object):
                     "ocs_version"
                 ) in csv.get("metadata").get("name"):
                     csv_name = csv.get("metadata").get("name")
-        if not csv_name:
-            raise CSVNotFound(f"No preupgrade CSV found for {resource_name}")
-        return csv_name
+                    return csv_name
+        raise CSVNotFound(f"No preupgrade CSV found for {resource_name}")
 
     def get_pre_upgrade_image(self, csv_name_pre_upgrade):
         """

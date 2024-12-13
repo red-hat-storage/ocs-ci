@@ -364,5 +364,5 @@ MULTICLUSTER:
   active_acm_cluster: False
 
 PREUPGRADE_CONFIG:
-  AUTH: null 
-  MULTICLUSTER: null 
+  AUTH: null
+  MULTICLUSTER: null
