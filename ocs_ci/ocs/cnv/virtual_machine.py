@@ -650,14 +650,21 @@ class VirtualMachine(Virtctl):
         self.vm_ocp_obj.delete(resource_name=self._vm_name)
         self.vm_ocp_obj.wait_for_delete(resource_name=self._vm_name, timeout=180)
         if self.volume_interface == constants.VM_VOLUME_PVC:
-            self.pvc_obj.delete()
-            self.pvc_obj.ocp.wait_for_delete(
-                resource_name=self.pvc_obj.name, timeout=180
-            )
-            self.volumeimportsource_obj.delete()
+            # Deletes only when PVC & VIS obj exists
+            if self.pvc_obj:
+                self.pvc_obj.delete()
+                self.pvc_obj.ocp.wait_for_delete(
+                    resource_name=self.pvc_obj.name, timeout=180
+                )
+            if self.volumeimportsource_obj:
+                self.volumeimportsource_obj.delete()
         elif self.volume_interface == constants.VM_VOLUME_DV:
-            self.dv_obj.delete()
-            self.dv_obj.ocp.wait_for_delete(resource_name=self.dv_obj.name, timeout=180)
+            # Deletes only when DV obj exists
+            if self.dv_obj:
+                self.dv_obj.delete()
+                self.dv_obj.ocp.wait_for_delete(
+                    resource_name=self.dv_obj.name, timeout=180
+                )
         if self.ns_obj:
             self.ns_obj.delete_project(project_name=self.namespace)
 
