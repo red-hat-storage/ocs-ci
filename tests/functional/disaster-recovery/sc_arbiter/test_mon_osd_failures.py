@@ -20,12 +20,16 @@ from ocs_ci.ocs.resources.pod import (
     wait_for_pods_to_be_in_statuses,
     get_deployment_name,
     wait_for_pods_by_label_count,
+    get_all_pods,
+    get_pod_node,
 )
 from ocs_ci.ocs.resources.pvc import get_pvc_objs
 from ocs_ci.ocs.resources.stretchcluster import StretchCluster
 from ocs_ci.ocs import constants
 
 logger = logging.getLogger(__name__)
+
+CNV_WORKLOAD_NAMESPACE = "namespace-cnv-workload"
 
 
 @pytest.fixture(scope="class")
@@ -141,7 +145,9 @@ def setup_logwriter_workloads(
 def setup_cnv_workload(request, cnv_workload_class, setup_cnv):
 
     logger.info("Setting up CNV workload and creating some data")
-    vm_obj = cnv_workload_class(volume_interface=constants.VM_VOLUME_PVC)[0]
+    vm_obj = cnv_workload_class(
+        volume_interface=constants.VM_VOLUME_PVC, namespace=CNV_WORKLOAD_NAMESPACE
+    )[0]
     vm_obj.run_ssh_cmd(command="dd if=/dev/zero of=/file_1.txt bs=1024 count=102400")
     md5sum_before = cal_md5sum_vm(vm_obj, file_path="/file_1.txt")
 
@@ -198,8 +204,14 @@ class TestMonAndOSDFailures:
         logger.info("testing single mon failures scenario")
         sc_obj = StretchCluster()
 
-        # get mon-pod of a single zone
-        mon_pods_in_zone = sc_obj.get_mon_pods_in_a_zone("data-1")
+        # get mon-pod of a zone where the cnv workloads
+        # are running
+        pod_objs = get_all_pods(namespace=CNV_WORKLOAD_NAMESPACE)
+        assert len(pod_objs) != 0, "No vmi pod instances are running"
+        node_obj = get_pod_node(pod_objs[0])
+        mon_pods_in_zone = sc_obj.get_mon_pods_in_a_zone(
+            node_obj.get()["metadata"]["labels"][constants.ZONE_LABEL]
+        )
         mon_pod_to_fail = random.choice(mon_pods_in_zone).name
 
         # get the deployment of the mon-pod
@@ -267,8 +279,14 @@ class TestMonAndOSDFailures:
         logger.info("testing single osd failure scenarios")
         sc_obj = StretchCluster()
 
-        # get osd-pod of a single zone
-        osd_pods_in_zone = sc_obj.get_osd_pods_in_a_zone("data-1")
+        # get osd-pod of a zone where the cnv
+        # workloads are running
+        pod_objs = get_all_pods(namespace=CNV_WORKLOAD_NAMESPACE)
+        assert len(pod_objs) != 0, "No vmi pod instances are running"
+        node_obj = get_pod_node(pod_objs[0])
+        osd_pods_in_zone = sc_obj.get_osd_pods_in_a_zone(
+            node_obj.get()["metadata"]["labels"][constants.ZONE_LABEL]
+        )
         osd_pod_to_fail = random.choice(osd_pods_in_zone).name
 
         # get the deployment of the osd-pod

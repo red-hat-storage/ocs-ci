@@ -284,6 +284,7 @@ class StretchCluster(OCS):
                         failed += 1
                     elif failed <= max_fail_expected:
                         failed += 1
+                        break
                     else:
                         raise
 
@@ -468,20 +469,23 @@ class StretchCluster(OCS):
             ceph_out = ceph_tools_pod.exec_sh_cmd_on_pod(
                 command=command, timeout=timeout + grace
             )
-            logger.info(ceph_out)
+            logger.info(f"Ceph status output:\n{ceph_out}")
             if "monclient(hunting): authenticate timed out" in ceph_out:
                 logger.warning("Ceph was hung for sometime.")
                 return False
             return True
         except Exception as err:
-            if "TimeoutExpired" in err.args[0]:
+            if (
+                "TimeoutExpired" in err.args[0]
+                or "monclient(hunting): authenticate timed out" in err.args[0]
+            ):
                 logger.error("Ceph status check got timed out. maybe ceph is hung.")
                 return False
             elif (
                 "connect: no route to host" in err.args[0]
                 or "error dialing backend" in err.args[0]
             ):
-                ceph_tools_pod.delete(wait=False)
+                ceph_tools_pod.delete(force=True)
             raise
 
     def get_out_of_quorum_nodes(self):
