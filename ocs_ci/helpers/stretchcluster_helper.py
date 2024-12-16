@@ -141,7 +141,6 @@ def recover_workload_pods_post_recovery(sc_obj, pods_not_running=None):
                         replica_count=4,
                         namespace=constants.STRETCH_CLUSTER_NAMESPACE,
                     )
-                    break
 
                 elif (
                     app_label.split("=")[1] in str(pod.get_labels())
@@ -164,7 +163,6 @@ def recover_workload_pods_post_recovery(sc_obj, pods_not_running=None):
                         count=4,
                         namespace=constants.STRETCH_CLUSTER_NAMESPACE,
                     )
-                    break
 
                 elif (
                     app_label.split("=")[1] in str(pod.get_labels())
@@ -187,7 +185,7 @@ def recover_workload_pods_post_recovery(sc_obj, pods_not_running=None):
                         replica_count=2,
                         namespace=constants.STRETCH_CLUSTER_NAMESPACE,
                     )
-                    break
+                break
 
     # fetch workload pod details now and make sure all of them are running
     logger.info("Checking if the logwriter pods are up and running now")
@@ -261,6 +259,7 @@ def recover_by_zone_restart(sc_obj, nodes):
 
         if check_errors_regex(desc_out, error_messages) and not restarted:
 
+            logger.info(f"{pod.name} description:\n{desc_out}")
             pod_node = get_pod_node(pod)
             logger.info(
                 f"We need to restart the all the nodes in the zone of node {pod_node.name}"
@@ -295,7 +294,11 @@ def recover_by_zone_restart(sc_obj, nodes):
             "because of known errors and no nodes restart was done."
             "Please check..."
         )
-        raise Exception
+        raise Exception(
+            "Raising exception because none of the pods are failing"
+            "because of known errors and no nodes restart was done."
+            "Please check..."
+        )
 
     # fetch workload pod details now and make sure all of them are running
     logger.info("Checking if the logwriter pods are up and running now")
@@ -319,4 +322,4 @@ def recover_from_ceph_stuck(sc_obj):
     """
 
     sc_obj.reset_conn_score()
-    return sc_obj.check_ceph_accessibility(timeout=30)
+    return sc_obj.check_ceph_accessibility(timeout=120)
