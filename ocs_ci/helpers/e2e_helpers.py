@@ -1,5 +1,4 @@
 import logging
-
 import random
 import copy
 import re
@@ -19,15 +18,7 @@ from ocs_ci.ocs.bucket_utils import (
 )
 from ocs_ci.ocs.resources.pod import get_rgw_pods, get_pod_logs
 from ocs_ci.utility.utils import exec_cmd, run_cmd
-from ocs_ci.ocs import constants
-from ocs_ci.helpers import helpers
-from ocs_ci.ocs.benchmark_operator_fio import get_file_size
-from ocs_ci.ocs.benchmark_operator_fio import BenchmarkOperatorFIO
-from ocs_ci.ocs.exceptions import TimeoutExpiredError
-from ocs_ci.utility.utils import TimeoutSampler, ceph_health_check
-from ocs_ci.ocs.resources.pod import cal_md5sum
 from ocs_ci.ocs.cluster import (
-    change_ceph_full_ratio,
     get_percent_used_capacity,
     get_osd_utilization,
     get_ceph_df_detail,
@@ -404,109 +395,6 @@ def validate_mcg_object_expiration(
 
 def validate_mcg_nsfs_feature():
     logger.info("This is not implemented")
-
-
-class Run_fio_till_cluster_full:
-    """
-    Run fio from multiple pods to fill cluster 85% of raw capacity.
-    """
-
-    def cleanup(self):
-        if self.benchmark_operator_teardown:
-            change_ceph_full_ratio(95)
-            self.benchmark_obj.cleanup()
-            ceph_health_check(tries=30, delay=60)
-        change_ceph_full_ratio(85)
-
-    def run_cluster_full_fio(
-        self,
-        teardown_project_factory,
-        pvc_factory,
-        pod_factory,
-    ):
-        """
-        1.Create PVC1 [FS + RBD]
-        2.Verify new PVC1 [FS + RBD] on Bound state
-        3.Run FIO on PVC1_FS + PVC1_RBD
-        4.Calculate Checksum PVC1_FS + PVC1_RBD
-        5.Fill the cluster to “Full ratio” (usually 85%) with benchmark-operator
-        """
-        self.benchmark_operator_teardown = False
-        project_name = "system-test-fullcluster"
-        self.project_obj = helpers.create_project(project_name=project_name)
-        teardown_project_factory(self.project_obj)
-
-        logger.info("Create PVC1 CEPH-RBD, Run FIO and get checksum")
-        pvc_obj_rbd1 = pvc_factory(
-            interface=constants.CEPHBLOCKPOOL,
-            project=self.project_obj,
-            size=2,
-            status=constants.STATUS_BOUND,
-        )
-        pod_rbd1_obj = pod_factory(
-            interface=constants.CEPHFILESYSTEM,
-            pvc=pvc_obj_rbd1,
-            status=constants.STATUS_RUNNING,
-        )
-        pod_rbd1_obj.run_io(
-            storage_type="fs",
-            size="1G",
-            io_direction="write",
-            runtime=60,
-        )
-        pod_rbd1_obj.get_fio_results()
-        logger.info(f"IO finished on pod {pod_rbd1_obj.name}")
-        pod_rbd1_obj.md5 = cal_md5sum(
-            pod_obj=pod_rbd1_obj,
-            file_name="fio-rand-write",
-            block=False,
-        )
-
-        logger.info("Create PVC1 CEPH-FS, Run FIO and get checksum")
-        pvc_obj_fs1 = pvc_factory(
-            interface=constants.CEPHFILESYSTEM,
-            project=self.project_obj,
-            size=2,
-            status=constants.STATUS_BOUND,
-        )
-        pod_fs1_obj = pod_factory(
-            interface=constants.CEPHFILESYSTEM,
-            pvc=pvc_obj_fs1,
-            status=constants.STATUS_RUNNING,
-        )
-        pod_fs1_obj.run_io(
-            storage_type="fs",
-            size="1G",
-            io_direction="write",
-            runtime=60,
-        )
-        pod_fs1_obj.get_fio_results()
-        logger.info(f"IO finished on pod {pod_fs1_obj.name}")
-        pod_fs1_obj.md5 = cal_md5sum(
-            pod_obj=pod_fs1_obj,
-            file_name="fio-rand-write",
-            block=False,
-        )
-
-        logger.info(
-            "Fill the cluster to “Full ratio” (usually 85%) with benchmark-operator"
-        )
-        size = get_file_size(100)
-        self.benchmark_obj = BenchmarkOperatorFIO()
-        self.benchmark_obj.setup_benchmark_fio(total_size=size)
-        self.benchmark_obj.run_fio_benchmark_operator(is_completed=False)
-        self.benchmark_operator_teardown = True
-
-        logger.info("Verify used capacity bigger than 85%")
-        sample = TimeoutSampler(
-            timeout=2500,
-            sleep=40,
-            func=verify_osd_used_capacity_greater_than_expected,
-            expected_used_capacity=85.0,
-        )
-        if not sample.wait_for_func_status(result=True):
-            logger.error("The after 1800 seconds the used capacity smaller than 85%")
-            raise TimeoutExpiredError
 
 
 def verify_osd_used_capacity_greater_than_expected(expected_used_capacity):
