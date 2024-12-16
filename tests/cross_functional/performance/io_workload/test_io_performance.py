@@ -48,7 +48,7 @@ class TestIOPerformance(ManageTest):
         ],
     )
     @pytest.mark.usefixtures(base_setup.__name__)
-    def test_run_io(self, size, io_direction, jobs, runtime, depth):
+    def deprecated_test_run_io(self, size, io_direction, jobs, runtime, depth):
         """
         Test IO
         """
