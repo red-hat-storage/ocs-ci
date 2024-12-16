@@ -647,28 +647,42 @@ class PVKeyrotation(KeyRotation):
         log.info("Completed key rotation state changes for all specified PVCs.")
         return True
 
-def verify_key_rotation_time(schedule):
+def validate_key_rotation_schedules(schedule):
     """
-    Verify Key rotation schedule changed at storage cluster, rook and Noobaa object.
+    Validate key rotation schedules across different components.
 
     Args:
-        schedule (str): schedule which need to be modified in the storage cluster
+        schedule (str): The expected key rotation schedule.
 
+    Raises:
+        ValueError: If the schedule does not match in any of the components.
     """
-    osd_keyrotation = OSDKeyrotation()
-    noobaa_keyrotation = NoobaaKeyrotation()
-    assert (
-        osd_keyrotation.get_keyrotation_schedule() == schedule
-    ), f"Keyrotation schedule is not set to {schedule} minutes in storage cluster object."
-    assert (
-        osd_keyrotation.get_osd_keyrotation_schedule() == schedule
-    ), "KeyRotation is not enabled in the Rook Object."
-    assert (
-        noobaa_keyrotation.get_noobaa_keyrotation_schedule() == schedule
-    ), f"Keyrotation schedule is not set to every {schedule} minutes in Noobaa object."
+    log.info(f"Starting key rotation schedule validation for schedule: {schedule}.")
+
+    components = [
+        ("Storage Cluster", OSDKeyrotation().get_keyrotation_schedule),
+        ("Rook Object", OSDKeyrotation().get_osd_keyrotation_schedule),
+        ("NooBaa Object", NoobaaKeyrotation().get_noobaa_keyrotation_schedule),
+    ]
+
+    for name, get_schedule in components:
+        current_schedule = get_schedule()
+        if current_schedule != schedule:
+            raise ValueError(
+                f"{name} key rotation schedule mismatch: expected {schedule}, got {current_schedule}."
+            )
+        log.info(f"{name} key rotation schedule verified successfully.")
+
+    log.info("Key rotation schedule validation completed successfully.")
+    return True
 
 
 def verify_new_key_after_rotation(tries, delays):
+    """
+    This function records existing keys for OSD, Noobaa volume and backend
+    and compare with the new keys generated on given schedule.
+
+    """
     osd_keyrotation = OSDKeyrotation()
     noobaa_keyrotation = NoobaaKeyrotation()
 
