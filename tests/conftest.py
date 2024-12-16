@@ -1234,7 +1234,7 @@ def pod_factory_fixture(request, pvc_factory):
         node_name=None,
         pod_dict_path=None,
         raw_block_pv=False,
-        deployment_config=False,
+        deployment=False,
         service_account=None,
         security_context=None,
         node_selector=None,
@@ -1243,7 +1243,6 @@ def pod_factory_fixture(request, pvc_factory):
         command=None,
         command_args=None,
         subpath=None,
-        deployment=False,
         pvc_read_only_mode=None,
         priorityClassName=None,
     ):
@@ -1262,8 +1261,6 @@ def pod_factory_fixture(request, pvc_factory):
             pod_dict_path (str): YAML path for the pod.
             raw_block_pv (bool): True for creating raw block pv based pod,
                 False otherwise.
-            deployment_config (bool): True for DeploymentConfig creation,
-                False otherwise
             service_account (OCS): Service account object, in case DeploymentConfig
                 is to be created
             security_context (dict): security context in the form of dictionary
@@ -1292,7 +1289,7 @@ def pod_factory_fixture(request, pvc_factory):
                 node_name=node_name,
                 pod_dict_path=pod_dict_path,
                 raw_block_pv=raw_block_pv,
-                dc_deployment=deployment_config,
+                deployment=deployment,
                 sa_name=sa_name,
                 replica_count=replica_count,
                 pod_name=pod_name,
@@ -1301,19 +1298,16 @@ def pod_factory_fixture(request, pvc_factory):
                 command=command,
                 command_args=command_args,
                 subpath=subpath,
-                deployment=deployment,
                 pvc_read_only_mode=pvc_read_only_mode,
                 priorityClassName=priorityClassName,
             )
             assert pod_obj, "Failed to create pod"
 
-        if deployment_config or deployment:
+        if deployment:
             d_name = pod_obj.get_labels().get("name")
             d_ocp_dict = ocp.OCP(
                 kind=(
-                    constants.DEPLOYMENTCONFIG
-                    if deployment_config
-                    else constants.DEPLOYMENT
+                    constants.DEPLOYMENTCONFIG if deployment else constants.DEPLOYMENT
                 ),
                 namespace=pod_obj.namespace,
             ).get(resource_name=d_name)
@@ -1326,7 +1320,7 @@ def pod_factory_fixture(request, pvc_factory):
             helpers.wait_for_resource_state(pod_obj, status, timeout=300)
             pod_obj.reload()
         pod_obj.pvc = pvc
-        if deployment_config or deployment:
+        if deployment:
             return d_obj
         return pod_obj
 
@@ -6265,7 +6259,7 @@ def create_pvcs_and_pods(multi_pvc_factory, pod_factory, service_account_factory
         num_of_rbd_pvc=None,
         num_of_cephfs_pvc=None,
         replica_count=1,
-        deployment_config=False,
+        deployment=False,
         sc_rbd=None,
         sc_cephfs=None,
         pod_dict_path=None,
@@ -6291,7 +6285,7 @@ def create_pvcs_and_pods(multi_pvc_factory, pod_factory, service_account_factory
                 elements in the list 'access_modes_cephfs'. Pass 0 for not
                 creating CephFS PVC
             replica_count (int): The replica count for deployment config
-            deployment_config (bool): True for DeploymentConfig creation,
+            deployment (bool): True for Deployment creation,
                 False otherwise
             sc_rbd (OCS): RBD storage class. ocs_ci.ocs.resources.ocs.OCS instance
                 of 'StorageClass' kind
@@ -6357,7 +6351,7 @@ def create_pvcs_and_pods(multi_pvc_factory, pod_factory, service_account_factory
             pvc_info = pvc_obj.get()
             setattr(pvc_obj, "volume_mode", pvc_info["spec"]["volumeMode"])
 
-        sa_obj = service_account_factory(project=project) if deployment_config else None
+        sa_obj = service_account_factory(project=project) if deployment else None
 
         pods_dc = []
         pods = []
@@ -6369,7 +6363,7 @@ def create_pvcs_and_pods(multi_pvc_factory, pod_factory, service_account_factory
             else:
                 interface = constants.CEPHBLOCKPOOL
 
-            if deployment_config:
+            if deployment:
                 pod_dict_path = pod_dict_path or constants.FEDORA_DC_YAML
             elif pvc_obj.volume_mode == "Block":
                 pod_dict_path = pod_dict_path or constants.CSI_RBD_RAW_BLOCK_POD_YAML
@@ -6387,12 +6381,12 @@ def create_pvcs_and_pods(multi_pvc_factory, pod_factory, service_account_factory
                     pvc=pvc_obj,
                     pod_dict_path=pod_dict_path,
                     raw_block_pv=pvc_obj.volume_mode == "Block",
-                    deployment_config=deployment_config,
+                    deployment=deployment,
                     service_account=sa_obj,
                     replica_count=replica_count,
                 )
                 pod_obj.pvc = pvc_obj
-                pods_dc.append(pod_obj) if deployment_config else pods.append(pod_obj)
+                pods_dc.append(pod_obj) if deployment else pods.append(pod_obj)
 
         # Get pod objects if deployment_config is True
         # pods_dc will be an empty list if deployment_config is False

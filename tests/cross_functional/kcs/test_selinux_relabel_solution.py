@@ -47,8 +47,8 @@ class TestSelinuxrelabel(E2ETest):
                 pvc_name=self.pvc_obj.name,
                 namespace=config.ENV_DATA["cluster_namespace"],
                 sa_name=self.service_account_obj.name,
-                dc_deployment=True,
-                pod_dict_path=constants.PERF_DC_YAML,
+                deployment=True,
+                pod_dict_path=constants.PERF_DEPLOY_YAML,
                 **kwargs,
             )
         except Exception as e:
