@@ -8,11 +8,9 @@ logger = logging.getLogger(__name__)
 # The below expected keys and names are gathered from pods with safe security.
 EXPECTED_KEYS = {
     "mon_initial_members",
-    "mon_host",
     "fsid",
     "ceph-username",
     "ceph-secret",
-    "token",
 }
 EXPECTED_NAMES = {"rook-ceph-config", "rook-ceph-mon", "ocs-kms-token"}
 
