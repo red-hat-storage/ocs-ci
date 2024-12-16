@@ -71,7 +71,7 @@ class Testopenshiftloggingonocs(E2ETest):
             pvc_name=pvc_obj.name,
             namespace=pvc_obj.project.namespace,
             sa_name=sa_name.name,
-            dc_deployment=True,
+            deployment=True,
         )
         helpers.wait_for_resource_state(
             resource=pod_obj, state=constants.STATUS_RUNNING

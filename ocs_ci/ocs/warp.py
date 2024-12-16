@@ -86,8 +86,7 @@ class Warp(object):
             pvc_name=self.pvc_obj.name,
             sa_name=self.sa_name,
             pod_dict_path=self.pod_dic_path,
-            dc_deployment=True,
-            deploy_pod_status=constants.STATUS_COMPLETED,
+            deployment=True,
             replica_count=replicas,
             ports=self.ports,
         )

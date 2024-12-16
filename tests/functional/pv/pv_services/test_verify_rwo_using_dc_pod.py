@@ -50,9 +50,8 @@ class TestVerifyRwoUsingReplicatedPod(ManageTest):
                 pvc_name=pvc_obj.name,
                 namespace=pvc_obj.namespace,
                 sa_name=sa_obj.name,
-                dc_deployment=True,
+                deployment=True,
                 replica_count=self.replica_count,
-                deploy_pod_status=constants.STATUS_RUNNING,
             )
         except TimeoutExpiredError:
             # The test cannot be continued if all the pods are created on the same node
