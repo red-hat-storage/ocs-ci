@@ -88,7 +88,7 @@ from ocs_ci.ocs.resources.backingstore import (
     backingstore_factory as backingstore_factory_implementation,
     clone_bs_dict_from_backingstore,
 )
-from ocs_ci.ocs.cluster import check_clusters
+from ocs_ci.ocs.cluster import check_clusters, change_ceph_full_ratio
 from ocs_ci.ocs.resources.namespacestore import (
     namespace_store_factory as namespacestore_factory_implementation,
 )
@@ -117,6 +117,7 @@ from ocs_ci.ocs.resources.pod import (
     get_pod_count,
     wait_for_pods_by_label_count,
     delete_deployment_pods,
+    cal_md5sum,
 )
 from ocs_ci.ocs.resources.pvc import (
     PVC,
@@ -204,6 +205,7 @@ from ocs_ci.ocs.longevity import start_app_workload
 from ocs_ci.utility.decorators import switch_to_default_cluster_index_at_last
 from ocs_ci.helpers.keyrotation_helper import PVKeyrotation
 from ocs_ci.ocs.resources.storage_cluster import set_in_transit_encryption
+from ocs_ci.helpers.e2e_helpers import verify_osd_used_capacity_greater_than_expected
 
 log = logging.getLogger(__name__)
 
@@ -9150,7 +9152,6 @@ def set_encryption_at_teardown(request):
     # Add the teardown function to the request's finalizer
     request.addfinalizer(teardown)
 
-
 def pytest_sessionfinish(session, exitstatus):
     """
     Do some session finish teardown functionality
@@ -9161,3 +9162,107 @@ def pytest_sessionfinish(session, exitstatus):
         cluster_load.finish_cluster_load()
     except Exception:
         log.exception("During finishing the Cluster load an exception was hit!")
+
+def run_fio_till_cluster_full(
+    request, teardown_project_factory, pvc_factory, pod_factory
+):
+    """
+    Run fio from multiple pods to fill cluster 85% of raw capacity.
+    """
+    shared_state = {"benchmark_obj": None, "benchmark_operator_teardown": False}
+
+    def factory():
+        """
+        1.Create PVC1 [FS + RBD]
+        2.Verify new PVC1 [FS + RBD] on Bound state
+        3.Run FIO on PVC1_FS + PVC1_RBD
+        4.Calculate Checksum PVC1_FS + PVC1_RBD
+        5.Fill the cluster to “Full ratio” (usually 85%) with benchmark-operator
+        """
+        project_name = "system-test-fullcluster"
+        project_obj = helpers.create_project(project_name=project_name)
+        teardown_project_factory(project_obj)
+
+        log.info("Create PVC1 CEPH-RBD, Run FIO and get checksum")
+        pvc_obj_rbd1 = pvc_factory(
+            interface=constants.CEPHBLOCKPOOL,
+            project=project_obj,
+            size=2,
+            status=constants.STATUS_BOUND,
+        )
+        pod_rbd1_obj = pod_factory(
+            interface=constants.CEPHFILESYSTEM,
+            pvc=pvc_obj_rbd1,
+            status=constants.STATUS_RUNNING,
+        )
+        pod_rbd1_obj.run_io(
+            storage_type="fs",
+            size="1G",
+            io_direction="write",
+            runtime=60,
+        )
+        pod_rbd1_obj.get_fio_results()
+        log.info(f"IO finished on pod {pod_rbd1_obj.name}")
+        pod_rbd1_obj.md5 = cal_md5sum(
+            pod_obj=pod_rbd1_obj,
+            file_name="fio-rand-write",
+            block=False,
+        )
+
+        log.info("Create PVC1 CEPH-FS, Run FIO and get checksum")
+        pvc_obj_fs1 = pvc_factory(
+            interface=constants.CEPHFILESYSTEM,
+            project=project_obj,
+            size=2,
+            status=constants.STATUS_BOUND,
+        )
+        pod_fs1_obj = pod_factory(
+            interface=constants.CEPHFILESYSTEM,
+            pvc=pvc_obj_fs1,
+            status=constants.STATUS_RUNNING,
+        )
+        pod_fs1_obj.run_io(
+            storage_type="fs",
+            size="1G",
+            io_direction="write",
+            runtime=60,
+        )
+        pod_fs1_obj.get_fio_results()
+        log.info(f"IO finished on pod {pod_fs1_obj.name}")
+        pod_fs1_obj.md5 = cal_md5sum(
+            pod_obj=pod_fs1_obj,
+            file_name="fio-rand-write",
+            block=False,
+        )
+
+        log.info(
+            "Fill the cluster to “Full ratio” (usually 85%) with benchmark-operator"
+        )
+        size = get_file_size(100)
+        benchmark_obj = BenchmarkOperatorFIO()
+        benchmark_obj.setup_benchmark_fio(total_size=size)
+        benchmark_obj.run_fio_benchmark_operator(is_completed=False)
+        shared_state["benchmark_obj"] = benchmark_obj
+        shared_state["benchmark_operator_teardown"] = True
+
+        log.info("Verify used capacity bigger than 85%")
+        sample = TimeoutSampler(
+            timeout=2500,
+            sleep=40,
+            func=verify_osd_used_capacity_greater_than_expected,
+            expected_used_capacity=85.0,
+        )
+        if not sample.wait_for_func_status(result=True):
+            log.error("The after 1800 seconds the used capacity smaller than 85%")
+            raise TimeoutExpiredError
+
+    def teardown():
+        if shared_state["benchmark_operator_teardown"]:
+            log.info("Cleaning up benchmark operator resources...")
+            change_ceph_full_ratio(95)
+            shared_state["benchmark_obj"].cleanup()
+            ceph_health_check(tries=30, delay=60)
+        change_ceph_full_ratio(85)
+
+    request.addfinalizer(teardown)
+    return factory
