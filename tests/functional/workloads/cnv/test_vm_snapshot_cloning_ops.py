@@ -66,7 +66,7 @@ class TestVmSnapshotClone(E2ETest):
     @workloads
     @pytest.mark.polarion_id("OCS-6299")
     def test_vm_snapshot_ops(
-        self, cnv_workload, snapshot_factory, snapshot_restore_factory
+        self, cnv_workload, snapshot_factory, snapshot_restore_factory, setup_cnv
     ):
         """
         This test performs the VM PVC snapshot operations
@@ -108,7 +108,7 @@ class TestVmSnapshotClone(E2ETest):
         res_vm_obj = cnv_workload(
             volume_interface=constants.VM_VOLUME_PVC,
             source_url=constants.CNV_FEDORA_SOURCE,
-            pvc_obj=res_snap_obj,
+            existing_pvc_obj=res_snap_obj,
             namespace=vm_obj.namespace,
         )[1]
         # Write new file to VM
