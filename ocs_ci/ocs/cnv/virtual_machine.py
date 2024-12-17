@@ -94,7 +94,7 @@ class VirtualMachine(Virtctl):
         access_mode=constants.ACCESS_MODE_RWX,
         pvc_size="30Gi",
         source_url=constants.CNV_CENTOS_SOURCE,
-        pvc_obj=None,
+        existing_pvc_obj=None,
         ssh=True,
         verify=True,
     ):
@@ -109,7 +109,7 @@ class VirtualMachine(Virtctl):
             sc_name (str): The name of the storage class to use. Default is `constants.DEFAULT_CNV_CEPH_RBD_SC`.
             pvc_size (str): The size of the PVC. Default is "30Gi".
             source_url (str): The URL of the vm registry image. Default is `constants.CNV_CENTOS_SOURCE`
-            pvc_obj (obj, optional): PVC object to use existing pvc as a backend volume to VM
+            existing_pvc_obj (obj, optional): PVC object to use existing pvc as a backend volume to VM
 
         """
         self.volume_interface = volume_interface
@@ -124,10 +124,11 @@ class VirtualMachine(Virtctl):
             self._add_ssh_key_to_vm(vm_data)
 
         if volume_interface == constants.VM_VOLUME_PVC:
-            if pvc_obj:
+            if existing_pvc_obj:
                 vm_data["spec"]["template"]["spec"]["volumes"][0][
                     "persistentVolumeClaim"
-                ] = {"claimName": pvc_obj.name}
+                ] = {"claimName": existing_pvc_obj.name}
+                self.pvc_name = existing_pvc_obj.name
             else:
                 self._create_vm_pvc(vm_data=vm_data)
         elif volume_interface == constants.VM_VOLUME_DV:

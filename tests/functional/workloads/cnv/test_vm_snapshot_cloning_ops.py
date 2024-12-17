@@ -94,7 +94,7 @@ class TestVmSnapshotClone(E2ETest):
         # Taking Snapshot of PVC
         pvc_obj = vm_obj.get_vm_pvc_obj()
         snap_obj = snapshot_factory(pvc_obj)
-        # Restore snapshot
+        # Restore the snapshot
         res_snap_obj = snapshot_restore_factory(
             snapshot_obj=snap_obj,
             storageclass=vm_obj.sc_name,
@@ -104,7 +104,7 @@ class TestVmSnapshotClone(E2ETest):
             status=constants.STATUS_BOUND,
             timeout=300,
         )
-        # Create new PVC using the restore PVC
+        # Create new VM using the restored PVC
         res_vm_obj = cnv_workload(
             volume_interface=constants.VM_VOLUME_PVC,
             source_url=constants.CNV_FEDORA_SOURCE,
