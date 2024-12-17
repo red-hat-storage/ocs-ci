@@ -7441,7 +7441,7 @@ def add_env_vars_to_noobaa_core_fixture(request, mcg_obj_session):
 @pytest.fixture(scope="class")
 def add_env_vars_to_noobaa_endpoint_class(request, mcg_obj_session):
     """
-    Class-scoped fixture for adding env vars to the noobaa-core sts
+    Class-scoped fixture for adding env vars to the noobaa-endpoint sts
 
     """
     return add_env_vars_to_noobaa_endpoint_fixture(request, mcg_obj_session)
