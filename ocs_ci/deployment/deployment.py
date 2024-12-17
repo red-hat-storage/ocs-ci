@@ -1952,6 +1952,9 @@ class Deployment(object):
         ocs_version = version.get_semantic_ocs_version_from_config()
         disable_noobaa = config.COMPONENTS.get("disable_noobaa", False)
         noobaa_cmd_arg = f"--param ignoreNoobaa={str(disable_noobaa).lower()}"
+        dr_cmd_arg = ""
+        if config.MULTICLUSTER.get("multicluster_mode") == constants.RDR_MODE:
+            dr_cmd_arg = "--param prepareForDisasterRecovery=true"
         device_size = int(
             config.ENV_DATA.get("device_size", defaults.DEVICE_SIZE_IBM_CLOUD_MANAGED)
         )
@@ -1964,7 +1967,7 @@ class Deployment(object):
         osd_size_arg = f"--param osdSize={device_size}Gi"
         cmd = (
             f"ibmcloud ks cluster addon enable openshift-data-foundation --cluster {clustername} -f --version "
-            f"{ocs_version}.0 {noobaa_cmd_arg} {osd_size_arg}"
+            f"{ocs_version}.0 {noobaa_cmd_arg} {osd_size_arg} {dr_cmd_arg}"
         )
         run_ibmcloud_cmd(cmd)
         time.sleep(120)
