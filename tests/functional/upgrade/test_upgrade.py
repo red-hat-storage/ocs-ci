@@ -87,11 +87,16 @@ def test_osd_reboot(teardown, upgrade_stats):
     run_ocs_upgrade(operation=osd_node_reboot, upgrade_stats=upgrade_stats)
 
 
+@pytest.fixture
+def config_index(request):
+    return request.param if hasattr(request, "param") else None
+
+
 @purple_squad
 @ocs_upgrade
 @polarion_id(get_polarion_id(upgrade=True))
 @multicluster_roles(["mdr-all-odf"])
-def test_upgrade(zone_rank, role_rank, config_index, upgrade_stats):
+def test_upgrade(zone_rank, role_rank, config_index, upgrade_stats=None):
     """
     Tests upgrade procedure of OCS cluster
 

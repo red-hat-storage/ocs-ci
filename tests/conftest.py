@@ -525,13 +525,13 @@ def pytest_collection_modifyitems(session, config, items):
                 log.info(
                     f"MARKERS = {[(i.name, i.args, i.kwargs) for i in item.iter_markers()]}"
                 )
-        # Update PREUPGRADE_CONFIG for each of the Config class
-        # so that in case of Y stream upgrade we will have preupgrade configurations for reference
-        # across the tests as Y stream upgrade will reload the config of target version
-        for cluster in ocsci_config.clusters:
-            for k in cluster.__dataclass_fields__.keys():
-                if k != "PREUPGRADE_CONFIG":
-                    cluster.PREUPGRADE_CONFIG[k] = deepcopy(getattr(cluster, k))
+    # Update PREUPGRADE_CONFIG for each of the Config class
+    # so that in case of Y stream upgrade we will have preupgrade configurations for reference
+    # across the tests as Y stream upgrade will reload the config of target version
+    for cluster in ocsci_config.clusters:
+        for k in cluster.__dataclass_fields__.keys():
+            if k != "PREUPGRADE_CONFIG":
+                cluster.PREUPGRADE_CONFIG[k] = deepcopy(getattr(cluster, k))
 
 
 def pytest_collection_finish(session):
@@ -8860,6 +8860,16 @@ def enable_guaranteed_bucket_logging_fixture(request, pvc_factory):
 @pytest.fixture(scope="session")
 def virtctl_binary():
     get_virtctl_tool()
+
+
+@pytest.fixture()
+def zone_rank():
+    return None
+
+
+@pytest.fixture()
+def role_rank():
+    return None
 
 
 @pytest.fixture()
