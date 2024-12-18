@@ -38,6 +38,14 @@ class TestCNVVM(E2ETest):
         logger.info("All vms created successfully")
 
     def verify_keyrotation(self, vm_objs, sc_obj):
+        """
+        Verify the keyrotation is succeed.
+
+        Args:
+            vm_objs (obj): virtual machine Object
+            sc_obj (obj): storage class object
+
+        """
         for vm in vm_objs:
             if vm.volume_interface == constants.VM_VOLUME_PVC:
                 pvk_obj = PVKeyrotation(sc_obj)
@@ -58,7 +66,7 @@ class TestCNVVM(E2ETest):
 
     @workloads
     @pytest.mark.polarion_id("OCS-6298")
-    def test_cnv_vms(self, setup):
+    def test_cnv_vms(self, setup, setup_cnv):
         """
         Tests to verify configuration for non-GS like environment
 
@@ -74,19 +82,15 @@ class TestCNVVM(E2ETest):
 
         """
 
-        # To Do
-        # 1. if os is windows then check rxbounce enabled in sc yaml
-
         all_vm_list = self.vm_objs_def + self.vm_objs_aggr
 
-        # 2.Validate data integrity using md5sum.
+        # 1.Validate data integrity using md5sum.
         file_name = "/tmp/dd_file"
         vm_filepath = "/home/admin/dd_file1_copy"
 
         # Create file locally
         cmd = f"dd if=/dev/zero of={file_name} bs=1M count=1024"
         run_cmd(cmd)
-
         # Calculate the MD5 checksum
         if file_name:
             cmd = f"md5sum {file_name}"
@@ -101,14 +105,12 @@ class TestCNVVM(E2ETest):
             raise ValueError(
                 "File name is not provided. Please specify a valid file name."
             )
-
         # Copy local file to all vms
         for vm_obj in all_vm_list:
             vm_obj.scp_to_vm(
                 local_path=file_name,
                 vm_dest_path=vm_filepath,
             )
-
         # Take md5sum of copied file and compare with md5sum taken locally
         for vm_obj in all_vm_list:
             md5sum_on_vm = cal_md5sum_vm(vm_obj, vm_filepath, username=None)
@@ -116,13 +118,12 @@ class TestCNVVM(E2ETest):
                 md5sum_on_vm == md5sum_on_local
             ), f"md5sum has changed after copying file on {vm_obj.name}"
 
-        # 3.Verify PV Keyrotation.
+        # 2.Verify PV Keyrotation.
         # Process VMs with default compression
         self.verify_keyrotation(self.vm_objs_def, self.sc_obj_def_compr)
-
         # Process VMs with aggressive compression
         self.verify_keyrotation(self.vm_objs_aggr, self.sc_obj_aggressive)
 
-        # 4.Stop all VMs
+        # 3.Stop all VMs
         for vm_obj in all_vm_list:
             vm_obj.stop()

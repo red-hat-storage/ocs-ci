@@ -7103,7 +7103,7 @@ def multi_cnv_workload(
     Fixture to create virtual machines (VMs) with specific configurations.
 
     This fixture sets up multiple VMs with varying storage configurations as specified
-    in the `vm_configs` yaml. Each VM configuration includes the volume interface type,
+    in the `cnv_vm_workload.yaml`. Each VM configuration includes the volume interface type,
     access mode, and the storage class to be used.
 
     The configurations applied to the VMs are:
@@ -7166,7 +7166,6 @@ def multi_cnv_workload(
                 log.info(f"Successfully patched parameters for storage class: {sc}")
             except Exception as e:
                 log.info(f"Failed to patch storage class {sc}: {e}")
-                continue
 
         # Create ceph-csi-kms-token in the tenant namespace
         kms.vault_path_token = kms.generate_vault_token()
@@ -7180,17 +7179,12 @@ def multi_cnv_workload(
         vm_configs = templating.load_yaml(constants.CNV_VM_WORKLOADS)
 
         # Loop through vm_configs and create the VMs using the cnv_workload fixture
-        for index, vm_config in enumerate(vm_configs["vm_configs"]):
+        for index, vm_config in enumerate(vm_configs["cnv_vm_configs"]):
             # Determine the storage class based on the compression type
             if vm_config["sc_compression"] == "default":
                 storageclass = sc_obj_def_compr.name
             elif vm_config["sc_compression"] == "aggressive":
                 storageclass = sc_obj_aggressive.name
-            else:
-                raise ValueError(
-                    f"Unknown storage class compression type: {vm_config['sc_name']}"
-                )
-
             vm_obj = cnv_workload(
                 volume_interface=vm_config["volume_interface"],
                 access_mode=vm_config["access_mode"],
