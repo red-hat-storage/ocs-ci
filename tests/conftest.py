@@ -888,6 +888,8 @@ def storageclass_factory_fixture(
             allow_volume_expansion (bool): True to Allows volume expansion
             kernelMountOptions (str): Mount option for security context
             annotations (dict): dict of annotation to be added to the storageclass.
+            mapOptions (str): mapOtions match the configuration of ocs-storagecluster-ceph-rbd-virtualization SC
+            mounter (str): mounter to match the configuration of ocs-storagecluster-ceph-rbd-virtualization SC
 
         Returns:
             object: helpers.create_storage_class instance with links to
@@ -7123,7 +7125,11 @@ def multi_cnv_workload(
             namespace (str, optional): The namespace to create the vm on.
 
         Returns:
-            lists: objects of cnv workload class with default comp and aggressive compression
+            tuple: tuple containing:
+                vm_list_default_compr(list): objects of cnv workload class with default comp
+                vm_list_agg_compr(list): objects of cnv workload class with aggressive compression
+                sc_obj_def_compr(list): objects of storage class with default comp
+                sc_obj_aggressive(list): objects of storage class with aggressive compression
 
         """
         vm_list_agg_compr = []
