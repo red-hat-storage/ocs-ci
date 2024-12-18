@@ -609,10 +609,68 @@ def create_ceph_block_pool(
     cbp_obj.reload()
 
     if verify:
-        assert verify_block_pool_exists(
+        assert verify_storage_pool_exists(
             cbp_obj.name
         ), f"Block pool {cbp_obj.name} does not exist"
     return cbp_obj
+
+
+def create_cephfs_storage_pool(
+    pool_name=None, replica=3, compression=None, verify=True
+):
+    """
+    Create an additional cephfs storage pool
+
+    Args:
+        pool_name (str): The pool name to create
+        replica (int): The replica size for a pool
+        compression (str): Compression type for a pool
+        verify (bool): True to verify the pool exists after creation,
+                       False otherwise
+
+    Returns:
+        str: Name of the new pool
+    """
+    if compression is None:
+        compression = "none"
+    if pool_name is None:
+        pool_name = create_unique_resource_name("test", "fspool")
+    logger.info(
+        f"Creating cephfs pool {pool_name} with replica {replica} and compression {compression}"
+    )
+    exec_cmd(
+        constants.PATCH_STORAGECLUSTER_TO_ADD_POOL.format(
+            compression=compression, pool_name=pool_name, replica=replica
+        )
+    )
+    pool_name = f"ocs-storagecluster-cephfilesystem-{pool_name}"
+    if verify:
+        assert verify_storage_pool_exists(
+            pool_name
+        ), f"Cephfs storage pool {pool_name} does not exist"
+    return pool_name
+
+
+def delete_cephfs_storage_pool(pool_name, replica, compression):
+    """
+    Delete the cephfs storage pool with the given name, replica and compression
+
+    Args:
+        pool_name (str): The name of the pool
+        replica (int): The replica size of the pool
+        compression (str): Compression type of the pool
+
+    """
+    logger.info(
+        f"Deleting cephfs pool {pool_name} with replica {replica} and compression {compression}"
+    )
+    exec_cmd(
+        constants.PATCH_STORAGECLUSTER_TO_DELETE_POOL.format(
+            compression=compression, pool_name=pool_name, replica=replica
+        )
+        # TODO: add verification that the pool has been deleted after
+        # https://bugzilla.redhat.com/show_bug.cgi?id=2299822 is fixed
+    )
 
 
 def create_ceph_file_system(
@@ -993,15 +1051,15 @@ def delete_bulk_pvcs(pvc_yaml_dir, pv_names_list, namespace):
         validate_pv_delete(pv_name)
 
 
-def verify_block_pool_exists(pool_name):
+def verify_storage_pool_exists(pool_name):
     """
-    Verify if a Ceph block pool exist
+    Verify if a storage pool exist
 
     Args:
-        pool_name (str): The name of the Ceph block pool
+        pool_name (str): The name of the storage pool
 
     Returns:
-        bool: True if the Ceph block pool exists, False otherwise
+        bool: True if the storage pool exists, False otherwise
     """
     logger.info(f"Verifying that block pool {pool_name} exists")
     ct_pod = pod.get_ceph_tools_pod()
