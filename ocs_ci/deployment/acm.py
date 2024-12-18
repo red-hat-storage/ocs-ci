@@ -166,15 +166,28 @@ class Submariner(object):
         elif self.source == "downstream":
             self.download_downstream_binary()
 
+    def get_submariner_csv_version(self):
+        """
+        Get submariner version from CSV
+
+        """
+        csv_version_cmd = (
+            "oc get submariners.submariner.io -n submariner-operator "
+            "submariner -o jsonpath='{{.status.gateways[0].version}}'"
+        )
+        return run_cmd(csv_version_cmd)
+
     def download_downstream_binary(self):
         """
-        Download downstream subctl binary
+        Download downstream subctl binary - released/unreleased
 
         Raises:
             UnsupportedPlatformError : If current platform has no supported subctl binary
         """
-
-        subctl_ver = config.ENV_DATA["subctl_version"]
+        if self.submariner_release_type == "unreleased":
+            subctl_ver = self.get_submariner_csv_version()
+        else:
+            subctl_ver = config.ENV_DATA["subctl_version"]
         version_str = subctl_ver.split(":")[1]
         pull_secret_path = os.path.join(constants.DATA_DIR, "pull-secret")
         processor = platform.processor()
@@ -187,11 +200,20 @@ class Submariner(object):
             raise UnsupportedPlatformError(
                 "Not a supported architecture for subctl binary"
             )
-        cmd = (
-            f"oc image extract --filter-by-os linux/{binary_pltfrm} --registry-config "
-            f"{pull_secret_path} {constants.SUBCTL_DOWNSTREAM_URL}{subctl_ver} "
-            f'--path="/dist/subctl-{version_str}*-linux-{binary_pltfrm}.tar.xz":/tmp --confirm'
-        )
+        if self.submariner_release_type == "unreleased":
+            brew_url = "/".join([constants.SUBMARINER_BREW, "rhacm2-subctl-rhel9:"])
+            cmd = (
+                f"oc image extract --filter-by-os linux/{binary_pltfrm} "
+                f"-a {pull_secret_path} {brew_url}{subctl_ver} "
+                f'--path="/dist/subctl-{version_str}*-linux-{binary_pltfrm}.tar.xz":/tmp --confirm'
+            )
+        else:
+            cmd = (
+                f"oc image extract --filter-by-os linux/{binary_pltfrm} --registry-config "
+                f"{pull_secret_path} {constants.SUBCTL_DOWNSTREAM_URL}{subctl_ver} "
+                f'--path="/dist/subctl-{version_str}*-linux-{binary_pltfrm}.tar.xz":/tmp --confirm'
+            )
+
         run_cmd(cmd)
         decompress = (
             f"tar -C /tmp/ -xf /tmp/subctl-{version_str}*-linux-{binary_pltfrm}.tar.xz"
