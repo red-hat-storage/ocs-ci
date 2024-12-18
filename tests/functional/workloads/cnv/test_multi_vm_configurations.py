@@ -81,7 +81,6 @@ class TestCNVVM(E2ETest):
         5) Delete the VM (as part of factory teardown)
 
         """
-
         all_vm_list = self.vm_objs_def + self.vm_objs_aggr
 
         # 1.Validate data integrity using md5sum.

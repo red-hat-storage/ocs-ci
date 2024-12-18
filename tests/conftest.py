@@ -860,6 +860,8 @@ def storageclass_factory_fixture(
         allow_volume_expansion=True,
         kernelMountOptions=None,
         annotations=None,
+        mapOptions=None,
+        mounter=None,
     ):
         """
         Args:
@@ -925,6 +927,8 @@ def storageclass_factory_fixture(
                 allow_volume_expansion=allow_volume_expansion,
                 kernelMountOptions=kernelMountOptions,
                 annotations=annotations,
+                mapOptions=mapOptions,
+                mounter=mounter,
             )
             assert sc_obj, f"Failed to create {interface} storage class"
             sc_obj.secret = secret
@@ -7140,6 +7144,8 @@ def multi_cnv_workload(
             encrypted=True,
             encryption_kms_id=kms.kmsid,
             new_rbd_pool=True,
+            mapOptions="krbd:rxbounce",
+            mounter="rbd",
         )
 
         sc_obj_aggressive = storageclass_factory(
@@ -7148,24 +7154,11 @@ def multi_cnv_workload(
             encryption_kms_id=kms.kmsid,
             compression="aggressive",
             new_rbd_pool=True,
+            mapOptions="krbd:rxbounce",
+            mounter="rbd",
         )
 
-        # Patch the storage class to match the configuration of
-        # ocs-storagecluster-ceph-rbd-virtualization storage class.
         storage_classes = [sc_obj_def_compr, sc_obj_aggressive]
-        parameter_patch = (
-            ' \'{"parameters": {"mapOptions": "krbd:rxbounce", "mounter": "rbd"}}\''
-        )
-        for sc in storage_classes:
-            try:
-                run_cmd(
-                    f"oc patch storageclass {sc.name} "
-                    f"-p {parameter_patch} "
-                    f"--request-timeout=120s"
-                )
-                log.info(f"Successfully patched parameters for storage class: {sc}")
-            except Exception as e:
-                log.info(f"Failed to patch storage class {sc}: {e}")
 
         # Create ceph-csi-kms-token in the tenant namespace
         kms.vault_path_token = kms.generate_vault_token()
