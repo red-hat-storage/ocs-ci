@@ -1156,7 +1156,7 @@ class VSPHEREUPI(VSPHEREBASE):
 
                 # Approving CSRs here in-case if any exists
                 approve_pending_csr()
-                if config.ENV_DATA["is_multus_enabled"]:
+                if config.ENV_DATA.get("is_multus_enabled"):
 
                     vsphere = VSPHERE(
                         config.ENV_DATA["vsphere_server"],
