@@ -436,7 +436,7 @@ class DeploymentUI(PageNavigator):
         self.do_click(locator=self.dep_loc[osd_size], enable_screenshot=True)
 
     def verify_operator_succeeded(
-        self, operator=OCS_OPERATOR, timeout_install=300, sleep=20
+        self, operator=OCS_OPERATOR, timeout_install=600, sleep=20
     ):
         """
         Verify Operator Installation
