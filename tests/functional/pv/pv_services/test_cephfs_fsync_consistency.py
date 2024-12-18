@@ -33,8 +33,8 @@ class TestCephfsFsyncConsistency(ManageTest):
         worker_node_names = get_worker_nodes()
         teardown_project_factory(project_obj)
         logger.info(
-            f"Created new pvc sc_name={constants.CEPHFILESYSTEM_SC} namespace={project_name}, "
-            f"size=6Gi, access_mode={constants.ACCESS_MODE_RWO}"
+            f"Create new pvc sc_name={constants.CEPHFILESYSTEM_SC} namespace={project_name}, "
+            f"size=6Gi, access_mode={constants.ACCESS_MODE_RWX}"
         )
         pvc_obj = helpers.create_pvc(
             sc_name=constants.CEPHFILESYSTEM_SC,
@@ -50,14 +50,12 @@ class TestCephfsFsyncConsistency(ManageTest):
         pod_obj_client = helpers.create_pod(
             pvc_name=pvc_obj.name,
             namespace=project_obj.namespace,
-            interface_type=constants.CEPHBLOCKPOOL,
             pod_name="client",
             node_name=worker_node_names[0],
         )
         pod_obj_server = helpers.create_pod(
             pvc_name=pvc_obj.name,
             namespace=project_obj.namespace,
-            interface_type=constants.CEPHBLOCKPOOL,
             pod_name="server",
             node_name=worker_node_names[1],
         )
