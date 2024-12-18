@@ -1031,9 +1031,15 @@ def delete_and_create_osd_node_managed_cp(osd_node_name):
         target_replicas=node_num_before_delete, timeout=machine_start_timeout
     )
 
-    node_names_after_delete = get_node_names()
-    new_node_names = list(set(node_names_after_delete) - set(node_names_before_delete))
-    new_node_name = new_node_names[0]
+    new_node_names = None
+    new_node_name = None
+    for sample in TimeoutSampler(
+        timeout=node_start_timeout, sleep=30, func=get_node_names
+    ):
+        if new_node_names := list(set(sample) - set(node_names_before_delete)):
+            new_node_name = new_node_names[0]
+            break
+
     wait_for_nodes_status(
         node_names=new_node_names,
         status=constants.NODE_READY,
