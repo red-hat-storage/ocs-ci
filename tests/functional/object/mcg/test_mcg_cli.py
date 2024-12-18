@@ -1,3 +1,5 @@
+import pytest
+
 import logging
 
 from ocs_ci.framework.pytest_customization.marks import (
@@ -18,8 +20,15 @@ class TestMcgCli(MCGTest):
     Tests for mcg cli commands validation
     """
 
+    @pytest.mark.parametrize(
+        argnames="count",
+        argvalues=[
+            pytest.param(3),
+        ],
+    )
     def test_bucket_list_command(
         self,
+        count,
         mcg_obj,
         bucket_factory,
     ):
@@ -30,6 +39,9 @@ class TestMcgCli(MCGTest):
          2) creates number of buckets
          3) runs bucket list command again
          4) verifies that the number of current buckets equals the number of previously existing and the added ones
+
+        Args:
+           count (int): number of buckets to create
 
         """
         bucket_lst_res = mcg_obj.exec_mcg_cmd("bucket list").stdout.split("\n")
@@ -44,7 +56,6 @@ class TestMcgCli(MCGTest):
         )
         logger.info(f"{existing_buckets_num} bucket(s) exist")
 
-        count = 3
         logger.info(f"Creating {count} buckets")
         buckets = bucket_factory(count)
         created_bucket_names = (b.name for b in buckets)
