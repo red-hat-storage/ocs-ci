@@ -212,6 +212,7 @@ higher priority).
 * `skip_ocp_deployment` - Skip the OCP deployment step or not (Default: false)
 * `skip_ocs_deployment` - Skip the OCS deployment step or not (Default: false)
 * `ocs_version` - Version of OCS that is being deployed
+* `acm_version` - Version of acm to be used for this run (applicable mostly to DR scenarios)
 * `vm_template` - VMWare template to use for RHCOS images
 * `fio_storageutilization_min_mbps` - Minimal write speed of FIO used in workload_fio_storageutilization
 * `TF_LOG_LEVEL` - Terraform log level
@@ -362,6 +363,9 @@ Upgrade related configuration data.
 * `ocp_arch` - Architecture type of the OCP image
 * `upgrade_logging_channel` - OCP logging channel to upgrade with
 * `upgrade_ui` - Perform upgrade via UI (Not all the versions are supported, please look at the code)
+* `upgrade_acm_version` - ACM version to which we have to upgrade
+* `upgrade_acm_registry_image` - ACM Image tag from brew which should be used to upgrade 
+example: <brew_registry_url>/rh-osbs/iib:565330
 
 #### AUTH
 
