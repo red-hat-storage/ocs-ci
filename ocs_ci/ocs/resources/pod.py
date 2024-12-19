@@ -853,15 +853,16 @@ def get_ceph_tools_pod(
         # one in status Terminated. Therefore, need to filter out the Terminated pod
 
         # Update the OCP pod object without the selector
-        cmd = f"oc get pods -n {namespace} -o custom-columns=NAME:.metadata.name,STATUS:.status.phase --no-headers"
-        pods_output = exec_cmd(cmd, shell=True).stdout.decode()
-        pod_name_status_dict = {
-            line.split()[0]: line.split()[1] for line in pods_output.splitlines()
-        }
-
+        ocp_pod_obj = OCP(
+            kind=constants.POD,
+            namespace=namespace,
+            cluster_kubeconfig=cluster_kubeconfig,
+        )
         running_ct_pods = list()
         for pod in ct_pod_items:
-            pod_status = pod_name_status_dict.get(pod.get("metadata").get("name"))
+            pod_status = ocp_pod_obj.get_resource_status(
+                pod.get("metadata").get("name")
+            )
             logger.info(f"Pod name: {pod.get('metadata').get('name')}")
             logger.info(f"Pod status: {pod_status}")
             if pod_status == constants.STATUS_RUNNING:
