@@ -38,6 +38,6 @@ class TestVmPvcExpansion(E2ETest):
         res_csum = cal_md5sum_vm(vm_obj=vm_obj, file_path=file_paths)
         log.info(res_csum)
         assert source_csum == res_csum and vm_obj.get_vm_pvc_obj().size == new_size, (
-            f"Failed: MD5 comparison of {vm_obj.name} before and after "
+            f"Failed: Either VM PVC Expansion or MD5 comparison of {vm_obj.name} before and after "
             f"PVC expansion"
         )
