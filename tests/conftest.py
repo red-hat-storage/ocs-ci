@@ -7056,7 +7056,6 @@ def cnv_workload(request):
         storageclass=constants.DEFAULT_CNV_CEPH_RBD_SC,
         pvc_size="30Gi",
         source_url=constants.CNV_CENTOS_SOURCE,
-        pvc_obj=None,
         namespace=None,
     ):
         """
@@ -7067,7 +7066,7 @@ def cnv_workload(request):
             pvc_size (str): The size of the PVC. Default is "30Gi".
             source_url (str): The URL of the vm registry image. Default is `constants.CNV_CENTOS_SOURCE`.
             namespace (str, optional): The namespace to create the vm on. Default, creates a unique namespace.
-            pvc_obj: PVC Object
+
         Returns:
             list: objects of cnv workload class
 
@@ -7080,7 +7079,6 @@ def cnv_workload(request):
             sc_name=storageclass,
             pvc_size=pvc_size,
             source_url=source_url,
-            pvc_obj=pvc_obj,
         )
         cnv_workloads.append(cnv_wl)
         return cnv_workloads
@@ -7090,7 +7088,7 @@ def cnv_workload(request):
         Cleans up the CNV workloads
 
         """
-        for cnv_wl in cnv_workloads[::-1]:
+        for cnv_wl in cnv_workloads:
             cnv_wl.delete()
 
     request.addfinalizer(teardown)
