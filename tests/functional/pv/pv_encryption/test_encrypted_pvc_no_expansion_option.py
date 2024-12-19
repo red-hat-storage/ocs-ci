@@ -76,6 +76,8 @@ class TestEncryptedPVCNOExpansionOption(ManageTest):
         log.info("Setting up csi-kms-connection-details configmap")
         self.kms = pv_encryption_kms_setup_factory(kv_version, use_vault_namespace)
         log.info("csi-kms-connection-details setup successful")
+        yield
+        log.info("csi-kms-connection-details removed successfully.")
 
     @tier1
     @pytest.mark.parametrize(
@@ -90,7 +92,6 @@ class TestEncryptedPVCNOExpansionOption(ManageTest):
         storageclass_factory,
         pvc_factory,
         pod_factory,
-        kv_version,
     ):
         """Test Encrypted PVC expansion with 'allowVolumeExpansion: false' option
 
