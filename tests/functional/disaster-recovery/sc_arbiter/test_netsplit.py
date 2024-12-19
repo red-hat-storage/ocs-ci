@@ -3,17 +3,16 @@ import logging
 import time
 import ocpnetsplit
 
-from ocs_ci.utility.retry import retry
 from ocs_ci.framework.pytest_customization.marks import (
     turquoise_squad,
     tier1,
     stretchcluster_required,
 )
+from ocs_ci.helpers.cnv_helpers import cal_md5sum_vm
 from ocs_ci.helpers.stretchcluster_helper import (
-    recover_workload_pods_post_recovery,
+    check_for_logwriter_workload_pods,
     recover_from_ceph_stuck,
 )
-from ocs_ci.ocs.exceptions import UnexpectedBehaviour, CommandFailed
 
 from ocs_ci.ocs.resources.stretchcluster import StretchCluster
 from ocs_ci.ocs.exceptions import CephHealthException
@@ -26,7 +25,6 @@ from ocs_ci.ocs.resources.pvc import get_pvc_objs
 from ocs_ci.ocs.resources.pod import (
     wait_for_pods_to_be_in_statuses,
     get_ceph_tools_pod,
-    get_not_running_pods,
 )
 
 logger = logging.getLogger(__name__)
@@ -36,29 +34,6 @@ logger = logging.getLogger(__name__)
 @stretchcluster_required
 @turquoise_squad
 class TestNetSplit:
-    def check_for_logwriter_workload_pods(
-        self,
-        sc_obj,
-    ):
-
-        try:
-            sc_obj.get_logwriter_reader_pods(label=constants.LOGWRITER_CEPHFS_LABEL)
-            sc_obj.get_logwriter_reader_pods(
-                label=constants.LOGREADER_CEPHFS_LABEL,
-                statuses=[constants.STATUS_RUNNING, constants.STATUS_COMPLETED],
-            )
-            sc_obj.get_logwriter_reader_pods(
-                label=constants.LOGWRITER_RBD_LABEL, exp_num_replicas=2
-            )
-        except UnexpectedBehaviour:
-
-            logger.info("some pods are not running, so trying the work-around")
-            pods_not_running = get_not_running_pods(
-                namespace=constants.STRETCH_CLUSTER_NAMESPACE
-            )
-            recover_workload_pods_post_recovery(sc_obj, pods_not_running)
-        logger.info("All the workloads pods are successfully up and running")
-
     @pytest.fixture()
     def init_sanity(self, request):
         """
@@ -76,7 +51,7 @@ class TestNetSplit:
             except CephHealthException as e:
                 assert (
                     "HEALTH_WARN" in e.args[0]
-                ), f"Ignoring Ceph health warnings: {e.args[0]}"
+                ), f"Ceph seems to be in HEALTH_ERR state: {e.args[0]}"
                 get_ceph_tools_pod().exec_ceph_cmd(ceph_cmd="ceph crash archive-all")
                 logger.info("Archived ceph crash!")
 
@@ -91,6 +66,7 @@ class TestNetSplit:
                 marks=[
                     pytest.mark.polarion_id("OCS-5069"),
                     pytest.mark.polarion_id("OCS-5071"),
+                    pytest.mark.bugzilla("2265992"),
                 ],
             ),
             pytest.param(
@@ -174,10 +150,10 @@ class TestNetSplit:
         vm_obj.run_ssh_cmd(
             command="dd if=/dev/zero of=/file_1.txt bs=1024 count=102400"
         )
-        md5sum_before = vm_obj.run_ssh_cmd(command="md5sum /file_1.txt")
+        md5sum_before = cal_md5sum_vm(vm_obj, file_path="/file_1.txt")
 
         # note all the pod names
-        self.check_for_logwriter_workload_pods(sc_obj)
+        check_for_logwriter_workload_pods(sc_obj, nodes=nodes)
 
         # note the file names created and each file start write time
         # note the file names created
@@ -196,16 +172,9 @@ class TestNetSplit:
         )
         logger.info(f"Netsplit induced at {start_time} for zones {zones}")
 
-        # get the nodes which are present in the
-        # out of quorum zone
-        if (
-            zones != constants.NETSPLIT_ARBITER_DATA_1
-            or zones != constants.NETSPLIT_ARBITER_DATA_1_AND_ARBITER_DATA_2
-        ):
-            retry(CommandFailed, tries=5, delay=10)(sc_obj.get_out_of_quorum_nodes)()
-
-        # note the end time (UTC)
-        if not sc_obj.check_ceph_accessibility(timeout=(duration * 60)):
+        # check for ceph accessibility and note the end time (UTC)
+        timeout = (end_time - datetime.now(timezone.utc)).total_seconds()
+        if not sc_obj.check_ceph_accessibility(timeout=int(timeout)):
             assert recover_from_ceph_stuck(
                 sc_obj
             ), "Something went wrong. not expected. please check rook-ceph logs"
@@ -216,7 +185,9 @@ class TestNetSplit:
         logger.info(f"Ended netsplit at {end_time}")
 
         # check vm data written before the failure for integrity
-        md5sum_after = vm_obj.run_ssh_cmd(command="md5sum /file_1.txt")
+        logger.info("Waiting for VM SSH connectivity!")
+        vm_obj.wait_for_ssh_connectivity()
+        md5sum_after = cal_md5sum_vm(vm_obj, file_path="/file_1.txt")
         assert (
             md5sum_before == md5sum_after
         ), "Data integrity of the file inside VM is not maintained during the failure"
@@ -253,7 +224,7 @@ class TestNetSplit:
         sc_obj.post_failure_checks(start_time, end_time, wait_for_read_completion=False)
 
         # check for any data loss
-        self.check_for_logwriter_workload_pods(sc_obj)
+        check_for_logwriter_workload_pods(sc_obj, nodes=nodes)
         assert sc_obj.check_for_data_loss(
             constants.LOGWRITER_CEPHFS_LABEL
         ), "[CephFS] Data is lost"
