@@ -136,9 +136,9 @@ class ExternalCluster(object):
             params = f"{params} --run-as-user {ceph_user}"
 
         if config.EXTERNAL_MODE.get("use_rbd_namespace"):
-            rbd_namespace = config.EXTERNAL_MODE.get(
-                "rbd_namespace"
-            ) or self.create_rbd_namespace(rbd=rbd_name)
+            rbd_namespace = self.create_rbd_namespace(
+                rbd=rbd_name, namespace=config.EXTERNAL_MODE.get("rbd_namespace")
+            )
             params = f"{params} --rados-namespace {rbd_namespace}"
 
         out = self.run_exporter_script(params=params)
@@ -499,7 +499,7 @@ class ExternalCluster(object):
             ExternalClusterRBDNamespaceCreationFailed: In case fails to create RBD namespace
 
         """
-        namespace = namespace or f"rbd_namespace_{uuid.uuid4().hex[:8]}"
+        namespace = namespace or f"rbd-namespace-{uuid.uuid4().hex[:8]}"
         logger.info(f"creating RBD namespace {namespace}")
         cmd = f"rbd namespace create {rbd}/{namespace}"
         retcode, out, err = self.rhcs_conn.exec_cmd(cmd)

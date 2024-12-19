@@ -673,7 +673,9 @@ def default_storage_class(
         resources = get_storageclass_names_from_storagecluster_spec()
 
     if interface_type == constants.CEPHBLOCKPOOL:
-        if custom_storage_class:
+        if config.EXTERNAL_MODE.get("use_rbd_namespace"):
+            resource_name = constants.DEFAULT_EXTERNAL_MODE_STORAGECLASS_RBD_NAMESPACE
+        elif custom_storage_class:
             try:
                 resource_name = resources[constants.OCS_COMPONENTS_MAP["blockpools"]]
             except KeyError:
