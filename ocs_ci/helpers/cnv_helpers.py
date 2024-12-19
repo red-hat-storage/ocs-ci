@@ -176,7 +176,7 @@ def create_dv(
     namespace=constants.CNV_NAMESPACE,
 ):
     """
-    Create/Clones a DV using a specified data source
+    Creates a DV using a specified data source
 
     Args:
         access_mode (str): The access mode for the volume. Default is `constants.ACCESS_MODE_RWX`
