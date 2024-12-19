@@ -165,7 +165,11 @@ class PackageManifest(OCP):
         self.check_name_is_specified()
         channel = channel if channel else self.get_default_channel()
         channels = self.get_channels()
-        if self.subscription_plan_approval == "Manual":
+        managed_ibmcloud = (
+            config.ENV_DATA["platform"] == constants.IBMCLOUD_PLATFORM
+            and config.ENV_DATA["deployment_type"] == "managed"
+        )
+        if self.subscription_plan_approval == "Manual" or managed_ibmcloud:
             try:
                 return self.get_installed_csv_from_install_plans(
                     pattern=csv_pattern,
