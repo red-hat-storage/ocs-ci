@@ -12,6 +12,7 @@ from ocs_ci.framework.testlib import (
     red_squad,
     skipif_mcg_only,
     tier1,
+    tier2,
     polarion_id,
 )
 from ocs_ci.ocs import constants
@@ -24,6 +25,7 @@ from ocs_ci.ocs.bucket_utils import (
 from ocs_ci.ocs.ocp import OCP
 from ocs_ci.ocs.resources.bucket_logging_manager import BucketLoggingManager
 from ocs_ci.ocs.resources.pvc import get_all_pvc_objs
+from ocs_ci.utility.utils import TimeoutSampler
 
 logger = logging.getLogger(__name__)
 
@@ -259,3 +261,197 @@ class TestBucketLogs(MCGTest):
         )
 
         logger.info("All the expected logs were found")
+
+    @tier2
+    @polarion_id("OCS-6289")
+    def test_multiple_gbl_setups(
+        self,
+        mcg_obj_session,
+        awscli_pod_session,
+        bucket_factory,
+        enable_guaranteed_bucket_logging,
+        test_directory_setup,
+    ):
+        """
+        Test multiple simultaneous guaranteed bucket logging setups
+
+        1. Create multiple source/logs bucket setups and upload objects to the source buckets
+        2. Wait for all the logs to be moved to the logs bucket
+        3. Validate that each logs bucket has the expected number of logs
+        """
+        enable_guaranteed_bucket_logging()
+        blm = BucketLoggingManager(mcg_obj_session, awscli_pod_session)
+
+        # 1. Create multiple source/logs bucket setups and upload objects to the source buckets
+        setups_num = 3
+        objs_num = 5
+        setups = []
+
+        for _ in range(setups_num):
+            source_bucket, logs_bucket = (b.name for b in bucket_factory(amount=2))
+            setups.append((source_bucket, logs_bucket))
+            blm.put_bucket_logging(source_bucket, logs_bucket, verify=True)
+
+            write_random_test_objects_to_bucket(
+                io_pod=awscli_pod_session,
+                bucket_to_write=source_bucket,
+                file_dir=test_directory_setup.origin_dir,
+                amount=objs_num,
+                mcg_obj=mcg_obj_session,
+            )
+
+        # 2. Wait for all the logs to be moved to the logs buckets
+        logger.info("Waiting for the intermediate logs to move to the logs bucket")
+        try:
+            for sample_logs in TimeoutSampler(
+                timeout=600,
+                sleep=10,
+                func=blm.get_interm_logs,
+                logs_bucket=logs_bucket,
+            ):
+                if not sample_logs:
+                    # An empty result indicates that the logs have been moved
+                    break
+        except TimeoutError:
+            logger.error("The interm logs were not moved to the logs bucket in time")
+            raise
+
+        # 3. Validate that each logs bucket has the expected number of logs
+        for source_bucket, logs_bucket in setups:
+            bucket_logs = blm.get_bucket_logs(logs_bucket)
+
+            assert len(bucket_logs) >= objs_num, (
+                f"Expected at least {objs_num} logs, " f"but got {len(bucket_logs)}"
+            )
+
+    @tier2
+    @polarion_id("OCS-6290")
+    def test_logs_bucket_sharing(
+        self,
+        mcg_obj_session,
+        awscli_pod_session,
+        bucket_factory,
+        enable_guaranteed_bucket_logging,
+        test_directory_setup,
+    ):
+        """
+        Test setting up multiple source buckets to log to the same logs bucket
+
+        1. Setup multiple source buckets to log to the same logs bucket and upload objects
+        2. Wait for the intermediate logs to move to the logs bucket
+        3. Validate that the logs bucket has the expected number of logs per source bucket
+        """
+        enable_guaranteed_bucket_logging()
+        blm = BucketLoggingManager(mcg_obj_session, awscli_pod_session)
+
+        # 1. Setup multiple source buckets to log to the same logs bucket and upload objects
+        source_buckets_num = 3
+        objs_count_to_upload = 5
+
+        source_buckets = []
+        logs_bucket = bucket_factory()[0].name
+
+        for _ in range(source_buckets_num):
+            source_buckets.append(bucket_factory()[0].name)
+            blm.put_bucket_logging(source_buckets[-1], logs_bucket, verify=True)
+
+            write_random_test_objects_to_bucket(
+                io_pod=awscli_pod_session,
+                bucket_to_write=source_buckets[-1],
+                file_dir=test_directory_setup.origin_dir,
+                amount=objs_count_to_upload,
+                mcg_obj=mcg_obj_session,
+            )
+
+        # 2. Wait for the intermediate logs to move to the logs bucket
+        logger.info("Waiting for the intermediate logs to move to the logs bucket")
+        try:
+            for sample_logs in TimeoutSampler(
+                timeout=600,
+                sleep=10,
+                func=blm.get_interm_logs,
+                logs_bucket=logs_bucket,
+            ):
+                if not sample_logs:
+                    # An empty result indicates that the logs have been moved
+                    break
+        except TimeoutError:
+            logger.error("The interm logs were not moved to the logs bucket in time")
+            raise
+
+        # 3. Validate that the logs bucket has the expected number of logs per source bucket
+        for source_bucket in source_buckets:
+            bucket_logs = blm.get_bucket_logs(logs_bucket, source_bucket=source_bucket)
+
+            assert len(bucket_logs) >= objs_count_to_upload, (
+                f"Expected at least {objs_count_to_upload} logs, "
+                f"but got {len(bucket_logs)}"
+            )
+
+    @tier2
+    @polarion_id("OCS-6291")
+    def test_gbl_with_prefix(
+        self,
+        mcg_obj_session,
+        awscli_pod_session,
+        bucket_factory,
+        enable_guaranteed_bucket_logging,
+        test_directory_setup,
+    ):
+        """
+        Test setting up guaranteed bucket logging with a prefix
+
+        1. Setup guaranteed bucket logging to a prefix on the logs bucket
+        2. Upload objects to the source bucket
+        3. Wait for the intermediate logs to move to the logs bucket
+        4. Validate that all the expected logs are under the prefix in the logs bucket
+        """
+        prefix = "test-prefix"
+        enable_guaranteed_bucket_logging()
+        blm = BucketLoggingManager(mcg_obj_session, awscli_pod_session)
+
+        # 1. Setup guarnaateed bucket logging to a prefix on the logs bucket
+        source_bucket, logs_bucket = (b.name for b in bucket_factory(amount=2))
+        blm.put_bucket_logging(
+            source_bucket, logs_bucket, prefix=prefix + "/", verify=True
+        )
+
+        # 2. Upload objects to the source bucket
+        obj_keys = write_random_test_objects_to_bucket(
+            io_pod=awscli_pod_session,
+            bucket_to_write=source_bucket,
+            file_dir=test_directory_setup.origin_dir,
+            amount=5,
+            mcg_obj=mcg_obj_session,
+        )
+
+        # 3. Wait for the intermediate logs to move to the logs bucket
+        logger.info("Waiting for the intermediate logs to move to the logs bucket")
+        try:
+            for sample_logs in TimeoutSampler(
+                timeout=600,
+                sleep=10,
+                func=blm.get_interm_logs,
+                logs_bucket=logs_bucket,
+            ):
+                if not sample_logs:
+                    # An empty result indicates that the logs have been moved
+                    break
+        except TimeoutError:
+            logger.error("The interm logs were not moved to the logs bucket in time")
+            raise
+
+        # 4. Validate that all the expected logs are under the prefix in the logs bucket
+        bucket_logs = blm.get_bucket_logs(logs_bucket, prefix=prefix)
+
+        expected_ops = []
+        for obj_key in obj_keys:
+            expected_ops.append(("PUT", f"/{source_bucket}/{obj_key}"))
+
+        assert blm.verify_logs_integrity(
+            logs=bucket_logs, expected_ops=expected_ops, check_intent=True
+        ), (
+            "Some of the expected logs were not found in the final logs"
+            f"Recieved: {json.dumps(bucket_logs, indent=4)}"
+            f"Expectation: {json.dumps(expected_ops, indent=4)}"
+        )
