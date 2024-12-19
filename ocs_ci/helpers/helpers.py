@@ -757,6 +757,8 @@ def create_storage_class(
     allow_volume_expansion=True,
     kernelMountOptions=None,
     annotations=None,
+    mapOptions=None,
+    mounter=None,
 ):
     """
     Create a storage class
@@ -781,6 +783,9 @@ def create_storage_class(
         allow_volume_expansion(bool): True to create sc with volume expansion
         kernelMountOptions (str): Mount option for security context
         annotations(dict): dict of annotations to be added to the storageclass.
+        mapOptions (str): mapOtions match the configuration of ocs-storagecluster-ceph-rbd-virtualization storage class
+        mounter (str): mounter to match the configuration of ocs-storagecluster-ceph-rbd-virtualization storage class
+
     Returns:
         OCS: An OCS instance for the storage class
     """
@@ -833,6 +838,10 @@ def create_storage_class(
 
     if annotations:
         sc_data["metadata"]["annotations"] = annotations
+
+    if mapOptions and mounter:
+        sc_data["parameters"]["mapOptions"] = mapOptions
+        sc_data["parameters"]["mounter"] = mounter
 
     sc_data["parameters"]["clusterID"] = config.ENV_DATA["cluster_namespace"]
     sc_data["reclaimPolicy"] = reclaim_policy

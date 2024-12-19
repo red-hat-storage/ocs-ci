@@ -197,7 +197,7 @@ from ocs_ci.helpers.longevity_helpers import (
 )
 from ocs_ci.ocs.longevity import start_app_workload
 from ocs_ci.utility.decorators import switch_to_default_cluster_index_at_last
-
+from ocs_ci.helpers.keyrotation_helper import PVKeyrotation
 
 log = logging.getLogger(__name__)
 
@@ -860,6 +860,8 @@ def storageclass_factory_fixture(
         allow_volume_expansion=True,
         kernelMountOptions=None,
         annotations=None,
+        mapOptions=None,
+        mounter=None,
     ):
         """
         Args:
@@ -886,6 +888,8 @@ def storageclass_factory_fixture(
             allow_volume_expansion (bool): True to Allows volume expansion
             kernelMountOptions (str): Mount option for security context
             annotations (dict): dict of annotation to be added to the storageclass.
+            mapOptions (str): mapOtions match the configuration of ocs-storagecluster-ceph-rbd-virtualization SC
+            mounter (str): mounter to match the configuration of ocs-storagecluster-ceph-rbd-virtualization SC
 
         Returns:
             object: helpers.create_storage_class instance with links to
@@ -925,6 +929,8 @@ def storageclass_factory_fixture(
                 allow_volume_expansion=allow_volume_expansion,
                 kernelMountOptions=kernelMountOptions,
                 annotations=annotations,
+                mapOptions=mapOptions,
+                mounter=mounter,
             )
             assert sc_obj, f"Failed to create {interface} storage class"
             sc_obj.secret = secret
@@ -7092,6 +7098,111 @@ def cnv_workload(request):
             cnv_wl.delete()
 
     request.addfinalizer(teardown)
+    return factory
+
+
+@pytest.fixture()
+def multi_cnv_workload(
+    pv_encryption_kms_setup_factory, storageclass_factory, cnv_workload
+):
+    """
+    Fixture to create virtual machines (VMs) with specific configurations.
+
+    This fixture sets up multiple VMs with varying storage configurations as specified
+    in the `cnv_vm_workload.yaml`. Each VM configuration includes the volume interface type,
+    access mode, and the storage class to be used.
+
+    The configurations applied to the VMs are:
+    - Volume interface: `VM_VOLUME_PVC` or `VM_VOLUME_DVT`
+    - Access mode: `ACCESS_MODE_RWX` or `ACCESS_MODE_RWO`
+    - Storage class: Custom storage classes, including default compression and aggressive profiles.
+
+    """
+
+    def factory(namespace=None):
+        """
+        Args:
+            namespace (str, optional): The namespace to create the vm on.
+
+        Returns:
+            tuple: tuple containing:
+                vm_list_default_compr(list): objects of cnv workload class with default comp
+                vm_list_agg_compr(list): objects of cnv workload class with aggressive compression
+                sc_obj_def_compr(list): objects of storage class with default comp
+                sc_obj_aggressive(list): objects of storage class with aggressive compression
+
+        """
+        vm_list_agg_compr = []
+        vm_list_default_compr = []
+
+        namespace = (
+            namespace if namespace else create_unique_resource_name("vm", "namespace")
+        )
+
+        # Setup csi-kms-connection-details configmap
+        log.info("Setting up csi-kms-connection-details configmap")
+        kms = pv_encryption_kms_setup_factory(kv_version="v2")
+        log.info("csi-kms-connection-details setup successful")
+
+        # Create an encryption enabled storageclass for RBD
+        sc_obj_def_compr = storageclass_factory(
+            interface=constants.CEPHBLOCKPOOL,
+            encrypted=True,
+            encryption_kms_id=kms.kmsid,
+            new_rbd_pool=True,
+            mapOptions="krbd:rxbounce",
+            mounter="rbd",
+        )
+
+        sc_obj_aggressive = storageclass_factory(
+            interface=constants.CEPHBLOCKPOOL,
+            encrypted=True,
+            encryption_kms_id=kms.kmsid,
+            compression="aggressive",
+            new_rbd_pool=True,
+            mapOptions="krbd:rxbounce",
+            mounter="rbd",
+        )
+
+        storage_classes = [sc_obj_def_compr, sc_obj_aggressive]
+
+        # Create ceph-csi-kms-token in the tenant namespace
+        kms.vault_path_token = kms.generate_vault_token()
+        kms.create_vault_csi_kms_token(namespace=namespace)
+
+        for sc_obj in storage_classes:
+            pvk_obj = PVKeyrotation(sc_obj)
+            pvk_obj.annotate_storageclass_key_rotation(schedule="*/3 * * * *")
+
+        # Load VMconfigs from cnv_vm_workload yaml
+        vm_configs = templating.load_yaml(constants.CNV_VM_WORKLOADS)
+
+        # Loop through vm_configs and create the VMs using the cnv_workload fixture
+        for index, vm_config in enumerate(vm_configs["cnv_vm_configs"]):
+            # Determine the storage class based on the compression type
+            if vm_config["sc_compression"] == "default":
+                storageclass = sc_obj_def_compr.name
+            elif vm_config["sc_compression"] == "aggressive":
+                storageclass = sc_obj_aggressive.name
+            vm_obj = cnv_workload(
+                volume_interface=vm_config["volume_interface"],
+                access_mode=vm_config["access_mode"],
+                storageclass=storageclass,
+                pvc_size="30Gi",  # Assuming pvc_size is fixed for all
+                source_url=constants.CNV_FEDORA_SOURCE,  # Assuming source_url is the same for all VMs
+                namespace=namespace,
+            )[index]
+            if vm_config["sc_compression"] == "aggressive":
+                vm_list_agg_compr.append(vm_obj)
+            else:
+                vm_list_default_compr.append(vm_obj)
+        return (
+            vm_list_default_compr,
+            vm_list_agg_compr,
+            sc_obj_def_compr,
+            sc_obj_aggressive,
+        )
+
     return factory
 
 
