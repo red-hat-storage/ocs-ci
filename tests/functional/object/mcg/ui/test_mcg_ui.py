@@ -9,6 +9,7 @@ from ocs_ci.framework.pytest_customization.marks import (
     mcg,
     skipif_ibm_cloud_managed,
     provider_mode,
+    jira,
 )
 from ocs_ci.ocs import constants
 from ocs_ci.helpers.helpers import create_unique_resource_name
@@ -29,7 +30,7 @@ from ocs_ci.ocs.ui.mcg_ui import BucketClassUI
 from ocs_ci.ocs.ui.page_objects.object_bucket_claims_tab import (
     ObjectBucketClaimsTab,
 )
-from ocs_ci.ocs.ui.page_objects.object_buckets_tab import ObjectBucketsTab
+from ocs_ci.ocs.ui.page_objects.buckets_tab import BucketsTab
 from ocs_ci.ocs.ui.page_objects.page_navigator import PageNavigator
 from ocs_ci.ocs.scale_noobaa_lib import fetch_noobaa_storage_class_name
 
@@ -338,6 +339,7 @@ class TestObcUserInterface(object):
                 resource_name=obc_name
             )
 
+    @jira("DFBUGS-1147")
     @pytest.mark.parametrize(
         argnames=["storageclass", "bucketclass", "delete_via", "verify_ob_removal"],
         argvalues=generate_test_params(),
@@ -404,7 +406,7 @@ class TestObcUserInterface(object):
 
         # covers BZ 2097772
         if verify_ob_removal:
-            ObjectBucketsTab().delete_object_bucket_ui(
+            BucketsTab().delete_bucket_ui(
                 delete_via="three_dots", expect_fail=True, resource_name=obc_name
             )
 
