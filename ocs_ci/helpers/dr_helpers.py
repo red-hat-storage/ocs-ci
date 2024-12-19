@@ -1662,11 +1662,25 @@ def generate_kubeobject_capture_interval():
         return capture_interval
 
 
-def disable_dr_rdr():
+def disable_dr_rdr(discovered_apps=False):
     """
     Disable DR for the applications
     """
     config.switch_acm_ctx()
+
+    # Delete the placement under openshift-dr-ops namespace
+    if discovered_apps:
+        run_cmd(f"oc delete drpc --all -n {constants.DR_OPS_NAMESAPCE}")
+        run_cmd(f"oc delete placement --all -n {constants.DR_OPS_NAMESAPCE}")
+    sample = TimeoutSampler(
+        timeout=300,
+        sleep=5,
+        func=verify_drpc_placement_deletion,
+        cmd=f"oc get placement -n '{constants.DR_OPS_NAMESAPCE}'",
+        expected_output_lst="No resources found",
+    )
+    if not sample.wait_for_func_status(result=True):
+        raise Exception("All placements are not deleted")
 
     # Edit drpc to add annotation
     drpc_obj = ocp.OCP(kind=constants.DRPC)
@@ -1688,7 +1702,7 @@ def disable_dr_rdr():
     sample = TimeoutSampler(
         timeout=300,
         sleep=5,
-        func=verify_drpc_deletion,
+        func=verify_drpc_placement_deletion,
         cmd="oc get drpc -A",
         expected_output_lst="No resources found",
     )
@@ -1697,7 +1711,7 @@ def disable_dr_rdr():
 
 
 @retry(CommandFailed, tries=10, delay=30, backoff=1)
-def verify_drpc_deletion(cmd, expected_output_lst):
+def verify_drpc_placement_deletion(cmd, expected_output_lst):
     """
     Function to validate drpc deletion
 

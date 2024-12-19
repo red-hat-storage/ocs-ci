@@ -35,21 +35,32 @@ class TestDisableDR:
             ),
         ],
     )
-    def test_disable_dr(self, pvc_interface, dr_workload):
+    def test_disable_dr(self, pvc_interface, dr_workload, discovered_apps_dr_workload):
         """
         Test to verify disable DR of application
 
         """
+        discovered_apps = False
 
         rdr_workload = dr_workload(
             num_of_subscription=1, num_of_appset=1, pvc_interface=pvc_interface
         )
+
         drpc_subscription = DRPC(namespace=rdr_workload[0].workload_namespace)
         drpc_appset = DRPC(
             namespace=constants.GITOPS_CLUSTER_NAMESPACE,
             resource_name=f"{rdr_workload[1].appset_placement_name}-drpc",
         )
+
         drpc_objs = [drpc_subscription, drpc_appset]
+
+        if not constants.CEPHFILESYSTEM in pvc_interface:
+            logger.info("Discovered apps")
+            rdr_workload_discovered_apps = discovered_apps_dr_workload()[0]
+            rdr_workload.append(rdr_workload_discovered_apps)
+            drpc_discovered_apps = DRPC(namespace=constants.DR_OPS_NAMESAPCE)
+            drpc_objs.append(drpc_discovered_apps)
+            discovered_apps = True
 
         scheduling_interval = dr_helpers.get_scheduling_interval(
             rdr_workload[0].workload_namespace,
@@ -69,7 +80,7 @@ class TestDisableDR:
         )
 
         # Disable DR
-        dr_helpers.disable_dr_rdr()
+        dr_helpers.disable_dr_rdr(discovered_apps=discovered_apps)
 
         # Verify resources deletion from primary cluster
         config.switch_to_cluster_by_name(primary_cluster_name)
