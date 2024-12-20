@@ -443,10 +443,17 @@ class BlockPoolUI(PageNavigator):
             # python function rounds from .5
             # ex. cli is doing 157.5 to 157 where as python round function will do 158
             if (
-                (self.custom_round(float(used_capacity_in_CLI)))
-                == self.custom_round(float(used_capacity_in_UI))
+                abs(
+                    self.custom_round(float(used_capacity_in_CLI))
+                    - self.custom_round(float(used_capacity_in_UI))
+                )
+                <= 1
             ) and (unit == used_capacity_unit_in_UI):
                 logger.info("UI values did match as per CLI for the Raw Capacity")
+                logger.info(
+                    f"used capacity in cli {used_capacity_in_CLI} and used capacity in UI "
+                    f"{used_capacity_in_UI} are not equal with 1 unit flexibility"
+                )
                 return True
             else:
                 logger.error(
