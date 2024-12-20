@@ -15,10 +15,14 @@ class TestVMSnapshotClone(E2ETest):
     """
 
     def test_vm_snapshot_clone(
-        self, cnv_workload, snapshot_factory, snapshot_restore_factory
+        self,
+        cnv_workload,
+        snapshot_factory,
+        snapshot_restore_factory,
+        pvc_clone_factory,
     ):
         """
-        creates snapshot of a deployed vm and clones it
+        creates snapshot of a deployed vm, restores the snapshot, and then clones the restored PVC.
         """
 
         # create a VM
@@ -27,16 +31,16 @@ class TestVMSnapshotClone(E2ETest):
             source_url=constants.CNV_FEDORA_SOURCE,
         )[-1]
 
-        # put some content onto it
+        # Write data to the VM
         file_paths = ["/source_file.txt", "/new_file.txt"]
         source_csum = run_dd_io(vm_obj=vm_obj, file_path=file_paths[0], verify=True)
         vm_obj.stop()
 
-        # take a snapshot
+        # Take a snapshot of the VM's PVC
         pvc_obj = vm_obj.get_vm_pvc_obj()
         snap_obj = snapshot_factory(pvc_obj)
 
-        # restoring the snapshot
+        # Restore the snapshot to a new PVC
         res_snap_obj = snapshot_restore_factory(
             snapshot_obj=snap_obj,
             storageclass=vm_obj.sc_name,
@@ -46,17 +50,20 @@ class TestVMSnapshotClone(E2ETest):
             status=constants.STATUS_BOUND,
             timeout=300,
         )
-        # verify snapshot and data persist
-        # restore the snapshot to a new PVC
+        # Clone the restored snapshot PVC to create a new PVC
+        cloned_pvc_obj = pvc_clone_factory(
+            pvc_obj=res_snap_obj, clone_name=f"{res_snap_obj.name}-clone"
+        )
+        # Create a new VM with the cloned PVC
         res_vm_obj = cnv_workload(
             volume_interface=constants.VM_VOLUME_PVC,
             source_url=constants.CNV_FEDORA_SOURCE,
-            pvc_obj=res_snap_obj,
+            pvc_obj=cloned_pvc_obj,
             namespace=vm_obj.namespace,
         )[1]
-        # make sure data integrity is present
+        # Verify data integrity in the cloned VM
         run_dd_io(vm_obj=res_vm_obj, file_path=file_paths[1], verify=True)
-        # getting the md5sum from the clone vm
+        # Check the MD5 checksum to verify that data persisted after cloning
         res_csum = cal_md5sum_vm(vm_obj=res_vm_obj, file_path=file_paths[0])
         assert source_csum == res_csum, (
             f"Failed: MD5 comparison between source {vm_obj.name} and cloned "
