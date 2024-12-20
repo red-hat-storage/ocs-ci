@@ -70,7 +70,7 @@ class TestMustGather(ManageTest):
         5.Verify paths do not exist in must gather directory
         """
 
-        flags_cmd = "/usr/bin/gather --minimal-crds"
+        flags_cmd = "/usr/bin/gather --minimal "
         paths_exist = list()
         paths_not_exist = list()
 
