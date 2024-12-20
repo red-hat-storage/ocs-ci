@@ -38,7 +38,7 @@ class TestMustGather(ManageTest):
                 ],
             ),
             pytest.param(
-                *[True, True, False, True, False, False],
+                *[True, False, False, True, False, False],
                 marks=[
                     pytest.mark.polarion_id(""),
                     skipif_external_mode,
@@ -47,7 +47,43 @@ class TestMustGather(ManageTest):
                 ],
             ),
             pytest.param(
-                *[True, True, True, False, True, False],
+                *[False, True, False, False, False, False],
+                marks=[
+                    pytest.mark.polarion_id(""),
+                    skipif_external_mode,
+                    skipif_ms_consumer,
+                    skipif_hci_client,
+                ],
+            ),
+            pytest.param(
+                *[False, False, True, False, False, False],
+                marks=[
+                    pytest.mark.polarion_id(""),
+                    skipif_external_mode,
+                    skipif_ms_consumer,
+                    skipif_hci_client,
+                ],
+            ),
+            pytest.param(
+                *[False, False, False, True, False, False],
+                marks=[
+                    pytest.mark.polarion_id(""),
+                    skipif_external_mode,
+                    skipif_ms_consumer,
+                    skipif_hci_client,
+                ],
+            ),
+            pytest.param(
+                *[False, False, False, False, True, False],
+                marks=[
+                    pytest.mark.polarion_id(""),
+                    skipif_external_mode,
+                    skipif_ms_consumer,
+                    skipif_hci_client,
+                ],
+            ),
+            pytest.param(
+                *[False, False, False, False, False, True],
                 marks=[
                     pytest.mark.polarion_id(""),
                     skipif_external_mode,
