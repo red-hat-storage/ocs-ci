@@ -279,7 +279,10 @@ class TestNodesMaintenance(ManageTest):
         argnames=["nodes_type"],
         argvalues=[
             pytest.param(*["worker"], marks=pytest.mark.polarion_id("OCS-1273")),
-            pytest.param(*["master"], marks=pytest.mark.polarion_id("OCS-1271")),
+            pytest.param(
+                *["master"],
+                marks=[pytest.mark.polarion_id("OCS-1271"), skipif_rosa_hcp],
+            ),
         ],
     )
     def test_2_nodes_maintenance_same_type(self, nodes_type):
