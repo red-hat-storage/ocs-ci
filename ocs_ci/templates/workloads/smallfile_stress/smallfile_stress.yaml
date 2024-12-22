@@ -1,0 +1,37 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: smallfile
+  namespace: default
+  labels:
+    appname: smallfileio
+spec:
+  template:
+    metadata:
+      labels:
+        name: smallfileio
+    spec:
+      containers:
+      - command: ["/bin/bash", "-ce", "tail -f /dev/null" ]
+        args:
+          - "python3 /script/smallfile.py"
+        env:
+          - name: file_dir_create      # directory used by smallfile to create files
+            value: "/mnt/iter1"
+          - name: file_dir_ops         # directory used by smallfile to perform file and directory operations(ex:append,stat,chmod,ls-l,..etc)
+            value: "/mnt/iter0"
+          - name: num_files            # number of files to create
+            value: "10000"
+          - name: operations           # file and directory operations to perform
+            value: "create,append,read,stat,chmod,ls-l,mkdir,symlink,overwrite"  # Pass as a comma-separated string
+        image: quay.io/nagreddy/test:smallfileio
+        imagePullPolicy: IfNotPresent
+        name: smallfileio
+        volumeMounts:
+        - mountPath: /mnt
+          name: mypvc
+      volumes:
+      - name: mypvc
+        persistentVolumeClaim:
+          claimName: pvc
+          readOnly: false
