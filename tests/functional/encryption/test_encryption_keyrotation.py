@@ -16,6 +16,9 @@ from ocs_ci.helpers.keyrotation_helper import (
 
 from ocs_ci.ocs.exceptions import UnexpectedBehaviour
 from ocs_ci.utility.retry import retry
+from ocs_ci.ocs import constants
+from ocs_ci.helpers.helpers import create_pods
+from concurrent.futures import ThreadPoolExecutor
 
 
 log = logging.getLogger(__name__)
@@ -230,3 +233,81 @@ class TestEncryptionKeyrotation:
         # Change the keyrotation value to default.
         log.info("Changing the keyrotation value to default.")
         noobaa_keyrotation.set_keyrotation_schedule("@weekly")
+
+
+@green_squad
+@tier1
+class TestOSDKeyrotationWithKMS:
+    @pytest.fixture(autouse=True)
+    def setup(
+        self,
+    ):
+        self.keyrotation = OSDKeyrotation()
+        self.keyrotation.set_keyrotation_schedule("*/2 * * * *")
+        self.keyrotation.enable_keyrotation()
+        yield
+        self.keyrotation.set_keyrotation_schedule("@weekly")
+
+    def test_osd_keyrotation_with_kms(self, multi_pvc_factory, pod_factory):
+        """Test OSD KEyrotation operation for vault KMS.
+
+        Steps:
+            1. Deploy cluster with clusterwide encryption
+            2. enable keyrotation and set keyrotation schedule for every 2 minute.
+            3. create a multiple PVC and attach it to the pod.
+            4. start IO's on PVC to pods.
+            5. Verify keyrotation operation happening for every 2 minutes.
+
+        """
+        size = 5
+        access_modes = {
+            constants.CEPHBLOCKPOOL: [
+                f"{constants.ACCESS_MODE_RWO}-Block",
+                f"{constants.ACCESS_MODE_RWX}-Block",
+            ],
+            constants.CEPHFILESYSTEM: [
+                constants.ACCESS_MODE_RWO,
+                constants.ACCESS_MODE_RWX,
+            ],
+        }
+
+        # Create PVCs for CephBlockPool and CephFS
+        pvc_objects = {
+            interface: multi_pvc_factory(
+                interface=interface,
+                access_modes=modes,
+                size=size,
+                num_of_pvc=2,
+            )
+            for interface, modes in access_modes.items()
+        }
+
+        # Create pods for each interface
+        self.all_pods = []
+        for interface, pvcs in pvc_objects.items():
+            pods = create_pods(
+                pvc_objs=pvcs,
+                pod_factory=pod_factory,
+                interface=interface,
+                pods_for_rwx=2,  # Create 2 pods for each RWX PVC
+                status=constants.STATUS_RUNNING,
+            )
+            assert pods, f"Failed to create pods for {interface}."
+            self.all_pods.extend(pods)
+
+        # Perform I/O on all pods using ThreadPoolExecutor
+        with ThreadPoolExecutor() as executor:
+            futures = [
+                executor.submit(
+                    pod_obj.run_io, storage_type="fs", size="1G", runtime=60
+                )
+                for pod_obj in self.all_pods
+            ]
+
+            assert (
+                self.keyrotation.verify_osd_keyrotation_for_kms()
+            ), "Failed to rotate OSD and NooBaa Keys in KMS."
+
+            # Wait for I/O operations to complete
+            for future in futures:
+                future.result()
