@@ -831,7 +831,7 @@ class HostedODF(HypershiftHostedOCP):
         )
 
     @kubeconfig_exists_decorator
-    def create_storage_client(self):
+    def create_storage_client(self, onboarding_token=None):
         """
         Create storage client
 
@@ -846,7 +846,7 @@ class HostedODF(HypershiftHostedOCP):
             return True
 
         @retry((CommandFailed, TimeoutError), tries=3, delay=30, backoff=1)
-        def _apply_storage_client_cr():
+        def _apply_storage_client_cr(onboarding_key=onboarding_token):
             """
             Internal function to apply storage client CR
             Returns:
@@ -859,7 +859,8 @@ class HostedODF(HypershiftHostedOCP):
                 "storageProviderEndpoint"
             ] = self.get_provider_address()
 
-            onboarding_key = self.get_onboarding_key()
+            if not onboarding_key:
+                onboarding_key = self.get_onboarding_key()
 
             if not len(onboarding_key):
                 return False
@@ -951,7 +952,7 @@ class HostedODF(HypershiftHostedOCP):
             logger.error("ticketgen.sh failed to generate Onboarding token")
         return token
 
-    def get_onboarding_key_ui(self):
+    def get_onboarding_key_ui(self, storage_quota=None):
         """
         Get onboarding key from UI
 
@@ -961,7 +962,9 @@ class HostedODF(HypershiftHostedOCP):
         from ocs_ci.ocs.ui.page_objects.page_navigator import PageNavigator
 
         storage_clients = PageNavigator().nav_to_storageclients_page()
-        onboarding_key = storage_clients.generate_client_onboarding_ticket()
+        onboarding_key = storage_clients.generate_client_onboarding_ticket_ui(
+            storage_quota=storage_quota
+        )
 
         return onboarding_key
 
@@ -1147,6 +1150,8 @@ class HostedODF(HypershiftHostedOCP):
         )
         if "latest" in hosted_odf_version:
             hosted_odf_version = hosted_odf_version.split("-")[-1]
+        elif len(hosted_odf_version) > 4:
+            hosted_odf_version = hosted_odf_version[:4]
 
         subscription_data["spec"]["channel"] = f"stable-{str(hosted_odf_version)}"
 
