@@ -312,3 +312,36 @@ class TestProviderHosted(object):
             assert (
                 storage_class in storage_class_classes
             ), "Storage classes ae not created as expected"
+
+    @runs_on_provider
+    def test_acm_upgrade(self):
+        """
+        Verify acm upgrade
+        """
+        logger.info("Verify acm upgrade")
+        from ocs_ci.ocs.acm_upgrade import ACMUpgrade
+
+        acm_hub_upgrade_obj = ACMUpgrade()
+        acm_hub_upgrade_obj.run_upgrade()
+
+    @runs_on_provider
+    def test_cnv_upgrade(self):
+        """
+        Verify cnv upgrade
+        """
+        logger.info("Verify cnv upgrade")
+        from ocs_ci.deployment.cnv import CNVInstaller
+
+        cnv_installer_obj = CNVInstaller()
+        cnv_installer_obj.upgrade_cnv()
+
+    @runs_on_provider
+    def test_metallb_upgrade(self):
+        """
+        Verify metallb upgrade
+        """
+        logger.info("Verify metallb upgrade")
+        from ocs_ci.deployment.metallb import MetalLBInstaller
+
+        metallb_installer_obj = MetalLBInstaller()
+        metallb_installer_obj.upgrade_metallb()
