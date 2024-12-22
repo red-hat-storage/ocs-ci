@@ -3,8 +3,6 @@ DEPLOYMENT:
   sts_enabled: true
   force_download_ocm_cli: true
   force_download_rosa_cli: true
-  ocm_cli_version: '0.1.67'
-  rosa_cli_version: '1.2.45'
   live_deployment: true
   customized_deployment_storage_class: 'gp3-csi'
 RUN:
