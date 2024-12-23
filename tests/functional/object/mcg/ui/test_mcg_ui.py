@@ -414,3 +414,11 @@ class TestObcUserInterface(object):
         obc_ui_obj.delete_obc_ui(obc_name, delete_via)
 
         assert test_obc.check_resource_existence(should_exist=False)
+
+
+class TestBucketCreate:
+    def test_bucket_create(self, setup_ui_class_factory):
+        setup_ui_class_factory()
+        PageNavigator().nav_object_storage_page()
+        bucket_ui = BucketsTab()
+        bucket_ui.create_bucket_ui("obc")
