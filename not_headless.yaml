@@ -1,0 +1,6 @@
+UI_SELENIUM:
+  browser_type: "chrome"
+  chrome_type: "google-chrome"
+  headless: False
+  screenshot: True
+  ignore_ssl: True
