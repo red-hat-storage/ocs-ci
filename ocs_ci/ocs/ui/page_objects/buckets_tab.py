@@ -13,6 +13,36 @@ class BucketsTab(ObjectStorage, ConfirmDialog):
     def __init__(self):
         super().__init__()
 
+    def create_bucket_ui(self, method):
+        locators = {
+            "create_bucket_button": ("//*[@id='yaml-create']", By.XPATH),
+        }
+        self.do_click(locators["create_bucket_button"])
+        if method == "obc":
+            self.create_bucket_via_obc()
+        elif method == "s3":
+            self.create_bucket_via_s3()
+        else:
+            raise ValueError(f"Invalid method: {method}")
+
+    def create_bucket_via_obc(self):
+        locators = {
+            "create_bucket_button": (
+                "//*[@id='content-scrollable']/section/div[2]/div[1]/div/div[2]/div[1]/div[2]",
+                By.XPATH,
+            ),
+        }
+        self.do_click(locators["create_bucket_button"])
+
+    def create_bucket_via_s3(self):
+        locators = {
+            "create_bucket_button": (
+                "//*[@id='content-scrollable']/section/div[2]/div/div/div[2]/div[2]/div[2]",
+                By.XPATH,
+            ),
+        }
+        self.do_click(locators["create_bucket_button"])
+
     def delete_bucket_ui(self, delete_via, expect_fail, resource_name):
         """
         Delete an Object Bucket via the UI
