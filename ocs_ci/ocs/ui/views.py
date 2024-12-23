@@ -1989,7 +1989,61 @@ alerting = {
     "alerting_rule_details_link": ("//a[normalize-space()='{}']", By.XPATH),
 }
 
-
+bucket_tab = {
+    "create_bucket_button_obc": (
+        "//*[@id='content-scrollable']/section/div[2]/div[1]/div/div[2]/div[1]/div[2]",
+        By.XPATH,
+    ),
+    "storage_class_dropdown": (
+        "[data-test='sc-dropdown']",
+        By.CSS_SELECTOR,
+    ),
+    "storage_class_noobaa_option": (
+        "div.pf-v5-c-dropdown div:nth-of-type(2)",
+        By.CSS_SELECTOR,
+    ),
+    "create_bucket_button_s3": (
+        "div:nth-of-type(2) > div.pf-v5-c-tile__body",
+        By.CSS_SELECTOR,
+    ),
+    "bucket_name_input": (
+        "[data-test='bucket-name']",
+        By.CSS_SELECTOR,
+    ),
+    "submit_button_obc": (
+        "[data-test='obc-create']",
+        By.CSS_SELECTOR,
+    ),
+    "first_bucket": (
+        "tr:nth-of-type(1) a",
+        By.CSS_SELECTOR,
+    ),
+    "create_folder_button": (
+        "div.pf-v5-u-w-50 > div > button.pf-v5-c-button",
+        By.CSS_SELECTOR,
+    ),
+    "folder_name_input": (
+        "#folder-name",
+        By.CSS_SELECTOR,
+    ),
+    "submit_button_folder": (
+        "button.pf-m-primary",
+        By.CSS_SELECTOR,
+    ),
+    "upload_button": (
+        "//button[contains(text(), 'Upload')]",
+        By.XPATH,
+    ),
+    "file_input": (
+        "input[multiple][type='file'][webkitdirectory]",
+        By.CSS_SELECTOR,
+    ),
+    "upload_submit": (
+        "//button[text()='Upload']",
+        By.XPATH,
+    ),
+    "create_bucket_button": ("//*[@id='yaml-create']", By.XPATH),
+}
 locators = {
     "4.18": {
         "login": {**login, **login_4_11, **login_4_14},
@@ -2042,6 +2096,7 @@ locators = {
         "topology": topology,
         "mcg_stores": mcg_stores,
         "alerting": alerting,
+        "bucket_tab": bucket_tab,
     },
     "4.17": {
         "login": {**login, **login_4_11, **login_4_14},
