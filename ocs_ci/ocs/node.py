@@ -2212,12 +2212,13 @@ def get_crashcollector_nodes():
     return set(crashcollector_ls)
 
 
-def add_new_disk_for_vsphere(sc_name):
+def add_new_disk_for_vsphere(sc_name, ssd=False):
     """
     Check the PVS in use per node, and add a new disk to the worker node with the minimum PVS.
 
     Args:
         sc_name (str): The storage class name
+        ssd (bool): if True, mark disk as SSD
 
     """
     ocs_nodes = get_ocs_nodes()
@@ -2225,14 +2226,17 @@ def add_new_disk_for_vsphere(sc_name):
         (len(get_node_pv_objs(sc_name, n.name)), n) for n in ocs_nodes
     ]
     node_with_min_pvs = min(num_of_pv_per_node_tuples, key=itemgetter(0))[1]
-    add_disk_to_node(node_with_min_pvs)
+    add_disk_to_node(node_with_min_pvs, ssd=ssd)
 
 
-def add_disk_stretch_arbiter():
+def add_disk_stretch_arbiter(ssd=False):
     """
     Adds disk to storage nodes in a stretch cluster with arbiter
     configuration evenly spread across two zones. Stretch cluster has
     replica 4, hence 2 disks to each of the zones
+
+    Args:
+        ssd (bool): if True, mark disk as SSD
 
     """
 
@@ -2243,7 +2247,7 @@ def add_disk_stretch_arbiter():
 
     for zone in data_zones:
         for node in sc_obj.get_ocs_nodes_in_zone(zone)[:2]:
-            add_disk_to_node(node)
+            add_disk_to_node(node, ssd=ssd)
 
 
 def get_odf_zone_count():

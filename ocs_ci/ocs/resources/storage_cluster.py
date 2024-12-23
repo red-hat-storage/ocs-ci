@@ -1658,8 +1658,8 @@ def add_capacity_lso(ui_flag=False):
     deviceset_count = get_deviceset_count()
     if is_flexible_scaling_enabled():
         log.info("Add 2 disk to same node")
-        add_disk_to_node(node_objs[0])
-        add_disk_to_node(node_objs[0])
+        add_disk_to_node(node_objs[0], ssd=True)
+        add_disk_to_node(node_objs[0], ssd=True)
         num_available_pv = 2
         set_count = deviceset_count + 2
     else:
@@ -1668,9 +1668,9 @@ def add_capacity_lso(ui_flag=False):
             config.DEPLOYMENT.get("arbiter_deployment") is True
             and num_available_pv == 4
         ):
-            add_disk_stretch_arbiter()
+            add_disk_stretch_arbiter(ssd=True)
         else:
-            add_new_disk_for_vsphere(sc_name=constants.LOCALSTORAGE_SC)
+            add_new_disk_for_vsphere(sc_name=constants.LOCALSTORAGE_SC, ssd=True)
         set_count = deviceset_count + 1
     localstorage.check_pvs_created(num_pvs_required=num_available_pv)
     if ui_add_capacity_conditions() and ui_flag:
