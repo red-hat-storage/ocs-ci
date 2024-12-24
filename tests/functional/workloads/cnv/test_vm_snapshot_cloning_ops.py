@@ -89,14 +89,14 @@ class TestVmSnapshotClone(E2ETest):
                 True,
                 False,
                 marks=pytest.mark.polarion_id(
-                    "OCS-3002"
+                    "OCS-6305"
                 ),  # Polarion ID for expansion before snapshot
             ),
             pytest.param(
                 False,
                 True,
                 marks=pytest.mark.polarion_id(
-                    "OCS-3003"
+                    "OCS-6305"
                 ),  # Polarion ID for expansion after restore
             ),
         ],
@@ -136,8 +136,7 @@ class TestVmSnapshotClone(E2ETest):
             # Expand PVC if `pvc_expand_before_snapshot` is True
             pvc_obj = vm_obj.get_vm_pvc_obj()
             if pvc_expand_before_snapshot:
-                new_size = pvc_obj.size + 10
-                pvc_obj.resize_pvc(new_size=new_size, verify=True)
+                pvc_obj.resize_pvc(new_size=50, verify=True)
 
             # Writing IO on source VM
             source_csum = run_dd_io(vm_obj=vm_obj, file_path=file_paths[0], verify=True)
@@ -161,15 +160,15 @@ class TestVmSnapshotClone(E2ETest):
 
             # Create new VM using the restored PVC
             res_vm_obj = cnv_workload(
-                volume_interface=vm_obj.volume_interface,
                 source_url=constants.CNV_FEDORA_SOURCE,
+                storageclass=vm_obj.sc_name,
                 existing_pvc_obj=res_snap_obj,
                 namespace=vm_obj.namespace,
             )[-1]
 
             # Expand PVC if `pvc_expand_after_restore` is True
             if pvc_expand_after_restore:
-                new_size = res_snap_obj.size + 10
+                new_size = 50
                 res_snap_obj.resize_pvc(new_size=new_size, verify=True)
                 assert res_vm_obj.get_vm_pvc_obj().size == new_size, (
                     f"Failed: VM PVC Expansion of {res_vm_obj.name} after "
