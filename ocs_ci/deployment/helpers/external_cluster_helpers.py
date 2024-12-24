@@ -136,9 +136,9 @@ class ExternalCluster(object):
             params = f"{params} --run-as-user {ceph_user}"
 
         if config.EXTERNAL_MODE.get("use_rbd_namespace"):
-            rbd_namespace = self.create_rbd_namespace(
-                rbd=rbd_name, namespace=config.EXTERNAL_MODE.get("rbd_namespace")
-            )
+            rbd_namespace = config.EXTERNAL_MODE.get(
+                "rbd_namespace"
+            ) or self.create_rbd_namespace(rbd=rbd_name)
             params = f"{params} --rados-namespace {rbd_namespace}"
 
         out = self.run_exporter_script(params=params)
