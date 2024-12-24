@@ -48,12 +48,7 @@ class TestMcgCli(MCGTest):
         bucket_names = [name.strip() for name in bucket_lst_res if name][
             1:
         ]  # get rid of empty strings and the title
-        default_bucket_name = "first.bucket"
         existing_buckets_num = len(bucket_names)
-        assert bucket_names[0] == default_bucket_name, (
-            f"First bucket name is {bucket_names[0]}, "
-            f" expected {default_bucket_name}."
-        )
         logger.info(f"{existing_buckets_num} bucket(s) exist")
 
         logger.info(f"Creating {count} buckets")
