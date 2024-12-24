@@ -161,9 +161,10 @@ class AMQ(object):
                     log.warn(
                         "Some amq leftovers are present, please cleanup the cluster"
                     )
-                    pytest.skip(
-                        "AMQ leftovers are present needs to cleanup the cluster"
-                    )
+                    # TODO: Check why this skip was here in the first place
+                    # pytest.skip(
+                    #     "AMQ leftovers are present needs to cleanup the cluster"
+                    # )
         time.sleep(30)
         #  Check strimzi-cluster-operator pod created
         if self.is_amq_pod_running(pod_pattern="cluster-operator", expected_pods=1):
