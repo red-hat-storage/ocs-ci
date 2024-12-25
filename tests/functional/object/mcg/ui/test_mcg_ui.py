@@ -422,3 +422,4 @@ class TestBucketCreate:
         PageNavigator().nav_object_storage_page()
         bucket_ui = BucketsTab()
         bucket_ui.create_bucket_ui("obc")
+        PageNavigator().nav_object_storage_page()
