@@ -78,7 +78,13 @@ class AMQ(object):
         """
         try:
             log.info(f"cloning amq in {self.dir}")
-            git_clone_cmd = f"git clone {self.repo} "
+
+            # The rest of this method assumes the use of zookeeper, before
+            # the following change was made to strimzi-kafka-operator:
+            # https://github.com/strimzi/strimzi-kafka-operator/pull/10982
+            last_compatible_branch = "release-0.44.x"
+            git_clone_cmd = f"git clone --branch {last_compatible_branch} {self.repo} "
+
             run(git_clone_cmd, shell=True, cwd=self.dir, check=True)
             self.amq_dir = "strimzi-kafka-operator/packaging/install/cluster-operator/"
             self.amq_kafka_pers_yaml = (
