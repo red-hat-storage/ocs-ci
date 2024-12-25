@@ -1,12 +1,16 @@
 import json
-
+import logging
 import requests
+
 from selenium.webdriver.common.by import By
+
 from ocs_ci.ocs.ocp import get_ocp_url
 from ocs_ci.ocs import exceptions
 from ocs_ci.ocs.ui.page_objects.confirm_dialog import ConfirmDialog
-from ocs_ci.ocs.ui.page_objects.object_storage import ObjectStorage, logger
+from ocs_ci.ocs.ui.page_objects.object_storage import ObjectStorage
 from ocs_ci.utility import version
+
+logger = logging.getLogger(__name__)
 
 
 class BucketsTab(ObjectStorage, ConfirmDialog):
@@ -31,17 +35,30 @@ class BucketsTab(ObjectStorage, ConfirmDialog):
                 "//*[@id='content-scrollable']/section/div[2]/div[1]/div/div[2]/div[1]/div[2]",
                 By.XPATH,
             ),
-        }
-        self.do_click(locators["create_bucket_button"])
-
-    def create_bucket_via_s3(self):
-        locators = {
-            "create_bucket_button": (
-                "//*[@id='content-scrollable']/section/div[2]/div/div/div[2]/div[2]/div[2]",
-                By.XPATH,
+            "storage_class_dropdown": (
+                "[data-test='sc-dropdown']",
+                By.CSS_SELECTOR,
+            ),
+            "storage_class_noobaa_option": (
+                "div.pf-v5-c-dropdown div:nth-of-type(2)",
+                By.CSS_SELECTOR,
+            ),
+            "submit_button": (
+                "[data-test='obc-create']",
+                By.CSS_SELECTOR,
             ),
         }
+
         self.do_click(locators["create_bucket_button"])
+
+        # Click the dropdown using CSS selector
+        self.do_click(locators["storage_class_dropdown"])
+
+        # Select the noobaa storage class option using CSS selector
+        self.do_click(locators["storage_class_noobaa_option"])
+
+        # Click submit using CSS selector
+        self.do_click(locators["submit_button"])
 
     def delete_bucket_ui(self, delete_via, expect_fail, resource_name):
         """
