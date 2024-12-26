@@ -3,7 +3,7 @@ import random
 
 from ocs_ci.framework.pytest_customization.marks import magenta_squad
 from threading import Event
-from concurrent.futures import ThreadPoolExecutor
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from ocs_ci.helpers.mcg_stress_helper import (
     upload_objs_to_buckets,
     run_noobaa_metadata_intense_ops,
@@ -33,6 +33,7 @@ class TestNoobaaUnderStress:
         scale_noobaa_resources_session,
         scale_noobaa_db_pod_pv_size,
         threading_lock,
+        disable_debug_logs,
     ):
         """
         Stress Noobaa by performing bulk s3 operations. This consists mainly 3 stages
@@ -45,18 +46,10 @@ class TestNoobaaUnderStress:
             3. At the end delete objects from all the bucket in batches
 
         """
+        # Scale noobaa pod resources
+        scale_noobaa_resources_session(cpu=2, memory="5Gi")
 
-        # Fetch buckets created for stress testing
-        self.base_setup_buckets = setup_stress_testing_bucket()
-
-        # Upload objects to the buckets created concurrently
-        upload_objs_to_buckets(
-            mcg_obj_session,
-            nb_stress_cli_pod,
-            self.base_setup_buckets,
-            iteration_no=0,
-        )
-
+        # Start the background check process running
         bg_event = Event()
         bg_executor = ThreadPoolExecutor(max_workers=1)
 
@@ -67,116 +60,137 @@ class TestNoobaaUnderStress:
             threading_lock=threading_lock,
         )
 
-        # Iterate and stress the cluster with object upload
-        # and other IO operations
-        total_iterations = 4
-        executor = ThreadPoolExecutor(max_workers=5)
-        futures_obj = list()
-        for i in range(1, total_iterations):
-            logger.info(f"Performing Iteration {i} of stressing the cluster")
+        try:
+            # Fetch buckets created for stress testing
+            self.base_setup_buckets = setup_stress_testing_bucket()
+
+            # Upload objects to the buckets created concurrently
+            upload_objs_to_buckets(
+                mcg_obj_session,
+                nb_stress_cli_pod,
+                self.base_setup_buckets,
+                iteration_no=0,
+            )
+
+            # Iterate and stress the cluster with object upload
+            # and other IO operations
+            total_iterations = 4
+            for i in range(0, total_iterations):
+                iteration_no = i + 1
+                multiplier = iteration_no + 1
+                logger.info(
+                    f"Performing Iteration {iteration_no} of stressing the cluster"
+                )
+                executor = ThreadPoolExecutor(max_workers=5)
+                futures_obj = list()
+                buckets = [
+                    (type, bucket) for type, bucket in self.base_setup_buckets.items()
+                ]
+
+                # Instantiate event object
+                event = Event()
+
+                # Perform object upload operation
+                # concurrently
+                futures_obj.append(
+                    executor.submit(
+                        upload_objs_to_buckets,
+                        mcg_obj_session,
+                        nb_stress_cli_pod,
+                        self.base_setup_buckets,
+                        iteration_no=iteration_no,
+                        event=event,
+                        multiplier=multiplier,
+                    )
+                )
+
+                # Perform metadata intense operations
+                # on randomly selected bucket
+                bucket = random.choice(buckets)
+                futures_obj.append(
+                    executor.submit(
+                        run_noobaa_metadata_intense_ops,
+                        mcg_obj_session,
+                        nb_stress_cli_pod,
+                        bucket_factory,
+                        bucket,
+                        iteration_no=i,
+                        event=event,
+                    )
+                )
+                buckets.remove(bucket)
+
+                # Perform object deletion on a
+                # randomly selected bucket
+                bucket = random.choice(buckets)
+                futures_obj.append(
+                    executor.submit(
+                        delete_objs_from_bucket,
+                        nb_stress_cli_pod,
+                        bucket,
+                        iteration_no=i,
+                        event=event,
+                    )
+                )
+                buckets.remove(bucket)
+
+                # Perform object listing on a
+                # randomly selected bucket
+                bucket = random.choice(buckets)
+                futures_obj.append(
+                    executor.submit(
+                        list_objs_from_bucket,
+                        bucket,
+                        iteration_no=i,
+                        event=event,
+                    )
+                )
+                buckets.remove(bucket)
+
+                # Perform object download on
+                # a randomly selected bucket
+                bucket = random.choice(buckets)
+                futures_obj.append(
+                    executor.submit(
+                        download_objs_from_bucket,
+                        nb_stress_cli_pod,
+                        bucket,
+                        stress_test_directory_setup.result_dir,
+                        iteration_no=i,
+                        event=event,
+                    )
+                )
+                buckets.remove(bucket)
+                nb_stress_cli_pod.exec_cmd_on_pod(
+                    f"rm -rf {stress_test_directory_setup.result_dir}/"
+                )
+
+                # Wait until all the object operations are done
+                logger.info(
+                    "Waiting all the Object upload and IO operations for the current iteration is completed"
+                )
+                for future in as_completed(futures_obj):
+                    future.result()
+
+                executor.shutdown()
+
+            # Delete all the objects from the bucket
+            # in batches of 20K objects at a time
             buckets = [
                 (type, bucket) for type, bucket in self.base_setup_buckets.items()
             ]
+            with ThreadPoolExecutor() as executor:
+                futures = list()
+                for bucket in buckets:
+                    future = executor.submit(
+                        delete_objects_in_batches, bucket, batch_size=20000
+                    )
+                    futures.append(future)
 
-            # Instantiate event object
-            event = Event()
-
-            # Perform object upload operation
-            # concurrently
-            futures_obj.append(
-                executor.submit(
-                    upload_objs_to_buckets,
-                    mcg_obj_session,
-                    nb_stress_cli_pod,
-                    self.base_setup_buckets,
-                    iteration_no=i,
-                    event=event,
-                    multiplier=i,
-                )
-            )
-
-            # Perform metadata intense operations
-            # on randomly selected bucket
-            bucket = random.choice(buckets)
-            futures_obj.append(
-                executor.submit(
-                    run_noobaa_metadata_intense_ops,
-                    mcg_obj_session,
-                    nb_stress_cli_pod,
-                    bucket_factory,
-                    bucket,
-                    iteration_no=i - 1,
-                    event=event,
-                )
-            )
-            buckets.remove(bucket)
-
-            # Perform object deletion on a
-            # randomly selected bucket
-            bucket = random.choice(buckets)
-            futures_obj.append(
-                executor.submit(
-                    delete_objs_from_bucket,
-                    nb_stress_cli_pod,
-                    bucket,
-                    iteration_no=i - 1,
-                    event=event,
-                )
-            )
-            buckets.remove(bucket)
-
-            # Perform object listing on a
-            # randomly selected bucket
-            bucket = random.choice(buckets)
-            futures_obj.append(
-                executor.submit(
-                    list_objs_from_bucket,
-                    bucket,
-                    iteration_no=i - 1,
-                    event=event,
-                )
-            )
-            buckets.remove(bucket)
-
-            # Perform object download on
-            # a randomly selected bucket
-            bucket = random.choice(buckets)
-            futures_obj.append(
-                executor.submit(
-                    download_objs_from_bucket,
-                    nb_stress_cli_pod,
-                    bucket,
-                    stress_test_directory_setup.result_dir,
-                    iteration_no=i - 1,
-                    event=event,
-                )
-            )
-            buckets.remove(bucket)
-            nb_stress_cli_pod.exec_cmd_on_pod(
-                f"rm -rf {stress_test_directory_setup.result_dir}/"
-            )
-
-            # Wait until all the object operations are done
-            logger.info(
-                "Waiting all the Object upload and IO operations for the current iteration is completed"
-            )
-            for future in futures_obj:
-                future.result()
-
-        # Delete all the objects from the bucket
-        # in batches of 20K objects at a time
-        buckets = [(type, bucket) for type, bucket in self.base_setup_buckets.items()]
-        with ThreadPoolExecutor() as executor:
-            futures = list()
-            for bucket in buckets:
-                future = executor.submit(
-                    delete_objects_in_batches, bucket, batch_size=20000
-                )
-                futures.append(future)
-
-            logger.info("Waiting for all the delete object operations to complete")
-            for future in futures:
-                future.result()
-
-        bg_event.set()
-        bg_future.result()
+                logger.info("Waiting for all the delete object operations to complete")
+                for future in as_completed(futures):
+                    future.result()
+        finally:
+            bg_event.set()
+            bg_future.result()
+            bg_executor.shutdown()
