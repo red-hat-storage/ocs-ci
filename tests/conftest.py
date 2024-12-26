@@ -8924,7 +8924,7 @@ def scale_noobaa_resources_session(request):
     Session scoped fixture to scale noobaa resources
 
     """
-    scale_noobaa_resources(request)
+    return scale_noobaa_resources(request)
 
 
 @pytest.fixture()
@@ -8933,7 +8933,7 @@ def scale_noobaa_resources_fixture(request):
     Fixture to scale noobaa resources
 
     """
-    scale_noobaa_resources(request)
+    return scale_noobaa_resources(request)
 
 
 def scale_noobaa_resources(request):
@@ -8954,12 +8954,12 @@ def scale_noobaa_resources(request):
             f'{{"endpoints": {{"minCount": {min_ep_count},"maxCount": {max_ep_count}}}}}}}}}'
         )
         scale_noobaa_resources_param = (
-            f'{{"spec": {{"resources": {{"noobaa-core": {{"limits": {{"cpu": {cpu},"memory": {memory}}},'
-            f'"requests": {{"cpu": {cpu},"memory": {memory}}}}},'
-            f'"noobaa-db": {{"limits": {{"cpu": {cpu},"memory": {memory}}},'
-            f'"requests": {{"cpu": {cpu},"memory": {memory}}}}},'
-            f'"noobaa-endpoint": {{"limits": {{"cpu": {cpu},"memory": {memory}}},'
-            f'"requests": {{"cpu": {cpu},"memory": "{memory}}}}}}}}}}}'
+            f'{{"spec": {{"resources": {{"noobaa-core": {{"limits": {{"cpu": {cpu},"memory": "{memory}"}},'
+            f'"requests": {{"cpu": {cpu},"memory": "{memory}"}}}},'
+            f'"noobaa-db": {{"limits": {{"cpu": {cpu},"memory": "{memory}"}},'
+            f'"requests": {{"cpu": {cpu},"memory": "{memory}"}}}},'
+            f'"noobaa-endpoint": {{"limits": {{"cpu": {cpu},"memory": "{memory}"}},'
+            f'"requests": {{"cpu": {cpu},"memory": "{memory}"}}}}}}}}}}'
         )
         storagecluster_obj.patch(params=scale_endpoint_pods_param, format_type="merge")
         log.info("Scaled noobaa endpoint counts")
@@ -10306,3 +10306,9 @@ def distribute_storage_classes_to_all_consumers():
             consumer.set_storage_classes(storage_class_names)
 
     return check_storage_classes_on_clients(ready_consumer_names)
+
+
+@pytest.fixture(scope="session")
+def disable_debug_logs():
+    log.info("Disabling debug logs for the current session")
+    logging.disable(logging.DEBUG)

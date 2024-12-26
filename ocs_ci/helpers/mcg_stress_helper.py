@@ -3,8 +3,9 @@ import concurrent.futures
 import time
 import textwrap
 
+from concurrent.futures import as_completed
 from tabulate import tabulate
-
+from uuid import uuid4
 from ocs_ci.helpers.helpers import get_noobaa_db_size, get_noobaa_db_usage_percent
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.resources.mcg import MCG
@@ -31,6 +32,23 @@ from ocs_ci.ocs.resources.pod import pod_resource_utilization_raw_output_from_ad
 from ocs_ci.utility.prometheus import PrometheusAPI
 
 logger = logging.getLogger(__name__)
+
+
+@retry(CommandFailed, tries=3, delay=60, backoff=1)
+def sync_object_directory_with_retry(
+    pod_obj,
+    src,
+    target,
+    s3_obj=None,
+    timeout=None,
+):
+    sync_object_directory(
+        podobj=pod_obj,
+        src=src,
+        target=target,
+        s3_obj=s3_obj,
+        timeout=timeout,
+    )
 
 
 def upload_objs_to_buckets(
@@ -65,7 +83,7 @@ def upload_objs_to_buckets(
                 )
                 for i in range(multiplier):
                     future = executor.submit(
-                        sync_object_directory,
+                        sync_object_directory_with_retry,
                         pod_obj,
                         src_path,
                         f"s3://{bucket.name}/{iteration_no}/{i+1}/",
@@ -80,10 +98,10 @@ def upload_objs_to_buckets(
             for future in concurrent.futures.as_completed(futures):
                 future.result()
     finally:
-        logger.info(
-            "Setting the event to indicate that upload objects operation is either completed or failed"
-        )
         if event:
+            logger.info(
+                "Setting the event to indicate that upload objects operation is either completed or failed"
+            )
             event.set()
 
 
@@ -162,7 +180,7 @@ def run_noobaa_metadata_intense_ops(
             target=bucket_name,
             prefix=iteration_no,
             s3_obj=s3_obj,
-            timeout=6000,
+            timeout=12000,
             recursive=True,
         )
         while True:
@@ -201,17 +219,19 @@ def run_noobaa_metadata_intense_ops(
             for i in range(0, 10):
                 nb_account = NoobaaAccount(
                     mcg_obj,
-                    name=f"nb-acc-{i}",
-                    email=f"nb-acc-{i}@email",
+                    name=f"nb-acc-{uuid4().hex}-{i}",
+                    email=f"nb-acc-{uuid4().hex}-{i}@email",
                 )
                 nb_accounts_created.append(nb_account)
                 logger.info(
                     f"METADATA OP: Created Noobaa account {nb_account.account_name}"
                 )
 
-            # for nb_acc in nb_accounts_created:
-            #     nb_acc.update_account(new_email=f"new-{nb_acc.email_id}")
-            #     logger.info(f"METADATA OP: Updated noobaa account {nb_acc.account_name}")
+            for nb_acc in nb_accounts_created:
+                nb_acc.update_account_email(new_email=f"new-{nb_acc.email_id}")
+                logger.info(
+                    f"METADATA OP: Updated noobaa account {nb_acc.account_name}"
+                )
 
             for nb_acc in nb_accounts_created:
                 nb_acc.delete_account()
@@ -233,9 +253,10 @@ def run_noobaa_metadata_intense_ops(
     futures_obj.append(executor.submit(_run_bucket_ops))
     futures_obj.append(executor.submit(_run_object_metadata_ops))
     futures_obj.append(executor.submit(_run_noobaa_account_ops))
-    logger.info("Waiting until all the upload objects operations are completed")
-    for future in futures_obj:
+    logger.info("Waiting until all metadata operations are completed")
+    for future in as_completed(futures_obj):
         future.result()
+    executor.shutdown()
 
 
 def delete_objs_from_bucket(pod_obj, bucket, iteration_no, event=None):
@@ -266,7 +287,7 @@ def delete_objs_from_bucket(pod_obj, bucket, iteration_no, event=None):
         bucket_name,
         mcg_obj,
         prefix=iteration_no,
-        timeout=6000,
+        timeout=12000,
     )
     logger.info(
         f"Successfully completed object deletion operation on bucket {bucket_name} under prefix {iteration_no}"
@@ -335,8 +356,13 @@ def download_objs_from_bucket(pod_obj, bucket, target_dir, iteration_no, event=N
             f"s3://{bucket_name}/{iteration_no}",
             target_dir,
             mcg_obj,
-            timeout=6000,
+            timeout=12000,
         )
+        logger.info(
+            f"Downloaded objects from {bucket_name}/{iteration_no} to {target_dir}"
+        )
+        logger.info(f"Cleaning up the downloaded objects from {target_dir}")
+        pod_obj.exec_cmd_on_pod(command=f"rm -rf {target_dir}")
 
         if event.is_set():
             logger.info(
@@ -387,7 +413,6 @@ def run_background_cluster_checks(scale_noobaa_db_pv, event=None, threading_lock
     """
     ceph_cluster = CephCluster()
     prometheus_api = PrometheusAPI(threading_lock=threading_lock)
-    prometheus_alert_list = list()
 
     logger.info(
         "\n"
@@ -409,14 +434,15 @@ def run_background_cluster_checks(scale_noobaa_db_pv, event=None, threading_lock
             logger.info(
                 "\n"
                 "\n[BACKGROUND CHECK]"
-                "\nNoobaa is healthy... rechecking in 1 minute"
+                "\nNoobaa is healthy... rechecking in 5 minute"
                 "\n"
             )
 
             if event.is_set():
                 logger.info("[BACKGROUND CHECK] Stopping the Noobaa health check")
                 break
-            time.sleep(60)
+
+            time.sleep(300)
 
     @retry(CephHealthException, tries=10, delay=60)
     def check_ceph_health():
@@ -428,14 +454,15 @@ def run_background_cluster_checks(scale_noobaa_db_pv, event=None, threading_lock
             logger.info(
                 "\n"
                 "\n[BACKGROUND CHECK]"
-                "\nCeph is healthy... rechecking in 1 minute"
+                "\nCeph is healthy... rechecking in 5 minute"
                 "\n"
             )
 
             if event.is_set():
                 logger.info("[BACKGROUND CHECK] Stopping the Ceph health check")
                 break
-            time.sleep(60)
+
+            time.sleep(300)
 
     @retry(CommandFailed, tries=10, delay=60)
     def check_noobaa_db_size():
@@ -461,19 +488,19 @@ def run_background_cluster_checks(scale_noobaa_db_pv, event=None, threading_lock
             logger.info(
                 f"\n"
                 f"\n[BACKGROUND CHECK]"
-                f"\nCurrent noobaa db usage is at {used_percent}%... Rechecking in 5 minutes..."
+                f"\nCurrent noobaa db usage is at {used_percent}%... Rechecking in 20 minutes..."
                 f"\n"
             )
 
             if event.is_set():
                 logger.info("[BACKGROUND CHECK] Stopping the Noobaa db size check")
                 break
-            time.sleep(300)
+            time.sleep(600)
 
     def check_prometheus_alerts():
 
         while True:
-
+            prometheus_alert_list = list()
             prometheus_api.prometheus_log(prometheus_alert_list)
             alert_tab = list()
             alert_printed = list()
@@ -520,7 +547,7 @@ def run_background_cluster_checks(scale_noobaa_db_pv, event=None, threading_lock
                     "[BACKGROUND CHECK] Stopping noobaa pod resource utilization checks"
                 )
                 break
-            time.sleep(300)
+            time.sleep(600)
 
     executor = concurrent.futures.ThreadPoolExecutor(max_workers=5)
     futures_obj = list()
@@ -529,5 +556,6 @@ def run_background_cluster_checks(scale_noobaa_db_pv, event=None, threading_lock
     futures_obj.append(executor.submit(check_noobaa_db_size))
     futures_obj.append(executor.submit(check_prometheus_alerts))
     futures_obj.append(executor.submit(check_noobaa_pod_resource_utilization))
-    for future in futures_obj:
+    for future in as_completed(futures_obj):
         future.result()
+    executor.shutdown()
