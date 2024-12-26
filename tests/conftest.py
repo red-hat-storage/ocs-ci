@@ -8552,7 +8552,7 @@ def scale_noobaa_resources_session(request):
     Session scoped fixture to scale noobaa resources
 
     """
-    scale_noobaa_resources(request)
+    return scale_noobaa_resources(request)
 
 
 @pytest.fixture()
@@ -8561,7 +8561,7 @@ def scale_noobaa_resources_fixture(request):
     Fixture to scale noobaa resources
 
     """
-    scale_noobaa_resources(request)
+    return scale_noobaa_resources(request)
 
 
 def scale_noobaa_resources(request):
@@ -8582,12 +8582,12 @@ def scale_noobaa_resources(request):
             f'{{"endpoints": {{"minCount": {min_ep_count},"maxCount": {max_ep_count}}}}}}}}}'
         )
         scale_noobaa_resources_param = (
-            f'{{"spec": {{"resources": {{"noobaa-core": {{"limits": {{"cpu": {cpu},"memory": {memory}}},'
-            f'"requests": {{"cpu": {cpu},"memory": {memory}}}}},'
-            f'"noobaa-db": {{"limits": {{"cpu": {cpu},"memory": {memory}}},'
-            f'"requests": {{"cpu": {cpu},"memory": {memory}}}}},'
-            f'"noobaa-endpoint": {{"limits": {{"cpu": {cpu},"memory": {memory}}},'
-            f'"requests": {{"cpu": {cpu},"memory": "{memory}}}}}}}}}}}'
+            f'{{"spec": {{"resources": {{"noobaa-core": {{"limits": {{"cpu": {cpu},"memory": "{memory}"}},'
+            f'"requests": {{"cpu": {cpu},"memory": "{memory}"}}}},'
+            f'"noobaa-db": {{"limits": {{"cpu": {cpu},"memory": "{memory}"}},'
+            f'"requests": {{"cpu": {cpu},"memory": "{memory}"}}}},'
+            f'"noobaa-endpoint": {{"limits": {{"cpu": {cpu},"memory": "{memory}"}},'
+            f'"requests": {{"cpu": {cpu},"memory": "{memory}"}}}}}}}}}}'
         )
         storagecluster_obj.patch(params=scale_endpoint_pods_param, format_type="merge")
         log.info("Scaled noobaa endpoint counts")
@@ -9625,3 +9625,9 @@ def admin_client():
     from ocp_resources.resource import get_client
 
     return get_client(config_file=kubeconfig_path)
+
+
+@pytest.fixture(scope="session")
+def disable_debug_logs():
+    log.info("Disabling debug logs for the current session")
+    logging.disable(logging.DEBUG)
