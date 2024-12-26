@@ -499,7 +499,7 @@ class ExternalCluster(object):
             ExternalClusterRBDNamespaceCreationFailed: In case fails to create RBD namespace
 
         """
-        namespace = namespace or f"rbd_namespace_{uuid.uuid4().hex[:8]}"
+        namespace = namespace or f"rbd-namespace-{uuid.uuid4().hex[:8]}"
         logger.info(f"creating RBD namespace {namespace}")
         cmd = f"rbd namespace create {rbd}/{namespace}"
         retcode, out, err = self.rhcs_conn.exec_cmd(cmd)
