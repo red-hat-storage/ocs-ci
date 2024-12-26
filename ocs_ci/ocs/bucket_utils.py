@@ -612,7 +612,7 @@ def rm_object_recursive(podobj, target, mcg_obj, option="", prefix=None, timeout
 
     rm_command = (
         f"rm s3://{target} --recursive {option}"
-        if not prefix
+        if prefix is None
         else f"rm s3://{target}/{prefix} --recursive {option}"
     )
     podobj.exec_cmd_on_pod(
