@@ -130,3 +130,96 @@ class TestVmSnapshotClone(E2ETest):
             source_csum == res_csum
         ), f"Failed: MD5 comparison between source {vm_obj.name} and cloned {res_vm_obj.name} VMs"
         res_vm_obj.stop()
+
+    @workloads
+    @pytest.mark.polarion_id("OCS-6288")
+    def test_vm_snap_of_clone(
+        self,
+        project_factory,
+        snapshot_factory,
+        snapshot_restore_factory,
+        multi_cnv_workload,
+        cnv_workload,
+        clone_vm_workload,
+        setup_cnv,
+    ):
+        """
+        This test performs the VM cloning and IOs created using different volume interfaces(PVC/DV/DVT)
+
+        Test steps:
+        1. Create a clone of a VM PVC by following the documented procedure from ODF official docs.
+            1.1 Create clone of the pvc associated with VM.
+            1.2 Cloned pvc successfully created and listed
+        2. Verify the cloned PVc is created.
+        3. create vm using cloned pvc.
+        4. Verify that the data on VM backed by cloned pvc is same as that in the original VM.
+        5. Add additional data to the cloned VM.
+        6. Create snapshot of cloned pvc
+        7. Vertify snapshot of cloned pvc created successfully
+        8. Validate the content of snapshot by restoring it to new pvc
+        9. Create VM using restored pvc
+        9. Check data conisistency on the new VM
+        10. Delete the clone and restored pvc by following the documented procedure from ODF official docs
+          1. Delete clone and restored pvc of the pvc associated with VM.
+          2. cloned pvc and restored pvc successfully deleted
+        11. Repeat the above procedure for all the VMs in the system
+        12. Delete all the clones and restored pvc created as part of this test
+        """
+
+        proj_obj = project_factory()
+        file_paths = ["/source_file.txt", "/new_file.txt"]
+        vm_objs_def, vm_objs_aggr, _, _ = multi_cnv_workload(
+            namespace=proj_obj.namespace
+        )
+
+        vm_list = vm_objs_def + vm_objs_aggr
+
+        for index, vm_obj in enumerate(vm_list):
+            source_csum = run_dd_io(vm_obj=vm_obj, file_path=file_paths[0], verify=True)
+            vm_obj.stop()
+            clone_obj = clone_vm_workload(
+                vm_obj=vm_obj,
+                volume_interface=vm_obj.volume_interface,
+                namespace=(
+                    vm_obj.namespace
+                    if vm_obj.volume_interface == constants.VM_VOLUME_PVC
+                    else None
+                ),
+            )[index]
+            new_csum = cal_md5sum_vm(vm_obj=clone_obj, file_path=file_paths[0])
+            assert (
+                source_csum == new_csum
+            ), f"Failed: MD5 comparison between source {vm_obj.name} and cloned {clone_obj.name} VMs"
+            run_dd_io(vm_obj=clone_obj, file_path=file_paths[1])
+
+            clone_obj.stop()
+
+            # Taking Snapshot of PVC
+            cloned_pvc_obj = clone_obj.get_vm_pvc_obj()
+            snap_obj = snapshot_factory(cloned_pvc_obj)
+
+            # Restore the snapshot
+            res_snap_obj = snapshot_restore_factory(
+                snapshot_obj=snap_obj,
+                storageclass=vm_obj.sc_name,
+                volume_mode=snap_obj.parent_volume_mode,
+                access_mode=vm_obj.pvc_access_mode,
+                status=constants.STATUS_BOUND,
+                timeout=300,
+            )
+
+            # Create new VM using the restored PVC
+            res_vm_obj = cnv_workload(
+                source_url=constants.CNV_FEDORA_SOURCE,
+                storageclass=vm_obj.sc_name,
+                existing_pvc_obj=res_snap_obj,
+                namespace=vm_obj.namespace,
+            )[-1]
+
+            restore_csum = cal_md5sum_vm(vm_obj=res_vm_obj, file_path=file_paths[0])
+            assert (
+                source_csum == restore_csum
+            ), f"Failed: MD5 comparison between source {vm_obj.name} and restored {res_vm_obj.name} VMs"
+            run_dd_io(vm_obj=res_vm_obj, file_path=file_paths[1])
+
+            res_vm_obj.stop()
