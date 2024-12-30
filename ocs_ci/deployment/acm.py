@@ -177,6 +177,22 @@ class Submariner(object):
         )
         return run_cmd(csv_version_cmd)
 
+    def get_submariner_unreleased_tag(self, subctl_version):
+        """
+        Get downstream unreleased tag to download
+
+        """
+        cmd = (
+            f"curl --retry 3 --retry-delay 5 -Ls "
+            f'"https://datagrepper.engineering.redhat.com/raw?'
+            f"topic=/topic/VirtualTopic.eng.ci.redhat-container-image.pipeline.complete&"
+            f'rows_per_page=25&delta=1296000&contains=subctl-container-{subctl_version}"|'
+            f'jq -r \'[.raw_messages[].msg | select(.pipeline.status=="complete") | '
+            f"{{nvr: .artifact.nvr, index_image: .artifact.image_tag}}] | .[0]' | "
+            f"jq -r '.index_image' |cut -d'/' -f3- |cut -d':' -f2-"
+        )
+        return run_cmd(cmd)
+
     def download_downstream_binary(self):
         """
         Download downstream subctl binary - released/unreleased
@@ -201,10 +217,11 @@ class Submariner(object):
                 "Not a supported architecture for subctl binary"
             )
         if self.submariner_release_type == "unreleased":
+            unreleased_tag = self.get_submariner_unreleased_tag(subctl_ver)
             brew_url = "/".join([constants.SUBMARINER_BREW, "rhacm2-subctl-rhel9:"])
             cmd = (
                 f"oc image extract --filter-by-os linux/{binary_pltfrm} "
-                f"-a {pull_secret_path} {brew_url}{subctl_ver} "
+                f"-a {pull_secret_path} {brew_url}{unreleased_tag} "
                 f'--path="/dist/subctl-{version_str}*-linux-{binary_pltfrm}.tar.xz":/tmp --confirm'
             )
         else:
