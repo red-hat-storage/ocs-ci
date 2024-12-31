@@ -3012,9 +3012,8 @@ def get_obj_versions(mcg_obj, awscli_pod, bucket_name, obj_key):
         obj_key (str): Object key
 
     Returns:
-        list: List of ETag values of the uploaded objects
+        list: List of dictionaries containing the versions data
     """
-    etags = []
     resp = awscli_pod.exec_cmd_on_pod(
         command=craft_s3_command(
             f"list-object-versions --bucket {bucket_name} --prefix {obj_key}",
@@ -3023,9 +3022,13 @@ def get_obj_versions(mcg_obj, awscli_pod, bucket_name, obj_key):
         ),
         out_yaml_format=False,
     )
-    etags = []
 
+    versions_dicts = []
     if resp and "Versions" in resp:
-        raw_etags = [version["ETag"] for version in json.loads(resp)["Versions"]]
-        etags = [etag.strip('"') for etag in raw_etags]
-    return etags
+        versions_dicts = json.loads(resp).get("Versions")
+
+        # Remove quotes from the ETag values for easier usage
+        for d in versions_dicts:
+            d["ETag"] = d["ETag"].strip('"')
+
+    return versions_dicts

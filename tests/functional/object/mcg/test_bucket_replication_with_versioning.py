@@ -113,7 +113,7 @@ class TestReplicationWithVersioning(MCGTest):
         # 4. Verify the versions were replicated to the target bucket in the same order
         last_target_etags = None
         try:
-            for target_etags in TimeoutSampler(
+            for target_versions in TimeoutSampler(
                 timeout=TIMEOUT,
                 sleep=30,
                 func=get_obj_versions,
@@ -122,6 +122,7 @@ class TestReplicationWithVersioning(MCGTest):
                 bucket_name=target_bucket.name,
                 obj_key=obj_key,
             ):
+                target_etags = [v["ETag"] for v in target_versions]
                 if source_etags == target_etags:
                     logger.info(
                         f"Source and target etags match: {source_etags} == {target_etags}"
