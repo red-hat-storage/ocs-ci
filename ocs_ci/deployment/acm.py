@@ -86,8 +86,11 @@ class Submariner(object):
         self.dr_only_list = []
 
     def deploy(self):
-        # Download subctl binary in any case.
-        self.download_binary()
+        # Download subctl binary in any case except downstream unreleased.
+        if not (
+            self.source == "downstream" and self.submariner_release_type == "unreleased"
+        ):
+            self.download_binary()
         if self.source == "upstream":
             self.deploy_upstream()
         elif self.source == "downstream":
@@ -173,7 +176,7 @@ class Submariner(object):
         """
         csv_version_cmd = (
             "oc get submariners.submariner.io -n submariner-operator "
-            "submariner -o jsonpath='{{.status.gateways[0].version}}'"
+            "submariner -o jsonpath='{.status.gateways[0].version}'"
         )
         return run_cmd(csv_version_cmd)
 
