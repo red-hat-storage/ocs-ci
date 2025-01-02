@@ -1021,6 +1021,31 @@ def verify_storage_cluster():
         verify_storage_cluster_version(storage_cluster)
 
 
+def verify_storage_cluster_extended():
+    """
+    Verify storage cluster extended status
+    """
+    with config.RunWithProviderConfigContextIfAvailable():
+        storage_cluster_name = config.ENV_DATA["external_storage_cluster_name"]
+        log.info("Verifying status of storage cluster: %s", storage_cluster_name)
+        storage_cluster = StorageCluster(
+            resource_name=storage_cluster_name,
+            namespace=config.ENV_DATA["external_storage_cluster_namespace"],
+        )
+        log.info(
+            f"Check if StorageCluster: {storage_cluster_name} is in Succeeded phase"
+        )
+        if config.ENV_DATA.get("platform") == constants.FUSIONAAS_PLATFORM:
+            timeout = 1000
+        elif storage_cluster.data["spec"].get(
+            "resourceProfile"
+        ) != storage_cluster.data["status"].get("lastAppliedResourceProfile"):
+            timeout = 1800
+        else:
+            timeout = 600
+        storage_cluster.wait_for_phase(phase="Ready", timeout=timeout)
+
+
 def verify_storage_cluster_version(storage_cluster):
     """
     Verifies the storage cluster version

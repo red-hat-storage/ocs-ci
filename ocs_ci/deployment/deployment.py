@@ -27,6 +27,7 @@ from ocs_ci.deployment.helpers.mcg_helpers import (
     mcg_only_deployment,
     mcg_only_post_deployment_checks,
 )
+from ocs_ci.ocs.resources.storage_cluster import verify_storage_cluster_extended
 from ocs_ci.deployment.helpers.odf_deployment_helpers import get_required_csvs
 from ocs_ci.deployment.acm import Submariner
 from ocs_ci.deployment.ingress_node_firewall import restrict_ssh_access_to_nodes
@@ -1950,6 +1951,7 @@ class Deployment(object):
                 raise CephHealthException(
                     "External multi-storagecluster external ceph cluster not healthy"
                 )
+            verify_storage_cluster_extended()
 
     def set_rook_log_level(self):
         rook_log_level = config.DEPLOYMENT.get("rook_log_level")
