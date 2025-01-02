@@ -35,6 +35,7 @@ from ocs_ci.ocs.exceptions import (
     NoRunningCephToolBoxException,
     TolerationNotFoundException,
 )
+from ocs_ci.ocs.resources.pvc import get_all_pvcs_in_storageclass
 
 from ocs_ci.ocs.utils import setup_ceph_toolbox, get_pod_name_by_pattern
 from ocs_ci.ocs.resources.ocs import OCS
@@ -4042,3 +4043,42 @@ def wait_for_ceph_cmd_execute_successfully(
         f"The ceph command failed to execute successfully after {num_of_retries} retries"
     )
     return False
+
+
+def get_osd_pod_pvc(osd_pod):
+    """
+    Get the osd pod PVC name
+
+    Args:
+        osd_pod (Pod): The pod object to get the PVC name
+
+    Returns:
+        str: The PVC name
+
+    """
+    volumes = osd_pod.get().get("spec").get("volumes")
+    for v in volumes:
+        pvc = v.get("persistentVolumeClaim")
+        if pvc:
+            return pvc.get("claimName")
+
+    return None
+
+
+def get_lvs_osd_pods(lvs_name):
+    """
+    Get the LocalVolumeSet osd pods
+
+    Args:
+        lvs_name (str): The LocalVolumeSet name
+
+    Returns:
+        list: List of the osd pods
+
+    """
+    pvcs = get_all_pvcs_in_storageclass(lvs_name)
+    pvc_names = [pvc.name for pvc in pvcs]
+    osd_pods = get_osd_pods()
+    lvs_pods = [p for p in osd_pods if get_osd_pod_pvc(p) in pvc_names]
+
+    return lvs_pods
