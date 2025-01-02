@@ -4,9 +4,6 @@ from ocs_ci.ocs.ui.helpers_ui import extract_encryption_status
 
 
 class ObjectDetails(StorageSystemDetails):
-    def __init__(self):
-        StorageSystemDetails.__init__(self)
-
     def get_encryption_summary(self):
         """
         Collecting Encryption summary shown in the Object details page.
