@@ -1023,7 +1023,12 @@ class OdfTopologyNodesView(TopologyTab):
             for detail_name, loc in filtered_dict.items():
                 if detail_name == "details_sidebar_node_addresses":
                     node_addresses = self.get_elements(loc)
-                    addresses_txt = [el.text for el in node_addresses]
+                    # exclude Internal DNS from addresses, it is applicable only for specific platforms
+                    addresses_txt = [
+                        el.text
+                        for el in node_addresses
+                        if not el.text.startswith("Internal DNS")
+                    ]
                     addresses_txt = "; ".join(addresses_txt)
                     details_dict[
                         detail_name.split("details_sidebar_node_", 1)[-1].strip()

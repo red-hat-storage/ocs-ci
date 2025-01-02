@@ -26,3 +26,4 @@ ENV_DATA:
   ms_env_type: "staging"
   addon_name: "ocs-converged"
   persistent-monitoring: false
+  node_labels: cluster.ocs.openshift.io/openshift-storage=""

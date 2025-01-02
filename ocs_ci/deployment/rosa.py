@@ -26,6 +26,7 @@ from ocs_ci.utility.rosa import (
     get_associated_oidc_config_id,
     delete_account_roles,
     wait_console_url,
+    destroy_rosa_cluster,
 )
 from ocs_ci.utility.utils import (
     ceph_health_check,
@@ -100,6 +101,11 @@ class ROSAOCP(BaseOCPDeployment):
             machinepool_details.wait_replicas_ready(
                 target_replicas=config.ENV_DATA["worker_replicas"], timeout=1200
             )
+            if node_labels := config.ENV_DATA.get("node_labels"):
+                if machinepool_id := config.ENV_DATA.get("machine_pool"):
+                    rosa.label_nodes(
+                        self.cluster_name, machinepool_id, node_labels, rewrite=False
+                    )
 
         logger.info("generate kubeconfig and kubeadmin-password files")
         if config.ENV_DATA["ms_env_type"] == "staging":
@@ -149,7 +155,10 @@ class ROSAOCP(BaseOCPDeployment):
             log_step(f"Destroying ROSA cluster. Hosted CP: {rosa_hcp}")
             delete_status = rosa.destroy_appliance_mode_cluster(self.cluster_name)
             if not delete_status:
-                ocm.destroy_cluster(self.cluster_name)
+                if rosa_hcp:
+                    destroy_rosa_cluster(self.cluster_name)
+                else:
+                    ocm.destroy_cluster(self.cluster_name)
             log_step("Waiting for ROSA cluster to be uninstalled")
             sample = TimeoutSampler(
                 timeout=14400,

@@ -996,22 +996,25 @@ def verify_storage_cluster():
     """
     Verify storage cluster status
     """
-    storage_cluster_name = config.ENV_DATA["storage_cluster_name"]
-    log.info("Verifying status of storage cluster: %s", storage_cluster_name)
-    storage_cluster = StorageCluster(
-        resource_name=storage_cluster_name,
-        namespace=config.ENV_DATA["cluster_namespace"],
-    )
-    log.info(f"Check if StorageCluster: {storage_cluster_name} is in Succeeded phase")
-    if config.ENV_DATA.get("platform") == constants.FUSIONAAS_PLATFORM:
-        timeout = 1000
-    elif storage_cluster.data["spec"].get("resourceProfile") != storage_cluster.data[
-        "status"
-    ].get("lastAppliedResourceProfile"):
-        timeout = 1800
-    else:
-        timeout = 600
-    storage_cluster.wait_for_phase(phase="Ready", timeout=timeout)
+    with config.RunWithProviderConfigContextIfAvailable():
+        storage_cluster_name = config.ENV_DATA["storage_cluster_name"]
+        log.info("Verifying status of storage cluster: %s", storage_cluster_name)
+        storage_cluster = StorageCluster(
+            resource_name=storage_cluster_name,
+            namespace=config.ENV_DATA["cluster_namespace"],
+        )
+        log.info(
+            f"Check if StorageCluster: {storage_cluster_name} is in Succeeded phase"
+        )
+        if config.ENV_DATA.get("platform") == constants.FUSIONAAS_PLATFORM:
+            timeout = 1000
+        elif storage_cluster.data["spec"].get(
+            "resourceProfile"
+        ) != storage_cluster.data["status"].get("lastAppliedResourceProfile"):
+            timeout = 1800
+        else:
+            timeout = 600
+        storage_cluster.wait_for_phase(phase="Ready", timeout=timeout)
 
     # verify storage cluster version
     if not config.ENV_DATA.get("disable_storage_cluster_version_check"):
@@ -1026,28 +1029,29 @@ def verify_storage_cluster_version(storage_cluster):
         storage_cluster (obj): storage cluster object
 
     """
-    # verify storage cluster version
-    if config.RUN["cli_params"].get("deploy") and not config.UPGRADE.get(
-        "upgrade_ocs_version"
-    ):
-        log.info("Verifying storage cluster version")
-        try:
-            storage_cluster_version = storage_cluster.get()["status"]["version"]
-            ocs_csv = get_ocs_csv()
-            csv_version = ocs_csv.data["spec"]["version"]
-            assert (
-                storage_cluster_version in csv_version
-            ), f"storage cluster version {storage_cluster_version} is not same as csv version {csv_version}"
-        except KeyError as e:
-            if (
-                config.ENV_DATA.get("platform", "").lower()
-                in constants.MANAGED_SERVICE_PLATFORMS
-            ):
-                # This is a workaround. The issue for tracking is
-                # https://github.com/red-hat-storage/ocs-ci/issues/8390
-                log.warning(f"Can't get the sc version due to the error: {str(e)}")
-            else:
-                raise e
+    with config.RunWithProviderConfigContextIfAvailable():
+        # verify storage cluster version
+        if config.RUN["cli_params"].get("deploy") and not config.UPGRADE.get(
+            "upgrade_ocs_version"
+        ):
+            log.info("Verifying storage cluster version")
+            try:
+                storage_cluster_version = storage_cluster.get()["status"]["version"]
+                ocs_csv = get_ocs_csv()
+                csv_version = ocs_csv.data["spec"]["version"]
+                assert (
+                    storage_cluster_version in csv_version
+                ), f"storage cluster version {storage_cluster_version} is not same as csv version {csv_version}"
+            except KeyError as e:
+                if (
+                    config.ENV_DATA.get("platform", "").lower()
+                    in constants.MANAGED_SERVICE_PLATFORMS
+                ):
+                    # This is a workaround. The issue for tracking is
+                    # https://github.com/red-hat-storage/ocs-ci/issues/8390
+                    log.warning(f"Can't get the sc version due to the error: {str(e)}")
+                else:
+                    raise e
 
 
 def verify_storage_device_class(device_class):
@@ -1395,18 +1399,19 @@ def in_transit_encryption_verification():
     intransit_config_state = get_in_transit_encryption_config_state()
 
     def search_secure_keys():
-        ceph_dump_data = ceph_config_dump()
-        keys_found = [
-            record["name"]
-            for record in ceph_dump_data
-            if record["name"] in keys_to_match
-        ]
+        with config.RunWithProviderConfigContextIfAvailable():
+            ceph_dump_data = ceph_config_dump()
+            keys_found = [
+                record["name"]
+                for record in ceph_dump_data
+                if record["name"] in keys_to_match
+            ]
 
-        if (intransit_config_state) and (len(keys_found) != len(keys_to_match)):
-            raise ValueError("Not all secure keys are present in the config")
+            if (intransit_config_state) and (len(keys_found) != len(keys_to_match)):
+                raise ValueError("Not all secure keys are present in the config")
 
-        if (not intransit_config_state) and (len(keys_found) > 0):
-            raise ValueError("Some secure keys are Still in the config")
+            if (not intransit_config_state) and (len(keys_found) > 0):
+                raise ValueError("Some secure keys are Still in the config")
 
         return keys_found
 
@@ -1440,22 +1445,27 @@ def get_in_transit_encryption_config_state():
         bool: True if in-transit encryption is enabled, False if it is disabled, or None if an error occurred.
 
     """
-    cluster_name = (
-        constants.DEFAULT_CLUSTERNAME_EXTERNAL_MODE
-        if storagecluster_independent_check()
-        else constants.DEFAULT_CLUSTERNAME
-    )
+    with config.RunWithProviderConfigContextIfAvailable():
+        cluster_name = (
+            constants.DEFAULT_CLUSTERNAME_EXTERNAL_MODE
+            if storagecluster_independent_check()
+            else constants.DEFAULT_CLUSTERNAME
+        )
 
-    ocp_obj = StorageCluster(
-        resource_name=cluster_name,
-        namespace=config.ENV_DATA["cluster_namespace"],
-    )
+        ocp_obj = StorageCluster(
+            resource_name=cluster_name,
+            namespace=config.ENV_DATA["cluster_namespace"],
+        )
 
-    try:
-        return ocp_obj.data["spec"]["network"]["connections"]["encryption"]["enabled"]
-    except KeyError as e:
-        log.error(f"In-transit Encryption key {e}. not present in the storagecluster.")
-        return False
+        try:
+            return ocp_obj.data["spec"]["network"]["connections"]["encryption"][
+                "enabled"
+            ]
+        except KeyError as e:
+            log.error(
+                f"In-transit Encryption key {e}. not present in the storagecluster."
+            )
+            return False
 
 
 def set_in_transit_encryption(enabled=True):
@@ -1477,27 +1487,30 @@ def set_in_transit_encryption(enabled=True):
         log.info("Existing in-transit encryption state is same as desire state.")
         return True
 
-    cluster_name = (
-        constants.DEFAULT_CLUSTERNAME_EXTERNAL_MODE
-        if storagecluster_independent_check()
-        else constants.DEFAULT_CLUSTERNAME
-    )
+    with config.RunWithProviderConfigContextIfAvailable():
+        cluster_name = (
+            constants.DEFAULT_CLUSTERNAME_EXTERNAL_MODE
+            if storagecluster_independent_check()
+            else constants.DEFAULT_CLUSTERNAME
+        )
 
-    ocp_obj = StorageCluster(
-        resource_name=cluster_name,
-        namespace=config.ENV_DATA["cluster_namespace"],
-    )
+        ocp_obj = StorageCluster(
+            resource_name=cluster_name,
+            namespace=config.ENV_DATA["cluster_namespace"],
+        )
 
-    patch = {"spec": {"network": {"connections": {"encryption": {"enabled": enabled}}}}}
-    action = "enable" if enabled else "disable"
-    log.info(f"Patching storage class to {action} in-transit encryption.")
+        patch = {
+            "spec": {"network": {"connections": {"encryption": {"enabled": enabled}}}}
+        }
+        action = "enable" if enabled else "disable"
+        log.info(f"Patching storage class to {action} in-transit encryption.")
 
-    if not ocp_obj.patch(params=json.dumps(patch), format_type="merge"):
-        log.error(f"Error {action} in-transit encryption.")
-        return False
+        if not ocp_obj.patch(params=json.dumps(patch), format_type="merge"):
+            log.error(f"Error {action} in-transit encryption.")
+            return False
 
-    log.info(f"In-transit encryption is {action}d successfully.")
-    ocp_obj.wait_for_phase("Progressing", timeout=60)
+        log.info(f"In-transit encryption is {action}d successfully.")
+        ocp_obj.wait_for_phase("Progressing", timeout=60)
     verify_storage_cluster()
     return True
 
@@ -1645,8 +1658,8 @@ def add_capacity_lso(ui_flag=False):
     deviceset_count = get_deviceset_count()
     if is_flexible_scaling_enabled():
         log.info("Add 2 disk to same node")
-        add_disk_to_node(node_objs[0])
-        add_disk_to_node(node_objs[0])
+        add_disk_to_node(node_objs[0], ssd=True)
+        add_disk_to_node(node_objs[0], ssd=True)
         num_available_pv = 2
         set_count = deviceset_count + 2
     else:
@@ -1655,9 +1668,9 @@ def add_capacity_lso(ui_flag=False):
             config.DEPLOYMENT.get("arbiter_deployment") is True
             and num_available_pv == 4
         ):
-            add_disk_stretch_arbiter()
+            add_disk_stretch_arbiter(ssd=True)
         else:
-            add_new_disk_for_vsphere(sc_name=constants.LOCALSTORAGE_SC)
+            add_new_disk_for_vsphere(sc_name=constants.LOCALSTORAGE_SC, ssd=True)
         set_count = deviceset_count + 1
     localstorage.check_pvs_created(num_pvs_required=num_available_pv)
     if ui_add_capacity_conditions() and ui_flag:

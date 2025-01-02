@@ -861,7 +861,9 @@ class MCG:
             )
             assert False
 
-    def exec_mcg_cmd(self, cmd, namespace=None, use_yes=False, **kwargs):
+    def exec_mcg_cmd(
+        self, cmd, namespace=None, use_yes=False, ignore_error=False, **kwargs
+    ):
         """
         Executes an MCG CLI command through the noobaa-operator pod's CLI binary
 
@@ -887,12 +889,14 @@ class MCG:
         if use_yes:
             result = exec_cmd(
                 [f"yes | {constants.NOOBAA_OPERATOR_LOCAL_CLI_PATH} {cmd} {namespace}"],
+                ignore_error=ignore_error,
                 shell=True,
                 **kwargs,
             )
         else:
             result = exec_cmd(
                 f"{constants.NOOBAA_OPERATOR_LOCAL_CLI_PATH} {cmd} {namespace}",
+                ignore_error=ignore_error,
                 **kwargs,
             )
         result.stdout = result.stdout.decode()

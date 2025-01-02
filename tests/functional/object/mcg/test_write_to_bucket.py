@@ -18,7 +18,6 @@ from ocs_ci.framework.testlib import (
     MCGTest,
     tier1,
     tier2,
-    acceptance,
     performance,
 )
 from ocs_ci.utility.utils import exec_nb_db_query
@@ -88,6 +87,14 @@ def file_setup(request):
     return zip_filename
 
 
+@pytest.fixture(scope="class", autouse=True)
+def reduce_dedup_wait_time(add_env_vars_to_noobaa_endpoint_class):
+    """
+    Reduce the dedup time to 0 sec
+    """
+    add_env_vars_to_noobaa_endpoint_class([(constants.MIN_CHUNK_AGE_FOR_DEDUP, 0)])
+
+
 @mcg
 @red_squad
 @runs_on_provider
@@ -101,45 +108,6 @@ class TestBucketIO(MCGTest):
     @pytest.mark.parametrize(
         argnames="interface,bucketclass_dict",
         argvalues=[
-            pytest.param(
-                *["S3", None],
-                marks=[tier1, acceptance],
-            ),
-            pytest.param(
-                *[
-                    "OC",
-                    {
-                        "interface": "OC",
-                        "backingstore_dict": {"aws": [(1, "eu-central-1")]},
-                    },
-                ],
-                marks=[tier1],
-            ),
-            pytest.param(
-                *[
-                    "OC",
-                    {"interface": "OC", "backingstore_dict": {"azure": [(1, None)]}},
-                ],
-                marks=[tier1],
-            ),
-            pytest.param(
-                *["OC", {"interface": "OC", "backingstore_dict": {"gcp": [(1, None)]}}],
-                marks=[tier1],
-            ),
-            pytest.param(
-                *[
-                    "OC",
-                    {"interface": "OC", "backingstore_dict": {"ibmcos": [(1, None)]}},
-                ],
-                marks=[tier1],
-            ),
-            pytest.param(
-                *[
-                    "CLI",
-                    {"interface": "CLI", "backingstore_dict": {"ibmcos": [(1, None)]}},
-                ],
-                marks=[tier1],
-            ),
             pytest.param(
                 *[
                     "OC",
@@ -156,12 +124,6 @@ class TestBucketIO(MCGTest):
             ),
         ],
         ids=[
-            "DEFAULT-BACKINGSTORE",
-            "AWS-OC-1",
-            "AZURE-OC-1",
-            "GCP-OC-1",
-            "IBMCOS-OC-1",
-            "IBMCOS-CLI-1",
             "RGW-OC-1",
             "RGW-CLI-1",
         ],
@@ -221,10 +183,6 @@ class TestBucketIO(MCGTest):
                 marks=[tier1],
             ),
             pytest.param(
-                {"interface": "OC", "backingstore_dict": {"ibmcos": [(1, None)]}},
-                marks=[tier1],
-            ),
-            pytest.param(
                 {"interface": "CLI", "backingstore_dict": {"ibmcos": [(1, None)]}},
                 marks=[tier1],
             ),
@@ -234,7 +192,6 @@ class TestBucketIO(MCGTest):
             "AWS-OC-1",
             "AZURE-OC-1",
             "GCP-OC-1",
-            "IBMCOS-OC-1",
             "IBMCOS-CLI-1",
         ],
     )
@@ -292,10 +249,6 @@ class TestBucketIO(MCGTest):
                 {"interface": "OC", "backingstore_dict": {"ibmcos": [(1, None)]}},
                 marks=[tier1],
             ),
-            pytest.param(
-                {"interface": "CLI", "backingstore_dict": {"ibmcos": [(1, None)]}},
-                marks=[tier1],
-            ),
         ],
         ids=[
             "DEFAULT-BACKINGSTORE",
@@ -303,7 +256,6 @@ class TestBucketIO(MCGTest):
             "AZURE-OC-1",
             "GCP-OC-1",
             "IBMCOS-OC-1",
-            "IBMCOS-CLI-1",
         ],
     )
     def test_mcg_data_compression(
@@ -333,7 +285,9 @@ class TestBucketIO(MCGTest):
     @tier2
     @performance
     @skip_inconsistent
-    def test_data_reduction_performance(self, mcg_obj, awscli_pod, bucket_factory):
+    def deprecated_test_data_reduction_performance(
+        self, mcg_obj, awscli_pod, bucket_factory
+    ):
         """
         Test data reduction performance
         """

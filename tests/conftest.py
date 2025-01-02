@@ -24,7 +24,7 @@ from ocs_ci.deployment.cnv import CNVInstaller
 from ocs_ci.deployment import factory as dep_factory
 from ocs_ci.deployment.helpers.hypershift_base import HyperShiftBase
 from ocs_ci.deployment.hosted_cluster import HostedClients
-from ocs_ci.framework import config as ocsci_config, Config
+from ocs_ci.framework import config as ocsci_config, Config, config
 import ocs_ci.framework.pytest_customization.marks
 from ocs_ci.framework.pytest_customization.marks import (
     deployment,
@@ -46,7 +46,7 @@ from ocs_ci.ocs.bucket_utils import (
     put_bucket_policy,
 )
 from ocs_ci.ocs.constants import FUSION_CONF_DIR
-from ocs_ci.ocs.cnv.virtual_machine import VirtualMachine
+from ocs_ci.ocs.cnv.virtual_machine import VirtualMachine, VMCloner
 from ocs_ci.ocs.dr.dr_workload import (
     BusyBox,
     BusyBox_AppSet,
@@ -197,7 +197,7 @@ from ocs_ci.helpers.longevity_helpers import (
 )
 from ocs_ci.ocs.longevity import start_app_workload
 from ocs_ci.utility.decorators import switch_to_default_cluster_index_at_last
-
+from ocs_ci.helpers.keyrotation_helper import PVKeyrotation
 
 log = logging.getLogger(__name__)
 
@@ -860,6 +860,8 @@ def storageclass_factory_fixture(
         allow_volume_expansion=True,
         kernelMountOptions=None,
         annotations=None,
+        mapOptions=None,
+        mounter=None,
     ):
         """
         Args:
@@ -886,6 +888,8 @@ def storageclass_factory_fixture(
             allow_volume_expansion (bool): True to Allows volume expansion
             kernelMountOptions (str): Mount option for security context
             annotations (dict): dict of annotation to be added to the storageclass.
+            mapOptions (str): mapOtions match the configuration of ocs-storagecluster-ceph-rbd-virtualization SC
+            mounter (str): mounter to match the configuration of ocs-storagecluster-ceph-rbd-virtualization SC
 
         Returns:
             object: helpers.create_storage_class instance with links to
@@ -925,6 +929,8 @@ def storageclass_factory_fixture(
                 allow_volume_expansion=allow_volume_expansion,
                 kernelMountOptions=kernelMountOptions,
                 annotations=annotations,
+                mapOptions=mapOptions,
+                mounter=mounter,
             )
             assert sc_obj, f"Failed to create {interface} storage class"
             sc_obj.secret = secret
@@ -3268,6 +3274,7 @@ def install_logging(request):
     * The teardown will uninstall cluster-logging from the cluster
 
     """
+    rosa_hcp_depl = config.ENV_DATA.get("platform") == constants.ROSA_HCP_PLATFORM
 
     def finalizer():
         uninstall_cluster_logging()
@@ -3291,18 +3298,15 @@ def install_logging(request):
     logging_channel = "stable" if ocp_version >= version.VERSION_4_7 else ocp_version
 
     # Creates namespace openshift-operators-redhat
-    try:
-        ocp_logging_obj.create_namespace(yaml_file=constants.EO_NAMESPACE_YAML)
-    except CommandFailed as e:
-        if "AlreadyExists" in str(e):
-            # on Rosa HCP the ns created from the deployment
-            log.info("Namespace openshift-operators-redhat already exists")
-        else:
-            raise
+    ocp_logging_obj.create_namespace(
+        yaml_file=constants.EO_NAMESPACE_YAML, skip_resource_exists=rosa_hcp_depl
+    )
 
     # Creates an operator-group for elasticsearch
     assert ocp_logging_obj.create_elasticsearch_operator_group(
-        yaml_file=constants.EO_OG_YAML, resource_name="openshift-operators-redhat"
+        yaml_file=constants.EO_OG_YAML,
+        resource_name="openshift-operators-redhat",
+        skip_resource_exists=rosa_hcp_depl,
     )
 
     # Set RBAC policy on the project
@@ -3325,11 +3329,13 @@ def install_logging(request):
     )
 
     # Creates a namespace openshift-logging
-    ocp_logging_obj.create_namespace(yaml_file=constants.CL_NAMESPACE_YAML)
+    ocp_logging_obj.create_namespace(
+        yaml_file=constants.CL_NAMESPACE_YAML, skip_resource_exists=rosa_hcp_depl
+    )
 
     # Creates an operator-group for cluster-logging
     assert ocp_logging_obj.create_clusterlogging_operator_group(
-        yaml_file=constants.CL_OG_YAML
+        yaml_file=constants.CL_OG_YAML, skip_resource_exists=rosa_hcp_depl
     )
 
     # Creates subscription for cluster-logging
@@ -5698,6 +5704,9 @@ def nsfs_interface_fixture(request, service_account_factory):
         nsfs_deployment_data["metadata"]["name"] = create_unique_resource_name(
             "nsfs-interface", "deployment"
         )
+        nsfs_deployment_data["metadata"]["namespace"] = ocsci_config.ENV_DATA[
+            "cluster_namespace"
+        ]
         uid = nsfs_deployment_data["metadata"]["name"].split("-")[-1]
         nsfs_deployment_data["spec"]["selector"]["matchLabels"]["app"] += f"-{uid}"
         nsfs_deployment_data["spec"]["template"]["metadata"]["labels"][
@@ -7053,6 +7062,7 @@ def cnv_workload(request):
         storageclass=constants.DEFAULT_CNV_CEPH_RBD_SC,
         pvc_size="30Gi",
         source_url=constants.CNV_CENTOS_SOURCE,
+        existing_pvc_obj=None,
         namespace=None,
     ):
         """
@@ -7062,6 +7072,7 @@ def cnv_workload(request):
             storageclass (str): The name of the storage class to use. Default is `constants.DEFAULT_CNV_CEPH_RBD_SC`.
             pvc_size (str): The size of the PVC. Default is "30Gi".
             source_url (str): The URL of the vm registry image. Default is `constants.CNV_CENTOS_SOURCE`.
+            existing_pvc_obj (obj, optional): PVC object to use existing pvc as a backend volume to VM
             namespace (str, optional): The namespace to create the vm on. Default, creates a unique namespace.
 
         Returns:
@@ -7076,6 +7087,7 @@ def cnv_workload(request):
             sc_name=storageclass,
             pvc_size=pvc_size,
             source_url=source_url,
+            existing_pvc_obj=existing_pvc_obj,
         )
         cnv_workloads.append(cnv_wl)
         return cnv_workloads
@@ -7085,8 +7097,159 @@ def cnv_workload(request):
         Cleans up the CNV workloads
 
         """
-        for cnv_wl in cnv_workloads:
+        # Iterating from end so that restored VMs are deleted before source
+        for cnv_wl in cnv_workloads[::-1]:
             cnv_wl.delete()
+
+    request.addfinalizer(teardown)
+    return factory
+
+
+@pytest.fixture()
+def multi_cnv_workload(
+    pv_encryption_kms_setup_factory, storageclass_factory, cnv_workload
+):
+    """
+    Fixture to create virtual machines (VMs) with specific configurations.
+
+    This fixture sets up multiple VMs with varying storage configurations as specified
+    in the `cnv_vm_workload.yaml`. Each VM configuration includes the volume interface type,
+    access mode, and the storage class to be used.
+
+    The configurations applied to the VMs are:
+    - Volume interface: `VM_VOLUME_PVC` or `VM_VOLUME_DVT`
+    - Access mode: `ACCESS_MODE_RWX` or `ACCESS_MODE_RWO`
+    - Storage class: Custom storage classes, including default compression and aggressive profiles.
+
+    """
+
+    def factory(namespace=None):
+        """
+        Args:
+            namespace (str, optional): The namespace to create the vm on.
+
+        Returns:
+            tuple: tuple containing:
+                vm_list_default_compr(list): objects of cnv workload class with default comp
+                vm_list_agg_compr(list): objects of cnv workload class with aggressive compression
+                sc_obj_def_compr(list): objects of storage class with default comp
+                sc_obj_aggressive(list): objects of storage class with aggressive compression
+
+        """
+        vm_list_agg_compr = []
+        vm_list_default_compr = []
+
+        namespace = (
+            namespace if namespace else create_unique_resource_name("vm", "namespace")
+        )
+
+        # Setup csi-kms-connection-details configmap
+        log.info("Setting up csi-kms-connection-details configmap")
+        kms = pv_encryption_kms_setup_factory(kv_version="v2")
+        log.info("csi-kms-connection-details setup successful")
+
+        # Create an encryption enabled storageclass for RBD
+        sc_obj_def_compr = storageclass_factory(
+            interface=constants.CEPHBLOCKPOOL,
+            encrypted=True,
+            encryption_kms_id=kms.kmsid,
+            new_rbd_pool=True,
+            mapOptions="krbd:rxbounce",
+            mounter="rbd",
+        )
+
+        sc_obj_aggressive = storageclass_factory(
+            interface=constants.CEPHBLOCKPOOL,
+            encrypted=True,
+            encryption_kms_id=kms.kmsid,
+            compression="aggressive",
+            new_rbd_pool=True,
+            mapOptions="krbd:rxbounce",
+            mounter="rbd",
+        )
+
+        storage_classes = [sc_obj_def_compr, sc_obj_aggressive]
+
+        # Create ceph-csi-kms-token in the tenant namespace
+        kms.vault_path_token = kms.generate_vault_token()
+        kms.create_vault_csi_kms_token(namespace=namespace)
+
+        for sc_obj in storage_classes:
+            pvk_obj = PVKeyrotation(sc_obj)
+            pvk_obj.annotate_storageclass_key_rotation(schedule="*/3 * * * *")
+
+        # Load VMconfigs from cnv_vm_workload yaml
+        vm_configs = templating.load_yaml(constants.CNV_VM_WORKLOADS)
+
+        # Loop through vm_configs and create the VMs using the cnv_workload fixture
+        for index, vm_config in enumerate(vm_configs["cnv_vm_configs"]):
+            # Determine the storage class based on the compression type
+            if vm_config["sc_compression"] == "default":
+                storageclass = sc_obj_def_compr.name
+            elif vm_config["sc_compression"] == "aggressive":
+                storageclass = sc_obj_aggressive.name
+            vm_obj = cnv_workload(
+                volume_interface=vm_config["volume_interface"],
+                access_mode=vm_config["access_mode"],
+                storageclass=storageclass,
+                pvc_size="30Gi",  # Assuming pvc_size is fixed for all
+                source_url=constants.CNV_FEDORA_SOURCE,  # Assuming source_url is the same for all VMs
+                namespace=namespace,
+            )[index]
+            if vm_config["sc_compression"] == "aggressive":
+                vm_list_agg_compr.append(vm_obj)
+            else:
+                vm_list_default_compr.append(vm_obj)
+        return (
+            vm_list_default_compr,
+            vm_list_agg_compr,
+            sc_obj_def_compr,
+            sc_obj_aggressive,
+        )
+
+    return factory
+
+
+@pytest.fixture()
+def clone_vm_workload(request):
+    """
+    Clones VM workloads
+
+    """
+    cloned_vms = []
+
+    def factory(
+        vm_obj,
+        volume_interface=None,
+        namespace=None,
+    ):
+        """
+        Args:
+            vm_obj (VirtualMachine): Object of source vm to clone
+            volume_interface (str): The type of volume interface to use. Default is `constants.VM_VOLUME_PVC`.
+            namespace (str, optional): The namespace to create the vm on. Default, creates a unique namespace.
+
+        Returns:
+            list: objects of VM clone class
+
+        """
+        clone_vm_name = create_unique_resource_name("clone", "vm")
+        clone_vm_obj = VMCloner(vm_name=clone_vm_name, namespace=namespace)
+        volume_iface = volume_interface if volume_interface else vm_obj.volume_interface
+        clone_vm_obj.clone_vm(
+            source_vm_obj=vm_obj,
+            volume_interface=volume_iface,
+        )
+        cloned_vms.append(clone_vm_obj)
+        return cloned_vms
+
+    def teardown():
+        """
+        Cleans up cloned vm workloads
+
+        """
+        for vm_wl in cloned_vms:
+            vm_wl.delete()
 
     request.addfinalizer(teardown)
     return factory
@@ -7438,7 +7601,7 @@ def add_env_vars_to_noobaa_core_fixture(request, mcg_obj_session):
 @pytest.fixture(scope="class")
 def add_env_vars_to_noobaa_endpoint_class(request, mcg_obj_session):
     """
-    Class-scoped fixture for adding env vars to the noobaa-core sts
+    Class-scoped fixture for adding env vars to the noobaa-endpoint sts
 
     """
     return add_env_vars_to_noobaa_endpoint_fixture(request, mcg_obj_session)
@@ -8026,7 +8189,7 @@ def scale_noobaa_resources(request):
         storagecluster_obj = OCP(
             kind=constants.STORAGECLUSTER,
             resource_name=constants.DEFAULT_STORAGE_CLUSTER,
-            namespace=constants.OPENSHIFT_STORAGE_NAMESPACE,
+            namespace=config.ENV_DATA["cluster_namespace"],
         )
 
         scale_endpoint_pods_param = (
@@ -8343,7 +8506,7 @@ def scale_noobaa_db_pod_pv_size(request):
                 get_pods_having_label(
                     label=label,
                     retry=5,
-                    namespace=constants.OPENSHIFT_STORAGE_NAMESPACE,
+                    namespace=config.ENV_DATA["cluster_namespace"],
                 )
             )
 
@@ -8368,7 +8531,7 @@ def scale_noobaa_db_pod_pv_size(request):
                 get_pods_having_label(
                     label=label,
                     retry=5,
-                    namespace=constants.OPENSHIFT_STORAGE_NAMESPACE,
+                    namespace=config.ENV_DATA["cluster_namespace"],
                 )
             )
 

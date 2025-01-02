@@ -17,6 +17,7 @@ import time
 import inspect
 import stat
 import platform
+import ipaddress
 from concurrent.futures import ThreadPoolExecutor
 from itertools import cycle
 from subprocess import PIPE, run
@@ -615,7 +616,7 @@ def create_ceph_block_pool(
 
 
 def create_ceph_file_system(
-    cephfs_name=None, label=None, namespace=constants.OPENSHIFT_STORAGE_NAMESPACE
+    cephfs_name=None, label=None, namespace=config.ENV_DATA["cluster_namespace"]
 ):
     """
     Create a Ceph file system
@@ -756,6 +757,8 @@ def create_storage_class(
     allow_volume_expansion=True,
     kernelMountOptions=None,
     annotations=None,
+    mapOptions=None,
+    mounter=None,
 ):
     """
     Create a storage class
@@ -780,6 +783,9 @@ def create_storage_class(
         allow_volume_expansion(bool): True to create sc with volume expansion
         kernelMountOptions (str): Mount option for security context
         annotations(dict): dict of annotations to be added to the storageclass.
+        mapOptions (str): mapOtions match the configuration of ocs-storagecluster-ceph-rbd-virtualization storage class
+        mounter (str): mounter to match the configuration of ocs-storagecluster-ceph-rbd-virtualization storage class
+
     Returns:
         OCS: An OCS instance for the storage class
     """
@@ -832,6 +838,10 @@ def create_storage_class(
 
     if annotations:
         sc_data["metadata"]["annotations"] = annotations
+
+    if mapOptions and mounter:
+        sc_data["parameters"]["mapOptions"] = mapOptions
+        sc_data["parameters"]["mounter"] = mounter
 
     sc_data["parameters"]["clusterID"] = config.ENV_DATA["cluster_namespace"]
     sc_data["reclaimPolicy"] = reclaim_policy
@@ -4949,34 +4959,61 @@ def configure_node_network_configuration_policy_on_all_worker_nodes():
     # This function require changes for compact mode
     logger.info("Configure NodeNetworkConfigurationPolicy on all worker nodes")
     worker_node_names = get_worker_nodes()
+    interface_num = 0
     for worker_node_name in worker_node_names:
-        worker_network_configuration = config.ENV_DATA["baremetal"]["servers"][
-            worker_node_name
-        ]
         node_network_configuration_policy = templating.load_yaml(
             constants.NODE_NETWORK_CONFIGURATION_POLICY
         )
-        node_network_configuration_policy["spec"]["nodeSelector"][
-            "kubernetes.io/hostname"
-        ] = worker_node_name
-        node_network_configuration_policy["metadata"]["name"] = (
-            worker_network_configuration["node_network_configuration_policy_name"]
-        )
-        node_network_configuration_policy["spec"]["desiredState"]["interfaces"][0][
-            "ipv4"
-        ]["address"][0]["ip"] = worker_network_configuration[
-            "node_network_configuration_policy_ip"
-        ]
-        node_network_configuration_policy["spec"]["desiredState"]["interfaces"][0][
-            "ipv4"
-        ]["address"][0]["prefix-length"] = worker_network_configuration[
-            "node_network_configuration_policy_prefix_length"
-        ]
-        node_network_configuration_policy["spec"]["desiredState"]["routes"]["config"][
-            0
-        ]["destination"] = worker_network_configuration[
-            "node_network_configuration_policy_destination_route"
-        ]
+
+        if config.ENV_DATA["platform"] == constants.BAREMETAL_PLATFORM:
+            worker_network_configuration = config.ENV_DATA["baremetal"]["servers"][
+                worker_node_name
+            ]
+            node_network_configuration_policy["spec"]["nodeSelector"][
+                "kubernetes.io/hostname"
+            ] = worker_node_name
+            node_network_configuration_policy["metadata"]["name"] = (
+                worker_network_configuration["node_network_configuration_policy_name"]
+            )
+            node_network_configuration_policy["spec"]["desiredState"]["interfaces"][0][
+                "ipv4"
+            ]["address"][0]["ip"] = worker_network_configuration[
+                "node_network_configuration_policy_ip"
+            ]
+            node_network_configuration_policy["spec"]["desiredState"]["interfaces"][0][
+                "ipv4"
+            ]["address"][0]["prefix-length"] = worker_network_configuration[
+                "node_network_configuration_policy_prefix_length"
+            ]
+            node_network_configuration_policy["spec"]["desiredState"]["routes"][
+                "config"
+            ][0]["destination"] = worker_network_configuration[
+                "node_network_configuration_policy_destination_route"
+            ]
+        elif config.ENV_DATA["platform"] == constants.VSPHERE_PLATFORM:
+
+            node_network_configuration_policy["spec"]["nodeSelector"][
+                "kubernetes.io/hostname"
+            ] = worker_node_name
+
+            node_network_configuration_policy["metadata"][
+                "name"
+            ] = f"ceph-public-net-shim-{worker_node_name}"
+            shim_default_ip = node_network_configuration_policy["spec"]["desiredState"][
+                "interfaces"
+            ][0]["ipv4"]["address"][0]["ip"]
+
+            shim_ip = str(ipaddress.ip_address(shim_default_ip) + interface_num)
+            interface_num += 1
+
+            node_network_configuration_policy["spec"]["desiredState"]["interfaces"][0][
+                "ipv4"
+            ]["address"][0]["ip"] = shim_ip
+
+            node_network_configuration_policy["spec"]["desiredState"]["interfaces"][0][
+                "mac-vlan"
+            ]["base-iface"] = constants.VSPHERE_MULTUS_INTERFACE
+
         public_net_yaml = tempfile.NamedTemporaryFile(
             mode="w+", prefix="multus_public", delete=False
         )

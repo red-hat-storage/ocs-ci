@@ -25,7 +25,7 @@ class NodeConf:
     ```
     node_conf_data = {
     "instance_type": "m5.large",
-    "machinepool": "mypool",
+    "machinepool_id": "mypool",
     "multi_availability_zone": ""
     }
     node_conf = NodeConf(**node_conf_data)
@@ -43,7 +43,7 @@ class NodeConf:
         None  # replicas are historically a separate parameter in node related functions of create_node functions
     )
     instance_type: str = None
-    machinepool: str = None  # machinepool id (machinepool name)
+    machinepool_id: str = None  # machinepool id (machinepool name)
     subnet: Optional[str] = None
     availability_zone: Optional[str] = None
     disk_size: Optional[str] = None  # e.g., '300GiB - default value'
@@ -68,8 +68,8 @@ class NodeConf:
         node_conf_data = self._to_dict()
 
         if (
-            node_conf_data.get("machinepool")
-            and len(node_conf_data.get("machinepool")) > 14
+            node_conf_data.get("machinepool_id")
+            and len(node_conf_data.get("machinepool_id")) > 15
         ):
             raise ValueError(
                 "Machinepool name must be less than 15 characters or less."
@@ -118,7 +118,9 @@ class NodeConf:
 @dataclass
 class MachinePool:
     cluster_name: str
-    id: str = field(default="")  # machinepool id (machinepool name in NodeConf)
+    machinepool_id: str = field(
+        default=""
+    )  # machinepool id (machinepool name in NodeConf)
     auto_repair: Optional[bool] = field(default=None)
     availability_zone: Optional[str] = field(default=None)
     replicas: int = field(default=0)
@@ -135,12 +137,15 @@ class MachinePool:
     exist: bool = field(
         default=False
     )  # not a part of the data fetched from the cluster
+    labels: Dict[str, str] = field(default_factory=dict)
 
     def __post_init__(self):
         """Automatically populate fields by fetching machine pool details."""
-        if self.cluster_name and self.id:
+        if self.cluster_name and self.machinepool_id:
             if not self.instance_type or not self.replicas:
-                details = self.get_machinepool_details(self.cluster_name, self.id)
+                details = self.get_machinepool_details(
+                    self.cluster_name, self.machinepool_id
+                )
                 if details:
                     self.__dict__.update(details.__dict__)
                     self.exist = True
@@ -165,9 +170,19 @@ class MachinePool:
             tags=data.get("aws_node_pool", {}).get("tags", {}),
             node_drain_grace_period=f"{data.get('node_drain_grace_period', {}).get('value', 0)}"
             f"{data.get('node_drain_grace_period', {}).get('unit', '')}",
-            id=data.get("id"),
+            machinepool_id=data.get(
+                "id"
+            ),  # this parameter is different in node_conf and data fetched from machinepool
             cluster_name=cluster_name,
+            labels=data.get("labels", {}),
         )
+
+    def refresh(self):
+        """Refresh the machine pool details."""
+        details = self.get_machinepool_details(self.cluster_name, self.machinepool_id)
+        if details:
+            self.__dict__.update(details.__dict__)
+            self.exist = True
 
     def get_machinepool_updated_replicas(self) -> Dict[str, int]:
         """
@@ -176,7 +191,7 @@ class MachinePool:
         Returns:
             dict: { "replicas": <num>, "current_replicas": <num> }
         """
-        cmd = f"rosa describe machinepool --cluster {self.cluster_name} --machinepool {self.id} -o json"
+        cmd = f"rosa describe machinepool --cluster {self.cluster_name} --machinepool {self.machinepool_id} -o json"
         try:
             res = exec_cmd(cmd)
             data = json.loads(res.stdout.strip().decode())
@@ -186,7 +201,7 @@ class MachinePool:
             }
         except CommandFailed as ex:
             logger.error(
-                f"Failed to get replicas for machinepool '{self.id}' in cluster '{self.cluster_name}': {ex}"
+                f"Failed to get replicas for machinepool '{self.machinepool_id}' in cluster '{self.cluster_name}': {ex}"
             )
             return {}
 
@@ -299,7 +314,7 @@ class MachinePools:
             dict: {replicas: <num>, current_replicas: <num>}
         """
         for machinepool in self.machinepools:
-            if machinepool.id == machinepool_id:
+            if machinepool.machinepool_id == machinepool_id:
                 return {
                     "replicas": machinepool.replicas,
                     "current_replicas": machinepool.current_replicas,
@@ -311,7 +326,7 @@ class MachinePools:
     def filter(
         self,
         instance_type: str = None,
-        id: str = None,
+        machinepool_id: str = None,
         availability_zone: str = None,
         subnet: str = None,
         version_raw_id: str = None,
@@ -322,7 +337,7 @@ class MachinePools:
 
         Args:
             instance_type (str): The instance type to search for.
-            id (str): The machinepool ID to search for.
+            machinepool_id (str): The machinepool ID to search for.
             availability_zone (str): The availability zone to search for.
             subnet (str): The subnet to search for.
             version_raw_id (str): The version raw ID to search for.
@@ -330,13 +345,14 @@ class MachinePools:
 
 
         Returns:
+            MachinePool | List[MachinePool]: The filtered machine; if pick_first is True, return a single instance.
 
         """
         machinepools_filtered = []
         for machinepool in self.machinepools:
             if instance_type and machinepool.instance_type != instance_type:
                 continue
-            if id and machinepool.id != id:
+            if machinepool_id and machinepool.machinepool_id != machinepool_id:
                 continue
             if availability_zone and machinepool.availability_zone != availability_zone:
                 continue
@@ -349,7 +365,15 @@ class MachinePools:
             return (
                 machinepools_filtered[0]
                 if machinepools_filtered
-                else MachinePool(cluster_name=self.cluster_name)
+                else MachinePool.from_dict(
+                    {
+                        "id": machinepool_id,
+                        "availability_zone": availability_zone,
+                        "subnet": subnet,
+                        "version_raw_id": version_raw_id,
+                    },
+                    cluster_name=self.cluster_name,
+                )
             )
         else:
             return machinepools_filtered
@@ -365,7 +389,9 @@ class MachinePools:
         """
         run_create_machinepool(self.cluster_name, node_conf)
         self.load_all_machinepools()
-        mp = self.filter(id=node_conf.get("machinepool"), pick_first=True)
+        mp = self.filter(
+            machinepool_id=node_conf.get("machinepool_id"), pick_first=True
+        )
         mp.wait_replicas_ready(node_conf.get("replicas"))
         return mp
 
@@ -382,7 +408,9 @@ class MachinePools:
         """
         run_edit_machinepool(self.cluster_name, node_conf)
         self.load_all_machinepools()
-        mp = self.filter(id=node_conf.get("machinepool"), pick_first=True)
+        mp = self.filter(
+            machinepool_id=node_conf.get("machinepool_id"), pick_first=True
+        )
         if wait_ready:
             mp.wait_replicas_ready(node_conf.get("replicas"))
         return mp
@@ -444,15 +472,11 @@ def build_machinepool_cmd_base(cluster_name, node_conf, action):
             raise ValueError(
                 "When 'enable_autoscaling' is True, 'min_replicas' and 'max_replicas' are required."
             )
-    elif node_conf.get("replicas") is None:
-        raise ValueError(
-            "Parameter 'replicas' is required when autoscaling is disabled."
-        )
 
     cmd = f"rosa {action} machinepool --cluster {cluster_name} "
 
     if action == "create":
-        cmd += f"--name {node_conf.get('machinepool')} --instance-type {node_conf.get('instance_type', '')} --yes "
+        cmd += f"--name {node_conf.get('machinepool_id')} --instance-type {node_conf.get('instance_type', '')} --yes "
 
     if node_conf.get("disk_size", ""):
         cmd += f"--disk-size {str(node_conf.get('disk_size', ''))} "
@@ -489,9 +513,9 @@ def build_machinepool_cmd_base(cluster_name, node_conf, action):
 
     # TODO: add unique edit actions by necessity
     # edit action has another structure, it reacquires name as a last value, without parameter name, e.g.
-    # rosa edit machinepool --cluster <cluster_name> <machinepool_name>
+    # rosa edit machinepool_id --cluster <cluster_name> <machinepool_name>
     if action == "edit":
-        cmd += f" {node_conf.get('machinepool')} "
+        cmd += f" {node_conf.get('machinepool_id')} "
     return cmd
 
 
@@ -529,13 +553,13 @@ def run_edit_machinepool(cluster_name, node_conf):
     return exec_cmd(cmd)
 
 
-def run_delete_machinepool(cluster_name, machinepool_name):
+def run_delete_machinepool(cluster_name, machinepool_id):
     """
     Delete a specified machine pool from a ROSA cluster.
 
     Args:
         cluster_name (str): The name or ID of the cluster.
-        machinepool_name (str): The ID of the machine pool to delete.
+        machinepool_id (str): The ID of the machine pool to delete.
 
     Raises:
         ValueError: If the cluster name or machine pool name is invalid.
@@ -544,16 +568,16 @@ def run_delete_machinepool(cluster_name, machinepool_name):
     Returns:
         CompletedProcess: The result of the executed command
     """
-    if not cluster_name or not machinepool_name:
+    if not cluster_name or not machinepool_id:
         raise ValueError("Both 'cluster_name' and 'machinepool_name' are required.")
 
-    cmd = f"rosa delete machinepool -c {shlex.quote(cluster_name)} {shlex.quote(machinepool_name)} --yes"
+    cmd = f"rosa delete machinepool -c {shlex.quote(cluster_name)} {shlex.quote(machinepool_id)} --yes"
 
     try:
         return exec_cmd(cmd)
 
     except CommandFailed as ex:
         logger.error(
-            f"Failed to delete machinepool '{machinepool_name}' from cluster '{cluster_name}': {ex}"
+            f"Failed to delete machinepool '{machinepool_id}' from cluster '{cluster_name}': {ex}"
         )
         raise
