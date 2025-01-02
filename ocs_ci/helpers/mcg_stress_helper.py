@@ -43,7 +43,7 @@ def sync_object_directory_with_retry(
     timeout=None,
 ):
     sync_object_directory(
-        pod_obj=pod_obj,
+        podobj=pod_obj,
         src=src,
         target=target,
         s3_obj=s3_obj,
