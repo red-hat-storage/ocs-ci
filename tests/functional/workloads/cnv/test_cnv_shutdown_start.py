@@ -63,11 +63,9 @@ class TestVmShutdownStart(E2ETest):
             self.sc_obj_def_compr,
             self.sc_obj_aggressive,
         ) = multi_cnv_workload(namespace=proj_obj.namespace)
-
         logger.info("All vms created successfully")
 
-        all_vms = (self.vm_objs_def + self.vm_objs_aggr,)
-
+        all_vms = self.vm_objs_def + self.vm_objs_aggr
         for vm_obj in all_vms:
             source_csum = run_dd_io(vm_obj=vm_obj, file_path=file_paths[0], verify=True)
 
@@ -153,7 +151,7 @@ class TestVmShutdownStart(E2ETest):
         # Verify that VMs status post start
         all_vms[1].start()
         all_vms[2].start()
-        all_vms[3].unpause()
+
         # Perform post restart data integrity check
         for vm_obj in all_vms:
             new_csum = cal_md5sum_vm(vm_obj=vm_obj, file_path=file_paths[0])
