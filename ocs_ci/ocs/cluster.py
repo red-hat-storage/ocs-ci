@@ -3823,3 +3823,51 @@ def get_age_of_cluster_in_days():
     seconds_per_day = 24 * 60 * 60
     time_diff_in_days = time_difference_in_sec / seconds_per_day
     return math.ceil(time_diff_in_days)
+
+
+def get_ceph_pool_list():
+    """
+    The function get the ceph osd pool list
+
+    Returns:
+        list: The ceph osd pool list
+
+    Raises:
+        CommandFailed: In case the command failed
+
+    """
+    ceph_cmd = "ceph osd pool ls"
+    ct_pod = pod.get_ceph_tools_pod()
+    ceph_osd_pool_list = ct_pod.exec_ceph_cmd(ceph_cmd)
+
+    return ceph_osd_pool_list
+
+
+def check_ceph_pool_exist(pool_name):
+    """
+    Check if a specific Ceph OSD pool exists in the cluster.
+
+    Args:
+        pool_name (str): The name of the Ceph OSD pool to check.
+
+    Returns:
+        bool: True if the pool exists, False otherwise.
+
+    Raises:
+        CommandFailed: If the `get_ceph_pool_list` function fails to execute.
+
+    """
+    current_ceph_osd_pool_list = get_ceph_pool_list()
+    for current_pool_name in current_ceph_osd_pool_list:
+        if pool_name in current_pool_name:
+            logger.info(
+                f"Found the ceph osd pool name {current_pool_name} that matches "
+                f"the name {pool_name}"
+            )
+            return True
+
+    logger.warning(
+        f"Failed to find the pool name {pool_name} in the current "
+        f"ceph osd pool names {current_ceph_osd_pool_list}"
+    )
+    return False
