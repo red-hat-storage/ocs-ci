@@ -131,7 +131,7 @@ class TestInTransitEncryptionSanity:
                 assert (
                     self.toggle_intransit_encryption_state()
                 ), "Failed to change in-transit encryption state."
-                time.sleep(10)
+                time.sleep(5)
 
             # Wait for I/O operations to complete
             for future in futures:
