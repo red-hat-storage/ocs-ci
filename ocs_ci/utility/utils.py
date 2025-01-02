@@ -2042,11 +2042,11 @@ def get_ocs_build_number():
             operator_name = defaults.HCI_CLIENT_ODF_OPERATOR_NAME
     else:
         operator_name = defaults.OCS_OPERATOR_NAME
-    ocs_csvs = get_csvs_start_with_prefix(
-        operator_name,
-        config.ENV_DATA["cluster_namespace"],
-    )
     try:
+        ocs_csvs = get_csvs_start_with_prefix(
+            operator_name,
+            config.ENV_DATA["cluster_namespace"],
+        )
         ocs_csv = ocs_csvs[0]
         csv_labels = ocs_csv["metadata"]["labels"]
         if "full_version" in csv_labels:
@@ -3493,9 +3493,16 @@ def destroy_cluster(installer, cluster_path, log_level="DEBUG"):
         # Execute destroy cluster using OpenShift installer
         log.info(f"Destroying cluster defined in {cluster_path}")
         run_cmd(destroy_cmd, timeout=1200)
-    except CommandFailed:
-        log.error(traceback.format_exc())
-        raise
+    except CommandFailed as ex:
+        error_message = str(ex)
+        # Check for the specific "ResourceGroup not found" error
+        if re.search(r"ResourceGroup .* not found", error_message):
+            log.warning(
+                f"Resource group not found. Assuming cluster is already destroyed. Exception {error_message}"
+            )
+        else:
+            log.error(traceback.format_exc())
+            raise
     except Exception:
         log.error(traceback.format_exc())
 
