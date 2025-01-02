@@ -34,6 +34,23 @@ from ocs_ci.utility.prometheus import PrometheusAPI
 logger = logging.getLogger(__name__)
 
 
+@retry(CommandFailed, tries=3, delay=60, backoff=1)
+def sync_object_directory_with_retry(
+    pod_obj,
+    src,
+    target,
+    s3_obj=None,
+    timeout=None,
+):
+    sync_object_directory(
+        pod_obj=pod_obj,
+        src=src,
+        target=target,
+        s3_obj=s3_obj,
+        timeout=timeout,
+    )
+
+
 def upload_objs_to_buckets(
     mcg_obj, pod_obj, buckets, iteration_no, event=None, multiplier=1
 ):
@@ -66,7 +83,7 @@ def upload_objs_to_buckets(
                 )
                 for i in range(multiplier):
                     future = executor.submit(
-                        sync_object_directory,
+                        sync_object_directory_with_retry,
                         pod_obj,
                         src_path,
                         f"s3://{bucket.name}/{iteration_no}/{i+1}/",
