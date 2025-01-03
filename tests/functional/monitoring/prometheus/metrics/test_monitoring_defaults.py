@@ -18,7 +18,7 @@ from ocs_ci.framework.pytest_customization.marks import (
     provider_client_platform_required,
     provider_mode,
 )
-from ocs_ci.framework.testlib import skipif_ocs_version, tier1
+from ocs_ci.framework.testlib import tier1
 from ocs_ci.ocs import constants, ocp
 from ocs_ci.ocs import metrics
 from ocs_ci.ocs.resources import pod
@@ -120,61 +120,58 @@ def test_ceph_mgr_dashboard_not_deployed():
 
 
 @skipif_mcg_only
-@blue_squad
-@skipif_ocs_version("<4.6")
-@metrics_for_external_mode_required
-@tier1
-@pytest.mark.polarion_id("OCS-1267")
 @skipif_managed_service
-@runs_on_provider
-def test_ceph_rbd_metrics_available(threading_lock):
-    """
-    Ceph RBD metrics should be provided via OCP Prometheus as well.
-    See also: https://ceph.com/rbd/new-in-nautilus-rbd-performance-monitoring/
-    """
-    prometheus = PrometheusAPI(threading_lock=threading_lock)
-    list_of_metrics_without_results = metrics.get_missing_metrics(
-        prometheus, metrics.ceph_rbd_metrics
-    )
-    msg = (
-        "OCS Monitoring should provide some value(s) for tested rbd metrics, "
-        "so that the list of metrics without results is empty."
-    )
-    assert list_of_metrics_without_results == [], msg
+class TestCephMonitoringAvailable:
+    @blue_squad
+    @metrics_for_external_mode_required
+    @tier1
+    @pytest.mark.polarion_id("OCS-1267")
+    @runs_on_provider
+    def test_ceph_rbd_metrics_available(self, threading_lock, enable_rbd_metrics):
+        """
+        Ceph RBD metrics should be provided via OCP Prometheus as well.
+        See also: https://ceph.com/rbd/new-in-nautilus-rbd-performance-monitoring/
+        """
+        prometheus = PrometheusAPI(threading_lock=threading_lock)
+        list_of_metrics_without_results = metrics.get_missing_metrics(
+            prometheus, metrics.ceph_rbd_metrics
+        )
+        msg = (
+            "OCS Monitoring should provide some value(s) for tested rbd metrics, "
+            "so that the list of metrics without results is empty."
+        )
+        assert list_of_metrics_without_results == [], msg
 
+    @provider_mode
+    @blue_squad
+    @tier1
+    @pytest.mark.bugzilla("2203795")
+    @metrics_for_external_mode_required
+    @pytest.mark.polarion_id("OCS-1268")
+    @runs_on_provider
+    def test_ceph_metrics_available(self, threading_lock, enable_rbd_metrics):
+        """
+        Ceph metrics as listed in KNIP-634 should be provided via OCP Prometheus.
 
-@provider_mode
-@skipif_mcg_only
-@blue_squad
-@tier1
-@pytest.mark.bugzilla("2203795")
-@metrics_for_external_mode_required
-@pytest.mark.polarion_id("OCS-1268")
-@skipif_managed_service
-@runs_on_provider
-def test_ceph_metrics_available(threading_lock):
-    """
-    Ceph metrics as listed in KNIP-634 should be provided via OCP Prometheus.
+        Ceph Object Gateway https://docs.ceph.com/docs/master/radosgw/ is
+        deployed on on-prem platforms only (such as VMWare - see BZ 1763150),
+        so this test case ignores failures for ceph_rgw_* and ceph_objecter_*
+        metrics when running on cloud platforms (such as AWS).
 
-    Ceph Object Gateway https://docs.ceph.com/docs/master/radosgw/ is
-    deployed on on-prem platforms only (such as VMWare - see BZ 1763150),
-    so this test case ignores failures for ceph_rgw_* and ceph_objecter_*
-    metrics when running on cloud platforms (such as AWS).
-
-    Since ODF 4.9 only subset of all ceph metrics ``ceph_metrics_healthy`` will
-    be always available, as noted in BZ 2028649.
-    """
-    prometheus = PrometheusAPI(threading_lock=threading_lock)
-    list_of_metrics_without_results = metrics.get_missing_metrics(
-        prometheus,
-        metrics.ceph_metrics_healthy,
-        current_platform=config.ENV_DATA["platform"].lower(),
-    )
-    msg = (
-        "OCS Monitoring should provide some value(s) for all tested metrics, "
-        "so that the list of metrics without results is empty."
-    )
-    assert list_of_metrics_without_results == [], msg
+        Since ODF 4.9 only subset of all ceph metrics ``ceph_metrics_healthy`` will
+        be always available, as noted in BZ 2028649.
+        """
+        prometheus = PrometheusAPI(threading_lock=threading_lock)
+        list_of_metrics_without_results = metrics.get_missing_metrics(
+            prometheus,
+            metrics.ceph_metrics_healthy,
+            current_platform=config.ENV_DATA["platform"].lower(),
+        )
+        msg = (
+            "OCS Monitoring should provide some value(s) for all tested metrics, "
+            "so that the list of metrics without results is empty."
+        )
+        assert list_of_metrics_without_results == [], msg
 
 
 @bugzilla("2238400")
