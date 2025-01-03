@@ -25,7 +25,7 @@ class TestNoobaaUnderStress:
     def test_noobaa_under_stress(
         self,
         setup_stress_testing_bucket,
-        nb_stress_cli_pod,
+        nb_stress_cli_pods,
         mcg_obj_session,
         rgw_obj_session,
         stress_test_directory_setup,
@@ -46,8 +46,15 @@ class TestNoobaaUnderStress:
             3. At the end delete objects from all the bucket in batches
 
         """
+
+        # Get pod objects
+        nb_stress_cli_pod_1 = nb_stress_cli_pods[0]
+        nb_stress_cli_pod_2 = nb_stress_cli_pods[1]
+
         # Scale noobaa pod resources
-        scale_noobaa_resources_session(cpu=2, memory="5Gi")
+        scale_noobaa_resources_session(
+            min_ep_count=2, max_ep_count=2, cpu=2, memory="10Gi"
+        )
 
         # Start the background check process running
         bg_event = Event()
@@ -67,7 +74,7 @@ class TestNoobaaUnderStress:
             # Upload objects to the buckets created concurrently
             upload_objs_to_buckets(
                 mcg_obj_session,
-                nb_stress_cli_pod,
+                nb_stress_cli_pod_1,
                 self.base_setup_buckets,
                 iteration_no=0,
             )
@@ -96,7 +103,7 @@ class TestNoobaaUnderStress:
                     executor.submit(
                         upload_objs_to_buckets,
                         mcg_obj_session,
-                        nb_stress_cli_pod,
+                        nb_stress_cli_pod_1,
                         self.base_setup_buckets,
                         iteration_no=iteration_no,
                         event=event,
@@ -111,7 +118,7 @@ class TestNoobaaUnderStress:
                     executor.submit(
                         run_noobaa_metadata_intense_ops,
                         mcg_obj_session,
-                        nb_stress_cli_pod,
+                        nb_stress_cli_pod_2,
                         bucket_factory,
                         bucket,
                         iteration_no=i,
@@ -126,7 +133,7 @@ class TestNoobaaUnderStress:
                 futures_obj.append(
                     executor.submit(
                         delete_objs_from_bucket,
-                        nb_stress_cli_pod,
+                        nb_stress_cli_pod_2,
                         bucket,
                         iteration_no=i,
                         event=event,
@@ -153,7 +160,7 @@ class TestNoobaaUnderStress:
                 futures_obj.append(
                     executor.submit(
                         download_objs_from_bucket,
-                        nb_stress_cli_pod,
+                        nb_stress_cli_pod_2,
                         bucket,
                         stress_test_directory_setup.result_dir,
                         iteration_no=i,
@@ -161,9 +168,6 @@ class TestNoobaaUnderStress:
                     )
                 )
                 buckets.remove(bucket)
-                nb_stress_cli_pod.exec_cmd_on_pod(
-                    f"rm -rf {stress_test_directory_setup.result_dir}/"
-                )
 
                 # Wait until all the object operations are done
                 logger.info(

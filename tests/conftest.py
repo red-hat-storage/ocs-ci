@@ -3017,7 +3017,7 @@ def javasdk_pod_fixture(request, scope_name):
 
 
 @pytest.fixture(scope="session")
-def nb_stress_cli_pod(request):
+def nb_stress_cli_pods(request):
     """
     A session scoped fixture to create stress cli pod
 
@@ -3068,24 +3068,32 @@ def nb_stress_cli_pod_fixture(request, scope_name):
 
     log.info("Verifying the AWS CLI StatefulSet is running")
     assert stress_cli_sts_obj, "Failed to create S3CLI STS"
-    stress_cli_pod_obj = retry(IndexError, tries=3, delay=15)(
-        lambda: Pod(
-            **get_pods_having_label(constants.STRESS_CLI_APP_LABEL, namespace)[0]
-        )
-    )()
-    wait_for_resource_state(stress_cli_pod_obj, constants.STATUS_RUNNING, timeout=180)
 
-    stress_cli_pod_obj.exec_cmd_on_pod(
-        f"cp {constants.SERVICE_CA_CRT_AWSCLI_PATH} {constants.AWSCLI_CA_BUNDLE_PATH}"
+    wait_for_pods_by_label_count(
+        constants.STRESS_CLI_APP_LABEL, exptected_count=2, namespace=namespace
     )
+    stress_cli_pod_objs = retry(IndexError, tries=3, delay=15)(
+        lambda: [
+            Pod(**pod_info)
+            for pod_info in get_pods_having_label(
+                constants.STRESS_CLI_APP_LABEL, namespace
+            )
+        ]
+    )()
+    for pod_obj in stress_cli_pod_objs:
+        wait_for_resource_state(pod_obj, constants.STATUS_RUNNING, timeout=180)
 
-    if storagecluster_independent_check() and ocsci_config.EXTERNAL_MODE.get(
-        "rgw_secure"
-    ):
-        log.info("Concatenating the RGW CA to the Stress CLI pod's CA bundle")
-        stress_cli_pod_obj.exec_cmd_on_pod(
-            f"bash -c 'wget -O - {ocsci_config.EXTERNAL_MODE['rgw_cert_ca']} >> {constants.AWSCLI_CA_BUNDLE_PATH}'"
+        pod_obj.exec_cmd_on_pod(
+            f"cp {constants.SERVICE_CA_CRT_AWSCLI_PATH} {constants.AWSCLI_CA_BUNDLE_PATH}"
         )
+
+        if storagecluster_independent_check() and ocsci_config.EXTERNAL_MODE.get(
+            "rgw_secure"
+        ):
+            log.info("Concatenating the RGW CA to the Stress CLI pod's CA bundle")
+            pod_obj.exec_cmd_on_pod(
+                f"bash -c 'wget -O - {ocsci_config.EXTERNAL_MODE['rgw_cert_ca']} >> {constants.AWSCLI_CA_BUNDLE_PATH}'"
+            )
 
     def cleanup():
         """
@@ -3100,16 +3108,16 @@ def nb_stress_cli_pod_fixture(request, scope_name):
         service_ca_configmap.delete()
 
     request.addfinalizer(cleanup)
-    return stress_cli_pod_obj
+    return stress_cli_pod_objs
 
 
 @pytest.fixture()
-def stress_test_directory_setup(request, nb_stress_cli_pod):
+def stress_test_directory_setup(request, nb_stress_cli_pods):
     """
     Setup test directories on noobaa stress CLI pod
 
     """
-    return test_directory_setup_fixture(request, nb_stress_cli_pod)
+    return test_directory_setup_fixture(request, nb_stress_cli_pods[1])
 
 
 @pytest.fixture()
