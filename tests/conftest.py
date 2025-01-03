@@ -1515,6 +1515,7 @@ def dc_pod_factory(request, pvc_factory, service_account_factory):
         custom_data=None,
         node_name=None,
         node_selector=None,
+        project=None,
         replica_count=1,
         raw_block_pv=False,
         sa_obj=None,
@@ -1546,7 +1547,10 @@ def dc_pod_factory(request, pvc_factory, service_account_factory):
             dc_pod_obj = helpers.create_resource(**custom_data)
         else:
             pvc = pvc or pvc_factory(
-                interface=interface, size=size, access_mode=access_mode
+                interface=interface,
+                size=size,
+                access_mode=access_mode,
+                project=project,
             )
             sa_obj = sa_obj or service_account_factory(
                 project=pvc.project, service_account=service_account
