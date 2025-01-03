@@ -1,4 +1,6 @@
 import logging
+from subprocess import CompletedProcess
+
 import pytest
 
 from ocs_ci.framework.testlib import (
@@ -10,7 +12,6 @@ from ocs_ci.framework.testlib import (
 from ocs_ci.ocs import constants
 from ocs_ci.helpers import helpers
 
-from ocs_ci.utility.utils import run_cmd
 from ocs_ci.framework.testlib import ignore_leftovers
 
 logger = logging.getLogger(__name__)
@@ -20,6 +21,11 @@ logger = logging.getLogger(__name__)
 @ignore_leftovers
 @green_squad
 class TestSubvolumesCommand(ManageTest):
+
+    @pytest.fixture(autouse=True)
+    def setup(self, odf_cli_setup):
+        self.odf_cli_runner = odf_cli_setup
+
     @skipif_ocs_version("<4.15")
     @pytest.mark.polarion_id("OCS-5794")
     def test_pvc_stale_volume_cleanup_cli(self, storageclass_factory, pvc_factory):
@@ -31,11 +37,9 @@ class TestSubvolumesCommand(ManageTest):
         5. Check for stale volumes
         6. No stale volumes should be present of the deleted PVC.
         """
-        from pathlib import Path
 
-        if not Path(constants.CLI_TOOL_LOCAL_PATH).exists():
-            helpers.retrieve_cli_binary(cli_type="odf")
-        output = run_cmd(cmd="odf-cli subvolume ls")
+        output = self.odf_cli_runner.run_command("subvolume ls")
+
         inital_subvolume_list = self.parse_subvolume_ls_output(output)
         logger.info(f"{inital_subvolume_list=}")
         cephfs_sc_obj = storageclass_factory(
@@ -49,7 +53,8 @@ class TestSubvolumesCommand(ManageTest):
             access_mode=constants.ACCESS_MODE_RWX,
             status=constants.STATUS_BOUND,
         )
-        output = run_cmd(cmd="odf-cli subvolume ls")
+
+        output = self.odf_cli_runner.run_command("subvolume ls")
         later_subvolume_list = self.parse_subvolume_ls_output(output)
         old = set(inital_subvolume_list)
         new = set(later_subvolume_list)
@@ -61,14 +66,19 @@ class TestSubvolumesCommand(ManageTest):
         pvc_obj.delete()
 
         # Deleteing stale subvolume
-        run_cmd(cmd=f"odf-cli subvolume delete {new_pvc[0]} {new_pvc[1]} {new_pvc[2]}")
+        self.odf_cli_runner.run_command(
+            f"subvolume delete {new_pvc[0]} {new_pvc[1]} {new_pvc[2]}"
+        )
 
         # Checking for stale volumes
-        output = run_cmd(cmd="odf-cli subvolume ls --stale")
+        output = self.odf_cli_runner.run_command("subvolume ls --stale")
         stale_volumes = self.parse_subvolume_ls_output(output)
         assert len(stale_volumes) == 0  # No stale volumes available
 
     def parse_subvolume_ls_output(self, output):
+        if isinstance(output, CompletedProcess):
+            output = output.stdout.decode("utf-8")
+
         subvolumes = []
         subvolumes_list = output.strip().split("\n")[1:]
         for item in subvolumes_list:
@@ -95,11 +105,8 @@ class TestSubvolumesCommand(ManageTest):
         5. Check for stale volumes
         6. No stale volumes should be present of the deleted PVC.
         """
-        from pathlib import Path
 
-        if not Path(constants.CLI_TOOL_LOCAL_PATH).exists():
-            helpers.retrieve_cli_binary(cli_type="odf")
-        output = run_cmd(cmd="odf-cli subvolume ls")
+        output = self.odf_cli_runner.run_command("subvolume ls")
         inital_subvolume_list = self.parse_subvolume_ls_output(output)
         logger.info(f"{inital_subvolume_list=}")
         cephfs_sc_obj = storageclass_factory(
@@ -131,7 +138,7 @@ class TestSubvolumesCommand(ManageTest):
             timeout=300,
         )
 
-        output = run_cmd(cmd="odf-cli subvolume ls")
+        output = self.odf_cli_runner.run_command("subvolume ls")
         later_subvolume_list = self.parse_subvolume_ls_output(output)
         old = set(inital_subvolume_list)
         new = set(later_subvolume_list)
@@ -149,14 +156,14 @@ class TestSubvolumesCommand(ManageTest):
         )
         pv_created_by_original_pvc.delete(wait=True)
 
-        # Checking for stale volumes
-        output = run_cmd(cmd="odf-cli subvolume ls --stale")
-
+        self.odf_cli_runner.run_command("subvolume ls --stale")
         # Deleteing stale subvolume
-        run_cmd(cmd=f"odf-cli subvolume delete {new_pvc[0]} {new_pvc[1]} {new_pvc[2]}")
+        self.odf_cli_runner.run_command(
+            f"subvolume delete {new_pvc[0]} {new_pvc[1]} {new_pvc[2]}"
+        )
 
         # Checking for stale volumes
-        output = run_cmd(cmd="odf-cli subvolume ls --stale")
+        output = self.odf_cli_runner.run_command("subvolume ls --stale")
         stale_volumes = self.parse_subvolume_ls_output(output)
         assert len(stale_volumes) == 0  # No stale volumes available
 
@@ -179,11 +186,8 @@ class TestSubvolumesCommand(ManageTest):
         7. Run script
         8. No stale volumes should be present of the deleted PVC and its snapshot.
         """
-        from pathlib import Path
 
-        if not Path(constants.CLI_TOOL_LOCAL_PATH).exists():
-            helpers.retrieve_cli_binary(cli_type="odf")
-        output = run_cmd(cmd="odf-cli subvolume ls")
+        output = self.odf_cli_runner.run_command("subvolume ls")
         inital_subvolume_list = self.parse_subvolume_ls_output(output)
         logger.info(f"{inital_subvolume_list=}")
         cephfs_sc_obj = storageclass_factory(
@@ -204,7 +208,7 @@ class TestSubvolumesCommand(ManageTest):
         snapshot_obj = snapshot_factory(pvc_obj, wait=False)
         logger.info("Verify snapshots moved from false state to true state")
 
-        output = run_cmd(cmd="odf-cli subvolume ls")
+        output = self.odf_cli_runner.run_command("subvolume ls")
         later_subvolume_list = self.parse_subvolume_ls_output(output)
         old = set(inital_subvolume_list)
         new = set(later_subvolume_list)
@@ -221,7 +225,7 @@ class TestSubvolumesCommand(ManageTest):
         pv_created_by_original_pvc.delete(wait=True)
 
         # Checking for stale volumes
-        output = run_cmd(cmd="odf-cli subvolume ls --stale")
+        output = self.odf_cli_runner.run_command("subvolume ls --stale")
         stale_with_snapshot_subvolume = self.parse_subvolume_ls_output(output)[0]
         logger.info(f"{stale_with_snapshot_subvolume=}")
         assert stale_with_snapshot_subvolume[3] == "stale-with-snapshot"
@@ -230,9 +234,11 @@ class TestSubvolumesCommand(ManageTest):
         snapshot_obj.delete(wait=True)
 
         # Deleteing stale subvolume
-        run_cmd(cmd=f"odf-cli subvolume delete {new_pvc[0]} {new_pvc[1]} {new_pvc[2]}")
+        self.odf_cli_runner.run_command(
+            f"subvolume delete {new_pvc[0]} {new_pvc[1]} {new_pvc[2]}"
+        )
 
         # Checking for stale volumes
-        output = run_cmd(cmd="odf-cli subvolume ls --stale")
+        output = self.odf_cli_runner.run_command("subvolume ls --stale")
         stale_volumes = self.parse_subvolume_ls_output(output)
         assert len(stale_volumes) == 0  # No stale volumes available
