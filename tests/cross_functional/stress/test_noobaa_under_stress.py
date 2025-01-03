@@ -52,7 +52,7 @@ class TestNoobaaUnderStress:
         nb_stress_cli_pod_2 = nb_stress_cli_pods[1]
 
         # Scale noobaa pod resources
-        scale_noobaa_resources_session(cpu=4, memory="10Gi")
+        scale_noobaa_resources_session(cpu=2, memory="10Gi")
 
         # Start the background check process running
         bg_event = Event()
