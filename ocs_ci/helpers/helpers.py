@@ -5619,3 +5619,109 @@ def apply_custom_taint_and_toleration(taint_label="xyz"):
             )
             for pod_obj in pod_list:
                 pod_obj.delete(wait=False)
+
+
+def create_ceph_block_pool_for_deviceclass(
+    device_class,
+    pool_name=None,
+    namespace=None,
+    replica=3,
+    failure_domain=None,
+    verify=True,
+):
+    """
+    Create a Ceph block pool for a device class
+
+    Args:
+        device_class (str): The device class name
+        pool_name (str): The pool name to create
+        namespace (str): The pool namespace
+        replica (int): The replica size for a pool
+        failure_domain (str): Failure domain name
+        verify (bool): True to verify the pool exists after creation. False otherwise
+
+    Returns:
+        OCS: The OCS instance for the Ceph block pool
+
+    """
+    cbp_data = templating.load_yaml(constants.CEPHBLOCKPOOL_YAML)
+    cbp_data["metadata"]["name"] = (
+        pool_name if pool_name else create_unique_resource_name("test", "cbp")
+    )
+    cbp_data["metadata"]["namespace"] = (
+        namespace or config.ENV_DATA["cluster_namespace"]
+    )
+    cbp_data["spec"]["deviceClass"] = device_class
+    cbp_data["spec"]["replicated"]["size"] = replica
+    cbp_data["spec"]["failureDomain"] = failure_domain or get_failure_domin()
+
+    cbp_obj = create_resource(**cbp_data)
+    cbp_obj.reload()
+
+    if verify:
+        assert verify_block_pool_exists(
+            cbp_obj.name
+        ), f"Block pool {cbp_obj.name} does not exist"
+    return cbp_obj
+
+
+def create_lvs_resource(storageclass, worker_nodes=None, min_size=None, max_size=None):
+    """
+    Create the LocalVolumeSet resource.
+
+    Args:
+        storageclass (string): storageClassName value to be used in
+            LocalVolumeSet CR based on LOCAL_VOLUME_YAML
+        worker_nodes (list): The worker node names to be used in the LocalVolumeSet resource
+        min_size (str): The min size to be used in the LocalVolumeSet resource
+        max_size (str): The max size to be used in the LocalVolumeSet resource
+
+    Returns:
+        OCS: The OCS instance for the LocalVolumeSet resource
+
+    """
+    worker_nodes = worker_nodes or node.get_worker_nodes()
+
+    # Pull local volume set yaml data
+    logger.info("Pulling LocalVolumeSet CR data from yaml")
+    lvs_data = templating.load_yaml(constants.LOCAL_VOLUME_SET_YAML)
+
+    # Since we don't have datastore with SSD on our current VMware machines, localvolumeset doesn't detect
+    # NonRotational disk. As a workaround we are setting Rotational to device MechanicalProperties to detect
+    # HDD disk
+    if config.ENV_DATA.get(
+        "local_storage_allow_rotational_disks"
+    ) or config.ENV_DATA.get("odf_provider_mode_deployment"):
+        logger.info(
+            "Adding Rotational for deviceMechanicalProperties spec"
+            " to detect HDD disk"
+        )
+        lvs_data["spec"]["deviceInclusionSpec"]["deviceMechanicalProperties"].append(
+            "Rotational"
+        )
+
+    if min_size:
+        lvs_data["spec"]["deviceInclusionSpec"]["minSize"] = min_size
+    if max_size:
+        lvs_data["spec"]["deviceInclusionSpec"]["maxSize"] = max_size
+    # Update local volume set data with Worker node Names
+    logger.info(
+        "Updating LocalVolumeSet CR data with worker nodes Name: %s", worker_nodes
+    )
+    lvs_data["spec"]["nodeSelector"]["nodeSelectorTerms"][0]["matchExpressions"][0][
+        "values"
+    ] = worker_nodes
+
+    # Set storage class
+    logger.info(
+        "Updating LocalVolumeSet CR data with LSO storageclass: %s", storageclass
+    )
+    lvs_data["spec"]["storageClassName"] = storageclass
+
+    # set volumeMode to Filesystem for MCG only deployment
+    if config.ENV_DATA["mcg_only_deployment"]:
+        lvs_data["spec"]["volumeMode"] = constants.VOLUME_MODE_FILESYSTEM
+
+    lvs_obj = create_resource(**lvs_data)
+    lvs_obj.reload()
+    return lvs_obj
