@@ -5,7 +5,9 @@ from ocs_ci.framework.pytest_customization.marks import (
     stretchcluster_required,
     turquoise_squad,
     polarion_id,
+    tier1,
 )
+from ocs_ci.helpers.cnv_helpers import cal_md5sum_vm
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.resources.pod import wait_for_pods_to_be_in_statuses
 
@@ -15,9 +17,11 @@ from ocs_ci.ocs.resources.stretchcluster import StretchCluster
 logger = logging.getLogger(__name__)
 
 
+@tier1
 @stretchcluster_required
 @turquoise_squad
 class TestDeviceReplacementInStretchCluster:
+
     @polarion_id("OCS-5047")
     def test_device_replacement(
         self,
@@ -56,11 +60,11 @@ class TestDeviceReplacementInStretchCluster:
         logger.info("All the workloads pods are successfully up and running")
 
         # setup vm and write some data to the VM instance
-        vm_obj = cnv_workload(volume_interface=constants.VM_VOLUME_PVC)[0]
+        vm_obj = cnv_workload(volume_interface=constants.VM_VOLUME_PVC)
         vm_obj.run_ssh_cmd(
             command="dd if=/dev/zero of=/file_1.txt bs=1024 count=102400"
         )
-        md5sum_before = vm_obj.run_ssh_cmd(command="md5sum /file_1.txt")
+        md5sum_before = cal_md5sum_vm(vm_obj, file_path="/file_1.txt")
 
         start_time = datetime.now(timezone.utc)
 
@@ -77,7 +81,7 @@ class TestDeviceReplacementInStretchCluster:
         logger.info("Successfully verified with post failure checks for the workloads")
 
         # check vm data written before the failure for integrity
-        md5sum_after = vm_obj.run_ssh_cmd(command="md5sum /file_1.txt")
+        md5sum_after = cal_md5sum_vm(vm_obj, file_path="/file_1.txt")
         assert (
             md5sum_before == md5sum_after
         ), "Data integrity of the file inside VM is not maintained during the device replacement"
