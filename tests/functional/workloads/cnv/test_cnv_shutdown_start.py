@@ -27,14 +27,14 @@ class TestVmShutdownStart(E2ETest):
     @pytest.mark.polarion_id("OCS-6304")
     def test_vm_abrupt_shutdown_cluster(
         self,
-        multi_cnv_workload,
-        nodes,
-        project_factory,
-        cnv_workload,
-        clone_vm_workload,
         setup_cnv,
+        project_factory,
+        multi_cnv_workload,
+        clone_vm_workload,
         snapshot_factory,
         snapshot_restore_factory,
+        cnv_workload,
+        nodes,
     ):
         """
         This test performs the behaviour of VMs and data integrity after abrupt shutdown of cluster
@@ -157,6 +157,10 @@ class TestVmShutdownStart(E2ETest):
         # Verify that VMs status post start
         all_vms[1].start()
         all_vms[2].start()
+
+        # Verifies vm status after start and ssh connectivity
+        all_vms[1].verify_vm(verify_ssh=True)
+        all_vms[2].verify_vm(verify_ssh=True)
 
         # Perform post restart data integrity check
         for vm_obj in all_vms:
