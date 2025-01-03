@@ -5,7 +5,9 @@ from datetime import datetime, timezone
 from ocs_ci.framework.pytest_customization.marks import (
     turquoise_squad,
     stretchcluster_required,
+    tier1,
 )
+from ocs_ci.helpers.cnv_helpers import cal_md5sum_vm
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.resources import storage_cluster
 from ocs_ci.ocs.resources.pod import (
@@ -18,6 +20,7 @@ from ocs_ci.ocs.resources.stretchcluster import StretchCluster
 logger = logging.getLogger(__name__)
 
 
+@tier1
 @turquoise_squad
 @stretchcluster_required
 class TestAddCapacityStretchCluster:
@@ -85,6 +88,7 @@ class TestAddCapacityStretchCluster:
         setup_logwriter_rbd_workload_factory,
         logreader_workload_factory,
         iterations,
+        setup_cnv,
         cnv_workload,
     ):
         """
@@ -109,11 +113,11 @@ class TestAddCapacityStretchCluster:
         logger.info("All the workloads pods are successfully up and running")
 
         # setup vm and write some data to the VM instance
-        vm_obj = cnv_workload(volume_interface=constants.VM_VOLUME_PVC)[0]
+        vm_obj = cnv_workload(volume_interface=constants.VM_VOLUME_PVC)
         vm_obj.run_ssh_cmd(
             command="dd if=/dev/zero of=/file_1.txt bs=1024 count=102400"
         )
-        md5sum_before = vm_obj.run_ssh_cmd(command="md5sum /file_1.txt")
+        md5sum_before = cal_md5sum_vm(vm_obj, file_path="/file_1.txt")
 
         start_time = datetime.now(timezone.utc)
 
@@ -132,7 +136,7 @@ class TestAddCapacityStretchCluster:
         logger.info("Successfully verified with post failure checks for the workloads")
 
         # check vm data written before the failure for integrity
-        md5sum_after = vm_obj.run_ssh_cmd(command="md5sum /file_1.txt")
+        md5sum_after = cal_md5sum_vm(vm_obj, file_path="/file_1.txt")
         assert (
             md5sum_before == md5sum_after
         ), "Data integrity of the file inside VM is not maintained during the add capacity"
