@@ -10,6 +10,7 @@ from ocs_ci.framework.pytest_customization.marks import (
     polarion_id,
     stretchcluster_required,
     turquoise_squad,
+    tier2,
 )
 from ocs_ci.helpers.cnv_helpers import cal_md5sum_vm
 from ocs_ci.helpers.helpers import modify_deployment_replica_count
@@ -181,6 +182,7 @@ def setup_cnv_workload(request, cnv_workload_class, setup_cnv):
     request.addfinalizer(finalizer)
 
 
+@tier2
 @turquoise_squad
 @stretchcluster_required
 @pytest.mark.usefixtures("setup_cnv_workload")
