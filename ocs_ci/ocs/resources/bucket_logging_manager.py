@@ -414,27 +414,34 @@ class BucketLoggingManager:
             )
             raise
 
-    def get_bucket_logs(self, logs_bucket, source_bucket=None):
+    def get_bucket_logs(self, logs_bucket, source_bucket=None, prefix=""):
         """
         Get the logs from a logs bucket
 
         Args:
             logs_bucket(str): Name of the logs bucket
             source_bucket(str|optional): Filter logs by source bucket
+            prefix(str|optional): Look for logs under a specific prefix
 
         Returns:
             list: A list of dicts, deserialized from the JSON logs
         """
         logs = []
+
         log_objs = list_objects_from_bucket(
+            prefix=f"{prefix}/" if prefix else "",
             pod_obj=self.awscli_pod,
             target=logs_bucket,
             s3_obj=self.mcg_obj,
         )
+
+        s3_bucket_path = f"s3://{logs_bucket}"
+        s3_bucket_path += f"/{prefix}" if prefix else ""
+
         for log_obj in log_objs:
             log_file_str = self.awscli_pod.exec_cmd_on_pod(
                 craft_s3_command(
-                    f"cp s3://{logs_bucket}/{log_obj} -",
+                    f"cp {s3_bucket_path}/{log_obj} -",
                     mcg_obj=self.mcg_obj,
                 ),
                 out_yaml_format=False,
