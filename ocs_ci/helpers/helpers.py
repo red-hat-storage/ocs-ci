@@ -6071,37 +6071,65 @@ def create_network_fence(node_name, cidr):
     """
     Create NetworkFence for the node
 
+    Args:
+        node_name (str): Name of the node
+        cidr (str): cidr
+
+    Returns:
+        OCS: NetworkFence object
+
     """
-    logger.info("Creating NetworkFence")
-    network_fence_dict = templating.load_yaml(constants.NETWORK_FENCE_CRD)
-    network_fence_dict["metadata"]["name"] = node_name
-    network_fence_dict["spec"]["cidrs"][0] = cidr
-    network_fence_obj = create_resource(**network_fence_dict)
-    if network_fence_obj.ocp.get(resource_name=network_fence_obj.name, dont_raise=True):
-        logger.info(
-            f"NetworkFence {network_fence_obj.name} for node {node_name} created successfully"
-        )
+    network_fence_obj = OCP(
+        kind=constants.NETWORK_FENCE,
+        namespace=config.ENV_DATA["cluster_namespace"],
+        resource_name=node_name,
+    )
+
+    if not network_fence_obj.get(resource_name=node_name, dont_raise=True):
+        logger.info("Creating NetworkFence")
+        network_fence_dict = templating.load_yaml(constants.NETWORK_FENCE_CRD)
+        network_fence_dict["metadata"]["name"] = node_name
+        network_fence_dict["spec"]["cidrs"][0] = cidr
+        network_fence_obj = create_resource(**network_fence_dict)
+        if network_fence_obj.ocp.get(
+            resource_name=network_fence_obj.name, dont_raise=True
+        ):
+            logger.info(
+                f"NetworkFence {network_fence_obj.name} for node {node_name} created successfully"
+            )
+    else:
+        logger.info(f"Network fence object for {node_name} already exists!")
+    return network_fence_obj
 
 
-def unfence_node(node_name):
+def unfence_node(node_name, delete=False):
     """
     Un-fence node
 
     Args:
         node_name (str): Name of the node
+        delete (bool): If True, delete the network fence object
 
     """
 
     network_fence_obj = OCP(
         kind=constants.NETWORK_FENCE, namespace=config.ENV_DATA["cluster_namespace"]
     )
-    network_fence_obj.patch(
-        resource_name=node_name,
-        params='{"spec":{"fenceState":"Unfenced"}}',
-        format_type="merge",
-    )
-    assert (
-        network_fence_obj.get(resource_name=node_name)["spec"]["fenceState"] != "Fenced"
-    ), f"{node_name} doesnt seem to be unfenced"
-    logger.info(f"Unfenced node {node_name} successfully!")
 
+    if network_fence_obj.get(resource_name=node_name, dont_raise=True):
+        network_fence_obj.patch(
+            resource_name=node_name,
+            params='{"spec":{"fenceState":"Unfenced"}}',
+            format_type="merge",
+        )
+        assert (
+            network_fence_obj.get(resource_name=node_name)["spec"]["fenceState"]
+            != "Fenced"
+        ), f"{node_name} doesnt seem to be unfenced"
+        logger.info(f"Unfenced node {node_name} successfully!")
+
+        if delete:
+            network_fence_obj.delete(resource_name=node_name)
+            logger.info(f"Deleted network fence object for node {node_name}")
+    else:
+        logger.info(f"No networkfence found for node {node_name}")
