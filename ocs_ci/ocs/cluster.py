@@ -69,6 +69,19 @@ from ocs_ci.utility.decorators import switch_to_orig_index_at_last
 logger = logging.getLogger(__name__)
 
 
+class CephClusterMultiCluster(object):
+    """
+    TODO: Implement this class later
+    This class will be used in case of multicluster scenario
+    and current cluster is ACM hence this cluster should point to
+    the ODF which is not in current context
+
+    """
+
+    def __init__(self, cluster_conf=None):
+        pass
+
+
 class CephCluster(object):
     """
     Handles all cluster related operations from ceph perspective
@@ -84,11 +97,17 @@ class CephCluster(object):
         namespace (str): openshift Namespace where this cluster lives
     """
 
-    def __init__(self):
+    def __init__(self, cluster_config=None):
         """
         Cluster object initializer, this object needs to be initialized
         after cluster deployment. However its harmless to do anywhere.
         """
+        if cluster_config:
+            logger.info(
+                "CephClusterMulticluster will be used to handle multicluster case"
+            )
+            return CephClusterMultiCluster()
+
         if config.ENV_DATA["mcg_only_deployment"] or (
             config.ENV_DATA.get("platform") == constants.FUSIONAAS_PLATFORM
             and config.ENV_DATA["cluster_type"].lower() == "consumer"
@@ -1035,6 +1054,18 @@ class CephCluster(object):
         self.RBD.exec_oc_cmd(f"patch {patch}")
 
 
+class MulticlusterCephHealthMonitor(object):
+    # TODO: This will be a placeholder for now
+    def __init__(self, ceph_cluster=None):
+        pass
+
+    def __enter__(self):
+        pass
+
+    def __exit__(self, exception_type, value, traceback):
+        pass
+
+
 class CephHealthMonitor(threading.Thread):
     """
     Context manager class for monitoring ceph health status of CephCluster.
@@ -1052,6 +1083,8 @@ class CephHealthMonitor(threading.Thread):
             sleep (int): Number of seconds to sleep between health checks.
 
         """
+        if isinstance(ceph_cluster, CephClusterMultiCluster):
+            return MulticlusterCephHealthMonitor()
         self.ceph_cluster = ceph_cluster
         self.sleep = sleep
         self.health_error_status = None

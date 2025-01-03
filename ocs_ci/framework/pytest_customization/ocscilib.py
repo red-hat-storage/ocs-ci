@@ -264,6 +264,16 @@ def pytest_addoption(parser):
         ),
     )
     parser.addoption(
+        "--acm-version",
+        dest="acm_version",
+        help="acm version(e.g. 2.8) to be used for the current run",
+    )
+    parser.addoption(
+        "--upgrade-acm-version",
+        dest="upgrade_acm_version",
+        help="acm version to upgrade(e.g. 2.8), use only with DR upgrade scenario",
+    )
+    parser.addoption(
         "--flexy-env-file", dest="flexy_env_file", help="Path to flexy environment file"
     )
     parser.addoption(
@@ -567,6 +577,11 @@ def process_cluster_cli_params(config):
     upgrade_ocs_version = get_cli_param(config, "upgrade_ocs_version")
     if upgrade_ocs_version:
         ocsci_config.UPGRADE["upgrade_ocs_version"] = upgrade_ocs_version
+        # Storing previous version explicitly
+        # Useful in DR upgrade scenarios
+        ocsci_config.UPGRADE["pre_upgrade_ocs_version"] = ocsci_config.ENV_DATA[
+            "ocs_version"
+        ]
     ocs_registry_image = get_cli_param(config, f"ocs_registry_image{suffix}")
     if ocs_registry_image:
         ocsci_config.DEPLOYMENT["ocs_registry_image"] = ocs_registry_image
@@ -661,6 +676,12 @@ def process_cluster_cli_params(config):
     if custom_kubeconfig_location:
         os.environ["KUBECONFIG"] = custom_kubeconfig_location
         ocsci_config.RUN["kubeconfig"] = custom_kubeconfig_location
+    acm_version = get_cli_param(config, "--acm-version")
+    if acm_version:
+        ocsci_config.ENV_DATA["acm_version"] = acm_version
+    upgrade_acm_version = get_cli_param(config, "--upgrade-acm-version")
+    if upgrade_acm_version:
+        ocsci_config.UPGRADE["upgrade_acm_version"] = upgrade_acm_version
 
 
 def pytest_collection_modifyitems(session, config, items):

@@ -13,6 +13,7 @@ from datetime import datetime
 from math import floor
 from shutil import copyfile, rmtree
 from functools import partial
+from copy import deepcopy
 
 import boto3
 import yaml
@@ -33,6 +34,7 @@ from ocs_ci.framework.pytest_customization.marks import (
     ignore_leftover_label,
     upgrade_marks,
     ignore_resource_not_found_error_label,
+    config_index,
 )
 
 from ocs_ci.helpers.proxy import update_container_with_proxy_env
@@ -150,6 +152,10 @@ from ocs_ci.utility.kms import is_kms_enabled, get_ksctl_cli
 from ocs_ci.utility.prometheus import PrometheusAPI
 from ocs_ci.utility.reporting import update_live_must_gather_image
 from ocs_ci.utility.retry import retry
+from ocs_ci.utility.multicluster import (
+    get_multicluster_upgrade_parametrizer,
+    MultiClusterUpgradeParametrize,
+)
 from ocs_ci.utility.uninstall_openshift_logging import uninstall_cluster_logging
 from ocs_ci.utility.utils import (
     ceph_health_check,
@@ -340,6 +346,30 @@ def export_squad_marker_to_csv(items, filename=None):
     log.info("%s tests require action across %s files", num_tests, num_files)
 
 
+def pytest_generate_tests(metafunc):
+    """
+    This hook handles pytest dynamic pytest parametrization of tests related to
+    Multicluster scenarios
+
+    Args:
+        metafunc (pytest fixture): metafunc pytest object to access info about
+            test function and its parameters
+
+    """
+    # For now we are only dealing with multicluster scenarios in this hook
+    if ocsci_config.multicluster:
+        upgrade_parametrizer = get_multicluster_upgrade_parametrizer()
+        # for various roles which are applicable to current test wrt multicluster, for ex: ACM, primary, secondary etc
+        roles = None
+        roles = upgrade_parametrizer.get_roles(metafunc)
+        if roles:
+            upgrade_parametrizer.config_init()
+            params = upgrade_parametrizer.generate_pytest_parameters(metafunc, roles)
+            for marker in metafunc.definition.iter_markers():
+                if marker.name in upgrade_parametrizer.MULTICLUSTER_UPGRADE_MARKERS:
+                    metafunc.parametrize("zone_rank, role_rank, config_index", params)
+
+
 def pytest_collection_modifyitems(session, config, items):
     """
     A pytest hook to filter out skipped tests satisfying
@@ -445,6 +475,63 @@ def pytest_collection_modifyitems(session, config, items):
                     f" UI is not supported on {ocsci_config.ENV_DATA['platform'].lower()}"
                 )
                 items.remove(item)
+    # If multicluster upgrade scenario
+    if ocsci_config.multicluster and ocsci_config.UPGRADE.get("upgrade", False):
+        for item in items:
+            if (
+                list(
+                    set([i.name for i in item.iter_markers()]).intersection(
+                        (MultiClusterUpgradeParametrize.MULTICLUSTER_UPGRADE_MARKERS)
+                    )
+                )
+                and ocsci_config.multicluster
+            ):
+                if getattr(item, "callspec", ""):
+                    zone_rank = item.callspec.params["zone_rank"]
+                    role_rank = item.callspec.params["role_rank"]
+                else:
+                    continue
+                markers_update = []
+                item_markers = copy.copy(item.own_markers)
+                if not item_markers:
+                    # If testcase is in a class then own_markers will be empty
+                    # hence we need to check item.instance.pytestmark
+                    item_markers = copy.copy(item.instance.pytestmark)
+                for m in item_markers:
+                    # fetch already marked 'order' value
+                    if m.name == "order":
+                        val = m.args[0]
+                        # Sum of the base order value along with
+                        # zone in which the cluster is and the cluster's role rank
+                        # determines the order in which tests need to be executed
+                        # Lower the sum, higher the rank hence it gets prioritized early
+                        # in the test execution sequence
+                        newval = val + zone_rank + role_rank
+                        log.info(f"ORIGINAL = {val}, NEW={newval}")
+                        markers_update.append((pytest.mark.order, newval))
+                        if item.own_markers:
+                            item.own_markers.remove(m)
+                        break
+                markers_update.append(
+                    (config_index, item.callspec.params["config_index"])
+                )
+                # Apply all the markers now
+                for mark, param in markers_update:
+                    if mark.name == "order":
+                        item.add_marker(pytest.mark.order(param))
+                    else:
+                        item.add_marker(mark(param))
+                log.info(f"TEST={item.name}")
+                log.info(
+                    f"MARKERS = {[(i.name, i.args, i.kwargs) for i in item.iter_markers()]}"
+                )
+    # Update PREUPGRADE_CONFIG for each of the Config class
+    # so that in case of Y stream upgrade we will have preupgrade configurations for reference
+    # across the tests as Y stream upgrade will reload the config of target version
+    for cluster in ocsci_config.clusters:
+        for k in cluster.__dataclass_fields__.keys():
+            if k != "PREUPGRADE_CONFIG":
+                cluster.PREUPGRADE_CONFIG[k] = deepcopy(getattr(cluster, k))
 
 
 def pytest_collection_finish(session):
@@ -457,6 +544,34 @@ def pytest_collection_finish(session):
 
     """
     ocsci_config.RUN["number_of_tests"] = len(session.items)
+
+
+def pytest_runtest_setup(item):
+    """
+    Pytest hook where we want to switch context of the cluster
+    before any fixture runs
+
+    """
+    if ocsci_config.multicluster and ocsci_config.UPGRADE.get("upgrade", False):
+        for mark in item.iter_markers():
+            if mark.name == "config_index":
+                log.info("Switching the test context to index: {mark.args[0]}")
+                ocsci_config.switch_ctx(mark.args[0])
+
+
+def pytest_fixture_setup(fixturedef, request):
+    """
+    In case of multicluster upgrade scenarios, we want to make sure that before running
+    any fixture related to the testcase we need to switch the cluster context
+
+    """
+    # If this is the first fixture getting loaded then its the right time
+    # to switch context
+    if ocsci_config.multicluster and ocsci_config.UPGRADE.get("upgrade", ""):
+        if request.fixturenames.index(fixturedef.argname) == 0:
+            for mark in request.node.iter_markers():
+                if mark.name == "config_index":
+                    ocsci_config.switch_ctx(mark.args[0])
 
 
 @pytest.fixture()
@@ -8880,6 +8995,16 @@ def enable_guaranteed_bucket_logging_fixture(request, pvc_factory):
 @pytest.fixture(scope="session")
 def virtctl_binary():
     get_virtctl_tool()
+
+
+@pytest.fixture()
+def zone_rank():
+    return None
+
+
+@pytest.fixture()
+def role_rank():
+    return None
 
 
 @pytest.fixture()
