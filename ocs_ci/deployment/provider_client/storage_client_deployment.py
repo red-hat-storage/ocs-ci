@@ -4,6 +4,7 @@ This module provides installation of ODF and native storage-client creation in p
 
 import logging
 import time
+import tempfile
 
 
 from ocs_ci.framework import config
@@ -41,6 +42,7 @@ from ocs_ci.helpers.helpers import (
     verify_block_pool_exists,
 )
 from ocs_ci.ocs.exceptions import CommandFailed
+from ocs_ci.ocs.resources.catalog_source import CatalogSource
 
 
 log = logging.getLogger(__name__)
@@ -322,6 +324,22 @@ class ODFAndNativeStorageClientDeploymentOnProvider(object):
         live_deployment = config.DEPLOYMENT.get("live_deployment")
         if not live_deployment:
             create_catalog_source()
+            catalog_data = templating.load_yaml(constants.PROVIDER_MODE_CATALOGSOURCE)
+            catalog_data["spec"]["image"] = config.DEPLOYMENT.get(
+                "ocs_registry_image", ""
+            )
+            catalog_data_yaml = tempfile.NamedTemporaryFile(
+                mode="w+", prefix="catalog_data", delete=False
+            )
+            templating.dump_data_to_temp_yaml(catalog_data, catalog_data_yaml.name)
+            self.ocp_obj.exec_oc_cmd(f"apply -f {catalog_data_yaml.name}")
+
+            catalog_source = CatalogSource(
+                resource_name=constants.OCS_CATALOG_SOURCE_NAME,
+                namespace=constants.MARKETPLACE_NAMESPACE,
+            )
+            # Wait for catalog source is ready
+            catalog_source.wait_for_state("READY")
 
         log.info("Creating namespace and operator group.")
         olm_data = templating.load_yaml(constants.OLM_YAML, multi_document=True)
