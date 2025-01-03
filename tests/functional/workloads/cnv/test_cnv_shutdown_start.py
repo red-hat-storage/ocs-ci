@@ -66,8 +66,10 @@ class TestVmShutdownStart(E2ETest):
         logger.info("All vms created successfully")
 
         all_vms = self.vm_objs_def + self.vm_objs_aggr
+        source_csums = {}
         for vm_obj in all_vms:
             source_csum = run_dd_io(vm_obj=vm_obj, file_path=file_paths[0], verify=True)
+            source_csums[vm_obj.name] = source_csum
 
         # Create VM using cloned pvc of source VM PVC
         all_vms[1].stop()
@@ -79,8 +81,10 @@ class TestVmShutdownStart(E2ETest):
                 if all_vms[1].volume_interface == constants.VM_VOLUME_PVC
                 else None
             ),
-        )
+        )[0]
         all_vms.append(clone_obj)
+        csum = cal_md5sum_vm(vm_obj=clone_obj, file_path=file_paths[0])
+        source_csums[clone_obj.name] = csum
 
         # Create a snapshot
         # Taking Snapshot of PVC
@@ -105,6 +109,8 @@ class TestVmShutdownStart(E2ETest):
             namespace=vm_obj.namespace,
         )[-1]
         all_vms.append(res_vm_obj)
+        csum = cal_md5sum_vm(vm_obj=res_vm_obj, file_path=file_paths[0])
+        source_csums[res_vm_obj.name] = csum
 
         # Keep vms in different states (power on, paused, stoped)
         all_vms[2].stop()
@@ -155,7 +161,7 @@ class TestVmShutdownStart(E2ETest):
         # Perform post restart data integrity check
         for vm_obj in all_vms:
             new_csum = cal_md5sum_vm(vm_obj=vm_obj, file_path=file_paths[0])
-            assert source_csum == new_csum, (
+            assert source_csums[vm_obj.name] == new_csum, (
                 f"ERROR: Failed data integrity before stopping the cluster and after starting the cluster "
                 f"for VM '{vm_obj.name}'."
             )
