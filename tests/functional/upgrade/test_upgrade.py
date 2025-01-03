@@ -28,7 +28,7 @@ def teardown(request, nodes):
 
 @purple_squad
 @pytest.mark.polarion_id("OCS-1579")
-def test_worker_node_abrupt_shutdown(teardown, upgrade_stats):
+def deprecated_test_worker_node_abrupt_shutdown(teardown, upgrade_stats):
     """
     Test OCS upgrade with disruption of shutting down worker node,
     for 5.5 minutes
@@ -42,7 +42,7 @@ def test_worker_node_abrupt_shutdown(teardown, upgrade_stats):
 
 @purple_squad
 @pytest.mark.polarion_id("OCS-1575")
-def test_worker_node_permanent_shutdown(teardown, upgrade_stats):
+def deprecated_test_worker_node_permanent_shutdown(teardown, upgrade_stats):
     """
     Test OCS upgrade with disruption of shutting down worker node
 
