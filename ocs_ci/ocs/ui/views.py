@@ -1695,7 +1695,8 @@ validation_4_10 = {
         By.XPATH,
     ),
     "ocs-external-storagecluster-storagesystem": (
-        "a[href='/odf/system/ocs.openshift.io~v1~storagecluster/ocs-external-storagecluster-storagesystem/overview']",
+        "a[href='/odf/system/ocs.openshift.io~v1~storagecluster/ocs-external-storagecluster-storagesystem/overview'], "
+        "td#name>span>a",
         By.CSS_SELECTOR,
     ),
     "performance-card": ("//div[contains(text(),'Performance')]", By.XPATH),
