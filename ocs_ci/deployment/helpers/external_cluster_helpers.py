@@ -100,10 +100,11 @@ class ExternalCluster(object):
         )
 
         if config.ENV_DATA["restricted-auth-permission"]:
-            params = (
-                f"{params} --cluster-name {cluster_name} --cephfs-filesystem-name "
-                f"{ceph_fs_name} --restricted-auth-permission true"
-            )
+            if config.ENV_DATA["use_k8s_cluster_name"]:
+                params = f"{params} --k8s-cluster-name {cluster_name}"
+            else:
+                params = f"{params} --cluster-name {cluster_name}"
+            params = f"{params} --cephfs-filesystem-name {ceph_fs_name} --restricted-auth-permission true"
 
         if "." in rbd_name or "_" in rbd_name:
             alias_rbd_name = rbd_name.replace(".", "-").replace("_", "-")
