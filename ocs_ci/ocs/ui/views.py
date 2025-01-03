@@ -298,7 +298,7 @@ generic_locators = {
         By.XPATH,
     ),
     "actions": (
-        '//button[@aria-label="Actions"] | //div[@data-test-id="details-actions"]//button | '
+        '//button[@aria-label="Actions"]| //div[@data-test-id="details-actions"]//button[normalize-space()="Actions"]| '
         '//span[@class="pf-c-dropdown__toggle-text" and text()="Actions"]/..',
         By.XPATH,
     ),
@@ -308,11 +308,19 @@ generic_locators = {
         "//tr[contains(., '{}')]//button[@data-test='kebab-button']",
         By.XPATH,
     ),
-    "resource_link": ("//td[@id='name']//a[contains(text(),'{}')]", By.XPATH),
+    "resource_link": (
+        "//td[@id='name']//a[contains(text(),'{}')] | "
+        "//td[@data-label='Name']//a[contains(text(),'{}')]",
+        By.XPATH,
+    ),
     "confirm_action": (
         'button[id="confirm-action"],button[data-test="delete-action"]',
         By.CSS_SELECTOR,
     ),
+    "confirm_dilog_input": ("//input[@placeholder='{}']", By.XPATH),
+    "confirm_delete_resource": ("//button[contains(text(), 'Delete')]", By.XPATH),
+    "cancel_delete_resource": ("//button[contains(text(), 'Cancel')]", By.XPATH),
+    "close_dialog": ("button[aria-label='Close']", By.XPATH),
     "submit_form": ('button[type="submit"]', By.CSS_SELECTOR),
     "ocs_operator": ('//h1[text()="OpenShift Container Storage"]', By.XPATH),
     "kebab_button": ('button[data-test-id="kebab-button"', By.CSS_SELECTOR),
@@ -689,8 +697,10 @@ page_nav = {
     "volumesnapshots_page": ("VolumeSnapshots", By.LINK_TEXT),
     "volumesnapshotclasses_page": ("VolumeSnapshotClasses", By.LINK_TEXT),
     "volumesnapshotcontents_page": ("VolumeSnapshotContents", By.LINK_TEXT),
-    "object_buckets_tab": (
-        "//a[normalize-space()='Object Buckets'] | //span[normalize-space()='Object Buckets']/..",
+    "buckets_tab": (
+        "//a[normalize-space()='Object Buckets'] "
+        "| //span[normalize-space()='Object Buckets']/.. "
+        "| //span[normalize-space()='Buckets']/..",
         By.XPATH,
     ),
     "object_storage": ("//a[normalize-space()='Object Storage']", By.XPATH),

@@ -12,6 +12,7 @@ from ocs_ci.framework.pytest_customization.marks import (
     red_squad,
     runs_on_provider,
     mcg,
+    skipif_noobaa_external_pgsql,
 )
 from ocs_ci.framework.testlib import MCGTest
 from ocs_ci.framework.testlib import skipif_ocs_version
@@ -41,6 +42,7 @@ PROP_SLEEP_TIME = 10
 @mcg
 @red_squad
 @runs_on_provider
+@skipif_noobaa_external_pgsql
 class TestObjectExpiration(MCGTest):
     """
     Tests suite for object expiration
