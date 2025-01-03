@@ -17,7 +17,14 @@ class TestVmSnapshotClone(E2ETest):
 
     @workloads
     @pytest.mark.polarion_id("OCS-6288")
-    def test_vm_clone(self, cnv_workload, clone_vm_workload, setup_cnv):
+    def test_vm_clone(
+        self,
+        multi_cnv_workload,
+        cnv_workload,
+        clone_vm_workload,
+        setup_cnv,
+        project_factory,
+    ):
         """
         This test performs the VM cloning and IOs created using different volume interfaces(PVC/DV/DVT)
 
@@ -31,29 +38,29 @@ class TestVmSnapshotClone(E2ETest):
         5. Add additional data to the cloned VM.
         6. Delete the clone by following the documented procedure from ODF official docs
          6.1 Delete clone of the pvc associated with VM.
-         6.2 cloned pvc successfully deleted
+         6.2 Cloned pvc successfully deleted
         7. Repeat the above procedure for all the VMs in the system
         8. Delete all the clones created as part of this test
         """
 
+        proj_obj = project_factory()
         file_paths = ["/source_file.txt", "/new_file.txt"]
-        # TODO: Add multi_cnv fixture to configure VMs based on specifications
-        volume_interface = [
-            constants.VM_VOLUME_PVC,
-            constants.VM_VOLUME_DV,
-            constants.VM_VOLUME_DVT,
-        ]
-        for index, vl_if in enumerate(volume_interface):
-            vm_obj = cnv_workload(
-                volume_interface=vl_if, source_url=constants.CNV_FEDORA_SOURCE
-            )[index]
+        log.info("Getting into multi cnv workload...")
+        vm_objs_def, vm_objs_aggr, _, _ = multi_cnv_workload(
+            namespace=proj_obj.namespace
+        )
+        log.info("Logging out multi cnv workload...")
+        vm_list = vm_objs_def + vm_objs_aggr
+        for index, vm_obj in enumerate(vm_list):
             source_csum = run_dd_io(vm_obj=vm_obj, file_path=file_paths[0], verify=True)
             vm_obj.stop()
             clone_obj = clone_vm_workload(
                 vm_obj=vm_obj,
-                volume_interface=vl_if,
+                volume_interface=vm_obj.volume_interface,
                 namespace=(
-                    vm_obj.namespace if vl_if == constants.VM_VOLUME_PVC else None
+                    vm_obj.namespace
+                    if vm_obj.volume_interface == constants.VM_VOLUME_PVC
+                    else None
                 ),
             )[index]
             new_csum = cal_md5sum_vm(vm_obj=clone_obj, file_path=file_paths[0])
