@@ -292,13 +292,13 @@ class PageNavigator(BaseUI):
             enable_screenshot=False,
         )
 
-    def navigate_object_buckets_page(self):
+    def navigate_buckets_page(self):
         """
         Navigate to Object Buckets Page
 
         """
 
-        return self.nav_object_storage().nav_object_buckets_tab()
+        return self.nav_object_storage().nav_buckets_tab()
 
     def navigate_object_bucket_claims_page(self):
         """
