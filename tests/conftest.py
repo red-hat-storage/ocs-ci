@@ -2858,12 +2858,12 @@ def nb_stress_cli_pod_fixture(request, scope_name):
 
 
 @pytest.fixture()
-def stress_test_directory_setup(request, nb_stress_cli_pod):
+def stress_test_directory_setup(request, nb_stress_cli_pods):
     """
     Setup test directories on noobaa stress CLI pod
 
     """
-    return test_directory_setup_fixture(request, nb_stress_cli_pod)
+    return test_directory_setup_fixture(request, nb_stress_cli_pods[1])
 
 
 @pytest.fixture()
