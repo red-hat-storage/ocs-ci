@@ -717,3 +717,9 @@ ceph_health_retry = pytest.mark.ceph_health_retry
 # Mark for Multicluster upgrade scenarios
 config_index = pytest.mark.config_index
 multicluster_roles = pytest.mark.multicluster_roles
+
+# Marks to identify if Vault KMS deployment is required
+vault_kms_deployment_required = pytest.mark.skipif(
+    config.ENV_DATA.get("KMS_PROVIDER", "").upper() != "VAULT",
+    reason="This test requires Vault KMS deployment.",
+)
