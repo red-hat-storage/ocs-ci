@@ -6,6 +6,7 @@ from ocs_ci.ocs.ui.helpers_ui import format_locator, logger
 from ocs_ci.ocs.ui.page_objects.storage_system_details import StorageSystemDetails
 from ocs_ci.ocs.ui.workload_ui import PvcCapacityDeploymentList, compare_mem_usage
 from ocs_ci.utility.utils import TimeoutSampler
+from ocs_ci.ocs.ui.helpers_ui import extract_encryption_status
 
 
 class BlockAndFile(StorageSystemDetails):
@@ -259,3 +260,101 @@ class BlockAndFile(StorageSystemDetails):
         )
         logger.info(f"'Average of storage consumption per day' from the UI : {average}")
         return average
+
+    def get_block_file_encryption_summary(self):
+        """
+        Click on Encryption Summary button and retrieve the encryption details.
+
+        Returns:
+            dict: Encryption summary on block and file page.
+        """
+        encryption_summary = {
+            "cluster_wide_encryption": {"status": None, "kms": ""},
+            "storageclass_encryption": {
+                "status": None,
+                "kms": "",
+            },
+            "intransit_encryption": {"status": None},
+        }
+
+        logger.info("Getting Block and File Encryption Summary Details")
+
+        # Open the encryption summary popup
+        self.do_click(
+            self.validation_loc["encryption_summary"]["file_and_block"]["enabled"],
+            enable_screenshot=True,
+        )
+
+        self.page_has_loaded(
+            module_loc=self.validation_loc["encryption_summary"]["file_and_block"][
+                "encryption_content_data"
+            ]
+        )
+
+        # Context and status mappings
+        context_map = {
+            "Cluster-wide encryption": "cluster_wide_encryption",
+            "Storage class encryption": "storageclass_encryption",
+            "In-transit encryption": "intransit_encryption",
+            "Block storage": "block_storage",
+        }
+
+        # Get elements for text and root
+        encryption_content_location = self.validation_loc["encryption_summary"][
+            "file_and_block"
+        ]["encryption_content_data"]
+        encryption_summary_text = self.get_element_text(encryption_content_location)
+        root_elements = self.get_elements(encryption_content_location)
+
+        if not root_elements:
+            raise ValueError("Error getting root web element")
+        root_element = root_elements[0]
+
+        # Process encryption summary text
+        current_context = None
+        for line in encryption_summary_text.split("\n"):
+            line = line.strip()
+            if line in context_map:
+                current_context = context_map[line]
+                continue
+
+            if (
+                current_context == "cluster_wide_encryption"
+                and "External Key Management Service" in line
+            ):
+                encryption_summary[current_context]["kms"] = line.split(":")[-1].strip()
+                encryption_summary[current_context][
+                    "status"
+                ] = extract_encryption_status(
+                    root_element,
+                    "div.pf-m-align-items-center:nth-child(1) > div:nth-child(2) > svg:nth-child(1)",
+                )
+            elif (
+                current_context == "storageclass_encryption"
+                and "External Key Management Service" in line
+            ):
+                encryption_summary[current_context]["kms"] = line.split(":")[-1].strip()
+                encryption_summary[current_context][
+                    "status"
+                ] = extract_encryption_status(
+                    root_element,
+                    "div.pf-v5-l-flex:nth-child(6) > div:nth-child(2) > svg:nth-child(1)",
+                )
+            elif current_context == "intransit_encryption":
+                encryption_summary[current_context][
+                    "status"
+                ] = extract_encryption_status(
+                    root_element,
+                    "div.pf-v5-l-flex:nth-child(10) > div:nth-child(2) > svg",
+                )
+
+        logger.info(f"Encryption Summary: {encryption_summary}")
+
+        # Close the popup
+        logger.info("Closing the popup")
+        self.do_click(
+            self.validation_loc["encryption_summary"]["file_and_block"]["close"],
+            enable_screenshot=True,
+        )
+
+        return encryption_summary

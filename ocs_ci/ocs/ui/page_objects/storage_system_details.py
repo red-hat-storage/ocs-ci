@@ -33,6 +33,10 @@ class StorageSystemDetails(StorageSystemTab):
         else:
             self.do_click(self.validation_loc["object"], enable_screenshot=True)
 
+        from ocs_ci.ocs.ui.page_objects.object_details_tab import ObjectDetails
+
+        return ObjectDetails()
+
     def nav_block_and_file(self):
         """
         Accessible only at StorageSystems / StorageSystem details / Overview
