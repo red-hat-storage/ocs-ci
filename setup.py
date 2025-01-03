@@ -24,7 +24,7 @@ setup(
         "requests==2.32.3",
         "paramiko==3.4.0",
         "pyyaml>=4.2b1",
-        "jinja2==3.1.4",
+        "jinja2==3.1.5",
         "openshift==0.11.2",
         "boto3==1.24.96",
         "munch==2.5.0",
