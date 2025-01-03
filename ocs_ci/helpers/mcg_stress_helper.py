@@ -488,7 +488,7 @@ def run_background_cluster_checks(scale_noobaa_db_pv, event=None, threading_lock
             logger.info(
                 f"\n"
                 f"\n[BACKGROUND CHECK]"
-                f"\nCurrent noobaa db usage is at {used_percent}%... Rechecking in 20 minutes..."
+                f"\nCurrent noobaa db usage is at {used_percent}%... Rechecking in 10 minutes..."
                 f"\n"
             )
 
