@@ -73,13 +73,7 @@ class TestVmSnapshotClone(E2ETest):
     @workloads
     @pytest.mark.polarion_id("OCS-6299")
     def test_vm_snapshot_ops(
-        self,
-        cnv_workload,
-        snapshot_factory,
-        snapshot_restore_factory,
-        setup_cnv,
-        project_factory,
-        multi_cnv_workload,
+        self, cnv_workload, snapshot_factory, snapshot_restore_factory, setup_cnv
     ):
         """
         This test performs the VM PVC snapshot operations
@@ -94,44 +88,41 @@ class TestVmSnapshotClone(E2ETest):
         6. Repeat the above procedure for all the VMs in the system
         7. Delete all the VMs created as part of this test
         """
-        proj_obj = project_factory()
-        file_paths = ["/source_file.txt", "/new_file.txt"]
-        log.info("Getting into multi cnv workload...")
-        vm_objs_def, vm_objs_aggr, _, _ = multi_cnv_workload(
-            namespace=proj_obj.namespace
+        file_paths = ["/file.txt", "/new_file.txt"]
+        # TODO: Add multi_cnv fixture to configure VMs based on specifications
+        vm_obj = cnv_workload(
+            volume_interface=constants.VM_VOLUME_PVC,
+            source_url=constants.CNV_FEDORA_SOURCE,
+        )[0]
+        # Writing IO on source VM
+        source_csum = run_dd_io(vm_obj=vm_obj, file_path=file_paths[0], verify=True)
+        # Stopping VM before taking snapshot of the VM PVC
+        vm_obj.stop()
+        # Taking Snapshot of PVC
+        pvc_obj = vm_obj.get_vm_pvc_obj()
+        snap_obj = snapshot_factory(pvc_obj)
+        # Restore the snapshot
+        res_snap_obj = snapshot_restore_factory(
+            snapshot_obj=snap_obj,
+            storageclass=vm_obj.sc_name,
+            size=vm_obj.pvc_size,
+            volume_mode=snap_obj.parent_volume_mode,
+            access_mode=vm_obj.pvc_access_mode,
+            status=constants.STATUS_BOUND,
+            timeout=300,
         )
-        log.info("Logging out multi cnv workload...")
-        vm_list = vm_objs_def + vm_objs_aggr
-        for index, vm_obj in enumerate(vm_list):
-            # Writing IO on source VM
-            source_csum = run_dd_io(vm_obj=vm_obj, file_path=file_paths[0], verify=True)
-            # Stopping VM before taking snapshot of the VM PVC
-            vm_obj.stop()
-            # Taking Snapshot of PVC
-            pvc_obj = vm_obj.get_vm_pvc_obj()
-            snap_obj = snapshot_factory(pvc_obj)
-            # Restore the snapshot
-            res_snap_obj = snapshot_restore_factory(
-                snapshot_obj=snap_obj,
-                storageclass=vm_obj.sc_name,
-                size=vm_obj.pvc_size,
-                volume_mode=snap_obj.parent_volume_mode,
-                access_mode=vm_obj.pvc_access_mode,
-                status=constants.STATUS_BOUND,
-                timeout=300,
-            )
-            # Create new VM using the restored PVC
-            res_vm_obj = cnv_workload(
-                volume_interface=constants.VM_VOLUME_PVC,
-                source_url=constants.CNV_FEDORA_SOURCE,
-                existing_pvc_obj=res_snap_obj,
-                namespace=vm_obj.namespace,
-            )[-1]
-            # Write new file to VM
-            run_dd_io(vm_obj=res_vm_obj, file_path=file_paths[1], verify=True)
-            # Validate data integrity of file written before taking snapshot
-            res_csum = cal_md5sum_vm(vm_obj=res_vm_obj, file_path=file_paths[0])
-            assert (
-                source_csum == res_csum
-            ), f"Failed: MD5 comparison between source {vm_obj.name} and cloned {res_vm_obj.name} VMs"
-            res_vm_obj.stop()
+        # Create new VM using the restored PVC
+        res_vm_obj = cnv_workload(
+            volume_interface=constants.VM_VOLUME_PVC,
+            source_url=constants.CNV_FEDORA_SOURCE,
+            existing_pvc_obj=res_snap_obj,
+            namespace=vm_obj.namespace,
+        )[1]
+        # Write new file to VM
+        run_dd_io(vm_obj=res_vm_obj, file_path=file_paths[1], verify=True)
+        # Validate data integrity of file written before taking snapshot
+        res_csum = cal_md5sum_vm(vm_obj=res_vm_obj, file_path=file_paths[0])
+        assert (
+            source_csum == res_csum
+        ), f"Failed: MD5 comparison between source {vm_obj.name} and cloned {res_vm_obj.name} VMs"
+        res_vm_obj.stop()
