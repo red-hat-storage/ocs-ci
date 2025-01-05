@@ -1970,8 +1970,17 @@ def verify_multus_network():
         )
         mds_map = ceph_fs_dump_data["filesystems"][0]["mdsmap"]
         for _, gid_data in mds_map["info"].items():
-            ip = gid_data["addr"].split(":")[0]
-            range = config.ENV_DATA["multus_public_net_range"]
+            if not config.DEPLOYMENT.get("ipv6"):
+                ip = gid_data["addr"].split(":")[0]
+                range = config.ENV_DATA["multus_public_net_range"]
+
+            else:
+                gid_dt_ip = gid_data["addr"]
+                pattern = r"^\[([\da-f:]+)\]"
+                match = re.search(pattern, gid_dt_ip, re.IGNORECASE)
+                ip = match.group(1)
+                range = config.ENV_DATA["multus_public_ipv6_net_range"]
+
             assert ipaddress.ip_address(ip) in ipaddress.ip_network(range)
 
     log.info("Verifying StorageCluster multus network data")
