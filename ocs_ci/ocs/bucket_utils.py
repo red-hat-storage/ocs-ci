@@ -2960,13 +2960,13 @@ def upload_obj_versions(mcg_obj, awscli_pod, bucket_name, obj_key, amount=1, siz
     Returns:
         list: List of ETag values of versions in latest to oldest order
     """
-    file_dir = f"/tmp/{uuid4()}"
+    file_dir = os.path.join("/tmp", str(uuid4()))
     awscli_pod.exec_cmd_on_pod(f"mkdir {file_dir}")
 
     etags = []
 
     for i in range(amount):
-        file_path = f"{file_dir}/{obj_key}_{i}"
+        file_path = os.path.join(file_dir, f"{obj_key}_{i}")
         awscli_pod.exec_cmd_on_pod(
             command=f"dd if=/dev/urandom of={file_path} bs={size} count=1"
         )

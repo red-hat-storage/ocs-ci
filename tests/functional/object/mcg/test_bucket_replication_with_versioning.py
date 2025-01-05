@@ -108,7 +108,7 @@ class TestReplicationWithVersioning(MCGTest):
             obj_key=obj_key,
             amount=versions_amount,
         )
-        logger.info(f"Uploaded versions: {source_etags}")
+        logger.info(f"Uploaded versions with etags: {source_etags}")
 
         # 4. Verify the versions were replicated to the target bucket in the same order
         last_target_etags = None
