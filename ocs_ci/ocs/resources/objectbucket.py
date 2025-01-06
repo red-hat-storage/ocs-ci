@@ -383,9 +383,19 @@ class MCGCLIBucket(ObjectBucket):
             NotFoundError: In case the OBC was not found
 
         """
-        result = self.mcg.exec_mcg_cmd(f"obc delete {self.name}")
-        if "deleting" and self.name not in result.stderr.lower():
-            raise NotFoundError(result)
+        try:
+            result = self.mcg.exec_mcg_cmd(f"obc delete {self.name}")
+            if (
+                "deleting" not in result.stderr.lower()
+                and self.name not in result.stderr.lower()
+            ):
+                raise NotFoundError(result)
+        except CommandFailed as e:
+            result = self.mcg.exec_mcg_cmd(f"obc delete {self.name}", ignore_error=True)
+            if f'Not Found: ObjectBucketClaim "{self.name}"' in str(
+                result.stderr
+            ) and "does not exist" in str(result.stderr):
+                raise NotFoundError(e)
 
     @property
     def internal_status(self):

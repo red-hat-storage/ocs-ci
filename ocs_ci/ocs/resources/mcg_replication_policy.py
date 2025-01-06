@@ -99,3 +99,20 @@ class AzureLogBasedReplicationPolicy(LogBasedReplicationPolicy):
         dict["log_replication_info"]["endpoint_type"] = "AZURE"
 
         return dict
+
+
+class ReplicationPolicyWithVersioning(McgReplicationPolicy):
+    """
+    A class to handle the MCG bucket replication policy JSON structure with versioning.
+
+    """
+
+    def __init__(self, target_bucket, sync_versions=True, prefix=""):
+        super().__init__(target_bucket, prefix)
+        self.sync_versions = sync_versions
+
+    def to_dict(self):
+        dict = super().to_dict()
+        dict["rules"][0]["sync_versions"] = self.sync_versions
+
+        return dict

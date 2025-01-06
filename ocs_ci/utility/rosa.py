@@ -19,6 +19,7 @@ from ocs_ci.ocs.exceptions import (
     ResourceWrongStatusException,
     TimeoutExpiredError,
 )
+from ocs_ci.ocs.machinepool import MachinePools, NodeConf
 from ocs_ci.utility import openshift_dedicated as ocm
 from ocs_ci.utility import utils
 
@@ -28,6 +29,7 @@ from ocs_ci.utility.managedservice import (
     generate_onboarding_token,
     get_storage_provider_endpoint,
 )
+from ocs_ci.utility.openshift_dedicated import get_cluster_details
 from ocs_ci.utility.retry import catch_exceptions
 from ocs_ci.utility.utils import exec_cmd, TimeoutSampler
 
@@ -893,6 +895,23 @@ def destroy_appliance_mode_cluster(cluster):
     return True
 
 
+def destroy_rosa_cluster(cluster, best_effort=True):
+    """
+    Delete rosa cluster
+
+    Parameters:
+        cluster (str): name of the cluster
+        best_effort (bool): If True (true), ignore errors and continue with the deletion of the cluster
+    """
+    external_id = get_cluster_details(cluster)["id"]
+    cmd = f"ocm delete cluster {external_id} -p best_effort={str(best_effort).lower()}"
+    proc = exec_cmd(cmd, timeout=1200)
+    if proc.returncode != 0:
+        raise CommandFailed(f"Failed to delete cluster: {proc.stderr.decode().strip()}")
+    logger.info(f"{proc.stdout.decode().strip()}")
+    return True
+
+
 def delete_oidc_provider(cluster_name):
     """
     Delete oidc provider of the given cluster
@@ -1112,3 +1131,41 @@ def get_associated_oidc_config_id(cluster_name):
         logger.warning(f"Failed to get OIDC config id: {proc.stderr.decode().strip()}")
         return ""
     return proc.stdout.decode().strip()
+
+
+def label_nodes(cluster_name, machinepool_id, labels, rewrite=False):
+    """
+    Label nodes of the given cluster.
+    ! Important
+    This method rewrites existing behavior of labeling nodes in the cluster, it appends the labels to the existing
+    labels, but not rewrite them. This prevents the issue of accidental overwriting the existing labels.
+
+    Args:
+        cluster_name (str): The cluster name
+        machinepool_id (str): The machinepool id
+        labels (str): The labels to apply
+        rewrite (bool): If True, rewrite the labels. False, otherwise.
+
+    Returns:
+        str: The output of the command
+    """
+    machine_pools = MachinePools(cluster_name)
+    machine_pool = machine_pools.filter(machinepool_id="workers", pick_first=True)
+    if not rewrite:
+        labels_dict = machine_pool.labels
+        logger.info(f"Existing labels: {labels_dict}")
+        # convert to comma separated string
+        if labels_dict:
+            labels = (
+                ",".join([f"{key}={value}" for key, value in labels_dict.items()])
+                + ","
+                + labels
+            )
+        else:
+            labels = labels
+    machine_pools.edit_machine_pool(
+        NodeConf(**{"machinepool_id": machinepool_id, "labels": labels}),
+        wait_ready=False,
+    )
+    machine_pool.refresh()
+    return machine_pool.labels

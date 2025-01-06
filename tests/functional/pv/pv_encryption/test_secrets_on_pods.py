@@ -4,6 +4,7 @@ import yaml
 from ocs_ci.framework.testlib import ManageTest, bugzilla, tier1, green_squad
 from ocs_ci.utility.utils import run_cmd
 from ocs_ci.framework import config
+from ocs_ci.framework.pytest_customization.marks import skipif_external_mode
 
 logger = logging.getLogger(__name__)
 # The below expected keys and names are gathered from pods with safe security.
@@ -14,6 +15,7 @@ EXPECTED_KEYS = {
     "ceph-username",
     "ceph-secret",
     "token",
+    "dmcrypt-key",
 }
 EXPECTED_NAMES = {"rook-ceph-config", "rook-ceph-mon", "ocs-kms-token"}
 
@@ -53,6 +55,7 @@ class TestSecretsAndSecurityContext(ManageTest):
     @tier1
     @green_squad
     @bugzilla("2180732")
+    @skipif_external_mode
     def test_securityContext_in_Crashcollector(self):
         """
         Testing security context of rook-ceph-crash-collector pods, in a

@@ -10,7 +10,6 @@ from ocs_ci.framework.pytest_customization.marks import (
     tier1,
     skipif_ocs_version,
     green_squad,
-    skipif_hci_provider_and_client,
     cloud_platform_required,
 )
 from ocs_ci.framework import config
@@ -19,7 +18,6 @@ log = logging.getLogger(__name__)
 
 
 @green_squad
-@skipif_hci_provider_and_client
 @cloud_platform_required
 class TestInTransitEncryptionSanity:
     @pytest.fixture(autouse=True)

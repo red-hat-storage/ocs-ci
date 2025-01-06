@@ -212,6 +212,7 @@ higher priority).
 * `skip_ocp_deployment` - Skip the OCP deployment step or not (Default: false)
 * `skip_ocs_deployment` - Skip the OCS deployment step or not (Default: false)
 * `ocs_version` - Version of OCS that is being deployed
+* `acm_version` - Version of acm to be used for this run (applicable mostly to DR scenarios)
 * `vm_template` - VMWare template to use for RHCOS images
 * `fio_storageutilization_min_mbps` - Minimal write speed of FIO used in workload_fio_storageutilization
 * `TF_LOG_LEVEL` - Terraform log level
@@ -349,6 +350,7 @@ higher priority).
 * `continue_upgrade_after_checks_even_if_not_healthy` -  if set to true Rook will continue the OSD daemon upgrade process even if the PGs are not clean.
 * `upgrade_osd_requires_healthy_pgs` - If set to true OSD upgrade process won't start until PGs are healthy.
 * `workaround_mark_disks_as_ssd` - WORKAROUND: mark disks as SSD (not rotational - `0` in `/sys/block/*d*/queue/rotational`)
+* `node_labels` - Comma-separated labels to be applied to the nodes in the cluster, e.g. 'cluster.ocs.openshift.io/openshift-storage="",node-role.kubernetes.io/infra=""', default - empty string
 
 #### UPGRADE
 
@@ -361,6 +363,9 @@ Upgrade related configuration data.
 * `ocp_arch` - Architecture type of the OCP image
 * `upgrade_logging_channel` - OCP logging channel to upgrade with
 * `upgrade_ui` - Perform upgrade via UI (Not all the versions are supported, please look at the code)
+* `upgrade_acm_version` - ACM version to which we have to upgrade
+* `upgrade_acm_registry_image` - ACM Image tag from brew which should be used to upgrade 
+example: <brew_registry_url>/rh-osbs/iib:565330
 
 #### AUTH
 
@@ -416,6 +421,8 @@ Configuration specific to external Ceph cluster
 * `external_cluster_details` - base64 encoded data of json output from exporter script
 * `rgw_secure` - boolean parameter which defines if external Ceph cluster RGW is secured using SSL
 * `rgw_cert_ca` - url pointing to CA certificate used to sign certificate for RGW with SSL
+* `use_rbd_namespace` - boolean parameter to use RBD namespace in pool
+* `rbd_namespace` - Name of RBD namespace to use in pool
 
 ##### login
 

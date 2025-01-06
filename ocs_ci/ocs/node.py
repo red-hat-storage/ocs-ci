@@ -500,7 +500,7 @@ def add_new_nodes_and_label_them_rosa_hcp(
     node_conf = node_conf or {}
     if kwargs.get("storage_nodes") and not node_conf:
         node_conf = {
-            "machinepool": config.ENV_DATA.get("machine_pool"),
+            "machinepool_id": config.ENV_DATA.get("machine_pool"),
             "instance_type": config.ENV_DATA.get("worker_instance_type"),
         }
 
@@ -1046,14 +1046,20 @@ def delete_and_create_osd_node_managed_cp(osd_node_name):
     node_util.stop_nodes(osd_node_objs)
     node_util.terminate_nodes(osd_node_objs)
     machne_pools = MachinePools(config.ENV_DATA["cluster_name"])
-    mp_filtered = machne_pools.filter(id=config.ENV_DATA["machine_pool"])
+    mp_filtered = machne_pools.filter(machinepool_id=config.ENV_DATA["machine_pool"])
     mp_filtered.wait_replicas_ready(
         target_replicas=node_num_before_delete, timeout=machine_start_timeout
     )
 
-    node_names_after_delete = get_node_names()
-    new_node_names = list(set(node_names_after_delete) - set(node_names_before_delete))
-    new_node_name = new_node_names[0]
+    new_node_names = None
+    new_node_name = None
+    for sample in TimeoutSampler(
+        timeout=node_start_timeout, sleep=30, func=get_node_names
+    ):
+        if new_node_names := list(set(sample) - set(node_names_before_delete)):
+            new_node_name = new_node_names[0]
+            break
+
     wait_for_nodes_status(
         node_names=new_node_names,
         status=constants.NODE_READY,
@@ -2212,12 +2218,13 @@ def get_crashcollector_nodes():
     return set(crashcollector_ls)
 
 
-def add_new_disk_for_vsphere(sc_name):
+def add_new_disk_for_vsphere(sc_name, ssd=False):
     """
     Check the PVS in use per node, and add a new disk to the worker node with the minimum PVS.
 
     Args:
         sc_name (str): The storage class name
+        ssd (bool): if True, mark disk as SSD
 
     """
     ocs_nodes = get_ocs_nodes()
@@ -2225,14 +2232,17 @@ def add_new_disk_for_vsphere(sc_name):
         (len(get_node_pv_objs(sc_name, n.name)), n) for n in ocs_nodes
     ]
     node_with_min_pvs = min(num_of_pv_per_node_tuples, key=itemgetter(0))[1]
-    add_disk_to_node(node_with_min_pvs)
+    add_disk_to_node(node_with_min_pvs, ssd=ssd)
 
 
-def add_disk_stretch_arbiter():
+def add_disk_stretch_arbiter(ssd=False):
     """
     Adds disk to storage nodes in a stretch cluster with arbiter
     configuration evenly spread across two zones. Stretch cluster has
     replica 4, hence 2 disks to each of the zones
+
+    Args:
+        ssd (bool): if True, mark disk as SSD
 
     """
 
@@ -2243,7 +2253,7 @@ def add_disk_stretch_arbiter():
 
     for zone in data_zones:
         for node in sc_obj.get_ocs_nodes_in_zone(zone)[:2]:
-            add_disk_to_node(node)
+            add_disk_to_node(node, ssd=ssd)
 
 
 def get_odf_zone_count():

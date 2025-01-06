@@ -37,6 +37,10 @@ class Config:
     COMPONENTS: dict = field(default_factory=dict)
     # Used for multicluster only
     MULTICLUSTER: dict = field(default_factory=dict)
+    # Use this variable to store any arbitrary key/values related
+    # to the upgrade context. Applicable only in the multicluster upgrade
+    # scenario
+    PREUPGRADE_CONFIG: dict = field(default_factory=dict)
 
     def __post_init__(self):
         self.reset()
@@ -493,7 +497,7 @@ class MultiClusterConfig:
             except ClusterNotFoundException:
                 # if no provider is available then set the switch to current index so that
                 # no switch happens and code runs on current cluster
-                logger.DEBUG("No provider was found - using current cluster")
+                logger.debug("No provider was found - using current cluster")
                 switch_index = config.cur_index
             super().__init__(switch_index)
 
@@ -509,7 +513,7 @@ class MultiClusterConfig:
             except ClusterNotFoundException:
                 # if no provider is available then set the switch to current index so that
                 # no switch happens and code runs on current cluster
-                logger.DEBUG("No Consumer was found - using current cluster")
+                logger.debug("No Consumer was found - using current cluster")
                 switch_index = config.cur_index
             super().__init__(switch_index)
 

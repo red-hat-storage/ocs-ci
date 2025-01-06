@@ -960,6 +960,17 @@ class VSPHEREUPI(VSPHEREBASE):
             for each_file in files_to_remove:
                 os.remove(each_file)
 
+            # configure spec.mastersSchedulable in cluster-scheduler-02-config.yml
+            if config.ENV_DATA["worker_replicas"] == 0:
+                cluster_scheduler_config = os.path.join(
+                    self.cluster_path, "manifests", "cluster-scheduler-02-config.yml"
+                )
+                with open(cluster_scheduler_config, "r") as f:
+                    cluster_scheduler_config_obj = yaml.safe_load(f.read())
+                cluster_scheduler_config_obj["spec"]["mastersSchedulable"] = True
+                with open(cluster_scheduler_config, "w") as f:
+                    f.write(yaml.safe_dump(cluster_scheduler_config_obj))
+
         def create_ignitions(self):
             """
             Creates the ignition files
@@ -1075,7 +1086,6 @@ class VSPHEREUPI(VSPHEREBASE):
 
             os.chdir(self.previous_dir)
             if not self.sno:
-
                 # Update kubeconfig with proxy-url (if client_http_proxy
                 # configured) to redirect client access through proxy server.
                 update_kubeconfig_with_proxy_url_for_client(self.kubeconfig)
@@ -1107,6 +1117,9 @@ class VSPHEREUPI(VSPHEREBASE):
                     lb = LoadBalancer()
                     lb.rename_haproxy_conf_and_reload()
                     lb.remove_boostrap_in_proxy()
+                    if config.ENV_DATA["worker_replicas"] == 0:
+                        # compact-mode deployment: add master nodes as backend servers for ingress
+                        lb.compact_mode_route_ingress_trafic_to_control_plane_nodes()
                     lb.restart_haproxy()
 
                 # remove bootstrap node
@@ -1157,6 +1170,15 @@ class VSPHEREUPI(VSPHEREBASE):
 
                 # Approving CSRs here in-case if any exists
                 approve_pending_csr()
+                if config.ENV_DATA.get("is_multus_enabled"):
+
+                    vsphere = VSPHERE(
+                        config.ENV_DATA["vsphere_server"],
+                        config.ENV_DATA["vsphere_user"],
+                        config.ENV_DATA["vsphere_password"],
+                    )
+
+                    vsphere.add_interface_to_compute_vms()
             self.test_cluster()
 
     def deploy_ocp(self, log_cli_level="DEBUG"):

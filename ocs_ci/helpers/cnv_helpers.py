@@ -176,31 +176,53 @@ def create_dv(
     namespace=constants.CNV_NAMESPACE,
 ):
     """
-    Create a PVC using a specified data source
+    Creates a DV using a specified data source
 
     Args:
         access_mode (str): The access mode for the volume. Default is `constants.ACCESS_MODE_RWX`
         sc_name (str): The name of the storage class to use. Default is `constants.DEFAULT_CNV_CEPH_RBD_SC`.
         pvc_size (str): The size of the PVC. Default is "30Gi".
         source_url (str): The URL of the vm registry image. Default is `constants.CNV_CENTOS_SOURCE`.
-        namespace (str, optional): The namespace to create the vm on.
-
+        namespace (str, optional): The namespace to create the DV on.
 
     Returns:
         dv_obj: DV object
 
     """
-    dv_data = templating.load_yaml(constants.CNV_VM_DV_YAML)
     dv_name = create_unique_resource_name("test", "dv")
-    dv_data["metadata"]["name"] = dv_name
-    dv_data["metadata"]["namespace"] = namespace
+    dv_data = templating.load_yaml(constants.CNV_VM_DV_YAML)
     dv_data["spec"]["storage"]["accessModes"] = [access_mode]
     dv_data["spec"]["storage"]["resources"]["requests"]["storage"] = pvc_size
     dv_data["spec"]["storage"]["storageClassName"] = sc_name
     dv_data["spec"]["source"]["registry"]["url"] = source_url
+    dv_data["metadata"]["name"] = dv_name
+    dv_data["metadata"]["namespace"] = namespace
     dv_data_obj = create_resource(**dv_data)
     logger.info(f"Successfully created DV - {dv_data_obj.name}")
+    return dv_data_obj
 
+
+def clone_dv(source_pvc_name, source_pvc_ns, destination_ns):
+    """
+    Clones a DV using a specified data source
+
+    Args:
+        source_pvc_name (str): PVC name of source vm used for cloning.
+        source_pvc_ns (str):  PVC namespace of source vm used for cloning.
+        destination_ns (str): Namespace of cloned dv to be created on
+
+    Returns:
+        dv_obj: Cloned DV object
+
+    """
+    dv_name = create_unique_resource_name("clone", "dv")
+    dv_data = templating.load_yaml(constants.CNV_VM_DV_CLONE_YAML)
+    dv_data["spec"]["source"]["pvc"]["name"] = source_pvc_name
+    dv_data["spec"]["source"]["pvc"]["namespace"] = source_pvc_ns
+    dv_data["metadata"]["name"] = dv_name
+    dv_data["metadata"]["namespace"] = destination_ns
+    dv_data_obj = create_resource(**dv_data)
+    logger.info(f"Successfully created DV - {dv_data_obj.name}")
     return dv_data_obj
 
 

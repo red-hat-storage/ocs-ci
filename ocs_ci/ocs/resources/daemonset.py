@@ -1,6 +1,7 @@
 """
 DaemonSet related functionalities
 """
+
 import logging
 
 from ocs_ci.ocs import constants

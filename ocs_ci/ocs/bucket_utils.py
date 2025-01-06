@@ -1090,7 +1090,7 @@ def check_pv_backingstore_status(
 
 def check_pv_backingstore_type(
     backingstore_name=constants.DEFAULT_NOOBAA_BACKINGSTORE,
-    namespace=constants.OPENSHIFT_STORAGE_NAMESPACE,
+    namespace=config.ENV_DATA["cluster_namespace"],
 ):
     """
     check if existing pv backing store is in READY state
@@ -1566,7 +1566,8 @@ def retrieve_verification_mode():
         verify = True
     elif (
         config.DEPLOYMENT.get("use_custom_ingress_ssl_cert")
-        and config.DEPLOYMENT["custom_ssl_cert_provider"] == "ocs-ci-ca"
+        and config.DEPLOYMENT["custom_ssl_cert_provider"]
+        == constants.SSL_CERT_PROVIDER_OCS_QE_CA
     ):
         verify = get_root_ca_cert()
     else:
@@ -2920,3 +2921,114 @@ def create_s3client_from_assume_role_creds(mcg_obj, assume_role_creds):
         aws_session_token=assumed_session_token,
     )
     return assumed_s3_resource.meta.client
+
+
+def put_bucket_versioning_via_awscli(
+    mcg_obj, awscli_pod, bucket_name, status="Enabled"
+):
+    """
+    Put bucket versioning using AWS CLI
+
+    Args:
+        mcg_obj (MCG): MCG object
+        awscli_pod (Pod): Pod object where AWS CLI is installed
+        bucket_name (str): Name of the bucket
+        status (str): Status of the versioning
+
+    """
+    awscli_pod.exec_cmd_on_pod(
+        command=craft_s3_command(
+            f"put-bucket-versioning --bucket {bucket_name} --versioning-configuration Status={status}",
+            mcg_obj=mcg_obj,
+            api=True,
+        )
+    )
+
+
+def upload_obj_versions(mcg_obj, awscli_pod, bucket_name, obj_key, amount=1, size="1M"):
+    """
+    Upload multiple random data versions to a given object key and return their ETag values
+
+    Args:
+        mcg_obj (MCG): MCG object
+        awscli_pod (Pod): Pod object where AWS CLI is installed
+        bucket_name (str): Name of the bucket
+        obj_key (str): Object key
+        amount (int): Number of versions to create
+        size (str): Size of the object. I.E 1M
+
+    Returns:
+        list: List of ETag values of versions in latest to oldest order
+    """
+    file_dir = os.path.join("/tmp", str(uuid4()))
+    awscli_pod.exec_cmd_on_pod(f"mkdir {file_dir}")
+
+    etags = []
+
+    for i in range(amount):
+        file_path = os.path.join(file_dir, f"{obj_key}_{i}")
+        awscli_pod.exec_cmd_on_pod(
+            command=f"dd if=/dev/urandom of={file_path} bs={size} count=1"
+        )
+        # Use debug and redirect it to stdout to get
+        # the uploaded object's ETag in the response
+        resp = awscli_pod.exec_cmd_on_pod(
+            command=craft_s3_command(
+                f"cp {file_path} s3://{bucket_name}/{obj_key} --debug 2>&1",
+                mcg_obj=mcg_obj,
+            ),
+            out_yaml_format=False,
+        )
+
+        # Parse the ETag from the response
+        # Filter the line containing the JSON
+        line = next(filter(lambda line: "ETag" in line, resp.splitlines()))
+        json_start = line.index("{")
+        json_str = line[json_start:]
+
+        # Fix quotes to read as dict
+        json_str = json_str.replace("'", '"')
+        json_str = json_str.replace('""', '"')
+
+        # Convert to dict and extract the ETag
+        new_etag = json.loads(json_str).get("ETag")
+
+        # Later versions should precede the older ones
+        # this achieves the expected order of versions
+        # we'd get from list-object-versions
+        etags.insert(0, new_etag)
+
+    return etags
+
+
+def get_obj_versions(mcg_obj, awscli_pod, bucket_name, obj_key):
+    """
+    Get object versions using AWS CLI
+
+    Args:
+        mcg_obj (MCG): MCG object
+        awscli_pod (Pod): Pod object where AWS CLI is installed
+        bucket_name (str): Name of the bucket
+        obj_key (str): Object key
+
+    Returns:
+        list: List of dictionaries containing the versions data
+    """
+    resp = awscli_pod.exec_cmd_on_pod(
+        command=craft_s3_command(
+            f"list-object-versions --bucket {bucket_name} --prefix {obj_key}",
+            mcg_obj=mcg_obj,
+            api=True,
+        ),
+        out_yaml_format=False,
+    )
+
+    versions_dicts = []
+    if resp and "Versions" in resp:
+        versions_dicts = json.loads(resp).get("Versions")
+
+        # Remove quotes from the ETag values for easier usage
+        for d in versions_dicts:
+            d["ETag"] = d["ETag"].strip('"')
+
+    return versions_dicts

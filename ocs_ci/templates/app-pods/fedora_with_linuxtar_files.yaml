@@ -3,6 +3,8 @@ kind: Pod
 metadata:
   name: fedora
   namespace: openshift-storage
+  labels:
+    app: fedora-pod
 spec:
   containers:
     - name: fedora

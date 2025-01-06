@@ -13,6 +13,7 @@ from datetime import datetime
 from math import floor
 from shutil import copyfile, rmtree
 from functools import partial
+from copy import deepcopy
 
 import boto3
 import yaml
@@ -24,7 +25,7 @@ from ocs_ci.deployment.cnv import CNVInstaller
 from ocs_ci.deployment import factory as dep_factory
 from ocs_ci.deployment.helpers.hypershift_base import HyperShiftBase
 from ocs_ci.deployment.hosted_cluster import HostedClients
-from ocs_ci.framework import config as ocsci_config, Config
+from ocs_ci.framework import config as ocsci_config, Config, config
 import ocs_ci.framework.pytest_customization.marks
 from ocs_ci.framework.pytest_customization.marks import (
     deployment,
@@ -33,6 +34,7 @@ from ocs_ci.framework.pytest_customization.marks import (
     ignore_leftover_label,
     upgrade_marks,
     ignore_resource_not_found_error_label,
+    config_index,
 )
 
 from ocs_ci.helpers.proxy import update_container_with_proxy_env
@@ -46,7 +48,7 @@ from ocs_ci.ocs.bucket_utils import (
     put_bucket_policy,
 )
 from ocs_ci.ocs.constants import FUSION_CONF_DIR
-from ocs_ci.ocs.cnv.virtual_machine import VirtualMachine
+from ocs_ci.ocs.cnv.virtual_machine import VirtualMachine, VMCloner
 from ocs_ci.ocs.dr.dr_workload import (
     BusyBox,
     BusyBox_AppSet,
@@ -150,6 +152,10 @@ from ocs_ci.utility.kms import is_kms_enabled, get_ksctl_cli
 from ocs_ci.utility.prometheus import PrometheusAPI
 from ocs_ci.utility.reporting import update_live_must_gather_image
 from ocs_ci.utility.retry import retry
+from ocs_ci.utility.multicluster import (
+    get_multicluster_upgrade_parametrizer,
+    MultiClusterUpgradeParametrize,
+)
 from ocs_ci.utility.uninstall_openshift_logging import uninstall_cluster_logging
 from ocs_ci.utility.utils import (
     ceph_health_check,
@@ -197,7 +203,7 @@ from ocs_ci.helpers.longevity_helpers import (
 )
 from ocs_ci.ocs.longevity import start_app_workload
 from ocs_ci.utility.decorators import switch_to_default_cluster_index_at_last
-
+from ocs_ci.helpers.keyrotation_helper import PVKeyrotation
 
 log = logging.getLogger(__name__)
 
@@ -340,6 +346,30 @@ def export_squad_marker_to_csv(items, filename=None):
     log.info("%s tests require action across %s files", num_tests, num_files)
 
 
+def pytest_generate_tests(metafunc):
+    """
+    This hook handles pytest dynamic pytest parametrization of tests related to
+    Multicluster scenarios
+
+    Args:
+        metafunc (pytest fixture): metafunc pytest object to access info about
+            test function and its parameters
+
+    """
+    # For now we are only dealing with multicluster scenarios in this hook
+    if ocsci_config.multicluster:
+        upgrade_parametrizer = get_multicluster_upgrade_parametrizer()
+        # for various roles which are applicable to current test wrt multicluster, for ex: ACM, primary, secondary etc
+        roles = None
+        roles = upgrade_parametrizer.get_roles(metafunc)
+        if roles:
+            upgrade_parametrizer.config_init()
+            params = upgrade_parametrizer.generate_pytest_parameters(metafunc, roles)
+            for marker in metafunc.definition.iter_markers():
+                if marker.name in upgrade_parametrizer.MULTICLUSTER_UPGRADE_MARKERS:
+                    metafunc.parametrize("zone_rank, role_rank, config_index", params)
+
+
 def pytest_collection_modifyitems(session, config, items):
     """
     A pytest hook to filter out skipped tests satisfying
@@ -445,6 +475,63 @@ def pytest_collection_modifyitems(session, config, items):
                     f" UI is not supported on {ocsci_config.ENV_DATA['platform'].lower()}"
                 )
                 items.remove(item)
+    # If multicluster upgrade scenario
+    if ocsci_config.multicluster and ocsci_config.UPGRADE.get("upgrade", False):
+        for item in items:
+            if (
+                list(
+                    set([i.name for i in item.iter_markers()]).intersection(
+                        (MultiClusterUpgradeParametrize.MULTICLUSTER_UPGRADE_MARKERS)
+                    )
+                )
+                and ocsci_config.multicluster
+            ):
+                if getattr(item, "callspec", ""):
+                    zone_rank = item.callspec.params["zone_rank"]
+                    role_rank = item.callspec.params["role_rank"]
+                else:
+                    continue
+                markers_update = []
+                item_markers = copy.copy(item.own_markers)
+                if not item_markers:
+                    # If testcase is in a class then own_markers will be empty
+                    # hence we need to check item.instance.pytestmark
+                    item_markers = copy.copy(item.instance.pytestmark)
+                for m in item_markers:
+                    # fetch already marked 'order' value
+                    if m.name == "order":
+                        val = m.args[0]
+                        # Sum of the base order value along with
+                        # zone in which the cluster is and the cluster's role rank
+                        # determines the order in which tests need to be executed
+                        # Lower the sum, higher the rank hence it gets prioritized early
+                        # in the test execution sequence
+                        newval = val + zone_rank + role_rank
+                        log.info(f"ORIGINAL = {val}, NEW={newval}")
+                        markers_update.append((pytest.mark.order, newval))
+                        if item.own_markers:
+                            item.own_markers.remove(m)
+                        break
+                markers_update.append(
+                    (config_index, item.callspec.params["config_index"])
+                )
+                # Apply all the markers now
+                for mark, param in markers_update:
+                    if mark.name == "order":
+                        item.add_marker(pytest.mark.order(param))
+                    else:
+                        item.add_marker(mark(param))
+                log.info(f"TEST={item.name}")
+                log.info(
+                    f"MARKERS = {[(i.name, i.args, i.kwargs) for i in item.iter_markers()]}"
+                )
+    # Update PREUPGRADE_CONFIG for each of the Config class
+    # so that in case of Y stream upgrade we will have preupgrade configurations for reference
+    # across the tests as Y stream upgrade will reload the config of target version
+    for cluster in ocsci_config.clusters:
+        for k in cluster.__dataclass_fields__.keys():
+            if k != "PREUPGRADE_CONFIG":
+                cluster.PREUPGRADE_CONFIG[k] = deepcopy(getattr(cluster, k))
 
 
 def pytest_collection_finish(session):
@@ -457,6 +544,34 @@ def pytest_collection_finish(session):
 
     """
     ocsci_config.RUN["number_of_tests"] = len(session.items)
+
+
+def pytest_runtest_setup(item):
+    """
+    Pytest hook where we want to switch context of the cluster
+    before any fixture runs
+
+    """
+    if ocsci_config.multicluster and ocsci_config.UPGRADE.get("upgrade", False):
+        for mark in item.iter_markers():
+            if mark.name == "config_index":
+                log.info("Switching the test context to index: {mark.args[0]}")
+                ocsci_config.switch_ctx(mark.args[0])
+
+
+def pytest_fixture_setup(fixturedef, request):
+    """
+    In case of multicluster upgrade scenarios, we want to make sure that before running
+    any fixture related to the testcase we need to switch the cluster context
+
+    """
+    # If this is the first fixture getting loaded then its the right time
+    # to switch context
+    if ocsci_config.multicluster and ocsci_config.UPGRADE.get("upgrade", ""):
+        if request.fixturenames.index(fixturedef.argname) == 0:
+            for mark in request.node.iter_markers():
+                if mark.name == "config_index":
+                    ocsci_config.switch_ctx(mark.args[0])
 
 
 @pytest.fixture()
@@ -860,6 +975,8 @@ def storageclass_factory_fixture(
         allow_volume_expansion=True,
         kernelMountOptions=None,
         annotations=None,
+        mapOptions=None,
+        mounter=None,
     ):
         """
         Args:
@@ -886,6 +1003,8 @@ def storageclass_factory_fixture(
             allow_volume_expansion (bool): True to Allows volume expansion
             kernelMountOptions (str): Mount option for security context
             annotations (dict): dict of annotation to be added to the storageclass.
+            mapOptions (str): mapOtions match the configuration of ocs-storagecluster-ceph-rbd-virtualization SC
+            mounter (str): mounter to match the configuration of ocs-storagecluster-ceph-rbd-virtualization SC
 
         Returns:
             object: helpers.create_storage_class instance with links to
@@ -925,6 +1044,8 @@ def storageclass_factory_fixture(
                 allow_volume_expansion=allow_volume_expansion,
                 kernelMountOptions=kernelMountOptions,
                 annotations=annotations,
+                mapOptions=mapOptions,
+                mounter=mounter,
             )
             assert sc_obj, f"Failed to create {interface} storage class"
             sc_obj.secret = secret
@@ -3268,6 +3389,7 @@ def install_logging(request):
     * The teardown will uninstall cluster-logging from the cluster
 
     """
+    rosa_hcp_depl = config.ENV_DATA.get("platform") == constants.ROSA_HCP_PLATFORM
 
     def finalizer():
         uninstall_cluster_logging()
@@ -3291,18 +3413,15 @@ def install_logging(request):
     logging_channel = "stable" if ocp_version >= version.VERSION_4_7 else ocp_version
 
     # Creates namespace openshift-operators-redhat
-    try:
-        ocp_logging_obj.create_namespace(yaml_file=constants.EO_NAMESPACE_YAML)
-    except CommandFailed as e:
-        if "AlreadyExists" in str(e):
-            # on Rosa HCP the ns created from the deployment
-            log.info("Namespace openshift-operators-redhat already exists")
-        else:
-            raise
+    ocp_logging_obj.create_namespace(
+        yaml_file=constants.EO_NAMESPACE_YAML, skip_resource_exists=rosa_hcp_depl
+    )
 
     # Creates an operator-group for elasticsearch
     assert ocp_logging_obj.create_elasticsearch_operator_group(
-        yaml_file=constants.EO_OG_YAML, resource_name="openshift-operators-redhat"
+        yaml_file=constants.EO_OG_YAML,
+        resource_name="openshift-operators-redhat",
+        skip_resource_exists=rosa_hcp_depl,
     )
 
     # Set RBAC policy on the project
@@ -3325,11 +3444,13 @@ def install_logging(request):
     )
 
     # Creates a namespace openshift-logging
-    ocp_logging_obj.create_namespace(yaml_file=constants.CL_NAMESPACE_YAML)
+    ocp_logging_obj.create_namespace(
+        yaml_file=constants.CL_NAMESPACE_YAML, skip_resource_exists=rosa_hcp_depl
+    )
 
     # Creates an operator-group for cluster-logging
     assert ocp_logging_obj.create_clusterlogging_operator_group(
-        yaml_file=constants.CL_OG_YAML
+        yaml_file=constants.CL_OG_YAML, skip_resource_exists=rosa_hcp_depl
     )
 
     # Creates subscription for cluster-logging
@@ -7042,8 +7163,25 @@ def discovered_apps_dr_workload_cnv(request):
     return factory
 
 
+@pytest.fixture(scope="class")
+def cnv_workload_class(request):
+    """
+    Class scoped fixture to deploy CNV workload
+
+    """
+    return cnv_workload_factory(request)
+
+
 @pytest.fixture()
 def cnv_workload(request):
+    """
+    Function scoped fixture to deploy CNV workload
+
+    """
+    return cnv_workload_factory(request)
+
+
+def cnv_workload_factory(request):
     """
     Deploys CNV based workloads
 
@@ -7056,6 +7194,7 @@ def cnv_workload(request):
         storageclass=constants.DEFAULT_CNV_CEPH_RBD_SC,
         pvc_size="30Gi",
         source_url=constants.CNV_CENTOS_SOURCE,
+        existing_pvc_obj=None,
         namespace=None,
     ):
         """
@@ -7065,6 +7204,7 @@ def cnv_workload(request):
             storageclass (str): The name of the storage class to use. Default is `constants.DEFAULT_CNV_CEPH_RBD_SC`.
             pvc_size (str): The size of the PVC. Default is "30Gi".
             source_url (str): The URL of the vm registry image. Default is `constants.CNV_CENTOS_SOURCE`.
+            existing_pvc_obj (obj, optional): PVC object to use existing pvc as a backend volume to VM
             namespace (str, optional): The namespace to create the vm on. Default, creates a unique namespace.
 
         Returns:
@@ -7079,6 +7219,7 @@ def cnv_workload(request):
             sc_name=storageclass,
             pvc_size=pvc_size,
             source_url=source_url,
+            existing_pvc_obj=existing_pvc_obj,
         )
         cnv_workloads.append(cnv_wl)
         return cnv_workloads
@@ -7088,8 +7229,159 @@ def cnv_workload(request):
         Cleans up the CNV workloads
 
         """
-        for cnv_wl in cnv_workloads:
+        # Iterating from end so that restored VMs are deleted before source
+        for cnv_wl in cnv_workloads[::-1]:
             cnv_wl.delete()
+
+    request.addfinalizer(teardown)
+    return factory
+
+
+@pytest.fixture()
+def multi_cnv_workload(
+    pv_encryption_kms_setup_factory, storageclass_factory, cnv_workload
+):
+    """
+    Fixture to create virtual machines (VMs) with specific configurations.
+
+    This fixture sets up multiple VMs with varying storage configurations as specified
+    in the `cnv_vm_workload.yaml`. Each VM configuration includes the volume interface type,
+    access mode, and the storage class to be used.
+
+    The configurations applied to the VMs are:
+    - Volume interface: `VM_VOLUME_PVC` or `VM_VOLUME_DVT`
+    - Access mode: `ACCESS_MODE_RWX` or `ACCESS_MODE_RWO`
+    - Storage class: Custom storage classes, including default compression and aggressive profiles.
+
+    """
+
+    def factory(namespace=None):
+        """
+        Args:
+            namespace (str, optional): The namespace to create the vm on.
+
+        Returns:
+            tuple: tuple containing:
+                vm_list_default_compr(list): objects of cnv workload class with default comp
+                vm_list_agg_compr(list): objects of cnv workload class with aggressive compression
+                sc_obj_def_compr(list): objects of storage class with default comp
+                sc_obj_aggressive(list): objects of storage class with aggressive compression
+
+        """
+        vm_list_agg_compr = []
+        vm_list_default_compr = []
+
+        namespace = (
+            namespace if namespace else create_unique_resource_name("vm", "namespace")
+        )
+
+        # Setup csi-kms-connection-details configmap
+        log.info("Setting up csi-kms-connection-details configmap")
+        kms = pv_encryption_kms_setup_factory(kv_version="v2")
+        log.info("csi-kms-connection-details setup successful")
+
+        # Create an encryption enabled storageclass for RBD
+        sc_obj_def_compr = storageclass_factory(
+            interface=constants.CEPHBLOCKPOOL,
+            encrypted=True,
+            encryption_kms_id=kms.kmsid,
+            new_rbd_pool=True,
+            mapOptions="krbd:rxbounce",
+            mounter="rbd",
+        )
+
+        sc_obj_aggressive = storageclass_factory(
+            interface=constants.CEPHBLOCKPOOL,
+            encrypted=True,
+            encryption_kms_id=kms.kmsid,
+            compression="aggressive",
+            new_rbd_pool=True,
+            mapOptions="krbd:rxbounce",
+            mounter="rbd",
+        )
+
+        storage_classes = [sc_obj_def_compr, sc_obj_aggressive]
+
+        # Create ceph-csi-kms-token in the tenant namespace
+        kms.vault_path_token = kms.generate_vault_token()
+        kms.create_vault_csi_kms_token(namespace=namespace)
+
+        for sc_obj in storage_classes:
+            pvk_obj = PVKeyrotation(sc_obj)
+            pvk_obj.annotate_storageclass_key_rotation(schedule="*/3 * * * *")
+
+        # Load VMconfigs from cnv_vm_workload yaml
+        vm_configs = templating.load_yaml(constants.CNV_VM_WORKLOADS)
+
+        # Loop through vm_configs and create the VMs using the cnv_workload fixture
+        for index, vm_config in enumerate(vm_configs["cnv_vm_configs"]):
+            # Determine the storage class based on the compression type
+            if vm_config["sc_compression"] == "default":
+                storageclass = sc_obj_def_compr.name
+            elif vm_config["sc_compression"] == "aggressive":
+                storageclass = sc_obj_aggressive.name
+            vm_obj = cnv_workload(
+                volume_interface=vm_config["volume_interface"],
+                access_mode=vm_config["access_mode"],
+                storageclass=storageclass,
+                pvc_size="30Gi",  # Assuming pvc_size is fixed for all
+                source_url=constants.CNV_FEDORA_SOURCE,  # Assuming source_url is the same for all VMs
+                namespace=namespace,
+            )[index]
+            if vm_config["sc_compression"] == "aggressive":
+                vm_list_agg_compr.append(vm_obj)
+            else:
+                vm_list_default_compr.append(vm_obj)
+        return (
+            vm_list_default_compr,
+            vm_list_agg_compr,
+            sc_obj_def_compr,
+            sc_obj_aggressive,
+        )
+
+    return factory
+
+
+@pytest.fixture()
+def clone_vm_workload(request):
+    """
+    Clones VM workloads
+
+    """
+    cloned_vms = []
+
+    def factory(
+        vm_obj,
+        volume_interface=None,
+        namespace=None,
+    ):
+        """
+        Args:
+            vm_obj (VirtualMachine): Object of source vm to clone
+            volume_interface (str): The type of volume interface to use. Default is `constants.VM_VOLUME_PVC`.
+            namespace (str, optional): The namespace to create the vm on. Default, creates a unique namespace.
+
+        Returns:
+            list: objects of VM clone class
+
+        """
+        clone_vm_name = create_unique_resource_name("clone", "vm")
+        clone_vm_obj = VMCloner(vm_name=clone_vm_name, namespace=namespace)
+        volume_iface = volume_interface if volume_interface else vm_obj.volume_interface
+        clone_vm_obj.clone_vm(
+            source_vm_obj=vm_obj,
+            volume_interface=volume_iface,
+        )
+        cloned_vms.append(clone_vm_obj)
+        return cloned_vms
+
+    def teardown():
+        """
+        Cleans up cloned vm workloads
+
+        """
+        for vm_wl in cloned_vms:
+            vm_wl.delete()
 
     request.addfinalizer(teardown)
     return factory
@@ -7441,7 +7733,7 @@ def add_env_vars_to_noobaa_core_fixture(request, mcg_obj_session):
 @pytest.fixture(scope="class")
 def add_env_vars_to_noobaa_endpoint_class(request, mcg_obj_session):
     """
-    Class-scoped fixture for adding env vars to the noobaa-core sts
+    Class-scoped fixture for adding env vars to the noobaa-endpoint sts
 
     """
     return add_env_vars_to_noobaa_endpoint_fixture(request, mcg_obj_session)
@@ -8029,7 +8321,7 @@ def scale_noobaa_resources(request):
         storagecluster_obj = OCP(
             kind=constants.STORAGECLUSTER,
             resource_name=constants.DEFAULT_STORAGE_CLUSTER,
-            namespace=constants.OPENSHIFT_STORAGE_NAMESPACE,
+            namespace=config.ENV_DATA["cluster_namespace"],
         )
 
         scale_endpoint_pods_param = (
@@ -8346,7 +8638,7 @@ def scale_noobaa_db_pod_pv_size(request):
                 get_pods_having_label(
                     label=label,
                     retry=5,
-                    namespace=constants.OPENSHIFT_STORAGE_NAMESPACE,
+                    namespace=config.ENV_DATA["cluster_namespace"],
                 )
             )
 
@@ -8371,7 +8663,7 @@ def scale_noobaa_db_pod_pv_size(request):
                 get_pods_having_label(
                     label=label,
                     retry=5,
-                    namespace=constants.OPENSHIFT_STORAGE_NAMESPACE,
+                    namespace=config.ENV_DATA["cluster_namespace"],
                 )
             )
 
@@ -8585,21 +8877,24 @@ def setup_cnv(request):
     """
     cnv_obj = CNVInstaller()
     installed = False
-    if not cnv_obj.post_install_verification():
-        cnv_obj.deploy_cnv(check_cnv_deployed=False, check_cnv_ready=False)
-        installed = True
+    try:
+        if not cnv_obj.post_install_verification():
+            installed = True
+            cnv_obj.deploy_cnv()
 
-    def finalizer():
-        """
-        Clean up CNV deployment
+    finally:
 
-        """
+        def finalizer():
+            """
+            Clean up CNV deployment
 
-        # Uninstall CNV only if installed by this fixture
-        if installed:
-            cnv_obj.uninstall_cnv()
+            """
 
-    request.addfinalizer(finalizer)
+            # Uninstall CNV only if installed by this fixture
+            if installed:
+                cnv_obj.uninstall_cnv()
+
+        request.addfinalizer(finalizer)
 
 
 @pytest.fixture(scope="class")
@@ -8700,6 +8995,16 @@ def enable_guaranteed_bucket_logging_fixture(request, pvc_factory):
 @pytest.fixture(scope="session")
 def virtctl_binary():
     get_virtctl_tool()
+
+
+@pytest.fixture()
+def zone_rank():
+    return None
+
+
+@pytest.fixture()
+def role_rank():
+    return None
 
 
 @pytest.fixture()

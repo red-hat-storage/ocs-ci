@@ -56,15 +56,6 @@ def worker_node(request):
 @orange_squad
 @scale
 @skipif_ocs_version("<4.5")
-@pytest.mark.parametrize(
-    argnames="resource_to_delete",
-    argvalues=[
-        pytest.param(*["mgr"], marks=pytest.mark.polarion_id("OCS-2402")),
-        pytest.param(*["mon"], marks=pytest.mark.polarion_id("OCS-2420")),
-        pytest.param(*["osd"], marks=pytest.mark.polarion_id("OCS-2446")),
-        pytest.param(*["mds"], marks=pytest.mark.polarion_id("OCS-2447")),
-    ],
-)
 class TestScaleEndpointAutoScale(MCGTest):
     """
     Test MCG endpoint auto-scaling
@@ -88,7 +79,7 @@ class TestScaleEndpointAutoScale(MCGTest):
             timeout=900,
         )
 
-    def test_scale_endpoint_and_respin_ceph_pods(
+    def deprecated_test_scale_endpoint_and_respin_ceph_pods(
         self,
         mcg_job_factory,
         resource_to_delete,

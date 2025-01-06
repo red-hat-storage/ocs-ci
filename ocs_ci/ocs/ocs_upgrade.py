@@ -31,8 +31,12 @@ from ocs_ci.ocs.defaults import (
 from ocs_ci.ocs.ocp import get_images, OCP
 from ocs_ci.ocs.node import get_nodes
 from ocs_ci.ocs.resources.catalog_source import CatalogSource, disable_specific_source
-from ocs_ci.ocs.resources.csv import CSV, check_all_csvs_are_succeeded
 from ocs_ci.ocs.resources.daemonset import DaemonSet
+from ocs_ci.ocs.resources.csv import (
+    CSV,
+    check_all_csvs_are_succeeded,
+    get_csvs_start_with_prefix,
+)
 from ocs_ci.ocs.resources.install_plan import wait_for_install_plan_and_approve
 from ocs_ci.ocs.resources.pod import get_noobaa_pods, verify_pods_upgraded
 from ocs_ci.ocs.resources.packagemanifest import (
@@ -62,6 +66,7 @@ from ocs_ci.utility.templating import dump_data_to_temp_yaml
 from ocs_ci.ocs.exceptions import (
     TimeoutException,
     ExternalClusterRGWAdminOpsUserException,
+    CSVNotFound,
 )
 from ocs_ci.ocs.ui.base_ui import logger, login_ui
 from ocs_ci.ocs.ui.views import locators, ODF_OPERATOR
@@ -365,23 +370,28 @@ class OCSUpgrade(object):
             config.REPORTING["ocs_must_gather_image"] = must_gather_image
             config.REPORTING["ocs_must_gather_latest_tag"] = must_gather_tag
 
-    def get_csv_name_pre_upgrade(self):
+    def get_csv_name_pre_upgrade(self, resource_name=OCS_OPERATOR_NAME):
         """
-        Getting OCS operator name as displayed in CSV
+        Get pre-upgrade CSV name
 
-        Returns:
-            str: OCS operator name, as displayed in CSV
+        Ealier we used to depend on packagemanifest to find the pre-upgrade
+        csv name. Due to issues in catalogsource where csv names were not shown properly once
+        catalogsource for upgrade version has been created, we are taking new approach of
+        finding csv name from csv list and also look for pre-upgrade ocs version for finding out
+        the actual csv
 
         """
-        operator_selector = get_selector_for_ocs_operator()
-        package_manifest = PackageManifest(
-            resource_name=OCS_OPERATOR_NAME,
-            selector=operator_selector,
-            subscription_plan_approval=self.subscription_plan_approval,
-        )
-        channel = config.DEPLOYMENT.get("ocs_csv_channel")
 
-        return package_manifest.get_current_csv(channel)
+        csv_name = None
+        csv_list = get_csvs_start_with_prefix(resource_name, namespace=self.namespace)
+        for csv in csv_list:
+            if resource_name in csv.get("metadata").get("name"):
+                if config.PREUPGRADE_CONFIG.get("ENV_DATA").get(
+                    "ocs_version"
+                ) in csv.get("metadata").get("name"):
+                    csv_name = csv.get("metadata").get("name")
+                    return csv_name
+        raise CSVNotFound(f"No preupgrade CSV found for {resource_name}")
 
     def get_pre_upgrade_image(self, csv_name_pre_upgrade):
         """
@@ -403,7 +413,7 @@ class OCSUpgrade(object):
         )
         return get_images(csv_pre_upgrade.get())
 
-    def set_upgrade_channel(self):
+    def set_upgrade_channel(self, resource_name=OCS_OPERATOR_NAME):
         """
         Wait for the new package manifest for upgrade.
 
@@ -413,7 +423,7 @@ class OCSUpgrade(object):
         """
         operator_selector = get_selector_for_ocs_operator()
         package_manifest = PackageManifest(
-            resource_name=OCS_OPERATOR_NAME,
+            resource_name=resource_name,
             selector=operator_selector,
         )
         package_manifest.wait_for_resource()
@@ -435,9 +445,14 @@ class OCSUpgrade(object):
             subscription_name = constants.ODF_SUBSCRIPTION
         else:
             subscription_name = constants.OCS_SUBSCRIPTION
+        kind_name = (
+            "subscription.operators.coreos.com"
+            if config.multicluster
+            else "subscription"
+        )
         subscription = OCP(
             resource_name=subscription_name,
-            kind="subscription",
+            kind=kind_name,
             namespace=config.ENV_DATA["cluster_namespace"],
         )
         current_ocs_source = subscription.data["spec"]["source"]
@@ -448,7 +463,7 @@ class OCSUpgrade(object):
             else constants.OPERATOR_CATALOG_SOURCE_NAME
         )
         patch_subscription_cmd = (
-            f"patch subscription {subscription_name} "
+            f"patch {kind_name} {subscription_name} "
             f'-n {self.namespace} --type merge -p \'{{"spec":{{"channel": '
             f'"{channel}", "source": "{ocs_source}"}}}}\''
         )
@@ -483,7 +498,13 @@ class OCSUpgrade(object):
             log.info(f"CSV now upgraded to: {csv_name_post_upgrade}")
             return True
 
-    def get_images_post_upgrade(self, channel, pre_upgrade_images, upgrade_version):
+    def get_images_post_upgrade(
+        self,
+        channel,
+        pre_upgrade_images,
+        upgrade_version,
+        resource_name=OCS_OPERATOR_NAME,
+    ):
         """
         Checks if all images of OCS cluster upgraded,
             and return list of all images if upgrade success
@@ -499,7 +520,7 @@ class OCSUpgrade(object):
         """
         operator_selector = get_selector_for_ocs_operator()
         package_manifest = PackageManifest(
-            resource_name=OCS_OPERATOR_NAME,
+            resource_name=resource_name,
             selector=operator_selector,
             subscription_plan_approval=self.subscription_plan_approval,
         )

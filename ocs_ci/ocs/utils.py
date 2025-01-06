@@ -1010,7 +1010,8 @@ def collect_ceph_external(path):
         current_dir = Path(__file__).parent.parent.parent
         script_path = os.path.join(current_dir, "scripts", "bash", "mg_external.sh")
         run_cmd(
-            f"sh {script_path} {os.path.join(path, 'ceph_external')} {kubeconfig_path}",
+            f"sh {script_path} {os.path.join(path, 'ceph_external')} {kubeconfig_path} "
+            f"{ocsci_config.ENV_DATA['cluster_namespace']}",
             timeout=140,
         )
     except Exception as ex:
@@ -1293,22 +1294,36 @@ def _collect_ocs_logs(
                     cluster_config=cluster_config,
                 )
 
-            submariner_log_path = os.path.join(
-                log_dir_path,
-                "submariner",
-            )
-            run_cmd(f"mkdir -p {submariner_log_path}")
-            cwd = os.getcwd()
-            run_cmd(f"chmod -R 777 {submariner_log_path}")
-            os.chdir(submariner_log_path)
-            submariner_log_collect = (
-                f"subctl gather --kubeconfig {cluster_config.RUN['kubeconfig']}"
-            )
-            log.info("Collecting submariner logs")
-            out = run_cmd(submariner_log_collect)
-            run_cmd(f"chmod -R 777 {submariner_log_path}")
-            os.chdir(cwd)
-            log.info(out)
+            # We want to skip submariner log collection if it's in import clusters phase
+            if not cluster_config.ENV_DATA.get(
+                "import_clusters_to_acm", False
+            ) or cluster_config.ENV_DATA.get("submariner_source", ""):
+                try:
+                    run_cmd("subctl")
+                except (CommandFailed, FileNotFoundError):
+                    log.debug("subctl binary not found, downloading now...")
+                    # Importing here to avoid circular import error
+                    from ocs_ci.deployment.acm import Submariner
+
+                    submariner = Submariner()
+                    submariner.download_binary()
+
+                submariner_log_path = os.path.join(
+                    log_dir_path,
+                    "submariner",
+                )
+                run_cmd(f"mkdir -p {submariner_log_path}")
+                cwd = os.getcwd()
+                run_cmd(f"chmod -R 777 {submariner_log_path}")
+                os.chdir(submariner_log_path)
+                submariner_log_collect = (
+                    f"subctl gather --kubeconfig {cluster_config.RUN['kubeconfig']}"
+                )
+                log.info("Collecting submariner logs")
+                out = run_cmd(submariner_log_collect)
+                run_cmd(f"chmod -R 777 {submariner_log_path}")
+                os.chdir(cwd)
+                log.info(out)
 
 
 def collect_ocs_logs(
@@ -1594,6 +1609,20 @@ def get_non_acm_cluster_config():
     return non_acm_list
 
 
+def get_non_acm_cluster_indexes():
+    """
+    Get config index of all non-acm clusters
+
+    Returns:
+        list: of integer indexes of non-acm clusters
+
+    """
+    non_acm_indexes = list()
+    for cluster in get_non_acm_cluster_config():
+        non_acm_indexes.append(cluster.MULTICLUSTER["multicluster_index"])
+    return non_acm_indexes
+
+
 def get_all_acm_indexes():
     """
     Get indexes fro all ACM clusters
@@ -1741,6 +1770,14 @@ def cluster_config_reindex():
 
     # switch cobntext to acm
     ocsci_config.switch_acm_ctx()
+
+
+def get_primary_cluster_index():
+    """
+    Get the index of primary cluster in case of multicluster scenario
+    """
+    pcluster = get_primary_cluster_config()
+    return pcluster.MULTICLUSTER["multicluster_index"]
 
 
 def thread_init_class(class_init_operations, shutdown):

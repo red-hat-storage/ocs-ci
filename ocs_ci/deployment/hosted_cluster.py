@@ -402,6 +402,9 @@ class HypershiftHostedOCP(HyperShiftBase, MetalLBInstaller, CNVInstaller, Deploy
         if not config.ENV_DATA["platform"].lower() in HCI_PROVIDER_CLIENT_PLATFORMS:
             raise ProviderModeNotFoundException()
 
+        if not config.ENV_DATA.get("deploy_acm_hub_cluster", True):
+            deploy_acm_hub = False
+
         self.deploy_dependencies(
             deploy_acm_hub, deploy_cnv, deploy_metallb, download_hcp_binary
         )
@@ -917,7 +920,7 @@ class HostedODF(HypershiftHostedOCP):
              str: onboarding token key
         """
         secret_ocp_obj = ocp.OCP(
-            kind=constants.SECRET, namespace=constants.OPENSHIFT_STORAGE_NAMESPACE
+            kind=constants.SECRET, namespace=config.ENV_DATA["cluster_namespace"]
         )
 
         key = (
@@ -1160,7 +1163,7 @@ class HostedODF(HypershiftHostedOCP):
         """
         Get the provider address
         """
-        ocp = OCP(namespace=constants.OPENSHIFT_STORAGE_NAMESPACE)
+        ocp = OCP(namespace=config.ENV_DATA["cluster_namespace"])
         storage_provider_endpoint = ocp.exec_oc_cmd(
             (
                 "get storageclusters.ocs.openshift.io -o jsonpath={'.items[*].status.storageProviderEndpoint'}"
@@ -1210,7 +1213,7 @@ class HostedODF(HypershiftHostedOCP):
         else:
             ocp = OCP(
                 kind=constants.STORAGECLAIM,
-                namespace=constants.OPENSHIFT_STORAGE_NAMESPACE,
+                namespace=config.ENV_DATA["cluster_namespace"],
                 cluster_kubeconfig=self.cluster_kubeconfig,
             )
 
@@ -1297,7 +1300,7 @@ class HostedODF(HypershiftHostedOCP):
         else:
             ocp = OCP(
                 kind=constants.STORAGECLAIM,
-                namespace=constants.OPENSHIFT_STORAGE_NAMESPACE,
+                namespace=config.ENV_DATA["cluster_namespace"],
                 cluster_kubeconfig=self.cluster_kubeconfig,
             )
 
