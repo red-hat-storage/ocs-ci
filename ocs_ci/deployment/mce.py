@@ -14,7 +14,6 @@ from ocs_ci.utility.utils import (
     run_cmd,
     exec_cmd,
 )
-from ocs_ci.ocs import exceptions
 from ocs_ci.ocs.resources.catalog_source import CatalogSource
 from ocs_ci.ocs import ocp
 from ocs_ci.utility.utils import get_running_ocp_version
@@ -35,29 +34,44 @@ class MCEInstaller(object):
             kind="MultiClusterEngine",
             resource_name=constants.MULTICLUSTER_ENGINE,
         )
+        self.catsrc = ocp.OCP(
+            kind=constants.CATSRC, namespace=constants.MARKETPLACE_NAMESPACE
+        )
+        self.subs = ocp.OCP(kind=constants.PROVIDER_SUBSCRIPTION)
 
     def create_mce_catalog_source(self):
         """
         Creates a catalogsource for mce operator.
 
         """
-        logger.info("Adding CatalogSource for MCE")
-        mce_catalog_source_data = templating.load_yaml(constants.MCE_CATSRC_YAML)
-        mce_catalog_source_name = mce_catalog_source_data.get("metadata").get("name")
-        if config.ENV_DATA.get("mce_image"):
-            mce_image_tag = config.ENV_DATA.get("mce_image")
-        mce_catalog_source_data["spec"]["image"] = mce_image_tag
-        mce_catalog_source_manifest = tempfile.NamedTemporaryFile(
-            mode="w+", prefix="mce_catalog_source_manifest", delete=False
-        )
-        templating.dump_data_to_temp_yaml(
-            mce_catalog_source_data, mce_catalog_source_manifest.name
-        )
-        run_cmd(f"oc apply -f {mce_catalog_source_manifest.name}", timeout=2400)
-        mce_catalog_source = CatalogSource(
-            resource_name=mce_catalog_source_name,
-            namespace=constants.MARKETPLACE_NAMESPACE,
-        )
+        if not self.catsrc.is_exist(
+            resource_name=constants.MCE_CATSRC_NAME,
+        ):
+            logger.info("Adding CatalogSource for MCE")
+            mce_catalog_source_data = templating.load_yaml(constants.MCE_CATSRC_YAML)
+            if config.ENV_DATA.get("mce_image"):
+                mce_image_tag = config.ENV_DATA.get("mce_image")
+            mce_catalog_source_data["spec"]["image"] = mce_image_tag
+            mce_catalog_source_manifest = tempfile.NamedTemporaryFile(
+                mode="w+", prefix="mce_catalog_source_manifest", delete=False
+            )
+            templating.dump_data_to_temp_yaml(
+                mce_catalog_source_data, mce_catalog_source_manifest.name
+            )
+            run_cmd(f"oc apply -f {mce_catalog_source_manifest.name}", timeout=2400)
+            mce_catalog_source = CatalogSource(
+                resource_name=constants.MCE_CATSRC_NAME,
+                namespace=constants.MARKETPLACE_NAMESPACE,
+            )
+        else:
+            logger.info("catalogsource exists")
+            logger.info("Check the image for MCE")
+            if not mce_catalog_source_data["spec"]["image"] == config.ENV_DATA.get(
+                "mce_image"
+            ):
+                mce_catalog_source_data["spec"]["image"] = config.ENV_DATA.get(
+                    "mce_image"
+                )
 
         # Wait for catalog source is ready
         mce_catalog_source.wait_for_state("READY")
@@ -69,54 +83,43 @@ class MCEInstaller(object):
         Raises:
             CommandFailed: If the 'oc create' command fails.
         """
-        try:
+        if not self.ns_obj.is_exist(
+            resource_name=self.namespace,
+        ):
             logger.info(f"Creating namespace {self.namespace} for mce resources")
             namespace_yaml_file = templating.load_yaml(constants.MCE_NAMESPACE_YAML)
             namespace_yaml = OCS(**namespace_yaml_file)
             namespace_yaml.create()
             logger.info(f"MCE namespace {self.namespace} was created successfully")
-        except exceptions.CommandFailed as ef:
-            if (
-                f'project.project.openshift.io "{self.namespace}" already exists'
-                in str(ef)
-            ):
-                logger.info(f"Namespace {self.namespace} already present")
-                raise ef
+        else:
+            logger.info(f"{self.namespace} already exists")
 
     def create_multiclusterengine_operator(self):
         """
         Creates multiclusterengine operator
 
         """
-        operatorgroup_yaml_file = templating.load_yaml(constants.MCE_OPERATOR_YAM)
-        operatorgroup_yaml = OCS(**operatorgroup_yaml_file)
-        try:
+        logger.info("Check if mce operator already exist")
+        if not self.multicluster_engine.is_exist(
+            resource_name=constants.MULTICLUSTER_ENGINE
+        ):
+
+            operatorgroup_yaml_file = templating.load_yaml(constants.MCE_OPERATOR_YAML)
+            operatorgroup_yaml = OCS(**operatorgroup_yaml_file)
             operatorgroup_yaml.create()
             logger.info("mce OperatorGroup created successfully")
-        except exceptions.CommandFailed as ef:
-            if "multiclusterengine exists" in str(ef):
-                logger.info("multiclusterengine already exists")
-
-        cmd = "oc get mce multiclusterengine -o jsonpath='{.status}'"
-        cmd_res = exec_cmd(cmd, shell=True)
-        if cmd_res.returncode != 0:
-            logger.error(f"Failed to get multicluster engine status\n{cmd_res.stderr}")
-        else:
-            logger.info(
-                f"Multicluster engine version: {cmd_res.stdout.decode('utf-8')}"
-            )
-            assert (
-                cmd_res.stdout.decode("utf-8") == "Available"
-            ), "multiclusterengine is not is 'Available' status"
+        self.multicluster_engine.wait_for_phase("Available")
 
     def create_mce_subscription(self):
         """
         Creates subscription for mce operator
 
         """
-        mce_subscription_yaml_data = templating.load_yaml(
-            constants.MCE_SUBSCRIPTION_YAML
-        )
+        logger.info("Check if mce subscription already exist")
+        if not self.subs.is_exist(resource_name=constants.MCE_OPERATOR):
+            mce_subscription_yaml_data = templating.load_yaml(
+                constants.MCE_SUBSCRIPTION_YAML
+            )
 
         if config.DEPLOYMENT.get("mce_latest_stable"):
             mce_subscription_yaml_data["spec"][
