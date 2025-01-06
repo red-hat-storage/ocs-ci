@@ -135,13 +135,13 @@ class TestVmSnapshotClone(E2ETest):
     @pytest.mark.polarion_id("OCS-6288")
     def test_vm_snap_of_clone(
         self,
+        setup_cnv,
         project_factory,
+        multi_cnv_workload,
+        clone_vm_workload,
         snapshot_factory,
         snapshot_restore_factory,
-        multi_cnv_workload,
         cnv_workload,
-        clone_vm_workload,
-        setup_cnv,
     ):
         """
         This test performs the VM cloning and IOs created using different volume interfaces(PVC/DV/DVT)
@@ -192,10 +192,10 @@ class TestVmSnapshotClone(E2ETest):
             ), f"Failed: MD5 comparison between source {vm_obj.name} and cloned {clone_obj.name} VMs"
             run_dd_io(vm_obj=clone_obj, file_path=file_paths[1])
 
-            clone_obj.stop()
-
-            # Taking Snapshot of PVC
             cloned_pvc_obj = clone_obj.get_vm_pvc_obj()
+            # Stopping VM before taking snapshot of the VM PVC
+            clone_obj.stop()
+            # Taking Snapshot of cloned PVC
             snap_obj = snapshot_factory(cloned_pvc_obj)
 
             # Restore the snapshot
