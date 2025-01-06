@@ -109,7 +109,7 @@ class TestMustGather(ManageTest):
         """
 
         flags_cmd = "/usr/bin/gather --minimal "
-        paths_exist = list()
+        paths_exist = const_must_gather.MINIMAL
         paths_not_exist = list()
 
         options = [
