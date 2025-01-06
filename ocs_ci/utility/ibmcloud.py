@@ -406,10 +406,20 @@ class IBMCloud(object):
         self.restart_nodes(nodes)
 
         if wait:
+            timeout = 300
+            ibm_cloud_managed = (
+                config.ENV_DATA["platform"] == constants.IBMCLOUD_PLATFORM
+                and config.ENV_DATA["deployment_type"] == "managed"
+            )
+            if ibm_cloud_managed:
+                timeout = 900
             # When the node is reachable then the node reaches status Ready.
             logger.info(f"Waiting for nodes: {node_names} to reach ready state")
             wait_for_nodes_status(
-                node_names=node_names, status=constants.NODE_READY, timeout=180, sleep=5
+                node_names=node_names,
+                status=constants.NODE_READY,
+                timeout=timeout,
+                sleep=5,
             )
 
     def stop_nodes(self, nodes, wait=True):
@@ -433,10 +443,17 @@ class IBMCloud(object):
             run_cmd(cmd.format(node))
 
         if wait:
+            timeout = 300
+            ibm_cloud_managed = (
+                config.ENV_DATA["platform"] == constants.IBMCLOUD_PLATFORM
+                and config.ENV_DATA["deployment_type"] == "managed"
+            )
+            if ibm_cloud_managed:
+                timeout = 900
             # When the node is reachable then the node reaches status Ready.
             logger.info(f"Waiting for nodes: {node_names} to reach not ready state")
             wait_for_nodes_status(
-                node_names, constants.NODE_NOT_READY, timeout=180, sleep=5
+                node_names, constants.NODE_NOT_READY, timeout=timeout, sleep=5
             )
 
     def restart_nodes(self, nodes, timeout=900, wait=True):
