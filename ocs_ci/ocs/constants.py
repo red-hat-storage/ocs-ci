@@ -1675,6 +1675,12 @@ ORDER_BEFORE_UPGRADE = 10
 ORDER_BEFORE_OCP_UPGRADE = 20
 ORDER_OCP_UPGRADE = 30
 ORDER_AFTER_OCP_UPGRADE = 40
+# Multicluster orchestrator
+ORDER_MCO_UPGRADE = 42
+# DR Hub operator
+ORDER_DR_HUB_UPGRADE = 44
+# ACM Operator
+ORDER_ACM_UPGRADE = 46
 ORDER_BEFORE_OCS_UPGRADE = 50
 ORDER_OCS_UPGRADE = 60
 ORDER_AFTER_OCS_UPGRADE = 70
@@ -1717,6 +1723,14 @@ ARO_WORKER_SUBNET_ADDRESS_PREFIXES = "10.0.2.0/23"
 ARO_MASTER_SUBNET_ADDRESS_PREFIXES = "10.0.0.0/23"
 CLIENT_OPERATOR_CONFIGMAP = "ocs-client-operator-config"
 CLIENT_OPERATOR_CSI_IMAGES = "ocs-client-operator-csi-images"
+MCO_SUBSCRIPTION = "odf-multicluster-orchestrator"
+DR_HUB_OPERATOR_SUBSCRIPTION = (
+    "odr-hub-operator-stable-PLACEHOLDER-redhat-operators-openshift-marketplace"
+)
+DR_HUB_OPERATOR_SUBSCRIPTION_LABEL = (
+    "operators.coreos.com/odr-hub-operator.openshift-operators"
+)
+DR_CLUSTER_OPERATOR_SUBSCRIPTION = "ramen-dr-cluster-subscription"
 
 # UI Deployment constants
 HTPASSWD_SECRET_NAME = "htpass-secret"
@@ -2701,14 +2715,22 @@ GLOBALNET_STATUS = "True"
 SUBMARINER_DOWNSTREAM_UNRELEASED = os.path.join(
     TEMPLATE_MULTICLUSTER_DIR, "submariner_downstream_unreleased_catsrc.yaml"
 )
+ACM_CATSRC = SUBMARINER_DOWNSTREAM_UNRELEASED
+ACM_CATSRC_NAME = "acm-catalogsource"
 # We need to append version string at the end of this url
 SUBMARINER_DOWNSTREAM_UNRELEASED_BUILD_URL = (
     "https://datagrepper.engineering.redhat.com/raw?topic=/topic/"
     "VirtualTopic.eng.ci.redhat-container-image.pipeline.complete"
     "&rows_per_page=25&delta=1296000&contains=submariner-operator-bundle-container-v"
 )
+ACM_BREW_BUILD_URL = (
+    "https://datagrepper.engineering.redhat.com/raw?topic=/topic/"
+    "VirtualTopic.eng.ci.redhat-container-image.pipeline.complete"
+    "&rows_per_page=25&delta=1296000&contains=acm"
+)
 SUBMARINER_BREW_REPO = "brew.registry.redhat.io/rh-osbs/iib"
 SUBCTL_DOWNSTREAM_URL = "registry.redhat.io/rhacm2/"
+ACM_BREW_REPO = SUBMARINER_BREW_REPO
 
 # Multicluster related
 
@@ -2747,6 +2769,7 @@ ACM_HUB_UNRELEASED_ICSP_YAML = os.path.join(
 SUBMARINER_DOWNSTREAM_BREW_ICSP = os.path.join(
     TEMPLATE_DIR, "acm-deployment", "submariner_downstream_brew_icsp.yaml"
 )
+ACM_BREW_ICSP_YAML = os.path.join(TEMPLATE_DIR, "acm-deployment", "acm_brew_icsp.yaml")
 ACM_HUB_UNRELEASED_PULL_SECRET_TEMPLATE = "pull-secret.yaml.j2"
 ACM_ODF_MULTICLUSTER_ORCHESTRATOR_RESOURCE = "odf-multicluster-orchestrator"
 ACM_ODR_HUB_OPERATOR_RESOURCE = "odr-hub-operator"
@@ -3092,3 +3115,5 @@ CREATE = "create"
 EDIT = "edit"
 DELETE = "delete"
 MACHINE_POOL_ACTIONS = [CREATE, EDIT, DELETE]
+# MDR multicluster roles
+MDR_ROLES = ["ActiveACM", "PassiveACM", "PrimaryODF", "SecondaryODF"]
