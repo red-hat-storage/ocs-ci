@@ -17,6 +17,7 @@ from ocs_ci.utility.utils import (
 from ocs_ci.ocs.resources.catalog_source import CatalogSource
 from ocs_ci.ocs import ocp
 from ocs_ci.utility.utils import get_running_ocp_version
+from ocs_ci.ocs.exceptions import CommandFailed, UnavailableResourceException
 
 logger = logging.getLogger(__name__)
 
@@ -165,9 +166,12 @@ class MCEInstaller(object):
             namespace=constants.HYPERSHIFT_NAMESPACE,
         )
 
-        assert configmaps_obj.is_exist(
+        if not configmaps_obj.is_exist(
             resource_name=constants.SUPPORTED_VERSIONS_CONFIGMAP
-        ), f"Configmap {constants.SUPPORTED_VERSIONS_CONFIGMAP} does not exist in hypershift namespace"
+        ):
+            raise UnavailableResourceException(
+                f"Configmap {constants.SUPPORTED_VERSIONS_CONFIGMAP} does not exist in hypershift namespace"
+            )
 
         cmd = "oc get cm -n hypershift supported-versions -o jsonpath='{.data.supported-versions}'"
         cmd_res = exec_cmd(cmd, shell=True)
@@ -188,16 +192,8 @@ class MCEInstaller(object):
             "-n {self.namespace}"
         )
         cmd_res = exec_cmd(cmd, shell=True)
-        assert cmd_res.returncode == 0
-
-        configmaps_obj = OCP(
-            kind=constants.CONFIGMAP,
-            namespace=constants.HYPERSHIFT_NAMESPACE,
-        )
-
-        assert configmaps_obj.is_exist(
-            resource_name=self.hypershift_override_image_cm
-        ), f"Configmap {self.hypershift_override_image_cm} does not exist in hypershift namespace"
+        if cmd_res.returncode:
+            raise CommandFailed("override configmap not created successfully")
 
         # annotate multicluster engine operator with the override cm
         self.multicluster_engine.annotate(
@@ -236,11 +232,9 @@ class MCEInstaller(object):
         self.create_multiclusterengine_operator()
         # Check hypershift ns created
         if not self.check_hypershift_namespace():
-            cmd = (
-                "oc patch mce multiclusterengine "
-                '-p \'{"spec":{"overrides":{"components":['
-                '{"enabled":true, "name":"hypershift"}'
-                "]}}}' --type=merge"
-            )
+            cmd = f"oc create namespace {constants.HYPERSHIFT_NAMESPACE}"
             cmd_res = exec_cmd(cmd, shell=True)
-            assert cmd_res.returncode == 0
+            if cmd_res.returncode:
+                raise CommandFailed("Failed to create hypershift namespace")
+        # Check supported versions in supported-versions configmap
+        self.check_supported_versions()
