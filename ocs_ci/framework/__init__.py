@@ -290,6 +290,18 @@ class MultiClusterConfig:
 
         return consumer_indexes_list
 
+    def get_consumer_with_resticted_quota_index(self):
+        """
+        Get the consumer cluster index
+        of the first consumer which has quota restrictions
+        """
+        consumer_indexes = self.get_consumer_indexes_list()
+        for index in consumer_indexes:
+            cluster = self.clusters[index]
+            if cluster.ENV_DATA["quota"] != "unlimited":
+                return index
+        raise ClusterNotFoundException("Didn't find any consumer with resticted quota")
+
     def get_cluster_index_by_name(self, cluster_name):
         """
         Get the cluster index by the cluster name
@@ -494,6 +506,21 @@ class MultiClusterConfig:
                 # if no provider is available then set the switch to current index so that
                 # no switch happens and code runs on current cluster
                 logger.DEBUG("No provider was found - using current cluster")
+                switch_index = config.cur_index
+            super().__init__(switch_index)
+
+    class RunWithRestrictedQuotaConsumerConfigContextIfAvailable(RunWithConfigContext):
+        """
+        Context manager that makes sure that a given code block is executed
+        on a Consumer with restricted quota.
+        If such config is not available, then run with current config context.
+        """
+
+        def __init__(self):
+            try:
+                switch_index = config.get_consumer_with_resticted_quota_index()
+            except ClusterNotFoundException:
+                logger.DEBUG("No consumer with restricted quota found")
                 switch_index = config.cur_index
             super().__init__(switch_index)
 

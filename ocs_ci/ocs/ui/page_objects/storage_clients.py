@@ -1,6 +1,6 @@
 import logging
 from selenium.common.exceptions import WebDriverException
-
+from ocs_ci.framework import config
 from ocs_ci.ocs.ui.base_ui import take_screenshot, copy_dom, BaseUI
 
 logger = logging.getLogger(__name__)
