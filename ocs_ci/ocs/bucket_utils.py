@@ -2115,6 +2115,15 @@ def update_replication_policy(bucket_name, replication_policy_dict):
     ).patch(params=json.dumps(replication_policy_patch_dict), format_type="merge")
 
 
+def get_replication_policy(bucket_name):
+
+    return OCP(
+        kind="obc",
+        namespace=config.ENV_DATA["cluster_namespace"],
+        resource_name=bucket_name,
+    ).get()["spec"]["additionalConfig"]["replicationPolicy"]
+
+
 def patch_replication_policy_to_bucketclass(
     bucketclass_name, rule_id, destination_bucket_name
 ):
@@ -2716,6 +2725,42 @@ def bulk_s3_put_bucket_lifecycle_config(mcg_obj, buckets, lifecycle_config):
     logger.info("Applied lifecyle rule on all the buckets")
 
 
+def upload_random_objects_to_source_and_wait_for_replication(
+    mcg_obj,
+    source_bucket,
+    target_bucket,
+    mockup_logger,
+    file_dir,
+    pattern="ObjKey-",
+    amount=1,
+    prefix=None,
+    timeout=600,
+):
+    """
+    Upload randomly generated objects to the source bucket and wait until the
+    replication happens
+
+    """
+
+    logger.info(f"Randomly generating {amount} object/s")
+    obj_list = write_random_objects_in_pod(
+        io_pod=mockup_logger.awscli_pod,
+        file_dir=file_dir,
+        amount=amount,
+        pattern=pattern,
+    )
+
+    mockup_logger.upload_random_objects_and_log(
+        source_bucket.name, file_dir=file_dir, obj_list=obj_list, prefix=prefix
+    )
+    assert compare_bucket_object_list(
+        mcg_obj,
+        source_bucket.name,
+        target_bucket.name,
+        timeout=timeout,
+    ), f"Standard replication failed to complete in {timeout} seconds"
+
+
 def upload_test_objects_to_source_and_wait_for_replication(
     mcg_obj, source_bucket, target_bucket, mockup_logger, timeout
 ):
@@ -2945,7 +2990,9 @@ def put_bucket_versioning_via_awscli(
     )
 
 
-def upload_obj_versions(mcg_obj, awscli_pod, bucket_name, obj_key, amount=1, size="1M"):
+def upload_obj_versions(
+    mcg_obj, awscli_pod, bucket_name, obj_key, prefix=None, amount=1, size="1M"
+):
     """
     Upload multiple random data versions to a given object key and return their ETag values
 
@@ -2960,6 +3007,10 @@ def upload_obj_versions(mcg_obj, awscli_pod, bucket_name, obj_key, amount=1, siz
     Returns:
         list: List of ETag values of versions in latest to oldest order
     """
+    full_object_path = (
+        f"s3://{bucket_name}/{prefix}" if prefix else f"s3://{bucket_name}/"
+    )
+
     file_dir = os.path.join("/tmp", str(uuid4()))
     awscli_pod.exec_cmd_on_pod(f"mkdir {file_dir}")
 
@@ -2974,7 +3025,7 @@ def upload_obj_versions(mcg_obj, awscli_pod, bucket_name, obj_key, amount=1, siz
         # the uploaded object's ETag in the response
         resp = awscli_pod.exec_cmd_on_pod(
             command=craft_s3_command(
-                f"cp {file_path} s3://{bucket_name}/{obj_key} --debug 2>&1",
+                f"cp {file_path} {full_object_path}/{obj_key} --debug 2>&1",
                 mcg_obj=mcg_obj,
             ),
             out_yaml_format=False,
@@ -3030,5 +3081,35 @@ def get_obj_versions(mcg_obj, awscli_pod, bucket_name, obj_key):
         # Remove quotes from the ETag values for easier usage
         for d in versions_dicts:
             d["ETag"] = d["ETag"].strip('"')
-
     return versions_dicts
+
+
+def verify_deletion_marker(mcg_obj, awscli_pod, bucket_name, object_key):
+    """
+    Verify if deletion marker exists for the given object key
+
+    Args:
+        mcg_obj (MCG): MCG object
+        awscli_pod (Pod): Pod object where AWS CLI is installed
+        bucket_name (str): Name of the bucket
+        object_key (str): Object key
+
+    Returns:
+        True if DeletionMarkers exists else False
+
+    """
+    resp = awscli_pod.exec_cmd_on_pod(
+        command=craft_s3_command(
+            f"list-object-versions --bucket {bucket_name} --prefix {object_key}",
+            mcg_obj=mcg_obj,
+            api=True,
+        ),
+        out_yaml_format=False,
+    )
+
+    if resp and "DeleteMarkers" in resp:
+        delete_markers = json.loads(resp).get("DeleteMarkers")[0]
+        logger.info(f"{bucket_name}:\n{delete_markers}")
+        if delete_markers.get("IsLatest"):
+            return True
+    return False
