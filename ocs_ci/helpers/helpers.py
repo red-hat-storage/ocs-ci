@@ -5673,6 +5673,13 @@ def create_network_fence(node_name, cidr):
     """
     Create NetworkFence for the node
 
+    Args:
+        node_name (str): Name of the node
+        cidr (str): cidr
+
+    Returns:
+        OCS: NetworkFence object
+
     """
     logger.info("Creating NetworkFence")
     network_fence_dict = templating.load_yaml(constants.NETWORK_FENCE_CRD)
@@ -5683,6 +5690,7 @@ def create_network_fence(node_name, cidr):
         logger.info(
             f"NetworkFence {network_fence_obj.name} for node {node_name} created successfully"
         )
+    return network_fence_obj
 
 
 def unfence_node(node_name):

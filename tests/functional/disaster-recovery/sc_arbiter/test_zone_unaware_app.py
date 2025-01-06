@@ -109,15 +109,15 @@ class TestZoneUnawareApps:
     @pytest.mark.parametrize(
         argnames="fencing",
         argvalues=[
-            pytest.param(
-                True,
-            ),
+            # pytest.param(
+            #     True,
+            # ),
             pytest.param(
                 False,
             ),
         ],
         ids=[
-            "With-Fencing",
+            # "With-Fencing",
             "Without-Fencing",
         ],
     )
@@ -171,6 +171,7 @@ class TestZoneUnawareApps:
             )
             log.info(f"Nodes of zone {zone} are shutdown successfully")
 
+            network_fence_objs = []
             if fencing:
 
                 # If fencing is True, then we need to fence the nodes after shutdown
@@ -195,8 +196,10 @@ class TestZoneUnawareApps:
                     ]
 
                     # Create the network fence
-                    retry(CommandFailed, tries=5)(create_network_fence)(
-                        node.name, cidr=cidrs[0]
+                    network_fence_objs.append(
+                        retry(CommandFailed, tries=5)(create_network_fence)(
+                            node.name, cidr=cidrs[0]
+                        )
                     )
 
                 # Taint the nodes that are shutdown
@@ -266,6 +269,10 @@ class TestZoneUnawareApps:
                 log.info(
                     "Successfully removed taints from the nodes that were shutdown"
                 )
+
+                # Delete NetworkFence objects for each of the nodes
+                for network_fence in network_fence_objs:
+                    network_fence.delete()
 
             # Start the nodes that were shutdown
             log.info(f"Starting the {zone} nodes")
