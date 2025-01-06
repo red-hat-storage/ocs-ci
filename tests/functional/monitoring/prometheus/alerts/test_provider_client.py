@@ -89,6 +89,36 @@ def test_change_client_ocs_version_and_stop_heartbeat(
         )
 
 
+@blue_squad
+@tier4c
+@runs_on_provider
+@hci_provider_and_client_required
+def test_quota_fillup_80_alert(measure_fill_up_client_quota, threading_lock):
+    api = prometheus.PrometheusAPI(threading_lock=threading_lock)
+
+    # get alerts from time when manager deployment was scaled down
+    alerts = measure_fill_up_client_quota.get("prometheus_alerts")
+    client_name = measure_fill_up_client_quota.get("metadata").get("client_name")
+    cluster_namespace = config.ENV_DATA["cluster_namespace"]
+    cluster_name = config.ENV_DATA["storage_cluster_name"]
+    target_alerts = []
+    states = ["firing"]
+
+    for target_alert in target_alerts:
+        prometheus.check_alert_list(
+            label=target_alert["label"],
+            msg=target_alert["msg"],
+            alerts=alerts,
+            states=states,
+            severity=target_alert["severity"],
+        )
+        api.check_alert_cleared(
+            label=target_alert["label"],
+            measure_end_time=measure_fill_up_client_quota.get("stop"),
+            time_min=300,
+        )
+
+
 def teardown_module():
     ocs_obj = OCP()
     ocs_obj.login_as_sa()
