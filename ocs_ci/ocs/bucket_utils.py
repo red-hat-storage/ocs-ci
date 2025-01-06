@@ -8,6 +8,7 @@ import os
 import shlex
 import time
 
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from uuid import uuid4
 
 import boto3
@@ -2115,6 +2116,15 @@ def update_replication_policy(bucket_name, replication_policy_dict):
     ).patch(params=json.dumps(replication_policy_patch_dict), format_type="merge")
 
 
+def get_replication_policy(bucket_name):
+
+    return OCP(
+        kind="obc",
+        namespace=config.ENV_DATA["cluster_namespace"],
+        resource_name=bucket_name,
+    ).get()["spec"]["additionalConfig"]["replicationPolicy"]
+
+
 def patch_replication_policy_to_bucketclass(
     bucketclass_name, rule_id, destination_bucket_name
 ):
@@ -2716,6 +2726,56 @@ def bulk_s3_put_bucket_lifecycle_config(mcg_obj, buckets, lifecycle_config):
     logger.info("Applied lifecyle rule on all the buckets")
 
 
+def upload_random_objects_to_source_and_wait_for_replication(
+    mcg_obj,
+    source_bucket,
+    target_bucket,
+    mockup_logger,
+    file_dir,
+    pattern="ObjKey-",
+    amount=1,
+    num_versions=1,
+    prefix=None,
+    timeout=600,
+):
+    """
+    Upload randomly generated objects to the source bucket and wait until the
+    replication happens
+
+    Args:
+        mcg_obj (MCG): MCG object
+        source_bucket (OBC): OBC object
+        target_bucket (OBC): OBC object
+        mockup_logger (MockupLogger): MockupLogger object
+        file_dir (str): File directory where to generate objects
+        pattern (str): Prefix for object name
+        amount (int): Number of objects
+        num_verions (int): Number of versions of each object
+        prefix (str): Prefix under bucket where objects need to be uploaded
+        timeout (int): Timeout to wait until the replication
+
+    """
+
+    logger.info(f"Randomly generating {amount} object/s")
+    for i in range(num_versions):
+        obj_list = write_random_objects_in_pod(
+            io_pod=mockup_logger.awscli_pod,
+            file_dir=file_dir,
+            amount=amount,
+            pattern=pattern,
+        )
+
+        mockup_logger.upload_random_objects_and_log(
+            source_bucket.name, file_dir=file_dir, obj_list=obj_list, prefix=prefix
+        )
+    assert compare_bucket_object_list(
+        mcg_obj,
+        source_bucket.name,
+        target_bucket.name,
+        timeout=timeout,
+    ), f"Standard replication failed to complete in {timeout} seconds"
+
+
 def upload_test_objects_to_source_and_wait_for_replication(
     mcg_obj, source_bucket, target_bucket, mockup_logger, timeout
 ):
@@ -3008,7 +3068,6 @@ def get_obj_versions(mcg_obj, awscli_pod, bucket_name, obj_key):
         # Remove quotes from the ETag values for easier usage
         for d in versions_dicts:
             d["ETag"] = d["ETag"].strip('"')
-
     return versions_dicts
 
 
@@ -3085,3 +3144,138 @@ def wait_for_object_versions_match(
         )
         logger.error(err_msg)
         raise TimeoutExpiredError(f"{str(e)}\n\n{err_msg}")
+
+
+def gen_empty_file_and_upload(
+    mcg_obj,
+    aws_pod,
+    dir,
+    amount,
+    bucket,
+    pattern="File",
+    prefix=None,
+    threads=1,
+    timeout=600,
+):
+    """
+    Generate empty files with unique identifiers
+
+    Args:
+        mcg_obj (MCG): MCG object
+        aws_pod (Pod): Pod object for aws-cli pod
+        dir (str): directory where the files need to generated
+        amount (int): number of files to be generated
+        bucket (str): Name of the bucket
+        pattern (str): pattern to use as prefix for the filename
+        prefix (str): prefix directory under which files needs to be
+                      uploaded.
+        threads (int): Number of threads to use for generate and upload
+                       process. Allows multithreading hence faster uploads.
+        timeout (int): Timeout to wait for the command completion
+
+    """
+
+    def _run_file_creation_and_upload(index, begin=1, end=amount):
+        aws_pod.exec_sh_cmd_on_pod(
+            command=f"mkdir -p {dir}/{index} && for i in $(seq {begin} {end});do touch {dir}/{index}/{pattern}-$i;done",
+            timeout=timeout,
+        )
+        logger.info(f"Uploading batch of {end-begin} objects to the bucket {bucket}")
+        sync_object_directory(
+            aws_pod,
+            f"{dir}/{index}",
+            f"s3://{bucket}/{prefix}" if prefix else f"s3://{bucket}",
+            mcg_obj,
+            timeout=timeout,
+        )
+
+    with ThreadPoolExecutor(max_workers=threads) as executor:
+        begin = 0
+        futures = []
+        for i in range(threads):
+            futures.append(
+                executor.submit(
+                    _run_file_creation_and_upload,
+                    index=i,
+                    begin=begin + 1,
+                    end=begin + (amount // threads),
+                )
+            )
+            begin = begin + (amount // threads)
+        logger.info("Waiting for the upload objects to complete")
+        for f_obj in as_completed(futures):
+            f_obj.result()
+
+    logger.info(f"Generated {amount} empty files successfully")
+
+
+def verify_objs_deleted_from_objmds(bucket_name, timeout=600, sleep=30):
+    """
+    Verify that all the objects are marked deletion time by checking
+    the objmds table in nbcore db.
+
+    Args:
+        bucket_name (str): Name of the bucket
+        timeout (int): Timeout until all the objects are expired
+
+    """
+
+    def _check_objs_deletion():
+
+        bucket_id = exec_nb_db_query(
+            f"select data->>'_id' as ID from buckets where data->>'name'='{bucket_name}'"
+        )[0].strip()
+
+        objs_count = exec_nb_db_query(
+            f"select count(*) from objectmds where data->>'bucket'='{bucket_id}'"
+        )[0].strip()
+        objs_deleted_count = exec_nb_db_query(
+            f"select count(*) from objectmds where data->>'bucket'='{bucket_id}' AND data ? 'deleted'"
+        )[0].strip()
+
+        logger.info(f"Objects count: {objs_count}")
+        logger.info(f"Objects deleted count: {objs_deleted_count}")
+
+        return int(objs_count) == int(objs_deleted_count)
+
+    sampler = TimeoutSampler(
+        timeout=timeout,
+        sleep=sleep,
+        func=_check_objs_deletion,
+    )
+
+    assert sampler.wait_for_func_status(
+        result=True
+    ), "Not all the objects are marked deleted"
+    logger.info("All the objects are marked expired")
+
+
+def verify_deletion_marker(mcg_obj, awscli_pod, bucket_name, object_key):
+    """
+    Verify if deletion marker exists for the given object key
+
+    Args:
+        mcg_obj (MCG): MCG object
+        awscli_pod (Pod): Pod object where AWS CLI is installed
+        bucket_name (str): Name of the bucket
+        object_key (str): Object key
+
+    Returns:
+        True if DeletionMarkers exists else False
+
+    """
+    resp = awscli_pod.exec_cmd_on_pod(
+        command=craft_s3_command(
+            f"list-object-versions --bucket {bucket_name} --prefix {object_key}",
+            mcg_obj=mcg_obj,
+            api=True,
+        ),
+        out_yaml_format=False,
+    )
+
+    if resp and "DeleteMarkers" in resp:
+        delete_markers = json.loads(resp).get("DeleteMarkers")[0]
+        logger.info(f"{bucket_name}:\n{delete_markers}")
+        if delete_markers.get("IsLatest"):
+            return True
+    return False
