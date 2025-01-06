@@ -98,9 +98,7 @@ def test_quota_fillup_80_alert(measure_fill_up_client_quota, threading_lock):
 
     # get alerts from time when manager deployment was scaled down
     alerts = measure_fill_up_client_quota.get("prometheus_alerts")
-    client_name = measure_fill_up_client_quota.get("metadata").get("client_name")
-    cluster_namespace = config.ENV_DATA["cluster_namespace"]
-    cluster_name = config.ENV_DATA["storage_cluster_name"]
+    # client_name = measure_fill_up_client_quota.get("metadata").get("client_name")
     target_alerts = []
     states = ["firing"]
 
