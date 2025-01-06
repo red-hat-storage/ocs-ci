@@ -407,6 +407,7 @@ PROVIDER_CLUSTER_RESOURCE_KINDS = [
     "storagesystems",
     "storagesystem",
 ]
+PROVIDER_SUBSCRIPTION = "subs"
 
 OCS_CLIENT_OPERATOR_CONTROLLER_MANAGER_PREFIX = "ocs-client-operator-controller-manager"
 OCS_CLIENT_OPERATOR_CONSOLE = "ocs-client-operator-console"
@@ -2768,10 +2769,11 @@ ACM_BREW_REPO = SUBMARINER_BREW_REPO
 MCE_NAMESPACE = "multicluster-engine"
 MCE_NAMESPACE_YAML = os.path.join(TEMPLATE_DEPLOYMENT_DIR_MCE, "mce_namespace.yaml")
 MCE_CATSRC_YAML = os.path.join(TEMPLATE_DEPLOYMENT_DIR_MCE, "mce_catsrc.yaml")
+MCE_CATSRC_NAME = "mce-catalogsource"
 MCE_SUBSCRIPTION_YAML = os.path.join(
     TEMPLATE_DEPLOYMENT_DIR_MCE, "mce_subscription.yaml"
 )
-MCE_OPERATOR = "multicluster-engine-operator"
+MCE_OPERATOR = "multicluster-engine"
 MCE_OPERATOR_YAML = os.path.join(TEMPLATE_DEPLOYMENT_DIR_MCE, "mce_operator.yaml")
 HYPERSHIFT_NAMESPACE = "hypershift"
 SUPPORTED_VERSIONS_CONFIGMAP = "supported-versions"
