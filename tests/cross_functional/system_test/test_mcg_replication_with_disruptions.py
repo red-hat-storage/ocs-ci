@@ -1,3 +1,4 @@
+import json
 import logging
 
 import pytest
@@ -29,6 +30,13 @@ from ocs_ci.ocs.bucket_utils import (
     write_random_test_objects_to_bucket,
     upload_test_objects_to_source_and_wait_for_replication,
     update_replication_policy,
+    put_bucket_versioning_via_awscli,
+    get_obj_versions,
+    s3_delete_object,
+    upload_random_objects_to_source_and_wait_for_replication,
+    get_replication_policy,
+    s3_put_bucket_versioning,
+    verify_deletion_marker,
 )
 from ocs_ci.ocs import ocp
 from ocs_ci.ocs.resources.pvc import get_pvc_objs
@@ -41,9 +49,16 @@ from ocs_ci.ocs.resources.pod import (
     get_noobaa_core_pod,
     get_noobaa_pods,
     wait_for_noobaa_pods_running,
+    get_pod_node,
 )
+
 from ocs_ci.utility.retry import retry
-from ocs_ci.ocs.exceptions import CommandFailed, ResourceWrongStatusException
+from ocs_ci.ocs.exceptions import (
+    CommandFailed,
+    ResourceWrongStatusException,
+    TimeoutExpiredError,
+)
+from ocs_ci.utility.utils import TimeoutSampler
 
 logger = logging.getLogger(__name__)
 
@@ -312,7 +327,9 @@ class TestLogBasedReplicationWithDisruptions:
             skip_any_features=["nsfs", "rgw kafka", "caching"],
         )
 
-        mockup_logger, source_bucket, target_bucket = aws_log_based_replication_setup()
+        mockup_logger, _, source_bucket, target_bucket = (
+            aws_log_based_replication_setup()
+        )
 
         # upload test objects to the bucket and verify replication
         upload_test_objects_to_source_and_wait_for_replication(
@@ -404,3 +421,332 @@ class TestLogBasedReplicationWithDisruptions:
             object_amount=5,
         )
         logger.info("No issues seen with the MCG bg feature validation")
+
+
+class TestMCGReplicationWithVersioningSystemTest:
+
+    @retry(Exception, tries=5, delay=10)
+    def upload_objects_with_retry(
+        self,
+        mcg_obj_session,
+        source_bucket,
+        target_bucket,
+        mockup_logger,
+        file_dir,
+        pattern,
+        prefix,
+    ):
+        upload_random_objects_to_source_and_wait_for_replication(
+            mcg_obj_session,
+            source_bucket,
+            target_bucket,
+            mockup_logger,
+            file_dir,
+            pattern=pattern,
+            amount=1,
+            prefix=prefix,
+        )
+
+    def test_bucket_replication_with_versioning_system_test(
+        self,
+        awscli_pod_session,
+        mcg_obj_session,
+        bucket_factory,
+        reduce_replication_delay,
+        nodes,
+        noobaa_db_backup,
+        noobaa_db_recovery_from_backup,
+        aws_log_based_replication_setup,
+        test_directory_setup,
+    ):
+
+        prefix_1 = "site_1"
+        prefix_2 = "site_2"
+        object_key = "ObjectKey-"
+
+        # Reduce the replication delay to 1 minute
+        logger.info("Reduce the bucket replication delay")
+        reduce_replication_delay()
+
+        # Setup two buckets with bi-directional replication enabled
+        # deletion sync enabled
+        bucketclass_dict = {
+            "interface": "OC",
+            "backingstore_dict": {"aws": [(1, "eu-central-1")]},
+        }
+        mockup_logger_source, mockup_logger_target, bucket_1, bucket_2 = (
+            aws_log_based_replication_setup(
+                bucketclass_dict=bucketclass_dict,
+                bidirectional=True,
+                prefix_source=prefix_1,
+                prefix_target=prefix_2,
+            )
+        )
+
+        # Upload object and verify that bucket replication works
+        logger.info(f"Uploading object {object_key} to the bucket {bucket_1.name}")
+        self.upload_objects_with_retry(
+            mcg_obj_session,
+            bucket_1,
+            bucket_2,
+            mockup_logger_source,
+            test_directory_setup.origin_dir,
+            pattern=object_key,
+            prefix=prefix_1,
+        )
+
+        # Enable object versioning on both the buckets
+        s3_put_bucket_versioning(mcg_obj_session, bucket_1.name)
+        s3_put_bucket_versioning(mcg_obj_session, bucket_2.name)
+
+        put_bucket_versioning_via_awscli(
+            mcg_obj_session, awscli_pod_session, bucket_1.name
+        )
+        put_bucket_versioning_via_awscli(
+            mcg_obj_session, awscli_pod_session, bucket_2.name
+        )
+        logger.info("Enabled object versioning for both the buckets")
+
+        # Enable sync versions in both buckets replication policy
+        replication_1 = json.loads(get_replication_policy(bucket_name=bucket_2.name))
+        replication_2 = json.loads(get_replication_policy(bucket_name=bucket_1.name))
+        replication_1["rules"][0]["sync_versions"] = True
+        replication_2["rules"][0]["sync_versions"] = True
+
+        update_replication_policy(bucket_2.name, replication_1)
+        update_replication_policy(bucket_1.name, replication_2)
+        logger.info(
+            "Enabled sync versions in the replication policy for both the buckets"
+        )
+
+        # This function samples if versions of objects in both the buckets under
+        # given prefix matches or not
+        def sample_if_versions_match(bucket_1, bucket_2, prefix):
+            def verify_object_version_etags(bucket_1, bucket_2, prefix):
+                bucket_1_etags = [
+                    v["ETag"]
+                    for v in get_obj_versions(
+                        mcg_obj_session,
+                        awscli_pod_session,
+                        bucket_1.name,
+                        f"{prefix}/{object_key}0",
+                    )
+                ]
+                bucket_2_etags = [
+                    v["ETag"]
+                    for v in get_obj_versions(
+                        mcg_obj_session,
+                        awscli_pod_session,
+                        bucket_2.name,
+                        f"{prefix}/{object_key}0",
+                    )
+                ]
+                logger.info(
+                    f"\n{bucket_1.name} Etags: {bucket_1_etags}"
+                    f"\n{bucket_2.name} Etags: {bucket_2_etags}"
+                )
+                return bucket_1_etags == bucket_2_etags
+
+            try:
+                for verified in TimeoutSampler(
+                    timeout=600,
+                    sleep=30,
+                    func=verify_object_version_etags,
+                    bucket_1=bucket_1,
+                    bucket_2=bucket_2,
+                    prefix=prefix,
+                ):
+                    if verified:
+                        return True
+            except TimeoutExpiredError:
+                logger.error(
+                    "\nEtags dont match for both the buckets even after timeout. hence they dont have same versions"
+                )
+                return False
+
+        # Update previously uploaded object with new data and new version
+        self.upload_objects_with_retry(
+            mcg_obj_session,
+            bucket_2,
+            bucket_1,
+            mockup_logger_target,
+            test_directory_setup.origin_dir,
+            pattern=object_key,
+            prefix=prefix_2,
+        )
+        logger.info(
+            f"Updated object {object_key} with new version data in bucket {bucket_2.name}"
+        )
+
+        assert sample_if_versions_match(
+            bucket_1, bucket_2, prefix_2
+        ), f"Source bucket and target buckets dont have matching versions for the object {object_key}"
+        logger.info(
+            f"Replication works from {bucket_1.name} to {bucket_2.name} and has all the versions of object {object_key}"
+        )
+
+        # Will perform disruptive operations and object uploads, version verifications
+        # parallely.
+        with ThreadPoolExecutor(max_workers=1) as executor:
+
+            # Update object uploaded previously from the second bucket and then shutdown the noobaa pod nodes
+            noobaa_pods = get_noobaa_pods(
+                namespace=constants.OPENSHIFT_STORAGE_NAMESPACE
+            )
+            nodes_to_shutdown = [get_pod_node(pod_obj) for pod_obj in noobaa_pods]
+            logger.info(
+                f"Updating object {object_key} with new version data in bucket {bucket_1.name}"
+            )
+            future = executor.submit(
+                self.upload_objects_with_retry,
+                mcg_obj_session,
+                bucket_1,
+                bucket_2,
+                mockup_logger_source,
+                test_directory_setup.origin_dir,
+                pattern=object_key,
+                prefix=prefix_1,
+            )
+
+            # nodes.stop_nodes(list(set(nodes_to_shutdown)))
+            logger.info(f"Stopped these noobaa pod nodes {nodes_to_shutdown}")
+
+            assert sample_if_versions_match(bucket_1, bucket_2, prefix_1), (
+                f"Source bucket and target buckets dont have matching"
+                f" versions for the object {object_key}"
+            )
+            logger.info(
+                f"Replication works from {bucket_2.name} to {bucket_1.name} and"
+                f" has all the versions of object {object_key}"
+            )
+
+            future.result()
+            logger.info("Starting nodes now...")
+            # nodes.start_nodes(nodes=nodes_to_shutdown)
+            wait_for_noobaa_pods_running()
+
+            # Update object uploaded previously from the first bucket and then restart the noobaa pods
+            logger.info(
+                f"Updating object {object_key} with new version data in bucket {bucket_2.name}"
+            )
+            future = executor.submit(
+                self.upload_objects_with_retry,
+                mcg_obj_session,
+                bucket_2,
+                bucket_1,
+                mockup_logger_target,
+                test_directory_setup.origin_dir,
+                pattern=object_key,
+                prefix=prefix_2,
+            )
+            for pod_obj in noobaa_pods:
+                pod_obj.delete(force=True)
+                logger.info(f"Deleted noobaa pod {pod_obj.name}")
+            logger.info("Restarted all Noobaa pods")
+
+            assert sample_if_versions_match(bucket_1, bucket_2, prefix_2), (
+                f"Source bucket and target buckets dont have matching "
+                f"versions for the object {object_key}"
+            )
+            logger.info(
+                f"Replication works from {bucket_1.name} to {bucket_2.name} "
+                f"and has all the versions of object {object_key}"
+            )
+            future.result()
+
+        # This function will sample if object deletion markers are synced
+        # between the objects
+        def sample_if_delete_marker_exists(bucket_1, bucket_2, prefix):
+            def verify_delete_markers(bucket_1, bucket_2, prefix):
+                return verify_deletion_marker(
+                    mcg_obj_session,
+                    awscli_pod_session,
+                    bucket_1.name,
+                    object_key=f"{prefix}/{object_key}0",
+                ) == verify_deletion_marker(
+                    mcg_obj_session,
+                    awscli_pod_session,
+                    bucket_2.name,
+                    object_key=f"{prefix}/{object_key}0",
+                )
+
+            try:
+                for verified in TimeoutSampler(
+                    timeout=600,
+                    sleep=30,
+                    func=verify_delete_markers,
+                    bucket_1=bucket_1,
+                    bucket_2=bucket_2,
+                    prefix=prefix,
+                ):
+                    if verified:
+                        return True
+            except TimeoutExpiredError:
+                logger.error(
+                    f"\nDeleteMarkers dont exist for the object {object_key} "
+                    f"in both the buckets"
+                )
+                return False
+
+        # Take the noobaa db backup and then perform the object deletion
+        # with deletion sync disabled.
+        logger.info("Taking backup of noobaa db")
+        noobaa_pvc_obj = get_pvc_objs(pvc_names=[constants.NOOBAA_DB_PVC_NAME])
+        _, snap_obj = noobaa_db_backup(noobaa_pvc_obj)
+
+        logger.info("Disabling deletion sync for the second bucket")
+        replication_2["rules"][0]["sync_deletions"] = False
+        update_replication_policy(bucket_1.name, replication_1)
+
+        logger.info(f"Deleting the object {object_key} from the bucket {bucket_1.name}")
+        s3_delete_object(mcg_obj_session, bucket_1.name, f"{prefix_1}/{object_key}0")
+
+        assert not compare_bucket_object_list(
+            mcg_obj_session,
+            bucket_1.name,
+            bucket_2.name,
+        ), "Deletion sync worked even when deletion sync was disabled"
+        logger.info("Deletion sync didn't seem to work as expected")
+
+        assert not sample_if_delete_marker_exists(
+            bucket_1, bucket_2, prefix_1
+        ), "DeleteMarkers are synced when it was not suppose to sync"
+        logger.info(
+            "DeleteMarkers are not synced between the buckets after "
+            "object deleted as expected"
+        )
+
+        # Recover the noobaa db from the backup and perform
+        # object deletion and verify deletion sync works
+        logger.info("Recovering noobaa db from backup")
+        noobaa_db_recovery_from_backup(snap_obj, noobaa_pvc_obj, noobaa_pods)
+        wait_for_noobaa_pods_running(timeout=420)
+
+        logger.info(f"Deleting the object {object_key} from the bucket {bucket_2.name}")
+        s3_delete_object(mcg_obj_session, bucket_2.name, f"{prefix_2}/{object_key}0")
+
+        assert compare_bucket_object_list(
+            mcg_obj_session,
+            bucket_1.name,
+            bucket_2.name,
+        ), (
+            "Deletion sync didnt work while it suppose to work, "
+            "even after noobaa db recovery"
+        )
+        logger.info("Deletion sync worked as expected")
+
+        assert sample_if_versions_match(bucket_1, bucket_2, prefix_2), (
+            f"Source bucket and target buckets dont have matching "
+            f"versions for the object {object_key}"
+        )
+        logger.info(
+            f"Replication works from {bucket_1.name} to {bucket_2.name} and "
+            f"has all the versions of object {object_key}"
+        )
+
+        assert sample_if_delete_marker_exists(
+            bucket_1, bucket_2, prefix_1
+        ), "DeleteMarkers are not synced between the buckets after object is deleted"
+        logger.info(
+            "DeleteMarkers are synced between the buckets after object deleted as expected"
+        )
