@@ -1,6 +1,8 @@
 import logging
 import os
 
+import pytest
+
 from pkg_resources import parse_version
 from semantic_version import Version
 
@@ -42,6 +44,11 @@ from ocs_ci.framework.pytest_customization.marks import (
 )
 
 logger = logging.getLogger(__name__)
+
+
+@pytest.fixture
+def config_index(request):
+    return request.param if hasattr(request, "param") else None
 
 
 @ignore_leftovers
