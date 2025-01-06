@@ -109,8 +109,10 @@ class TestMustGather(ManageTest):
         """
 
         flags_cmd = "/usr/bin/gather --minimal "
-        paths_exist = const_must_gather.MINIMAL
+        paths_exist = list()
         paths_not_exist = list()
+        for path in const_must_gather.MINIMAL:
+            paths_exist.append(path)
 
         options = [
             (ceph, const_must_gather.CEPH_ONLY, "-c "),
