@@ -37,6 +37,9 @@ class Warp(object):
         self.bucket_name = None
         self.warp_cr = templating.load_yaml(constants.WARP_OBJ_YAML)
         self.host = self.warp_cr["host"]
+        # avoid failing DNS server to resolve hostname, when running on cluster with custom storage namespace
+        if config.ENV_DATA["cluster_namespace"] not in self.host:
+            self.host = f"s3.{config.ENV_DATA['cluster_namespace']}.svc"
         self.duration = self.warp_cr["duration"]
         self.concurrent = self.warp_cr["concurrent"]
         self.obj_size = self.warp_cr["obj.size"]
