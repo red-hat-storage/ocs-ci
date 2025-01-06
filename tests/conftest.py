@@ -46,6 +46,8 @@ from ocs_ci.ocs.benchmark_operator_fio import get_file_size, BenchmarkOperatorFI
 from ocs_ci.ocs.bucket_utils import (
     craft_s3_command,
     put_bucket_policy,
+    update_replication_policy,
+    put_bucket_versioning_via_awscli,
 )
 from ocs_ci.ocs.cnv.virtual_machine import VirtualMachine, VMCloner
 from ocs_ci.ocs.dr.dr_workload import (
@@ -8489,6 +8491,21 @@ def change_lifecycle_batch_size(
 
 
 @pytest.fixture()
+def reduce_replication_delay(add_env_vars_to_noobaa_core_class):
+
+    def factory(interval=1):
+
+        new_delay_in_milliseconfs = interval * 60 * 1000
+        new_env_var_touples = [
+            (constants.BUCKET_REPLICATOR_DELAY_PARAM, new_delay_in_milliseconfs),
+            (constants.BUCKET_LOG_REPLICATOR_DELAY_PARAM, new_delay_in_milliseconfs),
+        ]
+        add_env_vars_to_noobaa_core_class(new_env_var_touples)
+
+    return factory
+
+
+@pytest.fixture()
 def reset_conn_score():
     """
     This is a fixture that will reset the connections scores for
@@ -8815,21 +8832,34 @@ def aws_log_based_replication_setup(
     """
     A fixture to set up standard log-based replication with deletion sync.
 
-    Args:
-        awscli_pod_session(Pod): A pod running the AWS CLI
-        mcg_obj_session(MCG): An MCG object
-        bucket_factory: A bucket factory fixture
-
-    Returns:
-        MockupBucketLogger: A MockupBucketLogger object
-        Bucket: The source bucket
-        Bucket: The target bucket
-
     """
 
     reduce_replication_delay_setup()
 
-    def factory(bucketclass_dict=None):
+    def factory(
+        bucketclass_dict=None,
+        prefix_source="",
+        prefix_target="",
+        bidirectional=False,
+        deletion_sync=True,
+        enable_versioning=False,
+    ):
+        """
+        A fixture to set up standard log-based replication with deletion sync.
+
+        Args:
+            bucketclass_dict (Dict): Dictionary representing bucketclass parameters
+            bidirectional (Bool): True if you want to setup bi-directional replication
+                                  otherwise False
+            deletion_sync (Bool): True if you want to setup deletion sync otherwise False
+
+        Returns:
+            MockupBucketLogger: A MockupBucketLogger object
+            Bucket: The source bucket
+            Bucket: The target bucket
+
+        """
+
         log.info("Starting log-based replication setup")
         if bucketclass_dict is None:
             bucketclass_dict = {
@@ -8842,27 +8872,60 @@ def aws_log_based_replication_setup(
                 },
             }
         target_bucket = bucket_factory(bucketclass=bucketclass_dict)[0]
+        if enable_versioning:
+            put_bucket_versioning_via_awscli(
+                mcg_obj_session, awscli_pod_session, target_bucket.name
+            )
 
-        mockup_logger = MockupBucketLogger(
+        mockup_logger_source = MockupBucketLogger(
             awscli_pod=awscli_pod_session,
             mcg_obj=mcg_obj_session,
             bucket_factory=bucket_factory,
             platform=constants.AWS_PLATFORM,
             region=constants.DEFAULT_AWS_REGION,
         )
-        replication_policy = AwsLogBasedReplicationPolicy(
+        replication_policy_source = AwsLogBasedReplicationPolicy(
             destination_bucket=target_bucket.name,
-            sync_deletions=True,
-            logs_bucket=mockup_logger.logs_bucket_uls_name,
+            sync_deletions=deletion_sync,
+            logs_bucket=mockup_logger_source.logs_bucket_uls_name,
+            prefix=prefix_source,
+            sync_versions=enable_versioning,
         )
 
         source_bucket = bucket_factory(
-            1, bucketclass=bucketclass_dict, replication_policy=replication_policy
+            1,
+            bucketclass=bucketclass_dict,
+            replication_policy=replication_policy_source,
         )[0]
+        if enable_versioning:
+            put_bucket_versioning_via_awscli(
+                mcg_obj_session, awscli_pod_session, source_bucket.name
+            )
+
+        mockup_logger_target = None
+        if bidirectional:
+            mockup_logger_target = MockupBucketLogger(
+                awscli_pod=awscli_pod_session,
+                mcg_obj=mcg_obj_session,
+                bucket_factory=bucket_factory,
+                platform=constants.AWS_PLATFORM,
+                region=constants.DEFAULT_AWS_REGION,
+            )
+
+            replication_policy_target = AwsLogBasedReplicationPolicy(
+                destination_bucket=source_bucket.name,
+                sync_deletions=deletion_sync,
+                logs_bucket=mockup_logger_target.logs_bucket_uls_name,
+                prefix=prefix_target,
+                sync_versions=enable_versioning,
+            )
+            update_replication_policy(
+                target_bucket.name, replication_policy_target.to_dict()
+            )
 
         log.info("log-based replication setup complete")
 
-        return mockup_logger, source_bucket, target_bucket
+        return mockup_logger_source, mockup_logger_target, source_bucket, target_bucket
 
     return factory
 

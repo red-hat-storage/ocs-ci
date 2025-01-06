@@ -101,7 +101,31 @@ class MockupBucketLogger:
 
         self._upload_mockup_logs(bucket_name, [obj_name], "PUT")
 
+
+    def upload_random_objects_and_log(
+        self, bucket_name, file_dir, obj_list, prefix=None
+    ):
+        """
+        Uploads randomly generated objects to the bucket and upload a matching
+        mockup log
+
+        """
+
+        logger.info(
+            f"Uploading randomly generated objects from {file_dir} to {bucket_name}"
+        )
+        prefix = prefix if prefix else ""
+        sync_object_directory(
+            self.awscli_pod,
+            file_dir,
+            f"s3://{bucket_name}/{prefix}",
+            self.mcg_obj,
+        )
+
+        self._upload_mockup_logs(bucket_name=bucket_name, obj_list=obj_list, op="PUT")
+
     def delete_objs_and_log(self, bucket_name, objs, prefix=""):
+
         """
         Delete list of objects from the MCG bucket and write
         matching mockup logs

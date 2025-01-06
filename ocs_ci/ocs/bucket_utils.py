@@ -2143,6 +2143,15 @@ def update_replication_policy(bucket_name, replication_policy_dict):
     ).patch(params=json.dumps(replication_policy_patch_dict), format_type="merge")
 
 
+def get_replication_policy(bucket_name):
+
+    return OCP(
+        kind="obc",
+        namespace=config.ENV_DATA["cluster_namespace"],
+        resource_name=bucket_name,
+    ).get()["spec"]["additionalConfig"]["replicationPolicy"]
+
+
 def patch_replication_policy_to_bucketclass(
     bucketclass_name, rule_id, destination_bucket_name
 ):
@@ -2855,6 +2864,56 @@ def bulk_s3_put_bucket_lifecycle_config(mcg_obj, buckets, lifecycle_config):
     logger.info("Applied lifecyle rule on all the buckets")
 
 
+def upload_random_objects_to_source_and_wait_for_replication(
+    mcg_obj,
+    source_bucket,
+    target_bucket,
+    mockup_logger,
+    file_dir,
+    pattern="ObjKey-",
+    amount=1,
+    num_versions=1,
+    prefix=None,
+    timeout=600,
+):
+    """
+    Upload randomly generated objects to the source bucket and wait until the
+    replication happens
+
+    Args:
+        mcg_obj (MCG): MCG object
+        source_bucket (OBC): OBC object
+        target_bucket (OBC): OBC object
+        mockup_logger (MockupLogger): MockupLogger object
+        file_dir (str): File directory where to generate objects
+        pattern (str): Prefix for object name
+        amount (int): Number of objects
+        num_verions (int): Number of versions of each object
+        prefix (str): Prefix under bucket where objects need to be uploaded
+        timeout (int): Timeout to wait until the replication
+
+    """
+
+    logger.info(f"Randomly generating {amount} object/s")
+    for i in range(num_versions):
+        obj_list = write_random_objects_in_pod(
+            io_pod=mockup_logger.awscli_pod,
+            file_dir=file_dir,
+            amount=amount,
+            pattern=pattern,
+        )
+
+        mockup_logger.upload_random_objects_and_log(
+            source_bucket.name, file_dir=file_dir, obj_list=obj_list, prefix=prefix
+        )
+    assert compare_bucket_object_list(
+        mcg_obj,
+        source_bucket.name,
+        target_bucket.name,
+        timeout=timeout,
+    ), f"Standard replication failed to complete in {timeout} seconds"
+
+
 def upload_test_objects_to_source_and_wait_for_replication(
     mcg_obj, source_bucket, target_bucket, mockup_logger, timeout
 ):
@@ -3147,7 +3206,6 @@ def get_obj_versions(mcg_obj, awscli_pod, bucket_name, obj_key):
         # Remove quotes from the ETag values for easier usage
         for d in versions_dicts:
             d["ETag"] = d["ETag"].strip('"')
-
     return versions_dicts
 
 
@@ -3356,3 +3414,34 @@ def delete_all_objects_in_batches(
         batch_deleter.delete_in_parallel()
     else:
         batch_deleter.delete_sequentially()
+
+
+def verify_deletion_marker(mcg_obj, awscli_pod, bucket_name, object_key):
+    """
+    Verify if deletion marker exists for the given object key
+
+    Args:
+        mcg_obj (MCG): MCG object
+        awscli_pod (Pod): Pod object where AWS CLI is installed
+        bucket_name (str): Name of the bucket
+        object_key (str): Object key
+
+    Returns:
+        True if DeletionMarkers exists else False
+
+    """
+    resp = awscli_pod.exec_cmd_on_pod(
+        command=craft_s3_command(
+            f"list-object-versions --bucket {bucket_name} --prefix {object_key}",
+            mcg_obj=mcg_obj,
+            api=True,
+        ),
+        out_yaml_format=False,
+    )
+
+    if resp and "DeleteMarkers" in resp:
+        delete_markers = json.loads(resp).get("DeleteMarkers")[0]
+        logger.info(f"{bucket_name}:\n{delete_markers}")
+        if delete_markers.get("IsLatest"):
+            return True
+    return False

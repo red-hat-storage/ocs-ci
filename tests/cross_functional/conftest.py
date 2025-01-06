@@ -400,6 +400,15 @@ def noobaa_db_backup(request, snapshot_factory):
         )
         return restore_pvc_objs, snap_obj
 
+    def teardown():
+        """
+        Teardown code to delete the restore pvc objects
+
+        """
+        for pvc_obj in restore_pvc_objs:
+            pvc_obj.delete()
+
+    request.addfinalizer(teardown)
     return factory
 
 
