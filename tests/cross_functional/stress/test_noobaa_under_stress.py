@@ -123,6 +123,7 @@ class TestNoobaaUnderStress:
                         bucket,
                         iteration_no=i,
                         event=event,
+                        multiplier=multiplier,
                     )
                 )
                 buckets.remove(bucket)
@@ -137,6 +138,7 @@ class TestNoobaaUnderStress:
                         bucket,
                         iteration_no=i,
                         event=event,
+                        multiplier=multiplier,
                     )
                 )
                 buckets.remove(bucket)
@@ -165,6 +167,7 @@ class TestNoobaaUnderStress:
                         stress_test_directory_setup.result_dir,
                         iteration_no=i,
                         event=event,
+                        multiplier=multiplier,
                     )
                 )
                 buckets.remove(bucket)

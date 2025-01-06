@@ -106,7 +106,7 @@ def upload_objs_to_buckets(
 
 
 def run_noobaa_metadata_intense_ops(
-    mcg_obj, pod_obj, bucket_factory, bucket, iteration_no, event=None
+    mcg_obj, pod_obj, bucket_factory, bucket, iteration_no, event=None, multiplier=1
 ):
     """
     Perfrom metdata intense operations to stress Noobaa
@@ -123,6 +123,8 @@ def run_noobaa_metadata_intense_ops(
     """
     bucket_type, bucket_obj = bucket
     bucket_name = bucket_obj.name
+    base_timeout = 6000
+    timeout = base_timeout * multiplier
 
     # Run metadata specific to bucket
     def _run_bucket_ops():
@@ -132,7 +134,7 @@ def run_noobaa_metadata_intense_ops(
         stressing the noobaa db through lot of metadata related operations
 
         """
-
+        total_buckets_created = 0
         while True:
             buckets_created = list()
             for i in range(0, 10):
@@ -156,6 +158,7 @@ def run_noobaa_metadata_intense_ops(
                 bucket.delete()
                 logger.info(f"METADATA OP: Deleted bucket {bucket.name}")
 
+            total_buckets_created += len(buckets_created)
             if event.is_set():
                 logger.info(
                     f"Successfully completed bucket creation/deletion operation in the background"
@@ -180,7 +183,7 @@ def run_noobaa_metadata_intense_ops(
             target=bucket_name,
             prefix=iteration_no,
             s3_obj=s3_obj,
-            timeout=12000,
+            timeout=timeout,
             recursive=True,
         )
         while True:
@@ -259,7 +262,7 @@ def run_noobaa_metadata_intense_ops(
     executor.shutdown()
 
 
-def delete_objs_from_bucket(pod_obj, bucket, iteration_no, event=None):
+def delete_objs_from_bucket(pod_obj, bucket, iteration_no, event=None, multiplier=1):
     """
     Delete all the objects from a bucket
 
@@ -273,6 +276,9 @@ def delete_objs_from_bucket(pod_obj, bucket, iteration_no, event=None):
     """
     bucket_type, bucket_obj = bucket
     bucket_name = bucket_obj.name
+    base_timeout = 6000
+    timeout = base_timeout * multiplier
+
     if bucket_type.upper() == "RGW":
         mcg_obj = OBC(bucket_name)
     else:
@@ -287,7 +293,7 @@ def delete_objs_from_bucket(pod_obj, bucket, iteration_no, event=None):
         bucket_name,
         mcg_obj,
         prefix=iteration_no,
-        timeout=12000,
+        timeout=timeout,
     )
     logger.info(
         f"Successfully completed object deletion operation on bucket {bucket_name} under prefix {iteration_no}"
@@ -327,7 +333,9 @@ def list_objs_from_bucket(bucket, iteration_no, event=None):
             break
 
 
-def download_objs_from_bucket(pod_obj, bucket, target_dir, iteration_no, event=None):
+def download_objs_from_bucket(
+    pod_obj, bucket, target_dir, iteration_no, event=None, multiplier=1
+):
     """
     Download objects from a bucket back to local directory
 
@@ -342,6 +350,9 @@ def download_objs_from_bucket(pod_obj, bucket, target_dir, iteration_no, event=N
     """
     bucket_type, bucket_obj = bucket
     bucket_name = bucket_obj.name
+    base_timeout = 6000
+    timeout = base_timeout * multiplier
+
     if bucket_type.upper() == "RGW":
         mcg_obj = OBC(bucket_name)
     else:
@@ -356,7 +367,7 @@ def download_objs_from_bucket(pod_obj, bucket, target_dir, iteration_no, event=N
             f"s3://{bucket_name}/{iteration_no}",
             target_dir,
             mcg_obj,
-            timeout=12000,
+            timeout=timeout,
         )
         logger.info(
             f"Downloaded objects from {bucket_name}/{iteration_no} to {target_dir}"
