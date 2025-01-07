@@ -493,6 +493,7 @@ class HypershiftHostedOCP(
             self.update_hcp_binary()
         if deploy_mce and not deploy_acm_hub():
             self.deploy_mce()
+            self.validate_mce_deployment()
 
         provider_ocp_version = str(
             get_semantic_version(get_ocp_version(), only_major_minor=True)
