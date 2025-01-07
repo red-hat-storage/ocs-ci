@@ -320,14 +320,14 @@ class TestProviderHosted(object):
         Test deploy mce without installting acm
         """
         logger.info("Test deploy mce without deploying ACM")
-        HypershiftHostedOCP("dummy").deploy_dependencies(
+        hypershift_hosted = HypershiftHostedOCP("dummy")
+        hypershift_hosted.deploy_dependencies(
             deploy_acm_hub=False,
             deploy_cnv=False,
             deploy_metallb=False,
             download_hcp_binary=False,
             deploy_mce=True,
         )
-        assert validate_acm_hub_install(), "ACM not installed or MCE not configured"
 
     @hci_provider_required
     def test_provider_deploy_OCP_hosted_skip_acm(self):

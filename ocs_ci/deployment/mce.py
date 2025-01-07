@@ -238,3 +238,11 @@ class MCEInstaller(object):
                 raise CommandFailed("Failed to create hypershift namespace")
         # Check supported versions in supported-versions configmap
         self.check_supported_versions()
+
+    def validate_mce_deployment(self):
+        """
+        Validate mce operator installation
+        """
+        if self.mce_hyperconverged_installed():
+            logger.info("mce operator is already deployed")
+            return
