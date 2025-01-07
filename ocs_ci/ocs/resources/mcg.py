@@ -713,7 +713,9 @@ class MCG:
 
         """
         if backingstores:  # bucket class is over backingstore
-            backingstore_name_list = [backingstore.name for backingstore in backingstores]
+            backingstore_name_list = [
+                backingstore.name for backingstore in backingstores
+            ]
             backingstores = f" --backingstores {','.join(backingstore_name_list)}"
             placement_policy = f" --placement {placement_policy}"
             placement_type = (
@@ -723,7 +725,8 @@ class MCG:
             )
             if (
                 replication_policy is not None
-                and version.get_semantic_ocs_version_from_config() >= version.VERSION_4_12
+                and version.get_semantic_ocs_version_from_config()
+                >= version.VERSION_4_12
             ):
                 replication_policy = {"rules": replication_policy}
             with tempfile.NamedTemporaryFile(
@@ -741,7 +744,9 @@ class MCG:
                     f"bucketclass create {placement_type}{name}{backingstores}{placement_policy}{replication_policy}"
                 )
         elif namespacestores:  # bucket class is over namespacestores
-            namestores_name_list = [namespacestore.name for namespacestore in namespacestores]
+            namestores_name_list = [
+                namespacestore.name for namespacestore in namespacestores
+            ]
             namestores_name_str = f"{','.join(namestores_name_list)}"
             namespace_policy_type = namespace_policy["type"].lower()
             self.exec_mcg_cmd(
