@@ -2,7 +2,7 @@ import argparse
 import logging
 import re
 import yaml
-from datetime import datetime, timedelta
+from datetime import datetime, timezone
 
 from ocs_ci.framework import config
 from ocs_ci.utility.ibmcloud import IBMCloudObjectStorage
@@ -21,7 +21,7 @@ def ibm_cleanup():
     )
     bucket_group = parser.add_argument_group("S3 Bucket Sweeping Options")
     bucket_group.add_argument(
-        "--sweep-buckets", action="store_true", help="Deleting S3 buckets."
+        "--sweep-buckets", action="store_true", help="Deleting IBM buckets."
     )
     parser.add_argument(
         "--hours-buckets",
@@ -55,7 +55,7 @@ def ibm_cleanup():
     ibmcloud_conf.close()
 
     if args.sweep_buckets:
-        bucket_hours = (
+        bucket_hours = int(
             args.hours_buckets
             if args.hours_buckets is not None
             else defaults.DEFAULT_TIME_BUCKETS
@@ -65,7 +65,7 @@ def ibm_cleanup():
 
 def delete_buckets(hours):
     """ """
-    # status = []
+    status = []
     # config.ENV_DATA["cluster_path"] = "/"
     # config.ENV_DATA["cluster_name"] = "cluster"
     # from ocs_ci.utility.ibmcloud import IBMCloudObjectStorage
@@ -75,9 +75,7 @@ def delete_buckets(hours):
     # buckets_delete = buckets_to_delete(buckets, hours)
     api_key = config.AUTH["ibmcloud"]["api_key"]
     service_instance_id = config.AUTH["ibmcloud"]["cos_instance_crn"]
-    endpoint_url = constants.IBM_COS_GEO_ENDPOINT_TEMPLATE.format(
-        config.ENV_DATA.get("region", "us-east").lower()
-    )
+    endpoint_url = constants.IBM_COS_GEO_ENDPOINT_TEMPLATE.format("us-east")
     # backingstore = get_backingstore()
     # bucket_name = backingstore["spec"]["ibmCos"]["targetBucket"]
     # logger.debug(f"bucket name from backingstore: {bucket_name}")
@@ -86,8 +84,15 @@ def delete_buckets(hours):
         service_instance_id=service_instance_id,
         endpoint_url=endpoint_url,
     )
-    buckets = cos.get_buckets()
-    logger.info(buckets)
+    buckets = cos.get_buckets_data()
+    bucket_delete_names = buckets_to_delete(buckets, hours)
+    for bucket_delete_name in bucket_delete_names:
+        res = cos.delete_bucket(bucket_delete_name)
+        if res is False:
+            status.append(bucket_delete_name)
+    if len(status) > 0:
+        raise Exception(f"Failed to delelte buckets {status}")
+
     # for bucket_delete in buckets_delete:
     #     try:
     #         ibm_cloud_ipi_obj.delete_bucket(bucket_delete)
@@ -107,19 +112,16 @@ def buckets_to_delete(buckets, hours):
 
     """
     buckets_delete = []
-    current_time = datetime.utcnow()
+    current_date = datetime.now(timezone.utc)
     for bucket in buckets:
         bucket_name = bucket["Name"]
-        creation_date = datetime.strptime(
-            bucket["CreationDate"], "%Y-%m-%dT%H:%M:%S.%fZ"
-        )
-        # Check if the bucket matches any prefix rule
+        age_in_hours = (current_date - bucket["CreationDate"]).total_seconds() / 3600
         hours_bucket = hours
         for prefix, max_age_hours in defaults.BUCKET_PREFIXES_SPECIAL_RULES.items():
             if re.match(prefix, bucket_name):
                 hours_bucket = max_age_hours
         if hours_bucket == "never":
             continue
-        if current_time - creation_date > timedelta(hours=int(hours_bucket)):
+        if hours_bucket < age_in_hours:
             buckets_delete.append(bucket_name)
     return buckets_delete[:10]
