@@ -699,7 +699,7 @@ class MCG:
         replication_policy=None,
     ):
         """
-        Creates a new NooBaa bucket class using the noobaa cli over either backing store pr namespace stores
+        Creates a new NooBaa bucket class using the noobaa cli over either backingstores or namespace stores
         Args:
             name (str): The name to be given to the bucket class
             backingstores (list): The backing stores to use as part of the policy. If None, namespacestores are used
