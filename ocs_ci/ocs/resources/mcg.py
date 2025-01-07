@@ -712,7 +712,7 @@ class MCG:
             OCS: The bucket class resource
 
         """
-        if backingstores: # bucket class is over backingstore
+        if backingstores:  # bucket class is over backingstore
             backingstore_name_list = [backingstore.name for backingstore in backingstores]
             backingstores = f" --backingstores {','.join(backingstore_name_list)}"
             placement_policy = f" --placement {placement_policy}"
@@ -740,12 +740,13 @@ class MCG:
                 self.exec_mcg_cmd(
                     f"bucketclass create {placement_type}{name}{backingstores}{placement_policy}{replication_policy}"
                 )
-        elif namespacestores: # bucket class is over namespacestores
+        elif namespacestores:  # bucket class is over namespacestores
             namestores_name_list = [namespacestore.name for namespacestore in namespacestores]
             namestores_name_str = f"{','.join(namestores_name_list)}"
             namespace_policy_type = namespace_policy["type"].lower()
             self.exec_mcg_cmd(
-                f"bucketclass create namespace-bucketclass {namespace_policy_type} --resource={namestores_name_str} {name}"
+                f"bucketclass create namespace-bucketclass {namespace_policy_type} "
+                f"--resource={namestores_name_str} {name}"
             )
         else:
             assert False, "No backingstores or namespacestores provided"
