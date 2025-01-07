@@ -491,7 +491,7 @@ class HypershiftHostedOCP(
             self.deploy_lb()
         if download_hcp_binary:
             self.update_hcp_binary()
-        if deploy_mce and not deploy_acm_hub():
+        if deploy_mce and not deploy_acm_hub:
             self.deploy_mce()
             self.validate_mce_deployment()
 
