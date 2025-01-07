@@ -204,6 +204,7 @@ from ocs_ci.helpers.longevity_helpers import (
 from ocs_ci.ocs.longevity import start_app_workload
 from ocs_ci.utility.decorators import switch_to_default_cluster_index_at_last
 from ocs_ci.helpers.keyrotation_helper import PVKeyrotation
+from ocs_ci.ocs.resources.storage_cluster import set_in_transit_encryption
 
 log = logging.getLogger(__name__)
 
@@ -9044,3 +9045,22 @@ def nb_assign_user_role_fixture(request, mcg_obj_session):
 
     request.addfinalizer(teardown)
     return factory
+
+
+@pytest.fixture()
+def set_encryption_at_teardown(request):
+    """
+    Fixture to restore encryption state and clean up resources after the test.
+
+    This fixture ensures that the encryption state is reset to its initial value
+    after the test completes, regardless of its outcome.
+    """
+    # Get the initial encryption state
+    initial_state = config.ENV_DATA.get("in_transit_encryption", False)
+
+    # Define the teardown logic
+    def teardown():
+        set_in_transit_encryption(enabled=initial_state)
+
+    # Add the teardown function to the request's finalizer
+    request.addfinalizer(teardown)
