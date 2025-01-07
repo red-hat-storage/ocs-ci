@@ -17,14 +17,8 @@ class TestVmSnapshotClone(E2ETest):
 
     @workloads
     @pytest.mark.polarion_id("OCS-6288")
-    def test_vm_clone(
-        self,
-        multi_cnv_workload,
-        cnv_workload,
-        clone_vm_workload,
-        setup_cnv,
-        project_factory,
-    ):
+    def test_vm_clone(self, project_factory, multi_cnv_workload, 
+                      clone_vm_workload,):
         """
         This test performs the VM cloning and IOs created using different volume interfaces(PVC/DV/DVT)
 
@@ -32,28 +26,33 @@ class TestVmSnapshotClone(E2ETest):
         1. Create a clone of a VM PVC by following the documented procedure from ODF official docs.
             1.1 Create clone of the pvc associated with VM.
             1.2 Cloned pvc successfully created and listed
-        2. Verify the cloned PVc is created.
-        3. create vm using cloned pvc.
-        4. Verify that the data on VM backed by cloned pvc is same as that in the original VM.
+        2. Verify the cloned PVC is created.
+        3. Create a VM using cloned PVC.
+        4. Verify that the data on VM backed by cloned PVC is the same as that in the original VM.
         5. Add additional data to the cloned VM.
         6. Delete the clone by following the documented procedure from ODF official docs
-         6.1 Delete clone of the pvc associated with VM.
-         6.2 Cloned pvc successfully deleted
+         6.1 Delete the clone of the PVC associated with VM.
+         6.2 Cloned PVC successfully deleted
         7. Repeat the above procedure for all the VMs in the system
         8. Delete all the clones created as part of this test
         """
 
         proj_obj = project_factory()
         file_paths = ["/source_file.txt", "/new_file.txt"]
-        log.info("Getting into multi cnv workload...")
         vm_objs_def, vm_objs_aggr, _, _ = multi_cnv_workload(
             namespace=proj_obj.namespace
         )
-        log.info("Logging out multi cnv workload...")
         vm_list = vm_objs_def + vm_objs_aggr
+        log.info(f"Total VMs to process: {len(vm_list)}")
         for index, vm_obj in enumerate(vm_list):
-            source_csum = run_dd_io(vm_obj=vm_obj, file_path=file_paths[0], verify=True)
+            log.info(
+                f"Starting I/O operation on VM {vm_obj.name} using {file_paths[0]}...")
+            source_csum = run_dd_io(vm_obj=vm_obj, file_path=file_paths[0],
+                                    verify=True)
+            log.info(f"Source checksum for {vm_obj.name}: {source_csum}")
+            log.info(f"Stopping VM {vm_obj.name}...")
             vm_obj.stop()
+            log.info(f"Cloning VM {vm_obj.name}...")
             clone_obj = clone_vm_workload(
                 vm_obj=vm_obj,
                 volume_interface=vm_obj.volume_interface,
@@ -63,12 +62,16 @@ class TestVmSnapshotClone(E2ETest):
                     else None
                 ),
             )[index]
+            log.info(
+                f"Clone created successfully for VM {vm_obj.name}: {clone_obj.name}")
             new_csum = cal_md5sum_vm(vm_obj=clone_obj, file_path=file_paths[0])
             assert (
                 source_csum == new_csum
             ), f"Failed: MD5 comparison between source {vm_obj.name} and cloned {clone_obj.name} VMs"
             run_dd_io(vm_obj=clone_obj, file_path=file_paths[1])
             clone_obj.stop()
+        log.info("Test completed successfully for all VMs.")
+
 
     @workloads
     @pytest.mark.polarion_id("OCS-6299")
