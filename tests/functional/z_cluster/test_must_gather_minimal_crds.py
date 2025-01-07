@@ -5,9 +5,11 @@ from ocs_ci.framework.pytest_customization.marks import brown_squad
 from ocs_ci.framework.testlib import (
     ManageTest,
     tier1,
+    tier2,
     skipif_external_mode,
     skipif_ms_consumer,
     skipif_hci_client,
+    stretchcluster_required,
 )
 from ocs_ci.ocs.must_gather.must_gather import MustGather
 from ocs_ci.ocs.must_gather import const_must_gather
@@ -17,7 +19,6 @@ logger = logging.getLogger(__name__)
 
 @brown_squad
 class TestMustGather(ManageTest):
-    @tier1
     @pytest.mark.parametrize(
         argnames=[
             "ceph",
@@ -31,64 +32,72 @@ class TestMustGather(ManageTest):
             pytest.param(
                 *[False, False, False, False, False, False],
                 marks=[
-                    pytest.mark.polarion_id(""),
+                    pytest.mark.polarion_id("OCS-6307"),
                     skipif_external_mode,
                     skipif_ms_consumer,
                     skipif_hci_client,
+                    tier1,
                 ],
             ),
             pytest.param(
                 *[True, False, False, True, False, False],
                 marks=[
-                    pytest.mark.polarion_id(""),
+                    pytest.mark.polarion_id("OCS-6312"),
                     skipif_external_mode,
                     skipif_ms_consumer,
                     skipif_hci_client,
+                    tier2,
                 ],
             ),
             pytest.param(
                 *[False, True, False, False, False, False],
                 marks=[
-                    pytest.mark.polarion_id(""),
+                    pytest.mark.polarion_id("OCS-6313"),
                     skipif_external_mode,
                     skipif_ms_consumer,
                     skipif_hci_client,
+                    tier2,
                 ],
             ),
             pytest.param(
                 *[False, False, True, False, False, False],
                 marks=[
-                    pytest.mark.polarion_id(""),
+                    pytest.mark.polarion_id("OCS-6314"),
                     skipif_external_mode,
                     skipif_ms_consumer,
                     skipif_hci_client,
+                    tier2,
                 ],
             ),
             pytest.param(
                 *[False, False, False, True, False, False],
                 marks=[
-                    pytest.mark.polarion_id(""),
+                    pytest.mark.polarion_id("OCS-6315"),
                     skipif_external_mode,
                     skipif_ms_consumer,
                     skipif_hci_client,
+                    tier2,
                 ],
             ),
             pytest.param(
                 *[False, False, False, False, True, False],
                 marks=[
-                    pytest.mark.polarion_id(""),
+                    pytest.mark.polarion_id("OCS-6311"),
                     skipif_external_mode,
                     skipif_ms_consumer,
                     skipif_hci_client,
+                    tier2,
                 ],
             ),
             pytest.param(
                 *[False, False, False, False, False, True],
                 marks=[
-                    pytest.mark.polarion_id(""),
+                    pytest.mark.polarion_id("OCS-6310"),
                     skipif_external_mode,
                     skipif_ms_consumer,
                     skipif_hci_client,
+                    tier2,
+                    stretchcluster_required,
                 ],
             ),
         ],
