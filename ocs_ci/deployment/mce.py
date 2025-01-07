@@ -66,18 +66,10 @@ class MCEInstaller(object):
                 resource_name=constants.MCE_CATSRC_NAME,
                 namespace=constants.MARKETPLACE_NAMESPACE,
             )
+            # Wait for catalog source is ready
+            mce_catalog_source.wait_for_state("READY")
         else:
             logger.info("catalogsource exists")
-            logger.info("Check the image for MCE")
-            if not mce_catalog_source_data["spec"]["image"] == config.ENV_DATA.get(
-                "mce_image"
-            ):
-                mce_catalog_source_data["spec"]["image"] = config.ENV_DATA.get(
-                    "mce_image"
-                )
-
-        # Wait for catalog source is ready
-        mce_catalog_source.wait_for_state("READY")
 
     def create_mce_namespace(self):
         """
@@ -128,9 +120,11 @@ class MCEInstaller(object):
             mce_subscription_yaml_data["spec"][
                 "source"
             ] = constants.OPERATOR_CATALOG_SOURCE_NAME
-            mce_sub_channel = "stable-2.7"
+            mce_channel = "stable"
+        else:
+            mce_channel = config.DEPLOYMENT.get("mce_channel")
 
-        mce_subscription_yaml_data["spec"]["channel"] = f"{mce_sub_channel}"
+        mce_subscription_yaml_data["spec"]["channel"] = mce_channel
         mce_subscription_manifest = tempfile.NamedTemporaryFile(
             mode="w+", prefix="mce_subscription_manifest", delete=False
         )
