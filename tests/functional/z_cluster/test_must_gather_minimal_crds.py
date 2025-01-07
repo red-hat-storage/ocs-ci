@@ -89,7 +89,6 @@ class TestMustGather(ManageTest):
                     skipif_external_mode,
                     skipif_ms_consumer,
                     skipif_hci_client,
-                    tier2,
                 ],
             ),
         ],
