@@ -693,15 +693,17 @@ class MCG:
         self,
         name,
         backingstores,
+        namespacestores,
         placement_policy,
         namespace_policy=None,
         replication_policy=None,
     ):
         """
-        Creates a new NooBaa bucket class using the noobaa cli
+        Creates a new NooBaa bucket class using the noobaa cli over either backing store pr namespace stores
         Args:
             name (str): The name to be given to the bucket class
-            backingstores (list): The backing stores to use as part of the policy
+            backingstores (list): The backing stores to use as part of the policy. If None, namespacestores are used
+            namespacestores (list): The namespaces stores to use as part of the policy
             placement_policy (str): The placement policy to be used - Mirror | Spread
             namespace_policy (dict): The namespace policy to be used
             replication_policy (dict): The replication policy dictionary
@@ -710,34 +712,43 @@ class MCG:
             OCS: The bucket class resource
 
         """
-        # TODO: Implement CLI namespace bucketclass support
-        backingstore_name_list = [backingstore.name for backingstore in backingstores]
-        backingstores = f" --backingstores {','.join(backingstore_name_list)}"
-        placement_policy = f" --placement {placement_policy}"
-        placement_type = (
-            f"{constants.PLACEMENT_BUCKETCLASS} "
-            if version.get_semantic_ocs_version_from_config() >= version.VERSION_4_7
-            else ""
-        )
-        if (
-            replication_policy is not None
-            and version.get_semantic_ocs_version_from_config() >= version.VERSION_4_12
-        ):
-            replication_policy = {"rules": replication_policy}
-        with tempfile.NamedTemporaryFile(
-            delete=True, mode="wb", buffering=0
-        ) as replication_policy_file:
-            replication_policy_file.write(
-                json.dumps(replication_policy).encode("utf-8")
-            )
-            replication_policy = (
-                f" --replication-policy {replication_policy_file.name}"
-                if replication_policy
+        if backingstores: # bucket class is over backingstore
+            backingstore_name_list = [backingstore.name for backingstore in backingstores]
+            backingstores = f" --backingstores {','.join(backingstore_name_list)}"
+            placement_policy = f" --placement {placement_policy}"
+            placement_type = (
+                f"{constants.PLACEMENT_BUCKETCLASS} "
+                if version.get_semantic_ocs_version_from_config() >= version.VERSION_4_7
                 else ""
             )
+            if (
+                replication_policy is not None
+                and version.get_semantic_ocs_version_from_config() >= version.VERSION_4_12
+            ):
+                replication_policy = {"rules": replication_policy}
+            with tempfile.NamedTemporaryFile(
+                delete=True, mode="wb", buffering=0
+            ) as replication_policy_file:
+                replication_policy_file.write(
+                    json.dumps(replication_policy).encode("utf-8")
+                )
+                replication_policy = (
+                    f" --replication-policy {replication_policy_file.name}"
+                    if replication_policy
+                    else ""
+                )
+                self.exec_mcg_cmd(
+                    f"bucketclass create {placement_type}{name}{backingstores}{placement_policy}{replication_policy}"
+                )
+        elif namespacestores: # bucket class is over namespacestores
+            namestores_name_list = [namespacestore.name for namespacestore in namespacestores]
+            namestores_name_str = f"{','.join(namestores_name_list)}"
+            namespace_policy_type = namespace_policy["type"].lower()
             self.exec_mcg_cmd(
-                f"bucketclass create {placement_type}{name}{backingstores}{placement_policy}{replication_policy}"
+                f"bucketclass create namespace-bucketclass {namespace_policy_type} --resource={namestores_name_str} {name}"
             )
+        else:
+            assert False, "No backingstores or namespacestores provided"
 
     def check_if_mirroring_is_done(self, bucket_name, timeout=300):
         """

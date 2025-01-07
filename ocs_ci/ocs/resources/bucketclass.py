@@ -209,10 +209,12 @@ def bucket_class_factory(
         interfaces[interface.lower()](
             name=bucket_class_name,
             backingstores=backingstores,
+            namespacestores=namespacestores,
             placement_policy=placement_policy,
             namespace_policy=namespace_policy,
             replication_policy=replication_policy,
         )
+
         bucket_class_object = BucketClass(
             bucket_class_name,
             backingstores,
