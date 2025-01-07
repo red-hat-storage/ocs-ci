@@ -1,9 +1,9 @@
 import logging
 import pytest
 
-from ocs_ci.framework.pytest_customization.marks import brown_squad
-from ocs_ci.framework.testlib import (
+from ocs_ci.framework.pytest_customization.marks import (
     ManageTest,
+    brown_squad,
     tier1,
     tier2,
     skipif_external_mode,
