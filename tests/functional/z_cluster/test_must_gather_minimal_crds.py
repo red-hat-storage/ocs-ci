@@ -5,7 +5,6 @@ from ocs_ci.framework.pytest_customization.marks import (
     ManageTest,
     brown_squad,
     tier1,
-    tier2,
     skipif_external_mode,
     skipif_ms_consumer,
     skipif_hci_client,
@@ -17,6 +16,7 @@ logger = logging.getLogger(__name__)
 
 
 @brown_squad
+@tier1
 class TestMustGather(ManageTest):
     @pytest.mark.parametrize(
         argnames=[
@@ -35,7 +35,6 @@ class TestMustGather(ManageTest):
                     skipif_external_mode,
                     skipif_ms_consumer,
                     skipif_hci_client,
-                    tier1,
                 ],
             ),
             pytest.param(
@@ -45,7 +44,6 @@ class TestMustGather(ManageTest):
                     skipif_external_mode,
                     skipif_ms_consumer,
                     skipif_hci_client,
-                    tier2,
                 ],
             ),
             pytest.param(
@@ -55,7 +53,6 @@ class TestMustGather(ManageTest):
                     skipif_external_mode,
                     skipif_ms_consumer,
                     skipif_hci_client,
-                    tier2,
                 ],
             ),
             pytest.param(
@@ -65,7 +62,6 @@ class TestMustGather(ManageTest):
                     skipif_external_mode,
                     skipif_ms_consumer,
                     skipif_hci_client,
-                    tier2,
                 ],
             ),
             pytest.param(
@@ -75,7 +71,6 @@ class TestMustGather(ManageTest):
                     skipif_external_mode,
                     skipif_ms_consumer,
                     skipif_hci_client,
-                    tier2,
                 ],
             ),
             pytest.param(
@@ -85,7 +80,6 @@ class TestMustGather(ManageTest):
                     skipif_external_mode,
                     skipif_ms_consumer,
                     skipif_hci_client,
-                    tier2,
                 ],
             ),
             pytest.param(
