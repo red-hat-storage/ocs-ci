@@ -1310,10 +1310,6 @@ validation_4_9 = {
         By.CSS_SELECTOR,
     ),
     "show-default-projects": (".pf-c-switch__toggle", By.CSS_SELECTOR),
-    "ocs-storagecluster-storgesystem": (
-        ".co-resource-item__resource-name[data-test-operand-link='ocs-storagecluster-storagesystem']",
-        By.CSS_SELECTOR,
-    ),
     "resources-tab": ("a[data-test-id='horizontal-link-Resources']", By.CSS_SELECTOR),
     "system-capacity": ("//h2[normalize-space()='System Capacity']", By.XPATH),
     "ocs-storagecluster": ("//a[normalize-space()='ocs-storagecluster']", By.XPATH),
