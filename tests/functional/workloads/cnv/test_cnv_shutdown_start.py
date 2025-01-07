@@ -24,9 +24,16 @@ class TestVmShutdownStart(E2ETest):
     """
 
     @workloads
-    @pytest.mark.polarion_id("OCS-6304")
+    @pytest.mark.parametrize(
+        argnames=["force"],
+        argvalues=[
+            pytest.param("True", marks=pytest.mark.polarion_id("OCS-6304")),
+            pytest.param("False", marks=pytest.mark.polarion_id("OCS-6316")),
+        ],
+    )
     def test_vm_abrupt_shutdown_cluster(
         self,
+        force,
         setup_cnv,
         project_factory,
         multi_cnv_workload,
@@ -121,8 +128,8 @@ class TestVmShutdownStart(E2ETest):
         master_nodes = get_nodes(node_type="master")
 
         logger.info("Abruptly Shutting down worker & master nodes")
-        nodes.stop_nodes(nodes=worker_nodes)
-        nodes.stop_nodes(nodes=master_nodes)
+        nodes.stop_nodes(nodes=worker_nodes, force=force)
+        nodes.stop_nodes(nodes=master_nodes, force=force)
 
         logger.info("waiting for 5 min before starting nodes")
         time.sleep(300)
