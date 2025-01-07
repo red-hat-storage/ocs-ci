@@ -52,7 +52,7 @@ class MCEInstaller(object):
             mce_catalog_source_data = templating.load_yaml(constants.MCE_CATSRC_YAML)
             if config.ENV_DATA.get("mce_image"):
                 mce_image_tag = config.ENV_DATA.get("mce_image")
-            mce_catalog_source_data["spec"]["image"] = mce_image_tag
+                mce_catalog_source_data["spec"]["image"] = mce_image_tag
             mce_catalog_source_manifest = tempfile.NamedTemporaryFile(
                 mode="w+", prefix="mce_catalog_source_manifest", delete=False
             )
