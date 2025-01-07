@@ -58,10 +58,7 @@ def bucket_class_factory(
         backingstore_factory: Factory for backing store creation
 
     """
-    interfaces = {
-        "oc": mcg_obj.oc_create_bucketclass,
-        "cli": mcg_obj.cli_create_bucketclass,
-    }
+    interfaces = ["oc", "cli"]
     created_bucket_classes = []
 
     def _create_bucket_class(bucket_class_dict):
@@ -108,7 +105,7 @@ def bucket_class_factory(
         """
         if "interface" in bucket_class_dict:
             interface = bucket_class_dict["interface"]
-            if interface.lower() not in interfaces.keys():
+            if interface.lower() not in interfaces:
                 raise RuntimeError(
                     f"Invalid interface type received: {interface}. "
                     f'available types: {", ".join(interfaces)}'
@@ -206,14 +203,22 @@ def bucket_class_factory(
         bucket_class_name = create_unique_resource_name(
             resource_description="bucketclass", resource_type=interface.lower()
         )
-        interfaces[interface.lower()](
-            name=bucket_class_name,
-            backingstores=backingstores,
-            namespacestores=namespacestores,
-            placement_policy=placement_policy,
-            namespace_policy=namespace_policy,
-            replication_policy=replication_policy,
-        )
+        if interface.lower() == "oc":
+            mcg_obj.oc_create_bucketclass(
+                bucket_class_name,
+                backingstores,
+                placement_policy,
+                namespace_policy,
+                replication_policy,
+            )
+        elif interface.lower() == "cli" and backingstores:
+            mcg_obj.cli_create_bucketclass_over_backingstores(
+                bucket_class_name, backingstores, placement_policy, replication_policy
+            )
+        else:
+            mcg_obj.cli_create_bucketclass_over_namespacestores(
+                bucket_class_name, namespacestores, namespace_policy
+            )
 
         bucket_class_object = BucketClass(
             bucket_class_name,
