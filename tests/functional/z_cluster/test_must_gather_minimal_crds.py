@@ -9,6 +9,7 @@ from ocs_ci.framework.pytest_customization.marks import (
     skipif_external_mode,
     skipif_ms_consumer,
     skipif_hci_client,
+    stretchcluster_required,
 )
 from ocs_ci.ocs.must_gather.must_gather import MustGather
 from ocs_ci.ocs.must_gather import const_must_gather
@@ -96,6 +97,7 @@ class TestMustGather(ManageTest):
                     skipif_ms_consumer,
                     skipif_hci_client,
                     tier2,
+                    stretchcluster_required,
                 ],
             ),
         ],
