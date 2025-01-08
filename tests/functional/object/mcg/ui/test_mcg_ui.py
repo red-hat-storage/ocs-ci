@@ -416,6 +416,7 @@ class TestObcUserInterface(object):
         assert test_obc.check_resource_existence(should_exist=False)
 
 
+@black_squad
 class TestBucketCreate:
     def test_bucket_create(self, setup_ui_class_factory):
         setup_ui_class_factory()
