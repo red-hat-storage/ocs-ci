@@ -13,7 +13,14 @@ log = logging.getLogger(__name__)
 @workloads
 class TestVmPvcExpansion(E2ETest):
     """
-    Tests for VM PVC Expansion
+    Independently expands the PVC attached to the VM
+    Test Steps:
+    1. Create VM PVC following the documented procedure
+        from ODF official docs.
+    2. Get initial PVC size and generate checksum before resize
+    3. Resize PVC (increase by 1-5 GiB)
+    4. Get new PVC size and generate checksum after resize
+    5. Verify resize and data integrity
     """
 
     def test_pvc_expansion(self, cnv_workload):
