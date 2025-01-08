@@ -22,7 +22,17 @@ class TestVMSnapshotClone(E2ETest):
         pvc_clone_factory,
     ):
         """
-        creates snapshot of a deployed vm, restores the snapshot, and then clones the restored PVC.
+        Creates a snapshot of a deployed VM, restores the snapshot, and then clones the restored PVC.
+
+        Test Steps:
+        1. Create a VM with PVC
+        2. Write data to the VM and stop it
+        3. Take a snapshot of the VM's PVC
+        4. Restore the snapshot to a new PVC
+        5. Clone the restored snapshot PVC
+        6. Create a new VM with the cloned PVC
+        7. Verify data integrity in the cloned VM 
+        8. Verify that the data persisted after cloning
         """
 
         # create a VM
