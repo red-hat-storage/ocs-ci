@@ -271,7 +271,7 @@ class VirtualMachine(Virtctl):
                 else self.dvt_name
             ),
             column="PHASE",
-            timeout=300,
+            timeout=900,
         ), "VM Data Volume not in Succeeded state"
 
     def get(self, out_yaml_format=True):
