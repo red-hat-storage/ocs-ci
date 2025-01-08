@@ -29,6 +29,7 @@ from ocs_ci.utility.managedservice import (
     generate_onboarding_token,
     get_storage_provider_endpoint,
 )
+from ocs_ci.utility.openshift_dedicated import get_cluster_details
 from ocs_ci.utility.retry import catch_exceptions
 from ocs_ci.utility.utils import exec_cmd, TimeoutSampler
 
@@ -891,6 +892,23 @@ def destroy_appliance_mode_cluster(cluster):
         if "deleting service" in service_status:
             logger.info("Rosa service status is 'deleting service'")
             break
+    return True
+
+
+def destroy_rosa_cluster(cluster, best_effort=True):
+    """
+    Delete rosa cluster
+
+    Parameters:
+        cluster (str): name of the cluster
+        best_effort (bool): If True (true), ignore errors and continue with the deletion of the cluster
+    """
+    external_id = get_cluster_details(cluster)["id"]
+    cmd = f"ocm delete cluster {external_id} -p best_effort={str(best_effort).lower()}"
+    proc = exec_cmd(cmd, timeout=1200)
+    if proc.returncode != 0:
+        raise CommandFailed(f"Failed to delete cluster: {proc.stderr.decode().strip()}")
+    logger.info(f"{proc.stdout.decode().strip()}")
     return True
 
 
