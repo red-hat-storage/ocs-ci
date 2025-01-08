@@ -31,6 +31,8 @@ from ocs_ci.ocs.ui.page_objects.object_bucket_claims_tab import (
 )
 from ocs_ci.ocs.ui.page_objects.object_buckets_tab import ObjectBucketsTab
 from ocs_ci.ocs.ui.page_objects.page_navigator import PageNavigator
+from ocs_ci.ocs.scale_noobaa_lib import fetch_noobaa_storage_class_name
+
 
 logger = logging.getLogger(__name__)
 
@@ -281,6 +283,43 @@ class TestBucketclassUserInterface(object):
         assert test_bc.check_resource_existence(should_exist=False)
 
 
+def generate_test_params():
+    """
+    Generate test parameters for the test_obc_creation_and_deletion - helper function to reuse fixture in parametrize
+    """
+
+    noobaa_sc = fetch_noobaa_storage_class_name().decode("utf-8")
+    return [
+        pytest.param(
+            *[
+                noobaa_sc,
+                "noobaa-default-bucket-class",
+                "three_dots",
+                True,
+            ],
+            marks=[pytest.mark.polarion_id("OCS-4698"), mcg],
+        ),
+        pytest.param(
+            *[
+                noobaa_sc,
+                "noobaa-default-bucket-class",
+                "Actions",
+                True,
+            ],
+            marks=[pytest.mark.polarion_id("OCS-2542"), mcg],
+        ),
+        pytest.param(
+            *[
+                "ocs-storagecluster-ceph-rgw",
+                None,
+                "three_dots",
+                True,
+            ],
+            marks=[pytest.mark.polarion_id("OCS-4845"), on_prem_platform_required],
+        ),
+    ]
+
+
 @skipif_disconnected_cluster
 @black_squad
 @runs_on_provider
@@ -299,43 +338,15 @@ class TestObcUserInterface(object):
                 resource_name=obc_name
             )
 
+    @pytest.mark.parametrize(
+        argnames=["storageclass", "bucketclass", "delete_via", "verify_ob_removal"],
+        argvalues=generate_test_params(),
+    )
     @provider_mode
     @ui
     @tier1
     @runs_on_provider
     @bugzilla("2097772")
-    @pytest.mark.parametrize(
-        argnames=["storageclass", "bucketclass", "delete_via", "verify_ob_removal"],
-        argvalues=[
-            pytest.param(
-                *[
-                    "openshift-storage.noobaa.io",
-                    "noobaa-default-bucket-class",
-                    "three_dots",
-                    True,
-                ],
-                marks=[pytest.mark.polarion_id("OCS-4698"), mcg],
-            ),
-            pytest.param(
-                *[
-                    "openshift-storage.noobaa.io",
-                    "noobaa-default-bucket-class",
-                    "Actions",
-                    True,
-                ],
-                marks=[pytest.mark.polarion_id("OCS-2542"), mcg],
-            ),
-            pytest.param(
-                *[
-                    "ocs-storagecluster-ceph-rgw",
-                    None,
-                    "three_dots",
-                    True,
-                ],
-                marks=[pytest.mark.polarion_id("OCS-4845"), on_prem_platform_required],
-            ),
-        ],
-    )
     def test_obc_creation_and_deletion(
         self,
         setup_ui_class_factory,
