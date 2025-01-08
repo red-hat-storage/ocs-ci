@@ -697,7 +697,7 @@ class MCG:
         replication_policy=None,
     ):
         """
-        Creates a new NooBaa bucket class using the noobaa cli over either backingstores
+        Creates a new NooBaa bucket class using the noobaa cli over backingstores
         Args:
             name (str): The name to be given to the bucket class
             backingstores (list): The backing stores to use as part of the policy.
@@ -758,6 +758,12 @@ class MCG:
         ]
         namestores_name_str = f"{','.join(namestores_name_list)}"
         namespace_policy_type = namespace_policy["type"].lower()
+        if namespace_policy_type != constants.NAMESPACE_POLICY_TYPE_SINGLE:
+            raise NotImplementedError(
+                f"Cli creating of bucketclass on namespacestpre "
+                f"with policy {namespace_policy_type} is not implemented yet"
+            )
+
         self.exec_mcg_cmd(
             f"bucketclass create namespace-bucketclass {namespace_policy_type} "
             f"--resource={namestores_name_str} {name}"
