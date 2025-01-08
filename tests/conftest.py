@@ -9,6 +9,7 @@ import tempfile
 import threading
 import json
 from concurrent.futures.thread import ThreadPoolExecutor
+from concurrent.futures import as_completed
 from datetime import datetime
 from math import floor
 from shutil import copyfile, rmtree
@@ -7311,28 +7312,51 @@ def multi_cnv_workload(
             pvk_obj = PVKeyrotation(sc_obj)
             pvk_obj.annotate_storageclass_key_rotation(schedule="*/3 * * * *")
 
-        # Load VMconfigs from cnv_vm_workload yaml
+        # Load VM configs from cnv_vm_workload yaml
         vm_configs = templating.load_yaml(constants.CNV_VM_WORKLOADS)
 
-        # Loop through vm_configs and create the VMs using the cnv_workload fixture
-        for vm_config in vm_configs["cnv_vm_configs"]:
+        # Function to create a VM using cnv_workload
+        def create_vm(index, vm_config, sc_obj_def_compr, sc_obj_aggressive, namespace):
             # Determine the storage class based on the compression type
             if vm_config["sc_compression"] == "default":
                 storageclass = sc_obj_def_compr.name
             elif vm_config["sc_compression"] == "aggressive":
                 storageclass = sc_obj_aggressive.name
-            vm_obj = cnv_workload(
+
+            return cnv_workload(
                 volume_interface=vm_config["volume_interface"],
                 access_mode=vm_config["access_mode"],
                 storageclass=storageclass,
                 pvc_size="30Gi",  # Assuming pvc_size is fixed for all
                 source_url=constants.CNV_FEDORA_SOURCE,  # Assuming source_url is the same for all VMs
                 namespace=namespace,
-            )
-            if vm_config["sc_compression"] == "aggressive":
-                vm_list_agg_compr.append(vm_obj)
-            else:
-                vm_list_default_compr.append(vm_obj)
+            )[index]
+
+        # Use ThreadPoolExecutor for parallel execution
+        with ThreadPoolExecutor() as executor:
+            future_to_vm = {
+                executor.submit(
+                    create_vm,
+                    index,
+                    vm_config,
+                    sc_obj_def_compr,
+                    sc_obj_aggressive,
+                    namespace,
+                ): vm_config
+                for index, vm_config in enumerate(vm_configs["cnv_vm_configs"])
+            }
+
+            for future in as_completed(future_to_vm):
+                vm_config = future_to_vm[future]
+                try:
+                    vm_obj = future.result()
+                    if vm_config["sc_compression"] == "aggressive":
+                        vm_list_agg_compr.append(vm_obj)
+                    else:
+                        vm_list_default_compr.append(vm_obj)
+                except Exception as e:
+                    print(f"Error occurred while creating VM: {e}")
+
         return (
             vm_list_default_compr,
             vm_list_agg_compr,
