@@ -1532,6 +1532,8 @@ def dc_pod_factory(request, pvc_factory, service_account_factory):
             node_name (str): The name of specific node to schedule the pod
             node_selector (dict): dict of key-value pair to be used for nodeSelector field
                 eg: {'nodetype': 'app-pod'}
+            project (object): ocs_ci.ocs.resources.ocs.OCS instance
+                of 'Project' kind.
             replica_count (int): Replica count for deployment config
             raw_block_pv (str): True if pod with raw block pvc
             sa_obj (object) : If specific service account is needed
