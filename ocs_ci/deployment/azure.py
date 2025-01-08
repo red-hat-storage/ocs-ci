@@ -114,6 +114,8 @@ class AZUREIPI(AZUREBase):
             cco.set_credentials_mode_manual(install_config)
             cco.set_resource_group_name(install_config, self.cluster_name)
             cco.create_manifests(self.installer, cluster_path)
+            azure_util = AzureUtil()
+            azure_util.set_auth_env_vars()
             cco.process_credentials_requests_azure(
                 self.cluster_name,
                 config.ENV_DATA["region"],
@@ -144,6 +146,7 @@ class AZUREIPI(AZUREBase):
 
         """
         if config.DEPLOYMENT.get("sts_enabled"):
+            self.azure_util.set_auth_env_vars()
             cco.delete_oidc_resource_group(
                 self.cluster_name,
                 config.ENV_DATA["region"],
