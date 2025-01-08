@@ -3,15 +3,16 @@ from ocs_ci.resiliency.resiliency_helper import Resiliency
 # from ocs_ci.resiliency.resiliency_workload import workload_object
 import logging
 from ocs_ci.ocs import constants
-from ocs_ci.framework.pytest_customization.marks import green_squad
+from ocs_ci.framework.pytest_customization.marks import green_squad, resiliency_test
 
 log = logging.getLogger(__name__)
 
 
 @green_squad
+@resiliency_test
 class TestResiliencyNodeFailures:
     def test_node_poweroff(self, multi_pvc_factory, fio_resiliency_workload):
-        """Resiliency tests"""
+        """Resiliency tests with node failures"""
         scenario = "NODE_FAILURES"
         failure_method = "POWEROFF_NODE"
 
