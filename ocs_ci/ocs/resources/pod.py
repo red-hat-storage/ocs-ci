@@ -17,7 +17,6 @@ from threading import Thread
 import base64
 from semantic_version import Version
 
-from ocs_ci.ocs.bucket_utils import craft_s3_command
 from ocs_ci.ocs.ocp import get_images, OCP, verify_images_upgraded
 from ocs_ci.helpers import helpers
 from ocs_ci.helpers.proxy import update_container_with_proxy_env
@@ -212,6 +211,9 @@ class Pod(OCS):
         Returns:
             Munch Obj: This object represents a returned yaml file
         """
+        # Importing here to avoid circular dependency
+        from ocs_ci.ocs.bucket_utils import craft_s3_command
+
         return self.exec_cmd_on_pod(
             craft_s3_command(command, mcg_obj),
             out_yaml_format=False,
@@ -2488,6 +2490,7 @@ def get_not_running_pods(selector=None, namespace=config.ENV_DATA["cluster_names
         if (
             status != constants.STATUS_RUNNING
             and status != constants.STATUS_TERMINATING
+            and status != constants.STATUS_COMPLETED
         ):
             pods_not_running.append(pod)
 

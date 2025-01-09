@@ -5243,3 +5243,16 @@ def extract_image_urls(string_data):
     # Find all URLs that start with 'registry.redhat.io'
     image_urls = re.findall(r'registry\.redhat\.io[^\s"]+', string_data)
     return image_urls
+
+
+def is_z_stream_upgrade():
+    """
+    Check whether this is a z-stream upgrade scenario
+
+    Returns:
+        bool: True if its a z-stream upgrade else False
+
+    """
+    return config.UPGRADE.get("pre_upgrade_ocs_version", "") == config.UPGRADE.get(
+        "upgrade_ocs_version", ""
+    )
