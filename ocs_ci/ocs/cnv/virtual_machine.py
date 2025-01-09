@@ -778,6 +778,7 @@ class VMCloner(VirtualMachine):
             "storage": {
                 "accessModes": [self.pvc_access_mode],
                 "resources": {"requests": {"storage": self.pvc_size}},
+                "storageClassName": self.sc_name,
             },
             "source": {
                 "pvc": {
