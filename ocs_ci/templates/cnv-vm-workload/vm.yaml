@@ -50,6 +50,4 @@ spec:
             userData: |-
               #cloud-config
               user: admin
-              password: admin@123
-              chpasswd: { expire: False }
           name: cloudinitdisk
