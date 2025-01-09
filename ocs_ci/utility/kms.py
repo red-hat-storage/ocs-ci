@@ -137,8 +137,10 @@ class Vault(KMS):
     def get_vault_token(self):
         """
         Get the Vault token value. Generate it first if it does not already exist.
+
         Returns:
             str: Vault token
+
         """
         if self.vault_path_token is None:
             Vault.vault_path_token = self.generate_vault_token()
