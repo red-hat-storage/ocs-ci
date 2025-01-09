@@ -5257,6 +5257,8 @@ def is_z_stream_upgrade():
     return config.UPGRADE.get("pre_upgrade_ocs_version", "") == config.UPGRADE.get(
         "upgrade_ocs_version", ""
     )
+
+
 def create_config_ini_file(params):
     """
     This function will create a config ini file for the params given.

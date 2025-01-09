@@ -36,7 +36,7 @@ from ocs_ci.utility.utils import (
     decode,
     download_file,
     wait_for_machineconfigpool_status,
-    params_to_configini_file,
+    create_config_ini_file,
 )
 
 logger = logging.getLogger(__name__)
@@ -309,7 +309,7 @@ class ExternalCluster(object):
             str: absolute path to config.ini file
 
         """
-        script_path = params_to_configini_file(params=params)
+        script_path = create_config_ini_file(params=params)
         upload_file(
             self.host, script_path, script_path, self.user, self.password, self.ssh_key
         )
