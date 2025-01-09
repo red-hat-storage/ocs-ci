@@ -357,7 +357,7 @@ def pytest_generate_tests(metafunc):
 
     """
     # For now we are only dealing with multicluster scenarios in this hook
-    if ocsci_config.multicluster:
+    if ocsci_config.multicluster and ocsci_config.UPGRADE.get("upgrade", False):
         upgrade_parametrizer = get_multicluster_upgrade_parametrizer()
         # for various roles which are applicable to current test wrt multicluster, for ex: ACM, primary, secondary etc
         roles = None

@@ -1,5 +1,6 @@
 import time
 import logging
+import os
 import pytest
 
 from ocs_ci.framework import config
@@ -108,7 +109,6 @@ class TestPodsCsiLogRotation(BaseTest):
     @pytest.mark.parametrize(
         argnames=[
             "pod_selector",
-            "logs_dir",
             "log_file_name",
             "additional_log_file_name",
         ],
@@ -116,7 +116,6 @@ class TestPodsCsiLogRotation(BaseTest):
             pytest.param(
                 *[
                     "csi-cephfsplugin",
-                    "/var/lib/rook/openshift-storage.cephfs.csi.ceph.com/log/node-plugin/",
                     "csi-cephfsplugin.log",
                     "",
                 ],
@@ -124,7 +123,6 @@ class TestPodsCsiLogRotation(BaseTest):
             pytest.param(
                 *[
                     "csi-rbdplugin",
-                    "/var/lib/rook/openshift-storage.rbd.csi.ceph.com/log/node-plugin/",
                     "csi-rbdplugin.log",
                     "",
                 ],
@@ -132,7 +130,6 @@ class TestPodsCsiLogRotation(BaseTest):
             pytest.param(
                 *[
                     "csi-cephfsplugin-provisioner",
-                    "/var/lib/rook/openshift-storage.cephfs.csi.ceph.com/log/controller-plugin/",
                     "csi-cephfsplugin.log",
                     "csi-addons.log",
                 ],
@@ -140,7 +137,6 @@ class TestPodsCsiLogRotation(BaseTest):
             pytest.param(
                 *[
                     "csi-rbdplugin-provisioner",
-                    "/var/lib/rook/openshift-storage.rbd.csi.ceph.com/log/controller-plugin/",
                     "csi-rbdplugin.log",
                     "csi-addons.log",
                 ],
@@ -148,7 +144,7 @@ class TestPodsCsiLogRotation(BaseTest):
         ],
     )
     def test_pods_csi_log_rotation(
-        self, pod_selector, logs_dir, log_file_name, additional_log_file_name
+        self, pod_selector, log_file_name, additional_log_file_name
     ):
         """
         Tests that the both log files on provisioner pod are rotated correctly.
@@ -160,6 +156,19 @@ class TestPodsCsiLogRotation(BaseTest):
             additional_log_file_name (str) Additional log file name; empty string if is not relevant
 
         """
+        base_dir = "/var/lib/rook/"
+        suffix_dir = ""
+        if pod_selector == "csi-cephfsplugin":
+            suffix_dir = "openshift-storage.cephfs.csi.ceph.com/log/node-plugin/"
+        elif pod_selector == "csi-rbdplugin":
+            suffix_dir = "openshift-storage.rbd.csi.ceph.com/log/node-plugin/"
+        elif pod_selector == "csi-cephfsplugin-provisioner":
+            suffix_dir = "openshift-storage.cephfs.csi.ceph.com/log/controller-plugin/"
+        elif pod_selector == "csi-rbdplugin-provisioner":
+            suffix_dir = "openshift-storage.rbd.csi.ceph.com/log/controller-plugin/"
+
+        logs_dir = os.path.join(base_dir, suffix_dir)
+        log.debug(f"logs dir: {logs_dir}")
         csi_interface_plugin_pod_objs = pod.get_all_pods(
             namespace=config.ENV_DATA["cluster_namespace"], selector=[pod_selector]
         )

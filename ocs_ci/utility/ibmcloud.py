@@ -1337,15 +1337,19 @@ class IBMCloudObjectStorage:
     def get_buckets(self):
         """
         Fetches the buckets
+
+        Returns:
+            list: List of buckets
+
         """
-        buckets = []
+        bucket_list = []
         logger.info("Retrieving list of buckets")
         try:
             buckets = self.cos_client.list_buckets()
             for bucket in buckets["Buckets"]:
-                buckets.append(bucket["Name"])
+                bucket_list.append(bucket["Name"])
         except ClientError as ce:
             logger.error(f"CLIENT ERROR: {ce}")
         except Exception as e:
             logger.error(f"Unable to retrieve list buckets: {e}")
-        return buckets
+        return bucket_list
