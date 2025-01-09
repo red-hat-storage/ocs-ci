@@ -170,3 +170,18 @@ class StorageClients(BaseUI):
         # Text is expected to be 'Available capacity (ocs-storagecluster): N TiB'
         split_capacity_text = av_capacity_text.split(" ")
         return f"{split_capacity_text[-2]} {split_capacity_text[-1]}"
+
+    def validate_unlimited_quota_utilization_info(self):
+        """
+        Verify that for every client with unlimited quota
+        utilization column only shows "-"
+        """
+        quota_elements = self.get_elements(self.storage_clients_loc["client_quota"])
+        utilization_elements = self.get_elements(
+            self.storage_clients_loc["quota_utilization"]
+        )
+        for i in len(quota_elements):
+            if quota_elements[i].text == "Unlimited":
+                assert (
+                    utilization_elements[i].text == "-"
+                ), f"Quota utilization is shown as {utilization_elements[i].text}"

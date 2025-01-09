@@ -108,3 +108,11 @@ class TestOnboardingTokenGenerationWithQuota(ManageTest):
             quota_cli = storageconsumer.get_storageconsumer_quota(client)
             assert quota_ui == quota_cli, f"Quota in the UI: {quota_ui}, "
             "quota in the CLI: {quota_cli}"
+
+    def test_usage_for_unlimited_quota_clients(self, setup_ui_class):
+        """
+        Test that clients with unlimited storage don't have
+        quota usage shown on Clients page
+        """
+        storage_clients_page = PageNavigator().nav_to_storageclients_page()
+        storage_clients_page.validate_unlimited_quota_utilization_info()
