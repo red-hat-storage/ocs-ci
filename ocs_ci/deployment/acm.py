@@ -220,27 +220,27 @@ class Submariner(object):
             raise UnsupportedPlatformError(
                 "Not a supported architecture for subctl binary"
             )
+        version_str_trimmed = None
         if self.submariner_release_type == "unreleased":
-            unreleased_tag = self.get_submariner_unreleased_tag(
-                re.match(r"(v\d+\.\d+)", version_str).group(1)
-            )
+            xy_version = re.match(r"(v\d+\.\d+)", version_str).group(1)
+            unreleased_tag = self.get_submariner_unreleased_tag(xy_version)
             brew_url = "/".join([constants.SUBMARINER_BREW, "rhacm2-subctl-rhel9:"])
             cmd = (
                 f"oc image extract --filter-by-os linux/{binary_pltfrm} "
                 f"-a {pull_secret_path} {brew_url}{unreleased_tag} "
-                f'--path="/dist/subctl-{version_str}*-linux-{binary_pltfrm}.tar.xz":/tmp --confirm'
+                f'--path="/dist/subctl-{xy_version}*-linux-{binary_pltfrm}.tar.xz":/tmp --confirm'
             )
+            version_str_trimmed = xy_version
         else:
             cmd = (
                 f"oc image extract --filter-by-os linux/{binary_pltfrm} --registry-config "
                 f"{pull_secret_path} {constants.SUBCTL_DOWNSTREAM_URL}{subctl_ver} "
                 f'--path="/dist/subctl-{version_str}*-linux-{binary_pltfrm}.tar.xz":/tmp --confirm'
             )
+            version_str_trimmed = version_str
 
         run_cmd(cmd)
-        decompress = (
-            f"tar -C /tmp/ -xf /tmp/subctl-{version_str}*-linux-{binary_pltfrm}.tar.xz"
-        )
+        decompress = f"tar -C /tmp/ -xf /tmp/subctl-{version_str_trimmed}*-linux-{binary_pltfrm}.tar.xz"
         p = subprocess.run(decompress, stdout=subprocess.PIPE, shell=True)
         if p.returncode:
             logger.error("Failed to untar subctl")
@@ -249,7 +249,7 @@ class Submariner(object):
             logger.info(p.stdout)
         target_dir = config.RUN["bin_dir"]
         install_cmd = (
-            f"install -m744 /tmp/subctl-{version_str}*/subctl-{version_str}*-linux-{binary_pltfrm} "
+            f"install -m744 /tmp/subctl-{version_str_trimmed}*/subctl-{version_str_trimmed}*-linux-{binary_pltfrm} "
             f"{target_dir} "
         )
         run_cmd(install_cmd, shell=True)
