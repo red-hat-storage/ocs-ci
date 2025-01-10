@@ -480,10 +480,25 @@ class MCGS3Bucket(ObjectBucket):
             response = self.s3client.get_bucket_versioning(Bucket=self.name)
             logger.info(response)
             if "Status" in response and response["Status"] == "Enabled":
+                # Wait for 60 seconds after calling delete object API
+                sleep(30)
+                obj_versions = self.s3resource.Bucket(self.name).object_versions.all()
+                for obj_version in obj_versions:
+                    logger.info(1111111111)
+                    logger.info(obj_version.key)
+                    logger.info(obj_version.version_id)
+                    logger.info(2222222222)
+                    obj_version.delete()
+                sleep(30)
+                logger.info("aaaaaaaaaaaaaaaaaa")
                 for obj_version in self.s3resource.Bucket(
                     self.name
                 ).object_versions.all():
-                    obj_version.delete()
+                    logger.info(1111111111)
+                    logger.info(obj_version.key)
+                    logger.info(obj_version.version_id)
+                    logger.info(2222222222)
+
             else:
                 self.s3resource.Bucket(self.name).objects.all().delete()
             if any("scale" in mark for mark in get_current_test_marks()):
