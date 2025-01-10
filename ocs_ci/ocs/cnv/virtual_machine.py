@@ -655,10 +655,13 @@ class VirtualMachine(Virtctl):
         if self.volume_interface == constants.VM_VOLUME_PVC:
             # Deletes only when PVC & VIS obj exists
             if self.pvc_obj:
+                self.pvc_obj.reload()
+                pv_name = self.pvc_obj.data.get("spec").get("volumeName")
                 self.pvc_obj.delete()
                 self.pvc_obj.ocp.wait_for_delete(
                     resource_name=self.pvc_obj.name, timeout=180
                 )
+                self.pvc_obj.ocp.wait_for_delete(resource_name=pv_name, timeout=300)
             if self.volumeimportsource_obj:
                 self.volumeimportsource_obj.delete()
         elif self.volume_interface == constants.VM_VOLUME_DV:
@@ -666,7 +669,7 @@ class VirtualMachine(Virtctl):
             if self.dv_obj:
                 self.dv_obj.delete()
                 self.dv_obj.ocp.wait_for_delete(
-                    resource_name=self.dv_obj.name, timeout=180
+                    resource_name=self.dv_obj.name, timeout=300
                 )
         if self.ns_obj:
             self.ns_obj.delete_project(project_name=self.namespace)
