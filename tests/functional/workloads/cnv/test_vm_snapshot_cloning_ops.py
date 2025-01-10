@@ -22,6 +22,7 @@ class TestVmSnapshotClone(E2ETest):
         project_factory,
         multi_cnv_workload,
         clone_vm_workload,
+        setup_cnv
     ):
         """
         This test performs the VM cloning and IOs created using different
@@ -76,7 +77,6 @@ class TestVmSnapshotClone(E2ETest):
                 f"and cloned {clone_obj.name} VMs"
             )
             run_dd_io(vm_obj=clone_obj, file_path=file_paths[1])
-            clone_obj.stop()
         log.info("Test completed successfully for all VMs.")
 
     @workloads
