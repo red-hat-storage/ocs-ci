@@ -141,7 +141,8 @@ class TestUpgradeOCP(ManageTest):
 
             if rosa_platform:
                 # Handle ROSA-specific upgrade logic
-                # If ROSA environment, Nightly builds are not supported
+                # On ROSA environment, Nightly builds are not supported.
+                # rosa cli uses only "X.Y.Z" format for the version (builds and images are not supported)
                 # If not provided ocp_upgrade_version - get the latest released version of the channel.
                 # If provided - check availability and use the provided version in format "X.Y.Z"
                 if ocp_upgrade_version and ocp_version_available_on_rosa(
@@ -150,9 +151,11 @@ class TestUpgradeOCP(ManageTest):
                     target_image = ocp_upgrade_version
                 else:
                     latest_ocp_ver = get_latest_ocp_version(channel=ocp_channel)
+                    # check, if ver is not available on rosa then get the latest version available on ROSA
                     if not ocp_version_available_on_rosa(latest_ocp_ver):
                         version_major_minor = drop_z_version(latest_ocp_ver)
-                        target_image = get_latest_rosa_version(version_major_minor)
+                        latest_ocp_ver = get_latest_rosa_version(version_major_minor)
+                    target_image = latest_ocp_ver
             else:
                 # Handle non-ROSA upgrade logic
                 if ocp_upgrade_version:
