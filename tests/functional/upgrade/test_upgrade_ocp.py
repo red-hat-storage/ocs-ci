@@ -12,6 +12,7 @@ from ocs_ci.ocs.exceptions import CephHealthException
 from ocs_ci.ocs.resources.pod import get_ceph_tools_pod
 from ocs_ci.deployment.disconnected import mirror_ocp_release_images
 from ocs_ci.framework import config
+from ocs_ci.utility.rosa import upgrade_rosa_cluster
 from ocs_ci.utility.utils import (
     archive_ceph_crashes,
     ceph_crash_info_display,
@@ -37,6 +38,9 @@ from ocs_ci.utility.multicluster import MDRClusterUpgradeParametrize
 from ocs_ci.utility.version import (
     get_semantic_ocp_running_version,
     VERSION_4_8,
+    get_latest_rosa_version,
+    ocp_version_available_on_rosa,
+    drop_z_version,
 )
 from ocs_ci.framework.pytest_customization.marks import (
     purple_squad,
@@ -126,17 +130,42 @@ class TestUpgradeOCP(ManageTest):
             ocp_channel = config.UPGRADE.get(
                 "ocp_channel", ocp.get_ocp_upgrade_channel()
             )
-            ocp_upgrade_version = config.UPGRADE.get("ocp_upgrade_version")
-            if ocp_upgrade_version:
-                target_image = ocp_upgrade_version
-            if not ocp_upgrade_version:
-                ocp_upgrade_version = get_latest_ocp_version(channel=ocp_channel)
-                ocp_arch = config.UPGRADE["ocp_arch"]
-                target_image = f"{ocp_upgrade_version}-{ocp_arch}"
-            elif ocp_upgrade_version.endswith(".nightly"):
-                target_image = expose_ocp_version(ocp_upgrade_version)
+            logger.info(f"OCP Channel: {ocp_channel}")
 
-            logger.info(f"Target image: {target_image}")
+            ocp_upgrade_version = config.UPGRADE.get("ocp_upgrade_version")
+            logger.info(f"OCP upgrade version: {ocp_upgrade_version}")
+
+            rosa_platform = (
+                config.ENV_DATA["platform"].lower() in constants.ROSA_PLATFORMS
+            )
+
+            if rosa_platform:
+                # Handle ROSA-specific upgrade logic
+                # If ROSA environment, Nightly builds are not supported
+                # If not provided ocp_upgrade_version - get the latest released version of the channel.
+                # If provided - check availability and use the provided version in format "X.Y.Z"
+                if ocp_upgrade_version and ocp_version_available_on_rosa(
+                    ocp_upgrade_version
+                ):
+                    target_image = ocp_upgrade_version
+                else:
+                    latest_ocp_ver = get_latest_ocp_version(channel=ocp_channel)
+                    if not ocp_version_available_on_rosa(latest_ocp_ver):
+                        version_major_minor = drop_z_version(latest_ocp_ver)
+                        target_image = get_latest_rosa_version(version_major_minor)
+            else:
+                # Handle non-ROSA upgrade logic
+                if ocp_upgrade_version:
+                    target_image = (
+                        expose_ocp_version(ocp_upgrade_version)
+                        if ocp_upgrade_version.endswith(".nightly")
+                        else ocp_upgrade_version
+                    )
+                else:
+                    ocp_upgrade_version = get_latest_ocp_version(channel=ocp_channel)
+                    ocp_arch = config.UPGRADE["ocp_arch"]
+                    target_image = f"{ocp_upgrade_version}-{ocp_arch}"
+                    logger.info(f"Target image: {target_image}")
 
             image_path = config.UPGRADE["ocp_upgrade_path"]
             cluster_operators = ocp.get_all_cluster_operators()
@@ -149,24 +178,28 @@ class TestUpgradeOCP(ManageTest):
                 )
 
             # Verify Upgrade subscription channel:
-            ocp.patch_ocp_upgrade_channel(ocp_channel)
-            for sampler in TimeoutSampler(
-                timeout=250,
-                sleep=15,
-                func=ocp.verify_ocp_upgrade_channel,
-                channel_variable=ocp_channel,
-            ):
-                if sampler:
-                    logger.info(f"OCP Channel:{ocp_channel}")
-                    break
+            if not rosa_platform:
+                ocp.patch_ocp_upgrade_channel(ocp_channel)
+                for sampler in TimeoutSampler(
+                    timeout=250,
+                    sleep=15,
+                    func=ocp.verify_ocp_upgrade_channel,
+                    channel_variable=ocp_channel,
+                ):
+                    if sampler:
+                        logger.info(f"OCP Channel:{ocp_channel}")
+                        break
 
-            # pause a MachineHealthCheck resource
-            if get_semantic_ocp_running_version() > VERSION_4_8:
-                pause_machinehealthcheck()
+                # pause a MachineHealthCheck resource
+                # no machinehealthcheck on ROSA
+                if get_semantic_ocp_running_version() > VERSION_4_8:
+                    pause_machinehealthcheck()
 
-            # Upgrade OCP
-            logger.info(f"full upgrade path: {image_path}:{target_image}")
-            ocp.upgrade_ocp(image=target_image, image_path=image_path)
+                logger.info(f"full upgrade path: {image_path}:{target_image}")
+                ocp.upgrade_ocp(image=target_image, image_path=image_path)
+            else:
+                logger.info(f"upgrade rosa cluster to target version: '{target_image}'")
+                upgrade_rosa_cluster(config.ENV_DATA["cluster_name"], target_image)
 
             # Wait for upgrade
             for ocp_operator in cluster_operators:
@@ -201,7 +234,7 @@ class TestUpgradeOCP(ManageTest):
                         logger.info(f"{ocp_operator} upgrade did not completed yet!")
 
             # resume a MachineHealthCheck resource
-            if get_semantic_ocp_running_version() > VERSION_4_8:
+            if get_semantic_ocp_running_version() > VERSION_4_8 and not rosa_platform:
                 resume_machinehealthcheck()
 
             # post upgrade validation: check cluster operator status
