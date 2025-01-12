@@ -1207,11 +1207,12 @@ def rosa_delete_htpasswd_idp(
 def upgrade_rosa_cluster(cluster_name, version):
     """
     Upgrade the ROSA cluster to the given version
+    ! important ! rosa cli version drops error in case if --control-plane parameter is not used
 
     Args:
         cluster_name (str): The cluster name
         version (str): The version to upgrade the cluster
 
     """
-    cmd = f"rosa upgrade cluster --cluster {cluster_name} --version {version} --mode auto --yes"
+    cmd = f"rosa upgrade cluster --cluster {cluster_name} --control-plane --version {version} --mode auto --yes"
     utils.run_cmd(cmd, timeout=2400)
