@@ -77,7 +77,6 @@ class TestVmSnapshotClone(E2ETest):
                 f"and cloned {clone_obj.name} VMs"
             )
             run_dd_io(vm_obj=clone_obj, file_path=file_paths[1])
-        log.info("Test completed successfully for all VMs.")
 
     @workloads
     @pytest.mark.polarion_id("OCS-6299")
