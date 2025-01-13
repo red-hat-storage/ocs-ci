@@ -449,7 +449,7 @@ class VirtualMachine(Virtctl):
                 f"VM: {self._vm_name} reached Running state state after restart operation"
             )
 
-    def addvolme(self, volume_name, persist=True, serial=None):
+    def addvolume(self, volume_name, persist=True, serial=None):
         """
         Add a volume to a VM
 

@@ -33,5 +33,5 @@ class TestVmOperations(E2ETest):
             access_mode=constants.ACCESS_MODE_RWX,
             volume_mode=constants.VOLUME_MODE_BLOCK,
         )
-        vm_obj.addvolme(volume_name=pvc_obj.name)
+        vm_obj.addvolume(volume_name=pvc_obj.name)
         vm_obj.removevolume(volume_name=pvc_obj.name)
