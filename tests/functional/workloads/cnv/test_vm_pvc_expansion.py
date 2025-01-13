@@ -16,8 +16,7 @@ class TestVmPvcExpansion(E2ETest):
     Test PVC expansion for a CNV VM workload
     """
 
-    @workloads
-    def test_pvc_expansion(self, cnv_workload):
+    def test_pvc_expansion(self, cnv_workload, setup_cnv):
         """
         Independently expands the PVC attached to the VM
         Test Steps:
