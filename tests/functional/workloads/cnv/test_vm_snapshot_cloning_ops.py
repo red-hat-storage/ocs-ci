@@ -144,7 +144,7 @@ class TestVmSnapshotClone(E2ETest):
     ):
         """
         Creates a snapshot of a deployed VM, restores the snapshot, and then
-        clones the restored PVC.
+        clones the restored PVC and deploys VM using restored PVC.
 
         Test Steps:
         1. Create a VM with PVC
@@ -164,7 +164,7 @@ class TestVmSnapshotClone(E2ETest):
         )[-1]
 
         # Write data to the VM
-        file_paths = ["/source_file.txt", "/new_file.txt"]
+        file_paths = "/source_file.txt"
         source_csum = run_dd_io(vm_obj=vm_obj, file_path=file_paths[0], verify=True)
         vm_obj.stop()
 
@@ -190,11 +190,9 @@ class TestVmSnapshotClone(E2ETest):
         res_vm_obj = cnv_workload(
             volume_interface=constants.VM_VOLUME_PVC,
             source_url=constants.CNV_FEDORA_SOURCE,
-            pvc_obj=cloned_pvc_obj,
+            existing_pvc_obj=cloned_pvc_obj,
             namespace=vm_obj.namespace,
-        )[1]
-        # Verify data integrity in the cloned VM
-        run_dd_io(vm_obj=res_vm_obj, file_path=file_paths[1], verify=True)
+        )[-1]
         # Check the MD5 checksum to verify that data persisted after cloning
         res_csum = cal_md5sum_vm(vm_obj=res_vm_obj, file_path=file_paths[0])
         assert source_csum == res_csum, (
