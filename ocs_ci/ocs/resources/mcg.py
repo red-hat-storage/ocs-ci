@@ -758,9 +758,9 @@ class MCG:
         ]
         namestores_name_str = f"{','.join(namestores_name_list)}"
         namespace_policy_type = namespace_policy["type"].lower()
-        if namespace_policy_type != constants.NAMESPACE_POLICY_TYPE_SINGLE:
+        if namespace_policy_type != constants.NAMESPACE_POLICY_TYPE_SINGLE.lower():
             raise NotImplementedError(
-                f"Cli creating of bucketclass on namespacestpre "
+                f"Cli creating of bucketclass on namespacestore "
                 f"with policy {namespace_policy_type} is not implemented yet"
             )
 

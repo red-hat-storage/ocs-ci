@@ -140,7 +140,6 @@ def bucket_class_factory(
                         },
                     }
                 else:
-                    # TODO: Implement support for Single-tiered NS bucketclass
                     namespace_policy["read_resources"] = [
                         nss.name for nss in namespacestores
                     ]
