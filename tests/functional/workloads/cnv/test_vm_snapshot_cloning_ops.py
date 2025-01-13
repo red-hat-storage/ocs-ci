@@ -18,11 +18,7 @@ class TestVmSnapshotClone(E2ETest):
     @workloads
     @pytest.mark.polarion_id("OCS-6288")
     def test_vm_clone(
-        self,
-        project_factory,
-        multi_cnv_workload,
-        clone_vm_workload,
-        setup_cnv
+        self, project_factory, multi_cnv_workload, clone_vm_workload, setup_cnv
     ):
         """
         This test performs the VM cloning and IOs created using different
