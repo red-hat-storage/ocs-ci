@@ -1991,27 +1991,28 @@ alerting = {
 
 bucket_tab = {
     "create_bucket_button_obc": (
-        "//*[@id='content-scrollable']/section/div[2]/div[1]/div/div[2]/div[1]/div[2]",
+        "//div[text()='Create via Object Bucket Claim']",
         By.XPATH,
     ),
     "storage_class_dropdown": (
-        "[data-test='sc-dropdown']",
-        By.CSS_SELECTOR,
+        "//button[contains(., 'SCSCSelect StorageClass')]",
+        By.XPATH,
     ),
     "storage_class_noobaa_option": (
-        "div.pf-v5-c-dropdown div:nth-of-type(2)",
+        "#openshift-storage\\.noobaa\\.io-link > a > div:nth-child(1) > span",
         By.CSS_SELECTOR,
     ),
+    "obc_bucket_name_input": ("#obc-name", By.CSS_SELECTOR),
     "create_bucket_button_s3": (
-        "div:nth-of-type(2) > div.pf-v5-c-tile__body",
-        By.CSS_SELECTOR,
+        "//div[text()='Create via S3 API']",
+        By.XPATH,
     ),
-    "bucket_name_input": (
+    "s3_bucket_name_input": (
         "[data-test='bucket-name']",
         By.CSS_SELECTOR,
     ),
     "submit_button_obc": (
-        "[data-test='obc-create']",
+        "button[data-test='obc-create'][type='submit']",
         By.CSS_SELECTOR,
     ),
     "first_bucket": (
@@ -2042,7 +2043,10 @@ bucket_tab = {
         "//button[text()='Upload']",
         By.XPATH,
     ),
-    "create_bucket_button": ("//*[@id='yaml-create']", By.XPATH),
+    "create_bucket_button": (
+        "//*[@id='yaml-create']",
+        By.XPATH,
+    ),
 }
 locators = {
     "4.18": {

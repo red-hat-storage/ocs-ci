@@ -24,9 +24,6 @@ class BucketsTab(ObjectStorage, ConfirmDialog):
     A class representation for abstraction of Buckets tab related OpenShift UI actions
     """
 
-    def __init__(self):
-        super().__init__()
-
     # Methods can directly access locators via self.bucket_tab, self.generic_locators etc.
     # No need to explicitly import or assign them
 
@@ -70,17 +67,46 @@ class BucketsTab(ObjectStorage, ConfirmDialog):
             raise ValueError(f"Invalid method: {method}")
 
     def create_bucket_via_obc(self):
+        """
+        Create bucket via OBC with improved dropdown handling
 
+        """
+        name_generator = f"test-bucket-obc-{uuid.uuid4()}"
+
+        logger.info("Clicking create bucket via OBC button")
         self.do_click(self.bucket_tab["create_bucket_button_obc"])
-        self.do_click(self.bucket_tab["storage_class_dropdown"])
-        self.do_click(self.bucket_tab["storage_class_noobaa_option"])
+        self.do_send_keys(self.bucket_tab["obc_bucket_name_input"], name_generator)
+        logger.info("Selecting storage class")
+        try:
+            # Try primary locator first
+            try:
+                logger.info("Trying to find dropdown by data-test attribute")
+                self.do_click(self.bucket_tab["storage_class_dropdown"])
+                logger.info("Dropdown found")
+            except NoSuchElementException:
+                # Fallback to aria label if data-test not found
+                logger.info("Trying to find dropdown by aria label")
+
+            # Select the noobaa option
+            logger.info("Selecting noobaa storage class option")
+            self.do_click(self.bucket_tab["storage_class_noobaa_option"])
+
+        except NoSuchElementException as e:
+            logger.error(f"Failed to select storage class: {str(e)}")
+            raise
+
+        logger.info("Clicking submit button to create OBC")
         self.do_click(self.bucket_tab["submit_button_obc"])
+        time.sleep(2)
+        self.do_click(self.bucket_tab["submit_button_obc"])
+
+        logger.info("Waiting for OBC to be created")
 
     def create_bucket_via_s3(self):
         name_generator = f"test-bucket-s3-{uuid.uuid4()}"
 
         self.do_click(self.bucket_tab["create_bucket_button_s3"])
-        self.do_send_keys(self.bucket_tab["bucket_name_input"], name_generator)
+        self.do_send_keys(self.bucket_tab["s3_bucket_name_input"], name_generator)
         self.do_click(self.bucket_tab["submit_button_obc"])
 
     def create_folder_in_bucket(self, bucket_name=None, folder_name=None):
@@ -100,8 +126,6 @@ class BucketsTab(ObjectStorage, ConfirmDialog):
         self.do_click(self.bucket_tab["submit_button_folder"])
 
         folder_path = self.generate_folder_with_file()
-
-        time.sleep(2)  # Wait for folder navigation
 
         logger.info("=== DEBUG: STARTING FILE UPLOAD ===")
 
