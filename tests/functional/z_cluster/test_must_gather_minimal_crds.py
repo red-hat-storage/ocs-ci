@@ -120,8 +120,7 @@ class TestMustGather(ManageTest):
         flags_cmd = "/usr/bin/gather --minimal "
         paths_exist = list()
         paths_not_exist = list()
-        for path in const_must_gather.MINIMAL:
-            paths_exist.append(path)
+        paths_exist += const_must_gather.MINIMAL
 
         options = [
             (ceph, const_must_gather.CEPH_ONLY, "-c "),
@@ -134,12 +133,10 @@ class TestMustGather(ManageTest):
 
         for flag, paths, param_value in options:
             if flag:
-                for path in paths:
-                    paths_exist.append(path)
+                paths_exist += paths
                 flags_cmd += param_value
             else:
-                for path in paths:
-                    paths_not_exist.append(path)
+                paths_not_exist += paths
         mustgather_obj = MustGather()
         mustgather_obj.collect_must_gather(ocs_flags=flags_cmd)
         mustgather_obj.get_all_paths()
