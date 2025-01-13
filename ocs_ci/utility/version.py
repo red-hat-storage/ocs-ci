@@ -360,9 +360,9 @@ def get_next_ocp_version_rosa(version):
     return str(next_version)
 
 
-def get_latest_rosa_version(version):
+def get_latest_rosa_ocp_version(version):
     """
-    Returns latest available z-stream version available for ROSA.
+    Returns latest z-stream version available for ROSA.
 
     Args:
         version (str): OCP version in format `x.y`
