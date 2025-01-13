@@ -1258,14 +1258,16 @@ class BusyboxDiscoveredApps(DRWorkload):
         )
 
         for cluster in get_non_acm_cluster_config():
-            log.info(f"Deleting Workload from {cluster}")
             config.switch_ctx(cluster.MULTICLUSTER["multicluster_index"])
+            log.info(f"Deleting workload from {cluster.ENV_DATA['cluster_name']}")
             run_cmd(
                 f"oc delete -k {self.workload_path} -n {self.workload_namespace}",
                 ignore_error=True,
             )
             dr_helpers.wait_for_all_resources_deletion(
-                namespace=self.workload_namespace
+                namespace=self.workload_namespace,
+                check_replication_resources_state=False,
+                discovered_apps=True,
             )
             run_cmd(f"oc delete project {self.workload_namespace}")
 
@@ -1569,13 +1571,15 @@ class CnvWorkloadDiscoveredApps(DRWorkload):
         )
 
         for cluster in get_non_acm_cluster_config():
-            log.info(f"Deleting Workload from {cluster}")
             config.switch_ctx(cluster.MULTICLUSTER["multicluster_index"])
+            log.info(f"Deleting workload from {cluster.ENV_DATA['cluster_name']}")
             run_cmd(
                 f"oc delete -k {self.workload_path} -n {self.workload_namespace}",
                 ignore_error=True,
             )
             dr_helpers.wait_for_all_resources_deletion(
-                namespace=self.workload_namespace
+                namespace=self.workload_namespace,
+                check_replication_resources_state=False,
+                discovered_apps=True,
             )
             run_cmd(f"oc delete project {self.workload_namespace}")
