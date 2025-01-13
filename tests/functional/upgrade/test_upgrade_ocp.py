@@ -9,6 +9,7 @@ from semantic_version import Version
 from ocs_ci.ocs import ocp
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.exceptions import CephHealthException
+from ocs_ci.ocs.ocp import check_cluster_operator_versions
 from ocs_ci.ocs.resources.pod import get_ceph_tools_pod
 from ocs_ci.deployment.disconnected import mirror_ocp_release_images
 from ocs_ci.framework import config
@@ -229,18 +230,7 @@ class TestUpgradeOCP(ManageTest):
                     continue
                 ver = ocp.get_cluster_operator_version(ocp_operator)
                 logger.info(f"current {ocp_operator} version: {ver}")
-                for sampler in TimeoutSampler(
-                    timeout=operator_upgrade_timeout,
-                    sleep=60,
-                    func=ocp.confirm_cluster_operator_version,
-                    target_version=target_image,
-                    cluster_operator=ocp_operator,
-                ):
-                    if sampler:
-                        logger.info(f"{ocp_operator} upgrade is completed!")
-                        break
-                    else:
-                        logger.info(f"{ocp_operator} upgrade is not completed yet!")
+                check_cluster_operator_versions(target_image, operator_upgrade_timeout)
 
             # resume a MachineHealthCheck resource
             if get_semantic_ocp_running_version() > VERSION_4_8 and not rosa_platform:
