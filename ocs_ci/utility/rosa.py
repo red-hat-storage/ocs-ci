@@ -1217,5 +1217,5 @@ def upgrade_rosa_cluster(cluster_name, version):
 
     """
     cmd = f"rosa upgrade cluster --cluster {cluster_name} --control-plane --version {version} --mode auto --yes"
-    proc = exec_cmd(cmd, timeout=2400, text=True)
-    logger.info(f"Upgrade cluster command output:\n {proc.stdout.strip()}")
+    proc = exec_cmd(cmd, timeout=2400)
+    logger.info(f"Upgrade cluster command output:\n {proc.stdout.decode().strip()}")
