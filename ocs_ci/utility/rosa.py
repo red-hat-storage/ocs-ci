@@ -31,7 +31,7 @@ from ocs_ci.utility.managedservice import (
 from ocs_ci.utility.openshift_dedicated import get_cluster_details
 from ocs_ci.utility.retry import catch_exceptions
 from ocs_ci.utility.utils import exec_cmd, TimeoutSampler
-from ocs_ci.utility.version import get_latest_rosa_version
+from ocs_ci.utility.version import get_latest_rosa_ocp_version
 
 logger = logging.getLogger(name=__file__)
 rosa = config.AUTH.get("rosa", {})
@@ -80,7 +80,7 @@ def create_cluster(cluster_name, version, region):
             f"Selecting latest rosa version for deployment"
         )
         logger.info(f"Looking for z-stream version of {version}")
-        rosa_ocp_version = get_latest_rosa_version(version)
+        rosa_ocp_version = get_latest_rosa_ocp_version(version)
         logger.info(f"Using OCP version {rosa_ocp_version}")
 
     if rosa_hcp:
@@ -1208,6 +1208,8 @@ def upgrade_rosa_cluster(cluster_name, version):
     """
     Upgrade the ROSA cluster to the given version
     ! important ! rosa cli version drops error in case if --control-plane parameter is not used
+    ! important ! upgrade is not performed automatically in case of ROSA clusters, especially in case of HCP;
+    Upgrade is controlled by the Hive Operator; schedule depends on a Control Plane Queue
 
     Args:
         cluster_name (str): The cluster name
@@ -1215,4 +1217,5 @@ def upgrade_rosa_cluster(cluster_name, version):
 
     """
     cmd = f"rosa upgrade cluster --cluster {cluster_name} --control-plane --version {version} --mode auto --yes"
-    utils.run_cmd(cmd, timeout=2400)
+    proc = exec_cmd(cmd, timeout=2400, text=True)
+    logger.info(f"Upgrade cluster command output:\n {proc.stdout.strip()}")
