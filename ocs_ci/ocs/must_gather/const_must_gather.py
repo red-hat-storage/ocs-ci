@@ -1085,3 +1085,8 @@ NOOBAA_ONLY = [
     "/noobaa/logs/openshift-storage",
 ]
 DR_ONLY = ["/namespaces/openshift-dr-system/"]
+MINIMAL = [
+    "/minimal_resources/cluster-scoped-resources/",
+    "/minimal_resources/namespaces/",
+    "/minimal_resources/oc_output/",
+]
