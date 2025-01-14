@@ -60,9 +60,9 @@ class BucketsTab(ObjectStorage, ConfirmDialog):
 
         self.do_click(self.bucket_tab["create_bucket_button"])
         if method == "obc":
-            self.create_bucket_via_obc()
+            return self.create_bucket_via_obc()
         elif method == "s3":
-            self.create_bucket_via_s3()
+            return self.create_bucket_via_s3()
         else:
             raise ValueError(f"Invalid method: {method}")
 
@@ -100,6 +100,7 @@ class BucketsTab(ObjectStorage, ConfirmDialog):
         self.do_click(self.bucket_tab["submit_button_obc"])
 
         logger.info("Waiting for OBC to be created")
+        return ObjectStorage()
 
     def create_bucket_via_s3(self):
         name_generator = f"test-bucket-s3-{uuid.uuid4()}"
@@ -107,6 +108,7 @@ class BucketsTab(ObjectStorage, ConfirmDialog):
         self.do_click(self.bucket_tab["create_bucket_button_s3"])
         self.do_send_keys(self.bucket_tab["s3_bucket_name_input"], name_generator)
         self.do_click(self.bucket_tab["submit_button_obc"])
+        return ObjectStorage()
 
     def create_folder_in_bucket(self, bucket_name=None, folder_name=None):
         # Note That object must be uploaded to the folder before navigating out of the bucket,
