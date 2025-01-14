@@ -437,6 +437,7 @@ def check_storage_size_is_reflected_in_ui():
         .nav_block_and_file()
     )
     used, available = block_and_file.get_raw_capacity_card_values()
+    block_and_file.take_screenshot("raw_capacity_card_values")
     # Get the used, available and total size in bytes
     used_size_bytes = human_to_bytes_ui(used)
     available_size_bytes = human_to_bytes_ui(available)
