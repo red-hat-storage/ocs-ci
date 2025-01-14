@@ -96,8 +96,7 @@ class BucketsTab(ObjectStorage, ConfirmDialog):
             raise
 
         logger.info("Clicking submit button to create OBC")
-        self.do_click(self.bucket_tab["submit_button_obc"])
-        time.sleep(2)
+        time.sleep(2)  # This sleep is needed to make sure the OBC is created
         self.do_click(self.bucket_tab["submit_button_obc"])
 
         logger.info("Waiting for OBC to be created")

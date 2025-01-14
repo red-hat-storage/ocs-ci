@@ -1,4 +1,5 @@
 import logging
+import time
 
 from ocs_ci.framework.logger_helper import log_step
 from ocs_ci.framework.pytest_customization.marks import (
@@ -420,10 +421,12 @@ class TestObcUserInterface(object):
 class TestBucketCreate:
     def test_bucket_create(self, setup_ui_class_factory):
         setup_ui_class_factory()
-        PageNavigator().nav_object_storage_page()
         bucket_ui = BucketsTab()
+        bucket_ui.nav_object_storage_page()
         bucket_ui.create_bucket_ui("obc")
+        time.sleep(15)
         bucket_ui.nav_object_storage_page()
         bucket_ui.create_bucket_ui("s3")
+        time.sleep(15)
         bucket_ui.nav_object_storage_page()
         bucket_ui.create_folder_in_bucket()
