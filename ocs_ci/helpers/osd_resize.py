@@ -39,6 +39,7 @@ from ocs_ci.ocs.constants import (
     AWS_PLATFORM,
     MAX_TOTAL_CLUSTER_CAPACITY,
     MAX_IBMCLOUD_TOTAL_CLUSTER_CAPACITY,
+    ROSA_HCP_PLATFORM,
 )
 
 
@@ -341,7 +342,8 @@ def check_resize_osd_pre_conditions(expected_storage_size):
     """
     Check the resize osd pre-conditions:
     1. Check that the current storage size is less than the osd max size
-    2. If we use AWS, check that the osd resize count is no more than the AWS max resize count
+    2. If we use AWS or ROSA HCP platforms, check that the osd resize count is no more
+    than the AWS max resize count.
 
     If the conditions are not met, the test will be skipped.
 
@@ -371,8 +373,9 @@ def check_resize_osd_pre_conditions(expected_storage_size):
 
     config.RUN["resize_osd_count"] = config.RUN.get("resize_osd_count", 0)
     logger.info(f"resize osd count = {config.RUN['resize_osd_count']}")
+    platforms_to_skip = [AWS_PLATFORM, ROSA_HCP_PLATFORM]
     if (
-        config.ENV_DATA["platform"].lower() == AWS_PLATFORM
+        config.ENV_DATA["platform"].lower() in platforms_to_skip
         and config.RUN["resize_osd_count"] >= AWS_MAX_RESIZE_OSD_COUNT
     ):
         pytest.skip(
