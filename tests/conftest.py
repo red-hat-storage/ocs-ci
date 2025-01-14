@@ -2764,7 +2764,7 @@ def awscli_pod_fixture(request, scope_name):
 
     """
     project = f"s3cli-{get_random_str()}"
-    ocp_obj = ocp.OCP(namespace=project)
+    ocp_obj = ocp.OCP(kind="namespace", namespace=project)
 
     def delete_project(namespace):
         if "openshift" not in namespace:
@@ -2774,6 +2774,10 @@ def awscli_pod_fixture(request, scope_name):
     request.addfinalizer(lambda: awscli_pod_cleanup(namespace=project))
 
     ocp_obj.new_project(project)
+
+    # Ignore potential letover on teardown
+    ocp_obj.add_label(resource_name=project, label=constants.S3CLI_APP_LABEL)
+
     ocp.switch_to_default_rook_cluster_project()
     return create_awscli_pod(scope_name, project)
 
