@@ -22,7 +22,7 @@ class TestVmOperations(E2ETest):
         Test for a single disk Hot Plugging and Hot Unplugging
 
         """
-        vm_obj = cnv_workload(volume_interface=constants.VM_VOLUME_PVC)[0]
+        vm_obj = cnv_workload(volume_interface=constants.VM_VOLUME_PVC)
         vm_obj.run_ssh_cmd(
             command="dd if=/dev/zero of=/dd_file.txt bs=1024 count=102400"
         )

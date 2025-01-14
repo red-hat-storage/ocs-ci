@@ -184,7 +184,7 @@ class TestZoneShutdownsAndCrashes:
         ) = setup_logwriter_cephfs_workload_factory(read_duration=0)
 
         # setup vm and write some data to the VM instance
-        vm_obj = cnv_workload(volume_interface=constants.VM_VOLUME_PVC)[0]
+        vm_obj = cnv_workload(volume_interface=constants.VM_VOLUME_PVC)
         vm_obj.run_ssh_cmd(
             command="dd if=/dev/zero of=/file_1.txt bs=1024 count=102400"
         )
@@ -424,7 +424,7 @@ class TestZoneShutdownsAndCrashes:
         ) = setup_logwriter_cephfs_workload_factory(read_duration=0)
 
         # setup vm and write some data to the VM instance
-        vm_obj = cnv_workload(volume_interface=constants.VM_VOLUME_PVC)[0]
+        vm_obj = cnv_workload(volume_interface=constants.VM_VOLUME_PVC)
         vm_obj.run_ssh_cmd(
             command="dd if=/dev/zero of=/file_1.txt bs=1024 count=102400"
         )
