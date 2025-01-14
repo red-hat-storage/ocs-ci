@@ -16,25 +16,6 @@ log = logging.getLogger(__name__)
 class TestVmHotPlugUnplug(E2ETest):
     """
     Tests for VM hot plugging and unplugging
-    Test Steps:
-        Pre-requisite before hot plugging:
-        - a running DVT based VM and a PVC based VM
-        - From virtctl, we will need to add --persist flag to add the hot plugged disk
-        to the VM as a permanently mounted virtual disk.
-
-        Steps:
-        1. Hotplug disk to the running VM based on PVC.
-        2. Verify the disk is attached to VM
-        3. Add data to disk
-            a. Identify newly attached disk.
-            b. Create file or do dd on new disk
-        4. Reboot the VM,
-        5. After reboot check if disk is still attached.
-        6. Make sure newly added data on new vm disk is intact
-        7. Unplug(Dettach) the disk from vm
-        8. Verify disk is successfully detached using console or cli
-        9. login into VM and confirm disk is no longer listed.
-        10 Repeat the above tests for DVT based VM
     """
 
     def test_vm_hot_plugging_unplugging(
@@ -42,7 +23,25 @@ class TestVmHotPlugUnplug(E2ETest):
     ):
         """
         Test for disk Hot Plugging and Hot Unplugging for DVT and PVC VMs
+        Test Steps:
+            Pre-requisite before hot plugging:
+            - a running DVT based VM and a PVC based VM
+            - From virtctl, we will need to add --persist flag to add the hot plugged disk
+            to the VM as a permanently mounted virtual disk.
 
+            Steps:
+            1. Hotplug disk to the running VM based on PVC.
+            2. Verify the disk is attached to VM
+            3. Add data to disk
+                a. Identify newly attached disk.
+                b. Create file or do dd on new disk
+            4. Reboot the VM,
+            5. After reboot check if disk is still attached.
+            6. Make sure newly added data on new vm disk is intact
+            7. Unplug(Dettach) the disk from vm
+            8. Verify disk is successfully detached using console or cli
+            9. login into VM and confirm disk is no longer listed.
+            10 Repeat the above tests for DVT based VM
         """
         proj_obj = project_factory()
         file_paths = ["/source_file.txt", "/new_file.txt"]
@@ -70,9 +69,7 @@ class TestVmHotPlugUnplug(E2ETest):
             # identify the newly attached pvc
             verifyvolume(vm_obj, volume_name=pvc_obj.name)
             # adding data onto the disk attached
-            pvc_obj.run_ssh_cmd(
-                command="dd if=/dev/zero of=/dd_file.txt bs=1024 count=102400"
-            )
+
             # rebooting the vm
             vm_obj.restart_vm()
             # verify the disk attached
