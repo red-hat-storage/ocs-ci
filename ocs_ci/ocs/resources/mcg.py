@@ -689,28 +689,25 @@ class MCG:
 
         return create_resource(**bc_data)
 
-    def cli_create_bucketclass(
+    def cli_create_bucketclass_over_backingstores(
         self,
         name,
         backingstores,
         placement_policy,
-        namespace_policy=None,
         replication_policy=None,
     ):
         """
-        Creates a new NooBaa bucket class using the noobaa cli
+        Creates a new NooBaa bucket class using the noobaa cli over backingstores
         Args:
             name (str): The name to be given to the bucket class
-            backingstores (list): The backing stores to use as part of the policy
+            backingstores (list): The backing stores to use as part of the policy.
             placement_policy (str): The placement policy to be used - Mirror | Spread
-            namespace_policy (dict): The namespace policy to be used
             replication_policy (dict): The replication policy dictionary
 
         Returns:
             OCS: The bucket class resource
 
         """
-        # TODO: Implement CLI namespace bucketclass support
         backingstore_name_list = [backingstore.name for backingstore in backingstores]
         backingstores = f" --backingstores {','.join(backingstore_name_list)}"
         placement_policy = f" --placement {placement_policy}"
@@ -738,6 +735,39 @@ class MCG:
             self.exec_mcg_cmd(
                 f"bucketclass create {placement_type}{name}{backingstores}{placement_policy}{replication_policy}"
             )
+
+    def cli_create_bucketclass_over_namespacestores(
+        self,
+        name,
+        namespacestores,
+        namespace_policy,
+    ):
+        """
+        Creates a new NooBaa bucket class using the noobaa cli over namespace stores
+        Args:
+            name (str): The name to be given to the bucket class
+            namespacestores (list): The namespaces stores to use as part of the policy
+            namespace_policy (dict): The namespace policy to be used
+
+        Returns:
+            OCS: The bucket class resource
+
+        """
+        namestores_name_list = [
+            namespacestore.name for namespacestore in namespacestores
+        ]
+        namestores_name_str = f"{','.join(namestores_name_list)}"
+        namespace_policy_type = namespace_policy["type"].lower()
+        if namespace_policy_type != constants.NAMESPACE_POLICY_TYPE_SINGLE.lower():
+            raise NotImplementedError(
+                f"Cli creating of bucketclass on namespacestore "
+                f"with policy {namespace_policy_type} is not implemented yet"
+            )
+
+        self.exec_mcg_cmd(
+            f"bucketclass create namespace-bucketclass {namespace_policy_type} "
+            f"--resource={namestores_name_str} {name}"
+        )
 
     def check_if_mirroring_is_done(self, bucket_name, timeout=300):
         """
