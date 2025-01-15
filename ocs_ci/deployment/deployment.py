@@ -901,8 +901,16 @@ class Deployment(object):
 
         """
         live_deployment = config.DEPLOYMENT.get("live_deployment")
+        platform = config.ENV_DATA["platform"]
+        aws_sts_deployment = (
+            config.DEPLOYMENT.get("sts_enabled") and platform == constants.AWS_PLATFORM
+        )
+        azure_sts_deployment = (
+            config.DEPLOYMENT.get("sts_enabled")
+            and platform == constants.AZURE_PLATFORM
+        )
         managed_ibmcloud = (
-            config.ENV_DATA["platform"] == constants.IBMCLOUD_PLATFORM
+            platform == constants.IBMCLOUD_PLATFORM
             and config.ENV_DATA["deployment_type"] == "managed"
         )
         if managed_ibmcloud and not live_deployment:
@@ -944,7 +952,7 @@ class Deployment(object):
             subscription_yaml_data["spec"]["source"] = config.DEPLOYMENT.get(
                 "live_content_source", defaults.LIVE_CONTENT_SOURCE
             )
-        if config.DEPLOYMENT.get("sts_enabled"):
+        if aws_sts_deployment:
             if "config" not in subscription_yaml_data["spec"]:
                 subscription_yaml_data["spec"]["config"] = {}
             role_arn_data = {"name": "ROLEARN", "value": self.sts_role_arn}
@@ -952,6 +960,20 @@ class Deployment(object):
                 subscription_yaml_data["spec"]["config"]["env"] = [role_arn_data]
             else:
                 subscription_yaml_data["spec"]["config"]["env"].append([role_arn_data])
+        elif azure_sts_deployment:
+            if "config" not in subscription_yaml_data["spec"]:
+                subscription_yaml_data["spec"]["config"] = {}
+            azure_auth_data = config.AUTH["azure_auth"]
+            azure_sub_data = [
+                {"name": "CLIENTID", "value": azure_auth_data["client_id"]},
+                {"name": "TENANTID", "value": azure_auth_data["tenant_id"]},
+                {"name": "SUBSCRIPTIONID", "value": azure_auth_data["subscription_id"]},
+            ]
+            if "env" not in subscription_yaml_data["spec"]["config"]:
+                subscription_yaml_data["spec"]["config"]["env"] = azure_sub_data
+            else:
+                subscription_yaml_data["spec"]["config"]["env"] = azure_sub_data
+
         subscription_yaml_data["metadata"]["namespace"] = self.namespace
         subscription_manifest = tempfile.NamedTemporaryFile(
             mode="w+", prefix="subscription_manifest", delete=False
@@ -1062,6 +1084,10 @@ class Deployment(object):
         live_deployment = config.DEPLOYMENT.get("live_deployment")
         arbiter_deployment = config.DEPLOYMENT.get("arbiter_deployment")
         local_storage = config.DEPLOYMENT.get("local_storage")
+        platform = config.ENV_DATA.get("platform").lower()
+        aws_sts_deployment = (
+            config.DEPLOYMENT.get("sts_enabled") and platform == constants.AWS_PLATFORM
+        )
 
         if ui_deployment and ui_deployment_conditions():
             log_step("Start ODF deployment with UI")
@@ -1072,7 +1098,7 @@ class Deployment(object):
             log_step("Deployment of OCS via OCS operator")
             self.label_and_taint_nodes()
 
-        if config.DEPLOYMENT.get("sts_enabled"):
+        if aws_sts_deployment:
             log_step("Create STS role and attach AmazonS3FullAccess Policy")
             role_data = create_and_attach_sts_role()
             self.sts_role_arn = role_data["Role"]["Arn"]
