@@ -2,11 +2,13 @@ from ocs_ci.ocs import constants
 from ocs_ci.ocs.ui.base_ui import logger, BaseUI
 from ocs_ci.ocs.ui.page_objects.storage_system_tab import StorageSystemTab
 from ocs_ci.utility import version
+from ocs_ci.ocs.ui.page_objects.encryption_module import EncryptionModule
 
 
-class StorageSystemDetails(StorageSystemTab):
+class StorageSystemDetails(StorageSystemTab, EncryptionModule):
     def __init__(self):
         StorageSystemTab.__init__(self)
+        EncryptionModule.__init__(self)
 
     def nav_details_overview(self):
         logger.info("Click on Overview tab")
@@ -32,6 +34,8 @@ class StorageSystemDetails(StorageSystemTab):
             )
         else:
             self.do_click(self.validation_loc["object"], enable_screenshot=True)
+
+        return self
 
     def nav_block_and_file(self):
         """

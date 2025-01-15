@@ -1794,6 +1794,41 @@ validation_4_17 = {
     ),
 }
 
+validation_4_18 = {
+    "encryption_summary": {
+        "file_and_block": {
+            "enabled": (
+                "//button[@class='pf-v5-c-button pf-m-link pf-m-inline' and "
+                "(text()='Enabled' or text()='Not enabled')]",
+                By.XPATH,
+            ),
+            "close": (
+                "//button[@class='pf-v5-c-button pf-m-plain' and @aria-label='Close']",
+                By.XPATH,
+            ),
+            "encryption_content_data": (
+                "//div[@class='pf-v5-c-popover__body']",
+                By.XPATH,
+            ),
+        },
+        "object_storage": {
+            "enabled": (
+                "//button[@class='pf-v5-c-button pf-m-link pf-m-inline' and "
+                "(text()='Enabled' or text()='Not enabled')]",
+                By.XPATH,
+            ),
+            "close": (
+                "//button[@class='pf-v5-c-button pf-m-plain' and @aria-label='Close']",
+                By.XPATH,
+            ),
+            "encryption_content_data": (
+                "//div[@class='pf-v5-c-popover__content']",
+                By.XPATH,
+            ),
+        },
+    }
+}
+
 topology = {
     "topology_graph": ("//*[@data-kind='graph']", By.XPATH),
     "node_label": ("//*[@class='pf-topology__node__label']", By.XPATH),
@@ -2035,6 +2070,7 @@ locators = {
             **validation_4_13,
             **validation_4_14,
             **validation_4_17,
+            **validation_4_18,
         },
         "block_pool": {**block_pool, **block_pool_4_12, **block_pool_4_13},
         "storageclass": {**storageclass, **storageclass_4_9},
