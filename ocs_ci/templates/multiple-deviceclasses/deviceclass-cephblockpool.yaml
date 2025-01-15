@@ -1,0 +1,21 @@
+apiVersion: ceph.rook.io/v1
+kind: CephBlockPool
+metadata:
+  name: deviceclass-ssd-pool
+  namespace: openshift-storage
+spec:
+  deviceClass: local-ssd
+  enableCrushUpdates: true
+  enableRBDStats: true
+  erasureCoded:
+    codingChunks: 0
+    dataChunks: 0
+  failureDomain: host
+  parameters:
+    compression_mode: none
+  replicated:
+    replicasPerFailureDomain: 1
+    requireSafeReplicaSize: true
+    size: 3
+  statusCheck:
+    mirror: {}
