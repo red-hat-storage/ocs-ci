@@ -418,12 +418,14 @@ class Vault(KMS):
             token_data = templating.load_yaml(constants.EXTERNAL_VAULT_KMS_TOKEN)
             # token has to base64 encoded (with padding)
             token_data["data"]["token"] = encode(self.vault_path_token)
+            token_data["metadata"]["namespace"] = config.ENV_DATA["cluster_namespace"]
             self.create_resource(token_data, prefix="token")
 
         # create ocs-kms-connection-details
         connection_data = templating.load_yaml(
             constants.EXTERNAL_VAULT_KMS_CONNECTION_DETAILS
         )
+        connection_data["metadata"]["namespace"] = config.ENV_DATA["cluster_namespace"]
         connection_data["data"]["VAULT_ADDR"] = os.environ["VAULT_ADDR"]
         if Version.coerce(config.ENV_DATA["ocs_version"]) >= Version.coerce("4.10"):
             connection_data["data"]["VAULT_AUTH_METHOD"] = self.vault_auth_method
