@@ -99,7 +99,7 @@ class ROSAOCP(BaseOCPDeployment):
                 self.cluster_name, config.ENV_DATA["machine_pool"]
             )
             machinepool_details.wait_replicas_ready(
-                target_replicas=config.ENV_DATA["worker_replicas"], timeout=1200
+                target_replicas=config.ENV_DATA["worker_replicas"], timeout=2400
             )
             if node_labels := config.ENV_DATA.get("node_labels"):
                 if machinepool_id := config.ENV_DATA.get("machine_pool"):
