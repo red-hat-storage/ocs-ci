@@ -432,11 +432,12 @@ class VirtualMachine(Virtctl):
             self.wait_for_vm_status(status=constants.CNV_VM_STOPPED)
             logger.info(f"VM: {self._vm_name} reached Stopped state")
 
-    def restart(self, wait=True):
+    def restart(self, wait=True, verify=True):
         """
         Restart the VirtualMachine.
 
         Args:
+            verify(bool): True to wait for VM ssh up after restart
             wait (bool): True to wait for the VirtualMachine to reach the "Running" status.
 
         """
@@ -448,6 +449,9 @@ class VirtualMachine(Virtctl):
             logger.info(
                 f"VM: {self._vm_name} reached Running state state after restart operation"
             )
+        if verify:
+            self.verify_vm(verify_ssh=True)
+            logger.info(f"VM: {self._vm_name} ssh working successfully!")
 
     def addvolume(self, volume_name, persist=True, serial=None):
         """
