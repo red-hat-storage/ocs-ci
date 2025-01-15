@@ -130,8 +130,8 @@ class StorageClient:
 
     def create_storage_client(
         self,
-        storage_provider_endpoint=None,
-        onboarding_token=None,
+        storage_provider_endpoint,
+        onboarding_token,
     ):
         """
         This method creates storage clients
@@ -144,7 +144,9 @@ class StorageClient:
 
         # Pull storage-client yaml data
         log.info("Pulling storageclient CR data from yaml")
-        storage_client_data = templating.load_yaml(constants.STORAGE_CLIENT_YAML)
+        storage_client_data = templating.load_yaml(
+            constants.PROVIDER_MODE_STORAGE_CLIENT
+        )
         resource_name = storage_client_data["metadata"]["name"]
         log.info(f"the resource name: {resource_name}")
 
@@ -164,7 +166,7 @@ class StorageClient:
             ] = storage_provider_endpoint
 
             # Set onboarding token
-            log.info("Updating storage provider endpoint details: %s", onboarding_token)
+            log.info("Updating storage client onboarding token: %s", onboarding_token)
             storage_client_data["spec"]["onboardingTicket"] = onboarding_token
             storage_client_data_yaml = tempfile.NamedTemporaryFile(
                 mode="w+", prefix="storage_client", delete=False
@@ -475,7 +477,7 @@ class StorageClient:
         from ocs_ci.ocs.ui.page_objects.page_navigator import PageNavigator
 
         storage_clients = PageNavigator().nav_to_storageclients_page()
-        onboarding_token = storage_clients.generate_client_onboarding_ticket()
+        onboarding_token = storage_clients.generate_client_onboarding_ticket_ui()
 
         # Create ODF subscription for storage-client
         self.odf_installation_on_client()

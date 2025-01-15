@@ -147,7 +147,9 @@ class BaseUI:
             locators, self.ocp_version, "add_capacity"
         )
         self.topology_loc = self.deep_get(locators, self.ocp_version, "topology")
-        self.storage_clients_loc = self.deep_get(locators, self.ocp_version, "storage")
+        self.storage_clients_loc = self.deep_get(
+            locators, self.ocp_version, "storage_clients"
+        )
         self.alerting_loc = self.deep_get(locators, self.ocp_version, "alerting")
 
     def __repr__(self):
@@ -988,6 +990,8 @@ def login_ui(console_url=None, username=None, password=None):
     )
 
     if hci_platform_conf:
+        logger.info("Adding some sleep time so the page loads successfuly")
+        time.sleep(60)
         dashboard_url = console_url + "/dashboards"
         # proceed to local-cluster page if not already there. The rule is always to start from the local-cluster page
         # when the hci platform is confirmed and proceed to the client if needed from within the test
@@ -1083,7 +1087,7 @@ def navigate_to_local_cluster(**kwargs):
     if "timeout" in kwargs:
         timeout = kwargs["timeout"]
     else:
-        timeout = 30
+        timeout = 60
 
     all_clusters_dropdown = acm_page_loc["all-clusters_dropdown"]
     try:
@@ -1116,12 +1120,16 @@ def navigate_to_all_clusters(**kwargs):
         timeout = 30
 
     local_clusters_dropdown = acm_page["local-cluster_dropdown"]
+    find_element = wait_for_element_to_be_visible(acm_page["click-local-cluster"], 60)
     try:
-        acm_dropdown = wait_for_element_to_be_visible(local_clusters_dropdown, timeout)
-        acm_dropdown.click()
-        all_clusters_item = wait_for_element_to_be_visible(
-            acm_page["all-clusters_dropdown_item"]
-        )
-        all_clusters_item.click()
+        if not not find_element:
+            acm_dropdown = wait_for_element_to_be_visible(
+                local_clusters_dropdown, timeout
+            )
+            acm_dropdown.click()
+            all_clusters_item = wait_for_element_to_be_visible(
+                acm_page["all-clusters_dropdown_item"]
+            )
+            all_clusters_item.click()
     except TimeoutException:
         wait_for_element_to_be_visible(acm_page["all-clusters_dropdown"])
