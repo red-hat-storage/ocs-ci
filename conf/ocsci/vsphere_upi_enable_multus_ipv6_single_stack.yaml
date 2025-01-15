@@ -1,0 +1,13 @@
+# This configuration file is to enable vsphere upi ipv6 single stack
+DEPLOYMENT:
+  ipv6: true
+ENV_DATA:
+  is_multus_enabled: true
+  multus_public_net_interface: "ens224"
+  multus_cluster_net_interface: "ens224"
+  multus_create_public_net: true
+  multus_create_cluster_net: true
+  multus_public_net_namespace: "default"
+REPORTING:
+  polarion:
+    deployment_id: "OCS-6137"
