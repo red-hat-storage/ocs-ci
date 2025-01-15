@@ -5,7 +5,7 @@ import pytest
 
 from ocs_ci.ocs import ocp
 from ocs_ci.helpers.sanity_helpers import Sanity
-from ocs_ci.framework.pytest_customization.marks import magenta_squad
+from ocs_ci.framework.pytest_customization.marks import magenta_squad, skipif_rosa_hcp
 from ocs_ci.framework.testlib import (
     E2ETest,
     workloads,
@@ -51,7 +51,9 @@ class TestCouchBaseNodeReboot(E2ETest):
         argnames=["pod_name_of_node"],
         argvalues=[
             pytest.param(*["osd"], marks=pytest.mark.polarion_id("OCS-776")),
-            pytest.param(*["master"], marks=pytest.mark.polarion_id("OCS-783")),
+            pytest.param(
+                *["master"], marks=[pytest.mark.polarion_id("OCS-783"), skipif_rosa_hcp]
+            ),
             pytest.param(*["couchbase"], marks=pytest.mark.polarion_id("OCS-776")),
         ],
     )
