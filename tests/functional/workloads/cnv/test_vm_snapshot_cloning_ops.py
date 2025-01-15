@@ -161,7 +161,7 @@ class TestVmSnapshotClone(E2ETest):
         vm_obj = cnv_workload(
             volume_interface=constants.VM_VOLUME_PVC,
             source_url=constants.CNV_FEDORA_SOURCE,
-        )[-1]
+        )
 
         # Write data to the VM
         file_paths = "/source_file.txt"
