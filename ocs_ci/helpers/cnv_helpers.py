@@ -15,6 +15,7 @@ from ocs_ci.helpers.helpers import (
 )
 from ocs_ci.framework import config
 from ocs_ci.utility.retry import retry
+from ocs_ci.utility.utils import run_cmd
 
 logger = logging.getLogger(__name__)
 
@@ -365,3 +366,23 @@ def run_dd_io(vm_obj, file_path, size="10240", username=None, verify=False):
             file_path=file_path,
             username=username,
         )
+
+
+def verifyvolume(vm_obj, volume_name):
+    """
+    Add a volume to a VM.
+
+    Args:
+        vm_obj (str): vm obj
+        volume_name (str): Name of the volume to add.
+
+    Returns:
+         str: stdout of command
+
+    """
+    cmd = f"oc get vm {vm_obj.name} -o=jsonpath='{{.spec.volumes}}'"
+    output = run_cmd(cmd=cmd)
+    if volume_name in output:
+        f"PVC {volume_name} is visible inside the VM {vm_obj.name}"
+        return True
+    return False
