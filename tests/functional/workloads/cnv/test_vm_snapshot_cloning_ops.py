@@ -135,16 +135,18 @@ class TestVmSnapshotClone(E2ETest):
     @pytest.mark.polarion_id("OCS-")
     def test_vm_snapshot_pvc_clone(
         self,
-        cnv_workload,
+        project_factory,
+        multi_cnv_workload,
         snapshot_factory,
         snapshot_restore_factory,
         pvc_clone_factory,
+        cnv_workload,
         clone_vm_workload,
         setup_cnv,
     ):
         """
         Creates a snapshot of a deployed VM, restores the snapshot, and then
-        clones the restored PVC and deploys VM using restored PVC.
+        clones the restored snapshot into PVC and deploys VM using restored PVC
 
         Test Steps:
         1. Create a VM with PVC
@@ -158,44 +160,46 @@ class TestVmSnapshotClone(E2ETest):
         """
 
         # create a VM
-        vm_obj = cnv_workload(
-            volume_interface=constants.VM_VOLUME_PVC,
-            source_url=constants.CNV_FEDORA_SOURCE,
+        proj_obj = project_factory()
+        file_paths = ["/file.txt", "/new_file.txt"]
+        vm_objs_def, vm_objs_aggr, _, _ = multi_cnv_workload(
+            namespace=proj_obj.namespace
         )
+        vm_list = vm_objs_def + vm_objs_aggr
 
-        # Write data to the VM
-        file_paths = "/source_file.txt"
-        source_csum = run_dd_io(vm_obj=vm_obj, file_path=file_paths[0], verify=True)
-        vm_obj.stop()
+        log.info(f"Total VMs to process: {len(vm_list)}")
+        for index, vm_obj in enumerate(vm_list):
+            source_csum = run_dd_io(vm_obj=vm_obj, file_path=file_paths[0], verify=True)
+            vm_obj.stop()
 
-        # Take a snapshot of the VM's PVC
-        pvc_obj = vm_obj.get_vm_pvc_obj()
-        snap_obj = snapshot_factory(pvc_obj)
+            # Take a snapshot of the VM's PVC
+            pvc_obj = vm_obj.get_vm_pvc_obj()
+            snap_obj = snapshot_factory(pvc_obj)
 
-        # Restore the snapshot to a new PVC
-        res_snap_obj = snapshot_restore_factory(
-            snapshot_obj=snap_obj,
-            storageclass=vm_obj.sc_name,
-            size=vm_obj.pvc_size,
-            volume_mode=snap_obj.parent_volume_mode,
-            access_mode=vm_obj.pvc_access_mode,
-            status=constants.STATUS_BOUND,
-            timeout=300,
-        )
-        # Clone the restored snapshot PVC to create a new PVC
-        cloned_pvc_obj = pvc_clone_factory(
-            pvc_obj=res_snap_obj, clone_name=f"{res_snap_obj.name}-clone"
-        )
-        # Create a new VM with the cloned PVC
-        res_vm_obj = cnv_workload(
-            volume_interface=constants.VM_VOLUME_PVC,
-            source_url=constants.CNV_FEDORA_SOURCE,
-            existing_pvc_obj=cloned_pvc_obj,
-            namespace=vm_obj.namespace,
-        )[-1]
-        # Check the MD5 checksum to verify that data persisted after cloning
-        res_csum = cal_md5sum_vm(vm_obj=res_vm_obj, file_path=file_paths[0])
-        assert source_csum == res_csum, (
-            f"Failed: MD5 comparison between source {vm_obj.name} and cloned "
-            f"{res_vm_obj.name} VMs"
-        )
+            # Restore the snapshot to a new PVC
+            res_snap_obj = snapshot_restore_factory(
+                snapshot_obj=snap_obj,
+                storageclass=vm_obj.sc_name,
+                size=vm_obj.pvc_size,
+                volume_mode=snap_obj.parent_volume_mode,
+                access_mode=vm_obj.pvc_access_mode,
+                status=constants.STATUS_BOUND,
+                timeout=300,
+            )
+            # Clone the restored snapshot PVC to create a new PVC
+            cloned_pvc_obj = pvc_clone_factory(
+                pvc_obj=res_snap_obj, clone_name=f"{res_snap_obj.name}-clone"
+            )
+            # Create a new VM with the cloned PVC
+            res_vm_obj = cnv_workload(
+                volume_interface=constants.VM_VOLUME_PVC,
+                source_url=constants.CNV_FEDORA_SOURCE,
+                existing_pvc_obj=cloned_pvc_obj,
+                namespace=vm_obj.namespace,
+            )[-1]
+            # Check the MD5 checksum to verify that data persisted after cloning
+            res_csum = cal_md5sum_vm(vm_obj=res_vm_obj, file_path=file_paths[0])
+            assert source_csum == res_csum, (
+                f"Failed: MD5 comparison between source {vm_obj.name} and cloned "
+                f"{res_vm_obj.name} VMs"
+            )
