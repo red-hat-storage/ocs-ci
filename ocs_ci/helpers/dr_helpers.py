@@ -1577,6 +1577,9 @@ def replace_cluster(workload, primary_cluster_name, secondary_cluster_name):
     else:
         logger.info("Old primary cluster is dettached")
 
+    # Uninstall submariner for rdr
+    uninstall_submariner()
+
     # Import Recovery cluster
     from ocs_ci.ocs.acm.acm import (
         import_recovery_clusters_with_acm,
@@ -1587,6 +1590,12 @@ def replace_cluster(workload, primary_cluster_name, secondary_cluster_name):
 
     # Verify recovery cluster is imported
     validate_cluster_import(cluster_name_recoevry)
+
+    # Install submariner for RDR
+    from ocs_ci.deployment.acm import Submariner
+
+    sub_obj = Submariner()
+    sub_obj.deploy_downstream()
 
     # Set recovery cluster as primary context wise
     set_recovery_as_primary()
@@ -1760,3 +1769,15 @@ def verify_last_kubeobject_protection_time(drpc_obj, kubeobject_sync_interval):
     logger.info("Verified lastKubeObjectProtectionTime value within expected range")
     config.switch_ctx(restore_index)
     return last_kubeobject_protection_time
+
+
+def uninstall_submariner():
+    """
+    Uninstall of submariner
+    """
+    config.switch_acm_ctx()
+
+    # get submariner name
+    submariner = run_cmd(cmd="oc get SubmarinerConfig")
+    run_cmd(cmd=f"oc delete SubmarinerConfig {submariner}")
+    run_cmd(cmd=f"oc delete ManagedClusterAddon {submariner}")
