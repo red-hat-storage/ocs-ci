@@ -1,6 +1,7 @@
 import logging
 import pytest
 import time
+import random
 
 from ocs_ci.framework.pytest_customization.marks import magenta_squad, workloads
 from ocs_ci.framework.testlib import E2ETest
@@ -13,6 +14,7 @@ from ocs_ci.ocs.exceptions import (
     ResourceWrongStatusException,
 )
 from ocs_ci.helpers.sanity_helpers import Sanity
+from ocs_ci.deployment.cnv import CNVInstaller
 
 logger = logging.getLogger(__name__)
 
@@ -31,7 +33,7 @@ class TestVmShutdownStart(E2ETest):
             pytest.param("False", marks=pytest.mark.polarion_id("OCS-6316")),
         ],
     )
-    def test_vm_abrupt_shutdown_cluster(
+    def test_vm_abrupt_graceful_shutdown_cluster(
         self,
         force,
         setup_cnv,
@@ -78,14 +80,17 @@ class TestVmShutdownStart(E2ETest):
             source_csum = run_dd_io(vm_obj=vm_obj, file_path=file_paths[0], verify=True)
             source_csums[vm_obj.name] = source_csum
 
+        # Choose VMs randomaly
+        vm_obj, vm_for_stop, vm_for_snap = random.sample(all_vms, 3)
+
         # Create VM using cloned pvc of source VM PVC
-        all_vms[1].stop()
+        vm_obj.stop()
         clone_obj = clone_vm_workload(
-            vm_obj=all_vms[1],
-            volume_interface=all_vms[1].volume_interface,
+            vm_obj=vm_obj,
+            volume_interface=vm_obj.volume_interface,
             namespace=(
-                all_vms[1].namespace
-                if all_vms[1].volume_interface == constants.VM_VOLUME_PVC
+                vm_obj.namespace
+                if vm_obj.volume_interface == constants.VM_VOLUME_PVC
                 else None
             ),
         )[0]
@@ -95,15 +100,15 @@ class TestVmShutdownStart(E2ETest):
 
         # Create a snapshot
         # Taking Snapshot of PVC
-        pvc_obj = all_vms[3].get_vm_pvc_obj()
+        pvc_obj = vm_for_snap.get_vm_pvc_obj()
         snap_obj = snapshot_factory(pvc_obj)
 
         # Restore the snapshot
         res_snap_obj = snapshot_restore_factory(
             snapshot_obj=snap_obj,
-            storageclass=vm_obj.sc_name,
+            storageclass=vm_for_snap.sc_name,
             volume_mode=snap_obj.parent_volume_mode,
-            access_mode=vm_obj.pvc_access_mode,
+            access_mode=vm_for_snap.pvc_access_mode,
             status=constants.STATUS_BOUND,
             timeout=300,
         )
@@ -111,7 +116,7 @@ class TestVmShutdownStart(E2ETest):
         # Create new VM using the restored PVC
         res_vm_obj = cnv_workload(
             source_url=constants.CNV_FEDORA_SOURCE,
-            storageclass=all_vms[3].sc_name,
+            storageclass=vm_for_snap.sc_name,
             existing_pvc_obj=res_snap_obj,
             namespace=vm_obj.namespace,
         )[-1]
@@ -120,14 +125,14 @@ class TestVmShutdownStart(E2ETest):
         source_csums[res_vm_obj.name] = csum
 
         # Keep vms in different states (power on, paused, stoped)
-        all_vms[2].stop()
-        all_vms[3].pause()
+        vm_for_stop.stop()
+        vm_for_snap.pause()
 
         # Initiate abrupt shutdown the cluster nodes as per OCP official documentation
         worker_nodes = get_nodes(node_type="worker")
         master_nodes = get_nodes(node_type="master")
 
-        logger.info("Abruptly Shutting down worker & master nodes")
+        logger.info("Abruptly/Gracefully Shutting down worker & master nodes")
         nodes.stop_nodes(nodes=worker_nodes, force=force)
         nodes.stop_nodes(nodes=master_nodes, force=force)
 
@@ -161,13 +166,18 @@ class TestVmShutdownStart(E2ETest):
             logger.error("Failed at cluster health check!!")
             raise ex
 
+        # CNV health check
+        cnv_obj = CNVInstaller()
+        cnv_obj.post_install_verification()
+
         # Verify that VMs status post start
-        all_vms[1].start()
-        all_vms[2].start()
+        vm_obj.start()
+        vm_for_stop.start()
 
         # Verifies vm status after start and ssh connectivity
-        all_vms[1].verify_vm(verify_ssh=True)
-        all_vms[2].verify_vm(verify_ssh=True)
+        vm_obj.verify_vm(verify_ssh=True)
+        vm_for_stop.verify_vm(verify_ssh=True)
+        vm_for_snap.verify_vm(verify_ssh=True)
 
         # Perform post restart data integrity check
         for vm_obj in all_vms:
@@ -179,7 +189,3 @@ class TestVmShutdownStart(E2ETest):
 
             # Perform some I/O operations on the VMs to ensure it is functioning as expected.
             run_dd_io(vm_obj=vm_obj, file_path=file_paths[1])
-
-        # Stop all the VMs created.
-        for vm_obj in all_vms:
-            vm_obj.stop()
