@@ -8,6 +8,8 @@ from ocs_ci.helpers import helpers
 from ocs_ci.ocs import cluster, constants
 from ocs_ci.utility import prometheus
 from ocs_ci.utility.utils import ceph_health_check_base
+from ocs_ci.framework import config
+from ocs_ci.ocs.ocp import OCP
 
 log = logging.getLogger(__name__)
 
@@ -27,12 +29,18 @@ def run_file_creator_io_with_cephfs(dc_pod_factory):
     interface = constants.CEPHFILESYSTEM
     log.info("Checking for Ceph Health OK")
     ceph_health_check_base()
+    ocp_project = OCP(
+        kind=constants.NAMESPACE, namespace=config.ENV_DATA["cluster_namespace"]
+    )
 
-    for dc_pod in range(10):
+    for dc_pod in range(6):
         log.info(f"Creating {interface} based PVC")
         log.info("Creating fedora dc pod")
         pod_obj = dc_pod_factory(
-            size="15", access_mode=access_mode, interface=interface
+            size="15",
+            access_mode=access_mode,
+            interface=interface,
+            project=ocp_project,
         )
         log.info("Copying file_creator_io.py to fedora pod ")
         cmd = f"oc cp {file} {pod_obj.namespace}/{pod_obj.name}:/"
@@ -53,16 +61,19 @@ def active_mds_alert_values(threading_lock):
     active_mds_pod = cluster.get_active_mds_info()["active_pod"]
     cpu_alert = constants.ALERT_MDSCPUUSAGEHIGH
 
+    scaling_type = "Vertical"
+
     api = prometheus.PrometheusAPI(threading_lock=threading_lock)
     alert_list = api.wait_for_alert(name=cpu_alert, state="pending")
     message = f"Ceph metadata server pod ({active_mds_pod}) has high cpu usage"
     description = (
         f"Ceph metadata server pod ({active_mds_pod}) has high cpu usage."
-        f"\nPlease consider increasing the CPU request for the {active_mds_pod} pod as described in the runbook."
+        f" Please consider {scaling_type} scaling, by adding more resources to the existing MDS pod."
+        f" Please see 'runbook_url' for more details."
     )
     runbook = (
-        "https://github.com/openshift/runbooks/blob/master/alerts/"
-        "openshift-container-storage-operator/CephMdsCpuUsageHigh.md"
+        "https://github.com/openshift/runbooks/blob/master/alerts/openshift-container-storage-operator"
+        "/CephMdsCpuUsageHighNeedsVerticalScaling.md"
     )
     severity = "warning"
     state = ["pending"]
@@ -108,4 +119,5 @@ class TestMdsCpuAlerts(E2ETest):
             "File creation IO started in the background."
             " Script will look for MDSCPUUsageHigh  alert"
         )
+
         assert active_mds_alert_values(threading_lock)
