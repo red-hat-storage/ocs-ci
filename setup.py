@@ -22,7 +22,7 @@ setup(
         "gevent==23.9.1",
         "reportportal-client==3.2.3",
         "requests==2.32.3",
-        "paramiko==3.4.0",
+        "paramiko==3.5.0",
         "pyyaml>=4.2b1",
         "jinja2==3.1.4",
         "openshift==0.11.2",
