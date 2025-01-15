@@ -37,6 +37,7 @@ from ocs_ci.ocs.constants import (
     BAREMETAL_PLATFORMS,
     AZURE_KV_PROVIDER_NAME,
     ROSA_HCP_PLATFORM,
+    VAULT_KMS_PROVIDER,
 )
 from ocs_ci.utility import version
 from ocs_ci.utility.aws import update_config_from_s3
@@ -717,3 +718,11 @@ ceph_health_retry = pytest.mark.ceph_health_retry
 # Mark for Multicluster upgrade scenarios
 config_index = pytest.mark.config_index
 multicluster_roles = pytest.mark.multicluster_roles
+
+# Marks to identify if Vault KMS deployment is required
+vault_kms_deployment_required = pytest.mark.skipif(
+    not config.DEPLOYMENT.get("kms_deployment", False)
+    or config.ENV_DATA.get("KMS_PROVIDER", "")
+    not in [VAULT_KMS_PROVIDER, HPCS_KMS_PROVIDER],
+    reason="This test requires both Vault or HPCS KMS deployment to be enabled and a valid KMS provider.",
+)
