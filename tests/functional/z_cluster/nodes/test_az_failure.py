@@ -20,7 +20,7 @@ logger = logging.getLogger(__name__)
 @pytest.mark.polarion_id("OCS-1287")
 @aws_platform_required
 @pytest.mark.skip(reason="az blocking method need to be fixed")
-class TestAvailabilityZones(ManageTest):
+class DeprecatedTestAvailabilityZones(ManageTest):
     """
     test availability zone failure:
     test stages:
@@ -63,7 +63,7 @@ class TestAvailabilityZones(ManageTest):
 
         request.addfinalizer(finalizer)
 
-    def test_availability_zone_failure(
+    def deprecated_test_availability_zone_failure(
         self,
         aws_obj,
         ec2_instances,
