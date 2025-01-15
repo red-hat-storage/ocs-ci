@@ -6,6 +6,7 @@ import logging
 
 from ocs_ci.framework import config
 from ocs_ci.ocs import constants, ocp
+from ocs_ci.helpers import helpers
 from ocs_ci.ocs.resources.ocs import OCS
 from ocs_ci.utility.utils import exec_cmd
 
@@ -120,3 +121,67 @@ class StorageConsumer:
                 if job["metadata"]["name"].endswith("status-reporter")
             ][0]
         return cronjob
+
+    def fill_up_quota_percentage(self, percentage, quota=None):
+        """
+        Create a PVC of such size that the correct percentage of quota is used
+
+        Returns:
+            PVC object
+        """
+        pvc_name = f"pvc-quota-{percentage}"
+        if not quota:
+            quota = config.ENV_DATA["quota"]
+        quota_value = quota.split(" ")[0]
+        quota_units = quota.split(" ")[1]
+        pvc_size_int = quota_value * percentage // 100
+        pvc_size = f"{pvc_size_int}{quota_units}"
+        rbd_storageclass = helpers.default_storage_class(constants.CEPHBLOCKPOOL)
+        pvc_obj = helpers.create_pvc(
+            pvc_name=pvc_name,
+            sc_name=rbd_storageclass,
+            namespace="default",
+            size=pvc_size,
+            do_reload=False,
+            access_mode=constants.ACCESS_MODE_RWO,
+            volume_mode=constants.VOLUME_MODE_BLOCK,
+        )
+        return pvc_obj
+
+
+def get_all_client_clusters():
+    """
+    Get client cluster names of all storage consumers
+
+    Returns:
+        array: names of client clusters
+    """
+    ocp_storageconsumers = ocp.OCP(
+        kind=constants.STORAGECONSUMER,
+        namespace=config.cluster_ctx.ENV_DATA["cluster_namespace"],
+    )
+    cluster_names = []
+    storageconsumers_data = ocp_storageconsumers.get().get("items")
+    for storageconsumer in storageconsumers_data:
+        cluster_names.append(storageconsumer["status"]["client"]["clusterName"])
+    return cluster_names
+
+
+def get_storageconsumer_quota(cluster_name):
+    """
+    Get the quota value from storageconsumer details
+    Args:
+        clustername(str): name of the client cluster
+    Returns"
+        str: quota value
+    """
+    ocp_storageconsumers = ocp.OCP(
+        kind=constants.STORAGECONSUMER,
+        namespace=config.cluster_ctx.ENV_DATA["cluster_namespace"],
+    )
+    storageconsumers_data = ocp_storageconsumers.get().get("items")
+    for storageconsumer in storageconsumers_data:
+        if storageconsumer["status"]["client"]["clusterName"] == cluster_name:
+            if "storageQuotaInGiB" not in storageconsumer["spec"]:
+                return "Unlimited"
+            return storageconsumer["spec"]["storageQuotaInGiB"]
