@@ -64,7 +64,7 @@ class TestKernelCrash(E2ETest):
         ],
     )
     def test_node_kernel_crash_ceph_fsync(
-        self, pvc_factory, teardown_factory, dc_pod_factory, interface_type
+        self, pvc_factory, teardown_factory, deployment_pod_factory, interface_type
     ):
         """
         1. Create 1GiB PVC
@@ -85,7 +85,7 @@ class TestKernelCrash(E2ETest):
         selected_node = random.choice(worker_nodes_list)
         log.info(f"Creating a pod on node: {selected_node} with pvc {pvc_obj.name}")
 
-        pod_obj = dc_pod_factory(
+        pod_obj = deployment_pod_factory(
             interface=interface_type,
             pvc=pvc_obj,
         )
