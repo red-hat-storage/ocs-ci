@@ -183,7 +183,9 @@ class TestMCGResourcesDisruptions(MCGTest):
         # Teardown function to revert back the scc changes made
         def finalizer():
             scc_name = constants.NOOBAA_DB_SERVICE_ACCOUNT_NAME
-            service_account = constants.NOOBAA_DB_SERVICE_ACCOUNT
+            service_account = constants.NOOBAA_DB_SERVICE_ACCOUNT.replace(
+                "openshift-storage", config.ENV_DATA["cluster_namespace"]
+            )
             pod_obj = pod.Pod(
                 **pod.get_pods_having_label(
                     label=self.labels_map["noobaa_db"],
@@ -238,7 +240,9 @@ class TestMCGResourcesDisruptions(MCGTest):
 
         """
         scc_name = constants.NOOBAA_DB_SERVICE_ACCOUNT_NAME
-        service_account = constants.NOOBAA_DB_SERVICE_ACCOUNT
+        service_account = constants.NOOBAA_DB_SERVICE_ACCOUNT.replace(
+            "openshift-storage", config.ENV_DATA["cluster_namespace"]
+        )
         pod_obj = pod.Pod(
             **pod.get_pods_having_label(
                 label=self.labels_map["noobaa_db"],
