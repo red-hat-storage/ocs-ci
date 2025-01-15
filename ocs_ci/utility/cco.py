@@ -4,6 +4,7 @@ Cloud Credential Operator utility functions
 
 import logging
 import os
+import re
 import shutil
 import yaml
 
@@ -227,11 +228,13 @@ def process_credentials_requests_azure(
 
     """
     logger.info("Processing all CredentialsRequest objects")
+    storage_account_name = re.sub(r"\W+", "", name)  # Strip non-alphanumeric characters
     cmd = (
         f"ccoctl azure create-all --name={name} --output-dir={output_dir} "
         f"--region={azure_region} --subscription-id={subscription_id} "
         f"--credentials-requests-dir={credentials_requests_dir} "
-        f"--dnszone-resource-group-name={dns_zone_group_name} --tenant-id={tenant_id}"
+        f"--dnszone-resource-group-name={dns_zone_group_name} --tenant-id={tenant_id} "
+        f"--storage-account-name={storage_account_name}"
     )
     exec_cmd(cmd)
 
@@ -276,8 +279,10 @@ def delete_oidc_resource_group(name, region, subscription_id):
 
     """
     logger.info("Deleting OIDC resource group")
+    storage_account_name = re.sub(r"\W+", "", name)  # Strip non-alphanumeric characters
     cmd = (
         f"ccoctl azure delete --name={name} --region={region} "
-        f"--subscription-id={subscription_id} --delete-oidc-resource-group"
+        f"--subscription-id={subscription_id} --delete-oidc-resource-group "
+        f"--storage-account-name={storage_account_name}"
     )
     exec_cmd(cmd)
