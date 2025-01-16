@@ -23,4 +23,4 @@ ENV_DATA:
   worker_instance_type: 'Standard_D16s_v3'
 REPORTING:
   polarion:
-    deployment_id: 'OCS-2461'
+    deployment_id: 'OCS-6319'
