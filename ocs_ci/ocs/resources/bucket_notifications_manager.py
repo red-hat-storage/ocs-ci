@@ -2,7 +2,7 @@ import json
 import logging
 import os
 import tempfile
-import time
+from time import sleep
 
 from ocs_ci.framework import config
 from ocs_ci.helpers.helpers import (
@@ -17,7 +17,7 @@ from ocs_ci.ocs.exceptions import CommandFailed
 from ocs_ci.ocs.ocp import OCP
 from ocs_ci.ocs.resources.pod import (
     Pod,
-    get_noobaa_endpoint_pods,
+    get_noobaa_pods,
     get_pods_having_label,
     wait_for_pods_to_be_running,
 )
@@ -81,10 +81,9 @@ class BucketNotificationsManager:
                 )
             )
         elif use_provided_pvc and self.pvc_factory:
-            clstr_proj_obj = OCP(namespace=self.namespace)
             provided_notifs_pvc = self.pvc_factory(
                 interface=constants.CEPHFILESYSTEM,
-                project=clstr_proj_obj,
+                project=OCP(namespace=self.namespace),
                 size=20,
                 access_mode=constants.ACCESS_MODE_RWX,
             ).name
@@ -207,14 +206,14 @@ class BucketNotificationsManager:
         conn_file_name = ""
 
         kafka_conn_config = {
-            "metadata.broker.list": "my-cluster-kafka-bootstrap.myproject.svc.cluster.local:9092",
+            "metadata.broker.list": constants.KAFKA_ENDPOINT,
             "notification_protocol": "kafka",
             "topic": topic,
             "name": conn_name,
         }
 
         with tempfile.NamedTemporaryFile(
-            mode="w+", prefix="kafka_conn_", suffix=".json", delete=True
+            mode="w+", prefix="kafka_conn_", suffix=".json"
         ) as conn_file:
             conn_file_name = os.path.basename(conn_file.name)
             conn_file.write(json.dumps(kafka_conn_config))
@@ -244,7 +243,7 @@ class BucketNotificationsManager:
             "name": secret.resource_name,
             "namespace": secret.namespace,
         }
-        patch_path = "/spec/bucketNotifications/connections"
+        patch_path = os.path.join(NOTIFS_YAML_PATH_NB_CR, "connections")
         add_op = [{"op": "add", "path": f"{patch_path}/-", "value": conn_data}]
         self.nb_config_resource.patch(
             resource_name=constants.NOOBAA_RESOURCE_NAME,
@@ -252,8 +251,7 @@ class BucketNotificationsManager:
             format_type="json",
         )
 
-        nb_pods = [pod.name for pod in get_noobaa_endpoint_pods()]
-        nb_pods += [constants.NOOBAA_CORE_POD]
+        nb_pods = [pod.name for pod in get_noobaa_pods()]
         wait_for_pods_to_be_running(
             namespace=self.namespace,
             pod_names=nb_pods,
@@ -292,7 +290,7 @@ class BucketNotificationsManager:
             )
         )
         logger.info("Waiting for put-bucket-notification to propogate")
-        time.sleep(60)
+        sleep(60)
 
     def get_bucket_notification(self, awscli_pod, mcg_obj, bucket):
         """
