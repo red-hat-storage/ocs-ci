@@ -7328,13 +7328,12 @@ def multi_cnv_workload(
                     volume_interface=vm_config["volume_interface"],
                     access_mode=vm_config["access_mode"],
                     storageclass=storageclass,
-                    pvc_size="30Gi",  # Assuming pvc_size is fixed for all
-                    source_url=constants.CNV_FEDORA_SOURCE,  # Assuming source_url is the same for all VMs
+                    pvc_size="30Gi",
+                    source_url=constants.CNV_FEDORA_SOURCE,
                     namespace=namespace,
                 )
 
                 futures.append((future, vm_config["sc_compression"]))
-
             for future, sc_compression in futures:
                 try:
                     vm_obj = future.result()[0]
