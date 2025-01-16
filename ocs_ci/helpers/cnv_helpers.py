@@ -374,7 +374,7 @@ def verifyvolume(vm_obj, volume_name):
 
     Args:
         vm_obj (str): vm obj
-        volume_name (str): Name of the volume to add.
+        volume_name (str): Name of the volume to verify
 
     Returns:
          str: stdout of command
