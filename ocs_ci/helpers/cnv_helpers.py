@@ -370,7 +370,7 @@ def run_dd_io(vm_obj, file_path, size="10240", username=None, verify=False):
 
 def verifyvolume(vm_obj, volume_name):
     """
-    Add a volume to a VM.
+    Verify a volume in VM.
 
     Args:
         vm_obj (str): vm obj
