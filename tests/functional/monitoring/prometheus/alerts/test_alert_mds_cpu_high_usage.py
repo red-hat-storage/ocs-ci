@@ -6,11 +6,8 @@ from ocs_ci.framework.pytest_customization.marks import blue_squad
 from ocs_ci.framework.testlib import E2ETest, tier2
 from ocs_ci.helpers import helpers
 from ocs_ci.ocs import cluster, constants
-from ocs_ci.ocs.monitoring import get_prometheus_response
 from ocs_ci.utility import prometheus
 from ocs_ci.utility.utils import ceph_health_check_base
-from ocs_ci.framework import config
-from ocs_ci.ocs.ocp import OCP
 
 log = logging.getLogger(__name__)
 
@@ -30,18 +27,12 @@ def run_file_creator_io_with_cephfs(dc_pod_factory):
     interface = constants.CEPHFILESYSTEM
     log.info("Checking for Ceph Health OK")
     ceph_health_check_base()
-    ocp_project = OCP(
-        kind=constants.NAMESPACE, namespace=config.ENV_DATA["cluster_namespace"]
-    )
 
     for dc_pod in range(10):
         log.info(f"Creating {interface} based PVC")
         log.info("Creating fedora dc pod")
         pod_obj = dc_pod_factory(
-            size="15",
-            access_mode=access_mode,
-            interface=interface,
-            project=ocp_project,
+            size="15", access_mode=access_mode, interface=interface
         )
         log.info("Copying file_creator_io.py to fedora pod ")
         cmd = f"oc cp {file} {pod_obj.namespace}/{pod_obj.name}:/"
@@ -52,19 +43,6 @@ def run_file_creator_io_with_cephfs(dc_pod_factory):
         metaio_executor.submit(
             pod_obj.exec_sh_cmd_on_pod, command="python3 file_creator_io.py"
         )
-
-
-def get_scaling_type(threading_lock):
-    api = prometheus.PrometheusAPI(threading_lock=threading_lock)
-    ceph_mds_request = get_prometheus_response(api, query="rate(ceph_mds_request[6h])")
-    result = ceph_mds_request["data"]["result"]
-    for item in result:
-        rate_ceph_mds_request = item["value"]
-        rate_ceph_mds_request = float(rate_ceph_mds_request[1])
-        if rate_ceph_mds_request >= 1000:
-            return "Horizontal"
-        else:
-            return "Vertical"
 
 
 def active_mds_alert_values(threading_lock):
@@ -78,22 +56,15 @@ def active_mds_alert_values(threading_lock):
     api = prometheus.PrometheusAPI(threading_lock=threading_lock)
     alert_list = api.wait_for_alert(name=cpu_alert, state="pending")
     message = f"Ceph metadata server pod ({active_mds_pod}) has high cpu usage"
-
-    scaling_type = get_scaling_type(threading_lock)
-    if scaling_type == "Horizontal":
-        description_part = (
-            " and cannot cope up with the current rate of mds requests."
-            "\nPlease consider Horizontal scaling, by adding another MDS pod"
-        )
-    else:
-        description_part = ". Please consider Vertical scaling, by adding more resources to the existing MDS pod"
     description = (
-        f"Ceph metadata server pod ({active_mds_pod}) has high cpu usage {description_part}."
-        "\nPlease see 'runbook_url' for more details."
+        f"Ceph metadata server pod ({active_mds_pod}) has high cpu usage"
+        f"\n. Please consider Vertical "
+        f"\nscaling, by adding more resources to the existing MDS pod."
+        f"\nPlease see 'runbook_url' for more details."
     )
     runbook = (
-        "https://github.com/openshift/runbooks/blob/master/alerts/openshift-container-storage-operator"
-        f"/CephMdsCPUUsageHighNeeds{scaling_type}Scaling.md"
+        "https://github.com/openshift/runbooks/blob/master/alerts/"
+        "openshift-container-storage-operator/CephMdsCPUUsageHighNeedsVerticalScaling.md"
     )
     severity = "warning"
     state = ["pending"]
@@ -139,5 +110,4 @@ class TestMdsCpuAlerts(E2ETest):
             "File creation IO started in the background."
             " Script will look for MDSCPUUsageHigh  alert"
         )
-
         assert active_mds_alert_values(threading_lock)
