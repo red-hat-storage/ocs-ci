@@ -460,6 +460,7 @@ def run_cmd(
     threading_lock=None,
     silent=False,
     cluster_config=None,
+    output_file=None,
     **kwargs,
 ):
     """
@@ -477,6 +478,7 @@ def run_cmd(
         threading_lock (threading.RLock): threading.RLock object that is used
             for handling concurrent oc commands
         silent (bool): If True will silent errors from the server, default false
+        output_file (str): path where to write stderr from command - apply only when silent mode is True
 
     Raises:
         CommandFailed: In case the command execution fails
@@ -492,6 +494,7 @@ def run_cmd(
         threading_lock,
         silent=silent,
         cluster_config=cluster_config,
+        output_file=output_file,
         **kwargs,
     )
     return mask_secrets(completed_process.stdout.decode(), secrets)
@@ -599,6 +602,7 @@ def exec_cmd(
     use_shell=False,
     cluster_config=None,
     lock_timeout=7200,
+    output_file=None,
     **kwargs,
 ):
     """
@@ -622,6 +626,7 @@ def exec_cmd(
         cluster_config (MultiClusterConfig): In case of multicluster environment this object
                 will be non-null
         lock_timeout (int): maximum timeout to wait for lock to prevent deadlocks (default 2 hours)
+        output_file (str): path where to write output of stderr from command - apply only when silent mode is True
 
     Raises:
         CommandFailed: In case the command execution fails
@@ -695,8 +700,13 @@ def exec_cmd(
     if len(completed_process.stderr) > 0:
         if not silent:
             log.warning(f"Command stderr: {masked_stderr}")
+        else:
+            if output_file:
+                with open(output_file, "a") as out_fd:
+                    out_fd.write(masked_stderr)
     else:
-        log.debug("Command stderr is empty")
+        if not silent:
+            log.debug("Command stderr is empty")
     log.debug(f"Command return code: {completed_process.returncode}")
     if completed_process.returncode and not ignore_error:
         masked_stderr = bin_xml_escape(filter_out_emojis(masked_stderr))
@@ -1895,6 +1905,20 @@ def add_mem_stats(soup):
         )
 
 
+def add_info_about_mg_skips(soup):
+    from ocs_ci.ocs import utils
+
+    if utils.mg_fail_count:
+        failed_mg_text = soup.new_tag("b")
+        failed_mg_text.string = (
+            f"Must Gather collection has failed: {utils.mg_fail_count} times!"
+            f" Execution has skipped MG collection: {utils.mg_skip_count} times!"
+            " Please check why this has happened!"
+        )
+        main_header = soup.find("h1")
+        main_header.insert_after(failed_mg_text)
+
+
 def email_reports(session):
     """
     Email results of test run
@@ -1941,6 +1965,7 @@ def email_reports(session):
     if config.RUN["cli_params"].get("squad_analysis"):
         add_squad_analysis_to_email(session, soup)
     move_summary_to_top(soup)
+    add_info_about_mg_skips(soup)
     add_time_report_to_email(session, soup)
     part1 = MIMEText(soup, "html")
     add_mem_stats(soup)

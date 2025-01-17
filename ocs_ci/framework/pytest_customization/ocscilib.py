@@ -19,6 +19,7 @@ from ocs_ci.framework.exceptions import (
     ClusterNameNotProvidedError,
     ClusterPathNotProvidedError,
 )
+from ocs_ci.ocs import defaults
 from ocs_ci.ocs.constants import (
     CLUSTER_NAME_MAX_CHARACTERS,
     CLUSTER_NAME_MIN_CHARACTERS,
@@ -30,7 +31,7 @@ from ocs_ci.ocs.exceptions import (
 )
 from ocs_ci.ocs.cluster import check_clusters
 from ocs_ci.ocs.resources.ocs import get_version_info
-from ocs_ci.ocs.utils import collect_ocs_logs, collect_prometheus_metrics
+from ocs_ci.ocs import utils
 from ocs_ci.utility.utils import (
     dump_config_to_file,
     get_ceph_version,
@@ -707,34 +708,53 @@ def pytest_runtest_makereport(item, call):
         and ocsci_config.RUN.get("cli_params").get("collect-logs")
         and not ocsci_config.RUN.get("cli_params").get("deploy")
     ):
+        item_markers = {marker.name for marker in item.iter_markers()}
         test_case_name = item.name
+        # TODO: We should avoid paths and rely on markers issue:
+        # https://github.com/red-hat-storage/ocs-ci/issues/10526
         ocp_logs_collection = (
             True
             if any(
                 x in item.location[0]
                 for x in [
-                    "ecosystem",
-                    "e2e/performance",
                     "tests/functional/z_cluster",
                 ]
             )
             else False
         )
+        ocp_markers_to_collect = {
+            "performance",
+            "purple_squad",
+        }
+        if ocp_markers_to_collect & item_markers:
+            ocp_logs_collection = True
         ocs_logs_collection = (
             False
             if any(x in item.location[0] for x in ["_ui", "must_gather"])
             else True
         )
-        mcg_logs_collection = (
-            True if any(x in item.location[0] for x in ["mcg", "ecosystem"]) else False
+        mcg_markers_to_collect = {
+            "mcg",
+            "purple_squad",
+        }
+        # For every failure in MG we are trying to extend next attempt by 20 minutes
+        adjusted_timeout = utils.mg_fail_count * 1200
+        timeout = ocsci_config.REPORTING.get(
+            "must_gather_timeout", defaults.MUST_GATHER_TIMEOUT + adjusted_timeout
         )
+        log.info(f"Adjusted timeout for MG is {timeout} seconds")
+        mcg_logs_collection = bool(mcg_markers_to_collect & item_markers)
         try:
             if not ocsci_config.RUN.get("is_ocp_deployment_failed"):
-                collect_ocs_logs(
+                utils.collect_ocs_logs(
                     dir_name=test_case_name,
                     ocp=ocp_logs_collection,
                     ocs=ocs_logs_collection,
                     mcg=mcg_logs_collection,
+                    silent=True,
+                    output_file=True,
+                    skip_after_max_fail=True,
+                    timeout=timeout,
                 )
         except Exception:
             log.exception("Failed to collect OCS logs")
@@ -748,7 +768,7 @@ def pytest_runtest_makereport(item, call):
         metrics = item.get_closest_marker("gather_metrics_on_fail").args
         try:
             threading_lock = call.getfixturevalue("threading_lock")
-            collect_prometheus_metrics(
+            utils.collect_prometheus_metrics(
                 metrics,
                 f"{item.name}-{call.when}",
                 call.start,

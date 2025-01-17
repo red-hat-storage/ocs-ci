@@ -230,7 +230,11 @@ class Deployment(object):
                     config.RUN["is_ocp_deployment_failed"] = True
                     logger.error(e)
                     if config.REPORTING["gather_on_deploy_failure"]:
-                        collect_ocs_logs("deployment", ocs=False)
+                        collect_ocs_logs(
+                            "deployment",
+                            ocs=False,
+                            timeout=defaults.MUST_GATHER_TIMEOUT,
+                        )
                     raise
 
     def do_deploy_submariner(self):
@@ -380,8 +384,16 @@ class Deployment(object):
                     if config.REPORTING["gather_on_deploy_failure"]:
                         # Let's do the collections separately to guard against one
                         # of them failing
-                        collect_ocs_logs("deployment", ocs=False)
-                        collect_ocs_logs("deployment", ocp=False)
+                        collect_ocs_logs(
+                            "deployment",
+                            ocs=False,
+                            timeout=defaults.MUST_GATHER_TIMEOUT,
+                        )
+                        collect_ocs_logs(
+                            "deployment",
+                            ocp=False,
+                            timeout=defaults.MUST_GATHER_TIMEOUT,
+                        )
                     raise
             config.reset_ctx()
             # Run ocs_install_verification here only in case of multicluster.
