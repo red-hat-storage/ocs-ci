@@ -8,6 +8,7 @@ import time
 import tempfile
 import threading
 import json
+import concurrent.futures
 from concurrent.futures.thread import ThreadPoolExecutor
 from datetime import datetime
 from math import floor
@@ -7316,13 +7317,14 @@ def multi_cnv_workload(
 
         # Use ThreadPoolExecutor to create VMs parallel
         with ThreadPoolExecutor() as executor:
-            futures = []
+            futures = {}
             for vm_config in vm_configs["cnv_vm_configs"]:
                 # Determine the storage class based on the compression type
-                if vm_config["sc_compression"] == "default":
-                    storageclass = sc_obj_def_compr.name
-                elif vm_config["sc_compression"] == "aggressive":
-                    storageclass = sc_obj_aggressive.name
+                storageclass = (
+                    sc_obj_def_compr.name
+                    if vm_config["sc_compression"] == "default"
+                    else sc_obj_aggressive.name
+                )
                 future = executor.submit(
                     cnv_workload,
                     volume_interface=vm_config["volume_interface"],
@@ -7333,8 +7335,9 @@ def multi_cnv_workload(
                     namespace=namespace,
                 )
 
-                futures.append((future, vm_config["sc_compression"]))
-            for future, sc_compression in futures:
+                futures[future] = vm_config["sc_compression"]
+            for future in concurrent.futures.as_completed(futures):
+                sc_compression = futures[future]
                 try:
                     vm_obj = future.result()[0]
                     if sc_compression == "aggressive":
@@ -7342,7 +7345,7 @@ def multi_cnv_workload(
                     else:
                         vm_list_default_compr.append(vm_obj)
                 except Exception as e:
-                    print(f"Error occurred while creating VM: {e}")
+                    log.info(f"Error occurred while creating VM: {e}")
 
         return (
             vm_list_default_compr,
