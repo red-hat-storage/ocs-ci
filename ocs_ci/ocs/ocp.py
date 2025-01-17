@@ -151,6 +151,7 @@ class OCP(object):
         silent=False,
         cluster_config=None,
         skip_tls_verify=False,
+        output_file=None,
         **kwargs,
     ):
         """
@@ -171,6 +172,8 @@ class OCP(object):
             cluster_config (MultiClusterConfig): cluster_config will be used only in the context of multiclsuter
                 executions
             skip_tls_verify (bool): Adding '--insecure-skip-tls-verify' to oc command
+            output_file (str): path where to write output of stdout and stderr from command - apply only when
+                silent mode is True
 
         Returns:
             dict: Dictionary represents a returned yaml file.
@@ -217,6 +220,7 @@ class OCP(object):
             threading_lock=self.threading_lock,
             silent=silent,
             cluster_config=cluster_config,
+            output_file=output_file,
             **kwargs,
         )
 
