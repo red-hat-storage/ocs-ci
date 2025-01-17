@@ -122,7 +122,3 @@ class TestCNVVM(E2ETest):
         self.verify_keyrotation(self.vm_objs_def, self.sc_obj_def_compr)
         # Process VMs with aggressive compression
         self.verify_keyrotation(self.vm_objs_aggr, self.sc_obj_aggressive)
-
-        # 3.Stop all VMs
-        for vm_obj in all_vm_list:
-            vm_obj.stop()
