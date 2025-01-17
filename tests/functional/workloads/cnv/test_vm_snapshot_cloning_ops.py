@@ -43,10 +43,10 @@ class TestVmSnapshotClone(E2ETest):
             constants.VM_VOLUME_DV,
             constants.VM_VOLUME_DVT,
         ]
-        for index, vl_if in enumerate(volume_interface):
+        for vl_if in volume_interface:
             vm_obj = cnv_workload(
                 volume_interface=vl_if, source_url=constants.CNV_FEDORA_SOURCE
-            )[index]
+            )
             source_csum = run_dd_io(vm_obj=vm_obj, file_path=file_paths[0], verify=True)
             vm_obj.stop()
             clone_obj = clone_vm_workload(
@@ -55,7 +55,7 @@ class TestVmSnapshotClone(E2ETest):
                 namespace=(
                     vm_obj.namespace if vl_if == constants.VM_VOLUME_PVC else None
                 ),
-            )[index]
+            )
             new_csum = cal_md5sum_vm(vm_obj=clone_obj, file_path=file_paths[0])
             assert (
                 source_csum == new_csum

@@ -7209,7 +7209,7 @@ def cnv_workload_factory(request):
             namespace (str, optional): The namespace to create the vm on. Default, creates a unique namespace.
 
         Returns:
-            list: objects of cnv workload class
+            object: cnv workload class instance
 
         """
         vm_name = create_unique_resource_name("test", "vm")
@@ -7223,7 +7223,7 @@ def cnv_workload_factory(request):
             existing_pvc_obj=existing_pvc_obj,
         )
         cnv_workloads.append(cnv_wl)
-        return cnv_workloads
+        return cnv_wl
 
     def teardown():
         """
@@ -7315,7 +7315,7 @@ def multi_cnv_workload(
         vm_configs = templating.load_yaml(constants.CNV_VM_WORKLOADS)
 
         # Loop through vm_configs and create the VMs using the cnv_workload fixture
-        for index, vm_config in enumerate(vm_configs["cnv_vm_configs"]):
+        for vm_config in vm_configs["cnv_vm_configs"]:
             # Determine the storage class based on the compression type
             if vm_config["sc_compression"] == "default":
                 storageclass = sc_obj_def_compr.name
@@ -7328,7 +7328,7 @@ def multi_cnv_workload(
                 pvc_size="30Gi",  # Assuming pvc_size is fixed for all
                 source_url=constants.CNV_FEDORA_SOURCE,  # Assuming source_url is the same for all VMs
                 namespace=namespace,
-            )[index]
+            )
             if vm_config["sc_compression"] == "aggressive":
                 vm_list_agg_compr.append(vm_obj)
             else:
@@ -7363,7 +7363,7 @@ def clone_vm_workload(request):
             namespace (str, optional): The namespace to create the vm on. Default, creates a unique namespace.
 
         Returns:
-            list: objects of VM clone class
+            object: VMCloner class instance
 
         """
         clone_vm_name = create_unique_resource_name("clone", "vm")
@@ -7374,7 +7374,7 @@ def clone_vm_workload(request):
             volume_interface=volume_iface,
         )
         cloned_vms.append(clone_vm_obj)
-        return cloned_vms
+        return clone_vm_obj
 
     def teardown():
         """

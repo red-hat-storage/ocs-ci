@@ -38,10 +38,10 @@ class TestVmOperations(E2ETest):
             constants.VM_VOLUME_DV,
             constants.VM_VOLUME_DVT,
         ]
-        for index, vl_if in enumerate(volume_interface):
+        for vl_if in volume_interface:
             vm_obj = cnv_workload(
                 volume_interface=vl_if, source_url=constants.CNV_FEDORA_SOURCE
-            )[index]
+            )
             vm_obj.run_ssh_cmd(
                 command="dd if=/dev/zero of=/dd_file.txt bs=1024 count=102400"
             )
