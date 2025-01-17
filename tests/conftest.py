@@ -7208,7 +7208,7 @@ def cnv_workload_factory(request):
             namespace (str, optional): The namespace to create the vm on. Default, creates a unique namespace.
 
         Returns:
-            object of cnv workload class
+            object: cnv workload class instance
 
         """
         vm_name = create_unique_resource_name("test", "vm")
@@ -7362,7 +7362,7 @@ def clone_vm_workload(request):
             namespace (str, optional): The namespace to create the vm on. Default, creates a unique namespace.
 
         Returns:
-            list: objects of VM clone class
+            object: VMCloner class instance
 
         """
         clone_vm_name = create_unique_resource_name("clone", "vm")
@@ -7373,7 +7373,7 @@ def clone_vm_workload(request):
             volume_interface=volume_iface,
         )
         cloned_vms.append(clone_vm_obj)
-        return cloned_vms
+        return clone_vm_obj
 
     def teardown():
         """
