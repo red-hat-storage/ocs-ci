@@ -670,9 +670,11 @@ def run_ocs_upgrade(
             if ui_upgrade_supported:
                 ocs_odf_upgrade_ui()
             else:
-                if (
+                managed_ibmcloud_platform = (
                     config.ENV_DATA["platform"] == constants.IBMCLOUD_PLATFORM
-                ) and not (upgrade_in_current_source):
+                    and config.ENV_DATA["deployment_type"] == "managed"
+                )
+                if managed_ibmcloud_platform and not upgrade_in_current_source:
                     create_ocs_secret(config.ENV_DATA["cluster_namespace"])
                 if upgrade_version != "4.9":
                     # In the case of upgrade to ODF 4.9, the ODF operator should upgrade
