@@ -54,6 +54,19 @@ def run_file_creator_io_with_cephfs(dc_pod_factory):
         )
 
 
+def get_scaling_type(threading_lock):
+    api = prometheus.PrometheusAPI(threading_lock=threading_lock)
+    ceph_mds_request = get_prometheus_response(api, query="rate(ceph_mds_request[6h])")
+    result = ceph_mds_request["data"]["result"]
+    for item in result:
+        rate_ceph_mds_request = item["value"]
+        rate_ceph_mds_request = float(rate_ceph_mds_request[1])
+        if rate_ceph_mds_request >= 1000:
+            return "Horizontal"
+        else:
+            return "Vertical"
+
+
 def active_mds_alert_values(threading_lock):
     """
     This function validates the mds alerts using prometheus api
@@ -63,40 +76,39 @@ def active_mds_alert_values(threading_lock):
     cpu_alert = constants.ALERT_MDSCPUUSAGEHIGH
 
     api = prometheus.PrometheusAPI(threading_lock=threading_lock)
-    ceph_mds_request = get_prometheus_response(api, query="rate(ceph_mds_request[6h])")
-    result = ceph_mds_request["data"]["result"]
-    for item in result:
-        rate_ceph_mds_request = item["value"]
-        rate_ceph_mds_request = float(rate_ceph_mds_request[1])
-        if rate_ceph_mds_request >= 1000:
-            scaling_type = "Horizontal"
-        else:
-            scaling_type = "Vertical"
-        alert_list = api.wait_for_alert(name=cpu_alert, state="pending")
-        message = f"Ceph metadata server pod ({active_mds_pod}) has high cpu usage"
-        description = (
-            f"Ceph metadata server pod ({active_mds_pod}) has high cpu usage."
-            f"\nPlease consider {scaling_type} scaling, by adding more resources to the existing MDS pod."
-            "\nPlease see 'runbook_url' for more details."
-        )
-        runbook = (
-            "https://github.com/openshift/runbooks/blob/master/alerts/openshift-container-storage-operator"
-            f"/CephMdsCPUUsageHighNeeds{scaling_type}Scaling.md"
-        )
-        severity = "warning"
-        state = ["pending"]
+    alert_list = api.wait_for_alert(name=cpu_alert, state="pending")
+    message = f"Ceph metadata server pod ({active_mds_pod}) has high cpu usage"
 
-        prometheus.check_alert_list(
-            label=cpu_alert,
-            msg=message,
-            description=description,
-            runbook=runbook,
-            states=state,
-            severity=severity,
-            alerts=alert_list,
+    scaling_type = get_scaling_type(threading_lock)
+    if scaling_type == "Horizontal":
+        description_part = (
+            " and cannot cope up with the current rate of mds requests."
+            "\nPlease consider Horizontal scaling, by adding another MDS pod"
         )
-        log.info("Alert verified successfully")
-        return True
+    else:
+        description_part = ". Please consider Vertical scaling, by adding more resources to the existing MDS pod"
+    description = (
+        f"Ceph metadata server pod ({active_mds_pod}) has high cpu usage {description_part}."
+        "\nPlease see 'runbook_url' for more details."
+    )
+    runbook = (
+        "https://github.com/openshift/runbooks/blob/master/alerts/openshift-container-storage-operator"
+        f"/CephMdsCPUUsageHighNeeds{scaling_type}Scaling.md"
+    )
+    severity = "warning"
+    state = ["pending"]
+
+    prometheus.check_alert_list(
+        label=cpu_alert,
+        msg=message,
+        description=description,
+        runbook=runbook,
+        states=state,
+        severity=severity,
+        alerts=alert_list,
+    )
+    log.info("Alert verified successfully")
+    return True
 
 
 @tier2
