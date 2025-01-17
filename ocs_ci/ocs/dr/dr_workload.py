@@ -25,11 +25,12 @@ from ocs_ci.ocs.exceptions import (
     CommandFailed,
     UnexpectedBehaviour,
     ResourceNotDeleted,
+    ResourceWrongStatusException,
 )
 from ocs_ci.ocs.resources.pod import get_all_pods
 from ocs_ci.ocs.utils import get_primary_cluster_config, get_non_acm_cluster_config
 from ocs_ci.utility import templating
-from ocs_ci.utility.utils import clone_repo, run_cmd
+from ocs_ci.utility.utils import clone_repo, run_cmd, TimeoutSampler
 
 log = logging.getLogger(__name__)
 
@@ -614,13 +615,33 @@ class BusyBox_AppSet(DRWorkload):
         )
 
         if self.appset_model == "pull":
-            appset_pull_obj = ocp.OCP(
-                kind=constants.APPLICATION_ARGOCD,
-                resource_name=appset_resource_name,
-                namespace=constants.GITOPS_CLUSTER_NAMESPACE,
+            sampler = TimeoutSampler(
+                120, sleep=5, func=self.check_workload_health_status
             )
-            appset_pull_obj._has_phase = True
-            appset_pull_obj.wait_for_phase(phase="Succeeded", timeout=120)
+            if not sampler.wait_for_func_status(True):
+                raise ResourceWrongStatusException(
+                    f"{appset_resource_name} health status is not Healthy"
+                )
+
+    def check_workload_health_status(self):
+        """
+        Checks the health status of the workload and returns whether it is healthy.
+
+        Returns:
+            bool: True if the health status is "Healthy", False otherwise
+
+        """
+        appset_resource_name = (
+            self._get_applicaionset_name() + "-" + self.preferred_primary_cluster
+        )
+        appset_obj = ocp.OCP(
+            kind=constants.APPLICATION_ARGOCD,
+            resource_name=appset_resource_name,
+            namespace=constants.GITOPS_CLUSTER_NAMESPACE,
+        )
+        health_status = appset_obj.get().get("status").get("health").get("status")
+        log.info(f"{appset_resource_name} health status: {health_status}")
+        return health_status == "Healthy"
 
     def check_pod_pvc_status(self, skip_replication_resources=False):
         """
@@ -1258,14 +1279,16 @@ class BusyboxDiscoveredApps(DRWorkload):
         )
 
         for cluster in get_non_acm_cluster_config():
-            log.info(f"Deleting Workload from {cluster}")
             config.switch_ctx(cluster.MULTICLUSTER["multicluster_index"])
+            log.info(f"Deleting workload from {cluster.ENV_DATA['cluster_name']}")
             run_cmd(
                 f"oc delete -k {self.workload_path} -n {self.workload_namespace}",
                 ignore_error=True,
             )
             dr_helpers.wait_for_all_resources_deletion(
-                namespace=self.workload_namespace
+                namespace=self.workload_namespace,
+                check_replication_resources_state=False,
+                discovered_apps=True,
             )
             run_cmd(f"oc delete project {self.workload_namespace}")
 
@@ -1569,13 +1592,15 @@ class CnvWorkloadDiscoveredApps(DRWorkload):
         )
 
         for cluster in get_non_acm_cluster_config():
-            log.info(f"Deleting Workload from {cluster}")
             config.switch_ctx(cluster.MULTICLUSTER["multicluster_index"])
+            log.info(f"Deleting workload from {cluster.ENV_DATA['cluster_name']}")
             run_cmd(
                 f"oc delete -k {self.workload_path} -n {self.workload_namespace}",
                 ignore_error=True,
             )
             dr_helpers.wait_for_all_resources_deletion(
-                namespace=self.workload_namespace
+                namespace=self.workload_namespace,
+                check_replication_resources_state=False,
+                discovered_apps=True,
             )
             run_cmd(f"oc delete project {self.workload_namespace}")

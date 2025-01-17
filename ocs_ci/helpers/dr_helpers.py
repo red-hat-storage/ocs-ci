@@ -524,8 +524,13 @@ def check_vrg_state(state, namespace):
 
     # Skip state check if resource was deleted
     if len(vrg_list) == 0 and state.lower() == "secondary":
-        logger.info("VRG resource not found, skipping state check")
-        return True
+        ocs_version = version.get_semantic_ocs_version_from_config()
+        if ocs_version <= version.VERSION_4_17:
+            logger.info("VRG resource not found, skipping state check")
+            return True
+        else:
+            logger.info("VRG resource not found")
+            return False
 
     vrg_name = vrg_list[0]["metadata"]["name"]
     desired_state = vrg_list[0]["spec"]["replicationState"]
@@ -617,7 +622,9 @@ def wait_for_replication_resources_creation(
         raise TimeoutExpiredError(error_msg)
 
 
-def wait_for_replication_resources_deletion(namespace, timeout, check_state=True):
+def wait_for_replication_resources_deletion(
+    namespace, timeout, check_state=True, discovered_apps=False
+):
     """
     Wait for replication resources to be deleted
 
@@ -626,11 +633,13 @@ def wait_for_replication_resources_deletion(namespace, timeout, check_state=True
         timeout (int): time in seconds to wait for resources to reach expected
             state or deleted
         check_state (bool): True for checking resources state before deletion, False otherwise
+        discovered_apps (bool): If true then deployed workload is discovered_apps
 
     Raises:
         TimeoutExpiredError: In case replication resources not deleted
 
     """
+    vrg_namespace = constants.DR_OPS_NAMESAPCE if discovered_apps else namespace
     # TODO: Improve the parameter for condition
     if "cephfs" in namespace:
         resource_kind = constants.REPLICATION_SOURCE
@@ -660,7 +669,7 @@ def wait_for_replication_resources_deletion(namespace, timeout, check_state=True
             sleep=5,
             func=check_vrg_state,
             state="secondary",
-            namespace=namespace,
+            namespace=vrg_namespace,
         )
         if not sample.wait_for_func_status(result=True):
             error_msg = (
@@ -669,10 +678,13 @@ def wait_for_replication_resources_deletion(namespace, timeout, check_state=True
             logger.info(error_msg)
             raise TimeoutExpiredError(error_msg)
 
-    if "cephfs" not in namespace:
+    ocs_version = version.get_semantic_ocs_version_from_config()
+    if not check_state or (
+        ocs_version <= version.VERSION_4_17 and "cephfs" not in namespace
+    ):
         logger.info("Waiting for VRG to be deleted")
         sample = TimeoutSampler(
-            timeout=timeout, sleep=5, func=check_vrg_existence, namespace=namespace
+            timeout=timeout, sleep=5, func=check_vrg_existence, namespace=vrg_namespace
         )
         if not sample.wait_for_func_status(result=False):
             error_msg = "VRG resource not deleted"
@@ -734,7 +746,10 @@ def wait_for_all_resources_creation(
 
 
 def wait_for_all_resources_deletion(
-    namespace, check_replication_resources_state=True, timeout=1000
+    namespace,
+    check_replication_resources_state=True,
+    timeout=1000,
+    discovered_apps=False,
 ):
     """
     Wait for workload and replication resources to be deleted
@@ -743,6 +758,7 @@ def wait_for_all_resources_deletion(
         namespace (str): the namespace of the workload
         check_replication_resources_state (bool): True for checking replication resources state, False otherwise
         timeout (int): time in seconds to wait for resource deletion
+        discovered_apps (bool): If true then deployed workload is discovered_apps
 
     """
     logger.info("Waiting for all pods to be deleted")
@@ -754,7 +770,7 @@ def wait_for_all_resources_deletion(
             )
 
     wait_for_replication_resources_deletion(
-        namespace, timeout, check_replication_resources_state
+        namespace, timeout, check_replication_resources_state, discovered_apps
     )
 
     if not (
@@ -1638,7 +1654,7 @@ def do_discovered_apps_cleanup(
     config.switch_to_cluster_by_name(old_primary)
     workload_path = constants.DR_WORKLOAD_REPO_BASE_DIR + "/" + workload_dir
     run_cmd(f"oc delete -k {workload_path} -n {workload_namespace} --wait=false")
-    wait_for_all_resources_deletion(namespace=workload_namespace)
+    wait_for_all_resources_deletion(namespace=workload_namespace, discovered_apps=True)
     config.switch_acm_ctx()
     drpc_obj.wait_for_progression_status(status=constants.STATUS_COMPLETED)
     config.switch_ctx(restore_index)
