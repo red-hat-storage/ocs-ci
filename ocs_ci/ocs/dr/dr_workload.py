@@ -624,6 +624,13 @@ class BusyBox_AppSet(DRWorkload):
                 )
 
     def check_workload_health_status(self):
+        """
+        Checks the health status of the workload and returns whether it is healthy.
+
+        Returns:
+            bool: True if the health status is "Healthy", False otherwise
+
+        """
         appset_resource_name = (
             self._get_applicaionset_name() + "-" + self.preferred_primary_cluster
         )
