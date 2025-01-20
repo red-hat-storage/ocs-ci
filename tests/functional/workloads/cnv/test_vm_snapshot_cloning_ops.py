@@ -62,8 +62,8 @@ class TestVmSnapshotClone(E2ETest):
             clone_obj = clone_vm_workload(
                 vm_obj=vm_obj,
                 volume_interface=vm_obj.volume_interface,
-                namespace=(vm_obj.namespace),
-            )[index]
+                namespace=vm_obj.namespace,
+            )
             log.info(
                 f"Clone created successfully for VM {vm_obj.name}: " f"{clone_obj.name}"
             )
