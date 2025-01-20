@@ -93,7 +93,7 @@ class TestVmShutdownStart(E2ETest):
                 if vm_obj.volume_interface == constants.VM_VOLUME_PVC
                 else None
             ),
-        )[0]
+        )
         all_vms.append(clone_obj)
         csum = cal_md5sum_vm(vm_obj=clone_obj, file_path=file_paths[0])
         source_csums[clone_obj.name] = csum
@@ -119,7 +119,7 @@ class TestVmShutdownStart(E2ETest):
             storageclass=vm_for_snap.sc_name,
             existing_pvc_obj=res_snap_obj,
             namespace=vm_obj.namespace,
-        )[-1]
+        )
         all_vms.append(res_vm_obj)
         csum = cal_md5sum_vm(vm_obj=res_vm_obj, file_path=file_paths[0])
         source_csums[res_vm_obj.name] = csum
