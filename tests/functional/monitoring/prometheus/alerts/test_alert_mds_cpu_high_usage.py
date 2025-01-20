@@ -58,13 +58,13 @@ def active_mds_alert_values(threading_lock):
     message = f"Ceph metadata server pod ({active_mds_pod}) has high cpu usage"
     description = (
         f"Ceph metadata server pod ({active_mds_pod}) has high cpu usage"
-        f"\n. Please consider Vertical "
+        f"\n. Please consider Vertical"
         f"\nscaling, by adding more resources to the existing MDS pod."
         f"\nPlease see 'runbook_url' for more details."
     )
     runbook = (
         "https://github.com/openshift/runbooks/blob/master/alerts/"
-        "openshift-container-storage-operator/CephMdsCPUUsageHighNeedsVerticalScaling.md"
+        "openshift-container-storage-operator/CephMdsCPUUsageHighNeedsVerticalScaling.md "
     )
     severity = "warning"
     state = ["pending"]
