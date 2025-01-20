@@ -5261,10 +5261,13 @@ def is_z_stream_upgrade():
 def create_config_ini_file(params):
     """
     This function will create a config ini file for the params given.
+
     Use case:
-        can be used in external-cluster-exporter script --config-file argument
+    can be used in external-cluster-exporter script --config-file argument
+
     Args:
         params (str): Parameter to pass to be converted into config.ini file.
+
     Returns:
         str: Path to the config.ini file.
     """
