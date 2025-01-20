@@ -38,7 +38,7 @@ class TestVmSnapshotClone(E2ETest):
         ODF official docs
          6.1 Delete the clone of the PVC associated with VM.
          6.2 Cloned PVC successfully deleted
-        7. Repeat the above procedure for all the VMs in the system
+        7. Repeat the above procedure for all the VMs
         8. Delete all the clones created as part of this test
         """
 
