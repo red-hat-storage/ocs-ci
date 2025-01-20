@@ -13,6 +13,7 @@ from ocs_ci.framework.testlib import (
     skipif_mcg_only,
     tier1,
     polarion_id,
+    skipif_external_mode,
 )
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.bucket_utils import (
@@ -33,6 +34,7 @@ RECONCILE_WAIT = 30
 @red_squad
 @mcg
 @ignore_leftover_label(constants.CUSTOM_MCG_LABEL)
+@skipif_external_mode
 class TestBucketLogs(MCGTest):
     """
     Test the MCG bucket logs feature
