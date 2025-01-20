@@ -347,7 +347,7 @@ class ExternalCluster(object):
         if (
             "--upgrade" not in params
             and ocs_version >= version.VERSION_4_17
-            and config.ENV_DATA.get("use_config_file")
+            and config.ENV_DATA.get("rhcs_external_use_config_file")
         ):
             # upload config.ini file to external RHCS cluster
             config_ini_path = self.upload_config_ini_file(params)
