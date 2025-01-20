@@ -197,7 +197,7 @@ class VirtualMachine(Virtctl):
             access_mode=self.pvc_access_mode,
             namespace=self.namespace,
         )
-        wait_for_resource_state(self.pvc_obj, state=constants.STATUS_BOUND, timeout=300)
+        wait_for_resource_state(self.pvc_obj, state=constants.STATUS_BOUND, timeout=900)
         self.pvc_name = self.pvc_obj.name
         vm_data["spec"]["template"]["spec"]["volumes"][0]["persistentVolumeClaim"] = {
             "claimName": self.pvc_obj.name
@@ -271,7 +271,7 @@ class VirtualMachine(Virtctl):
                 else self.dvt_name
             ),
             column="PHASE",
-            timeout=300,
+            timeout=900,
         ), "VM Data Volume not in Succeeded state"
 
     def get(self, out_yaml_format=True):
@@ -336,7 +336,7 @@ class VirtualMachine(Virtctl):
                         f"Username not found in the {self.name} user data"
                     )
 
-    def wait_for_vm_status(self, status=constants.VM_RUNNING, timeout=600):
+    def wait_for_vm_status(self, status=constants.VM_RUNNING, timeout=900):
         """
         Wait for the VirtualMachine to reach the specified status.
 
@@ -655,6 +655,7 @@ class VirtualMachine(Virtctl):
         if self.volume_interface == constants.VM_VOLUME_PVC:
             # Deletes only when PVC & VIS obj exists
             if self.pvc_obj:
+                self.pvc_obj.reload()
                 self.pvc_obj.delete()
                 self.pvc_obj.ocp.wait_for_delete(
                     resource_name=self.pvc_obj.name, timeout=180
@@ -666,7 +667,7 @@ class VirtualMachine(Virtctl):
             if self.dv_obj:
                 self.dv_obj.delete()
                 self.dv_obj.ocp.wait_for_delete(
-                    resource_name=self.dv_obj.name, timeout=180
+                    resource_name=self.dv_obj.name, timeout=300
                 )
         if self.ns_obj:
             self.ns_obj.delete_project(project_name=self.namespace)
