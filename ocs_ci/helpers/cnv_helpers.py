@@ -377,7 +377,7 @@ def verifyvolume(vm_obj, volume_name):
         volume_name (str): Name of the volume to verify
 
     Returns:
-         str: stdout of command
+         bool: true if volume is found
 
     """
     cmd = f"oc get vm {vm_obj.name} -o=jsonpath='{{.spec.volumes}}'"

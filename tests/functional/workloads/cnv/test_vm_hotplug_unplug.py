@@ -67,7 +67,9 @@ class TestVmHotPlugUnplug(E2ETest):
 
             # Hotplug the PVC to the VM
             vm_obj.addvolume(volume_name=pvc_obj.name)
-            verifyvolume(vm_obj, volume_name=pvc_obj.name)
+            assert verifyvolume(
+                vm_obj, volume_name=pvc_obj.name
+            ), f"Unable to found volume {pvc_obj.name} mounted on VM: {vm_obj.name}"
             log.info(f"Hotplugged PVC {pvc_obj.name} to VM {vm_obj.name}")
 
             # List disks after attaching the new volume
@@ -89,7 +91,9 @@ class TestVmHotPlugUnplug(E2ETest):
             vm_obj.restart(wait=True, verify=True)
 
             # Verify that the disk is still attached
-            verifyvolume(vm_obj, volume_name=pvc_obj.name)
+            assert verifyvolume(
+                vm_obj, volume_name=pvc_obj.name
+            ), f"Unable to found volume {pvc_obj.name} mounted on VM: {vm_obj.name}"
 
             # Verify data persistence by checking MD5 checksum
             new_csum = cal_md5sum_vm(vm_obj=vm_obj, file_path=file_paths[0])
@@ -111,13 +115,6 @@ class TestVmHotPlugUnplug(E2ETest):
                 before_disks
             ), f"Failed to unplug disk from VM {vm_obj.name}"
 
-            # Confirm disk removal
-            if not verifyvolume(vm_obj, volume_name=pvc_obj.name):
-                log.info(
-                    f"Volume {pvc_obj.name} unplugged successfully from VM {vm_obj.name}"
-                )
-                run_dd_io(vm_obj=vm_obj, file_path=file_paths[1])
-            else:
-                pytest.fail(
-                    f"Volume {pvc_obj.name} is still attached to VM {vm_obj.name}"
-                )
+            assert not verifyvolume(
+                vm_obj, volume_name=pvc_obj.name
+            ), f"Unable to found volume {pvc_obj.name} mounted on VM: {vm_obj.name}"
