@@ -118,9 +118,13 @@ class TestVmSnapshotClone(E2ETest):
         Test steps:
         1. Create VMs, add data(e.g., files) to all the VMs
         2. Create a snapshot for a VM backed pvc
+            a. Expand PVC if `pvc_expand_before_snapshot` is True.
+            b. Verify the availability of expanded portion for IOs
         3. Restore the snapshot (to same access mode of the parent PVC and storage_class) by following the
         documented procedure from ODF official docs
         4. Create new vm using restored pvc Verify existing data of the VM are not changed.
+             a. Expand PVC if `pvc_expand_after_restore` is True
+             b. Verify the availability of expanded portion for IOs
         5. Add further data(e.g., new file) to the VM
         6. Repeat the above procedure for all the VMs in the system
         7. Stop all the VMs created as part of this test.
@@ -135,8 +139,19 @@ class TestVmSnapshotClone(E2ETest):
         for vm_obj in vm_list:
             # Expand PVC if `pvc_expand_before_snapshot` is True
             pvc_obj = vm_obj.get_vm_pvc_obj()
+            new_size = 50
             if pvc_expand_before_snapshot:
-                pvc_obj.resize_pvc(new_size=50, verify=True)
+                pvc_obj.resize_pvc(new_size=new_size, verify=True)
+                pvc_obj = vm_obj.get_vm_pvc_obj()
+
+                result = vm_obj.run_ssh_cmd(command="lsblk -o SIZE")
+                if new_size in result:
+                    log.info("expanded PVC size is showing on vm")
+                else:
+                    raise ValueError(
+                        "Expanded PVC size is not showing on VM. "
+                        "Please verify the disk rescan and filesystem resize."
+                    )
 
             # Writing IO on source VM
             source_csum = run_dd_io(vm_obj=vm_obj, file_path=file_paths[0], verify=True)
@@ -145,7 +160,6 @@ class TestVmSnapshotClone(E2ETest):
             vm_obj.stop()
 
             # Taking Snapshot of PVC
-            pvc_obj = vm_obj.get_vm_pvc_obj()
             snap_obj = snapshot_factory(pvc_obj)
 
             # Restore the snapshot
@@ -164,7 +178,7 @@ class TestVmSnapshotClone(E2ETest):
                 storageclass=vm_obj.sc_name,
                 existing_pvc_obj=res_snap_obj,
                 namespace=vm_obj.namespace,
-            )[-1]
+            )
 
             # Expand PVC if `pvc_expand_after_restore` is True
             if pvc_expand_after_restore:
@@ -174,6 +188,14 @@ class TestVmSnapshotClone(E2ETest):
                     f"Failed: VM PVC Expansion of {res_vm_obj.name} after "
                     f"snapshot restore"
                 )
+                result = res_snap_obj.run_ssh_cmd(command="lsblk -o SIZE")
+                if new_size in result:
+                    log.info("expanded PVC size is showing on vm")
+                else:
+                    raise ValueError(
+                        "Expanded PVC size is not showing on VM. "
+                        "Please verify the disk rescan and filesystem resize."
+                    )
 
             # Validate data integrity of file written before taking snapshot
             res_csum = cal_md5sum_vm(vm_obj=res_vm_obj, file_path=file_paths[0])
@@ -183,6 +205,3 @@ class TestVmSnapshotClone(E2ETest):
 
             # Write new file to VM
             run_dd_io(vm_obj=res_vm_obj, file_path=file_paths[1], verify=True)
-
-            # Stop the restored VM
-            res_vm_obj.stop()
