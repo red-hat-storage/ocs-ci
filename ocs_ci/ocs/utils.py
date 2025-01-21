@@ -1322,6 +1322,7 @@ def collect_ocs_logs(
         ocs_flags (str): flags to ocs must gather command for example ["-- /usr/bin/gather -cs"]
 
     """
+    cwd = os.getcwd()
     results = list()
     with ThreadPoolExecutor() as executor:
         for cluster in ocsci_config.clusters:
@@ -1372,6 +1373,8 @@ def collect_ocs_logs(
             log.error("Must-gather collection failed")
             log.error(e)
             raise
+        finally:
+            os.chdir(cwd)
 
 
 def collect_prometheus_metrics(
