@@ -139,6 +139,11 @@ class Vault(KMS):
             Vault._vault_path_token = self.generate_vault_token()
         return Vault._vault_path_token
 
+    @vault_path_token.setter
+    def vault_path_token(self, value):
+        # For setting values in test cases
+        Vault._vault_path_token = value
+
     def deploy(self):
         """
         This function delegates the deployment of vault
