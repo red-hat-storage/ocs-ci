@@ -972,7 +972,7 @@ class Deployment(object):
             if "env" not in subscription_yaml_data["spec"]["config"]:
                 subscription_yaml_data["spec"]["config"]["env"] = azure_sub_data
             else:
-                subscription_yaml_data["spec"]["config"]["env"] = azure_sub_data
+                subscription_yaml_data["spec"]["config"]["env"].append(azure_sub_data)
 
         subscription_yaml_data["metadata"]["namespace"] = self.namespace
         subscription_manifest = tempfile.NamedTemporaryFile(
