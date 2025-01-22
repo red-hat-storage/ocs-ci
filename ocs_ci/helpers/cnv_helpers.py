@@ -9,13 +9,13 @@ import logging
 from ocs_ci.helpers.helpers import create_unique_resource_name, create_resource
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.exceptions import CommandFailed
+from ocs_ci.ocs.ocp import OCP
 from ocs_ci.utility import templating
 from ocs_ci.helpers.helpers import (
     create_ocs_object_from_kind_and_name,
 )
 from ocs_ci.framework import config
 from ocs_ci.utility.retry import retry
-from ocs_ci.utility.utils import run_cmd
 
 logger = logging.getLogger(__name__)
 
@@ -368,21 +368,37 @@ def run_dd_io(vm_obj, file_path, size="10240", username=None, verify=False):
         )
 
 
-def verifyvolume(vm_obj, volume_name):
+def verifyvolume(vm_name, volume_name, namespace):
     """
     Verify a volume in VM.
 
     Args:
-        vm_obj (str): vm obj
-        volume_name (str): Name of the volume to verify
+        vm_name (str): Name of the virtual machine
+        volume_name (str): Name of the volume (PVC) to verify
 
     Returns:
-         bool: true if volume is found
-
+        bool: True if the volume (PVC) is found, False otherwise
     """
-    cmd = f"oc get vm {vm_obj.name} -o=jsonpath='{{.spec.volumes}}'"
-    output = run_cmd(cmd=cmd)
-    if volume_name in output:
-        f"PVC {volume_name} is visible inside the VM {vm_obj.name}"
-        return True
-    return False
+    cmd = (
+        f"get vm {vm_name} -n {namespace} -o "
+        + "jsonpath='{.spec.template.spec.volumes}'"
+    )
+    try:
+        output = OCP().exec_oc_cmd(command=cmd)
+        logger.info(f"Output of the command '{cmd}': {output}")
+        for volume in output:
+            if volume.get("persistentVolumeClaim", {}).get("claimName") == volume_name:
+                if volume.get("persistentVolumeClaim", {}).get("hotpluggable", False):
+                    logger.info(
+                        f"Hotpluggable PVC {volume_name} is visible inside the VM {vm_name}"
+                    )
+                    return True
+                else:
+                    logger.warning(
+                        f"PVC {volume_name} found inside the VM {vm_name}, but it is not hotpluggable"
+                    )
+                    return False
+        return
+    except Exception as e:
+        logger.error(f"Error executing command '{cmd}': {e}")
+        return False

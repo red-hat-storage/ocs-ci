@@ -1,4 +1,5 @@
 import logging
+import time
 import pytest
 
 from ocs_ci.framework.pytest_customization.marks import magenta_squad, workloads
@@ -12,14 +13,17 @@ log = logging.getLogger(__name__)
 
 @magenta_squad
 @workloads
-@pytest.mark.polarion_id("OCS-")
+@pytest.mark.polarion_id("OCS-6322")
 class TestVmHotPlugUnplug(E2ETest):
     """
     Test case for VM hot plugging and unplugging of PVC disks.
     """
 
     def test_vm_hot_plugging_unplugging(
-        self, project_factory, multi_cnv_workload, setup_cnv
+        self,
+        # setup_cnv,
+        project_factory,
+        multi_cnv_workload,
     ):
         """
         Verify that hotplugging and hot unplugging of a PVC to/from a VM works
@@ -46,53 +50,34 @@ class TestVmHotPlugUnplug(E2ETest):
             namespace=proj_obj.namespace
         )
         vm_list = vm_objs_def + vm_objs_aggr
-
         log.info(f"Total VMs to process: {len(vm_list)}")
         for index, vm_obj in enumerate(vm_list):
-            # Create a new PVC for hotplug
             pvc_obj = create_pvc(
-                sc_name=constants.DEFAULT_CNV_CEPH_RBD_SC,
+                sc_name=vm_obj.sc_name,
                 namespace=vm_obj.namespace,
                 size="20Gi",
                 access_mode=constants.ACCESS_MODE_RWX,
                 volume_mode=constants.VOLUME_MODE_BLOCK,
             )
             log.info(f"PVC {pvc_obj.name} created successfully")
-
-            # List disks before attaching the new volume
             before_disks = vm_obj.run_ssh_cmd(
                 command="lsblk -o NAME,SIZE,MOUNTPOINT -P"
             )
             log.info(f"Disks before hotplug:\n{before_disks}")
-
-            # Hotplug the PVC to the VM
-            vm_obj.addvolume(volume_name=pvc_obj.name)
-            assert verifyvolume(
-                vm_obj, volume_name=pvc_obj.name
-            ), f"Unable to found volume {pvc_obj.name} mounted on VM: {vm_obj.name}"
+            vm_obj.addvolume(volume_name=pvc_obj.name, verify=True)
             log.info(f"Hotplugged PVC {pvc_obj.name} to VM {vm_obj.name}")
-
-            # List disks after attaching the new volume
+            time.sleep(30)
             after_disks = vm_obj.run_ssh_cmd("lsblk -o NAME,SIZE,MOUNTPOINT -P")
             log.info(f"Disks after hotplug:\n{after_disks}")
-
-            # Identify the newly attached disk
-            new_disks = set(after_disks) - set(before_disks)
-            log.info(f"Newly attached disks: {set(new_disks)}")
-
-            # Perform I/O operation on the new disk
-            log.info(
-                f"Running I/O operation on the newly attached disk in VM {vm_obj.name}"
-            )
+            log.info(f"Running I/O operation on VM {vm_obj.name}")
             source_csum = run_dd_io(vm_obj=vm_obj, file_path=file_paths[0], verify=True)
-
-            # Reboot the VM
             log.info(f"Rebooting VM {vm_obj.name}")
             vm_obj.restart(wait=True, verify=True)
+            log.info(f"Reboot Success for VM: {vm_obj.name}")
 
             # Verify that the disk is still attached
             assert verifyvolume(
-                vm_obj, volume_name=pvc_obj.name
+                vm_obj.name, volume_name=pvc_obj.name, namespace=vm_obj.namespace
             ), f"Unable to found volume {pvc_obj.name} mounted on VM: {vm_obj.name}"
 
             # Verify data persistence by checking MD5 checksum
@@ -102,7 +87,7 @@ class TestVmHotPlugUnplug(E2ETest):
             ), f"MD5 mismatch after reboot for VM {vm_obj.name}"
 
             # Unplug the disk
-            vm_obj.removevolume(volume_name=pvc_obj.name)
+            vm_obj.removevolume(volume_name=pvc_obj.name, verify=True)
 
             # Verify the disk is detached
             after_hotplug_rm_disks = vm_obj.run_ssh_cmd(
@@ -114,7 +99,3 @@ class TestVmHotPlugUnplug(E2ETest):
             assert set(after_hotplug_rm_disks) == set(
                 before_disks
             ), f"Failed to unplug disk from VM {vm_obj.name}"
-
-            assert not verifyvolume(
-                vm_obj, volume_name=pvc_obj.name
-            ), f"Unable to found volume {pvc_obj.name} mounted on VM: {vm_obj.name}"

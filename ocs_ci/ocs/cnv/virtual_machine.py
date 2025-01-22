@@ -11,6 +11,7 @@ from ocs_ci.helpers.cnv_helpers import (
     create_vm_secret,
     create_dv,
     clone_dv,
+    verifyvolume,
 )
 
 from ocs_ci.helpers.helpers import (
@@ -453,7 +454,7 @@ class VirtualMachine(Virtctl):
             self.verify_vm(verify_ssh=True)
             logger.info(f"VM: {self._vm_name} ssh working successfully!")
 
-    def addvolume(self, volume_name, persist=True, serial=None):
+    def addvolume(self, volume_name, persist=True, serial=None, verify=False):
         """
         Add a volume to a VM
 
@@ -461,6 +462,7 @@ class VirtualMachine(Virtctl):
             volume_name (str): Name of the volume/PVC to add.
             persist (bool): True to persist the volume.
             serial (str): Serial number for the volume.
+            verify (bool): If true, checks volume_name present in vm yaml.
 
         Returns:
              str: stdout of command
@@ -473,13 +475,24 @@ class VirtualMachine(Virtctl):
             persist=persist,
             serial=serial,
         )
-        logger.info(f"Successfully HotPlugged disk {volume_name} to {self._vm_name}")
+        if verify:
+            if verifyvolume(
+                vm_name=self._vm_name, volume_name=volume_name, namespace=self.namespace
+            ):
+                logger.info(
+                    f"Successfully HotPlugged disk {volume_name} to {self._vm_name}"
+                )
+            else:
+                raise Exception(
+                    f"HotPlugged disk {volume_name} not found on {self._vm_name}"
+                )
 
-    def removevolume(self, volume_name):
+    def removevolume(self, volume_name, verify=False):
         """
         Remove a volume from a VM
 
         Args:
+            verify: If true, checks volume_name not present in vm yaml
             volume_name (str): Name of the volume to remove.
 
         Returns:
@@ -488,9 +501,17 @@ class VirtualMachine(Virtctl):
         """
         logger.info(f"Removing {volume_name} from {self._vm_name}")
         self.remove_volume(vm_name=self._vm_name, volume_name=volume_name)
-        logger.info(
-            f"Successfully HotUnplugged disk {volume_name} from {self._vm_name}"
-        )
+        if verify:
+            if not verifyvolume(
+                vm_name=self._vm_name, volume_name=volume_name, namespace=self.namespace
+            ):
+                logger.info(
+                    f"Successfully HotUnplugged disk {volume_name} from {self._vm_name}"
+                )
+            else:
+                raise Exception(
+                    f"UnPlugged disk {volume_name} found on {self._vm_name}"
+                )
 
     def scp_to_vm(
         self,
