@@ -255,7 +255,7 @@ class Pod(OCS):
         return exec_cmd(cmd, timeout=timeout, shell=True)
 
     def copy_from_pod_oc_exec(
-        self, target_path, src_path, timeout=600, chunk_size=2000
+        self, target_path, src_path, timeout=1200, chunk_size=2000
     ):
         """
         Copies to local path file from the pod using standard output stream via 'oc exec'. Good for log/json/yaml/text
