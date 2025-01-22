@@ -132,7 +132,7 @@ class TestVmSnapshotClone(E2ETest):
         res_vm_obj.stop()
 
     @workloads
-    @pytest.mark.polarion_id("OCS-6288")
+    @pytest.mark.polarion_id("OCS-6325")
     def test_vm_snap_of_clone(
         self,
         setup_cnv,
@@ -185,7 +185,7 @@ class TestVmSnapshotClone(E2ETest):
                     if vm_obj.volume_interface == constants.VM_VOLUME_PVC
                     else None
                 ),
-            )[index]
+            )
             new_csum = cal_md5sum_vm(vm_obj=clone_obj, file_path=file_paths[0])
             assert (
                 source_csum == new_csum
@@ -214,12 +214,10 @@ class TestVmSnapshotClone(E2ETest):
                 storageclass=vm_obj.sc_name,
                 existing_pvc_obj=res_snap_obj,
                 namespace=vm_obj.namespace,
-            )[-1]
+            )
 
             restore_csum = cal_md5sum_vm(vm_obj=res_vm_obj, file_path=file_paths[0])
             assert (
                 source_csum == restore_csum
             ), f"Failed: MD5 comparison between source {vm_obj.name} and restored {res_vm_obj.name} VMs"
             run_dd_io(vm_obj=res_vm_obj, file_path=file_paths[1])
-
-            res_vm_obj.stop()
