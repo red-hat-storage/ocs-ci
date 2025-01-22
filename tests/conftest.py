@@ -7343,7 +7343,7 @@ def multi_cnv_workload(
             for future in concurrent.futures.as_completed(futures):
                 sc_compression = futures[future]
                 try:
-                    vm_obj = future.result()[0]
+                    vm_obj = future.result()
                     if sc_compression == "aggressive":
                         vm_list_agg_compr.append(vm_obj)
                     else:
