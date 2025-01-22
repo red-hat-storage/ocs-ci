@@ -1,5 +1,6 @@
 import logging
 import pytest
+import time
 
 from ocs_ci.framework.pytest_customization.marks import magenta_squad, workloads
 from ocs_ci.framework.testlib import E2ETest
@@ -16,9 +17,40 @@ class TestVmSnapshotClone(E2ETest):
     """
 
     @workloads
-    @pytest.mark.polarion_id("OCS-6288")
+    @pytest.mark.parametrize(
+        argnames=["pvc_expand_before_clone", "pvc_expand_after_clone"],
+        argvalues=[
+            pytest.param(
+                False,
+                False,
+                marks=pytest.mark.polarion_id(
+                    "OCS-6288"
+                ),  # Polarion ID for no PVC expansion
+            ),
+            pytest.param(
+                True,
+                False,
+                marks=pytest.mark.polarion_id(
+                    "OCS-6326"
+                ),  # Polarion ID for expansion before clone
+            ),
+            pytest.param(
+                False,
+                True,
+                marks=pytest.mark.polarion_id(
+                    "OCS-6326"
+                ),  # Polarion ID for expansion after clone
+            ),
+        ],
+    )
     def test_vm_clone(
-        self, project_factory, multi_cnv_workload, clone_vm_workload, setup_cnv
+        self,
+        project_factory,
+        pvc_expand_before_clone,
+        pvc_expand_after_clone,
+        multi_cnv_workload,
+        clone_vm_workload,
+        setup_cnv,
     ):
         """
         This test performs the VM cloning and IOs created using different
@@ -27,12 +59,14 @@ class TestVmSnapshotClone(E2ETest):
         Test steps:
         1. Create a clone of a VM PVC by following the documented procedure
         from ODF official docs.
-            1.1 Create clone of the pvc associated with VM.
-            1.2 Cloned pvc successfully created and listed
+            1.1 Expand PVC if `pvc_expand_before_clone` is True.
+            1.2 Verify the availability of expanded portion for IOs.
         2. Verify the cloned PVC is created.
         3. Create a VM using cloned PVC.
         4. Verify that the data on VM backed by cloned PVC is the
         same as that in the original VM.
+            4.1 Expand PVC if `pvc_expand_after_restore` is True
+            4.2 Verify the availability of expanded portion for IOs
         5. Add additional data to the cloned VM.
         6. Delete the clone by following the documented procedure from
         ODF official docs
@@ -49,11 +83,27 @@ class TestVmSnapshotClone(E2ETest):
         )
         vm_list = vm_objs_def + vm_objs_aggr
         log.info(f"Total VMs to process: {len(vm_list)}")
-        for index, vm_obj in enumerate(vm_list):
+        for vm_obj in vm_list:
             log.info(
                 f"Starting I/O operation on VM {vm_obj.name} using "
                 f"{file_paths[0]}..."
             )
+            # Expand PVC if `pvc_expand_before_snapshot` is True
+            pvc_obj = vm_obj.get_vm_pvc_obj()
+            new_size = 50
+            if pvc_expand_before_clone:
+                pvc_obj.resize_pvc(new_size=new_size, verify=True)
+                time.sleep(30)
+                pvc_obj = vm_obj.get_vm_pvc_obj()
+                result = vm_obj.run_ssh_cmd(command="lsblk -o SIZE")
+                if str(new_size) in result:
+                    log.info("expanded PVC size is showing on vm")
+                else:
+                    raise ValueError(
+                        "Expanded PVC size is not showing on VM. "
+                        "Please verify the disk rescan and filesystem resize."
+                    )
+
             source_csum = run_dd_io(vm_obj=vm_obj, file_path=file_paths[0], verify=True)
             log.info(f"Source checksum for {vm_obj.name}: {source_csum}")
             log.info(f"Stopping VM {vm_obj.name}...")
@@ -72,6 +122,23 @@ class TestVmSnapshotClone(E2ETest):
                 f"Failed: MD5 comparison between source {vm_obj.name} "
                 f"and cloned {clone_obj.name} VMs"
             )
+            # Expand PVC if `pvc_expand_after_restore` is True
+            if pvc_expand_after_clone:
+                new_size = 50
+                clone_pvc_obj = clone_obj.get_vm_pvc_obj()
+                clone_pvc_obj.resize_pvc(new_size=new_size, verify=True)
+                assert (
+                    clone_pvc_obj.get_vm_pvc_obj().size == new_size
+                ), f"Failed: VM PVC Expansion on cloned VM {clone_obj.name} "
+                time.sleep(30)
+                result = clone_obj.run_ssh_cmd(command="lsblk -o SIZE")
+                if str(new_size) in result:
+                    log.info("expanded PVC size is showing on vm")
+                else:
+                    raise ValueError(
+                        "Expanded PVC size is not showing on VM. "
+                        "Please verify the disk rescan and filesystem resize."
+                    )
             run_dd_io(vm_obj=clone_obj, file_path=file_paths[1])
 
     @workloads
