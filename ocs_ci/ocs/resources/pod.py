@@ -255,9 +255,15 @@ class Pod(OCS):
         return exec_cmd(cmd, timeout=timeout, shell=True)
 
     def copy_from_pod_oc_exec(
-        self, target_path, src_path, timeout=1200, chunk_size=2000
+        self, target_path, src_path, timeout=60 * 40, chunk_size=2000
     ):
         """
+        !!!Important Note!!!
+        Due to implemented https://url.corp.redhat.com/RHSTOR-3411 task 'tar', 'yum' utilities were removed from ceph
+        pods to trim an image size.
+        oc cp command depends on 'tar' utility, see https://linuxhint.com/use-kubectl-cp-command/ and oc cp --help
+
+        This function is a workaround to copy files from the pod to the local path file using standard input stream
         Copies to local path file from the pod using standard output stream via 'oc exec'. Good for log/json/yaml/text
         files, not good for large files/binaries with one-line plain string
         * Hand data from the pod over `oc exec cat`, other standard output ways will fail for the files > 1 Mb
@@ -265,7 +271,7 @@ class Pod(OCS):
         Args:
             target_path (str): local path
             src_path (str): path within pod what you want to copy
-            timeout (int): timeout in seconds
+            timeout (int): total timeout in seconds
                 until size of the local file will not reach the initial file size.
                 2000 lines is a maximum chunk size tested successfully
             chunk_size (int): file will be copied by chunks, by number of lines
