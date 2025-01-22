@@ -1,5 +1,6 @@
 import logging
 import pytest
+import time
 
 from ocs_ci.framework.pytest_customization.marks import magenta_squad, workloads
 from ocs_ci.framework.testlib import E2ETest
@@ -103,14 +104,14 @@ class TestVmSnapshotClone(E2ETest):
     )
     def test_vm_snapshot_ops(
         self,
+        setup_cnv,
         project_factory,
         pvc_expand_before_snapshot,
         pvc_expand_after_restore,
         multi_cnv_workload,
-        cnv_workload,
         snapshot_factory,
         snapshot_restore_factory,
-        setup_cnv,
+        cnv_workload,
     ):
         """
         This test performs the VM PVC snapshot operations
@@ -143,9 +144,9 @@ class TestVmSnapshotClone(E2ETest):
             if pvc_expand_before_snapshot:
                 pvc_obj.resize_pvc(new_size=new_size, verify=True)
                 pvc_obj = vm_obj.get_vm_pvc_obj()
-
+                time.sleep(30)
                 result = vm_obj.run_ssh_cmd(command="lsblk -o SIZE")
-                if new_size in result:
+                if str(new_size) in result:
                     log.info("expanded PVC size is showing on vm")
                 else:
                     raise ValueError(
@@ -174,8 +175,9 @@ class TestVmSnapshotClone(E2ETest):
 
             # Create new VM using the restored PVC
             res_vm_obj = cnv_workload(
-                source_url=constants.CNV_FEDORA_SOURCE,
+                volume_interface=constants.VM_VOLUME_PVC,
                 storageclass=vm_obj.sc_name,
+                source_url=constants.CNV_FEDORA_SOURCE,
                 existing_pvc_obj=res_snap_obj,
                 namespace=vm_obj.namespace,
             )
@@ -188,8 +190,10 @@ class TestVmSnapshotClone(E2ETest):
                     f"Failed: VM PVC Expansion of {res_vm_obj.name} after "
                     f"snapshot restore"
                 )
+
+                time.sleep(30)
                 result = res_snap_obj.run_ssh_cmd(command="lsblk -o SIZE")
-                if new_size in result:
+                if str(new_size) in result:
                     log.info("expanded PVC size is showing on vm")
                 else:
                     raise ValueError(
