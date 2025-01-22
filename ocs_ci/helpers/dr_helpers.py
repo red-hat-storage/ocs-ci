@@ -639,7 +639,7 @@ def wait_for_replication_resources_creation(
 
 
 def wait_for_replication_resources_deletion(
-    namespace, timeout, check_state=True, discovered_apps=False, , vrg_name=""
+    namespace, timeout, check_state=True, discovered_apps=False, vrg_name=""
 ):
     """
     Wait for replication resources to be deleted
