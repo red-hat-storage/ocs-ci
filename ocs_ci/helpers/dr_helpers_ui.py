@@ -200,6 +200,7 @@ def failover_relocate_ui(
     timeout=120,
     move_workloads_to_same_cluster=False,
     workload_type=constants.SUBSCRIPTION,
+    do_not_trigger=False,
 ):
     """
     Function to perform Failover/Relocate operations via ACM UI
@@ -215,6 +216,8 @@ def failover_relocate_ui(
         timeout (int): timeout to wait for certain elements to be found on the ACM UI
         move_workloads_to_same_cluster (bool): Bool condition to test negative failover/relocate scenarios to move
                                             running workloads to same cluster
+        do_not_trigger (bool): If in case you do not want to click on the Initiate button
+                            so as not to initiate the operation, set it to True. It's False by default.
     Returns:
             bool: True if the action is triggered, raises Exception if any of the mandatory argument is not provided
 
@@ -340,31 +343,37 @@ def failover_relocate_ui(
             log.error("Initiate button in not enabled to failover/relocate")
             return False
         else:
-            log.info("Click on Initiate button to failover/relocate")
-            acm_obj.do_click(
-                acm_loc["initiate-action"], enable_screenshot=True, avoid_stale=True
-            )
-            if action == constants.ACTION_FAILOVER:
-                log.info("Failover trigerred from ACM UI")
+            if do_not_trigger:
+                log.warning("Failover/Relocate operation will not be triggered")
             else:
-                log.info("Relocate trigerred from ACM UI")
-        acm_obj.take_screenshot()
-        acm_obj.page_has_loaded()
-        if workload_type == constants.SUBSCRIPTION:
-            log.info("Close the action modal")
-            acm_obj.do_click(
-                acm_loc["close-action-modal"], enable_screenshot=True, avoid_stale=True
+                log.info("Click on Initiate button to failover/relocate")
+                acm_obj.do_click(
+                    acm_loc["initiate-action"], enable_screenshot=True, avoid_stale=True
+                )
+                if action == constants.ACTION_FAILOVER:
+                    log.info("Failover trigerred from ACM UI")
+                else:
+                    log.info("Relocate trigerred from ACM UI")
+        if not do_not_trigger:
+            acm_obj.take_screenshot()
+            acm_obj.page_has_loaded()
+            if workload_type == constants.SUBSCRIPTION:
+                log.info("Close the action modal")
+                acm_obj.do_click(
+                    acm_loc["close-action-modal"],
+                    enable_screenshot=True,
+                    avoid_stale=True,
+                )
+                log.info(
+                    f"Action modal successfully closed for {constants.SUBSCRIPTION} type workload"
+                )
+                # It automatically closes for Appset based workload
+            return True
+        else:
+            log.error(
+                "Incorrect or missing params to perform Failover/Relocate operation from ACM UI"
             )
-            log.info(
-                f"Action modal successfully closed for {constants.SUBSCRIPTION} type workload"
-            )
-            # It automatically closes for Appset based workload
-        return True
-    else:
-        log.error(
-            "Incorrect or missing params to perform Failover/Relocate operation from ACM UI"
-        )
-        raise NotImplementedError
+            raise NotImplementedError
 
 
 def verify_failover_relocate_status_ui(

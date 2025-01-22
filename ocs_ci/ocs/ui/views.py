@@ -1151,6 +1151,14 @@ acm_configuration_4_16 = {
     ),
 }
 
+acm_configuration_4_18 = {
+    "inconsistent-warning-alert": (
+        "(//h4[@class='pf-v5-c-alert__title'])[3]",
+        By.XPATH,
+    ),
+    "cancel-action-modal": ("#modal-cancel-action", By.CSS_SELECTOR),
+}
+
 add_capacity = {
     "ocs_operator": (
         'a[data-test-operator-row="OpenShift Container Storage"]',
@@ -2059,6 +2067,7 @@ locators = {
             **acm_configuration_4_13,
             **acm_configuration_4_14,
             **acm_configuration_4_16,
+            **acm_configuration_4_18,
         },
         "validation": {
             **validation,
