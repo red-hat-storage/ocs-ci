@@ -301,10 +301,13 @@ class ExternalCluster(object):
         """
         Upload config.ini file that is used for external cluster
         exporter script --config-file param
+
         Args:
             params (str): Parameter to pass to exporter script
+
         Returns:
             str: absolute path to config.ini file
+
         """
         script_path = create_config_ini_file(params=params)
         upload_file(

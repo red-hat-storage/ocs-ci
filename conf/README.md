@@ -351,6 +351,7 @@ higher priority).
 * `upgrade_osd_requires_healthy_pgs` - If set to true OSD upgrade process won't start until PGs are healthy.
 * `workaround_mark_disks_as_ssd` - WORKAROUND: mark disks as SSD (not rotational - `0` in `/sys/block/*d*/queue/rotational`)
 * `node_labels` - Comma-separated labels to be applied to the nodes in the cluster, e.g. 'cluster.ocs.openshift.io/openshift-storage="",node-role.kubernetes.io/infra=""', default - empty string
+* `use_config_file` - If set to true the external-cluster-details-exporter python script will use a config file to setup the external cluster.
 
 #### UPGRADE
 
@@ -364,7 +365,7 @@ Upgrade related configuration data.
 * `upgrade_logging_channel` - OCP logging channel to upgrade with
 * `upgrade_ui` - Perform upgrade via UI (Not all the versions are supported, please look at the code)
 * `upgrade_acm_version` - ACM version to which we have to upgrade
-* `upgrade_acm_registry_image` - ACM Image tag from brew which should be used to upgrade 
+* `upgrade_acm_registry_image` - ACM Image tag from brew which should be used to upgrade
 example: <brew_registry_url>/rh-osbs/iib:565330
 
 #### AUTH
