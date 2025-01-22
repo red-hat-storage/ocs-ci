@@ -2,6 +2,8 @@
 Virtual machine class
 """
 
+import time
+
 import yaml
 import logging
 
@@ -475,6 +477,7 @@ class VirtualMachine(Virtctl):
             persist=persist,
             serial=serial,
         )
+        time.sleep(30)
         if verify:
             if verifyvolume(
                 vm_name=self._vm_name, volume_name=volume_name, namespace=self.namespace
@@ -501,6 +504,7 @@ class VirtualMachine(Virtctl):
         """
         logger.info(f"Removing {volume_name} from {self._vm_name}")
         self.remove_volume(vm_name=self._vm_name, volume_name=volume_name)
+        time.sleep(30)
         if verify:
             if not verifyvolume(
                 vm_name=self._vm_name, volume_name=volume_name, namespace=self.namespace
