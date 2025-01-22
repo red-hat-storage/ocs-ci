@@ -175,7 +175,7 @@ class TestVmSnapshotClone(E2ETest):
         res_vm_obj.stop()
 
     @workloads
-    @pytest.mark.polarion_id("OCS-6288")
+    @pytest.mark.polarion_id("OCS-6325")
     def test_vm_snap_of_clone(
         self,
         setup_cnv,
@@ -252,6 +252,23 @@ class TestVmSnapshotClone(E2ETest):
 
             # Stopping VM before restoring
             vm_obj.stop()
+<<<<<<< HEAD
+=======
+            clone_obj = clone_vm_workload(
+                vm_obj=vm_obj,
+                volume_interface=vm_obj.volume_interface,
+                namespace=(
+                    vm_obj.namespace
+                    if vm_obj.volume_interface == constants.VM_VOLUME_PVC
+                    else None
+                ),
+            )
+            new_csum = cal_md5sum_vm(vm_obj=clone_obj, file_path=file_paths[0])
+            assert (
+                source_csum == new_csum
+            ), f"Failed: MD5 comparison between source {vm_obj.name} and cloned {clone_obj.name} VMs"
+            run_dd_io(vm_obj=clone_obj, file_path=file_paths[1])
+>>>>>>> 38d0c5983 (Removed indexing)
 
             # Explicitly create the VirtualMachineRestore instance
             restore_snapshot_name = create_unique_resource_name(
