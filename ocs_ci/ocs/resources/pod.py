@@ -302,6 +302,29 @@ class Pod(OCS):
                 f"src file size = {src_path}b, target file size = {os.stat(target_path).st_size}b"
             )
 
+    def copy_file_with_base64(self, target_path, src_path, container=""):
+        """
+        !!!Important Note!!!
+        Due to implemented https://url.corp.redhat.com/RHSTOR-3411 task 'tar', 'yum' utilities were removed from ceph
+        pods to trim an image size.
+        oc cp command depends on 'tar' utility, see https://linuxhint.com/use-kubectl-cp-command/ and oc cp --help
+
+        Function to copy a file to a pod using base64 tool. Example:
+        1) oc exec -n odf-storage rook-ceph-osd-0-68d76f868c-s25sw -c osd -- base64 /var/log/ceph/pg_log_1.30.txt >
+        pg_log_1.30.txt.base64
+        2) cat pg_log_1.30.txt.base64 | base64 -d > pg_log_1.30.txt
+
+        Args:
+            src_path (str): The source file to copy
+            target_path (str): The target file to copy to
+            container (str): The container to copy to
+        """
+        with tempfile.NamedTemporaryFile(delete=True, suffix=".base64") as temp_file:
+            base64_file = temp_file.name
+            cmd = f"oc -n {self.namespace} exec {self.name} -c {container} -- base64 {src_path} > {base64_file}"
+            exec_cmd(cmd, shell=True)
+            exec_cmd(f"cat {base64_file} | base64 -d > {target_path}", shell=True)
+
     def exec_sh_cmd_on_pod(self, command, sh="bash", timeout=600, **kwargs):
         """
         Execute a pure bash command on a pod via oc exec where you can use
