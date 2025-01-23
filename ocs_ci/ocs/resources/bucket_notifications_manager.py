@@ -59,11 +59,10 @@ class BucketNotificationsManager:
         Set the bucket notifications feature on the NooBaa CR
 
         Args:
-            notifs_pvc(str|optional): Name of a provided PVC for MCG to use for
-                                      intermediate logging of the events.
-            Note:
-                If not provided, a PVC will be automatically be created
-                by MCG when first enabling the feature.
+            use_provided_pvc(bool): Whether to set a custom PVC or use NooBaa's default.
+
+        Note that if use_provided_pvc is set to True, a PVC factory must be set
+        to the pvc_factory attribute of the BucketNotificationsManager instance.
         """
         logger.info("Enabling bucket notifications on the NooBaa CR")
 
@@ -172,10 +171,10 @@ class BucketNotificationsManager:
 
     def create_kafka_topic(self, topic_name=""):
         """
-        Create a Kafka topic
+        Create a KafkaTopic - a receiver of bucket notifications
 
         Args:
-            name(str|optional): Name of the Kafka topic
+            topic_name(str|optional): Name of the Kafka topic
 
         Returns:
             str: Name of the created Kafka topic
@@ -190,7 +189,7 @@ class BucketNotificationsManager:
     def create_kafka_conn_secret(self, topic):
         """
         Create secret from a JSON file that
-        defines the Kafka connection configuration
+        defines the Kafka connection for NooBaa to use
 
         Args:
             topic(str): Name of the Kafka topic
