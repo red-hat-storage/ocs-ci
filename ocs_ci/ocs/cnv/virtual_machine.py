@@ -2,8 +2,6 @@
 Virtual machine class
 """
 
-import time
-
 import yaml
 import logging
 
@@ -477,7 +475,6 @@ class VirtualMachine(Virtctl):
             persist=persist,
             serial=serial,
         )
-        time.sleep(30)
         if verify:
             sample = TimeoutSampler(
                 timeout=600,
