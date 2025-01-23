@@ -479,16 +479,15 @@ class VirtualMachine(Virtctl):
         )
         time.sleep(30)
         if verify:
-            if verifyvolume(
-                vm_name=self._vm_name, volume_name=volume_name, namespace=self.namespace
-            ):
-                logger.info(
-                    f"Successfully HotPlugged disk {volume_name} to {self._vm_name}"
-                )
-            else:
-                raise Exception(
-                    f"HotPlugged disk {volume_name} not found on {self._vm_name}"
-                )
+            sample = TimeoutSampler(
+                timeout=600,
+                sleep=15,
+                func=verifyvolume,
+                vm_name=self._vm_name,
+                volume_name=volume_name,
+                namespace=self.namespace,
+            )
+            sample.wait_for_func_value(value=True)
 
     def removevolume(self, volume_name, verify=False):
         """
@@ -504,18 +503,16 @@ class VirtualMachine(Virtctl):
         """
         logger.info(f"Removing {volume_name} from {self._vm_name}")
         self.remove_volume(vm_name=self._vm_name, volume_name=volume_name)
-        time.sleep(30)
         if verify:
-            if not verifyvolume(
-                vm_name=self._vm_name, volume_name=volume_name, namespace=self.namespace
-            ):
-                logger.info(
-                    f"Successfully HotUnplugged disk {volume_name} from {self._vm_name}"
-                )
-            else:
-                raise Exception(
-                    f"UnPlugged disk {volume_name} found on {self._vm_name}"
-                )
+            sample = TimeoutSampler(
+                timeout=600,
+                sleep=15,
+                func=verifyvolume,
+                vm_name=self._vm_name,
+                volume_name=volume_name,
+                namespace=self.namespace,
+            )
+            sample.wait_for_func_value(value=False)
 
     def scp_to_vm(
         self,
