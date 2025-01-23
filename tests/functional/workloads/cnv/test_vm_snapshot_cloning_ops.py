@@ -209,3 +209,4 @@ class TestVmSnapshotClone(E2ETest):
 
             # Write new file to VM
             run_dd_io(vm_obj=res_vm_obj, file_path=file_paths[1], verify=True)
+            res_vm_obj.stop()
