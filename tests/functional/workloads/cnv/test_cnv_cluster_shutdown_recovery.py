@@ -189,3 +189,7 @@ class TestVmShutdownStart(E2ETest):
 
             # Perform some I/O operations on the VMs to ensure it is functioning as expected.
             run_dd_io(vm_obj=vm_obj, file_path=file_paths[1])
+
+        # Stop all the VMs created.
+        for vm_obj in all_vms:
+            vm_obj.stop()
