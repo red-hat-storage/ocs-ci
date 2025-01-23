@@ -1270,7 +1270,7 @@ class BusyboxDiscoveredApps(DRWorkload):
         current_test = (
             os.environ.get("PYTEST_CURRENT_TEST").split("::")[-1].split(" ")[0]
         )
-        if not "test_disable_dr" in current_test:
+        if "test_disable_dr" not in current_test:
             log.info("Deleting DRPC")
             config.switch_acm_ctx()
             run_cmd(

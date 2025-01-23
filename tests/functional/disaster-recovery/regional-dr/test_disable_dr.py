@@ -56,7 +56,7 @@ class TestDisableDR:
         drpc_objs = [drpc_subscription, drpc_appset]
         rdr_workloads = copy.copy(rdr_workload)
 
-        if not constants.CEPHFILESYSTEM in pvc_interface:
+        if constants.CEPHFILESYSTEM not in pvc_interface:
             logger.info("Discovered apps")
             rdr_workload_discovered_apps = discovered_apps_dr_workload()[0]
             rdr_workloads.append(rdr_workload_discovered_apps)
