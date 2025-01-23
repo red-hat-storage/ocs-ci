@@ -746,22 +746,23 @@ class Vault(KMS):
             ]
             logger.info(f"Setting vault_kube_auth_role = {self.vault_kube_auth_role}")
 
-    def get_vault_policy(self):
+    def set_vault_policy(self):
         """
-        Get the policy name based on token from vault
+        Set the policy name matching the cluster name or one provided in config
 
         """
+        namespace_arg = ""
+        if self.vault_namespace:
+            namespace_arg = f"-namespace='{self.vault_namespace}'"
         self.vault_policy_name = config.ENV_DATA.get("VAULT_POLICY", None)
         if not self.vault_policy_name:
-            if config.ENV_DATA.get("VAULT_AUTH_METHOD") == constants.VAULT_TOKEN_AUTH:
-                cmd = f"vault token lookup {self.vault_path_token}"
-            else:
-                cmd = f"vault read auth/{self.vault_kube_auth_path}/role/{self.vault_kube_auth_role}"
-            out = subprocess.check_output(shlex.split(cmd))
-            json_out = json.loads(out)
-            logger.info(json_out)
-            for policy in json_out["data"]["policies"]:
-                if self.cluster_id in policy:
+            policies = json.loads(
+                run_cmd(f"vault policy list {namespace_arg} --format=json")
+            )
+            logger.info(policies)
+            cluster_name = get_cluster_name(config.ENV_DATA["cluster_path"])
+            for policy in policies:
+                if self.cluster_id in policy or cluster_name in policy:
                     self.vault_policy_name = policy
                     logger.info(f"setting vault_policy_name = {self.vault_policy_name}")
 
@@ -881,20 +882,35 @@ class Vault(KMS):
             # from token get policy
             if not self.cluster_id:
                 self.cluster_id = get_running_cluster_id()
-            self.get_vault_policy()
+            self.set_vault_policy()
         except (CommandFailed, IndexError):
             logger.error(
-                "Error occured during kms resource info gathering,"
+                "Error occurred during kms resource info gathering,"
                 "skipping vault cleanup"
             )
             return
 
         # Delete the policy and backend path from vault
         # we need root token of vault in the env
-        self.remove_vault_backend_path()
-        self.remove_vault_policy()
+        cleanup_errors = []
+        try:
+            self.remove_vault_backend_path(vault_namespace=self.vault_namespace)
+        except Exception as ex:
+            logger.error(ex)
+            cleanup_errors.append(ex)
+        try:
+            self.remove_vault_policy(vault_namespace=self.vault_namespace)
+        except Exception as ex:
+            logger.error(ex)
+            cleanup_errors.append(ex)
         if self.vault_namespace:
-            self.remove_vault_namespace()
+            try:
+                self.remove_vault_namespace()
+            except Exception as ex:
+                logger.error(ex)
+                cleanup_errors.append(ex)
+        if cleanup_errors:
+            raise cleanup_errors[0]
 
     def post_deploy_verification(self):
         """
