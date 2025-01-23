@@ -7692,6 +7692,15 @@ def add_env_vars_to_noobaa_core_class(request, mcg_obj_session):
     return add_env_vars_to_noobaa_core_fixture(request, mcg_obj_session)
 
 
+@pytest.fixture(scope="function")
+def add_env_vars_to_noobaa_core(request, mcg_obj_session):
+    """
+    Function-scoped fixture for adding env vars to the noobaa-core sts
+
+    """
+    return add_env_vars_to_noobaa_core_fixture(request, mcg_obj_session)
+
+
 def add_env_vars_to_noobaa_core_fixture(request, mcg_obj_session):
     """
     Add env vars to the noobaa-core sts
