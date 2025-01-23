@@ -29,6 +29,7 @@ from ocs_ci.framework.pytest_customization.marks import (
     ignore_leftover_label,
     upgrade_marks,
     ignore_resource_not_found_error_label,
+    skipif_ibm_cloud_managed,
 )
 from ocs_ci.helpers.proxy import update_container_with_proxy_env
 from ocs_ci.ocs import constants, defaults, fio_artefacts, node, ocp, platform_nodes
@@ -4920,11 +4921,13 @@ def es(request):
     return es
 
 
+@skipif_ibm_cloud_managed
 @pytest.fixture(scope="session")
 def setup_ui_session(request):
     return setup_ui_fixture(request)
 
 
+@skipif_ibm_cloud_managed
 @pytest.fixture(scope="class")
 def setup_ui_class(request):
     return setup_ui_fixture(request)
