@@ -1267,16 +1267,17 @@ class BusyboxDiscoveredApps(DRWorkload):
         Delete Discovered Apps
 
         """
-
-        log.info("Deleting DRPC")
-        config.switch_acm_ctx()
-        run_cmd(
-            f"oc delete drpc -n {constants.DR_OPS_NAMESAPCE} {self.discovered_apps_placement_name}"
-        )
-        log.info("Deleting Placement")
-        run_cmd(
-            f"oc delete placement -n {constants.DR_OPS_NAMESAPCE} {self.discovered_apps_placement_name}-placement-1"
-        )
+        current_test = os.environ.get('PYTEST_CURRENT_TEST').split('::')[-1].split(' ')[0]
+        if not "test_disable_dr" in current_test:
+            log.info("Deleting DRPC")
+            config.switch_acm_ctx()
+            run_cmd(
+                f"oc delete drpc -n {constants.DR_OPS_NAMESAPCE} {self.discovered_apps_placement_name}"
+            )
+            log.info("Deleting Placement")
+            run_cmd(
+                f"oc delete placement -n {constants.DR_OPS_NAMESAPCE} {self.discovered_apps_placement_name}-placement-1"
+            )
 
         for cluster in get_non_acm_cluster_config():
             config.switch_ctx(cluster.MULTICLUSTER["multicluster_index"])

@@ -1,5 +1,6 @@
 import logging
 import pytest
+import copy
 from time import sleep
 
 from ocs_ci.framework import config
@@ -53,17 +54,18 @@ class TestDisableDR:
         )
 
         drpc_objs = [drpc_subscription, drpc_appset]
+        rdr_workloads = copy.copy(rdr_workload)
 
         if not constants.CEPHFILESYSTEM in pvc_interface:
             logger.info("Discovered apps")
             rdr_workload_discovered_apps = discovered_apps_dr_workload()[0]
-            rdr_workload.append(rdr_workload_discovered_apps)
+            rdr_workloads.append(rdr_workload_discovered_apps)
             drpc_discovered_apps = DRPC(namespace=constants.DR_OPS_NAMESAPCE)
             drpc_objs.append(drpc_discovered_apps)
             discovered_apps = True
 
         scheduling_interval = dr_helpers.get_scheduling_interval(
-            rdr_workload[0].workload_namespace,
+            rdr_workloads[0].workload_namespace,
         )
         wait_time = 2 * scheduling_interval  # Time in minutes
         logger.info(f"Waiting for {wait_time} minutes to run IOs")
@@ -76,7 +78,7 @@ class TestDisableDR:
         logger.info("Verified the lastGroupSyncTime before disabling the DR")
 
         primary_cluster_name = dr_helpers.get_current_primary_cluster_name(
-            rdr_workload[0].workload_namespace,
+            rdr_workloads[0].workload_namespace,
         )
 
         # Disable DR
@@ -86,7 +88,7 @@ class TestDisableDR:
         config.switch_to_cluster_by_name(primary_cluster_name)
 
         # Verify replication resource deletion on primary cluster
-        for workload in rdr_workload:
+        for workload in rdr_workloads:
             logger.info(
                 f"Validating replication resource deletion in namespace {workload.workload_namespace}..."
             )
