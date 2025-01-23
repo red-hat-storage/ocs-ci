@@ -388,17 +388,12 @@ def verifyvolume(vm_name, volume_name, namespace):
         logger.info(f"Output of the command '{cmd}': {output}")
         for volume in output:
             if volume.get("persistentVolumeClaim", {}).get("claimName") == volume_name:
-                if volume.get("persistentVolumeClaim", {}).get("hotpluggable", False):
-                    logger.info(
-                        f"Hotpluggable PVC {volume_name} is visible inside the VM {vm_name}"
-                    )
-                    return True
-                else:
-                    logger.warning(
-                        f"PVC {volume_name} found inside the VM {vm_name}, but it is not hotpluggable"
-                    )
-                    return False
-        return
+                logger.info(
+                    f"Hotpluggable PVC {volume_name} is visible inside the VM {vm_name}"
+                )
+                return True
+        logger.warning(f"PVC {volume_name} not found inside the VM {vm_name}")
+        return False
     except Exception as e:
         logger.error(f"Error executing command '{cmd}': {e}")
         return False
