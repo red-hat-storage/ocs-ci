@@ -721,7 +721,7 @@ class Vault(KMS):
             type: Opaque
 
         """
-        if not self.vault_path_token:
+        if not Vault._vault_path_token:
             vault_token = ocp.OCP(
                 kind="Secret",
                 resource_name=constants.VAULT_KMS_TOKEN_RESOURCE,
