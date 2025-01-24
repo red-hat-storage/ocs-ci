@@ -3830,10 +3830,10 @@ def get_age_of_cluster_in_days():
 
 def get_active_mds_count_cephfilesystem():
     """
-    Get the active mds count from cephfilesystem yaml.
+    Get the active mds pod count from cephfilesystem yaml.
 
     Returns:
-         int: active_mds_count
+         mds_active_count (int): Active mds pod count.
 
     """
     cephfs = ocp.OCP(
@@ -3848,7 +3848,7 @@ def get_active_mds_count_cephfilesystem():
 def adjust_active_mds_count_storagecluster(target_count):
     """
     Adjust the activeMetadataServers count for the Storage cluster to the target_count.
-    The function will increase or decrease the count to match the target value.
+    The function increases or decreases the count to match the target value sequentially.
 
     Args:
         target_count (int): The desired count for activeMetadataServers.
@@ -3885,6 +3885,7 @@ def adjust_active_mds_count_storagecluster(target_count):
 
     # Verify the final count
     current_count_cephfilesystem = get_active_mds_count_cephfilesystem()
+    logger.info(f"Mds active count is {current_count_cephfilesystem}")
     if target_count != current_count_cephfilesystem:
         raise ActiveMdsValueNotMatch(
             f"Failed to change the active count to {target_count}"
@@ -3896,7 +3897,7 @@ def get_active_mds_pods():
     Gets active mds pods objs.
 
     Returns:
-        dict: mds pod objs
+        active_mds_pods (dict): Active mds pod objs.
 
     """
     ct_pod = pod.get_ceph_tools_pod()
@@ -3915,7 +3916,7 @@ def get_active_mds_pods():
     return active_mds_pods
 
 
-def get_active_and_standby_pod_count():
+def get_active_and_standby_mds_count():
     """
     Get the active and standby mds pod count from ceph command.
 
