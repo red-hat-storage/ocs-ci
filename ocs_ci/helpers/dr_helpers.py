@@ -1216,7 +1216,7 @@ def get_fence_state(drcluster_name, switch_ctx=None):
     return state
 
 
-@retry(UnexpectedBehaviour, tries=40, delay=5, backoff=5)
+@retry(UnexpectedBehaviour, tries=25, delay=5, backoff=5)
 def verify_fence_state(drcluster_name, state, switch_ctx=None):
     """
     Verify the specified drcluster is in expected state
@@ -1288,7 +1288,7 @@ def restore_backup():
     config.switch_ctx(restore_index)
 
 
-@retry(UnexpectedBehaviour, tries=40, delay=5, backoff=5)
+@retry(UnexpectedBehaviour, tries=25, delay=5, backoff=5)
 def verify_restore_is_completed():
     """
     Function to verify restore is completed or finished
@@ -1309,7 +1309,7 @@ def verify_restore_is_completed():
     config.switch_ctx(restore_index)
 
 
-@retry(UnexpectedBehaviour, tries=60, delay=5, backoff=2)
+@retry(UnexpectedBehaviour, tries=25, delay=5, backoff=2)
 def verify_drpolicy_cli(switch_ctx=None):
     """
     Function to verify DRPolicy status
@@ -1336,7 +1336,7 @@ def verify_drpolicy_cli(switch_ctx=None):
         )
 
 
-@retry(UnexpectedBehaviour, tries=40, delay=5, backoff=5)
+@retry(UnexpectedBehaviour, tries=25, delay=5, backoff=5)
 def verify_backup_is_taken():
     """
     Function to verify backup is taken

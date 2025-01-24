@@ -84,7 +84,7 @@ class TestZoneShutdownsAndCrashes:
                         AssertionError,
                         ResourceWrongStatusException,
                     ),
-                    tries=30,
+                    tries=28,
                     delay=15,
                 )(wait_for_nodes_status(timeout=1800))
                 log.info(
@@ -260,7 +260,7 @@ class TestZoneShutdownsAndCrashes:
                     AssertionError,
                     ResourceWrongStatusException,
                 ),
-                tries=30,
+                tries=28,
                 delay=15,
             )(wait_for_nodes_status(timeout=1800))
             log.info(f"Nodes of zone {zone} are started successfully")
@@ -489,7 +489,7 @@ class TestZoneShutdownsAndCrashes:
                     AssertionError,
                     ResourceWrongStatusException,
                 ),
-                tries=30,
+                tries=28,
                 delay=15,
             )(wait_for_nodes_status(timeout=1800))
 

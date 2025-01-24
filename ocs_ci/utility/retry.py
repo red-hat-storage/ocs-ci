@@ -28,7 +28,7 @@ def validate_retry_params(tries, delay, backoff, max_timeout, max_delay):
             raise ValueError(
                 f"The retry configuration exceeds the maximum allowed timeout ({max_timeout} seconds) "
                 f"with the given parameters: tries={tries}, delay={delay}, backoff={backoff}, max_delay={max_delay}."
-                f"You can reach up to: {total_time} seconds! Please fix it or adjust parameters of retry."
+                f"You reached to: {max_timeout} seconds! Please fix it or adjust parameters of retry."
             )
         current_delay = min(current_delay * backoff, max_delay)
 
@@ -50,7 +50,8 @@ def retry(
         exception_to_check: The exception to check. May be a tuple of exceptions to check.
         tries: Number of times to try (not retry) before giving up.
         delay: Initial delay between retries in seconds.
-        backoff: Backoff multiplier e.g., value of 2 will double the delay each retry.
+        backoff: Backoff multiplier e.g., value of 2 will double the delay each retry. If the delay
+            is greater than max_delay after multiplier, than max_delay is used as delay
         text_in_exception: Retry only when text_in_exception is in the text of exception.
         func: Function for garbage collector.
         max_timeout: Maximum total time for retries in seconds (default: 4 hours).
@@ -127,7 +128,8 @@ def retry_until_exception(
         exception_to_check: the exception to check. may be a tuple of exceptions to check
         tries: number of times to try (not retry) before giving up
         delay: initial delay between retries in seconds
-        backoff: backoff multiplier e.g. value of 2 will double the delay each retry
+        backoff: Backoff multiplier e.g., value of 2 will double the delay each retry. If the delay
+            is greater than max_delay after multiplier, than max_delay is used as delay
         text_in_exception: Retry only when text_in_exception is in the text of exception
         func: function for garbage collector
     """
