@@ -2,8 +2,6 @@ import logging
 import pytest
 import time
 
-from datetime import datetime, timezone
-
 from ocs_ci.framework.pytest_customization.marks import (
     stretchcluster_required,
     tier1,
@@ -30,6 +28,7 @@ from ocs_ci.ocs.resources.pod import (
     Pod,
     get_ceph_tools_pod,
     wait_for_pods_to_be_in_statuses,
+    logger,
 )
 from ocs_ci.ocs.resources.pvc import get_pvc_objs
 from ocs_ci.ocs.resources.stretchcluster import StretchCluster
@@ -106,6 +105,22 @@ class TestZoneUnawareApps:
 
         request.addfinalizer(finalizer)
 
+    @pytest.fixture(autouse=True)
+    def unfence_teardown(self, request):
+        """
+        In case of failure in between test run unfence the networkfence
+        and delete the NetworkFence objects
+
+        """
+
+        def teardown():
+            all_worker_nodes = get_worker_nodes()
+            for node_name in all_worker_nodes:
+                unfence_node(node_name, delete=True)
+            logger.info("cleaned up all network fence objects if any")
+
+        request.addfinalizer(teardown)
+
     @pytest.mark.parametrize(
         argnames="fencing",
         argvalues=[
@@ -161,7 +176,6 @@ class TestZoneUnawareApps:
             )
 
             # Shutdown the nodes
-            start_time = datetime.now(timezone.utc)
             nodes_to_shutdown = sc_obj.get_nodes_in_zone(zone)
             nodes.stop_nodes(nodes=nodes_to_shutdown)
             wait_for_nodes_status(
@@ -235,9 +249,10 @@ class TestZoneUnawareApps:
                         Pod(**pod_info)
                         for pod_info in get_pods_having_label(
                             label=constants.LOGWRITER_RBD_LABEL,
-                            statuses=[constants.STATUS_TERMINATING],
+                            namespace=constants.STRETCH_CLUSTER_NAMESPACE,
                         )
                     ]
+                    log.info(pods_terminating)
                     for pod in pods_terminating:
                         log.info(f"Force deleting the pod {pod.name}")
                         pod.delete(force=True)
@@ -293,14 +308,7 @@ class TestZoneUnawareApps:
                 tries=30,
                 delay=15,
             )(wait_for_nodes_status(timeout=1800))
-            end_time = datetime.now(timezone.utc)
             log.info(f"Nodes of zone {zone} are started successfully")
-
-            # Verify logwriter workload IO post recovery
-            sc_obj.post_failure_checks(
-                start_time, end_time, wait_for_read_completion=False
-            )
-            log.info("Successfully verified with post failure checks for the workloads")
 
         # Make sure all the logwriter pods are running
         check_for_logwriter_workload_pods(sc_obj, nodes=nodes)

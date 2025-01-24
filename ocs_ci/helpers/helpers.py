@@ -5818,24 +5818,33 @@ def create_network_fence(node_name, cidr):
     return network_fence_obj
 
 
-def unfence_node(node_name):
+def unfence_node(node_name, delete=False):
     """
     Un-fence node
 
     Args:
         node_name (str): Name of the node
+        delete (bool): If True, delete the network fence object
 
     """
 
     network_fence_obj = OCP(
         kind=constants.NETWORK_FENCE, namespace=config.ENV_DATA["cluster_namespace"]
     )
-    network_fence_obj.patch(
-        resource_name=node_name,
-        params='{"spec":{"fenceState":"Unfenced"}}',
-        format_type="merge",
-    )
-    assert (
-        network_fence_obj.get(resource_name=node_name)["spec"]["fenceState"] != "Fenced"
-    ), f"{node_name} doesnt seem to be unfenced"
-    logger.info(f"Unfenced node {node_name} successfully!")
+    if network_fence_obj.get(resource_name=node_name, dont_raise=True):
+        network_fence_obj.patch(
+            resource_name=node_name,
+            params='{"spec":{"fenceState":"Unfenced"}}',
+            format_type="merge",
+        )
+        assert (
+            network_fence_obj.get(resource_name=node_name)["spec"]["fenceState"]
+            != "Fenced"
+        ), f"{node_name} doesnt seem to be unfenced"
+        logger.info(f"Unfenced node {node_name} successfully!")
+
+        if delete:
+            network_fence_obj.delete()
+            logger.info(f"Deleted network fence object for node {node_name}")
+    else:
+        logger.info(f"No networkfence found for node {node_name}")
