@@ -19,6 +19,7 @@ from ocs_ci.framework.testlib import (
     tier1,
     tier2,
     performance,
+    jira,
 )
 from ocs_ci.utility.utils import exec_nb_db_query
 from ocs_ci.ocs import constants
@@ -122,10 +123,24 @@ class TestBucketIO(MCGTest):
                 ],
                 marks=[tier1, on_prem_platform_required],
             ),
+            pytest.param(
+                *[
+                    "CLI",
+                    {
+                        "interface": "CLI",
+                        "namespace_policy_dict": {
+                            "type": "Single",
+                            "namespacestore_dict": {"rgw": [(1, None)]},
+                        },
+                    },
+                ],
+                marks=[tier1, on_prem_platform_required],
+            ),
         ],
         ids=[
             "RGW-OC-1",
             "RGW-CLI-1",
+            "RGW-CLI-NSS-1",
         ],
     )
     @flaky
