@@ -19,7 +19,6 @@ from ocs_ci.framework.testlib import (
     tier1,
     tier2,
     performance,
-    jira,
 )
 from ocs_ci.utility.utils import exec_nb_db_query
 from ocs_ci.ocs import constants
