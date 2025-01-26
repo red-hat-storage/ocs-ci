@@ -1018,18 +1018,22 @@ class MCG:
 
         from ocs_ci.ocs.resources.pod import wait_for_pods_by_label_count
 
-        endpoint_pods = [
-            Pod(**pod_data)
-            for pod_data in get_pods_having_label(
-                constants.NOOBAA_ENDPOINT_POD_LABEL, self.namespace
+        nb_ep_dep_obj = OCP(
+            kind="deployment",
+            namespace=self.namespace,
+            resource_name=constants.NOOBAA_ENDPOINT_DEPLOYMENT,
+        )
+        nb_ep_dep_obj.exec_oc_cmd(
+            (
+                "oc rollout restart"
+                f" deployment/{constants.NOOBAA_ENDPOINT_DEPLOYMENT}"
+                " --wait=true"
             )
-        ]
-        for pod in endpoint_pods:
-            pod.delete(wait=True)
+        )
 
         wait_for_pods_by_label_count(
             label=constants.NOOBAA_ENDPOINT_POD_LABEL,
-            exptected_count=len(endpoint_pods),
+            exptected_count=len(constants.MCG_TESTS_MIN_NB_ENDPOINT_COUNT),
         )
 
         endpoint_pods = [
