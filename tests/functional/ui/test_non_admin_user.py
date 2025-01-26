@@ -87,8 +87,7 @@ class TestUnprivilegedUserODFAccess(E2ETest):
             f"user created: {user[0]} password: {user[1]}, wait additional 10 sec to get user active"
         )
         # increasing the wait time from 10 to 30 sec to get user active [ibm cloud 4.18]
-        logger.info("wait additional 2 min to get user active")
-        time.sleep(60 * 2)
+        time.sleep(30)
 
         # login with the user created
         login_factory(user[0], user[1])
