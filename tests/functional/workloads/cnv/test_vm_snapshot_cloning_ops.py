@@ -174,7 +174,7 @@ class TestVmSnapshotClone(E2ETest):
 
         vm_list = vm_objs_def + vm_objs_aggr
 
-        for index, vm_obj in enumerate(vm_list):
+        for vm_obj in vm_list:
             source_csum = run_dd_io(vm_obj=vm_obj, file_path=file_paths[0], verify=True)
             vm_obj.stop()
             clone_obj = clone_vm_workload(
@@ -221,3 +221,5 @@ class TestVmSnapshotClone(E2ETest):
                 source_csum == restore_csum
             ), f"Failed: MD5 comparison between source {vm_obj.name} and restored {res_vm_obj.name} VMs"
             run_dd_io(vm_obj=res_vm_obj, file_path=file_paths[1])
+
+            res_vm_obj.stop()
