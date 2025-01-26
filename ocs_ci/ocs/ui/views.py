@@ -1516,7 +1516,8 @@ validation = {
         'button[data-test-id="perspective-switcher-toggle"]',
         By.CSS_SELECTOR,
     ),
-    # This is a complex element. Header of the dropdown element very similar to the dropdown item itself.
+    # Starting from 4.18 webelement become hard to locate.
+    # Header of the dropdown element by attributes is very similar to the dropdown item itself.
     "select_administrator": (
         "//h2[@data-test-id='perspective-switcher-menu-option' and normalize-space()='Administrator']/ancestor"
         "::button[@role='option']",
@@ -1792,6 +1793,11 @@ validation_4_17 = {
     ),
     "locate_estimated_days_along_with_value": (
         "//div[@class='pf-m-flex-1'][2]",
+        By.XPATH,
+    ),
+    "select_administrator": (
+        "//a[@class='pf-c-dropdown__menu-item']//h2[@class='pf-c-title pf-m-md'][normalize-space()='Administrator'] | "
+        "//a[@class='pf-m-icon pf-v5-c-dropdown__menu-item']//h2[normalize-space()='Administrator']",
         By.XPATH,
     ),
 }
