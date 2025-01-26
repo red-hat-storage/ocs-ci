@@ -5910,7 +5910,7 @@ def nsfs_bucket_factory_fixture(
         # and for the obsolete noobaa-endpoint pods to be terminated
         wait_for_pods_by_label_count(
             label=constants.NOOBAA_ENDPOINT_POD_LABEL,
-            exptected_count=original_endpoint_pods_count,
+            expected_count=original_endpoint_pods_count,
         )
 
         # Apply the necessary permissions on the filesystem
