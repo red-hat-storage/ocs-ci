@@ -1003,7 +1003,7 @@ class MCG:
 
         self.core_pod.delete(wait=True)
         wait_for_pods_by_label_count(
-            label=constants.NOOBAA_CORE_POD_LABEL, exptected_count=1
+            label=constants.NOOBAA_CORE_POD_LABEL, expected_count=1
         )
         self.core_pod = Pod(
             **get_pods_having_label(constants.NOOBAA_CORE_POD_LABEL, self.namespace)[0]
@@ -1024,16 +1024,20 @@ class MCG:
             resource_name=constants.NOOBAA_ENDPOINT_DEPLOYMENT,
         )
         nb_ep_dep_obj.exec_oc_cmd(
-            (
-                "oc rollout restart"
-                f" deployment/{constants.NOOBAA_ENDPOINT_DEPLOYMENT}"
-                " --wait=true"
-            )
+            f"rollout restart deployment/{constants.NOOBAA_ENDPOINT_DEPLOYMENT}"
         )
-
+        # Wait for the rollout to complete
+        nb_ep_dep_obj.exec_oc_cmd(
+            (
+                f"rollout status deployment/{constants.NOOBAA_ENDPOINT_DEPLOYMENT}"
+                " --timeout=120s"
+            ),
+            out_yaml_format=False,
+        )
+        expected_pod_count = nb_ep_dep_obj.get().get("spec").get("replicas")
         wait_for_pods_by_label_count(
             label=constants.NOOBAA_ENDPOINT_POD_LABEL,
-            exptected_count=len(constants.MCG_TESTS_MIN_NB_ENDPOINT_COUNT),
+            expected_count=expected_pod_count,
         )
 
         endpoint_pods = [
