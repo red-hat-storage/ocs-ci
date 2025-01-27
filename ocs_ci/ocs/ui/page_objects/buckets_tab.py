@@ -27,13 +27,15 @@ class BucketsTab(ObjectStorage, ConfirmDialog):
     # Methods can directly access locators via self.bucket_tab, self.generic_locators etc.
     # No need to explicitly import or assign them
 
-    def generate_folder_with_file(self):
-        # TODO: move to utils
+    def generate_folder_with_file(self) -> str:
         """
-        Generates a random folder with a random text file inside it in /tmp folder
+        Generates a random folder with random text file inside it in /tmp folder.
 
         Returns:
-            str: Full path to the generated folder
+            str: Full path to the generated folder.
+
+        Raises:
+            OSError: If folder creation or file write fails.
         """
         folder_name = "".join(
             random.choices(string.ascii_lowercase + string.digits, k=8)
@@ -56,8 +58,19 @@ class BucketsTab(ObjectStorage, ConfirmDialog):
 
         return folder_path
 
-    def create_bucket_ui(self, method):
+    def create_bucket_ui(self, method: str) -> ObjectStorage:
+        """
+        Creates a bucket via UI using specified method.
 
+        Args:
+            method (str): Creation method, either 'obc' or 's3'.
+
+        Returns:
+            ObjectStorage: Instance of ObjectStorage class.
+
+        Raises:
+            ValueError: If method is not 'obc' or 's3'.
+        """
         self.do_click(self.bucket_tab["create_bucket_button"])
         if method == "obc":
             return self.create_bucket_via_obc()
@@ -66,10 +79,15 @@ class BucketsTab(ObjectStorage, ConfirmDialog):
         else:
             raise ValueError(f"Invalid method: {method}")
 
-    def create_bucket_via_obc(self):
+    def create_bucket_via_obc(self) -> ObjectStorage:
         """
-        Create bucket via OBC with improved dropdown handling
+        Creates bucket via OBC with improved dropdown handling.
 
+        Returns:
+            ObjectStorage: Instance of ObjectStorage class.
+
+        Raises:
+            NoSuchElementException: If UI elements are not found.
         """
         name_generator = f"test-bucket-obc-{uuid.uuid4()}"
 
@@ -102,7 +120,16 @@ class BucketsTab(ObjectStorage, ConfirmDialog):
         logger.info("Waiting for OBC to be created")
         return ObjectStorage()
 
-    def create_bucket_via_s3(self):
+    def create_bucket_via_s3(self) -> ObjectStorage:
+        """
+        Creates bucket via S3 method.
+
+        Returns:
+            ObjectStorage: Instance of ObjectStorage class.
+
+        Raises:
+            NoSuchElementException: If UI elements are not found.
+        """
         name_generator = f"test-bucket-s3-{uuid.uuid4()}"
 
         self.do_click(self.bucket_tab["create_bucket_button_s3"])
@@ -110,7 +137,22 @@ class BucketsTab(ObjectStorage, ConfirmDialog):
         self.do_click(self.bucket_tab["submit_button_obc"])
         return ObjectStorage()
 
-    def create_folder_in_bucket(self, bucket_name=None, folder_name=None):
+    def create_folder_in_bucket(
+        self, bucket_name: str = None, folder_name: str = None
+    ) -> str:
+        """
+        Creates folder in specified bucket and uploads a file to it.
+
+        Args:
+            bucket_name (str, optional): Name of the bucket. If None, uses first bucket.
+            folder_name (str, optional): Name of the folder. If None, generates random name.
+
+        Returns:
+            str: Name of the created folder.
+
+        Raises:
+            NoSuchElementException: If UI elements are not found.
+        """
         # Note That object must be uploaded to the folder before navigating out of the bucket,
         # else the folder will be vanished
 
@@ -162,9 +204,6 @@ class BucketsTab(ObjectStorage, ConfirmDialog):
         except NoSuchElementException as e:
             logger.error(f"Error during file upload: {str(e)}")
             raise
-
-    def check_folder_details(self, folder_name):
-        pass
 
     def delete_bucket_ui(self, delete_via, expect_fail, resource_name):
         """

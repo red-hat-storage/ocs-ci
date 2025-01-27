@@ -420,6 +420,13 @@ class TestObcUserInterface(object):
 @black_squad
 class TestBucketCreate:
     def test_bucket_create(self, setup_ui_class_factory):
+        """
+        Test bucket creation functionality in UI.
+
+        Creates both OBC and S3 buckets, then creates a folder in one of them.
+        Verifies basic bucket and folder creation workflows through the UI.
+
+        """
         setup_ui_class_factory()
         bucket_ui = BucketsTab()
         bucket_ui.nav_object_storage_page()
