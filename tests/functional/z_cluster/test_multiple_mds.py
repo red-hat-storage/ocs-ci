@@ -107,7 +107,7 @@ class TestMultipleMds:
         """
         original_active_count_cephfilesystem = get_active_mds_count_cephfilesystem()
 
-        # Scale up active mds pods from 1 to 2 and then 2 to 3
+        # Scale up active mds pods from 1 to 3 sequentially.
         new_active_mds_count = original_active_count_cephfilesystem + 2
         adjust_active_mds_count_storagecluster(new_active_mds_count)
 
@@ -167,7 +167,8 @@ class TestMultipleMds:
         rand = random.randint(0, 1)
         ct_pod = pod.get_ceph_tools_pod()
         ct_pod.exec_ceph_cmd(f"ceph mds fail {rand}")
+        log.info("Wait for the standby MDS pod to transition into an active MDS pod")
         time.sleep(60)
 
-        # Verify active and standby-replay mds counts.
+        # Verify active and standby-replay mds counts is still same.
         self.verify_mds_count(new_active_mds_count)

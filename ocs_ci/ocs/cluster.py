@@ -3847,7 +3847,7 @@ def get_active_mds_count_cephfilesystem():
 
 def adjust_active_mds_count_storagecluster(target_count):
     """
-    Adjust the activeMetadataServers count for the Storage cluster to the target_count.
+    Adjust the activeMetadataServers count in the Storage cluster to the target_count.
     The function increases or decreases the count to match the target value sequentially.
 
     Args:
@@ -3880,15 +3880,17 @@ def adjust_active_mds_count_storagecluster(target_count):
                 "cephFilesystems"
             ]["activeMetadataServers"]
 
-    logger.info("Sleeping 1 minute")
-    time.sleep(60)
-
-    # Verify the final count
-    current_count_cephfilesystem = get_active_mds_count_cephfilesystem()
-    logger.info(f"Mds active count is {current_count_cephfilesystem}")
-    if target_count != current_count_cephfilesystem:
+    # Wait until the active mds pod count from cephfilesystem matches the target count
+    try:
+        TimeoutSampler(
+            timeout=300,
+            sleep=10,
+            func=get_active_mds_count_cephfilesystem,
+        ).wait_for_func_value(target_count)
+        logger.info(f"Target activeMetadataServers count {target_count} reached.")
+    except TimeoutExpiredError:
         raise ActiveMdsValueNotMatch(
-            f"Failed to change the active count to {target_count}"
+            f"Failed to change the active count to {target_count} within timeout."
         )
 
 
@@ -3897,7 +3899,7 @@ def get_active_mds_pods():
     Gets active mds pods objs.
 
     Returns:
-        active_mds_pods (dict): Active mds pod objs.
+        active_mds_pods (list): Active mds pod objs.
 
     """
     ct_pod = pod.get_ceph_tools_pod()
@@ -3921,7 +3923,10 @@ def get_active_and_standby_mds_count():
     Get the active and standby mds pod count from ceph command.
 
     Returns:
-         dict: active and standby mds pod count
+     dict: A dictionary containing the counts of active and standby-replay MDS pods.
+           The dictionary has the following keys:
+               - active_pod_count (int): The number of active MDS pods.
+               - standby_replay_count (int): The number of standby-replay MDS pods.
 
     """
     # Verify active and standby-replay mds counts.
