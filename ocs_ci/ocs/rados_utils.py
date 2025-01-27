@@ -480,8 +480,10 @@ def get_pg_log_dups_count_via_cot(osd_deployments, pgid):
         temp_file = tempfile.NamedTemporaryFile(
             mode="w+", prefix=f"pg_log_{pgid}", delete=True
         )
-        osd_pod.copy_from_pod_oc_exec(
-            target_path=temp_file.name, src_path=f"/var/log/ceph/pg_log_{pgid}.txt"
+        osd_pod.copy_file_with_base64(
+            target_path=temp_file.name,
+            src_path=f"/var/log/ceph/pg_log_{pgid}.txt",
+            container="osd",
         )
         res = exec_cmd(
             f"cat {temp_file.name} | jq  '(.pg_log_t.log|length),(.pg_log_t.dups|length)'",
