@@ -456,7 +456,16 @@ class TestMCGReplicationWithVersioningSystemTest:
         noobaa_db_recovery_from_backup,
         aws_log_based_replication_setup,
         test_directory_setup,
+        setup_mcg_bg_features,
+        validate_mcg_bg_features,
     ):
+
+        feature_setup_map = setup_mcg_bg_features(
+            num_of_buckets=5,
+            object_amount=5,
+            is_disruptive=True,
+            skip_any_features=["nsfs", "rgw kafka", "caching"],
+        )
 
         prefix_1 = "site_1"
         prefix_2 = "site_2"
@@ -581,10 +590,10 @@ class TestMCGReplicationWithVersioningSystemTest:
         # parallely.
         with ThreadPoolExecutor(max_workers=1) as executor:
 
-            # Update object uploaded previously from the second bucket and then shutdown the noobaa pod nodes
-            noobaa_pods = get_noobaa_pods(
-                namespace=constants.OPENSHIFT_STORAGE_NAMESPACE
-            )
+            # Update object uploaded previously from the second bucket and
+            # then shutdown the noobaa core and db pod nodes
+            noobaa_pods = [get_noobaa_core_pod()]
+
             nodes_to_shutdown = [get_pod_node(pod_obj) for pod_obj in noobaa_pods]
             logger.info(
                 f"Updating object {object_key} with new version data in bucket {bucket_1.name}"
@@ -677,7 +686,7 @@ class TestMCGReplicationWithVersioningSystemTest:
             test_directory_setup.origin_dir,
             pattern=object_key,
             prefix=prefix_1,
-            num_versions=2,
+            num_versions=4,
         )
         logger.info(
             f"Updated object {object_key} with new version data in bucket {bucket_1.name}"
@@ -707,7 +716,7 @@ class TestMCGReplicationWithVersioningSystemTest:
             test_directory_setup.origin_dir,
             pattern=object_key,
             prefix=prefix_1,
-            num_versions=2,
+            num_versions=4,
         )
         logger.info(
             f"Updated object {object_key} with new version data in bucket {bucket_1.name}"
@@ -720,3 +729,11 @@ class TestMCGReplicationWithVersioningSystemTest:
             f"Replication works from {bucket_1.name} to {bucket_2.name} and"
             f" has all the versions of object {object_key}"
         )
+
+        validate_mcg_bg_features(
+            feature_setup_map,
+            run_in_bg=False,
+            skip_any_features=["nsfs", "rgw kafka", "caching"],
+            object_amount=5,
+        )
+        logger.info("No issues seen with the MCG bg feature validation")
