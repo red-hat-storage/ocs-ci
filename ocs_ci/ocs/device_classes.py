@@ -49,6 +49,7 @@ def create_new_lvs_for_new_deviceclass(
     """
     osd_size = get_storage_size()
     log.info(f"the osd size is {osd_size}")
+    # Limit the old LVS max size so it will not consume the new PVs
     old_lvs_max_size = sum_of_two_storage_sizes(osd_size, "30Gi")
     ocp_lvs_obj = OCP(
         kind=constants.LOCAL_VOLUME_SET,
