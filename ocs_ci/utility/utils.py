@@ -5291,3 +5291,55 @@ def create_config_ini_file(params):
     log.info(f"config.ini file for cluster is located at {config_ini_file.name}")
 
     return config_ini_file.name
+
+
+def generate_folder_with_files(num_files: int = 300) -> str:
+    """
+    Generates a random folder with specified number of random text files inside it in /tmp folder.
+
+    Args:
+        num_files (int): Number of files to generate. Defaults to 300.
+
+    Returns:
+        str: Full path to the generated folder.
+
+    Raises:
+        OSError: If folder creation or file write fails.
+        RuntimeError: If file count validation fails.
+    """
+
+    def _generate_files():
+        for _ in range(num_files):
+            filename = (
+                "".join(random.choices(string.ascii_lowercase + string.digits, k=8))
+                + ".txt"
+            )
+            filepath = os.path.join(folder_path, filename)
+
+            content = "".join(
+                random.choices(string.ascii_letters + string.digits + " \n", k=100)
+            )
+
+            with open(filepath, "w") as f:
+                f.write(content)
+                f.flush()
+                os.fsync(f.fileno())  # Ensure data is written to disk
+
+            yield filepath
+
+    # Create folder
+    folder_name = "".join(random.choices(string.ascii_lowercase + string.digits, k=8))
+    folder_path = os.path.join("/tmp", folder_name)
+    os.makedirs(folder_path, exist_ok=True)
+
+    # Generate files using generator
+    created_files = set(_generate_files())
+
+    # Validate file count
+    actual_files = set(os.path.join(folder_path, f) for f in os.listdir(folder_path))
+    if len(actual_files) != num_files or actual_files != created_files:
+        raise RuntimeError(
+            f"File count validation failed. Expected {num_files}, got {len(actual_files)}"
+        )
+
+    return folder_path
