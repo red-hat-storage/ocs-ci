@@ -2733,6 +2733,7 @@ def upload_random_objects_to_source_and_wait_for_replication(
     file_dir,
     pattern="ObjKey-",
     amount=1,
+    num_versions=1,
     prefix=None,
     timeout=600,
 ):
@@ -2740,19 +2741,32 @@ def upload_random_objects_to_source_and_wait_for_replication(
     Upload randomly generated objects to the source bucket and wait until the
     replication happens
 
+    Args:
+        mcg_obj (MCG): MCG object
+        source_bucket (OBC): OBC object
+        target_bucket (OBC): OBC object
+        mockup_logger (MockupLogger): MockupLogger object
+        file_dir (str): File directory where to generate objects
+        pattern (str): Prefix for object name
+        amount (int): Number of objects
+        num_verions (int): Number of versions of each object
+        prefix (str): Prefix under bucket where objects need to be uploaded
+        timeout (int): Timeout to wait until the replication
+
     """
 
     logger.info(f"Randomly generating {amount} object/s")
-    obj_list = write_random_objects_in_pod(
-        io_pod=mockup_logger.awscli_pod,
-        file_dir=file_dir,
-        amount=amount,
-        pattern=pattern,
-    )
+    for i in range(num_versions):
+        obj_list = write_random_objects_in_pod(
+            io_pod=mockup_logger.awscli_pod,
+            file_dir=file_dir,
+            amount=amount,
+            pattern=pattern,
+        )
 
-    mockup_logger.upload_random_objects_and_log(
-        source_bucket.name, file_dir=file_dir, obj_list=obj_list, prefix=prefix
-    )
+        mockup_logger.upload_random_objects_and_log(
+            source_bucket.name, file_dir=file_dir, obj_list=obj_list, prefix=prefix
+        )
     assert compare_bucket_object_list(
         mcg_obj,
         source_bucket.name,

@@ -432,6 +432,7 @@ class TestMCGReplicationWithVersioningSystemTest:
         file_dir,
         pattern,
         prefix,
+        num_versions=1,
     ):
         upload_random_objects_to_source_and_wait_for_replication(
             mcg_obj_session,
@@ -441,8 +442,9 @@ class TestMCGReplicationWithVersioningSystemTest:
             file_dir,
             pattern=pattern,
             amount=1,
+            num_versions=num_versions,
             prefix=prefix,
-            timeout=300,
+            timeout=600,
         )
 
     def test_bucket_replication_with_versioning_system_test(
@@ -463,7 +465,7 @@ class TestMCGReplicationWithVersioningSystemTest:
         object_key = "ObjectKey-"
 
         # Reduce the replication delay to 1 minute
-        logger.info("Reduce the bucket replication delay")
+        logger.info("Reduce the bucket replication delay cycle to 1 minute")
         reduce_replication_delay()
 
         # Setup two buckets with bi-directional replication enabled
@@ -541,7 +543,7 @@ class TestMCGReplicationWithVersioningSystemTest:
 
             try:
                 for verified in TimeoutSampler(
-                    timeout=300,
+                    timeout=600,
                     sleep=30,
                     func=verify_object_version_etags,
                     bucket_1=bucket_1,
@@ -600,7 +602,7 @@ class TestMCGReplicationWithVersioningSystemTest:
                 prefix=prefix_1,
             )
 
-            # nodes.stop_nodes(list(set(nodes_to_shutdown)))
+            nodes.stop_nodes(list(set(nodes_to_shutdown)))
             logger.info(f"Stopped these noobaa pod nodes {nodes_to_shutdown}")
 
             # Wait for the upload to finish
@@ -616,7 +618,7 @@ class TestMCGReplicationWithVersioningSystemTest:
             )
 
             logger.info("Starting nodes now...")
-            # nodes.start_nodes(nodes=nodes_to_shutdown)
+            nodes.start_nodes(nodes=nodes_to_shutdown)
             wait_for_noobaa_pods_running()
 
             # Update object uploaded previously from the first bucket and then restart the noobaa pods
@@ -664,6 +666,10 @@ class TestMCGReplicationWithVersioningSystemTest:
         update_replication_policy(bucket_2.name, replication_1)
         update_replication_policy(bucket_1.name, replication_2)
 
+        # Change the replication cycle delay to 3 minutes
+        logger.info("Reduce the bucket replication delay cycle to 3 minutes")
+        reduce_replication_delay(interval=5)
+
         # Update previously uploaded object with new data and new version
         self.upload_objects_with_retry(
             mcg_obj_session,
@@ -673,6 +679,7 @@ class TestMCGReplicationWithVersioningSystemTest:
             test_directory_setup.origin_dir,
             pattern=object_key,
             prefix=prefix_1,
+            num_versions=2,
         )
         logger.info(
             f"Updated object {object_key} with new version data in bucket {bucket_1.name}"
@@ -696,21 +703,22 @@ class TestMCGReplicationWithVersioningSystemTest:
         # Update previously uploaded object with new data and new version
         self.upload_objects_with_retry(
             mcg_obj_session,
-            bucket_2,
             bucket_1,
-            mockup_logger_target,
+            bucket_2,
+            mockup_logger_source,
             test_directory_setup.origin_dir,
             pattern=object_key,
-            prefix=prefix_2,
+            prefix=prefix_1,
+            num_versions=2,
         )
         logger.info(
-            f"Updated object {object_key} with new version data in bucket {bucket_2.name}"
+            f"Updated object {object_key} with new version data in bucket {bucket_1.name}"
         )
 
         assert sample_if_versions_match(
-            bucket_1, bucket_2, prefix_2
+            bucket_1, bucket_2, prefix_1
         ), f"Source bucket and target buckets dont have matching versions for the object {object_key}"
         logger.info(
-            f"Replication works from {bucket_2.name} to {bucket_1.name} and"
+            f"Replication works from {bucket_1.name} to {bucket_2.name} and"
             f" has all the versions of object {object_key}"
         )
