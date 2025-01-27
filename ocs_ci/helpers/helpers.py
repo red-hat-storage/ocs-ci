@@ -574,31 +574,51 @@ def default_ceph_block_pool():
 
 
 def create_ceph_block_pool(
-    pool_name=None, replica=3, compression=None, failure_domain=None, verify=True
+    pool_name=None,
+    replica=3,
+    compression=None,
+    failure_domain=None,
+    verify=True,
+    namespace=None,
+    device_class=None,
+    yaml_file=None,
 ):
     """
-    Create a Ceph block pool
-    ** This method should not be used anymore **
-    ** This method is for internal testing only **
+    Create a Ceph block pool with optional parameters.
 
     Args:
-        pool_name (str): The pool name to create
-        failure_domain (str): Failure domain name
-        verify (bool): True to verify the pool exists after creation,
-                       False otherwise
-        replica (int): The replica size for a pool
-        compression (str): Compression type for a pool
+        pool_name (str): The pool name to create (optional).
+        replica (int): The replica size for the pool.
+        compression (str): Compression type for the pool (optional).
+        failure_domain (str): Failure domain name (optional).
+        verify (bool): True to verify the pool exists after creation, False otherwise.
+        namespace (str): The pool namespace (optional).
+        device_class (str): The device class name (optional).
+        yaml_file (str): The name of the YAML file for the Ceph block pool (optional).
 
     Returns:
-        OCS: An OCS instance for the Ceph block pool
+        OCS: The OCS instance for the Ceph block pool.
+
     """
-    cbp_data = templating.load_yaml(constants.CEPHBLOCKPOOL_YAML)
+    # Load the YAML template
+    if yaml_file:
+        cbp_data = templating.load_yaml(yaml_file)
+    elif device_class:
+        # Use the appropriate yaml for the device class CephBlockPool
+        cbp_data = templating.load_yaml(constants.DEVICECLASS_CEPHBLOCKPOOL_YAML)
+        cbp_data["spec"]["deviceClass"] = device_class
+    else:
+        # Use the appropriate yaml for the CephBlockPool
+        cbp_data = templating.load_yaml(constants.CEPHBLOCKPOOL_YAML)
+
     cbp_data["metadata"]["name"] = (
         pool_name if pool_name else create_unique_resource_name("test", "cbp")
     )
-    cbp_data["metadata"]["namespace"] = config.ENV_DATA["cluster_namespace"]
-    cbp_data["spec"]["replicated"]["size"] = replica
+    cbp_data["metadata"]["namespace"] = (
+        namespace or config.ENV_DATA["cluster_namespace"]
+    )
 
+    cbp_data["spec"]["replicated"]["size"] = replica
     cbp_data["spec"]["failureDomain"] = failure_domain or get_failure_domin()
 
     if compression:
@@ -612,6 +632,7 @@ def create_ceph_block_pool(
         assert verify_block_pool_exists(
             cbp_obj.name
         ), f"Block pool {cbp_obj.name} does not exist"
+
     return cbp_obj
 
 
@@ -5746,44 +5767,6 @@ def verify_reclaimspacecronjob_suspend_state_for_pvc(pvc_obj):
     return False
 
 
-def create_ceph_block_pool_for_deviceclass(
-    device_class,
-    pool_name=None,
-    namespace=None,
-    replica=3,
-    failure_domain=None,
-):
-    """
-    Create a Ceph block pool for a device class
-
-    Args:
-        device_class (str): The device class name
-        pool_name (str): The pool name to create
-        namespace (str): The pool namespace
-        replica (int): The replica size for a pool
-        failure_domain (str): Failure domain name
-        verify (bool): True to verify the pool exists after creation. False otherwise
-
-    Returns:
-        OCS: The OCS instance for the Ceph block pool
-
-    """
-    cbp_data = templating.load_yaml(constants.DEVICECLASS_CEPHBLOCKPOOL_YAML)
-    cbp_data["metadata"]["name"] = (
-        pool_name if pool_name else create_unique_resource_name("test", "cbp")
-    )
-    cbp_data["metadata"]["namespace"] = (
-        namespace or config.ENV_DATA["cluster_namespace"]
-    )
-    cbp_data["spec"]["deviceClass"] = device_class
-    cbp_data["spec"]["replicated"]["size"] = replica
-    cbp_data["spec"]["failureDomain"] = failure_domain or get_failure_domin()
-
-    cbp_obj = create_resource(**cbp_data)
-    cbp_obj.reload()
-    return cbp_obj
-
-
 def create_lvs_resource(
     name, storageclass, worker_nodes=None, min_size=None, max_size=None
 ):
@@ -5851,7 +5834,7 @@ def create_lvs_resource(
     return lvs_obj
 
 
-def create_deviceclass_storageclass(
+def create_rbd_deviceclass_storageclass(
     pool_name,
     sc_name=None,
     cluster_id="openshift-storage",
@@ -5862,7 +5845,7 @@ def create_deviceclass_storageclass(
     allow_volume_expansion=True,
 ):
     """
-    Create a StorageClass resource for device class from provided parameters.
+    Create an RBD StorageClass resource for device class from provided parameters.
 
     Args:
         pool_name (str): Name of the pool.

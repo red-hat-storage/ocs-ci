@@ -11,7 +11,7 @@ from ocs_ci.framework.testlib import (
 from ocs_ci.helpers.sanity_helpers import Sanity
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.node import get_osd_running_nodes
-from ocs_ci.helpers.multiple_device_classes import (
+from ocs_ci.ocs.device_classes import (
     create_new_lvs_for_new_deviceclass,
     verification_steps_after_adding_new_deviceclass,
 )
@@ -21,11 +21,10 @@ from ocs_ci.ocs.resources.storage_cluster import (
     get_storage_cluster,
 )
 from ocs_ci.helpers.helpers import (
-    create_ceph_block_pool_for_deviceclass,
-    create_deviceclass_storageclass,
+    create_ceph_block_pool,
+    create_rbd_deviceclass_storageclass,
 )
-from ocs_ci.ocs.cluster import check_ceph_pool_exist
-from ocs_ci.utility.utils import ceph_health_check, TimeoutSampler
+from ocs_ci.utility.utils import ceph_health_check
 
 
 log = logging.getLogger(__name__)
@@ -105,7 +104,7 @@ class TestMultipleDeviceClasses(ManageTest):
         )
 
         log.info(f"Create a new CephBlockPool for the device class {lvs_obj.name}")
-        cbp_obj = create_ceph_block_pool_for_deviceclass(lvs_obj.name)
+        cbp_obj = create_ceph_block_pool(device_class=lvs_obj.name)
         assert (
             cbp_obj
         ), f"Failed to create the CephBlockPool for the device class {lvs_obj.name}"
@@ -116,14 +115,9 @@ class TestMultipleDeviceClasses(ManageTest):
             timeout=180,
             sleep=10,
         )
-        sample = TimeoutSampler(
-            timeout=120, sleep=10, func=check_ceph_pool_exist, pool_name=cbp_obj.name
-        )
-        res = sample.wait_for_func_status(result=True)
-        assert res, f"Didn't find the ceph osd pool {cbp_obj.name}"
 
         log.info(f"Create a new StorageClass for the pool {cbp_obj.name}")
-        sc_obj = create_deviceclass_storageclass(pool_name=cbp_obj.name)
+        sc_obj = create_rbd_deviceclass_storageclass(pool_name=cbp_obj.name)
         assert sc_obj, f"Failed to create the StorageClass for the pool {cbp_obj.name}"
 
         log.info("Verification steps after adding a new deviceclass...")
