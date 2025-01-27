@@ -5084,10 +5084,12 @@ def es(request):
 
     return es
 
+
 @skipif_ibm_cloud_managed
 @pytest.fixture(scope="session")
 def setup_ui_session(request):
     return setup_ui_fixture(request)
+
 
 @skipif_ibm_cloud_managed
 @pytest.fixture(scope="class")
