@@ -171,7 +171,7 @@ class TestUpgradeOCP(ManageTest):
                     ocp_upgrade_version = get_latest_ocp_version(channel=ocp_channel)
                     ocp_arch = config.UPGRADE["ocp_arch"]
                     target_image = f"{ocp_upgrade_version}-{ocp_arch}"
-                    logger.info(f"Target image: {target_image}")
+            logger.info(f"Target image: {target_image}")
 
             image_path = config.UPGRADE["ocp_upgrade_path"]
             cluster_operators = ocp.get_all_cluster_operators()
