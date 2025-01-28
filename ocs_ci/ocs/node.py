@@ -79,7 +79,8 @@ def get_nodes(node_type=constants.WORKER_MACHINE, num_of_nodes=None):
     """
     Get cluster's nodes according to the node type (e.g. worker, master) and the
     number of requested nodes from that type.
-    In case of HCI provider cluster and 'node_type' is worker, it will exclude the master nodes.
+    In case of HCI provider cluster and 'node_type' is worker and it is
+    not a compact setup, it will exclude the master nodes.
 
     Args:
         node_type (str): The node type (e.g. worker, master)
@@ -110,7 +111,11 @@ def get_nodes(node_type=constants.WORKER_MACHINE, num_of_nodes=None):
             if node_type
             in node.ocp.get_resource(resource_name=node.name, column="ROLES")
         ]
-    if is_hci_provider_cluster() and node_type == constants.WORKER_MACHINE:
+    if (
+        is_hci_provider_cluster()
+        and node_type == constants.WORKER_MACHINE
+        and config.ENV_DATA["worker_replicas"] is not 0
+    ):
         typed_nodes = [
             node
             for node in typed_nodes
