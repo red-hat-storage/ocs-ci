@@ -173,6 +173,11 @@ class TestVmShutdownStart(E2ETest):
         # Verify that VMs status post start
         vm_obj.start()
         vm_for_stop.start()
+        time.sleep(60)
+        for vm in (vm_obj, vm_for_stop):
+            assert (
+                vm.printableStatus() == constants.VM_RUNNING
+            ), f"{vm.name} did not reach the running state."
 
         # Verifies vm status after start and ssh connectivity
         vm_obj.verify_vm(verify_ssh=True)
