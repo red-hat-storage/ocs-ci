@@ -37,6 +37,7 @@ from ocs_ci.framework.pytest_customization.marks import (
     bugzilla,
     skipif_ocs_version,
     on_prem_platform_required,
+    jira,
 )
 from ocs_ci.ocs.constants import AWSCLI_TEST_OBJ_DIR
 from uuid import uuid4
@@ -133,7 +134,11 @@ class TestBucketIO(MCGTest):
                         },
                     },
                 ],
-                marks=[tier1, on_prem_platform_required],
+                marks=[
+                    tier1,
+                    on_prem_platform_required,
+                    jira("DFBUGS-1035", run=False),
+                ],
             ),
         ],
         ids=[
