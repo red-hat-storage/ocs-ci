@@ -132,10 +132,10 @@ class TestVmSnapshotClone(E2ETest):
         res_vm_obj.stop()
 
     @workloads
-    @pytest.mark.polarion_id("OCS-")
+    @pytest.mark.polarion_id("OCS-6321")
     def test_vm_snapshot_pvc_clone(
         self,
-        # setup_cnv,
+        setup_cnv,
         project_factory,
         multi_cnv_workload,
         snapshot_factory,
