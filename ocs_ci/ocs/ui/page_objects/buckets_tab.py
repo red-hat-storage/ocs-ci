@@ -179,6 +179,19 @@ class BucketsTab(ObjectStorage, ConfirmDialog):
             logger.error(f"Error during file upload: {str(e)}")
             raise
 
+    def get_buckets_list(self) -> list:
+        """
+        Get list of all buckets using href pattern
+
+        Returns:
+            list: WebElement objects representing bucket links
+        """
+        buckets = self.get_elements(
+            ("//a[starts-with(@href, '/odf/object-storage/buckets/')]", By.XPATH)
+        )
+        logger.info(f"Found {len(buckets), buckets} buckets")
+        return buckets
+
     def delete_bucket_ui(self, delete_via, expect_fail, resource_name):
         """
         Delete an Object Bucket via the UI

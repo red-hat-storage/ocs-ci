@@ -437,3 +437,5 @@ class TestBucketCreate:
         time.sleep(15)
         bucket_ui.nav_object_storage_page()
         bucket_ui.create_folder_in_bucket()
+        bucket_ui.nav_buckets_page()
+        bucket_ui.get_buckets_list()
