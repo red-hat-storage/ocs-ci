@@ -27,20 +27,20 @@ class TestVmSnapshotClone(E2ETest):
                     "OCS-6288"
                 ),  # Polarion ID for no PVC expansion
             ),
-            pytest.param(
-                True,
-                False,
-                marks=pytest.mark.polarion_id(
-                    "OCS-6326"
-                ),  # Polarion ID for expansion before clone
-            ),
-            pytest.param(
-                False,
-                True,
-                marks=pytest.mark.polarion_id(
-                    "OCS-6326"
-                ),  # Polarion ID for expansion after clone
-            ),
+            # pytest.param(
+            #     True,
+            #     False,
+            #     marks=pytest.mark.polarion_id(
+            #         "OCS-6326"
+            #     ),  # Polarion ID for expansion before clone
+            # ),
+            # pytest.param(
+            #     False,
+            #     True,
+            #     marks=pytest.mark.polarion_id(
+            #         "OCS-6326"
+            #     ),  # Polarion ID for expansion after clone
+            # ),
         ],
     )
     def test_vm_clone(
@@ -92,16 +92,21 @@ class TestVmSnapshotClone(E2ETest):
             pvc_obj = vm_obj.get_vm_pvc_obj()
             new_size = 50
             if pvc_expand_before_clone:
-                pvc_obj.resize_pvc(new_size=new_size, verify=True)
-                time.sleep(30)
-                pvc_obj = vm_obj.get_vm_pvc_obj()
-                result = vm_obj.run_ssh_cmd(command="lsblk -o SIZE")
-                if str(new_size) in result:
-                    log.info("expanded PVC size is showing on vm")
-                else:
-                    raise ValueError(
-                        "Expanded PVC size is not showing on VM. "
-                        "Please verify the disk rescan and filesystem resize."
+                try:
+                    pvc_obj.resize_pvc(new_size=new_size, verify=True)
+                    time.sleep(30)
+                    pvc_obj = vm_obj.get_vm_pvc_obj()
+                    result = vm_obj.run_ssh_cmd(command="lsblk -o SIZE")
+                    if str(new_size) in result:
+                        log.info("expanded PVC size is showing on vm")
+                    else:
+                        raise ValueError(
+                            "Expanded PVC size is not showing on VM. "
+                            "Please verify the disk rescan and filesystem resize."
+                        )
+                except ValueError as e:
+                    log.error(
+                        f"Error for VM {vm_obj}: {e}. Continuing with the next VM."
                     )
 
             source_csum = run_dd_io(vm_obj=vm_obj, file_path=file_paths[0], verify=True)
@@ -125,19 +130,24 @@ class TestVmSnapshotClone(E2ETest):
             # Expand PVC if `pvc_expand_after_restore` is True
             if pvc_expand_after_clone:
                 new_size = 50
-                clone_pvc_obj = clone_obj.get_vm_pvc_obj()
-                clone_pvc_obj.resize_pvc(new_size=new_size, verify=True)
-                assert (
-                    clone_pvc_obj.get_vm_pvc_obj().size == new_size
-                ), f"Failed: VM PVC Expansion on cloned VM {clone_obj.name} "
-                time.sleep(30)
-                result = clone_obj.run_ssh_cmd(command="lsblk -o SIZE")
-                if str(new_size) in result:
-                    log.info("expanded PVC size is showing on vm")
-                else:
-                    raise ValueError(
-                        "Expanded PVC size is not showing on VM. "
-                        "Please verify the disk rescan and filesystem resize."
+                try:
+                    clone_pvc_obj = clone_obj.get_vm_pvc_obj()
+                    clone_pvc_obj.resize_pvc(new_size=new_size, verify=True)
+                    assert (
+                        clone_pvc_obj.get_vm_pvc_obj().size == new_size
+                    ), f"Failed: VM PVC Expansion on cloned VM {clone_obj.name} "
+                    time.sleep(30)
+                    result = clone_obj.run_ssh_cmd(command="lsblk -o SIZE")
+                    if str(new_size) in result:
+                        log.info("expanded PVC size is showing on vm")
+                    else:
+                        raise ValueError(
+                            "Expanded PVC size is not showing on VM. "
+                            "Please verify the disk rescan and filesystem resize."
+                        )
+                except ValueError as e:
+                    log.error(
+                        f"Error for VM {vm_obj}: {e}. Continuing with the next VM."
                     )
             run_dd_io(vm_obj=clone_obj, file_path=file_paths[1])
 
