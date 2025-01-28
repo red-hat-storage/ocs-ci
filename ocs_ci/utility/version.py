@@ -8,7 +8,10 @@ from semantic_version import Version
 
 from ocs_ci.framework import config
 from ocs_ci.ocs import defaults
-from ocs_ci.ocs.exceptions import WrongVersionExpression
+from ocs_ci.ocs.exceptions import (
+    WrongVersionExpression,
+    UnsupportedPlatformVersionError,
+)
 from ocs_ci.ocs import constants
 
 
@@ -292,3 +295,110 @@ def get_volsync_operator_version(namespace=constants.SUBMARINER_OPERATOR_NAMESPA
         if "volsync" in csv["metadata"]["name"]:
             # extract version string
             return csv["spec"]["version"]
+
+
+def get_ocp_versions_rosa():
+    """
+    Get the list of available versions for ROSA.
+
+    Returns:
+        str: a list of available versions for ROSA in string format
+    """
+    from ocs_ci.utility.utils import exec_cmd
+
+    cmd = "rosa list versions"
+    output = exec_cmd(cmd, timeout=1800)
+    return output.stdout.decode()
+
+
+def ocp_version_available_on_rosa(version):
+    """
+    Check if requested version is available on ROSA for upgrade
+
+    Args:
+        version (str): OCP version in format `x.y.z`
+
+    Returns:
+        bool: True if version is supported, False otherwise
+    """
+    output = get_ocp_versions_rosa()
+    return True if version in output else False
+
+
+def get_next_ocp_version_rosa(version):
+    """
+    Get the next available minor version for ROSA.
+
+    Args:
+        version (str): OCP version in format `x.y.z`
+
+    Returns:
+        str: Next available version for ROSA
+
+    """
+    # This should return a list of versions in `x.y.z` format in string representation
+    output = get_ocp_versions_rosa()
+
+    current_version = Version(version)
+    next_version = None
+
+    for line in output.splitlines():
+        try:
+            available_version = Version(line.split()[0])
+            if available_version > current_version:
+                next_version = available_version
+                break
+        except ValueError:
+            # Skipping invalid version
+            pass
+
+    if next_version is None:
+        raise UnsupportedPlatformVersionError(
+            f"Could not find any next version after {version} available for ROSA"
+        )
+
+    return str(next_version)
+
+
+def get_latest_rosa_ocp_version(version):
+    """
+    Returns latest z-stream version available for ROSA.
+
+    Args:
+        version (str): OCP version in format `x.y`
+
+    Returns:
+        str: Latest available z-stream version
+
+    """
+    output = get_ocp_versions_rosa()
+    rosa_version = None
+    for line in output.splitlines():
+        match = re.search(f"^{version}\\.(\\d+) ", line)
+        if match:
+            rosa_version = match.group(0).rstrip()
+            break
+    if rosa_version is None:
+        error_msg = (
+            f"Could not find any version of {version} available for ROSA. "
+            f"Try providing an older version of OCP with --ocp-version. "
+            f"Latest OCP versions available for ROSA are: \n"
+        )
+        for i in range(3):
+            error_msg += f"{output.splitlines()[i + 1]}"
+        raise UnsupportedPlatformVersionError(error_msg)
+    return rosa_version
+
+
+def drop_z_version(version_str):
+    """
+    Drops the z (patch) version from a semantic version string.
+
+    Args:
+        version_str (str): Version string in the format `x.y.z` or `x.y`
+
+    Returns:
+        str: Version string in the format `x.y`
+    """
+    version = Version.coerce(version_str)
+    return f"{version.major}.{version.minor}"

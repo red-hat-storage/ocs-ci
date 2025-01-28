@@ -14,7 +14,6 @@ from ocs_ci.ocs import constants, ocp
 from ocs_ci.ocs.exceptions import (
     CommandFailed,
     ManagedServiceAddonDeploymentError,
-    UnsupportedPlatformVersionError,
     ConfigurationError,
     ResourceWrongStatusException,
     TimeoutExpiredError,
@@ -32,6 +31,7 @@ from ocs_ci.utility.managedservice import (
 from ocs_ci.utility.openshift_dedicated import get_cluster_details
 from ocs_ci.utility.retry import catch_exceptions
 from ocs_ci.utility.utils import exec_cmd, TimeoutSampler
+from ocs_ci.utility.version import get_latest_rosa_ocp_version
 
 logger = logging.getLogger(name=__file__)
 rosa = config.AUTH.get("rosa", {})
@@ -79,7 +79,8 @@ def create_cluster(cluster_name, version, region):
             f"is not valid ROSA OCP version. "
             f"Selecting latest rosa version for deployment"
         )
-        rosa_ocp_version = get_latest_rosa_version(version)
+        logger.info(f"Looking for z-stream version of {version}")
+        rosa_ocp_version = get_latest_rosa_ocp_version(version)
         logger.info(f"Using OCP version {rosa_ocp_version}")
 
     if rosa_hcp:
@@ -343,36 +344,6 @@ def get_rosa_service_details(cluster):
     # Todo : update this function when -o json get supported in rosa services command
     # TODO : need exception handling
     return json.loads(service_info)
-
-
-def get_latest_rosa_version(version):
-    """
-    Returns latest available z-stream version available for ROSA.
-
-    Args:
-        version (str): OCP version in format `x.y`
-
-    Returns:
-        str: Latest available z-stream version
-
-    """
-    cmd = "rosa list versions"
-    output = utils.run_cmd(cmd, timeout=1800)
-    logger.info(f"Looking for z-stream version of {version}")
-    rosa_version = None
-    for line in output.splitlines():
-        match = re.search(f"^{version}\\.(\\d+) ", line)
-        if match:
-            rosa_version = match.group(0).rstrip()
-            break
-    if rosa_version is None:
-        logger.error(f"Could not find any version of {version} available for ROSA")
-        logger.info("Try providing an older version of OCP with --ocp-version")
-        logger.info("Latest OCP versions available for ROSA are:")
-        for i in range(3):
-            logger.info(f"{output.splitlines()[i + 1]}")
-        raise UnsupportedPlatformVersionError
-    return rosa_version
 
 
 def validate_ocp_version(version):
@@ -1231,3 +1202,20 @@ def rosa_delete_htpasswd_idp(
         raise CommandFailed("Failed to delete IDP")
     else:
         logger.info(f"response\n: {resp.stdout.decode('utf-8').splitlines()}")
+
+
+def upgrade_rosa_cluster(cluster_name, version):
+    """
+    Upgrade the ROSA cluster to the given version
+    ! important ! rosa cli version drops error in case if --control-plane parameter is not used
+    ! important ! upgrade is not performed automatically in case of ROSA clusters, especially in case of HCP;
+    Upgrade is controlled by the Hive Operator; schedule depends on a Control Plane Queue
+
+    Args:
+        cluster_name (str): The cluster name
+        version (str): The version to upgrade the cluster
+
+    """
+    cmd = f"rosa upgrade cluster --cluster {cluster_name} --control-plane --version {version} --mode auto --yes"
+    proc = exec_cmd(cmd, timeout=2400)
+    logger.info(f"Upgrade cluster command output:\n {proc.stdout.decode().strip()}")
