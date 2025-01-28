@@ -37,6 +37,7 @@ from ocs_ci.framework.pytest_customization.marks import (
     bugzilla,
     skipif_ocs_version,
     on_prem_platform_required,
+    jira,
 )
 from ocs_ci.ocs.constants import AWSCLI_TEST_OBJ_DIR
 from uuid import uuid4
@@ -122,10 +123,28 @@ class TestBucketIO(MCGTest):
                 ],
                 marks=[tier1, on_prem_platform_required],
             ),
+            pytest.param(
+                *[
+                    "CLI",
+                    {
+                        "interface": "CLI",
+                        "namespace_policy_dict": {
+                            "type": "Single",
+                            "namespacestore_dict": {"rgw": [(1, None)]},
+                        },
+                    },
+                ],
+                marks=[
+                    tier1,
+                    on_prem_platform_required,
+                    jira("DFBUGS-1035", run=False),
+                ],
+            ),
         ],
         ids=[
             "RGW-OC-1",
             "RGW-CLI-1",
+            "RGW-CLI-NSS-1",
         ],
     )
     @flaky
