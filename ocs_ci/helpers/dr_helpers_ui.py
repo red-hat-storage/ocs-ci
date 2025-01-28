@@ -344,7 +344,9 @@ def failover_relocate_ui(
             return False
         else:
             if do_not_trigger:
-                log.warning("Failover/Relocate operation will not be triggered")
+                log.info(
+                    "Failover/Relocate operation will not be triggered as intended"
+                )
             else:
                 log.info("Click on Initiate button to failover/relocate")
                 acm_obj.do_click(
