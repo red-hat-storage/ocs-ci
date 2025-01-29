@@ -10,6 +10,7 @@ from ocs_ci.framework.testlib import (
     post_upgrade,
     skipif_managed_service,
     skipif_hci_provider_and_client,
+    skipif_external_mode,
 )
 from ocs_ci.ocs.resources.pod import get_fio_rw_iops
 from tests.fixtures import create_project
@@ -24,6 +25,7 @@ log = logging.getLogger(__name__)
 @tier2
 @post_upgrade
 @skipif_managed_service
+@skipif_external_mode
 @skipif_hci_provider_and_client
 @pytest.mark.usefixtures(
     create_project.__name__,
