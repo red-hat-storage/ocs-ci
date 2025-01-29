@@ -574,31 +574,51 @@ def default_ceph_block_pool():
 
 
 def create_ceph_block_pool(
-    pool_name=None, replica=3, compression=None, failure_domain=None, verify=True
+    pool_name=None,
+    replica=3,
+    compression=None,
+    failure_domain=None,
+    verify=True,
+    namespace=None,
+    device_class=None,
+    yaml_file=None,
 ):
     """
-    Create a Ceph block pool
-    ** This method should not be used anymore **
-    ** This method is for internal testing only **
+    Create a Ceph block pool with optional parameters.
 
     Args:
-        pool_name (str): The pool name to create
-        failure_domain (str): Failure domain name
-        verify (bool): True to verify the pool exists after creation,
-                       False otherwise
-        replica (int): The replica size for a pool
-        compression (str): Compression type for a pool
+        pool_name (str): The pool name to create (optional).
+        replica (int): The replica size for the pool.
+        compression (str): Compression type for the pool (optional).
+        failure_domain (str): Failure domain name (optional).
+        verify (bool): True to verify the pool exists after creation, False otherwise.
+        namespace (str): The pool namespace (optional).
+        device_class (str): The device class name (optional).
+        yaml_file (str): The name of the YAML file for the Ceph block pool (optional).
 
     Returns:
-        OCS: An OCS instance for the Ceph block pool
+        OCS: The OCS instance for the Ceph block pool.
+
     """
-    cbp_data = templating.load_yaml(constants.CEPHBLOCKPOOL_YAML)
+    # Load the YAML template
+    if yaml_file:
+        cbp_data = templating.load_yaml(yaml_file)
+    elif device_class:
+        # Use the appropriate yaml for the device class CephBlockPool
+        cbp_data = templating.load_yaml(constants.DEVICECLASS_CEPHBLOCKPOOL_YAML)
+        cbp_data["spec"]["deviceClass"] = device_class
+    else:
+        # Use the appropriate yaml for the CephBlockPool
+        cbp_data = templating.load_yaml(constants.CEPHBLOCKPOOL_YAML)
+
     cbp_data["metadata"]["name"] = (
         pool_name if pool_name else create_unique_resource_name("test", "cbp")
     )
-    cbp_data["metadata"]["namespace"] = config.ENV_DATA["cluster_namespace"]
-    cbp_data["spec"]["replicated"]["size"] = replica
+    cbp_data["metadata"]["namespace"] = (
+        namespace or config.ENV_DATA["cluster_namespace"]
+    )
 
+    cbp_data["spec"]["replicated"]["size"] = replica
     cbp_data["spec"]["failureDomain"] = failure_domain or get_failure_domin()
 
     if compression:
@@ -612,6 +632,7 @@ def create_ceph_block_pool(
         assert verify_block_pool_exists(
             cbp_obj.name
         ), f"Block pool {cbp_obj.name} does not exist"
+
     return cbp_obj
 
 
@@ -5744,3 +5765,120 @@ def verify_reclaimspacecronjob_suspend_state_for_pvc(pvc_obj):
 
     logger.info(f"ReclaimSpace operation is enabled for PVC '{pvc_obj.name}'")
     return False
+
+
+def create_lvs_resource(
+    name, storageclass, worker_nodes=None, min_size=None, max_size=None
+):
+    """
+    Create the LocalVolumeSet resource.
+
+    Args:
+        name (str): The name of the LocalVolumeSet CR
+        storageclass (str): storageClassName value to be used in
+            LocalVolumeSet CR based on LOCAL_VOLUME_YAML
+        worker_nodes (list): The worker node names to be used in the LocalVolumeSet resource
+        min_size (str): The min size to be used in the LocalVolumeSet resource
+        max_size (str): The max size to be used in the LocalVolumeSet resource
+
+    Returns:
+        OCS: The OCS instance for the LocalVolumeSet resource
+
+    """
+    worker_nodes = worker_nodes or node.get_worker_nodes()
+
+    # Pull local volume set yaml data
+    logger.info("Pulling LocalVolumeSet CR data from yaml")
+    lvs_data = templating.load_yaml(constants.LOCAL_VOLUME_SET_YAML)
+
+    # Since we don't have datastore with SSD on our current VMware machines, localvolumeset doesn't detect
+    # NonRotational disk. As a workaround we are setting Rotational to device MechanicalProperties to detect
+    # HDD disk
+    if config.ENV_DATA.get(
+        "local_storage_allow_rotational_disks"
+    ) or config.ENV_DATA.get("odf_provider_mode_deployment"):
+        logger.info(
+            "Adding Rotational for deviceMechanicalProperties spec"
+            " to detect HDD disk"
+        )
+        lvs_data["spec"]["deviceInclusionSpec"]["deviceMechanicalProperties"].append(
+            "Rotational"
+        )
+
+    lvs_data["metadata"]["name"] = name
+
+    if min_size:
+        lvs_data["spec"]["deviceInclusionSpec"]["minSize"] = min_size
+    if max_size:
+        lvs_data["spec"]["deviceInclusionSpec"]["maxSize"] = max_size
+    # Update local volume set data with Worker node Names
+    logger.info(
+        "Updating LocalVolumeSet CR data with worker nodes Name: %s", worker_nodes
+    )
+    lvs_data["spec"]["nodeSelector"]["nodeSelectorTerms"][0]["matchExpressions"][0][
+        "values"
+    ] = worker_nodes
+
+    # Set storage class
+    logger.info(
+        "Updating LocalVolumeSet CR data with LSO storageclass: %s", storageclass
+    )
+    lvs_data["spec"]["storageClassName"] = storageclass
+
+    # set volumeMode to Filesystem for MCG only deployment
+    if config.ENV_DATA["mcg_only_deployment"]:
+        lvs_data["spec"]["volumeMode"] = constants.VOLUME_MODE_FILESYSTEM
+
+    lvs_obj = create_resource(**lvs_data)
+    lvs_obj.reload()
+    return lvs_obj
+
+
+def create_rbd_deviceclass_storageclass(
+    pool_name,
+    sc_name=None,
+    cluster_id="openshift-storage",
+    reclaim_policy="Delete",
+    volume_binding_mode="WaitForFirstConsumer",
+    image_features=None,
+    encrypted="false",
+    allow_volume_expansion=True,
+):
+    """
+    Create an RBD StorageClass resource for device class from provided parameters.
+
+    Args:
+        pool_name (str): Name of the pool.
+        sc_name (str): Name of the StorageClass. If not provided, it will set a random name.
+        cluster_id (str): Cluster ID.
+        reclaim_policy (str): Reclaim policy (e.g., "Delete" or "Retain").
+        volume_binding_mode (str): Volume binding mode (e.g., "Immediate", "WaitForFirstConsumer").
+        image_features (str): Image features for the pool.
+        encrypted (str): Encryption flag ("true" or "false").
+        allow_volume_expansion (bool): Allow volume expansion (True/False).
+
+    Returns:
+        OCS: The OCS instance for the StorageClass resource
+
+    """
+    suffix = "".join(random.choices("0123456789", k=5))
+    sc_name = sc_name or f"ssd{suffix}"
+    image_features = (
+        image_features or "layering,deep-flatten,exclusive-lock,object-map,fast-diff"
+    )
+
+    sc_data = templating.load_yaml(constants.DEVICECLASS_STORAGECLASS_YAML)
+
+    # Update the YAML with the provided parameters
+    sc_data["metadata"]["name"] = sc_name
+    sc_data["parameters"]["pool"] = pool_name
+    sc_data["allowVolumeExpansion"] = allow_volume_expansion
+    sc_data["reclaimPolicy"] = reclaim_policy
+    sc_data["volumeBindingMode"] = volume_binding_mode
+    sc_data["parameters"]["imageFeatures"] = image_features
+    sc_data["parameters"]["clusterID"] = cluster_id
+    sc_data["parameters"]["encrypted"] = encrypted
+
+    sc_obj = create_resource(**sc_data)
+    sc_obj.reload()
+    return sc_obj
