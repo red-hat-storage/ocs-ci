@@ -694,9 +694,7 @@ def run_ocs_upgrade(
                         wait_for_install_plan_and_approve(
                             config.ENV_DATA["cluster_namespace"]
                         )
-                if (
-                    config.ENV_DATA["platform"] == constants.IBMCLOUD_PLATFORM
-                ) and not (upgrade_in_current_source):
+                if managed_ibmcloud_platform and not upgrade_in_current_source:
                     for attempt in range(2):
                         # We need to do it twice, because some of the SA are updated
                         # after the first load of OCS pod after upgrade. So we need to
