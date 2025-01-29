@@ -2577,7 +2577,7 @@ def wait_for_pods_to_be_running(
 
 def wait_for_pods_by_label_count(
     label,
-    exptected_count,
+    expected_count,
     namespace=config.ENV_DATA["cluster_namespace"],
     timeout=200,
     sleep=10,
@@ -2588,7 +2588,7 @@ def wait_for_pods_by_label_count(
 
     Args:
         selector (str): The resource selector to search with
-        exptected_count (int): The expected number of pods with the given selector
+        expected_count (int): The expected number of pods with the given selector
         namespace (str): the namespace ot the pods
         timeout (int): time to wait for pods to be running
         sleep (int): Time in seconds to sleep between attempts
@@ -2604,8 +2604,8 @@ def wait_for_pods_by_label_count(
             namespace=namespace,
         ):
             # Check if the expected number of pods with the given selector is met
-            if pods_count == exptected_count:
-                logger.info(f"Found {exptected_count} pods with selector {label}")
+            if pods_count == expected_count:
+                logger.info(f"Found {expected_count} pods with selector {label}")
                 return True
     except TimeoutExpiredError:
         logger.warning(

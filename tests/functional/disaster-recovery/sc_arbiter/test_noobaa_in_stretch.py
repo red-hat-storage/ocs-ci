@@ -65,7 +65,7 @@ def test_nb_endpoint_topology_spread_constraints(setup_nb_endpoint):
     ), f"Topology spread constraints are not set as expected: \n {topology_spread_constraint}"
     logger.info("Topology spread constraints are set correctly")
 
-    wait_for_pods_by_label_count(constants.NOOBAA_ENDPOINT_POD_LABEL, exptected_count=2)
+    wait_for_pods_by_label_count(constants.NOOBAA_ENDPOINT_POD_LABEL, expected_count=2)
 
     nb_endpoint_pods = [
         Pod(**pod)
