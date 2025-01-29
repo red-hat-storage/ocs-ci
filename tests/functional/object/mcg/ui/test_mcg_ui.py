@@ -418,6 +418,7 @@ class TestObcUserInterface(object):
 
 
 @black_squad
+@tier1
 class TestBucketCreate:
     def test_bucket_create(self, setup_ui_class_factory):
         """
