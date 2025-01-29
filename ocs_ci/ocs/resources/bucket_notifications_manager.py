@@ -363,16 +363,27 @@ class BucketNotificationsManager:
             list: List of event dictionaries
         """
         # Query the Kafka topic via the Kafka consumer script on any of the Kafka pods
-        kafka_pod = Pod(
-            **get_pods_having_label(
+        kafka_pods = [
+            Pod(**pod_info)
+            for pod_info in get_pods_having_label(
                 namespace=constants.AMQ_NAMESPACE, label=constants.KAFKA_PODS_LABEL
-            )[0]
-        )
-        cmd = (
-            f"bin/kafka-console-consumer.sh --bootstrap-server {constants.KAFKA_ENDPOINT} "
-            f"--topic {topic} --from-beginning --timeout-ms {timeout_in_ms}"
-        )
-        raw_resp = kafka_pod.exec_cmd_on_pod(command=cmd, out_yaml_format=False)
+            )
+        ]
+        for kafka_pod in kafka_pods:
+            cmd = (
+                f"bin/kafka-console-consumer.sh --bootstrap-server {constants.KAFKA_ENDPOINT} "
+                f"--topic {topic} --from-beginning --timeout-ms {timeout_in_ms}"
+            )
+
+            # for some test involving node shutdown, we make sure we get the events
+            # from available kafka pods
+            try:
+                raw_resp = kafka_pod.exec_cmd_on_pod(command=cmd, out_yaml_format=False)
+            except CommandFailed as err:
+                if "connect: no route to host" in err.args[0]:
+                    continue
+                raise err
+            break
 
         # Parse the raw response into a list of event dictionaries
         events = []
