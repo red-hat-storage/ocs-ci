@@ -3258,7 +3258,7 @@ class MultiClusterDROperatorsDeploy(object):
             dr_policy_hub_data["metadata"][
                 "name"
             ] = constants.RDR_DR_POLICY_IBM_CLOUD_MANAGED
-            dr_policy_hub_data["spec"]["schedulingInterval"] = "10m"
+            dr_policy_hub_data["spec"]["schedulingInterval"] = "30m"
 
         if config.MULTICLUSTER["multicluster_mode"] == "metro-dr":
             dr_policy_hub_data["metadata"]["name"] = constants.MDR_DR_POLICY
