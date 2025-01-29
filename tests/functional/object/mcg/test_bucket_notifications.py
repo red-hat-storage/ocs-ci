@@ -370,7 +370,7 @@ class TestBucketNotifications(MCGTest):
             notif_manager.add_notif_conn_to_noobaa_cr(
                 secret=secret,
                 # Only wait on the last iteration to avoid waiting multiple times
-                wait_for_ready_status=True if i == SETUP_NUM - 1 else False,
+                wait=True if i == SETUP_NUM - 1 else False,
             )
 
         # Create the buckets and configure the bucket notifications
@@ -415,31 +415,29 @@ class TestBucketNotifications(MCGTest):
         accumulated_delta = set()
         try:
             for events in TimeoutSampler(
-                timeout=120, sleep=5, func=_get_events_by_topic
+                timeout=300, sleep=10, func=_get_events_by_topic
             ):
+                accumulated_delta.clear()  # Clear deltas from the previous iteration
                 for bucket, expected_objs_set in buckets_to_written_objs.items():
                     received_objs_set = events[buckets_to_topics[bucket]]
                     buckets_to_received_events[bucket] = received_objs_set
                     accumulated_delta.update(
                         expected_objs_set.difference(received_objs_set)
                     )
-
-                accumulated_delta = (
-                    delta for delta in buckets_to_received_events.values() if delta
-                )
                 if any(accumulated_delta):
                     logger.warning(
                         f"Some expected events were not received: {accumulated_delta}"
                     )
-                    continue
-                logger.info("Every topic received all its expected events")
+                else:
+                    logger.info("Every topic received all its expected events")
+                    break
         except TimeoutExpiredError as e:
             raise TimeoutExpiredError(
                 e,
                 f"Some expected events were not received by Kafka: {accumulated_delta}",
             )
 
-        # 5. Check that no topic received events it shouldn't
+        # 5. Check that no topic received events that it shouldn't have
         for set_a, set_b in combinations(buckets_to_received_events.values(), 2):
             assert not set_a.intersection(
                 set_b

@@ -6,6 +6,7 @@ import re
 
 import tempfile
 from time import sleep
+import time
 
 import boto3
 from botocore.client import ClientError
@@ -27,8 +28,10 @@ from ocs_ci.ocs.exceptions import (
 )
 from ocs_ci.ocs.ocp import OCP
 from ocs_ci.ocs.resources.pod import (
+    get_noobaa_pods,
     get_pods_having_label,
     Pod,
+    wait_for_pods_to_be_running,
 )
 from ocs_ci.utility import templating, version
 from ocs_ci.utility.retry import retry
@@ -984,9 +987,18 @@ class MCG:
         Raises:
             TimeoutExpiredError: If the status is not reached within the timeout
         """
+        starttime = time.time()
+        nb_pods = [pod.name for pod in get_noobaa_pods()]
+        wait_for_pods_to_be_running(
+            namespace=config.ENV_DATA["cluster_namespace"],
+            pod_names=nb_pods,
+            timeout=timeout,
+            sleep=10,
+        )
+        timeout = int(timeout - (time.time() - starttime))
         try:
             for mcg_status_ready in TimeoutSampler(
-                timeout=timeout, sleep=30, backoff=1, func=MCG._status()
+                timeout=timeout, sleep=30, func=MCG._status
             ):
                 if mcg_status_ready:
                     return
