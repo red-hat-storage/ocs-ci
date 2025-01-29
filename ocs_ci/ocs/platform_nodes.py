@@ -2103,16 +2103,30 @@ class BaremetalNodes(NodesBase):
         """
         self.baremetal.start_baremetal_machines(nodes, wait=wait)
 
-    def restart_nodes(self, nodes, force=True):
+    def restart_nodes(self, nodes, wait=True, force=True):
         """
         Restart Baremetal Machine
 
         Args:
             nodes (list): The OCS objects of the nodes
+            wait (bool): NOT IMPLEMENTED! True if need to wait till the restarted OCP node
+                reaches READY state. False otherwise
             force (bool): True for force BM stop, False otherwise
 
         """
+        # TODO: handle wait parameter
         self.baremetal.restart_baremetal_machines(nodes, force=force)
+
+    def restart_nodes_by_stop_and_start(self, nodes, force=True):
+        """
+        Restart Bare Metal Machines
+
+        Args:
+            nodes (list): The OCS objects of the nodes
+            force (bool): True for force machine stop, False otherwise
+
+        """
+        self.baremetal.restart_baremetal_machines_by_stop_and_start(nodes, force=force)
 
     def restart_nodes_by_stop_and_start_teardown(self):
         """
@@ -2120,18 +2134,15 @@ class BaremetalNodes(NodesBase):
 
         """
         self.cluster_nodes = get_node_objs()
-        bms = self.baremetal.get_nodes_ipmi_ctx(self.cluster_nodes)
         stopped_bms = [
             bm
-            for bm in bms
+            for bm in self.cluster_nodes
             if self.baremetal.get_power_status(bm) == constants.VM_POWERED_OFF
         ]
 
         if stopped_bms:
             logger.info(f"The following BMs are powered off: {stopped_bms}")
-            self.baremetal.start_baremetal_machines_with_ipmi_ctx(stopped_bms)
-        for bm in bms:
-            bm.session.close()
+            self.baremetal.start_baremetal_machines(stopped_bms)
 
     def get_data_volumes(self):
         raise NotImplementedError("Get data volume functionality is not implemented")

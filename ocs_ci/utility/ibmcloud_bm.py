@@ -9,6 +9,7 @@ import logging
 import time
 
 from ocs_ci.framework import config
+from ocs_ci.ocs import constants
 from ocs_ci.ocs.exceptions import CommandFailed
 from ocs_ci.utility.utils import run_cmd
 from ocs_ci.utility.retry import retry
@@ -115,6 +116,23 @@ class IBMCloudBM(object):
         """
         machine_list = self.get_all_machines()
         return [m for m in machine_list if m["hostname"] in machine_names]
+
+    def get_power_status(self, machine):
+        """
+        Get the power status of the machine.
+
+        Args:
+            machine (str): IBMCloud Bare metal machine object to get status from.
+
+        Returns:
+            Get the machines in the IBMCloud Bare metal machines that have the given machine names
+
+        """
+        return (
+            constants.VM_POWERED_ON
+            if machine["hardwareStatus"]["status"] == "ACTIVE"
+            else constants.VM_POWERED_OFF
+        )
 
     def stop_machines(self, machines):
         """
