@@ -114,7 +114,7 @@ def get_nodes(node_type=constants.WORKER_MACHINE, num_of_nodes=None):
     if (
         is_hci_provider_cluster()
         and node_type == constants.WORKER_MACHINE
-        and config.ENV_DATA["worker_replicas"] == 0
+        and config.ENV_DATA["worker_replicas"] != 0
     ):
         typed_nodes = [
             node
