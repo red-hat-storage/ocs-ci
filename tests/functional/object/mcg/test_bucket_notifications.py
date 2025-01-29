@@ -13,13 +13,9 @@ from ocs_ci.framework.testlib import (
     mcg,
     polarion_id,
     red_squad,
-    skipif_disconnected_cluster,
     skipif_external_mode,
     skipif_disconnected_cluster,
-    skipif_external_mode,
     skipif_mcg_only,
-    skipif_noobaa_external_pgsql,
-    skipif_proxy_cluster,
     skipif_noobaa_external_pgsql,
     skipif_proxy_cluster,
     tier1,
@@ -44,10 +40,6 @@ logger = logging.getLogger(__name__)
 
 @mcg
 @red_squad
-@skipif_disconnected_cluster
-@skipif_noobaa_external_pgsql
-@skipif_external_mode
-@skipif_proxy_cluster
 @skipif_disconnected_cluster
 @skipif_noobaa_external_pgsql
 @skipif_external_mode
@@ -206,7 +198,7 @@ class TestBucketNotifications(MCGTest):
 
         # 2. Add a Kafka topic connection to the NooBaa CR
         topic = notif_manager.create_kafka_topic()
-        secret, conn_file_name = notif_manager.create_kafka_conn_secret(topic)
+        secret, conn_config_path = notif_manager.create_kafka_conn_secret(topic)
         notif_manager.add_notif_conn_to_noobaa_cr(secret)
 
         # 3. Create a bucket and configure bucket notifs on it using the new connection
@@ -224,7 +216,7 @@ class TestBucketNotifications(MCGTest):
             mcg_obj=mcg_obj,
             bucket=bucket,
             events=[f"s3:{event}" for event in config_events],
-            conn_file=conn_file_name,
+            conn_config_path=conn_config_path,
         )
 
         # 4. Write objects to the bucket
@@ -323,11 +315,10 @@ class TestBucketNotifications(MCGTest):
                 func=notif_manager.get_events,
                 topic=topic,
             ):
-                received_events = set()
-                for event in raw_received_events:
-                    received_events.add(
-                        (event["eventName"], event["s3"]["object"]["key"])
-                    )
+                received_events = set(
+                    (event["eventName"], event["s3"]["object"]["key"])
+                    for event in raw_received_events
+                )
                 delta = expected_events.difference(received_events)
                 if not delta:
                     logger.info("All expected events were received by Kafka")
@@ -371,25 +362,25 @@ class TestBucketNotifications(MCGTest):
         kafka_conn_resources = []
         for i in range(SETUP_NUM):
             topic = notif_manager.create_kafka_topic()
-            secret, conn_file_name = notif_manager.create_kafka_conn_secret(topic)
-            kafka_conn_resources.append((secret, conn_file_name))
+            secret, conn_config_path = notif_manager.create_kafka_conn_secret(topic)
+            kafka_conn_resources.append((topic, secret, conn_config_path))
 
             notif_manager.add_notif_conn_to_noobaa_cr(
                 secret=secret,
                 # Only wait on the last iteration to avoid waiting multiple times
-                wait_for_ready_status=True if i == SETUP_NUM - 1 else False,
+                wait=True if i == SETUP_NUM - 1 else False,
             )
 
         # Create the buckets and configure the bucket notifications
         for i in range(SETUP_NUM):
             bucket = bucket_factory()[0].name
-            _, conn_file_name = kafka_conn_resources[i]
+            topic, _, conn_config_path = kafka_conn_resources[i]
             notif_manager.put_bucket_notification(
                 awscli_pod=awscli_pod,
                 mcg_obj=mcg_obj,
                 bucket=bucket,
                 events=["s3:ObjectCreated:*"],
-                conn_file=conn_file_name,
+                conn_config_path=conn_config_path,
                 # Only wait on the last iteration to avoid waiting multiple times
                 wait=True if i == SETUP_NUM - 1 else False,
             )
@@ -397,10 +388,11 @@ class TestBucketNotifications(MCGTest):
 
         # 3. Write some objects to each bucket
         for bucket in buckets_to_topics.keys():
+            file_dir = os.path.join(test_directory_setup.origin_dir, bucket)
             objs = write_random_test_objects_to_bucket(
                 io_pod=awscli_pod,
                 bucket_to_write=bucket,
-                file_dir=test_directory_setup.origin_dir,
+                file_dir=file_dir,
                 amount=5,
                 pattern=f"{bucket}-",
                 mcg_obj=mcg_obj,
@@ -422,35 +414,32 @@ class TestBucketNotifications(MCGTest):
         accumulated_delta = set()
         try:
             for events in TimeoutSampler(
-                timeout=120, sleep=5, func=_get_events_by_topic
+                timeout=300, sleep=10, func=_get_events_by_topic
             ):
+                accumulated_delta.clear()  # Clear deltas from the previous iteration
+
                 for bucket, expected_objs_set in buckets_to_written_objs.items():
                     received_objs_set = events[buckets_to_topics[bucket]]
                     buckets_to_received_events[bucket] = received_objs_set
-                    accumulated_delta.update(
-                        expected_objs_set.difference(received_objs_set)
-                    )
-
-                accumulated_delta = (
-                    delta for delta in buckets_to_received_events.values() if delta
-                )
+                    accumulated_delta.update(expected_objs_set - received_objs_set)
                 if any(accumulated_delta):
                     logger.warning(
                         f"Some expected events were not received: {accumulated_delta}"
                     )
-                    continue
-                logger.info("Every topic received all its expected events")
+                else:
+                    logger.info("Every topic received all its expected events")
+                    break
         except TimeoutExpiredError as e:
             raise TimeoutExpiredError(
                 e,
                 f"Some expected events were not received by Kafka: {accumulated_delta}",
             )
 
-        # 5. Check that no topic received events it shouldn't
+        # 5. Check that no topic received events that it shouldn't have
         for set_a, set_b in combinations(buckets_to_received_events.values(), 2):
-            assert not set_a.intersection(
-                set_b
-            ), f"Two different topics received the same event/s: {set_a.intersection(set_b)}"
+            assert (
+                not set_a & set_b
+            ), f"Overlap detected: {set_a & set_b} appeared in multiple topics."
 
     @tier2
     @polarion_id("OCS-6333")
@@ -479,7 +468,7 @@ class TestBucketNotifications(MCGTest):
 
         # 2. Setup two buckets with bucket notifications to the same topic
         topic = notif_manager.create_kafka_topic()
-        secret, conn_file_name = notif_manager.create_kafka_conn_secret(topic)
+        secret, conn_config_path = notif_manager.create_kafka_conn_secret(topic)
         notif_manager.add_notif_conn_to_noobaa_cr(secret)
 
         buckets = [bucket.name for bucket in bucket_factory(SETUP_NUM)]
@@ -489,7 +478,7 @@ class TestBucketNotifications(MCGTest):
                 mcg_obj=mcg_obj,
                 bucket=bucket,
                 events=["s3:ObjectCreated:*"],
-                conn_file=conn_file_name,
+                conn_config_path=conn_config_path,
             )
 
         # 3. Write some objects to each bucket
