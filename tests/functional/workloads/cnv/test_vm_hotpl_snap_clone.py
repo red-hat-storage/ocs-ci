@@ -68,8 +68,8 @@ class TestVmHotPlugUnplugSnapClone(E2ETest):
         # List of VM-Object and PVC pairs for hotplug testing
         vms_pvc = [(vm_obj_pvc, pvc_obj), (vm_obj_dvt, dvt_obj)]
         before_disks_hotpl = []
+        i = 0
         for vm_obj, pvc in vms_pvc:
-            i = 0
             # Verify disks before hotplugging
             before_disks = vm_obj.run_ssh_cmd("lsblk -o NAME,SIZE,MOUNTPOINT -P")
             log.info(f"Disks before hotplug on VM {vm_obj.name}:\n{before_disks}")
