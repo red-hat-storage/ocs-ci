@@ -2,7 +2,7 @@ import pytest
 
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
-from ocs_ci.ocs import constants
+# from ocs_ci.ocs import constants
 from ocs_ci.ocs.bucket_utils import (
     write_random_test_objects_to_bucket,
     s3_delete_object,
@@ -12,7 +12,12 @@ from ocs_ci.ocs.resources.bucket_notifications_manager import (
     BucketNotificationsManager,
     logger,
 )
-from ocs_ci.ocs.resources.pod import get_noobaa_pods, get_pod_node
+from ocs_ci.ocs.resources.pod import (
+    # get_noobaa_pods,
+    # get_pod_node,
+    get_pods_having_label,
+    Pod,
+)
 from ocs_ci.utility.utils import TimeoutSampler
 
 
@@ -51,7 +56,7 @@ class TestBucketNotificationSystemTest:
                     and event["s3"]["bucket"]["name"] in bucket_names
                 ):
                     logger.info(
-                        f'{event_name} found for the bucket {event["s3"]["bucket"]["name"]}'
+                        f'{event_name} event found for the bucket {event["s3"]["bucket"]["name"]}'
                     )
                     bucket_names.remove(event["s3"]["bucket"]["name"])
 
@@ -134,12 +139,12 @@ class TestBucketNotificationSystemTest:
 
             # 5. Tag object from the bucket and restart noobaa pod nodes
             # Verify ObjectTagging:Put events has occurred for all the buckets
-            noobaa_pod_nodes = [
-                get_pod_node(pod_obj)
-                for pod_obj in get_noobaa_pods(
-                    namespace=constants.OPENSHIFT_STORAGE_NAMESPACE
-                )
-            ]
+            # noobaa_pod_nodes = [
+            #     get_pod_node(pod_obj)
+            #     for pod_obj in get_noobaa_pods(
+            #         namespace=constants.OPENSHIFT_STORAGE_NAMESPACE
+            #     )
+            # ]
             future_objs = []
             for bucket in buckets_created:
                 logger.info(f"Tagging object {obj_written[1]} from the bucket {bucket}")
@@ -154,8 +159,7 @@ class TestBucketNotificationSystemTest:
                 )
 
             logger.info("Stopping Noobaa pod nodes")
-            nodes.stop_nodes(nodes=noobaa_pod_nodes)
-
+            # nodes.stop_nodes(nodes=noobaa_pod_nodes)
             for future in as_completed(future_objs):
                 future.result()
 
@@ -170,10 +174,15 @@ class TestBucketNotificationSystemTest:
             )
 
             logger.info("Starting Noobaa pod nodes")
-            nodes.start_nodes(nodes=noobaa_pod_nodes)
+            # nodes.start_nodes(nodes=noobaa_pod_nodes)
 
             # 6. Remove object from the bucket and restart kafka pods
             # Verify ObjectRemoved event has occurred
+            kafka_kind_label = "strimzi.io/kind=Kafka"
+            kafka_pods = [
+                Pod(**pod_info)
+                for pod_info in get_pods_having_label(label=kafka_kind_label)
+            ]
             future_objs = []
             for bucket in buckets_created:
                 logger.info(f"Deleting object {obj_written[0]} from bucket {bucket}")
@@ -187,7 +196,9 @@ class TestBucketNotificationSystemTest:
                 )
 
             logger.info("Restarting Kafka pods")
-
+            for pod in kafka_pods:
+                logger.info(f"Deleting pod {pod.name}")
+                pod.delete()
             for future in as_completed(future_objs):
                 future.result()
 
