@@ -3918,28 +3918,31 @@ def get_active_mds_pods():
     return active_mds_pods
 
 
-def get_active_and_standby_mds_count():
+def verify_active_and_standby_mds_count(target_count):
     """
-    Get the active and standby mds pod count from ceph command.
+    Get the active and standby mds pod count from ceph command and verify it matches the target count.
 
-    Returns:
-     dict: A dictionary containing the counts of active and standby-replay MDS pods.
-           The dictionary has the following keys:
-               - active_pod_count (int): The number of active MDS pods.
-               - standby_replay_count (int): The number of standby-replay MDS pods.
+    Args:
+        target_count (int): The desired count of active and standby mds pods.
 
     """
-    # Verify active and standby-replay mds counts.
-    ct_pod = pod.get_ceph_tools_pod()
-    ceph_mdsmap = ct_pod.exec_ceph_cmd("ceph fs status")
-    # Extract the mdsmap list from the data
-    ceph_mdsmap = ceph_mdsmap["mdsmap"]
-    # Counting active and standby MDS daemons
-    active_pod_count = sum(1 for mds in ceph_mdsmap if mds["state"] == "active")
-    standby_replay_count = sum(
-        1 for mds in ceph_mdsmap if mds["state"] == "standby-replay"
-    )
-    return {
-        "active_pod_count": active_pod_count,
-        "standby_replay_count": standby_replay_count,
-    }
+
+    def get_mds_counts():
+        """Fetch active and standby-replay MDS counts."""
+        ct_pod = pod.get_ceph_tools_pod()
+        ceph_mdsmap = ct_pod.exec_ceph_cmd("ceph fs status")["mdsmap"]
+        active_pod_count = sum(1 for mds in ceph_mdsmap if mds["state"] == "active")
+        standby_replay_count = sum(
+            1 for mds in ceph_mdsmap if mds["state"] == "standby-replay"
+        )
+        return active_pod_count, standby_replay_count
+
+    try:
+        TimeoutSampler(timeout=180, sleep=10, func=get_mds_counts).wait_for_func_value(
+            (target_count, target_count)
+        )
+        logger.info(f"Active and standby-replay MDS pod counts reached {target_count}.")
+    except TimeoutExpiredError:
+        raise AssertionError(
+            f"Failed to reach target count {target_count} for active and standby-replay MDS pods within timeout."
+        )

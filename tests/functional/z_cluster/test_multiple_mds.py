@@ -4,7 +4,6 @@ Test cases for multiple mds support
 
 import logging
 import random
-import time
 
 import pytest
 
@@ -18,7 +17,7 @@ from ocs_ci.ocs.cluster import (
     adjust_active_mds_count_storagecluster,
     get_active_mds_count_cephfilesystem,
     get_active_mds_pods,
-    get_active_and_standby_mds_count,
+    verify_active_and_standby_mds_count,
     get_active_mds_info,
 )
 from ocs_ci.ocs.resources import pod
@@ -75,28 +74,6 @@ class TestMultipleMds:
         """
         self.sanity_helpers = Sanity()
 
-    def verify_mds_count(self, new_active_mds_count):
-        """
-        Verify active and standby-replay mds counts.
-
-        Args:
-            new_active_mds_count (int): The desired count for active mds pods.
-
-        """
-
-        pod_counts = get_active_and_standby_mds_count()
-        active_pod_count = pod_counts["active_pod_count"]
-        standby_replay_count = pod_counts["standby_replay_count"]
-
-        log.info(f"Number of active MDS daemons:{active_pod_count}")
-        log.info(f"Number of standby MDS daemons:{standby_replay_count}")
-        assert (
-            active_pod_count == new_active_mds_count
-        ), "Active mds counts did not increased"
-        assert (
-            standby_replay_count == new_active_mds_count
-        ), "Standby replay mds counts did not increased"
-
     def test_node_replacement_multiple_mds(self):
         """
         1. Trigger the scale-up process to add new pods.
@@ -112,7 +89,7 @@ class TestMultipleMds:
         adjust_active_mds_count_storagecluster(new_active_mds_count)
 
         # Verify active and standby-replay mds counts.
-        self.verify_mds_count(new_active_mds_count)
+        verify_active_and_standby_mds_count(new_active_mds_count)
 
         # Replace node
         active_mds_pods = get_active_mds_pods()
@@ -125,7 +102,7 @@ class TestMultipleMds:
         self.sanity_helpers.health_check(tries=120)
 
         # Verify active and standby-replay mds counts after node replacement
-        self.verify_mds_count(new_active_mds_count)
+        verify_active_and_standby_mds_count(new_active_mds_count)
 
     def test_node_drain_and_fault_tolerance_for_multiple_mds(self):
         """
@@ -161,14 +138,12 @@ class TestMultipleMds:
         self.sanity_helpers.health_check(tries=120)
 
         # Verify active and standby-replay mds counts.
-        self.verify_mds_count(new_active_mds_count)
+        verify_active_and_standby_mds_count(new_active_mds_count)
 
         # Fail one active mds pod [out of two]
         rand = random.randint(0, 1)
         ct_pod = pod.get_ceph_tools_pod()
         ct_pod.exec_ceph_cmd(f"ceph mds fail {rand}")
-        log.info("Wait for the standby MDS pod to transition into an active MDS pod")
-        time.sleep(60)
 
         # Verify active and standby-replay mds counts is still same.
-        self.verify_mds_count(new_active_mds_count)
+        verify_active_and_standby_mds_count(new_active_mds_count)
