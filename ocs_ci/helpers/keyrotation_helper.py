@@ -426,6 +426,7 @@ class PVKeyrotation(KeyRotation):
     def __init__(self, sc_obj):
         self.sc_obj = sc_obj
         self.kms = get_kms_details()
+        self.all_pvc_key_data = None
 
     def annotate_storageclass_key_rotation(self, schedule="@weekly"):
         """
@@ -476,4 +477,170 @@ class PVKeyrotation(KeyRotation):
             log.error(f"Keys are not rotated for device handle {device_handle}")
             assert False
 
+        return True
+
+    def set_keyrotation_state_by_annotation(self, enable: bool):
+        """
+        Enables or disables key rotation by annotating the StorageClass.
+        """
+        state = "true" if enable else "false"
+        annotation = f"keyrotation.csiaddons.openshift.io/enable={state}"
+        self.sc_obj.annotate(annotation=annotation)
+        log.info(
+            f"Key rotation {'enabled' if enable else 'disabled'} for the StorageClass."
+        )
+
+    def set_keyrotation_state_by_rbac_user(self, pvc_obj, suspend_state=True):
+        """
+        Updates key rotation CronJob state for a PVC.
+        """
+        cron_job = self.get_keyrotation_cronjob_for_pvc(pvc_obj)
+        state = "unmanaged" if suspend_state else "managed"
+        cron_job.annotate(f"csiaddons.openshift.io/state={state}", overwrite=True)
+
+        log.info(f"Updated CronJob annotation for PVC '{pvc_obj.name}' to '{state}'")
+
+        suspend_patch = (
+            '[{"op": "add", "path": "/spec/suspend", "value": true}]'
+            if suspend_state
+            else '[{"op": "remove", "path": "/spec/suspend"}]'
+        )
+        cron_job.patch(params=suspend_patch, format_type="json")
+        log.info(f"'suspend' {'enabled' if suspend_state else 'removed'} for CronJob.")
+
+    def get_keyrotation_cronjob_for_pvc(self, pvc_obj):
+        """
+        Retrieves the key rotation CronJob associated with a PVC.
+
+        Args:
+            pvc_obj (object): The PVC object for which to retrieve the CronJob.
+
+        Returns:
+            object: The CronJob object associated with the PVC.
+
+        Raises:
+            ValueError: If the PVC lacks the key rotation CronJob annotation.
+        """
+        # Ensure annotations are loaded in the PVC object
+        if "annotations" not in pvc_obj.data["metadata"]:
+            pvc_obj.reload()
+
+        # Extract the cronjob name from PVC annotations
+        cron_job_name = (
+            pvc_obj.data["metadata"]
+            .get("annotations", {})
+            .get("keyrotation.csiaddons.openshift.io/cronjob")
+        )
+
+        if not cron_job_name:
+            log.error(f"PVC '{pvc_obj.name}' lacks keyrotation cronjob annotation.")
+            raise ValueError(f"Missing keyrotation cronjob for PVC '{pvc_obj.name}'")
+
+        log.info(f"Found CronJob '{cron_job_name}' for PVC '{pvc_obj.name}'.")
+
+        cronjob_obj = OCP(
+            kind=constants.ENCRYPTIONKEYROTATIONCRONJOB,
+            namespace=pvc_obj.namespace,
+            resource_name=cron_job_name,
+        )
+
+        if not cronjob_obj.is_exist():
+            log.error(
+                f"cronjob {cron_job_name} is not exists for the PVC: {pvc_obj.name}"
+            )
+            raise ValueError(
+                f"Missing keyrotation cronjob Object for PVC '{pvc_obj.name}'"
+            )
+
+        return OCP(
+            kind=constants.ENCRYPTIONKEYROTATIONCRONJOB,
+            namespace=pvc_obj.namespace,
+            resource_name=cron_job_name,
+        )
+
+    def get_pvc_keys_data(self, pvc_objs):
+        """
+        Retrieves key data for PVCs.
+        """
+        return {
+            pvc.name: {
+                "device_handle": pvc.get_pv_volume_handle_name,
+                "vault_key": self.kms.get_pv_secret(pvc.get_pv_volume_handle_name),
+            }
+            for pvc in pvc_objs
+        }
+
+    @retry(UnexpectedBehaviour, tries=5, delay=20)
+    def wait_till_all_pv_keyrotation_on_vault_kms(self, pvc_objs):
+        """
+        Waits for all PVC keys to be rotated in the Vault KMS.
+        """
+        if not self.all_pvc_key_data:
+            self.all_pvc_key_data = self.get_pvc_keys_data(pvc_objs)
+            raise UnexpectedBehaviour("Initializing PVC vault key data")
+
+        new_pvc_keys = self.get_pvc_keys_data(pvc_objs)
+        if self.all_pvc_key_data == new_pvc_keys:
+            raise UnexpectedBehaviour("PVC keys have not rotated yet.")
+
+        log.info("PVC keys rotated successfully.")
+        return True
+
+    def change_pvc_keyrotation_cronjob_state(self, pvc_objs, disable=True):
+        """
+        Modify the key rotation state of PVCs by annotating and patching their associated cronjobs.
+
+        Args:
+            pvc_objs (list): List of PVC objects to modify.
+            disable (bool): If True, disables the key rotation. If False, enables it. Defaults to True.
+
+        Returns:
+            bool: True if the operation succeeds.
+        """
+        state_value = "unmanaged" if disable else "managed"
+
+        for pvc in pvc_objs:
+            # Retrieve the cronjob associated with the PVC
+            cronjob = self.get_keyrotation_cronjob_for_pvc(pvc)
+            if not cronjob:
+                log.warning(
+                    f"No KeyRotationCronjob found for PVC '{pvc.name}'. Skipping."
+                )
+                continue
+
+            # Annotate the cronjob to reflect the new state
+            state_annotation = f"csiaddons.openshift.io/state={state_value}"
+            cronjob.annotate(state_annotation, overwrite=True)
+            log.info(
+                f"Annotated KeyRotationCronjob for PVC '{pvc.name}' with state: {state_value}."
+            )
+
+            # Prepare the patch for suspending or resuming the cronjob
+            if disable:
+                suspend_patch = (
+                    '[{"op": "add", "path": "/spec/suspend", "value": true}]'
+                )
+                log.info(
+                    f"'suspend' set to True in KeyRotationCronjob for PVC '{pvc.name}'."
+                )
+            else:
+                suspend_patch = '[{"op": "remove", "path": "/spec/suspend"}]'
+                log.info(
+                    f"'suspend' removed from KeyRotationCronjob for PVC '{pvc.name}'."
+                )
+
+            # Apply the patch to the cronjob
+            try:
+                cronjob.patch(params=suspend_patch, format_type="json")
+                log.info(
+                    f"Successfully patched KeyRotationCronjob for PVC '{pvc.name}'."
+                )
+            except Exception as e:
+                log.error(
+                    f"Failed to patch KeyRotationCronjob for PVC '{pvc.name}': {e}"
+                )
+                raise
+            pvc.reload()
+
+        log.info("Completed key rotation state changes for all specified PVCs.")
         return True
