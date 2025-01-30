@@ -107,6 +107,7 @@ AI_NETWORK_CONFIG_TEMPLATE = os.path.join(
 )
 # Statuses
 STATUS_READY = "Ready"
+STATUS_PROGRESSING = "Progressing"
 PEER_READY = "Peer ready"
 STATUS_PENDING = "Pending"
 STATUS_CONTAINER_CREATING = "ContainerCreating"
