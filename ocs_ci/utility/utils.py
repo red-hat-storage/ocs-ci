@@ -2489,13 +2489,15 @@ def wait_for_ceph_health_not_ok(timeout=300, sleep=10):
     sampler.wait_for_func_status(True)
 
 
-def ceph_health_check(namespace=None, tries=20, delay=30):
+def ceph_health_check(namespace=None, tries=20, delay=30, resolve_daemon_crash=True):
     """
     Args:
         namespace (str): Namespace of OCS
             (default: config.ENV_DATA['cluster_namespace'])
         tries (int): Number of retries
         delay (int): Delay in seconds between retries
+        resolve_daemon_crash (bool): Automatically resolve daemon crash to
+            prevent issues in a test run.
 
     Returns:
         bool: ceph_health_check_base return value with default retries of 20,
@@ -2514,7 +2516,7 @@ def ceph_health_check(namespace=None, tries=20, delay=30):
         tries=tries,
         delay=delay,
         backoff=1,
-    )(ceph_health_check_base)(namespace)
+    )(ceph_health_check_base)(namespace, resolve_daemon_crash)
 
 
 def ceph_health_check_base(namespace=None, resolve_daemon_crash=True):
