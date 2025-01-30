@@ -34,6 +34,7 @@ from ocs_ci.framework.pytest_customization.marks import (
     ignore_leftover_label,
     upgrade_marks,
     ignore_resource_not_found_error_label,
+    skipif_ibm_cloud_managed,
     config_index,
 )
 
@@ -5191,11 +5192,13 @@ def es(request):
     return es
 
 
+@skipif_ibm_cloud_managed
 @pytest.fixture(scope="session")
 def setup_ui_session(request):
     return setup_ui_fixture(request)
 
 
+@skipif_ibm_cloud_managed
 @pytest.fixture(scope="class")
 def setup_ui_class(request):
     return setup_ui_fixture(request)
