@@ -8,4 +8,5 @@ class TestMirroringStatus(ManageTest):
     Test to check if the function to check mirroring status works with and without hci configuration
     """
 
-    wait_for_mirroring_status_ok()
+    def test_mirroring_status(self):
+        wait_for_mirroring_status_ok()
