@@ -1715,3 +1715,49 @@ def verify_drpc_deletion(cmd, expected_output_lst):
         if expected_output not in drpc_out.stderr.decode():
             return False
     return True
+
+
+def verify_last_kubeobject_protection_time(drpc_obj, kubeobject_sync_interval):
+    """
+    Verifies that the lastKubeObjectProtectionTime for a given DRPC object is within the expected range.
+
+    Args:
+        drpc_obj (obj): DRPC object
+        kubeobject_sync_interval (int): The KubeObject sync interval in minutes
+
+    Returns:
+        str: Current lastKubeObjectProtectionTime
+
+    Raises:
+        AssertionError: If the lastKubeObjectProtectionTime is outside the expected range
+            (greater than or equal to two times the scheduling interval)
+
+    """
+    restore_index = config.cur_index
+    config.switch_acm_ctx()
+    last_kubeobject_protection_time = drpc_obj.get_last_kubeobject_protection_time()
+    if not last_kubeobject_protection_time:
+        assert last_kubeobject_protection_time, (
+            "There is no lastKubeObjectProtectionTime. "
+            "Verify that certificates are included correctly in the Ramen Hub configuration map."
+        )
+    # Verify lastGroupSyncTime
+    time_format = "%Y-%m-%dT%H:%M:%SZ"
+    last_kubeobject_protection_time_formatted = datetime.strptime(
+        last_kubeobject_protection_time, time_format
+    )
+    current_time = datetime.strptime(
+        datetime.utcnow().strftime(time_format), time_format
+    )
+    time_since_last_sync = (
+        current_time - last_kubeobject_protection_time_formatted
+    ).total_seconds() / 60
+    logger.info(
+        f"Time in minutes since the last Kube Object sync {time_since_last_sync}"
+    )
+    assert (
+        time_since_last_sync < 2 * kubeobject_sync_interval
+    ), "The syncing of Kube Resources is exceeding three times the Kube object sync interval"
+    logger.info("Verified lastKubeObjectProtectionTime value within expected range")
+    config.switch_ctx(restore_index)
+    return last_kubeobject_protection_time
