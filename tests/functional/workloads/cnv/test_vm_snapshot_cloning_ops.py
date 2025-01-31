@@ -1,6 +1,5 @@
 import logging
 import pytest
-import time
 
 from ocs_ci.framework.pytest_customization.marks import magenta_squad, workloads
 from ocs_ci.framework.testlib import E2ETest
@@ -27,30 +26,40 @@ class TestVmSnapshotClone(E2ETest):
                     "OCS-6288"
                 ),  # Polarion ID for no PVC expansion
             ),
-            # pytest.param(
-            #     True,
-            #     False,
-            #     marks=pytest.mark.polarion_id(
-            #         "OCS-6326"
-            #     ),  # Polarion ID for expansion before clone
-            # ),
-            # pytest.param(
-            #     False,
-            #     True,
-            #     marks=pytest.mark.polarion_id(
-            #         "OCS-6326"
-            #     ),  # Polarion ID for expansion after clone
-            # ),
+            pytest.param(
+                True,
+                False,
+                marks=[
+                    pytest.mark.polarion_id(
+                        "OCS-6326"
+                    ),  # Polarion ID for expansion before clone
+                    pytest.mark.jira(
+                        "CNV-55558", run=False
+                    ),  # Skip if JIRA issue is open
+                ],
+            ),
+            pytest.param(
+                False,
+                True,
+                marks=[
+                    pytest.mark.polarion_id(
+                        "OCS-6326"
+                    ),  # Polarion ID for expansion after clone
+                    pytest.mark.jira(
+                        "CNV-55558", run=False
+                    ),  # Skip if JIRA issue is open
+                ],
+            ),
         ],
     )
-    def test_vm_clone(
+    def test_vm_clone_with_expansion(
         self,
+        setup_cnv,
         project_factory,
         pvc_expand_before_clone,
         pvc_expand_after_clone,
         multi_cnv_workload,
         clone_vm_workload,
-        setup_cnv,
     ):
         """
         This test performs the VM cloning and IOs created using different
@@ -83,32 +92,44 @@ class TestVmSnapshotClone(E2ETest):
         )
         vm_list = vm_objs_def + vm_objs_aggr
         log.info(f"Total VMs to process: {len(vm_list)}")
+        failed_vms = []
         for vm_obj in vm_list:
-            log.info(
-                f"Starting I/O operation on VM {vm_obj.name} using "
-                f"{file_paths[0]}..."
-            )
             # Expand PVC if `pvc_expand_before_snapshot` is True
             pvc_obj = vm_obj.get_vm_pvc_obj()
-            new_size = 50
             if pvc_expand_before_clone:
+                new_size = 50
                 try:
                     pvc_obj.resize_pvc(new_size=new_size, verify=True)
-                    time.sleep(30)
                     pvc_obj = vm_obj.get_vm_pvc_obj()
-                    result = vm_obj.run_ssh_cmd(command="lsblk -o SIZE")
-                    if str(new_size) in result:
+
+                    # Get rootdisk name
+                    disk = (
+                        vm_obj.vmi_obj.get()
+                        .get("status")
+                        .get("volumeStatus")[1]["target"]
+                    )
+                    devicename = f"/dev/{disk}"
+
+                    result = vm_obj.run_ssh_cmd(
+                        command=f"lsblk -d -n -o SIZE {devicename}"
+                    ).strip()
+                    if result == f"{new_size}G":
                         log.info("expanded PVC size is showing on vm")
                     else:
                         raise ValueError(
-                            "Expanded PVC size is not showing on VM. "
+                            "Expanded PVC size before clone is not showing on VM. "
                             "Please verify the disk rescan and filesystem resize."
                         )
                 except ValueError as e:
                     log.error(
                         f"Error for VM {vm_obj}: {e}. Continuing with the next VM."
                     )
-
+                    failed_vms.append(vm_obj.name)
+                    continue
+            log.info(
+                f"Starting I/O operation on VM {vm_obj.name} using "
+                f"{file_paths[0]}..."
+            )
             source_csum = run_dd_io(vm_obj=vm_obj, file_path=file_paths[0], verify=True)
             log.info(f"Source checksum for {vm_obj.name}: {source_csum}")
             log.info(f"Stopping VM {vm_obj.name}...")
@@ -136,20 +157,35 @@ class TestVmSnapshotClone(E2ETest):
                     assert (
                         clone_pvc_obj.get_vm_pvc_obj().size == new_size
                     ), f"Failed: VM PVC Expansion on cloned VM {clone_obj.name} "
-                    time.sleep(30)
-                    result = clone_obj.run_ssh_cmd(command="lsblk -o SIZE")
-                    if str(new_size) in result:
+
+                    # Get rootdisk name
+                    disk = (
+                        vm_obj.vmi_obj.get()
+                        .get("status")
+                        .get("volumeStatus")[1]["target"]
+                    )
+                    devicename = f"/dev/{disk}"
+
+                    result = vm_obj.run_ssh_cmd(
+                        command=f"lsblk -d -n -o SIZE {devicename}"
+                    ).strip()
+                    if result == f"{new_size}G":
                         log.info("expanded PVC size is showing on vm")
                     else:
                         raise ValueError(
-                            "Expanded PVC size is not showing on VM. "
+                            "Expanded PVC size after clone is not showing on VM. "
                             "Please verify the disk rescan and filesystem resize."
                         )
                 except ValueError as e:
                     log.error(
                         f"Error for VM {vm_obj}: {e}. Continuing with the next VM."
                     )
+                    failed_vms.append(vm_obj.name)
+                    continue
             run_dd_io(vm_obj=clone_obj, file_path=file_paths[1])
+
+        if failed_vms:
+            assert False, f"Test case failed for VMs: {', '.join(failed_vms)}"
 
     @workloads
     @pytest.mark.polarion_id("OCS-6299")
