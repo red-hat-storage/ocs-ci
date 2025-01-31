@@ -1,0 +1,38 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  labels:
+    appname: fedora-chunk-1
+    workloadpattern: chunk_io
+  name: chunkio-1
+spec:
+  selector:
+    matchLabels:
+      workload: chunkio-1
+  strategy:
+    type: Recreate
+  template:
+    metadata:
+      labels:
+        workload: chunkio-1
+    spec:
+      containers:
+      - command: ["/bin/sh", "-c"]
+        args:
+          - python3 /script/chunk.py
+        image: quay.io/nagreddy/test:demo
+        env:
+          - name: file_size_in_mb
+            value: "2000"
+          - name: number_of_files
+            value: "5"
+        imagePullPolicy: Always
+        name: chunkio
+        volumeMounts:
+        - mountPath: /mnt/test
+          name: mypvc
+      volumes:
+      - name: mypvc
+        persistentVolumeClaim:
+          claimName: pvc
+          readOnly: false
