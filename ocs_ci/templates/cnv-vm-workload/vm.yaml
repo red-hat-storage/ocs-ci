@@ -17,7 +17,7 @@ spec:
       architecture: amd64
       domain:
         cpu:
-          cores: 2
+          cores: 1
           sockets: 1
           threads: 1
         devices:
@@ -37,7 +37,7 @@ spec:
           networkInterfaceMultiqueue: true
           rng: {}
         memory:
-          guest: 6Gi
+          guest: 2Gi
         resources: {}
       evictionStrategy: LiveMigrate
       networks:
