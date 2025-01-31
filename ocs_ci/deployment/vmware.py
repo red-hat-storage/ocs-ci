@@ -19,6 +19,7 @@ import hcl2
 import yaml
 import re
 import shutil
+from pytest import fail
 
 from ocs_ci.deployment.helpers.vsphere_helpers import VSPHEREHELPERS
 from ocs_ci.deployment.helpers.prechecks import VSpherePreChecks
@@ -143,9 +144,9 @@ class VSPHEREBASE(Deployment):
 
         self.ocp_version = get_ocp_version()
         config.ENV_DATA["ocp_version"] = self.ocp_version
-        config.ENV_DATA["ocp_version_object"] = (
-            version.get_semantic_ocp_version_from_config()
-        )
+        config.ENV_DATA[
+            "ocp_version_object"
+        ] = version.get_semantic_ocp_version_from_config()
         config.ENV_DATA["version_4_9_object"] = version.VERSION_4_9
 
         self.wait_time = 90
@@ -1626,6 +1627,21 @@ class VSPHEREIPI(VSPHEREBASE):
             template_folder = get_infra_id(self.cluster_path)
         else:
             logger.warning("metadata.json file doesn't exist.")
+        vsphere = VSPHERE(
+            config.ENV_DATA["vsphere_server"],
+            config.ENV_DATA["vsphere_user"],
+            config.ENV_DATA["vsphere_password"],
+        )
+        all_vms = vsphere.get_vms_by_string(config.ENV_DATA["cluster_name"])
+        vsphere.stop_vms(all_vms)
+
+        for vm in all_vms:
+            try:
+                vsphere.remove_disks_with_main_disk(vm)
+            except Exception as e:
+                logger.error(
+                    f"Removing disks for {vm.name} in destroy fail with the error {e}"
+                )
 
         try:
             run_cmd(
