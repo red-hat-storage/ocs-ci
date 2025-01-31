@@ -8,6 +8,7 @@ from ocs_ci.framework.testlib import E2ETest
 from ocs_ci.helpers.cnv_helpers import cal_md5sum_vm, run_dd_io, verifyvolume
 from ocs_ci.helpers.helpers import create_pvc
 from ocs_ci.ocs import constants
+from ocs_ci.ocs.resources.pvc import delete_pvcs
 
 log = logging.getLogger(__name__)
 
@@ -24,7 +25,7 @@ class TestVmHotPlugUnplug(E2ETest):
 
     def test_vm_hot_plugging_unplugging(
         self,
-        setup_cnv,
+        # setup_cnv,
         project_factory,
         multi_cnv_workload,
     ):
@@ -137,3 +138,4 @@ class TestVmHotPlugUnplug(E2ETest):
             assert set(after_disks) == set(
                 after_hotplug_rm_disk_wout
             ), f"Failed to unplug disk {pvc_obj_wout.name} from VM {vm_obj.name}"
+            delete_pvcs(pvc_objs=[pvc_obj_wout, pvc_obj])
