@@ -817,7 +817,7 @@ def import_clusters_via_cli(clusters):
         time.sleep(60)
         ocp_obj = OCP(kind=constants.ACM_MANAGEDCLUSTER)
         ocp_obj.wait_for_resource(
-            timeout=1200,
+            timeout=2000,
             condition="True",
             column="AVAILABLE",
             resource_name=cluster[0],
