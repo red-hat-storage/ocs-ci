@@ -124,6 +124,18 @@ class PageNavigator(BaseUI):
 
         return ObjectStorage()
 
+    def nav_buckets_page(self):
+        """
+        Navigate to Buckets page
+
+        """
+        self.choose_expanded_mode(mode=True, locator=self.page_nav["Storage"])
+        self.do_click(locator=self.page_nav["buckets_tab"], timeout=90)
+        self.page_has_loaded(retries=15)
+        from ocs_ci.ocs.ui.page_objects.object_storage import ObjectStorage
+
+        return ObjectStorage()
+
     def navigate_quickstarts_page(self):
         """
         Navigate to Quickstarts Page
