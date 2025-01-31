@@ -11,7 +11,6 @@ from subprocess import TimeoutExpired
 from semantic_version import Version
 
 from ocs_ci.ocs.machine import get_machine_objs
-
 from ocs_ci.framework import config
 from ocs_ci.ocs.exceptions import (
     TimeoutExpiredError,
@@ -1209,6 +1208,10 @@ def delete_and_create_osd_node_vsphere_upi_lso(osd_node_name, use_existing_node=
         str: The new node name
 
     """
+
+    # importing within the func to avoid circular import
+    from ocs_ci.ocs.cluster import is_stretch_cluster
+
     sc_name = constants.LOCAL_BLOCK_RESOURCE
     old_pv_objs = get_pv_objs_in_sc(sc_name)
 
@@ -1229,6 +1232,11 @@ def delete_and_create_osd_node_vsphere_upi_lso(osd_node_name, use_existing_node=
     # Save the node hostname before deleting the node
     osd_node_hostname_label = get_node_hostname_label(osd_node)
 
+    # Save the node topology label if stretch cluster deployment
+    node_topology_label = None
+    if is_stretch_cluster():
+        node_topology_label = get_node_topology_label(osd_node)
+
     log.info("Scale down node deployments...")
     scale_down_deployments(osd_node_name)
     log.info("Scale down deployments finished successfully")
@@ -1239,10 +1247,15 @@ def delete_and_create_osd_node_vsphere_upi_lso(osd_node_name, use_existing_node=
     assert new_node_name, "Failed to create a new node"
     log.info(f"New node created successfully. Node name: {new_node_name}")
 
+    # Label the node with topology zone label if stretch cluster
+    new_node = get_node_objs(node_names=[new_node_name])[0]
+    if is_stretch_cluster():
+        label_nodes([new_node], label=f"{constants.ZONE_LABEL}={node_topology_label}")
+
     num_of_new_pvs = len(osd_ids)
     log.info(f"Number of the expected new pvs = {num_of_new_pvs}")
     # If we use LSO, we need to create and attach a new disk manually
-    new_node = get_node_objs(node_names=[new_node_name])[0]
+
     for i in range(num_of_new_pvs):
         add_disk_to_node(new_node)
 
@@ -1752,6 +1765,20 @@ def get_node_hostname_label(node_obj):
 
     """
     return node_obj.get().get("metadata").get("labels").get(constants.HOSTNAME_LABEL)
+
+
+def get_node_topology_label(node_obj):
+    """
+    Get the topology label from a node
+
+    Args:
+        node_obj (ocs_ci.ocs.resources.ocs.OCS): The node object
+
+    Returns:
+        str: The node's topology label
+
+    """
+    return node_obj.get().get("metadata").get("labels").get(constants.ZONE_LABEL)
 
 
 def wait_for_new_osd_node(old_osd_node_names, timeout=600):
