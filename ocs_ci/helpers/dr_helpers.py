@@ -312,6 +312,9 @@ def check_mirroring_status_ok(
             is not obtained
     """
     if is_hci_cluster():
+        logging.info(
+            "Find the cephblockpoolradosnamespace the associated with storageclient"
+        )
         cephbpradosns = (
             config.ENV_DATA.get("radosnamespace_name", False) or cephblockpoolradosns
         )
