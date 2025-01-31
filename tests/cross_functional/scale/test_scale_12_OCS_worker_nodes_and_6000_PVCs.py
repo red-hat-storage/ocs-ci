@@ -244,7 +244,7 @@ class TestAddNode(E2ETest):
         )
 
     @ignore_leftovers
-    def test_add_node_cleanup(self):
+    def deprecated_test_add_node_cleanup(self):
         """
         Test to cleanup possible resources created in TestAddNode class
         """
