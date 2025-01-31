@@ -21,7 +21,7 @@ class TestVmHotPlugUnplugSnapClone(E2ETest):
 
     def test_vm_hotpl_snap_clone(
         self,
-        # setup_cnv,
+        setup_cnv,
         project_factory,
         cnv_workload,
         pvc_clone_factory,
@@ -63,22 +63,23 @@ class TestVmHotPlugUnplugSnapClone(E2ETest):
             volume_mode=constants.VOLUME_MODE_BLOCK,
         )
 
-        log.info(f"PVC {dvt_obj.name} and {pvc_obj.name} created successfully")
+        log.info(f"PVCs {dvt_obj.name} and {pvc_obj.name} created successfully")
 
-        # List of VM-Object and PVC pairs for hotplug testing
+        # List of VM-PVC pairs for hotplug testing
         vms_pvc = [(vm_obj_pvc, pvc_obj), (vm_obj_dvt, dvt_obj)]
         before_disks_hotpl = []
-        i = 0
-        for vm_obj, pvc in vms_pvc:
+
+        # Hotplug disks and perform I/O operations
+        for i, (vm_obj, pvc) in enumerate(vms_pvc):
             # Verify disks before hotplugging
             before_disks = vm_obj.run_ssh_cmd("lsblk -o NAME,SIZE,MOUNTPOINT -P")
             log.info(f"Disks before hotplug on VM {vm_obj.name}:\n{before_disks}")
-            before_disks_hotpl[i] = before_disks
+            before_disks_hotpl.append(before_disks)
 
             # Hotplug the PVC volume
             vm_obj.addvolume(volume_name=pvc.name, verify=True)
             log.info(f"Hotplugged PVC {pvc.name} to VM {vm_obj.name}")
-            time.sleep(30)
+            time.sleep(5)
 
             # Verify disks after hotplugging
             after_disks = vm_obj.run_ssh_cmd("lsblk -o NAME,SIZE,MOUNTPOINT -P")
@@ -104,23 +105,20 @@ class TestVmHotPlugUnplugSnapClone(E2ETest):
                 source_csum == new_csum
             ), f"MD5 mismatch after reboot for VM {vm_obj.name}"
 
-        # Create PVC clones
+        # Create PVC clones and attach them to opposite VMs
         clone_obj_pvc = pvc_clone_factory(pvc_obj)
         clone_obj_dvt = pvc_clone_factory(dvt_obj)
         log.info(f"Clones of PVCs {pvc_obj.name} and {dvt_obj.name} created!")
 
         # Attach clones to the opposite VMs
-
-        # Verify doesn't work as temp hotplug is
-        # not visible inside VM yaml
         vm_obj_pvc.addvolume(volume_name=clone_obj_dvt.name, persist=False)
         vm_obj_dvt.addvolume(volume_name=clone_obj_pvc.name, persist=False)
 
         # Run I/O on the cloned disks
-        run_dd_io(vm_obj=vm_obj_pvc, file_path=file_paths[0])
-        run_dd_io(vm_obj=vm_obj_dvt, file_path=file_paths[0])
+        run_dd_io(vm_obj=vm_obj_pvc, file_path=file_paths[1])
+        run_dd_io(vm_obj=vm_obj_dvt, file_path=file_paths[1])
 
-        # Unplug the cloned disks and verify detachment
+        # Unplug cloned disks and verify detachment
         vm_obj_pvc.removevolume(volume_name=clone_obj_dvt.name, verify=True)
         vm_obj_dvt.removevolume(volume_name=clone_obj_pvc.name, verify=True)
 
