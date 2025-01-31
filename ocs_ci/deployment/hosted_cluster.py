@@ -5,6 +5,7 @@ import tempfile
 import time
 from concurrent.futures import ThreadPoolExecutor
 from ocs_ci.deployment.cnv import CNVInstaller
+from ocs_ci.deployment.mce import MCEInstaller
 from ocs_ci.deployment.deployment import Deployment
 from ocs_ci.deployment.helpers.hypershift_base import (
     HyperShiftBase,
@@ -359,12 +360,15 @@ class HostedClients(HyperShiftBase):
             hosted_odf.do_deploy()
 
 
-class HypershiftHostedOCP(HyperShiftBase, MetalLBInstaller, CNVInstaller, Deployment):
+class HypershiftHostedOCP(
+    HyperShiftBase, MetalLBInstaller, CNVInstaller, Deployment, MCEInstaller
+):
     def __init__(self, name):
         Deployment.__init__(self)
         HyperShiftBase.__init__(self)
         MetalLBInstaller.__init__(self)
         CNVInstaller.__init__(self)
+        MCEInstaller.__init__(self)
         self.name = name
         if config.ENV_DATA.get("clusters", {}).get(self.name):
             cluster_path = (
@@ -386,6 +390,7 @@ class HypershiftHostedOCP(HyperShiftBase, MetalLBInstaller, CNVInstaller, Deploy
         deploy_acm_hub=True,
         deploy_metallb=True,
         download_hcp_binary=True,
+        deploy_mce=True,
     ):
         """
         Deploy hosted OCP cluster on provisioned Provider platform
@@ -406,7 +411,7 @@ class HypershiftHostedOCP(HyperShiftBase, MetalLBInstaller, CNVInstaller, Deploy
             deploy_acm_hub = False
 
         self.deploy_dependencies(
-            deploy_acm_hub, deploy_cnv, deploy_metallb, download_hcp_binary
+            deploy_acm_hub, deploy_cnv, deploy_metallb, download_hcp_binary, deploy_mce
         )
 
         ocp_version = str(config.ENV_DATA["clusters"][self.name].get("ocp_version"))
@@ -450,7 +455,12 @@ class HypershiftHostedOCP(HyperShiftBase, MetalLBInstaller, CNVInstaller, Deploy
         )
 
     def deploy_dependencies(
-        self, deploy_acm_hub, deploy_cnv, deploy_metallb, download_hcp_binary
+        self,
+        deploy_acm_hub,
+        deploy_cnv,
+        deploy_metallb,
+        download_hcp_binary,
+        deploy_mce,
     ):
         """
         Deploy dependencies for hosted OCP cluster
@@ -459,6 +469,7 @@ class HypershiftHostedOCP(HyperShiftBase, MetalLBInstaller, CNVInstaller, Deploy
             deploy_cnv: bool Deploy CNV
             deploy_metallb: bool Deploy MetalLB
             download_hcp_binary: bool Download HCP binary
+            deploy_mce: bool Deploy mce
 
         """
         initial_default_sc = helpers.get_default_storage_class()
@@ -480,6 +491,9 @@ class HypershiftHostedOCP(HyperShiftBase, MetalLBInstaller, CNVInstaller, Deploy
             self.deploy_lb()
         if download_hcp_binary:
             self.update_hcp_binary()
+        if deploy_mce and not deploy_acm_hub:
+            self.deploy_mce()
+            self.validate_mce_deployment()
 
         provider_ocp_version = str(
             get_semantic_version(get_ocp_version(), only_major_minor=True)

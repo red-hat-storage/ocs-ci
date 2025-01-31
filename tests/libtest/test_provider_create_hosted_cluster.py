@@ -312,3 +312,29 @@ class TestProviderHosted(object):
             assert (
                 storage_class in storage_class_classes
             ), "Storage classes ae not created as expected"
+
+    @runs_on_provider
+    @hci_provider_required
+    def test_deploy_mce(self):
+        """
+        Test deploy mce without installting acm
+        """
+        logger.info("Test deploy mce without deploying ACM")
+        hypershift_hosted = HypershiftHostedOCP("dummy")
+        hypershift_hosted.deploy_dependencies(
+            deploy_acm_hub=False,
+            deploy_cnv=False,
+            deploy_metallb=False,
+            download_hcp_binary=False,
+            deploy_mce=True,
+        )
+
+    @hci_provider_required
+    def test_provider_deploy_OCP_hosted_skip_acm(self):
+        """
+        Test deploy hosted OCP on provider platform with cnv ready beforehand
+        """
+        logger.info("Test deploy hosted OCP on provider platform with cnv ready")
+        cluster_name = list(config.ENV_DATA["clusters"].keys())[-1]
+
+        HypershiftHostedOCP(cluster_name).deploy_ocp(deploy_acm_hub=False)
