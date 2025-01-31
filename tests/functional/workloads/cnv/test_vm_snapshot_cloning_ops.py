@@ -1,6 +1,5 @@
 import logging
 import pytest
-import time
 
 from ocs_ci.framework.pytest_customization.marks import magenta_squad, workloads
 from ocs_ci.framework.testlib import E2ETest
@@ -86,20 +85,26 @@ class TestVmSnapshotClone(E2ETest):
                     "OCS-6299"
                 ),  # Polarion ID for no PVC expansion
             ),
-            # pytest.param(
-            #     True,
-            #     False,
-            #     marks=pytest.mark.polarion_id(
-            #         "OCS-6305"
-            #     ),  # Polarion ID for expansion before snapshot
-            # ),
-            # pytest.param(
-            #     False,
-            #     True,
-            #     marks=pytest.mark.polarion_id(
-            #         "OCS-6305"
-            #     ),  # Polarion ID for expansion after restore
-            # ),
+            pytest.param(
+                True,
+                False,
+                marks=[
+                    pytest.mark.polarion_id(
+                        "OCS-6305"
+                    ),  # Polarion ID for expansion before snapshot
+                    pytest.mark.jira("CNV-55558", run=False),
+                ],
+            ),
+            pytest.param(
+                False,
+                True,
+                marks=[
+                    pytest.mark.polarion_id(
+                        "OCS-6305"
+                    ),  # Polarion ID for expansion after restore
+                    pytest.mark.jira("CNV-55558", run=False),
+                ],
+            ),
         ],
     )
     def test_vm_snapshot_ops(
@@ -136,18 +141,28 @@ class TestVmSnapshotClone(E2ETest):
             namespace=proj_obj.namespace
         )
         vm_list = vm_objs_def + vm_objs_aggr
-
+        failed_vms = []
         for vm_obj in vm_list:
             # Expand PVC if `pvc_expand_before_snapshot` is True
             pvc_obj = vm_obj.get_vm_pvc_obj()
-            new_size = 50
             if pvc_expand_before_snapshot:
+                new_size = 50
                 try:
                     pvc_obj.resize_pvc(new_size=new_size, verify=True)
                     pvc_obj = vm_obj.get_vm_pvc_obj()
-                    time.sleep(30)
-                    result = vm_obj.run_ssh_cmd(command="lsblk -o SIZE")
-                    if str(new_size) in result:
+
+                    # get rootdisk name
+                    disk = (
+                        vm_obj.vmi_obj.get()
+                        .get("status")
+                        .get("volumeStatus")[1]["target"]
+                    )
+                    devicename = f"/dev/{disk}"
+
+                    result = vm_obj.run_ssh_cmd(
+                        command=f"lsblk -d -n -o SIZE {devicename}"
+                    ).strip()
+                    if result == f"{new_size}G":
                         log.info("expanded PVC size is showing on vm")
                     else:
                         raise ValueError(
@@ -158,6 +173,8 @@ class TestVmSnapshotClone(E2ETest):
                     log.error(
                         f"Error for VM {vm_obj}: {e}. Continuing with the next VM."
                     )
+                    failed_vms.append(vm_obj.name)
+                    continue
 
             # Writing IO on source VM
             source_csum = run_dd_io(vm_obj=vm_obj, file_path=file_paths[0], verify=True)
@@ -197,9 +214,19 @@ class TestVmSnapshotClone(E2ETest):
                         f"snapshot restore"
                     )
 
-                    time.sleep(30)
-                    result = res_snap_obj.run_ssh_cmd(command="lsblk -o SIZE")
-                    if str(new_size) in result:
+                    # Get rootdisk name
+                    disk = (
+                        vm_obj.vmi_obj.get()
+                        .get("status")
+                        .get("volumeStatus")[1]["target"]
+                    )
+                    devicename = f"/dev/{disk}"
+
+                    result = vm_obj.run_ssh_cmd(
+                        command=f"lsblk -d -n -o SIZE {devicename}"
+                    ).strip()
+
+                    if result == f"{new_size}G":
                         log.info("expanded PVC size is showing on vm")
                     else:
                         raise ValueError(
@@ -210,6 +237,8 @@ class TestVmSnapshotClone(E2ETest):
                     log.error(
                         f"Error for VM {vm_obj}: {e}. Continuing with the next VM."
                     )
+                    failed_vms.append(vm_obj.name)
+                    continue
 
             # Validate data integrity of file written before taking snapshot
             res_csum = cal_md5sum_vm(vm_obj=res_vm_obj, file_path=file_paths[0])
@@ -220,3 +249,5 @@ class TestVmSnapshotClone(E2ETest):
             # Write new file to VM
             run_dd_io(vm_obj=res_vm_obj, file_path=file_paths[1], verify=True)
             res_vm_obj.stop()
+        if failed_vms:
+            assert False, f"Test case failed for VMs: {', '.join(failed_vms)}"
