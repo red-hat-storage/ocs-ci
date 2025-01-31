@@ -141,6 +141,10 @@ class ExternalCluster(object):
                 "rbd_namespace"
             ) or self.create_rbd_namespace(rbd=rbd_name)
             params = f"{params} --rados-namespace {rbd_namespace}"
+            if "restricted-auth-permission" not in params:
+                params += " --restricted-auth-permission true"
+            if "cluster-name" not in params:
+                params += f" --k8s-cluster-name {cluster_name}"
 
         out = self.run_exporter_script(params=params)
 
