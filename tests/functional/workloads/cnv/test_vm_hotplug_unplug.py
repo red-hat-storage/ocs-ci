@@ -1,4 +1,6 @@
 import logging
+import time
+
 import pytest
 
 from ocs_ci.framework.pytest_customization.marks import magenta_squad, workloads
@@ -63,7 +65,7 @@ class TestVmHotPlugUnplug(E2ETest):
             # Attach the PVC to the VM (with persist flag enabled)
             vm_obj.addvolume(volume_name=pvc_obj.name, verify=True)
             log.info(f"Hotplugged PVC {pvc_obj.name} to VM {vm_obj.name}")
-
+            time.sleep(30)
             # Step 3: Verify the disk is attached
             after_disks = vm_obj.run_ssh_cmd("lsblk -o NAME,SIZE,MOUNTPOINT -P")
             log.info(f"Disks after hotplug:\n{after_disks}")
@@ -107,7 +109,7 @@ class TestVmHotPlugUnplug(E2ETest):
             log.info(
                 f"Hotplugged PVC {pvc_obj_wout.name} to VM {vm_obj.name} without persist"
             )
-
+            time.sleep(30)
             # Step 7: Verify the new disk was successfully hotplugged
             after_disks_wout_add = vm_obj.run_ssh_cmd(
                 "lsblk -o NAME,SIZE,MOUNTPOINT -P"
