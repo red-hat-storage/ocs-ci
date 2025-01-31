@@ -453,7 +453,7 @@ class TestGracefulNodesShutdown(E2ETest):
                 AssertionError,
                 ResourceWrongStatusException,
             ),
-            tries=30,
+            tries=25,
             delay=15,
         )(wait_for_nodes_status(timeout=1800))
         logger.info("All nodes are now in READY state")

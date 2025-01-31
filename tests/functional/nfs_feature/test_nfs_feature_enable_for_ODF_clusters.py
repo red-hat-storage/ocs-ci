@@ -466,7 +466,7 @@ class TestNfsEnable(ManageTest):
 
         retry(
             (CommandFailed),
-            tries=200,
+            tries=28,
             delay=10,
         )(self.con.exec_cmd(export_nfs_external_cmd))
 
@@ -639,7 +639,7 @@ class TestNfsEnable(ManageTest):
             )
             retry(
                 (CommandFailed),
-                tries=200,
+                tries=28,
                 delay=10,
             )(self.con.exec_cmd(export_nfs_external_cmd))
 
@@ -772,7 +772,7 @@ class TestNfsEnable(ManageTest):
         )
         retry(
             (CommandFailed),
-            tries=200,
+            tries=28,
             delay=10,
         )(self.con.exec_cmd(export_nfs_external_cmd))
 
@@ -905,7 +905,7 @@ class TestNfsEnable(ManageTest):
         )
         retry(
             (CommandFailed),
-            tries=200,
+            tries=28,
             delay=10,
         )(self.con.exec_cmd(export_nfs_external_cmd))
 

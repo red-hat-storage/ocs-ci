@@ -2845,7 +2845,7 @@ class RBDDRDeployOps(object):
             index = +1
 
         # Check for RBD mirroring pods
-        @retry(PodNotCreated, tries=1000, delay=5)
+        @retry(PodNotCreated, tries=28, delay=5)
         def _get_mirror_pod_count():
             mirror_pod = get_pod_count(label="app=rook-ceph-rbd-mirror")
             if not mirror_pod:
@@ -3010,7 +3010,7 @@ class MultiClusterDROperatorsDeploy(object):
 
         retry(
             (ResourceNameNotSpecifiedException, ChannelNotFound, CommandFailed),
-            tries=50,
+            tries=27,
             delay=20,
         )(package_manifest.get_current_csv)(
             self.channel, constants.ACM_ODF_MULTICLUSTER_ORCHESTRATOR_RESOURCE
