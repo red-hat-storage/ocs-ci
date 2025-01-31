@@ -21,7 +21,7 @@ from ocs_ci.ocs.exceptions import UnexpectedBehaviour
 from ocs_ci.ocs.ui.validation_ui import ValidationUI
 from ocs_ci.ocs.ui.views import locators
 from ocs_ci.ocs.utils import enable_mco_console_plugin, get_primary_cluster_config
-from ocs_ci.utility.utils import get_ocp_version
+from ocs_ci.utility.utils import get_ocp_version, ceph_health_check
 from ocs_ci.ocs.resources.drpc import DRPC
 
 logger = logging.getLogger(__name__)
@@ -50,12 +50,16 @@ def scale_up_deployment(request):
         primary_config = get_primary_cluster_config()
         primary_index = primary_config.MULTICLUSTER.get("multicluster_index")
         config.switch_ctx(primary_index)
+        logger.info(
+            "Scaling up rbd-mirror and mds deployments to one on primary cluster"
+        )
         helpers.modify_deployment_replica_count(
             deployment_name=constants.RBD_MIRROR_DAEMON_DEPLOYMENT, replica_count=1
         )
         helpers.modify_deployment_replica_count(
             deployment_name=constants.MDS_DAEMON_DEPLOYMENT, replica_count=1
         )
+        ceph_health_check(tries=30, delay=60)
 
     request.addfinalizer(teardown)
 
@@ -76,12 +80,10 @@ class TestRDRWarningAndAlerting:
         ],
         argvalues=[
             pytest.param(
-                False,
                 constants.ACTION_FAILOVER,
                 marks=pytest.mark.polarion_id("xxx"),
             ),
             pytest.param(
-                True,
                 constants.ACTION_RELOCATE,
                 marks=pytest.mark.polarion_id("yyy"),
             ),
