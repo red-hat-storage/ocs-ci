@@ -51,7 +51,7 @@ from ocs_ci.ocs.resources.pv import get_all_pvs
 from ocs_ci.ocs.resources.pvc import (
     scale_down_pods_and_remove_pvcs,
 )
-from ocs_ci.utility.aws import AWS
+from ocs_ci.utility.aws import AWS, delete_sts_iam_roles
 from ocs_ci.utility.bootstrap import gather_bootstrap
 from ocs_ci.utility.csr import approve_pending_csr, wait_for_all_nodes_csr_and_approve
 from ocs_ci.utility.ipam import IPAM
@@ -66,6 +66,7 @@ from ocs_ci.utility.utils import (
     clone_repo,
     convert_yaml2tfvars,
     create_directory_path,
+    get_infra_id_from_openshift_install_state,
     read_file_as_str,
     replace_content_in_file,
     run_cmd,
@@ -88,6 +89,10 @@ from ocs_ci.utility.vsphere import VSPHERE
 from ocs_ci.utility.connection import Connection
 from ocs_ci.ocs.exceptions import ConnectivityFail
 from ocs_ci.deployment import assisted_installer
+
+# FDF STS
+from ocs_ci.utility import cco
+from ocs_ci.utility.deployment import get_ocp_release_image_from_installer
 
 logger = logging.getLogger(__name__)
 
@@ -1532,6 +1537,50 @@ class VSPHEREIPI(VSPHEREBASE):
             # create DNS records
             create_dns_records(ips)
 
+            # FDF STS
+            if config.DEPLOYMENT.get("sts_enabled"):
+                self.aws_sts_setup()
+
+        def aws_sts_setup(self):
+            """
+            Perform setup procedure for STS Mode deployments.
+            """
+            cluster_path = config.ENV_DATA["cluster_path"]
+            output_dir = os.path.join(cluster_path, "output-dir")
+            pull_secret_path = os.path.join(constants.DATA_DIR, "pull-secret")
+            credentials_requests_dir = os.path.join(cluster_path, "creds_reqs")
+            install_config = os.path.join(cluster_path, "install-config.yaml")
+
+            release_image = get_ocp_release_image_from_installer()
+            cco_image = cco.get_cco_container_image(release_image, pull_secret_path)
+            cco.extract_ccoctl_binary(cco_image, pull_secret_path)
+            cco.extract_credentials_requests(
+                release_image,
+                install_config,
+                pull_secret_path,
+                credentials_requests_dir,
+            )
+            cco.set_credentials_mode_manual(install_config)
+            cco.create_manifests(self.installer, cluster_path)
+            infra_id = get_infra_id_from_openshift_install_state(cluster_path)
+            cco.process_credentials_requests_aws(
+                infra_id,
+                config.ENV_DATA.get("region"),
+                credentials_requests_dir,
+                output_dir,
+            )
+            manifests_source_dir = os.path.join(output_dir, "manifests")
+            manifests_target_dir = os.path.join(cluster_path, "manifests")
+            file_names = os.listdir(manifests_source_dir)
+            for file_name in file_names:
+                shutil.move(
+                    os.path.join(manifests_source_dir, file_name), manifests_target_dir
+                )
+
+            tls_source_dir = os.path.join(output_dir, "tls")
+            tls_target_dir = os.path.join(cluster_path, "tls")
+            shutil.move(tls_source_dir, tls_target_dir)
+
         def create_config(self):
             """
             Creates the OCP deploy config for the vSphere
@@ -1654,6 +1703,10 @@ class VSPHEREIPI(VSPHEREBASE):
         # post destroy checks
         if template_folder:
             self.post_destroy_checks(template_folder=template_folder)
+
+        # FDF STS
+        if config.DEPLOYMENT.get("sts_enabled"):
+            delete_sts_iam_roles()
 
     def post_destroy_checks(self, template_folder):
         """
