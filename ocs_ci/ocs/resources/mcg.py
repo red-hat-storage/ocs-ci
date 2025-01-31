@@ -6,6 +6,7 @@ import re
 
 import tempfile
 from time import sleep
+import time
 
 import boto3
 from botocore.client import ClientError
@@ -27,8 +28,10 @@ from ocs_ci.ocs.exceptions import (
 )
 from ocs_ci.ocs.ocp import OCP
 from ocs_ci.ocs.resources.pod import (
+    get_noobaa_pods,
     get_pods_having_label,
     Pod,
+    wait_for_pods_to_be_running,
 )
 from ocs_ci.utility import templating, version
 from ocs_ci.utility.retry import retry
@@ -934,13 +937,20 @@ class MCG:
         return result
 
     @property
+    def status(self):
+        """
+        Expose the status check of NooBaa as a property
+        """
+        return self._status()
+
+    @staticmethod
     @retry(
         exception_to_check=(CommandFailed, KeyError, subprocess.TimeoutExpired),
         tries=10,
         delay=6,
         backoff=1,
     )
-    def status(self):
+    def _status():
         """
         Verify the status of NooBaa, and its default backing store and bucket class
 
@@ -949,13 +959,14 @@ class MCG:
 
         """
         # Get noobaa status
-        get_noobaa = OCP(kind="noobaa", namespace=self.namespace).get(
+        namespace = config.ENV_DATA["cluster_namespace"]
+        get_noobaa = OCP(kind="noobaa", namespace=namespace).get(
             resource_name=NOOBAA_RESOURCE_NAME
         )
-        get_default_bs = OCP(kind="backingstore", namespace=self.namespace).get(
+        get_default_bs = OCP(kind="backingstore", namespace=namespace).get(
             resource_name=DEFAULT_NOOBAA_BACKINGSTORE
         )
-        get_default_bc = OCP(kind="bucketclass", namespace=self.namespace).get(
+        get_default_bc = OCP(kind="bucketclass", namespace=namespace).get(
             resource_name=DEFAULT_NOOBAA_BUCKETCLASS
         )
         return (
@@ -964,6 +975,37 @@ class MCG:
             == get_default_bc["status"]["phase"]
             == STATUS_READY
         )
+
+    @staticmethod
+    def wait_for_ready_status(timeout=600):
+        """
+        Wait for NooBaa's resources to reach the 'Ready' status
+
+        Args:
+            timeout (int): Number of seconds to wait for the status
+
+        Raises:
+            TimeoutExpiredError: If the status is not reached within the timeout
+        """
+        starttime = time.time()
+        nb_pods = [pod.name for pod in get_noobaa_pods()]
+        wait_for_pods_to_be_running(
+            namespace=config.ENV_DATA["cluster_namespace"],
+            pod_names=nb_pods,
+            timeout=timeout,
+            sleep=10,
+        )
+        timeout = int(timeout - (time.time() - starttime))
+        try:
+            for mcg_status_ready in TimeoutSampler(
+                timeout=timeout, sleep=30, func=MCG._status
+            ):
+                if mcg_status_ready:
+                    return
+        except TimeoutExpiredError as e:
+            raise TimeoutExpiredError(
+                e, f"NooBaa health is not OK after {timeout} seconds"
+            )
 
     def get_mcg_cli_version(self):
         """

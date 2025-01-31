@@ -12,12 +12,11 @@ from ocs_ci.helpers.helpers import (
 )
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.amq import AMQ
-from ocs_ci.ocs.cluster import CephCluster
 from ocs_ci.ocs.exceptions import CommandFailed
 from ocs_ci.ocs.ocp import OCP
+from ocs_ci.ocs.resources.mcg import MCG
 from ocs_ci.ocs.resources.pod import (
     Pod,
-    get_noobaa_pods,
     get_pods_having_label,
     wait_for_pods_to_be_running,
 )
@@ -230,13 +229,14 @@ class BucketNotificationsManager:
         self.conn_secrets.append(secret_ocp_obj)
         return secret_ocp_obj, conn_file_name
 
-    def add_notif_conn_to_noobaa_cr(self, secret):
+    def add_notif_conn_to_noobaa_cr(self, secret, wait=True):
         """
         Add a connection secret to list of bucket notifications
         connections in the NooBaa CR.
 
         Args:
             secret(ocs_ci.ocs.ocp.OCP): OCP instance of the secret to add
+            wait(bool): Whether to wait for the NooBaa resources to be ready
         """
         conn_data = {
             "name": secret.resource_name,
@@ -249,17 +249,12 @@ class BucketNotificationsManager:
             params=json.dumps(add_op),
             format_type="json",
         )
+        if wait:
+            MCG.wait_for_ready_status()
 
-        nb_pods = [pod.name for pod in get_noobaa_pods()]
-        wait_for_pods_to_be_running(
-            namespace=self.namespace,
-            pod_names=nb_pods,
-            timeout=60,
-            sleep=10,
-        )
-        CephCluster().wait_for_noobaa_health_ok()
-
-    def put_bucket_notification(self, awscli_pod, mcg_obj, bucket, events, conn_file):
+    def put_bucket_notification(
+        self, awscli_pod, mcg_obj, bucket, events, conn_file, wait=True
+    ):
         """
         Configure bucket notifications on a bucket using the AWS CLI
 
@@ -269,6 +264,7 @@ class BucketNotificationsManager:
             bucket(str): Name of the bucket
             events(list): List of events to trigger notifications
             conn_file(str): Name of the file that NooBaa uses to connect to Kafka
+            wait(bool): Whether to wait for the notification to propagate
         """
         rand_id = create_unique_resource_name(
             resource_description="notif", resource_type="id"
@@ -288,8 +284,9 @@ class BucketNotificationsManager:
                 api=True,
             )
         )
-        logger.info("Waiting for put-bucket-notification to propogate")
-        sleep(60)
+        if wait:
+            logger.info("Waiting for put-bucket-notification to propagate")
+            sleep(60)
 
     def get_bucket_notification(self, awscli_pod, mcg_obj, bucket):
         """
