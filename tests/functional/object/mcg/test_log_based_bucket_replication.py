@@ -20,6 +20,7 @@ from ocs_ci.ocs import constants
 from ocs_ci.ocs.bucket_utils import (
     compare_bucket_object_list,
     update_replication_policy,
+    write_random_test_objects_to_bucket,
 )
 from ocs_ci.ocs.resources.mcg_replication_policy import AwsLogBasedReplicationPolicy
 from ocs_ci.ocs.resources.mockup_bucket_logger import MockupBucketLogger
@@ -54,15 +55,15 @@ class TestLogBasedBucketReplication(MCGTest):
         A fixture to reduce the replication delay to one minute.
 
         Args:
-            new_delay_in_miliseconds (function): A function to add env vars to the noobaa-core pod
+            new_delay_in_milliseconds (function): A function to add env vars to the noobaa-core pod
 
         """
-        new_delay_in_miliseconds = 60 * 1000
-        new_env_var_touples = [
-            (constants.BUCKET_REPLICATOR_DELAY_PARAM, new_delay_in_miliseconds),
-            (constants.BUCKET_LOG_REPLICATOR_DELAY_PARAM, new_delay_in_miliseconds),
+        new_delay_in_milliseconds = 60 * 1000
+        new_env_var_tuples = [
+            (constants.BUCKET_REPLICATOR_DELAY_PARAM, new_delay_in_milliseconds),
+            (constants.BUCKET_LOG_REPLICATOR_DELAY_PARAM, new_delay_in_milliseconds),
         ]
-        add_env_vars_to_noobaa_core_class(new_env_var_touples)
+        add_env_vars_to_noobaa_core_class(new_env_var_tuples)
 
     @pytest.fixture()
     def log_based_replication_setup(
@@ -145,6 +146,110 @@ class TestLogBasedBucketReplication(MCGTest):
             mockup_logger,
             self.DEFAULT_TIMEOUT,
         )
+
+    @tier2
+    @polarion_id("OCS-6327")
+    def test_bidirectional_deletion_sync(
+        self, mcg_obj_session, awscli_pod_session, bucket_factory, test_directory_setup
+    ):
+        """
+        Test bidirectional log-based replication with deletion sync
+
+        1. Set up bidirectional log-based replication with deletion sync
+        2. Test replication and deletion sync from bucketA to bucketB
+        3. Test replication and deletion sync from bucketB to bucketA
+        """
+        # Constants
+        STD_RPLI_ERR_MSG = (
+            f"Standard replication failed to complete in {self.DEFAULT_TIMEOUT} seconds"
+        )
+        DEL_SYNC_FAIL_MSG = (
+            f"Deletion sync failed to complete in {self.DEFAULT_TIMEOUT} seconds"
+        )
+        BUCKET_A_PREFIX = "bucket_a_prefix"
+        BUCKET_B_PREFIX = "bucket_b_prefix"
+
+        # 1. Set up bidirectional log-based replication with deletion sync
+        bucketclass_dict = {
+            "interface": "OC",
+            "namespace_policy_dict": {
+                "type": "Single",
+                "namespacestore_dict": {
+                    constants.AWS_PLATFORM: [(1, self.DEFAULT_AWS_REGION)]
+                },
+            },
+        }
+        bucket_b = bucket_factory(bucketclass=bucketclass_dict)[0]
+
+        mockup_logger_a = MockupBucketLogger(
+            awscli_pod=awscli_pod_session,
+            mcg_obj=mcg_obj_session,
+            bucket_factory=bucket_factory,
+            platform=constants.AWS_PLATFORM,
+            region=self.DEFAULT_AWS_REGION,
+        )
+        replication_policy = AwsLogBasedReplicationPolicy(
+            destination_bucket=bucket_b.name,
+            sync_deletions=True,
+            prefix=BUCKET_A_PREFIX,
+            logs_bucket=mockup_logger_a.logs_bucket_uls_name,
+        )
+        bucket_a = bucket_factory(
+            1, bucketclass=bucketclass_dict, replication_policy=replication_policy
+        )[0]
+
+        mockup_logger_b = MockupBucketLogger(
+            awscli_pod=awscli_pod_session,
+            mcg_obj=mcg_obj_session,
+            bucket_factory=bucket_factory,
+            platform=constants.AWS_PLATFORM,
+            region=self.DEFAULT_AWS_REGION,
+        )
+        replication_policy = AwsLogBasedReplicationPolicy(
+            destination_bucket=bucket_a.name,
+            sync_deletions=True,
+            prefix=BUCKET_B_PREFIX,
+            logs_bucket=mockup_logger_b.logs_bucket_uls_name,
+        )
+        update_replication_policy(bucket_b.name, replication_policy.to_dict())
+
+        def _assert_compare_bucket_object_list(err_msg=""):
+            logger.info("Waiting for bucket objects to sync")
+            assert compare_bucket_object_list(
+                mcg_obj_session,
+                bucket_a.name,
+                bucket_b.name,
+                timeout=self.DEFAULT_TIMEOUT,
+            ), err_msg
+            logger.info(f"Bucket {bucket_a.name} and {bucket_b.name} are in sync")
+
+        # Test replication and deletion sync from bucketA to bucketB
+        objs = write_random_test_objects_to_bucket(
+            io_pod=awscli_pod_session,
+            bucket_to_write=bucket_a.name,
+            file_dir=test_directory_setup.origin_dir,
+            amount=10,
+            prefix=BUCKET_A_PREFIX,
+            mcg_obj=mcg_obj_session,
+        )
+        logger.info(objs)
+        _assert_compare_bucket_object_list(STD_RPLI_ERR_MSG)
+
+        mockup_logger_a.delete_objs_and_log(bucket_a.name, objs, prefix=BUCKET_A_PREFIX)
+        _assert_compare_bucket_object_list(DEL_SYNC_FAIL_MSG)
+
+        # Test replication and deletion sync in the opposite direction
+        objs = write_random_test_objects_to_bucket(
+            io_pod=awscli_pod_session,
+            bucket_to_write=bucket_b.name,
+            file_dir=test_directory_setup.origin_dir,
+            amount=10,
+            prefix=BUCKET_B_PREFIX,
+            mcg_obj=mcg_obj_session,
+        )
+        _assert_compare_bucket_object_list(STD_RPLI_ERR_MSG)
+        mockup_logger_b.delete_objs_and_log(bucket_b.name, objs, prefix=BUCKET_B_PREFIX)
+        _assert_compare_bucket_object_list(DEL_SYNC_FAIL_MSG)
 
     @tier1
     @polarion_id("OCS-4937")
