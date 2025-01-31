@@ -12,6 +12,7 @@ from ocs_ci.framework.testlib import (
     skipif_disconnected_cluster,
     skipif_proxy_cluster,
     config,
+    vault_kms_deployment_required,
 )
 from ocs_ci.ocs import constants
 from ocs_ci.helpers.keyrotation_helper import PVKeyrotation
@@ -56,6 +57,7 @@ else:
 @skipif_hci_provider_and_client
 @skipif_disconnected_cluster
 @skipif_proxy_cluster
+@vault_kms_deployment_required
 class TestPVKeyRotationWithVaultKMS(ManageTest):
     """
     Test Key Rotation for encrypted PV.
