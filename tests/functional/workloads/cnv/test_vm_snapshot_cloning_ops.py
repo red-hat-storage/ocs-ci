@@ -97,7 +97,7 @@ class TestVmSnapshotClone(E2ETest):
         vm_obj = cnv_workload(
             volume_interface=constants.VM_VOLUME_PVC,
             source_url=constants.CNV_FEDORA_SOURCE,
-        )[0]
+        )
         # Writing IO on source VM
         source_csum = run_dd_io(vm_obj=vm_obj, file_path=file_paths[0], verify=True)
         # Stopping VM before taking snapshot of the VM PVC
@@ -121,7 +121,7 @@ class TestVmSnapshotClone(E2ETest):
             source_url=constants.CNV_FEDORA_SOURCE,
             existing_pvc_obj=res_snap_obj,
             namespace=vm_obj.namespace,
-        )[1]
+        )
         # Write new file to VM
         run_dd_io(vm_obj=res_vm_obj, file_path=file_paths[1], verify=True)
         # Validate data integrity of file written before taking snapshot
@@ -130,3 +130,77 @@ class TestVmSnapshotClone(E2ETest):
             source_csum == res_csum
         ), f"Failed: MD5 comparison between source {vm_obj.name} and cloned {res_vm_obj.name} VMs"
         res_vm_obj.stop()
+
+    @workloads
+    @pytest.mark.polarion_id("OCS-6321")
+    def test_vm_snapshot_pvc_clone(
+        self,
+        setup_cnv,
+        project_factory,
+        multi_cnv_workload,
+        snapshot_factory,
+        snapshot_restore_factory,
+        cnv_workload,
+        clone_vm_workload,
+    ):
+        """
+        This test checks the clone of restored snapshot PVC created successfully
+        without data loss or corruption.
+
+        Test steps:
+        1. Create a VM with PVC/DVT
+        2. Add data to the VM and shut it down
+        3. Take a snapshot of the VM’s PVC
+        4. Deploy a new VM using the restored snapshot PVC
+        5. Clone the VM workload to create a new PVC from the restored snapshot PVC
+        6. Check data integrity in the cloned VM
+        7. Verify that the data persisted after cloning
+        8. Adding data on cloned VM
+        """
+        proj_obj = project_factory()
+        file_paths = ["/file.txt", "/new_file.txt"]
+        vm_objs_def, vm_objs_aggr, _, _ = multi_cnv_workload(
+            namespace=proj_obj.namespace
+        )
+        vm_list = vm_objs_def + vm_objs_aggr
+        log.info(f"Total VMs to process: {len(vm_list)}")
+        for index, vm_obj in enumerate(vm_list):
+            source_csum = run_dd_io(vm_obj=vm_obj, file_path=file_paths[0], verify=True)
+            vm_obj.stop()
+
+            # Take snapshot of the VM's PVC
+            pvc_obj = vm_obj.get_vm_pvc_obj()
+            snap_obj = snapshot_factory(pvc_obj)
+
+            # Restore the snapshot to a new PVC
+            res_snap_obj = snapshot_restore_factory(
+                snapshot_obj=snap_obj,
+                storageclass=vm_obj.sc_name,
+                size=vm_obj.pvc_size,
+                volume_mode=snap_obj.parent_volume_mode,
+                access_mode=vm_obj.pvc_access_mode,
+                timeout=300,
+            )
+
+            # Create a new VM from the restored PVC
+            res_vm_obj = cnv_workload(
+                source_url=constants.CNV_FEDORA_SOURCE,
+                existing_pvc_obj=res_snap_obj,
+                namespace=vm_obj.namespace,
+                storageclass=vm_obj.sc_name,
+            )
+
+            res_vm_obj.stop()
+
+            # Clone the restored VM
+            res_vm_obj_clone = clone_vm_workload(res_vm_obj, namespace=vm_obj.namespace)
+
+            # Validate data integrity in the cloned VM
+            res_csum = cal_md5sum_vm(vm_obj=res_vm_obj_clone, file_path=file_paths[0])
+            assert source_csum == res_csum, (
+                f"Failed: MD5 comparison between source {vm_obj.name} and cloned "
+                f"{res_vm_obj.name} VMs"
+            )
+
+            # Writing new data on cloned VM
+            run_dd_io(vm_obj=res_vm_obj_clone, file_path=file_paths[1])
