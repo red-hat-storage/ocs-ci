@@ -17,7 +17,6 @@ from ocs_ci.ocs.exceptions import (
     UnexpectedBehaviour,
     NotFoundError,
 )
-from ocs_ci.ocs.rados_utils import fetch_rados_namespaces
 from ocs_ci.ocs.resources.drpc import DRPC
 from ocs_ci.ocs.resources.pod import get_all_pods, get_ceph_tools_pod
 from ocs_ci.ocs.resources.pv import get_all_pvs
@@ -303,29 +302,23 @@ def check_mirroring_status_ok(
         replaying_images (int): Expected number of images in replaying state
         cephblockpoolradosns (string): The name of the cephblockpoolradosnamespace
         storageclient_id(string): The uid of the storageclient in the client cluster where the application is running.
-            Applicable for provider - client setup.
+            Applicable for provider - client configuration.
 
     Returns:
         bool: True if status contains expected health and states values, False otherwise
 
     Raises:
-        NotFoundError: If the setup is provider mode and the name of the cephblockpoolradosnamespace is not obtained
+        NotFoundError: If the configuration is provider mode and the name of the cephblockpoolradosnamespace
+            is not obtained
     """
     if is_hci_cluster():
         cephbpradosns = (
             config.ENV_DATA.get("radosnamespace_name", False) or cephblockpoolradosns
         )
         if not cephbpradosns:
-            if not storageclient_uid:
-                radosnamespaces = fetch_rados_namespaces(
-                    namespace=config.ENV_DATA["cluster_namespace"]
-                )
-                if radosnamespaces and len(radosnamespaces) == 1:
-                    cephbpradosns = radosnamespaces[0]
-                else:
-                    cephbpradosns = find_cephblockpoolradosnamespace(
-                        storageclient_uid=storageclient_uid
-                    )
+            cephbpradosns = find_cephblockpoolradosnamespace(
+                storageclient_uid=storageclient_uid
+            )
 
         if not cephbpradosns:
             raise NotFoundError("Couldn't identify the cephblockpoolradosnamespace")
@@ -1001,13 +994,14 @@ def verify_backend_volume_deletion(
         cephblockpoolradosns (str): The name of the cephblockpoolradosnamespace
         cephfssubvolumegroup (str): The name of the cephfilesystemsubvolumegroup
         storageclient_id(string): The uid of the storageclient in the client cluster where the application is running.
-            Applicable for provider - client setup.
+            Applicable for provider - client configuration.
 
     Returns:
         bool: True if volumes are deleted and False if volumes are not deleted
 
     Raises:
-        NotFoundError: If the setup is provider mode and the name of the cephblockpoolradosnamespace is not obtained
+        NotFoundError: If the configuration is provider mode and the name of the cephblockpoolradosnamespace
+            is not obtained
     """
     ct_pod = get_ceph_tools_pod()
     rbd_pool_name = (
@@ -1020,17 +1014,9 @@ def verify_backend_volume_deletion(
             config.ENV_DATA.get("radosnamespace_name", False) or cephblockpoolradosns
         )
         if not cephbpradosns:
-            if not storageclient_uid:
-                # Check if there is only one cephblockpoolradosnamespace
-                radosnamespaces = fetch_rados_namespaces(
-                    namespace=config.ENV_DATA["cluster_namespace"]
-                )
-                if radosnamespaces and len(radosnamespaces) == 1:
-                    cephbpradosns = radosnamespaces[0]
-                else:
-                    cephbpradosns = find_cephblockpoolradosnamespace(
-                        storageclient_uid=storageclient_uid
-                    )
+            cephbpradosns = find_cephblockpoolradosnamespace(
+                storageclient_uid=storageclient_uid
+            )
 
         if not cephbpradosns:
             raise NotFoundError("Couldn't identify the cephblockpoolradosnamespace")
@@ -1040,19 +1026,9 @@ def verify_backend_volume_deletion(
             config.ENV_DATA.get("subvolumegroup_name", False) or cephfssubvolumegroup
         )
         if not cephfssubvolgroup:
-            if not storageclient_uid:
-                # Check if there is only one cephfilesystemsubvolumegroup
-                cephfssubvolgroup_obj = ocp.OCP(
-                    kind=constants.CEPHFILESYSTEMSUBVOLUMEGROUP,
-                    namespace=config.ENV_DATA["cluster_namespace"],
-                )
-                cephfssubvolgroups = cephfssubvolgroup_obj.get()["items"]
-                if cephfssubvolgroups and len(cephfssubvolgroups) == 1:
-                    cephfssubvolgroup = cephfssubvolgroups[0]
-                else:
-                    cephfssubvolgroup = find_cephfilesystemsubvolumegroup(
-                        storageclient_uid=storageclient_uid
-                    )
+            cephfssubvolgroup = find_cephfilesystemsubvolumegroup(
+                storageclient_uid=storageclient_uid
+            )
 
         if not cephfssubvolgroup:
             raise NotFoundError("Couldn't identify the cephfilesystemsubvolumegroup")
