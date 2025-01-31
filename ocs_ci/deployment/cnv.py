@@ -32,6 +32,7 @@ from ocs_ci.ocs import exceptions
 from ocs_ci.ocs.resources.catalog_source import CatalogSource
 from ocs_ci.ocs.resources.install_plan import wait_for_install_plan_and_approve
 from ocs_ci.ocs.resources.csv import CSV, get_csvs_start_with_prefix
+from ocs_ci.utility.retry import retry
 from ocs_ci.utility.utils import TimeoutSampler
 from ocs_ci.ocs import ocp
 from ocs_ci.ocs.resources.pod import wait_for_pods_to_be_running
@@ -137,7 +138,9 @@ class CNVInstaller(object):
             cnv_subscription_yaml_data, cnv_subscription_manifest.name
         )
         logger.info("Creating subscription for CNV operator")
-        run_cmd(f"oc create -f {cnv_subscription_manifest.name}")
+        retry(exceptions.CommandFailed, tries=25, delay=60, backoff=1)(run_cmd)(
+            f"oc apply -f {cnv_subscription_manifest.name}"
+        )
         self.wait_for_the_resource_to_discover(
             kind=constants.SUBSCRIPTION_WITH_ACM,
             namespace=self.namespace,
@@ -539,7 +542,9 @@ class CNVInstaller(object):
         )
         try:
             # Download the archive
-            response = requests.get(virtctl_download_url, verify=False)
+            response = retry(requests.exceptions.RequestException, tries=10, delay=30)(
+                requests.get
+            )(virtctl_download_url, verify=False)
             response.raise_for_status()
         except requests.exceptions.RequestException as e:
             logger.error(
