@@ -406,6 +406,6 @@ class HsBench(object):
 
         """
         log.info("Deleting pods and deployment config")
-        pod.delete_deploymentconfig_pods(self.pod_obj)
+        pod.delete_deployment_pods(self.pod_obj)
         self.pvc_obj.delete()
         time.sleep(timeout)
