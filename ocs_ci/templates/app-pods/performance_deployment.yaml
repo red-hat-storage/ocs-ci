@@ -1,29 +1,31 @@
 kind: Deployment
 apiVersion: apps/v1
 metadata:
-  name: warppod
+  name: perfpod
   labels:
-    app: warppod
+    app: perfpod
 spec:
   selector:
     matchLabels:
-      app: warppod
+      name: perfpod
+  strategy:
+      type: Recreate
   template:
     metadata:
       labels:
-        app: warppod
+        name: perfpod
     spec:
       securityContext:
         fsGroup: 2000
       serviceAccountName: admin
       restartPolicy: Always
       volumes:
-      - name: warp-vol
+      - name: perf-vol
         persistentVolumeClaim:
-          claimName: warp-s3
+          claimName: test-2
       containers:
-      - name: warp
-        image: quay.io/ocsci/warp:latest
+      - name: perf
+        image: quay.io/ocsci/perf:latest
         resources:
           limits:
             memory: "2048Mi"
@@ -32,4 +34,12 @@ spec:
         imagePullPolicy: IfNotPresent
         volumeMounts:
         - mountPath: /mnt
-          name: warp-vol
+          name: perf-vol
+        livenessProbe:
+          exec:
+            command:
+            - 'sh'
+            - '-ec'
+            - 'df /mnt'
+          initialDelaySeconds: 3
+          timeoutSeconds: 3
