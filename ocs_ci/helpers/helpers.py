@@ -5434,6 +5434,7 @@ def update_volsync_channel():
                 f"Pod volsync-controller-manager not in {constants.STATUS_RUNNING} after 300 seconds"
             )
 
+
 def update_volsync_icsp():
     """
     Update Volsync ImageContentSourcePolicy.
@@ -5447,7 +5448,9 @@ def update_volsync_icsp():
         config.switch_ctx(index)
         run_cmd(f"oc create -f {constants.ACM_BREW_ICSP_YAML}")
         wait_for_machineconfigpool_status("all", timeout=1800)
-        volsync_pod_obj = get_pods_having_label(namespace="volsync-system", label="app.kubernetes.io/name=volsync")[0]
+        volsync_pod_obj = get_pods_having_label(
+            namespace="volsync-system", label="app.kubernetes.io/name=volsync"
+        )[0]
         volsync_pod_obj.delete(wait=False)
     for non_acm_cluster in non_acm_clusters:
         index = non_acm_cluster.MULTICLUSTER["multicluster_index"]
@@ -5466,6 +5469,7 @@ def update_volsync_icsp():
                 f"Pod volsync-controller-manager not in {constants.STATUS_RUNNING} after 300 seconds"
             )
     config.switch_ctx(restore_index)
+
 
 def verify_nb_db_psql_version(check_image_name_version=True):
     """
