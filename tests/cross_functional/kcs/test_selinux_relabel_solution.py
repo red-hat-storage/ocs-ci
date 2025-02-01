@@ -33,7 +33,7 @@ log = logging.getLogger(__name__)
 @magenta_squad
 @tier1
 class TestSelinuxrelabel(E2ETest):
-    def create_deploymentconfig_pod(self, **kwargs):
+    def create_deployment_pod(self, **kwargs):
         """
         Create deployment pod.
 
@@ -223,7 +223,7 @@ class TestSelinuxrelabel(E2ETest):
         """
         Cleanup the test environment
         """
-        res_pod.delete_deploymentconfig_pods(self.pod_obj)
+        res_pod.delete_deployment_pods(self.pod_obj)
 
     @bugzilla("1988284")
     @polarion_id("OCS-5132")
@@ -263,7 +263,7 @@ class TestSelinuxrelabel(E2ETest):
         )
 
         # Create deployment pod
-        self.pod_obj = self.create_deploymentconfig_pod(
+        self.pod_obj = self.create_deployment_pod(
             command=["/opt/multiple_files.sh"],
             command_args=[f"{copies}", "/mnt"],
         )
