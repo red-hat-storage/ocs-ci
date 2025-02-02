@@ -23,7 +23,7 @@ class TestVmHotPlugUnplug(E2ETest):
 
     def test_vm_hot_plugging_unplugging(
         self,
-        # setup_cnv,
+        setup_cnv,
         project_factory,
         multi_cnv_workload,
         pvc_factory_class,
