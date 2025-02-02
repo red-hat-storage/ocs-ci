@@ -419,6 +419,7 @@ class TestObcUserInterface(object):
 
 @black_squad
 @tier1
+@pytest.mark.polarion_id("OCS-6334")
 class TestBucketCreate:
     def test_bucket_create(self, setup_ui_class_factory):
         """
@@ -431,10 +432,12 @@ class TestBucketCreate:
         setup_ui_class_factory()
         bucket_ui = BucketsTab()
         bucket_ui.nav_object_storage_page()
-        bucket_ui.create_bucket_ui("obc")
+        assert bucket_ui.create_bucket_ui("obc"), "Failed to create OBC bucket"
         time.sleep(15)
         bucket_ui.nav_object_storage_page()
-        bucket_ui.create_bucket_ui("s3")
+        assert bucket_ui.create_bucket_ui("s3"), "Failed to create S3 bucket"
         time.sleep(15)
         bucket_ui.nav_object_storage_page()
-        bucket_ui.create_folder_in_bucket()
+        assert (
+            bucket_ui.create_folder_in_bucket()
+        ), "Failed to create and upload folder in bucket"
