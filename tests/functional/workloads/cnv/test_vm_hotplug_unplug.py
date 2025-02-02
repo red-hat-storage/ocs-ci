@@ -6,9 +6,7 @@ import pytest
 from ocs_ci.framework.pytest_customization.marks import magenta_squad, workloads
 from ocs_ci.framework.testlib import E2ETest
 from ocs_ci.helpers.cnv_helpers import cal_md5sum_vm, run_dd_io, verifyvolume
-from ocs_ci.helpers.helpers import create_pvc
 from ocs_ci.ocs import constants
-from ocs_ci.ocs.resources.pvc import delete_pvcs
 
 log = logging.getLogger(__name__)
 
@@ -28,6 +26,7 @@ class TestVmHotPlugUnplug(E2ETest):
         # setup_cnv,
         project_factory,
         multi_cnv_workload,
+        pvc_factory_class,
     ):
         """
         Test the hot plugging and unplugging of a PVC into/from a VM.
@@ -41,23 +40,24 @@ class TestVmHotPlugUnplug(E2ETest):
 
         proj_obj = project_factory()
         file_paths = ["/file.txt", "/new_file.txt"]
-        vm_objs_def, vm_objs_aggr, _, _ = multi_cnv_workload(
+        vm_objs_def, vm_objs_aggr, sc_objs_def, sc_objs_aggr = multi_cnv_workload(
             namespace=proj_obj.namespace
         )
         vm_list = vm_objs_def + vm_objs_aggr
         log.info(f"Total VMs to process: {len(vm_list)}")
 
         for index, vm_obj in enumerate(vm_list):
+            sc_obj = sc_objs_def if vm_obj in vm_objs_def else sc_objs_aggr
             before_disks = vm_obj.run_ssh_cmd(
                 command="lsblk -o NAME,SIZE,MOUNTPOINT -P"
             )
             log.info(f"Disks before hotplug:\n{before_disks}")
 
             # Step 2: Create a PVC and hotplug it to the VM with persist flag
-            pvc_obj = create_pvc(
-                sc_name=vm_obj.sc_name,
-                namespace=vm_obj.namespace,
-                size="20Gi",
+            pvc_obj = pvc_factory_class(
+                project=proj_obj,
+                storageclass=sc_obj,
+                size=20,
                 access_mode=constants.ACCESS_MODE_RWX,
                 volume_mode=constants.VOLUME_MODE_BLOCK,
             )
@@ -70,9 +70,9 @@ class TestVmHotPlugUnplug(E2ETest):
             # Step 3: Verify the disk is attached
             after_disks = vm_obj.run_ssh_cmd("lsblk -o NAME,SIZE,MOUNTPOINT -P")
             log.info(f"Disks after hotplug:\n{after_disks}")
-            assert (
-                set(after_disks) - set(before_disks)
-            ) != set(), f"Failed to plug disk {pvc_obj.name} to VM {vm_obj.name}"
+            assert (set(after_disks) - set(before_disks)) != set(), (
+                f"Failed to plug disk {pvc_obj.name} " f"to VM {vm_obj.name}"
+            )
 
             # Step 4: Perform I/O on the attached disk to ensure it's working
             log.info(f"Running I/O operation on VM {vm_obj.name}")
@@ -96,10 +96,10 @@ class TestVmHotPlugUnplug(E2ETest):
             ), f"MD5 mismatch after reboot for VM {vm_obj.name}"
 
             # Step 6: Hotplug another disk to the VM without persist flag
-            pvc_obj_wout = create_pvc(
-                sc_name=vm_obj.sc_name,
-                namespace=vm_obj.namespace,
-                size="20Gi",
+            pvc_obj_wout = pvc_factory_class(
+                project=proj_obj,
+                storageclass=sc_obj,
+                size=20,
                 access_mode=constants.ACCESS_MODE_RWX,
                 volume_mode=constants.VOLUME_MODE_BLOCK,
             )
@@ -133,9 +133,6 @@ class TestVmHotPlugUnplug(E2ETest):
             log.info(
                 f"Disks after unplugging {pvc_obj_wout.name}:\n{after_hotplug_rm_disk_wout}"
             )
-
-            # Ensure the hotplugged disk was removed successfully (check for no change)
             assert set(after_disks) == set(
                 after_hotplug_rm_disk_wout
             ), f"Failed to unplug disk {pvc_obj_wout.name} from VM {vm_obj.name}"
-            delete_pvcs(pvc_objs=[pvc_obj_wout, pvc_obj])
