@@ -151,7 +151,7 @@ class TestNamespace(MCGTest):
                     "interface": "CLI",
                     "namespace_policy_dict": {
                         "type": "Cache",
-                        "ttl": 180,
+                        "ttl": 300000,
                         "namespacestore_dict": {
                             "rgw": [(1, None)],
                         },
