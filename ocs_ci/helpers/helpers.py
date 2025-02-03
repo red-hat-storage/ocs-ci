@@ -29,7 +29,7 @@ from ocs_ci.helpers.proxy import (
     get_cluster_proxies,
     update_container_with_proxy_env,
 )
-from ocs_ci.ocs.resources.pod import get_pods_having_label
+from ocs_ci.helpers.pvc_ops import delete_pods
 from ocs_ci.ocs.utils import (
     get_non_acm_cluster_config,
     get_pod_name_by_pattern,
@@ -5448,20 +5448,19 @@ def update_volsync_icsp():
         config.switch_ctx(index)
         run_cmd(f"oc create -f {constants.ACM_BREW_ICSP_YAML}")
         wait_for_machineconfigpool_status("all", timeout=1800)
-        volsync_pod_obj = get_pods_having_label(
-            namespace="volsync-system", label="app.kubernetes.io/name=volsync"
-        )[0]
-        volsync_pod_obj.delete(wait=False)
-    for non_acm_cluster in non_acm_clusters:
-        index = non_acm_cluster.MULTICLUSTER["multicluster_index"]
-        config.switch_ctx(index)
+        volsync_pod_list = OCP(
+            kind=constants.POD,
+            namespace=constants.VOLSYNC_NAMESPACE,
+            selector="app.kubernetes.io/name=volsync",
+        )
+        delete_pods(volsync_pod_list)
         logger.info("Verify volsync-controller-manager pods in Running state")
         sample = TimeoutSampler(
             timeout=300,
             sleep=10,
             func=check_pods_status_by_pattern,
             pattern="volsync-controller-manager",
-            namespace="volsync-system",
+            namespace=constants.VOLSYNC_NAMESPACE,
             expected_status=constants.STATUS_RUNNING,
         )
         if not sample.wait_for_func_status(result=True):
