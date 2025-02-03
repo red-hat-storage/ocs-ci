@@ -16,6 +16,7 @@ from ocs_ci.ocs.bucket_utils import (
     rm_object_recursive,
     expire_objects_in_bucket,
     verify_objs_deleted_from_objmds,
+    sample_if_objects_expired,
 )
 from ocs_ci.framework.pytest_customization.marks import (
     bugzilla,
@@ -202,6 +203,8 @@ class TestDeleteObjects:
         io_thread.result()
 
     @bugzilla("2279742")
+    @bugzilla("2279964")
+    @polarion_id("OCS-6097")
     @polarion_id("OCS-6096")
     @pytest.mark.parametrize(
         argnames=["is_expiration"],
@@ -216,6 +219,7 @@ class TestDeleteObjects:
         bucket_factory,
         reduce_expiration_interval,
         scale_noobaa_resources_session,
+        change_lifecycle_schedule_min,
         change_lifecycle_batch_size,
         awscli_pod_session,
         test_directory_setup,
@@ -232,18 +236,25 @@ class TestDeleteObjects:
         reduce_expiration_interval(interval=1)
         log.info("Reduced expiration interval to 1 minute")
 
+        # change lifecycle schedule minutes
+        change_lifecycle_schedule_min(interval=1)
+        log.info("Change lifecycle schedyle minute to 1 minute")
+
         # change lifecycle batch size to 10K to enable faster deletion
         change_lifecycle_batch_size(new_lifecycle_batch_size=10000)
         log.info("Increased the lifecycle batch size to 10K")
 
+        # generate 1 million empty files with unique identifiers
+        generate_empty_files(
+            awscli_pod_session,
+            dir=test_directory_setup.origin_dir,
+            amount=1000000,
+            timeout=3600,
+        )
+
         # create the bucket
         bucket = bucket_factory()[0]
         log.info(f"Created bucket {bucket.name}")
-
-        # generate 1 million empty files with unique identifiers
-        generate_empty_files(
-            awscli_pod_session, dir=test_directory_setup.origin_dir, amount=1000000
-        )
 
         # sync all objects generated above to the bucket
         sync_object_directory(
@@ -251,7 +262,7 @@ class TestDeleteObjects:
             test_directory_setup.origin_dir,
             f"s3://{bucket.name}",
             mcg_obj_session,
-            timeout=7200,
+            timeout=10800,
         )
         log.info(f"Uploaded objects to the bucket {bucket.name}")
 
@@ -272,8 +283,14 @@ class TestDeleteObjects:
             )
         else:
             # remove the objects in the bucket recursively
-            rm_object_recursive(awscli_pod_session, bucket.name, mcg_obj_session)
+            rm_object_recursive(
+                awscli_pod_session, bucket.name, mcg_obj_session, timeout=7200
+            )
             log.info("Deleted objects from the bucket recursively")
 
-        # verify that all the objects are marked as deleted
-        verify_objs_deleted_from_objmds(bucket.name)
+        # Verify that all the objects are marked as deleted
+        verify_objs_deleted_from_objmds(bucket.name, timeout=64800, sleep=90)
+
+        # Verify the object expiration/deletion by listing from the buckets also
+        sample_if_objects_expired(mcg_obj_session, bucket.name)
+        log.info("All the objects are deleted/expired")

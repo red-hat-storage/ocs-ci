@@ -8196,6 +8196,28 @@ def reduce_expiration_interval(add_env_vars_to_noobaa_core_class):
 
 
 @pytest.fixture()
+def change_lifecycle_schedule_min(add_env_vars_to_noobaa_core_class):
+    """
+    Change the lifecycle schedule minute. i.e, that is delay between
+    the each run when lifecycle expiration is identfied.
+
+    """
+
+    def factory(interval):
+        """
+        Args:
+            interval (int): New interval in minute/s
+
+        """
+        new_interval_in_milliseconds = 60 * interval * 1000
+        add_env_vars_to_noobaa_core_class(
+            [(constants.LIFECYCLE_SCHED_MINUTES, new_interval_in_milliseconds)]
+        )
+
+    return factory
+
+
+@pytest.fixture()
 def change_lifecycle_batch_size(
     add_env_vars_to_noobaa_core_class, add_env_vars_to_noobaa_endpoint_class
 ):

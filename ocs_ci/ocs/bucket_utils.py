@@ -579,7 +579,7 @@ def download_objects_using_s3cmd(
     ), "Failed to download objects"
 
 
-def rm_object_recursive(podobj, target, mcg_obj, option=""):
+def rm_object_recursive(podobj, target, mcg_obj, option="", timeout=600):
     """
     Remove bucket objects with --recursive option
 
@@ -601,6 +601,7 @@ def rm_object_recursive(podobj, target, mcg_obj, option=""):
             mcg_obj.access_key,
             mcg_obj.s3_internal_endpoint,
         ],
+        timeout=timeout,
     )
 
 
@@ -3052,7 +3053,7 @@ def generate_empty_files(aws_pod, dir, amount, pattern="File", timeout=600):
     logger.info(f"Generated {amount} empty files successfully")
 
 
-def verify_objs_deleted_from_objmds(bucket_name, timeout=600):
+def verify_objs_deleted_from_objmds(bucket_name, timeout=600, sleep=30):
     """
     Verify that all the objects are marked deletion time by checking
     the objmds table in nbcore db.
@@ -3083,7 +3084,7 @@ def verify_objs_deleted_from_objmds(bucket_name, timeout=600):
 
     sampler = TimeoutSampler(
         timeout=timeout,
-        sleep=30,
+        sleep=sleep,
         func=_check_objs_deletion,
     )
 
