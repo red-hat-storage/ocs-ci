@@ -10,6 +10,7 @@ from datetime import datetime
 
 from ocs_ci.framework import config
 from ocs_ci.ocs import constants, ocp
+from ocs_ci.ocs.cluster import is_hci_cluster
 from ocs_ci.ocs.defaults import RBD_NAME
 from ocs_ci.ocs.exceptions import (
     TimeoutExpiredError,
@@ -310,7 +311,7 @@ def check_mirroring_status_ok(
         NotFoundError: If the configuration is provider mode and the name of the cephblockpoolradosnamespace
             is not obtained
     """
-    if not cephblockpoolradosns:
+    if is_hci_cluster():
         logging.info(
             "Find the cephblockpoolradosnamespace the associated with storageclient"
         )
@@ -1011,7 +1012,7 @@ def verify_backend_volume_deletion(
         if config.DEPLOYMENT["external_mode"]
         else constants.DEFAULT_CEPHBLOCKPOOL
     )
-    if not cephblockpoolradosns:
+    if is_hci_cluster():
         cephbpradosns = (
             config.ENV_DATA.get("radosnamespace_name", False) or cephblockpoolradosns
         )
