@@ -25,7 +25,10 @@ from ocs_ci.framework.pytest_customization.marks import (
     brown_squad,
     skipif_ibm_cloud_managed,
 )
-from ocs_ci.helpers.helpers import verify_storagecluster_nodetopology
+from ocs_ci.helpers.helpers import (
+    verify_storagecluster_nodetopology,
+    clear_crash_warning_and_osd_removal_leftovers,
+)
 from ocs_ci.helpers.sanity_helpers import Sanity
 
 log = logging.getLogger(__name__)
@@ -193,6 +196,11 @@ class TestNodeReplacementWithIO(ManageTest):
     """
 
     @pytest.fixture(autouse=True)
+    def teardown(self):
+        log.info("Clear crash warnings and osd removal leftovers")
+        clear_crash_warning_and_osd_removal_leftovers()
+
+    @pytest.fixture(autouse=True)
     def init_sanity(self):
         """
         Initialize Sanity instance
@@ -272,6 +280,11 @@ class TestNodeReplacement(ManageTest):
     """
 
     @pytest.fixture(autouse=True)
+    def teardown(self):
+        log.info("Clear crash warnings and osd removal leftovers")
+        clear_crash_warning_and_osd_removal_leftovers()
+
+    @pytest.fixture(autouse=True)
     def init_sanity(self):
         """
         Initialize Sanity instance
@@ -326,6 +339,11 @@ class TestNodeReplacementTwice(ManageTest):
       1. node is labeled for rack correctly
       2. ceph side host still on the old rack
     """
+
+    @pytest.fixture(autouse=True)
+    def teardown(self, request):
+        log.info("Clear crash warnings and osd removal leftovers")
+        clear_crash_warning_and_osd_removal_leftovers()
 
     def test_nodereplacement_twice(self):
         for i in range(2):
