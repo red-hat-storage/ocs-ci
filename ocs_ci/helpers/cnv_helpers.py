@@ -5,6 +5,7 @@ Helper functions specific for CNV
 import os
 import base64
 import logging
+import re
 
 from ocs_ci.helpers.helpers import create_unique_resource_name, create_resource
 from ocs_ci.ocs import constants
@@ -396,4 +397,35 @@ def verifyvolume(vm_name, volume_name, namespace):
         return False
     except Exception as e:
         logger.error(f"Error executing command '{cmd}': {e}")
+        return False
+
+
+def verify_hotplug(vm_obj, hot_pl_disk_raw):
+    """Verifies if a disk has been hot-plugged into/removed a VM.
+    Args:
+        hot_pl_disk_raw (str): Set of disk information before hot-plug or add.
+        vm_obj (VM obj): The virtual machine object to check.
+    Returns:
+        bool: True if a hot-plugged disk is detected, False otherwise.
+    """
+    try:
+        hot_pl_disk_after_raw = vm_obj.run_ssh_cmd("lsblk -o NAME,SIZE,MOUNTPOINT -P")
+        hot_pl_disk_after = set(re.findall(r'NAME="([^"]+)"', hot_pl_disk_after_raw))
+        hot_pl_disk = set(re.findall(r'NAME="([^"]+)"', hot_pl_disk_raw))
+        logger.info(f"Disks before hotplug:\n{hot_pl_disk}")
+        logger.info(f"Disks found after hotplug:\n{hot_pl_disk_after}")
+        added_disks = hot_pl_disk_after - hot_pl_disk
+        removed_disks = hot_pl_disk - hot_pl_disk_after
+        if added_disks or removed_disks:
+            logger.info(
+                f"Hotplug difference detected: Added: {added_disks}, "
+                f"Removed: {removed_disks}"
+            )
+            return True
+        logger.info(f"No hotplug difference detected in VM {vm_obj.name}")
+        return False
+    except Exception as e:
+        logger.error(
+            f"Error occurred while verifying " f"hotplug in VM {vm_obj.name}: {str(e)}"
+        )
         return False
