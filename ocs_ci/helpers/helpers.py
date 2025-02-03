@@ -5443,6 +5443,7 @@ def update_volsync_icsp():
     logger.info("Creating ImageContentSourcePolicy for Volsync")
     restore_index = config.cur_index
     non_acm_clusters = get_non_acm_cluster_config()
+    from ocs_ci.ocs.resources.pod import delete_pods
     for non_acm_cluster in non_acm_clusters:
         index = non_acm_cluster.MULTICLUSTER["multicluster_index"]
         config.switch_ctx(index)
