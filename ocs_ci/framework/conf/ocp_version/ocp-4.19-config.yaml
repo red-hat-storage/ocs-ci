@@ -9,8 +9,7 @@ DEPLOYMENT:
   # https://docs.openshift.com/container-platform/4.7/post_installation_configuration/machine-configuration-tasks.html#machine-config-overview-post-install-machine-configuration-tasks
   ignition_version: "3.2.0"
 ENV_DATA:
-  # TODO: replace with 4.19 once template is available
-  vm_template: "rhcos-418.94.202410090804-0-vmware.x86_64"
+  vm_template: "rhcos-9.6.20250121-0-vmware.x86_64"
   acm_hub_channel: release-2.12
   acm_version: "2.12"
   submariner_version: "0.19.0"
