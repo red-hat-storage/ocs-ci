@@ -168,6 +168,7 @@ KMIP_CSI_CONNECTION_CONF = {
 # Must-gather:
 MUST_GATHER_UPSTREAM_IMAGE = "quay.io/ocs-dev/ocs-must-gather"
 MUST_GATHER_UPSTREAM_TAG = "latest"
+MUST_GATHER_TIMEOUT = 3600
 
 # CrushDeviceClass
 CRUSH_DEVICE_CLASS = "ssd"
