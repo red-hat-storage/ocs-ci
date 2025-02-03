@@ -692,6 +692,48 @@ class OCP(object):
         token = self.exec_oc_cmd(command, out_yaml_format=False).rstrip()
         return token
 
+    def get_user_name(self):
+        """
+        Get user identity
+
+        Returns:
+            str: user identity
+        """
+        command = "whoami"
+        identity = self.exec_oc_cmd(command, out_yaml_format=False).rstrip()
+        return identity
+
+    def get_user_identities(self):
+        """
+        Get user identities
+        ! Important. We start see new user identity only after the first authentication
+
+        Returns:
+            list: user identities
+        """
+        command = "get identities"
+        identities = self.exec_oc_cmd(command, out_yaml_format=False).rstrip()
+        return identities
+
+    def delete_identity(self, idp_name, user_name):
+        """
+        Delete identity.
+        Users and identities are separate resources. Deleting one does not automatically delete the other.
+        If you only delete the user, the identity remains. This can lead to unexpected behavior, such as
+        The user may still be able to authenticate to the cluster.
+        Records may cause confusion or conflicts
+
+        Args:
+            idp_name (str): identity type to delete
+            user_name (str): username to delete
+
+        Returns:
+            str: output of delete command
+        """
+        command = f"delete identity {idp_name}:{user_name}"
+        status = self.exec_oc_cmd(command, out_yaml_format=False)
+        return status
+
     def wait_for_resource(
         self,
         condition,
@@ -1559,25 +1601,59 @@ def get_current_oc_version():
     return oc_dict.get("openshiftVersion")
 
 
+def check_cluster_operator_versions(target_image, operator_upgrade_timeout):
+    """
+    Check if all cluster operators are upgraded to the target image.
+    Function will wait for the operator upgrade to complete.
+    In case of sample fail, it will log the operator that is not upgraded yet.
+    In case of timeout reached, it will raise TimeoutExpiredError.
+
+    Args:
+        target_image (str): target image to be upgraded
+        operator_upgrade_timeout (int): timeout for operator upgrade
+    """
+    cluster_operators = get_all_cluster_operators()
+    for ocp_operator in cluster_operators:
+        for sampler in TimeoutSampler(
+            timeout=operator_upgrade_timeout,
+            sleep=60,
+            func=confirm_cluster_operator_version,
+            target_version=target_image,
+            cluster_operator=ocp_operator,
+        ):
+            if sampler:
+                log.info(f"{ocp_operator} upgrade is completed!")
+                break
+            else:
+                log.info(f"{ocp_operator} upgrade is not completed yet!")
+
+
 def get_cluster_operator_version(cluster_operator_name):
     """
-    Get image version of selected cluster operator
+    Get the version of the "operator" component from a ClusterOperator resource.
 
     Args:
         cluster_operator_name (str): ClusterOperator name
 
     Returns:
-        str: cluster operator version: ClusterOperator image version
-
+        str: Cluster Operator version if found, otherwise None
     """
     ocp = OCP(kind="ClusterOperator")
     operator_info = ocp.get(cluster_operator_name)
     log.debug(f"operator info: {operator_info}")
-    operator_status = operator_info.get("status")
-    version = operator_status.get("versions")[0]["version"]
-    version = version.rstrip("_openshift")
+    operator_status = operator_info.get("status", {})
+    versions = operator_status.get("versions", [])
 
-    return version
+    # dependant operators may have different versioning than operator itself
+    # determine the version of the operator by looking for the "operator" component
+    for version_info in versions:
+        if version_info.get("name") == "operator":
+            return version_info.get("version").rstrip("_openshift")
+
+    log.warning(
+        f"Operator version not found for ClusterOperator {cluster_operator_name}"
+    )
+    return None
 
 
 def get_all_cluster_operators():

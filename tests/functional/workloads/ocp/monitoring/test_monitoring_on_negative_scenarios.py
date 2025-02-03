@@ -68,7 +68,7 @@ def wait_to_update_mgrpod_info_prometheus_pod(threading_lock):
     log.info("Ceph health status metrics is updated")
 
 
-@retry(AssertionError, tries=30, delay=5, backoff=2)
+@retry(AssertionError, tries=29, delay=5, backoff=2)
 def check_ceph_metrics_available_within_time(threading_lock):
     """
     Validates the ceph metrics are available on prometheus pod

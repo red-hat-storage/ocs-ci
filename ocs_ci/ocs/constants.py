@@ -241,6 +241,8 @@ DRIVER = "Driver"
 IMAGECONTENTSOURCEPOLICY_KIND = "ImageContentSourcePolicy"
 NOOBAA_ACCOUNT = "NoobaaAccount"
 EXTERNAL_CLUSTER_SCRIPT_CONFIG = "rook-ceph-external-cluster-script-config"
+ENCRYPTIONKEYROTATIONCRONJOB = "encryptionkeyrotationcronjobs.csiaddons.openshift.io"
+ENCRYPTIONKEYROTATIONJOB = "encryptionkeyrotationjobs.csiaddons.openshift.io"
 
 # Provisioners
 AWS_EFS_PROVISIONER = "openshift.org/aws-efs"
@@ -413,10 +415,12 @@ OCS_MONKEY_REPOSITORY = "https://github.com/red-hat-storage/ocs-monkey.git"
 
 # AMQ
 AMQ_NAMESPACE = "myproject"
+KAFKA_ENDPOINT = f"my-cluster-kafka-bootstrap.{AMQ_NAMESPACE}.svc.cluster.local:9092"
 KAFKA_OPERATOR = "https://github.com/strimzi/strimzi-kafka-operator"
 RGW_KAFKA_NOTIFY = "https://github.com/shonpaz123/notify/"
 OCS_WORKLOADS = "https://github.com/red-hat-storage/ocs-workloads"
 CODESPEED_URL = "http://10.0.78.167:8000/"
+KAFKA_PODS_LABEL = "strimzi.io/pool-name=kafka"
 
 # ODF monitoring tool
 ODF_MONITORING_TOOL_REPO = "https://github.com/red-hat-storage/odf-monitoring-tools.git"
@@ -439,6 +443,7 @@ IMAGE_REGISTRY_CONFIG = "configs.imageregistry.operator.openshift.io/cluster"
 DEFAULT_NOOBAA_BACKINGSTORE = "noobaa-default-backing-store"
 DEFAULT_NOOBAA_BUCKETCLASS = "noobaa-default-bucket-class"
 DEFAULT_MCG_BUCKET_LOGS_PVC = "noobaa-bucket-logging-pvc"
+DEFAULT_MCG_BUCKET_NOTIFS_PVC = "noobaa-bucket-notifications-pvc"
 CUSTOM_MCG_LABEL = "custom=mcg-label"
 NOOBAA_RESOURCE_NAME = "noobaa"
 NOOBAA_DB_PVC_NAME = "db-noobaa-db-pg-0"
@@ -621,7 +626,9 @@ PROMETHEUS_POD_LABEL = "app.kubernetes.io/name=prometheus"
 NOOBAA_OPERATOR_DEPLOYMENT = "noobaa-operator"
 NOOBAA_ENDPOINT_DEPLOYMENT = "noobaa-endpoint"
 NOOBAA_DB_STATEFULSET = "noobaa-db-pg"
+NOOBAA_DB_POD = "noobaa-db-pg-0"
 NOOBAA_CORE_STATEFULSET = "noobaa-core"
+NOOBAA_CORE_POD = "noobaa-core-0"
 
 # Noobaa db secret
 NOOBAA_DB_SECRET = "noobaa-db"

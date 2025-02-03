@@ -242,7 +242,7 @@ class TestMCGReplicationWithDisruptions(E2ETest):
         nodes.restart_nodes(node_objs, timeout=500)
         retry(
             (CommandFailed, TimeoutError, AssertionError, ResourceWrongStatusException),
-            tries=60,
+            tries=28,
             delay=15,
         )(ocp.wait_for_cluster_connectivity(tries=400))
         wait_for_pods_to_be_running(

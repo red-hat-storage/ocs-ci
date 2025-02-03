@@ -257,9 +257,15 @@ class Pod(OCS):
         return exec_cmd(cmd, timeout=timeout, shell=True)
 
     def copy_from_pod_oc_exec(
-        self, target_path, src_path, timeout=1200, chunk_size=2000
+        self, target_path, src_path, timeout=60 * 40, chunk_size=2000
     ):
         """
+        !!!Important Note!!!
+        Due to implemented https://url.corp.redhat.com/RHSTOR-3411 task 'tar', 'yum' utilities were removed from ceph
+        pods to trim an image size.
+        oc cp command depends on 'tar' utility, see https://linuxhint.com/use-kubectl-cp-command/ and oc cp --help
+
+        This function is a workaround to copy files from the pod to the local path file using standard input stream
         Copies to local path file from the pod using standard output stream via 'oc exec'. Good for log/json/yaml/text
         files, not good for large files/binaries with one-line plain string
         * Hand data from the pod over `oc exec cat`, other standard output ways will fail for the files > 1 Mb
@@ -267,7 +273,7 @@ class Pod(OCS):
         Args:
             target_path (str): local path
             src_path (str): path within pod what you want to copy
-            timeout (int): timeout in seconds
+            timeout (int): total timeout in seconds
                 until size of the local file will not reach the initial file size.
                 2000 lines is a maximum chunk size tested successfully
             chunk_size (int): file will be copied by chunks, by number of lines
@@ -295,6 +301,29 @@ class Pod(OCS):
                 f"Failed to copy file from pod {self.name}:{src_path} to local path '{target_path}'\n"
                 f"src file size = {src_path}b, target file size = {os.stat(target_path).st_size}b"
             )
+
+    def copy_file_with_base64(self, target_path, src_path, container=""):
+        """
+        !!!Important Note!!!
+        Due to implemented https://url.corp.redhat.com/RHSTOR-3411 task 'tar', 'yum' utilities were removed from ceph
+        pods to trim an image size.
+        oc cp command depends on 'tar' utility, see https://linuxhint.com/use-kubectl-cp-command/ and oc cp --help
+
+        Function to copy a file to a pod using base64 tool. Example:
+        1) oc exec -n odf-storage rook-ceph-osd-0-68d76f868c-s25sw -c osd -- base64 /var/log/ceph/pg_log_1.30.txt >
+        pg_log_1.30.txt.base64
+        2) cat pg_log_1.30.txt.base64 | base64 -d > pg_log_1.30.txt
+
+        Args:
+            src_path (str): The source file to copy
+            target_path (str): The target file to copy to
+            container (str): The container to copy to
+        """
+        with tempfile.NamedTemporaryFile(delete=True, suffix=".base64") as temp_file:
+            base64_file = temp_file.name
+            cmd = f"oc -n {self.namespace} exec {self.name} -c {container} -- base64 {src_path} > {base64_file}"
+            exec_cmd(cmd, shell=True)
+            exec_cmd(f"cat {base64_file} | base64 -d > {target_path}", shell=True)
 
     def exec_sh_cmd_on_pod(self, command, sh="bash", timeout=600, **kwargs):
         """
@@ -2548,7 +2577,7 @@ def wait_for_pods_to_be_running(
 
 def wait_for_pods_by_label_count(
     label,
-    exptected_count,
+    expected_count,
     namespace=config.ENV_DATA["cluster_namespace"],
     timeout=200,
     sleep=10,
@@ -2559,7 +2588,7 @@ def wait_for_pods_by_label_count(
 
     Args:
         selector (str): The resource selector to search with
-        exptected_count (int): The expected number of pods with the given selector
+        expected_count (int): The expected number of pods with the given selector
         namespace (str): the namespace ot the pods
         timeout (int): time to wait for pods to be running
         sleep (int): Time in seconds to sleep between attempts
@@ -2575,8 +2604,8 @@ def wait_for_pods_by_label_count(
             namespace=namespace,
         ):
             # Check if the expected number of pods with the given selector is met
-            if pods_count == exptected_count:
-                logger.info(f"Found {exptected_count} pods with selector {label}")
+            if pods_count == expected_count:
+                logger.info(f"Found {expected_count} pods with selector {label}")
                 return True
     except TimeoutExpiredError:
         logger.warning(

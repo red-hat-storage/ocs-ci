@@ -227,7 +227,7 @@ class TestMonAndOSDFailures:
         logger.info(f"recovering mon {mon_dep} now...")
         modify_deployment_replica_count(mon_dep, 1)
         wait_for_pods_by_label_count(
-            label=constants.MON_APP_LABEL, exptected_count=5, timeout=300
+            label=constants.MON_APP_LABEL, expected_count=5, timeout=300
         )
 
     @polarion_id("OCS-5060")
@@ -257,7 +257,7 @@ class TestMonAndOSDFailures:
             expected_mon_count -= 1
             mon_deps.append(mon_dep)
             wait_for_pods_by_label_count(
-                label=constants.MON_APP_LABEL, exptected_count=expected_mon_count
+                label=constants.MON_APP_LABEL, expected_count=expected_mon_count
             )
 
         time.sleep(600)
@@ -267,7 +267,7 @@ class TestMonAndOSDFailures:
             logger.info(f"Recovering mon by scaling up the mon deployment {mon_dep}")
             modify_deployment_replica_count(mon_dep, 1)
         wait_for_pods_by_label_count(
-            label=constants.MON_APP_LABEL, exptected_count=5, timeout=300
+            label=constants.MON_APP_LABEL, expected_count=5, timeout=300
         )
 
     @polarion_id("OCS-5061")

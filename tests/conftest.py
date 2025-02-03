@@ -36,6 +36,7 @@ from ocs_ci.framework.pytest_customization.marks import (
     upgrade_marks,
     ignore_resource_not_found_error_label,
     config_index,
+    skipif_ibm_cloud_managed,
 )
 
 from ocs_ci.helpers.proxy import update_container_with_proxy_env
@@ -5084,11 +5085,13 @@ def es(request):
     return es
 
 
+@skipif_ibm_cloud_managed
 @pytest.fixture(scope="session")
 def setup_ui_session(request):
     return setup_ui_fixture(request)
 
 
+@skipif_ibm_cloud_managed
 @pytest.fixture(scope="class")
 def setup_ui_class(request):
     return setup_ui_fixture(request)
@@ -6048,7 +6051,7 @@ def nsfs_bucket_factory_fixture(
         # and for the obsolete noobaa-endpoint pods to be terminated
         wait_for_pods_by_label_count(
             label=constants.NOOBAA_ENDPOINT_POD_LABEL,
-            exptected_count=original_endpoint_pods_count,
+            expected_count=original_endpoint_pods_count,
         )
 
         # Apply the necessary permissions on the filesystem

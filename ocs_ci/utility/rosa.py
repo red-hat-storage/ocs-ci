@@ -14,7 +14,6 @@ from ocs_ci.ocs import constants, ocp
 from ocs_ci.ocs.exceptions import (
     CommandFailed,
     ManagedServiceAddonDeploymentError,
-    UnsupportedPlatformVersionError,
     ConfigurationError,
     ResourceWrongStatusException,
     TimeoutExpiredError,
@@ -32,6 +31,7 @@ from ocs_ci.utility.managedservice import (
 from ocs_ci.utility.openshift_dedicated import get_cluster_details
 from ocs_ci.utility.retry import catch_exceptions
 from ocs_ci.utility.utils import exec_cmd, TimeoutSampler
+from ocs_ci.utility.version import get_latest_rosa_ocp_version
 
 logger = logging.getLogger(name=__file__)
 rosa = config.AUTH.get("rosa", {})
@@ -79,7 +79,8 @@ def create_cluster(cluster_name, version, region):
             f"is not valid ROSA OCP version. "
             f"Selecting latest rosa version for deployment"
         )
-        rosa_ocp_version = get_latest_rosa_version(version)
+        logger.info(f"Looking for z-stream version of {version}")
+        rosa_ocp_version = get_latest_rosa_ocp_version(version)
         logger.info(f"Using OCP version {rosa_ocp_version}")
 
     if rosa_hcp:
@@ -343,36 +344,6 @@ def get_rosa_service_details(cluster):
     # Todo : update this function when -o json get supported in rosa services command
     # TODO : need exception handling
     return json.loads(service_info)
-
-
-def get_latest_rosa_version(version):
-    """
-    Returns latest available z-stream version available for ROSA.
-
-    Args:
-        version (str): OCP version in format `x.y`
-
-    Returns:
-        str: Latest available z-stream version
-
-    """
-    cmd = "rosa list versions"
-    output = utils.run_cmd(cmd, timeout=1800)
-    logger.info(f"Looking for z-stream version of {version}")
-    rosa_version = None
-    for line in output.splitlines():
-        match = re.search(f"^{version}\\.(\\d+) ", line)
-        if match:
-            rosa_version = match.group(0).rstrip()
-            break
-    if rosa_version is None:
-        logger.error(f"Could not find any version of {version} available for ROSA")
-        logger.info("Try providing an older version of OCP with --ocp-version")
-        logger.info("Latest OCP versions available for ROSA are:")
-        for i in range(3):
-            logger.info(f"{output.splitlines()[i + 1]}")
-        raise UnsupportedPlatformVersionError
-    return rosa_version
 
 
 def validate_ocp_version(version):
@@ -1169,3 +1140,82 @@ def label_nodes(cluster_name, machinepool_id, labels, rewrite=False):
     )
     machine_pool.refresh()
     return machine_pool.labels
+
+
+def rosa_create_htpasswd_idp(
+    htpasswd_path, cluster_name=config.ENV_DATA["cluster_name"], idp_name="my_htpasswd"
+):
+    """
+    Creates HTPasswd IDP from htpasswd file
+
+    Args:
+        htpasswd_path (str): Path to htpasswd file
+        cluster_name (str): Cluster name
+        idp_name (str): Name of the IDP
+
+    """
+    cmd = f"rosa create idp --cluster {cluster_name} --type htpasswd --name {idp_name} --from-file {htpasswd_path}"
+    resp = utils.exec_cmd(cmd)
+    if resp.returncode != 0:
+        raise CommandFailed(f"Failed to create IDP from htpasswd file {htpasswd_path}")
+    else:
+        logger.info(f"response\n: {resp.stdout.decode('utf-8').splitlines()}")
+
+
+def rosa_list_idps(cluster_name=config.ENV_DATA["cluster_name"]):
+    """
+    List IDPs
+
+    Args:
+        cluster_name (str): Cluster name
+
+    Returns:
+        dict: Dictionary with IDP names as keys and IDP types as values
+    """
+    cmd = f"rosa list idps --cluster {cluster_name}"
+    resp = utils.exec_cmd(cmd)
+
+    if resp.returncode != 0:
+        raise CommandFailed("Failed to list IDPs")
+    else:
+        out_decoded = resp.stdout.decode("utf-8").splitlines()
+        logger.info(f"response\n: {out_decoded}")
+    # at least one line is always returned, so we can safely skip the header - out_decoded[1:]
+    names_to_idp_dict = {item.split()[0]: item.split()[1] for item in out_decoded[1:]}
+    return names_to_idp_dict
+
+
+def rosa_delete_htpasswd_idp(
+    cluster_name=config.ENV_DATA["cluster_name"], idp_name="my_htpasswd"
+):
+    """
+    Deletes IDP
+
+    Args:
+        cluster_name (str): Cluster name
+        idp_name (str): Name of the IDP
+
+    """
+    cmd = f"rosa delete idp {idp_name} --cluster {cluster_name} --yes"
+    resp = utils.exec_cmd(cmd)
+    if resp.returncode != 0:
+        raise CommandFailed("Failed to delete IDP")
+    else:
+        logger.info(f"response\n: {resp.stdout.decode('utf-8').splitlines()}")
+
+
+def upgrade_rosa_cluster(cluster_name, version):
+    """
+    Upgrade the ROSA cluster to the given version
+    ! important ! rosa cli version drops error in case if --control-plane parameter is not used
+    ! important ! upgrade is not performed automatically in case of ROSA clusters, especially in case of HCP;
+    Upgrade is controlled by the Hive Operator; schedule depends on a Control Plane Queue
+
+    Args:
+        cluster_name (str): The cluster name
+        version (str): The version to upgrade the cluster
+
+    """
+    cmd = f"rosa upgrade cluster --cluster {cluster_name} --control-plane --version {version} --mode auto --yes"
+    proc = exec_cmd(cmd, timeout=2400)
+    logger.info(f"Upgrade cluster command output:\n {proc.stdout.decode().strip()}")
