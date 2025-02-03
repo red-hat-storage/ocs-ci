@@ -15,6 +15,6 @@ ENV_DATA:
   # TODO: This we will need to update to update to released version once we
   # will upload to DCs
   vm_template: "rhcos-4.16.0-x86_64-vmware.x86_64"
-  acm_hub_channel: release-2.11
-  acm_version: "2.11"
-  submariner_version: "0.18.0"
+  acm_hub_channel: release-2.12
+  acm_version: "2.12"
+  submariner_version: "0.19.0"
