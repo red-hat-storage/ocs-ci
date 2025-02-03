@@ -69,7 +69,7 @@ class TestVmHotPlugUnplug(E2ETest):
 
             sample = TimeoutSampler(
                 timeout=600,
-                sleep=15,
+                sleep=5,
                 func=verify_hotplug,
                 vm_obj=vm_obj,
                 hot_pl_disk_raw=before_disks,
@@ -109,10 +109,10 @@ class TestVmHotPlugUnplug(E2ETest):
 
             sample = TimeoutSampler(
                 timeout=600,
-                sleep=15,
+                sleep=5,
                 func=verify_hotplug,
                 vm_obj=vm_obj,
-                hot_pl_disk=before_disks_wout,
+                hot_pl_disk_raw=before_disks_wout,
             )
             sample.wait_for_func_value(value=True)
 
@@ -126,7 +126,7 @@ class TestVmHotPlugUnplug(E2ETest):
 
             sample = TimeoutSampler(
                 timeout=600,
-                sleep=15,
+                sleep=5,
                 func=verify_hotplug,
                 vm_obj=vm_obj,
                 hot_pl_disk_raw=before_disks_wout_rm,
