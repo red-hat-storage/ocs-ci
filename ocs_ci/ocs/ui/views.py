@@ -2032,7 +2032,65 @@ alerting = {
     "alerting_rule_details_link": ("//a[normalize-space()='{}']", By.XPATH),
 }
 
-
+bucket_tab = {
+    "create_bucket_button_obc": (
+        "//div[text()='Create via Object Bucket Claim']",
+        By.XPATH,
+    ),
+    "storage_class_dropdown": (
+        "//button[contains(., 'SCSCSelect StorageClass')]",
+        By.XPATH,
+    ),
+    "storage_class_noobaa_option": (
+        "#openshift-storage\\.noobaa\\.io-link > a > div:nth-child(1) > span",
+        By.CSS_SELECTOR,
+    ),
+    "obc_bucket_name_input": ("#obc-name", By.CSS_SELECTOR),
+    "create_bucket_button_s3": (
+        "//div[text()='Create via S3 API']",
+        By.XPATH,
+    ),
+    "s3_bucket_name_input": (
+        "[data-test='bucket-name']",
+        By.CSS_SELECTOR,
+    ),
+    "submit_button_obc": (
+        "button[data-test='obc-create'][type='submit']",
+        By.CSS_SELECTOR,
+    ),
+    "first_bucket": (
+        "tr:nth-of-type(1) a",
+        By.CSS_SELECTOR,
+    ),
+    "create_folder_button": (
+        "div.pf-v5-u-w-50 > div > button.pf-v5-c-button",
+        By.CSS_SELECTOR,
+    ),
+    "folder_name_input": (
+        "#folder-name",
+        By.CSS_SELECTOR,
+    ),
+    "submit_button_folder": (
+        "button.pf-m-primary",
+        By.CSS_SELECTOR,
+    ),
+    "upload_button": (
+        "//button[contains(text(), 'Upload')]",
+        By.XPATH,
+    ),
+    "file_input": (
+        "input[multiple][type='file'][webkitdirectory]",
+        By.CSS_SELECTOR,
+    ),
+    "upload_submit": (
+        "//button[text()='Upload']",
+        By.XPATH,
+    ),
+    "create_bucket_button": (
+        "//*[@id='yaml-create']",
+        By.XPATH,
+    ),
+}
 locators = {
     "4.18": {
         "login": {**login, **login_4_11, **login_4_14},
@@ -2086,6 +2144,7 @@ locators = {
         "topology": topology,
         "mcg_stores": mcg_stores,
         "alerting": alerting,
+        "bucket_tab": bucket_tab,
     },
     "4.17": {
         "login": {**login, **login_4_11, **login_4_14},
