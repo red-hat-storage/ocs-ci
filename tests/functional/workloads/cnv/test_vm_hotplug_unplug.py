@@ -136,3 +136,5 @@ class TestVmHotPlugUnplug(E2ETest):
             assert set(after_disks) == set(
                 after_hotplug_rm_disk_wout
             ), f"Failed to unplug disk {pvc_obj_wout.name} from VM {vm_obj.name}"
+
+            vm_obj.stop()
