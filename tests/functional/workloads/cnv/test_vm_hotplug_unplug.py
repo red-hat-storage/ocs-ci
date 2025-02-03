@@ -26,7 +26,7 @@ class TestVmHotPlugUnplug(E2ETest):
         setup_cnv,
         project_factory,
         multi_cnv_workload,
-        pvc_factory_class,
+        pvc_factory,
     ):
         """
         Test the hot plugging and unplugging of a PVC into/from a VM.
@@ -54,7 +54,7 @@ class TestVmHotPlugUnplug(E2ETest):
             log.info(f"Disks before hotplug:\n{before_disks}")
 
             # Step 2: Create a PVC and hotplug it to the VM with persist flag
-            pvc_obj = pvc_factory_class(
+            pvc_obj = pvc_factory(
                 project=proj_obj,
                 storageclass=sc_obj,
                 size=20,
@@ -96,7 +96,7 @@ class TestVmHotPlugUnplug(E2ETest):
             ), f"MD5 mismatch after reboot for VM {vm_obj.name}"
 
             # Step 6: Hotplug another disk to the VM without persist flag
-            pvc_obj_wout = pvc_factory_class(
+            pvc_obj_wout = pvc_factory(
                 project=proj_obj,
                 storageclass=sc_obj,
                 size=20,
