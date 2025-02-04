@@ -25,7 +25,7 @@ class TestVmHotPlugUnplugSnapClone(E2ETest):
 
     def test_vm_hotpl_snap_clone(
         self,
-        # setup_cnv,
+        setup_cnv,
         project_factory,
         cnv_workload,
         pvc_clone_factory,
