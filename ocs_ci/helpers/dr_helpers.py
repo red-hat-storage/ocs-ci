@@ -425,7 +425,7 @@ def get_pv_count(namespace):
     workload_pvs = [
         pv
         for pv in all_pvs
-        if pv.get("spec").get("claimRef").get("namespace") == namespace
+        if pv.get("spec").get("claimRef", {}).get("namespace") == namespace
     ]
     return len(workload_pvs)
 
