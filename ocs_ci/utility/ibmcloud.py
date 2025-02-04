@@ -1242,6 +1242,43 @@ def find_free_network_subnets(subnet_cidr, network_prefix=27):
             return possible_subnets
 
 
+def delete_dns_records(cluster_name):
+    """
+    Delete DNS records leftover from cluster destroy.
+
+    Args:
+        cluster_name (str): Name of the cluster, used to filter DNS records
+
+    """
+    dns_domain_id = constants.IBMCLOUD_BASE_DOMAIN_ID
+    cis_instance_name = constants.IBMCLOUD_CIS_INSTANCE_NAME
+    ids_to_delete = []
+    page = 1
+    while True:
+        out = run_ibmcloud_cmd(
+            f"ibmcloud cis dns-records {dns_domain_id} --per-page 1000 --page {page} --output json"
+        )
+        records = json.loads(out)
+        if not records:
+            logger.info("Reached end of pagination")
+            break
+
+        filter_string = f".{cluster_name}."
+        logger.info(f"Searching for records with string: {filter_string}")
+        for record in records:
+            if filter_string in record["name"]:
+                logger.info(f"Found {record['name']}, marking for deletion")
+                ids_to_delete.append(record["id"])
+        page += 1
+
+    logger.info(f"Records to delete: {records}")
+    for record_id in ids_to_delete:
+        logger.info(f"Deleting DNS record: {record_id}")
+        run_ibmcloud_cmd(
+            f"ibmcloud cis dns-record-delete {dns_domain_id} {record_id} -i {cis_instance_name}"
+        )
+
+
 class IBMCloudObjectStorage:
     """
     IBM Cloud Object Storage (COS) class
