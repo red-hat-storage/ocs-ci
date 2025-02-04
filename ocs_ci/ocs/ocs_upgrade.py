@@ -956,10 +956,10 @@ def set_update_strategy(rbd_max_unavailable=None, cephfs_max_unavailable=None):
             to be updated in rook-ceph-operator-config configmap.
 
     """
-    rbd_max = rbd_max_unavailable or config.ENV_DATA.get(
+    rbd_max = rbd_max_unavailable or config.UPGRADE.get(
         "csi_rbd_plugin_update_strategy_max_unavailable"
     )
-    cephfs_max = cephfs_max_unavailable or config.ENV_DATA.get(
+    cephfs_max = cephfs_max_unavailable or config.UPGRADE.get(
         "csi_cephfs_plugin_update_strategy_max_unavailable"
     )
     if rbd_max:
