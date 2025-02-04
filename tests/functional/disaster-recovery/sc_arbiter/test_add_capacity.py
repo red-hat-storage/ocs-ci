@@ -135,7 +135,7 @@ class TestAddCapacityStretchCluster:
         sc_obj.post_failure_checks(start_time, end_time, wait_for_read_completion=False)
         logger.info("Successfully verified with post failure checks for the workloads")
 
-        # check vm data written before the failure for integrity
+        # check vm data written after the failure for integrity
         md5sum_after = cal_md5sum_vm(vm_obj, file_path="/file_1.txt")
         assert (
             md5sum_before == md5sum_after
