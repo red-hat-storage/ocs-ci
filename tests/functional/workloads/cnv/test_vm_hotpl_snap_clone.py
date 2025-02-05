@@ -9,6 +9,7 @@ from ocs_ci.helpers.cnv_helpers import (
     verifyvolume,
     verify_hotplug,
 )
+from ocs_ci.helpers.keyrotation_helper import PVKeyrotation
 from ocs_ci.ocs import constants
 from ocs_ci.utility.utils import TimeoutSampler
 
@@ -26,10 +27,12 @@ class TestVmHotPlugUnplugSnapClone(E2ETest):
     def test_vm_hotpl_snap_clone(
         self,
         setup_cnv,
+        pv_encryption_kms_setup_factory,
+        storageclass_factory,
         project_factory,
         cnv_workload,
-        pvc_clone_factory,
         pvc_factory,
+        pvc_clone_factory,
     ):
         """
         A running DVT based VM and a PVC based VM
@@ -42,17 +45,41 @@ class TestVmHotPlugUnplugSnapClone(E2ETest):
         6. Attach clones to opposite VMs and verify disk operation
         7. Unplug the disks and verify detachment
         """
+        # Setup csi-kms-connection-details configmap
+        log.info("Setting up csi-kms-connection-details configmap")
+        kms = pv_encryption_kms_setup_factory(kv_version="v2")
+        log.info("csi-kms-connection-details setup successful")
+
+        # Create an encryption enabled storageclass for RBD
+        sc_obj_def = storageclass_factory(
+            interface=constants.CEPHBLOCKPOOL,
+            encrypted=True,
+            encryption_kms_id=kms.kmsid,
+            new_rbd_pool=True,
+            mapOptions="krbd:rxbounce",
+            mounter="rbd",
+        )
+
+        # Create ceph-csi-kms-token in the tenant namespace
         proj_obj = project_factory()
+        kms.vault_path_token = kms.generate_vault_token()
+        kms.create_vault_csi_kms_token(namespace=proj_obj.namespace)
+        pvk_obj = PVKeyrotation(sc_obj_def)
+        pvk_obj.annotate_storageclass_key_rotation(schedule="*/3 * * * *")
+
         file_paths = ["/source_file.txt", "/new_file.txt"]
 
         # Create a PVC-based VM (VM1)
         vm_obj_pvc = cnv_workload(
-            namespace=proj_obj.namespace, volume_interface=constants.VM_VOLUME_PVC
+            storageclass=sc_obj_def.name,
+            namespace=proj_obj.namespace,
+            volume_interface=constants.VM_VOLUME_PVC,
         )
 
         # Create the PVC for VM1
         pvc_obj = pvc_factory(
             project=proj_obj,
+            storageclass=sc_obj_def,
             size=20,
             access_mode=constants.ACCESS_MODE_RWX,
             volume_mode=constants.VOLUME_MODE_BLOCK,
@@ -61,10 +88,13 @@ class TestVmHotPlugUnplugSnapClone(E2ETest):
 
         # Create a DVT-based VM (VM2)
         vm_obj_dvt = cnv_workload(
-            namespace=proj_obj.namespace, volume_interface=constants.VM_VOLUME_DVT
+            storageclass=sc_obj_def.name,
+            namespace=proj_obj.namespace,
+            volume_interface=constants.VM_VOLUME_DVT,
         )
         dvt_obj = pvc_factory(
             project=proj_obj,
+            storageclass=sc_obj_def,
             size=20,
             access_mode=constants.ACCESS_MODE_RWX,
             volume_mode=constants.VOLUME_MODE_BLOCK,
