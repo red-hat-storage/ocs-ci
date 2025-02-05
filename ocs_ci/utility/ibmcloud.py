@@ -1276,7 +1276,7 @@ def delete_dns_records(cluster_name):
                 ids_to_delete.append(record["id"])
         page += 1
 
-    logger.info(f"Records to delete: {records}")
+    logger.info(f"Records to delete: {ids_to_delete}")
     for record_id in ids_to_delete:
         logger.info(f"Deleting DNS record: {record_id}")
         try:
