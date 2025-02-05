@@ -12,12 +12,11 @@ from ocs_ci.helpers.helpers import (
 )
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.amq import AMQ
-from ocs_ci.ocs.cluster import CephCluster
 from ocs_ci.ocs.exceptions import CommandFailed
 from ocs_ci.ocs.ocp import OCP
+from ocs_ci.ocs.resources.mcg import MCG
 from ocs_ci.ocs.resources.pod import (
     Pod,
-    get_noobaa_pods,
     get_pods_having_label,
     wait_for_pods_to_be_running,
 )
@@ -52,7 +51,14 @@ class BucketNotificationsManager:
         Deploy an AMQ cluster and set up Kafka
         """
         sc = default_storage_class(interface_type=constants.CEPHBLOCKPOOL)
-        self.amq.setup_amq_cluster(sc.name)
+
+        # Avoid the long setup in dev-mode if the AMQ cluster already exists
+        # in dev-mode we don't cleanup the AMQ cluster
+        if (
+            not config.RUN["cli_params"].get("dev_mode")
+            or not self.amq.check_amq_cluster_exists()
+        ):
+            self.amq.setup_amq_cluster(sc.name)
 
     def enable_bucket_notifs_on_cr(self, use_provided_pvc=False):
         """
@@ -120,7 +126,11 @@ class BucketNotificationsManager:
             kind="pvc",
             resource_name=pvc_name,
         )
-        pv_name = pvc_ocp_obj.get()["spec"]["volumeName"]
+
+        # First get attempts may fail if MCG just created the PVC due to the patch
+        pvc_dict = pvc_ocp_obj.get(retry=5, wait=5)
+
+        pv_name = pvc_dict["spec"]["volumeName"]
         pv_ocp_obj = OCP(
             namespace=self.namespace,
             kind="pv",
@@ -196,7 +206,7 @@ class BucketNotificationsManager:
 
         Returns:
             secret_ocp_obj: OCP instance of the created secret
-            conn_file_name: Name of the JSON file
+            conn_config_path: MCG's Path to the connection config file
         """
         conn_name = create_unique_resource_name(
             resource_description="nb-notif", resource_type="kafka-conn"
@@ -217,7 +227,6 @@ class BucketNotificationsManager:
             conn_file_name = os.path.basename(conn_file.name)
             conn_file.write(json.dumps(kafka_conn_config))
             conn_file.flush()  # Ensure that the data is written
-
             OCP().exec_oc_cmd(
                 f"create secret generic {secret_name} --from-file={conn_file.name} -n {self.namespace}"
             )
@@ -228,15 +237,20 @@ class BucketNotificationsManager:
             resource_name=secret_name,
         )
         self.conn_secrets.append(secret_ocp_obj)
-        return secret_ocp_obj, conn_file_name
 
-    def add_notif_conn_to_noobaa_cr(self, secret):
+        # MCG stores the connection config file in a directory named after the secret
+        conn_config_path = os.path.join(secret_name, conn_file_name)
+
+        return secret_ocp_obj, conn_config_path
+
+    def add_notif_conn_to_noobaa_cr(self, secret, wait=True):
         """
         Add a connection secret to list of bucket notifications
         connections in the NooBaa CR.
 
         Args:
             secret(ocs_ci.ocs.ocp.OCP): OCP instance of the secret to add
+            wait(bool): Whether to wait for the NooBaa resources to be ready
         """
         conn_data = {
             "name": secret.resource_name,
@@ -249,17 +263,12 @@ class BucketNotificationsManager:
             params=json.dumps(add_op),
             format_type="json",
         )
+        if wait:
+            MCG.wait_for_ready_status()
 
-        nb_pods = [pod.name for pod in get_noobaa_pods()]
-        wait_for_pods_to_be_running(
-            namespace=self.namespace,
-            pod_names=nb_pods,
-            timeout=60,
-            sleep=10,
-        )
-        CephCluster().wait_for_noobaa_health_ok()
-
-    def put_bucket_notification(self, awscli_pod, mcg_obj, bucket, events, conn_file):
+    def put_bucket_notification(
+        self, awscli_pod, mcg_obj, bucket, events, conn_config_path, wait=True
+    ):
         """
         Configure bucket notifications on a bucket using the AWS CLI
 
@@ -268,7 +277,8 @@ class BucketNotificationsManager:
             mcg_obj(MCG): MCG object
             bucket(str): Name of the bucket
             events(list): List of events to trigger notifications
-            conn_file(str): Name of the file that NooBaa uses to connect to Kafka
+            conn_config_path(str): MCG's Path to the connection config file
+            wait(bool): Whether to wait for the notification to propagate
         """
         rand_id = create_unique_resource_name(
             resource_description="notif", resource_type="id"
@@ -277,7 +287,7 @@ class BucketNotificationsManager:
             "TopicConfiguration": {
                 "Id": rand_id,
                 "Events": events,
-                "Topic": conn_file,
+                "Topic": conn_config_path,
             }
         }
         notif_config_json = json.dumps(notif_config).replace('"', '\\"')
@@ -288,8 +298,9 @@ class BucketNotificationsManager:
                 api=True,
             )
         )
-        logger.info("Waiting for put-bucket-notification to propogate")
-        sleep(60)
+        if wait:
+            logger.info("Waiting for put-bucket-notification to propagate")
+            sleep(60)
 
     def get_bucket_notification(self, awscli_pod, mcg_obj, bucket):
         """
@@ -311,7 +322,7 @@ class BucketNotificationsManager:
             )
         )
 
-    def get_events(self, topic, timeout_in_ms=5000):
+    def get_events(self, topic, timeout_in_ms=10000):
         """
         Query a Kafka topic for events
 
@@ -338,9 +349,12 @@ class BucketNotificationsManager:
         events = []
         for line in raw_resp.split("\n"):
             if line:
+                parsed_event = json.loads(line)
                 # Every event is nested in a single-element list
-                event_dict = json.loads(line)["Records"][0]
-                events.append(event_dict)
+                # which is nested in a dict with the key "Records"
+                if isinstance(parsed_event, dict) and "Records" in parsed_event:
+                    event_dict = parsed_event["Records"][0]
+                    events.append(event_dict)
         return events
 
     def cleanup(self):
@@ -356,4 +370,7 @@ class BucketNotificationsManager:
             secret.delete(resource_name=secret.resource_name)
         for topic in self.kafka_topics:
             topic.delete()
-        self.amq.cleanup()
+
+        # Don't cleanup the AMQ cluster in dev-mode for faster re-runs
+        if not config.RUN["cli_params"].get("dev_mode"):
+            self.amq.cleanup()

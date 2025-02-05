@@ -9,11 +9,17 @@ from ocs_ci.framework.testlib import (
     mcg,
     polarion_id,
     red_squad,
+    skipif_disconnected_cluster,
+    skipif_external_mode,
     skipif_mcg_only,
+    skipif_noobaa_external_pgsql,
+    skipif_proxy_cluster,
     tier1,
 )
 from ocs_ci.ocs import constants
-from ocs_ci.ocs.bucket_utils import write_random_test_objects_to_bucket
+from ocs_ci.ocs.bucket_utils import (
+    write_random_test_objects_to_bucket,
+)
 from ocs_ci.ocs.exceptions import TimeoutExpiredError
 from ocs_ci.ocs.resources.bucket_notifications_manager import BucketNotificationsManager
 from ocs_ci.utility.utils import TimeoutSampler
@@ -23,6 +29,10 @@ logger = logging.getLogger(__name__)
 
 @mcg
 @red_squad
+@skipif_disconnected_cluster
+@skipif_noobaa_external_pgsql
+@skipif_external_mode
+@skipif_proxy_cluster
 @ignore_leftover_label(constants.CUSTOM_MCG_LABEL)
 class TestBucketNotifications(MCGTest):
     """
@@ -52,10 +62,10 @@ class TestBucketNotifications(MCGTest):
     @pytest.mark.parametrize(
         argnames=["use_provided_pvc"],
         argvalues=[
-            pytest.param(False, marks=[polarion_id("OCS-6242"), bugzilla("2302842")]),
+            pytest.param(False, marks=[polarion_id("OCS-6329"), bugzilla("2302842")]),
             pytest.param(
                 True,
-                marks=[polarion_id("OCS-6243"), skipif_mcg_only],
+                marks=[polarion_id("OCS-6330"), skipif_mcg_only],
             ),
         ],
         ids=[
@@ -74,9 +84,10 @@ class TestBucketNotifications(MCGTest):
     ):
         """
         Test the MCG bucket notifications feature
+
         1. Enable bucket notifications on the NooBaa CR
         2. Create a Kafka topic and add a Kafka notification connection to the NooBaa CR
-        3. Create a bucket and configure bucket notificiations
+        3. Create a bucket and configure bucket notifications
         on it using the new connection
         4. Verify that the bucket notification configuration was set correctly
         5. Write some objects to the bucket
@@ -87,7 +98,7 @@ class TestBucketNotifications(MCGTest):
 
         # 2. Add a Kafka topic connection to the NooBaa CR
         topic = notif_manager.create_kafka_topic()
-        secret, conn_file_name = notif_manager.create_kafka_conn_secret(topic)
+        secret, conn_config_path = notif_manager.create_kafka_conn_secret(topic)
         notif_manager.add_notif_conn_to_noobaa_cr(secret)
 
         # 3. Create a bucket and configure bucket notifs on it using the new connection
@@ -97,12 +108,12 @@ class TestBucketNotifications(MCGTest):
             mcg_obj=mcg_obj,
             bucket=bucket,
             events=["s3:ObjectCreated:*"],
-            conn_file=conn_file_name,
+            conn_config_path=conn_config_path,
         )
 
         # 4. Verify the bucket notification configuration was set correctly
         resp = notif_manager.get_bucket_notification(awscli_pod, mcg_obj, bucket)
-        assert resp["TopicConfiguration"]["Topic"] == conn_file_name
+        assert resp["TopicConfiguration"]["Topic"] == conn_config_path
 
         # 5. Write some objects to the bucket
         obj_keys = write_random_test_objects_to_bucket(
@@ -115,6 +126,7 @@ class TestBucketNotifications(MCGTest):
         obj_keys_set = set(obj_keys)
 
         # 6. Verify that the expected events were received by Kafka
+        delta = set()
         try:
             for events in TimeoutSampler(
                 timeout=120,
@@ -123,9 +135,12 @@ class TestBucketNotifications(MCGTest):
                 topic=topic,
             ):
                 keys_in_notifs = set(event["s3"]["object"]["key"] for event in events)
-                if obj_keys_set.issubset(keys_in_notifs):
+                delta = obj_keys_set.difference(keys_in_notifs)
+                if not delta:
                     logger.info("All expected events were received by Kafka")
                     break
-        except TimeoutExpiredError:
-            logger.error("Not all expected events were received by Kafka")
-            raise
+        except TimeoutExpiredError as e:
+            raise TimeoutExpiredError(
+                e,
+                f"Some PutObject events were not received by Kafka: {delta}",
+            )
