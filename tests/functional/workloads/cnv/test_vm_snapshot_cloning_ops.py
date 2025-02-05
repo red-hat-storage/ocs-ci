@@ -3,7 +3,7 @@ import pytest
 
 from ocs_ci.framework.pytest_customization.marks import magenta_squad, workloads
 from ocs_ci.framework.testlib import E2ETest
-from ocs_ci.helpers.cnv_helpers import cal_md5sum_vm, run_dd_io
+from ocs_ci.helpers.cnv_helpers import cal_md5sum_vm, run_dd_io, expand_pvc_and_verify
 from ocs_ci.ocs import constants
 
 log = logging.getLogger(__name__)
@@ -145,37 +145,12 @@ class TestVmSnapshotClone(E2ETest):
         for vm_obj in vm_list:
             # Expand PVC if `pvc_expand_before_snapshot` is True
             pvc_obj = vm_obj.get_vm_pvc_obj()
+            new_size = 50
             if pvc_expand_before_snapshot:
-                new_size = 50
-                try:
-                    pvc_obj.resize_pvc(new_size=new_size, verify=True)
-                    pvc_obj = vm_obj.get_vm_pvc_obj()
-
-                    # get rootdisk name
-                    disk = (
-                        vm_obj.vmi_obj.get()
-                        .get("status")
-                        .get("volumeStatus")[1]["target"]
-                    )
-                    devicename = f"/dev/{disk}"
-
-                    result = vm_obj.run_ssh_cmd(
-                        command=f"lsblk -d -n -o SIZE {devicename}"
-                    ).strip()
-                    if result == f"{new_size}G":
-                        log.info("expanded PVC size is showing on vm")
-                    else:
-                        raise ValueError(
-                            "Expanded PVC size is not showing on VM. "
-                            "Please verify the disk rescan and filesystem resize."
-                        )
-                except ValueError as e:
-                    log.error(
-                        f"Error for VM {vm_obj}: {e}. Continuing with the next VM."
-                    )
-                    failed_vms.append(vm_obj.name)
+                if not expand_pvc_and_verify(
+                    vm_obj, new_size, failed_vms=failed_vms, vm_objs_def=vm_objs_def
+                ):
                     continue
-
             # Writing IO on source VM
             source_csum = run_dd_io(vm_obj=vm_obj, file_path=file_paths[0], verify=True)
 
@@ -206,38 +181,9 @@ class TestVmSnapshotClone(E2ETest):
 
             # Expand PVC if `pvc_expand_after_restore` is True
             if pvc_expand_after_restore:
-                new_size = 50
-                try:
-                    res_snap_obj.resize_pvc(new_size=new_size, verify=True)
-                    assert res_vm_obj.get_vm_pvc_obj().size == new_size, (
-                        f"Failed: VM PVC Expansion of {res_vm_obj.name} after "
-                        f"snapshot restore"
-                    )
-
-                    # Get rootdisk name
-                    disk = (
-                        vm_obj.vmi_obj.get()
-                        .get("status")
-                        .get("volumeStatus")[1]["target"]
-                    )
-                    devicename = f"/dev/{disk}"
-
-                    result = vm_obj.run_ssh_cmd(
-                        command=f"lsblk -d -n -o SIZE {devicename}"
-                    ).strip()
-
-                    if result == f"{new_size}G":
-                        log.info("expanded PVC size is showing on vm")
-                    else:
-                        raise ValueError(
-                            "Expanded PVC size is not showing on VM. "
-                            "Please verify the disk rescan and filesystem resize."
-                        )
-                except ValueError as e:
-                    log.error(
-                        f"Error for VM {vm_obj}: {e}. Continuing with the next VM."
-                    )
-                    failed_vms.append(vm_obj.name)
+                if not expand_pvc_and_verify(
+                    vm_obj, new_size, failed_vms=failed_vms, vm_objs_def=vm_objs_def
+                ):
                     continue
 
             # Validate data integrity of file written before taking snapshot
