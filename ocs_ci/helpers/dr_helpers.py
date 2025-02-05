@@ -311,7 +311,7 @@ def check_mirroring_status_ok(
     """
     # TODO: Check based on provider mode or not
     if not cephblockpoolradosns:
-        logging.info(
+        logger.info(
             "Find the cephblockpoolradosnamespace the associated with storageclient"
         )
         cephbpradosns = (
