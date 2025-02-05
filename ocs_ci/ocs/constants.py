@@ -2646,8 +2646,6 @@ SHA_SEPARATOR = "@sha256:"
 
 # ibmcloud related constants
 IBMCLOUD_VOLUME_NAME = "ibmvolume"
-IBMCLOUD_BASE_DOMAIN_ID = "a180c88cc263d58808a739e1fdfc268a"
-IBMCLOUD_CIS_INSTANCE_NAME = "odf-qe-cis"
 
 # manifest.json and background.js files used for Chrome extention configuring
 # authenticated proxy, see also:

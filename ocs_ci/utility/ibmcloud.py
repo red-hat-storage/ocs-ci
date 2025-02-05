@@ -8,6 +8,7 @@ import json
 import logging
 import os
 import re
+import traceback
 import requests
 import time
 import ibm_boto3
@@ -1250,10 +1251,14 @@ def delete_dns_records(cluster_name):
         cluster_name (str): Name of the cluster, used to filter DNS records
 
     """
-    dns_domain_id = constants.IBMCLOUD_BASE_DOMAIN_ID
-    cis_instance_name = constants.IBMCLOUD_CIS_INSTANCE_NAME
+    dns_domain_id = config.ENV_DATA["base_domain_id"]
+    cis_instance_name = config.ENV_DATA["cis_instance_name"]
     ids_to_delete = []
     page = 1
+
+    logger.info(f"Setting cis instance to {cis_instance_name}")
+    run_ibmcloud_cmd(f"ibmcloud cis instance-set {cis_instance_name}")
+
     while True:
         out = run_ibmcloud_cmd(
             f"ibmcloud cis dns-records {dns_domain_id} --per-page 1000 --page {page} --output json"
@@ -1274,9 +1279,12 @@ def delete_dns_records(cluster_name):
     logger.info(f"Records to delete: {records}")
     for record_id in ids_to_delete:
         logger.info(f"Deleting DNS record: {record_id}")
-        run_ibmcloud_cmd(
-            f"ibmcloud cis dns-record-delete {dns_domain_id} {record_id} -i {cis_instance_name}"
-        )
+        try:
+            run_ibmcloud_cmd(
+                f"ibmcloud cis dns-record-delete {dns_domain_id} {record_id}"
+            )
+        except CommandFailed:
+            logger.error(traceback.format_exc())
 
 
 class IBMCloudObjectStorage:
