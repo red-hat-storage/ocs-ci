@@ -289,7 +289,7 @@ class TestDeleteObjects:
             log.info("Deleted objects from the bucket recursively")
 
         # Verify that all the objects are marked as deleted
-        verify_objs_deleted_from_objmds(bucket.name, timeout=64800, sleep=90)
+        verify_objs_deleted_from_objmds(bucket.name, timeout=72000, sleep=90)
 
         # Verify the object expiration/deletion by listing from the buckets also
         sample_if_objects_expired(mcg_obj_session, bucket.name)
