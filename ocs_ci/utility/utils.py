@@ -2489,7 +2489,7 @@ def wait_for_ceph_health_not_ok(timeout=300, sleep=10):
     sampler.wait_for_func_status(True)
 
 
-def ceph_health_check(namespace=None, tries=20, delay=30, resolve_daemon_crash=True):
+def ceph_health_check(namespace=None, tries=20, delay=30, resolve_daemon_crash=False):
     """
     Args:
         namespace (str): Namespace of OCS
@@ -2519,7 +2519,7 @@ def ceph_health_check(namespace=None, tries=20, delay=30, resolve_daemon_crash=T
     )(ceph_health_check_base)(namespace, resolve_daemon_crash)
 
 
-def ceph_health_check_base(namespace=None, resolve_daemon_crash=True):
+def ceph_health_check_base(namespace=None, resolve_daemon_crash=False):
     """
     Exec `ceph health` cmd on tools pod to determine health of cluster.
 
