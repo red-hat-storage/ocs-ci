@@ -180,6 +180,9 @@ def delete_and_create_osd_node(osd_node_name):
         osd_node_name, new_node_name, old_osd_node_names, old_osd_ids
     )
 
+    log.info("Clear crash warnings and osd removal leftovers")
+    clear_crash_warning_and_osd_removal_leftovers()
+
 
 @brown_squad
 @tier4a
