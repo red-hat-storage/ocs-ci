@@ -8,7 +8,6 @@ import json
 import logging
 import os
 import re
-import traceback
 import requests
 import time
 import ibm_boto3
@@ -1284,7 +1283,7 @@ def delete_dns_records(cluster_name):
                 f"ibmcloud cis dns-record-delete {dns_domain_id} {record_id}"
             )
         except CommandFailed:
-            logger.error(traceback.format_exc())
+            logger.exception("Failed to delete CIS leftovers")
 
 
 class IBMCloudObjectStorage:
