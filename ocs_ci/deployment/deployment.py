@@ -2455,6 +2455,17 @@ class Deployment(object):
         else:
             self.deploy_acm_hub_released()
             self.deploy_multicluster_hub()
+        self.configure_acm_to_import_mce_clusters()
+
+    def configure_acm_to_import_mce_clusters(self):
+        """
+        Configure ACM to import MCE operator cluster and hosted clusters
+        """
+        logger.info("Creating AddOnDeploymentConfig")
+        run_cmd(f"oc create -f {constants.ACM_ADDON_DEPLOYMENT_CONFIG}")
+        addon_obj = OCP(kind=constants.CLUSTERMANAGEMENTADDON)
+        for management_addon in ["work-manager", "managed-serviceaccount", "cluster-proxy"]:
+
 
     def deploy_acm_hub_unreleased(self):
         """
