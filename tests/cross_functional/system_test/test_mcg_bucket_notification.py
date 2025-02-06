@@ -2,6 +2,8 @@ import pytest
 
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
+from ocs_ci.ocs import constants
+from ocs_ci.framework.pytest_customization.marks import ignore_leftover_label
 from ocs_ci.ocs.bucket_utils import (
     write_random_test_objects_to_bucket,
     s3_delete_object,
@@ -26,6 +28,7 @@ from ocs_ci.ocs.resources.pod import (
 from ocs_ci.utility.utils import TimeoutSampler
 
 
+@ignore_leftover_label(constants.CUSTOM_MCG_LABEL)
 class TestBucketNotificationSystemTest:
 
     @pytest.fixture(autouse=True, scope="class")
@@ -191,6 +194,8 @@ class TestBucketNotificationSystemTest:
                 topic,
                 bucket_names=buckets_created[:],
                 event_name="ObjectTagging:Put",
+                timeout=600,
+                sleep=30,
             )
 
             logger.info("Starting Noobaa pod nodes")
@@ -230,6 +235,8 @@ class TestBucketNotificationSystemTest:
                 topic,
                 bucket_names=buckets_created[:],
                 event_name="ObjectRemoved:Delete",
+                timeout=300,
+                sleep=30,
             )
 
         # 7. Enable object expiration for 1 day and expire the objects manually
