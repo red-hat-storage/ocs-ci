@@ -21,7 +21,7 @@ data:
     matches:
       - __name__="csv_succeeded",exported_namespace="openshift-storage",name=~"odf-operator.*"
       - __name__="csv_succeeded",exported_namespace="openshift-dr-system",name=~"odr-cluster-operator.*"
-      - __name__="csv_succeeded",exported_namespace="openshift-operators",name=~"volsync.*"
+      - __name__="kube_running_pod_ready",namespace=~"volsync-system|openshift-operators",pod=~"volsync.*" 
     recording_rules:
       - record: count_persistentvolumeclaim_total
         expr: count(kube_persistentvolumeclaim_info)
