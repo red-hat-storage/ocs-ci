@@ -3853,6 +3853,9 @@ def adjust_active_mds_count_storagecluster(target_count):
     Args:
         target_count (int): The desired count for activeMetadataServers.
 
+    Raises:
+        ActiveMdsValueNotMatch: if activeMetadataServers count does not match.
+
     """
 
     # Retrieve the current activeMetadataServers count
@@ -3880,7 +3883,31 @@ def adjust_active_mds_count_storagecluster(target_count):
                 "cephFilesystems"
             ]["activeMetadataServers"]
 
-    # Wait until the active mds pod count from cephfilesystem matches the target count
+            for _ in range(2):
+                if current_count_cephfilesystem == target_count:
+                    break
+                # Determine the new count by incrementing or decrementing
+                step = 1 if current_count_cephfilesystem < target_count else -1
+                new_count = current_count_cephfilesystem + step
+                param = (
+                    f'{{"spec": {{"managedResources": {{"cephFilesystems": '
+                    f'{{"activeMetadataServers": {new_count}}}}}}}}}'
+                )
+                sc.patch(resource_name=resource_name, params=param, format_type="merge")
+
+                # Retrieve the updated count
+                current_params = sc.get(resource_name=resource_name)
+                current_count_cephfilesystem = current_params["spec"][
+                    "managedResources"
+                ]["cephFilesystems"]["activeMetadataServers"]
+            else:
+                raise RuntimeError(
+                    f"Failed to update activeMetadataServers to {target_count} after 2 attempts"
+                )
+
+    logger.info(
+        "Wait until the active mds pod count from cephfilesystem matches the target count"
+    )
     try:
         TimeoutSampler(
             timeout=300,
@@ -3937,12 +3964,7 @@ def verify_active_and_standby_mds_count(target_count):
         )
         return active_pod_count, standby_replay_count
 
-    try:
-        TimeoutSampler(timeout=180, sleep=10, func=get_mds_counts).wait_for_func_value(
-            (target_count, target_count)
-        )
-        logger.info(f"Active and standby-replay MDS pod counts reached {target_count}.")
-    except TimeoutExpiredError:
-        raise AssertionError(
-            f"Failed to reach target count {target_count} for active and standby-replay MDS pods within timeout."
-        )
+    TimeoutSampler(timeout=180, sleep=10, func=get_mds_counts).wait_for_func_value(
+        (target_count, target_count)
+    )
+    logger.info(f"Active and standby-replay MDS pod counts reached {target_count}.")
