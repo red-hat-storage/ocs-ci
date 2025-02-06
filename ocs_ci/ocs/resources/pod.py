@@ -35,6 +35,7 @@ from ocs_ci.ocs.exceptions import (
     NoRunningCephToolBoxException,
     TolerationNotFoundException,
 )
+from ocs_ci.ocs.resources.pvc import get_all_pvcs_in_storageclass
 
 from ocs_ci.ocs.utils import setup_ceph_toolbox, get_pod_name_by_pattern
 from ocs_ci.ocs.resources.ocs import OCS
@@ -1971,22 +1972,33 @@ def verify_node_name(pod_obj, node_name):
 
 def get_pvc_name(pod_obj):
     """
-    Function to get pvc_name from pod_obj
+    Get the PVC name from a pod object.
+
+    This function retrieves the PVC name from a given pod object by checking all volumes
+    attached to the pod. It will return the first PVC found or raise an exception if no
+    PVC is attached.
 
     Args:
-        pod_obj (str): The pod object
+        pod_obj (Pod): The pod object to get the PVC name.
 
     Returns:
-        str: The pvc name of a given pod_obj,
+        str: The PVC name attached to the pod.
 
     Raises:
-        UnavailableResourceException: If no pvc attached
+        UnavailableResourceException: If no PVC is attached to the pod.
 
     """
-    pvc = pod_obj.get().get("spec").get("volumes")[0].get("persistentVolumeClaim")
-    if not pvc:
-        raise UnavailableResourceException
-    return pvc.get("claimName")
+    # Get all volumes attached to the pod
+    volumes = pod_obj.get().get("spec", {}).get("volumes", [])
+
+    # Iterate through volumes to find the first PVC
+    for volume in volumes:
+        pvc = volume.get("persistentVolumeClaim")
+        if pvc:
+            return pvc.get("claimName")
+
+    # Raise an exception if no PVC is found
+    raise UnavailableResourceException("No PVC attached to the given pod.")
 
 
 def get_used_space_on_mount_point(pod_obj):
@@ -4042,3 +4054,22 @@ def wait_for_ceph_cmd_execute_successfully(
         f"The ceph command failed to execute successfully after {num_of_retries} retries"
     )
     return False
+
+
+def get_lvs_osd_pods(lvs_name):
+    """
+    Get the LocalVolumeSet osd pods
+
+    Args:
+        lvs_name (str): The LocalVolumeSet name
+
+    Returns:
+        list: List of the osd pods
+
+    """
+    pvcs = get_all_pvcs_in_storageclass(lvs_name)
+    pvc_names = [pvc.name for pvc in pvcs]
+    osd_pods = get_osd_pods()
+    lvs_pods = [p for p in osd_pods if get_pvc_name(p) in pvc_names]
+
+    return lvs_pods

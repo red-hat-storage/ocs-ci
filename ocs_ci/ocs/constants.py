@@ -105,6 +105,8 @@ NETWORK_POLICY_PROVIDER_TO_CLIENT_TEMPLATE = os.path.join(
 AI_NETWORK_CONFIG_TEMPLATE = os.path.join(
     "ocp-deployment", "ai-host-network-config.yaml.j2"
 )
+MULTIPLE_DEVICECLASSES_DIR = os.path.join(TEMPLATE_DIR, "multiple-deviceclasses")
+
 # Statuses
 STATUS_READY = "Ready"
 PEER_READY = "Peer ready"
@@ -243,6 +245,7 @@ NOOBAA_ACCOUNT = "NoobaaAccount"
 EXTERNAL_CLUSTER_SCRIPT_CONFIG = "rook-ceph-external-cluster-script-config"
 ENCRYPTIONKEYROTATIONCRONJOB = "encryptionkeyrotationcronjobs.csiaddons.openshift.io"
 ENCRYPTIONKEYROTATIONJOB = "encryptionkeyrotationjobs.csiaddons.openshift.io"
+DEFAULT_CEPH_DEVICECLASS = "defaultCephDeviceClass"
 
 # Provisioners
 AWS_EFS_PROVISIONER = "openshift.org/aws-efs"
@@ -3144,3 +3147,14 @@ ENCRYPTION_DASHBOARD_CONTEXT_MAP = {
     "In-transit encryption": "intransit_encryption",
     "Object storage": "object_storage",
 }
+
+# Multiple device classes Yaml files
+STORAGE_DEVICESET_YAML = os.path.join(
+    MULTIPLE_DEVICECLASSES_DIR, "storage-device-set.yaml"
+)
+DEVICECLASS_CEPHBLOCKPOOL_YAML = os.path.join(
+    MULTIPLE_DEVICECLASSES_DIR, "deviceclass-cephblockpool.yaml"
+)
+DEVICECLASS_STORAGECLASS_YAML = os.path.join(
+    MULTIPLE_DEVICECLASSES_DIR, "deviceclass-storageclass.yaml"
+)

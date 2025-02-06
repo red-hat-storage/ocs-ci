@@ -44,6 +44,7 @@ from ocs_ci.ocs.resources.pod import (
     get_rbdfsplugin_provisioner_pods,
     get_ceph_tools_pod,
     get_osd_pod_id,
+    get_lvs_osd_pods,
 )
 from ocs_ci.ocs.resources.pv import check_pvs_present_for_ocs_expansion
 from ocs_ci.ocs.resources.pvc import get_deviceset_pvcs
@@ -1079,7 +1080,10 @@ def verify_storage_cluster_version(storage_cluster):
                     raise e
 
 
-def verify_storage_device_class(device_class):
+def verify_storage_device_class(
+    device_class,
+    check_multiple_deviceclasses=False,
+):
     """
     Verifies the parameters of storageClassDeviceSets in CephCluster.
 
@@ -1089,8 +1093,15 @@ def verify_storage_device_class(device_class):
 
     Args:
         device_class (str): Name of the device class
+        check_multiple_deviceclasses (bool): If true, then check multiple deviceclasses. False, otherwise.
 
     """
+    if check_multiple_deviceclasses:
+        deviceset_sc_name_per_deviceclass = get_deviceset_sc_name_per_deviceclass()
+    else:
+        deviceset_sc_name_per_deviceclass = {}
+    log.info(f"deviceset name per deviceclass = {deviceset_sc_name_per_deviceclass}")
+
     # If the user has not provided any specific DeviceClass in the StorageDeviceSet for internal deployment then
     # tunefastDeviceClass will be true and crushDeviceClass will set to "ssd"
     log.info("Verifying crushDeviceClass for storageClassDeviceSets")
@@ -1103,8 +1114,18 @@ def verify_storage_device_class(device_class):
     ]
 
     for each_devise_set in storage_class_device_sets:
+        if deviceset_sc_name_per_deviceclass:
+            sc_device_set_name = each_devise_set["volumeClaimTemplates"][0]["spec"].get(
+                "storageClassName"
+            )
+            # Get the deviceclass per the storagecluster deviceset name if exist or get the provided deviceclass
+            device_class = deviceset_sc_name_per_deviceclass.get(
+                sc_device_set_name, device_class
+            )
+
         # check tuneFastDeviceClass
         device_set_name = each_devise_set["name"]
+        log.info(f"device set name = {device_set_name}")
         if config.ENV_DATA.get("tune_fast_device_class"):
             tune_fast_device_class = each_devise_set["tuneFastDeviceClass"]
             msg = f"tuneFastDeviceClass for {device_set_name} is set to {tune_fast_device_class}"
@@ -1125,35 +1146,52 @@ def verify_storage_device_class(device_class):
             crush_device_class == device_class
         ), f"{crush_device_class_msg} but it should be set to {device_class}"
 
+    sc_device_classes = deviceset_sc_name_per_deviceclass.values()
     # get deviceClasses for overall storage
     device_classes = cephcluster_data["items"][0]["status"]["storage"]["deviceClasses"]
     log.debug(f"deviceClasses are {device_classes}")
     for each_device_class in device_classes:
         device_class_name = each_device_class["name"]
-        assert (
-            device_class_name == device_class
-        ), f"deviceClass is set to {device_class_name} but it should be set to {device_class}"
+        if sc_device_classes:
+            assert (
+                device_class_name in sc_device_classes
+            ), f"deviceClass {device_class_name} is not in the expected device classes {sc_device_classes}"
+        else:
+            assert (
+                device_class_name == device_class
+            ), f"deviceClass is set to {device_class_name} but it should be set to {device_class}"
 
 
-def verify_device_class_in_osd_tree(ct_pod, device_class):
+def verify_device_class_in_osd_tree(
+    ct_pod, device_class, check_multiple_deviceclasses=False
+):
     """
     Verifies device class in ceph osd tree output
 
     Args:
         ct_pod (:obj:`OCP`):  Object of the Ceph tools pod
         device_class (str): Name of the device class
+        check_multiple_deviceclasses (bool): If true, then check multiple deviceclasses. False, otherwise.
 
     """
+    if check_multiple_deviceclasses:
+        osd_id_per_deviceclass = get_osd_id_per_deviceclass()
+    else:
+        osd_id_per_deviceclass = {}
+    log.info(f"osd id per deviceclass = {osd_id_per_deviceclass}")
+
     log.info("Verifying DeviceClass in ceph osd tree")
     osd_tree = ct_pod.exec_ceph_cmd(ceph_cmd="ceph osd tree")
     for each in osd_tree["nodes"]:
         if each["type"] == "osd":
+            osd_id = each.get("id")
+            current_device_class = osd_id_per_deviceclass.get(osd_id, device_class)
             osd_name = each["name"]
             device_class_in_osd_tree = each["device_class"]
             log.debug(f"DeviceClass for {osd_name} is {device_class_in_osd_tree}")
             assert (
-                device_class_in_osd_tree == device_class
-            ), f"DeviceClass for {osd_name} is {device_class_in_osd_tree} but expected value is {device_class}"
+                device_class_in_osd_tree == current_device_class
+            ), f"DeviceClass for {osd_name} is {device_class_in_osd_tree} but expected value is {current_device_class}"
 
 
 def get_device_class():
@@ -2978,3 +3016,171 @@ def get_csi_images_for_client_ocp_version(ocp_version=None):
     csi_ocp_version_images = csi_images.split(first_str)[1].split(last_str)[0]
     csi_ocp_version_images_urls = extract_image_urls(csi_ocp_version_images)
     return csi_ocp_version_images_urls
+
+
+def add_new_deviceset_in_storagecluster(
+    device_class, name, count=3, replica=1, access_modes=None, device_type="SSD"
+):
+    """
+    Add a new DeviceSet to the StorageCluster.
+
+    Args:
+        device_class (str): Device class for the DeviceSet.
+        name (str): Name of the DeviceSet.
+        count (int): Number of devices in the DeviceSet.
+        replica (int): Number of replicas.
+        access_modes (list): List of access modes.
+        device_type (str): Device type for the DeviceSet.
+
+    Returns:
+        bool: True if the patch was applied successfully, False otherwise.
+
+    """
+    access_modes = access_modes or ["ReadWriteOnce"]
+
+    template_data = templating.load_yaml(constants.STORAGE_DEVICESET_YAML)
+    # Update the YAML with the relevant parameters
+    template_data["spec"]["storageDeviceSets"][0]["count"] = count
+    template_data["spec"]["storageDeviceSets"][0]["dataPVCTemplate"]["spec"][
+        "accessModes"
+    ] = access_modes
+    template_data["spec"]["storageDeviceSets"][0]["dataPVCTemplate"]["spec"][
+        "storageClassName"
+    ] = device_class
+    template_data["spec"]["storageDeviceSets"][0]["deviceClass"] = device_class
+    template_data["spec"]["storageDeviceSets"][0]["name"] = name
+    template_data["spec"]["storageDeviceSets"][0]["replica"] = replica
+    template_data["spec"]["storageDeviceSets"][0]["deviceType"] = device_type
+
+    new_device_set = template_data["spec"]["storageDeviceSets"][0]
+
+    sc = get_storage_cluster()
+    resource_name = sc.data["items"][0]["metadata"]["name"]
+    current_sc = sc.get(resource_name=resource_name)
+    current_device_sets = current_sc["spec"].get("storageDeviceSets", [])
+    current_device_sets.append(new_device_set)
+
+    params_dict = {"spec": {"storageDeviceSets": current_device_sets}}
+    params = json.dumps(params_dict)
+    # Apply the patch using the updated YAML
+    result = sc.patch(
+        resource_name=resource_name,
+        params=params,
+        format_type="merge",
+    )
+
+    return result
+
+
+def get_all_device_sets():
+    """
+    Get all the device classes in the storagecluster
+
+    Returns:
+        list: The device classes in the storagecluster
+
+    """
+    storage_cluster_name = config.ENV_DATA["storage_cluster_name"]
+    storage_cluster = StorageCluster(
+        resource_name=storage_cluster_name,
+        namespace=config.ENV_DATA["cluster_namespace"],
+    )
+    storage_device_sets = storage_cluster.data["spec"]["storageDeviceSets"]
+    log.info(f"storage device sets = {storage_device_sets}")
+    return storage_device_sets
+
+
+def get_default_deviceclass():
+    """
+    Get the default deviceclass from the storagecluster
+
+    Returns:
+        str: The default deviceclass
+
+    """
+    storage_cluster_name = config.ENV_DATA["storage_cluster_name"]
+    storage_cluster = StorageCluster(
+        resource_name=storage_cluster_name,
+        namespace=config.ENV_DATA["cluster_namespace"],
+    )
+    default_deviceclass = storage_cluster.data["status"].get(
+        constants.DEFAULT_CEPH_DEVICECLASS
+    )
+
+    return default_deviceclass
+
+
+def get_deviceclass_name(device_set):
+    """
+    Get the deviceclass name from the device set dict
+
+    Args:
+        device_set (dict): The device set dict
+
+    Returns:
+        str: The deviceclass name
+
+    """
+    default_deviceclass = get_default_deviceclass()
+    deviceclass_name = device_set.get(constants.DEVICECLASS, default_deviceclass)
+    return deviceclass_name
+
+
+def get_deviceset_sc_name(device_set):
+    """
+    Get the deviceset storageclass name from the device set dict
+
+    Args:
+        device_set (dict): The device set dict
+
+    Returns:
+        str: The deviceset storageclass name
+
+    """
+    return device_set["dataPVCTemplate"]["spec"]["storageClassName"]
+
+
+def get_deviceset_sc_name_per_count():
+    """
+    Get the deviceset storageclass name per count dict from the storagecluster
+
+    Returns:
+        dict: The deviceset storageclass name per count dict
+
+    """
+    device_sets = get_all_device_sets()
+    return {get_deviceset_sc_name(d): d["count"] for d in device_sets}
+
+
+def get_osd_id_per_deviceclass():
+    """
+    Get the osd id per deviceclass dict
+
+    Returns:
+        dict: The osd id per deviceclass dict
+
+    """
+    osd_id_per_deviceclass = {}
+
+    device_sets = get_all_device_sets()
+    deviceclass_names = [get_deviceclass_name(d) for d in device_sets]
+    for d_name in deviceclass_names:
+        lvs_osd_pods = get_lvs_osd_pods(d_name)
+        # Add the osd ids per the device class to the dict
+        for p in lvs_osd_pods:
+            osd_id = int(get_osd_pod_id(p))
+            osd_id_per_deviceclass[osd_id] = d_name
+
+    return osd_id_per_deviceclass
+
+
+def get_deviceset_sc_name_per_deviceclass():
+    """
+    Get the deviceset storageclass name per deviceclass name dict
+
+    Returns:
+        dict: The deviceset storageclass name per deviceclass name dict
+
+    """
+    device_sets = get_all_device_sets()
+    return {get_deviceset_sc_name(d): get_deviceclass_name(d) for d in device_sets}
