@@ -27,7 +27,7 @@ class TestVmHotPlugUnplug(E2ETest):
 
     def test_vm_hot_plugging_unplugging(
         self,
-        setup_cnv,
+        # setup_cnv,
         project_factory,
         multi_cnv_workload,
         pvc_factory,
@@ -72,7 +72,7 @@ class TestVmHotPlugUnplug(E2ETest):
                 sleep=5,
                 func=verify_hotplug,
                 vm_obj=vm_obj,
-                hot_pl_disk_raw=before_disks,
+                disks_before_hotplug=before_disks,
             )
             sample.wait_for_func_value(value=True)
 
@@ -112,7 +112,7 @@ class TestVmHotPlugUnplug(E2ETest):
                 sleep=5,
                 func=verify_hotplug,
                 vm_obj=vm_obj,
-                hot_pl_disk_raw=before_disks_wout,
+                disks_before_hotplug=before_disks_wout,
             )
             sample.wait_for_func_value(value=True)
 
@@ -129,7 +129,7 @@ class TestVmHotPlugUnplug(E2ETest):
                 sleep=5,
                 func=verify_hotplug,
                 vm_obj=vm_obj,
-                hot_pl_disk_raw=before_disks_wout_rm,
+                disks_before_hotplug=before_disks_wout_rm,
             )
             sample.wait_for_func_value(value=True)
             vm_obj.stop()
