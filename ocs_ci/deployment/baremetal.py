@@ -1026,12 +1026,13 @@ class BAREMETALAI(BAREMETALBASE):
             )
 
             # upload ipxe config to httpd server (helper_node)
+            discovery_ipxe_file_dest = (
+                f"{self.bm_config['bm_httpd_document_root']}/ipxe/"
+                f"{self.bm_config['env_name']}/discovery.ipxe"
+            )
             self.helper_node_handler.upload_file(
                 ipxe_config_file,
-                (
-                    f"{self.bm_config['bm_httpd_document_root']}/ipxe/"
-                    f"{self.bm_config['env_name']}/discovery.ipxe"
-                ),
+                discovery_ipxe_file_dest,
             )
             ipxe_file_url = (
                 f"http://{self.bm_config['bm_httpd_provision_server']}/ipxe/"
@@ -1085,6 +1086,11 @@ class BAREMETALAI(BAREMETALBASE):
                     pxelinux_cfg_file,
                     f"{self.bm_config['bm_tftp_base_dir']}/pxelinux.cfg/{dest_cfg_file_name}",
                 )
+            # rename the discovery.ipxe file to continue boot from disk on UEFI boot mode systems
+            cmd = f"mv {discovery_ipxe_file_dest} {discovery_ipxe_file_dest}.backup"
+            assert (
+                self.helper_node_handler.exec_cmd(cmd=cmd)[0] == 0
+            ), "Failed to rename discovery.ipxe file"
 
             # update discovered hosts (configure hostname and role)
             self.ai_cluster.update_hosts_config(
