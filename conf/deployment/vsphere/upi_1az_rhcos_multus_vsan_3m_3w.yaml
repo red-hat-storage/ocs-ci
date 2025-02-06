@@ -5,8 +5,14 @@ DEPLOYMENT:
 ENV_DATA:
   platform: "vsphere"
   deployment_type: "upi"
+  platform: "vsphere"
+  deployment_type: "upi"
   worker_replicas: 3
   master_replicas: 3
+  worker_num_cpus: "16"
+  master_num_cpus: "4"
+  master_memory: "16384"
+  compute_memory: "65536"
   worker_num_cpus: "16"
   master_num_cpus: "4"
   master_memory: "16384"
@@ -15,10 +21,11 @@ ENV_DATA:
   is_multus_enabled: true
   multus_public_net_interface: "ens224"
   multus_cluster_net_interface: "ens224"
+  multus_public_net_interface: "ens224"
+  multus_cluster_net_interface: "ens224"
   multus_create_public_net: true
   multus_create_cluster_net: true
   multus_public_net_namespace: "default"
-  multus_cluster_net_namespace: "default"
 
 REPORTING:
   polarion:

@@ -18,6 +18,7 @@ import inspect
 import stat
 import platform
 import ipaddress
+import ipaddress
 from concurrent.futures import ThreadPoolExecutor
 from itertools import cycle
 from subprocess import PIPE, run
@@ -4971,21 +4972,11 @@ def configure_node_network_configuration_policy_on_all_worker_nodes():
     # This function require changes for compact mode
     logger.info("Configure NodeNetworkConfigurationPolicy on all worker nodes")
     worker_node_names = get_worker_nodes()
-    ip_version = "ipv4"
-    if (
-        config.DEPLOYMENT.get("ipv6")
-        and config.ENV_DATA.get("platform") == constants.VSPHERE_PLATFORM
-    ):
-        constants.NODE_NETWORK_CONFIGURATION_POLICY = (
-            constants.NODE_NETWORK_CONFIGURATION_POLICY_IPV6
-        )
-        ip_version = "ipv6"
     interface_num = 0
     for worker_node_name in worker_node_names:
         node_network_configuration_policy = templating.load_yaml(
             constants.NODE_NETWORK_CONFIGURATION_POLICY
         )
-
         if config.ENV_DATA["platform"] == constants.BAREMETAL_PLATFORM:
             worker_network_configuration = config.ENV_DATA["baremetal"]["servers"][
                 worker_node_name
@@ -4993,9 +4984,9 @@ def configure_node_network_configuration_policy_on_all_worker_nodes():
             node_network_configuration_policy["spec"]["nodeSelector"][
                 "kubernetes.io/hostname"
             ] = worker_node_name
-            node_network_configuration_policy["metadata"]["name"] = (
-                worker_network_configuration["node_network_configuration_policy_name"]
-            )
+            node_network_configuration_policy["metadata"][
+                "name"
+            ] = worker_network_configuration["node_network_configuration_policy_name"]
             node_network_configuration_policy["spec"]["desiredState"]["interfaces"][0][
                 "ipv4"
             ]["address"][0]["ip"] = worker_network_configuration[
@@ -5022,13 +5013,13 @@ def configure_node_network_configuration_policy_on_all_worker_nodes():
             ] = f"ceph-public-net-shim-{worker_node_name}"
             shim_default_ip = node_network_configuration_policy["spec"]["desiredState"][
                 "interfaces"
-            ][0][ip_version]["address"][0]["ip"]
+            ][0]["ipv4"]["address"][0]["ip"]
 
             shim_ip = str(ipaddress.ip_address(shim_default_ip) + interface_num)
             interface_num += 1
 
             node_network_configuration_policy["spec"]["desiredState"]["interfaces"][0][
-                ip_version
+                "ipv4"
             ]["address"][0]["ip"] = shim_ip
 
             node_network_configuration_policy["spec"]["desiredState"]["interfaces"][0][

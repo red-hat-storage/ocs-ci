@@ -32,6 +32,7 @@ from ocs_ci.ocs.constants import (
     VM_DEFAULT_NETWORK_ADAPTER,
 )
 from ocs_ci.framework import config
+from ocs_ci.framework import config
 from ocs_ci.utility.utils import TimeoutSampler
 
 logger = logging.getLogger(__name__)
@@ -1888,61 +1889,3 @@ class VSPHERE(object):
                     f"Task for configuring network for {vm.name} did not complete successfully."
                 )
             logger.info(f"Network adapter added to {vm.name} successfully.")
-
-    def get_vms_by_string(self, str_to_match):
-        """
-        Gets the VM's with search string
-
-        Args:
-            str_to_match (str): String to match VM's
-
-        Returns:
-            list: VM instance
-
-        """
-
-        content = self.get_content
-        container = content.rootFolder
-        view_type = [vim.VirtualMachine]
-        recursive = True
-
-        container_view = content.viewManager.CreateContainerView(
-            container, view_type, recursive
-        )
-        vms = [vm for vm in container_view.view if str_to_match in vm.name]
-        container_view.Destroy()
-        return vms
-
-    def wait_for_vm_status(self, vm, desired_status, timeout=300, interval=10):
-        """
-        Wait for the VM to reach the desired status.
-
-        :param vm: The virtual machine object
-        :param desired_status: The desired status (e.g., 'poweredOn', 'poweredOff')
-        :param timeout: Maximum time (in seconds) to wait for the VM to reach the desired status
-        :param interval: Time (in seconds) between each status check
-        :return: True if the VM reaches the desired status, False otherwise
-        """
-        import time
-
-        start_time = time.time()
-
-        while time.time() - start_time < timeout:
-            current_status = vm.runtime.powerState
-
-            # Check if the VM has reached the desired status
-            if current_status == desired_status:
-                logger.info(
-                    f"VM {vm.name} has reached the desired status: {desired_status}"
-                )
-                return True
-
-            logger.info(
-                f"Current status of VM {vm.name} is {current_status}, waiting for {desired_status}..."
-            )
-            time.sleep(interval)
-
-        logger.info(
-            f"VM {vm.name} did not reach the desired status {desired_status} within the timeout period."
-        )
-        return False

@@ -1136,18 +1136,6 @@ MULTUS_CLUSTER_NET_YAML = os.path.join(
 NODE_NETWORK_CONFIGURATION_POLICY = os.path.join(
     TEMPLATE_DEPLOYMENT_DIR, "node_network_configuration_policy.yaml"
 )
-
-MULTUS_PUBLIC_NET_IPV6_YAML = os.path.join(
-    TEMPLATE_DEPLOYMENT_DIR, "multus-public-net-ipv6.yaml"
-)
-MULTUS_CLUSTER_NET_IPV6_YAML = os.path.join(
-    TEMPLATE_DEPLOYMENT_DIR, "multus-cluster-net-ipv6.yaml"
-)
-NODE_NETWORK_CONFIGURATION_POLICY_IPV6 = os.path.join(
-    TEMPLATE_DEPLOYMENT_DIR, "node_network_configuration_policy_ipv6.yaml"
-)
-
-
 NETWORK_ATTACHEMENT_DEFINITION = "network-attachment-definitions.k8s.cni.cncf.io"
 VSPHERE_MULTUS_INTERFACE = "ens224"
 
