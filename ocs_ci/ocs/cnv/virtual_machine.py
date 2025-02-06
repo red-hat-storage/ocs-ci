@@ -454,7 +454,7 @@ class VirtualMachine(Virtctl):
             self.verify_vm(verify_ssh=True)
             logger.info(f"VM: {self._vm_name} ssh working successfully!")
 
-    def addvolume(self, volume_name, persist=True, serial=None, verify=False):
+    def addvolume(self, volume_name, persist=True, serial=None, verify=True):
         """
         Add a volume to a VM
 
@@ -486,7 +486,7 @@ class VirtualMachine(Virtctl):
             )
             sample.wait_for_func_value(value=True)
 
-    def removevolume(self, volume_name, verify=False):
+    def removevolume(self, volume_name, verify=True):
         """
         Remove a volume from a VM
 

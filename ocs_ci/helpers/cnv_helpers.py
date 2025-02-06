@@ -376,9 +376,11 @@ def verifyvolume(vm_name, volume_name, namespace):
     Args:
         vm_name (str): Name of the virtual machine
         volume_name (str): Name of the volume (PVC) to verify
+        namespace (str): Virtual Machine Namespace
 
     Returns:
         bool: True if the volume (PVC) is found, False otherwise
+
     """
     cmd = (
         f"get vm {vm_name} -n {namespace} -o "
@@ -400,22 +402,31 @@ def verifyvolume(vm_name, volume_name, namespace):
         return False
 
 
-def verify_hotplug(vm_obj, hot_pl_disk_raw):
-    """Verifies if a disk has been hot-plugged into/removed a VM.
+def verify_hotplug(vm_obj, disks_before_hotplug):
+    """
+    Verifies if a disk has been hot-plugged into/removed from a VM.
+
     Args:
-        hot_pl_disk_raw (str): Set of disk information before hot-plug or add.
-        vm_obj (VM obj): The virtual machine object to check.
+        disks_before_hotplug (str): Set of disk information before hot-plug or add.
+        vm_obj (VM object): The virtual machine object to check.
+
     Returns:
         bool: True if a hot-plugged disk is detected, False otherwise.
+
     """
     try:
-        hot_pl_disk_after_raw = vm_obj.run_ssh_cmd("lsblk -o NAME,SIZE,MOUNTPOINT -P")
-        hot_pl_disk_after = set(re.findall(r'NAME="([^"]+)"', hot_pl_disk_after_raw))
-        hot_pl_disk = set(re.findall(r'NAME="([^"]+)"', hot_pl_disk_raw))
-        logger.info(f"Disks before hotplug:\n{hot_pl_disk}")
-        logger.info(f"Disks found after hotplug:\n{hot_pl_disk_after}")
-        added_disks = hot_pl_disk_after - hot_pl_disk
-        removed_disks = hot_pl_disk - hot_pl_disk_after
+        disks_after_hotplug_raw = vm_obj.run_ssh_cmd("lsblk -o NAME,SIZE,MOUNTPOINT -P")
+        disks_after_hotplug = set(
+            re.findall(r'NAME="([^"]+)"', disks_after_hotplug_raw)
+        )
+        disks_before_hotplug = set(re.findall(r'NAME="([^"]+)"', disks_before_hotplug))
+
+        logger.info(f"Disks before hotplug:\n{disks_before_hotplug}")
+        logger.info(f"Disks found after hotplug:\n{disks_after_hotplug}")
+
+        added_disks = disks_after_hotplug - disks_before_hotplug
+        removed_disks = disks_before_hotplug - disks_after_hotplug
+
         if added_disks or removed_disks:
             logger.info(
                 f"Hotplug difference detected: Added: {added_disks}, "
@@ -424,8 +435,8 @@ def verify_hotplug(vm_obj, hot_pl_disk_raw):
             return True
         logger.info(f"No hotplug difference detected in VM {vm_obj.name}")
         return False
-    except Exception as e:
+    except Exception as error:
         logger.error(
-            f"Error occurred while verifying " f"hotplug in VM {vm_obj.name}: {str(e)}"
+            f"Error occurred while verifying hotplug in VM {vm_obj.name}: {str(error)}"
         )
         return False

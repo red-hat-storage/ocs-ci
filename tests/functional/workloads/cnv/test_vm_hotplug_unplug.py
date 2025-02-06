@@ -64,7 +64,7 @@ class TestVmHotPlugUnplug(E2ETest):
             )
             log.info(f"PVC {pvc_obj.name} created successfully")
 
-            vm_obj.addvolume(volume_name=pvc_obj.name, verify=True)
+            vm_obj.addvolume(volume_name=pvc_obj.name)
             log.info(f"Hotplugged PVC {pvc_obj.name} to VM {vm_obj.name}")
 
             sample = TimeoutSampler(
@@ -105,7 +105,7 @@ class TestVmHotPlugUnplug(E2ETest):
             )
             log.info(f"Disks before hotplug (without persist):\n{before_disks_wout}")
 
-            vm_obj.addvolume(volume_name=pvc_obj_wout.name, persist=False)
+            vm_obj.addvolume(volume_name=pvc_obj_wout.name, persist=False, verify=False)
 
             sample = TimeoutSampler(
                 timeout=600,
@@ -122,7 +122,7 @@ class TestVmHotPlugUnplug(E2ETest):
             before_disks_wout_rm = vm_obj.run_ssh_cmd(
                 "lsblk -o NAME,SIZE," "MOUNTPOINT -P"
             )
-            vm_obj.removevolume(volume_name=pvc_obj_wout.name, verify=True)
+            vm_obj.removevolume(volume_name=pvc_obj_wout.name)
 
             sample = TimeoutSampler(
                 timeout=600,
