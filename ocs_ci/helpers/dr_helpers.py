@@ -370,7 +370,7 @@ def check_mirroring_status_ok(
 
             # TODO: Add some wait time if "stopped" is the initial value. Do not merge this code. This is to verify
             #   other changes in this PR
-            time.sleep(200)
+            time.sleep(300)
             if current_stopped_value in expected_value:
                 logger.warning("Counting 'stopped' value due to the bug DFBUGS-1525")
             else:
