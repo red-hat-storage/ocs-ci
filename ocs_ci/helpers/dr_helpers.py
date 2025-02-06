@@ -10,6 +10,7 @@ from datetime import datetime
 
 from ocs_ci.framework import config
 from ocs_ci.ocs import constants, ocp
+from ocs_ci.ocs.cluster import is_hci_cluster
 from ocs_ci.ocs.defaults import RBD_NAME
 from ocs_ci.ocs.exceptions import (
     TimeoutExpiredError,
@@ -310,8 +311,7 @@ def check_mirroring_status_ok(
         NotFoundError: If the configuration is provider mode and the name of the cephblockpoolradosnamespace
             is not obtained
     """
-    # TODO: Check based on provider mode or not
-    if not cephblockpoolradosns:
+    if is_hci_cluster():
         logger.info(
             "Find the cephblockpoolradosnamespace the associated with storageclient"
         )
@@ -367,6 +367,10 @@ def check_mirroring_status_ok(
             )
             # Continue test if the bug https://issues.redhat.com/browse/DFBUGS-1525 is hit
             current_stopped_value = mirroring_status.get("states").get("stopped")
+
+            # TODO: Add some wait time if "stopped" is the initial value. Do not merge this code. This is to verify
+            #   other changes in this PR
+            time.sleep(200)
             if current_stopped_value in expected_value:
                 logger.warning("Counting 'stopped' value due to the bug DFBUGS-1525")
             else:
@@ -1018,7 +1022,7 @@ def verify_backend_volume_deletion(
         else constants.DEFAULT_CEPHBLOCKPOOL
     )
     # TODO: Check based on provider mode or not
-    if not cephblockpoolradosns:
+    if is_hci_cluster():
         cephbpradosns = (
             config.ENV_DATA.get("radosnamespace_name", False) or cephblockpoolradosns
         )

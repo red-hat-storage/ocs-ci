@@ -4123,15 +4123,6 @@ def node_restart_teardown(request, nodes_multicluster, nodes):
     try to make them 'Ready' by restarting the nodes.
 
     """
-    if (
-        ocsci_config.ENV_DATA.get("platform", "").lower()
-        in constants.HCI_PROVIDER_CLIENT_PLATFORMS
-    ):
-        log.warning(
-            "Skip node restart at teardown for HCI platform. This is not implemented."
-        )
-        return
-
     cluster_node_objs = []
     for index in range(ocsci_config.nclusters):
         ocsci_config.switch_ctx(index)
