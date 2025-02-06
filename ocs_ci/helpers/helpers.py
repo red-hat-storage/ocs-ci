@@ -5447,7 +5447,7 @@ def update_volsync_icsp():
     for non_acm_cluster in non_acm_clusters:
         index = non_acm_cluster.MULTICLUSTER["multicluster_index"]
         config.switch_ctx(index)
-        run_cmd(f"oc create -f {constants.ACM_BREW_ICSP_YAML}")
+        run_cmd(f"oc apply -f {constants.ACM_BREW_ICSP_YAML}")
         wait_for_machineconfigpool_status("all", timeout=1800)
         volsync_pod_list = get_all_pods(
             namespace=constants.VOLSYNC_NAMESPACE,
