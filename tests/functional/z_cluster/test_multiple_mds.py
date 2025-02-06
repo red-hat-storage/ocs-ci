@@ -23,6 +23,7 @@ from ocs_ci.ocs.cluster import (
 from ocs_ci.ocs.resources import pod
 from ocs_ci.helpers.sanity_helpers import Sanity
 from ocs_ci.ocs import node, constants
+from ocs_ci.ocs.resources.pod import run_io_in_bg
 from ocs_ci.utility.utils import ceph_health_check_base
 from tests.functional.z_cluster.nodes.test_node_replacement_proactive import (
     delete_and_create_osd_node,
@@ -104,7 +105,7 @@ class TestMultipleMds:
         # Verify active and standby-replay mds counts after node replacement
         verify_active_and_standby_mds_count(new_active_mds_count)
 
-    def test_node_drain_and_fault_tolerance_for_multiple_mds(self):
+    def test_node_drain_and_fault_tolerance_for_multiple_mds(self, pod_factory):
         """
         1. Trigger the scale-up process to add new pods.
         2. Drain active mds pod running node.
@@ -118,6 +119,10 @@ class TestMultipleMds:
         # Scale up active mds pods from 1 to 2.
         new_active_mds_count = original_active_count_cephfilesystem + 1
         adjust_active_mds_count_storagecluster(new_active_mds_count)
+
+        # Start IO Workload in the background.
+        pod_obj = pod_factory(interface=constants.CEPHBLOCKPOOL)
+        run_io_in_bg(pod_obj)
 
         # Get active mds node name
         active_mds_pods = get_active_mds_pods()
