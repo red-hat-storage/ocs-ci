@@ -1073,7 +1073,6 @@ class VSPHEREUPI(VSPHEREBASE):
 
             os.chdir(self.previous_dir)
             if not self.sno:
-
                 # Update kubeconfig with proxy-url (if client_http_proxy
                 # configured) to redirect client access through proxy server.
                 update_kubeconfig_with_proxy_url_for_client(self.kubeconfig)
@@ -1155,6 +1154,15 @@ class VSPHEREUPI(VSPHEREBASE):
 
                 # Approving CSRs here in-case if any exists
                 approve_pending_csr()
+                if config.ENV_DATA.get("is_multus_enabled"):
+
+                    vsphere = VSPHERE(
+                        config.ENV_DATA["vsphere_server"],
+                        config.ENV_DATA["vsphere_user"],
+                        config.ENV_DATA["vsphere_password"],
+                    )
+
+                    vsphere.add_interface_to_compute_vms()
             self.test_cluster()
 
     def deploy_ocp(self, log_cli_level="DEBUG"):
