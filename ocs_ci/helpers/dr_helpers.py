@@ -1021,7 +1021,7 @@ def verify_backend_volume_deletion(
         if config.DEPLOYMENT["external_mode"]
         else constants.DEFAULT_CEPHBLOCKPOOL
     )
-    # TODO: Check based on provider mode or not
+
     if is_hci_cluster():
         cephbpradosns = (
             config.ENV_DATA.get("radosnamespace_name", False) or cephblockpoolradosns
