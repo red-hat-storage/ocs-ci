@@ -23,7 +23,6 @@ from ocs_ci.ocs.cluster import (
 from ocs_ci.ocs.resources import pod
 from ocs_ci.helpers.sanity_helpers import Sanity
 from ocs_ci.ocs import node, constants
-from ocs_ci.ocs.resources.pod import run_io_in_bg
 from ocs_ci.utility.utils import ceph_health_check_base
 from tests.functional.z_cluster.nodes.test_node_replacement_proactive import (
     delete_and_create_osd_node,
@@ -120,9 +119,9 @@ class TestMultipleMds:
         new_active_mds_count = original_active_count_cephfilesystem + 1
         adjust_active_mds_count_storagecluster(new_active_mds_count)
 
-        # Start IO Workload in the background.
+        # Start IO Workload.
         pod_obj = pod_factory(interface=constants.CEPHBLOCKPOOL)
-        run_io_in_bg(pod_obj)
+        pod_obj.run_io(direct=1, runtime=60, storage_type="fs", size="1G")
 
         # Get active mds node name
         active_mds_pods = get_active_mds_pods()
@@ -152,3 +151,11 @@ class TestMultipleMds:
 
         # Verify active and standby-replay mds counts is still same.
         verify_active_and_standby_mds_count(new_active_mds_count)
+
+        # Wait for IO completion
+        fio_result = pod_obj.get_fio_results()
+        log.info("IO completed on all pods")
+        err_count = fio_result.get("jobs")[0].get("error")
+        assert err_count == 0, (
+            f"IO error on pod {pod_obj.name}. " f"FIO result: {fio_result}"
+        )
