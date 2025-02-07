@@ -206,6 +206,7 @@ class IBMCloudIPI(CloudDeploymentBase):
         self.delete_volumes(resource_group)
         self.delete_leftover_resources(resource_group)
         self.delete_resource_group(resource_group)
+        ibmcloud.delete_dns_records(self.cluster_name)
 
     def manually_create_iam_for_vpc(self):
         """
