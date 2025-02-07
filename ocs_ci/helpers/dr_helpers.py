@@ -1035,15 +1035,15 @@ def verify_backend_volume_deletion(
             raise NotFoundError("Couldn't identify the cephblockpoolradosnamespace")
         namespace_param = f"--namespace {cephbpradosns}"
 
-        cephfssubvolgroup = (
+        subvolumegroup = (
             config.ENV_DATA.get("subvolumegroup_name", False) or cephfssubvolumegroup
         )
-        if not cephfssubvolgroup:
-            cephfssubvolgroup = find_cephfilesystemsubvolumegroup(
+        if not subvolumegroup:
+            subvolumegroup = find_cephfilesystemsubvolumegroup(
                 storageclient_uid=storageclient_uid
             )
 
-        if not cephfssubvolgroup:
+        if not subvolumegroup:
             raise NotFoundError("Couldn't identify the cephfilesystemsubvolumegroup")
     else:
         namespace_param = ""
