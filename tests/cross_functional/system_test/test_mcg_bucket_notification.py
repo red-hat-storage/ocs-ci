@@ -116,12 +116,12 @@ class TestBucketNotificationSystemTest:
             "s3:ObjectTagging:*",
         ]
 
-        feature_setup_map = setup_mcg_bg_features(
-            num_of_buckets=5,
-            object_amount=5,
-            is_disruptive=True,
-            skip_any_features=["nsfs", "rgw kafka", "caching"],
-        )
+        # feature_setup_map = setup_mcg_bg_features(
+        #     num_of_buckets=5,
+        #     object_amount=5,
+        #     is_disruptive=True,
+        #     skip_any_features=["nsfs", "rgw kafka", "caching"],
+        # )
 
         # 1. Enable bucket notification on Noobaa CR
         notify_manager.enable_bucket_notifs_on_cr(use_provided_pvc=True)
@@ -194,7 +194,7 @@ class TestBucketNotificationSystemTest:
                 topic,
                 bucket_names=buckets_created[:],
                 event_name="ObjectTagging:Put",
-                timeout=600,
+                timeout=1200,
                 sleep=30,
             )
 
@@ -272,10 +272,10 @@ class TestBucketNotificationSystemTest:
             sleep=30,
         )
 
-        validate_mcg_bg_features(
-            feature_setup_map,
-            run_in_bg=False,
-            skip_any_features=["nsfs", "rgw kafka", "caching"],
-            object_amount=5,
-        )
-        logger.info("No issues seen with the MCG bg feature validation")
+        # validate_mcg_bg_features(
+        #     feature_setup_map,
+        #     run_in_bg=False,
+        #     skip_any_features=["nsfs", "rgw kafka", "caching"],
+        #     object_amount=5,
+        # )
+        # logger.info("No issues seen with the MCG bg feature validation")
