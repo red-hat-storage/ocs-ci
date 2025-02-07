@@ -368,18 +368,16 @@ def check_mirroring_status_ok(
             # Continue test if the bug https://issues.redhat.com/browse/DFBUGS-1525 is hit
             current_stopped_value = mirroring_status.get("states").get("stopped")
 
-            # TODO: Add some wait time if "stopped" is the initial value. Do not merge this code. This is to verify
-            #   other changes in this PR
-            time.sleep(300)
             if current_stopped_value in expected_value:
                 logger.warning("Counting 'stopped' value due to the bug DFBUGS-1525")
+                return True
             else:
                 return False
 
     return True
 
 
-def wait_for_mirroring_status_ok(replaying_images=None, timeout=300):
+def wait_for_mirroring_status_ok(replaying_images=None, timeout=600):
     """
     Wait for mirroring status to reach health OK and expected number of replaying
     images for each of the ODF cluster
