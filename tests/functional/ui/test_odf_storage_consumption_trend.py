@@ -13,6 +13,7 @@ from ocs_ci.framework.testlib import (
     skipif_mcg_only,
     skipif_external_mode,
     polarion_id,
+    jira,
 )
 from ocs_ci.helpers import helpers
 from ocs_ci.helpers.osd_resize import basic_resize_osd
@@ -294,6 +295,7 @@ class TestConsumptionTrendUI(ManageTest):
         ), "'Estimated days until full' is wrongly displayed in UI"
 
     @polarion_id("OCS-6264")
+    @jira("DFBUGS-1467")
     def test_consumption_trend_after_osd_resize(self, setup_ui_class):
         """
         Verify consumption trend after OSD resize
