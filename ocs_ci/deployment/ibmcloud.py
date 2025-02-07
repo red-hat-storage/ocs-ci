@@ -225,6 +225,7 @@ class IBMCloudIPI(CloudDeploymentBase):
             self.delete_volumes(resource_group)
             self.delete_leftover_resources(resource_group)
             self.delete_resource_group(resource_group)
+            ibmcloud.delete_dns_records(self.cluster_name)
         except Exception as ex:
             logger.error(f"During IBM Cloud cleanup some exception occurred {ex}")
             raise
