@@ -15,6 +15,7 @@ from ocs_ci.ocs.exceptions import (
 )
 from ocs_ci.helpers.sanity_helpers import Sanity
 from ocs_ci.deployment.cnv import CNVInstaller
+from ocs_ci.ocs.resources.pod import wait_for_pods_to_be_running
 
 logger = logging.getLogger(__name__)
 
@@ -46,14 +47,16 @@ class TestVmShutdownStart(E2ETest):
         nodes,
     ):
         """
-        This test performs the behaviour of VMs and data integrity after abrupt shutdown of cluster
+        This test performs the behaviour of VMs and data integrity after abrupt or Graceful shutdown of cluster
 
         Test steps:
         1. Create VMs using fixture multi_cnv_workload
         2. Create a clone of a VM PVC and new vm using cloned pvc.
         3. Create a snapshot for a VM backed pvc,Restore snapshot,Create new vm using restored pvc.
         4. Keep vms in different states (power on, paused, stoped)
-        5. Initiate abrupt shutdown the cluster nodes as per OCP official documentation
+        5. Initiate shutdown the cluster nodes as per OCP official documentation
+            5.1 If force = True - abrupt shutdown
+            5.2 If force = False - Graceful shutdown
         6. Initate ordered start of cluster after 10 min by following OCP official documentation.
         7. Verify cluster health Post-start
         8. Verify that VMs status post start
@@ -81,18 +84,14 @@ class TestVmShutdownStart(E2ETest):
             source_csums[vm_obj.name] = source_csum
 
         # Choose VMs randomaly
-        vm_obj, vm_for_stop, vm_for_snap = random.sample(all_vms, 3)
+        vm_for_clone, vm_for_stop, vm_for_snap = random.sample(all_vms, 3)
 
         # Create VM using cloned pvc of source VM PVC
-        vm_obj.stop()
+        vm_for_clone.stop()
         clone_obj = clone_vm_workload(
-            vm_obj=vm_obj,
-            volume_interface=vm_obj.volume_interface,
-            namespace=(
-                vm_obj.namespace
-                if vm_obj.volume_interface == constants.VM_VOLUME_PVC
-                else None
-            ),
+            vm_obj=vm_for_clone,
+            volume_interface=vm_for_clone.volume_interface,
+            namespace=vm_for_clone.namespace,
         )
         all_vms.append(clone_obj)
         csum = cal_md5sum_vm(vm_obj=clone_obj, file_path=file_paths[0])
@@ -132,7 +131,9 @@ class TestVmShutdownStart(E2ETest):
         worker_nodes = get_nodes(node_type="worker")
         master_nodes = get_nodes(node_type="master")
 
-        logger.info("Abruptly/Gracefully Shutting down worker & master nodes")
+        shutdown_type = "abruptly" if force else "gracefully"
+        logger.info(f"{shutdown_type.capitalize()} shutting down worker & master nodes")
+
         nodes.stop_nodes(nodes=worker_nodes, force=force)
         nodes.stop_nodes(nodes=master_nodes, force=force)
 
@@ -155,8 +156,8 @@ class TestVmShutdownStart(E2ETest):
         )(wait_for_nodes_status(timeout=1800))
         logger.info("All nodes are now in READY state")
 
-        logger.info("Waiting for 10 min for all pods to come in running state.")
-        time.sleep(600)
+        logger.info("Waiting for pods to come in running state.")
+        wait_for_pods_to_be_running(timeout=500)
 
         # check cluster health
         try:
@@ -171,16 +172,15 @@ class TestVmShutdownStart(E2ETest):
         cnv_obj.post_install_verification()
 
         # Verify that VMs status post start
-        vm_obj.start()
+        vm_for_clone.start()
         vm_for_stop.start()
-        time.sleep(60)
-        for vm in (vm_obj, vm_for_stop):
+        for vm in (vm_for_clone, vm_for_stop):
             assert (
                 vm.printableStatus() == constants.VM_RUNNING
             ), f"{vm.name} did not reach the running state."
 
         # Verifies vm status after start and ssh connectivity
-        vm_obj.verify_vm(verify_ssh=True)
+        vm_for_clone.verify_vm(verify_ssh=True)
         vm_for_stop.verify_vm(verify_ssh=True)
         vm_for_snap.verify_vm(verify_ssh=True)
 
