@@ -8,7 +8,7 @@ import logging
 import pytest
 
 from ocs_ci.framework import config
-from ocs_ci.framework.pytest_customization.marks import blue_squad
+from ocs_ci.framework.pytest_customization.marks import blue_squad, jira
 from ocs_ci.framework.testlib import (
     bugzilla,
     tier3,
@@ -167,6 +167,7 @@ def test_monitoring_shows_osd_down(measure_stop_ceph_osd, threading_lock):
     assert osd_in_validation, osd_in_msg
 
 
+@jira("DFBUGS-1579")
 @blue_squad
 @tier3
 @bugzilla("2203795")
