@@ -7741,9 +7741,7 @@ def add_env_vars_to_noobaa_core_fixture(request, mcg_obj_session):
             params=json.dumps(patch_ops),
             format_type="json",
         )
-
-        # Reset the noobaa-core pod to apply the changes
-        mcg_obj_session.reset_core_pod()
+        mcg_obj_session.wait_for_ready_status()
 
     def finalizer():
         """
@@ -7776,9 +7774,7 @@ def add_env_vars_to_noobaa_core_fixture(request, mcg_obj_session):
                 params=json.dumps([remove_env_var_op]),
                 format_type="json",
             )
-
-        # Reset the noobaa-core pod to apply the changes
-        mcg_obj_session.reset_core_pod()
+        mcg_obj_session.wait_for_ready_status()
 
     request.addfinalizer(finalizer)
     return add_env_vars_to_noobaa_core_implementation
@@ -7848,9 +7844,7 @@ def add_env_vars_to_noobaa_endpoint_fixture(request, mcg_obj_session):
             params=json.dumps(patch_ops),
             format_type="json",
         )
-
-    # Reset noobaa endpoint pods
-    mcg_obj_session.reset_endpoint_pods()
+        mcg_obj_session.wait_for_ready_status()
 
     def finalizer():
         """
@@ -7866,7 +7860,7 @@ def add_env_vars_to_noobaa_endpoint_fixture(request, mcg_obj_session):
         del remove_env_var_op["value"]
 
         for target_env_var in added_env_vars:
-            # Fetch the target's index from the noobaa-core statefulset
+            # Fetch the target's index from the noobaa-endpoint deployment
             nb_endpoint_dep = dep_obj.get(
                 resource_name=constants.NOOBAA_ENDPOINT_DEPLOYMENT
             )
@@ -7879,15 +7873,13 @@ def add_env_vars_to_noobaa_endpoint_fixture(request, mcg_obj_session):
             target_index = env_vars_names_in_dep.index(target_env_var)
             remove_env_var_op["path"] = f"{yaml_path_to_env_variables}/{target_index}"
 
-            # Patch the noobaa-core sts to remove the env var
+            # Patch the noobaa-endpoint deployment to remove the env var
             dep_obj.patch(
                 resource_name=constants.NOOBAA_ENDPOINT_DEPLOYMENT,
                 params=json.dumps([remove_env_var_op]),
                 format_type="json",
             )
-
-        # Reset noobaa endpoint pods
-        mcg_obj_session.reset_endpoint_pods()
+        mcg_obj_session.wait_for_ready_status()
 
     request.addfinalizer(finalizer)
     return add_env_vars_to_noobaa_endpoint_implementation
