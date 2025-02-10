@@ -1158,6 +1158,9 @@ acm_configuration_4_18 = {
     ),
     "cancel-action-modal": ("#modal-cancel-action", By.CSS_SELECTOR),
     "apply-filter": ("//div[@class='pf-v5-c-select']", By.XPATH),
+    "failover-app": ("//a[normalize-space()='Failover application']", By.XPATH),
+    "relocate-app": ("//a[normalize-space()='Relocate application']", By.XPATH),
+    "close-action-modal": ("button[aria-label='Close']", By.CSS_SELECTOR),
 }
 
 add_capacity = {

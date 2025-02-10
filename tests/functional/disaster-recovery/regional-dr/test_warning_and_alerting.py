@@ -20,7 +20,11 @@ from ocs_ci.helpers.dr_helpers_ui import (
 from ocs_ci.ocs.exceptions import UnexpectedBehaviour
 from ocs_ci.ocs.ui.validation_ui import ValidationUI
 from ocs_ci.ocs.ui.views import locators
-from ocs_ci.ocs.utils import enable_mco_console_plugin, get_primary_cluster_config
+from ocs_ci.ocs.utils import (
+    enable_mco_console_plugin,
+    get_primary_cluster_config,
+    get_non_acm_cluster_config,
+)
 from ocs_ci.utility.utils import get_ocp_version, ceph_health_check
 from ocs_ci.ocs.resources.drpc import DRPC
 
@@ -49,18 +53,25 @@ def scale_up_deployment(request):
         #     modify_registry_pod_count(count=2)
         primary_config = get_primary_cluster_config()
         primary_index = primary_config.MULTICLUSTER.get("multicluster_index")
-        config.switch_ctx(primary_index)
+        secondary_index = [
+            s.MULTICLUSTER["multicluster_index"]
+            for s in get_non_acm_cluster_config()
+            if s.MULTICLUSTER["multicluster_index"] != primary_index
+        ][0]
+        config.switch_ctx(secondary_index)
         logger.info(
-            "Scaling up rbd-mirror and mds deployments to one on primary cluster"
-        )
-        helpers.modify_deployment_replica_count(
-            deployment_name=constants.RBD_MIRROR_DAEMON_DEPLOYMENT, replica_count=1
+            "Scale up rbd-mirror deployment on the secondary cluster and mds deployments on the primary cluster"
         )
         helpers.modify_deployment_replica_count(
             deployment_name=constants.MDS_DAEMON_DEPLOYMENT_ONE, replica_count=1
         )
         helpers.modify_deployment_replica_count(
             deployment_name=constants.MDS_DAEMON_DEPLOYMENT_TWO, replica_count=1
+        )
+        ceph_health_check(tries=30, delay=60)
+        config.switch_ctx(primary_index)
+        helpers.modify_deployment_replica_count(
+            deployment_name=constants.RBD_MIRROR_DAEMON_DEPLOYMENT, replica_count=1
         )
         ceph_health_check(tries=30, delay=60)
 
@@ -100,8 +111,8 @@ class TestRDRWarningAndAlerting:
         Test to verify that "Inconsistent data on target cluster" warning alert is seen on the Failover/Relocate modal
         when the lastGroupSyncTime is lagging behind 2x the sync interval or more for a particular DR protected workload
 
-        No DR action is performed in this test case. We scale down rbd-mirror and mds daemons and scale them up back
-        to original count.
+        No DR action is performed in this test case. We scale down rbd-mirror daemon deployment on the secondary cluster
+        and mds daemons on the primary cluster and scale them up back to their original count.
 
         """
 
@@ -164,20 +175,19 @@ class TestRDRWarningAndAlerting:
                 dr_helpers.verify_last_group_sync_time(obj, scheduling_interval)
             )
         logger.info("Verified lastGroupSyncTime")
-
-        config.switch_to_cluster_by_name(primary_cluster_name)
-        # Scale down rbd-mirror and mds deployments to zero
         logger.info(
-            f"Scale down rbd-mirror and mds deployments to zero on primary cluster: {primary_cluster_name}"
+            "Scale down rbd-mirror deployment on the secondary cluster and mds deployments on the primary cluster"
         )
-        helpers.modify_deployment_replica_count(
-            deployment_name=constants.RBD_MIRROR_DAEMON_DEPLOYMENT, replica_count=0
-        )
+        config.switch_to_cluster_by_name(secondary_cluster_name)
         helpers.modify_deployment_replica_count(
             deployment_name=constants.MDS_DAEMON_DEPLOYMENT_ONE, replica_count=0
         )
         helpers.modify_deployment_replica_count(
             deployment_name=constants.MDS_DAEMON_DEPLOYMENT_TWO, replica_count=0
+        )
+        config.switch_to_cluster_by_name(primary_cluster_name)
+        helpers.modify_deployment_replica_count(
+            deployment_name=constants.RBD_MIRROR_DAEMON_DEPLOYMENT, replica_count=0
         )
 
         logger.info(
@@ -231,19 +241,19 @@ class TestRDRWarningAndAlerting:
             )
             raise NoAlertPresentException
 
-        config.switch_to_cluster_by_name(primary_cluster_name)
-        # Scale up rbd-mirror and mds deployments to one
         logger.info(
-            f"Scale up rbd-mirror and mds deployments to one on primary cluster: {primary_cluster_name}"
+            "Scale up rbd-mirror deployment on the secondary cluster and mds deployments on the primary cluster"
         )
-        helpers.modify_deployment_replica_count(
-            deployment_name=constants.RBD_MIRROR_DAEMON_DEPLOYMENT, replica_count=1
-        )
+        config.switch_to_cluster_by_name(secondary_cluster_name)
         helpers.modify_deployment_replica_count(
             deployment_name=constants.MDS_DAEMON_DEPLOYMENT_ONE, replica_count=1
         )
         helpers.modify_deployment_replica_count(
             deployment_name=constants.MDS_DAEMON_DEPLOYMENT_TWO, replica_count=1
+        )
+        config.switch_to_cluster_by_name(primary_cluster_name)
+        helpers.modify_deployment_replica_count(
+            deployment_name=constants.RBD_MIRROR_DAEMON_DEPLOYMENT, replica_count=1
         )
         logger.info(
             f"Waiting for {scheduling_interval * 60} seconds to allow warning alert to disappear"
