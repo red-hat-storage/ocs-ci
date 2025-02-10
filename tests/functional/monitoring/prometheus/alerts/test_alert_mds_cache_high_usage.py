@@ -78,7 +78,7 @@ def run_metadata_io_with_cephfs(dc_pod_factory):
 @tier2
 @blue_squad
 @ignore_leftovers
-@jira("DFBUGS-1034")
+@jira("DFBUGS-368")
 class TestMdsMemoryAlerts(E2ETest):
     @pytest.fixture(scope="function", autouse=True)
     def teardown(self, request):
