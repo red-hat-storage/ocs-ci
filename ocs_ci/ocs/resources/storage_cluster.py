@@ -28,6 +28,7 @@ from ocs_ci.ocs.exceptions import (
     ResourceNotFoundError,
     UnsupportedFeatureError,
     PVNotSufficientException,
+    ResourceWrongStatusException,
 )
 from ocs_ci.ocs.ocp import get_images, OCP
 from ocs_ci.ocs.resources import csv, deployment
@@ -1573,7 +1574,18 @@ def set_in_transit_encryption(enabled=True):
             return False
 
         log.info(f"In-transit encryption is {action}d successfully.")
-        ocp_obj.wait_for_phase("Progressing", timeout=60)
+        try:
+            ocp_obj.wait_for_phase(constants.STATUS_PROGRESSING, timeout=60)
+        except ResourceWrongStatusException:
+            current_phase = ocp_obj.check_phase(constants.STATUS_READY)
+
+            if current_phase == constants.STATUS_READY:
+                log.info(f"Resource Phase has reached {constants.STATUS_READY}")
+            else:
+                log.error(
+                    f"Unexpected resource phase: {current_phase}. Raising exception."
+                )
+                raise
     verify_storage_cluster()
     return True
 

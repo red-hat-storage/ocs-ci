@@ -109,6 +109,7 @@ MULTIPLE_DEVICECLASSES_DIR = os.path.join(TEMPLATE_DIR, "multiple-deviceclasses"
 
 # Statuses
 STATUS_READY = "Ready"
+STATUS_PROGRESSING = "Progressing"
 PEER_READY = "Peer ready"
 STATUS_PENDING = "Pending"
 STATUS_CONTAINER_CREATING = "ContainerCreating"
