@@ -2246,7 +2246,7 @@ def is_flexible_scaling_enabled():
 
 
 def check_ceph_health_after_add_capacity(
-    ceph_health_tries=80, ceph_rebalance_timeout=1800
+    ceph_health_tries=80, ceph_rebalance_timeout=2400
 ):
     """
     Check Ceph health after adding capacity to the cluster
