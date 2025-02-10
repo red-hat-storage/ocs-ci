@@ -443,9 +443,27 @@ class TestBucketCreate:
             bucket_ui.create_folder_in_bucket()
         ), "Failed to create and upload folder in bucket"
 
-    def test_bucket_list(self, setup_ui_class_factory):
+    def test_bucket_delete(self, setup_ui_class_factory):
         """
-        Test bucket list functionality in UI.
+        Test bucket deletion functionality in UI.
+
+        """
+        setup_ui_class_factory()
+        bucket_ui = BucketsTab()
+        bucket_ui.nav_object_storage_page()
+        bucket_ui.nav_buckets_page()
+        bucket_ui.delete_bucket_ui()
+
+    def test_bucket_list_comparison(self, setup_ui_class_factory, mcg_obj):
+        """
+        Test that the bucket list from UI matches the bucket list from CLI.
+
+        Args:
+            setup_ui_class_factory (any): UI setup fixture.
+            mcg_obj (any): MCG CLI client fixture assumed to have a method list_buckets() returning list.
+
+        Returns:
+            None
 
         """
         setup_ui_class_factory()
@@ -456,13 +474,9 @@ class TestBucketCreate:
         assert (
             len(ui_list) >= 2
         ), "Expected at least 2 buckets (OBC and S3) but found less"
-
-    def test_bucket_delete(self, setup_ui_class_factory):
-        """
-        Test bucket deletion functionality in UI.
-
-        """
-        setup_ui_class_factory()
-        bucket_ui = BucketsTab()
-        bucket_ui.nav_buckets_page()
-        bucket_ui.delete_bucket_ui()
+        cli_buckets = list(
+            mcg_obj.cli_list_all_buckets()
+        )  # Using s3_get_all_buckets from MCG class
+        assert len(ui_list) == len(
+            cli_buckets
+        ), f"UI bucket count ({len(ui_list)}) does not match CLI bucket count ({len(cli_buckets)})"
