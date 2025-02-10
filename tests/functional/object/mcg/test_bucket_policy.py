@@ -307,8 +307,8 @@ class TestS3BucketPolicy(MCGTest):
         # Hardcoded sleep is needed because we lack a confirmation mechanism
         # we could wait for - even the get-policy result has been observed to be
         # unreliable in confirming whether they policy is actually taking effect
-        logger.info("Waiting for 60 seconds for the policy to take effect")
-        time.sleep(60)
+        logger.info("Waiting for 120 seconds for the policy to take effect")
+        time.sleep(120)
 
         # Get Policy
         logger.info(f"Getting Bucket policy on bucket: {obc_obj.bucket_name}")
