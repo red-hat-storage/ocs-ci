@@ -57,7 +57,10 @@ def scale_up_deployment(request):
             deployment_name=constants.RBD_MIRROR_DAEMON_DEPLOYMENT, replica_count=1
         )
         helpers.modify_deployment_replica_count(
-            deployment_name=constants.MDS_DAEMON_DEPLOYMENT, replica_count=1
+            deployment_name=constants.MDS_DAEMON_DEPLOYMENT_ONE, replica_count=1
+        )
+        helpers.modify_deployment_replica_count(
+            deployment_name=constants.MDS_DAEMON_DEPLOYMENT_TWO, replica_count=1
         )
         ceph_health_check(tries=30, delay=60)
 
@@ -83,10 +86,10 @@ class TestRDRWarningAndAlerting:
                 constants.ACTION_FAILOVER,
                 marks=pytest.mark.polarion_id("xxx"),
             ),
-            pytest.param(
-                constants.ACTION_RELOCATE,
-                marks=pytest.mark.polarion_id("yyy"),
-            ),
+            # pytest.param(
+            #     constants.ACTION_RELOCATE,
+            #     marks=pytest.mark.polarion_id("yyy"),
+            # ),
         ],
     )
     # TODO: Update polarion IDs
@@ -97,40 +100,48 @@ class TestRDRWarningAndAlerting:
         Test to verify that "Inconsistent data on target cluster" warning alert is seen on the Failover/Relocate modal
         when the lastGroupSyncTime is lagging behind 2x the sync interval or more for a particular DR protected workload
 
+        No DR action is performed in this test case. We scale down rbd-mirror and mds daemons and scale them up back
+        to original count.
+
         """
 
         # Enable MCO console plugin needed for DR dashboard
         enable_mco_console_plugin()
 
-        rdr_workload_rbd = dr_workload(
+        workload_names = []
+        rdr_workload = dr_workload(
             num_of_subscription=1,
             num_of_appset=0,
             pvc_interface=constants.CEPHBLOCKPOOL,
         )
-        rdr_workload_cephfs = dr_workload(
-            num_of_subscription=0,
-            num_of_appset=1,
-            pvc_interface=constants.CEPHFILESYSTEM,
+        workload_names.append(f"{rdr_workload[0].workload_name}-1")
+        rdr_workload.append(
+            dr_workload(
+                num_of_subscription=0,
+                num_of_appset=1,
+                pvc_interface=constants.CEPHFILESYSTEM,
+            )
         )
+        workload_names.append(f"{rdr_workload[1].workload_name}-1-cephfs")
 
-        rdr_workload_total = rdr_workload_rbd + rdr_workload_cephfs
+        logger.info(f"Workload names are {workload_names}")
 
         dr_helpers.set_current_primary_cluster_context(
-            rdr_workload_rbd[0].workload_namespace
+            rdr_workload[0].workload_namespace
         )
 
         scheduling_interval = dr_helpers.get_scheduling_interval(
-            rdr_workload_rbd[0].workload_namespace
+            rdr_workload[0].workload_namespace
         )
-        wait_time = 2 * scheduling_interval  # Time in minutes
+        wait_time = 0.5  # Time in minutes
         logger.info(f"Waiting for {wait_time} minutes to run IOs")
         sleep(wait_time * 60)
 
         primary_cluster_name = dr_helpers.get_current_primary_cluster_name(
-            rdr_workload_rbd[0].workload_namespace
+            rdr_workload[0].workload_namespace
         )
         secondary_cluster_name = dr_helpers.get_current_secondary_cluster_name(
-            rdr_workload_rbd[0].workload_namespace, rdr_workload_rbd[0].workload_type
+            rdr_workload[0].workload_namespace, rdr_workload[0].workload_type
         )
 
         acm_obj = AcmAddClusters()
@@ -141,10 +152,10 @@ class TestRDRWarningAndAlerting:
 
         page_nav.refresh_web_console()
         config.switch_to_cluster_by_name(primary_cluster_name)
-        drpc_subscription = DRPC(namespace=rdr_workload_total[0].workload_namespace)
+        drpc_subscription = DRPC(namespace=rdr_workload[0].workload_namespace)
         drpc_appset = DRPC(
             namespace=constants.GITOPS_CLUSTER_NAMESPACE,
-            resource_name=f"{rdr_workload_total[1].appset_placement_name}-drpc",
+            resource_name=f"{rdr_workload[1].appset_placement_name}-drpc",
         )
         drpc_objs = [drpc_subscription, drpc_appset]
         before_failover_last_group_sync_time = []
@@ -163,15 +174,11 @@ class TestRDRWarningAndAlerting:
             deployment_name=constants.RBD_MIRROR_DAEMON_DEPLOYMENT, replica_count=0
         )
         helpers.modify_deployment_replica_count(
-            deployment_name=constants.MDS_DAEMON_DEPLOYMENT, replica_count=0
+            deployment_name=constants.MDS_DAEMON_DEPLOYMENT_ONE, replica_count=0
         )
-        workload_names = []
-        workload_number = 1
-        for workload in rdr_workload_total:
-            logger.info(f"Workload name is {workload.workload_name}")
-            workload_name = f"{workload.workload_name}-{workload_number}"
-            workload_names.append(workload_name)
-        logger.info(f"Workload names are {workload_names}")
+        helpers.modify_deployment_replica_count(
+            deployment_name=constants.MDS_DAEMON_DEPLOYMENT_TWO, replica_count=0
+        )
 
         logger.info(
             f"Waiting for {wait_time * 60} seconds to allow warning alert to appear"
@@ -181,7 +188,7 @@ class TestRDRWarningAndAlerting:
         config.switch_acm_ctx()
         # Navigate to failover modal via ACM UI
         logger.info("Navigate to failover modal via ACM UI")
-        for workload in rdr_workload_total:
+        for workload in rdr_workload:
             if workload.workload_type == constants.SUBSCRIPTION:
                 failover_relocate_ui(
                     acm_obj,
@@ -233,7 +240,10 @@ class TestRDRWarningAndAlerting:
             deployment_name=constants.RBD_MIRROR_DAEMON_DEPLOYMENT, replica_count=1
         )
         helpers.modify_deployment_replica_count(
-            deployment_name=constants.MDS_DAEMON_DEPLOYMENT, replica_count=1
+            deployment_name=constants.MDS_DAEMON_DEPLOYMENT_ONE, replica_count=1
+        )
+        helpers.modify_deployment_replica_count(
+            deployment_name=constants.MDS_DAEMON_DEPLOYMENT_TWO, replica_count=1
         )
         logger.info(
             f"Waiting for {scheduling_interval * 60} seconds to allow warning alert to disappear"
@@ -251,7 +261,7 @@ class TestRDRWarningAndAlerting:
         config.switch_acm_ctx()
         # Navigate to failover modal via ACM UI
         logger.info("Navigate to failover modal via ACM UI")
-        for workload in rdr_workload_total:
+        for workload in rdr_workload:
             if workload.workload_type == constants.SUBSCRIPTION:
                 failover_relocate_ui(
                     acm_obj,

@@ -1157,6 +1157,7 @@ acm_configuration_4_18 = {
         By.XPATH,
     ),
     "cancel-action-modal": ("#modal-cancel-action", By.CSS_SELECTOR),
+    "apply-filter": ("//div[@class='pf-v5-c-select']", By.XPATH),
 }
 
 add_capacity = {
