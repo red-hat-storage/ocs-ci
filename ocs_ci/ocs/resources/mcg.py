@@ -766,7 +766,7 @@ class MCG:
             self.exec_mcg_cmd(cmd)
         elif namespace_policy_type == constants.NAMESPACE_POLICY_TYPE_CACHE.lower():
             cmd += f" --hub-resource={namestores_name_str}"
-            cmd += " --backingstores=noobaa-default-backing-store"
+            cmd += " --backingstores=constants.DEFAULT_NOOBAA_BACKINGSTORE"
             if "ttl" in namespace_policy:
                 cmd += f" --ttl=={namespace_policy['ttl']}"
             self.exec_mcg_cmd(cmd)

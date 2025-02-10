@@ -143,7 +143,7 @@ class TestNamespace(MCGTest):
                 marks=[
                     tier1,
                     on_prem_platform_required,
-                    pytest.mark.polarion_id("OCS-2407"),
+                    pytest.mark.polarion_id("OCS-6339"),
                 ],
             ),
             pytest.param(
@@ -160,7 +160,7 @@ class TestNamespace(MCGTest):
                 marks=[
                     tier1,
                     on_prem_platform_required,
-                    pytest.mark.polarion_id("OCS-2407"),
+                    pytest.mark.polarion_id("OCS-6338"),
                 ],
             ),
             pytest.param(
