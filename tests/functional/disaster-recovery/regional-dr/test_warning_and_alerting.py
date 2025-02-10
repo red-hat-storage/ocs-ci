@@ -1,4 +1,6 @@
 import logging
+import time
+
 import pytest
 
 from time import sleep
@@ -291,7 +293,7 @@ class TestRDRWarningAndAlerting:
                     workload_type=constants.APPLICATION_SET,
                     do_not_trigger=True,
                 )
-
+        time.sleep(120)
         warning_alert_found = acm_obj.wait_until_expected_text_is_found(
             locator=acm_loc["inconsistent-warning-alert"],
             expected_text="Inconsistent data on target cluster",
