@@ -592,7 +592,7 @@ class Vault(KMS):
         """
         cmd = (
             f"vault token create -policy={self.vault_policy_name} "
-            f"--format=json "
+            "--format=json "
             f"-ttl={ttl}"
         )
         out = subprocess.check_output(shlex.split(cmd))
