@@ -121,10 +121,11 @@ class TestReplicaOne:
         self, pod_factory, pvc_factory, project_factory
     ):
         self.osd_before_test = count_osd_pods()
+        log.info(f"{self.osd_before_test} OSD pods detected Before test")
         self.kb_before_workload = get_osd_kb_used_data()
         log.info(f"{self.kb_before_workload} KB used before test")
         self.device_class_before_test = get_device_class_from_ceph()
-        log.info(f"{self.device_class_before_test} device class detected")
+        log.info(f"{self.device_class_before_test} device class detected before test")
         self.project = project_factory()
         self.pvc = pvc_factory(
             interface=CEPHBLOCKPOOL,
@@ -158,11 +159,18 @@ class TestReplicaOne:
             pod_factory,
             failure_domain=failure_domains[0],
         )
-        log.info(testing_pod)
+        log.info(testing_pod.data)
+        try:
+            log.info(
+                f"Pod created on {testing_pod.data['spec']['nodeSelector']['topology.kubernetes.io/zone']}"
+            )
+        except Exception:
+            log.error(f"Pod data is {testing_pod.data}")
+
         pgs_before_workload = get_osd_pgs_used()
         kb_before_workload = get_osd_kb_used_data()
         testing_pod.run_io(storage_type="fs", size="50g")
-        testing_pod.get_fio_results()
+        testing_pod.get_fio_results(timeout=1200)
         pgs_after_workload = get_osd_pgs_used()
         log.info(
             f"{pgs_before_workload} PGS before test\n{pgs_after_workload} PGS after test"
