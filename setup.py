@@ -48,11 +48,11 @@ setup(
         "google-cloud-storage==2.6.0",
         "google-auth==2.14.1",
         "elasticsearch==8.11.1",
-        "numpy",
-        "pandas",
+        "numpy==1.23.2",
+        "pandas==1.5.2",
         "tabulate==0.9.0",
         "python-ipmi==0.4.2",
-        "scipy",
+        "scipy==1.12.0",
         "PrettyTable==0.7.2",
         "azure-common==1.1.28",
         "azure-mgmt-compute==33.0.0",
@@ -72,7 +72,7 @@ setup(
         # by default program attempting to load an x86_64-only library from a native arm64 process
         # Beginning with gevent 20.12.0, 64-bit ARM binaries are distributed on PyPI for aarch64 manylinux2014
         # compatible systems. Resolves problem for m1 Mac chips
-        "greenlet",
+        "greenlet==3.0rc3",
         "ovirt-engine-sdk-python==4.4.11",
         "junitparser==3.1.0",
         "flaky==3.7.0",
@@ -97,7 +97,7 @@ setup(
         "google-resumable-media==2.4.1",
         "googleapis-common-protos==1.59.0",
         "urllib3==1.26.19",
-        "psycopg2-binary",
+        "psycopg2-binary==2.9.9",
         "azure-keyvault-secrets==4.8.0",
         "pytest-jira==0.3.21",
         "certbot==3.0.0",
