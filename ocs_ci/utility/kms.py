@@ -571,7 +571,7 @@ class Vault(KMS):
             )
         self.vault_path_token = self.generate_vault_token()
 
-    def generate_vault_token(self):
+    def generate_vault_token(self, ttl="768h"):
         """
         Generate a token for self.vault_policy_name
 
@@ -579,7 +579,11 @@ class Vault(KMS):
             str: vault token
 
         """
-        cmd = f"vault token create -policy={self.vault_policy_name} " f"--format=json"
+        cmd = (
+            f"vault token create -policy={self.vault_policy_name} "
+            f"--format=json "
+            f"-ttl={ttl}"
+        )
         out = subprocess.check_output(shlex.split(cmd))
         json_out = json.loads(out)
         return json_out["auth"]["client_token"]
