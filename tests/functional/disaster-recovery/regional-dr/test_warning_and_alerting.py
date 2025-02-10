@@ -60,20 +60,21 @@ def scale_up_deployment(request):
             for s in get_non_acm_cluster_config()
             if s.MULTICLUSTER["multicluster_index"] != primary_index
         ][0]
-        config.switch_ctx(secondary_index)
+
         logger.info(
             "Scale up rbd-mirror deployment on the secondary cluster and mds deployments on the primary cluster"
         )
+        config.switch_ctx(secondary_index)
+        helpers.modify_deployment_replica_count(
+            deployment_name=constants.RBD_MIRROR_DAEMON_DEPLOYMENT, replica_count=1
+        )
+        ceph_health_check(tries=30, delay=60)
+        config.switch_ctx(primary_index)
         helpers.modify_deployment_replica_count(
             deployment_name=constants.MDS_DAEMON_DEPLOYMENT_ONE, replica_count=1
         )
         helpers.modify_deployment_replica_count(
             deployment_name=constants.MDS_DAEMON_DEPLOYMENT_TWO, replica_count=1
-        )
-        ceph_health_check(tries=30, delay=60)
-        config.switch_ctx(primary_index)
-        helpers.modify_deployment_replica_count(
-            deployment_name=constants.RBD_MIRROR_DAEMON_DEPLOYMENT, replica_count=1
         )
         ceph_health_check(tries=30, delay=60)
 
@@ -182,16 +183,15 @@ class TestRDRWarningAndAlerting:
         )
         config.switch_to_cluster_by_name(secondary_cluster_name)
         helpers.modify_deployment_replica_count(
+            deployment_name=constants.RBD_MIRROR_DAEMON_DEPLOYMENT, replica_count=0
+        )
+        config.switch_to_cluster_by_name(primary_cluster_name)
+        helpers.modify_deployment_replica_count(
             deployment_name=constants.MDS_DAEMON_DEPLOYMENT_ONE, replica_count=0
         )
         helpers.modify_deployment_replica_count(
             deployment_name=constants.MDS_DAEMON_DEPLOYMENT_TWO, replica_count=0
         )
-        config.switch_to_cluster_by_name(primary_cluster_name)
-        helpers.modify_deployment_replica_count(
-            deployment_name=constants.RBD_MIRROR_DAEMON_DEPLOYMENT, replica_count=0
-        )
-
         logger.info(
             f"Waiting for {wait_time * 60} seconds to allow warning alert to appear"
         )
@@ -248,14 +248,14 @@ class TestRDRWarningAndAlerting:
         )
         config.switch_to_cluster_by_name(secondary_cluster_name)
         helpers.modify_deployment_replica_count(
+            deployment_name=constants.RBD_MIRROR_DAEMON_DEPLOYMENT, replica_count=1
+        )
+        config.switch_to_cluster_by_name(primary_cluster_name)
+        helpers.modify_deployment_replica_count(
             deployment_name=constants.MDS_DAEMON_DEPLOYMENT_ONE, replica_count=1
         )
         helpers.modify_deployment_replica_count(
             deployment_name=constants.MDS_DAEMON_DEPLOYMENT_TWO, replica_count=1
-        )
-        config.switch_to_cluster_by_name(primary_cluster_name)
-        helpers.modify_deployment_replica_count(
-            deployment_name=constants.RBD_MIRROR_DAEMON_DEPLOYMENT, replica_count=1
         )
         logger.info(
             f"Waiting for {scheduling_interval * 60} seconds to allow warning alert to disappear"
