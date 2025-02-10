@@ -314,7 +314,12 @@ class IBMCloudIPI(CloudDeploymentBase):
             cmd = (
                 f"ibmcloud is vols --resource-group-name {resource_group} --output json"
             )
-            proc = exec_cmd(cmd)
+            try:
+                proc = exec_cmd(cmd)
+            except CommandFailed as ex:
+                if "No resource group found" in str(ex):
+                    logger.info(f"No resource group: {resource_group} found!")
+                    return []
 
             volume_data = json.loads(proc.stdout)
             return [volume["id"] for volume in volume_data]
