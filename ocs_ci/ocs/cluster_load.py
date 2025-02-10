@@ -361,7 +361,9 @@ class ClusterLoad:
                 )[0]["value"][1]
             )
         except requests.exceptions.RequestException as e:
-            print(f"Encountered error: {e}. Refreshing connection and retrying...")
+            logger.info(
+                f"Encountered error: {e}. Refreshing connection and retrying..."
+            )
             self.prometheus_api.refresh_connection()
             result = float(
                 self.prometheus_api.query(
