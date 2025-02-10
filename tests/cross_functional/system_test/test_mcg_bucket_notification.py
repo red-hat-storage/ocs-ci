@@ -116,12 +116,12 @@ class TestBucketNotificationSystemTest:
             "s3:ObjectTagging:*",
         ]
 
-        # feature_setup_map = setup_mcg_bg_features(
-        #     num_of_buckets=5,
-        #     object_amount=5,
-        #     is_disruptive=True,
-        #     skip_any_features=["nsfs", "rgw kafka", "caching"],
-        # )
+        feature_setup_map = setup_mcg_bg_features(
+            num_of_buckets=5,
+            object_amount=5,
+            is_disruptive=True,
+            skip_any_features=["nsfs", "rgw kafka", "caching"],
+        )
 
         # 1. Enable bucket notification on Noobaa CR
         notify_manager.enable_bucket_notifs_on_cr(use_provided_pvc=True)
@@ -181,8 +181,9 @@ class TestBucketNotificationSystemTest:
                     )
                 )
 
-            logger.info("Stopping Noobaa pod nodes")
+            logger.info(f"Stopping Noobaa pod node {noobaa_pod_nodes[0]}")
             nodes.stop_nodes(nodes=noobaa_pod_nodes)
+
             for future in as_completed(future_objs):
                 future.result()
 
@@ -206,7 +207,9 @@ class TestBucketNotificationSystemTest:
             kafka_kind_label = "strimzi.io/kind=Kafka"
             kafka_pods = [
                 Pod(**pod_info)
-                for pod_info in get_pods_having_label(label=kafka_kind_label)
+                for pod_info in get_pods_having_label(
+                    label=kafka_kind_label, namespace=constants.AMQ_NAMESPACE
+                )
             ]
             future_objs = []
             for bucket in buckets_created:
@@ -272,10 +275,10 @@ class TestBucketNotificationSystemTest:
             sleep=30,
         )
 
-        # validate_mcg_bg_features(
-        #     feature_setup_map,
-        #     run_in_bg=False,
-        #     skip_any_features=["nsfs", "rgw kafka", "caching"],
-        #     object_amount=5,
-        # )
-        # logger.info("No issues seen with the MCG bg feature validation")
+        validate_mcg_bg_features(
+            feature_setup_map,
+            run_in_bg=False,
+            skip_any_features=["nsfs", "rgw kafka", "caching"],
+            object_amount=5,
+        )
+        logger.info("No issues seen with the MCG bg feature validation")
