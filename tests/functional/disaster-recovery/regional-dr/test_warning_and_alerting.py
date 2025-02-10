@@ -35,7 +35,7 @@ logger = logging.getLogger(__name__)
 
 @pytest.fixture
 def scale_up_deployment(request):
-    def teardown(dr_workload):
+    def teardown():
         # rdr_workload_rbd = dr_workload(
         #     num_of_subscription=1,
         #     num_of_appset=0,
@@ -147,7 +147,7 @@ class TestRDRWarningAndAlerting:
         scheduling_interval = dr_helpers.get_scheduling_interval(
             rdr_workload[0].workload_namespace
         )
-        wait_time = 0.5  # Time in minutes
+        wait_time = 2 * scheduling_interval  # Time in minutes
         logger.info(f"Waiting for {wait_time} minutes to run IOs")
         sleep(wait_time * 60)
 
@@ -258,9 +258,9 @@ class TestRDRWarningAndAlerting:
             deployment_name=constants.MDS_DAEMON_DEPLOYMENT_TWO, replica_count=1
         )
         logger.info(
-            f"Waiting for {scheduling_interval * 60} seconds to allow warning alert to disappear"
+            f"Waiting for {wait_time * 60} seconds to allow warning alert to disappear"
         )
-        sleep(scheduling_interval * 60)
+        sleep(wait_time * 60)
 
         for obj, initial_last_group_sync_time in zip(
             drpc_objs, before_failover_last_group_sync_time
@@ -268,7 +268,7 @@ class TestRDRWarningAndAlerting:
             dr_helpers.verify_last_group_sync_time(
                 obj, scheduling_interval, initial_last_group_sync_time
             )
-        logger.info("lastGroupSyncTime updated after cluster is online")
+        logger.info("lastGroupSyncTime updated after pods are recovered")
 
         config.switch_acm_ctx()
         # Navigate to failover modal via ACM UI
@@ -293,6 +293,7 @@ class TestRDRWarningAndAlerting:
                     workload_type=constants.APPLICATION_SET,
                     do_not_trigger=True,
                 )
+        # Allow additional time for alerts to disappear
         time.sleep(120)
         warning_alert_found = acm_obj.wait_until_expected_text_is_found(
             locator=acm_loc["inconsistent-warning-alert"],
