@@ -15,6 +15,7 @@ from ocs_ci.framework.pytest_customization.marks import (
     brown_squad,
     black_squad,
     ibmcloud_platform_required,
+    skipif_ibm_cloud_managed,
 )
 from ocs_ci.framework.testlib import (
     ignore_leftovers,
@@ -306,6 +307,7 @@ class TestResizeOSD(ManageTest):
     @tier4b
     @tier4c
     @black_squad
+    @skipif_ibm_cloud_managed
     @pytest.mark.order("last")
     @polarion_id("OCS-5800")
     def test_ui_storage_size_post_resize_osd(self, setup_ui_session):
