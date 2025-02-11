@@ -23,6 +23,7 @@ from ocs_ci.framework.pytest_customization.marks import (
     skipif_ms_consumer,
     skipif_hci_client,
     brown_squad,
+    skipif_ibm_cloud_managed,
 )
 from ocs_ci.helpers.helpers import (
     verify_storagecluster_nodetopology,
@@ -294,6 +295,7 @@ class TestNodeReplacement(ManageTest):
         """
         self.sanity_helpers = Sanity()
 
+    @skipif_ibm_cloud_managed
     def test_nodereplacement_proactive(self):
         """
         Knip-894 Node Replacement proactive(without IO running)
