@@ -16,6 +16,7 @@ from ocs_ci.framework.pytest_customization.marks import (
     black_squad,
     ibmcloud_platform_required,
     skipif_ibm_cloud_managed,
+    jira,
 )
 from ocs_ci.framework.testlib import (
     ignore_leftovers,
@@ -71,6 +72,7 @@ logger = logging.getLogger(__name__)
 @skipif_ibm_power
 @skipif_managed_service
 @skipif_hci_provider_and_client
+@jira("DFBUGS-1467")
 class TestResizeOSD(ManageTest):
     """
     Automates the resize OSD test procedure
