@@ -911,8 +911,10 @@ class OdfTopologyNodesView(TopologyTab):
 
         :return: name of the cluster such as 'ocs-storagecluster'
         """
-        cluster_name_el = self.get_elements(self.topology_loc["node_group_name"])[0]
-        return cluster_name_el.text.split("\n")[1]
+        cluster_name_el = self.get_elements(self.topology_loc["topology_node_parent"])[
+            0
+        ]
+        return cluster_name_el.text
 
     @retry(TimeoutException)
     def nav_into_node(

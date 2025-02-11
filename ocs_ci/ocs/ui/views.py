@@ -1842,7 +1842,8 @@ topology = {
     "node_label": ("//*[@class='pf-topology__node__label']", By.XPATH),
     # status is in class name of the node_status_axis one from pf-m-warning / pf-m-danger / pf-m-success
     "node_status_class_axis": (
-        "//*[@class='pf-topology__node__label']//*[contains(text(), '{}')]/parent::*/parent::*/parent::*/parent::*",
+        "//*[@class='pf-topology__node__label']//*[contains(text(), '{}')]"
+        "/ancestor::*[starts-with(@class, 'pf-topology__node ')]",
         By.XPATH,
     ),
     "select_entity": (
@@ -1854,9 +1855,12 @@ topology = {
         "//*[contains(text(), '{}')]/../../../..",
         By.XPATH,
     ),
+    # this is complex locator, it is used to find node with specific name and via its ancestor find the arrow to enter
+    # to click and show the node topology
     "enter_into_entity_arrow": (
-        "(//*[@class='pf-topology__node__label']//*[contains(text(), '{}')]/parent::*/parent::*/parent::*/parent::*"
-        "//*[@class='pf-topology__node__decorator'])[2]",
+        "//*[contains(text(), '{}')]"
+        "/ancestor::*[starts-with(@class, 'pf-topology__node ')]"
+        "//*[@class='pf-topology__node__decorator' and @role='button' and not(@aria-label)]",
         By.XPATH,
     ),
     "cluster_state_ready": (
@@ -1870,6 +1874,14 @@ topology = {
     # node_group_name may be 'zone-<num>' or 'rack-<num>'
     "node_group_name": (
         "//*[@data-kind='node' and @data-type='group' and not (@transform)]",
+        By.XPATH,
+    ),
+    # topology node parent, that aggregates n of nodes or n of deployments
+    # may be ocs-storagecluster or name of the node
+    "topology_node_parent": (
+        "//*[@class='pf-topology__group__label' "
+        "and *[contains(@class, 'pf-topology__node__label__badge')] "
+        "and *[contains(@class, 'pf-topology__node__label__icon')] ]",
         By.XPATH,
     ),
     "zoom_out": ("zoom-out", By.ID),
