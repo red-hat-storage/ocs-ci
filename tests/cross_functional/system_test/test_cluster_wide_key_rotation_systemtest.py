@@ -92,7 +92,7 @@ class TestKeyRotationWithClusterFull(E2ETest):
 
         # Custom taints PR 9808 got merged. Included below.
 
-        apply_non_ocs_taint_and_tolerations()
+        # apply_non_ocs_taint_and_tolerations()
         run_fio_till_cluster_full()
         log.info(
             "Verifying the key rotation time is still unchanged after 85% cluster full"
