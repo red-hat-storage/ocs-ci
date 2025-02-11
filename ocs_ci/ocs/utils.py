@@ -4,6 +4,7 @@ import logging
 import os
 import pickle
 import re
+import threading
 import time
 import traceback
 import subprocess
@@ -21,7 +22,7 @@ from libcloud.compute.types import Provider
 from paramiko.ssh_exception import SSHException
 
 from ocs_ci.framework import config as ocsci_config, config
-from ocs_ci.ocs import constants
+from ocs_ci.ocs import constants, defaults
 from ocs_ci.ocs.external_ceph import RolesContainer, Ceph, CephNode
 from ocs_ci.ocs.clients import WinNode
 from ocs_ci.ocs.exceptions import CommandFailed, ExternalClusterDetailsException
@@ -50,6 +51,12 @@ from ocs_ci.utility.version import (
 
 
 log = logging.getLogger(__name__)
+mg_fail_count = 0
+mg_skip_count = 0
+mg_last_fail = None
+mg_collected_logs = 0
+mg_collected_types = set()
+mg_lock = threading.Lock()
 
 
 def create_ceph_nodes(cluster_conf, inventory, osp_cred, run_id, instances_name=None):
@@ -927,7 +934,16 @@ def apply_oc_resource(
     occli.apply(cfg_file)
 
 
-def run_must_gather(log_dir_path, image, command=None, cluster_config=None):
+def run_must_gather(
+    log_dir_path,
+    image,
+    command=None,
+    cluster_config=None,
+    silent=False,
+    output_file=None,
+    skip_after_max_fail=False,
+    timeout=defaults.MUST_GATHER_TIMEOUT,
+):
     """
     Runs the must-gather tool against the cluster
 
@@ -936,26 +952,34 @@ def run_must_gather(log_dir_path, image, command=None, cluster_config=None):
         image (str): must-gather image registry path
         command (str): optional command to execute within the must-gather image
         cluster_config (MultiClusterConfig): Holds specifc cluster config object in case of multicluster
+        silent (bool): True if silent mode
+        output_file (bool): True if direct whole output to file instead of printing it out to log (apply
+          only if silent is True).
+        skip_after_max_fail (bool): When max number failed attempts to collect MG reached, will skip
+            MG collection.
+        timeout (int): Max timeout to wait for MG to complete before aborting the MG execution.
 
     Returns:
         mg_output (str): must-gather cli output
 
     """
-    # Must-gather has many changes on 4.6 which add more time to the collection.
-    # https://github.com/red-hat-storage/ocs-ci/issues/3240
+    global mg_fail_count, mg_last_fail, mg_collected_logs, mg_skip_count
+
+    max_mg_fail_attempts = config.REPORTING.get("max_mg_fail_attempts")
+    if skip_after_max_fail:
+        with mg_lock:
+            if mg_fail_count > max_mg_fail_attempts:
+                mg_skip_count += 1
+                log.warning(
+                    f"MG collection is skipped because MG already failed {mg_fail_count} times!"
+                    f" Last error occurred at: {mg_last_fail}"
+                )
+                return
     if not cluster_config:
         cluster_config = ocsci_config
     mg_output = ""
-    ocs_version = version.get_semantic_ocs_version_from_config()
-    if ocs_version >= version.VERSION_4_10:
-        timeout = 2100
-    elif ocs_version >= version.VERSION_4_6:
-        timeout = 1500
-    else:
-        timeout = 600
 
-    must_gather_timeout = cluster_config.REPORTING.get("must_gather_timeout", timeout)
-
+    timestamp = time.time()
     log.info(f"Must gather image: {image} will be used.")
     create_directory_path(log_dir_path)
     cmd = f"adm must-gather --image={image} --dest-dir={log_dir_path}"
@@ -963,29 +987,33 @@ def run_must_gather(log_dir_path, image, command=None, cluster_config=None):
         cmd += f" -- {command}"
 
     log.info(f"OCS logs will be placed in location {log_dir_path}")
+    if output_file:
+        output_file = os.path.join(log_dir_path, f"mg_output_{timestamp}.log")
+        log.info(f"Must gather std error log will be placed in: {output_file}")
     occli = OCP()
     try:
         mg_output = occli.exec_oc_cmd(
             cmd,
             out_yaml_format=False,
-            timeout=must_gather_timeout,
+            timeout=timeout,
             cluster_config=cluster_config,
+            silent=silent,
+            output_file=output_file,
         )
         if config.DEPLOYMENT["external_mode"]:
             collect_ceph_external(path=log_dir_path)
-    except CommandFailed as ex:
-        log.error(
-            f"Failed during must gather logs! Error: {ex}"
-            f"Must-Gather Output: {mg_output}"
-        )
+        with mg_lock:
+            mg_collected_logs += 1
+    except (CommandFailed, TimeoutExpired) as ex:
+        log.error(f"Failed during must gather logs! Error: {ex}")
+        with mg_lock:
+            mg_fail_count += 1
+            mg_last_fail = datetime.datetime.now()
+
+        if mg_output:
+            log.error(f"Must-Gather Output: {mg_output}")
         export_mg_pods_logs(log_dir_path=log_dir_path)
 
-    except TimeoutExpired as ex:
-        log.error(
-            f"Failed during must gather logs! Error: {ex}"
-            f"Must-Gather Output: {mg_output}"
-        )
-        export_mg_pods_logs(log_dir_path=log_dir_path)
     return mg_output
 
 
@@ -1169,11 +1197,16 @@ def _collect_ocs_logs(
     mcg=False,
     status_failure=True,
     ocs_flags=None,
+    silent=False,
+    output_file=None,
+    skip_after_max_fail=False,
+    timeout=defaults.MUST_GATHER_TIMEOUT,
 ):
     """
     This function runs in thread
 
     """
+    global mg_collected_types
     log.info(
         (
             f"RUNNING IN CTX: {cluster_config.ENV_DATA['cluster_name']} RUNID: = {cluster_config.RUN['run_id']}"
@@ -1225,7 +1258,12 @@ def _collect_ocs_logs(
             ocs_must_gather_image_and_tag,
             cluster_config=cluster_config,
             command=ocs_flags,
+            silent=silent,
+            output_file=output_file,
+            skip_after_max_fail=skip_after_max_fail,
+            timeout=timeout,
         )
+        mg_collected_types.add("ocs")
         if (
             ocsci_config.DEPLOYMENT.get("disconnected")
             and "cannot stat 'jq'" in mg_output
@@ -1239,14 +1277,23 @@ def _collect_ocs_logs(
         if cluster_config.DEPLOYMENT.get("disconnected"):
             ocp_must_gather_image = mirror_image(ocp_must_gather_image)
         run_must_gather(
-            ocp_log_dir_path, ocp_must_gather_image, cluster_config=cluster_config
+            ocp_log_dir_path,
+            ocp_must_gather_image,
+            cluster_config=cluster_config,
+            output_file=output_file,
+            skip_after_max_fail=skip_after_max_fail,
+            timeout=timeout,
         )
         run_must_gather(
             ocp_log_dir_path,
             ocp_must_gather_image,
             "/usr/bin/gather_service_logs worker",
             cluster_config=cluster_config,
+            output_file=output_file,
+            skip_after_max_fail=skip_after_max_fail,
+            timeout=timeout,
         )
+        mg_collected_types.add("ocp")
     if mcg:
         counter = 0
         while counter < 5:
@@ -1259,6 +1306,7 @@ def _collect_ocs_logs(
                 ):
                     break
                 collect_noobaa_db_dump(log_dir_path, cluster_config)
+                mg_collected_types.add("mcg")
                 break
             except CommandFailed as ex:
                 log.error(f"Failed to dump noobaa DB! Error: {ex}")
@@ -1320,7 +1368,16 @@ def _collect_ocs_logs(
 
 
 def collect_ocs_logs(
-    dir_name, ocp=True, ocs=True, mcg=False, status_failure=True, ocs_flags=None
+    dir_name,
+    ocp=True,
+    ocs=True,
+    mcg=False,
+    status_failure=True,
+    ocs_flags=None,
+    silent=False,
+    output_file=None,
+    skip_after_max_fail=False,
+    timeout=defaults.MUST_GATHER_TIMEOUT,
 ):
     """
     Collects OCS logs
@@ -1334,6 +1391,12 @@ def collect_ocs_logs(
         status_failure (bool): Whether the collection is after success or failure,
             allows better naming for folders under logs directory
         ocs_flags (str): flags to ocs must gather command for example ["-- /usr/bin/gather -cs"]
+        silent (bool): True if silent mode
+        output_file (bool): True if direct whole output to file instead of printing it out to log (apply
+            only if silent is True).
+        skip_after_max_fail (bool): When max number failed attempts to collect MG reached, will skip
+            MG collection.
+        timeout (int): Max timeout to wait for MG to complete before aborting the MG execution.
 
     """
     results = list()
@@ -1350,6 +1413,10 @@ def collect_ocs_logs(
                         mcg=False,
                         status_failure=status_failure,
                         ocs_flags=ocs_flags,
+                        silent=silent,
+                        output_file=output_file,
+                        skip_after_max_fail=skip_after_max_fail,
+                        timeout=timeout,
                     )
                 )
             if ocs:
@@ -1363,6 +1430,10 @@ def collect_ocs_logs(
                         mcg=False,
                         status_failure=status_failure,
                         ocs_flags=ocs_flags,
+                        silent=silent,
+                        output_file=output_file,
+                        skip_after_max_fail=skip_after_max_fail,
+                        timeout=timeout,
                     )
                 )
             if mcg:
@@ -1376,6 +1447,10 @@ def collect_ocs_logs(
                         mcg=mcg,
                         status_failure=status_failure,
                         ocs_flags=ocs_flags,
+                        silent=silent,
+                        output_file=output_file,
+                        skip_after_max_fail=skip_after_max_fail,
+                        timeout=timeout,
                     )
                 )
 
