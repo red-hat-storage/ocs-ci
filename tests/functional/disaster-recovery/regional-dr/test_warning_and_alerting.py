@@ -108,7 +108,7 @@ class TestRDRWarningAndAlerting:
     )
     # TODO: Update polarion IDs
     def test_rdr_inconsistent_data_warning_alert(
-        self, action, setup_acm_ui, dr_workload
+        self, action, setup_acm_ui, dr_workload, scale_up_deployment
     ):
         """
         Test to verify that "Inconsistent data on target cluster" warning alert is seen on the Failover/Relocate modal
