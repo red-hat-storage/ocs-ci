@@ -510,7 +510,8 @@ def noobaa_db_backup_and_recovery(
             ), f"Failed to scale up the statefulset {constants.NOOBAA_DB_STATEFULSET}"
 
         try:
-            restore_pvc_objs[0].delete()
+            for restore_pvc_obj in restore_pvc_objs:
+                restore_pvc_obj.delete()
         except CommandFailed as ex:
             if f'"{restore_pvc_objs[0].name}" not found' not in str(ex):
                 raise ex
