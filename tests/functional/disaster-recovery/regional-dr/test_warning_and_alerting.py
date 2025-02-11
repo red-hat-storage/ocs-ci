@@ -125,15 +125,15 @@ class TestRDRWarningAndAlerting:
 
         workload_names = []
         rdr_workload = dr_workload(
-            num_of_subscription=0,
-            num_of_appset=1,
+            num_of_subscription=1,
+            num_of_appset=0,
             pvc_interface=constants.CEPHBLOCKPOOL,
         )
         workload_names.append(f"{rdr_workload[0].workload_name}-1")
         rdr_workload.append(
             dr_workload(
-                num_of_subscription=1,
-                num_of_appset=0,
+                num_of_subscription=0,
+                num_of_appset=1,
                 pvc_interface=constants.CEPHFILESYSTEM,
             )
         )
@@ -205,7 +205,7 @@ class TestRDRWarningAndAlerting:
                 failover_relocate_ui(
                     acm_obj,
                     scheduling_interval=scheduling_interval,
-                    workload_to_move=workload_names[1],
+                    workload_to_move=workload_names[0],
                     policy_name=workload.dr_policy_name,
                     action=action,
                     failover_or_preferred_cluster=secondary_cluster_name,
@@ -215,7 +215,7 @@ class TestRDRWarningAndAlerting:
                 failover_relocate_ui(
                     acm_obj,
                     scheduling_interval=scheduling_interval,
-                    workload_to_move=workload_names[0],
+                    workload_to_move=workload_names[1],
                     policy_name=workload.dr_policy_name,
                     action=action,
                     failover_or_preferred_cluster=secondary_cluster_name,
@@ -278,7 +278,7 @@ class TestRDRWarningAndAlerting:
                 failover_relocate_ui(
                     acm_obj,
                     scheduling_interval=scheduling_interval,
-                    workload_to_move=workload_names[1],
+                    workload_to_move=workload_names[0],
                     policy_name=workload.dr_policy_name,
                     failover_or_preferred_cluster=secondary_cluster_name,
                     do_not_trigger=True,
@@ -287,7 +287,7 @@ class TestRDRWarningAndAlerting:
                 failover_relocate_ui(
                     acm_obj,
                     scheduling_interval=scheduling_interval,
-                    workload_to_move=workload_names[0],
+                    workload_to_move=workload_names[1],
                     policy_name=workload.dr_policy_name,
                     failover_or_preferred_cluster=secondary_cluster_name,
                     workload_type=constants.APPLICATION_SET,
