@@ -2514,13 +2514,15 @@ def wait_for_ceph_health_not_ok(timeout=300, sleep=10):
     sampler.wait_for_func_status(True)
 
 
-def ceph_health_check(namespace=None, tries=20, delay=30):
+def ceph_health_check(namespace=None, tries=20, delay=30, resolve_daemon_crash=False):
     """
     Args:
         namespace (str): Namespace of OCS
             (default: config.ENV_DATA['cluster_namespace'])
         tries (int): Number of retries
         delay (int): Delay in seconds between retries
+        resolve_daemon_crash (bool): Automatically resolve daemon crash to
+            prevent issues in a test run.
 
     Returns:
         bool: ceph_health_check_base return value with default retries of 20,
@@ -2539,16 +2541,18 @@ def ceph_health_check(namespace=None, tries=20, delay=30):
         tries=tries,
         delay=delay,
         backoff=1,
-    )(ceph_health_check_base)(namespace)
+    )(ceph_health_check_base)(namespace, resolve_daemon_crash)
 
 
-def ceph_health_check_base(namespace=None):
+def ceph_health_check_base(namespace=None, resolve_daemon_crash=False):
     """
     Exec `ceph health` cmd on tools pod to determine health of cluster.
 
     Args:
         namespace (str): Namespace of OCS
             (default: config.ENV_DATA['cluster_namespace'])
+        resolve_daemon_crash (bool): Automatically resolve daemon crash to
+            prevent issues in a test run.
 
     Raises:
         CephHealthException: If the ceph health returned is not HEALTH_OK
@@ -2560,6 +2564,15 @@ def ceph_health_check_base(namespace=None):
     """
     namespace = namespace or config.ENV_DATA["cluster_namespace"]
     health = run_ceph_health_cmd(namespace)
+
+    if "daemons have recently crashed" in health and resolve_daemon_crash:
+        # importing here to avoid circular imports
+        from ocs_ci.ocs.resources.pod import get_ceph_tools_pod
+
+        log.error(health)
+        ct_pod = get_ceph_tools_pod()
+        ceph_crash_info_display(ct_pod)
+        archive_ceph_crashes(ct_pod)
 
     if health.strip() == "HEALTH_OK":
         log.info("Ceph cluster health is HEALTH_OK.")
