@@ -37,7 +37,7 @@ spec:
           networkInterfaceMultiqueue: true
           rng: {}
         memory:
-          guest: 2Gi
+          guest: 4Gi
         resources: {}
       evictionStrategy: LiveMigrate
       networks:
