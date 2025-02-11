@@ -108,6 +108,9 @@ def assign_get_values(env_status_dict, key, kind=None, exclude_labels=None):
             if constants.CONTROLLER_DETECT_VERSION_NAME in name:
                 log.debug(f"ignoring item: {name}")
                 continue
+            if constants.OSD_KEY_ROTATION_POD_NAME in name:
+                log.debug(f"ignoring item: {name}")
+                continue
             if name.startswith(constants.REPORT_STATUS_TO_PROVIDER_POD):
                 log.debug(f"ignoring item: {name}")
                 continue

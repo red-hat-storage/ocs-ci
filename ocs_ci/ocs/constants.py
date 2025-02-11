@@ -594,6 +594,7 @@ NOOBAA_DEFAULT_BACKINGSTORE_LABEL = "pool=noobaa-default-backing-store"
 ROOK_CEPH_DETECT_VERSION_LABEL = "app=rook-ceph-detect-version"
 CEPH_FILE_CONTROLLER_DETECT_VERSION_LABEL = "app=ceph-file-controller-detect-version"
 CONTROLLER_DETECT_VERSION_NAME = "controller-detect-version"
+OSD_KEY_ROTATION_POD_NAME = "rook-ceph-osd-key-rotation"
 CEPH_OBJECT_CONTROLLER_DETECT_VERSION_LABEL = (
     "app=ceph-object-controller-detect-version"
 )
