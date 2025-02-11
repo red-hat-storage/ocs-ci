@@ -298,7 +298,11 @@ class TestDiskFailures(ManageTest):
         """
         osd_operations.osd_device_replacement(nodes)
         self.sanity_helpers.create_resources(
-            pvc_factory, pod_factory, bucket_factory, rgw_bucket_factory
+            pvc_factory,
+            pod_factory,
+            bucket_factory,
+            rgw_bucket_factory,
+            bucket_creation_timeout=800,
         )
 
     @bugzilla("2234479")
