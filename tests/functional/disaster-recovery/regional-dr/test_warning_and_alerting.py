@@ -159,6 +159,7 @@ class TestRDRWarningAndAlerting:
             rdr_workload[0].workload_namespace, rdr_workload[0].workload_type
         )
 
+        config.switch_acm_ctx()
         acm_obj = AcmAddClusters()
         page_nav = ValidationUI()
 
@@ -211,6 +212,27 @@ class TestRDRWarningAndAlerting:
                     failover_or_preferred_cluster=secondary_cluster_name,
                     do_not_trigger=True,
                 )
+                warning_alert_found = acm_obj.wait_until_expected_text_is_found(
+                    locator=acm_loc["inconsistent-warning-alert"],
+                    expected_text="Inconsistent data on target cluster",
+                    timeout=300,
+                )
+                if warning_alert_found:
+                    logger.info(
+                        "Warning alert 'Inconsistent data on target cluster' found on the Failover modal"
+                    )
+                    logger.info("Click on 'Cancel' on the action modal")
+                    acm_obj.do_click(
+                        acm_loc["cancel-action-modal"],
+                        enable_screenshot=True,
+                        avoid_stale=True,
+                    )
+                    logger.info("Action modal closed successfully")
+                else:
+                    logger.error(
+                        "Warning alert 'Inconsistent data on target cluster' not found on the Failover modal"
+                    )
+                    raise NoAlertPresentException
             else:
                 failover_relocate_ui(
                     acm_obj,
@@ -222,26 +244,27 @@ class TestRDRWarningAndAlerting:
                     workload_type=constants.APPLICATION_SET,
                     do_not_trigger=True,
                 )
-
-        warning_alert_found = acm_obj.wait_until_expected_text_is_found(
-            locator=acm_loc["inconsistent-warning-alert"],
-            expected_text="Inconsistent data on target cluster",
-            timeout=300,
-        )
-        if warning_alert_found:
-            logger.info(
-                "Warning alert 'Inconsistent data on target cluster' found on the Failover modal"
-            )
-            logger.info("Click on 'Cancel' on the action modal")
-            acm_obj.do_click(
-                acm_loc["cancel-action-modal"], enable_screenshot=True, avoid_stale=True
-            )
-            logger.info("Action modal closed successfully")
-        else:
-            logger.error(
-                "Warning alert 'Inconsistent data on target cluster' not found on the Failover modal"
-            )
-            raise NoAlertPresentException
+                warning_alert_found = acm_obj.wait_until_expected_text_is_found(
+                    locator=acm_loc["inconsistent-warning-alert"],
+                    expected_text="Inconsistent data on target cluster",
+                    timeout=300,
+                )
+                if warning_alert_found:
+                    logger.info(
+                        "Warning alert 'Inconsistent data on target cluster' found on the Failover modal"
+                    )
+                    logger.info("Click on 'Cancel' on the action modal")
+                    acm_obj.do_click(
+                        acm_loc["cancel-action-modal"],
+                        enable_screenshot=True,
+                        avoid_stale=True,
+                    )
+                    logger.info("Action modal closed successfully")
+                else:
+                    logger.error(
+                        "Warning alert 'Inconsistent data on target cluster' not found on the Failover modal"
+                    )
+                    raise NoAlertPresentException
 
         logger.info(
             "Scale up rbd-mirror deployment on the secondary cluster and mds deployments on the primary cluster"
@@ -283,6 +306,31 @@ class TestRDRWarningAndAlerting:
                     failover_or_preferred_cluster=secondary_cluster_name,
                     do_not_trigger=True,
                 )
+                # Allow additional time for alerts to disappear
+                time.sleep(120)
+                warning_alert_found = acm_obj.wait_until_expected_text_is_found(
+                    locator=acm_loc["inconsistent-warning-alert"],
+                    expected_text="Inconsistent data on target cluster",
+                    timeout=60,
+                )
+                if warning_alert_found:
+                    logger.error(
+                        "Warning alert 'Inconsistent data on target cluster' still exists after successful sync on the "
+                        "Failover modal"
+                    )
+                    raise UnexpectedBehaviour
+                else:
+                    logger.info(
+                        "Warning alert 'Inconsistent data on target cluster' disappeared after successful sync on the "
+                        "Failover modal"
+                    )
+                    logger.info("Click on 'Cancel' on the action modal")
+                    acm_obj.do_click(
+                        acm_loc["cancel-action-modal"],
+                        enable_screenshot=True,
+                        avoid_stale=True,
+                    )
+                    logger.info("Action modal closed successfully")
             else:
                 failover_relocate_ui(
                     acm_obj,
@@ -293,26 +341,28 @@ class TestRDRWarningAndAlerting:
                     workload_type=constants.APPLICATION_SET,
                     do_not_trigger=True,
                 )
-        # Allow additional time for alerts to disappear
-        time.sleep(120)
-        warning_alert_found = acm_obj.wait_until_expected_text_is_found(
-            locator=acm_loc["inconsistent-warning-alert"],
-            expected_text="Inconsistent data on target cluster",
-            timeout=60,
-        )
-        if warning_alert_found:
-            logger.error(
-                "Warning alert 'Inconsistent data on target cluster' still exists after successful sync on the "
-                "Failover modal"
-            )
-            raise UnexpectedBehaviour
-        else:
-            logger.info(
-                "Warning alert 'Inconsistent data on target cluster' disappeared after successful sync on the "
-                "Failover modal"
-            )
-            logger.info("Click on 'Cancel' on the action modal")
-            acm_obj.do_click(
-                acm_loc["cancel-action-modal"], enable_screenshot=True, avoid_stale=True
-            )
-            logger.info("Action modal closed successfully")
+                # Allow additional time for alerts to disappear
+                time.sleep(120)
+                warning_alert_found = acm_obj.wait_until_expected_text_is_found(
+                    locator=acm_loc["inconsistent-warning-alert"],
+                    expected_text="Inconsistent data on target cluster",
+                    timeout=60,
+                )
+                if warning_alert_found:
+                    logger.error(
+                        "Warning alert 'Inconsistent data on target cluster' still exists after successful sync on the "
+                        "Failover modal"
+                    )
+                    raise UnexpectedBehaviour
+                else:
+                    logger.info(
+                        "Warning alert 'Inconsistent data on target cluster' disappeared after successful sync on the "
+                        "Failover modal"
+                    )
+                    logger.info("Click on 'Cancel' on the action modal")
+                    acm_obj.do_click(
+                        acm_loc["cancel-action-modal"],
+                        enable_screenshot=True,
+                        avoid_stale=True,
+                    )
+                    logger.info("Action modal closed successfully")

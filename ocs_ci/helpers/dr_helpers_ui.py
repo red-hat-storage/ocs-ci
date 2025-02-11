@@ -338,10 +338,7 @@ def failover_relocate_ui(
                 )
                 acm_obj.take_screenshot()
                 return True
-        if workload_type == constants.SUBSCRIPTION:
-            log.info("Click on subscription dropdown")
-            acm_obj.do_click(acm_loc["subscription-dropdown"], enable_screenshot=True)
-            # DRPC name is by default selected, hence no code is needed
+            # DRPC name is by default selected, hence no code is needed for subscription dropdown
         if aria_disabled == "true":
             log.error("Initiate button in not enabled to failover/relocate")
             return False
