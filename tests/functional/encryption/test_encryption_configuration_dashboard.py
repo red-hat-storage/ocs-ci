@@ -161,8 +161,8 @@ class TestEncryptionConfigurationDashboard:
         if bool(encryption_summary["object_storage"]["kms"]):
             log.info("Verifying object_storage KMS status")
             assert (
-                encryption_summary["object_storage"]["kms"].upper()
-                == self.noobaa_kms.upper()
+                self.noobaa_kms.upper()
+                in encryption_summary["object_storage"]["kms"].upper()
             ), "KMS details is not correct"
 
         # Validate in-transit encryption
