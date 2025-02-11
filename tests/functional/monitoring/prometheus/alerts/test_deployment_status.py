@@ -1,7 +1,7 @@
 import logging
 import pytest
 
-from ocs_ci.framework.pytest_customization.marks import blue_squad, provider_mode
+from ocs_ci.framework.pytest_customization.marks import blue_squad, provider_mode, jira
 from ocs_ci.framework.testlib import (
     tier4c,
     bugzilla,
@@ -125,6 +125,7 @@ def test_ceph_mons_quorum_lost(measure_stop_ceph_mon, threading_lock):
     )
 
 
+@jira("DFBUGS-1579")
 @blue_squad
 @tier4c
 @pytest.mark.polarion_id("OCS-900")
