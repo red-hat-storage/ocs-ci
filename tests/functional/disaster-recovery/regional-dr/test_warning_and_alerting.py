@@ -119,20 +119,21 @@ class TestRDRWarningAndAlerting:
 
         """
 
+        config.switch_acm_ctx()
         # Enable MCO console plugin needed for DR dashboard
         enable_mco_console_plugin()
 
         workload_names = []
         rdr_workload = dr_workload(
-            num_of_subscription=1,
-            num_of_appset=0,
+            num_of_subscription=0,
+            num_of_appset=1,
             pvc_interface=constants.CEPHBLOCKPOOL,
         )
         workload_names.append(f"{rdr_workload[0].workload_name}-1")
         rdr_workload.append(
             dr_workload(
-                num_of_subscription=0,
-                num_of_appset=1,
+                num_of_subscription=1,
+                num_of_appset=0,
                 pvc_interface=constants.CEPHFILESYSTEM,
             )
         )
