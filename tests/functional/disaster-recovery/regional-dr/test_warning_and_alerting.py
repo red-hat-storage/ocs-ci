@@ -192,12 +192,11 @@ class TestRDRWarningAndAlerting:
         helpers.modify_deployment_replica_count(
             deployment_name=constants.MDS_DAEMON_DEPLOYMENT_TWO, replica_count=0
         )
+        config.switch_acm_ctx()
         logger.info(
             f"Waiting for {wait_time * 60} seconds to allow warning alert to appear"
         )
         sleep(wait_time * 60)
-
-        config.switch_acm_ctx()
         # Navigate to failover modal via ACM UI
         logger.info("Navigate to failover modal via ACM UI")
         for workload in rdr_workload:
