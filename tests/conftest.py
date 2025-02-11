@@ -5693,6 +5693,9 @@ def nsfs_interface_fixture(request, service_account_factory):
         nsfs_deployment_data["metadata"]["name"] = create_unique_resource_name(
             "nsfs-interface", "deployment"
         )
+        nsfs_deployment_data["metadata"]["namespace"] = ocsci_config.ENV_DATA[
+            "cluster_namespace"
+        ]
         uid = nsfs_deployment_data["metadata"]["name"].split("-")[-1]
         nsfs_deployment_data["spec"]["selector"]["matchLabels"]["app"] += f"-{uid}"
         nsfs_deployment_data["spec"]["template"]["metadata"]["labels"][
