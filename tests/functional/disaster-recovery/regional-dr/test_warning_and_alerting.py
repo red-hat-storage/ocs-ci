@@ -68,7 +68,7 @@ def scale_up_deployment(request):
         helpers.modify_deployment_replica_count(
             deployment_name=constants.RBD_MIRROR_DAEMON_DEPLOYMENT, replica_count=1
         )
-        ceph_health_check(tries=30, delay=60)
+        ceph_health_check(tries=10, delay=30)
         config.switch_ctx(primary_index)
         helpers.modify_deployment_replica_count(
             deployment_name=constants.MDS_DAEMON_DEPLOYMENT_ONE, replica_count=1
@@ -76,7 +76,7 @@ def scale_up_deployment(request):
         helpers.modify_deployment_replica_count(
             deployment_name=constants.MDS_DAEMON_DEPLOYMENT_TWO, replica_count=1
         )
-        ceph_health_check(tries=30, delay=60)
+        ceph_health_check(tries=10, delay=30)
 
     request.addfinalizer(teardown)
 
@@ -205,7 +205,7 @@ class TestRDRWarningAndAlerting:
                 failover_relocate_ui(
                     acm_obj,
                     scheduling_interval=scheduling_interval,
-                    workload_to_move=workload_names[0],
+                    workload_to_move=workload_names[1],
                     policy_name=workload.dr_policy_name,
                     action=action,
                     failover_or_preferred_cluster=secondary_cluster_name,
@@ -215,7 +215,7 @@ class TestRDRWarningAndAlerting:
                 failover_relocate_ui(
                     acm_obj,
                     scheduling_interval=scheduling_interval,
-                    workload_to_move=workload_names[1],
+                    workload_to_move=workload_names[0],
                     policy_name=workload.dr_policy_name,
                     action=action,
                     failover_or_preferred_cluster=secondary_cluster_name,
@@ -278,7 +278,7 @@ class TestRDRWarningAndAlerting:
                 failover_relocate_ui(
                     acm_obj,
                     scheduling_interval=scheduling_interval,
-                    workload_to_move=workload_names[0],
+                    workload_to_move=workload_names[1],
                     policy_name=workload.dr_policy_name,
                     failover_or_preferred_cluster=secondary_cluster_name,
                     do_not_trigger=True,
@@ -287,7 +287,7 @@ class TestRDRWarningAndAlerting:
                 failover_relocate_ui(
                     acm_obj,
                     scheduling_interval=scheduling_interval,
-                    workload_to_move=workload_names[1],
+                    workload_to_move=workload_names[0],
                     policy_name=workload.dr_policy_name,
                     failover_or_preferred_cluster=secondary_cluster_name,
                     workload_type=constants.APPLICATION_SET,

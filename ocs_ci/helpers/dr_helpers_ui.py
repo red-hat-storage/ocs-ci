@@ -306,6 +306,7 @@ def failover_relocate_ui(
                     locator=acm_loc["operation-readiness"],
                     expected_text=constants.STATUS_READY,
                 ), "Failover Operation readiness check failed"
+                log.info("Failover readiness is Ready as expected")
         else:
             if move_workloads_to_same_cluster:
                 assert not acm_obj.wait_until_expected_text_is_found(
@@ -319,6 +320,7 @@ def failover_relocate_ui(
                     locator=acm_loc["operation-readiness"],
                     expected_text=constants.STATUS_READY,
                 ), "Relocate Operation readiness check failed"
+                log.info("Relocate readiness is Ready as expected")
         initiate_btn = acm_obj.find_an_element_by_xpath(
             "//button[@id='modal-intiate-action']"
         )
@@ -372,11 +374,11 @@ def failover_relocate_ui(
                 )
                 # It automatically closes for Appset based workload
             return True
-        else:
-            log.error(
-                "Incorrect or missing params to perform Failover/Relocate operation from ACM UI"
-            )
-            raise NotImplementedError
+    else:
+        log.error(
+            "Incorrect or missing params to perform Failover/Relocate operation from ACM UI"
+        )
+        raise NotImplementedError
 
 
 def verify_failover_relocate_status_ui(
