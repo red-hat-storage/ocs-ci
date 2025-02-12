@@ -304,7 +304,8 @@ class TestRDRWarningAndAlerting:
                     failover_or_preferred_cluster=secondary_cluster_name,
                     do_not_trigger=True,
                 )
-                # Allow additional time for alerts to disappear
+                # Allow additional time for warning alert to disappear
+                logger.info("Allowing additional time for warning alert to disappear")
                 time.sleep(120)
                 warning_alert_found = acm_obj.wait_until_expected_text_is_found(
                     locator=acm_loc["inconsistent-warning-alert"],

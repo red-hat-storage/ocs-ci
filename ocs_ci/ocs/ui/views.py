@@ -1157,6 +1157,11 @@ acm_configuration_4_18 = {
         By.XPATH,
     ),
     "cancel-action-modal": ("#modal-cancel-action", By.CSS_SELECTOR),
+    "clear-filter": (
+        "div[class='pf-v5-c-toolbar__content pf-m-chip-container'] "
+        "div[class='pf-v5-c-toolbar__item'] button[type='button']",
+        By.CSS_SELECTOR,
+    ),
     "apply-filter": ("//div[@class='pf-v5-c-select']", By.XPATH),
     "kebab-action": ("button[aria-label='Actions']", By.CSS_SELECTOR),
     "failover-app": ("//span[contains(text(),'Failover application')]", By.XPATH),
