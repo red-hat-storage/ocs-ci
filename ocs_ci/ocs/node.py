@@ -14,6 +14,7 @@ from ocs_ci.ocs.machine import get_machine_objs
 
 from ocs_ci.framework import config
 from ocs_ci.ocs.exceptions import (
+    HostNameNotFoundInOSDStatus,
     TimeoutExpiredError,
     NotAllNodesCreated,
     CommandFailed,
@@ -1470,17 +1471,14 @@ def node_replacement_verification_steps_ceph_side(
     if not pod.check_pods_after_node_replacement():
         return False
 
-    ct_pod = pod.get_ceph_tools_pod()
-    ceph_osd_status = ct_pod.exec_ceph_cmd(ceph_cmd="ceph osd status")
-    log.info(f"Ceph osd status: {ceph_osd_status}")
+    node_names_from_ceph_osd_status = get_node_names_from_osd_status()
     osd_node_names = get_osd_running_nodes()
     log.info(f"osd node names: {osd_node_names}")
 
     if new_osd_node_name:
         log.info(f"New osd node name is: {new_osd_node_name}")
-        node_names = [osd["host name"] for osd in ceph_osd_status["OSDs"]]
-        log.info(f"Node names from ceph osd status: {node_names}")
-        if new_osd_node_name not in node_names:
+        log.info(f"Node names from ceph osd status: {node_names_from_ceph_osd_status}")
+        if new_osd_node_name not in node_names_from_ceph_osd_status:
             log.warning("new osd node name not found in 'ceph osd status' output")
             return False
         if new_osd_node_name not in osd_node_names:
@@ -1492,14 +1490,14 @@ def node_replacement_verification_steps_ceph_side(
         )
 
     if (
-        old_node_name in ceph_osd_status
+        old_node_name in node_names_from_ceph_osd_status
         and config.ENV_DATA["platform"].lower() != constants.VSPHERE_PLATFORM
     ):
         log.warning("old node name found in 'ceph osd status' output")
         return False
 
     if (
-        old_node_name in osd_node_names
+        old_node_name in node_names_from_ceph_osd_status
         and config.ENV_DATA["platform"].lower() != constants.VSPHERE_PLATFORM
     ):
         log.warning("the old hostname found in osd node names")
@@ -1512,6 +1510,34 @@ def node_replacement_verification_steps_ceph_side(
 
     log.info("Verification steps from the ceph side finish successfully")
     return True
+
+
+@retry(
+    HostNameNotFoundInOSDStatus,
+    tries=60,
+    delay=10,
+    backoff=1,
+)
+def get_node_names_from_osd_status():
+    """
+    Fetch the Host/Node names from ceph osd status
+
+    Returns:
+        list: List of host names from ceph osd status
+
+    """
+    host_names = []
+    ct_pod = pod.get_ceph_tools_pod()
+    ceph_osd_status = ct_pod.exec_ceph_cmd(ceph_cmd="ceph osd status")
+    log.info(f"Ceph osd status: {ceph_osd_status}")
+    for osd in ceph_osd_status["OSDs"]:
+        if (osd["host name"]) == "":
+            raise HostNameNotFoundInOSDStatus(
+                "Hostnames are not reflected in ceph osd status"
+            )
+        else:
+            host_names.append(osd["host name"])
+    return host_names
 
 
 def is_node_labeled(node_name, label=constants.OPERATOR_NODE_LABEL):
