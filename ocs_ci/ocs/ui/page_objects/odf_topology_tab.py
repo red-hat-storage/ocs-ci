@@ -413,7 +413,9 @@ class AbstractTopologyView(ABC, TopologySidebar):
                 text = entity.text
                 if not len(text):
                     raise NoSuchElementException("Cannot read element text")
-                name = text.split("\n")[1]
+                # with ODF 4.18 we sometimes see no D, N prefix in the name of entity. This is not confirmed visually
+                # so we make exception for this case, checking "\n" within text
+                name = text.split("\n")[1] if "\n" in text else text
                 entity_names.append(name)
                 time.sleep(0.1)
             self.topology_df["entity_name"] = entity_names
@@ -709,7 +711,7 @@ class TopologyTab(DataFoundationDefaultTab, AbstractTopologyView):
         if cluster_app_name_cli != cluster_name_ui:
             logger.error(
                 "cluster app name from UI and from CLI are not identical\n"
-                f"cluster_app_name_cli = '{cluster_app_name_cli}'"
+                f"cluster_app_name_cli = '{cluster_app_name_cli}'\n"
                 f"cluster_name_ui = '{cluster_name_ui}'"
             )
             topology_deviation["cluster_app_name_not_equal"] = True
@@ -903,7 +905,8 @@ class OdfTopologyNodesView(TopologyTab):
         :return: names of the groups
         """
         elements = self.get_elements(self.topology_loc["node_group_name"])
-        return [el.text for el in elements if "OCS" not in el.text and el.text.strip()]
+        # starting from ODF 4.18 group name is an id only and not duplicated to html text
+        return [el.get_attribute("data-id") for el in elements]
 
     def get_cluster_name(self) -> str:
         """
@@ -914,7 +917,9 @@ class OdfTopologyNodesView(TopologyTab):
         cluster_name_el = self.get_elements(self.topology_loc["topology_node_parent"])[
             0
         ]
-        return cluster_name_el.text
+        # automation framework is not stable in this part, sometimes we do not have SC\n prefix, although it is visible
+        text = cluster_name_el.text
+        return text.split("\n")[1] if "\n" in text else text
 
     @retry(TimeoutException)
     def nav_into_node(

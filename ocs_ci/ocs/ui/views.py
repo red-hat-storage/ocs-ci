@@ -1851,8 +1851,8 @@ topology = {
         By.XPATH,
     ),
     "entity_box_select_indicator": (
-        "//*[@class='pf-topology__node__label']"
-        "//*[contains(text(), '{}')]/../../../..",
+        "//*[@class='pf-topology__node__label']//*[contains(text(), '{}')]"
+        "/ancestor::*[starts-with(@class, 'pf-topology__node ')]",
         By.XPATH,
     ),
     # this is complex locator, it is used to find node with specific name and via its ancestor find the arrow to enter
@@ -1871,9 +1871,11 @@ topology = {
         "//*[@class='pf-topology__group odf-topology__group odf-topology__group-state--error']",
         By.XPATH,
     ),
-    # node_group_name may be 'zone-<num>' or 'rack-<num>'
+    # node_group_name may be 'zone-<num>' or 'rack-<num>', exclude other elements that are not node groups
     "node_group_name": (
-        "//*[@data-kind='node' and @data-type='group' and not (@transform)]",
+        "//*[@data-kind='node' and @data-type='group' "
+        "and not(@transform) "
+        "and *[contains(@class, 'odf-topology__group--zone')]]",
         By.XPATH,
     ),
     # topology node parent, that aggregates n of nodes or n of deployments
