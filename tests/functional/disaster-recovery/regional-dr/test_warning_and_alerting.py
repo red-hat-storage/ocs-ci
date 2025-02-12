@@ -130,12 +130,10 @@ class TestRDRWarningAndAlerting:
             pvc_interface=constants.CEPHBLOCKPOOL,
         )
         workload_names.append(f"{rdr_workload[0].workload_name}-1")
-        rdr_workload.append(
-            dr_workload(
-                num_of_subscription=0,
-                num_of_appset=1,
-                pvc_interface=constants.CEPHFILESYSTEM,
-            )
+        dr_workload(
+            num_of_subscription=0,
+            num_of_appset=1,
+            pvc_interface=constants.CEPHFILESYSTEM,
         )
         workload_names.append(f"{rdr_workload[1].workload_name}-1-cephfs")
 
