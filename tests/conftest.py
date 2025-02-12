@@ -1919,7 +1919,6 @@ def cluster_load(
     io_in_bg = ocsci_config.RUN.get("io_in_bg")
     log_utilization = ocsci_config.RUN.get("log_utilization")
     io_load = ocsci_config.RUN.get("io_load")
-    cluster_load_error = None
     cluster_load_error_msg = (
         "Cluster load might not work correctly during this run, because "
         "it failed with an exception: %s"
@@ -1929,6 +1928,8 @@ def cluster_load(
     deployment_test = (
         True if ("deployment" in request.node.items[0].location[0]) else False
     )
+    from ocs_ci.ocs import cluster_load
+
     if io_in_bg and not deployment_test:
         io_load = int(io_load) * 0.01
         log.info(wrap_msg("Tests will be running while IO is in the background"))
@@ -1949,7 +1950,7 @@ def cluster_load(
             cl_load_obj.reach_cluster_load_percentage()
         except Exception as ex:
             log.error(cluster_load_error_msg, ex)
-            cluster_load_error = ex
+            cluster_load.cluster_load_error = ex
 
     if (log_utilization or io_in_bg) and not deployment_test:
         if not cl_load_obj:
@@ -1957,7 +1958,7 @@ def cluster_load(
                 cl_load_obj = ClusterLoad(threading_lock=threading_lock)
             except Exception as ex:
                 log.error(cluster_load_error_msg, ex)
-                cluster_load_error = ex
+                cluster_load.cluster_load_error = ex
 
         ocsci_config.RUN["load_status"] = "running"
 
@@ -1965,11 +1966,7 @@ def cluster_load(
             """
             Stop the thread that executed watch_load()
             """
-            ocsci_config.RUN["load_status"] = "finished"
-            if thread:
-                thread.join()
-            if cluster_load_error:
-                raise cluster_load_error
+            cluster_load.finish_cluster_load()
 
         request.addfinalizer(finalizer)
 
@@ -2001,11 +1998,14 @@ def cluster_load(
 
                 # Any type of exception should be caught and we should continue.
                 # We don't want any test to fail
-                except Exception:
+                except Exception as ex:
+                    log.error(f"Cluster load hit an exception: {ex}")
                     continue
 
-        thread = threading.Thread(target=watch_load)
-        thread.start()
+        cluster_load.cluster_load_thread = threading.Thread(
+            target=watch_load, daemon=True
+        )
+        cluster_load.cluster_load_thread.start()
 
 
 def resume_cluster_load_implementation():
@@ -7934,3 +7934,15 @@ def scale_noobaa_db_pod_pv_size(request):
 
     request.addfinalizer(finalizer)
     return factory
+
+
+def pytest_sessionfinish(session, exitstatus):
+    """
+    Do some session finish teardown functionality
+    """
+    from ocs_ci.ocs import cluster_load
+
+    try:
+        cluster_load.finish_cluster_load()
+    except Exception:
+        log.exception("During finishing the Cluster load an exception was hit!")
