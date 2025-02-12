@@ -66,19 +66,9 @@ def ibm_cleanup():
 def delete_buckets(hours):
     """ """
     status = []
-    # config.ENV_DATA["cluster_path"] = "/"
-    # config.ENV_DATA["cluster_name"] = "cluster"
-    # from ocs_ci.utility.ibmcloud import IBMCloudObjectStorage
-    # ibm_obj_storage = IBMCloudObjectStorage()
-    # ibm_cloud_ipi_obj = IBMCloudIPI()
-    # buckets = ibm_cloud_ipi_obj.get_bucket_list()
-    # buckets_delete = buckets_to_delete(buckets, hours)
     api_key = config.AUTH["ibmcloud"]["api_key"]
     service_instance_id = config.AUTH["ibmcloud"]["cos_instance_crn"]
-    endpoint_url = constants.IBM_COS_GEO_ENDPOINT_TEMPLATE.format("us-east")
-    # backingstore = get_backingstore()
-    # bucket_name = backingstore["spec"]["ibmCos"]["targetBucket"]
-    # logger.debug(f"bucket name from backingstore: {bucket_name}")
+    endpoint_url = constants.IBM_COS_GEO_ENDPOINT_TEMPLATE.format("us")
     cos = IBMCloudObjectStorage(
         api_key=api_key,
         service_instance_id=service_instance_id,
@@ -92,16 +82,6 @@ def delete_buckets(hours):
             status.append(bucket_delete_name)
     if len(status) > 0:
         raise Exception(f"Failed to delelte buckets {status}")
-
-    # for bucket_delete in buckets_delete:
-    #     try:
-    #         ibm_cloud_ipi_obj.delete_bucket(bucket_delete)
-    #     except Exception as e:
-    #         log = f"Failed to delete {bucket_delete}\nerror: {e}"
-    #         logger.info(log)
-    #         status.append(log)
-    # if len(status) > 0:
-    #     raise Exception(status)
 
 
 def buckets_to_delete(buckets, hours):
