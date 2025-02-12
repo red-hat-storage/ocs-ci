@@ -61,6 +61,7 @@ from ocs_ci.utility.utils import (
     update_container_with_mirrored_image,
     exec_cmd,
     get_ocs_build_number,
+    wait_for_machineconfigpool_status,
 )
 from ocs_ci.utility.utils import convert_device_size
 
@@ -5452,6 +5453,42 @@ def update_volsync_channel():
             logger.error(
                 f"Pod volsync-controller-manager not in {constants.STATUS_RUNNING} after 300 seconds"
             )
+
+
+def update_volsync_icsp():
+    """
+    Update Volsync ImageContentSourcePolicy.
+
+    """
+    logger.info("Creating ImageContentSourcePolicy for Volsync")
+    restore_index = config.cur_index
+    non_acm_clusters = get_non_acm_cluster_config()
+    from ocs_ci.ocs.resources.pod import delete_pods, get_all_pods
+
+    for non_acm_cluster in non_acm_clusters:
+        index = non_acm_cluster.MULTICLUSTER["multicluster_index"]
+        config.switch_ctx(index)
+        run_cmd(f"oc apply -f {constants.ACM_BREW_ICSP_YAML}")
+        wait_for_machineconfigpool_status("all", timeout=1800)
+        volsync_pod_list = get_all_pods(
+            namespace=constants.VOLSYNC_NAMESPACE,
+            selector_label="app.kubernetes.io/name=volsync",
+        )
+        delete_pods(volsync_pod_list, wait=True)
+        logger.info("Verify volsync pods in Running state")
+        sample = TimeoutSampler(
+            timeout=300,
+            sleep=10,
+            func=check_pods_status_by_pattern,
+            pattern="volsync",
+            namespace=constants.VOLSYNC_NAMESPACE,
+            expected_status=constants.STATUS_RUNNING,
+        )
+        if not sample.wait_for_func_status(result=True):
+            logger.error(
+                f"Pod volsync not in {constants.STATUS_RUNNING} after 300 seconds"
+            )
+    config.switch_ctx(restore_index)
 
 
 def verify_nb_db_psql_version(check_image_name_version=True):
