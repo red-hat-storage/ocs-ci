@@ -579,7 +579,7 @@ def download_objects_using_s3cmd(
     ), "Failed to download objects"
 
 
-def rm_object_recursive(podobj, target, mcg_obj, option=""):
+def rm_object_recursive(podobj, target, mcg_obj, option="", timeout=600):
     """
     Remove bucket objects with --recursive option
 
@@ -601,6 +601,7 @@ def rm_object_recursive(podobj, target, mcg_obj, option=""):
             mcg_obj.access_key,
             mcg_obj.s3_internal_endpoint,
         ],
+        timeout=timeout,
     )
 
 
@@ -3032,3 +3033,62 @@ def get_obj_versions(mcg_obj, awscli_pod, bucket_name, obj_key):
             d["ETag"] = d["ETag"].strip('"')
 
     return versions_dicts
+
+
+def generate_empty_files(aws_pod, dir, amount, pattern="File", timeout=600):
+    """
+    Generate empty files with unique identifiers
+
+    Args:
+        aws_pod (Pod): Pod object for aws-cli pod
+        dir (str): directory where the files need to generated
+        amount (int): number of files to be generated
+        pattern (str): pattern to use as prefix for the filename
+
+    """
+    aws_pod.exec_sh_cmd_on_pod(
+        command=f"for i in $(seq 1 {amount});do touch {dir}/{pattern}-$i;done",
+        timeout=timeout,
+    )
+    logger.info(f"Generated {amount} empty files successfully")
+
+
+def verify_objs_deleted_from_objmds(bucket_name, timeout=600, sleep=30):
+    """
+    Verify that all the objects are marked deletion time by checking
+    the objmds table in nbcore db.
+
+    Args:
+        bucket_name (str): Name of the bucket
+        timeout (int): Timeout until all the objects are expired
+
+    """
+
+    def _check_objs_deletion():
+
+        bucket_id = exec_nb_db_query(
+            f"select data->>'_id' as ID from buckets where data->>'name'='{bucket_name}'"
+        )[0].strip()
+
+        objs_count = exec_nb_db_query(
+            f"select count(*) from objectmds where data->>'bucket'='{bucket_id}'"
+        )[0].strip()
+        objs_deleted_count = exec_nb_db_query(
+            f"select count(*) from objectmds where data->>'bucket'='{bucket_id}' AND data ? 'deleted'"
+        )[0].strip()
+
+        logger.info(f"Objects count: {objs_count}")
+        logger.info(f"Objects deleted count: {objs_deleted_count}")
+
+        return int(objs_count) == int(objs_deleted_count)
+
+    sampler = TimeoutSampler(
+        timeout=timeout,
+        sleep=sleep,
+        func=_check_objs_deletion,
+    )
+
+    assert sampler.wait_for_func_status(
+        result=True
+    ), "Not all the objects are marked deleted"
+    logger.info("All the objects are marked expired")
