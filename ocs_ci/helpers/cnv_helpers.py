@@ -5,10 +5,12 @@ Helper functions specific for CNV
 import os
 import base64
 import logging
+import re
 
 from ocs_ci.helpers.helpers import create_unique_resource_name, create_resource
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.exceptions import CommandFailed
+from ocs_ci.ocs.ocp import OCP
 from ocs_ci.utility import templating
 from ocs_ci.helpers.helpers import (
     create_ocs_object_from_kind_and_name,
@@ -365,3 +367,76 @@ def run_dd_io(vm_obj, file_path, size="10240", username=None, verify=False):
             file_path=file_path,
             username=username,
         )
+
+
+def verifyvolume(vm_name, volume_name, namespace):
+    """
+    Verify a volume in VM.
+
+    Args:
+        vm_name (str): Name of the virtual machine
+        volume_name (str): Name of the volume (PVC) to verify
+        namespace (str): Virtual Machine Namespace
+
+    Returns:
+        bool: True if the volume (PVC) is found, False otherwise
+
+    """
+    cmd = (
+        f"get vm {vm_name} -n {namespace} -o "
+        + "jsonpath='{.spec.template.spec.volumes}'"
+    )
+    try:
+        output = OCP().exec_oc_cmd(command=cmd)
+        logger.info(f"Output of the command '{cmd}': {output}")
+        for volume in output:
+            if volume.get("persistentVolumeClaim", {}).get("claimName") == volume_name:
+                logger.info(
+                    f"Hotpluggable PVC {volume_name} is visible inside the VM {vm_name}"
+                )
+                return True
+        logger.warning(f"PVC {volume_name} not found inside the VM {vm_name}")
+        return False
+    except Exception as e:
+        logger.error(f"Error executing command '{cmd}': {e}")
+        return False
+
+
+def verify_hotplug(vm_obj, disks_before_hotplug):
+    """
+    Verifies if a disk has been hot-plugged into/removed from a VM.
+
+    Args:
+        disks_before_hotplug (str): Set of disk information before hot-plug or add.
+        vm_obj (VM object): The virtual machine object to check.
+
+    Returns:
+        bool: True if a hot-plugged disk is detected, False otherwise.
+
+    """
+    try:
+        disks_after_hotplug_raw = vm_obj.run_ssh_cmd("lsblk -o NAME,SIZE,MOUNTPOINT -P")
+        disks_after_hotplug = set(
+            re.findall(r'NAME="([^"]+)"', disks_after_hotplug_raw)
+        )
+        disks_before_hotplug = set(re.findall(r'NAME="([^"]+)"', disks_before_hotplug))
+
+        logger.info(f"Disks before hotplug:\n{disks_before_hotplug}")
+        logger.info(f"Disks found after hotplug:\n{disks_after_hotplug}")
+
+        added_disks = disks_after_hotplug - disks_before_hotplug
+        removed_disks = disks_before_hotplug - disks_after_hotplug
+
+        if added_disks or removed_disks:
+            logger.info(
+                f"Hotplug difference detected: Added: {added_disks}, "
+                f"Removed: {removed_disks}"
+            )
+            return True
+        logger.info(f"No hotplug difference detected in VM {vm_obj.name}")
+        return False
+    except Exception as error:
+        logger.error(
+            f"Error occurred while verifying hotplug in VM {vm_obj.name}: {str(error)}"
+        )
+        return False
