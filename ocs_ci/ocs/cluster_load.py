@@ -28,6 +28,10 @@ cluster_load_thread = None
 cluster_load_error = None
 
 
+cluster_load_thread = None
+cluster_load_error = None
+
+
 def wrap_msg(msg):
     """
     Wrap a log message with '=' marks.
@@ -485,8 +489,7 @@ def finish_cluster_load():
     logger.info("Finishing cluster load!")
     config.RUN["load_status"] = "finished"
     if cluster_load_thread:
-        logger.info("Waiting for 60 seconds to get cluster load thread finished!")
-        cluster_load_thread.join(timeout=60)
+        cluster_load_thread.join()
     logger.info("Cluster load thread finished!")
     if cluster_load_error:
         raise cluster_load_error
