@@ -75,29 +75,35 @@ def create_pod_on_failure_domain(project_factory, pod_factory, failure_domain: s
 @skipif_external_mode
 class TestReplicaOne:
     @pytest.fixture(scope="class")
-    def replica1_setup(self):
-        log.info("Setup function called")
+    def replica1_setup(self, request):
+        """
+        Setup function to enable replica-1 feature.
+        Skip for test_cluster_before_configuration.
+        """
         storage_cluster = StorageCluster(
             resource_name=config.ENV_DATA["storage_cluster_name"],
             namespace=config.ENV_DATA["cluster_namespace"],
         )
-        set_non_resilient_pool(storage_cluster)
-        validate_non_resilient_pool(storage_cluster)
-        storage_cluster.wait_for_resource(
-            condition=STATUS_READY, column="PHASE", timeout=180, sleep=15
-        )
-        osd_names_n_id = get_replica_1_osds()
-        osd_names = list(osd_names_n_id.keys())
 
-        for osd in osd_names:
-            pod = OCP(
-                kind=POD,
-                namespace=config.ENV_DATA["cluster_namespace"],
-                resource_name=osd,
+        if not request.node.get_closest_marker("replica1_validation"):
+            log.info("Setup function called")
+            set_non_resilient_pool(storage_cluster)
+            validate_non_resilient_pool(storage_cluster)
+            storage_cluster.wait_for_resource(
+                condition=STATUS_READY, column="PHASE", timeout=180, sleep=15
             )
-            pod.wait_for_resource(condition=STATUS_RUNNING, column="STATUS")
+            osd_names_n_id = get_replica_1_osds()
+            osd_names = list(osd_names_n_id.keys())
 
-        return storage_cluster
+            for osd in osd_names:
+                pod = OCP(
+                    kind=POD,
+                    namespace=config.ENV_DATA["cluster_namespace"],
+                    resource_name=osd,
+                )
+                pod.wait_for_resource(condition=STATUS_RUNNING, column="STATUS")
+
+        yield storage_cluster
 
     @pytest.fixture(scope="class")
     def replica1_teardown(self, request, replica1_setup):
@@ -117,9 +123,33 @@ class TestReplicaOne:
             condition=STATUS_READY, column="PHASE", timeout=1800, sleep=60
         )
 
+    @pytest.mark.replica1_validation
     def test_cluster_before_configuration(
         self, pod_factory, pvc_factory, project_factory
     ):
+        """
+        Test cluster configuration before enabling replica-1 feature.
+        Skip if replica-1 is already enabled.
+
+        Args:
+            pod_factory: Factory for creating pods
+            pvc_factory: Factory for creating PVCs
+            project_factory: Factory for creating projects
+        """
+        storage_cluster = StorageCluster(
+            resource_name=config.ENV_DATA["storage_cluster_name"],
+            namespace=config.ENV_DATA["cluster_namespace"],
+        )
+
+        # Check if replica-1 is enabled
+        if (
+            storage_cluster.data.get("spec", {})
+            .get("managedResources", {})
+            .get("cephNonResilientPools", {})
+            .get("enable")
+        ):
+            pytest.skip("Test requires replica-1 to be disabled initially")
+
         self.osd_before_test = count_osd_pods()
         log.info(f"{self.osd_before_test} OSD pods detected Before test")
         self.kb_before_workload = get_osd_kb_used_data()
@@ -176,6 +206,8 @@ class TestReplicaOne:
             f"{pgs_before_workload} PGS before test\n{pgs_after_workload} PGS after test"
         )
         kb_after_workload = get_osd_kb_used_data()
+        log.info(f"KB before workload: {kb_before_workload}")
+        log.info(f"KB after workload: {kb_after_workload}")
         osds = get_device_class_from_ceph()
         osd_number = get_all_osd_names_by_device_class(osds, failure_domains[0])
         diff = compare_dictionaries(kb_before_workload, kb_after_workload, osd_number)
