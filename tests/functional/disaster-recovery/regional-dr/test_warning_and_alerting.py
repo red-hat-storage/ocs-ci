@@ -96,14 +96,14 @@ class TestRDRWarningAndAlerting:
             "action",
         ],
         argvalues=[
-            pytest.param(
-                constants.ACTION_FAILOVER,
-                marks=pytest.mark.polarion_id("xxx"),
-            ),
             # pytest.param(
-            #     constants.ACTION_RELOCATE,
-            #     marks=pytest.mark.polarion_id("yyy"),
+            #     constants.ACTION_FAILOVER,
+            #     marks=pytest.mark.polarion_id("xxx"),
             # ),
+            pytest.param(
+                constants.ACTION_RELOCATE,
+                marks=pytest.mark.polarion_id("yyy"),
+            ),
         ],
     )
     # TODO: Update polarion IDs
