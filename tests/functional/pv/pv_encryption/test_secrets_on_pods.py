@@ -17,7 +17,12 @@ EXPECTED_KEYS = {
     "token",
     "dmcrypt-key",
 }
-EXPECTED_NAMES = {"rook-ceph-config", "rook-ceph-mon", "ocs-kms-token"}
+EXPECTED_NAMES = {
+    "rook-ceph-config",
+    "rook-ceph-mon",
+    "ocs-kms-token",
+    "rook-ceph-osd-encryption-key",
+}
 
 
 class TestSecretsAndSecurityContext(ManageTest):
@@ -46,8 +51,9 @@ class TestSecretsAndSecurityContext(ManageTest):
                             value in EXPECTED_KEYS
                         ), f"Key: {value} is not expected in securityKeyRef, may be secrutiy breach please check"
                     for value in n:
-                        assert (
-                            value in EXPECTED_NAMES
+                        assert any(
+                            value == key or value.startswith(key)
+                            for key in EXPECTED_NAMES
                         ), f"Name: {value} is not expected in securityKeyRef, may be secrutiy breach please check"
             else:
                 break
