@@ -734,3 +734,7 @@ class TolerationNotFoundException(Exception):
 
 class VMIndexNotFoundException(Exception):
     pass
+
+
+class ActiveMdsValueNotMatch(Exception):
+    pass
