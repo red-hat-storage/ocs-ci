@@ -760,17 +760,24 @@ class MCG:
             namespacestore.name for namespacestore in namespacestores
         ]
         namestores_name_str = f"{','.join(namestores_name_list)}"
+
         namespace_policy_type = namespace_policy["type"].lower()
-        if namespace_policy_type != constants.NAMESPACE_POLICY_TYPE_SINGLE.lower():
+        cmd = f"bucketclass create namespace-bucketclass {namespace_policy_type} {name}"
+
+        if namespace_policy_type == constants.NAMESPACE_POLICY_TYPE_SINGLE.lower():
+            cmd += f" --resource={namestores_name_str}"
+            self.exec_mcg_cmd(cmd)
+        elif namespace_policy_type == constants.NAMESPACE_POLICY_TYPE_CACHE.lower():
+            cmd += f" --hub-resource={namestores_name_str}"
+            cmd += " --backingstores=constants.DEFAULT_NOOBAA_BACKINGSTORE"
+            if "ttl" in namespace_policy:
+                cmd += f" --ttl=={namespace_policy['ttl']}"
+            self.exec_mcg_cmd(cmd)
+        else:
             raise NotImplementedError(
                 f"Cli creating of bucketclass on namespacestore "
                 f"with policy {namespace_policy_type} is not implemented yet"
             )
-
-        self.exec_mcg_cmd(
-            f"bucketclass create namespace-bucketclass {namespace_policy_type} "
-            f"--resource={namestores_name_str} {name}"
-        )
 
     def check_if_mirroring_is_done(self, bucket_name, timeout=300):
         """

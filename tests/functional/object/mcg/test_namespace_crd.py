@@ -143,7 +143,24 @@ class TestNamespace(MCGTest):
                 marks=[
                     tier1,
                     on_prem_platform_required,
-                    pytest.mark.polarion_id("OCS-2407"),
+                    pytest.mark.polarion_id("OCS-6339"),
+                ],
+            ),
+            pytest.param(
+                {
+                    "interface": "CLI",
+                    "namespace_policy_dict": {
+                        "type": "Cache",
+                        "ttl": 300000,
+                        "namespacestore_dict": {
+                            "rgw": [(1, None)],
+                        },
+                    },
+                },
+                marks=[
+                    tier1,
+                    on_prem_platform_required,
+                    pytest.mark.polarion_id("OCS-6338"),
                 ],
             ),
             pytest.param(
@@ -218,6 +235,7 @@ class TestNamespace(MCGTest):
             "Azure-OC-Single",
             "RGW-OC-Single",
             "RGW-CLI-Single",
+            "RGW-CLI-Cache",
             "IBM-OC-Single",
             "AWS+Azure-OC-Multi",
             "AWS+AWS-OC-Multi",
