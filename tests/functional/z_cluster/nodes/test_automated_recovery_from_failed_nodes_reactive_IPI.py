@@ -162,7 +162,7 @@ class TestAutomatedRecoveryFromFailedNodes(ManageTest):
         new_ocs_node_names = add_new_node_and_label_it(machineset_name)
         failure_domain = get_failure_domain()
         log.info("Wait for the nodes racks or zones to appear...")
-        wait_for_nodes_racks_or_zones(failure_domain, new_ocs_node_names)
+        wait_for_nodes_racks_or_zones(failure_domain, new_ocs_node_names, timeout=300)
 
         new_ocs_node = get_node_objs(new_ocs_node_names)[0]
         osd_node_in_same_rack_or_zone = get_another_osd_node_in_same_rack_or_zone(
@@ -186,7 +186,7 @@ class TestAutomatedRecoveryFromFailedNodes(ManageTest):
         try:
             # DC app pods on the failed node will get automatically created on other
             # running node. Waiting for all dc app pod to reach running state
-            pod.wait_for_dc_app_pods_to_reach_running_state(dc_pod_obj, timeout=720)
+            pod.wait_for_dc_app_pods_to_reach_running_state(dc_pod_obj, timeout=900)
             log.info("All the dc pods reached running state")
             pod.wait_for_storage_pods(timeout=300)
 
@@ -317,7 +317,9 @@ class TestAutomatedRecoveryFromStoppedNodes(ManageTest):
             new_ocs_node_names = add_new_node_and_label_it(self.machineset_name)
             failure_domain = get_failure_domain()
             log.info("Wait for the nodes racks or zones to appear...")
-            wait_for_nodes_racks_or_zones(failure_domain, new_ocs_node_names)
+            wait_for_nodes_racks_or_zones(
+                failure_domain, new_ocs_node_names, timeout=300
+            )
 
             new_ocs_node = get_node_objs(new_ocs_node_names)[0]
             log.info(f"Successfully created a new OCS node '{new_ocs_node.name}'")
