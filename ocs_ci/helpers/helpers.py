@@ -685,6 +685,7 @@ def default_storage_class(
         OCS: Existing StorageClass Instance
     """
     external = config.DEPLOYMENT["external_mode"]
+    rbd_namespace = config.EXTERNAL_MODE.get("rbd_namespace")
     custom_storage_class = config.ENV_DATA.get("custom_default_storageclass_names")
     if custom_storage_class:
         from ocs_ci.ocs.resources.storage_cluster import (
@@ -702,7 +703,9 @@ def default_storage_class(
                     f"StorageCluster spec doesn't have the custom name for '{constants.CEPHBLOCKPOOL}' storageclass"
                 )
         else:
-            if external:
+            if rbd_namespace:
+                resource_name = f"{constants.DEFAULT_EXTERNAL_MODE_STORAGECLASS_RBD_NAMESPACE_PREFIX}-{rbd_namespace}"
+            elif external:
                 resource_name = constants.DEFAULT_EXTERNAL_MODE_STORAGECLASS_RBD
             elif config.ENV_DATA["platform"].lower() in constants.HCI_PC_OR_MS_PLATFORM:
                 storage_class = OCP(kind="storageclass")

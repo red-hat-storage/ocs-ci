@@ -463,9 +463,12 @@ def ocs_install_verification(
         )
 
     elif config.DEPLOYMENT["external_mode"]:
-        sc_rbd = storage_class.get(
-            resource_name=constants.DEFAULT_EXTERNAL_MODE_STORAGECLASS_RBD
-        )
+        rbd_namespace = config.EXTERNAL_MODE.get("rbd_namespace")
+        if rbd_namespace:
+            rbd_resource_name = f"{constants.DEFAULT_EXTERNAL_MODE_STORAGECLASS_RBD_NAMESPACE_PREFIX}-{rbd_namespace}"
+        else:
+            rbd_resource_name = constants.DEFAULT_EXTERNAL_MODE_STORAGECLASS_RBD
+        sc_rbd = storage_class.get(resource_name=rbd_resource_name)
         sc_cephfs = storage_class.get(
             resource_name=(constants.DEFAULT_EXTERNAL_MODE_STORAGECLASS_CEPHFS)
         )
