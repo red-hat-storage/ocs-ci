@@ -359,7 +359,7 @@ class ClusterLoad:
                     query, str(timestamp(now())), mute_logs=mute_logs, log_debug=True
                 )[0]["value"][1]
             )
-        except requests.exceptions.RequestException as e:
+        except (requests.exceptions.RequestException, IndexError) as e:
             logger.info(
                 f"Encountered error: {e}. Refreshing connection and retrying..."
             )
