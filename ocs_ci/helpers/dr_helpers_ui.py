@@ -5,6 +5,9 @@ Helper functions specific to DR User Interface
 import logging
 
 from selenium.common.exceptions import NoSuchElementException
+from selenium.webdriver.common.by import By
+from selenium.webdriver.support.wait import WebDriverWait
+
 from ocs_ci.framework import config
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.exceptions import ResourceWrongStatusException
@@ -12,6 +15,7 @@ from ocs_ci.ocs.ui.views import locators
 from ocs_ci.ocs.ui.helpers_ui import format_locator
 from ocs_ci.utility.utils import get_ocp_version
 from ocs_ci.ocs.utils import get_non_acm_cluster_config
+from selenium.webdriver.support import expected_conditions as EC
 
 log = logging.getLogger(__name__)
 
@@ -216,6 +220,7 @@ def failover_relocate_ui(
         timeout (int): timeout to wait for certain elements to be found on the ACM UI
         move_workloads_to_same_cluster (bool): Bool condition to test negative failover/relocate scenarios to move
                                             running workloads to same cluster
+        workload_type (str): Type of workload, appset or subscription
         do_not_trigger (bool): If in case you do not want to click on the Initiate button
                             so as not to initiate the operation, set it to True. It's False by default.
     Returns:
@@ -249,8 +254,16 @@ def failover_relocate_ui(
         acm_obj.do_clear(acm_loc["search-bar"])
         log.info(f"Enter the workload to be searched {workload_to_move}")
         acm_obj.do_send_keys(acm_loc["search-bar"], text=workload_to_move)
-        acm_obj.page_has_loaded()
         log.info("Click on kebab menu option")
+        kebab_button = WebDriverWait(acm_obj, 10).until(
+            EC.element_to_be_clickable(
+                (
+                    By.XPATH,
+                    "(//td[@class='pf-v5-c-table__td pf-v5-c-table__action']//button)[1]",
+                )
+            )
+        )
+        acm_obj.execute_script("arguments[0].click();", kebab_button)
         acm_obj.do_click(
             acm_loc["kebab-action"], enable_screenshot=True, avoid_stale=True
         )

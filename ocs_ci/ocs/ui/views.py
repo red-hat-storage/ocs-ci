@@ -1164,7 +1164,7 @@ acm_configuration_4_18 = {
     ),
     "apply-filter": ("//div[@class='pf-v5-c-select']", By.XPATH),
     "kebab-action": (
-        "(//td[@class='pf-v5-c-table__td pf-v5-c-table__action'])[1]",
+        "(//td[@class='pf-v5-c-table__td pf-v5-c-table__action']//button)[1]",
         By.XPATH,
     ),
     "failover-app": ("//span[contains(text(),'Failover application')]", By.XPATH),

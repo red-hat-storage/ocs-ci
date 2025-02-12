@@ -36,23 +36,6 @@ logger = logging.getLogger(__name__)
 @pytest.fixture
 def scale_up_deployment(request):
     def teardown():
-        # rdr_workload_rbd = dr_workload(
-        #     num_of_subscription=1,
-        #     num_of_appset=0,
-        #     pvc_interface=constants.CEPHBLOCKPOOL,
-        # )
-        # primary_cluster_name = dr_helpers.get_current_primary_cluster_name(
-        #     rdr_workload_rbd[0].workload_namespace
-        # )
-        # config.switch_to_cluster_by_name(primary_cluster_name)
-        # # Validate replica count is set to 1
-        # config_obj = ocp.OCP(
-        #     kind=constants.DEPLOYMENT,
-        #     namespace=constants.OPENSHIFT_IMAGE_REGISTRY_NAMESPACE,
-        # )
-        # replica_count = config_obj.get().get("spec").get("replicas")
-        # if replica_count != 2:
-        #     modify_registry_pod_count(count=2)
         primary_config = get_primary_cluster_config()
         primary_index = primary_config.MULTICLUSTER.get("multicluster_index")
         secondary_index = [
