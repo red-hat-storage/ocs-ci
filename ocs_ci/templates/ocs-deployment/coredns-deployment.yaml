@@ -1,0 +1,64 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: odf-dns
+  namespace: openshift-storage
+  labels:
+    app: odf-dns
+spec:
+  selector:
+    matchLabels:
+      app: odf-dns
+  template:
+    metadata:
+      namespace: openshift-storage
+      labels:
+        app: odf-dns
+    spec:
+      containers:
+        - args:
+            - -conf
+            - /etc/coredns/Corefile
+          command:
+            - coredns
+          image: quay.io/openshift-release-dev/ocp-v4.0-art-dev@sha256:16f82af39788414dcd7f889b5ee7e07bdc9760ee3d0320c65dcfe14d1f6786ce
+          imagePullPolicy: IfNotPresent
+          name: odf-dns
+          ports:
+            - containerPort: 5353
+              name: dns
+              protocol: UDP
+            - containerPort: 5353
+              name: dns-tcp
+              protocol: TCP
+          resources:
+            requests:
+              cpu: 50m
+              memory: 70Mi
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: ["ALL"]
+            runAsNonRoot: true
+            seccompProfile:
+              type: RuntimeDefault
+          terminationMessagePath: /dev/termination-log
+          terminationMessagePolicy: FallbackToLogsOnError
+          volumeMounts:
+            - mountPath: /etc/coredns
+              name: config-volume
+              readOnly: true
+      nodeSelector:
+        kubernetes.io/os: linux
+      preemptionPolicy: PreemptLowerPriority
+      priority: 2000001000
+      priorityClassName: system-node-critical
+      restartPolicy: Always
+      schedulerName: default-scheduler
+      serviceAccount: rook-ceph-system
+      serviceAccountName: rook-ceph-system
+      terminationGracePeriodSeconds: 30
+      volumes:
+        - configMap:
+            name: odf-dns
+          name: config-volume
