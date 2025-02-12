@@ -249,9 +249,12 @@ def failover_relocate_ui(
         acm_obj.do_clear(acm_loc["search-bar"])
         log.info(f"Enter the workload to be searched {workload_to_move}")
         acm_obj.do_send_keys(acm_loc["search-bar"], text=workload_to_move)
+        acm_obj.page_has_loaded()
         log.info("Click on kebab menu option")
-        acm_obj.do_click(acm_loc["kebab-action"], enable_screenshot=True)
-        acm_obj.take_screenshot()
+        acm_obj.do_click(
+            acm_loc["kebab-action"], enable_screenshot=True, avoid_stale=True
+        )
+        log.info("Kebab menu options are open")
         if action == constants.ACTION_FAILOVER:
             log.info("Selecting action as Failover from ACM UI")
             acm_obj.do_click(
