@@ -22,7 +22,7 @@ from ocs_ci.ocs.constants import (
     REPLICA1_STORAGECLASS,
 )
 from ocs_ci.ocs.exceptions import CommandFailed
-
+from ocs_ci.utility.utils import TimeoutSampler
 
 log = getLogger(__name__)
 
@@ -88,7 +88,9 @@ def get_replica_1_osds() -> dict:
 
     """
     replica1_osds = dict()
-    all_osds = get_pods_having_label(label=OSD_APP_LABEL)
+    all_osds = get_pods_having_label(
+        label=OSD_APP_LABEL, namespace=config.ENV_DATA["cluster_namespace"]
+    )
     for domain in get_failure_domains():
         for osd in all_osds:
             if osd["metadata"]["labels"]["ceph.rook.io/DeviceSet"] == domain:
@@ -156,7 +158,11 @@ def count_osd_pods() -> int:
         int: number of OSDs in cluster
 
     """
-    return len(get_pods_having_label(label=OSD_APP_LABEL))
+    return len(
+        get_pods_having_label(
+            label=OSD_APP_LABEL, namespace=config.ENV_DATA["cluster_namespace"]
+        )
+    )
 
 
 def delete_replica_1_sc() -> None:
@@ -164,7 +170,11 @@ def delete_replica_1_sc() -> None:
     Deletes storage class associated with replica1
 
     """
-    sc_obj = OCP(kind=STORAGECLASS, resource_name=REPLICA1_STORAGECLASS)
+    sc_obj = OCP(
+        kind=STORAGECLASS,
+        resource_name=REPLICA1_STORAGECLASS,
+        namespace=config.ENV_DATA["cluster_namespace"],
+    )
     try:
         sc_obj.delete(resource_name=REPLICA1_STORAGECLASS)
     except CommandFailed as e:
@@ -267,17 +277,48 @@ def get_all_osd_names_by_device_class(osd_dict: dict, device_class: str) -> list
     ]
 
 
+def get_ceph_osd_df_output():
+    """
+    Retrieves the Ceph OSD df tree output using TimeoutSampler.
+
+    Returns:
+        dict: The JSON output of 'ceph osd df tree' command.
+
+    Raises:
+        Exception: If unable to get valid output after maximum retries.
+    """
+    ceph_pod = get_ceph_tools_pod(namespace=config.ENV_DATA["cluster_namespace"])
+    timeout = 120
+    sleep = 10
+
+    sampler = TimeoutSampler(
+        timeout=timeout,
+        sleep=sleep,
+        func=lambda: ceph_pod.exec_cmd_on_pod(
+            command="ceph osd df tree -f json-pretty"
+        ),
+    )
+
+    try:
+        for output in sampler:
+            if output is not None:
+                return output
+        raise Exception("Failed to get valid output after maximum retries")
+    except Exception as e:
+        log.error(f"Error while getting ceph osd df data: {str(e)}")
+        raise
+
+
 def get_osd_kb_used_data() -> dict:
     """
     Retrieves the KB used data for each OSD from the Ceph cluster.
 
     Returns:
         dict: kb_used_data("osd_name": kb_used_data)
-
     """
-    ceph_pod = get_ceph_tools_pod()
-    output = ceph_pod.exec_cmd_on_pod("ceph osd df tree -f json-pretty")
+    output = get_ceph_osd_df_output()
     log.info(f"DF tree: {output}")
+
     nodes = output["nodes"]
     kb_used_data = dict()
     for node in nodes:
