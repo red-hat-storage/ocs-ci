@@ -67,7 +67,9 @@ def get_csv_from_image(bundle_image):
         raise
 
 
-def mirror_images_from_mapping_file(mapping_file, icsp=None, ignore_image=None):
+def mirror_images_from_mapping_file(
+    mapping_file, icsp=None, idms=None, ignore_image=None
+):
     """
     Mirror images based on mapping.txt file.
 
@@ -93,6 +95,28 @@ def mirror_images_from_mapping_file(mapping_file, icsp=None, ignore_image=None):
                 for policy in icsp["spec"]["repositoryDigestMirrors"]:
                     # we use only first defined mirror for particular source,
                     # because we don't use any ICSP with more mirrors for one
+                    # source and it will make the logic very complex and
+                    # confusing
+                    line = line.replace(policy["source"], policy["mirrors"][0])
+                mapping_file_content.append(line)
+        # write mapping file to disk
+        mapping_file = "_updated".join(os.path.splitext(mapping_file))
+        with open(mapping_file, "w") as f:
+            f.writelines(mapping_file_content)
+
+    if idms:
+        # update mapping.txt file with urls updated based on provided
+        # ImageDigestMirrorSet
+        with open(mapping_file) as mf:
+            mapping_file_content = []
+            for line in mf:
+                # exclude ignore_image
+                if ignore_image and ignore_image in line:
+                    continue
+                # apply any matching policy to all lines from mapping file
+                for policy in idms["spec"]["imageDigestMirrors"]:
+                    # we use only first defined mirror for particular source,
+                    # because we don't use any IDMS with more mirrors for one
                     # source and it will make the logic very complex and
                     # confusing
                     line = line.replace(policy["source"], policy["mirrors"][0])
