@@ -3,11 +3,15 @@
 Module for interactions with Openshift Dedciated Cluster.
 """
 
+import argparse
 import json
 import logging
 import os
 import re
+import sys
+import yaml
 
+from ocs_ci import framework
 from ocs_ci.framework import config
 from ocs_ci.framework.logger_helper import log_step
 from ocs_ci.ocs import constants, ocp
@@ -31,12 +35,11 @@ from ocs_ci.utility.managedservice import (
 from ocs_ci.utility.openshift_dedicated import get_cluster_details
 from ocs_ci.utility.retry import catch_exceptions
 from ocs_ci.utility.utils import exec_cmd, TimeoutSampler
-from ocs_ci.utility.version import get_latest_rosa_ocp_version
+from ocs_ci.utility import version
 
 logger = logging.getLogger(name=__file__)
 rosa = config.AUTH.get("rosa", {})
 rosa_hcp = config.ENV_DATA.get("platform") == constants.ROSA_HCP_PLATFORM
-auth_data = config.AUTH.get("openshiftdedicated", {})
 # to trace the leftovers of aws resources - use the date + letters for every role, config, etc.
 date_in_minimal_format = utils.date_in_minimal_format()
 random_letters = utils.get_random_letters(3)
@@ -46,7 +49,7 @@ def login():
     """
     Login to ROSA client
     """
-    token = auth_data["token"]
+    token = config.AUTH.get("openshiftdedicated", {})["token"]
     ms_env = config.ENV_DATA.get("ms_env_type", "staging")
     cmd = f"rosa login --token={token}"
     if ms_env != "production":
@@ -80,7 +83,7 @@ def create_cluster(cluster_name, version, region):
             f"Selecting latest rosa version for deployment"
         )
         logger.info(f"Looking for z-stream version of {version}")
-        rosa_ocp_version = get_latest_rosa_ocp_version(version)
+        rosa_ocp_version = version.get_latest_rosa_ocp_version(version)
         logger.info(f"Using OCP version {rosa_ocp_version}")
 
     if rosa_hcp:
@@ -1219,3 +1222,83 @@ def upgrade_rosa_cluster(cluster_name, version):
     cmd = f"rosa upgrade cluster --cluster {cluster_name} --control-plane --version {version} --mode auto --yes"
     proc = exec_cmd(cmd, timeout=2400)
     logger.info(f"Upgrade cluster command output:\n {proc.stdout.decode().strip()}")
+
+
+def rosa_ocp_version_endpoint():
+    """
+    Endpoint for getting available OCP versions form ROSA.
+    """
+    parser = argparse.ArgumentParser(
+        description="Get information about available OCP versions from ROSA"
+    )
+    parser.add_argument(
+        "--debug",
+        "-d",
+        action="store_true",
+        default=False,
+        help="Print logging messages (mainly useful for debugging).",
+    )
+    parser.add_argument(
+        "--get-available-versions",
+        "-a",
+        action="store_true",
+        default=False,
+        help="Get all available OCP versions from ROSA",
+    )
+    parser.add_argument(
+        "--check-available-version",
+        "-c",
+        action="store",
+        default=None,
+        metavar="OCP_VERSION",
+        help=(
+            "Check if provided OCP version is available in ROSA, "
+            "if available, returns latest z-stream version"
+        ),
+    )
+    parser.add_argument(
+        "--ocsci-conf",
+        action="store",
+        required=True,
+        type=argparse.FileType("r", encoding="UTF-8"),
+        help="""OCM Credentials configuration file in yaml format.
+            Example file:
+                ---
+                AUTH:
+                  openshiftdedicated:
+                    token: '<TOKEN>'
+            """,
+    )
+    args = parser.parse_args()
+
+    if args.debug:
+        FORMAT = "%(asctime)s - %(threadName)s - %(name)s - %(levelname)s - %(message)s"
+        logging.basicConfig(format=FORMAT, level=logging.DEBUG)
+
+    # load auth data to config
+    rosa_conf = args.ocsci_conf
+    config_data = yaml.safe_load(rosa_conf)
+    framework.config.update(config_data)
+    rosa_conf.close()
+
+    utils.add_path_to_env_path(os.path.expanduser(config.RUN["bin_dir"]))
+    download_rosa_cli()
+    login()
+
+    versions = version.get_ocp_versions_rosa(yaml_format=True)
+    if args.get_available_versions:
+        for v in versions:
+            print(v["raw_id"])
+        sys.exit(0)
+
+    if args.check_available_version:
+        for v in versions:
+            if v["raw_id"].startswith(args.check_available_version):
+                print(v["raw_id"])
+                sys.exit(0)
+        else:
+            print(
+                f"Version {args.check_available_version} not available in ROSA.",
+                file=sys.stderr,
+            )
+            sys.exit(255)
