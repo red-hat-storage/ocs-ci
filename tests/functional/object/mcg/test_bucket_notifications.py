@@ -112,8 +112,10 @@ class TestBucketNotifications(MCGTest):
         )
 
         # 4. Verify the bucket notification configuration was set correctly
-        resp = notif_manager.get_bucket_notification(awscli_pod, mcg_obj, bucket)
-        assert resp["TopicConfiguration"]["Topic"] == conn_config_path
+        resp = notif_manager.get_bucket_notification_configuration(
+            awscli_pod, mcg_obj, bucket
+        )
+        assert resp["TopicConfigurations"][0]["TopicArn"] == conn_config_path
 
         # 5. Write some objects to the bucket
         obj_keys = write_random_test_objects_to_bucket(
