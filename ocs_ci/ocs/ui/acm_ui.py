@@ -166,12 +166,15 @@ class AcmPageNavigator(BaseUI):
             timeout=240,
         )
         if find_element:
+            log.info("Data Services page found")
             element = self.driver.find_element_by_xpath(
                 "//button[normalize-space()='Data Services']"
             )
             if element.get_attribute("aria-expanded") == "false":
                 self.do_click(
-                    locator=self.acm_page_nav["data-services"], avoid_stale=True
+                    locator=self.acm_page_nav["data-services"],
+                    avoid_stale=True,
+                    enable_screenshot=True,
                 )
             disaster_recovery = self.wait_until_expected_text_is_found(
                 locator=self.acm_page_nav["disaster-recovery"],
@@ -183,6 +186,9 @@ class AcmPageNavigator(BaseUI):
                     locator=self.acm_page_nav["disaster-recovery"],
                     enable_screenshot=True,
                     avoid_stale=True,
+                )
+                log.info(
+                    "Successfully navigated to Disaster recovery Overview page under 'Data Services' on ACM console"
                 )
         else:
             log.error(
