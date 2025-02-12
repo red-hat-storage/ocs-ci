@@ -101,7 +101,7 @@ class TestReplicationWithVersioning(MCGTest):
         update_replication_policy(source_bucket.name, replication_policy.to_dict())
 
         # 3. Write some versions to the source bucket
-        source_etags = upload_obj_versions(
+        upload_obj_versions(
             mcg_obj,
             awscli_pod,
             source_bucket.name,
