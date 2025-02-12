@@ -1,0 +1,10 @@
+apiVersion: multicluster.openshift.io/v1
+kind: MultiClusterEngine
+metadata:
+  name: multiclusterengine
+spec:
+  overrides:
+    components:
+      - name: local-cluster
+        enabled: true
+  availabilityConfig: High
