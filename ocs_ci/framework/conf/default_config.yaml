@@ -259,6 +259,7 @@ ENV_DATA:
   multus_public_net_namespace: "openshift-storage"
   multus_public_net_interface: "br-ex"
   multus_public_net_range: "192.168.20.0/24"
+  multus_public_ipv6_net_range: "fd01:db8:1:1::/96"
   multus_public_net_type: "macvlan"
   multus_public_net_mode: "bridge"
   multus_create_cluster_net: true
@@ -266,6 +267,7 @@ ENV_DATA:
   multus_cluster_net_namespace: "openshift-storage"
   multus_cluster_net_interface: "br-ex"
   multus_cluster_net_range: "192.168.30.0/24"
+  multus_cluster_ipv6_net_range: "fd01:db8:2:1::/96"
   multus_cluster_net_type: "macvlan"
   multus_cluster_net_mode: "bridge"
   multus_destination_route: "192.168.252.0/24"

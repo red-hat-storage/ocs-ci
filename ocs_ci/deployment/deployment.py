@@ -1084,8 +1084,11 @@ class Deployment(object):
                         node_obj.exec_oc_debug_cmd(node=node, cmd_list=[ip_link_cmd])
 
             if create_public_net:
+                nad_to_load = constants.MULTUS_PUBLIC_NET_YAML
                 logger.info("Creating Multus public network")
-                public_net_data = templating.load_yaml(constants.MULTUS_PUBLIC_NET_YAML)
+                if config.DEPLOYMENT.get("ipv6"):
+                    nad_to_load = constants.MULTUS_PUBLIC_NET_IPV6_YAML
+                public_net_data = templating.load_yaml(nad_to_load)
                 public_net_data["metadata"]["name"] = config.ENV_DATA.get(
                     "multus_public_net_name"
                 )
@@ -1097,9 +1100,14 @@ class Deployment(object):
                 public_net_config_dict["master"] = config.ENV_DATA.get(
                     "multus_public_net_interface"
                 )
-                public_net_config_dict["ipam"]["range"] = config.ENV_DATA.get(
-                    "multus_public_net_range"
-                )
+                if not config.DEPLOYMENT.get("ipv6"):
+                    public_net_config_dict["ipam"]["range"] = config.ENV_DATA.get(
+                        "multus_public_net_range"
+                    )
+                else:
+                    public_net_config_dict["ipam"]["range"] = config.ENV_DATA.get(
+                        "multus_public_ipv6_net_range"
+                    )
                 public_net_config_dict["type"] = config.ENV_DATA.get(
                     "multus_public_net_type"
                 )
@@ -1115,6 +1123,10 @@ class Deployment(object):
 
             if create_cluster_net:
                 logger.info("Creating Multus cluster network")
+                if config.DEPLOYMENT.get("ipv6"):
+                    constants.MULTUS_CLUSTER_NET_YAML = (
+                        constants.MULTUS_CLUSTER_NET_IPV6_YAML
+                    )
                 cluster_net_data = templating.load_yaml(
                     constants.MULTUS_CLUSTER_NET_YAML
                 )
@@ -1129,12 +1141,14 @@ class Deployment(object):
                 cluster_net_config_dict["master"] = config.ENV_DATA.get(
                     "multus_cluster_net_interface"
                 )
-                cluster_net_config_dict["ipam"]["range"] = config.ENV_DATA.get(
-                    "multus_cluster_net_range"
-                )
-                cluster_net_config_dict["type"] = config.ENV_DATA.get(
-                    "multus_cluster_net_type"
-                )
+                if not config.DEPLOYMENT.get("ipv6"):
+                    cluster_net_config_dict["ipam"]["range"] = config.ENV_DATA.get(
+                        "multus_cluster_net_range"
+                    )
+                else:
+                    cluster_net_config_dict["ipam"]["range"] = config.ENV_DATA.get(
+                        "multus_cluster_ipv6_net_range"
+                    )
                 cluster_net_config_dict["mode"] = config.ENV_DATA.get(
                     "multus_cluster_net_mode"
                 )
