@@ -10,6 +10,7 @@ import re
 from ocs_ci.helpers.helpers import create_unique_resource_name, create_resource
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.exceptions import CommandFailed
+from ocs_ci.ocs.node import get_node_objs
 from ocs_ci.ocs.ocp import OCP
 from ocs_ci.utility import templating
 from ocs_ci.helpers.helpers import (
@@ -440,3 +441,14 @@ def verify_hotplug(vm_obj, disks_before_hotplug):
             f"Error occurred while verifying hotplug in VM {vm_obj.name}: {str(error)}"
         )
         return False
+
+
+@retry(AssertionError, tries=5, delay=10, backoff=1)
+def all_nodes_ready():
+    nodes = get_node_objs()
+    for node in nodes:
+        assert (
+            node.ocp.get_resource_status(node.name) == "Ready"
+        ), f"Node {node.name} is not in Ready state"
+    logger.info("All nodes are in Ready state.")
+    return True
