@@ -1,0 +1,21 @@
+NODE_FAILURES:
+  WAIT_TILL_NODE_JOIN: true
+  FAILURES:
+  - POWEROFF_NODE:
+      NODE_TYPE:
+        - "master"
+        - "worker"
+      node_selector: 
+        - labels: []
+      ITERATION: 10
+  - NODE_DRAIN:
+      node_selector:
+        - labels: []
+  WORKLOAD:
+    FIO:
+      - CEPHFS:
+        template: "fio_cephfs_template.yaml"
+        name: "cephfs-fio-workload"
+      - BLOCK:
+        template: "fio_block_template.yaml"
+        name: "block-fio-workload"
