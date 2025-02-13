@@ -209,7 +209,7 @@ class StretchCluster(OCS):
             try:
                 pause_count = 0
                 time_var = start_time
-                logger.info(f"Current logreader pod: {pod_obj.name}")
+                logger.info(f"Current log-reader pod: {pod_obj.name}")
                 pod_log = get_pod_logs(
                     pod_name=pod_obj.name, namespace=constants.STRETCH_CLUSTER_NAMESPACE
                 )
