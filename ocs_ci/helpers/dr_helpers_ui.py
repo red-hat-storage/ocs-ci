@@ -258,6 +258,7 @@ def failover_relocate_ui(
             try:
                 kebab_button = wait_for_element_to_be_clickable(acm_loc["kebab-action"])
                 acm_obj.do_click(kebab_button, avoid_stale=True)
+                break
             except Exception:
                 time.sleep(2)
         log.info("Kebab menu options are open")
