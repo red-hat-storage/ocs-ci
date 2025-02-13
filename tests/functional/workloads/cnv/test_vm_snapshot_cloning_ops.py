@@ -147,9 +147,16 @@ class TestVmSnapshotClone(E2ETest):
             pvc_obj = vm_obj.get_vm_pvc_obj()
             new_size = 50
             if pvc_expand_before_snapshot:
-                if not expand_pvc_and_verify(
-                    vm_obj, new_size, failed_vms=failed_vms, vm_objs_def=vm_objs_def
-                ):
+                try:
+                    expand_pvc_and_verify(vm_obj, new_size)
+                except ValueError as e:
+                    log.error(
+                        f"Error for VM {vm_obj.name}: {e}. Continuing with the next VM."
+                    )
+                    failed_vms.append(
+                        f"{vm_obj.name} (Config: {vm_obj.pvc_access_mode}-{vm_obj.volume_interface}, "
+                        f"Storage Compression: {'default' if vm_obj in vm_objs_def else 'aggressive'})"
+                    )
                     continue
             # Writing IO on source VM
             source_csum = run_dd_io(vm_obj=vm_obj, file_path=file_paths[0], verify=True)
@@ -181,9 +188,16 @@ class TestVmSnapshotClone(E2ETest):
 
             # Expand PVC if `pvc_expand_after_restore` is True
             if pvc_expand_after_restore:
-                if not expand_pvc_and_verify(
-                    vm_obj, new_size, failed_vms=failed_vms, vm_objs_def=vm_objs_def
-                ):
+                try:
+                    expand_pvc_and_verify(vm_obj, new_size)
+                except ValueError as e:
+                    log.error(
+                        f"Error for VM {vm_obj.name}: {e}. Continuing with the next VM."
+                    )
+                    failed_vms.append(
+                        f"{vm_obj.name} (Config: {vm_obj.pvc_access_mode}-{vm_obj.volume_interface}, "
+                        f"Storage Compression: {'default' if vm_obj in vm_objs_def else 'aggressive'})"
+                    )
                     continue
 
             # Validate data integrity of file written before taking snapshot
