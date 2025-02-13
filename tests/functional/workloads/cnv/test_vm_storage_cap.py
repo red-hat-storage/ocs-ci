@@ -104,6 +104,7 @@ class TestVmStorageCapacity(E2ETest):
         vm_pause = random.sample(vm_list, 1)
         for vm in vm_pause:
             vm.pause()
+            vm_list.remove(vm)
 
         logger.info("Verifying cluster stability before capacity addition...")
         assert all_nodes_ready(), "Some nodes are not ready!"
