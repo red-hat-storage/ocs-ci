@@ -1531,53 +1531,72 @@ def taint_nodes(nodes, taint_label=None):
             log.info(f"{node} was not tainted - {e}")
 
 
-def check_taint_on_nodes(taint=None):
+def has_taint(node_obj, taint):
     """
-    Function to check for particular taint on nodes
+    Check if a specific node has a given taint.
 
     Args:
-        taint (str): The taint to check on nodes
+        node_obj (ocs_ci.ocs.resources.ocs.OCS): The node object
+        taint (str): The taint key to check.
 
-    Return:
-        bool: True if taint is present on node. False otherwise
+    Returns:
+        bool: True if the node has the taint, False otherwise.
+
+    """
+    taints = node_obj.get().get("spec", {}).get("taints", [])
+    return any(t.get("key") in taint for t in taints)
+
+
+def check_taint_on_nodes(taint=None):
+    """
+    Check if any node in the cluster has a specific taint.
+
+    Args:
+        taint (str): The taint key to check on nodes.
+
+    Returns:
+        bool: True if the taint is present on any node, False otherwise.
 
     """
     taint = taint if taint else constants.OPERATOR_NODE_TAINT
     nodes = get_nodes()
-    flag = -1
+
     for node_obj in nodes:
-        if node_obj.get().get("spec").get("taints"):
-            if taint in node_obj.get().get("spec").get("taints")[0].get("key"):
-                log.info(f"Node {node_obj.name} has taint {taint}")
-                flag = 1
-        else:
-            flag = 0
-        return bool(flag)
+        if has_taint(node_obj, taint):
+            log.info(f"Node {node_obj.name} has taint {taint}")
+            return True
+
+    return False
 
 
 def untaint_nodes(taint_label=None, nodes_to_untaint=None):
     """
-    Function to remove taints from nodes
+    Function to remove taints from specific nodes.
 
     Args:
-        taint_label (str): taint to use
-        nodes_to_untaint (list): list of node objs to untaint
+        taint_label (str): The taint key to remove.
+        nodes_to_untaint (list): List of node objects to untaint.
 
-    Return:
-        bool: True if untainted, false otherwise
+    Returns:
+        bool: True if untainted successfully, False otherwise.
 
     """
-    if check_taint_on_nodes():
-        ocp = OCP()
-        ocs_nodes = get_ocs_nodes()
-        nodes_to_untaint = nodes_to_untaint if nodes_to_untaint else ocs_nodes
-        taint = taint_label if taint_label else constants.OPERATOR_NODE_TAINT
-        for node in nodes_to_untaint:
+    ocp = OCP()
+    ocs_nodes = get_ocs_nodes()
+    nodes_to_untaint = nodes_to_untaint if nodes_to_untaint else ocs_nodes
+    taint = taint_label if taint_label else constants.OPERATOR_NODE_TAINT
+
+    result = False
+    for node in nodes_to_untaint:
+        if has_taint(node, taint):
             taint_cmd = f"adm taint nodes {node.name} {taint}-"
             ocp.exec_oc_cmd(command=taint_cmd)
-            log.info(f"Untainted {node.name}")
-        return True
-    return False
+            log.info(f"Successfully untainted {node.name}")
+            result = True
+        else:
+            log.info(f"Node {node.name} does not have the taint {taint}")
+
+    return result
 
 
 def get_node_pods(node_name, pods_to_search=None, raise_pod_not_found_error=False):
