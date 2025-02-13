@@ -452,3 +452,20 @@ def all_nodes_ready():
         ), f"Node {node.name} is not in Ready state"
     logger.info("All nodes are in Ready state.")
     return True
+
+
+def get_vm_status(vm_obj):
+    """
+    Get the status of a VM.
+
+    Args:
+        vm_obj (VM): The VM object.
+
+    Returns:
+        str: The status of the VM.
+    """
+    try:
+        return vm_obj.get().get("status", {}).get("phase", "Unknown")
+    except Exception as e:
+        logger.error(f"Failed to get VM status for {vm_obj.name}: {e}")
+        return "Error"

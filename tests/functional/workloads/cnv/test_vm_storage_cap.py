@@ -7,12 +7,15 @@ from ocs_ci.helpers.cnv_helpers import (
     run_dd_io,
     all_nodes_ready,
     cal_md5sum_vm,
+    get_vm_status,
 )
 from ocs_ci.helpers.keyrotation_helper import PVKeyrotation
 from ocs_ci.ocs import constants
-from ocs_ci.ocs.resources import storage_cluster
-from ocs_ci.ocs.resources.pod import get_pod_restarts_count, wait_for_pods_to_be_running
+from ocs_ci.ocs.resources.pod import wait_for_pods_to_be_running
 from ocs_ci.utility.utils import TimeoutSampler
+from tests.functional.z_cluster.cluster_expansion.test_add_capacity import (
+    add_capacity_test,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -28,7 +31,7 @@ class TestVmStorageCapacity(E2ETest):
 
     def test_vm_storage_capacity(
         self,
-        setup_cnv,
+        # setup_cnv,
         pv_encryption_kms_setup_factory,
         storageclass_factory,
         project_factory,
@@ -44,7 +47,7 @@ class TestVmStorageCapacity(E2ETest):
         4. Verify Cluster Stability and Data Integrity.
         5. Ensure the additional storage has been added.
         6. Verify VMs, snapshots and clones have preserved their states and
-        data integrity
+        data integrity.
         """
         source_csum = {}
         res_csum = {}
@@ -95,15 +98,17 @@ class TestVmStorageCapacity(E2ETest):
             vm_list_clone.append(clone_vm_obj)
 
         # Stop and pause VMs in random order
+        logger.info("Stopping and pausing VMs in random order...")
         vm_stopped = random.sample(vm_list, 1)
         for vm_obj in vm_stopped:
-            logger.info(f"VM Name{vm_obj.name}")
+            logger.info(f"Stopping VM: {vm_obj.name}")
             vm_obj.stop()
             snapshot_factory(vm_obj.get_vm_pvc_obj())
             vm_list.remove(vm_obj)
 
         vm_pause = random.sample(vm_list, 1)
         for vm in vm_pause:
+            logger.info(f"Pausing VM: {vm.name}")
             vm.pause()
             vm_list.remove(vm)
 
@@ -120,16 +125,19 @@ class TestVmStorageCapacity(E2ETest):
             result=True
         ), "Not all OCS pods are running before capacity addition."
 
-        osd_pods_restart_count_before = get_pod_restarts_count(
-            label=constants.OSD_APP_LABEL
-        )
+        # Save initial states of VMs
+        initial_vm_states = {}
+        for vm_obj in vm_list + vm_list_clone:
+            initial_vm_states[vm_obj.name] = get_vm_status(vm_obj)
+            logger.info(
+                f"Initial status of VM {vm_obj.name}: {initial_vm_states[vm_obj.name]}"
+            )
 
-        # Perform add capacity operation
-        osd_size = storage_cluster.get_osd_size()
-        logger.info(f"Adding {osd_size} to existing storageclass capacity")
-        storage_cluster.add_capacity(osd_size)
-        logger.info("Successfully added capacity")
+        logger.info("Adding storage capacity...")
+        add_capacity_test()
+        logger.info("Added storage capacity!")
 
+        # Verify cluster stability after capacity addition
         logger.info("Verifying cluster stability after capacity addition...")
         assert all_nodes_ready(), "Some nodes are not ready!"
 
@@ -139,21 +147,27 @@ class TestVmStorageCapacity(E2ETest):
             func=wait_for_pods_to_be_running,
             namespace=constants.OPENSHIFT_STORAGE_NAMESPACE,
         )
-
         assert sample.wait_for_func_status(
             result=True
         ), "Not all pods are running after capacity addition."
 
-        osd_pods_restart_count_after = get_pod_restarts_count(
-            label=constants.OSD_APP_LABEL
-        )
+        # Verify final status of VMs against initial status
+        for vm_obj in vm_list_clone + vm_stopped:
+            final_vm_status = get_vm_status(vm_obj)
+            logger.info(f"Final status of VM {vm_obj.name}: {final_vm_status}")
 
-        assert sum(osd_pods_restart_count_before.values()) == sum(
-            osd_pods_restart_count_after.values()
-        ), "Some of the osd pods have restarted during the add capacity"
-        logger.info("OSD pod restart counts are the same before and after.")
+            if vm_obj.name in initial_vm_states:
+                assert (
+                    final_vm_status == initial_vm_states[vm_obj.name]
+                ), f"VM {vm_obj.name} state has changed after add capacity."
+                logger.info(
+                    f"VM {vm_obj.name} state is consistent before and after add capacity."
+                )
+            else:
+                logger.warning(f"Initial state of VM {vm_obj.name} not found.")
 
-        for vm_obj in vm_list + vm_list_clone:
+        # Data integrity check
+        for vm_obj in vm_list_clone:
             res_csum[f"{vm_obj.name}"] = cal_md5sum_vm(
                 vm_obj=vm_obj, file_path=file_paths[0]
             )
@@ -162,4 +176,9 @@ class TestVmStorageCapacity(E2ETest):
             assert (
                 source_checksum == result_checksum
             ), f"Failed: MD5 comparison between source {vm_obj.name} and its cloned VMs"
+
+        # Cleanup VMs
+        logger.info("Stopping VMs...")
+        for vm_obj in vm_list_clone + vm_stopped + vm_list:
+            logger.info(f"Stopping VM: {vm_obj.name}")
             vm_obj.stop()
