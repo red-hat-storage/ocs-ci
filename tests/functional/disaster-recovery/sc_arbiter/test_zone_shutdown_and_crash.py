@@ -13,7 +13,13 @@ from ocs_ci.helpers.stretchcluster_helper import (
 from ocs_ci.ocs.resources.stretchcluster import StretchCluster
 from ocs_ci.ocs.ocp import OCP
 from ocs_ci.ocs.resources.pvc import get_pvc_objs
-from ocs_ci.ocs.node import wait_for_nodes_status, get_nodes
+from ocs_ci.ocs.node import (
+    wait_for_nodes_status,
+    get_nodes,
+    get_worker_nodes,
+    get_master_nodes,
+    get_node_objs,
+)
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.resources.pod import (
     get_ceph_tools_pod,
@@ -23,10 +29,8 @@ from ocs_ci.ocs.resources.pod import (
 from ocs_ci.helpers.sanity_helpers import Sanity
 from ocs_ci.ocs.exceptions import (
     CommandFailed,
-    ResourceWrongStatusException,
     CephHealthException,
 )
-from ocs_ci.utility.retry import retry
 from ocs_ci.framework.pytest_customization.marks import (
     tier1,
     turquoise_squad,
@@ -34,7 +38,62 @@ from ocs_ci.framework.pytest_customization.marks import (
     jira,
 )
 
+
 log = logging.getLogger(__name__)
+
+
+@pytest.fixture()
+def init_sanity(request, nodes):
+    """
+    Initial Cluster sanity
+    """
+    sanity_helpers = Sanity()
+
+    def finalizer():
+        """
+        Make sure all the nodes are Running and
+        the ceph health is OK at the end of the test
+        """
+
+        # check if all the nodes are Running
+        log.info("Checking if all the nodes are READY")
+        master_nodes = get_nodes(node_type=constants.MASTER_MACHINE)
+        worker_nodes = get_nodes(node_type=constants.WORKER_MACHINE)
+        nodes_not_ready = list()
+        nodes_not_ready.extend(
+            [node for node in worker_nodes if node.status() != "Ready"]
+        )
+        nodes_not_ready.extend(
+            [node for node in master_nodes if node.status() != "Ready"]
+        )
+
+        if len(nodes_not_ready) != 0:
+            try:
+                nodes.start_nodes(nodes=nodes_not_ready)
+            except Exception:
+                log.error(
+                    f"Something went wrong while starting the nodes {nodes_not_ready}!"
+                )
+                raise
+            wait_for_nodes_status(timeout=600)
+            log.info(
+                f"Following nodes {nodes_not_ready} were NOT READY, are now in READY state"
+            )
+        else:
+            log.info("All nodes are READY")
+
+        # check cluster health
+        try:
+            log.info("Making sure ceph health is OK")
+            sanity_helpers.health_check(tries=50, cluster_check=False)
+        except CephHealthException as e:
+            assert (
+                "HEALTH_WARN" in e.args[0]
+            ), f"Ignoring Ceph health warnings: {e.args[0]}"
+            get_ceph_tools_pod().exec_ceph_cmd(ceph_cmd="ceph crash archive-all")
+            log.info("Archived ceph crash!")
+
+    request.addfinalizer(finalizer)
 
 
 @tier1
@@ -43,69 +102,6 @@ log = logging.getLogger(__name__)
 class TestZoneShutdownsAndCrashes:
 
     zones = constants.DATA_ZONE_LABELS
-
-    @pytest.fixture()
-    def init_sanity(self, request, nodes):
-        """
-        Initial Cluster sanity
-        """
-        self.sanity_helpers = Sanity()
-
-        def finalizer():
-            """
-            Make sure all the nodes are Running and
-            the ceph health is OK at the end of the test
-            """
-
-            # check if all the nodes are Running
-            log.info("Checking if all the nodes are READY")
-            master_nodes = get_nodes(node_type=constants.MASTER_MACHINE)
-            worker_nodes = get_nodes(node_type=constants.WORKER_MACHINE)
-            nodes_not_ready = list()
-            nodes_not_ready.extend(
-                [node for node in worker_nodes if node.status() != "Ready"]
-            )
-            nodes_not_ready.extend(
-                [node for node in master_nodes if node.status() != "Ready"]
-            )
-
-            if len(nodes_not_ready) != 0:
-                try:
-                    nodes.start_nodes(nodes=nodes_not_ready)
-                except Exception:
-                    log.error(
-                        f"Something went wrong while starting the nodes {nodes_not_ready}!"
-                    )
-                    raise
-
-                retry(
-                    (
-                        CommandFailed,
-                        TimeoutError,
-                        AssertionError,
-                        ResourceWrongStatusException,
-                    ),
-                    tries=28,
-                    delay=15,
-                )(wait_for_nodes_status(timeout=1800))
-                log.info(
-                    f"Following nodes {nodes_not_ready} were NOT READY, are now in READY state"
-                )
-            else:
-                log.info("All nodes are READY")
-
-            # check cluster health
-            try:
-                log.info("Making sure ceph health is OK")
-                self.sanity_helpers.health_check(tries=50, cluster_check=False)
-            except CephHealthException as e:
-                assert (
-                    "HEALTH_WARN" in e.args[0]
-                ), f"Ignoring Ceph health warnings: {e.args[0]}"
-                get_ceph_tools_pod().exec_ceph_cmd(ceph_cmd="ceph crash archive-all")
-                log.info("Archived ceph crash!")
-
-        request.addfinalizer(finalizer)
 
     @pytest.mark.parametrize(
         argnames="iteration, immediate, delay",
@@ -261,6 +257,7 @@ class TestZoneShutdownsAndCrashes:
 
             # Validate all nodes are in READY state and up
             wait_for_nodes_status(timeout=600)
+
             log.info(f"Nodes of zone {zone} are started successfully")
             log.info(f"Failure started at {start_time} and ended at {end_time}")
 
@@ -535,6 +532,164 @@ class TestZoneShutdownsAndCrashes:
 
         # check if the data can be copied back to local machine
         vm_obj.scp_from_vm(local_path="/tmp", vm_src_path="/test/file_1.txt")
+        log.info("VM data is successfully copied back to local machine")
+
+        # stop the VM
+        vm_obj.stop()
+        log.info("Stoped the VM successfully")
+
+        # check for any data loss
+        check_for_logwriter_workload_pods(sc_obj, nodes=nodes)
+
+        assert sc_obj.check_for_data_loss(
+            constants.LOGWRITER_CEPHFS_LABEL
+        ), "[CephFS] Data is lost"
+        log.info("[CephFS] No data loss is seen")
+        assert sc_obj.check_for_data_loss(
+            constants.LOGWRITER_RBD_LABEL
+        ), "[RBD] Data is lost"
+        log.info("[RBD] No data loss is seen")
+
+        # check for data corruption
+        sc_obj.cephfs_logreader_job.delete()
+        for pod in sc_obj.cephfs_logreader_pods:
+            pod.wait_for_pod_delete(timeout=120)
+        log.info("All old logreader pods are deleted")
+        pvc = get_pvc_objs(
+            pvc_names=[
+                sc_obj.cephfs_logwriter_dep.get()["spec"]["template"]["spec"][
+                    "volumes"
+                ][0]["persistentVolumeClaim"]["claimName"]
+            ],
+            namespace=constants.STRETCH_CLUSTER_NAMESPACE,
+        )[0]
+        logreader_workload_factory(
+            pvc=pvc, logreader_path=constants.LOGWRITER_CEPHFS_READER, duration=5
+        )
+
+        sc_obj.get_logwriter_reader_pods(constants.LOGREADER_CEPHFS_LABEL)
+
+        wait_for_pods_to_be_in_statuses(
+            expected_statuses=constants.STATUS_COMPLETED,
+            pod_names=[pod.name for pod in sc_obj.cephfs_logreader_pods],
+            timeout=900,
+            namespace=constants.STRETCH_CLUSTER_NAMESPACE,
+        )
+        log.info("Logreader job pods have reached 'Completed' state!")
+
+        assert sc_obj.check_for_data_corruption(
+            label=constants.LOGREADER_CEPHFS_LABEL
+        ), "Data is corrupted for cephFS workloads"
+        log.info("No data corruption is seen in CephFS workloads")
+
+        assert sc_obj.check_for_data_corruption(
+            label=constants.LOGWRITER_RBD_LABEL
+        ), "Data is corrupted for RBD workloads"
+        log.info("No data corruption is seen in RBD workloads")
+
+
+class TestGracefulShutdowns:
+
+    @pytest.mark.parametrize(
+        argnames="node_types",
+        argvalues=[
+            pytest.param(
+                "worker",
+            ),
+            pytest.param("master"),
+        ],
+    )
+    def test_gracefull_shutdown(
+        self,
+        init_sanity,
+        reset_conn_score,
+        setup_logwriter_cephfs_workload_factory,
+        setup_logwriter_rbd_workload_factory,
+        logreader_workload_factory,
+        nodes,
+        cnv_workload,
+        setup_cnv,
+        node_types,
+    ):
+        """
+        Test node grace full shutdown while the workloads are Running
+
+        """
+
+        sc_obj = StretchCluster()
+
+        # Run the logwriter cephFs workloads
+        log.info("Running logwriter cephFS and RBD workloads")
+        (
+            sc_obj.cephfs_logwriter_dep,
+            sc_obj.cephfs_logreader_job,
+        ) = setup_logwriter_cephfs_workload_factory(read_duration=0)
+        sc_obj.rbd_logwriter_sts = setup_logwriter_rbd_workload_factory(
+            zone_aware=False
+        )
+
+        # setup vm and write some data to the VM instance
+        vm_obj = cnv_workload(volume_interface=constants.VM_VOLUME_PVC)
+        vm_obj.run_ssh_cmd(
+            command="dd if=/dev/zero of=/file_1.txt bs=1024 count=102400"
+        )
+        md5sum_before = cal_md5sum_vm(vm_obj, file_path="/file_1.txt")
+
+        # make sure all the worload pods are running
+        check_for_logwriter_workload_pods(sc_obj, nodes=nodes)
+        log.info("All logwriter workload pods are running successfully")
+
+        # fetch all the node objects for the nodes to be shutdown
+        if node_types == "worker":
+            nodes_to_shutdown = get_node_objs(get_worker_nodes())
+        else:
+            nodes_to_shutdown = get_node_objs(get_master_nodes())
+
+        # stop the nodes
+        nodes.stop_nodes(nodes=nodes_to_shutdown)
+        if node_types == "worker":
+            wait_for_nodes_status(
+                node_names=[node.name for node in nodes_to_shutdown],
+                status=constants.NODE_NOT_READY,
+                timeout=300,
+            )
+        log.info(f"{node_types} nodes shutdown successfully!")
+
+        time.sleep(60)
+        log.info("a moment to breathe!")
+
+        # start the nodes
+        try:
+            nodes.start_nodes(nodes=nodes_to_shutdown)
+        except Exception:
+            log.error("something went wrong while starting the nodes!")
+
+        # validate all nodes are in READY state and up
+        wait_for_nodes_status(timeout=600)
+        log.info("all the nodes are up and running!")
+
+        # wait for all storage pods to be running or completed
+        # wait_for_pods_to_be_running()
+        time.sleep(600)
+        log.info("all the storage pods are running!")
+
+        # check vm data written before the failure for integrity
+        md5sum_after = cal_md5sum_vm(vm_obj, file_path="/file_1.txt")
+        assert (
+            md5sum_before == md5sum_after
+        ), "Data integrity of the file inside VM is not maintained during the failure"
+        log.info(
+            "Data integrity of the file inside VM is maintained during the failure"
+        )
+
+        # check if new data can be created
+        vm_obj.run_ssh_cmd(
+            command="dd if=/dev/zero of=/file_2.txt bs=1024 count=103600"
+        )
+        log.info("Successfully created new data inside VM")
+
+        # check if the data can be copied back to local machine
+        vm_obj.scp_from_vm(local_path="/tmp", vm_src_path="/file_1.txt")
         log.info("VM data is successfully copied back to local machine")
 
         # stop the VM
