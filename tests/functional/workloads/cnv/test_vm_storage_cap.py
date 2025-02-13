@@ -43,7 +43,8 @@ class TestVmStorageCapacity(E2ETest):
         3. Perform add capacity using official docs.
         4. Verify Cluster Stability and Data Integrity.
         5. Ensure the additional storage has been added.
-        6. Verify snapshots and clones have preserved data integrity.
+        6. Verify VMs, snapshots and clones have preserved their states and
+        data integrity
         """
         source_csum = {}
         res_csum = {}
