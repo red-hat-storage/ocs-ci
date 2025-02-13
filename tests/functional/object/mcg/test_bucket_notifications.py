@@ -108,11 +108,11 @@ class TestBucketNotifications(MCGTest):
         notif_manager.enable_bucket_notifs_on_cr(use_provided_pvc=use_provided_pvc)
 
         # 2. Add a Kafka topic connection to the NooBaa CR
-        topic = notif_manager.create_kafka_topic()
-        secret, conn_config_path = notif_manager.create_kafka_conn_secret(topic)
-        notif_manager.add_notif_conn_to_noobaa_cr(secret)
+        topic, conn_config_path = (
+            notif_manager.create_and_register_kafka_topic_with_noobaa()
+        )
 
-        # 3. Create a bucket and configure bucket notifs on it using the new connection
+        # 3. Create a bucket and configure bucket notifications on it using the new connection
         bucket = bucket_factory()[0].name
         notif_manager.put_bucket_notification(
             awscli_pod=awscli_pod,
@@ -197,11 +197,11 @@ class TestBucketNotifications(MCGTest):
         notif_manager.enable_bucket_notifs_on_cr()
 
         # 2. Add a Kafka topic connection to the NooBaa CR
-        topic = notif_manager.create_kafka_topic()
-        secret, conn_config_path = notif_manager.create_kafka_conn_secret(topic)
-        notif_manager.add_notif_conn_to_noobaa_cr(secret)
+        topic, conn_config_path = (
+            notif_manager.create_and_register_kafka_topic_with_noobaa()
+        )
 
-        # 3. Create a bucket and configure bucket notifs on it using the new connection
+        # 3. Create a bucket and configure bucket notifications on it using the new connection
         config_events = [
             "ObjectRemoved:Delete",
             "ObjectRemoved:DeleteMarkerCreated",
@@ -361,20 +361,19 @@ class TestBucketNotifications(MCGTest):
         # Create the Kafka topics and the secrets that define the connections
         kafka_conn_resources = []
         for i in range(SETUP_NUM):
-            topic = notif_manager.create_kafka_topic()
-            secret, conn_config_path = notif_manager.create_kafka_conn_secret(topic)
-            kafka_conn_resources.append((topic, secret, conn_config_path))
+            # Only wait for a healthy state after the
+            # last iteration to avoid waiting multiple times
+            should_wait = True if i == SETUP_NUM - 1 else False
 
-            notif_manager.add_notif_conn_to_noobaa_cr(
-                secret=secret,
-                # Only wait on the last iteration to avoid waiting multiple times
-                wait=True if i == SETUP_NUM - 1 else False,
+            topic, conn_config_path = (
+                notif_manager.create_and_register_kafka_topic_with_noobaa(should_wait)
             )
+            kafka_conn_resources.append((topic, conn_config_path))
 
         # Create the buckets and configure the bucket notifications
         for i in range(SETUP_NUM):
             bucket = bucket_factory()[0].name
-            topic, _, conn_config_path = kafka_conn_resources[i]
+            topic, conn_config_path = kafka_conn_resources[i]
             notif_manager.put_bucket_notification(
                 awscli_pod=awscli_pod,
                 mcg_obj=mcg_obj,
@@ -455,7 +454,7 @@ class TestBucketNotifications(MCGTest):
         Test setting multiple buckets to send notifications to the same Kafka topic
 
         1. Enable bucket notifications on the NooBaa CR
-        2. Setup two buckets with bucket notifications to the same topic
+        2. Setup multiple buckets with bucket notifications to the same topic
         3. Write some objects to each bucket
         4. Verify that the topic received all the expected events
         """
@@ -466,10 +465,10 @@ class TestBucketNotifications(MCGTest):
         # 1. Enable bucket notifications on the NooBaa CR
         notif_manager.enable_bucket_notifs_on_cr()
 
-        # 2. Setup two buckets with bucket notifications to the same topic
-        topic = notif_manager.create_kafka_topic()
-        secret, conn_config_path = notif_manager.create_kafka_conn_secret(topic)
-        notif_manager.add_notif_conn_to_noobaa_cr(secret)
+        # 2. Setup multiple buckets with bucket notifications to the same topic
+        topic, conn_config_path = (
+            notif_manager.create_and_register_kafka_topic_with_noobaa()
+        )
 
         buckets = [bucket.name for bucket in bucket_factory(SETUP_NUM)]
         for bucket in buckets:
