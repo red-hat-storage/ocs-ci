@@ -443,44 +443,37 @@ def verify_hotplug(vm_obj, disks_before_hotplug):
 
 def expand_pvc_and_verify(vm_obj, new_size, failed_vms, vm_objs_def=None):
     """
-    Expands the PVC for a VM and verifies the new size inside the VM.
+    Expands the PVC for a VM and verifies the new size of pvc from inside the VM.
 
     Args:
         vm_obj: The VM object.
         new_size (int): The new PVC size in GB.
-        failed_vms (list): List to store failed VM names with configurations.
-        vm_objs_def (list): List of default VM objects for storage compression check.
 
     Returns:
-        bool: True if expansion is successful, False otherwise.
+        bool: True if expansion is successful.
+
+    Raises:
+        ValueError: If the pvc size is not expanded.
+
     """
-    try:
-        # Expand PVC
-        pvc_obj = vm_obj.get_vm_pvc_obj()
-        pvc_obj.resize_pvc(new_size=new_size, verify=True)
 
-        # Refresh PVC object after resizing
-        pvc_obj = vm_obj.get_vm_pvc_obj()
+    # Expand PVC
+    pvc_obj = vm_obj.get_vm_pvc_obj()
+    pvc_obj.resize_pvc(new_size=new_size, verify=True)
 
-        logger.info("Get root disk name")
-        disk = vm_obj.vmi_obj.get().get("status").get("volumeStatus")[1]["target"]
-        devicename = f"/dev/{disk}"
+    # Refresh PVC object after resizing
+    pvc_obj = vm_obj.get_vm_pvc_obj()
 
-        # Verify the new size inside the VM
-        result = vm_obj.run_ssh_cmd(command=f"lsblk -d -n -o SIZE {devicename}").strip()
-        if result != f"{new_size}G":
-            raise ValueError(
-                "Expanded PVC size is not showing on VM. "
-                "Please verify the disk rescan and filesystem resize."
-            )
+    logger.info("Get root disk name")
+    disk = vm_obj.vmi_obj.get().get("status").get("volumeStatus")[1]["target"]
+    devicename = f"/dev/{disk}"
 
-        logger.info(f"PVC expansion successful for VM {vm_obj.name}.")
-        return True
-
-    except ValueError as e:
-        logger.error(f"Error for VM {vm_obj.name}: {e}. Continuing with the next VM.")
-        failed_vms.append(
-            f"{vm_obj.name} (Config: {vm_obj.pvc_access_mode}-{vm_obj.volume_interface}, "
-            f"Storage Compression: {'default' if vm_obj in vm_objs_def else 'aggressive'})"
+    # Verify the new size inside the VM
+    result = vm_obj.run_ssh_cmd(command=f"lsblk -d -n -o SIZE {devicename}").strip()
+    if result != f"{new_size}G":
+        raise ValueError(
+            "Expanded PVC size is not showing on VM. "
+            "Please verify the disk rescan and filesystem resize."
         )
-        return False
+    logger.info(f"PVC expansion successful for VM {vm_obj.name}.")
+    return True
