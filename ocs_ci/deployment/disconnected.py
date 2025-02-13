@@ -590,10 +590,13 @@ def mirror_ocp_release_images(ocp_image_path, ocp_version):
         f"--max-per-registry=2 --from={ocp_image} "
         f"--to={dest_image_repo} "
         f"--to-release-image={dest_ocp_image} "
+        f"--print-mirror-instructions=idms "
         # following two arguments leads to failure of this command, we have to
         # investigate it more to see, if they are required or not
         # f"--release-image-signature-to-dir {config.ENV_DATA['cluster_path']} "
         # "--apply-release-image-signature"
+        # f"--print-mirror-instructions=idms", this parameter is added to print
+        # instructions of ImageDigestMirrorSet for using images from mirror registries
     )
     result = exec_cmd(cmd, timeout=7200)
     # parse imageContentSources and ImageContentSourcePolicy from oc adm release mirror command output
@@ -607,7 +610,7 @@ def mirror_ocp_release_images(ocp_image_path, ocp_version):
     # icsp_index = (
     idms_index = (
         stdout_lines.index(
-            "To use the new mirrored repository for upgrades, use the following to create an ImageContentSourcePolicy:"
+            "To use the new mirrored repository for upgrades, use the following to create an ImageDigestMirrorSet:"
         )
         + 2
     )
