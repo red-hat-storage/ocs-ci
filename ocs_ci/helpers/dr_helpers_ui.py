@@ -5,11 +5,14 @@ Helper functions specific to DR User Interface
 import logging
 import time
 
-from selenium.common.exceptions import NoSuchElementException
+from selenium.common.exceptions import (
+    NoSuchElementException,
+    StaleElementReferenceException,
+)
 
 from ocs_ci.framework import config
 from ocs_ci.ocs import constants
-from ocs_ci.ocs.exceptions import ResourceWrongStatusException
+from ocs_ci.ocs.exceptions import ResourceWrongStatusException, TimeoutException
 from ocs_ci.ocs.ui.base_ui import wait_for_element_to_be_clickable
 from ocs_ci.ocs.ui.views import locators
 from ocs_ci.ocs.ui.helpers_ui import format_locator
@@ -241,11 +244,11 @@ def failover_relocate_ui(
             acm_obj.do_click(acm_loc["clear-filter"])
         if workload_type == constants.SUBSCRIPTION:
             log.info(f"Apply filter for workload type {constants.SUBSCRIPTION}")
-            acm_obj.do_click(acm_loc["apply-filter"])
+            acm_obj.do_click(acm_loc["apply-filter"], enable_screenshot=True)
             acm_obj.do_click(acm_loc["sub-checkbox"], enable_screenshot=True)
         elif workload_type == constants.APPLICATION_SET:
             log.info(f"Apply filter for workload type {constants.APPLICATION_SET}")
-            acm_obj.do_click(acm_loc["apply-filter"])
+            acm_obj.do_click(acm_loc["apply-filter"], enable_screenshot=True)
             acm_obj.do_click(acm_loc["appset-checkbox"], enable_screenshot=True)
         log.info("Click on search bar")
         acm_obj.do_click(acm_loc["search-bar"])
@@ -257,9 +260,9 @@ def failover_relocate_ui(
         for _ in range(5):
             try:
                 kebab_button = wait_for_element_to_be_clickable(acm_loc["kebab-action"])
-                acm_obj.do_click(kebab_button, avoid_stale=True)
+                acm_obj.execute_script("arguments[0].click();", kebab_button)
                 break
-            except Exception:
+            except (TimeoutException, StaleElementReferenceException):
                 time.sleep(2)
         log.info("Kebab menu options are open")
         if action == constants.ACTION_FAILOVER:
