@@ -164,7 +164,9 @@ class TestVmHotPlugUnplugSnapClone(E2ETest):
         log.info(
             f"Disks before clone hotplug on VM {vm_obj_pvc.name}:\n{before_disks_pvc}"
         )
-        vm_obj_pvc.addvolume(volume_name=clone_obj_dvt.name, persist=False)
+        vm_obj_pvc.addvolume(
+            volume_name=clone_obj_dvt.name, persist=False, verify=False
+        )
         sample = TimeoutSampler(
             timeout=600,
             sleep=5,
@@ -179,7 +181,9 @@ class TestVmHotPlugUnplugSnapClone(E2ETest):
         log.info(
             f"Disks before clone hotplug on VM {vm_obj_dvt.name}:\n{before_disks_dvt}"
         )
-        vm_obj_dvt.addvolume(volume_name=clone_obj_pvc.name, persist=False)
+        vm_obj_dvt.addvolume(
+            volume_name=clone_obj_pvc.name, persist=False, verify=False
+        )
         sample = TimeoutSampler(
             timeout=600,
             sleep=5,
@@ -201,7 +205,7 @@ class TestVmHotPlugUnplugSnapClone(E2ETest):
         log.info(
             f"Disks before unplugging from VM {vm_obj_pvc.name}:\n{before_disks_pvc_rm}"
         )
-        vm_obj_pvc.removevolume(volume_name=clone_obj_dvt.name)
+        vm_obj_pvc.removevolume(volume_name=clone_obj_dvt.name, verify=False)
         sample = TimeoutSampler(
             timeout=600,
             sleep=5,
@@ -216,7 +220,7 @@ class TestVmHotPlugUnplugSnapClone(E2ETest):
         log.info(
             f"Disks before unplugging from VM {vm_obj_dvt.name}:\n{before_disks_dvt_rm}"
         )
-        vm_obj_dvt.removevolume(volume_name=clone_obj_pvc.name)
+        vm_obj_dvt.removevolume(volume_name=clone_obj_pvc.name, verify=False)
         sample = TimeoutSampler(
             timeout=600,
             sleep=5,
