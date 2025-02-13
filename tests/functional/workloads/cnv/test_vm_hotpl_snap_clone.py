@@ -21,7 +21,8 @@ log = logging.getLogger(__name__)
 @pytest.mark.polarion_id("OCS-")
 class TestVmHotPlugUnplugSnapClone(E2ETest):
     """
-    Test case for snapshot and clones with hotplug/unplug
+    Test case for snapshot and clones
+    with hotplug/unplug
     """
 
     def test_vm_hotpl_snap_clone(
