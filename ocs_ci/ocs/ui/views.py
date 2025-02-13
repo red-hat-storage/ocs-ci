@@ -1167,8 +1167,14 @@ acm_configuration_4_18 = {
         "(//td[@class='pf-v5-c-table__td pf-v5-c-table__action']//button)[1]",
         By.XPATH,
     ),
-    "failover-app": ("//span[contains(text(),'Failover application')]", By.XPATH),
-    "relocate-app": ("//span[contains(text(),'Relocate application')]", By.XPATH),
+    "failover-app": (
+        "//button[.//span[contains(text(),'Failover application')]]",
+        By.XPATH,
+    ),
+    "relocate-app": (
+        "//button[.//span[contains(text(),'Relocate application')]]",
+        By.XPATH,
+    ),
     "close-action-modal": ("button[aria-label='Close']", By.CSS_SELECTOR),
 }
 
