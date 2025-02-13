@@ -501,10 +501,11 @@ class MetalLBInstaller:
             f"Deploying MetalLB and dependant resources to namespace: '{self.namespace_lb}'"
         )
 
-        if self.apply_icsp():
-            logger.info("ICSP brew-registry applied successfully")
         if self.apply_idms():
             logger.info("IDMS brew-registry applied successfully")
+        else:
+            if self.apply_icsp():
+                logger.info("ICSP brew-registry applied successfully")
         if self.create_metallb_namespace():
             logger.info(f"Namespace {self.namespace_lb} created successfully")
         if self.create_catalog_source():
