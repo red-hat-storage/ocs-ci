@@ -12,9 +12,8 @@ from ocs_ci.deployment.deployment import (
     create_catalog_source,
     create_ocs_secret,
     Deployment,
-    # get_and_apply_icsp_from_catalog,
-    get_and_apply_idms_from_catalog,
 )
+from ocs_ci.utility.deployment import get_and_apply_idms_from_catalog
 from ocs_ci.deployment.disconnected import prepare_disconnected_ocs_deployment
 from ocs_ci.deployment.helpers.external_cluster_helpers import (
     ExternalCluster,

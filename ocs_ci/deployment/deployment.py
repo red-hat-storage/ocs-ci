@@ -136,7 +136,8 @@ from ocs_ci.ocs.utils import (
 )
 from ocs_ci.utility.deployment import (
     create_external_secret,
-    get_and_apply_icsp_from_catalog,
+    # get_and_apply_icsp_from_catalog,
+    get_and_apply_idms_from_catalog,
     workaround_mark_disks_as_ssd,
 )
 from ocs_ci.utility.flexy import load_cluster_info
@@ -2953,7 +2954,8 @@ def create_catalog_source(image=None, ignore_upgrade=False):
     image = f"{image}:{image_tag if image_tag else 'latest'}"
     insecure_mode = True if config.DEPLOYMENT.get("disconnected") else False
 
-    get_and_apply_icsp_from_catalog(image=image, insecure=insecure_mode)
+    # get_and_apply_icsp_from_catalog(image=image, insecure=insecure_mode)
+    get_and_apply_idms_from_catalog(image=image, insecure=insecure_mode)
 
     catalog_source_manifest = tempfile.NamedTemporaryFile(
         mode="w+", prefix="catalog_source_manifest", delete=False
