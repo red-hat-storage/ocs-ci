@@ -267,12 +267,14 @@ def create_optional_operators_catalogsource_non_ga(force=False):
     if config.DEPLOYMENT.get("disconnected"):
         # in case of disconnected environment, we have to mirror all the
         # optional_operators images
-        icsp = None
+        # icsp = None
+        idms = None
         for _dict in optional_operators_data:
             if _dict.get("kind").lower() == "catalogsource":
                 index_image = _dict["spec"]["image"]
             if _dict.get("kind").lower() == "imagecontentsourcepolicy":
-                icsp = _dict
+                # icsp = _dict
+                idms = _dict
         mirrored_index_image = (
             f"{config.DEPLOYMENT['mirror_registry']}/"
             f"{index_image.split('/', 1)[-1]}"
@@ -281,7 +283,8 @@ def create_optional_operators_catalogsource_non_ga(force=False):
             index_image,
             mirrored_index_image,
             constants.DISCON_CL_REQUIRED_PACKAGES,
-            icsp,
+            # icsp,
+            idms,
         )
         _dict["spec"]["image"] = mirrored_index_image
     templating.dump_data_to_temp_yaml(
