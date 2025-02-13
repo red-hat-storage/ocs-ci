@@ -3,12 +3,14 @@ Helper functions specific to DR User Interface
 """
 
 import logging
+import time
 
 from selenium.common.exceptions import NoSuchElementException
 
 from ocs_ci.framework import config
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.exceptions import ResourceWrongStatusException
+from ocs_ci.ocs.ui.base_ui import wait_for_element_to_be_clickable
 from ocs_ci.ocs.ui.views import locators
 from ocs_ci.ocs.ui.helpers_ui import format_locator
 from ocs_ci.utility.utils import get_ocp_version
@@ -252,9 +254,12 @@ def failover_relocate_ui(
         log.info(f"Enter the workload to be searched {workload_to_move}")
         acm_obj.do_send_keys(acm_loc["search-bar"], text=workload_to_move)
         log.info("Click on kebab menu option")
-        acm_obj.do_click(
-            acm_loc["kebab-action"], enable_screenshot=True, avoid_stale=True
-        )
+        for _ in range(5):
+            try:
+                kebab_button = wait_for_element_to_be_clickable(acm_loc["kebab-action"])
+                acm_obj.do_click(kebab_button, avoid_stale=True)
+            except Exception:
+                time.sleep(2)
         log.info("Kebab menu options are open")
         if action == constants.ACTION_FAILOVER:
             log.info("Selecting action as Failover from ACM UI")
