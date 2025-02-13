@@ -567,7 +567,7 @@ def mirror_ocp_release_images(ocp_image_path, ocp_version):
             - mirrored image path,
             - tag or checksum
             - imageContentSources (for install-config.yaml)
-            - ImageContentSourcePolicy (for running cluster)
+            - ImageDigestMirrorSet (for running cluster)
     """
     dest_image_repo = (
         f"{config.DEPLOYMENT['mirror_registry']}/"
