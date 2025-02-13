@@ -1168,11 +1168,11 @@ acm_configuration_4_18 = {
         By.XPATH,
     ),
     "failover-app": (
-        "//button[.//span[contains(text(),'Failover application')]]",
+        "//span[contains(text(),'Failover application')]",
         By.XPATH,
     ),
     "relocate-app": (
-        "//button[.//span[contains(text(),'Relocate application')]]",
+        "//span[contains(text(),'Relocate application')]",
         By.XPATH,
     ),
     "close-action-modal": ("button[aria-label='Close']", By.CSS_SELECTOR),
