@@ -507,7 +507,7 @@ def check_vrg_existence(namespace):
         return False
 
 
-def check_vrg_state(state, namespace, resource_name):
+def check_vrg_state(state, namespace, resource_name=None):
     """
     Check if VRG in the given namespace is in expected state
 
