@@ -59,7 +59,7 @@ def scale_up_deployment(request):
         helpers.modify_deployment_replica_count(
             deployment_name=constants.MDS_DAEMON_DEPLOYMENT_TWO, replica_count=1
         )
-        # ceph_health_check(tries=10, delay=30)
+        ceph_health_check(tries=10, delay=30)
 
     request.addfinalizer(teardown)
 
