@@ -83,10 +83,10 @@ class TestRDRWarningAndAlerting:
                 constants.ACTION_FAILOVER,
                 marks=pytest.mark.polarion_id("xxx"),
             ),
-            # pytest.param(
-            #     constants.ACTION_RELOCATE,
-            #     marks=pytest.mark.polarion_id("yyy"),
-            # ),
+            pytest.param(
+                constants.ACTION_RELOCATE,
+                marks=pytest.mark.polarion_id("yyy"),
+            ),
         ],
     )
     # TODO: Update polarion IDs
@@ -232,7 +232,7 @@ class TestRDRWarningAndAlerting:
                 )
                 if warning_alert_found:
                     logger.info(
-                        "Warning alert 'Inconsistent data on target cluster' found on the Failover modal"
+                        "Warning alert 'Inconsistent data on target cluster' found on the Relocate modal"
                     )
                     logger.info("Click on 'Cancel' on the action modal")
                     acm_obj.do_click(
@@ -243,7 +243,7 @@ class TestRDRWarningAndAlerting:
                     logger.info("Action modal closed successfully")
                 else:
                     logger.error(
-                        "Warning alert 'Inconsistent data on target cluster' not found on the Failover modal"
+                        "Warning alert 'Inconsistent data on target cluster' not found on the Relocate modal"
                     )
                     raise NoAlertPresentException
 
@@ -275,8 +275,8 @@ class TestRDRWarningAndAlerting:
         logger.info("lastGroupSyncTime updated after pods are recovered")
 
         config.switch_acm_ctx()
-        # Navigate to failover modal via ACM UI
-        logger.info("Navigate to failover modal via ACM UI")
+        # Navigate to failover/relocate modal via ACM UI
+        logger.info("Navigate to failover/relocate modal via ACM UI")
         for workload in rdr_workload:
             if workload.workload_type == constants.SUBSCRIPTION:
                 failover_relocate_ui(
@@ -333,13 +333,13 @@ class TestRDRWarningAndAlerting:
                 if warning_alert_found:
                     logger.error(
                         "Warning alert 'Inconsistent data on target cluster' still exists after successful sync on the "
-                        "Failover modal"
+                        "Relocate modal"
                     )
                     raise UnexpectedBehaviour
                 else:
                     logger.info(
                         "Warning alert 'Inconsistent data on target cluster' disappeared after successful sync on the "
-                        "Failover modal"
+                        "Relocate modal"
                     )
                     logger.info("Click on 'Cancel' on the action modal")
                     acm_obj.do_click(
