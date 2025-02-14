@@ -13,7 +13,10 @@ from selenium.common.exceptions import (
 from ocs_ci.framework import config
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.exceptions import ResourceWrongStatusException, TimeoutException
-from ocs_ci.ocs.ui.base_ui import wait_for_element_to_be_clickable
+from ocs_ci.ocs.ui.base_ui import (
+    wait_for_element_to_be_clickable,
+    wait_for_element_to_be_visible,
+)
 from ocs_ci.ocs.ui.views import locators
 from ocs_ci.ocs.ui.helpers_ui import format_locator
 from ocs_ci.utility.utils import get_ocp_version
@@ -265,14 +268,20 @@ def failover_relocate_ui(
                         acm_loc["kebab-action"]
                     )
                     acm_obj.driver.execute_script("arguments[0].click();", kebab_action)
-                    log.info("Kebab menu options are open")
-                    time.sleep(1)
-                    failover_app = wait_for_element_to_be_clickable(
+                    kebab_state = kebab_action.get_attribute("aria-expanded")
+                    log.info(f"Kebab state: {kebab_state}")
+                    if not kebab_state:
+                        acm_obj.driver.execute_script(
+                            "arguments[0].click();", kebab_action
+                        )
+                        log.info("Kebab menu options are open")
+                    failover_app = wait_for_element_to_be_visible(
                         acm_loc["failover-app"]
                     )
                     acm_obj.driver.execute_script("arguments[0].click();", failover_app)
                     break
                 except (TimeoutException, StaleElementReferenceException):
+                    log.warning("Failover option not found, retrying...")
                     time.sleep(1)
             log.info("Failover option is selected")
             # acm_obj.do_click(
@@ -287,14 +296,20 @@ def failover_relocate_ui(
                         acm_loc["kebab-action"]
                     )
                     acm_obj.driver.execute_script("arguments[0].click();", kebab_action)
-                    log.info("Kebab menu options are open")
-                    time.sleep(1)
-                    relocate_app = wait_for_element_to_be_clickable(
+                    kebab_state = kebab_action.get_attribute("aria-expanded")
+                    log.info(f"Kebab state: {kebab_state}")
+                    if not kebab_state:
+                        acm_obj.driver.execute_script(
+                            "arguments[0].click();", kebab_action
+                        )
+                        log.info("Kebab menu options are open")
+                    relocate_app = wait_for_element_to_be_visible(
                         acm_loc["relocate-app"]
                     )
                     acm_obj.driver.execute_script("arguments[0].click();", relocate_app)
                     break
                 except (TimeoutException, StaleElementReferenceException):
+                    log.warning("Relocate option not found, retrying...")
                     time.sleep(1)
             log.info("Relocate option is selected")
             # acm_obj.do_click(
