@@ -2,10 +2,13 @@
 This module contains functions needed to install IBM Fusion Data Foundation.
 """
 
+import json
 import logging
+import os
 
-from ocs_ci.ocs import constants
+from ocs_ci.ocs import constants, defaults
 from ocs_ci.ocs.exceptions import CommandFailed
+from ocs_ci.framework import config
 from ocs_ci.ocs.resources.ocs import OCP, OCS
 from ocs_ci.utility.retry import retry
 from ocs_ci.utility.utils import run_cmd
@@ -22,6 +25,8 @@ def deploy_fdf():
     create_image_tag_mirror_set()
     create_image_digest_mirror_set()
     create_spectrum_fusion_cr()
+    if config.DEPLOYMENT.get("fdf_pre_release"):
+        setup_fdf_pre_release_deployment()
     create_fdf_service_cr()
     verify_fdf_installation()
 
@@ -117,7 +122,7 @@ def spectrum_fusion_status_check():
     assert spectrumfusion_status == "Completed"
 
 
-@retry((AssertionError, KeyError), 20, 30)
+@retry((AssertionError, KeyError), 20, 60, backoff=1)
 def fusion_service_instance_health_check():
     """
     Ensure the FusionServiceInstance is in the Healthy state.
@@ -137,3 +142,45 @@ def fusion_service_instance_health_check():
     install_percent = instance_status["installStatus"]["progressPercentage"]
     assert service_health == "Healthy"
     assert install_percent == 100
+
+
+def setup_fdf_pre_release_deployment():
+    """
+    Perform steps to prepare for a Pre-release deployment of FDF.
+    """
+    fdf_image_tag = config.DEPLOYMENT.get("fdf_image_tag")
+    fdf_catalog_name = defaults.FUSION_CATALOG_NAME
+    fdf_registry = config.DEPLOYMENT.get("fdf_pre_release_registry")
+    fdf_image_digest = config.DEPLOYMENT.get("fdf_pre_release_image_digest")
+    pull_secret = os.path.join(constants.DATA_DIR, "pull-secret")
+
+    if not fdf_image_digest:
+        logger.info("Retrieving imageDigest")
+        cmd = f"skopeo inspect docker://{fdf_registry}/{fdf_catalog_name}:{fdf_image_tag} --authfile {pull_secret}"
+        catalog_data = run_cmd(cmd)
+        fdf_image_digest = json.loads(catalog_data).get("Digest")
+        logger.info(f"Retrieved image digest: {fdf_image_digest}")
+        config.DEPLOYMENT["fdf_pre_release_image_digest"] = fdf_image_digest
+
+    logger.info("Updating FusionServiceDefinition")
+    params_dict = {
+        "spec": {
+            "onboarding": {
+                "serviceOperatorSubscription": {
+                    "multiVersionCatSrcDetails": {
+                        "ocp418-t": {
+                            "imageDigest": fdf_image_digest,
+                            "registryPath": fdf_registry,
+                        }
+                    }
+                }
+            }
+        }
+    }
+    params = json.dumps(params_dict)
+    cmd = (
+        f"oc -n {constants.FDF_NAMESPACE} patch FusionServiceDefinition "
+        f"data-foundation-service -p '{params}' --type merge"
+    )
+    out = run_cmd(cmd)
+    assert "patched" in out
