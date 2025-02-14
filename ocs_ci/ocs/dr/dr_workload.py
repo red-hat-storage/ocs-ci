@@ -1161,7 +1161,7 @@ class BusyboxDiscoveredApps(DRWorkload):
             self.workload_pod_count,
             self.workload_namespace,
             discovered_apps=True,
-            vrg_name=self.discovered_apps_placement_name
+            vrg_name=self.discovered_apps_placement_name,
         )
 
     def create_placement(self):
