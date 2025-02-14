@@ -369,7 +369,6 @@ def run_dd_io(vm_obj, file_path, size="10240", username=None, verify=False):
         )
 
 
-
 def verifyvolume(vm_name, volume_name, namespace):
     """
     Verify a volume in VM.
@@ -441,7 +440,8 @@ def verify_hotplug(vm_obj, disks_before_hotplug):
             f"Error occurred while verifying hotplug in VM {vm_obj.name}: {str(error)}"
         )
 
-def expand_pvc_and_verify(vm_obj, new_size, failed_vms, vm_objs_def=None):
+
+def expand_pvc_and_verify(vm_obj, new_size):
     """
     Expands the PVC for a VM and verifies the new size of pvc from inside the VM.
 
