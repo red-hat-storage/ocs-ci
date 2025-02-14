@@ -1925,9 +1925,14 @@ def collect_pod_container_rpm_package(dir_name):
     pods = pod.get_all_pods(namespace=cluster_namespace)
     ocp_obj = OCP(namespace=cluster_namespace)
     for pod_obj in pods:
-        pod_object = pod_obj.get()
-        if "detect-version" in pod_obj.name:
+        ignore_pods = (
+            constants.CONTROLLER_DETECT_VERSION_NAME,
+            constants.OSD_KEY_ROTATION_POD_NAME,
+            constants.ROOK_CEPH_DETECT_VERSION_POD_NAME,
+        )
+        if any(pod in pod_obj.name for pod in ignore_pods):
             continue
+        pod_object = pod_obj.get()
         pod_containers = pod_object.get("spec").get("containers")
         ocp_pod_obj = OCP(kind=constants.POD, namespace=cluster_namespace)
         pod_status = ocp_pod_obj.get_resource_status(pod_obj.name)
