@@ -1356,6 +1356,7 @@ class Vault(KMS):
 
         try:
             # Execute the command and capture the output
+            logger.info(f"Getting OSD secrets from fault : {cmd}")
             out = subprocess.check_output(
                 shlex.split(cmd), stderr=subprocess.STDOUT, text=True
             )
@@ -1365,7 +1366,10 @@ class Vault(KMS):
 
             # Retrieve the secret
             # secret_key = f"rook-ceph-osd-encryption-key-{device_handle}"
-            secret = json_out.get("data", {}).get(secret_key)
+            data_section = json_out.get("data", {})
+            secret = data_section.get("data", {}).get(
+                secret_key, data_section.get(secret_key)
+            )
 
             if not secret:
                 logger.error(
@@ -1391,6 +1395,8 @@ class Vault(KMS):
         cmd = f"vault kv get -format=json {self.vault_backend_path}/{constants.NOOBAA_BACKEND_SECRET}"
 
         try:
+            logger.info(f"Getting NooBaa secrets from fault : {cmd}")
+
             # Execute the command and capture the output
             out = subprocess.check_output(
                 shlex.split(cmd), stderr=subprocess.STDOUT, text=True
@@ -1400,7 +1406,8 @@ class Vault(KMS):
             json_out = json.loads(out)
 
             # Retrieve the secret
-            secret = json_out["data"].get(json_out["data"].get("active_root_key"))
+            data_section = json_out.get("data", {}).get("data", {})
+            secret = data_section.get(data_section.get("active_root_key"))
 
             if not secret:
                 logger.error(
