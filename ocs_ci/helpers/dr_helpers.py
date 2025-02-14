@@ -507,13 +507,14 @@ def check_vrg_existence(namespace):
         return False
 
 
-def check_vrg_state(state, namespace, resource_name=""):
+def check_vrg_state(state, namespace, resource_name):
     """
     Check if VRG in the given namespace is in expected state
 
     Args:
         state (str): The VRG state to check for (e.g. 'primary', 'secondary')
         namespace (str): the namespace of the VRG resources
+        resource_name (str): Name of VRG resource
 
     Returns:
         bool: True if VRG is in expected state or was deleted, False otherwise
@@ -538,6 +539,7 @@ def check_vrg_state(state, namespace, resource_name=""):
     else:
         vrg_list_index = vrg_list[0]
     ocs_version = version.get_semantic_ocs_version_from_config()
+    logger.info(f"====={ocs_version}======{version.VERSION_4_17}")
     if ocs_version <= version.VERSION_4_17:
         logger.info("VRG resource not found, skipping state check")
         return True
