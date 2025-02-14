@@ -21,7 +21,6 @@ import math
 from datetime import datetime
 from semantic_version import Version
 
-from ocs_ci.ocs.resources.storage_cluster import get_storage_cluster
 from ocs_ci.ocs.utils import thread_init_class
 
 import ocs_ci.ocs.resources.pod as pod
@@ -3859,7 +3858,9 @@ def adjust_active_mds_count_storagecluster(target_count):
     """
     # Retrieve the current activeMetadataServers count
     current_count_cephfilesystem = get_active_mds_count_cephfilesystem()
-    sc = get_storage_cluster(namespace=config.ENV_DATA["cluster_namespace"])
+    sc = storage_cluster.get_storage_cluster(
+        namespace=config.ENV_DATA["cluster_namespace"]
+    )
     resource_name = sc.get()["items"][0]["metadata"]["name"]
 
     if current_count_cephfilesystem == target_count:
