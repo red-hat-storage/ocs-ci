@@ -284,9 +284,6 @@ def failover_relocate_ui(
                     log.warning("Failover option not found, retrying...")
                     time.sleep(1)
             log.info("Failover option is selected")
-            # acm_obj.do_click(
-            #     acm_loc["failover-app"], enable_screenshot=True, timeout=timeout
-            # )
         else:
             log.info("Selecting action as Relocate from ACM UI")
             for _ in range(10):
@@ -312,9 +309,6 @@ def failover_relocate_ui(
                     log.warning("Relocate option not found, retrying...")
                     time.sleep(1)
             log.info("Relocate option is selected")
-            # acm_obj.do_click(
-            #     acm_loc["relocate-app"], enable_screenshot=True, timeout=timeout
-            # )
         if workload_type == constants.SUBSCRIPTION:
             log.info("Click on policy dropdown")
             acm_obj.do_click(acm_loc["policy-dropdown"], enable_screenshot=True)
