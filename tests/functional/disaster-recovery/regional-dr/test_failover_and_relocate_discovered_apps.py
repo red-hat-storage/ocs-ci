@@ -79,6 +79,7 @@ class TestFailoverAndRelocateWithDiscoveredApps:
             rdr_workload.workload_pod_count,
             rdr_workload.workload_namespace,
             discovered_apps=True,
+            vrg_name=rdr_workload.discovered_apps_placement_name
         )
 
         # Doing Relocate
