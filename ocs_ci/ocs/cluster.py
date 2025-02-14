@@ -3857,7 +3857,6 @@ def adjust_active_mds_count_storagecluster(target_count):
         ActiveMdsValueNotMatch: if activeMetadataServers count does not match.
 
     """
-
     # Retrieve the current activeMetadataServers count
     current_count_cephfilesystem = get_active_mds_count_cephfilesystem()
     sc = get_storage_cluster(namespace=config.ENV_DATA["cluster_namespace"])
@@ -3868,25 +3867,23 @@ def adjust_active_mds_count_storagecluster(target_count):
             "The current count is already equal to the target count. No changes needed."
         )
     else:
-        for _ in range(2):
-            if current_count_cephfilesystem == target_count:
-                break
-            # Determine the new count by incrementing or decrementing
-            step = 1 if current_count_cephfilesystem < target_count else -1
-            new_count = current_count_cephfilesystem + step
-            param = (
-                f'{{"spec": {{"managedResources": {{"cephFilesystems": '
-                f'{{"activeMetadataServers": {new_count}}}}}}}}}'
-            )
-            sc.patch(resource_name=resource_name, params=param, format_type="merge")
-            # Retrieve the updated count
-            current_params = sc.get(resource_name=resource_name)
-            current_count_cephfilesystem = current_params["spec"]["managedResources"][
-                "cephFilesystems"
-            ]["activeMetadataServers"]
-        else:
+        # Determine the new count by incrementing or decrementing
+        step = 1 if current_count_cephfilesystem < target_count else -1
+        new_count = current_count_cephfilesystem + step
+        param = (
+            f'{{"spec": {{"managedResources": {{"cephFilesystems": '
+            f'{{"activeMetadataServers": {new_count}}}}}}}}}'
+        )
+        sc.patch(resource_name=resource_name, params=param, format_type="merge")
+
+        # Retrieve the updated count
+        current_params = sc.get(resource_name=resource_name)
+        current_count_cephfilesystem = current_params["spec"]["managedResources"][
+            "cephFilesystems"
+        ]["activeMetadataServers"]
+        if current_count_cephfilesystem != target_count:
             raise ActiveMdsValueNotMatch(
-                f"Failed to update activeMetadataServers to {target_count} after 2 attempts"
+                f"Failed to update activeMetadataServers to {target_count}"
             )
 
     logger.info(
@@ -3905,7 +3902,7 @@ def adjust_active_mds_count_storagecluster(target_count):
         )
 
 
-def get_active_mds_pods():
+def get_active_mds_pod_objs():
     """
     Gets active mds pods objs.
 
@@ -3922,33 +3919,26 @@ def get_active_mds_pods():
     ceph_daemon_name = [mds["name"] for mds in mdsmap if mds["state"] == "active"]
     mds_pods = get_mds_pods()
     active_mds_pods = [
-        pod
-        for pod in mds_pods
-        if any(daemon_name in pod.name for daemon_name in ceph_daemon_name)
+        mdspod
+        for mdspod in mds_pods
+        if any(daemon_name in mdspod.name for daemon_name in ceph_daemon_name)
     ]
     return active_mds_pods
 
 
-def verify_active_and_standby_mds_count(target_count):
+def get_mds_counts():
     """
-    Get the active and standby mds pod count from ceph command and verify it matches the target count.
+    Fetch active and standby-replay MDS counts.
 
-    Args:
-        target_count (int): The desired count of active and standby mds pods.
-
+    Returns:
+        tuple: A tuple containing two integers:
+            - active_pod_count (int): The number of active MDS pods.
+            - standby_replay_count (int): The number of standby-replay MDS pods.
     """
-
-    def get_mds_counts():
-        """Fetch active and standby-replay MDS counts."""
-        ct_pod = pod.get_ceph_tools_pod()
-        ceph_mdsmap = ct_pod.exec_ceph_cmd("ceph fs status")["mdsmap"]
-        active_pod_count = sum(1 for mds in ceph_mdsmap if mds["state"] == "active")
-        standby_replay_count = sum(
-            1 for mds in ceph_mdsmap if mds["state"] == "standby-replay"
-        )
-        return active_pod_count, standby_replay_count
-
-    TimeoutSampler(timeout=180, sleep=10, func=get_mds_counts).wait_for_func_value(
-        (target_count, target_count)
+    ct_pod = pod.get_ceph_tools_pod()
+    ceph_mdsmap = ct_pod.exec_ceph_cmd("ceph fs status")["mdsmap"]
+    active_pod_count = sum(1 for mds in ceph_mdsmap if mds["state"] == "active")
+    standby_replay_count = sum(
+        1 for mds in ceph_mdsmap if mds["state"] == "standby-replay"
     )
-    logger.info(f"Active and standby-replay MDS pod counts reached {target_count}.")
+    return active_pod_count, standby_replay_count

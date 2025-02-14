@@ -13,23 +13,38 @@ from ocs_ci.framework.pytest_customization.marks import (
     skipif_external_mode,
 )
 from ocs_ci.framework import config
+from ocs_ci.helpers import helpers
 from ocs_ci.ocs.cluster import (
     adjust_active_mds_count_storagecluster,
     get_active_mds_count_cephfilesystem,
-    get_active_mds_pods,
-    verify_active_and_standby_mds_count,
-    get_active_mds_info,
+    get_active_mds_pod_objs,
+    get_mds_counts,
 )
 from ocs_ci.ocs.resources import pod
 from ocs_ci.helpers.sanity_helpers import Sanity
 from ocs_ci.ocs import node, constants
-from ocs_ci.utility.utils import ceph_health_check_base
+from ocs_ci.ocs.resources.pod import get_mds_pods
+from ocs_ci.utility.utils import ceph_health_check_base, TimeoutSampler
 from tests.functional.z_cluster.nodes.test_node_replacement_proactive import (
     delete_and_create_osd_node,
 )
 
 
 log = logging.getLogger(__name__)
+
+
+def verify_active_and_standby_mds_count(target_count):
+    """
+    Get the active and standby mds pod count from ceph command and verify it matches the target count.
+
+    Args:
+        target_count (int): The desired count of active and standby mds pods.
+
+    """
+    TimeoutSampler(timeout=180, sleep=10, func=get_mds_counts).wait_for_func_value(
+        (target_count, target_count)
+    )
+    log.info(f"Active and standby-replay MDS pod counts reached {target_count}.")
 
 
 @brown_squad
@@ -55,12 +70,14 @@ class TestMultipleMds:
             adjust_active_mds_count_storagecluster(
                 1
             ), "Failed to set active mds count to 1"
-            active_mds_pod = get_active_mds_info()["active_pod"]
-            log.info("Validate mds is up and running")
-            pod.wait_for_pods_to_be_in_statuses(
-                expected_statuses=[constants.STATUS_RUNNING],
-                pod_names=[active_mds_pod],
-            )
+
+            log.info("Validate mds pods are up and running")
+            mds_pods = get_mds_pods()
+            for mds_pod in mds_pods:
+                helpers.wait_for_resource_state(
+                    resource=mds_pod, state=constants.STATUS_RUNNING
+                )
+
             log.info("Checking for Ceph Health OK")
             ceph_health_check_base()
 
@@ -78,7 +95,7 @@ class TestMultipleMds:
         """
         1. Trigger the scale-up process to add new pods.
         2. Verify active and standby-replay mds count is same.
-        3. Perform node replacement on a newly added mds pod running node.
+        3. Perform node replacement on a mds pod running node.
         4. Make sure all the active mds pods come to active state.
 
         """
@@ -91,18 +108,18 @@ class TestMultipleMds:
         # Verify active and standby-replay mds counts.
         verify_active_and_standby_mds_count(new_active_mds_count)
 
-        # Replace node
-        active_mds_pods = get_active_mds_pods()
+        # Replace active mds node
+        active_mds_pods = get_active_mds_pod_objs()
         active_mds_pod = random.choice(active_mds_pods)
         active_mds_node_name = active_mds_pod.data["spec"].get("nodeName")
         log.info(f"Replacing active mds node : {active_mds_node_name}")
         delete_and_create_osd_node(active_mds_node_name)
 
-        # Perform cluster and Ceph health checks
-        self.sanity_helpers.health_check(tries=120)
-
         # Verify active and standby-replay mds counts after node replacement
         verify_active_and_standby_mds_count(new_active_mds_count)
+
+        # Perform cluster and Ceph health checks
+        self.sanity_helpers.health_check(tries=120)
 
     def test_node_drain_and_fault_tolerance_for_multiple_mds(self, pod_factory):
         """
@@ -112,19 +129,14 @@ class TestMultipleMds:
         4. Fail one active mds pod [out of two] and standby pod changes to active.
 
         """
-
         original_active_count_cephfilesystem = get_active_mds_count_cephfilesystem()
 
         # Scale up active mds pods from 1 to 2.
         new_active_mds_count = original_active_count_cephfilesystem + 1
         adjust_active_mds_count_storagecluster(new_active_mds_count)
 
-        # Start IO Workload.
-        pod_obj = pod_factory(interface=constants.CEPHBLOCKPOOL)
-        pod_obj.run_io(direct=1, runtime=60, storage_type="fs", size="1G")
-
         # Get active mds node name
-        active_mds_pods = get_active_mds_pods()
+        active_mds_pods = get_active_mds_pod_objs()
         active_mds_pod = random.choice(active_mds_pods)
         active_mds_pod_name = active_mds_pod.name
         selected_pod_obj = pod.get_pod_obj(
@@ -143,6 +155,10 @@ class TestMultipleMds:
 
         # Verify active and standby-replay mds counts.
         verify_active_and_standby_mds_count(new_active_mds_count)
+
+        # Start IO Workload.
+        pod_obj = pod_factory(interface=constants.CEPHBLOCKPOOL)
+        pod_obj.run_io(direct=1, runtime=180, storage_type="fs", size="1G")
 
         # Fail one active mds pod [out of two]
         rand = random.randint(0, 1)
