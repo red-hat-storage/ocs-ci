@@ -17,6 +17,7 @@ from ocs_ci.framework.pytest_customization.marks import (
     runs_on_provider,
     provider_client_platform_required,
     provider_mode,
+    skipif_external_mode,
 )
 from ocs_ci.framework.testlib import skipif_ocs_version, tier1
 from ocs_ci.ocs import constants, ocp
@@ -119,6 +120,7 @@ def test_ceph_mgr_dashboard_not_deployed():
         assert "ceph-mgr-dashboard" not in route_name, msg
 
 
+@skipif_external_mode
 @skipif_mcg_only
 @blue_squad
 @skipif_ocs_version("<4.6")
@@ -143,6 +145,7 @@ def test_ceph_rbd_metrics_available(threading_lock):
     assert list_of_metrics_without_results == [], msg
 
 
+@skipif_external_mode
 @provider_mode
 @skipif_mcg_only
 @blue_squad
@@ -177,6 +180,7 @@ def test_ceph_metrics_available(threading_lock):
     assert list_of_metrics_without_results == [], msg
 
 
+@skipif_external_mode
 @bugzilla("2238400")
 @skipif_mcg_only
 @blue_squad
