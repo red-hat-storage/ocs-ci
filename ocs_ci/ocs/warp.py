@@ -86,8 +86,7 @@ class Warp(object):
             pvc_name=self.pvc_obj.name,
             sa_name=self.sa_name,
             pod_dict_path=self.pod_dic_path,
-            dc_deployment=True,
-            deploy_pod_status=constants.STATUS_COMPLETED,
+            deployment=True,
             replica_count=replicas,
             ports=self.ports,
         )
@@ -223,5 +222,5 @@ class Warp(object):
                 log.info(f"Deleting the service {self.service_obj.name}")
                 self.service_obj.delete()
         log.info("Deleting pods and deployment config")
-        pod.delete_deploymentconfig_pods(self.pod_obj)
+        pod.delete_deployment_pods(self.pod_obj)
         self.pvc_obj.delete()

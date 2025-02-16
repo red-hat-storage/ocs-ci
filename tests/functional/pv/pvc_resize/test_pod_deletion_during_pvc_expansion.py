@@ -31,7 +31,7 @@ class TestPodRespinDuringPvcExpansion(ManageTest):
 
     """
 
-    def test_pod_respin_during_pvc_expansion(self, dc_pod_factory):
+    def test_pod_respin_during_pvc_expansion(self, deployment_pod_factory):
         """
         Verify PVC expansion during rbd-app pod respins
 
@@ -45,7 +45,7 @@ class TestPodRespinDuringPvcExpansion(ManageTest):
         * The expansion should be successful, and the app should be running
 
         """
-        rbd_pod = dc_pod_factory(size=10)
+        rbd_pod = deployment_pod_factory(size=10)
         rbd_pvc = rbd_pod.pvc
 
         pvc_size_new = 20
