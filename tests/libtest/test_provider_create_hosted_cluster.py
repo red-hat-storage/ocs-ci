@@ -30,7 +30,7 @@ from ocs_ci.ocs import constants
 from ocs_ci.ocs.resources.storage_client import StorageClient
 from ocs_ci.helpers.helpers import (
     get_all_storageclass_names,
-    verify_block_pool_exists,
+    verify_storage_pool_exists,
 )
 from ocs_ci.ocs.rados_utils import (
     verify_cephblockpool_status,
@@ -292,7 +292,7 @@ class TestProviderHosted(object):
         logger.info("Verify native storage client")
         storage_client = StorageClient()
         storage_client.verify_native_storageclient()
-        assert verify_block_pool_exists(
+        assert verify_storage_pool_exists(
             constants.DEFAULT_BLOCKPOOL
         ), f"{constants.DEFAULT_BLOCKPOOL} is not created"
         assert verify_cephblockpool_status(), "the cephblockpool is not in Ready phase"
