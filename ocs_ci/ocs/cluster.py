@@ -2230,6 +2230,17 @@ def is_lso_cluster():
     return config.DEPLOYMENT.get("local_storage", False)
 
 
+def is_stretch_cluster():
+    """
+    Check if the cluster is stretch cluster
+
+    Returns:
+        bool: True, if the cluster is an lso cluster. False, otherwise
+
+    """
+    return config.DEPLOYMENT.get("arbiter_deployment", False)
+
+
 def is_flexible_scaling_enabled():
     """
     Check if flexible scaling is enabled
