@@ -1759,6 +1759,9 @@ DR_HUB_OPERATOR_SUBSCRIPTION_LABEL = (
     "operators.coreos.com/odr-hub-operator.openshift-operators"
 )
 DR_CLUSTER_OPERATOR_SUBSCRIPTION = "ramen-dr-cluster-subscription"
+RBD_MIRROR_DAEMON_DEPLOYMENT = "rook-ceph-rbd-mirror-a"
+MDS_DAEMON_DEPLOYMENT_ONE = "rook-ceph-mds-ocs-storagecluster-cephfilesystem-a"
+MDS_DAEMON_DEPLOYMENT_TWO = "rook-ceph-mds-ocs-storagecluster-cephfilesystem-b"
 
 # UI Deployment constants
 HTPASSWD_SECRET_NAME = "htpass-secret"

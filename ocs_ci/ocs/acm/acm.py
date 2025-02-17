@@ -460,7 +460,7 @@ def login_to_acm():
     else:
         page_title = ACM_PAGE_TITLE
     validate_page_title(title=page_title)
-
+    log.info("Successfully logged into RHACM console")
     return driver
 
 
