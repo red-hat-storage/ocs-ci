@@ -1547,7 +1547,7 @@ validation = {
     # Header of the dropdown element by attributes is very similar to the dropdown item itself.
     "select_administrator": (
         "//h2[@data-test-id='perspective-switcher-menu-option' and normalize-space()='Administrator']/ancestor"
-        "::button[@role='option']",
+        "::button[@role='option'] | //h2[.='Administrator']",
         By.XPATH,
     ),
 }
@@ -1824,7 +1824,8 @@ validation_4_17 = {
     ),
     "select_administrator": (
         "//a[@class='pf-c-dropdown__menu-item']//h2[@class='pf-c-title pf-m-md'][normalize-space()='Administrator'] | "
-        "//a[@class='pf-m-icon pf-v5-c-dropdown__menu-item']//h2[normalize-space()='Administrator']",
+        "//a[@class='pf-m-icon pf-v5-c-dropdown__menu-item']//h2[normalize-space()='Administrator'] | "
+        "//h2[.='Administrator']",
         By.XPATH,
     ),
 }

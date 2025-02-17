@@ -947,6 +947,7 @@ def login_ui(console_url=None, username=None, password=None):
     try:
         wait = WebDriverWait(driver, 15)
         if username is not None:
+            logger.info(f"Trying to log in as {username}")
             element = wait.until(
                 ec.element_to_be_clickable(
                     (
@@ -957,6 +958,7 @@ def login_ui(console_url=None, username=None, password=None):
                 message="Title element containing text 'Log in with my_htpasswd' is not present",
             )
         else:
+            logger.info("Trying to log in as kubeadmin")
             element = wait.until(
                 ec.element_to_be_clickable(
                     (
@@ -1057,7 +1059,7 @@ def proceed_to_login_console():
     """
     driver = SeleniumDriver()
     login_loc = locators[get_ocp_version()]["login"]
-    if driver.title == login_loc["pre_login_page_title"]:
+    if login_loc["pre_login_page_title"].lower() in driver.title.lower():
         proceed_btn = driver.find_element(
             by=login_loc["proceed_to_login_btn"][1],
             value=login_loc["proceed_to_login_btn"][0],
