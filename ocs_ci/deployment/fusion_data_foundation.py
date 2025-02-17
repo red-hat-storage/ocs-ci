@@ -79,6 +79,7 @@ def verify_fdf_installation():
     """
     logger.info("Verifying FDF installation")
     fusion_service_instance_health_check()
+    logger.info("FDF successfully installed")
 
 
 def spectrum_fusion_existstance_check():
