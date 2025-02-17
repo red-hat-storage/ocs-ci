@@ -33,6 +33,7 @@ TEMPLATE_DEPLOYMENT_DIR_FUSION = os.path.join(TEMPLATE_DIR, "fusion")
 TEMPLATE_DEPLOYMENT_DIR_LVMO = os.path.join(TEMPLATE_DIR, "lvmo-deployment")
 TEMPLATE_MULTICLUSTER_DIR = os.path.join(TEMPLATE_DEPLOYMENT_DIR, "multicluster")
 TEMPLATE_DEPLOYMENT_DIR_CNV = os.path.join(TEMPLATE_DIR, "cnv-deployment")
+TEMPLATE_DEPLOYMENT_DIR_MCE = os.path.join(TEMPLATE_DIR, "mce-deployment")
 TEMPLATE_DEPLOYMENT_DIR_METALLB = os.path.join(TEMPLATE_DIR, "metallb-deployment")
 TEMPLATE_DEPLOYMENT_DIR_NMSTATE = os.path.join(TEMPLATE_DIR, "nmstate-deployment")
 TEMPLATE_DEPLOYMENT_DIR_INF = os.path.join(
@@ -406,6 +407,7 @@ PROVIDER_CLUSTER_RESOURCE_KINDS = [
     "storagesystems",
     "storagesystem",
 ]
+PROVIDER_SUBSCRIPTION = "subs"
 
 OCS_CLIENT_OPERATOR_CONTROLLER_MANAGER_PREFIX = "ocs-client-operator-controller-manager"
 OCS_CLIENT_OPERATOR_CONSOLE = "ocs-client-operator-console"
@@ -2764,6 +2766,18 @@ SUBCTL_DOWNSTREAM_URL = "registry.redhat.io/rhacm2/"
 ACM_BREW_REPO = SUBMARINER_BREW_REPO
 
 # Multicluster related
+MCE_NAMESPACE = "multicluster-engine"
+MCE_NAMESPACE_YAML = os.path.join(TEMPLATE_DEPLOYMENT_DIR_MCE, "mce_namespace.yaml")
+MCE_CATSRC_YAML = os.path.join(TEMPLATE_DEPLOYMENT_DIR_MCE, "mce_catsrc.yaml")
+MCE_CATSRC_NAME = "mce-catalogsource"
+MCE_SUBSCRIPTION_YAML = os.path.join(
+    TEMPLATE_DEPLOYMENT_DIR_MCE, "mce_subscription.yaml"
+)
+MCE_OPERATOR = "multicluster-engine"
+MCE_OPERATOR_YAML = os.path.join(TEMPLATE_DEPLOYMENT_DIR_MCE, "mce_operator.yaml")
+HYPERSHIFT_NAMESPACE = "hypershift"
+SUPPORTED_VERSIONS_CONFIGMAP = "supported-versions"
+IMAGE_OVERRIDE_JSON = os.path.join(TEMPLATE_DEPLOYMENT_DIR_MCE, "image-override.json")
 
 # OpenSSL Certificate parameters
 OPENSSL_KEY_SIZE = 2048
