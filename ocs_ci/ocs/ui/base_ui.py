@@ -1059,7 +1059,7 @@ def proceed_to_login_console():
     """
     driver = SeleniumDriver()
     login_loc = locators[get_ocp_version()]["login"]
-    if driver.title == login_loc["pre_login_page_title"]:
+    if login_loc["pre_login_page_title"].lower() in driver.title.lower():
         proceed_btn = driver.find_element(
             by=login_loc["proceed_to_login_btn"][1],
             value=login_loc["proceed_to_login_btn"][0],
