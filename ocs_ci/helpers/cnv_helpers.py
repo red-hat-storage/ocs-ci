@@ -465,7 +465,7 @@ def get_vm_status(vm_obj):
         str: The status of the VM.
     """
     try:
-        return vm_obj.get().get("status", {}).get("phase", "Unknown")
+        return vm_obj.get().get("status", {}).get("printableStatus", "Unknown")
     except Exception as e:
         logger.error(f"Failed to get VM status for {vm_obj.name}: {e}")
         return "Error"

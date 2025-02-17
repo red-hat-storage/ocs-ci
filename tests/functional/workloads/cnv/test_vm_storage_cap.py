@@ -87,15 +87,20 @@ class TestVmStorageCapacity(E2ETest):
                 volume_interface=constants.VM_VOLUME_PVC,
             )
             vm_list.append(vm_obj)
-            i -= 1
             source_csum[f"{vm_obj.name}"] = run_dd_io(
                 vm_obj=vm_obj, file_path=file_paths[0], verify=True
             )
+            logger.info(f" before cloning source csum: {source_csum[f'{vm_obj.name}']}")
             clone_vm_obj = clone_vm_workload(vm_obj, namespace=vm_obj.namespace)
-            source_csum[f"{clone_vm_obj.name}"] = run_dd_io(
-                vm_obj=vm_obj, file_path=file_paths[0], verify=True
-            )
             vm_list_clone.append(clone_vm_obj)
+            res_csum[f"{clone_vm_obj.name}"] = cal_md5sum_vm(
+                vm_obj=clone_vm_obj, file_path=file_paths[0]
+            )
+            assert res_csum[f"{clone_vm_obj.name}"] == source_csum[f"{vm_obj.name}"], (
+                f"Failed: MD5 comparison between source {vm_obj.name} and "
+                f"its cloned VMs"
+            )
+            i -= 1
 
         # Stop and pause VMs in random order
         logger.info("Stopping and pausing VMs in random order...")
@@ -151,8 +156,8 @@ class TestVmStorageCapacity(E2ETest):
             result=True
         ), "Not all pods are running after capacity addition."
 
-        # Verify final status of VMs against initial status
-        for vm_obj in vm_list_clone + vm_stopped:
+        vm_list.append(vm_pause)
+        for vm_obj in vm_list_clone + vm_list:
             final_vm_status = get_vm_status(vm_obj)
             logger.info(f"Final status of VM {vm_obj.name}: {final_vm_status}")
 
@@ -161,24 +166,21 @@ class TestVmStorageCapacity(E2ETest):
                     final_vm_status == initial_vm_states[vm_obj.name]
                 ), f"VM {vm_obj.name} state has changed after add capacity."
                 logger.info(
-                    f"VM {vm_obj.name} state is consistent before and after add capacity."
+                    f"VM {vm_obj.name} state is consistent "
+                    f"before and after add capacity."
                 )
             else:
                 logger.warning(f"Initial state of VM {vm_obj.name} not found.")
 
         # Data integrity check
         for vm_obj in vm_list_clone:
-            res_csum[f"{vm_obj.name}"] = cal_md5sum_vm(
-                vm_obj=vm_obj, file_path=file_paths[0]
-            )
-            source_checksum = source_csum.get(vm_obj.name)
             result_checksum = res_csum.get(vm_obj.name)
             assert (
-                source_checksum == result_checksum
+                cal_md5sum_vm(vm_obj=vm_obj, file_path=file_paths[0]) == result_checksum
             ), f"Failed: MD5 comparison between source {vm_obj.name} and its cloned VMs"
 
         # Cleanup VMs
         logger.info("Stopping VMs...")
-        for vm_obj in vm_list_clone + vm_stopped + vm_list:
+        for vm_obj in vm_list_clone + vm_list:
             logger.info(f"Stopping VM: {vm_obj.name}")
             vm_obj.stop()
