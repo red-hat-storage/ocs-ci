@@ -4605,6 +4605,10 @@ def collect_logs_fixture(request):
     This fixture collects ocs logs after tier execution and this will allow
     to see the cluster's status after the execution on all execution status options.
     """
+    dev_mode = ocsci_config.RUN["cli_params"].get("dev_mode")
+    if dev_mode:
+        log.info("Skipping RPM collection for development mode.")
+        return
 
     def finalizer():
         """
