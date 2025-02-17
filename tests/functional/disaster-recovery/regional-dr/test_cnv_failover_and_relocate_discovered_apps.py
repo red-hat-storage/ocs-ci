@@ -90,6 +90,7 @@ class TestCNVFailoverAndRelocateWithDiscoveredApps:
             old_primary=primary_cluster_name_before_failover,
             workload_namespace=cnv_workloads[0].workload_namespace,
             workload_dir=cnv_workloads[0].workload_dir,
+            vrg_name=cnv_workloads[0].discovered_apps_placement_name,
         )
 
         # Verify resources creation on secondary cluster (failoverCluster)

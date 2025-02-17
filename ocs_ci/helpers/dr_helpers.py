@@ -282,6 +282,7 @@ def relocate(
             old_primary=old_primary,
             workload_namespace=workload_instance.workload_namespace,
             workload_dir=workload_instance.workload_dir,
+            vrg_name=workload_instance.discovered_apps_placement_name,
         )
     config.switch_ctx(restore_index)
 
@@ -488,16 +489,23 @@ def check_vr_state(state, namespace):
         return False
 
 
-def check_vrg_existence(namespace):
+def check_vrg_existence(namespace, vrg_name=None):
     """
     Check if VRG resource exists in the given namespace
 
     Args:
         namespace (str): the namespace of the VRG resource
+        vrg_name (str): Name of VRG
 
     """
+    if not vrg_name:
+        vrg_name = ""
     vrg_list = (
-        ocp.OCP(kind=constants.VOLUME_REPLICATION_GROUP, namespace=namespace)
+        ocp.OCP(
+            kind=constants.VOLUME_REPLICATION_GROUP,
+            namespace=namespace,
+            resource_name=vrg_name,
+        )
         .get()
         .get("items")
     )
@@ -520,13 +528,13 @@ def check_vrg_state(state, namespace, resource_name=None):
         bool: True if VRG is in expected state or was deleted, False otherwise
 
     """
+
     vrg_obj = ocp.OCP(
         kind=constants.VOLUME_REPLICATION_GROUP,
         namespace=namespace,
-        resource_name=resource_name,
     )
     if resource_name:
-        vrg_list = vrg_obj.get()
+        vrg_list = vrg_obj.get(resource_name=resource_name)
     else:
         vrg_list = vrg_obj.get().get("items")
 
@@ -636,7 +644,7 @@ def wait_for_replication_resources_creation(
 
 
 def wait_for_replication_resources_deletion(
-    namespace, timeout, check_state=True, discovered_apps=False
+    namespace, timeout, check_state=True, discovered_apps=False, vrg_name=None
 ):
     """
     Wait for replication resources to be deleted
@@ -647,6 +655,7 @@ def wait_for_replication_resources_deletion(
             state or deleted
         check_state (bool): True for checking resources state before deletion, False otherwise
         discovered_apps (bool): If true then deployed workload is discovered_apps
+        vrg_name (str): Name of VRG
 
     Raises:
         TimeoutExpiredError: In case replication resources not deleted
@@ -683,6 +692,7 @@ def wait_for_replication_resources_deletion(
             func=check_vrg_state,
             state="secondary",
             namespace=vrg_namespace,
+            resource_name=vrg_name,
         )
         if not sample.wait_for_func_status(result=True):
             error_msg = (
@@ -697,7 +707,11 @@ def wait_for_replication_resources_deletion(
     ):
         logger.info("Waiting for VRG to be deleted")
         sample = TimeoutSampler(
-            timeout=timeout, sleep=5, func=check_vrg_existence, namespace=vrg_namespace
+            timeout=timeout,
+            sleep=5,
+            func=check_vrg_existence,
+            namespace=vrg_namespace,
+            vrg_name=vrg_name,
         )
         if not sample.wait_for_func_status(result=False):
             error_msg = "VRG resource not deleted"
@@ -765,6 +779,7 @@ def wait_for_all_resources_deletion(
     timeout=1000,
     discovered_apps=False,
     workload_cleanup=False,
+    vrg_name=None,
 ):
     """
     Wait for workload and replication resources to be deleted
@@ -777,6 +792,7 @@ def wait_for_all_resources_deletion(
             If True:
             - PVC and PV deletion will always be checked
             - Replication resources state check will be skipped.
+        vrg_name (str): Name of VRG
 
     """
     logger.info("Waiting for all pods to be deleted")
@@ -789,7 +805,7 @@ def wait_for_all_resources_deletion(
 
     check_state = not workload_cleanup
     wait_for_replication_resources_deletion(
-        namespace, timeout, check_state, discovered_apps
+        namespace, timeout, check_state, discovered_apps, vrg_name
     )
 
     if workload_cleanup or not (
@@ -1658,7 +1674,7 @@ def replace_cluster(workload, primary_cluster_name, secondary_cluster_name):
 
 
 def do_discovered_apps_cleanup(
-    drpc_name, old_primary, workload_namespace, workload_dir
+    drpc_name, old_primary, workload_namespace, workload_dir, vrg_name
 ):
     """
     Function to clean up Resources
@@ -1668,6 +1684,8 @@ def do_discovered_apps_cleanup(
         old_primary (str): Name of old primary where cleanup will happen
         workload_namespace (str): Workload namespace
         workload_dir (str): Dir location of workload
+        vrg_name (str): Name of VRG
+
     """
     restore_index = config.cur_index
     config.switch_acm_ctx()
@@ -1676,7 +1694,9 @@ def do_discovered_apps_cleanup(
     config.switch_to_cluster_by_name(old_primary)
     workload_path = constants.DR_WORKLOAD_REPO_BASE_DIR + "/" + workload_dir
     run_cmd(f"oc delete -k {workload_path} -n {workload_namespace} --wait=false")
-    wait_for_all_resources_deletion(namespace=workload_namespace, discovered_apps=True)
+    wait_for_all_resources_deletion(
+        namespace=workload_namespace, discovered_apps=True, vrg_name=vrg_name
+    )
     config.switch_acm_ctx()
     drpc_obj.wait_for_progression_status(status=constants.STATUS_COMPLETED)
     config.switch_ctx(restore_index)
