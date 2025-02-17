@@ -947,6 +947,7 @@ def login_ui(console_url=None, username=None, password=None):
     try:
         wait = WebDriverWait(driver, 15)
         if username is not None:
+            logger.info(f"Trying to log in as {username}")
             element = wait.until(
                 ec.element_to_be_clickable(
                     (
@@ -957,6 +958,7 @@ def login_ui(console_url=None, username=None, password=None):
                 message="Title element containing text 'Log in with my_htpasswd' is not present",
             )
         else:
+            logger.info("Trying to log in as kubeadmin")
             element = wait.until(
                 ec.element_to_be_clickable(
                     (

@@ -61,6 +61,11 @@ class TestOBCUi(ManageTest):
 
         """
         user = user_factory()
+        logger.info(
+            f"user created: {user[0]} password: {user[1]}, wait additional 10 sec to get user active"
+        )
+        # increasing the wait time from 10 to 30 sec to get user active [ibm cloud 4.18]
+        time.sleep(30)
         login_factory(user[0], user[1])
         obc_ui_obj = ObjectBucketClaimsTab()
         assert obc_ui_obj.check_obc_option(
