@@ -284,7 +284,7 @@ def create_optional_operators_catalogsource_non_ga(force=False):
             mirrored_index_image,
             constants.DISCON_CL_REQUIRED_PACKAGES,
             # icsp,
-            idms,
+            idms=idms,
         )
         _dict["spec"]["image"] = mirrored_index_image
     templating.dump_data_to_temp_yaml(
