@@ -1580,14 +1580,12 @@ def set_in_transit_encryption(enabled=True):
         try:
             ocp_obj.wait_for_phase(constants.STATUS_PROGRESSING, timeout=60)
         except ResourceWrongStatusException:
-            current_phase = ocp_obj.check_phase(constants.STATUS_READY)
+            is_sc_status_ready = ocp_obj.check_phase(constants.STATUS_READY)
 
-            if current_phase == constants.STATUS_READY:
+            if is_sc_status_ready:
                 log.info(f"Resource Phase has reached {constants.STATUS_READY}")
             else:
-                log.error(
-                    f"Unexpected resource phase: {current_phase}. Raising exception."
-                )
+                log.error(f"StorageCluster is not in : {constants.STATUS_READY} Phase.")
                 raise
     verify_storage_cluster()
     return True
