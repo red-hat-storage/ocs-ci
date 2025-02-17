@@ -1,5 +1,6 @@
 import logging
 import random
+
 import time
 
 from datetime import datetime, timezone
@@ -7,6 +8,7 @@ from datetime import datetime, timezone
 from ocs_ci.helpers.cnv_helpers import cal_md5sum_vm
 from ocs_ci.helpers.stretchcluster_helper import check_for_logwriter_workload_pods
 from ocs_ci.ocs import constants
+
 from ocs_ci.ocs.node import drain_nodes, schedule_nodes
 from ocs_ci.ocs.resources.pod import wait_for_pods_to_be_in_statuses
 from ocs_ci.ocs.resources.pvc import get_pvc_objs
@@ -65,6 +67,7 @@ class TestNodeDrain:
         drain_nodes(node_names=[node_obj.name for node_obj in nodes_to_drain])
         time.sleep(300)
         schedule_nodes(node_names=[node_obj.name for node_obj in nodes_to_drain])
+
         end_time = datetime.now(timezone.utc)
 
         # verify the io after all the nodes are scheduled
@@ -151,3 +154,12 @@ class TestNodeDrain:
             label=constants.LOGWRITER_RBD_LABEL
         ), "Data is corrupted for RBD workloads"
         log.info("No data corruption is seen in RBD workloads")
+
+
+def test_install_temp():
+
+    from ocs_ci.deployment.provider_client.storage_client_deployment import (
+        ODFAndNativeStorageClientDeploymentOnProvider,
+    )
+
+    ODFAndNativeStorageClientDeploymentOnProvider().provider_and_native_client_installation()
