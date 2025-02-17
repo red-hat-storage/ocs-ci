@@ -44,7 +44,12 @@ def create_image_digest_mirror_set():
     Create ImageDigestMirrorSet.
     """
     logger.info("Creating FDF ImageDigestMirrorSet")
-    run_cmd(f"oc create -f {constants.FDF_IMAGE_DIGEST_MIRROR_SET}")
+    if config.DEPLOYMENT.get("fdf_pre_release"):
+        image_digest_mirror_set = extract_image_digest_mirror_set()
+        run_cmd(f"oc create -f {image_digest_mirror_set}")
+        os.remove(image_digest_mirror_set)
+    else:
+        run_cmd(f"oc create -f {constants.FDF_IMAGE_DIGEST_MIRROR_SET}")
 
 
 def create_spectrum_fusion_cr():
@@ -184,3 +189,25 @@ def setup_fdf_pre_release_deployment():
     )
     out = run_cmd(cmd)
     assert "patched" in out
+
+
+def extract_image_digest_mirror_set():
+    """
+    Extract the ImageDigestMirrorSet from the FDF build.
+
+    Returns:
+        str: Name of the extracted ImageDigestMirrorSet
+
+    """
+    pull_secret = os.path.join(constants.DATA_DIR, "pull-secret")
+    fdf_registry = config.DEPLOYMENT.get("fdf_pre_release_registry")
+    fdf_catalog_name = defaults.FUSION_CATALOG_NAME
+    fdf_image_tag = config.DEPLOYMENT.get("fdf_image_tag")
+
+    filename = constants.FDF_IMAGE_DIGEST_MIRROR_SET_FILENAME
+    cmd = (
+        f"oc image extract --filter-by-os linux/amd64 --registry-config "
+        f"{pull_secret} {fdf_registry}/{fdf_catalog_name}:{fdf_image_tag} --confirm --path /{filename}:./"
+    )
+    run_cmd(cmd)
+    return filename
