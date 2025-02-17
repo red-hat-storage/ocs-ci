@@ -12,22 +12,25 @@ from ocs_ci.ocs.rados_utils import (
     verify_cephblockpool_status,
     check_phase_of_rados_namespace,
 )
-from ocs_ci.deployment.helpers.lso_helpers import (
-    setup_local_storage,
-    cleanup_nodes_for_lso_install,
-)
-from ocs_ci.ocs.node import label_nodes, get_all_nodes, get_node_objs, get_nodes
+
+# from ocs_ci.deployment.helpers.lso_helpers import (
+#     setup_local_storage,
+#     cleanup_nodes_for_lso_install,
+# )
+from ocs_ci.ocs.node import get_nodes
 from ocs_ci.ocs.utils import (
     setup_ceph_toolbox,
     enable_console_plugin,
     run_cmd,
 )
-from ocs_ci.utility.utils import (
-    wait_for_machineconfigpool_status,
-)
+
+# from ocs_ci.utility.utils import (
+#     wait_for_machineconfigpool_status,
+# )
 from ocs_ci.utility import templating, kms as KMS, version
 from ocs_ci.deployment.deployment import Deployment, create_catalog_source
-from ocs_ci.deployment.baremetal import disks_available_to_cleanup
+
+# from ocs_ci.deployment.baremetal import disks_available_to_cleanup
 from ocs_ci.deployment.encryption import (
     add_encryption_details_to_cluster_data,
     add_in_transit_encryption_to_cluster_data,
@@ -103,66 +106,66 @@ class ODFAndNativeStorageClientDeploymentOnProvider(object):
         6. Disable ROOK_CSI_ENABLE_CEPHFS and ROOK_CSI_ENABLE_RBD
         7. Create storage profile
         """
-        nodes = get_all_nodes()
-        node_objs = get_node_objs(nodes)
+        # nodes = get_all_nodes()
+        # node_objs = get_node_objs(nodes)
         worker_node_objs = get_nodes(node_type=constants.WORKER_MACHINE)
         no_of_worker_nodes = len(worker_node_objs)
 
-        # Allow hosting cluster domain to be usable by hosted clusters
-        path = "/spec/routeAdmission"
-        value = '{wildcardPolicy: "WildcardsAllowed"}'
-        params = f"""[{{"op": "add", "path": "{path}", "value": {value}}}]"""
-        patch_cmd = (
-            f"patch {constants.INGRESSCONTROLLER} -n {constants.OPENSHIFT_INGRESS_OPERATOR_NAMESPACE} "
-            + f"default --type json -p '{params}'"
-        )
-        self.ocp_obj.exec_oc_cmd(command=patch_cmd)
-
-        # Enable nested virtualization on nodes
-        machine_config_data = templating.load_yaml(
-            constants.MACHINE_CONFIG_YAML, multi_document=True
-        )
-        templating.dump_data_to_temp_yaml(
-            machine_config_data, constants.MACHINE_CONFIG_YAML
-        )
-        self.ocp_obj.exec_oc_cmd(f"apply -f {constants.MACHINE_CONFIG_YAML}")
-        wait_for_machineconfigpool_status(node_type="all")
-        log.info("All the nodes are upgraded")
-
-        # Mark master nodes schedulable if mark_masters_schedulable: True
-        if config.ENV_DATA.get("mark_masters_schedulable", False):
-            path = "/spec/mastersSchedulable"
-            params = f"""[{{"op": "replace", "path": "{path}", "value": true}}]"""
-            assert self.scheduler_obj.patch(
-                params=params, format_type="json"
-            ), "Failed to run patch command to update control nodes as scheduleable"
-            # Allow ODF to be deployed on all nodes
-            log.info("labeling all nodes as storage nodes")
-            label_nodes(nodes=node_objs, label=constants.OPERATOR_NODE_LABEL)
-            worker_node_objs = get_nodes(node_type=constants.WORKER_MACHINE)
-            no_of_worker_nodes = len(worker_node_objs)
-        else:
-            log.info("labeling worker nodes as storage nodes")
-            label_nodes(nodes=worker_node_objs, label=constants.OPERATOR_NODE_LABEL)
-
-        disks_available_on_worker_nodes_for_cleanup = disks_available_to_cleanup(
-            worker_node_objs[0]
-        )
-        number_of_disks_available = len(disks_available_on_worker_nodes_for_cleanup)
-        log.info(
-            f"disks avilable for cleanup, {disks_available_on_worker_nodes_for_cleanup}"
-            f"number of disks avilable for cleanup, {number_of_disks_available}"
-        )
-
-        # Install LSO, create LocalVolumeDiscovery and LocalVolumeSet
-        is_local_storage_available = self.sc_obj.is_exist(
-            resource_name=self.storageclass,
-        )
-        if not is_local_storage_available:
-            cleanup_nodes_for_lso_install()
-            setup_local_storage(storageclass=self.storageclass)
-        else:
-            log.info("local storage is already installed")
+        # # Allow hosting cluster domain to be usable by hosted clusters
+        # path = "/spec/routeAdmission"
+        # value = '{wildcardPolicy: "WildcardsAllowed"}'
+        # params = f"""[{{"op": "add", "path": "{path}", "value": {value}}}]"""
+        # patch_cmd = (
+        #     f"patch {constants.INGRESSCONTROLLER} -n {constants.OPENSHIFT_INGRESS_OPERATOR_NAMESPACE} "
+        #     + f"default --type json -p '{params}'"
+        # )
+        # self.ocp_obj.exec_oc_cmd(command=patch_cmd)
+        #
+        # # Enable nested virtualization on nodes
+        # machine_config_data = templating.load_yaml(
+        #     constants.MACHINE_CONFIG_YAML, multi_document=True
+        # )
+        # templating.dump_data_to_temp_yaml(
+        #     machine_config_data, constants.MACHINE_CONFIG_YAML
+        # )
+        # self.ocp_obj.exec_oc_cmd(f"apply -f {constants.MACHINE_CONFIG_YAML}")
+        # wait_for_machineconfigpool_status(node_type="all")
+        # log.info("All the nodes are upgraded")
+        #
+        # # Mark master nodes schedulable if mark_masters_schedulable: True
+        # if config.ENV_DATA.get("mark_masters_schedulable", False):
+        #     path = "/spec/mastersSchedulable"
+        #     params = f"""[{{"op": "replace", "path": "{path}", "value": true}}]"""
+        #     assert self.scheduler_obj.patch(
+        #         params=params, format_type="json"
+        #     ), "Failed to run patch command to update control nodes as scheduleable"
+        #     # Allow ODF to be deployed on all nodes
+        #     log.info("labeling all nodes as storage nodes")
+        #     label_nodes(nodes=node_objs, label=constants.OPERATOR_NODE_LABEL)
+        #     worker_node_objs = get_nodes(node_type=constants.WORKER_MACHINE)
+        #     no_of_worker_nodes = len(worker_node_objs)
+        # else:
+        #     log.info("labeling worker nodes as storage nodes")
+        #     label_nodes(nodes=worker_node_objs, label=constants.OPERATOR_NODE_LABEL)
+        #
+        # disks_available_on_worker_nodes_for_cleanup = disks_available_to_cleanup(
+        #     worker_node_objs[0]
+        # )
+        # number_of_disks_available = len(disks_available_on_worker_nodes_for_cleanup)
+        # log.info(
+        #     f"disks avilable for cleanup, {disks_available_on_worker_nodes_for_cleanup}"
+        #     f"number of disks avilable for cleanup, {number_of_disks_available}"
+        # )
+        #
+        # # Install LSO, create LocalVolumeDiscovery and LocalVolumeSet
+        # is_local_storage_available = self.sc_obj.is_exist(
+        #     resource_name=self.storageclass,
+        # )
+        # if not is_local_storage_available:
+        #     cleanup_nodes_for_lso_install()
+        #     setup_local_storage(storageclass=self.storageclass)
+        # else:
+        #     log.info("local storage is already installed")
 
         # odf subscription for provider
         self.odf_subscription_on_provider()
@@ -227,10 +230,10 @@ class ODFAndNativeStorageClientDeploymentOnProvider(object):
                     "replica"
                 ] = no_of_worker_nodes
 
-                if self.platform in constants.HCI_PROVIDER_CLIENT_PLATFORMS:
-                    storage_cluster_data["spec"]["storageDeviceSets"][0][
-                        "count"
-                    ] = number_of_disks_available
+                # if self.platform in constants.HCI_PROVIDER_CLIENT_PLATFORMS:
+                #     storage_cluster_data["spec"]["storageDeviceSets"][0][
+                #         "count"
+                #     ] = number_of_disks_available
 
                 templating.dump_data_to_temp_yaml(
                     storage_cluster_data, constants.OCS_STORAGE_CLUSTER_YAML
@@ -252,10 +255,10 @@ class ODFAndNativeStorageClientDeploymentOnProvider(object):
                     "replica"
                 ] = no_of_worker_nodes
 
-                if self.platform in constants.HCI_PROVIDER_CLIENT_PLATFORMS:
-                    storage_cluster_data["spec"]["storageDeviceSets"][0][
-                        "count"
-                    ] = number_of_disks_available
+                # if self.platform in constants.HCI_PROVIDER_CLIENT_PLATFORMS:
+                #     storage_cluster_data["spec"]["storageDeviceSets"][0][
+                #         "count"
+                #     ] = number_of_disks_available
                 templating.dump_data_to_temp_yaml(
                     storage_cluster_data, constants.OCS_STORAGE_CLUSTER_UPDATED_YAML
                 )
