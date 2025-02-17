@@ -417,6 +417,7 @@ class TestObcUserInterface(object):
         assert test_obc.check_resource_existence(should_exist=False)
 
 
+@tier1
 @black_squad
 @tier1
 @pytest.mark.polarion_id("OCS-6334")
@@ -441,3 +442,27 @@ class TestBucketCreate:
         assert (
             bucket_ui.create_folder_in_bucket()
         ), "Failed to create and upload folder in bucket"
+
+    def test_bucket_list(self, setup_ui_class_factory):
+        """
+        Test bucket list functionality in UI.
+
+        """
+        setup_ui_class_factory()
+        bucket_ui = BucketsTab()
+        bucket_ui.nav_object_storage_page()
+        bucket_ui.nav_buckets_page()
+        ui_list = bucket_ui.get_buckets_list()
+        assert (
+            len(ui_list) >= 2
+        ), "Expected at least 2 buckets (OBC and S3) but found less"
+
+    def test_bucket_delete(self, setup_ui_class_factory):
+        """
+        Test bucket deletion functionality in UI.
+
+        """
+        setup_ui_class_factory()
+        bucket_ui = BucketsTab()
+        bucket_ui.nav_buckets_page()
+        bucket_ui.delete_bucket_ui()

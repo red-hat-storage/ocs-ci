@@ -2,8 +2,6 @@ import json
 import logging
 import uuid
 import requests
-import random
-import string
 import os
 import time
 
@@ -15,6 +13,7 @@ from ocs_ci.ocs import exceptions
 from ocs_ci.ocs.ui.page_objects.confirm_dialog import ConfirmDialog
 from ocs_ci.ocs.ui.page_objects.object_storage import ObjectStorage
 from ocs_ci.utility import version
+from ocs_ci.utility.utils import generate_folder_with_files
 
 logger = logging.getLogger(__name__)
 
@@ -26,37 +25,6 @@ class BucketsTab(ObjectStorage, ConfirmDialog):
 
     # Methods can directly access locators via self.bucket_tab, self.generic_locators etc.
     # No need to explicitly import or assign them
-
-    def generate_folder_with_file(self) -> str:
-        """
-        Generates a random folder with random text file inside it in /tmp folder.
-
-        Returns:
-            str: Full path to the generated folder.
-
-        Raises:
-            OSError: If folder creation or file write fails.
-        """
-        folder_name = "".join(
-            random.choices(string.ascii_lowercase + string.digits, k=8)
-        )
-        folder_path = os.path.join("/tmp", folder_name)
-        os.makedirs(folder_path, exist_ok=True)
-
-        filename = (
-            "".join(random.choices(string.ascii_lowercase + string.digits, k=8))
-            + ".txt"
-        )
-        filepath = os.path.join(folder_path, filename)
-
-        content = "".join(
-            random.choices(string.ascii_letters + string.digits + " \n", k=100)
-        )
-
-        with open(filepath, "w") as f:
-            f.write(content)
-
-        return folder_path
 
     def create_bucket_ui(self, method: str) -> ObjectStorage:
         """
@@ -168,7 +136,7 @@ class BucketsTab(ObjectStorage, ConfirmDialog):
         self.do_send_keys(self.bucket_tab["folder_name_input"], folder_name)
         self.do_click(self.bucket_tab["submit_button_folder"])
 
-        folder_path = self.generate_folder_with_file()
+        folder_path = generate_folder_with_files(num_files=400)
 
         logger.info("=== DEBUG: STARTING FILE UPLOAD ===")
 
@@ -179,11 +147,16 @@ class BucketsTab(ObjectStorage, ConfirmDialog):
             )
             logger.info("Found directory input")
 
-            # Make the input visible and remove directory requirement
+            # Debug logging
+            logger.info(f"Files in folder: {os.listdir(folder_path)}")
+            logger.info(
+                "File input attributes before: "
+                f"{self.driver.execute_script('return arguments[0].attributes;', file_input)}"
+            )
+
+            # Make the input visible but keep directory requirement
             self.driver.execute_script(
                 """
-                arguments[0].removeAttribute('webkitdirectory');
-                arguments[0].removeAttribute('directory');
                 arguments[0].style.display = 'block';
                 arguments[0].style.visibility = 'visible';
                 arguments[0].style.height = '1px';
@@ -193,17 +166,31 @@ class BucketsTab(ObjectStorage, ConfirmDialog):
                 file_input,
             )
             logger.info("Modified file input for direct interaction")
+            attrs = self.driver.execute_script(
+                "return arguments[0].attributes;", file_input
+            )
+            logger.info(f"File input attributes after: {attrs}")
 
-            file_path = os.path.join(folder_path, os.listdir(folder_path)[0])
-            logger.info(f"Sending file path: {file_path}")
-
-            file_input.send_keys(file_path)
-            logger.info("Successfully sent file path")
+            logger.info(f"Sending folder path: {folder_path}")
+            file_input.send_keys(folder_path)
             return folder_name
 
         except NoSuchElementException as e:
             logger.error(f"Error during file upload: {str(e)}")
             raise
+
+    def get_buckets_list(self) -> list:
+        """
+        Get list of all buckets using href pattern
+
+        Returns:
+            list: WebElement objects representing bucket links
+        """
+        buckets = self.get_elements(
+            ("//a[starts-with(@href, '/odf/object-storage/buckets/')]", By.XPATH)
+        )
+        logger.info(f"Found {len(buckets), buckets} buckets")
+        return buckets
 
     def delete_bucket_ui(self, delete_via, expect_fail, resource_name):
         """
