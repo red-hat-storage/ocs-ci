@@ -302,7 +302,7 @@ class BucketNotificationsManager:
             logger.info("Waiting for put-bucket-notification to propagate")
             sleep(60)
 
-    def get_bucket_notification(self, awscli_pod, mcg_obj, bucket):
+    def get_bucket_notification_configuration(self, awscli_pod, mcg_obj, bucket):
         """
         Get the bucket notification configuration of a bucket
 
@@ -316,7 +316,7 @@ class BucketNotificationsManager:
         """
         return awscli_pod.exec_cmd_on_pod(
             command=craft_s3_command(
-                f"get-bucket-notification --bucket {bucket}",
+                f"get-bucket-notification-configuration --bucket {bucket}",
                 mcg_obj=mcg_obj,
                 api=True,
             )
