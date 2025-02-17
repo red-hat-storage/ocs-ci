@@ -20,11 +20,15 @@ from ocs_ci.ocs.constants import (
     ACCESS_MODE_RWO,
     POD,
     STATUS_READY,
+    STORAGECLASS,
     REPLICA1_STORAGECLASS,
     STATUS_RUNNING,
     VOLUME_MODE_BLOCK,
     CSI_RBD_RAW_BLOCK_POD_YAML,
     DEFALUT_DEVICE_CLASS,
+    RACK_LABEL,
+    ZONE_LABEL,
+    VSPHERE_PLATFORM,
 )
 from ocs_ci.helpers.helpers import create_pvc
 from ocs_ci.utility.utils import validate_dict_values, compare_dictionaries
@@ -64,8 +68,12 @@ def create_pod_on_failure_domain(project_factory, pod_factory, failure_domain: s
         access_mode=ACCESS_MODE_RWO,
     )
 
-    node = {"topology.kubernetes.io/zone": failure_domain}
-    return pod_factory(pvc=pvc, node_selector=node)
+    if config.ENV_DATA["platform"].lower() == VSPHERE_PLATFORM:
+        node_selector = {RACK_LABEL: failure_domain}
+    else:  # Default to ibm_cloud behavior
+        node_selector = {ZONE_LABEL: failure_domain}
+
+    return pod_factory(pvc=pvc, node_selector=node_selector)
 
 
 @polarion_id("OCS-5720")
@@ -102,7 +110,10 @@ class TestReplicaOne:
                     resource_name=osd,
                 )
                 pod.wait_for_resource(condition=STATUS_RUNNING, column="STATUS")
-
+            sc_obj = OCP(kind=STORAGECLASS, resource_name=REPLICA1_STORAGECLASS)
+            sc_obj.wait_for_resource(
+                condition="Delete", column="RECLAIMPOLICY", timeout=180, sleep=15
+            )
         yield storage_cluster
 
     @pytest.fixture(scope="class")
