@@ -2746,12 +2746,12 @@ def create_fusion_catalog_source():
     Create catalog source for fusion operator
     """
     logger.info("Adding CatalogSource for IBM Fusion")
-    fusion_pre_ga = config.DEPLOYMENT.get("fusion_pre_ga", False)
+    fusion_pre_release = config.DEPLOYMENT.get("fusion_pre_release", False)
 
-    if fusion_pre_ga:
+    if fusion_pre_release:
         render_data = {
-            "sds_version": config.DEPLOYMENT.get("fusion_pre_ga_sds_version"),
-            "image_tag": config.DEPLOYMENT.get("fusion_pre_ga_image"),
+            "sds_version": config.DEPLOYMENT.get("fusion_pre_release_sds_version"),
+            "image_tag": config.DEPLOYMENT.get("fusion_pre_release_image"),
         }
         catalog_source_name = constants.ISF_CATALOG_SOURCE_NAME
         _templating = templating.Templating(
