@@ -1547,7 +1547,7 @@ validation = {
     # Header of the dropdown element by attributes is very similar to the dropdown item itself.
     "select_administrator": (
         "//h2[@data-test-id='perspective-switcher-menu-option' and normalize-space()='Administrator']/ancestor"
-        "::button[@role='option']",
+        "::button[@role='option'] | //h2[.='Administrator']",
         By.XPATH,
     ),
 }
