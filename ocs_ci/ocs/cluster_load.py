@@ -5,6 +5,7 @@ A module for cluster load related functionalities
 
 import logging
 import time
+import requests
 from datetime import datetime
 from uuid import uuid4
 import math
@@ -361,11 +362,24 @@ class ClusterLoad:
         """
         now = datetime.now
         timestamp = datetime.timestamp
-        return float(
-            self.prometheus_api.query(
-                query, str(timestamp(now())), mute_logs=mute_logs, log_debug=True
-            )[0]["value"][1]
-        )
+        try:
+            result = float(
+                self.prometheus_api.query(
+                    query, str(timestamp(now())), mute_logs=mute_logs, log_debug=True
+                )[0]["value"][1]
+            )
+        except (requests.exceptions.RequestException, IndexError) as e:
+            logger.info(
+                f"Encountered error: {e}. Refreshing connection and retrying..."
+            )
+            self.prometheus_api.refresh_connection()
+            result = float(
+                self.prometheus_api.query(
+                    query, str(timestamp(now())), mute_logs=mute_logs, log_debug=True
+                )[0]["value"][1]
+            )
+
+        return result
 
     def calc_trim_metric_mean(self, metric, samples=5, mute_logs=False):
         """
