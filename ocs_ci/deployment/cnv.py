@@ -146,7 +146,7 @@ class CNVInstaller(object):
             namespace=self.namespace,
             resource_name=constants.KUBEVIRT_HYPERCONVERGED,
         )
-        wait_for_install_plan_and_approve(self.namespace)
+        wait_for_install_plan_and_approve(self.namespace, timeout=1500)
         cnv_package_manifest = PackageManifest(
             resource_name=constants.KUBEVIRT_HYPERCONVERGED,
             subscription_plan_approval="Manual",
@@ -154,7 +154,7 @@ class CNVInstaller(object):
         )
         # Wait for package manifest is ready
         cnv_package_manifest.wait_for_resource(
-            resource_name=constants.KUBEVIRT_HYPERCONVERGED, timeout=300
+            resource_name=constants.KUBEVIRT_HYPERCONVERGED, timeout=600
         )
         # csv sometimes takes more time to discover
         for csv in TimeoutSampler(
@@ -168,7 +168,7 @@ class CNVInstaller(object):
                 break
         csv_name = csv[0]["metadata"]["name"]
         csv_obj = CSV(resource_name=csv_name, namespace=self.namespace)
-        csv_obj.wait_for_phase(phase="Succeeded", timeout=720)
+        csv_obj.wait_for_phase(phase="Succeeded", timeout=900)
 
     def wait_for_the_resource_to_discover(self, kind, namespace, resource_name):
         """
