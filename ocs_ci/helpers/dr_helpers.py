@@ -535,8 +535,10 @@ def check_vrg_state(state, namespace, resource_name=None):
     )
     if resource_name:
         vrg_list = vrg_obj.get(resource_name=resource_name)
+        vrg_list_index = vrg_list
     else:
-        vrg_list = vrg_obj.get().get("items")
+        vrg_list_zero_index = vrg_list = vrg_obj.get().get("items")
+        vrg_list_index = vrg_list_zero_index[0]
 
     # Skip state check if resource was deleted
     if len(vrg_list) == 0 and state.lower() == "secondary":
@@ -547,10 +549,6 @@ def check_vrg_state(state, namespace, resource_name=None):
         else:
             logger.info("VRG resource not found")
             return False
-    if resource_name:
-        vrg_list_index = vrg_list
-    else:
-        vrg_list_index = vrg_list[0]
     vrg_name = vrg_list_index["metadata"]["name"]
     desired_state = vrg_list_index["spec"]["replicationState"]
     current_state = vrg_list_index["status"]["state"]
