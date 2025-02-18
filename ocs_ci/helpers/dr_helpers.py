@@ -510,7 +510,10 @@ def check_vrg_existence(namespace, vrg_name=""):
             .get("items")
         )
     except CommandFailed as e:
-        if f'Error from server (NotFound): volumereplicationgroups.ramendr.openshift.io "{vrg_name}" not found' in str(e):
+        if (
+            f'Error from server (NotFound): volumereplicationgroups.ramendr.openshift.io "{vrg_name}" not found'
+            in str(e)
+        ):
             logger.info(f"VRG {vrg_name} not found in namespace {namespace}.")
             vrg_list = []
 
