@@ -71,7 +71,6 @@ from ocs_ci.ocs.exceptions import (
     StorageClassNotDeletedFromUI,
     ResourceNotDeleted,
     MissingDecoratorError,
-    TolerationNotFoundException,
 )
 from ocs_ci.ocs.mcg_workload import mcg_job_factory as mcg_job_factory_implementation
 from ocs_ci.ocs.node import get_node_objs, schedule_nodes
@@ -92,7 +91,6 @@ from ocs_ci.ocs.resources.backingstore import (
 from ocs_ci.ocs.cluster import (
     check_clusters,
     change_ceph_full_ratio,
-    CephClusterExternal,
 )
 from ocs_ci.ocs.resources.namespacestore import (
     namespace_store_factory as namespacestore_factory_implementation,
@@ -105,7 +103,7 @@ from ocs_ci.ocs.resources.cloud_manager import CloudManager
 from ocs_ci.ocs.resources.cloud_uls import (
     cloud_uls_factory as cloud_uls_factory_implementation,
 )
-from ocs_ci.ocs.node import check_nodes_specs, untaint_nodes
+from ocs_ci.ocs.node import check_nodes_specs
 from ocs_ci.ocs.resources.mcg import MCG
 from ocs_ci.ocs.resources.objectbucket import BUCKET_MAP
 from ocs_ci.ocs.resources.ocs import OCS
@@ -123,8 +121,6 @@ from ocs_ci.ocs.resources.pod import (
     wait_for_pods_by_label_count,
     delete_deployment_pods,
     cal_md5sum,
-    check_toleration_on_pods,
-    check_toleration_on_subscriptions,
 )
 from ocs_ci.ocs.resources.pvc import (
     PVC,
@@ -192,7 +188,6 @@ from ocs_ci.helpers.helpers import (
     get_current_test_name,
     modify_deployment_replica_count,
     modify_statefulset_replica_count,
-    apply_custom_taint_and_toleration,
 )
 from ocs_ci.ocs.ceph_debug import CephObjectStoreTool, MonStoreTool, RookCephPlugin
 from ocs_ci.ocs.bucket_utils import get_rgw_restart_counts
@@ -214,7 +209,6 @@ from ocs_ci.utility.decorators import switch_to_default_cluster_index_at_last
 from ocs_ci.helpers.keyrotation_helper import PVKeyrotation
 from ocs_ci.ocs.resources.storage_cluster import set_in_transit_encryption
 from ocs_ci.helpers.e2e_helpers import verify_osd_used_capacity_greater_than_expected
-from ocs_ci.helpers.sanity_helpers import Sanity
 
 log = logging.getLogger(__name__)
 
@@ -9172,6 +9166,7 @@ def pytest_sessionfinish(session, exitstatus):
     except Exception:
         log.exception("During finishing the Cluster load an exception was hit!")
 
+@pytest.fixture()
 def run_fio_till_cluster_full(
     request, teardown_project_factory, pvc_factory, pod_factory
 ):
@@ -9272,105 +9267,6 @@ def run_fio_till_cluster_full(
             shared_state["benchmark_obj"].cleanup()
             ceph_health_check(tries=30, delay=60)
         change_ceph_full_ratio(85)
-
-    request.addfinalizer(teardown)
-    return factory
-
-@pytest.fixture()
-def apply_non_ocs_taint_and_tolerations(request, nodes):
-    """
-    Test runs the following steps
-    1. Taint odf nodes with non-ocs taint
-    2. Set tolerations on storagecluster, subscription, configmap and ocsinit
-    3. check tolerations on all subscription yaml.
-    4. Check toleration on all odf pods.
-    5. Add Capacity.
-
-    """
-    sanity_helpers = Sanity()
-
-    def factory():
-        number_of_pods_before = len(
-            get_all_pods(namespace=config.ENV_DATA["cluster_namespace"], wait=True)
-        )
-
-        log.info("Apply custom taints and tolerations.")
-        apply_custom_taint_and_toleration()
-
-        log.info(
-            "After adding toleration wait for some time for pods to respin as expected"
-        )
-        time.sleep(300)
-        assert wait_for_pods_to_be_running(
-            timeout=900, sleep=15
-        ), "Few pods failed to reach the desired running state"
-
-        retry(
-            (CommandFailed, TolerationNotFoundException),
-            tries=10,
-            delay=10,
-        )(
-            check_toleration_on_subscriptions
-        )(toleration_key="xyz")
-
-        log.info(
-            "Check non-ocs toleration on all newly created pods under openshift-storage NS"
-        )
-        retry(
-            (CommandFailed, TolerationNotFoundException),
-            tries=10,
-            delay=10,
-        )(
-            check_toleration_on_pods
-        )(toleration_key="xyz")
-        if config.DEPLOYMENT["external_mode"]:
-            cephcluster = CephClusterExternal()
-            cephcluster.cluster_health_check()
-        else:
-            sanity_helpers.health_check()
-
-        log.info("Check number of pods before and after adding non ocs taint")
-        number_of_pods_after = len(
-            get_all_pods(namespace=config.ENV_DATA["cluster_namespace"], wait=True)
-        )
-        assert (
-            number_of_pods_before == number_of_pods_after
-        ), "Number of pods didn't match"
-
-    def teardown():
-        assert untaint_nodes(
-            taint_label="xyz=true:NoSchedule",
-        ), "Failed to untaint"
-
-        resource_name = constants.DEFAULT_CLUSTERNAME
-        if config.DEPLOYMENT["external_mode"]:
-            resource_name = constants.DEFAULT_CLUSTERNAME_EXTERNAL_MODE
-
-        log.info("Remove tolerations from storagecluster")
-        storagecluster_obj = ocp.OCP(
-            resource_name=resource_name,
-            namespace=config.ENV_DATA["cluster_namespace"],
-            kind=constants.STORAGECLUSTER,
-        )
-        params = '[{"op": "remove", "path": "/spec/placement"},]'
-        storagecluster_obj.patch(params=params, format_type="json")
-
-        log.info("Remove tolerations from subscriptions")
-        sub_list = ocp.get_all_resource_names_of_a_kind(kind=constants.SUBSCRIPTION)
-
-        sub_obj = ocp.OCP(
-            namespace=config.ENV_DATA["cluster_namespace"],
-            kind=constants.SUBSCRIPTION,
-        )
-        for sub in sub_list:
-            subscription_data = sub_obj.get(resource_name=sub)
-            if "config" in subscription_data.get("spec", {}):
-                params = '[{"op": "remove", "path": "/spec/config"}]'
-                sub_obj.patch(resource_name=sub, params=params, format_type="json")
-        time.sleep(180)
-        assert wait_for_pods_to_be_running(
-            timeout=900, sleep=15
-        ), "Few pods failed to reach the desired running state"
 
     request.addfinalizer(teardown)
     return factory
