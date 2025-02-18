@@ -4,7 +4,10 @@ from ocs_ci.framework.testlib import config, tier1
 from ocs_ci.ocs import constants
 from ocs_ci.helpers.keyrotation_helper import PVKeyrotation
 from ocs_ci.helpers.helpers import create_pods
-from ocs_ci.framework.pytest_customization.marks import green_squad
+from ocs_ci.framework.pytest_customization.marks import (
+    green_squad,
+    vault_kms_deployment_required,
+)
 
 log = logging.getLogger(__name__)
 
@@ -110,6 +113,7 @@ class PVKeyrotationTestBase:
     argnames=argnames,
     argvalues=argvalues,
 )
+@vault_kms_deployment_required
 class TestDisablePVKeyrotationOperation(PVKeyrotationTestBase):
     @pytest.mark.polarion_id("OCS-6323")
     def test_disable_pv_keyrotation_globally(self, setup_common):
