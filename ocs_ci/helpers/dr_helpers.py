@@ -498,15 +498,22 @@ def check_vrg_existence(namespace, vrg_name=""):
         vrg_name (str): Name of VRG
 
     """
-    vrg_list = (
-        ocp.OCP(
-            kind=constants.VOLUME_REPLICATION_GROUP,
-            namespace=namespace,
-            resource_name=vrg_name,
+    try:
+
+        vrg_list = (
+            ocp.OCP(
+                kind=constants.VOLUME_REPLICATION_GROUP,
+                namespace=namespace,
+                resource_name=vrg_name,
+            )
+            .get()
+            .get("items")
         )
-        .get()
-        .get("items")
-    )
+    except CommandFailed as e:
+        if f'Error from server (NotFound): volumereplicationgroups.ramendr.openshift.io "{vrg_name}" not found' in str(e):
+            logger.info(f"VRG {vrg_name} not found in namespace {namespace}.")
+            vrg_list = []
+
     if len(vrg_list) > 0:
         return True
     else:
