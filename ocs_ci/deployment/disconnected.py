@@ -250,7 +250,9 @@ def prune_and_mirror_index_image(
             f"{mirroring_manifests_dir}",
             "mapping.txt",
         )
-        mirror_images_from_mapping_file(mapping_file, idms, mirrored_index_image)
+        mirror_images_from_mapping_file(
+            mapping_file, ignore_image=mirrored_index_image, idms=idms
+        )
 
     # create imageDigestMirrorSet
     idms_file = os.path.join(
@@ -366,7 +368,7 @@ def mirror_index_image_via_oc_mirror(index_image, packages, icsp=None, idms=None
             f"{mirroring_manifests_dir}",
             "mapping.txt",
         )
-        mirror_images_from_mapping_file(mapping_file, icsp or idms)
+        mirror_images_from_mapping_file(mapping_file, idms=idms)
 
     # # create ImageContentSourcePolicy
     # icsp_file = os.path.join(
