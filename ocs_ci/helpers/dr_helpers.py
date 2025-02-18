@@ -489,7 +489,7 @@ def check_vr_state(state, namespace):
         return False
 
 
-def check_vrg_existence(namespace, vrg_name=None):
+def check_vrg_existence(namespace, vrg_name=""):
     """
     Check if VRG resource exists in the given namespace
 
@@ -498,8 +498,6 @@ def check_vrg_existence(namespace, vrg_name=None):
         vrg_name (str): Name of VRG
 
     """
-    if not vrg_name:
-        vrg_name = ""
     vrg_list = (
         ocp.OCP(
             kind=constants.VOLUME_REPLICATION_GROUP,
