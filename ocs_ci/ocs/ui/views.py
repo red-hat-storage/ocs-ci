@@ -1178,6 +1178,15 @@ acm_configuration_4_18 = {
         By.XPATH,
     ),
     "close-action-modal": ("button[aria-label='Close']", By.CSS_SELECTOR),
+    "critical-alert": ("#alert-toggle-critical", By.CSS_SELECTOR),
+    "volsyncdelayalert1": (
+        "(//span[contains(text(),'VolumeSynchronizationDelay')])[1]",
+        By.XPATH,
+    ),
+    "volsyncdelayalert2": (
+        "(//span[contains(text(),'VolumeSynchronizationDelay')])[2]",
+        By.XPATH,
+    ),
 }
 
 add_capacity = {
