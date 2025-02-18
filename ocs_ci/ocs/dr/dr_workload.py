@@ -1293,6 +1293,7 @@ class BusyboxDiscoveredApps(DRWorkload):
                 namespace=self.workload_namespace,
                 check_replication_resources_state=False,
                 discovered_apps=True,
+                vrg_name=self.discovered_apps_placement_name,
             )
             run_cmd(f"oc delete project {self.workload_namespace}")
 
