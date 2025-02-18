@@ -283,9 +283,12 @@ class TestNodeReplacement(ManageTest):
     """
 
     @pytest.fixture(autouse=True)
-    def teardown(self):
-        log.info("Clear crash warnings and osd removal leftovers")
-        clear_crash_warning_and_osd_removal_leftovers()
+    def teardown(self, request):
+        def finalizer():
+            log.info("Clear crash warnings and osd removal leftovers")
+            clear_crash_warning_and_osd_removal_leftovers()
+
+        request.addfinalizer(finalizer)
 
     @pytest.fixture(autouse=True)
     def init_sanity(self):

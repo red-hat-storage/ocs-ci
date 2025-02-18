@@ -35,7 +35,6 @@ from ocs_ci.ocs.exceptions import (
     NoRunningCephToolBoxException,
     TolerationNotFoundException,
 )
-from ocs_ci.ocs.resources.pvc import get_all_pvcs_in_storageclass
 
 from ocs_ci.ocs.utils import setup_ceph_toolbox, get_pod_name_by_pattern
 from ocs_ci.ocs.resources.ocs import OCS
@@ -2928,9 +2927,17 @@ def delete_osd_removal_job(osd_id=None):
     else:
         job_name = f"ocs-osd-removal-{osd_id}"
 
-    osd_removal_job = get_job_obj(
-        job_name, namespace=config.ENV_DATA["cluster_namespace"]
-    )
+    try:
+        osd_removal_job = get_job_obj(
+            job_name, namespace=config.ENV_DATA["cluster_namespace"]
+        )
+    except CommandFailed as ex:
+        if "NotFound" in str(ex):
+            logger.info(f"Didn't find the job {job_name}")
+            return True
+        else:
+            raise ex
+
     osd_removal_job.delete()
     try:
         osd_removal_job.ocp.wait_for_delete(resource_name=job_name)
@@ -4083,9 +4090,30 @@ def get_lvs_osd_pods(lvs_name):
         list: List of the osd pods
 
     """
+    from ocs_ci.ocs.resources.pvc import get_all_pvcs_in_storageclass
+
     pvcs = get_all_pvcs_in_storageclass(lvs_name)
     pvc_names = [pvc.name for pvc in pvcs]
     osd_pods = get_osd_pods()
     lvs_pods = [p for p in osd_pods if get_pvc_name(p) in pvc_names]
 
     return lvs_pods
+
+
+def get_pods_pvcs(pod_objs, namespace=None):
+    """
+    Get the PVC objects of the given pod objects
+
+    Args:
+        pod_objs (list): List of the pod objects
+        namespace (str): Name of namespace
+
+    Returns:
+        list: The PVC objects
+
+    """
+    from ocs_ci.ocs.resources.pvc import get_pvc_objs
+
+    namespace = namespace or config.ENV_DATA["cluster_namespace"]
+    pvc_names = [get_pvc_name(p) for p in pod_objs]
+    return get_pvc_objs(pvc_names, namespace)
