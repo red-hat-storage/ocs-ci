@@ -5,9 +5,8 @@ from concurrent.futures import ThreadPoolExecutor
 from ocs_ci.framework.pytest_customization.marks import (
     blue_squad,
     skipif_ocs_version,
-    skipif_vsphere_ipi,
-    skipif_vsphere_upi,
-    skipif_disconnected_cluster,
+    aws_platform_required,
+    baremetal_deployment_required,
 )
 from ocs_ci.framework.testlib import E2ETest, tier2
 from ocs_ci.helpers import helpers
@@ -90,10 +89,9 @@ def active_mds_alert_values(threading_lock):
 
 @tier2
 @blue_squad
-@skipif_ocs_version("<4.18")
-@skipif_vsphere_ipi  # Skip on vsphere due to latency issues with hardware used.
-@skipif_vsphere_upi  # This test will give accurate results on BM,AWS,Azure and IBM cloud only.
-@skipif_disconnected_cluster
+@skipif_ocs_version("<4.15")
+@aws_platform_required
+@baremetal_deployment_required
 class TestMdsCpuAlerts(E2ETest):
     @pytest.fixture(scope="function", autouse=True)
     def teardown(self, request):
