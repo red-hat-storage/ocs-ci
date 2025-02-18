@@ -190,12 +190,12 @@ class TestCapacityBreakdownUI(ManageTest):
                     capacity,
                 )
 
-        # deploy busybox and attach different pvcs to it
+        # deploy test app and attach different pvcs to it
         for data_struct in PvcCapacityDeploymentList():
-            _, data_struct.deployment = WorkloadUi().deploy_busybox(
+            _, data_struct.deployment = WorkloadUi().deploy_app(
                 namespace=namespace,
                 pvc_name=data_struct.pvc_obj.name,
-                depl_name=f"busybox-{data_struct.capacity_size}gi-{time.time_ns() // 1_000_000}",
+                depl_name=f"ubi8-{data_struct.capacity_size}gi-{time.time_ns() // 1_000_000}",
             )
 
         # fill attached PVC's with data
@@ -226,7 +226,7 @@ class TestCapacityBreakdownUI(ManageTest):
         # update of the ui comes by portions. For example, the large PVC will be updated by parts, first it's filled
         # with 1Gi, then 2.5Gi, etc. This process is random, so we give a time to update the UI
         logger.info(
-            "finished deploying busybox, wait 180 sec to update the UI of the management-console"
+            "finished deploying testing apps, wait 180 sec to update the UI of the management-console"
         )
         time.sleep(180)
 

@@ -41,47 +41,66 @@ class SingletonMeta(type):
 class WorkloadUi(metaclass=SingletonMeta):
     """Class to handle workload UI related operations"""
 
-    with open(constants.BUSYBOX_TEMPLATE) as file_stream:
-        busy_box_depl = yaml.safe_load(file_stream)
-
     deployment_list = list()
 
-    def get_busybox_depl_name(self):
+    def __init__(self, app: str = "ubi8"):
         """
-        Retrieves the name of the BusyBox deployment.
-
-        Returns:
-            str: Name of the BusyBox deployment.
-        """
-        return self.busy_box_depl["metadata"]["name"]
-
-    def set_busybox_depl_name(self, name):
-        """
-        Sets the name of the BusyBox deployment in the original YAML.
+        Initialize the WorkloadUi class.
 
         Args:
-            name (str): New name for the BusyBox deployment.
+            app (str): The application to be deployed. Defaults to "ubi8".
         """
-        self.busy_box_depl["metadata"]["name"] = name
+        if hasattr(self, "app"):
+            return
 
-    def deploy_busybox(
+        self.app = app
+
+        if self.app == "ubi8":
+            app_path = constants.UBI8_TEMPLATE
+        elif self.app == "busybox":
+            app_path = constants.BUSYBOX_TEMPLATE
+        else:
+            raise ValueError(f"Unsupported app {app}")
+
+        with open(app_path) as file_stream:
+            self.depl_cr = yaml.safe_load(file_stream)
+
+    def get_depl_name(self):
+        """
+        Retrieves the name of the testing app deployment.
+
+        Returns:
+            str: Name of the deployment.
+        """
+        return self.depl_cr["metadata"]["name"]
+
+    def set_depl_name(self, name):
+        """
+        Sets the name of the testing app deployment in the original YAML.
+
+        Args:
+            name (str): New name for the testing app deployment.
+        """
+        self.depl_cr["metadata"]["name"] = name
+
+    def deploy_app(
         self,
         node: str = None,
         namespace=config.ENV_DATA["cluster_namespace"],
-        depl_name="busybox-ui-test",
+        depl_name="ui-test-app",
         pvc_name: str = None,
     ) -> tuple:
         """
-        Deploys a busybox container to a randomly selected worker node.
+        Deploys a testing app container to a randomly selected worker node.
 
-        node (str): Name of the node where the busybox container is to be deployed.
+        node (str): Name of the node where the app container is to be deployed.
         If not specified, a random worker node is selected.
-        namespace (str): Namespace where the busybox container is to be deployed.
+        namespace (str): Namespace where deployment is to be deployed.
         depl_name (str): Name of the deployment to be created. Defaults to None.
-        pvc_name (str): Name of the PVC to be attached by the busybox container. Defaults to None.
+        pvc_name (str): Name of the PVC to be attached by the test app container. Defaults to None.
 
         Returns:
-            tuple: The name of the node where the busybox container is deployed, and a deployment name if deployed,
+            tuple: The name of the node where the container is deployed, and a deployment name if deployed,
             otherwise None.
         """
         if not node:
@@ -92,33 +111,41 @@ class WorkloadUi(metaclass=SingletonMeta):
             mode="w", suffix=".yaml", delete=True
         ) as temp_file:
 
-            bb_dict = copy.deepcopy(self.busy_box_depl)
+            depl_dict = copy.deepcopy(self.depl_cr)
 
-            bb_dict["spec"]["template"]["spec"]["nodeName"] = node
-            bb_dict["metadata"]["namespace"] = namespace
+            depl_dict["spec"]["template"]["spec"]["nodeName"] = node
+            depl_dict["metadata"]["namespace"] = namespace
             if depl_name:
-                bb_dict["metadata"]["name"] = depl_name
+                depl_dict["metadata"]["name"] = depl_name
             if pvc_name:
-                bb_dict["spec"]["template"]["spec"].setdefault("volumes", [])
-                bb_dict["spec"]["template"]["spec"]["volumes"].append(
+                depl_dict["spec"]["template"]["spec"].setdefault("volumes", [])
+                depl_dict["spec"]["template"]["spec"]["volumes"].append(
                     {
                         "name": "unique-pvc",
                         "persistentVolumeClaim": {"claimName": pvc_name},
                     }
                 )
-                bb_dict["spec"]["template"]["spec"]["containers"][0].setdefault(
+
+                depl_dict["spec"]["template"]["spec"].setdefault("containers", [{}])
+                if not depl_dict["spec"]["template"]["spec"]["containers"]:
+                    depl_dict["spec"]["template"]["spec"]["containers"].append({})
+
+                depl_dict["spec"]["template"]["spec"]["containers"][0].setdefault(
                     "volumeMounts", []
                 )
-                bb_dict["spec"]["template"]["spec"]["containers"][0][
+                depl_dict["spec"]["template"]["spec"]["containers"][0][
                     "volumeMounts"
                 ].append({"name": "unique-pvc", "mountPath": "/tmp"})
 
-            yaml.dump(bb_dict, temp_file, default_flow_style=False)
+            if not namespace:
+                namespace = config.ENV_DATA["cluster_namespace"]
+
+            yaml.dump(depl_dict, temp_file, default_flow_style=False)
             temp_file.flush()
             occli = OCP()
             occli.apply(temp_file.name)
 
-        busy_box_scaled_up = self.wait_busy_box_scaled_up(60, depl_name, namespace)
+        app_scaled_up = self.wait_app_scaled_up(60, depl_name, namespace)
         deployment = Deployment(
             **OCP(
                 kind="deployment",
@@ -127,13 +154,11 @@ class WorkloadUi(metaclass=SingletonMeta):
             ).get()
         )
         self.deployment_list.append(deployment)
-        return node, deployment if busy_box_scaled_up else None
+        return node, deployment if app_scaled_up else None
 
-    def wait_busy_box_scaled_up(
-        self, timeout: int, depl_name: str, namespace: str
-    ) -> bool:
+    def wait_app_scaled_up(self, timeout: int, depl_name: str, namespace: str) -> bool:
         """
-        Waits for the 'busybox' deployment to be scaled up within the specified timeout.
+        Waits for the 'busybox' or 'ubi8' or other test deployment to be scaled up within the specified timeout.
 
         Args:
             timeout (int): The maximum time to wait for the deployment to be scaled up, in seconds.
@@ -143,7 +168,7 @@ class WorkloadUi(metaclass=SingletonMeta):
             bool: True if the deployment is successfully scaled up within the timeout, False otherwise.
 
         """
-        busy_box_ocp_inst = OCP(
+        test_app_ocp_inst = OCP(
             kind="deployment",
             namespace=namespace,
             resource_name=depl_name,
@@ -151,10 +176,10 @@ class WorkloadUi(metaclass=SingletonMeta):
 
         try:
             sample = TimeoutSampler(
-                timeout=timeout, sleep=1, func=busy_box_ocp_inst.get
+                timeout=timeout, sleep=1, func=test_app_ocp_inst.get
             )
-            for busy_box_data in sample:
-                if busy_box_data.get("spec").get("replicas") > 0:
+            for test_app_data in sample:
+                if test_app_data.get("spec").get("replicas") > 0:
                     logger.info(f"deployment '{depl_name}' " f"successfully deployed")
                     return True
         except TimeoutExpiredError:
@@ -163,15 +188,15 @@ class WorkloadUi(metaclass=SingletonMeta):
             )
             return False
 
-    def delete_busybox(self, depl_name: str, force: bool = False):
+    def delete_depl(self, depl_name: str, force: bool = False):
         """
-        Deletes the BusyBox deployment from cluster.
+        Deletes deployment from cluster.
 
         Args:
             force (bool, optional): If True, force deletion even if the deployment is not found. Defaults to False.
             depl_name ( str): Name of the deployment to be deleted. Defaults to None.
         Returns:
-            dict: The deletion result if the BusyBox deployment exists and is successfully deleted.
+            dict: The deletion result if deployment exists and is successfully deleted.
                   Returns None otherwise.
         """
 
@@ -186,12 +211,12 @@ class WorkloadUi(metaclass=SingletonMeta):
         self.deployment_list.remove(bb_depl)
         return res
 
-    def delete_all_busy_box_deployments(self):
+    def delete_all_deployments(self):
         """
-        Deletes all BusyBox deployments from cluster.
+        Deletes all test deployments from cluster created for ui tests.
         """
         for depl in WorkloadUi().deployment_list:
-            self.delete_busybox(depl.name, force=True)
+            self.delete_depl(depl.name, force=True)
 
 
 class PvcCapacityDeployment:
@@ -438,7 +463,7 @@ def wait_for_container_status_ready(pod: Pod):
 
     retry(
         CommandFailed,
-        text_in_exception="can't read container state of busybox deployment",
+        text_in_exception="can't read container state of deployment",
         func=do_wait_for_container_status_ready,
     )(pod)
 

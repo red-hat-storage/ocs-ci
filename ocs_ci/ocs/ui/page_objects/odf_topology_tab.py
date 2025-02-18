@@ -656,7 +656,7 @@ class TopologyTab(DataFoundationDefaultTab, AbstractTopologyView):
                   and the values are booleans indicating whether the deviation was detected or not.
         """
 
-        node_with_busybox, _ = self.workload_ui.deploy_busybox()
+        node_with_test_app, _ = self.workload_ui.deploy_app()
         sleep_time = 30
         logger.info(f"give {sleep_time}sec to render on ODF Topology view")
         time.sleep(sleep_time)
@@ -758,33 +758,33 @@ class TopologyTab(DataFoundationDefaultTab, AbstractTopologyView):
                 )
                 topology_deviation[f"{node_name}__deployments_not_equal"] = True
 
-            busybox_depl_name = self.workload_ui.get_busybox_depl_name()
-            if node_name == node_with_busybox and (
-                busybox_depl_name not in deployments_names_list_ui
+            test_app_depl_name = self.workload_ui.get_depl_name()
+            if node_name == node_with_test_app and (
+                test_app_depl_name not in deployments_names_list_ui
             ):
                 self.take_screenshot()
                 self.copy_dom()
                 logger.error(
-                    f"busybox deployment '{busybox_depl_name}' deployed on the node '{node_with_busybox}' "
+                    f"test-app deployment '{test_app_depl_name}' deployed on the node '{node_with_test_app}' "
                     f"during the test was not found in UI"
                 )
                 topology_deviation["added_deployment_not_found"] = True
-            elif node_name == node_with_busybox and (
-                busybox_depl_name in deployments_names_list_ui
+            elif node_name == node_with_test_app and (
+                test_app_depl_name in deployments_names_list_ui
             ):
-                self.workload_ui.delete_busybox(busybox_depl_name)
+                self.workload_ui.delete_depl(test_app_depl_name)
                 sleep_time = 30
                 logger.info(
-                    f"delete '{busybox_depl_name}' deployment from cluster, give {sleep_time}sec to update ODF "
+                    f"delete '{test_app_depl_name}' deployment from cluster, give {sleep_time}sec to update ODF "
                     "Topology and verify deployment was removed"
                 )
                 time.sleep(sleep_time)
 
                 deployment_topology = self.nodes_view.nav_into_node(
-                    node_name_option=node_with_busybox
+                    node_name_option=node_with_test_app
                 )
 
-                # zoom out Topology view before trying to find busybox deployment
+                # zoom out Topology view before trying to find test-app deployment
                 if len(deployments_names_list_ui) < 6:
                     zoom_out_times = 1
                 elif len(deployments_names_list_ui) < 12:
@@ -794,19 +794,19 @@ class TopologyTab(DataFoundationDefaultTab, AbstractTopologyView):
                 for i in range(1, zoom_out_times + 1):
                     self.zoom_out_view()
 
-                # check deployed during the test deployment is present
-                if not deployment_topology.is_entity_present(busybox_depl_name):
+                # check that the test-app deployment is present
+                if not deployment_topology.is_entity_present(test_app_depl_name):
                     logger.info(
-                        f"Deployment '{busybox_depl_name}' was successfully removed from ODF Topology view"
+                        f"Deployment '{test_app_depl_name}' was successfully removed from ODF Topology view"
                     )
                 else:
                     logger.error(
-                        f"busybox deployment '{busybox_depl_name}' deployed on the node '{node_with_busybox}' "
+                        f"test-app deployment '{test_app_depl_name}' deployed on the node '{node_with_test_app}' "
                         f"during the test was not removed from ODF Topology"
                     )
                     self.take_screenshot()
                     self.copy_dom()
-                    topology_deviation[f"{busybox_depl_name}__not_removed"] = True
+                    topology_deviation[f"{test_app_depl_name}__not_removed"] = True
                 deployment_topology.nav_back_main_topology_view()
         return topology_deviation
 
