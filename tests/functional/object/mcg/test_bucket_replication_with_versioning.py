@@ -310,7 +310,11 @@ class TestReplicationWithVersioning(MCGTest):
                 raise UnexpectedBehaviour(
                     f"Expected a single version, got: {target_versions}"
                 )
-            target_version_etag = target_versions[0]["ETag"]
+            target_version_etag = (
+                target_versions[0].get("ETag")
+                if target_versions and isinstance(target_versions[0], dict)
+                else None
+            )
             if target_version_etag == latest_version_etag:
                 logger.info("Only the later version was replicated as expected")
                 break
