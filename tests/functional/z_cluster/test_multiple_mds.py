@@ -101,11 +101,11 @@ class TestMultipleMds:
         """
         original_active_count_cephfilesystem = get_active_mds_count_cephfilesystem()
 
-        # Scale up active mds pods from 1 to 3 sequentially.
+        log.info("Scale up active mds pods from 1 to 3 sequentially.")
         new_active_mds_count = original_active_count_cephfilesystem + 2
         adjust_active_mds_count_storagecluster(new_active_mds_count)
 
-        # Verify active and standby-replay mds counts.
+        log.info("Verify active and standby-replay mds counts")
         verify_active_and_standby_mds_count(new_active_mds_count)
 
         # Replace active mds node
@@ -115,7 +115,7 @@ class TestMultipleMds:
         log.info(f"Replacing active mds node : {active_mds_node_name}")
         delete_and_create_osd_node(active_mds_node_name)
 
-        # Verify active and standby-replay mds counts after node replacement
+        log.info("Verify active and standby-replay mds counts after node replacement")
         verify_active_and_standby_mds_count(new_active_mds_count)
 
         # Perform cluster and Ceph health checks
@@ -131,11 +131,11 @@ class TestMultipleMds:
         """
         original_active_count_cephfilesystem = get_active_mds_count_cephfilesystem()
 
-        # Scale up active mds pods from 1 to 2.
+        log.info("Scale up active mds pods from 1 to 2")
         new_active_mds_count = original_active_count_cephfilesystem + 1
         adjust_active_mds_count_storagecluster(new_active_mds_count)
 
-        # Get active mds node name
+        log.info("Get active mds node name")
         active_mds_pods = get_active_mds_pod_objs()
         active_mds_pod = random.choice(active_mds_pods)
         active_mds_pod_name = active_mds_pod.name
@@ -144,31 +144,32 @@ class TestMultipleMds:
         )
         active_mds_node_name = selected_pod_obj.data["spec"].get("nodeName")
 
-        # Drain active mds pod running node
+        log.info("Drain active mds pod running node")
         node.drain_nodes([active_mds_node_name])
-
         # Make the node schedulable again
         node.schedule_nodes([active_mds_node_name])
 
         # Perform cluster and Ceph health checks
         self.sanity_helpers.health_check(tries=120)
 
-        # Verify active and standby-replay mds counts.
+        log.info("Verify active and standby-replay mds counts")
         verify_active_and_standby_mds_count(new_active_mds_count)
 
-        # Start IO Workload.
+        log.info("Start IO Workload")
         pod_obj = pod_factory(interface=constants.CEPHBLOCKPOOL)
         pod_obj.run_io(direct=1, runtime=180, storage_type="fs", size="1G")
 
         # Fail one active mds pod [out of two]
+        log.info("Fail one active mds pod")
         rand = random.randint(0, 1)
         ct_pod = pod.get_ceph_tools_pod()
         ct_pod.exec_ceph_cmd(f"ceph mds fail {rand}")
 
         # Verify active and standby-replay mds counts is still same.
+        log.info("Verify active and standby-replay mds counts after pod failure")
         verify_active_and_standby_mds_count(new_active_mds_count)
 
-        # Wait for IO completion
+        log.info("Wait for IO completion")
         fio_result = pod_obj.get_fio_results()
         log.info("IO completed on all pods")
         err_count = fio_result.get("jobs")[0].get("error")
