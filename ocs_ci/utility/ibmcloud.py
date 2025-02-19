@@ -1358,12 +1358,13 @@ class IBMCloudObjectStorage:
         if objects:
             try:
                 # Form the delete request
-                delete_request = {"Objects": [{"Key": obj} for obj in objects]}
-                response = self.cos_client.delete_objects(
-                    Bucket=bucket_name, Delete=delete_request
-                )
-                logger.info(f"Deleted items for {bucket_name}")
-                logger.debug(json.dumps(response.get("Deleted"), indent=4))
+                for obj in objects:
+                    delete_request = {"Objects": [{"Key": obj}]}
+                    response = self.cos_client.delete_objects(
+                        Bucket=bucket_name, Delete=delete_request
+                    )
+                    logger.info(f"Deleted items for {bucket_name}")
+                    logger.debug(json.dumps(response.get("Deleted"), indent=4))
             except ClientError as ce:
                 logger.error(f"CLIENT ERROR: {ce}")
             except Exception as e:
