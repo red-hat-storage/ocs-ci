@@ -2,12 +2,14 @@
 Helper functions specific for CNV
 """
 
+import concurrent.futures
 import os
 import base64
 import logging
 import re
 
 from ocs_ci.helpers.helpers import create_unique_resource_name, create_resource
+from ocs_ci.helpers.keyrotation_helper import PVKeyrotation
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.exceptions import CommandFailed
 from ocs_ci.ocs.node import get_node_objs
@@ -465,7 +467,70 @@ def get_vm_status(vm_obj):
         str: The status of the VM.
     """
     try:
-        return vm_obj.get().get("status", {}).get("printableStatus", "Unknown")
+        status_info = vm_obj.get()
+        return status_info.get("status", {}).get("printableStatus", "Unknown")
     except Exception as e:
         logger.error(f"Failed to get VM status for {vm_obj.name}: {e}")
         return "Error"
+
+
+def setup_kms_and_storageclass(
+    pv_encryption_kms_setup_factory, storageclass_factory, project_factory
+):
+    proj_obj = project_factory()
+
+    logger.info("Setting up csi-kms-connection-details configmap")
+    kms = pv_encryption_kms_setup_factory(kv_version="v2")
+    logger.info("csi-kms-connection-details setup successful")
+
+    sc_obj_def = storageclass_factory(
+        interface=constants.CEPHBLOCKPOOL,
+        encrypted=True,
+        encryption_kms_id=kms.kmsid,
+        new_rbd_pool=True,
+        mapOptions="krbd:rxbounce",
+        mounter="rbd",
+    )
+
+    kms.vault_path_token = kms.generate_vault_token()
+    kms.create_vault_csi_kms_token(namespace=proj_obj.namespace)
+
+    pvk_obj = PVKeyrotation(sc_obj_def)
+    pvk_obj.annotate_storageclass_key_rotation(schedule="*/3 * * * *")
+
+    return proj_obj, kms, sc_obj_def
+
+
+def create_and_clone_vms(
+    cnv_workload, clone_vm_workload, proj_obj, sc_obj_def, file_paths, number_of_vm
+):
+    vm_list = []
+    vm_list_clone = []
+    source_csum = {}
+    res_csum = {}
+
+    def create_and_clone_vm(index):
+        vm_obj = cnv_workload(
+            storageclass=sc_obj_def.name,
+            namespace=proj_obj.namespace,
+            volume_interface=constants.VM_VOLUME_PVC,
+        )
+        vm_list.append(vm_obj)
+        source_csum[vm_obj.name] = run_dd_io(
+            vm_obj=vm_obj, file_path=file_paths[0], verify=True
+        )
+        logger.info(f" before cloning source csum: {source_csum[vm_obj.name]}")
+        clone_vm_obj = clone_vm_workload(vm_obj, namespace=vm_obj.namespace)
+        vm_list_clone.append(clone_vm_obj)
+        res_csum[clone_vm_obj.name] = cal_md5sum_vm(
+            vm_obj=clone_vm_obj, file_path=file_paths[0]
+        )
+        assert (
+            res_csum[clone_vm_obj.name] == source_csum[vm_obj.name]
+        ), f"Failed: MD5 comparison between source {vm_obj.name} and its cloned VMs"
+
+    with concurrent.futures.ThreadPoolExecutor() as executor:
+        futures = [executor.submit(create_and_clone_vm, i) for i in range(number_of_vm)]
+        concurrent.futures.wait(futures)
+
+    return vm_list, vm_list_clone, source_csum, res_csum
