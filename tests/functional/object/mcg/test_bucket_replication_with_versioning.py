@@ -23,6 +23,7 @@ from ocs_ci.ocs.bucket_utils import (
     wait_for_object_versions_match,
 )
 from ocs_ci.ocs.exceptions import UnexpectedBehaviour
+from ocs_ci.ocs.ocp import OCP
 from ocs_ci.ocs.resources.mcg_replication_policy import ReplicationPolicyWithVersioning
 from ocs_ci.utility.utils import TimeoutSampler
 
@@ -248,6 +249,18 @@ class TestReplicationWithVersioning(MCGTest):
         put_bucket_versioning_via_awscli(
             mcg_obj, awscli_pod, source_bucket.name, status="Suspended"
         )
+
+        # Increase the replication delay to avoid race condition issues
+        # where non-latest versions get replicated in between writes
+        longer_interval_in_miliseconds = 3 * 60 * 1000
+        OCP().exec_oc_cmd(
+            (
+                f"set env statefulset/{constants.NOOBAA_CORE_STATEFULSET} "
+                f"{constants.BUCKET_REPLICATOR_DELAY_PARAM}={longer_interval_in_miliseconds} "
+                f"{constants.BUCKET_LOG_REPLICATOR_DELAY_PARAM}={longer_interval_in_miliseconds} "
+            )
+        )
+        mcg_obj.wait_for_ready_status()
 
         # 4. Write some versions to the source bucket
         upload_obj_versions(
