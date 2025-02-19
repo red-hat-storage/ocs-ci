@@ -984,6 +984,7 @@ def login_ui(console_url=None, username=None, password=None):
     password_el = wait_for_element_to_be_clickable(login_loc["password"], 60)
     password_el.send_keys(password)
 
+    logger.info("Username and password filled in, clicking Log in")
     confirm_login_el = wait_for_element_to_be_clickable(login_loc["click_login"], 60)
     confirm_login_el.click()
 
@@ -1011,7 +1012,8 @@ def login_ui(console_url=None, username=None, password=None):
                 f"Platform {config.ENV_DATA['platform']} is not supported"
             )
 
-    if default_console is True and username is constants.KUBEADMIN:
+    # Log in process needs to be retried if navigator sidebar is not visible
+    if default_console is True:
         wait_for_element_to_be_visible(page_nav_loc["page_navigator_sidebar"], 180)
 
     # Skip tour if it appears, if not found, continue without clicking
