@@ -1,5 +1,7 @@
 import logging
 
+from flaky import flaky
+
 from ocs_ci.framework.pytest_customization.marks import (
     skipif_ibm_cloud_managed,
     skipif_managed_service,
@@ -32,6 +34,7 @@ logger = logging.getLogger(__name__)
 @skipif_ocs_version("<4.13")
 class TestErrorMessageImprovements(ManageTest):
     @mcg
+    @flaky(max_runs=2)
     @bugzilla("2193109")
     @polarion_id("OCS-4865")
     def test_backing_store_creation_rules(self, setup_ui_class):
@@ -65,6 +68,7 @@ class TestErrorMessageImprovements(ManageTest):
         object_bucket_claim_create_tab.check_error_messages()
 
     @mcg
+    @flaky(max_runs=2)
     @bugzilla("2193109")
     @polarion_id("OCS-4869")
     def test_bucket_class_creation_rules(self, setup_ui_class):
@@ -83,6 +87,7 @@ class TestErrorMessageImprovements(ManageTest):
         bucket_class_create_tab.check_error_messages()
 
     @mcg
+    @flaky(max_runs=2)
     @bugzilla("2193109")
     @polarion_id("OCS-4871")
     @skipif_disconnected_cluster
@@ -146,6 +151,7 @@ class TestErrorMessageImprovements(ManageTest):
 
     @bugzilla("2193109")
     @polarion_id("OCS-4875")
+    @flaky(max_runs=2)
     @external_mode_required
     @skipif_hci_provider_or_client
     def test_storage_class_creation_rules(self, setup_ui_class):
