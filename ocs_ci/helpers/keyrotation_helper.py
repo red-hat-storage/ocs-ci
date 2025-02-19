@@ -647,6 +647,7 @@ class PVKeyrotation(KeyRotation):
         log.info("Completed key rotation state changes for all specified PVCs.")
         return True
 
+
 def validate_key_rotation_schedules(schedule):
     """
     Validate key rotation schedules across different components.

@@ -9155,6 +9155,7 @@ def set_encryption_at_teardown(request):
     # Add the teardown function to the request's finalizer
     request.addfinalizer(teardown)
 
+
 def pytest_sessionfinish(session, exitstatus):
     """
     Do some session finish teardown functionality
@@ -9165,6 +9166,7 @@ def pytest_sessionfinish(session, exitstatus):
         cluster_load.finish_cluster_load()
     except Exception:
         log.exception("During finishing the Cluster load an exception was hit!")
+
 
 @pytest.fixture()
 def run_fio_till_cluster_full(
