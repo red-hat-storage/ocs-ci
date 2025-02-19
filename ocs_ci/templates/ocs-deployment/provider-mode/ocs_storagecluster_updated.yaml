@@ -33,7 +33,7 @@ spec:
   providerAPIServerServiceType: NodePort
   storageDeviceSets:
   - config: {}
-    count: 4
+    count: 1
     dataPVCTemplate:
       metadata: {}
       spec:
@@ -41,7 +41,7 @@ spec:
         - ReadWriteOnce
         resources:
           requests:
-            storage: 256Gi
+            storage: 100Gi
         storageClassName: localblock
 
         volumeMode: Block
