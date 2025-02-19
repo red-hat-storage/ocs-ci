@@ -4,7 +4,7 @@ import time
 
 from concurrent.futures import ThreadPoolExecutor
 from ocs_ci.framework.pytest_customization.marks import blue_squad
-from ocs_ci.framework.testlib import E2ETest, tier2, ignore_leftovers
+from ocs_ci.framework.testlib import E2ETest, tier2, ignore_leftovers, jira
 from ocs_ci.framework import config
 from ocs_ci.helpers import helpers
 from ocs_ci.ocs import constants
@@ -78,6 +78,7 @@ def run_metadata_io_with_cephfs(dc_pod_factory):
 @tier2
 @blue_squad
 @ignore_leftovers
+@jira("DFBUGS-368")
 class TestMdsMemoryAlerts(E2ETest):
     @pytest.fixture(scope="function", autouse=True)
     def teardown(self, request):
@@ -130,7 +131,9 @@ class TestMdsMemoryAlerts(E2ETest):
         return True
 
     @pytest.mark.polarion_id("OCS-5570")
-    def test_alert_triggered(self, run_metadata_io_with_cephfs, threading_lock):
+    def deprecated_test_mds_cache_alert_triggered(
+        self, run_metadata_io_with_cephfs, threading_lock
+    ):
         """
         This function verifies the mds cache alert triggered or not.
 
@@ -141,7 +144,7 @@ class TestMdsMemoryAlerts(E2ETest):
         assert self.active_mds_alert_values(threading_lock)
 
     @pytest.mark.polarion_id("OCS-5571")
-    def test_mds_cache_alert_with_active_node_drain(
+    def deprecated_test_mds_cache_alert_with_active_node_drain(
         self, run_metadata_io_with_cephfs, threading_lock
     ):
         """
@@ -170,7 +173,7 @@ class TestMdsMemoryAlerts(E2ETest):
         assert self.active_mds_alert_values(threading_lock)
 
     @pytest.mark.polarion_id("OCS-5572")
-    def test_alert_by_restarting_operator_and_ceph_pods(
+    def deprecated_test_alert_by_restarting_operator_and_ceph_pods(
         self, run_metadata_io_with_cephfs, threading_lock
     ):
         """
@@ -215,7 +218,7 @@ class TestMdsMemoryAlerts(E2ETest):
         assert self.active_mds_alert_values(threading_lock)
 
     @pytest.mark.polarion_id("OCS-5576")
-    def test_mds_cache_alert_after_recovering_prometheus_from_failures(
+    def deprecated_test_mds_cache_alert_after_recovering_prometheus_from_failures(
         self, run_metadata_io_with_cephfs, threading_lock
     ):
         """
@@ -230,7 +233,7 @@ class TestMdsMemoryAlerts(E2ETest):
         assert self.active_mds_alert_values(threading_lock)
 
     @pytest.mark.polarion_id("OCS-5577")
-    def test_mds_cache_alert_with_active_node_scaledown(
+    def deprecated_test_mds_cache_alert_with_active_node_scaledown(
         self, run_metadata_io_with_cephfs, threading_lock
     ):
         """
@@ -266,7 +269,7 @@ class TestMdsMemoryAlerts(E2ETest):
         assert self.active_mds_alert_values(threading_lock)
 
     @pytest.mark.polarion_id("OCS-5578")
-    def test_mds_cache_alert_with_sr_node_scaledown(
+    def deprecated_test_mds_cache_alert_with_sr_node_scaledown(
         self, run_metadata_io_with_cephfs, threading_lock
     ):
         """
@@ -296,7 +299,7 @@ class TestMdsMemoryAlerts(E2ETest):
         assert self.active_mds_alert_values(threading_lock)
 
     @pytest.mark.polarion_id("OCS-5579")
-    def test_mds_cache_alert_with_all_mds_node_scaledown(
+    def deprecated_test_mds_cache_alert_with_all_mds_node_scaledown(
         self, run_metadata_io_with_cephfs, threading_lock
     ):
         """
