@@ -116,30 +116,32 @@ class MCEInstaller(object):
                 constants.MCE_SUBSCRIPTION_YAML
             )
 
-        if config.DEPLOYMENT.get("mce_latest_stable"):
-            mce_subscription_yaml_data["spec"][
-                "source"
-            ] = constants.OPERATOR_CATALOG_SOURCE_NAME
-            mce_channel = "stable"
-        else:
-            mce_channel = config.DEPLOYMENT.get("mce_channel")
+            if config.DEPLOYMENT.get("mce_latest_stable"):
+                mce_subscription_yaml_data["spec"][
+                    "source"
+                ] = constants.OPERATOR_CATALOG_SOURCE_NAME
+                mce_channel = "stable"
+            else:
+                mce_channel = config.DEPLOYMENT.get("mce_channel")
 
-        mce_subscription_yaml_data["spec"]["channel"] = mce_channel
-        mce_subscription_manifest = tempfile.NamedTemporaryFile(
-            mode="w+", prefix="mce_subscription_manifest", delete=False
-        )
-        templating.dump_data_to_temp_yaml(
-            mce_subscription_yaml_data, mce_subscription_manifest.name
-        )
-        logger.info("Creating subscription for mce operator")
-        run_cmd(f"oc create -f {mce_subscription_manifest.name}")
-        OCP(
-            kind=constants.SUBSCRIPTION_COREOS,
-            namespace=self.namespace,
-            resource_name=constants.MCE_OPERATOR,
-        ).check_resource_existence(
-            should_exist=True, resource_name=constants.MCE_OPERATOR
-        )
+            mce_subscription_yaml_data["spec"]["channel"] = mce_channel
+            mce_subscription_manifest = tempfile.NamedTemporaryFile(
+                mode="w+", prefix="mce_subscription_manifest", delete=False
+            )
+            templating.dump_data_to_temp_yaml(
+                mce_subscription_yaml_data, mce_subscription_manifest.name
+            )
+            logger.info("Creating subscription for mce operator")
+            run_cmd(f"oc create -f {mce_subscription_manifest.name}")
+            OCP(
+                kind=constants.SUBSCRIPTION_COREOS,
+                namespace=self.namespace,
+                resource_name=constants.MCE_OPERATOR,
+            ).check_resource_existence(
+                should_exist=True, resource_name=constants.MCE_OPERATOR
+            )
+        else:
+            logger.info("mce operator is already installed")
 
     def check_hypershift_namespace(self):
         """

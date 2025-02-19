@@ -4,7 +4,6 @@ This module provides installation of ODF and native storage-client creation in p
 
 import logging
 import time
-import tempfile
 
 
 from ocs_ci.framework import config
@@ -324,16 +323,6 @@ class ODFAndNativeStorageClientDeploymentOnProvider(object):
         live_deployment = config.DEPLOYMENT.get("live_deployment")
         if not live_deployment:
             create_catalog_source()
-            catalog_data = templating.load_yaml(constants.PROVIDER_MODE_CATALOGSOURCE)
-            catalog_data["spec"]["image"] = config.DEPLOYMENT.get(
-                "ocs_registry_image", ""
-            )
-            catalog_data_yaml = tempfile.NamedTemporaryFile(
-                mode="w+", prefix="catalog_data", delete=False
-            )
-            templating.dump_data_to_temp_yaml(catalog_data, catalog_data_yaml.name)
-            self.ocp_obj.exec_oc_cmd(f"apply -f {catalog_data_yaml.name}")
-
             catalog_source = CatalogSource(
                 resource_name=constants.OCS_CATALOG_SOURCE_NAME,
                 namespace=constants.MARKETPLACE_NAMESPACE,
