@@ -30,8 +30,8 @@ class TestVmShutdownStart(E2ETest):
     @pytest.mark.parametrize(
         argnames=["force"],
         argvalues=[
-            pytest.param("True", marks=pytest.mark.polarion_id("OCS-6304")),
-            pytest.param("False", marks=pytest.mark.polarion_id("OCS-6316")),
+            pytest.param(True, marks=pytest.mark.polarion_id("OCS-6304")),
+            pytest.param(False, marks=pytest.mark.polarion_id("OCS-6316")),
         ],
     )
     def test_vm_abrupt_graceful_shutdown_cluster(
@@ -151,9 +151,9 @@ class TestVmShutdownStart(E2ETest):
                 AssertionError,
                 ResourceWrongStatusException,
             ),
-            tries=30,
+            tries=15,
             delay=15,
-        )(wait_for_nodes_status(timeout=1800))
+        )(wait_for_nodes_status(timeout=900))
         logger.info("All nodes are now in READY state")
 
         logger.info("Waiting for pods to come in running state.")
