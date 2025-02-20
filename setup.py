@@ -72,7 +72,7 @@ setup(
         # by default program attempting to load an x86_64-only library from a native arm64 process
         # Beginning with gevent 20.12.0, 64-bit ARM binaries are distributed on PyPI for aarch64 manylinux2014
         # compatible systems. Resolves problem for m1 Mac chips
-        "greenlet==2.0.2",
+        "greenlet==3.0rc3",
         "ovirt-engine-sdk-python==4.4.11",
         "junitparser==3.1.0",
         "flaky==3.7.0",
