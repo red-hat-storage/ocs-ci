@@ -3863,19 +3863,18 @@ def adjust_active_mds_count_storagecluster(target_count):
     )
     resource_name = sc.get()["items"][0]["metadata"]["name"]
 
-    if current_count_cephfilesystem == target_count:
-        logger.info(
-            "The current count is already equal to the target count. No changes needed."
-        )
-    else:
-        # Determine the new count by incrementing or decrementing
-        step = 1 if current_count_cephfilesystem < target_count else -1
-        new_count = current_count_cephfilesystem + step
-        param = (
-            f'{{"spec": {{"managedResources": {{"cephFilesystems": '
-            f'{{"activeMetadataServers": {new_count}}}}}}}}}'
-        )
-        sc.patch(resource_name=resource_name, params=param, format_type="merge")
+    step = 1 if current_count_cephfilesystem < target_count else -1
+    for _ in range(current_count_cephfilesystem, target_count + step, step):
+        if current_count_cephfilesystem == target_count:
+            logger.info("The current count is equal to the target count.")
+        else:
+            # Determine the new count by incrementing or decrementing
+            current_count_cephfilesystem = current_count_cephfilesystem + step
+            param = (
+                f'{{"spec": {{"managedResources": {{"cephFilesystems": '
+                f'{{"activeMetadataServers": {current_count_cephfilesystem}}}}}}}}}'
+            )
+            sc.patch(resource_name=resource_name, params=param, format_type="merge")
 
         # Retrieve the updated count
         current_params = sc.get(resource_name=resource_name)

@@ -118,7 +118,7 @@ class TestMultipleMds:
         log.info("Verify active and standby-replay mds counts after node replacement")
         verify_active_and_standby_mds_count(new_active_mds_count)
 
-        # Perform cluster and Ceph health checks
+        log.info("Performing cluster and Ceph health checks")
         self.sanity_helpers.health_check(tries=120)
 
     def test_node_drain_and_fault_tolerance_for_multiple_mds(self, pod_factory):
@@ -149,7 +149,7 @@ class TestMultipleMds:
         # Make the node schedulable again
         node.schedule_nodes([active_mds_node_name])
 
-        # Perform cluster and Ceph health checks
+        log.info("Performing cluster and Ceph health checks")
         self.sanity_helpers.health_check(tries=120)
 
         log.info("Verify active and standby-replay mds counts")
