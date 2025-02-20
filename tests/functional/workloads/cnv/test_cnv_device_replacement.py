@@ -7,6 +7,7 @@ from ocs_ci.framework.pytest_customization.marks import workloads, magenta_squad
 from ocs_ci.helpers.cnv_helpers import cal_md5sum_vm, run_dd_io
 from ocs_ci.ocs import constants
 from ocs_ci.ocs import osd_operations
+from ocs_ci.framework import config
 from ocs_ci.ocs.resources.storage_cluster import osd_encryption_verification
 
 logger = logging.getLogger(__name__)
@@ -105,9 +106,23 @@ class TestCnvDeviceReplace(E2ETest):
         osd_operations.osd_device_replacement(nodes)
 
         # Verify osd encryption
-        osd_encryption_verification
+        if config.ENV_DATA.get("encryption_at_rest"):
+            osd_encryption_verification()
 
-        # ToDo: check VMs status
+        # Check VMs status
+        assert (
+            vm_for_stop.printableStatus() == constants.CNV_VM_STOPPED
+        ), "VM did not stop with preserved state after device replacement."
+        logger.info("After device replacement, stopped VM preserved state.")
+
+        assert (
+            vm_for_snap.printableStatus() == constants.VM_PAUSED
+        ), "VM did not pause with preserved state after device replacement."
+        logger.info("After device replacement, paused VM preserved state.")
+
+        logger.info("Starting vms")
+        vm_for_stop.start()
+        vm_for_snap.start()
 
         # Perform post device replacement data integrity check
         for vm_obj in all_vms:
