@@ -1,7 +1,11 @@
 import logging
 import random
 import pytest
-from ocs_ci.framework.pytest_customization.marks import magenta_squad, workloads
+from ocs_ci.framework.pytest_customization.marks import (
+    magenta_squad,
+    workloads,
+    ignore_leftover_label,
+)
 from ocs_ci.framework.testlib import E2ETest
 from ocs_ci.helpers.cnv_helpers import (
     all_nodes_ready,
@@ -29,6 +33,8 @@ class TestVmStorageCapacity(E2ETest):
     and in the presence of snapshots and clones of the VMs.
     """
 
+    @ignore_leftover_label(constants.OSD_APP_LABEL)
+    @ignore_leftover_label(constants.OSD_PREPARE_APP_LABEL)
     def test_vm_storage_capacity(
         self,
         setup_cnv,
