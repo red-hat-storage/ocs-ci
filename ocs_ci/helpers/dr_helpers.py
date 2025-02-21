@@ -747,18 +747,21 @@ def wait_for_all_resources_creation(
 
 def wait_for_all_resources_deletion(
     namespace,
-    check_replication_resources_state=True,
     timeout=1000,
     discovered_apps=False,
+    workload_cleanup=False,
 ):
     """
     Wait for workload and replication resources to be deleted
 
     Args:
         namespace (str): the namespace of the workload
-        check_replication_resources_state (bool): True for checking replication resources state, False otherwise
         timeout (int): time in seconds to wait for resource deletion
         discovered_apps (bool): If true then deployed workload is discovered_apps
+        workload_cleanup (bool): Set to True when performing final workload cleanup.
+            If True:
+            - PVC and PV deletion will always be checked
+            - Replication resources state check will be skipped.
 
     """
     logger.info("Waiting for all pods to be deleted")
@@ -769,11 +772,12 @@ def wait_for_all_resources_deletion(
                 resource_name=pod_obj.name, timeout=timeout, sleep=5
             )
 
+    check_state = not workload_cleanup
     wait_for_replication_resources_deletion(
-        namespace, timeout, check_replication_resources_state, discovered_apps
+        namespace, timeout, check_state, discovered_apps
     )
 
-    if not (
+    if workload_cleanup or not (
         config.MULTICLUSTER["multicluster_mode"] == "regional-dr"
         and "cephfs" in namespace
     ):
@@ -786,7 +790,7 @@ def wait_for_all_resources_deletion(
             )
 
     if config.MULTICLUSTER["multicluster_mode"] != "metro-dr":
-        if "cephfs" not in namespace:
+        if workload_cleanup or "cephfs" not in namespace:
             logger.info("Waiting for all PVs to be deleted")
             sample = TimeoutSampler(
                 timeout=timeout,
@@ -960,7 +964,7 @@ def wait_for_backend_volume_deletion(backend_volumes, timeout=600):
     """
     sample = TimeoutSampler(
         timeout=timeout,
-        sleep=5,
+        sleep=10,
         func=verify_backend_volume_deletion,
         backend_volumes=backend_volumes,
     )
