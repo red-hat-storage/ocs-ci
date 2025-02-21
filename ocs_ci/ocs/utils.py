@@ -24,7 +24,12 @@ from ocs_ci.framework import config as ocsci_config, config
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.external_ceph import RolesContainer, Ceph, CephNode
 from ocs_ci.ocs.clients import WinNode
-from ocs_ci.ocs.exceptions import CommandFailed, ExternalClusterDetailsException
+from ocs_ci.ocs.exceptions import (
+    CommandFailed,
+    ExternalClusterDetailsException,
+    ResourceNotFoundError,
+    UnexpectedBehaviour,
+)
 from ocs_ci.ocs.ocp import OCP
 from ocs_ci.ocs.openstack import CephVMNode
 from ocs_ci.ocs.parallel import parallel
@@ -1904,3 +1909,33 @@ def get_dr_operator_versions():
             if submariner_operator_version:
                 versions_dic["submariner_version"] = submariner_operator_version
     return versions_dic
+
+
+def get_expected_nb_db_psql_version():
+    """
+        Get the expected NooBaa DB version from the NooBaa CR
+        Returns:
+            str: The expected NooBaa DB version
+    Raises:
+            ResourceNotFoundError: If the NooBaa CR was not found
+            UnexpectedBehaviour: If the NooBaa DB version could not be extracted from the
+    """
+
+    nb_cr_obj = OCP(
+        kind=constants.NOOBAA_RESOURCE_NAME,
+        namespace=ocsci_config.ENV_DATA["cluster_namespace"],
+        resource_name=constants.NOOBAA_RESOURCE_NAME,
+    )
+    if not nb_cr_obj:
+        raise ResourceNotFoundError(
+            f"NooBaa CR {constants.NOOBAA_RESOURCE_NAME} not found"
+        )
+
+    try:
+        psql_image = nb_cr_obj.data["spec"]["dbImage"]
+        re_match = re.search(r"postgresql-(\d+(\.\d+)*)", psql_image)
+        return re_match.group(1)
+    except Exception as e:
+        raise UnexpectedBehaviour(
+            f"Failed to extract the NooBaa DB version from the NooBaa CR: {e}"
+        )
