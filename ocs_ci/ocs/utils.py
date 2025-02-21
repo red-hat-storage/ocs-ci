@@ -2071,9 +2071,11 @@ def get_dr_operator_versions():
 
 def get_expected_nb_db_psql_version():
     """
-        Get the expected NooBaa DB version from the NooBaa CR
-        Returns:
-            str: The expected NooBaa DB version
+    Get the expected NooBaa DB version from the NooBaa CR
+
+    Returns:
+        str: The expected NooBaa DB version
+
     Raises:
             ResourceNotFoundError: If the NooBaa CR was not found
             UnexpectedBehaviour: If the NooBaa DB version could not be extracted from the
