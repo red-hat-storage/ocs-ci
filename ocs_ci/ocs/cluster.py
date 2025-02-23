@@ -3876,15 +3876,15 @@ def adjust_active_mds_count_storagecluster(target_count):
             )
             sc.patch(resource_name=resource_name, params=param, format_type="merge")
 
-        # Retrieve the updated count
-        current_params = sc.get(resource_name=resource_name)
-        current_count_cephfilesystem = current_params["spec"]["managedResources"][
-            "cephFilesystems"
-        ]["activeMetadataServers"]
-        if current_count_cephfilesystem != target_count:
-            raise ActiveMdsValueNotMatch(
-                f"Failed to update activeMetadataServers to {target_count}"
-            )
+    # Retrieve the updated count
+    current_params = sc.get(resource_name=resource_name)
+    current_count_cephfilesystem = current_params["spec"]["managedResources"][
+        "cephFilesystems"
+    ]["activeMetadataServers"]
+    if current_count_cephfilesystem != target_count:
+        raise ActiveMdsValueNotMatch(
+            f"Failed to update activeMetadataServers to {target_count}"
+        )
 
     logger.info(
         "Wait until the active mds pod count from cephfilesystem matches the target count"
