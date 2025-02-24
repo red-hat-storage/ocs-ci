@@ -1824,6 +1824,8 @@ def collect_pod_container_rpm_package(dir_name):
     ocp_obj = OCP(namespace=cluster_namespace)
     for pod_obj in pods:
         pod_object = pod_obj.get()
+        if "detect-version" in pod_object.name:
+            continue
         pod_containers = pod_object.get("spec").get("containers")
         ocp_pod_obj = OCP(kind=constants.POD, namespace=cluster_namespace)
         pod_status = ocp_pod_obj.get_resource_status(pod_obj.name)
