@@ -100,6 +100,7 @@ CHRONY_TEMPLATE = os.path.join(
 HUGE_PAGES_TEMPLATE = os.path.join(TEMPLATE_DIR, "ocp-deployment", "huge_pages.yaml")
 NAMESPACE_TEMPLATE = os.path.join(TEMPLATE_DIR, "ocp-deployment", "namespace.yaml")
 BUSYBOX_TEMPLATE = os.path.join(TEMPLATE_DIR, "ocp-deployment", "busybox.yaml")
+UBI8_TEMPLATE = os.path.join(TEMPLATE_DIR, "app-deployments", "ubi8-simple.yaml")
 NETWORK_POLICY_PROVIDER_TO_CLIENT_TEMPLATE = os.path.join(
     TEMPLATE_DIR, "ocs-deployment", "provider-mode", "network_policy_provider_mode.yaml"
 )

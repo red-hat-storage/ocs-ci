@@ -1,10 +1,7 @@
 import json
 import logging
-import random
-import tempfile
 import time
 import datetime
-import yaml
 import pandas as pd
 
 from ocs_ci.framework import config
@@ -15,7 +12,6 @@ from ocs_ci.ocs.constants import (
     ZONE_LABEL,
     RACK_LABEL,
 )
-from ocs_ci.ocs.node import get_worker_nodes
 from ocs_ci.ocs.ocp import OCP, get_all_resource_names_of_a_kind
 from ocs_ci.ocs.resources.pod import Pod
 from ocs_ci.ocs.utils import get_pod_name_by_pattern
@@ -137,10 +133,15 @@ def get_node_details_cli(node_name) -> dict:
     node_details["architecture"] = node_status.get("nodeInfo").get("architecture")
     _addresses = node_status.get("addresses")
     _address_dict = {item["type"]: item["address"] for item in _addresses}
-    node_details["addresses"] = (
+    # example of addresses for the vSphere:
+    # External IP: 10.1.112.86; Hostname: compute-2; Internal IP: 10.1.112.86
+    external_ip_str = (
         f"External IP: {_address_dict.get('ExternalIP')}; "
         if _address_dict.get("ExternalIP")
         else ""
+    )
+    node_details["addresses"] = (
+        f"{external_ip_str}"
         f"Hostname: {_address_dict.get('Hostname')}; "
         f"Internal IP: {_address_dict.get('InternalIP')}"
     )
@@ -249,8 +250,6 @@ class OdfTopologyHelper:
         return cls.instance
 
     topology_cli_df = pd.DataFrame()
-    with open(constants.BUSYBOX_TEMPLATE) as file_stream:
-        busy_box_depl = yaml.safe_load(file_stream)
 
     def read_topology_cli_all(self):
         """
@@ -497,94 +496,3 @@ class OdfTopologyHelper:
         return self.get_pod_obj_from_node_and_depl_df_cli(
             node_name, deployment_name, pod_name
         ).status()
-
-    def get_busybox_depl_name(self):
-        """
-        Retrieves the name of the BusyBox deployment.
-
-        Returns:
-            str: Name of the BusyBox deployment.
-        """
-        return self.busy_box_depl["metadata"]["name"]
-
-    def set_busybox_depl_name(self, name):
-        """
-        Sets the name of the BusyBox deployment.
-
-        Args:
-            name (str): New name for the BusyBox deployment.
-        """
-        self.busy_box_depl["metadata"]["name"] = name
-
-    def deploy_busybox(self) -> str:
-        """
-        Deploys a busybox container to a randomly selected worker node.
-
-        Returns:
-            str: The name of the node where the busybox container is deployed, if deployed, otherwise None.
-        """
-        random_node = random.choice(get_worker_nodes())
-        with tempfile.NamedTemporaryFile(
-            mode="w", suffix=".yaml", delete=True
-        ) as temp_file:
-            self.busy_box_depl["spec"]["template"]["spec"]["nodeName"] = random_node
-            self.busy_box_depl["metadata"]["namespace"] = config.ENV_DATA[
-                "cluster_namespace"
-            ]
-            yaml.dump(self.busy_box_depl, temp_file, default_flow_style=False)
-            temp_file.flush()
-            occli = OCP()
-            occli.apply(temp_file.name)
-
-        busy_box_scaled_up = self.wait_busy_box_scaled_up(60)
-        return random_node if busy_box_scaled_up else None
-
-    def wait_busy_box_scaled_up(self, timeout) -> bool:
-        """
-        Waits for the 'busybox' deployment to be scaled up within the specified timeout.
-
-        Args:
-            timeout (int): The maximum time to wait for the deployment to be scaled up, in seconds.
-
-        Returns:
-            bool: True if the deployment is successfully scaled up within the timeout, False otherwise.
-        """
-        busy_box_ocp_inst = OCP(
-            kind="deployment",
-            namespace=config.ENV_DATA["cluster_namespace"],
-            resource_name=self.get_busybox_depl_name(),
-        )
-        start_time = time.perf_counter()
-        while time.perf_counter() - start_time < timeout:
-            time.sleep(1)
-            if busy_box_ocp_inst.get().get("spec").get("replicas") > 0:
-                logger.info(
-                    f"deployment '{self.get_busybox_depl_name()}' "
-                    f"successfully deployed"
-                )
-                return True
-        else:
-            logger.error(
-                f"failed to deploy and scale up '{self.get_busybox_depl_name()}' deployment"
-            )
-            return False
-
-    def delete_busybox(self, force: bool = False):
-        """
-        Deletes the BusyBox deployment from cluster.
-
-        Args:
-            force (bool, optional): If True, force deletion even if the deployment is not found. Defaults to False.
-
-        Returns:
-            dict: The deletion result if the BusyBox deployment exists and is successfully deleted.
-                  Returns None otherwise.
-        """
-        deployment_name = self.get_busybox_depl_name()
-        bb_depl = OCP(
-            kind="deployment",
-            namespace=config.ENV_DATA["cluster_namespace"],
-            resource_name=deployment_name,
-        )
-        if bb_depl.is_exist():
-            return bb_depl.delete(resource_name=deployment_name, force=force)

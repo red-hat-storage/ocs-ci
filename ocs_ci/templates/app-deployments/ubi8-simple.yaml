@@ -1,0 +1,19 @@
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: ubi-test
+  namespace: {}
+spec:
+  selector:
+    matchLabels:
+      app: test-deployment-ubi
+  template:
+    metadata:
+      labels:
+        app: test-deployment-ubi
+    spec:
+      containers:
+        - name: ubi
+          image: registry.access.redhat.com/ubi8/ubi-minimal:latest
+          command: ["sleep", "360000"]
