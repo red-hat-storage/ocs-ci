@@ -80,7 +80,7 @@ class TestReplicationWithVersioning(MCGTest):
             Returns:
                 list(Bucket): The created buckets
             """
-            # Using the OC interface allows patching a repli policy on the OBC
+            # Using the OC interface allows patching a replication policy on the OBC
             buckets = bucket_factory(amount, "OC")
             for bucket in buckets:
                 put_bucket_versioning_via_awscli(
