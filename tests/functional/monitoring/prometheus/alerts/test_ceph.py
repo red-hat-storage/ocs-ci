@@ -10,6 +10,7 @@ from ocs_ci.framework.testlib import (
     skipif_managed_service,
     runs_on_provider,
     blue_squad,
+    provider_mode,
 )
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.cluster import (
@@ -73,13 +74,16 @@ def test_corrupt_pg_alerts(measure_corrupt_pg, threading_lock):
         )
 
 
+@provider_mode
 @blue_squad
 @tier4
 @tier4a
 @pytest.mark.polarion_id("OCS-898")
 @skipif_managed_service
 @runs_on_provider
-def test_ceph_health(measure_stop_ceph_osd, measure_corrupt_pg, threading_lock):
+def deprecated_test_ceph_health(
+    measure_stop_ceph_osd, measure_corrupt_pg, threading_lock
+):
     """
     Test that there are appropriate alerts for Ceph health triggered.
     For this check of Ceph Warning state is used measure_stop_ceph_osd

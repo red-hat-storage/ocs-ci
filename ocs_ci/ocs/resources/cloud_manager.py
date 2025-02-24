@@ -151,7 +151,7 @@ class CloudClient(ABC):
 
         try:
             for deletion_result in TimeoutSampler(
-                60, 5, self.internal_delete_uls, name
+                300, 5, self.internal_delete_uls, name
             ):
                 if deletion_result:
                     logger.info("ULS deleted.")
@@ -360,12 +360,12 @@ class S3Client(CloudClient):
             f"cldmgr-{secret_name_prefix}", "secret"
         )
         bs_secret_data["metadata"]["namespace"] = config.ENV_DATA["cluster_namespace"]
-        bs_secret_data["data"][
-            f"{data_prefix}_ACCESS_KEY_ID"
-        ] = base64.urlsafe_b64encode(self.access_key.encode("UTF-8")).decode("ascii")
-        bs_secret_data["data"][
-            f"{data_prefix}_SECRET_ACCESS_KEY"
-        ] = base64.urlsafe_b64encode(self.secret_key.encode("UTF-8")).decode("ascii")
+        bs_secret_data["data"][f"{data_prefix}_ACCESS_KEY_ID"] = (
+            base64.urlsafe_b64encode(self.access_key.encode("UTF-8")).decode("ascii")
+        )
+        bs_secret_data["data"][f"{data_prefix}_SECRET_ACCESS_KEY"] = (
+            base64.urlsafe_b64encode(self.secret_key.encode("UTF-8")).decode("ascii")
+        )
 
         return create_resource(**bs_secret_data)
 
@@ -471,10 +471,10 @@ class GoogleClient(CloudClient):
             "cldmgr-gcp", "secret"
         )
         bs_secret_data["metadata"]["namespace"] = config.ENV_DATA["cluster_namespace"]
-        bs_secret_data["data"][
-            "GoogleServiceAccountPrivateKeyJson"
-        ] = base64.urlsafe_b64encode(self.cred_dict_string.encode("UTF-8")).decode(
-            "ascii"
+        bs_secret_data["data"]["GoogleServiceAccountPrivateKeyJson"] = (
+            base64.urlsafe_b64encode(self.cred_dict_string.encode("UTF-8")).decode(
+                "ascii"
+            )
         )
 
         return create_resource(**bs_secret_data)

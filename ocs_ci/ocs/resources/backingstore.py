@@ -284,7 +284,7 @@ def backingstore_factory(request, cld_mgr, mcg_obj, cloud_uls_factory):
         },
     }
 
-    def _create_backingstore(method, uls_dict):
+    def _create_backingstore(method, uls_dict, timeout=600):
         """
         Tracks creation and cleanup of all the backing stores that were created in the scope
 
@@ -296,7 +296,7 @@ def backingstore_factory(request, cld_mgr, mcg_obj, cloud_uls_factory):
             i.e. - 'aws': [(3, us-west-1),(2, eu-west-2)]
             PV form - 'pv': [(amount, size_in_gb, storagecluster), ...]
             i.e. - 'pv': [(3, 32, ocs-storagecluster-ceph-rbd),(2, 100, ocs-storagecluster-ceph-rbd)]
-
+            timeout (int): Timeout until backingstore reaches desired state
         Returns:
             list: A list of backingstore names.
 
@@ -391,7 +391,7 @@ def backingstore_factory(request, cld_mgr, mcg_obj, cloud_uls_factory):
                                 cld_mgr, backingstore_name, uls_name, region
                             )
                         mcg_obj.check_backingstore_state(
-                            backingstore_name, constants.BS_OPTIMAL
+                            backingstore_name, constants.BS_OPTIMAL, timeout=timeout
                         )
                         # TODO: Verify OC\CLI BS health by using the appropriate methods
 
@@ -489,3 +489,17 @@ def clone_bs_dict_from_backingstore(
         raise UnknownCloneTypeException(prototype_bs_platform_name)
 
     return clone_bs_dict
+
+
+def get_backingstore():
+    """
+    Fetches the backingstore
+
+    Returns:
+        dict: backingstore details
+
+    """
+    backingstore = OCP(
+        kind=constants.BACKINGSTORE, namespace=config.ENV_DATA["cluster_namespace"]
+    )
+    return backingstore.get(resource_name=constants.DEFAULT_NOOBAA_BACKINGSTORE)

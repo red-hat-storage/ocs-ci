@@ -2,10 +2,12 @@
 This module contains platform specific methods and classes for deployment
 on vSphere platform
 """
+
 import glob
 import json
 import logging
 import os
+import gzip
 from shutil import rmtree, copyfile
 from subprocess import TimeoutExpired
 import time
@@ -141,19 +143,20 @@ class VSPHEREBASE(Deployment):
 
         self.ocp_version = get_ocp_version()
         config.ENV_DATA["ocp_version"] = self.ocp_version
-        config.ENV_DATA[
-            "ocp_version_object"
-        ] = version.get_semantic_ocp_version_from_config()
+        config.ENV_DATA["ocp_version_object"] = (
+            version.get_semantic_ocp_version_from_config()
+        )
         config.ENV_DATA["version_4_9_object"] = version.VERSION_4_9
 
         self.wait_time = 90
 
-    def attach_disk(self, size=100, disk_type=constants.VM_DISK_TYPE):
+    def attach_disk(self, size=100, disk_type=constants.VM_DISK_TYPE, ssd=False):
         """
         Add a new disk to all the workers nodes
 
         Args:
             size (int): Size of disk in GB (default: 100)
+            ssd (bool): if True, mark disk as SSD
 
         """
         vms = self.vsphere.get_all_vms_in_pool(
@@ -163,7 +166,7 @@ class VSPHEREBASE(Deployment):
         for vm in vms:
             if "compute" in vm.name:
                 self.vsphere.add_disks(
-                    config.ENV_DATA.get("extra_disks", 1), vm, size, disk_type
+                    config.ENV_DATA.get("extra_disks", 1), vm, size, disk_type, ssd
                 )
 
     def add_nodes(self):
@@ -957,6 +960,17 @@ class VSPHEREUPI(VSPHEREBASE):
             for each_file in files_to_remove:
                 os.remove(each_file)
 
+            # configure spec.mastersSchedulable in cluster-scheduler-02-config.yml
+            if config.ENV_DATA["worker_replicas"] == 0:
+                cluster_scheduler_config = os.path.join(
+                    self.cluster_path, "manifests", "cluster-scheduler-02-config.yml"
+                )
+                with open(cluster_scheduler_config, "r") as f:
+                    cluster_scheduler_config_obj = yaml.safe_load(f.read())
+                cluster_scheduler_config_obj["spec"]["mastersSchedulable"] = True
+                with open(cluster_scheduler_config, "w") as f:
+                    f.write(yaml.safe_dump(cluster_scheduler_config_obj))
+
         def create_ignitions(self):
             """
             Creates the ignition files
@@ -967,6 +981,39 @@ class VSPHEREUPI(VSPHEREBASE):
                     f"{self.installer} create ignition-configs "
                     f"--dir {self.cluster_path} "
                 )
+                # Because ignition file for bootstrap in ipv6 is too big to be passed by terraform changing
+                # encoding to gzip+base64 instead of pain text.
+                if config.DEPLOYMENT.get("ipv6"):
+                    bootstrap_ignition_path = os.path.join(
+                        config.ENV_DATA["cluster_path"], constants.BOOTSTRAP_IGN
+                    )
+                    control_plane_ignition_path = os.path.join(
+                        config.ENV_DATA["cluster_path"], constants.MASTER_IGN
+                    )
+                    compute_ignition_path = os.path.join(
+                        config.ENV_DATA["cluster_path"], constants.WORKER_IGN
+                    )
+                    ignition_paths = [
+                        bootstrap_ignition_path,
+                        control_plane_ignition_path,
+                        compute_ignition_path,
+                    ]
+                    for ignition_path in ignition_paths:
+                        # Read the file and compress it + base64
+                        with open(ignition_path, "rb") as f_in:
+                            compressed_data = gzip.compress(
+                                f_in.read(), compresslevel=9
+                            )
+                            base64_encoded_data = base64.b64encode(compressed_data)
+                            base64_encoded_string = base64_encoded_data.decode("utf-8")
+                            output_filename = f"{ignition_path}.txt"
+                            with open(output_filename, "w") as f_out:
+                                f_out.write(base64_encoded_string)
+
+                            logger.info(
+                                f"Base64 encoded and compressed output written to: {output_filename}"
+                            )
+
             else:
                 copyfile(
                     f"{self.cluster_path}/install-config.yaml",
@@ -1039,6 +1086,9 @@ class VSPHEREUPI(VSPHEREBASE):
 
             os.chdir(self.previous_dir)
             if not self.sno:
+                # Update kubeconfig with proxy-url (if client_http_proxy
+                # configured) to redirect client access through proxy server.
+                update_kubeconfig_with_proxy_url_for_client(self.kubeconfig)
                 logger.info("waiting for bootstrap to complete")
                 try:
                     run_cmd(
@@ -1067,6 +1117,9 @@ class VSPHEREUPI(VSPHEREBASE):
                     lb = LoadBalancer()
                     lb.rename_haproxy_conf_and_reload()
                     lb.remove_boostrap_in_proxy()
+                    if config.ENV_DATA["worker_replicas"] == 0:
+                        # compact-mode deployment: add master nodes as backend servers for ingress
+                        lb.compact_mode_route_ingress_trafic_to_control_plane_nodes()
                     lb.restart_haproxy()
 
                 # remove bootstrap node
@@ -1117,10 +1170,15 @@ class VSPHEREUPI(VSPHEREBASE):
 
                 # Approving CSRs here in-case if any exists
                 approve_pending_csr()
+                if config.ENV_DATA.get("is_multus_enabled"):
 
-            # Update kubeconfig with proxy-url (if client_http_proxy
-            # configured) to redirect client access through proxy server.
-            update_kubeconfig_with_proxy_url_for_client(self.kubeconfig)
+                    vsphere = VSPHERE(
+                        config.ENV_DATA["vsphere_server"],
+                        config.ENV_DATA["vsphere_user"],
+                        config.ENV_DATA["vsphere_password"],
+                    )
+
+                    vsphere.add_interface_to_compute_vms()
             self.test_cluster()
 
     def deploy_ocp(self, log_cli_level="DEBUG"):
@@ -1738,9 +1796,9 @@ class VSPHEREAI(VSPHEREBASE):
             mac_role_mapping = {
                 res["instances"][0]["attributes"]["network_interface"][0][
                     "mac_address"
-                ]: "master"
-                if "module.control_plane_vm" in res["module"]
-                else "worker"
+                ]: (
+                    "master" if "module.control_plane_vm" in res["module"] else "worker"
+                )
                 for res in tfstate["resources"]
                 if res["type"] == "vsphere_virtual_machine"
             }
@@ -1896,7 +1954,7 @@ class VSPHEREAI(VSPHEREBASE):
             terraform.initialize()
             terraform.destroy(tfvars)
             os.chdir(previous_dir)
-        except (exceptions.CommandFailed) as err:
+        except exceptions.CommandFailed as err:
             logger.warning(
                 f"Failed to destroy cluster resources via Terraform: {err}\n"
                 "(ignoring the failure and continuing the destroy process to remove other resources)"
@@ -2046,10 +2104,17 @@ def clone_openshift_installer():
                     branch="release-4.12",
                 )
             else:
+                if config.DEPLOYMENT.get("ipv6"):
+                    constants.VSPHERE_INSTALLER_REPO = (
+                        "https://gitlab.cee.redhat.com/srozen/installer_ipv6.git"
+                    )
+                    branch = "master"
+                else:
+                    branch = f"release-{ocp_version}"
                 clone_repo(
                     url=constants.VSPHERE_INSTALLER_REPO,
                     location=upi_repo_path,
-                    branch=f"release-{ocp_version}",
+                    branch=branch,
                 )
     elif Version.coerce(ocp_version) == Version.coerce("4.4"):
         clone_repo(

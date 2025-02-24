@@ -2,15 +2,17 @@ import pytest
 import logging
 import time
 import os
+import socket
 
 
 from ocs_ci.utility import nfs_utils
+from ocs_ci.utility.utils import exec_cmd
 from ocs_ci.framework import config
 from ocs_ci.utility.connection import Connection
-from ocs_ci.ocs import constants, ocp
+from ocs_ci.ocs import constants, ocp, resources
 from ocs_ci.utility import templating
 from ocs_ci.helpers import helpers
-from ocs_ci.framework.pytest_customization.marks import brown_squad
+from ocs_ci.framework.pytest_customization.marks import brown_squad, skipif_rosa_hcp
 from ocs_ci.framework.testlib import (
     skipif_ocs_version,
     ManageTest,
@@ -28,7 +30,9 @@ from ocs_ci.framework.testlib import (
 
 from ocs_ci.ocs.resources import pod, ocs
 from ocs_ci.utility.retry import retry
-from ocs_ci.ocs.exceptions import CommandFailed
+from ocs_ci.ocs.exceptions import CommandFailed, ConfigurationError
+
+from ocs_ci.utility.utils import run_cmd
 
 
 log = logging.getLogger(__name__)
@@ -60,7 +64,7 @@ class TestDefaultNfsDisabled(ManageTest):
 
         """
         storage_cluster_obj = ocp.OCP(
-            kind="Storagecluster", namespace="openshift-storage"
+            kind="Storagecluster", namespace=config.ENV_DATA["cluster_namespace"]
         )
         # Checks cephnfs resources not available by default
         cephnfs_resource = storage_cluster_obj.exec_oc_cmd("get cephnfs")
@@ -71,6 +75,7 @@ class TestDefaultNfsDisabled(ManageTest):
 
 
 @brown_squad
+@skipif_rosa_hcp
 @skipif_external_mode
 @skipif_ocs_version("<4.11")
 @skipif_ocp_version("<4.11")
@@ -120,7 +125,7 @@ class TestNfsEnable(ManageTest):
         """
         self = request.node.cls
         log.info("-----Setup-----")
-        self.namespace = "openshift-storage"
+        self.namespace = config.ENV_DATA["cluster_namespace"]
         self.storage_cluster_obj = ocp.OCP(
             kind="Storagecluster", namespace=self.namespace
         )
@@ -131,6 +136,15 @@ class TestNfsEnable(ManageTest):
         self.pv_obj = ocp.OCP(kind=constants.PV, namespace=self.namespace)
         self.nfs_sc = "ocs-storagecluster-ceph-nfs"
         self.sc = ocs.OCS(kind=constants.STORAGECLASS, metadata={"name": self.nfs_sc})
+        self.retain_nfs_sc_name = "ocs-storagecluster-ceph-nfs-retain"
+        self.retain_nfs_sc = resources.ocs.OCS(
+            kind=constants.STORAGECLASS, metadata={"name": "ocs-storagecluster-cephfs"}
+        )
+        self.retain_nfs_sc.reload()
+        self.retain_nfs_sc.data["reclaimPolicy"] = constants.RECLAIM_POLICY_RETAIN
+        self.retain_nfs_sc.data["metadata"]["name"] = self.retain_nfs_sc_name
+        self.retain_nfs_sc._name = self.retain_nfs_sc.data["metadata"]["name"]
+        self.retain_nfs_sc.create()
         platform = config.ENV_DATA.get("platform", "").lower()
         self.run_id = config.RUN.get("run_id")
         self.test_folder = f"mnt/test_nfs_{self.run_id}"
@@ -145,8 +159,6 @@ class TestNfsEnable(ManageTest):
             config.ENV_DATA.get("nfs_client_private_key")
             or config.DEPLOYMENT["ssh_key_private"]
         )
-
-        self.con = None
 
         # Enable nfs feature
         log.info("----Enable nfs----")
@@ -193,6 +205,53 @@ class TestNfsEnable(ManageTest):
                 nfs_utils.unmount(self.con, self.test_folder)
             log.info("Delete mount point")
             _, _, _ = self.con.exec_cmd("rm -rf " + self.test_folder)
+
+    # the NFS Client VM might not be healthy, so rebooting it and re-trying
+    @property
+    @retry((TimeoutError, socket.gaierror), tries=3, delay=60, backoff=1)
+    def con(self):
+        """
+        Create connection to NFS Client VM, if not accessible, try to restart it.
+        """
+        if (
+            not hasattr(self, "__nfs_client_connection")
+            or not self.__nfs_client_connection
+        ):
+            try:
+                self.__nfs_client_connection = self.get_nfs_client_connection(
+                    re_try=False
+                )
+            except (TimeoutError, socket.gaierror):
+                nfs_client_vm_cloud = config.ENV_DATA.get("nfs_client_vm_cloud")
+                nfs_client_vm_name = config.ENV_DATA.get("nfs_client_vm_name")
+                if not nfs_client_vm_cloud or not nfs_client_vm_name:
+                    raise ConfigurationError(
+                        "NFS Client VM is not accessible and ENV_DATA nfs_client_vm_cloud and/or nfs_client_vm_name "
+                        "parameters are not configured to be able to automatically reboot the NFS Client VM."
+                    )
+                cmd = f"openstack --os-cloud {nfs_client_vm_cloud} server reboot --hard --wait {nfs_client_vm_name}"
+                exec_cmd(cmd)
+
+                time.sleep(60)
+                self.__nfs_client_connection = self.get_nfs_client_connection()
+        return self.__nfs_client_connection
+
+    def get_nfs_client_connection(self, re_try=True):
+        """
+        Create connection to NFS Client VM.
+        """
+        log.info("Connecting to nfs client test VM")
+        tries = 3 if re_try else 1
+
+        @retry((TimeoutError, socket.gaierror), tries=tries, delay=60, backoff=1)
+        def __make_connection():
+            return Connection(
+                self.nfs_client_ip,
+                self.nfs_client_user,
+                private_key=self.nfs_client_private_key,
+            )
+
+        return __make_connection()
 
     @tier1
     @polarion_id("OCS-4269")
@@ -326,14 +385,6 @@ class TestNfsEnable(ManageTest):
         """
         nfs_utils.skip_test_if_nfs_client_unavailable(self.nfs_client_ip)
 
-        # ssh to test-nfs-vm
-        log.info("Login to test vm")
-        self.con = Connection(
-            self.nfs_client_ip,
-            self.nfs_client_user,
-            private_key=self.nfs_client_private_key,
-        )
-
         # Create nfs pvcs with storageclass ocs-storagecluster-ceph-nfs
         nfs_pvc_obj = helpers.create_pvc(
             sc_name=self.nfs_sc,
@@ -415,7 +466,7 @@ class TestNfsEnable(ManageTest):
 
         retry(
             (CommandFailed),
-            tries=200,
+            tries=28,
             delay=10,
         )(self.con.exec_cmd(export_nfs_external_cmd))
 
@@ -504,14 +555,6 @@ class TestNfsEnable(ManageTest):
         """
         nfs_utils.skip_test_if_nfs_client_unavailable(self.nfs_client_ip)
 
-        # ssh to test-nfs-vm
-        log.info("Login to test vm")
-        self.con = Connection(
-            self.nfs_client_ip,
-            self.nfs_client_user,
-            private_key=self.nfs_client_private_key,
-        )
-
         # Create nfs pvcs with storageclass ocs-storagecluster-ceph-nfs
         nfs_pvc_objs, yaml_creation_dir = helpers.create_multiple_pvcs(
             sc_name=self.nfs_sc,
@@ -596,7 +639,7 @@ class TestNfsEnable(ManageTest):
             )
             retry(
                 (CommandFailed),
-                tries=200,
+                tries=28,
                 delay=10,
             )(self.con.exec_cmd(export_nfs_external_cmd))
 
@@ -653,14 +696,6 @@ class TestNfsEnable(ManageTest):
 
         """
         nfs_utils.skip_test_if_nfs_client_unavailable(self.nfs_client_ip)
-
-        # ssh to test-nfs-vm
-        log.info("Login to test vm")
-        self.con = Connection(
-            self.nfs_client_ip,
-            self.nfs_client_user,
-            private_key=self.nfs_client_private_key,
-        )
 
         # Create nfs pvc with storageclass ocs-storagecluster-ceph-nfs
         pvc_objs = []
@@ -737,7 +772,7 @@ class TestNfsEnable(ManageTest):
         )
         retry(
             (CommandFailed),
-            tries=200,
+            tries=28,
             delay=10,
         )(self.con.exec_cmd(export_nfs_external_cmd))
 
@@ -801,13 +836,6 @@ class TestNfsEnable(ManageTest):
         """
         nfs_utils.skip_test_if_nfs_client_unavailable(self.nfs_client_ip)
 
-        # ssh to test-nfs-vm
-        log.info("Login to test vm")
-        self.con = Connection(
-            self.nfs_client_ip,
-            self.nfs_client_user,
-            private_key=self.nfs_client_private_key,
-        )
         # Create nfs pvcs with storageclass ocs-storagecluster-ceph-nfs
         nfs_pvc_obj = helpers.create_pvc(
             sc_name=self.nfs_sc,
@@ -877,7 +905,7 @@ class TestNfsEnable(ManageTest):
         )
         retry(
             (CommandFailed),
-            tries=200,
+            tries=28,
             delay=10,
         )(self.con.exec_cmd(export_nfs_external_cmd))
 
@@ -1364,3 +1392,121 @@ class TestNfsEnable(ManageTest):
 
         log.info("Check nfs pv is deleted")
         pv_obj.ocp.wait_for_delete(resource_name=pv_obj.name, timeout=180)
+
+    @tier1
+    @polarion_id("OCS-6193")
+    def test_nfs_pvc_subvolume_deletion(
+        self,
+        pod_factory,
+        pvc_factory,
+    ):
+        """
+        This test is to validate NFS export using a PVC mounted on an app pod (in-cluster) and subvolume
+        deletion using odf-cli
+
+        Steps:
+        1:- Create nfs pvcs with storageclass ocs-storagecluster-ceph-nfs-retain
+        2:- Create pods with nfs pvcs mounted
+        3:- Run IO
+        4:- Wait for IO completion
+        5:- Verify presence of the file
+        6:- Deletion of Pods and PVCs
+        7:- Delete stale subvolume using odf-cli
+
+        """
+        # checking subvolume before retain nfs pvc creation
+        from pathlib import Path
+
+        if not Path(constants.CLI_TOOL_LOCAL_PATH).exists():
+            helpers.retrieve_cli_binary(cli_type="odf")
+        output = run_cmd(cmd="odf-cli subvolume ls")
+        inital_subvolume_list = self.parse_subvolume_ls_output(output)
+        log.info(f"{inital_subvolume_list=}")
+
+        # Create nfs pvcs with storageclass ocs-storagecluster-ceph-nfs
+        retain_nfs_pvc_obj = pvc_factory(
+            storageclass=self.retain_nfs_sc,
+            interface=constants.CEPHFILESYSTEM,
+            size=1,
+            access_mode=constants.ACCESS_MODE_RWX,
+            status=constants.STATUS_BOUND,
+        )
+
+        # checking subvolumes post pvc creation
+        output = run_cmd(cmd="odf-cli subvolume ls")
+        later_subvolume_list = self.parse_subvolume_ls_output(output)
+        old = set(inital_subvolume_list)
+        new = set(later_subvolume_list)
+        new_pvc = list(new.difference(old))[0]
+        log.info(f"{new_pvc=}")
+
+        # Create nginx pod with nfs pvcs mounted
+        pod_obj = pod_factory(
+            interface=constants.CEPHFILESYSTEM,
+            pvc=retain_nfs_pvc_obj,
+            status=constants.STATUS_RUNNING,
+        )
+
+        file_name = pod_obj.name
+        # Run IO
+        pod_obj.run_io(
+            storage_type="fs",
+            size="1G",
+            fio_filename=file_name,
+            runtime=60,
+        )
+        log.info("IO started on all pods")
+
+        # Wait for IO completion
+        fio_result = pod_obj.get_fio_results()
+        log.info("IO completed on all pods")
+        err_count = fio_result.get("jobs")[0].get("error")
+        assert err_count == 0, (
+            f"IO error on pod {pod_obj.name}. " f"FIO result: {fio_result}"
+        )
+        # Verify presence of the file
+        file_path = pod.get_file_path(pod_obj, file_name)
+        log.info(f"Actual file path on the pod {file_path}")
+        assert pod.check_file_existence(
+            pod_obj, file_path
+        ), f"File {file_name} doesn't exist"
+        log.info(f"File {file_name} exists in {pod_obj.name}")
+
+        # Deletion of Pods and PVCs
+        log.info("Deleting pod")
+        pod_obj.delete()
+        pod_obj.ocp.wait_for_delete(
+            pod_obj.name, 180
+        ), f"Pod {pod_obj.name} is not deleted"
+
+        pv_obj = retain_nfs_pvc_obj.backed_pv_obj
+        log.info(f"pv object-----{pv_obj}")
+
+        log.info("Deleting PVC")
+        retain_nfs_pvc_obj.delete()
+        retain_nfs_pvc_obj.ocp.wait_for_delete(
+            resource_name=retain_nfs_pvc_obj.name
+        ), f"PVC {retain_nfs_pvc_obj.name} is not deleted"
+        log.info(f"Verified: PVC {retain_nfs_pvc_obj.name} is deleted.")
+
+        log.info("Check nfs pv is deleted")
+        pv_obj.delete(wait=True)
+
+        # Checking for stale volumes
+        output = run_cmd(cmd="odf-cli subvolume ls --stale")
+
+        # Deleteing stale subvolume
+        run_cmd(cmd=f"odf-cli subvolume delete {new_pvc[0]} {new_pvc[1]} {new_pvc[2]}")
+
+        # Checking for stale volumes
+        output = run_cmd(cmd="odf-cli subvolume ls --stale")
+        stale_volumes = self.parse_subvolume_ls_output(output)
+        assert len(stale_volumes) == 0  # No stale volumes available
+
+    def parse_subvolume_ls_output(self, output):
+        subvolumes = []
+        subvolumes_list = output.strip().split("\n")[1:]
+        for item in subvolumes_list:
+            fs, sv, svg, status = item.split(" ")
+            subvolumes.append((fs, sv, svg, status))
+        return subvolumes

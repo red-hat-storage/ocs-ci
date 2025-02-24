@@ -1,17 +1,19 @@
 """
 A test for deleting an existing PVC and create a new PVC with the same name
 """
+
 import logging
 import pytest
 
 from ocs_ci.ocs import constants
-from ocs_ci.framework.pytest_customization.marks import green_squad
+from ocs_ci.framework.pytest_customization.marks import green_squad, provider_mode
 from ocs_ci.framework.testlib import ManageTest, tier2
 from ocs_ci.helpers import helpers
 
 logger = logging.getLogger(__name__)
 
 
+@provider_mode
 @green_squad
 @tier2
 class TestDeleteCreatePVCSameName(ManageTest):

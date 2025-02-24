@@ -1,6 +1,7 @@
 """
 This module contains the vSphere related methods
 """
+
 import logging
 import os
 import ssl
@@ -28,6 +29,7 @@ from ocs_ci.ocs.constants import (
     VM_DEFAULT_NETWORK,
     VM_DEFAULT_NETWORK_ADAPTER,
 )
+from ocs_ci.framework import config
 from ocs_ci.utility.utils import TimeoutSampler
 
 logger = logging.getLogger(__name__)
@@ -330,7 +332,7 @@ class VSPHERE(object):
                     raise VMMaxDisksReachedException
         return unit_number
 
-    def add_disk(self, vm, size, disk_type="thin"):
+    def add_disk(self, vm, size, disk_type="thin", ssd=False):
         """
         Attaches disk to VM
 
@@ -338,8 +340,11 @@ class VSPHERE(object):
             vm (vim.VirtualMachine): VM instance
             size (int) : size of disk in GB
             disk_type (str) : disk type
+            ssd (bool): if True, mark disk as SSD
 
         """
+        if ssd:
+            self.stop_vms(vms=[vm])
         logger.info(f"Adding disk to {vm.config.name}")
         spec = vim.vm.ConfigSpec()
         controller = self.get_controller_for_adding_disk(vm)
@@ -356,6 +361,11 @@ class VSPHERE(object):
         if disk_type == VM_DISK_TYPE:
             disk_spec.device.backing.thinProvisioned = True
         disk_spec.device.backing.diskMode = VM_DISK_MODE
+        if ssd:
+            option = vim.option.OptionValue()
+            option.key = f"scsi0:{unit_number}.virtualSSD"
+            option.value = "TRUE"
+            spec.extraConfig = [option]
         disk_spec.device.unitNumber = unit_number
         disk_spec.device.capacityInKB = new_disk_kb
         disk_spec.device.controllerKey = controller.key
@@ -364,7 +374,10 @@ class VSPHERE(object):
         WaitForTask(vm.ReconfigVM_Task(spec=spec))
         logger.info(f"{size}GB disk added successfully to {vm.config.name}")
 
-    def add_disks(self, num_disks, vm, size, disk_type="thin"):
+        if ssd:
+            self.start_vms(vms=[vm])
+
+    def add_disks(self, num_disks, vm, size, disk_type="thin", ssd=False):
         """
         Adds multiple disks to the VM
 
@@ -373,10 +386,11 @@ class VSPHERE(object):
             vm (vim.VirtualMachine): VM instance
             size (int) : size of disk in GB
             disk_type (str) : disk type
+            ssd (bool): if True, mark disk as SSD
 
         """
         for _ in range(int(num_disks)):
-            self.add_disk(vm, size, disk_type)
+            self.add_disk(vm, size, disk_type, ssd)
 
     def add_rdm_disk(self, vm, device_name, disk_mode=None, compatibility_mode=None):
         """
@@ -695,6 +709,44 @@ class VSPHERE(object):
         pi = self.get_pool(pool, dc, cluster)
         WaitForTask(pi.Destroy())
         logger.info(f"Successfully deleted resource pool {pool}")
+
+    def get_disks(self, vm):
+        """
+        Fetches the information of all disks in a VM
+
+        Args:
+            vm (vim.VirtualMachine): VM instance
+
+        Returns:
+            list: List which contains disk related information
+
+        """
+        disks = []
+        for device in vm.config.hardware.device:
+            if isinstance(device, vim.vm.device.VirtualDisk):
+                backing = device.backing
+                if hasattr(backing, "uuid"):
+                    wwn = getattr(backing, "uuid", "N/A")
+                    disk_info = {
+                        "deviceName": device.deviceInfo.label,
+                        "capacityInKB": device.capacityInKB,
+                        "unitNumber": device.unitNumber,
+                        "datastore": backing.datastore,
+                        "isthinProvisioned": (
+                            backing.thinProvisioned
+                            if hasattr(backing, "thinProvisioned")
+                            else False
+                        ),
+                        "uuid": backing.uuid,
+                        "eagerlyScrub": backing.eagerlyScrub,
+                        "fileName": (
+                            backing.fileName if hasattr(backing, "fileName") else "N/A"
+                        ),
+                        "wwn": wwn,
+                    }
+                    disks.append(disk_info)
+        logger.debug(f"Disks on node {vm.name} is {disks}")
+        return disks
 
     def remove_disk(self, vm, identifier, key="unit_number", datastore=True):
         """
@@ -1691,3 +1743,61 @@ class VSPHERE(object):
         volume_path = vstorage_object.config.backing.filePath
         logger.debug(f"File path for volume {volume_id} is `{volume_path}`")
         return volume_path
+
+    def add_interface_to_compute_vms(
+        self, network_name="VM Network", adapter_type="vmxnet3"
+    ):
+        """
+        Add idditional interface to VMs in pool run
+
+        Args:
+            network_name (str): Network to add the interface, default VM Network
+            adapter_type (str): Type of network adapter, default vmxnet3
+
+        """
+        pool = config.ENV_DATA["cluster_name"]
+        dc = config.ENV_DATA["vsphere_datacenter"]
+        cluster = config.ENV_DATA["vsphere_cluster"]
+        vms = self.get_compute_vms_in_pool(name=pool, dc=dc, cluster=cluster)
+        if not vms:
+            raise Exception(f"Compute VMs in '{pool}' not found.")
+        content = self.get_content
+        container = content.viewManager.CreateContainerView(
+            content.rootFolder, [vim.Network], True
+        )
+        for conf in container.view:
+            if conf.name == network_name:
+                network = conf
+                break
+        if not network:
+            raise Exception(f"Network '{network_name}' not found.")
+        for vm in vms:
+            device_spec = vim.vm.device.VirtualDeviceSpec()
+            device_spec.operation = vim.vm.device.VirtualDeviceSpec.Operation.add
+            if adapter_type == "vmxnet3":
+                nic = vim.vm.device.VirtualVmxnet3()
+            # Set the network backing
+            nic.backing = vim.vm.device.VirtualEthernetCard.NetworkBackingInfo()
+            nic.backing.network = network
+            nic.backing.deviceName = network_name
+            # Specify the adapter type
+            nic.key = -100  # Temporary key; vSphere assigns a unique key
+            nic.deviceInfo = vim.Description()
+            nic.deviceInfo.summary = (
+                f"{adapter_type} adapter connected to {network_name}"
+            )
+            device_spec.device = nic
+            # Create a VM configuration spec
+            spec = vim.vm.ConfigSpec()
+            spec.deviceChange = [device_spec]
+            # Reconfigure the VM
+            task = vm.ReconfigVM_Task(spec=spec)
+            logger.info(
+                f"Adding {adapter_type} adapter to VM '{vm.name}' on network '{network_name}'..."
+            )
+            result = WaitForTask(task)
+            if result is None:
+                raise Exception(
+                    f"Task for configuring network for {vm.name} did not complete successfully."
+                )
+            logger.info(f"Network adapter added to {vm.name} successfully.")

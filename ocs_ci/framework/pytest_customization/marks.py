@@ -14,6 +14,9 @@ from ocs_ci.ocs.constants import (
     ORDER_BEFORE_OCP_UPGRADE,
     ORDER_BEFORE_UPGRADE,
     ORDER_OCP_UPGRADE,
+    ORDER_MCO_UPGRADE,
+    ORDER_DR_HUB_UPGRADE,
+    ORDER_ACM_UPGRADE,
     ORDER_OCS_UPGRADE,
     ORDER_AFTER_OCP_UPGRADE,
     ORDER_AFTER_OCS_UPGRADE,
@@ -32,6 +35,9 @@ from ocs_ci.ocs.constants import (
     MS_CONSUMER_TYPE,
     HCI_PROVIDER,
     BAREMETAL_PLATFORMS,
+    AZURE_KV_PROVIDER_NAME,
+    ROSA_HCP_PLATFORM,
+    VAULT_KMS_PROVIDER,
 )
 from ocs_ci.utility import version
 from ocs_ci.utility.aws import update_config_from_s3
@@ -84,7 +90,10 @@ scale_changed_layout = pytest.mark.scale_changed_layout
 deployment = pytest.mark.deployment
 polarion_id = pytest.mark.polarion_id
 bugzilla = pytest.mark.bugzilla
+jira = pytest.mark.jira
 acm_import = pytest.mark.acm_import
+rdr = pytest.mark.rdr
+mdr = pytest.mark.mdr
 
 tier_marks = [
     tier1,
@@ -112,12 +121,28 @@ order_pre_upgrade = pytest.mark.order(ORDER_BEFORE_UPGRADE)
 order_pre_ocp_upgrade = pytest.mark.order(ORDER_BEFORE_OCP_UPGRADE)
 order_pre_ocs_upgrade = pytest.mark.order(ORDER_BEFORE_OCS_UPGRADE)
 order_ocp_upgrade = pytest.mark.order(ORDER_OCP_UPGRADE)
+order_mco_upgrade = pytest.mark.order(ORDER_MCO_UPGRADE)
+order_dr_hub_upgrade = pytest.mark.order(ORDER_DR_HUB_UPGRADE)
+# dr cluster operator order is same as hub operator order except that
+# it's applicable only on the managed clusters
+order_dr_cluster_operator_upgrade = pytest.mark.order(ORDER_DR_HUB_UPGRADE)
+order_acm_upgrade = pytest.mark.order(ORDER_ACM_UPGRADE)
 order_ocs_upgrade = pytest.mark.order(ORDER_OCS_UPGRADE)
 order_post_upgrade = pytest.mark.order(ORDER_AFTER_UPGRADE)
 order_post_ocp_upgrade = pytest.mark.order(ORDER_AFTER_OCP_UPGRADE)
 order_post_ocs_upgrade = pytest.mark.order(ORDER_AFTER_OCS_UPGRADE)
 ocp_upgrade = compose(order_ocp_upgrade, pytest.mark.ocp_upgrade)
+# multicluster orchestrator
+mco_upgrade = compose(order_mco_upgrade, pytest.mark.mco_upgrade)
+# dr hub operator
+dr_hub_upgrade = compose(order_dr_hub_upgrade, pytest.mark.dr_hub_upgrade)
+dr_cluster_operator_upgrade = compose(
+    order_dr_cluster_operator_upgrade, pytest.mark.dr_cluster_operator_upgrade
+)
+# acm operator
+acm_upgrade = compose(order_acm_upgrade, pytest.mark.acm_upgrade)
 ocs_upgrade = compose(order_ocs_upgrade, pytest.mark.ocs_upgrade)
+# pre_*_upgrade markers
 pre_upgrade = compose(order_pre_upgrade, pytest.mark.pre_upgrade)
 pre_ocp_upgrade = compose(
     order_pre_ocp_upgrade,
@@ -127,12 +152,16 @@ pre_ocs_upgrade = compose(
     order_pre_ocs_upgrade,
     pytest.mark.pre_ocs_upgrade,
 )
+# post_*_upgrade markers
 post_upgrade = compose(order_post_upgrade, pytest.mark.post_upgrade)
 post_ocp_upgrade = compose(order_post_ocp_upgrade, pytest.mark.post_ocp_upgrade)
 post_ocs_upgrade = compose(order_post_ocs_upgrade, pytest.mark.post_ocs_upgrade)
 
 upgrade_marks = [
     ocp_upgrade,
+    mco_upgrade,
+    dr_hub_upgrade,
+    acm_upgrade,
     ocs_upgrade,
     pre_upgrade,
     pre_ocp_upgrade,
@@ -193,9 +222,13 @@ fips_required = pytest.mark.skipif(
     reason="Test runs only on FIPS enabled cluster",
 )
 
-stretchcluster_required = pytest.mark.skipif(
+stretchcluster_required_skipif = pytest.mark.skipif(
     config.DEPLOYMENT.get("arbiter_deployment") is False,
     reason="Test runs only on Stretch cluster with arbiter deployments",
+)
+
+stretchcluster_required = compose(
+    stretchcluster_required_skipif, pytest.mark.stretchcluster_required
 )
 
 sts_deployment_required = pytest.mark.skipif(
@@ -370,6 +403,16 @@ kms_config_required = pytest.mark.skipif(
     reason="KMS config not found in auth.yaml",
 )
 
+azure_kv_config_required = pytest.mark.skipif(
+    config.ENV_DATA["KMS_PROVIDER"].lower() != AZURE_KV_PROVIDER_NAME,
+    reason="Azure KV config required to run the test.",
+)
+
+rosa_hcp_required = pytest.mark.skipif(
+    config.ENV_DATA["platform"].lower() != ROSA_HCP_PLATFORM,
+    reason="Test runs ONLY on ROSA HCP cluster",
+)
+
 external_mode_required = pytest.mark.skipif(
     config.DEPLOYMENT.get("external_mode") is not True,
     reason="Test will run on External Mode cluster only",
@@ -397,6 +440,11 @@ skipif_bmpsi = pytest.mark.skipif(
 skipif_managed_service = pytest.mark.skipif(
     config.ENV_DATA["platform"].lower() in MANAGED_SERVICE_PLATFORMS,
     reason="Test will not run on Managed service cluster",
+)
+
+skipif_rosa_hcp = pytest.mark.skipif(
+    config.ENV_DATA["platform"].lower() == ROSA_HCP_PLATFORM,
+    reason="Test will not run on ROSA HCP cluster",
 )
 
 skipif_openshift_dedicated = pytest.mark.skipif(
@@ -530,6 +578,12 @@ skipif_noobaa_external_pgsql = pytest.mark.skipif(
     config.ENV_DATA.get("noobaa_external_pgsql") is True,
     reason="This test will not run correctly in external DB deployed cluster.",
 )
+
+skipif_compact_mode = pytest.mark.skipif(
+    config.ENV_DATA.get("worker_replicas") == 0,
+    reason="This test is not supported for compact mode deployment types.",
+)
+
 metrics_for_external_mode_required = pytest.mark.skipif(
     version.get_semantic_ocs_version_from_config() < version.VERSION_4_6
     and config.DEPLOYMENT.get("external_mode") is True,
@@ -615,6 +669,9 @@ ignore_owner = pytest.mark.ignore_owner
 # Marks to identify the cluster type in which the test case should run
 runs_on_provider = pytest.mark.runs_on_provider
 
+# Marks to identify the regression tests for provider-client cluster
+provider_mode = pytest.mark.provider_mode
+
 current_test_marks = []
 
 
@@ -651,4 +708,21 @@ encryption_at_rest_required = pytest.mark.skipif(
 skipif_kms_deployment = pytest.mark.skipif(
     config.DEPLOYMENT.get("kms_deployment") is True,
     reason="This test is not supported for KMS deployment.",
+)
+
+# Mark the test with marker below to allow re-tries in ceph health fixture
+# for known issues when waiting in re-balance and flip flop from health OK
+# to 1-2 PGs waiting to be Clean
+ceph_health_retry = pytest.mark.ceph_health_retry
+
+# Mark for Multicluster upgrade scenarios
+config_index = pytest.mark.config_index
+multicluster_roles = pytest.mark.multicluster_roles
+
+# Marks to identify if Vault KMS deployment is required
+vault_kms_deployment_required = pytest.mark.skipif(
+    not config.DEPLOYMENT.get("kms_deployment", False)
+    or config.ENV_DATA.get("KMS_PROVIDER", "")
+    not in [VAULT_KMS_PROVIDER, HPCS_KMS_PROVIDER],
+    reason="This test requires both Vault or HPCS KMS deployment to be enabled and a valid KMS provider.",
 )

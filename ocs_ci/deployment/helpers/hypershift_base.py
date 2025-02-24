@@ -1,5 +1,6 @@
 import logging
 import os
+import re
 import shutil
 import tempfile
 import time
@@ -9,12 +10,20 @@ from ocs_ci.deployment.helpers.icsp_parser import parse_ICSP_json_to_mirrors_fil
 from ocs_ci.deployment.ocp import download_pull_secret
 from ocs_ci.framework import config
 from ocs_ci.ocs import constants
+from ocs_ci.ocs import defaults
 from ocs_ci.ocs.exceptions import CommandFailed
 from ocs_ci.ocs.ocp import OCP
 from ocs_ci.ocs.resources.pod import wait_for_pods_to_be_in_statuses_concurrently
 from ocs_ci.ocs.version import get_ocp_version
 from ocs_ci.utility.retry import retry
-from ocs_ci.utility.utils import exec_cmd, TimeoutSampler
+from ocs_ci.utility.utils import (
+    exec_cmd,
+    TimeoutSampler,
+    get_latest_release_version,
+    get_random_letters,
+)
+from ocs_ci.utility.decorators import switch_to_orig_index_at_last
+from ocs_ci.ocs.utils import get_namespce_name_by_pattern
 
 """
 This module contains the base class for HyperShift hosted cluster management.
@@ -60,6 +69,107 @@ def kubeconfig_exists_decorator(func):
         return func(self, *args, **kwargs)
 
     return wrapper
+
+
+def get_random_hosted_cluster_name():
+    """
+    Get a random cluster name
+
+    Returns:
+        str: random cluster name
+    """
+    # getting the cluster name from the env data, for instance "ibm_cloud_baremetal3; mandatory conf field"
+    bm_name = config.ENV_DATA.get("baremetal", {}).get("env_name")
+    ocp_version = get_latest_release_version()
+    hcp_version = "".join([c for c in ocp_version if c.isdigit()][:3])
+    match = re.search(r"\d+$", bm_name)
+    if match:
+        random_letters = get_random_letters(3)
+        cluster_name = (
+            "hcp"
+            + hcp_version
+            + "-bm"
+            + bm_name[match.start() :]
+            + "-"
+            + random_letters
+        )
+    else:
+        raise ValueError("Cluster name not found in the env data")
+    return cluster_name
+
+
+def get_binary_hcp_version():
+    """
+    Get hcp version output. Handles hcp 4.16 and 4.17 cmd differences
+
+    Returns:
+        str: hcp version output
+    """
+    try:
+        return exec_cmd("hcp version").stdout.decode("utf-8").strip()
+    except CommandFailed:
+        return exec_cmd("hcp --version").stdout.decode("utf-8").strip()
+
+
+@switch_to_orig_index_at_last
+def get_cluster_vm_namespace(cluster_name=None):
+    """
+    Get the cluster virtual machines namespace by the cluster name
+
+    Args:
+        cluster_name (str): The cluster name.
+
+    Returns:
+        str: The cluster virtual machines namespace
+
+    """
+    cluster_name = cluster_name or config.ENV_DATA["cluster_name"]
+    pattern = f"clusters-{cluster_name}"
+    config.switch_to_provider()
+    cluster_vm_namespaces = get_namespce_name_by_pattern(pattern=pattern)
+    assert (
+        cluster_vm_namespaces
+    ), f"Didn't find the cluster namespace for the cluster {cluster_name}"
+
+    return cluster_vm_namespaces[0]
+
+
+@switch_to_orig_index_at_last
+def is_hosted_cluster(cluster_name=None):
+    """
+    Check if the cluster is a hosted cluster
+
+    Args:
+        cluster_name (str): The cluster name
+
+    Returns:
+        bool: True, if the cluster is a hosted cluster. False, otherwise.
+
+    """
+    cluster_name = cluster_name or config.ENV_DATA["cluster_name"]
+    config.switch_to_provider()
+    ocp_obj = OCP(kind=constants.HOSTED_CLUSTERS, namespace="clusters")
+    return ocp_obj.is_exist(resource_name=cluster_name)
+
+
+@switch_to_orig_index_at_last
+def get_hosted_cluster_type(cluster_name=None):
+    """
+    Get the hosted cluster type
+
+    Args:
+        cluster_name (str): The cluster name
+
+    Returns:
+        str: The hosted cluster type in lowercase
+
+    """
+    cluster_name = cluster_name or config.ENV_DATA["cluster_name"]
+    config.switch_to_provider()
+    ocp_hosted_cluster_obj = OCP(
+        kind=constants.HOSTED_CLUSTERS, namespace="clusters", resource_name=cluster_name
+    )
+    return ocp_hosted_cluster_obj.get()["spec"]["platform"]["type"].lower()
 
 
 class HyperShiftBase:
@@ -125,9 +235,8 @@ class HyperShiftBase:
 
         if not (self.hcp_binary_exists() and self.hypershift_binary_exists()):
             raise Exception("Failed to download hcp binary from git")
-
-        hcp_version = exec_cmd("hcp --version").stdout.decode("utf-8").strip()
-        logger.info(f"hcp binary version: {hcp_version}")
+        hcp_version = get_binary_hcp_version()
+        logger.info(f"hcp binary version output: '{hcp_version}'")
 
         shutil.rmtree(temp_dir)
 
@@ -232,11 +341,13 @@ class HyperShiftBase:
     def create_kubevirt_ocp_cluster(
         self,
         name: str = None,
-        nodepool_replicas: int = 2,
-        memory: str = "12Gi",
-        cpu_cores: int = 6,
+        nodepool_replicas: int = defaults.HYPERSHIFT_NODEPOOL_REPLICAS_DEFAULT,
+        memory: str = defaults.HYPERSHIFT_MEMORY_DEFAULT,
+        cpu_cores: int = defaults.HYPERSHIFT_CPU_CORES_DEFAULT,
         root_volume_size: str = 40,
         ocp_version=None,
+        cp_availability_policy=None,
+        disable_default_sources=None,
     ):
         """
         Create HyperShift hosted cluster. Default parameters have minimal requirements for the cluster.
@@ -248,7 +359,9 @@ class HyperShiftBase:
             cpu_cores (str): CPU cores of the cluster, minimum 6
             ocp_version (str): OCP version of the cluster
             root_volume_size (str): Root volume size of the cluster, default 40 (Gi is not required)
-
+            cp_availability_policy (str): Control plane availability policy, default HighlyAvailable, if no value
+            provided and argument is not used in the command the single replica mode cluster will be created
+            disable_default_sources (bool): Disable default sources on hosted cluster, such as 'redhat-operators'
         Returns:
             str: Name of the hosted cluster
         """
@@ -293,6 +406,21 @@ class HyperShiftBase:
             "--annotations 'hypershift.openshift.io/skip-release-image-validation=true' "
             "--olm-catalog-placement Guest"
         )
+
+        if (
+            cp_availability_policy
+            and cp_availability_policy in constants.CONTROL_PLANE_AVAILABILITY_POLICIES
+        ):
+            logger.error(
+                f"Control plane availability policy {cp_availability_policy} is not valid. "
+                f"Valid values are: {constants.CONTROL_PLANE_AVAILABILITY_POLICIES}"
+            )
+            create_hcp_cluster_cmd += (
+                f" --control-plane-availability-policy {cp_availability_policy} "
+            )
+
+        if disable_default_sources:
+            create_hcp_cluster_cmd += " --olm-disable-default-sources"
 
         logger.info("Creating HyperShift hosted cluster")
         exec_cmd(create_hcp_cluster_cmd)
@@ -464,7 +592,7 @@ class HyperShiftBase:
         """
 
         path_abs = os.path.expanduser(hosted_cluster_path)
-        auth_path = os.path.join(path_abs, "auth_path")
+        auth_path = os.path.join(path_abs, "auth")
         os.makedirs(auth_path, exist_ok=True)
         kubeconfig_path = os.path.join(auth_path, "kubeconfig")
 
@@ -551,7 +679,7 @@ class HyperShiftBase:
         Args:
             name (str): Name of the cluster
         """
-        destroy_timeout_min = 10
+        destroy_timeout_min = 15
         logger.info(
             f"Destroying HyperShift hosted cluster {name}. Timeout: {destroy_timeout_min} min"
         )

@@ -12,8 +12,11 @@ from ocs_ci.ocs.rados_utils import (
     verify_cephblockpool_status,
     check_phase_of_rados_namespace,
 )
-from ocs_ci.deployment.helpers.lso_helpers import setup_local_storage
-from ocs_ci.ocs.node import label_nodes, get_all_nodes, get_node_objs
+from ocs_ci.deployment.helpers.lso_helpers import (
+    setup_local_storage,
+    cleanup_nodes_for_lso_install,
+)
+from ocs_ci.ocs.node import label_nodes, get_all_nodes, get_node_objs, get_nodes
 from ocs_ci.ocs.utils import (
     setup_ceph_toolbox,
     enable_console_plugin,
@@ -24,7 +27,11 @@ from ocs_ci.utility.utils import (
 )
 from ocs_ci.utility import templating, kms as KMS, version
 from ocs_ci.deployment.deployment import Deployment, create_catalog_source
-from ocs_ci.deployment.baremetal import clean_disk
+from ocs_ci.deployment.baremetal import disks_available_to_cleanup
+from ocs_ci.deployment.encryption import (
+    add_encryption_details_to_cluster_data,
+    add_in_transit_encryption_to_cluster_data,
+)
 from ocs_ci.ocs.resources.storage_cluster import verify_storage_cluster
 from ocs_ci.ocs.resources.storage_client import StorageClient
 from ocs_ci.ocs.bucket_utils import check_pv_backingstore_type
@@ -78,6 +85,7 @@ class ODFAndNativeStorageClientDeploymentOnProvider(object):
             namespace=config.ENV_DATA["cluster_namespace"],
         )
 
+        self.platform = config.ENV_DATA.get("platform").lower()
         self.deployment = Deployment()
         self.storage_clients = StorageClient()
 
@@ -95,13 +103,10 @@ class ODFAndNativeStorageClientDeploymentOnProvider(object):
         6. Disable ROOK_CSI_ENABLE_CEPHFS and ROOK_CSI_ENABLE_RBD
         7. Create storage profile
         """
-
-        # Allow ODF to be deployed on all nodes
         nodes = get_all_nodes()
         node_objs = get_node_objs(nodes)
-
-        log.info("labeling storage nodes")
-        label_nodes(nodes=node_objs, label=constants.OPERATOR_NODE_LABEL)
+        worker_node_objs = get_nodes(node_type=constants.WORKER_MACHINE)
+        no_of_worker_nodes = len(worker_node_objs)
 
         # Allow hosting cluster domain to be usable by hosted clusters
         path = "/spec/routeAdmission"
@@ -124,19 +129,37 @@ class ODFAndNativeStorageClientDeploymentOnProvider(object):
         wait_for_machineconfigpool_status(node_type="all")
         log.info("All the nodes are upgraded")
 
+        # Mark master nodes schedulable if mark_masters_schedulable: True
+        if config.ENV_DATA.get("mark_masters_schedulable", False):
+            path = "/spec/mastersSchedulable"
+            params = f"""[{{"op": "replace", "path": "{path}", "value": true}}]"""
+            assert self.scheduler_obj.patch(
+                params=params, format_type="json"
+            ), "Failed to run patch command to update control nodes as scheduleable"
+            # Allow ODF to be deployed on all nodes
+            log.info("labeling all nodes as storage nodes")
+            label_nodes(nodes=node_objs, label=constants.OPERATOR_NODE_LABEL)
+            worker_node_objs = get_nodes(node_type=constants.WORKER_MACHINE)
+            no_of_worker_nodes = len(worker_node_objs)
+        else:
+            log.info("labeling worker nodes as storage nodes")
+            label_nodes(nodes=worker_node_objs, label=constants.OPERATOR_NODE_LABEL)
+
+        disks_available_on_worker_nodes_for_cleanup = disks_available_to_cleanup(
+            worker_node_objs[0]
+        )
+        number_of_disks_available = len(disks_available_on_worker_nodes_for_cleanup)
+        log.info(
+            f"disks avilable for cleanup, {disks_available_on_worker_nodes_for_cleanup}"
+            f"number of disks avilable for cleanup, {number_of_disks_available}"
+        )
+
         # Install LSO, create LocalVolumeDiscovery and LocalVolumeSet
         is_local_storage_available = self.sc_obj.is_exist(
             resource_name=self.storageclass,
         )
         if not is_local_storage_available:
-            for node in nodes:
-                cmd = f"oc debug nodes/{node} -- chroot /host rm -rvf /var/lib/rook /mnt/local-storage"
-                out = run_cmd(cmd)
-                log.info(out)
-                log.info(f"Mount data cleared from node, {node}")
-            for node_obj in node_objs:
-                clean_disk(node_obj)
-            log.info("All nodes are wiped")
+            cleanup_nodes_for_lso_install()
             setup_local_storage(storageclass=self.storageclass)
         else:
             log.info("local storage is already installed")
@@ -194,9 +217,21 @@ class ODFAndNativeStorageClientDeploymentOnProvider(object):
                 storage_cluster_data = templating.load_yaml(
                     constants.OCS_STORAGE_CLUSTER_YAML
                 )
-                storage_cluster_data = self.add_encryption_details_to_cluster_data(
+                storage_cluster_data = add_encryption_details_to_cluster_data(
                     storage_cluster_data
                 )
+                storage_cluster_data = add_in_transit_encryption_to_cluster_data(
+                    storage_cluster_data
+                )
+                storage_cluster_data["spec"]["storageDeviceSets"][0][
+                    "replica"
+                ] = no_of_worker_nodes
+
+                if self.platform in constants.HCI_PROVIDER_CLIENT_PLATFORMS:
+                    storage_cluster_data["spec"]["storageDeviceSets"][0][
+                        "count"
+                    ] = number_of_disks_available
+
                 templating.dump_data_to_temp_yaml(
                     storage_cluster_data, constants.OCS_STORAGE_CLUSTER_YAML
                 )
@@ -207,9 +242,20 @@ class ODFAndNativeStorageClientDeploymentOnProvider(object):
                 storage_cluster_data = templating.load_yaml(
                     constants.OCS_STORAGE_CLUSTER_UPDATED_YAML
                 )
-                storage_cluster_data = self.add_encryption_details_to_cluster_data(
+                storage_cluster_data = add_encryption_details_to_cluster_data(
                     storage_cluster_data
                 )
+                storage_cluster_data = add_in_transit_encryption_to_cluster_data(
+                    storage_cluster_data
+                )
+                storage_cluster_data["spec"]["storageDeviceSets"][0][
+                    "replica"
+                ] = no_of_worker_nodes
+
+                if self.platform in constants.HCI_PROVIDER_CLIENT_PLATFORMS:
+                    storage_cluster_data["spec"]["storageDeviceSets"][0][
+                        "count"
+                    ] = number_of_disks_available
                 templating.dump_data_to_temp_yaml(
                     storage_cluster_data, constants.OCS_STORAGE_CLUSTER_UPDATED_YAML
                 )
@@ -225,7 +271,7 @@ class ODFAndNativeStorageClientDeploymentOnProvider(object):
         if self.ocs_version >= version.VERSION_4_16:
             # Validate native client is created in openshift-storage namespace
             self.deployment.wait_for_csv(
-                self.ocs_client_operator, constants.OPENSHIFT_STORAGE_NAMESPACE
+                self.ocs_client_operator, config.ENV_DATA["cluster_namespace"]
             )
 
             # Verify native storageclient is created successfully
@@ -289,31 +335,6 @@ class ODFAndNativeStorageClientDeploymentOnProvider(object):
         # Enable odf-console:
         enable_console_plugin()
         time.sleep(30)
-
-    def add_encryption_details_to_cluster_data(self, storage_cluster_data):
-        """
-        Update storage cluster YAML data with encryption information from
-        configuration.
-
-        Args:
-            storage_cluster_data (dict): storage cluster YAML data
-
-        Returns:
-            dict: updated storage storage cluster yaml
-        """
-        if config.ENV_DATA.get("encryption_at_rest"):
-            log.info("Enabling encryption at REST!")
-            storage_cluster_data["spec"]["encryption"] = {
-                "enable": True,
-            }
-            storage_cluster_data["spec"]["encryption"] = {
-                "clusterWide": True,
-            }
-        if config.DEPLOYMENT.get("kms_deployment"):
-            storage_cluster_data["spec"]["encryption"]["kms"] = {
-                "enable": True,
-            }
-        return storage_cluster_data
 
     def verify_provider_mode_deployment(self):
         """

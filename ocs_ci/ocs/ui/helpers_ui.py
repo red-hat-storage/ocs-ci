@@ -8,6 +8,7 @@ from ocs_ci.ocs import constants
 from ocs_ci.ocs.ui.base_ui import login_ui, close_browser
 from ocs_ci.ocs.ui.add_replace_device_ui import AddReplaceDeviceUI
 from ocs_ci.ocs.resources.storage_cluster import get_deviceset_count, get_osd_size
+from ocs_ci.ocs.exceptions import ResourceNotFoundError
 
 logger = logging.getLogger(__name__)
 
@@ -133,6 +134,7 @@ def ui_add_capacity_conditions():
         "4.14",
         "4.15",
         "4.16",
+        "4.17",
     ):
         logger.info(
             f"Add capacity via UI is not supported when the OCP version [{ocp_version}]"
@@ -216,3 +218,27 @@ def is_ui_deployment():
         return True
 
     return False
+
+
+def extract_encryption_status(root_element, svg_path):
+    """Function to extract encryption status from an SVG element
+
+    Args:
+        root_element (str): Dom root element
+        svg_element (str): svg element path
+
+    Returns:
+        bool: if encryption status is enable for given element return True otherwise False.
+
+    Raises:
+        ResourceNotFoundError: If given resource is not found.
+    """
+    try:
+        svg_element = root_element.find_element(By.CSS_SELECTOR, svg_path)
+        if svg_element and svg_element.tag_name == "svg":
+            if svg_element.get_attribute("data-test") == "success-icon":
+                return True
+            else:
+                return False
+    except Exception as e:
+        raise ResourceNotFoundError(f"Given SVG element is not Found: {e}")

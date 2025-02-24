@@ -1,6 +1,7 @@
 """
 StorageCluster related functionalities
 """
+
 import copy
 import ipaddress
 import logging
@@ -27,6 +28,7 @@ from ocs_ci.ocs.exceptions import (
     ResourceNotFoundError,
     UnsupportedFeatureError,
     PVNotSufficientException,
+    ResourceWrongStatusException,
 )
 from ocs_ci.ocs.ocp import get_images, OCP
 from ocs_ci.ocs.resources import csv, deployment
@@ -43,6 +45,7 @@ from ocs_ci.ocs.resources.pod import (
     get_rbdfsplugin_provisioner_pods,
     get_ceph_tools_pod,
     get_osd_pod_id,
+    get_lvs_osd_pods,
 )
 from ocs_ci.ocs.resources.pv import check_pvs_present_for_ocs_expansion
 from ocs_ci.ocs.resources.pvc import get_deviceset_pvcs
@@ -58,8 +61,13 @@ from ocs_ci.ocs.node import (
     get_provider_internal_node_ips,
     add_disk_stretch_arbiter,
 )
+from ocs_ci.ocs.utils import get_primary_cluster_config
 from ocs_ci.ocs.version import get_ocp_version
-from ocs_ci.utility.version import get_semantic_version, VERSION_4_11
+from ocs_ci.utility.version import (
+    get_semantic_version,
+    VERSION_4_11,
+    get_semantic_ocp_running_version,
+)
 from ocs_ci.helpers.helpers import (
     get_secret_names,
     get_cephfs_name,
@@ -74,10 +82,14 @@ from ocs_ci.utility import (
 )
 from ocs_ci.utility.retry import retry
 from ocs_ci.utility.rgwutils import get_rgw_count
-from ocs_ci.utility.utils import run_cmd, TimeoutSampler, convert_device_size
+from ocs_ci.utility.utils import (
+    run_cmd,
+    TimeoutSampler,
+    convert_device_size,
+    extract_image_urls,
+)
 from ocs_ci.utility.decorators import switch_to_orig_index_at_last
 from ocs_ci.helpers.helpers import storagecluster_independent_check
-from ocs_ci.deployment.helpers.mcg_helpers import check_if_mcg_root_secret_public
 
 log = logging.getLogger(__name__)
 
@@ -253,7 +265,7 @@ def ocs_install_verification(
                 constants.MDS_APP_LABEL: 2,
             }
         )
-    elif consumer_cluster or client_cluster:
+    elif client_cluster and (ocs_version < version.VERSION_4_17):
         resources_dict.update(
             {
                 constants.CSI_CEPHFSPLUGIN_LABEL: number_of_worker_nodes,
@@ -302,6 +314,23 @@ def ocs_install_verification(
                 constants.UX_BACKEND_APP_LABEL: 1,
             }
         )
+
+    if ocs_version >= version.VERSION_4_17:
+        resources_dict.update(
+            {
+                constants.CEPH_CSI_CONTROLLER_MANAGER_LABEL: 1,
+            }
+        )
+        # In provider mode, add the new name and label that replaces the provisioner and plugin pods
+        if hci_cluster:
+            resources_dict.update(
+                {
+                    constants.CEPHFS_NODEPLUGIN_LABEL: number_of_worker_nodes,
+                    constants.RBD_NODEPLUGIN_LABEL: number_of_worker_nodes,
+                    constants.CEPHFS_CTRLPLUGIN_LABEL: 2,
+                    constants.RBD_CTRLPLUGIN_LABEL: 2,
+                }
+            )
 
     for label, count in resources_dict.items():
         if label == constants.RGW_APP_LABEL:
@@ -435,9 +464,12 @@ def ocs_install_verification(
         )
 
     elif config.DEPLOYMENT["external_mode"]:
-        sc_rbd = storage_class.get(
-            resource_name=constants.DEFAULT_EXTERNAL_MODE_STORAGECLASS_RBD
-        )
+        rbd_namespace = config.EXTERNAL_MODE.get("rbd_namespace")
+        if rbd_namespace:
+            rbd_resource_name = f"{constants.DEFAULT_EXTERNAL_MODE_STORAGECLASS_RBD_NAMESPACE_PREFIX}-{rbd_namespace}"
+        else:
+            rbd_resource_name = constants.DEFAULT_EXTERNAL_MODE_STORAGECLASS_RBD
+        sc_rbd = storage_class.get(resource_name=rbd_resource_name)
         sc_cephfs = storage_class.get(
             resource_name=(constants.DEFAULT_EXTERNAL_MODE_STORAGECLASS_CEPHFS)
         )
@@ -556,7 +588,8 @@ def ocs_install_verification(
             # removes duplicate hostname
             deviceset_pvcs = list(set(deviceset_pvcs))
             if (
-                config.ENV_DATA.get("platform") == constants.BAREMETAL_PLATFORM
+                config.ENV_DATA.get("platform")
+                in [constants.BAREMETAL_PLATFORM, constants.HCI_BAREMETAL]
                 or config.ENV_DATA.get("platform") == constants.AWS_PLATFORM
             ):
                 deviceset_pvcs = [
@@ -768,54 +801,71 @@ def ocs_install_verification(
             verify_device_class_in_osd_tree(ct_pod, device_class)
 
     # RDR with globalnet submariner
-    if (
-        config.ENV_DATA.get("enable_globalnet", True)
-        and config.MULTICLUSTER.get("multicluster_mode") == "regional-dr"
+    if config.MULTICLUSTER.get(
+        "multicluster_mode"
+    ) == "regional-dr" and get_primary_cluster_config().ENV_DATA.get(
+        "enable_globalnet", True
     ):
         validate_serviceexport()
 
-    # check that noobaa root secrets are not public
-    if not (client_cluster or managed_service):
-        assert (
-            check_if_mcg_root_secret_public() is False
-        ), "Seems like MCG root secrets are public, please check"
-        log.info("Noobaa root secrets are not public")
+    # Verify the owner of CSI deployments and daemonsets
+    csi_owner_name = (
+        constants.CLIENT_OPERATOR_CONFIGMAP
+        if hci_cluster
+        else constants.ROOK_CEPH_OPERATOR
+    )
 
-    # Verify the owner of CSI deployments and daemonsets if not provider mode
-    if not (managed_service or hci_cluster):
-        deployment_kind = OCP(kind=constants.DEPLOYMENT, namespace=namespace)
-        daemonset_kind = OCP(kind=constants.DAEMONSET, namespace=namespace)
-        for provisioner_name in [
-            "csi-cephfsplugin-provisioner",
-            "csi-rbdplugin-provisioner",
-        ]:
-            provisioner_deployment = deployment_kind.get(resource_name=provisioner_name)
-            owner_references = provisioner_deployment["metadata"].get("ownerReferences")
-            assert (
-                len(owner_references) == 1
-            ), f"Found more than 1 or none owner reference for {constants.DEPLOYMENT} {provisioner_name}"
-            assert (
-                owner_references[0].get("kind") == constants.DEPLOYMENT
-            ), f"Owner reference of {constants.DEPLOYMENT} {provisioner_name} is not of kind {constants.DEPLOYMENT}"
-            assert owner_references[0].get("name") == constants.ROOK_CEPH_OPERATOR, (
-                f"Owner reference of {constants.DEPLOYMENT} {provisioner_name} "
-                f"is not {constants.ROOK_CEPH_OPERATOR} {constants.DEPLOYMENT}"
-            )
-        log.info("Verified the ownerReferences CSI provisioner deployemts")
-        for plugin_name in ["csi-cephfsplugin", "csi-rbdplugin"]:
-            plugin_daemonset = daemonset_kind.get(resource_name=plugin_name)
-            owner_references = plugin_daemonset["metadata"].get("ownerReferences")
-            assert (
-                len(owner_references) == 1
-            ), f"Found more than 1 or none owner reference for {constants.DAEMONSET} {plugin_name}"
-            assert (
-                owner_references[0].get("kind") == constants.DEPLOYMENT
-            ), f"Owner reference of {constants.DAEMONSET} {plugin_name} is not of kind {constants.DEPLOYMENT}"
-            assert owner_references[0].get("name") == constants.ROOK_CEPH_OPERATOR, (
-                f"Owner reference of {constants.DAEMONSET} {plugin_name} "
-                f"is not {constants.ROOK_CEPH_OPERATOR} {constants.DEPLOYMENT}"
-            )
-        log.info("Verified the ownerReferences CSI plugin daemonsets")
+    if ocs_version >= version.VERSION_4_17 and hci_cluster:
+        provisioner_deployment_and_owner_names = {
+            f"{constants.CEPHFS_PROVISIONER}-ctrlplugin": constants.CEPHFS_PROVISIONER,
+            f"{constants.RBD_PROVISIONER}-ctrlplugin": constants.RBD_PROVISIONER,
+        }
+        nodeplugin_daemonset_and_owner_names = {
+            f"{constants.CEPHFS_PROVISIONER}-nodeplugin": constants.CEPHFS_PROVISIONER,
+            f"{constants.RBD_PROVISIONER}-nodeplugin": constants.RBD_PROVISIONER,
+        }
+        csi_owner_kind = constants.DRIVER
+    else:
+        provisioner_deployment_and_owner_names = {
+            "csi-cephfsplugin-provisioner": csi_owner_name,
+            "csi-rbdplugin-provisioner": csi_owner_name,
+        }
+        nodeplugin_daemonset_and_owner_names = {
+            "csi-cephfsplugin": csi_owner_name,
+            "csi-rbdplugin": csi_owner_name,
+        }
+        csi_owner_kind = constants.CONFIGMAP if hci_cluster else constants.DEPLOYMENT
+    deployment_kind = OCP(kind=constants.DEPLOYMENT, namespace=namespace)
+    daemonset_kind = OCP(kind=constants.DAEMONSET, namespace=namespace)
+    for (
+        provisioner_name,
+        csi_owner_name,
+    ) in provisioner_deployment_and_owner_names.items():
+        provisioner_deployment = deployment_kind.get(resource_name=provisioner_name)
+        owner_references = provisioner_deployment["metadata"].get("ownerReferences")
+        assert (
+            len(owner_references) == 1
+        ), f"Found more than 1 or none owner reference for {constants.DEPLOYMENT} {provisioner_name}"
+        assert (
+            owner_references[0].get("kind") == csi_owner_kind
+        ), f"Owner reference of {constants.DEPLOYMENT} {provisioner_name} is not of kind {csi_owner_kind}"
+        assert (
+            owner_references[0].get("name") == csi_owner_name
+        ), f"Owner reference of {constants.DEPLOYMENT} {provisioner_name} is not {csi_owner_name} {csi_owner_kind}"
+    log.info("Verified the ownerReferences CSI provisioner deployments")
+    for plugin_name, csi_owner_name in nodeplugin_daemonset_and_owner_names.items():
+        plugin_daemonset = daemonset_kind.get(resource_name=plugin_name)
+        owner_references = plugin_daemonset["metadata"].get("ownerReferences")
+        assert (
+            len(owner_references) == 1
+        ), f"Found more than 1 or none owner reference for {constants.DAEMONSET} {plugin_name}"
+        assert (
+            owner_references[0].get("kind") == csi_owner_kind
+        ), f"Owner reference of {constants.DAEMONSET} {plugin_name} is not of kind {csi_owner_kind}"
+        assert (
+            owner_references[0].get("name") == csi_owner_name
+        ), f"Owner reference of {constants.DAEMONSET} {plugin_name} is not {csi_owner_name} {csi_owner_kind}"
+    log.info("Verified the ownerReferences CSI plugin daemonsets")
 
 
 def mcg_only_install_verification(ocs_registry_image=None):
@@ -894,6 +944,7 @@ def verify_ocs_csv(ocs_registry_image=None):
             )
 
 
+@retry(AssertionError, 60, 10, 1)
 def verify_storage_system():
     """
     Verify storage system status
@@ -950,26 +1001,54 @@ def verify_storage_cluster():
     """
     Verify storage cluster status
     """
-    storage_cluster_name = config.ENV_DATA["storage_cluster_name"]
-    log.info("Verifying status of storage cluster: %s", storage_cluster_name)
-    storage_cluster = StorageCluster(
-        resource_name=storage_cluster_name,
-        namespace=config.ENV_DATA["cluster_namespace"],
-    )
-    log.info(f"Check if StorageCluster: {storage_cluster_name} is in Succeeded phase")
-    if config.ENV_DATA.get("platform") == constants.FUSIONAAS_PLATFORM:
-        timeout = 1000
-    elif storage_cluster.data["spec"].get("resourceProfile") != storage_cluster.data[
-        "status"
-    ].get("lastAppliedResourceProfile"):
-        timeout = 1200
-    else:
-        timeout = 600
-    storage_cluster.wait_for_phase(phase="Ready", timeout=timeout)
+    with config.RunWithProviderConfigContextIfAvailable():
+        storage_cluster_name = config.ENV_DATA["storage_cluster_name"]
+        log.info("Verifying status of storage cluster: %s", storage_cluster_name)
+        storage_cluster = StorageCluster(
+            resource_name=storage_cluster_name,
+            namespace=config.ENV_DATA["cluster_namespace"],
+        )
+        log.info(
+            f"Check if StorageCluster: {storage_cluster_name} is in Succeeded phase"
+        )
+        if config.ENV_DATA.get("platform") == constants.FUSIONAAS_PLATFORM:
+            timeout = 1000
+        elif storage_cluster.data["spec"].get(
+            "resourceProfile"
+        ) != storage_cluster.data["status"].get("lastAppliedResourceProfile"):
+            timeout = 1800
+        else:
+            timeout = 600
+        storage_cluster.wait_for_phase(phase="Ready", timeout=timeout)
 
     # verify storage cluster version
     if not config.ENV_DATA.get("disable_storage_cluster_version_check"):
         verify_storage_cluster_version(storage_cluster)
+
+
+def verify_storage_cluster_extended():
+    """
+    Verify storage cluster extended status
+    """
+    with config.RunWithProviderConfigContextIfAvailable():
+        storage_cluster_name = config.ENV_DATA["external_storage_cluster_name"]
+        log.info("Verifying status of storage cluster: %s", storage_cluster_name)
+        storage_cluster = StorageCluster(
+            resource_name=storage_cluster_name,
+            namespace=config.ENV_DATA["external_storage_cluster_namespace"],
+        )
+        log.info(
+            f"Check if StorageCluster: {storage_cluster_name} is in Succeeded phase"
+        )
+        if config.ENV_DATA.get("platform") == constants.FUSIONAAS_PLATFORM:
+            timeout = 1000
+        elif storage_cluster.data["spec"].get(
+            "resourceProfile"
+        ) != storage_cluster.data["status"].get("lastAppliedResourceProfile"):
+            timeout = 1800
+        else:
+            timeout = 600
+        storage_cluster.wait_for_phase(phase="Ready", timeout=timeout)
 
 
 def verify_storage_cluster_version(storage_cluster):
@@ -980,31 +1059,35 @@ def verify_storage_cluster_version(storage_cluster):
         storage_cluster (obj): storage cluster object
 
     """
-    # verify storage cluster version
-    if config.RUN["cli_params"].get("deploy") and not config.UPGRADE.get(
-        "upgrade_ocs_version"
-    ):
-        log.info("Verifying storage cluster version")
-        try:
-            storage_cluster_version = storage_cluster.get()["status"]["version"]
-            ocs_csv = get_ocs_csv()
-            csv_version = ocs_csv.data["spec"]["version"]
-            assert (
-                storage_cluster_version in csv_version
-            ), f"storage cluster version {storage_cluster_version} is not same as csv version {csv_version}"
-        except KeyError as e:
-            if (
-                config.ENV_DATA.get("platform", "").lower()
-                in constants.MANAGED_SERVICE_PLATFORMS
-            ):
-                # This is a workaround. The issue for tracking is
-                # https://github.com/red-hat-storage/ocs-ci/issues/8390
-                log.warning(f"Can't get the sc version due to the error: {str(e)}")
-            else:
-                raise e
+    with config.RunWithProviderConfigContextIfAvailable():
+        # verify storage cluster version
+        if config.RUN["cli_params"].get("deploy") and not config.UPGRADE.get(
+            "upgrade_ocs_version"
+        ):
+            log.info("Verifying storage cluster version")
+            try:
+                storage_cluster_version = storage_cluster.get()["status"]["version"]
+                ocs_csv = get_ocs_csv()
+                csv_version = ocs_csv.data["spec"]["version"]
+                assert (
+                    storage_cluster_version in csv_version
+                ), f"storage cluster version {storage_cluster_version} is not same as csv version {csv_version}"
+            except KeyError as e:
+                if (
+                    config.ENV_DATA.get("platform", "").lower()
+                    in constants.MANAGED_SERVICE_PLATFORMS
+                ):
+                    # This is a workaround. The issue for tracking is
+                    # https://github.com/red-hat-storage/ocs-ci/issues/8390
+                    log.warning(f"Can't get the sc version due to the error: {str(e)}")
+                else:
+                    raise e
 
 
-def verify_storage_device_class(device_class):
+def verify_storage_device_class(
+    device_class,
+    check_multiple_deviceclasses=False,
+):
     """
     Verifies the parameters of storageClassDeviceSets in CephCluster.
 
@@ -1014,8 +1097,15 @@ def verify_storage_device_class(device_class):
 
     Args:
         device_class (str): Name of the device class
+        check_multiple_deviceclasses (bool): If true, then check multiple deviceclasses. False, otherwise.
 
     """
+    if check_multiple_deviceclasses:
+        deviceset_sc_name_per_deviceclass = get_deviceset_sc_name_per_deviceclass()
+    else:
+        deviceset_sc_name_per_deviceclass = {}
+    log.info(f"deviceset name per deviceclass = {deviceset_sc_name_per_deviceclass}")
+
     # If the user has not provided any specific DeviceClass in the StorageDeviceSet for internal deployment then
     # tunefastDeviceClass will be true and crushDeviceClass will set to "ssd"
     log.info("Verifying crushDeviceClass for storageClassDeviceSets")
@@ -1028,8 +1118,18 @@ def verify_storage_device_class(device_class):
     ]
 
     for each_devise_set in storage_class_device_sets:
+        if deviceset_sc_name_per_deviceclass:
+            sc_device_set_name = each_devise_set["volumeClaimTemplates"][0]["spec"].get(
+                "storageClassName"
+            )
+            # Get the deviceclass per the storagecluster deviceset name if exist or get the provided deviceclass
+            device_class = deviceset_sc_name_per_deviceclass.get(
+                sc_device_set_name, device_class
+            )
+
         # check tuneFastDeviceClass
         device_set_name = each_devise_set["name"]
+        log.info(f"device set name = {device_set_name}")
         if config.ENV_DATA.get("tune_fast_device_class"):
             tune_fast_device_class = each_devise_set["tuneFastDeviceClass"]
             msg = f"tuneFastDeviceClass for {device_set_name} is set to {tune_fast_device_class}"
@@ -1050,35 +1150,52 @@ def verify_storage_device_class(device_class):
             crush_device_class == device_class
         ), f"{crush_device_class_msg} but it should be set to {device_class}"
 
+    sc_device_classes = deviceset_sc_name_per_deviceclass.values()
     # get deviceClasses for overall storage
     device_classes = cephcluster_data["items"][0]["status"]["storage"]["deviceClasses"]
     log.debug(f"deviceClasses are {device_classes}")
     for each_device_class in device_classes:
         device_class_name = each_device_class["name"]
-        assert (
-            device_class_name == device_class
-        ), f"deviceClass is set to {device_class_name} but it should be set to {device_class}"
+        if sc_device_classes:
+            assert (
+                device_class_name in sc_device_classes
+            ), f"deviceClass {device_class_name} is not in the expected device classes {sc_device_classes}"
+        else:
+            assert (
+                device_class_name == device_class
+            ), f"deviceClass is set to {device_class_name} but it should be set to {device_class}"
 
 
-def verify_device_class_in_osd_tree(ct_pod, device_class):
+def verify_device_class_in_osd_tree(
+    ct_pod, device_class, check_multiple_deviceclasses=False
+):
     """
     Verifies device class in ceph osd tree output
 
     Args:
         ct_pod (:obj:`OCP`):  Object of the Ceph tools pod
         device_class (str): Name of the device class
+        check_multiple_deviceclasses (bool): If true, then check multiple deviceclasses. False, otherwise.
 
     """
+    if check_multiple_deviceclasses:
+        osd_id_per_deviceclass = get_osd_id_per_deviceclass()
+    else:
+        osd_id_per_deviceclass = {}
+    log.info(f"osd id per deviceclass = {osd_id_per_deviceclass}")
+
     log.info("Verifying DeviceClass in ceph osd tree")
     osd_tree = ct_pod.exec_ceph_cmd(ceph_cmd="ceph osd tree")
     for each in osd_tree["nodes"]:
         if each["type"] == "osd":
+            osd_id = each.get("id")
+            current_device_class = osd_id_per_deviceclass.get(osd_id, device_class)
             osd_name = each["name"]
             device_class_in_osd_tree = each["device_class"]
             log.debug(f"DeviceClass for {osd_name} is {device_class_in_osd_tree}")
             assert (
-                device_class_in_osd_tree == device_class
-            ), f"DeviceClass for {osd_name} is {device_class_in_osd_tree} but expected value is {device_class}"
+                device_class_in_osd_tree == current_device_class
+            ), f"DeviceClass for {osd_name} is {device_class_in_osd_tree} but expected value is {current_device_class}"
 
 
 def get_device_class():
@@ -1349,18 +1466,19 @@ def in_transit_encryption_verification():
     intransit_config_state = get_in_transit_encryption_config_state()
 
     def search_secure_keys():
-        ceph_dump_data = ceph_config_dump()
-        keys_found = [
-            record["name"]
-            for record in ceph_dump_data
-            if record["name"] in keys_to_match
-        ]
+        with config.RunWithProviderConfigContextIfAvailable():
+            ceph_dump_data = ceph_config_dump()
+            keys_found = [
+                record["name"]
+                for record in ceph_dump_data
+                if record["name"] in keys_to_match
+            ]
 
-        if (intransit_config_state) and (len(keys_found) != len(keys_to_match)):
-            raise ValueError("Not all secure keys are present in the config")
+            if (intransit_config_state) and (len(keys_found) != len(keys_to_match)):
+                raise ValueError("Not all secure keys are present in the config")
 
-        if (not intransit_config_state) and (len(keys_found) > 0):
-            raise ValueError("Some secure keys are Still in the config")
+            if (not intransit_config_state) and (len(keys_found) > 0):
+                raise ValueError("Some secure keys are Still in the config")
 
         return keys_found
 
@@ -1394,22 +1512,27 @@ def get_in_transit_encryption_config_state():
         bool: True if in-transit encryption is enabled, False if it is disabled, or None if an error occurred.
 
     """
-    cluster_name = (
-        constants.DEFAULT_CLUSTERNAME_EXTERNAL_MODE
-        if storagecluster_independent_check()
-        else constants.DEFAULT_CLUSTERNAME
-    )
+    with config.RunWithProviderConfigContextIfAvailable():
+        cluster_name = (
+            constants.DEFAULT_CLUSTERNAME_EXTERNAL_MODE
+            if storagecluster_independent_check()
+            else constants.DEFAULT_CLUSTERNAME
+        )
 
-    ocp_obj = StorageCluster(
-        resource_name=cluster_name,
-        namespace=config.ENV_DATA["cluster_namespace"],
-    )
+        ocp_obj = StorageCluster(
+            resource_name=cluster_name,
+            namespace=config.ENV_DATA["cluster_namespace"],
+        )
 
-    try:
-        return ocp_obj.data["spec"]["network"]["connections"]["encryption"]["enabled"]
-    except KeyError as e:
-        log.error(f"In-transit Encryption key {e}. not present in the storagecluster.")
-        return False
+        try:
+            return ocp_obj.data["spec"]["network"]["connections"]["encryption"][
+                "enabled"
+            ]
+        except KeyError as e:
+            log.error(
+                f"In-transit Encryption key {e}. not present in the storagecluster."
+            )
+            return False
 
 
 def set_in_transit_encryption(enabled=True):
@@ -1431,27 +1554,39 @@ def set_in_transit_encryption(enabled=True):
         log.info("Existing in-transit encryption state is same as desire state.")
         return True
 
-    cluster_name = (
-        constants.DEFAULT_CLUSTERNAME_EXTERNAL_MODE
-        if storagecluster_independent_check()
-        else constants.DEFAULT_CLUSTERNAME
-    )
+    with config.RunWithProviderConfigContextIfAvailable():
+        cluster_name = (
+            constants.DEFAULT_CLUSTERNAME_EXTERNAL_MODE
+            if storagecluster_independent_check()
+            else constants.DEFAULT_CLUSTERNAME
+        )
 
-    ocp_obj = StorageCluster(
-        resource_name=cluster_name,
-        namespace=config.ENV_DATA["cluster_namespace"],
-    )
+        ocp_obj = StorageCluster(
+            resource_name=cluster_name,
+            namespace=config.ENV_DATA["cluster_namespace"],
+        )
 
-    patch = {"spec": {"network": {"connections": {"encryption": {"enabled": enabled}}}}}
-    action = "enable" if enabled else "disable"
-    log.info(f"Patching storage class to {action} in-transit encryption.")
+        patch = {
+            "spec": {"network": {"connections": {"encryption": {"enabled": enabled}}}}
+        }
+        action = "enable" if enabled else "disable"
+        log.info(f"Patching storage class to {action} in-transit encryption.")
 
-    if not ocp_obj.patch(params=json.dumps(patch), format_type="merge"):
-        log.error(f"Error {action} in-transit encryption.")
-        return False
+        if not ocp_obj.patch(params=json.dumps(patch), format_type="merge"):
+            log.error(f"Error {action} in-transit encryption.")
+            return False
 
-    log.info(f"In-transit encryption is {action}d successfully.")
-    ocp_obj.wait_for_phase("Progressing", timeout=60)
+        log.info(f"In-transit encryption is {action}d successfully.")
+        try:
+            ocp_obj.wait_for_phase(constants.STATUS_PROGRESSING, timeout=60)
+        except ResourceWrongStatusException:
+            is_sc_status_ready = ocp_obj.check_phase(constants.STATUS_READY)
+
+            if is_sc_status_ready:
+                log.info(f"Resource Phase has reached {constants.STATUS_READY}")
+            else:
+                log.error(f"StorageCluster is not in : {constants.STATUS_READY} Phase.")
+                raise
     verify_storage_cluster()
     return True
 
@@ -1599,8 +1734,8 @@ def add_capacity_lso(ui_flag=False):
     deviceset_count = get_deviceset_count()
     if is_flexible_scaling_enabled():
         log.info("Add 2 disk to same node")
-        add_disk_to_node(node_objs[0])
-        add_disk_to_node(node_objs[0])
+        add_disk_to_node(node_objs[0], ssd=True)
+        add_disk_to_node(node_objs[0], ssd=True)
         num_available_pv = 2
         set_count = deviceset_count + 2
     else:
@@ -1609,9 +1744,9 @@ def add_capacity_lso(ui_flag=False):
             config.DEPLOYMENT.get("arbiter_deployment") is True
             and num_available_pv == 4
         ):
-            add_disk_stretch_arbiter()
+            add_disk_stretch_arbiter(ssd=True)
         else:
-            add_new_disk_for_vsphere(sc_name=constants.LOCALSTORAGE_SC)
+            add_new_disk_for_vsphere(sc_name=constants.LOCALSTORAGE_SC, ssd=True)
         set_count = deviceset_count + 1
     localstorage.check_pvs_created(num_pvs_required=num_available_pv)
     if ui_add_capacity_conditions() and ui_flag:
@@ -1924,8 +2059,17 @@ def verify_multus_network():
         )
         mds_map = ceph_fs_dump_data["filesystems"][0]["mdsmap"]
         for _, gid_data in mds_map["info"].items():
-            ip = gid_data["addr"].split(":")[0]
-            range = config.ENV_DATA["multus_public_net_range"]
+            if not config.DEPLOYMENT.get("ipv6"):
+                ip = gid_data["addr"].split(":")[0]
+                range = config.ENV_DATA["multus_public_net_range"]
+
+            else:
+                gid_dt_ip = gid_data["addr"]
+                pattern = r"^\[([\da-f:]+)\]"
+                match = re.search(pattern, gid_dt_ip, re.IGNORECASE)
+                ip = match.group(1)
+                range = config.ENV_DATA["multus_public_ipv6_net_range"]
+
             assert ipaddress.ip_address(ip) in ipaddress.ip_network(range)
 
     log.info("Verifying StorageCluster multus network data")
@@ -2673,7 +2817,7 @@ def patch_storage_cluster_for_custom_storage_class(
         return False
 
 
-@retry(AssertionError, 50, 10, 1)
+@retry(AssertionError, 10, 20, 2)
 def validate_serviceexport():
     """
     validate the serviceexport resource
@@ -2768,3 +2912,288 @@ def resize_osd(new_osd_size, check_size=True):
         format_type="json",
     )
     return res
+
+
+def get_client_storage_provider_endpoint():
+    """
+    Get the client "storageProviderEndpoint" from the storage-client
+
+    Returns:
+        str: The client "storageProviderEndpoint"
+
+    """
+    sc_obj = ocp.OCP(
+        kind=constants.STORAGECLIENT,
+        namespace=config.ENV_DATA["cluster_namespace"],
+        resource_name=config.cluster_ctx.ENV_DATA.get("storage_client_name"),
+    )
+    return sc_obj.get()["spec"]["storageProviderEndpoint"]
+
+
+def wait_for_storage_client_connected(timeout=180, sleep=10):
+    """
+    Wait for the storage-client to be in a connected phase
+
+    Args:
+        timeout (int): Time to wait for the storage-client to be in a connected phase
+        sleep (int): Time in seconds to sleep between attempts
+
+    Raises:
+        ResourceWrongStatusException: In case the storage-client didn't reach the desired connected phase
+
+    """
+    sc_obj = OCP(
+        kind=constants.STORAGECLIENT, namespace=config.ENV_DATA["cluster_namespace"]
+    )
+    resource_name = config.ENV_DATA.get(
+        "storage_client_name", constants.STORAGE_CLIENT_NAME
+    )
+    sc_obj.wait_for_resource(
+        resource_name=resource_name,
+        column="PHASE",
+        condition="Connected",
+        timeout=timeout,
+        sleep=sleep,
+    )
+
+
+def set_non_resilient_pool(
+    storage_cluster: StorageCluster, enable: bool = True
+) -> None:
+    """
+    Enable non-resilient ceph settings by patching the storage cluster
+    (Replica-1 feature)
+
+    Args:
+        storage_cluster (StorageCluster): StorageCluster object
+        enable (bool, optional): cephNonResilientPools value *** Setting False is not supported by ODF in 4.14 ***.
+
+    """
+    cmd = f'[{{ "op": "replace", "path": "/spec/managedResources/cephNonResilientPools/enable", "value": {enable} }}]'
+    storage_cluster.patch(
+        resource_name=constants.DEFAULT_CLUSTERNAME, format_type="json", params=cmd
+    )
+
+
+def validate_non_resilient_pool(storage_cluster: StorageCluster) -> bool:
+    """
+    Validate non-resilient pools (replica-1) are enabled in storage cluster
+
+    Args:
+        storage_cluster (StorageCluster): StorageCluster object
+
+    Returns:
+        bool: True if replica-1 enabled, False otherwise
+
+    """
+    storagecluster_yaml = storage_cluster.get(
+        resource_name=constants.DEFAULT_CLUSTERNAME
+    )
+    if (
+        str(
+            storagecluster_yaml["spec"]["managedResources"]["cephNonResilientPools"][
+                "enable"
+            ]
+        ).lower()
+        == "true"
+    ):
+        return True
+
+    return False
+
+
+def get_csi_images_for_client_ocp_version(ocp_version=None):
+    """
+    Get the csi images of the specified ocp version
+
+    Args:
+        ocp_version (str): The ocp version of the csi images. If not provided,
+            it will get the current ocp cluster version
+
+    Returns:
+        list: The list of the csi images of the specified ocp version
+
+    """
+    configmap_obj = ocp.OCP(
+        kind=constants.CONFIGMAP,
+        namespace=config.ENV_DATA["cluster_namespace"],
+        resource_name=constants.CLIENT_OPERATOR_CSI_IMAGES,
+    )
+    csi_images = configmap_obj.data.get("data").get("csi-images.yaml")
+
+    if not ocp_version:
+        ocp_version = str(get_semantic_ocp_running_version())
+
+    log.info(f"The cluster ocp version is {ocp_version}")
+    first_str, last_str = f"v{ocp_version}", "version"
+    csi_ocp_version_images = csi_images.split(first_str)[1].split(last_str)[0]
+    csi_ocp_version_images_urls = extract_image_urls(csi_ocp_version_images)
+    return csi_ocp_version_images_urls
+
+
+def add_new_deviceset_in_storagecluster(
+    device_class, name, count=3, replica=1, access_modes=None, device_type="SSD"
+):
+    """
+    Add a new DeviceSet to the StorageCluster.
+
+    Args:
+        device_class (str): Device class for the DeviceSet.
+        name (str): Name of the DeviceSet.
+        count (int): Number of devices in the DeviceSet.
+        replica (int): Number of replicas.
+        access_modes (list): List of access modes.
+        device_type (str): Device type for the DeviceSet.
+
+    Returns:
+        bool: True if the patch was applied successfully, False otherwise.
+
+    """
+    access_modes = access_modes or ["ReadWriteOnce"]
+
+    template_data = templating.load_yaml(constants.STORAGE_DEVICESET_YAML)
+    # Update the YAML with the relevant parameters
+    template_data["spec"]["storageDeviceSets"][0]["count"] = count
+    template_data["spec"]["storageDeviceSets"][0]["dataPVCTemplate"]["spec"][
+        "accessModes"
+    ] = access_modes
+    template_data["spec"]["storageDeviceSets"][0]["dataPVCTemplate"]["spec"][
+        "storageClassName"
+    ] = device_class
+    template_data["spec"]["storageDeviceSets"][0]["deviceClass"] = device_class
+    template_data["spec"]["storageDeviceSets"][0]["name"] = name
+    template_data["spec"]["storageDeviceSets"][0]["replica"] = replica
+    template_data["spec"]["storageDeviceSets"][0]["deviceType"] = device_type
+
+    new_device_set = template_data["spec"]["storageDeviceSets"][0]
+
+    sc = get_storage_cluster()
+    resource_name = sc.data["items"][0]["metadata"]["name"]
+    current_sc = sc.get(resource_name=resource_name)
+    current_device_sets = current_sc["spec"].get("storageDeviceSets", [])
+    current_device_sets.append(new_device_set)
+
+    params_dict = {"spec": {"storageDeviceSets": current_device_sets}}
+    params = json.dumps(params_dict)
+    # Apply the patch using the updated YAML
+    result = sc.patch(
+        resource_name=resource_name,
+        params=params,
+        format_type="merge",
+    )
+
+    return result
+
+
+def get_all_device_sets():
+    """
+    Get all the device classes in the storagecluster
+
+    Returns:
+        list: The device classes in the storagecluster
+
+    """
+    storage_cluster_name = config.ENV_DATA["storage_cluster_name"]
+    storage_cluster = StorageCluster(
+        resource_name=storage_cluster_name,
+        namespace=config.ENV_DATA["cluster_namespace"],
+    )
+    storage_device_sets = storage_cluster.data["spec"]["storageDeviceSets"]
+    log.info(f"storage device sets = {storage_device_sets}")
+    return storage_device_sets
+
+
+def get_default_deviceclass():
+    """
+    Get the default deviceclass from the storagecluster
+
+    Returns:
+        str: The default deviceclass
+
+    """
+    storage_cluster_name = config.ENV_DATA["storage_cluster_name"]
+    storage_cluster = StorageCluster(
+        resource_name=storage_cluster_name,
+        namespace=config.ENV_DATA["cluster_namespace"],
+    )
+    default_deviceclass = storage_cluster.data["status"].get(
+        constants.DEFAULT_CEPH_DEVICECLASS
+    )
+
+    return default_deviceclass
+
+
+def get_deviceclass_name(device_set):
+    """
+    Get the deviceclass name from the device set dict
+
+    Args:
+        device_set (dict): The device set dict
+
+    Returns:
+        str: The deviceclass name
+
+    """
+    default_deviceclass = get_default_deviceclass()
+    deviceclass_name = device_set.get(constants.DEVICECLASS, default_deviceclass)
+    return deviceclass_name
+
+
+def get_deviceset_sc_name(device_set):
+    """
+    Get the deviceset storageclass name from the device set dict
+
+    Args:
+        device_set (dict): The device set dict
+
+    Returns:
+        str: The deviceset storageclass name
+
+    """
+    return device_set["dataPVCTemplate"]["spec"]["storageClassName"]
+
+
+def get_deviceset_sc_name_per_count():
+    """
+    Get the deviceset storageclass name per count dict from the storagecluster
+
+    Returns:
+        dict: The deviceset storageclass name per count dict
+
+    """
+    device_sets = get_all_device_sets()
+    return {get_deviceset_sc_name(d): d["count"] for d in device_sets}
+
+
+def get_osd_id_per_deviceclass():
+    """
+    Get the osd id per deviceclass dict
+
+    Returns:
+        dict: The osd id per deviceclass dict
+
+    """
+    osd_id_per_deviceclass = {}
+
+    device_sets = get_all_device_sets()
+    deviceclass_names = [get_deviceclass_name(d) for d in device_sets]
+    for d_name in deviceclass_names:
+        lvs_osd_pods = get_lvs_osd_pods(d_name)
+        # Add the osd ids per the device class to the dict
+        for p in lvs_osd_pods:
+            osd_id = int(get_osd_pod_id(p))
+            osd_id_per_deviceclass[osd_id] = d_name
+
+    return osd_id_per_deviceclass
+
+
+def get_deviceset_sc_name_per_deviceclass():
+    """
+    Get the deviceset storageclass name per deviceclass name dict
+
+    Returns:
+        dict: The deviceset storageclass name per deviceclass name dict
+
+    """
+    device_sets = get_all_device_sets()
+    return {get_deviceset_sc_name(d): get_deviceclass_name(d) for d in device_sets}

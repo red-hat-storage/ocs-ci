@@ -1,23 +1,27 @@
 import logging
-import warnings
+import math
+import pytest
 import time
+import warnings
 
 import pandas as pd
-import pytest
-from selenium.common.exceptions import TimeoutException
+from ocs_ci.framework import config
+from ocs_ci.framework.logger_helper import log_step
+from ocs_ci.ocs.cluster import (
+    get_used_and_total_capacity_in_gibibytes,
+    get_age_of_cluster_in_days,
+)
 from ocs_ci.ocs.exceptions import UnexpectedODFAccessException
 from ocs_ci.ocs.ui.page_objects.backing_store_tab import BackingStoreTab
 from ocs_ci.ocs.ui.page_objects.namespace_store_tab import NameSpaceStoreTab
 from ocs_ci.ocs.ui.page_objects.overview_tab import OverviewTab
 from ocs_ci.ocs.ui.page_objects.page_navigator import PageNavigator
 from ocs_ci.ocs.ui.page_objects.storage_system_details import StorageSystemDetails
-from ocs_ci.utility import version
-from ocs_ci.utility.utils import TimeoutSampler
-from ocs_ci.framework import config
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.resources.storage_cluster import StorageCluster
-from ocs_ci.framework.logger_helper import log_step
-
+from ocs_ci.utility import version
+from ocs_ci.utility.utils import TimeoutSampler
+from selenium.common.exceptions import TimeoutException
 
 logger = logging.getLogger(__name__)
 
@@ -94,7 +98,11 @@ class ValidationUI(PageNavigator):
         )
 
         logger.info("Verify Details tab on OCS operator")
-        strings_details_tab = ["Description", "Succeeded", "openshift-storage"]
+        strings_details_tab = [
+            "Description",
+            "Succeeded",
+            config.ENV_DATA["cluster_namespace"],
+        ]
         self.verify_page_contain_strings(
             strings_on_page=strings_details_tab, page_name="details_tab"
         )
@@ -213,11 +221,12 @@ class ValidationUI(PageNavigator):
         if default_projects_is_checked.get_attribute("data-checked-state") == "false":
             logger.info("Show default projects")
             self.do_click(self.validation_loc["show-default-projects"])
-        logger.info("Search for 'openshift-storage' project")
+        logger.info("Search for '%s' project", config.ENV_DATA["cluster_namespace"])
         self.do_send_keys(
-            self.validation_loc["project-search-bar"], text="openshift-storage"
+            self.validation_loc["project-search-bar"],
+            text=config.ENV_DATA["cluster_namespace"],
         )
-        logger.info("Select 'openshift-storage' project")
+        logger.info("Select '%s' project", config.ENV_DATA["cluster_namespace"])
         time.sleep(2)
         self.do_click(
             self.dep_loc["choose_openshift-storage_project"], enable_screenshot=True
@@ -307,9 +316,9 @@ class ValidationUI(PageNavigator):
         odf_overview_tab = self.nav_odf_default_page().nav_overview_tab()
 
         log_step("Verify if Overview tab is active")
-        res_dict[
-            "overview_tab_is_active_1"
-        ] = odf_overview_tab.validate_overview_tab_active()
+        res_dict["overview_tab_is_active_1"] = (
+            odf_overview_tab.validate_overview_tab_active()
+        )
 
         log_step("Ensure used raw capacity string in System Capacity card")
         res_dict["system_raw_capacity_check_bz_2185042"] = self.check_element_text(
@@ -317,9 +326,9 @@ class ValidationUI(PageNavigator):
         )
 
         log_step("Verify if Storage System popup works")
-        res_dict[
-            "storage_system_status_popup_present"
-        ] = odf_overview_tab.wait_storagesystem_popup()
+        res_dict["storage_system_status_popup_present"] = (
+            odf_overview_tab.wait_storagesystem_popup()
+        )
         odf_overview_tab.open_storage_popup_from_status_card()
 
         log_step("Ensure that Block and File status, on Storage System popup is Ready")
@@ -338,9 +347,9 @@ class ValidationUI(PageNavigator):
             log_step(
                 "Verify only one Block Pool present on Storage System details page"
             )
-            res_dict[
-                "blockpools_tabs_bz_2096513"
-            ] = storage_system_details_page.check_only_one_block_pools_tab()
+            res_dict["blockpools_tabs_bz_2096513"] = (
+                storage_system_details_page.check_only_one_block_pools_tab()
+            )
 
         log_step("Navigate Storage System via breadcrumb")
         storage_systems_tab = (
@@ -351,9 +360,9 @@ class ValidationUI(PageNavigator):
         odf_overview_tab = storage_systems_tab.nav_overview_tab()
 
         log_step("Verify if System Capacity Card is present")
-        res_dict[
-            "system_capacity_card_present"
-        ] = odf_overview_tab.validate_system_capacity_card_present()
+        res_dict["system_capacity_card_present"] = (
+            odf_overview_tab.validate_system_capacity_card_present()
+        )
 
         if not config.DEPLOYMENT["external_mode"]:
             log_step("Navigate to Storage System details via System Capacity Card")
@@ -364,9 +373,7 @@ class ValidationUI(PageNavigator):
             log_step(
                 "Verify if Storage System details breadcrumb is present and link works"
             )
-            res_dict[
-                "storagesystem-details-via-system-capacity-card-link-works"
-            ] = (
+            res_dict["storagesystem-details-via-system-capacity-card-link-works"] = (
                 storage_system_details_page.is_storage_system_details_breadcrumb_present()
             )
 
@@ -378,9 +385,9 @@ class ValidationUI(PageNavigator):
             odf_overview_tab = storage_systems_tab.nav_overview_tab()
 
         log_step("Verify if Performance Card is present and link works")
-        res_dict[
-            "performance_card_header_present"
-        ] = odf_overview_tab.validate_performance_card_header_present()
+        res_dict["performance_card_header_present"] = (
+            odf_overview_tab.validate_performance_card_header_present()
+        )
 
         log_step("Navigate to Storage System details via Performance Card")
         storage_system_details_page = (
@@ -390,9 +397,9 @@ class ValidationUI(PageNavigator):
         log_step(
             "Verify if Storage System details breadcrumb is present and link works"
         )
-        res_dict[
-            "storagesystem-details-via-performance-card-link-works"
-        ] = storage_system_details_page.is_storage_system_details_breadcrumb_present()
+        res_dict["storagesystem-details-via-performance-card-link-works"] = (
+            storage_system_details_page.is_storage_system_details_breadcrumb_present()
+        )
 
         storage_system_details_page.nav_storage_systems_via_breadcrumb()
 
@@ -418,9 +425,9 @@ class ValidationUI(PageNavigator):
         log_step(
             "Verify if Backing Store is present and link to Backing Store resource works"
         )
-        res_dict[
-            "backing_store_status_ready"
-        ] = backing_store_tab.validate_backing_store_ready()
+        res_dict["backing_store_status_ready"] = (
+            backing_store_tab.validate_backing_store_ready()
+        )
 
         log_step("Navigate to Backing Store tab via breadcrumb")
         backing_store_tab.nav_backing_store_list_breadcrumb()
@@ -450,9 +457,9 @@ class ValidationUI(PageNavigator):
             namespace_store_tab = NameSpaceStoreTab()
         else:
             namespace_store_tab = bucket_class_tab.nav_namespace_store_tab()
-        res_dict[
-            "namespace_store_tab_works"
-        ] = namespace_store_tab.is_namespace_store_tab_active()
+        res_dict["namespace_store_tab_works"] = (
+            namespace_store_tab.is_namespace_store_tab_active()
+        )
 
         log_step("Navigate to ODF Overview tab via tab bar")
         # Starting from ODF 4.13 Object Storage is implemented as a separate page and navigate via Overview tab
@@ -467,9 +474,9 @@ class ValidationUI(PageNavigator):
                 namespace_store_tab.nav_odf_default_page().nav_overview_tab()
             )
 
-        res_dict[
-            "overview_tab_is_active_2"
-        ] = odf_overview_tab.validate_overview_tab_active()
+        res_dict["overview_tab_is_active_2"] = (
+            odf_overview_tab.validate_overview_tab_active()
+        )
         logger.info("Navigated back to ODF tab under Storage. Check results below:")
 
         res_pd = pd.DataFrame.from_dict(res_dict, orient="index", columns=["check"])
@@ -676,3 +683,31 @@ class ValidationUI(PageNavigator):
             page_name="client_onboarding_token_page",
         )
         return storage_client_obj
+
+    def calculate_est_days_and_average_manually(self):
+        """
+        Calculates the 'Estimated days until full' manually by:
+        1. Get the age of the cluster in days
+        2. Get used capacity of the cluster
+        3. Get total capacity of the cluster
+        4. Calculate average consumption of the storage per day
+        5. Calculate the 'Estimated days until full' by using average and available capacity.
+
+        Returns:
+            tuple: Estimated days until full which calculated manually
+
+        """
+        number_of_days = get_age_of_cluster_in_days()
+        logger.info(f"Age of the cluster in days: {number_of_days}")
+        tpl_of_used_and_total_capacity = get_used_and_total_capacity_in_gibibytes()
+        used_capacity = tpl_of_used_and_total_capacity[0]
+        logger.info(f"The used capacity from the cluster is: {used_capacity}")
+        total_capacity = tpl_of_used_and_total_capacity[1]
+        available_capacity = total_capacity - used_capacity
+        logger.info(f"The available capacity from the cluster is: {available_capacity}")
+        average = used_capacity / number_of_days
+        logger.info(f"Average of storage consumption per day: {average}")
+        estimated_days_calculated = available_capacity / average
+        manual_est = math.floor(estimated_days_calculated)
+        logger.info(f"Estimated days calculated are {manual_est}")
+        return (manual_est, average)

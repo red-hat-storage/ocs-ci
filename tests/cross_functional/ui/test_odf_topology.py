@@ -18,6 +18,7 @@ from ocs_ci.framework.pytest_customization.marks import (
     ui,
     skipif_hci_provider_or_client,
     runs_on_provider,
+    jira,
 )
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.node import get_nodes, get_node_names
@@ -31,6 +32,8 @@ from ocs_ci.ocs.ui.odf_topology import (
 )
 from ocs_ci.utility.utils import ceph_health_check
 from ocs_ci.utility import prometheus
+from ocs_ci.helpers import helpers
+from ocs_ci.ocs.ocp import OCP
 
 logger = logging.getLogger(__name__)
 
@@ -51,8 +54,8 @@ def teardown_nodes_job(request, nodes):
         """
         ceph_health_check(tries=60, delay=30)
 
-    request.addfinalizer(finalizer_restart_nodes_by_stop_and_start_teardown)
     request.addfinalizer(finalizer_wait_cluster_healthy)
+    request.addfinalizer(finalizer_restart_nodes_by_stop_and_start_teardown)
 
 
 @pytest.fixture()
@@ -79,11 +82,10 @@ class TestODFTopology(object):
     @tier3
     @bugzilla("2209251")
     @bugzilla("2233027")
+    @bugzilla("2245068")
     @polarion_id("OCS-4901")
     def test_validate_topology_configuration(
-        self,
-        setup_ui_class,
-        teardown_depl_busybox,
+        self, setup_ui_class, teardown_depl_busybox, pvc_factory, teardown_factory
     ):
         """
         Test to validate configuration of ODF Topology for internal and external deployments,
@@ -113,7 +115,23 @@ class TestODFTopology(object):
         OCS-4906        Add deployment to ODF cluster and verify that Topology represents added deployment
         OCS-4907        Delete deployment from ODF cluster and verify that Topology represents that deployment
         """
-
+        logger.info(
+            "Add an unlabeled pod to the openshift-storage ns and "
+            "Check the ODF topology UI and verify that it functions as expected."
+        )
+        pvc_obj = pvc_factory(
+            interface=constants.CEPHBLOCKPOOL,
+            access_mode=constants.ACCESS_MODE_RWO,
+            status=constants.STATUS_BOUND,
+            project=OCP(kind="Project", namespace=config.ENV_DATA["cluster_namespace"]),
+        )
+        pod_obj = helpers.create_pod(
+            interface_type=constants.CEPHBLOCKPOOL,
+            pvc_name=pvc_obj.name,
+            namespace=pvc_obj.namespace,
+            pod_dict_path=constants.NGINX_POD_YAML,
+        )
+        teardown_factory(pod_obj)
         topology_tab = PageNavigator().nav_odf_default_page().nav_topology_tab()
 
         topology_deviation = topology_tab.validate_topology_configuration()
@@ -164,6 +182,10 @@ class TestODFTopology(object):
         deviations_df["Differences"] = (
             deviations_df["details_cli"] != deviations_df["details_ui"]
         )
+
+        if config.ENV_DATA["worker_replicas"] == 0:
+            # Remove the row with index "role" from the deviations DataFrame if COMPACT MODE (0 worker nodes)
+            deviations_df = deviations_df.drop(index="role", errors="ignore")
 
         pd.set_option("display.max_colwidth", 100)
         if deviations_df["Differences"].any():
@@ -231,6 +253,7 @@ class TestODFTopology(object):
             )
 
     @tier4a
+    @jira("DFBUGS-418")
     @bugzilla("2242132")
     @ignore_leftovers
     @polarion_id("OCS-4905")
@@ -273,7 +296,7 @@ class TestODFTopology(object):
         random_node_idle = random.choice(
             [node for node in ocp_nodes if node != random_node_under_test]
         )
-        nodes.stop_nodes(nodes=[random_node_under_test], force=True)
+        nodes.stop_nodes(nodes=[random_node_under_test])
 
         api = prometheus.PrometheusAPI(threading_lock=threading_lock)
         logger.info(f"Verifying whether {constants.ALERT_NODEDOWN} has been triggered")
@@ -294,16 +317,16 @@ class TestODFTopology(object):
         topology_tab = PageNavigator().nav_odf_default_page().nav_topology_tab()
         topology_tab.nodes_view.read_presented_topology()
 
-        test_checks[
-            "cluster_in_danger_state_check_pass"
-        ] = topology_tab.nodes_view.is_cluster_in_danger()
+        test_checks["cluster_in_danger_state_check_pass"] = (
+            topology_tab.nodes_view.is_cluster_in_danger()
+        )
         if not test_checks["cluster_in_danger_state_check_pass"]:
             take_screenshot("cluster_in_danger_state_check")
             logger.error("cluster is not in danger, when one Worker node is down")
 
-        test_checks[
-            "ceph_node_down_alert_found_check_pass"
-        ] = topology_tab.is_node_down_alert_in_alerts_ui(read_canvas_alerts=True)
+        test_checks["ceph_node_down_alert_found_check_pass"] = (
+            topology_tab.is_node_down_alert_in_alerts_ui(read_canvas_alerts=True)
+        )
         if not test_checks["ceph_node_down_alert_found_check_pass"]:
             logger.error("CephNodeDown alert has not been found after node went down")
 
@@ -312,10 +335,10 @@ class TestODFTopology(object):
                 f"check that any random idle node '{random_node_idle.name}' "
                 "do not show CephNodeDown when conditions not met"
             )
-            test_checks[
-                "ceph_node_down_alert_found_on_idle_node_check_pass"
-            ] = not topology_tab.is_node_down_alert_in_alerts_ui(
-                entity=random_node_idle.name
+            test_checks["ceph_node_down_alert_found_on_idle_node_check_pass"] = (
+                not topology_tab.is_node_down_alert_in_alerts_ui(
+                    entity=random_node_idle.name
+                )
             )
 
             if not test_checks["ceph_node_down_alert_found_on_idle_node_check_pass"]:
@@ -341,9 +364,9 @@ class TestODFTopology(object):
         )
         time.sleep(min_wait_for_update * 60)
 
-        test_checks[
-            "ceph_node_down_alert_found_after_node_turned_on_check_pass"
-        ] = not topology_tab.is_node_down_alert_in_alerts_ui(read_canvas_alerts=True)
+        test_checks["ceph_node_down_alert_found_after_node_turned_on_check_pass"] = (
+            not topology_tab.is_node_down_alert_in_alerts_ui(read_canvas_alerts=True)
+        )
         if not test_checks[
             "ceph_node_down_alert_found_after_node_turned_on_check_pass"
         ]:

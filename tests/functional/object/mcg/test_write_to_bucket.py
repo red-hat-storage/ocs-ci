@@ -7,6 +7,7 @@ from zipfile import ZipFile
 import pytest
 from flaky import flaky
 
+from ocs_ci.framework import config
 from ocs_ci.framework.pytest_customization.marks import (
     vsphere_platform_required,
     skip_inconsistent,
@@ -18,7 +19,6 @@ from ocs_ci.framework.testlib import (
     MCGTest,
     tier1,
     tier2,
-    acceptance,
     performance,
 )
 from ocs_ci.utility.utils import exec_nb_db_query
@@ -38,6 +38,7 @@ from ocs_ci.framework.pytest_customization.marks import (
     bugzilla,
     skipif_ocs_version,
     on_prem_platform_required,
+    jira,
 )
 from ocs_ci.ocs.constants import AWSCLI_TEST_OBJ_DIR
 from uuid import uuid4
@@ -88,6 +89,14 @@ def file_setup(request):
     return zip_filename
 
 
+@pytest.fixture(scope="class", autouse=True)
+def reduce_dedup_wait_time(add_env_vars_to_noobaa_endpoint_class):
+    """
+    Reduce the dedup time to 0 sec
+    """
+    add_env_vars_to_noobaa_endpoint_class([(constants.MIN_CHUNK_AGE_FOR_DEDUP, 0)])
+
+
 @mcg
 @red_squad
 @runs_on_provider
@@ -102,45 +111,6 @@ class TestBucketIO(MCGTest):
         argnames="interface,bucketclass_dict",
         argvalues=[
             pytest.param(
-                *["S3", None],
-                marks=[tier1, acceptance],
-            ),
-            pytest.param(
-                *[
-                    "OC",
-                    {
-                        "interface": "OC",
-                        "backingstore_dict": {"aws": [(1, "eu-central-1")]},
-                    },
-                ],
-                marks=[tier1],
-            ),
-            pytest.param(
-                *[
-                    "OC",
-                    {"interface": "OC", "backingstore_dict": {"azure": [(1, None)]}},
-                ],
-                marks=[tier1],
-            ),
-            pytest.param(
-                *["OC", {"interface": "OC", "backingstore_dict": {"gcp": [(1, None)]}}],
-                marks=[tier1],
-            ),
-            pytest.param(
-                *[
-                    "OC",
-                    {"interface": "OC", "backingstore_dict": {"ibmcos": [(1, None)]}},
-                ],
-                marks=[tier1],
-            ),
-            pytest.param(
-                *[
-                    "CLI",
-                    {"interface": "CLI", "backingstore_dict": {"ibmcos": [(1, None)]}},
-                ],
-                marks=[tier1],
-            ),
-            pytest.param(
                 *[
                     "OC",
                     {"interface": "OC", "backingstore_dict": {"rgw": [(1, None)]}},
@@ -154,16 +124,28 @@ class TestBucketIO(MCGTest):
                 ],
                 marks=[tier1, on_prem_platform_required],
             ),
+            pytest.param(
+                *[
+                    "CLI",
+                    {
+                        "interface": "CLI",
+                        "namespace_policy_dict": {
+                            "type": "Single",
+                            "namespacestore_dict": {"rgw": [(1, None)]},
+                        },
+                    },
+                ],
+                marks=[
+                    tier1,
+                    on_prem_platform_required,
+                    jira("DFBUGS-1035", run=False),
+                ],
+            ),
         ],
         ids=[
-            "DEFAULT-BACKINGSTORE",
-            "AWS-OC-1",
-            "AZURE-OC-1",
-            "GCP-OC-1",
-            "IBMCOS-OC-1",
-            "IBMCOS-CLI-1",
             "RGW-OC-1",
             "RGW-CLI-1",
+            "RGW-CLI-NSS-1",
         ],
     )
     @flaky
@@ -221,10 +203,6 @@ class TestBucketIO(MCGTest):
                 marks=[tier1],
             ),
             pytest.param(
-                {"interface": "OC", "backingstore_dict": {"ibmcos": [(1, None)]}},
-                marks=[tier1],
-            ),
-            pytest.param(
                 {"interface": "CLI", "backingstore_dict": {"ibmcos": [(1, None)]}},
                 marks=[tier1],
             ),
@@ -234,7 +212,6 @@ class TestBucketIO(MCGTest):
             "AWS-OC-1",
             "AZURE-OC-1",
             "GCP-OC-1",
-            "IBMCOS-OC-1",
             "IBMCOS-CLI-1",
         ],
     )
@@ -248,6 +225,20 @@ class TestBucketIO(MCGTest):
             awscli_pod_session (pod): A pod running the AWSCLI tools
             bucket_factory: Calling this fixture creates a new bucket(s)
         """
+
+        if (
+            config.ENV_DATA.get("fips") == "true"
+            and "ibmcos" in bucketclass_dict["backingstore_dict"]
+        ):
+            pytest.skip("Skipping test for IBM Cloud on FIPS enabled cluster")
+
+        if (
+            config.ENV_DATA.get("fips") == "true"
+            and bucketclass_dict is None
+            and config.ENV_DATA["platform"].lower() == "ibm_cloud"
+        ):
+            pytest.skip("Skipping test for IBM Cloud on FIPS enabled cluster")
+
         download_dir = AWSCLI_TEST_OBJ_DIR
         file_size = int(
             awscli_pod_session.exec_cmd_on_pod(
@@ -292,10 +283,6 @@ class TestBucketIO(MCGTest):
                 {"interface": "OC", "backingstore_dict": {"ibmcos": [(1, None)]}},
                 marks=[tier1],
             ),
-            pytest.param(
-                {"interface": "CLI", "backingstore_dict": {"ibmcos": [(1, None)]}},
-                marks=[tier1],
-            ),
         ],
         ids=[
             "DEFAULT-BACKINGSTORE",
@@ -303,7 +290,6 @@ class TestBucketIO(MCGTest):
             "AZURE-OC-1",
             "GCP-OC-1",
             "IBMCOS-OC-1",
-            "IBMCOS-CLI-1",
         ],
     )
     def test_mcg_data_compression(
@@ -316,6 +302,19 @@ class TestBucketIO(MCGTest):
             awscli_pod_session (pod): A pod running the AWSCLI tools
             bucket_factory: Calling this fixture creates a new bucket(s)
         """
+        if (
+            config.ENV_DATA.get("fips") == "true"
+            and "ibmcos" in bucketclass_dict["backingstore_dict"]
+        ):
+            pytest.skip("Skipping test for IBM Cloud on FIPS enabled cluster")
+
+        if (
+            config.ENV_DATA.get("fips") == "true"
+            and bucketclass_dict is None
+            and config.ENV_DATA["platform"].lower() == "ibm_cloud"
+        ):
+            pytest.skip("Skipping test for IBM Cloud on FIPS enabled cluster")
+
         download_dir = AWSCLI_TEST_OBJ_DIR
         bucketname = bucket_factory(1, bucketclass=bucketclass_dict)[0].name
         full_object_path = f"s3://{bucketname}"
@@ -333,7 +332,9 @@ class TestBucketIO(MCGTest):
     @tier2
     @performance
     @skip_inconsistent
-    def test_data_reduction_performance(self, mcg_obj, awscli_pod, bucket_factory):
+    def deprecated_test_data_reduction_performance(
+        self, mcg_obj, awscli_pod, bucket_factory
+    ):
         """
         Test data reduction performance
         """
@@ -474,7 +475,6 @@ class TestBucketIO(MCGTest):
         change_the_noobaa_log_level,
         test_directory_setup,
     ):
-
         """
         This test checks if the activity logs are being logged
         in the activitylogs table for every object upload and

@@ -17,6 +17,8 @@ LOG_FORMAT = "%(asctime)s - %(threadName)s - %(name)s - %(levelname)s - %(messag
 # Directories
 TOP_DIR = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 CONF_DIR = os.path.join(TOP_DIR, "conf")
+DEPLOYMENT_CONF_DIR = os.path.join(CONF_DIR, "deployment")
+FUSION_CONF_DIR = os.path.join(DEPLOYMENT_CONF_DIR, "fusion_hci_pc")
 FRAMEWORK_CONF_DIR = os.path.join(TOP_DIR, "ocs_ci", "framework", "conf")
 OCP_VERSION_CONF_DIR = os.path.join(FRAMEWORK_CONF_DIR, "ocp_version")
 OCS_VERSION_CONF_DIR = os.path.join(FRAMEWORK_CONF_DIR, "ocs_version")
@@ -33,6 +35,9 @@ TEMPLATE_MULTICLUSTER_DIR = os.path.join(TEMPLATE_DEPLOYMENT_DIR, "multicluster"
 TEMPLATE_DEPLOYMENT_DIR_CNV = os.path.join(TEMPLATE_DIR, "cnv-deployment")
 TEMPLATE_DEPLOYMENT_DIR_METALLB = os.path.join(TEMPLATE_DIR, "metallb-deployment")
 TEMPLATE_DEPLOYMENT_DIR_NMSTATE = os.path.join(TEMPLATE_DIR, "nmstate-deployment")
+TEMPLATE_DEPLOYMENT_DIR_INF = os.path.join(
+    TEMPLATE_DIR, "ingress-node-firewall-deployment"
+)
 TEMPLATE_CEPH_DIR = os.path.join(TEMPLATE_DIR, "ceph")
 TEMPLATE_CSI_DIR = os.path.join(TEMPLATE_DIR, "CSI")
 TEMPLATE_CSI_LVM_DIR = os.path.join(TEMPLATE_CSI_DIR, "lvm")
@@ -74,9 +79,6 @@ TEMPLATE_DEPLOYMENT_CLO = os.path.join(
 TEMPLATE_AUTHENTICATION_DIR = os.path.join(TEMPLATE_DIR, "authentication")
 KREW_INSTALL_DIR = os.path.join(TEMPLATE_DIR, "krew_plugin")
 TEMPLATE_CNV_VM_WORKLOAD_DIR = os.path.join(TEMPLATE_DIR, "cnv-vm-workload")
-TEMPLATE_CNV_VM_STANDALONE_PVC_DIR = os.path.join(
-    TEMPLATE_CNV_VM_WORKLOAD_DIR, "vm-standalone-pvc"
-)
 DATA_DIR = os.getenv("OCSCI_DATA_DIR") or os.path.join(TOP_DIR, "data")
 ROOK_REPO_DIR = os.path.join(DATA_DIR, "rook")
 ROOK_EXAMPLES_DIR = os.path.join(
@@ -103,8 +105,11 @@ NETWORK_POLICY_PROVIDER_TO_CLIENT_TEMPLATE = os.path.join(
 AI_NETWORK_CONFIG_TEMPLATE = os.path.join(
     "ocp-deployment", "ai-host-network-config.yaml.j2"
 )
+MULTIPLE_DEVICECLASSES_DIR = os.path.join(TEMPLATE_DIR, "multiple-deviceclasses")
+
 # Statuses
 STATUS_READY = "Ready"
+STATUS_PROGRESSING = "Progressing"
 PEER_READY = "Peer ready"
 STATUS_PENDING = "Pending"
 STATUS_CONTAINER_CREATING = "ContainerCreating"
@@ -120,7 +125,13 @@ STATUS_READYTOUSE = "READYTOUSE"
 STATUS_FAILED = "Failed"
 STATUS_FAILEDOVER = "FailedOver"
 STATUS_RELOCATED = "Relocated"
+STATUS_RELOCATING = "Relocating"
 STATUS_CONTAINER_STATUS_UNKNOWN = "ContainerStatusUnknown"
+STATUS_WAITFORUSERTOCLEANUP = "WaitOnUserToCleanUp"
+STATUS_POWERON = "ON"
+STATUS_POWEROFF = "OFF"
+STATUS_STOPPED = "stopped"
+STATUS_STOPPING = "stopping"
 
 # NooBaa statuses
 BS_AUTH_FAILED = "AUTH_FAILED"
@@ -130,13 +141,18 @@ HEALTHY_OB = "OPTIMAL"
 HEALTHY_OBC = STATUS_BOUND
 HEALTHY_OBC_CLI_PHASE = "Phase:Bound"
 HEALTHY_OB_CLI_MODE = "Mode:OPTIMAL"
-HEALTHY_PV_BS = ["`OPTIMAL`", "`LOW_CAPACITY`"]
+HEALTHY_PV_BS = ["OPTIMAL", "LOW_CAPACITY"]
 
 # noobaa-core config.js parameters
 CONFIG_JS_PREFIX = "CONFIG_JS_"
 BUCKET_REPLICATOR_DELAY_PARAM = CONFIG_JS_PREFIX + "BUCKET_REPLICATOR_DELAY"
 BUCKET_LOG_REPLICATOR_DELAY_PARAM = CONFIG_JS_PREFIX + "BUCKET_LOG_REPLICATOR_DELAY"
 LIFECYCLE_INTERVAL_PARAM = CONFIG_JS_PREFIX + "LIFECYCLE_INTERVAL"
+BUCKET_LOG_UPLOADER_DELAY_PARAM = CONFIG_JS_PREFIX + "BUCKET_LOG_UPLOADER_DELAY"
+STS_DEFAULT_SESSION_TOKEN_EXPIRY_MS = (
+    CONFIG_JS_PREFIX + "STS_DEFAULT_SESSION_TOKEN_EXPIRY_MS"
+)
+MIN_CHUNK_AGE_FOR_DEDUP = CONFIG_JS_PREFIX + "MIN_CHUNK_AGE_FOR_DEDUP"
 
 # Resources / Kinds
 CEPHFILESYSTEM = "CephFileSystem"
@@ -158,6 +174,7 @@ PVC = "PersistentVolumeClaim"
 POD = "Pod"
 ROUTE = "Route"
 SERVICE = "Service"
+DAEMONSET = "DaemonSet"
 CEPHOBJECTSTORE = "cephobjectstore"
 NODE = "Node"
 DEPLOYMENTCONFIG = "deploymentconfig"
@@ -204,6 +221,7 @@ MANAGED_FUSION_OFFERING = "ManagedFusionOffering"
 CEPH_CLUSTER = "CephCluster"
 EXTERNAL_CEPHCLUSTER_NAME = "ocs-external-storagecluster-cephcluster"
 CEPH_CLUSTER_NAME = "ocs-storagecluster-cephcluster"
+REPLICA1_STORAGECLASS = "ocs-storagecluster-ceph-non-resilient-rbd"
 ENDPOINTS = "Endpoints"
 WEBHOOK = "ValidatingWebhookConfiguration"
 ROOK_CEPH_WEBHOOK = "rook-ceph-webhook"
@@ -218,6 +236,17 @@ INGRESSCONTROLLER = "ingresscontroller"
 PROVISIONING = "Provisioning"
 AGENT_SERVICE_CONFIG = "AgentServiceConfig"
 INFRA_ENV = "InfraEnv"
+DEFALUT_DEVICE_CLASS = "ssd"
+VM = "vm"
+HOSTED_CLUSTERS = "hostedclusters"
+OPERATOR_KIND = "Operator"
+DRIVER = "Driver"
+IMAGECONTENTSOURCEPOLICY_KIND = "ImageContentSourcePolicy"
+NOOBAA_ACCOUNT = "NoobaaAccount"
+EXTERNAL_CLUSTER_SCRIPT_CONFIG = "rook-ceph-external-cluster-script-config"
+ENCRYPTIONKEYROTATIONCRONJOB = "encryptionkeyrotationcronjobs.csiaddons.openshift.io"
+ENCRYPTIONKEYROTATIONJOB = "encryptionkeyrotationjobs.csiaddons.openshift.io"
+DEFAULT_CEPH_DEVICECLASS = "defaultCephDeviceClass"
 
 # Provisioners
 AWS_EFS_PROVISIONER = "openshift.org/aws-efs"
@@ -249,6 +278,7 @@ IGNORE_SC_FLEX = "rook-ceph-block"
 TEST_FILES_BUCKET = "ocsci-test-files"
 ROOK_REPOSITORY = "https://github.com/rook/rook.git"
 OPENSHIFT_STORAGE_NAMESPACE = "openshift-storage"
+OPENSHIFT_NAMESPACE = "openshift"
 OPENSHIFT_STORAGE_CLIENT_NAMESPACE = "openshift-storage-client"
 OPENSHIFT_STORAGE_EXTENDED_NAMESPACE = "openshift-storage-extended"
 OPENSHIFT_STORAGE_CLIENT_NAMESPACE = "openshift-storage-client"
@@ -263,6 +293,7 @@ OPENSHIFT_IMAGE_REGISTRY_DEPLOYMENT = "image-registry"
 OPENSHIFT_IMAGE_SELECTOR = "docker-registry=default"
 OPENSHIFT_INGRESS_NAMESPACE = "openshift-ingress"
 OPENSHIFT_MONITORING_NAMESPACE = "openshift-monitoring"
+CLUSTERS_NAMESPACE = "clusters"
 MASTER_MACHINE = "master"
 WORKER_MACHINE = "worker"
 BOOTSTRAP_MACHINE = "bootstrap"
@@ -285,6 +316,10 @@ NON_MS_CLUSTER_TYPE = "non_ms"
 # HCI cluster types
 HCI_CLIENT = "hci_client"
 HCI_PROVIDER = "provider"
+# hosted cluster types
+HOSTED_CLUSTER_KUBEVIRT = "kubevirt"
+HOSTED_CLUSTER_AGENT = "agent"
+NON_HOSTED_CLUSTER = "non_hosted"
 
 # provider mode constants
 PROVIDER_MODE_OCS_DEPLOYMENT_PATH = os.path.join(
@@ -335,6 +370,43 @@ NATIVE_STORAGE_CLIENT_YAML = os.path.join(
     PROVIDER_CLIENT_DEPLOYMENT_DIR, "native_storage_client.yaml"
 )
 
+PROVIDER_CLUSTER_RESOURCE_KINDS = [
+    "cephblockpoolradosnamespaces",
+    "cephblockpoolradosnamespace",
+    "cephblockpools",
+    "cephblockpool",
+    "cephclients",
+    "cephclient",
+    "cephclusters",
+    "cephcluster",
+    "cephfilesystems",
+    "cephfilesystem",
+    "cephfilesystemsubvolumegroups",
+    "cephfilesystemsubvolumegroup",
+    "cephobjectstores",
+    "cephobjectstore",
+    "cephobjectstoreusers",
+    "cephobjectstoreuser",
+    "localvolumediscoveries",
+    "localvolumediscovery",
+    "localvolumediscoveryresults",
+    "localvolumediscoveryresult",
+    "localvolumes",
+    "localvolume",
+    "localvolumesets",
+    "localvolumeset",
+    "storageclusters",
+    "storagecluster",
+    "storageconsumers",
+    "storageconsumer",
+    "storageprofiles",
+    "storageprofile",
+    "storagerequests",
+    "storagerequest",
+    "storagesystems",
+    "storagesystem",
+]
+
 OCS_CLIENT_OPERATOR_CONTROLLER_MANAGER_PREFIX = "ocs-client-operator-controller-manager"
 OCS_CLIENT_OPERATOR_CONSOLE = "ocs-client-operator-console"
 STORAGE_CLIENT_NAME = "storage-client"
@@ -347,10 +419,12 @@ OCS_MONKEY_REPOSITORY = "https://github.com/red-hat-storage/ocs-monkey.git"
 
 # AMQ
 AMQ_NAMESPACE = "myproject"
+KAFKA_ENDPOINT = f"my-cluster-kafka-bootstrap.{AMQ_NAMESPACE}.svc.cluster.local:9092"
 KAFKA_OPERATOR = "https://github.com/strimzi/strimzi-kafka-operator"
 RGW_KAFKA_NOTIFY = "https://github.com/shonpaz123/notify/"
 OCS_WORKLOADS = "https://github.com/red-hat-storage/ocs-workloads"
 CODESPEED_URL = "http://10.0.78.167:8000/"
+KAFKA_PODS_LABEL = "strimzi.io/pool-name=kafka"
 
 # ODF monitoring tool
 ODF_MONITORING_TOOL_REPO = "https://github.com/red-hat-storage/odf-monitoring-tools.git"
@@ -372,6 +446,9 @@ IMAGE_REGISTRY_RESOURCE_NAME = "cluster"
 IMAGE_REGISTRY_CONFIG = "configs.imageregistry.operator.openshift.io/cluster"
 DEFAULT_NOOBAA_BACKINGSTORE = "noobaa-default-backing-store"
 DEFAULT_NOOBAA_BUCKETCLASS = "noobaa-default-bucket-class"
+DEFAULT_MCG_BUCKET_LOGS_PVC = "noobaa-bucket-logging-pvc"
+DEFAULT_MCG_BUCKET_NOTIFS_PVC = "noobaa-bucket-notifications-pvc"
+CUSTOM_MCG_LABEL = "custom=mcg-label"
 NOOBAA_RESOURCE_NAME = "noobaa"
 NOOBAA_DB_PVC_NAME = "db-noobaa-db-pg-0"
 MIN_PV_BACKINGSTORE_SIZE_IN_GB = 17
@@ -404,6 +481,9 @@ DEFAULT_EXTERNAL_MODE_STORAGECLASS_RBD = f"{DEFAULT_CLUSTERNAME_EXTERNAL_MODE}-c
 DEFAULT_EXTERNAL_MODE_STORAGECLASS_RBD_THICK = (
     f"{DEFAULT_CLUSTERNAME_EXTERNAL_MODE}-ceph-rbd-thick"
 )
+DEFAULT_EXTERNAL_MODE_STORAGECLASS_RBD_NAMESPACE_PREFIX = (
+    f"{DEFAULT_EXTERNAL_MODE_STORAGECLASS_RBD}-rados-namespace"
+)
 
 # Default StorageClass for Provider-mode
 DEFAULT_STORAGECLASS_CLIENT_CEPHFS = f"{DEFAULT_CLUSTERNAME_CLIENT}-cephfs"
@@ -433,6 +513,12 @@ CNV_OPERATORNAME = "kubevirt-hyperconverged.openshift-cnv"
 CNV_SELECTOR = f"operators.coreos.com/{CNV_OPERATORNAME}"
 HCP_REGISTRY = "quay.io/hypershift/hypershift-operator"
 HCP_REPOSITORY = "https://github.com/openshift/hypershift.git"
+CONTROL_PLANE_AVAILABILITY_POLICY_HA = "HighlyAvailable"
+CONTROL_PLANE_AVAILABILITY_POLICY_SINGLE = "SingleReplica"
+CONTROL_PLANE_AVAILABILITY_POLICIES = [
+    CONTROL_PLANE_AVAILABILITY_POLICY_SINGLE,
+    CONTROL_PLANE_AVAILABILITY_POLICY_HA,
+]
 
 # CNV VM constants
 VIRTUAL_MACHINE = "VirtualMachine"
@@ -442,7 +528,14 @@ CNV_VM_STOPPED = "Stopped"
 VM_PAUSED = "Paused"
 DEFAULT_CNV_CEPH_RBD_SC = "ocs-storagecluster-ceph-rbd-virtualization"
 VOLUME_IMPORT_SOURCE = "VolumeImportSource"
+VM_VOLUME_PVC = "PVC"
+VM_VOLUME_DV = "DV"
+VM_VOLUME_DVT = "DVT"
 
+# CNV VM source images:
+CNV_FEDORA_SOURCE = "docker://quay.io/containerdisks/fedora:latest"
+CNV_CENTOS_SOURCE = "docker://quay.io/containerdisks/centos-stream:9"
+CNV_RHEL_SOURCE = "docker://registry.redhat.io/rhel9/rhel-guest-image"
 
 # Virtctl constants
 VIRTCTL = "virtctl"
@@ -471,6 +564,7 @@ ACCESS_MODE_RWOP = "ReadWriteOncePod"
 NB_DB_NAME_46_AND_BELOW = "noobaa-db-0"
 NB_DB_NAME_47_AND_ABOVE = "noobaa-db-pg-0"
 REPORT_STATUS_TO_PROVIDER_POD = "report-status-to-provider-"
+ROOK_CEPH_OSD_PREPARE = "rook-ceph-osd-prepare"
 
 # Pod label
 MON_APP_LABEL = "app=rook-ceph-mon"
@@ -502,10 +596,13 @@ NOOBAA_ENDPOINT_POD_LABEL = "noobaa-s3=noobaa"
 NOOBAA_DEFAULT_BACKINGSTORE_LABEL = "pool=noobaa-default-backing-store"
 ROOK_CEPH_DETECT_VERSION_LABEL = "app=rook-ceph-detect-version"
 CEPH_FILE_CONTROLLER_DETECT_VERSION_LABEL = "app=ceph-file-controller-detect-version"
+CONTROLLER_DETECT_VERSION_NAME = "controller-detect-version"
+OSD_KEY_ROTATION_POD_NAME = "rook-ceph-osd-key-rotation"
 CEPH_OBJECT_CONTROLLER_DETECT_VERSION_LABEL = (
     "app=ceph-object-controller-detect-version"
 )
 CSI_ADDONS_CONTROLLER_MANAGER_LABEL = "app.kubernetes.io/name=csi-addons"
+CEPH_CSI_CONTROLLER_MANAGER_LABEL = "control-plane=ceph-csi-op-controller-manager"
 
 DEFAULT_DEVICESET_PVC_NAME = "ocs-deviceset"
 DEFAULT_DEVICESET_LSO_PVC_NAME = "ocs-deviceset-localblock"
@@ -527,12 +624,23 @@ MANAGED_FUSION_ALERTMANAGER_LABEL = "alertmanager=managed-fusion-alertmanager"
 MANAGED_FUSION_AWS_DATA_GATHER = "name=aws-data-gather"
 MANAGED_FUSION_PROMETHEUS_LABEL = "prometheus=managed-fusion-prometheus"
 UX_BACKEND_SERVER_LABEL = "app=ux-backend-server"
+CEPHFS_NODEPLUGIN_LABEL = "app=openshift-storage.cephfs.csi.ceph.com-nodeplugin"
+RBD_NODEPLUGIN_LABEL = "app=openshift-storage.rbd.csi.ceph.com-nodeplugin"
+CEPHFS_CTRLPLUGIN_LABEL = "app=openshift-storage.cephfs.csi.ceph.com-ctrlplugin"
+RBD_CTRLPLUGIN_LABEL = "app=openshift-storage.rbd.csi.ceph.com-ctrlplugin"
+PROMETHEUS_POD_LABEL = "app.kubernetes.io/name=prometheus"
 
 # Noobaa Deployments and Statefulsets
 NOOBAA_OPERATOR_DEPLOYMENT = "noobaa-operator"
 NOOBAA_ENDPOINT_DEPLOYMENT = "noobaa-endpoint"
 NOOBAA_DB_STATEFULSET = "noobaa-db-pg"
+NOOBAA_DB_POD = "noobaa-db-pg-0"
 NOOBAA_CORE_STATEFULSET = "noobaa-core"
+NOOBAA_CORE_POD = "noobaa-core-0"
+
+# Noobaa db secret
+NOOBAA_DB_SECRET = "noobaa-db"
+NOOBAA_S3_SERVING_CERT = "noobaa-s3-serving-cert"
 
 # Auth Yaml
 OCSCI_DATA_BUCKET = "ocs-ci-data"
@@ -893,15 +1001,18 @@ CNV_HYPERCONVERGED_YAML = os.path.join(
 CNV_VM_SECRET_YAML = os.path.join(TEMPLATE_DEPLOYMENT_DIR_CNV, "vm-secret.yaml")
 
 # CNV VM workload yamls
-CNV_VM_STANDALONE_PVC_SOURCE_YAML = os.path.join(
-    TEMPLATE_CNV_VM_STANDALONE_PVC_DIR, "source.yaml"
+CNV_VM_SOURCE_YAML = os.path.join(TEMPLATE_CNV_VM_WORKLOAD_DIR, "source.yaml")
+CNV_VM_PVC_YAML = os.path.join(TEMPLATE_CNV_VM_WORKLOAD_DIR, "pvc.yaml")
+CNV_VM_DV_YAML = os.path.join(TEMPLATE_CNV_VM_WORKLOAD_DIR, "dv.yaml")
+CNV_VM_DV_CLONE_YAML = os.path.join(TEMPLATE_CNV_VM_WORKLOAD_DIR, "clone_dv.yaml")
+CNV_VM_DV_CLUSTER_ROLE_YAML = os.path.join(
+    TEMPLATE_CNV_VM_WORKLOAD_DIR, "dv_cluster_role.yaml"
 )
-CNV_VM_STANDALONE_PVC_PVC_YAML = os.path.join(
-    TEMPLATE_CNV_VM_STANDALONE_PVC_DIR, "pvc.yaml"
+CNV_VM_DV_ROLE_BIND_YAML = os.path.join(
+    TEMPLATE_CNV_VM_WORKLOAD_DIR, "dv_role_binding.yaml"
 )
-CNV_VM_STANDALONE_PVC_VM_YAML = os.path.join(
-    TEMPLATE_CNV_VM_STANDALONE_PVC_DIR, "vm.yaml"
-)
+CNV_VM_TEMPLATE_YAML = os.path.join(TEMPLATE_CNV_VM_WORKLOAD_DIR, "vm.yaml")
+CNV_VM_WORKLOADS = os.path.join(TEMPLATE_CNV_VM_WORKLOAD_DIR, "cnv_vm_workload.yaml")
 
 METALLB = "metallb-operator"
 METALLB_CONTROLLER_MANAGER_PREFIX = "metallb-operator-controller-manager"
@@ -928,6 +1039,7 @@ METALLB_L2_ADVERTISEMENT_PATH = os.path.join(
 QE_APP_REGISTRY_SOURCE = os.path.join(
     TEMPLATE_DEPLOYMENT_DIR_OCP, "qe-app-registry-catalog-source.yaml"
 )
+QE_APP_REGISTRY_CATALOG_SOURCE_NAME = "qe-app-registry"
 
 # NMState deployment
 NMSTATE_NAMESPACE_YAML = os.path.join(TEMPLATE_DEPLOYMENT_DIR_NMSTATE, "namespace.yaml")
@@ -951,8 +1063,20 @@ MULTUS_CLUSTER_NET_YAML = os.path.join(
 NODE_NETWORK_CONFIGURATION_POLICY = os.path.join(
     TEMPLATE_DEPLOYMENT_DIR, "node_network_configuration_policy.yaml"
 )
-NETWORK_ATTACHEMENT_DEFINITION = "network-attachment-definitions.k8s.cni.cncf.io"
 
+MULTUS_PUBLIC_NET_IPV6_YAML = os.path.join(
+    TEMPLATE_DEPLOYMENT_DIR, "multus-public-net-ipv6.yaml"
+)
+MULTUS_CLUSTER_NET_IPV6_YAML = os.path.join(
+    TEMPLATE_DEPLOYMENT_DIR, "multus-cluster-net-ipv6.yaml"
+)
+NODE_NETWORK_CONFIGURATION_POLICY_IPV6 = os.path.join(
+    TEMPLATE_DEPLOYMENT_DIR, "node_network_configuration_policy_ipv6.yaml"
+)
+
+
+NETWORK_ATTACHEMENT_DEFINITION = "network-attachment-definitions.k8s.cni.cncf.io"
+VSPHERE_MULTUS_INTERFACE = "ens224"
 
 OPERATOR_SOURCE_NAME = "ocs-operatorsource"
 
@@ -1104,6 +1228,9 @@ VELERO_POD_COUNT = 1
 MDR_DPA = "dpa-1"
 MULTICLUSTER_ENGINE = "multiclusterengine"
 BACKUP_SCHEDULE_YAML = os.path.join(TEMPLATE_MULTICLUSTER_DIR, "backupschedule.yaml")
+KLUSTERLET_CONFIG_YAML = os.path.join(
+    TEMPLATE_MULTICLUSTER_DIR, "klusterlet_config.yaml"
+)
 MDR_BACKUP_SCHEDULE_RESOURCE = "schedule-acm"
 ACM_POLICY_COMPLIANT = "Compliant"
 ACM_POLICY_NONCOMPLIANT = "NonCompliant"
@@ -1129,6 +1256,7 @@ RBD_SIDECAR_PATCH_CMD = (
 )
 RBD_SIDECAR_COUNT = 18
 RBD_SIDECAR_COUNT_4_12 = 14
+RBD_SIDECAR_COUNT_4_17 = 16
 DR_S3_SECRET_NAME_PREFIX = "odr-s3secret"
 DR_WORKLOAD_REPO_BASE_DIR = "ocs-workloads"
 DR_RAMEN_CONFIG_MANAGER_KEY = "ramen_manager_config.yaml"
@@ -1138,6 +1266,7 @@ RAMEN_DR_CLUSTER_OPERATOR_APP_LABEL = "app=ramen-dr-cluster"
 RDR_OSD_MODE_GREENFIELD = "greenfield"
 RDR_OSD_MODE_BROWNFIELD = "brownfield"
 RDR_VOLSYNC_CEPHFILESYSTEM_SC = "ocs-storagecluster-cephfs-vrg"
+
 
 # constants
 RBD_INTERFACE = "rbd"
@@ -1208,6 +1337,7 @@ ALERT_STORAGECLIENTHEARTBEATMISSED = "StorageClientHeartbeatMissed"
 ALERT_STORAGECLIENTINCOMPATIBLEOPERATORVERSION = (
     "StorageClientIncompatibleOperatorVersion"
 )
+
 ALERT_CEPH_OSD_VERSION_MISMATCH = "CephOSDVersionMismatch"
 ALERT_PERSISTENT_VOLUME_USAGE_CRITICAL = "PersistentVolumeUsageCritical"
 ALERT_CEPH_CLUSTER_READ_ONLY = "CephClusterReadOnly"
@@ -1229,6 +1359,8 @@ ALERT_CEPH_OSD_NEAR_FULL = "CephOSDNearFull"
 ALERT_PERSISTENT_VOLUME_USAGE_NEAR_FULL = "PersistentVolumeUsageNearFull"
 ALERT_ODF_PERSISTENT_VOLUME_MIRROR_STATUS = "ODFPersistentVolumeMirrorStatus"
 ALERT_OBC_QUOTA_BYTES_ALERT = "ObcQuotaBytesAlert"
+ALERT_MDSCACHEUSAGEHIGH = "MDSCacheUsageHigh"
+ALERT_MDSCPUUSAGEHIGH = "MDSCPUUsageHigh"
 
 # OCS Deployment related constants
 OPERATOR_NODE_LABEL = "cluster.ocs.openshift.io/openshift-storage=''"
@@ -1249,6 +1381,25 @@ OPERATOR_CS_QUAY_API_QUERY = (
 OPTIONAL_OPERATORS_SELECTOR = "catalog=optional-operators"
 OCS_OPERATOR_BUNDLE_IMAGE = "quay.io/rhceph-dev/ocs-operator-bundle"
 OCS_CATALOG_SOURCE_NAME = "ocs-catalogsource"
+
+OCS_DEPLOYMENTS = [
+    "csi-addons-controller-manager",
+    "noobaa-operator",
+    "ocs-operator",
+    "odf-console",
+    "odf-operator-controller-manager",
+    "rook-ceph-operator",
+    "ux-backend-server",
+]
+
+OCS_DEPLOYMENTS_4_16 = OCS_DEPLOYMENTS + [
+    "ocs-client-operator-console",
+    "ocs-client-operator-controller-manager",
+    "prometheus-operator",
+]
+OCS_DEPLOYMENTS_4_17 = OCS_DEPLOYMENTS_4_16 + [
+    "ceph-csi-controller-manager",
+]
 
 # OCP related constants
 OPENSHIFT_UPGRADE_INFO_API = (
@@ -1293,15 +1444,15 @@ BALANCED_PROFILE_REQUEST_MEMORY_VALUES = {
 }
 
 PERFORMANCE_PROFILE_REQUEST_CPU_VALUES = {
-    "mgr": "1500m'",
-    "mon": "1500",
+    "mgr": "1500m",
+    "mon": "1500m",
     "osd": "4",
     "mds": "3",
     "rgw": "2",
 }
 PERFORMANCE_PROFILE_REQUEST_MEMORY_VALUES = {
     "mgr": "2Gi",
-    "mon": "2Gi",
+    "mon": "3Gi",
     "osd": "8Gi",
     "mds": "8Gi",
     "rgw": "4Gi",
@@ -1348,7 +1499,7 @@ PERFORMANCE_PROFILE_CPU_LIMIT_VALUES = {
 }
 PERFORMANCE_PROFILE_MEMORY_LIMIT_VALUES = {
     "mgr": "4Gi",
-    "mon": "2Gi",
+    "mon": "3Gi",
     "osd": "8Gi",
     "mds": "8Gi",
     "rgw": "4Gi",
@@ -1378,6 +1529,8 @@ OPENSHIFT_DEDICATED_PLATFORM = "openshiftdedicated"
 RHV_PLATFORM = "rhv"
 ROSA_PLATFORM = "rosa"
 FUSIONAAS_PLATFORM = "fusion_aas"
+ROSA_HCP_PLATFORM = "rosa_hcp"
+ROSA_PLATFORMS = [ROSA_PLATFORM, ROSA_HCP_PLATFORM]
 HCI_BAREMETAL = "hci_baremetal"
 HCI_VSPHERE = "hci_vsphere"
 ACM_OCP_DEPLOYMENT = "acm_ocp_deployment"
@@ -1399,6 +1552,7 @@ CLOUD_PLATFORMS = [
     IBMCLOUD_PLATFORM,
     ROSA_PLATFORM,
     OPENSHIFT_DEDICATED_PLATFORM,
+    ROSA_HCP_PLATFORM,
 ]
 MANAGED_SERVICE_PLATFORMS = [
     OPENSHIFT_DEDICATED_PLATFORM,
@@ -1411,12 +1565,36 @@ BAREMETAL_PLATFORMS = [
     HCI_BAREMETAL,
     IBM_POWER_PLATFORM,
 ]
+
+IPI_DEPL_TYPE = "ipi"
+UPI_DEPL_TYPE = "upi"
+MANAGED_DEPL_TYPE = "managed"
+LOCAL_DEPL_TYPE = "local"
+GLOBAL_DEPL_TYPE = "global"
+MANAGED_CP_DEPL_TYPE = "managed_cp"
+DEPLOYMENT_TYPES = [IPI_DEPL_TYPE, UPI_DEPL_TYPE, MANAGED_DEPL_TYPE, LOCAL_DEPL_TYPE]
+
 DEFAULT_AWS_REGION = "us-east-2"
 
 HCI_PROVIDER_CLIENT_PLATFORMS = [
     HCI_BAREMETAL,
     HCI_VSPHERE,
 ]
+
+IBM_CLOUD_SUBNETS = {
+    # Washington D.C.
+    "us-east": {
+        "us-east-1": "10.241.0.0/18",
+        "us-east-2": "10.241.64.0/18",
+        "us-east-3": "10.241.128.0/18",
+    },
+    # Dalas
+    "us-south": {
+        "us-south-1": "10.240.0.0/18",
+        "us-south-2": "10.240.64.0/18",
+        "us-south-3": "10.240.128.0/18",
+    },
+}
 
 HCI_PC_OR_MS_PLATFORM = MANAGED_SERVICE_PLATFORMS + HCI_PROVIDER_CLIENT_PLATFORMS
 # AWS i3 worker instance for LSO
@@ -1442,9 +1620,9 @@ MIN_STORAGE_FOR_DATASTORE = 1.1 * 1024**4
 VSPHERE_NODE_USER = "core"
 VSPHERE_INSTALLER_BRANCH = "release-4.3"
 VSPHERE_INSTALLER_REPO = "https://github.com/openshift/installer.git"
-VSPHERE_CLUSTER_LAUNCHER = (
-    VSPHERE_SCALEUP_REPO
-) = "https://gitlab.cee.redhat.com/aosqe/v4-scaleup.git"
+VSPHERE_CLUSTER_LAUNCHER = VSPHERE_SCALEUP_REPO = (
+    "https://gitlab.cee.redhat.com/aosqe/v4-scaleup.git"
+)
 VSPHERE_DIR = os.path.join(EXTERNAL_DIR, "installer/upi/vsphere/")
 INSTALLER_IGNITION = os.path.join(VSPHERE_DIR, "machine/ignition.tf")
 VM_IFCFG = os.path.join(VSPHERE_DIR, "vm/ifcfg.tmpl")
@@ -1527,6 +1705,12 @@ ORDER_BEFORE_UPGRADE = 10
 ORDER_BEFORE_OCP_UPGRADE = 20
 ORDER_OCP_UPGRADE = 30
 ORDER_AFTER_OCP_UPGRADE = 40
+# Multicluster orchestrator
+ORDER_MCO_UPGRADE = 42
+# DR Hub operator
+ORDER_DR_HUB_UPGRADE = 44
+# ACM Operator
+ORDER_ACM_UPGRADE = 46
 ORDER_BEFORE_OCS_UPGRADE = 50
 ORDER_OCS_UPGRADE = 60
 ORDER_AFTER_OCS_UPGRADE = 70
@@ -1551,6 +1735,7 @@ MIRROR_OPENSHIFT_USER_FILE = "mirror_openshift_user"
 MIRROR_OPENSHIFT_PASSWORD_FILE = "mirror_openshift_password"
 NOOBAA_POSTGRES_CONFIGMAP = "noobaa-postgres-config"
 NOOBAA_POSTGRES_SECRET = "noobaa-pgsql-secret"
+NOOBAA_POSTGRES_12_VERSION = 12
 ROOK_CEPH_OPERATOR = "rook-ceph-operator"
 ROOK_CEPH_CSI_CONFIG = "rook-ceph-csi-config"
 PDBSTATEMAP = "rook-ceph-pdbstatemap"
@@ -1566,6 +1751,19 @@ ARO_WORKER_SUBNET = "worker-subnet"
 ARO_MASTER_SUBNET = "master-subnet"
 ARO_WORKER_SUBNET_ADDRESS_PREFIXES = "10.0.2.0/23"
 ARO_MASTER_SUBNET_ADDRESS_PREFIXES = "10.0.0.0/23"
+CLIENT_OPERATOR_CONFIGMAP = "ocs-client-operator-config"
+CLIENT_OPERATOR_CSI_IMAGES = "ocs-client-operator-csi-images"
+MCO_SUBSCRIPTION = "odf-multicluster-orchestrator"
+DR_HUB_OPERATOR_SUBSCRIPTION = (
+    "odr-hub-operator-stable-PLACEHOLDER-redhat-operators-openshift-marketplace"
+)
+DR_HUB_OPERATOR_SUBSCRIPTION_LABEL = (
+    "operators.coreos.com/odr-hub-operator.openshift-operators"
+)
+DR_CLUSTER_OPERATOR_SUBSCRIPTION = "ramen-dr-cluster-subscription"
+RBD_MIRROR_DAEMON_DEPLOYMENT = "rook-ceph-rbd-mirror-a"
+MDS_DAEMON_DEPLOYMENT_ONE = "rook-ceph-mds-ocs-storagecluster-cephfilesystem-a"
+MDS_DAEMON_DEPLOYMENT_TWO = "rook-ceph-mds-ocs-storagecluster-cephfilesystem-b"
 
 # UI Deployment constants
 HTPASSWD_SECRET_NAME = "htpass-secret"
@@ -1906,6 +2104,7 @@ DEFAULT_INGRESS_CRT_LOCAL_PATH = f"{DATA_DIR}/mcg-{DEFAULT_INGRESS_CRT}"
 SERVICE_CA_CRT = "service-ca.crt"
 SERVICE_MONITORS = "servicemonitors"
 SERVICE_CA_CRT_AWSCLI_PATH = f"/cert/{SERVICE_CA_CRT}"
+AWSCLI_CA_BUNDLE_PATH = "/tmp/ca-bundle.crt"
 AWSCLI_RELAY_POD_NAME = "awscli-relay-pod"
 JAVAS3_POD_NAME = "java-s3"
 SCALECLI_SERVICE_CA_CM_NAME = "scalecli-service-ca"
@@ -1996,6 +2195,8 @@ DISCON_CL_REQUIRED_PACKAGES = [
     "odf-operator",
 ]
 # for OCP >= 4.11
+# the list of available packages can be obtained via following command:
+# oc mirror list operators --catalog REGISTRY_IMAGE
 DISCON_CL_REQUIRED_PACKAGES_PER_ODF_VERSION = {
     "4.11": [
         "cluster-logging",
@@ -2021,21 +2222,41 @@ DISCON_CL_REQUIRED_PACKAGES_PER_ODF_VERSION = {
     ],
 }
 # the list of packages for 4.13 and 4.14 seems to be the same as 4.12
-DISCON_CL_REQUIRED_PACKAGES_PER_ODF_VERSION[
-    "4.13"
-] = DISCON_CL_REQUIRED_PACKAGES_PER_ODF_VERSION["4.12"]
+DISCON_CL_REQUIRED_PACKAGES_PER_ODF_VERSION["4.13"] = (
+    DISCON_CL_REQUIRED_PACKAGES_PER_ODF_VERSION["4.12"]
+)
+
+DISCON_CL_REQUIRED_PACKAGES_PER_ODF_VERSION["4.14"] = (
+    DISCON_CL_REQUIRED_PACKAGES_PER_ODF_VERSION["4.12"]
+)
+
+DISCON_CL_REQUIRED_PACKAGES_PER_ODF_VERSION["4.15"] = (
+    DISCON_CL_REQUIRED_PACKAGES_PER_ODF_VERSION["4.12"]
+)
+
+DISCON_CL_REQUIRED_PACKAGES_PER_ODF_VERSION["4.16"] = [
+    "cluster-logging",
+    "elasticsearch-operator",
+    # we might need to uncomment next line, if we would like to use it in
+    # disconnected deployment:
+    # "lvms-operator",
+    "mcg-operator",
+    "ocs-operator",
+    "odf-csi-addons-operator",
+    "odf-multicluster-orchestrator",
+    "odf-operator",
+    # "odf-prometheus-operator",
+]
+
+DISCON_CL_REQUIRED_PACKAGES_PER_ODF_VERSION["4.17"] = (
+    DISCON_CL_REQUIRED_PACKAGES_PER_ODF_VERSION["4.16"]
+)
 
 DISCON_CL_REQUIRED_PACKAGES_PER_ODF_VERSION[
-    "4.14"
-] = DISCON_CL_REQUIRED_PACKAGES_PER_ODF_VERSION["4.12"]
-
-DISCON_CL_REQUIRED_PACKAGES_PER_ODF_VERSION[
-    "4.15"
-] = DISCON_CL_REQUIRED_PACKAGES_PER_ODF_VERSION["4.12"]
-
-DISCON_CL_REQUIRED_PACKAGES_PER_ODF_VERSION[
-    "4.16"
-] = DISCON_CL_REQUIRED_PACKAGES_PER_ODF_VERSION["4.12"]
+    "4.18"
+] = DISCON_CL_REQUIRED_PACKAGES_PER_ODF_VERSION["4.16"] + [
+    "odf-dependencies",
+]
 
 # PSI-openstack constants
 NOVA_CLNT_VERSION = "2.0"
@@ -2151,6 +2372,10 @@ MIN_NODE_MEMORY = 64 * 10**9
 
 # aws tags
 AWS_CLOUDFORMATION_TAG = "aws:cloudformation:stack-name"
+
+# aws prefixes
+ACCOUNT_ROLE_PREFIX_ROSA_HCP = "accroleshcp"
+OPERATOR_ROLE_PREFIX_ROSA_HCP = "oproleshcp"
 
 # aws volume constants
 AWS_VOL_PVC_NAME_TAG = "kubernetes.io/created-for/pvc/name"
@@ -2404,6 +2629,22 @@ osd_memory_target_cgroup_limit_ratio = 0.8
 bluestore_prefer_deferred_size_hdd = 0
 """
 
+ROOK_CEPH_CONFIG_VALUES_416 = """
+[global]
+bdev_flock_retry = 20
+mon_osd_full_ratio = .85
+mon_osd_backfillfull_ratio = .8
+mon_osd_nearfull_ratio = .75
+mon_max_pg_per_osd = 600
+mon_pg_warn_max_object_skew = 0
+mon_data_avail_warn = 15
+mon_warn_on_pool_no_redundancy = false
+[osd]
+osd_memory_target_cgroup_limit_ratio = 0.8
+bluestore_prefer_deferred_size_hdd = 0
+"""
+
+
 CEPH_DEBUG_CONFIG_VALUES = """
 [mon]
 debug_mon = 30
@@ -2507,14 +2748,22 @@ GLOBALNET_STATUS = "True"
 SUBMARINER_DOWNSTREAM_UNRELEASED = os.path.join(
     TEMPLATE_MULTICLUSTER_DIR, "submariner_downstream_unreleased_catsrc.yaml"
 )
+ACM_CATSRC = SUBMARINER_DOWNSTREAM_UNRELEASED
+ACM_CATSRC_NAME = "acm-catalogsource"
 # We need to append version string at the end of this url
 SUBMARINER_DOWNSTREAM_UNRELEASED_BUILD_URL = (
     "https://datagrepper.engineering.redhat.com/raw?topic=/topic/"
     "VirtualTopic.eng.ci.redhat-container-image.pipeline.complete"
     "&rows_per_page=25&delta=1296000&contains=submariner-operator-bundle-container-v"
 )
+ACM_BREW_BUILD_URL = (
+    "https://datagrepper.engineering.redhat.com/raw?topic=/topic/"
+    "VirtualTopic.eng.ci.redhat-container-image.pipeline.complete"
+    "&rows_per_page=25&delta=1296000&contains=acm"
+)
 SUBMARINER_BREW_REPO = "brew.registry.redhat.io/rh-osbs/iib"
 SUBCTL_DOWNSTREAM_URL = "registry.redhat.io/rhacm2/"
+ACM_BREW_REPO = SUBMARINER_BREW_REPO
 
 # Multicluster related
 
@@ -2526,6 +2775,8 @@ OPENSSL_CERT_LOCALITY_NAME = "."
 OPENSSL_CERT_ORGANIZATION_NAME = "OCS"
 OPENSSL_CERT_ORGANIZATIONAL_UNIT_NAME = "OCS-QE"
 OPENSSL_CERT_EMAIL_ADDRESS = "ocs-qe@redhat.com"
+SSL_CERT_PROVIDER_OCS_QE_CA = "ocs-qe-ca"
+SSL_CERT_PROVIDER_LETS_ENCRYPT = "letsencrypt"
 
 # ACM Hub Parameters
 ACM_HUB_OPERATORGROUP_YAML = os.path.join(
@@ -2551,6 +2802,7 @@ ACM_HUB_UNRELEASED_ICSP_YAML = os.path.join(
 SUBMARINER_DOWNSTREAM_BREW_ICSP = os.path.join(
     TEMPLATE_DIR, "acm-deployment", "submariner_downstream_brew_icsp.yaml"
 )
+ACM_BREW_ICSP_YAML = os.path.join(TEMPLATE_DIR, "acm-deployment", "acm_brew_icsp.yaml")
 ACM_HUB_UNRELEASED_PULL_SECRET_TEMPLATE = "pull-secret.yaml.j2"
 ACM_ODF_MULTICLUSTER_ORCHESTRATOR_RESOURCE = "odf-multicluster-orchestrator"
 ACM_ODR_HUB_OPERATOR_RESOURCE = "odr-hub-operator"
@@ -2559,6 +2811,7 @@ ACM_LOCAL_CLUSTER = "local-cluster"
 ACM_CLUSTERSET_LABEL = "cluster.open-cluster-management.io/clusterset"
 ACM_ADDONS_NAMESPACE = "open-cluster-management-agent-addon"
 ACM_HUB_OPERATOR_NAME_WITH_NS = f"{ACM_HUB_OPERATOR_NAME}.{ACM_HUB_NAMESPACE}"
+ACM_MANAGEDCLUSTER_ADDONS = "managedclusteraddons.addon.open-cluster-management.io"
 
 # GitOps
 GITOPS_NAMESPACE = "openshift-gitops"
@@ -2578,6 +2831,9 @@ GITOPS_MANAGEDCLUSTER_SETBINDING_YAML = os.path.join(
 GITOPS_SUBSCRIPTION_YAML = os.path.join(
     TEMPLATE_DIR, "gitops-deployment", "subscription.yaml"
 )
+GITOPS_OPERATORGROUP_YAML = os.path.join(
+    TEMPLATE_DIR, "gitops-deployment", "gitops_og.yaml"
+)
 OADP_NAMESPACE = "openshift-adp"
 OADP_OPERATOR_NAME = "redhat-oadp-operator"
 OADP_SUBSCRIPTION_YAML = os.path.join(
@@ -2586,6 +2842,8 @@ OADP_SUBSCRIPTION_YAML = os.path.join(
 OADP_NS_YAML = os.path.join(TEMPLATE_DIR, "oadp-deployment", "namespace_opg_oadp.yaml")
 ACM_HUB_BACKUP_NAMESPACE = "open-cluster-management-backup"
 ACM_HUB_RESTORE = "Restore"
+ACM_BACKUP_SCHEDULE = "BackupSchedule"
+KLUSTERLET_CONFIG = "KlusterletConfig"
 
 # Vault encryption KMS types for PV encryption
 VAULT_TOKEN = "vaulttokens"
@@ -2720,14 +2978,34 @@ UI_INPUT_RULES_STORAGE_SYSTEM = {
 
 # DR
 DRPC_PATH = os.path.join(TEMPLATE_DIR, "DR", "drpc.yaml")
+PLACEMENT_PATH = os.path.join(TEMPLATE_DIR, "DR", "placement.yaml")
 CLUSTERROLEBINDING_APPSET_PULLMODEL_PATH = os.path.join(
     TEMPLATE_DIR, "DR", "clusterrolebinding_appset_pullmodel.yaml"
+)
+THANOS_PATH = os.path.join(TEMPLATE_DIR, "DR", "thanos.yaml")
+MULTICLUSTEROBSERVABILITY_PATH = os.path.join(
+    TEMPLATE_DIR, "DR", "multiclusterobservability.yaml"
+)
+OBSERVABILITYMETRICSCONFIGMAP_PATH = os.path.join(
+    TEMPLATE_DIR, "DR", "observability-metrics-configmap.yaml"
 )
 APPLICATION_SET = "ApplicationSet"
 PLACEMENT = "Placement"
 GITOPS_CLUSTER_NAMESPACE = "openshift-gitops"
 APPLICATION_ARGOCD = "applications.argoproj.io"
 PLACEMENT_KIND = "placements.cluster.open-cluster-management.io"
+
+DISCOVERED_APPS = "DiscoveredApps"
+DR_OPS_NAMESAPCE = "openshift-dr-ops"
+DPA_DISCOVERED_APPS_PATH = os.path.join(TEMPLATE_DIR, "DR", "dpa_discovered_apps.yaml")
+
+DISABLE_DR_EACH_APP = os.path.join(TEMPLATE_DIR, "DR", "disable_dr_each_app.sh")
+REMOVE_DR_EACH_MANAGED_CLUSTER = os.path.join(TEMPLATE_DIR, "DR", "dr_conf_removal.sh")
+CLUSTERSELECTORPATH = "/spec/predicates/0/requiredClusterSelector/labelSelector/matchExpressions/0/values/0"
+EXPERIMENTAL_ANNOTATION_PATH = (
+    "/metadata/annotations/"
+    "cluster.open-cluster-management.io~1experimental-scheduling-disable"
+)
 
 # CNV
 VIRTUAL_MACHINE_INSTANCES = "vmi"
@@ -2822,3 +3100,71 @@ CCOCTL_LOG_FILE = "ccoctl-service-id.log"
 # Noobaa Secrets
 NOOBAA_BACKEND_SECRET = "noobaa-root-master-key-backend"
 NOOBAA_VOLUME_SECRET = "noobaa-root-master-key-volume"
+
+# Noobaa built in accounts
+NB_OPERATOR_ACC_NAME = "operator@noobaa.io"
+
+# ascii characters
+ENTER_KEY = chr(13)
+
+# Large size chunk IO
+CHUNK = os.path.join(TEMPLATE_WORKLOAD_DIR, "helper_scripts/chunk.py")
+
+# Ingress Node Firewall related constants
+INGRESS_NODE_FIREWALL_NAMESPACE = "openshift-ingress-node-firewall"
+INGRESS_NODE_FIREWALL_CSV_NAME = "ingress-node-firewall"
+INGRESS_NODE_FIREWALL_OPERATOR_NAME = "ingress-node-firewall"
+INF_NAMESPACE_YAML = os.path.join(TEMPLATE_DEPLOYMENT_DIR_INF, "namespace.yaml")
+INF_OPERATORGROUP_YAML = os.path.join(TEMPLATE_DEPLOYMENT_DIR_INF, "operatorgroup.yaml")
+INF_SUBSCRIPTION_YAML = os.path.join(TEMPLATE_DEPLOYMENT_DIR_INF, "subscription.yaml")
+INF_CONFIG_YAML = os.path.join(TEMPLATE_DEPLOYMENT_DIR_INF, "config.yaml")
+INF_RULES_YAML = os.path.join(TEMPLATE_DEPLOYMENT_DIR_INF, "rules.yaml")
+
+# helper script to perform meta data operations [create, rename, change permissions...etc] on app pod to fill MDS cache
+METAIO = os.path.join(TEMPLATE_WORKLOAD_DIR, "helper_scripts/meta_data_io.py")
+# helper script to perform file creation IO on app pod to fill MDS cpu
+FILE_CREATOR_IO = os.path.join(
+    TEMPLATE_WORKLOAD_DIR, "helper_scripts/file_creator_io.py"
+)
+
+# workaround: marking disks as ssd
+MC_WORKAROUND_SSD = os.path.join(
+    TEMPLATE_DEPLOYMENT_DIR_OCP, "workaround-ssd-machine-config.yaml"
+)
+
+# Fusion Data Foundation
+FDF_TEMPLATE_DIR = os.path.join(TEMPLATE_DIR, "fusion-data-foundation")
+FDF_IMAGE_TAG_MIRROR_SET = os.path.join(FDF_TEMPLATE_DIR, "image-tag-mirror-set.yaml")
+FDF_IMAGE_DIGEST_MIRROR_SET = os.path.join(
+    FDF_TEMPLATE_DIR, "image-digest-mirror-set.yaml"
+)
+FDF_SERVICE_CR = os.path.join(FDF_TEMPLATE_DIR, "data-foundation-instance.yaml")
+FDF_SPECTRUM_FUSION_CR = os.path.join(FDF_TEMPLATE_DIR, "spectrum-fusion.yaml")
+FDF_NAMESPACE = "ibm-spectrum-fusion-ns"
+ISF_CATALOG_SOURCE_NAME = "isf-catalog"
+ISF_OPERATOR_SOFTWARE_CATALOG_SOURCE_YAML = "catalog-source.yaml.j2"
+
+CREATE = "create"
+EDIT = "edit"
+DELETE = "delete"
+MACHINE_POOL_ACTIONS = [CREATE, EDIT, DELETE]
+# MDR multicluster roles
+MDR_ROLES = ["ActiveACM", "PassiveACM", "PrimaryODF", "SecondaryODF"]
+
+ENCRYPTION_DASHBOARD_CONTEXT_MAP = {
+    "Cluster-wide encryption": "cluster_wide_encryption",
+    "Storage class encryption": "storageclass_encryption",
+    "In-transit encryption": "intransit_encryption",
+    "Object storage": "object_storage",
+}
+
+# Multiple device classes Yaml files
+STORAGE_DEVICESET_YAML = os.path.join(
+    MULTIPLE_DEVICECLASSES_DIR, "storage-device-set.yaml"
+)
+DEVICECLASS_CEPHBLOCKPOOL_YAML = os.path.join(
+    MULTIPLE_DEVICECLASSES_DIR, "deviceclass-cephblockpool.yaml"
+)
+DEVICECLASS_STORAGECLASS_YAML = os.path.join(
+    MULTIPLE_DEVICECLASSES_DIR, "deviceclass-storageclass.yaml"
+)

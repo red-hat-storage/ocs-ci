@@ -81,10 +81,33 @@ class OCP(object):
         self._data = {}
         self.selector = selector
         self.field_selector = field_selector
-        self.cluster_kubeconfig = cluster_kubeconfig
+        # In provider mode multicluster run, certain kind of resources are available in the provider cluster only.
+        # Setting cluster_kubeconfig of provider cluster in such cases will enable running "oc" commands seamlessly even
+        # when dealing with two instances of this class simultaneously despite the cluster context. This is achievable
+        # because all the methods use "exec_oc_cmd" method to run "oc" commmands. Primary cluster context being a
+        # client cluster, the test cases need not switch context to provider cluster before initializing a resource of
+        # the kinds listed in constants.PROVIDER_CLUSTER_RESOURCE_KINDS
+        if (
+            (not cluster_kubeconfig)
+            and config.multicluster
+            and config.ENV_DATA.get("odf_provider_mode_deployment", False)
+            and kind.lower() in constants.PROVIDER_CLUSTER_RESOURCE_KINDS
+        ):
+            provider_cluster_index = config.get_provider_index()
+            provider_kubeconfig_path = os.path.join(
+                config.clusters[provider_cluster_index].ENV_DATA["cluster_path"],
+                config.clusters[provider_cluster_index].RUN.get("kubeconfig_location"),
+            )
+            self.cluster_kubeconfig = provider_kubeconfig_path
+            # TODO : self.cluster_context = provider_cluster_index, remove cluster_kubeconfig check in if condition
+        else:
+            self.cluster_kubeconfig = cluster_kubeconfig
         self.threading_lock = threading_lock
         self.silent = silent
         self.skip_tls_verify = skip_tls_verify
+        # TODO: Set cluster_context based on the conditions of setting cluster_kubeconfig. Currently, setting
+        #  cluster_context expects the current context to be the cluster where the resource is present.
+        #  This cannot deal with simultaneous usage of two instances in two different clusters.
         self.cluster_context = config.cluster_ctx.MULTICLUSTER.get("multicluster_index")
 
     @property
@@ -128,6 +151,7 @@ class OCP(object):
         silent=False,
         cluster_config=None,
         skip_tls_verify=False,
+        output_file=None,
         **kwargs,
     ):
         """
@@ -148,6 +172,8 @@ class OCP(object):
             cluster_config (MultiClusterConfig): cluster_config will be used only in the context of multiclsuter
                 executions
             skip_tls_verify (bool): Adding '--insecure-skip-tls-verify' to oc command
+            output_file (str): path where to write output of stdout and stderr from command - apply only when
+                silent mode is True
 
         Returns:
             dict: Dictionary represents a returned yaml file.
@@ -194,6 +220,7 @@ class OCP(object):
             threading_lock=self.threading_lock,
             silent=silent,
             cluster_config=cluster_config,
+            output_file=output_file,
             **kwargs,
         )
 
@@ -669,6 +696,48 @@ class OCP(object):
         token = self.exec_oc_cmd(command, out_yaml_format=False).rstrip()
         return token
 
+    def get_user_name(self):
+        """
+        Get user identity
+
+        Returns:
+            str: user identity
+        """
+        command = "whoami"
+        identity = self.exec_oc_cmd(command, out_yaml_format=False).rstrip()
+        return identity
+
+    def get_user_identities(self):
+        """
+        Get user identities
+        ! Important. We start see new user identity only after the first authentication
+
+        Returns:
+            list: user identities
+        """
+        command = "get identities"
+        identities = self.exec_oc_cmd(command, out_yaml_format=False).rstrip()
+        return identities
+
+    def delete_identity(self, idp_name, user_name):
+        """
+        Delete identity.
+        Users and identities are separate resources. Deleting one does not automatically delete the other.
+        If you only delete the user, the identity remains. This can lead to unexpected behavior, such as
+        The user may still be able to authenticate to the cluster.
+        Records may cause confusion or conflicts
+
+        Args:
+            idp_name (str): identity type to delete
+            user_name (str): username to delete
+
+        Returns:
+            str: output of delete command
+        """
+        command = f"delete identity {idp_name}:{user_name}"
+        status = self.exec_oc_cmd(command, out_yaml_format=False)
+        return status
+
     def wait_for_resource(
         self,
         condition,
@@ -869,7 +938,13 @@ class OCP(object):
 
         return False
 
-    def wait_for_delete(self, resource_name="", timeout=60, sleep=3):
+    def wait_for_delete(
+        self,
+        resource_name="",
+        timeout=60,
+        sleep=3,
+        ignore_command_failed_exception=False,
+    ):
         """
         Wait for a resource to be deleted
 
@@ -878,6 +953,9 @@ class OCP(object):
                 for (e.g.my-pv1)
             timeout (int): Time in seconds to wait
             sleep (int): Sampling time in seconds
+            ignore_command_failed_exception (bool): If True, it will ignore the CommandFailed Exception
+                if it differs from the "NotFound" exception and wait until the given timeout. If False, it will
+                raise the CommandFailed Exception if it differs from the "NotFound" exception.
 
         Raises:
             CommandFailed: If failed to verify the resource deletion
@@ -897,6 +975,10 @@ class OCP(object):
                 if "NotFound" in str(ex):
                     log.info(f"{self.kind} {resource_name} got deleted successfully")
                     return True
+                elif ignore_command_failed_exception:
+                    log.warning(
+                        f"Failed to get the resource {resource_name} due to the exception: {str(ex)}"
+                    )
                 else:
                     raise ex
 
@@ -1425,19 +1507,31 @@ def get_images(data, images=None):
     return images
 
 
-def verify_images_upgraded(old_images, object_data):
+def verify_images_upgraded(old_images, object_data, ignore_psql_12_verification=False):
     """
     Verify that all images in ocp object are upgraded.
 
     Args:
        old_images (set): Set with old images.
        object_data (dict): OCP object yaml data.
+       ignore_psql_12_verification (bool): If True, psql 12 image is removed from current_images for verification
 
     Raises:
         NonUpgradedImagesFoundError: In case the images weren't upgraded.
 
     """
     current_images = get_images(object_data)
+    # from 4.15, noobaa-operator pod has NOOBAA_PSQL_12_IMAGE along with NOOBAA_DB_IMAGE
+    if (
+        ignore_psql_12_verification
+        and "noobaa_psql_12" in current_images
+        and constants.NOOBAA_OPERATOR_DEPLOYMENT
+        in object_data.get("metadata").get("name")
+    ):
+        log.info(
+            f'deleting noobaa_psql_12 image from current images for {object_data.get("metadata").get("name")}'
+        )
+        del current_images["noobaa_psql_12"]
     not_upgraded_images = set(
         [image for image in current_images.values() if image in old_images]
     )
@@ -1511,25 +1605,59 @@ def get_current_oc_version():
     return oc_dict.get("openshiftVersion")
 
 
+def check_cluster_operator_versions(target_image, operator_upgrade_timeout):
+    """
+    Check if all cluster operators are upgraded to the target image.
+    Function will wait for the operator upgrade to complete.
+    In case of sample fail, it will log the operator that is not upgraded yet.
+    In case of timeout reached, it will raise TimeoutExpiredError.
+
+    Args:
+        target_image (str): target image to be upgraded
+        operator_upgrade_timeout (int): timeout for operator upgrade
+    """
+    cluster_operators = get_all_cluster_operators()
+    for ocp_operator in cluster_operators:
+        for sampler in TimeoutSampler(
+            timeout=operator_upgrade_timeout,
+            sleep=60,
+            func=confirm_cluster_operator_version,
+            target_version=target_image,
+            cluster_operator=ocp_operator,
+        ):
+            if sampler:
+                log.info(f"{ocp_operator} upgrade is completed!")
+                break
+            else:
+                log.info(f"{ocp_operator} upgrade is not completed yet!")
+
+
 def get_cluster_operator_version(cluster_operator_name):
     """
-    Get image version of selected cluster operator
+    Get the version of the "operator" component from a ClusterOperator resource.
 
     Args:
         cluster_operator_name (str): ClusterOperator name
 
     Returns:
-        str: cluster operator version: ClusterOperator image version
-
+        str: Cluster Operator version if found, otherwise None
     """
     ocp = OCP(kind="ClusterOperator")
     operator_info = ocp.get(cluster_operator_name)
     log.debug(f"operator info: {operator_info}")
-    operator_status = operator_info.get("status")
-    version = operator_status.get("versions")[0]["version"]
-    version = version.rstrip("_openshift")
+    operator_status = operator_info.get("status", {})
+    versions = operator_status.get("versions", [])
 
-    return version
+    # dependant operators may have different versioning than operator itself
+    # determine the version of the operator by looking for the "operator" component
+    for version_info in versions:
+        if version_info.get("name") == "operator":
+            return version_info.get("version").rstrip("_openshift")
+
+    log.warning(
+        f"Operator version not found for ClusterOperator {cluster_operator_name}"
+    )
+    return None
 
 
 def get_all_cluster_operators():

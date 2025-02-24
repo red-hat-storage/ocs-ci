@@ -1,105 +1,24 @@
 """
 Helper functions specific for CNV
 """
+
 import os
 import base64
 import logging
+import re
 
 from ocs_ci.helpers.helpers import create_unique_resource_name, create_resource
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.exceptions import CommandFailed
+from ocs_ci.ocs.ocp import OCP
 from ocs_ci.utility import templating
-from ocs_ci.ocs.cnv.virtual_machine import VirtualMachine
 from ocs_ci.helpers.helpers import (
-    wait_for_resource_state,
     create_ocs_object_from_kind_and_name,
 )
 from ocs_ci.framework import config
 from ocs_ci.utility.retry import retry
 
 logger = logging.getLogger(__name__)
-
-
-def create_vm_using_standalone_pvc(
-    namespace=constants.CNV_NAMESPACE,
-    vm_name=None,
-    pvc_size=None,
-    sc_name=None,
-    ssh=True,
-    running=True,
-    wait_for_vm_boot=True,
-    vm_dict_path=None,
-):
-    """
-    Create a Virtual Machine (VM) in the specified namespace using a standalone Persistent Volume Claim (PVC)
-
-    Args:
-        namespace (str): The namespace in which to create the VM.
-        vm_name (str): Name for the VM. If not provided, a unique name will be generated.
-        pvc_size (str): The size of the PVC to create
-        sc_name (str): Storageclass name to use
-        ssh (bool): If set to True, it adds a statically manged public SSH key during the VM creation at the first boot
-        running (bool): Set to True for the VM to start upon it's creation, False otherwise
-        wait_for_vm_boot (bool): If True and running is True, wait for the VM to finish booting and
-        ensure SSH connectivity
-        vm_dict_path (str): Path to the VM YAML file
-
-    Returns:
-        vm_obj: The VirtualMachine object
-
-    Raises:
-        CommandFailed: If an error occurs during the creation of the VM
-
-    """
-    namespace = (
-        namespace if namespace else create_unique_resource_name("test-vm", "namespace")
-    )
-    source_data_obj = create_volume_import_source()
-    pvc_data_obj = create_pvc_using_data_source(
-        source_name=source_data_obj.name,
-        pvc_size=pvc_size,
-        sc_name=sc_name,
-        namespace=namespace,
-    )
-
-    vm_dict_path = (
-        vm_dict_path if vm_dict_path else constants.CNV_VM_STANDALONE_PVC_VM_YAML
-    )
-    vm_data = templating.load_yaml(vm_dict_path)
-    vm_name = vm_name if vm_name else create_unique_resource_name("test", "vm")
-    vm_data["metadata"]["name"] = vm_name
-    vm_data["metadata"]["namespace"] = namespace
-    if not running:
-        vm_data["spec"]["running"] = False
-    vm_data["spec"]["template"]["spec"]["volumes"][0]["persistentVolumeClaim"][
-        "claimName"
-    ] = pvc_data_obj.name
-
-    if ssh:
-        ssh_secret = create_vm_secret(namespace=namespace)
-        ssh_secret_dict = [
-            {
-                "sshPublicKey": {
-                    "propagationMethod": {"noCloud": {}},
-                    "source": {"secret": {"secretName": f"{ssh_secret.name}"}},
-                }
-            }
-        ]
-        vm_data["spec"]["template"]["spec"]["accessCredentials"] = ssh_secret_dict
-
-    vm_ocs_obj = create_resource(**vm_data)
-    logger.info(f"Successfully created VM: {vm_ocs_obj.name}")
-
-    wait_for_resource_state(
-        resource=pvc_data_obj, state=constants.STATUS_BOUND, timeout=300
-    )
-    vm_obj = VirtualMachine(vm_name=vm_ocs_obj.name, namespace=namespace)
-    if running:
-        vm_obj.wait_for_vm_status(status=constants.VM_RUNNING)
-        if wait_for_vm_boot:
-            vm_obj.wait_for_ssh_connectivity(timeout=1200)
-
-    return vm_obj
 
 
 def get_ssh_pub_key_with_filename(path=None):
@@ -194,7 +113,7 @@ def create_vm_secret(path=None, secret_name=None, namespace=constants.CNV_NAMESP
     return secret_obj
 
 
-def create_volume_import_source(name=None, url=None):
+def create_volume_import_source(name=None, url=constants.CNV_CENTOS_SOURCE):
     """
     Create a VolumeImportSource object
 
@@ -206,11 +125,10 @@ def create_volume_import_source(name=None, url=None):
         source_data_obj: The created VolumeImportSource object
 
     """
-    source_data = templating.load_yaml(constants.CNV_VM_STANDALONE_PVC_SOURCE_YAML)
+    source_data = templating.load_yaml(constants.CNV_VM_SOURCE_YAML)
     name = name if name else create_unique_resource_name("source", "volumeimportsource")
     source_data["metadata"]["name"] = name
-    if url:
-        source_data["spec"]["source"]["registry"]["url"]
+    source_data["spec"]["source"]["registry"]["url"] = url
     source_data_obj = create_resource(**source_data)
     logger.info(f"Successfully created VolumeImportSource - {source_data_obj.name}")
 
@@ -218,34 +136,96 @@ def create_volume_import_source(name=None, url=None):
 
 
 def create_pvc_using_data_source(
-    source_name, pvc_size=None, sc_name=None, namespace=constants.CNV_NAMESPACE
+    source_name,
+    access_mode=constants.ACCESS_MODE_RWX,
+    sc_name=constants.DEFAULT_CNV_CEPH_RBD_SC,
+    pvc_size="30Gi",
+    namespace=constants.CNV_NAMESPACE,
 ):
     """
     Create a PVC using a specified data source
 
     Args:
+        access_mode (str): The access mode for the volume. Default is `constants.ACCESS_MODE_RWX`
         source_name (str): Name of the data source (VolumeImportSource) for the PVC
         pvc_size (str): Size of the PVC
         sc_name (str): StorageClass name for the PVC
         namespace (str): The namespace in which to create the PVC
 
     Returns:
-        pvc_data_obj: PVC object
+        pvc_obj: PVC object
 
     """
-    pvc_data = templating.load_yaml(constants.CNV_VM_STANDALONE_PVC_PVC_YAML)
+    pvc_data = templating.load_yaml(constants.CNV_VM_PVC_YAML)
     pvc_name = create_unique_resource_name("test", "pvc")
     pvc_data["metadata"]["name"] = pvc_name
     pvc_data["metadata"]["namespace"] = namespace
     pvc_data["spec"]["dataSourceRef"]["name"] = source_name
-    if pvc_size:
-        pvc_data["spec"]["resource"]["requests"]["storage"] = pvc_size
-    if sc_name:
-        pvc_data["spec"]["storageClassName"] = sc_name
+    pvc_data["spec"]["accessModes"] = [access_mode]
+    pvc_data["spec"]["resources"]["requests"]["storage"] = pvc_size
+    pvc_data["spec"]["storageClassName"] = sc_name
     pvc_data_obj = create_resource(**pvc_data)
     logger.info(f"Successfully created PVC - {pvc_data_obj.name} using data source")
 
     return pvc_data_obj
+
+
+def create_dv(
+    access_mode=constants.ACCESS_MODE_RWX,
+    sc_name=constants.DEFAULT_CNV_CEPH_RBD_SC,
+    pvc_size="30Gi",
+    source_url=constants.CNV_CENTOS_SOURCE,
+    namespace=constants.CNV_NAMESPACE,
+):
+    """
+    Creates a DV using a specified data source
+
+    Args:
+        access_mode (str): The access mode for the volume. Default is `constants.ACCESS_MODE_RWX`
+        sc_name (str): The name of the storage class to use. Default is `constants.DEFAULT_CNV_CEPH_RBD_SC`.
+        pvc_size (str): The size of the PVC. Default is "30Gi".
+        source_url (str): The URL of the vm registry image. Default is `constants.CNV_CENTOS_SOURCE`.
+        namespace (str, optional): The namespace to create the DV on.
+
+    Returns:
+        dv_obj: DV object
+
+    """
+    dv_name = create_unique_resource_name("test", "dv")
+    dv_data = templating.load_yaml(constants.CNV_VM_DV_YAML)
+    dv_data["spec"]["storage"]["accessModes"] = [access_mode]
+    dv_data["spec"]["storage"]["resources"]["requests"]["storage"] = pvc_size
+    dv_data["spec"]["storage"]["storageClassName"] = sc_name
+    dv_data["spec"]["source"]["registry"]["url"] = source_url
+    dv_data["metadata"]["name"] = dv_name
+    dv_data["metadata"]["namespace"] = namespace
+    dv_data_obj = create_resource(**dv_data)
+    logger.info(f"Successfully created DV - {dv_data_obj.name}")
+    return dv_data_obj
+
+
+def clone_dv(source_pvc_name, source_pvc_ns, destination_ns):
+    """
+    Clones a DV using a specified data source
+
+    Args:
+        source_pvc_name (str): PVC name of source vm used for cloning.
+        source_pvc_ns (str):  PVC namespace of source vm used for cloning.
+        destination_ns (str): Namespace of cloned dv to be created on
+
+    Returns:
+        dv_obj: Cloned DV object
+
+    """
+    dv_name = create_unique_resource_name("clone", "dv")
+    dv_data = templating.load_yaml(constants.CNV_VM_DV_CLONE_YAML)
+    dv_data["spec"]["source"]["pvc"]["name"] = source_pvc_name
+    dv_data["spec"]["source"]["pvc"]["namespace"] = source_pvc_ns
+    dv_data["metadata"]["name"] = dv_name
+    dv_data["metadata"]["namespace"] = destination_ns
+    dv_data_obj = create_resource(**dv_data)
+    logger.info(f"Successfully created DV - {dv_data_obj.name}")
+    return dv_data_obj
 
 
 def get_pvc_from_vm(vm_obj):
@@ -387,3 +367,76 @@ def run_dd_io(vm_obj, file_path, size="10240", username=None, verify=False):
             file_path=file_path,
             username=username,
         )
+
+
+def verifyvolume(vm_name, volume_name, namespace):
+    """
+    Verify a volume in VM.
+
+    Args:
+        vm_name (str): Name of the virtual machine
+        volume_name (str): Name of the volume (PVC) to verify
+        namespace (str): Virtual Machine Namespace
+
+    Returns:
+        bool: True if the volume (PVC) is found, False otherwise
+
+    """
+    cmd = (
+        f"get vm {vm_name} -n {namespace} -o "
+        + "jsonpath='{.spec.template.spec.volumes}'"
+    )
+    try:
+        output = OCP().exec_oc_cmd(command=cmd)
+        logger.info(f"Output of the command '{cmd}': {output}")
+        for volume in output:
+            if volume.get("persistentVolumeClaim", {}).get("claimName") == volume_name:
+                logger.info(
+                    f"Hotpluggable PVC {volume_name} is visible inside the VM {vm_name}"
+                )
+                return True
+        logger.warning(f"PVC {volume_name} not found inside the VM {vm_name}")
+        return False
+    except Exception as e:
+        logger.error(f"Error executing command '{cmd}': {e}")
+        return False
+
+
+def verify_hotplug(vm_obj, disks_before_hotplug):
+    """
+    Verifies if a disk has been hot-plugged into/removed from a VM.
+
+    Args:
+        disks_before_hotplug (str): Set of disk information before hot-plug or add.
+        vm_obj (VM object): The virtual machine object to check.
+
+    Returns:
+        bool: True if a hot-plugged disk is detected, False otherwise.
+
+    """
+    try:
+        disks_after_hotplug_raw = vm_obj.run_ssh_cmd("lsblk -o NAME,SIZE,MOUNTPOINT -P")
+        disks_after_hotplug = set(
+            re.findall(r'NAME="([^"]+)"', disks_after_hotplug_raw)
+        )
+        disks_before_hotplug = set(re.findall(r'NAME="([^"]+)"', disks_before_hotplug))
+
+        logger.info(f"Disks before hotplug:\n{disks_before_hotplug}")
+        logger.info(f"Disks found after hotplug:\n{disks_after_hotplug}")
+
+        added_disks = disks_after_hotplug - disks_before_hotplug
+        removed_disks = disks_before_hotplug - disks_after_hotplug
+
+        if added_disks or removed_disks:
+            logger.info(
+                f"Hotplug difference detected: Added: {added_disks}, "
+                f"Removed: {removed_disks}"
+            )
+            return True
+        logger.info(f"No hotplug difference detected in VM {vm_obj.name}")
+        return False
+    except Exception as error:
+        logger.error(
+            f"Error occurred while verifying hotplug in VM {vm_obj.name}: {str(error)}"
+        )
+        return False

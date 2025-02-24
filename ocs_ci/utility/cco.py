@@ -1,8 +1,10 @@
 """
 Cloud Credential Operator utility functions
 """
+
 import logging
 import os
+import re
 import shutil
 import yaml
 
@@ -69,11 +71,11 @@ def extract_credentials_requests_ibmcloud(
     exec_cmd(cmd)
 
 
-def extract_credentials_requests_aws(
+def extract_credentials_requests(
     release_image, install_config, pull_secret, credentials_requests_dir
 ):
     """
-    Extract the CredentialsRequests (AWS STS variant).
+    Extract the CredentialsRequests (AWS and Azure STS variant).
 
     Args:
         release_image (str): Release image from the openshift installer
@@ -203,6 +205,40 @@ def process_credentials_requests_aws(
     exec_cmd(cmd)
 
 
+def process_credentials_requests_azure(
+    name,
+    azure_region,
+    credentials_requests_dir,
+    output_dir,
+    subscription_id,
+    dns_zone_group_name,
+    tenant_id,
+):
+    """
+    Process all CredentialsRequest objects.
+
+    Args:
+        name (str): Name used to tag any created cloud resources
+        azure_region (str): Region to create cloud resources
+        credentials_requests_dir (str): Path to the CredentialsRequest directory
+        output_dir (str): Path to the output directory
+        subscription_id (str): Service Principal Subscription ID
+        dns_zone_group_name (str): Name of the DNS Zone
+        tenant_id (str): Service Principal Tenant ID
+
+    """
+    logger.info("Processing all CredentialsRequest objects")
+    storage_account_name = re.sub(r"\W+", "", name)  # Strip non-alphanumeric characters
+    cmd = (
+        f"ccoctl azure create-all --name={name} --output-dir={output_dir} "
+        f"--region={azure_region} --subscription-id={subscription_id} "
+        f"--credentials-requests-dir={credentials_requests_dir} "
+        f"--dnszone-resource-group-name={dns_zone_group_name} --tenant-id={tenant_id} "
+        f"--storage-account-name={storage_account_name}"
+    )
+    exec_cmd(cmd)
+
+
 def set_credentials_mode_manual(install_config):
     """
     Set credentialsMode to Manual in the install-config.yaml
@@ -213,3 +249,40 @@ def set_credentials_mode_manual(install_config):
         install_config_data["credentialsMode"] = "Manual"
     with open(install_config, "w") as f:
         yaml.dump(install_config_data, f)
+
+
+def set_resource_group_name(install_config, name):
+    """
+    Set resourceGroupName to Manual in the install-config.yaml for Azure deployments.
+
+    Args:
+        install_config (str): Path to the install-config.yaml
+        name (str): Name of the Resource Group
+
+    """
+    logger.info("Set resourceGroupName")
+    with open(install_config, "r") as f:
+        install_config_data = yaml.safe_load(f)
+        install_config_data["platform"]["azure"]["resourceGroupName"] = name
+    with open(install_config, "w") as f:
+        yaml.dump(install_config_data, f)
+
+
+def delete_oidc_resource_group(name, region, subscription_id):
+    """
+    Delete the Azure resources that ccoctl created.
+
+    Args:
+        name (str): Name used to tag any created cloud resources
+        region (str): Region to create cloud resources
+        subscription_id (str): Service Principal Subscription ID
+
+    """
+    logger.info("Deleting OIDC resource group")
+    storage_account_name = re.sub(r"\W+", "", name)  # Strip non-alphanumeric characters
+    cmd = (
+        f"ccoctl azure delete --name={name} --region={region} "
+        f"--subscription-id={subscription_id} --delete-oidc-resource-group "
+        f"--storage-account-name={storage_account_name}"
+    )
+    exec_cmd(cmd)

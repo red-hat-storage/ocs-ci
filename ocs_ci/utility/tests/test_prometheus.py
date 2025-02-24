@@ -2,6 +2,7 @@
 
 import pytest
 
+from ocs_ci.framework import config
 from ocs_ci.utility.prometheus import check_query_range_result_enum
 
 
@@ -22,7 +23,7 @@ def query_range_result_ok():
                 "endpoint": "http-metrics",
                 "instance": "10.131.0.36:9283",
                 "job": "rook-ceph-mgr",
-                "namespace": "openshift-storage",
+                "namespace": config.ENV_DATA["cluster_namespace"],
                 "pod": "rook-ceph-mgr-a-66df496d9d-snssn",
                 "service": "rook-ceph-mgr",
             },
@@ -52,7 +53,7 @@ def query_range_result_ok():
                 "endpoint": "http-metrics",
                 "instance": "10.131.0.36:9283",
                 "job": "rook-ceph-mgr",
-                "namespace": "openshift-storage",
+                "namespace": config.ENV_DATA["cluster_namespace"],
                 "pod": "rook-ceph-mgr-a-66df496d9d-snssn",
                 "service": "rook-ceph-mgr",
             },

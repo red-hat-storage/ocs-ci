@@ -73,7 +73,7 @@ class TestPvcUserInterface(object):
         self,
         project_factory,
         teardown_factory,
-        setup_ui_class,
+        setup_ui_class_factory,
         sc_name,
         access_mode,
         pvc_size,
@@ -83,6 +83,9 @@ class TestPvcUserInterface(object):
         Test create, resize and delete pvc via UI
 
         """
+
+        setup_ui_class_factory()
+
         # Creating a test project via CLI
         pro_obj = project_factory()
         project_name = pro_obj.namespace
@@ -197,7 +200,12 @@ class TestPvcUserInterface(object):
         else:
             storage_type = constants.WORKLOAD_STORAGE_TYPE_FS
 
-        new_pod.run_io(storage_type, size=(new_size - 1), invalidate=0, rate="1000m")
+        new_pod.run_io(
+            storage_type,
+            size=(new_size - 1),
+            invalidate=0,
+            direct=int(storage_type == "block"),
+        )
 
         get_fio_rw_iops(new_pod)
         logger.info("FIO execution on Pod successfully completed..!!")
@@ -239,7 +247,7 @@ class TestPvcUserInterface(object):
         self,
         project_factory,
         teardown_factory,
-        setup_ui_class,
+        setup_ui_class_factory,
         sc_name,
         access_mode,
         clone_access_mode,
@@ -248,6 +256,9 @@ class TestPvcUserInterface(object):
         Test to verify PVC clone from UI
 
         """
+
+        setup_ui_class_factory()
+
         pvc_size = "1"
         vol_mode = constants.VOLUME_MODE_FILESYSTEM
 

@@ -7,7 +7,7 @@ import argparse
 import os
 
 from ocs_ci.framework import config
-from ocs_ci.framework.main import load_config
+from ocs_ci.utility.framework.initialization import load_config
 from ocs_ci.ocs.constants import OCS_VERSION_CONF_DIR
 from ocs_ci.utility.utils import get_latest_ds_olm_tag
 

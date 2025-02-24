@@ -1,7 +1,9 @@
+from selenium.common.exceptions import StaleElementReferenceException
 from selenium.webdriver.support.wait import WebDriverWait
 from selenium.webdriver.support import expected_conditions as ec
 from ocs_ci.ocs.exceptions import TimeoutExpiredError, IncorrectUiOptionRequested
 from ocs_ci.ocs.ui.base_ui import BaseUI, logger, take_screenshot
+from ocs_ci.utility.retry import retry
 from ocs_ci.utility.utils import TimeoutSampler
 
 
@@ -23,6 +25,7 @@ class ResourcePage(BaseUI):
             bool: True if the resource was found, False otherwise
         """
 
+        @retry(StaleElementReferenceException, tries=3, delay=3)
         def _retrieve_current_status_from_ui():
             resource_status = WebDriverWait(self.driver, timeout).until(
                 ec.visibility_of_element_located(
@@ -123,7 +126,7 @@ class ResourcePage(BaseUI):
         from ocs_ci.ocs.ui.page_objects.object_bucket_claims_tab import (
             ObjectBucketClaimsTab,
         )
-        from ocs_ci.ocs.ui.page_objects.object_buckets_tab import ObjectBucketsTab
+        from ocs_ci.ocs.ui.page_objects.buckets_tab import BucketsTab
 
         if self.is_namespace_store_open():
             resource_list_page = NameSpaceStoreTab
@@ -132,7 +135,7 @@ class ResourcePage(BaseUI):
         elif self.is_obc_open():
             resource_list_page = ObjectBucketClaimsTab
         elif self.is_ob_open():
-            resource_list_page = ObjectBucketsTab
+            resource_list_page = BucketsTab
         else:
             raise IncorrectUiOptionRequested(
                 "Wrong page is open after resource created", func=take_screenshot

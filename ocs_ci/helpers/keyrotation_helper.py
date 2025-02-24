@@ -8,6 +8,7 @@ from ocs_ci.framework import config
 from ocs_ci.ocs.resources.pvc import get_deviceset_pvcs
 from ocs_ci.ocs.exceptions import UnexpectedBehaviour
 from ocs_ci.utility.retry import retry
+from ocs_ci.utility.kms import get_kms_details, is_kms_enabled
 
 log = logging.getLogger(__name__)
 
@@ -26,13 +27,27 @@ class KeyRotation:
         self.cluster_namespace = config.ENV_DATA["cluster_namespace"]
 
         if config.DEPLOYMENT["external_mode"]:
-            self.cluster_name_name = constants.DEFAULT_CLUSTERNAME_EXTERNAL_MODE
+            self.cluster_name = constants.DEFAULT_CLUSTERNAME_EXTERNAL_MODE
 
         self.storagecluster_obj = OCP(
             resource_name=self.cluster_name,
             namespace=self.cluster_namespace,
             kind=self.resource_name,
         )
+
+    def set_keyrotation_defaults(self):
+        """
+        Setting Keyrotation Defaults on the cluster.
+        """
+        param = '[{"op":"add","path":"/spec/encryption/keyRotation","value":{"schedule":"@weekly"}}]'
+        self.storagecluster_obj.patch(params=param, format_type="json")
+        self.storagecluster_obj.wait_for_resource(
+            constants.STATUS_READY,
+            self.storagecluster_obj.resource_name,
+            column="PHASE",
+            timeout=180,
+        )
+        self.storagecluster_obj.reload_data()
 
     def _exec_oc_cmd(self, cmd, **kwargs):
         """
@@ -94,14 +109,8 @@ class KeyRotation:
         Returns:
             bool: True if key rotation is enabled, False otherwise.
         """
-        if self.is_keyrotation_enable():
-            log.info("Keyrotation is Already in Enabled state.")
-            return True
-
-        param = '{"spec":{"encryption":{"keyRotation":{"enable":null}}}}'
-        self.storagecluster_obj.patch(
-            params=param, format_type="merge", resource_name=self.cluster_name
-        )
+        param = '[{"op": "add", "path": "/spec/encryption/keyRotation/enable", "value": true}]'
+        self.storagecluster_obj.patch(params=param, format_type="json")
         resource_status = self.storagecluster_obj.wait_for_resource(
             constants.STATUS_READY,
             self.storagecluster_obj.resource_name,
@@ -263,11 +272,26 @@ class OSDKeyrotation(KeyRotation):
         super().__init__()
         self.deviceset = self._get_deviceset()
 
+        # get the kms config for the OSD keyrotation
+        if is_kms_enabled(dont_raise=True) and (
+            config.ENV_DATA.get("KMS_PROVIDER")
+            in [constants.VAULT_KMS_PROVIDER, constants.HPCS_KMS_PROVIDER]
+        ):
+            self.kms = get_kms_details()
+
     def _get_deviceset(self):
         """
         Listing deviceset for OSD.
         """
         return [pvc.name for pvc in get_deviceset_pvcs()]
+
+    def enable_osd_keyrotatio(self):
+        """Enable OSD keyrotation in storagecluster Spec.
+
+        Returns:
+            bool: True if keyrotation is Enabled otherwise False
+        """
+        return self.enable_keyrotation()
 
     def is_osd_keyrotation_enabled(self):
         """
@@ -349,4 +373,274 @@ class OSDKeyrotation(KeyRotation):
             assert False
 
         log.info("Keyrotation is sucessfully done for the all OSD.")
+        return True
+
+    def verify_osd_keyrotation_for_kms(self, tries=10, delay=10):
+        """Verify OSD KeyRotation for Vault KMS
+
+        Returns:
+            bool: return True If KeyRotation is sucessfull otherwise False.
+        """
+
+        old_keys = {}
+
+        for dev in self.deviceset:
+            old_keys[dev] = self.kms.get_osd_secret(dev)
+
+        # Noobaa Secret
+        old_keys[constants.NOOBAA_BACKEND_SECRET] = self.kms.get_noobaa_secret()
+
+        log.info(f"OSD and NooBaa keys before Rotation : {old_keys}")
+
+        @retry(UnexpectedBehaviour, tries=tries, delay=delay)
+        def compare_keys():
+            new_keys = {}
+            for dev in self.deviceset:
+                new_keys[dev] = self.kms.get_osd_secret(dev)
+
+            new_keys[constants.NOOBAA_BACKEND_SECRET] = self.kms.get_noobaa_secret()
+
+            unmatched_keys = []
+            for key in old_keys:
+                if old_keys[key] == new_keys[key]:
+                    log.info(f"Vault key for {key} is not yet rotated ")
+                    unmatched_keys.append(key)
+
+            if unmatched_keys:
+                raise UnexpectedBehaviour(
+                    f"These component keys are not rotated in vault : {','.join(unmatched_keys)}"
+                )
+
+            log.info(f"New OSD and Noobaa keys are rotated : {new_keys}")
+
+        try:
+            compare_keys()
+        except UnexpectedBehaviour:
+            log.info("OSD and Noobaa  Keys are not rotated.")
+            return False
+
+        return True
+
+
+class PVKeyrotation(KeyRotation):
+    def __init__(self, sc_obj):
+        self.sc_obj = sc_obj
+        self.kms = get_kms_details()
+        self.all_pvc_key_data = None
+
+    def annotate_storageclass_key_rotation(self, schedule="@weekly"):
+        """
+        Annotate Storageclass To enable keyrotation for encrypted PV
+        """
+        annot_str = f"keyrotation.csiaddons.openshift.io/schedule='{schedule}'"
+        log.info(f"Adding annotation to the storage class:  {annot_str}")
+        self.sc_obj.annotate(annotation=annot_str)
+
+    @retry(UnexpectedBehaviour, tries=5, delay=20)
+    def compare_keys(self, device_handle, old_key):
+        """
+        Compares the current key with the rotated key.
+
+        Args:
+            device_handle (str): The handle or identifier for the device.
+            old_key (str): The current key before rotation.
+
+        Returns:
+            bool: True if the key has rotated successfully.
+
+        Raises:
+            UnexpectedBehaviour: If the keys have not rotated.
+        """
+        rotated_key = self.kms.get_pv_secret(device_handle)
+        if old_key == rotated_key:
+            raise UnexpectedBehaviour(
+                f"Keys are not rotated for device handle {device_handle}"
+            )
+        log.info(f"PV key rotated with new key : {rotated_key}")
+        return True
+
+    def wait_till_keyrotation(self, device_handle):
+        """
+        Waits until the key rotation occurs for a given device handle.
+
+        Args:
+            device_handle (str): The handle or identifier for the device whose key
+                rotation is to be checked.
+
+        Returns:
+            bool: True if the key rotation is successful, otherwise False.
+        """
+        old_key = self.kms.get_pv_secret(device_handle)
+        try:
+            self.compare_keys(device_handle, old_key)
+        except UnexpectedBehaviour:
+            log.error(f"Keys are not rotated for device handle {device_handle}")
+            assert False
+
+        return True
+
+    def set_keyrotation_state_by_annotation(self, enable: bool):
+        """
+        Enables or disables key rotation by annotating the StorageClass.
+        """
+        state = "true" if enable else "false"
+        annotation = f"keyrotation.csiaddons.openshift.io/enable={state}"
+        self.sc_obj.annotate(annotation=annotation)
+        log.info(
+            f"Key rotation {'enabled' if enable else 'disabled'} for the StorageClass."
+        )
+
+    def set_keyrotation_state_by_rbac_user(self, pvc_obj, suspend_state=True):
+        """
+        Updates key rotation CronJob state for a PVC.
+        """
+        cron_job = self.get_keyrotation_cronjob_for_pvc(pvc_obj)
+        state = "unmanaged" if suspend_state else "managed"
+        cron_job.annotate(f"csiaddons.openshift.io/state={state}", overwrite=True)
+
+        log.info(f"Updated CronJob annotation for PVC '{pvc_obj.name}' to '{state}'")
+
+        suspend_patch = (
+            '[{"op": "add", "path": "/spec/suspend", "value": true}]'
+            if suspend_state
+            else '[{"op": "remove", "path": "/spec/suspend"}]'
+        )
+        cron_job.patch(params=suspend_patch, format_type="json")
+        log.info(f"'suspend' {'enabled' if suspend_state else 'removed'} for CronJob.")
+
+    def get_keyrotation_cronjob_for_pvc(self, pvc_obj):
+        """
+        Retrieves the key rotation CronJob associated with a PVC.
+
+        Args:
+            pvc_obj (object): The PVC object for which to retrieve the CronJob.
+
+        Returns:
+            object: The CronJob object associated with the PVC.
+
+        Raises:
+            ValueError: If the PVC lacks the key rotation CronJob annotation.
+        """
+        # Ensure annotations are loaded in the PVC object
+        if "annotations" not in pvc_obj.data["metadata"]:
+            pvc_obj.reload()
+
+        # Extract the cronjob name from PVC annotations
+        cron_job_name = (
+            pvc_obj.data["metadata"]
+            .get("annotations", {})
+            .get("keyrotation.csiaddons.openshift.io/cronjob")
+        )
+
+        if not cron_job_name:
+            log.error(f"PVC '{pvc_obj.name}' lacks keyrotation cronjob annotation.")
+            raise ValueError(f"Missing keyrotation cronjob for PVC '{pvc_obj.name}'")
+
+        log.info(f"Found CronJob '{cron_job_name}' for PVC '{pvc_obj.name}'.")
+
+        cronjob_obj = OCP(
+            kind=constants.ENCRYPTIONKEYROTATIONCRONJOB,
+            namespace=pvc_obj.namespace,
+            resource_name=cron_job_name,
+        )
+
+        if not cronjob_obj.is_exist():
+            log.error(
+                f"cronjob {cron_job_name} is not exists for the PVC: {pvc_obj.name}"
+            )
+            raise ValueError(
+                f"Missing keyrotation cronjob Object for PVC '{pvc_obj.name}'"
+            )
+
+        return OCP(
+            kind=constants.ENCRYPTIONKEYROTATIONCRONJOB,
+            namespace=pvc_obj.namespace,
+            resource_name=cron_job_name,
+        )
+
+    def get_pvc_keys_data(self, pvc_objs):
+        """
+        Retrieves key data for PVCs.
+        """
+        return {
+            pvc.name: {
+                "device_handle": pvc.get_pv_volume_handle_name,
+                "vault_key": self.kms.get_pv_secret(pvc.get_pv_volume_handle_name),
+            }
+            for pvc in pvc_objs
+        }
+
+    @retry(UnexpectedBehaviour, tries=5, delay=20)
+    def wait_till_all_pv_keyrotation_on_vault_kms(self, pvc_objs):
+        """
+        Waits for all PVC keys to be rotated in the Vault KMS.
+        """
+        if not self.all_pvc_key_data:
+            self.all_pvc_key_data = self.get_pvc_keys_data(pvc_objs)
+            raise UnexpectedBehaviour("Initializing PVC vault key data")
+
+        new_pvc_keys = self.get_pvc_keys_data(pvc_objs)
+        if self.all_pvc_key_data == new_pvc_keys:
+            raise UnexpectedBehaviour("PVC keys have not rotated yet.")
+
+        log.info("PVC keys rotated successfully.")
+        return True
+
+    def change_pvc_keyrotation_cronjob_state(self, pvc_objs, disable=True):
+        """
+        Modify the key rotation state of PVCs by annotating and patching their associated cronjobs.
+
+        Args:
+            pvc_objs (list): List of PVC objects to modify.
+            disable (bool): If True, disables the key rotation. If False, enables it. Defaults to True.
+
+        Returns:
+            bool: True if the operation succeeds.
+        """
+        state_value = "unmanaged" if disable else "managed"
+
+        for pvc in pvc_objs:
+            # Retrieve the cronjob associated with the PVC
+            cronjob = self.get_keyrotation_cronjob_for_pvc(pvc)
+            if not cronjob:
+                log.warning(
+                    f"No KeyRotationCronjob found for PVC '{pvc.name}'. Skipping."
+                )
+                continue
+
+            # Annotate the cronjob to reflect the new state
+            state_annotation = f"csiaddons.openshift.io/state={state_value}"
+            cronjob.annotate(state_annotation, overwrite=True)
+            log.info(
+                f"Annotated KeyRotationCronjob for PVC '{pvc.name}' with state: {state_value}."
+            )
+
+            # Prepare the patch for suspending or resuming the cronjob
+            if disable:
+                suspend_patch = (
+                    '[{"op": "add", "path": "/spec/suspend", "value": true}]'
+                )
+                log.info(
+                    f"'suspend' set to True in KeyRotationCronjob for PVC '{pvc.name}'."
+                )
+            else:
+                suspend_patch = '[{"op": "remove", "path": "/spec/suspend"}]'
+                log.info(
+                    f"'suspend' removed from KeyRotationCronjob for PVC '{pvc.name}'."
+                )
+
+            # Apply the patch to the cronjob
+            try:
+                cronjob.patch(params=suspend_patch, format_type="json")
+                log.info(
+                    f"Successfully patched KeyRotationCronjob for PVC '{pvc.name}'."
+                )
+            except Exception as e:
+                log.error(
+                    f"Failed to patch KeyRotationCronjob for PVC '{pvc.name}': {e}"
+                )
+                raise
+            pvc.reload()
+
+        log.info("Completed key rotation state changes for all specified PVCs.")
         return True

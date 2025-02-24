@@ -487,7 +487,7 @@ def noobaa_db_backup_and_recovery(
     restore_pvc_objs = []
 
     def factory(snapshot_factory=snapshot_factory):
-        global restore_pvc_objs
+        nonlocal restore_pvc_objs
         # Get noobaa pods before execution
         noobaa_pods = pod.get_noobaa_pods()
 
@@ -922,8 +922,8 @@ def setup_mcg_expiration_feature_buckets(
         """
         type = dict()
         type["data"] = bucket_types["data"]
-        reduce_expiration_interval(interval=2)
-        logger.info("Changed noobaa lifecycle interval to 2 minutes")
+        reduce_expiration_interval(interval=1)
+        logger.info("Changed noobaa lifecycle interval to 1 minute")
 
         expiration_rule = {
             "Rules": [
@@ -989,7 +989,6 @@ def setup_rgw_kafka_notification(request, rgw_bucket_factory, rgw_obj):
     ) = amq.create_kafkadrop()
 
     def factory():
-
         """
         Factory function implementing the fixture
 
@@ -1070,7 +1069,10 @@ def validate_mcg_bg_features(
     """
 
     def factory(
-        feature_setup_map, run_in_bg=False, skip_any_features=None, object_amount=5
+        feature_setup_map,
+        run_in_bg=False,
+        skip_any_features=None,
+        object_amount=5,
     ):
         """
         factory functon implementing the fixture
@@ -1103,9 +1105,9 @@ def validate_mcg_bg_features(
 
         event = Event()
         executor = ThreadPoolExecutor(
-            max_workers=5 - len(skip_any_features)
-            if skip_any_features is not None
-            else 5
+            max_workers=(
+                5 - len(skip_any_features) if skip_any_features is not None else 5
+            )
         )
         skip_any_features = list() if skip_any_features is None else skip_any_features
 
@@ -1145,7 +1147,6 @@ def validate_mcg_bg_features(
                 event,
                 run_in_bg=run_in_bg,
                 object_amount=object_amount,
-                prefix="",
             )
             futures_obj.append(validate_expiration)
 
@@ -1279,7 +1280,7 @@ def setup_mcg_bg_features(
                         f"and valid are {list(cloud_providers.keys())}"
                     )
                 else:
-                    bucket_types.pop(provider)
+                    cloud_providers.pop(provider)
 
         all_buckets = list()
         feature_setup_map = dict()
@@ -1346,6 +1347,7 @@ def setup_mcg_bg_features(
         )
         feature_setup_map["executor"]["event"] = event
         feature_setup_map["executor"]["threads"] = threads
+        feature_setup_map["all_buckets"] = all_buckets
         return feature_setup_map
 
     return factory

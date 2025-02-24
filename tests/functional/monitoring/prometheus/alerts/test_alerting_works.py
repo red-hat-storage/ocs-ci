@@ -1,8 +1,14 @@
 import logging
 
+from flaky import flaky
 import pytest
 
-from ocs_ci.framework.pytest_customization.marks import bugzilla, tier1, blue_squad
+from ocs_ci.framework.pytest_customization.marks import (
+    bugzilla,
+    tier1,
+    blue_squad,
+    provider_mode,
+)
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.ocp import OCP
 import ocs_ci.utility.prometheus
@@ -26,10 +32,12 @@ def test_alerting_works(threading_lock):
     assert len(alerts) > 0
 
 
+@provider_mode
 @blue_squad
 @pytest.mark.polarion_id("OCS-2503")
 @bugzilla("1897674")
 @tier1
+@flaky(max_runs=3)
 def test_prometheus_rule_failures(threading_lock):
     """
     There should be no PrometheusRuleFailures alert when OCS is configured.

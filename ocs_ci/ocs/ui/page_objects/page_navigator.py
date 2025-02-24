@@ -4,7 +4,7 @@ from selenium.common.exceptions import (
 from ocs_ci.framework import config
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.ocp import get_ocp_url
-from ocs_ci.ocs.ui.base_ui import BaseUI, logger
+from ocs_ci.ocs.ui.base_ui import BaseUI, logger, wait_for_element_to_be_clickable
 from ocs_ci.ocs.ui.views import ODF_OPERATOR, OCS_OPERATOR
 from ocs_ci.utility import version
 
@@ -188,13 +188,17 @@ class PageNavigator(BaseUI):
         logger.info("Navigate to Installed Operators Page")
         self.choose_expanded_mode(mode=True, locator=self.page_nav["Operators"])
         self.page_has_loaded(retries=25, sleep_time=1)
+        logger.info("Click on Installed Operators Page")
         self.do_click(
-            self.page_nav["installed_operators_page"], enable_screenshot=False
+            self.page_nav["installed_operators_page"],
+            enable_screenshot=True,
+            avoid_stale=True,
         )
         self.page_has_loaded(retries=25, sleep_time=1)
         if self.ocp_version_full >= version.VERSION_4_9:
             self.do_click(self.page_nav["drop_down_projects"])
             self.do_click(self.page_nav["choose_all_projects"])
+        logger.info("Successfully navigated to Installed Operators Page")
 
     def navigate_to_ocs_operator_page(self):
         """
@@ -206,6 +210,19 @@ class PageNavigator(BaseUI):
 
         logger.info("Enter the OCS operator page")
         self.do_click(self.generic_locators["ocs_operator"], enable_screenshot=False)
+
+    def navigate_to_mco_operator_page(self):
+        """
+        Navigate to the ODF Multicluster Orchestrator Operator page
+
+        """
+        self.navigate_installed_operators_page()
+        logger.info("Select 'ODF Multicluster Orchestrator' project")
+        self.select_namespace("openshift-operators")
+        logger.info("Enter the MCO operator page")
+        self.do_click(
+            self.generic_locators["openshift-operators"], enable_screenshot=False
+        )
 
     def navigate_persistentvolumes_page(self):
         """
@@ -275,13 +292,13 @@ class PageNavigator(BaseUI):
             enable_screenshot=False,
         )
 
-    def navigate_object_buckets_page(self):
+    def navigate_buckets_page(self):
         """
         Navigate to Object Buckets Page
 
         """
 
-        return self.nav_object_storage().nav_object_buckets_tab()
+        return self.nav_object_storage().nav_buckets_tab()
 
     def navigate_object_bucket_claims_page(self):
         """
@@ -424,8 +441,12 @@ class PageNavigator(BaseUI):
         """
         logger.info("Select the OCP administrator user role from the dropdown")
         if self.get_elements(self.generic_locators["developer_selected"]):
-            self.do_click(self.validation_loc["developer_dropdown"])
-            self.do_click(self.validation_loc["select_administrator"], timeout=5)
+            logger.info("Changing role from Developer to Administrator")
+            self.do_click(self.validation_loc["developer_dropdown"], timeout=5)
+            admin_el = wait_for_element_to_be_clickable(
+                self.validation_loc["select_administrator"]
+            )
+            admin_el.click()
             logger.info("Administrator user is selected")
         elif self.get_elements(self.generic_locators["administrator_selected"]):
             logger.info("Administrator user was already selected")

@@ -86,7 +86,9 @@ class TestNamespace(MCGTest):
         ],
     )
     @pytest.mark.polarion_id("OCS-2255")
-    def test_namespace_store_creation_crd(self, namespace_store_factory, nss_tup):
+    def deprecated_test_namespace_store_creation_crd(
+        self, namespace_store_factory, nss_tup
+    ):
         """
         Test namespace store creation using the MCG CRDs.
         """
@@ -128,6 +130,37 @@ class TestNamespace(MCGTest):
                     tier1,
                     on_prem_platform_required,
                     pytest.mark.polarion_id("OCS-2407"),
+                ],
+            ),
+            pytest.param(
+                {
+                    "interface": "CLI",
+                    "namespace_policy_dict": {
+                        "type": "Single",
+                        "namespacestore_dict": {"rgw": [(1, None)]},
+                    },
+                },
+                marks=[
+                    tier1,
+                    on_prem_platform_required,
+                    pytest.mark.polarion_id("OCS-6339"),
+                ],
+            ),
+            pytest.param(
+                {
+                    "interface": "CLI",
+                    "namespace_policy_dict": {
+                        "type": "Cache",
+                        "ttl": 300000,
+                        "namespacestore_dict": {
+                            "rgw": [(1, None)],
+                        },
+                    },
+                },
+                marks=[
+                    tier1,
+                    on_prem_platform_required,
+                    pytest.mark.polarion_id("OCS-6338"),
                 ],
             ),
             pytest.param(
@@ -201,6 +234,8 @@ class TestNamespace(MCGTest):
             "AWS-OC-Single",
             "Azure-OC-Single",
             "RGW-OC-Single",
+            "RGW-CLI-Single",
+            "RGW-CLI-Cache",
             "IBM-OC-Single",
             "AWS+Azure-OC-Multi",
             "AWS+AWS-OC-Multi",

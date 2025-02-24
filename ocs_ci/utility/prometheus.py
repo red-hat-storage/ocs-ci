@@ -21,7 +21,14 @@ logger = logging.getLogger(name=__file__)
 # TODO(fbalak): if ignore_more_occurences is set to False then tests are flaky.
 # The root cause should be inspected.
 def check_alert_list(
-    label, msg, alerts, states, severity="warning", ignore_more_occurences=True
+    label,
+    msg,
+    alerts,
+    states,
+    severity="warning",
+    ignore_more_occurences=True,
+    description=None,
+    runbook=None,
 ):
     """
     Check list of alerts that there are alerts with requested label and
@@ -36,8 +43,10 @@ def check_alert_list(
         ignore_more_occurences (bool): If true then there is checkced only
             occurence of alert with requested label, message and state but
             it is not checked if there is more of occurences than one.
-    """
+        description (str): Alert description
+        runbook (str): Alert's runbook URL
 
+    """
     target_alerts = [
         alert for alert in alerts if alert.get("labels").get("alertname") == label
     ]
@@ -54,14 +63,29 @@ def check_alert_list(
         assert_msg = (
             f"There was not found alert {label} with message: {msg}, "
             f"severity: {severity} in state: {state}"
+            f"Alerts matched with alert name are {target_alerts}"
+            f"Alerts matched with given message, severity and state are {found_alerts}"
         )
         assert found_alerts, assert_msg
+
         if not ignore_more_occurences:
             assert_msg = (
                 f"There are multiple instances of alert {label} with "
                 f"message: {msg}, severity: {severity} in state: {state}"
             )
             assert len(found_alerts) == 1, assert_msg
+
+        if description:
+            assert_msg = f"Alert description for alert {label} is not correct"
+            assert (
+                found_alerts[key]["annotations"]["description"] == description
+            ), assert_msg
+
+        if runbook:
+            assert_msg = f"Alert runbook url for alert {label} is not correct"
+            assert (
+                found_alerts[key]["annotations"]["runbook_url"] == runbook
+            ), assert_msg
 
     logger.info("Alerts were triggered correctly during utilization")
 
@@ -341,9 +365,9 @@ class PrometheusAPI(object):
             self._password = password
         self._threading_lock = threading_lock
         self.refresh_connection()
-        # TODO: generate certificate for IBM cloud platform
         if (
             not config.ENV_DATA["platform"].lower() == "ibm_cloud"
+            and not config.ENV_DATA["platform"].lower() == constants.ROSA_HCP_PLATFORM
             and config.ENV_DATA["deployment_type"] == "managed"
         ):
             self.generate_cert()
@@ -378,8 +402,13 @@ class PrometheusAPI(object):
         TODO: find proper way how to generate/load cert files.
         """
         if config.DEPLOYMENT.get("use_custom_ingress_ssl_cert"):
-            self._cacert = get_root_ca_cert()
-            return
+            cert_provider = config.DEPLOYMENT.get("custom_ssl_cert_provider")
+            if cert_provider == constants.SSL_CERT_PROVIDER_OCS_QE_CA:
+                self._cacert = get_root_ca_cert()
+                return
+            elif cert_provider == constants.SSL_CERT_PROVIDER_LETS_ENCRYPT:
+                self._cacert = True
+                return
         kubeconfig_path = os.path.join(
             config.ENV_DATA["cluster_path"], config.RUN["kubeconfig_location"]
         )

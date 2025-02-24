@@ -104,18 +104,25 @@ class Connection(object):
         logger.debug("SSH Jump host channel were created.")
         return jump_channel
 
-    def exec_cmd(self, cmd):
+    def exec_cmd(self, cmd, secrets=None):
         """
         Executes command on server
 
         Args:
             cmd (str): Command to run on server
+            secrets (list): A list of secrets to be masked with asterisks
+                This kwarg is popped in order to not interfere with
+                subprocess.run(``**kwargs``)
 
         Returns:
             tuple: tuple which contains command return code, output and error
 
         """
-        logger.info(f"Executing cmd: {cmd} on {self.host}")
+        # importing it here to avoid circular import issue
+        from ocs_ci.utility.utils import mask_secrets
+
+        masked_cmd = mask_secrets(cmd, secrets)
+        logger.info(f"Executing cmd: {masked_cmd} on {self.host}")
         _, out, err = self.client.exec_command(cmd)
         retcode = out.channel.recv_exit_status()
         stdout = out.read().decode("utf-8").strip("\n")
@@ -124,10 +131,14 @@ class Connection(object):
         except UnicodeDecodeError:
             stderr = err.read()
         logger.debug(f"retcode: {retcode}")
-        logger.info(f"stdout: {stdout}") if self.stdout else logger.debug(
-            f"stdout: {stdout}"
+        masked_stdout = mask_secrets(stdout, secrets)
+        (
+            logger.info(f"stdout: {masked_stdout}")
+            if self.stdout
+            else logger.debug(f"stdout: {masked_stdout}")
         )
-        logger.debug(f"stderr: {stderr}")
+        masked_stderr = mask_secrets(stderr, secrets)
+        logger.debug(f"stderr: {masked_stderr}")
         return (retcode, stdout, stderr)
 
     def upload_file(self, localpath, remotepath):

@@ -9,7 +9,6 @@ ENV_DATA:
   master_replicas: 3
   mon_type: 'hostpath'
   osd_type: 'nvme'
-  disk_pattern: 'nvme-INTEL'
   is_multus_enabled: true
   multus_public_net_interface: 'enp1s0f1'
   multus_create_public_net: true

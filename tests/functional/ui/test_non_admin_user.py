@@ -1,4 +1,6 @@
 import logging
+import time
+
 import pytest
 
 from ocs_ci.framework.pytest_customization.marks import (
@@ -59,6 +61,10 @@ class TestOBCUi(ManageTest):
 
         """
         user = user_factory()
+        logger.info(
+            f"user created: {user[0]} password: {user[1]}, wait additional 10 sec to get user active"
+        )
+        time.sleep(10)
         login_factory(user[0], user[1])
         obc_ui_obj = ObjectBucketClaimsTab()
         assert obc_ui_obj.check_obc_option(
@@ -81,7 +87,11 @@ class TestUnprivilegedUserODFAccess(E2ETest):
     def test_unprivileged_user_odf_access(self, user_factory, login_factory):
         # create a user without any role
         user = user_factory()
-        logger.info(f"user created: {user[0]} password: {user[1]}")
+        logger.info(
+            f"user created: {user[0]} password: {user[1]}, wait additional 10 sec to get user active"
+        )
+        # increasing the wait time from 10 to 30 sec to get user active [ibm cloud 4.18]
+        time.sleep(30)
 
         # login with the user created
         login_factory(user[0], user[1])

@@ -55,6 +55,23 @@ def get_pv_status(pv_obj):
     return pv_obj.get("status").get("phase")
 
 
+def get_pv_in_status(storage_class, status="Bound"):
+    """
+    It looks for pv with particular storageclass in particular status
+
+    Args:
+        storage_class (str): storage class
+        status (str): status of the pv
+
+    Returns:
+        list of pv objects
+
+    """
+
+    pvs = [pv for pv in get_pv_objs_in_sc(storage_class) if get_pv_status(pv) == status]
+    return pvs
+
+
 def get_pv_name(pv_obj):
     """
     Get the name of the pv object
@@ -245,3 +262,36 @@ def get_node_pv_objs(sc_name, node_name):
         for pv_obj in pv_objs
         if pv_obj["metadata"]["labels"]["kubernetes.io/hostname"] == node_name
     ]
+
+
+def wait_for_pvs_in_lvs_to_reach_status(
+    lvs_name, pv_count, expected_status, timeout=180, sleep=10
+):
+    """
+    Wait for the Persistent Volumes (PVs) associated with a specific LocalVolumeSet (LVS)
+    to reach the expected status within a given timeout.
+
+    Args:
+        lvs_name (str): The LocalVolumeSet name whose PVs are being monitored.
+        pv_count (int): The number of PVs expected to reach the desired status.
+        expected_status (str): The expected status of the PVs (e.g., "Bound", "Available").
+        timeout (int): Maximum time to wait for the PVs to reach the expected status, in seconds.
+        sleep (int): Interval between successive checks, in seconds.
+
+    Returns:
+        bool: True if all PVs reach the expected status within the timeout, False otherwise.
+
+    Raises:
+        TimeoutExpiredError: If the PVs do not reach the expected status within the specified timeout.
+        ResourceWrongStatusException: If any PV enters an unexpected or error status.
+
+    """
+    selector = f"storage.openshift.com/owner-name={lvs_name}"
+    pv_obj = ocp.OCP(kind=constants.PV)
+    return pv_obj.wait_for_resource(
+        condition=expected_status,
+        resource_count=pv_count,
+        selector=selector,
+        timeout=timeout,
+        sleep=sleep,
+    )

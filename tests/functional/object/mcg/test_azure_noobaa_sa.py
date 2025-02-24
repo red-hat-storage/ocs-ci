@@ -29,7 +29,6 @@ logger = logging.getLogger(__name__)
 @pytest.mark.polarion_id("OCS-3963")
 @skipif_ocs_version("<4.10")
 class TestNoobaaStorageAccount:
-
     """
     Test azure Noobaa SA
     """

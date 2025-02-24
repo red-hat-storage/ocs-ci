@@ -5,7 +5,10 @@ import pytest
 
 from ocs_ci.helpers.helpers import default_storage_class
 from ocs_ci.ocs.resources.pod import get_fio_rw_iops
-from ocs_ci.framework.pytest_customization.marks import green_squad
+from ocs_ci.framework.pytest_customization.marks import (
+    green_squad,
+    provider_mode,
+)
 from ocs_ci.framework.testlib import (
     tier1,
     ManageTest,
@@ -21,6 +24,7 @@ from ocs_ci.utility.utils import convert_device_size
 log = logging.getLogger(__name__)
 
 
+@provider_mode
 @green_squad
 @tier1
 @acceptance
@@ -130,6 +134,7 @@ class TestRawBlockPV(ManageTest):
                     storage_type=storage_type,
                     size=f"{random.randint(10,200)}M",
                     invalidate=0,
+                    direct=1,
                 )
             for pod in pvc_gb_pods:
                 log.info(f"running io on pod {pod.name}")
@@ -138,6 +143,7 @@ class TestRawBlockPV(ManageTest):
                     storage_type=storage_type,
                     size=f"{random.randint(1,5)}G",
                     invalidate=0,
+                    direct=1,
                 )
             for pod in pvc_tb_pods:
                 log.info(f"running io on pod {pod.name}")
@@ -146,6 +152,7 @@ class TestRawBlockPV(ManageTest):
                     storage_type=storage_type,
                     size=f"{random.randint(10,15)}G",
                     invalidate=0,
+                    direct=1,
                 )
 
         for pod in pods:

@@ -3,6 +3,7 @@ Pod related functionalities and context info
 
 Each pod in the openshift cluster will have a corresponding pod object
 """
+
 from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timedelta
 import logging
@@ -16,7 +17,6 @@ from threading import Thread
 import base64
 from semantic_version import Version
 
-from ocs_ci.ocs.bucket_utils import craft_s3_command
 from ocs_ci.ocs.ocp import get_images, OCP, verify_images_upgraded
 from ocs_ci.helpers import helpers
 from ocs_ci.helpers.proxy import update_container_with_proxy_env
@@ -33,12 +33,14 @@ from ocs_ci.ocs.exceptions import (
     NotFoundError,
     TimeoutException,
     NoRunningCephToolBoxException,
+    TolerationNotFoundException,
 )
+from ocs_ci.ocs.resources.pvc import get_all_pvcs_in_storageclass
 
 from ocs_ci.ocs.utils import setup_ceph_toolbox, get_pod_name_by_pattern
 from ocs_ci.ocs.resources.ocs import OCS
 from ocs_ci.ocs.resources.job import get_job_obj, get_jobs_with_prefix
-from ocs_ci.utility import templating, version
+from ocs_ci.utility import templating
 from ocs_ci.utility.utils import (
     run_cmd,
     check_timeout_reached,
@@ -210,12 +212,17 @@ class Pod(OCS):
         Returns:
             Munch Obj: This object represents a returned yaml file
         """
+        # Importing here to avoid circular dependency
+        from ocs_ci.ocs.bucket_utils import craft_s3_command
+
         return self.exec_cmd_on_pod(
             craft_s3_command(command, mcg_obj),
             out_yaml_format=False,
-            secrets=[mcg_obj.access_key_id, mcg_obj.access_key, mcg_obj.s3_endpoint]
-            if mcg_obj
-            else None,
+            secrets=(
+                [mcg_obj.access_key_id, mcg_obj.access_key, mcg_obj.s3_endpoint]
+                if mcg_obj
+                else None
+            ),
         )
 
     def copy_to_pod_rsync(self, src_path, target_path, container=None):
@@ -251,9 +258,15 @@ class Pod(OCS):
         return exec_cmd(cmd, timeout=timeout, shell=True)
 
     def copy_from_pod_oc_exec(
-        self, target_path, src_path, timeout=600, chunk_size=2000
+        self, target_path, src_path, timeout=60 * 40, chunk_size=2000
     ):
         """
+        !!!Important Note!!!
+        Due to implemented https://url.corp.redhat.com/RHSTOR-3411 task 'tar', 'yum' utilities were removed from ceph
+        pods to trim an image size.
+        oc cp command depends on 'tar' utility, see https://linuxhint.com/use-kubectl-cp-command/ and oc cp --help
+
+        This function is a workaround to copy files from the pod to the local path file using standard input stream
         Copies to local path file from the pod using standard output stream via 'oc exec'. Good for log/json/yaml/text
         files, not good for large files/binaries with one-line plain string
         * Hand data from the pod over `oc exec cat`, other standard output ways will fail for the files > 1 Mb
@@ -261,7 +274,7 @@ class Pod(OCS):
         Args:
             target_path (str): local path
             src_path (str): path within pod what you want to copy
-            timeout (int): timeout in seconds
+            timeout (int): total timeout in seconds
                 until size of the local file will not reach the initial file size.
                 2000 lines is a maximum chunk size tested successfully
             chunk_size (int): file will be copied by chunks, by number of lines
@@ -289,6 +302,29 @@ class Pod(OCS):
                 f"Failed to copy file from pod {self.name}:{src_path} to local path '{target_path}'\n"
                 f"src file size = {src_path}b, target file size = {os.stat(target_path).st_size}b"
             )
+
+    def copy_file_with_base64(self, target_path, src_path, container=""):
+        """
+        !!!Important Note!!!
+        Due to implemented https://url.corp.redhat.com/RHSTOR-3411 task 'tar', 'yum' utilities were removed from ceph
+        pods to trim an image size.
+        oc cp command depends on 'tar' utility, see https://linuxhint.com/use-kubectl-cp-command/ and oc cp --help
+
+        Function to copy a file to a pod using base64 tool. Example:
+        1) oc exec -n odf-storage rook-ceph-osd-0-68d76f868c-s25sw -c osd -- base64 /var/log/ceph/pg_log_1.30.txt >
+        pg_log_1.30.txt.base64
+        2) cat pg_log_1.30.txt.base64 | base64 -d > pg_log_1.30.txt
+
+        Args:
+            src_path (str): The source file to copy
+            target_path (str): The target file to copy to
+            container (str): The container to copy to
+        """
+        with tempfile.NamedTemporaryFile(delete=True, suffix=".base64") as temp_file:
+            base64_file = temp_file.name
+            cmd = f"oc -n {self.namespace} exec {self.name} -c {container} -- base64 {src_path} > {base64_file}"
+            exec_cmd(cmd, shell=True)
+            exec_cmd(f"cat {base64_file} | base64 -d > {target_path}", shell=True)
 
     def exec_sh_cmd_on_pod(self, command, sh="bash", timeout=600, **kwargs):
         """
@@ -651,6 +687,43 @@ class Pod(OCS):
         resource_name = resource_name if resource_name else self.name
         return self.ocp.wait_for_delete(resource_name, timeout=timeout)
 
+    def get_csi_pod_log_details(self, logs_dir, log_file_name):
+        """
+        Gets csi pod log files details
+
+        Args:
+            logs_dir (str): Directory where the logs are looked for
+            log_file_name (str): Current log file name
+
+        Returns:
+            gz_logs_num (int): Number of compressed log files
+            current_log_file_size (int) Size of the current log file
+        """
+
+        all_logs = (
+            self.exec_cmd_on_pod(
+                command=f"-- ls -l {logs_dir}",
+                container_name="log-collector",
+                out_yaml_format=False,
+                shell=True,
+            )
+            .strip()
+            .split("\n")
+        )
+        gz_logs_num = 0
+        current_log_file_size = 0
+
+        for log_file in all_logs[1:]:  # ignore 'total' line
+            file_details = log_file.split()
+            file_name = "".join(file_details[8:])
+            if file_name.startswith(log_file_name) and file_name.endswith(
+                ".gz"
+            ):  # archived compressed log
+                gz_logs_num = gz_logs_num + 1
+            if file_name == log_file_name:  # current log file
+                current_log_file_size = file_details[4]
+        return gz_logs_num, current_log_file_size
+
 
 # Helper functions for Pods
 
@@ -716,7 +789,9 @@ def get_all_pods(
     return pod_objs
 
 
-def get_ceph_tools_pod(skip_creating_pod=False, wait=False, namespace=None):
+def get_ceph_tools_pod(
+    skip_creating_pod=False, wait=False, namespace=None, get_running_pods=True
+):
     """
     Get the Ceph tools pod
 
@@ -725,6 +800,8 @@ def get_ceph_tools_pod(skip_creating_pod=False, wait=False, namespace=None):
             if it doesn't exist
         wait (bool): True if you want to wait for the tool pods to be Running
         namespace: Namespace of OCS
+        get_running_pods (bool): If True, get only the ceph tool pods in a Running status.
+            If False, get the ceph tool pods even if they are not in a Running status.
 
     Returns:
         Pod object: The Ceph tools pod object
@@ -751,7 +828,7 @@ def get_ceph_tools_pod(skip_creating_pod=False, wait=False, namespace=None):
         cluster_kubeconfig = config.ENV_DATA.get("provider_kubeconfig", "")
 
     if cluster_kubeconfig:
-        namespace = constants.OPENSHIFT_STORAGE_NAMESPACE
+        namespace = config.ENV_DATA["cluster_namespace"]
     else:
         namespace = namespace or config.ENV_DATA["cluster_namespace"]
 
@@ -797,6 +874,10 @@ def get_ceph_tools_pod(skip_creating_pod=False, wait=False, namespace=None):
 
         if not ct_pod_items:
             raise CephToolBoxNotFoundException
+
+        if not get_running_pods:
+            # Return the ceph tool pod objects even if they are not running
+            return ct_pod_items
 
         # In the case of node failure, the CT pod will be recreated with the old
         # one in status Terminated. Therefore, need to filter out the Terminated pod
@@ -1525,7 +1606,8 @@ def run_io_and_verify_mount_point(pod_obj, bs="10M", count="950"):
 
 def get_pods_having_label(
     label,
-    namespace=constants.OPENSHIFT_STORAGE_NAMESPACE,
+    namespace=config.ENV_DATA["cluster_namespace"],
+    retry=0,
     cluster_config=None,
     statuses=None,
 ):
@@ -1544,7 +1626,9 @@ def get_pods_having_label(
 
     """
     ocp_pod = OCP(kind=constants.POD, namespace=namespace)
-    pods = ocp_pod.get(selector=label, cluster_config=cluster_config).get("items")
+    pods = ocp_pod.get(selector=label, retry=retry, cluster_config=cluster_config).get(
+        "items"
+    )
     if statuses:
         for pod in pods:
             if pod["status"]["phase"] not in statuses:
@@ -1888,22 +1972,33 @@ def verify_node_name(pod_obj, node_name):
 
 def get_pvc_name(pod_obj):
     """
-    Function to get pvc_name from pod_obj
+    Get the PVC name from a pod object.
+
+    This function retrieves the PVC name from a given pod object by checking all volumes
+    attached to the pod. It will return the first PVC found or raise an exception if no
+    PVC is attached.
 
     Args:
-        pod_obj (str): The pod object
+        pod_obj (Pod): The pod object to get the PVC name.
 
     Returns:
-        str: The pvc name of a given pod_obj,
+        str: The PVC name attached to the pod.
 
     Raises:
-        UnavailableResourceException: If no pvc attached
+        UnavailableResourceException: If no PVC is attached to the pod.
 
     """
-    pvc = pod_obj.get().get("spec").get("volumes")[0].get("persistentVolumeClaim")
-    if not pvc:
-        raise UnavailableResourceException
-    return pvc.get("claimName")
+    # Get all volumes attached to the pod
+    volumes = pod_obj.get().get("spec", {}).get("volumes", [])
+
+    # Iterate through volumes to find the first PVC
+    for volume in volumes:
+        pvc = volume.get("persistentVolumeClaim")
+        if pvc:
+            return pvc.get("claimName")
+
+    # Raise an exception if no PVC is found
+    raise UnavailableResourceException("No PVC attached to the given pod.")
 
 
 def get_used_space_on_mount_point(pod_obj):
@@ -2122,7 +2217,9 @@ def wait_for_noobaa_pods_running(timeout=300, sleep=10):
     sampler.wait_for_func_status(True)
 
 
-def verify_pods_upgraded(old_images, selector, count=1, timeout=720):
+def verify_pods_upgraded(
+    old_images, selector, count=1, timeout=720, ignore_psql_12_verification=False
+):
     """
     Verify that all pods do not have old image.
 
@@ -2131,6 +2228,7 @@ def verify_pods_upgraded(old_images, selector, count=1, timeout=720):
        selector (str): Selector (e.g. app=ocs-osd)
        count (int): Number of resources for selector.
        timeout (int): Timeout in seconds to wait for pods to be upgraded.
+       ignore_psql_12_verification (bool): If True, psql 12 image is removed from current_images for verification
 
     Raises:
         TimeoutException: If the pods didn't get upgraded till the timeout.
@@ -2158,7 +2256,7 @@ def verify_pods_upgraded(old_images, selector, count=1, timeout=720):
                 )
             for pod in pods:
                 pod_obj = pod.get()
-                verify_images_upgraded(old_images, pod_obj)
+                verify_images_upgraded(old_images, pod_obj, ignore_psql_12_verification)
                 current_pod_images = get_images(pod_obj)
                 for container_name, container_image in current_pod_images.items():
                     if container_name not in pod_images:
@@ -2267,7 +2365,6 @@ def wait_for_new_osd_pods_to_come_up(number_of_osd_pods_before):
 def get_pod_restarts_count(
     namespace=config.ENV_DATA["cluster_namespace"], label=None, list_of_pods=None
 ):
-
     """
     Gets the dictionary of pod and its restart count for all the pods in a given namespace
 
@@ -2290,11 +2387,15 @@ def get_pod_restarts_count(
     restart_dict = {}
     ocp_pod_obj = OCP(kind=constants.POD, namespace=namespace)
     for p in list_of_pods:
-        # we don't want to compare osd-prepare and canary pods as they get created freshly when an osd need to be added.
-        if (
-            "rook-ceph-osd-prepare" not in p.name
-            and "rook-ceph-drain-canary" not in p.name
-        ):
+        # we don't want to compare osd-prepare and canary pods as they get
+        # created freshly when an osd need to be added. Also skip check on ceph-file-controller-detect-version
+        # as it's a temp. pod.
+        exclude_names = (
+            "rook-ceph-osd-prepare",
+            "rook-ceph-drain-canary",
+            "ceph-file-controller-detect-version",
+        )
+        if all(exclude_name not in p.name for exclude_name in exclude_names):
             pod_count = ocp_pod_obj.get_resource(p.name, "RESTARTS")
             restart_dict[p.name] = int(pod_count.split()[0])
     logger.info(f"get_pod_restarts_count: restarts dict = {restart_dict}")
@@ -2377,15 +2478,26 @@ def check_pods_in_running_state(
     return ret_val
 
 
-def get_running_state_pods(namespace=config.ENV_DATA["cluster_namespace"]):
+def get_running_state_pods(
+    namespace=config.ENV_DATA["cluster_namespace"], ignore_selector=None
+):
     """
     Checks the running state pods in a given namespace.
 
-        Returns:
-            List: all the pod objects that are in running state only
+    Args:
+        namespace (str): Cluster namespace where pods are running
+        ignore_selector (list): List of pod selectors to ignore ( eg: ["rook-ceph-mgr", "rook-ceph-detect-version"] )
+
+    Returns:
+        List: all the pod objects that are in running state only
 
     """
-    list_of_pods = get_all_pods(namespace)
+    if ignore_selector:
+        list_of_pods = get_all_pods(
+            namespace, selector=ignore_selector, exclude_selector=True
+        )
+    else:
+        list_of_pods = get_all_pods(namespace)
     ocp_pod_obj = OCP(kind=constants.POD, namespace=namespace)
     running_pods_object = list()
     for pod in list_of_pods:
@@ -2416,7 +2528,11 @@ def get_not_running_pods(selector=None, namespace=config.ENV_DATA["cluster_names
     pods_not_running = list()
     for pod in pod_objs:
         status = pod.status()
-        if status != constants.STATUS_RUNNING:
+        if (
+            status != constants.STATUS_RUNNING
+            and status != constants.STATUS_TERMINATING
+            and status != constants.STATUS_COMPLETED
+        ):
             pods_not_running.append(pod)
 
     return pods_not_running
@@ -2473,7 +2589,7 @@ def wait_for_pods_to_be_running(
 
 def wait_for_pods_by_label_count(
     label,
-    exptected_count,
+    expected_count,
     namespace=config.ENV_DATA["cluster_namespace"],
     timeout=200,
     sleep=10,
@@ -2484,7 +2600,7 @@ def wait_for_pods_by_label_count(
 
     Args:
         selector (str): The resource selector to search with
-        exptected_count (int): The expected number of pods with the given selector
+        expected_count (int): The expected number of pods with the given selector
         namespace (str): the namespace ot the pods
         timeout (int): time to wait for pods to be running
         sleep (int): Time in seconds to sleep between attempts
@@ -2500,8 +2616,8 @@ def wait_for_pods_by_label_count(
             namespace=namespace,
         ):
             # Check if the expected number of pods with the given selector is met
-            if pods_count == exptected_count:
-                logger.info(f"Found {exptected_count} pods with selector {label}")
+            if pods_count == expected_count:
+                logger.info(f"Found {expected_count} pods with selector {label}")
                 return True
     except TimeoutExpiredError:
         logger.warning(
@@ -2565,26 +2681,82 @@ def check_toleration_on_pods(toleration_key=constants.TOLERATION_KEY):
     Args:
         toleration_key (str): The toleration key to check
 
-    """
+    Raises:
+            TolerationNotFoundException: Exception raised when a required toleration is not found in the pods.
 
+    """
     pod_objs = get_all_pods(
         namespace=config.ENV_DATA["cluster_namespace"],
-        selector=[constants.TOOL_APP_LABEL],
+        selector=[constants.ROOK_CEPH_OSD_PREPARE],
         exclude_selector=True,
     )
-    flag = False
+
+    pods_missing_toleration = []
     for pod_obj in pod_objs:
         resource_name = pod_obj.name
         tolerations = pod_obj.get().get("spec").get("tolerations")
-        for key in tolerations:
-            if key["key"] == toleration_key:
-                flag = True
-        if flag:
-            logger.info(f"The Toleration {toleration_key} exists on {resource_name}")
-        else:
+
+        # Check if any toleration matches the provided key
+        toleration_found = any(tol["key"] == toleration_key for tol in tolerations)
+
+        if not toleration_found:
             logger.error(
                 f"The pod {resource_name} does not have toleration {toleration_key}"
             )
+            pods_missing_toleration.append(resource_name)
+        else:
+            logger.info(f"The Toleration {toleration_key} exists on {resource_name}")
+    if pods_missing_toleration:
+        logger.error(
+            f"Some pods are missing the toleration {toleration_key}: {', '.join(pods_missing_toleration)}"
+        )
+        raise TolerationNotFoundException(
+            f"The following pods do not have toleration {toleration_key}: {', '.join(pods_missing_toleration)}"
+        )
+
+
+def check_toleration_on_subscriptions(toleration_key=constants.TOLERATION_KEY):
+    """
+    Function to check toleration on subscriptions
+
+    Args:
+        toleration_key (str): The toleration key to check
+
+    Raises:
+            TolerationNotFoundException: Exception raised when a required toleration is not found in the pods.
+
+    """
+    sub_list = ocp.get_all_resource_names_of_a_kind(kind=constants.SUBSCRIPTION)
+    subs_missing_toleration = []
+
+    for sub in sub_list:
+        sub_obj = ocp.OCP(
+            resource_name=sub,
+            namespace=config.ENV_DATA["cluster_namespace"],
+            kind=constants.SUBSCRIPTION,
+        )
+        tolerations = (
+            sub_obj.get().get("spec", {}).get("config", {}).get("tolerations", [])
+        )
+
+        # Check if any toleration matches the provided key
+        toleration_found = any(tol.get("key") == toleration_key for tol in tolerations)
+
+        if not toleration_found:
+            logger.error(
+                f"The subscription {sub} does not have toleration {toleration_key}"
+            )
+            subs_missing_toleration.append(sub)
+        else:
+            logger.info(f"The Toleration {toleration_key} exists on {sub}")
+
+    if subs_missing_toleration:
+        logger.error(
+            f"Some subscriptions are missing the toleration {toleration_key}: {', '.join(subs_missing_toleration)}"
+        )
+        raise TolerationNotFoundException(
+            f"The following subscriptions do not have toleration {toleration_key}: {', '.join(subs_missing_toleration)}"
+        )
 
 
 def run_osd_removal_job(osd_ids=None):
@@ -2599,23 +2771,10 @@ def run_osd_removal_job(osd_ids=None):
 
     """
     osd_ids_str = ",".join(map(str, osd_ids))
-    ocp_version = version.get_semantic_ocp_version_from_config()
-    ocs_version = version.get_semantic_ocs_version_from_config()
 
-    # Fixes: #6662
-    # Version OCS 4.6 and above requires FORCE_OSD_REMOVAL set to true in order to not get stuck
-    cmd_params = (
-        "-p FORCE_OSD_REMOVAL=true"
-        if ocs_version >= version.VERSION_4_6
-        and not check_safe_to_destroy_status(osd_ids_str)
-        else ""
-    )
+    cmd_params = "-p FORCE_OSD_REMOVAL=true"
 
-    # Parameter name FAILED_OSD_ID changed to FAILED_OSD_IDS for Version OCP 4.6 and above
-    if ocp_version >= version.VERSION_4_6:
-        cmd_params += f" -p FAILED_OSD_IDS={osd_ids_str}"
-    else:
-        cmd_params += f" -p FAILED_OSD_ID={osd_ids_str}"
+    cmd_params += f" -p FAILED_OSD_IDS={osd_ids_str}"
 
     logger.info(f"Executing OSD removal job on OSD ids: {osd_ids_str}")
     ocp_obj = ocp.OCP(namespace=config.ENV_DATA["cluster_namespace"])
@@ -2736,7 +2895,7 @@ def verify_osd_removal_job_completed_successfully(osd_id):
     return True
 
 
-def delete_osd_removal_job(osd_id):
+def delete_osd_removal_job(osd_id=None):
     """
     Delete the ocs-osd-removal job.
 
@@ -3473,12 +3632,13 @@ def restart_pods_in_statuses(
     logger.info("Finish restarting the pods")
 
 
-def wait_for_ceph_cmd_execute_successfully(timeout=300):
+def base_wait_for_ceph_cmd_execute_successfully(timeout=300, sleep=20):
     """
     Wait for a Ceph command to execute successfully
 
     Args:
         timeout (int): The time to wait for a Ceph command to execute successfully
+        sleep (int): Time to sleep between the iterations
 
     Returns:
         bool: True, if the Ceph command executed successfully. False, otherwise
@@ -3486,7 +3646,7 @@ def wait_for_ceph_cmd_execute_successfully(timeout=300):
     """
     try:
         for res in TimeoutSampler(
-            timeout=timeout, sleep=10, func=check_ceph_cmd_execute_successfully
+            timeout=timeout, sleep=sleep, func=check_ceph_cmd_execute_successfully
         ):
             if res:
                 return True
@@ -3611,7 +3771,7 @@ def get_mon_pod_by_pvc_name(pvc_name: str):
     return Pod(**mon_pod_ocp)
 
 
-def get_debug_pods(debug_nodes, namespace=constants.OPENSHIFT_STORAGE_NAMESPACE):
+def get_debug_pods(debug_nodes, namespace=config.ENV_DATA["cluster_namespace"]):
     """
     Get debug pods created for the nodes in debug
 
@@ -3636,7 +3796,7 @@ def get_debug_pods(debug_nodes, namespace=constants.OPENSHIFT_STORAGE_NAMESPACE)
 
 
 def wait_for_pods_deletion(
-    label, timeout=120, sleep=5, namespace=constants.OPENSHIFT_STORAGE_NAMESPACE
+    label, timeout=120, sleep=5, namespace=config.ENV_DATA["cluster_namespace"]
 ):
     """
     Wait for the pods with particular label to be deleted
@@ -3747,3 +3907,169 @@ def fetch_rgw_pod_restart_count(namespace=config.ENV_DATA["cluster_namespace"]):
     rgw_pod_restart_count = restart_count_for_rgw_pod[rgw_pod_obj.name]
     logger.info(f"restart count for rgw pod is: {rgw_pod_restart_count}")
     return rgw_pod_restart_count
+
+
+def get_pod_used_memory_in_mebibytes(podname):
+    """
+    Get a pod's used memory in MiB
+
+    Args:
+        podname: (str)  name of the pod to get used memory of it
+
+    Returns:
+        int:  the used memory of the pod in Mebibytes (MiB)
+
+    """
+    logger.info("Retrieve raw resource utilization data using oc adm top command")
+    pod_raw_adm_out = pod_resource_utilization_raw_output_from_adm_top()
+    lines = pod_raw_adm_out.strip().split("\n")
+    for line in lines:
+        parts = line.split()
+        if podname in line:
+            memory_value_with_unit = parts[2]
+            if memory_value_with_unit.endswith("Mi"):
+                memory_value = int(memory_value_with_unit.replace("Mi", ""))
+                return memory_value
+
+
+def get_ceph_csi_ctrl_pods(namespace=None):
+    """
+    Fetches info about the ceph csi ctrl pods in the cluster
+
+    Args:
+        namespace (str): Namespace in which ceph cluster lives
+            (default: config.ENV_DATA["cluster_namespace"])
+
+    Returns:
+        list : The list of the ceph csi ctrl pod objects
+
+    """
+    namespace = namespace or config.ENV_DATA["cluster_namespace"]
+    ceph_csi_ctrl_labels = [
+        constants.CEPHFS_NODEPLUGIN_LABEL,
+        constants.RBD_NODEPLUGIN_LABEL,
+        constants.RBD_CTRLPLUGIN_LABEL,
+        constants.CEPHFS_CTRLPLUGIN_LABEL,
+    ]
+    ceph_csi_ctrl_pods_data = []
+    for label in ceph_csi_ctrl_labels:
+        ceph_csi_ctrl_pods_data.extend(get_pods_having_label(label, namespace))
+
+    ceph_csi_ctrl_pods = [Pod(**pod_data) for pod_data in ceph_csi_ctrl_pods_data]
+    return ceph_csi_ctrl_pods
+
+
+def get_container_images(pod_obj):
+    """
+    Get all container images (both containers and initContainers) from the pod object
+
+    Args:
+        pod_obj (Pod): The pod object
+
+    Returns:
+        set: Set of the container images from the pod object
+
+    Raises:
+        ValueError: In case we didn't find the containers or images for the pod
+
+    """
+    containers = pod_obj.data.get("spec", {}).get("containers", [])
+    containers += pod_obj.data.get("spec", {}).get("initContainers", [])
+    if not containers:
+        raise ValueError(f"Didn't find containers for the pod {pod_obj.name}")
+
+    images = set()
+    # Extract images from containers
+    for container in containers:
+        image = container.get("image")
+        if image:
+            images.add(image)
+
+    if not images:
+        raise ValueError(f"Didn't find images for the pod {pod_obj.name} containers")
+
+    return images
+
+
+def get_prometheus_pods(
+    prometheus_label=constants.PROMETHEUS_POD_LABEL,
+    namespace=constants.MONITORING_NAMESPACE,
+):
+    """
+    Fetches info about prometheus pods in the cluster
+
+    Args:
+        prometheus_label (str): label associated with prometheus pods
+        namespace (str): Namespace in which prometheus pods lives
+
+    Returns:
+        list : of prometheus pod objects
+
+    """
+    namespace = namespace
+    pods_with_label_match = get_pods_having_label(prometheus_label, namespace)
+    prometheus_pod_objs = [Pod(**prometheus) for prometheus in pods_with_label_match]
+    return prometheus_pod_objs
+
+
+def wait_for_ceph_cmd_execute_successfully(
+    timeout=300, sleep=20, num_of_retries=1, restart_tool_pod_before_retry=True
+):
+    """
+    Wait for the Ceph command to execute successfully in the given timeout and number of retries.
+    For, example, if the timeout is 300 and 'num_of_retries' is 2, we will wait 600 seconds
+    for the ceph command to execute successfully.
+
+    Args:
+        timeout (int): The time to wait for a Ceph command to execute successfully
+        sleep (int): Time to sleep between the iterations
+        num_of_retries (int): The number of retries to wait for the Ceph command to execute successfully.
+        restart_tool_pod_before_retry (bool): If True, restart the rook-ceph-tool pod before the next retry.
+            False, otherwise.
+
+    Returns:
+        bool: True, if the Ceph command executed successfully. False, otherwise
+
+    """
+    logger.info("Wait for the ceph command to execute successfully")
+
+    for num_of_retry in range(num_of_retries):
+        logger.info(f"num of retries = {num_of_retry}")
+        res = base_wait_for_ceph_cmd_execute_successfully(timeout=timeout, sleep=sleep)
+        if res:
+            return True
+        if num_of_retry < 1:
+            # Continue to the next iteration if we didn't reach the first retry
+            continue
+
+        if restart_tool_pod_before_retry:
+            try:
+                logger.info("Trying to restart the rook-ceph-tool pods...")
+                ceph_tool_pod = get_ceph_tools_pod(get_running_pods=False)
+                delete_pods([ceph_tool_pod], wait=False)
+            except CommandFailed as ex:
+                logger.warning(ex)
+
+    logger.warning(
+        f"The ceph command failed to execute successfully after {num_of_retries} retries"
+    )
+    return False
+
+
+def get_lvs_osd_pods(lvs_name):
+    """
+    Get the LocalVolumeSet osd pods
+
+    Args:
+        lvs_name (str): The LocalVolumeSet name
+
+    Returns:
+        list: List of the osd pods
+
+    """
+    pvcs = get_all_pvcs_in_storageclass(lvs_name)
+    pvc_names = [pvc.name for pvc in pvcs]
+    osd_pods = get_osd_pods()
+    lvs_pods = [p for p in osd_pods if get_pvc_name(p) in pvc_names]
+
+    return lvs_pods

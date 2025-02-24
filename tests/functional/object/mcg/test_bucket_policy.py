@@ -37,6 +37,7 @@ from ocs_ci.ocs.bucket_utils import (
     s3_delete_bucket_website,
     s3_get_bucket_versioning,
     s3_put_bucket_versioning,
+    s3_list_objects_v2,
     list_multipart_upload,
     list_uploaded_parts,
     complete_multipart_upload,
@@ -52,6 +53,7 @@ from ocs_ci.framework.pytest_customization.marks import (
     red_squad,
     runs_on_provider,
     mcg,
+    provider_mode,
 )
 from ocs_ci.utility import version
 from ocs_ci.utility.retry import retry
@@ -87,6 +89,7 @@ def delete_bucket_policy_verify(s3_obj, bucket_name):
             )
 
 
+@provider_mode
 @mcg
 @red_squad
 @runs_on_provider
@@ -201,6 +204,7 @@ class TestS3BucketPolicy(MCGTest):
                     f"{e.response} received invalid error code {response.error['Code']}"
                 )
 
+    @provider_mode
     @pytest.mark.polarion_id("OCS-2146")
     @tier1
     def test_bucket_policy_actions(self, mcg_obj, bucket_factory):
@@ -303,8 +307,8 @@ class TestS3BucketPolicy(MCGTest):
         # Hardcoded sleep is needed because we lack a confirmation mechanism
         # we could wait for - even the get-policy result has been observed to be
         # unreliable in confirming whether they policy is actually taking effect
-        logger.info("Waiting for 60 seconds for the policy to take effect")
-        time.sleep(60)
+        logger.info("Waiting for 120 seconds for the policy to take effect")
+        time.sleep(120)
 
         # Get Policy
         logger.info(f"Getting Bucket policy on bucket: {obc_obj.bucket_name}")
@@ -939,17 +943,20 @@ class TestS3BucketPolicy(MCGTest):
         """
 
         # Creating obc and obc object to get account details, keys etc
-        obc_bucket = bucket_factory(amount=1, interface="OC")
+        obc_bucket = bucket_factory(amount=2, interface="OC")
         obc_obj = OBC(obc_bucket[0].name)
+        obc_obj1 = OBC(obc_bucket[1].name)
 
         # Set bucket policy for user
         bucket_policy_generated = gen_bucket_policy(
-            user_list=obc_obj.obc_account,
+            user_list=obc_obj1.obc_account,
             action_property="NotAction",
             actions_list=["DeleteBucket"],
             resources_list=[f'{obc_obj.bucket_name}/{"*"}'],
             effect=effect,
         )
+        if effect == "Allow":
+            bucket_policy_generated["Statement"][0]["NotAction"][0] = "s3:ListBucket"
         bucket_policy = json.dumps(bucket_policy_generated)
 
         # Add Bucket Policy
@@ -968,19 +975,19 @@ class TestS3BucketPolicy(MCGTest):
             # Put Object is allowed
             logger.info("Writing index data to the bucket")
             assert s3_put_object(
-                s3_obj=obc_obj,
+                s3_obj=obc_obj1,
                 bucketname=obc_obj.bucket_name,
                 object_key="index.html",
                 data=index,
                 content_type="text/html",
             ), "Failed to put object."
 
-            # Delete bucket get access denied.
-            logger.info(f"Deleting bucket {obc_obj.bucket_name}")
+            # List bucket get access denied.
+            logger.info(f"Listing bucket objects {obc_obj.bucket_name}")
             try:
-                s3_delete_bucket_website(s3_obj=obc_obj, bucketname=obc_obj.bucket_name)
+                s3_list_objects_v2(s3_obj=obc_obj1, bucketname=obc_obj.bucket_name)
                 raise UnexpectedBehaviour(
-                    "Failed: Bucket got deleted, expect to get AccessDenied."
+                    "Failed: Object got listed, expect to get AccessDenied."
                 )
             except boto3exception.ClientError as e:
                 logger.info(e.response)
@@ -997,7 +1004,7 @@ class TestS3BucketPolicy(MCGTest):
             logger.info("Writing index data to the bucket")
             try:
                 s3_put_object(
-                    s3_obj=obc_obj,
+                    s3_obj=obc_obj1,
                     bucketname=obc_obj.bucket_name,
                     object_key="index.html",
                     data=index,

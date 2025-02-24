@@ -1,6 +1,7 @@
 """
 AMQ Class to run amq specific tests
 """
+
 import logging
 import os
 import tempfile
@@ -78,7 +79,13 @@ class AMQ(object):
         """
         try:
             log.info(f"cloning amq in {self.dir}")
-            git_clone_cmd = f"git clone {self.repo} "
+
+            # Further setup in this class assumes the use of zookeeper, before
+            # the following change was made to strimzi-kafka-operator:
+            # https://github.com/strimzi/strimzi-kafka-operator/pull/10982
+            last_compatible_branch = "release-0.44.x"
+            git_clone_cmd = f"git clone --branch {last_compatible_branch} {self.repo} "
+
             run(git_clone_cmd, shell=True, cwd=self.dir, check=True)
             self.amq_dir = "strimzi-kafka-operator/packaging/install/cluster-operator/"
             self.amq_kafka_pers_yaml = (
@@ -666,9 +673,9 @@ class AMQ(object):
 
         # Update commonConfig with kafka-bootstrap server details
         driver_kafka = templating.load_yaml(constants.AMQ_DRIVER_KAFKA_YAML)
-        driver_kafka[
-            "commonConfig"
-        ] = f"bootstrap.servers=my-cluster-kafka-bootstrap.{kafka_namespace}.svc.cluster.local:9092"
+        driver_kafka["commonConfig"] = (
+            f"bootstrap.servers=my-cluster-kafka-bootstrap.{kafka_namespace}.svc.cluster.local:9092"
+        )
         json_file = f"{self.dir}/driver_kafka"
         templating.dump_data_to_json(driver_kafka, json_file)
         cmd = f"cp {json_file} {benchmark_pod_name}-driver:/"
@@ -1028,3 +1035,19 @@ class AMQ(object):
         switch_to_default_rook_cluster_project()
         run_cmd(f"oc delete project {kafka_namespace}")
         self.ns_obj.wait_for_delete(resource_name=kafka_namespace, timeout=90)
+
+    def check_amq_cluster_exists(self):
+        """
+        Check if amq cluster exists
+
+        Returns:
+            bool: True if amq cluster exists
+
+        """
+        try:
+            self.ns_obj.get(resource_name=constants.AMQ_NAMESPACE)
+            return True
+        except CommandFailed as cf:
+            if "NotFound" in str(cf):
+                return False
+            raise cf

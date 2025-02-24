@@ -419,9 +419,9 @@ class TestDaemonKillDuringMultipleCreateDeleteOperations(ManageTest):
             disruption.select_daemon()
             node_name = disruption.resource_obj[0].pod_data.get("spec").get("nodeName")
             # Create node-daemons dict. Value as string for passing in the 'kill' command
-            nodes_and_pids[
-                node_name
-            ] = f"{nodes_and_pids.get(node_name, '')} {disruption.daemon_pid}"
+            nodes_and_pids[node_name] = (
+                f"{nodes_and_pids.get(node_name, '')} {disruption.daemon_pid}"
+            )
 
         # Start IO on pods to be deleted
         pods_to_delete_io = [

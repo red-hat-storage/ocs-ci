@@ -43,7 +43,6 @@ class TopologySidebar(BaseUI):
         return bool(self.get_elements(self.topology_loc["alerts_sidebar_tab"]))
 
     def open_side_bar_of_entity(self, entity_name: str = None, canvas: bool = False):
-
         """
         Opens the sidebar of an entity in the topology view.
 
@@ -111,7 +110,9 @@ class TopologySidebar(BaseUI):
         Returns:
             bool: if the node down alert visible in Alerts tab of the Topology
         """
-        alerts_dict = self.read_alerts_procedure(entity, read_canvas_alerts)
+        alerts_dict = retry(TimeoutException, tries=3, delay=5)(
+            self.read_alerts_procedure
+        )(entity, read_canvas_alerts)
         return (
             "Critical" in alerts_dict
             and constants.ALERT_NODEDOWN in alerts_dict["Critical"]
@@ -373,24 +374,22 @@ class AbstractTopologyView(ABC, TopologySidebar):
         df = self.topology_df
         for index, row in df.iterrows():
             entity_name = row["entity_name"]
-            df.loc[
-                df["entity_name"] == entity_name, "entity_status"
-            ] = self._get_status_of_entity(entity_name)
+            df.loc[df["entity_name"] == entity_name, "entity_status"] = (
+                self._get_status_of_entity(entity_name)
+            )
             df.loc[df["entity_name"] == entity_name, "status_xpath"] = format_locator(
                 self.topology_loc["node_status_class_axis"], entity_name
             )[0]
-            df.loc[
-                df["entity_name"] == entity_name, "select_node_xpath"
-            ] = format_locator(self.topology_loc["select_entity"], entity_name)[0]
+            df.loc[df["entity_name"] == entity_name, "select_node_xpath"] = (
+                format_locator(self.topology_loc["select_entity"], entity_name)[0]
+            )
             # navigate_into_xpath is applicable only for node level, since we can not navigate into deployment
             if "navigate_into_xpath" in df.columns:
-                df.loc[
-                    df["entity_name"] == entity_name, "navigate_into_xpath"
-                ] = format_locator(
-                    self.topology_loc["enter_into_entity_arrow"], entity_name
-                )[
-                    0
-                ]
+                df.loc[df["entity_name"] == entity_name, "navigate_into_xpath"] = (
+                    format_locator(
+                        self.topology_loc["enter_into_entity_arrow"], entity_name
+                    )[0]
+                )
             time.sleep(0.1)
 
     def initiate_topology_df(self, reinit: bool = True):
@@ -414,7 +413,9 @@ class AbstractTopologyView(ABC, TopologySidebar):
                 text = entity.text
                 if not len(text):
                     raise NoSuchElementException("Cannot read element text")
-                name = text.split("\n")[1]
+                # with ODF 4.18 we sometimes see no D, N prefix in the name of entity. This is not confirmed visually
+                # so we make exception for this case, checking "\n" within text
+                name = text.split("\n")[1] if "\n" in text else text
                 entity_names.append(name)
                 time.sleep(0.1)
             self.topology_df["entity_name"] = entity_names
@@ -693,9 +694,9 @@ class TopologyTab(DataFoundationDefaultTab, AbstractTopologyView):
 
         if node_selected != another_random_node:
             logger.error("search bar navigate to another node check failed")
-            topology_deviation[
-                "search_bar_navigate_to_another_node_check_failed"
-            ] = True
+            topology_deviation["search_bar_navigate_to_another_node_check_failed"] = (
+                True
+            )
 
         topology_ui_df = self.get_topology_df()
 
@@ -710,7 +711,7 @@ class TopologyTab(DataFoundationDefaultTab, AbstractTopologyView):
         if cluster_app_name_cli != cluster_name_ui:
             logger.error(
                 "cluster app name from UI and from CLI are not identical\n"
-                f"cluster_app_name_cli = '{cluster_app_name_cli}'"
+                f"cluster_app_name_cli = '{cluster_app_name_cli}'\n"
                 f"cluster_name_ui = '{cluster_name_ui}'"
             )
             topology_deviation["cluster_app_name_not_equal"] = True
@@ -832,14 +833,17 @@ class TopologyTab(DataFoundationDefaultTab, AbstractTopologyView):
             self.nodes_view.zoom_out_view()
         groups_ui = self.nodes_view.get_group_names()
         # check group names such as racks or zones from ODF Topology UI and CLI are identical
-        if not sorted(groups_cli) == sorted(groups_ui):
+        # Preprocess groups_ui to remove elements that contain 'SC\n' and the cluster name
+        processed_groups_ui = [group for group in groups_ui if "SC\n" not in group]
+        if not sorted(groups_cli) == sorted(processed_groups_ui):
             logger.error(
                 f"group names for worker nodes (labels) of the cluster {cluster_app_name_cli} "
                 "from UI and from CLI are not identical\n"
                 f"groups_cli = {sorted(groups_cli)}\n"
                 f"groups_ui = {sorted(groups_ui)}"
             )
-        topology_deviation["worker_group_labels_not_equal"] = True
+
+            topology_deviation["worker_group_labels_not_equal"] = True
 
     def validate_topology_navigation_bar(self, entity_name):
         """
@@ -901,7 +905,8 @@ class OdfTopologyNodesView(TopologyTab):
         :return: names of the groups
         """
         elements = self.get_elements(self.topology_loc["node_group_name"])
-        return [el.text for el in elements if "OCS" not in el.text and el.text.strip()]
+        # starting from ODF 4.18 group name is an id only and not duplicated to html text
+        return [el.get_attribute("data-id") for el in elements]
 
     def get_cluster_name(self) -> str:
         """
@@ -909,8 +914,12 @@ class OdfTopologyNodesView(TopologyTab):
 
         :return: name of the cluster such as 'ocs-storagecluster'
         """
-        cluster_name_el = self.get_elements(self.topology_loc["node_group_name"])[0]
-        return cluster_name_el.text.split("\n")[1]
+        cluster_name_el = self.get_elements(self.topology_loc["topology_node_parent"])[
+            0
+        ]
+        # automation framework is not stable in this part, sometimes we do not have SC\n prefix, although it is visible
+        text = cluster_name_el.text
+        return text.split("\n")[1] if "\n" in text else text
 
     @retry(TimeoutException)
     def nav_into_node(
@@ -1021,7 +1030,12 @@ class OdfTopologyNodesView(TopologyTab):
             for detail_name, loc in filtered_dict.items():
                 if detail_name == "details_sidebar_node_addresses":
                     node_addresses = self.get_elements(loc)
-                    addresses_txt = [el.text for el in node_addresses]
+                    # exclude Internal DNS from addresses, it is applicable only for specific platforms
+                    addresses_txt = [
+                        el.text
+                        for el in node_addresses
+                        if not el.text.startswith("Internal DNS")
+                    ]
                     addresses_txt = "; ".join(addresses_txt)
                     details_dict[
                         detail_name.split("details_sidebar_node_", 1)[-1].strip()
@@ -1116,9 +1130,13 @@ class OdfTopologyDeploymentsView(TopologyTab):
                 self.topology_loc["details_sidebar_depl_labels"]
             )
             labels_list = [label_element.text for label_element in label_elements]
+            # work with labels including such that does not have value, such as
+            # operators.coreos.com/ocs-operator.openshift-storage
             if labels_list:
                 details_dict["labels"] = {
-                    label.split("=", 1)[0]: label.split("=", 1)[1]
+                    label.split("=", 1)[0]: (
+                        label.split("=", 1)[1] if "=" in label else ""
+                    )
                     for label in labels_list
                 }
             else:

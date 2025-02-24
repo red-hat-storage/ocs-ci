@@ -1,5 +1,6 @@
 import logging
 import pytest
+import json
 
 from ocs_ci.framework.pytest_customization.marks import (
     tier1,
@@ -7,6 +8,7 @@ from ocs_ci.framework.pytest_customization.marks import (
     encryption_at_rest_required,
     skipif_kms_deployment,
     skipif_external_mode,
+    vault_kms_deployment_required,
 )
 from ocs_ci.helpers.keyrotation_helper import (
     NoobaaKeyrotation,
@@ -16,6 +18,9 @@ from ocs_ci.helpers.keyrotation_helper import (
 
 from ocs_ci.ocs.exceptions import UnexpectedBehaviour
 from ocs_ci.utility.retry import retry
+from ocs_ci.ocs import constants
+from ocs_ci.helpers.helpers import create_pods
+from concurrent.futures import ThreadPoolExecutor
 
 
 log = logging.getLogger(__name__)
@@ -35,8 +40,7 @@ class TestEncryptionKeyrotation:
 
         def finalizer():
             kr_obj = KeyRotation()
-            kr_obj.set_keyrotation_schedule("@weekly")
-            kr_obj.enable_keyrotation()
+            kr_obj.set_keyrotation_defaults()
 
         request.addfinalizer(finalizer)
 
@@ -55,6 +59,7 @@ class TestEncryptionKeyrotation:
             7. Change the keyrotation value to default.
         """
         osd_keyrotation = OSDKeyrotation()
+        osd_keyrotation.set_keyrotation_defaults()
 
         # Disable keyrotation and verify its enable status at rook and storagecluster end.
         log.info("Disabling the Keyrotation in storagecluster Spec.")
@@ -143,6 +148,7 @@ class TestEncryptionKeyrotation:
 
         # Get the noobaa object.
         noobaa_keyrotation = NoobaaKeyrotation()
+        noobaa_keyrotation.set_keyrotation_defaults()
 
         # Disable keyrotation and verify its disable status at noobaa and storagecluster end.
         noobaa_keyrotation.disable_keyrotation()
@@ -229,3 +235,109 @@ class TestEncryptionKeyrotation:
         # Change the keyrotation value to default.
         log.info("Changing the keyrotation value to default.")
         noobaa_keyrotation.set_keyrotation_schedule("@weekly")
+
+
+@green_squad
+@tier1
+@encryption_at_rest_required
+@vault_kms_deployment_required
+@skipif_external_mode
+class TestOSDKeyrotationWithKMS:
+    @pytest.fixture(autouse=True)
+    def setup(
+        self,
+    ):
+        self.keyrotation = OSDKeyrotation()
+        preserve_encryption_status = (
+            self.keyrotation.storagecluster_obj.data["spec"]
+            .get("encryption")
+            .get("keyRotation")
+        )
+        self.keyrotation.set_keyrotation_schedule("*/2 * * * *")
+        self.keyrotation.enable_keyrotation()
+        yield
+        if preserve_encryption_status:
+            param = json.dumps(
+                [
+                    {
+                        "op": "add",
+                        "path": "/spec/encryption/keyRotation",
+                        "value": preserve_encryption_status,
+                    }
+                ]
+            )
+            self.keyrotation.storagecluster_obj.patch(params=param, format_type="json")
+            self.keyrotation.storagecluster_obj.wait_for_resource(
+                constants.STATUS_READY,
+                self.keyrotation.storagecluster_obj.resource_name,
+                column="PHASE",
+                timeout=180,
+            )
+
+    def test_osd_keyrotation_with_kms(self, multi_pvc_factory, pod_factory):
+        """Test OSD KEyrotation operation for vault KMS.
+
+        Steps:
+            1. Deploy cluster with clusterwide encryption
+            2. enable keyrotation and set keyrotation schedule for every 2 minute.
+            3. create a multiple PVC and attach it to the pod.
+            4. start IO's on PVC to pods.
+            5. Verify keyrotation operation happening for every 2 minutes.
+
+        """
+        size = 5
+        access_modes = {
+            constants.CEPHBLOCKPOOL: [
+                f"{constants.ACCESS_MODE_RWO}-Block",
+                f"{constants.ACCESS_MODE_RWX}-Block",
+            ],
+            constants.CEPHFILESYSTEM: [
+                constants.ACCESS_MODE_RWO,
+                constants.ACCESS_MODE_RWX,
+            ],
+        }
+
+        # Create PVCs for CephBlockPool and CephFS
+        pvc_objects = {
+            interface: multi_pvc_factory(
+                interface=interface,
+                access_modes=modes,
+                size=size,
+                num_of_pvc=2,
+            )
+            for interface, modes in access_modes.items()
+        }
+
+        # Create pods for each interface
+        self.all_pods = []
+        for interface, pvcs in pvc_objects.items():
+            pods = create_pods(
+                pvc_objs=pvcs,
+                pod_factory=pod_factory,
+                interface=interface,
+                pods_for_rwx=2,  # Create 2 pods for each RWX PVC
+                status=constants.STATUS_RUNNING,
+            )
+            assert pods, f"Failed to create pods for {interface}."
+            log.info(f"Created {len(pods)} pods for interface: {interface}")
+            self.all_pods.extend(pods)
+
+        # Perform I/O on all pods using ThreadPoolExecutor
+        log.info("Starting I/O operations on all pods.")
+        with ThreadPoolExecutor() as executor:
+            futures = [
+                executor.submit(
+                    pod_obj.run_io, storage_type="fs", size="1G", runtime=60
+                )
+                for pod_obj in self.all_pods
+            ]
+
+            log.info("Verifying OSD keyrotation for KMS.")
+            assert self.keyrotation.verify_osd_keyrotation_for_kms(
+                tries=6, delay=10
+            ), "Failed to rotate OSD and NooBaa Keys in KMS."
+            log.info("Keyrotation verification successful.")
+
+            # Wait for I/O operations to complete
+            for future in futures:
+                future.result()

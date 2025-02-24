@@ -28,6 +28,7 @@ from ocs_ci.ocs.resources.rgw import RGW
 from ocs_ci.ocs.utils import oc_get_all_obc_names
 from ocs_ci.utility import templating, version
 from ocs_ci.utility.utils import TimeoutSampler, mask_secrets
+from time import sleep
 
 logger = logging.getLogger(name=__file__)
 
@@ -382,9 +383,19 @@ class MCGCLIBucket(ObjectBucket):
             NotFoundError: In case the OBC was not found
 
         """
-        result = self.mcg.exec_mcg_cmd(f"obc delete {self.name}")
-        if "deleting" and self.name not in result.stderr.lower():
-            raise NotFoundError(result)
+        try:
+            result = self.mcg.exec_mcg_cmd(f"obc delete {self.name}")
+            if (
+                "deleting" not in result.stderr.lower()
+                and self.name not in result.stderr.lower()
+            ):
+                raise NotFoundError(result)
+        except CommandFailed as e:
+            result = self.mcg.exec_mcg_cmd(f"obc delete {self.name}", ignore_error=True)
+            if f'Not Found: ObjectBucketClaim "{self.name}"' in str(
+                result.stderr
+            ) and "does not exist" in str(result.stderr):
+                raise NotFoundError(e)
 
     @property
     def internal_status(self):
@@ -475,6 +486,8 @@ class MCGS3Bucket(ObjectBucket):
                     obj_version.delete()
             else:
                 self.s3resource.Bucket(self.name).objects.all().delete()
+            if any("scale" in mark for mark in get_current_test_marks()):
+                sleep(1800)
             self.s3resource.Bucket(self.name).delete()
         except botocore.exceptions.ClientError as e:
             if e.response["Error"]["Code"] == "NoSuchBucket":

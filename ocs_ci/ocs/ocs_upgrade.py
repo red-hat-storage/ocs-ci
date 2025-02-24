@@ -7,6 +7,7 @@ import time
 
 from selenium.webdriver.common.by import By
 from ocs_ci.framework import config
+from ocs_ci.helpers.helpers import verify_nb_db_psql_version
 from ocs_ci.deployment.deployment import (
     create_catalog_source,
     create_ocs_secret,
@@ -30,9 +31,14 @@ from ocs_ci.ocs.defaults import (
 from ocs_ci.ocs.ocp import get_images, OCP
 from ocs_ci.ocs.node import get_nodes
 from ocs_ci.ocs.resources.catalog_source import CatalogSource, disable_specific_source
-from ocs_ci.ocs.resources.csv import CSV, check_all_csvs_are_succeeded
+from ocs_ci.ocs.resources.daemonset import DaemonSet
+from ocs_ci.ocs.resources.csv import (
+    CSV,
+    check_all_csvs_are_succeeded,
+    get_csvs_start_with_prefix,
+)
 from ocs_ci.ocs.resources.install_plan import wait_for_install_plan_and_approve
-from ocs_ci.ocs.resources.pod import verify_pods_upgraded
+from ocs_ci.ocs.resources.pod import get_noobaa_pods, verify_pods_upgraded
 from ocs_ci.ocs.resources.packagemanifest import (
     get_selector_for_ocs_operator,
     PackageManifest,
@@ -42,7 +48,7 @@ from ocs_ci.ocs.resources.storage_cluster import (
     mcg_only_install_verification,
     ocs_install_verification,
 )
-from ocs_ci.ocs.utils import setup_ceph_toolbox
+from ocs_ci.ocs.utils import setup_ceph_toolbox, get_expected_nb_db_psql_version
 from ocs_ci.utility import version
 from ocs_ci.utility.reporting import update_live_must_gather_image
 from ocs_ci.utility.rgwutils import get_rgw_count
@@ -60,6 +66,7 @@ from ocs_ci.utility.templating import dump_data_to_temp_yaml
 from ocs_ci.ocs.exceptions import (
     TimeoutException,
     ExternalClusterRGWAdminOpsUserException,
+    CSVNotFound,
 )
 from ocs_ci.ocs.ui.base_ui import logger, login_ui
 from ocs_ci.ocs.ui.views import locators, ODF_OPERATOR
@@ -134,11 +141,15 @@ def verify_image_versions(old_images, upgrade_version, version_before_upgrade):
     verify_pods_upgraded(old_images, selector=constants.OPERATOR_LABEL)
     default_noobaa_pods = 3
     noobaa_pods = default_noobaa_pods
+    noobaa_pod_obj = get_noobaa_pods()
     if (
         config.ENV_DATA.get("mcg_only_deployment")
         and config.ENV_DATA["platform"].lower() == constants.VSPHERE_PLATFORM
     ):
         default_noobaa_pods = 4
+    for pod in noobaa_pod_obj:
+        if "pv-backingstore" in pod.name:
+            default_noobaa_pods += 1
     if upgrade_version >= parse_version("4.7"):
         noobaa = OCP(kind="noobaa", namespace=config.ENV_DATA["cluster_namespace"])
         resource = noobaa.get()["items"][0]
@@ -148,17 +159,22 @@ def verify_image_versions(old_images, upgrade_version, version_before_upgrade):
             "minCount", constants.MIN_NB_ENDPOINT_COUNT_POST_DEPLOYMENT
         )
         noobaa_pods = default_noobaa_pods + min_endpoints
+    noobaa_db_psql_version = get_expected_nb_db_psql_version()
+    ignore_psql_12_verification = True
+    if int(noobaa_db_psql_version) == constants.NOOBAA_POSTGRES_12_VERSION:
+        ignore_psql_12_verification = False
     try:
         verify_pods_upgraded(
             old_images,
             selector=constants.NOOBAA_APP_LABEL,
             count=noobaa_pods,
             timeout=1020,
+            ignore_psql_12_verification=ignore_psql_12_verification,
         )
     except TimeoutException as ex:
         if upgrade_version >= parse_version("4.7"):
             log.info(
-                "Nooba pods didn't match. Trying once more with max noobaa endpoints!"
+                "Noobaa pods didn't match. Trying once more with max noobaa endpoints!"
                 f"Exception: {ex}"
             )
             noobaa_pods = default_noobaa_pods + max_endpoints
@@ -336,8 +352,10 @@ class OCSUpgrade(object):
             and config.ENV_DATA["deployment_type"] == "managed"
         )
         use_upstream_mg_image = managed_ibmcloud_platform and not upgrade_in_same_source
-        if (live_deployment and upgrade_in_same_source) or (
-            managed_ibmcloud_platform and not use_upstream_mg_image
+        if (
+            (live_deployment and upgrade_in_same_source)
+            or (managed_ibmcloud_platform and not use_upstream_mg_image)
+            or config.ENV_DATA.get("platform") == constants.ROSA_HCP_PLATFORM
         ):
             update_live_must_gather_image()
         elif use_upstream_mg_image:
@@ -352,23 +370,28 @@ class OCSUpgrade(object):
             config.REPORTING["ocs_must_gather_image"] = must_gather_image
             config.REPORTING["ocs_must_gather_latest_tag"] = must_gather_tag
 
-    def get_csv_name_pre_upgrade(self):
+    def get_csv_name_pre_upgrade(self, resource_name=OCS_OPERATOR_NAME):
         """
-        Getting OCS operator name as displayed in CSV
+        Get pre-upgrade CSV name
 
-        Returns:
-            str: OCS operator name, as displayed in CSV
+        Ealier we used to depend on packagemanifest to find the pre-upgrade
+        csv name. Due to issues in catalogsource where csv names were not shown properly once
+        catalogsource for upgrade version has been created, we are taking new approach of
+        finding csv name from csv list and also look for pre-upgrade ocs version for finding out
+        the actual csv
 
         """
-        operator_selector = get_selector_for_ocs_operator()
-        package_manifest = PackageManifest(
-            resource_name=OCS_OPERATOR_NAME,
-            selector=operator_selector,
-            subscription_plan_approval=self.subscription_plan_approval,
-        )
-        channel = config.DEPLOYMENT.get("ocs_csv_channel")
 
-        return package_manifest.get_current_csv(channel)
+        csv_name = None
+        csv_list = get_csvs_start_with_prefix(resource_name, namespace=self.namespace)
+        for csv in csv_list:
+            if resource_name in csv.get("metadata").get("name"):
+                if config.PREUPGRADE_CONFIG.get("ENV_DATA").get(
+                    "ocs_version"
+                ) in csv.get("metadata").get("name"):
+                    csv_name = csv.get("metadata").get("name")
+                    return csv_name
+        raise CSVNotFound(f"No preupgrade CSV found for {resource_name}")
 
     def get_pre_upgrade_image(self, csv_name_pre_upgrade):
         """
@@ -390,7 +413,7 @@ class OCSUpgrade(object):
         )
         return get_images(csv_pre_upgrade.get())
 
-    def set_upgrade_channel(self):
+    def set_upgrade_channel(self, resource_name=OCS_OPERATOR_NAME):
         """
         Wait for the new package manifest for upgrade.
 
@@ -400,7 +423,7 @@ class OCSUpgrade(object):
         """
         operator_selector = get_selector_for_ocs_operator()
         package_manifest = PackageManifest(
-            resource_name=OCS_OPERATOR_NAME,
+            resource_name=resource_name,
             selector=operator_selector,
         )
         package_manifest.wait_for_resource()
@@ -422,9 +445,14 @@ class OCSUpgrade(object):
             subscription_name = constants.ODF_SUBSCRIPTION
         else:
             subscription_name = constants.OCS_SUBSCRIPTION
+        kind_name = (
+            "subscription.operators.coreos.com"
+            if config.multicluster
+            else "subscription"
+        )
         subscription = OCP(
             resource_name=subscription_name,
-            kind="subscription",
+            kind=kind_name,
             namespace=config.ENV_DATA["cluster_namespace"],
         )
         current_ocs_source = subscription.data["spec"]["source"]
@@ -435,7 +463,7 @@ class OCSUpgrade(object):
             else constants.OPERATOR_CATALOG_SOURCE_NAME
         )
         patch_subscription_cmd = (
-            f"patch subscription {subscription_name} "
+            f"patch {kind_name} {subscription_name} "
             f'-n {self.namespace} --type merge -p \'{{"spec":{{"channel": '
             f'"{channel}", "source": "{ocs_source}"}}}}\''
         )
@@ -470,7 +498,13 @@ class OCSUpgrade(object):
             log.info(f"CSV now upgraded to: {csv_name_post_upgrade}")
             return True
 
-    def get_images_post_upgrade(self, channel, pre_upgrade_images, upgrade_version):
+    def get_images_post_upgrade(
+        self,
+        channel,
+        pre_upgrade_images,
+        upgrade_version,
+        resource_name=OCS_OPERATOR_NAME,
+    ):
         """
         Checks if all images of OCS cluster upgraded,
             and return list of all images if upgrade success
@@ -486,7 +520,7 @@ class OCSUpgrade(object):
         """
         operator_selector = get_selector_for_ocs_operator()
         package_manifest = PackageManifest(
-            resource_name=OCS_OPERATOR_NAME,
+            resource_name=resource_name,
             selector=operator_selector,
             subscription_plan_approval=self.subscription_plan_approval,
         )
@@ -561,6 +595,7 @@ class OCSUpgrade(object):
 
 def run_ocs_upgrade(
     operation=None,
+    upgrade_stats=None,
     *operation_args,
     **operation_kwargs,
 ):
@@ -569,6 +604,8 @@ def run_ocs_upgrade(
 
     Args:
         operation: (function): Function to run
+        upgrade_stats: (dict): Dictionary where can be stored statistics
+            gathered during the upgrade
         operation_args: (iterable): Function's arguments
         operation_kwargs: (map): Function's keyword arguments
 
@@ -591,6 +628,21 @@ def run_ocs_upgrade(
         f"is not higher or equal to the version you currently running: "
         f"{upgrade_ocs.version_before_upgrade}"
     )
+
+    # Update values CSI_RBD_PLUGIN_UPDATE_STRATEGY_MAX_UNAVAILABLE and CSI_CEPHFS_PLUGIN_UPDATE_STRATEGY_MAX_UNAVAILABLE
+    # in rook-ceph-operator-config configmap
+    set_update_strategy()
+    if upgrade_stats:
+        cephfs_daemonset = DaemonSet(
+            resource_name="csi-cephfsplugin",
+            namespace=config.ENV_DATA["cluster_namespace"],
+        )
+        rbd_daemonset = DaemonSet(
+            resource_name="csi-rbdplugin",
+            namespace=config.ENV_DATA["cluster_namespace"],
+        )
+        upgrade_stats["odf_upgrade"]["rbd_max_unavailable"] = 0
+        upgrade_stats["odf_upgrade"]["cephfs_max_unavailable"] = 0
 
     # create external cluster object
     if config.DEPLOYMENT["external_mode"]:
@@ -619,6 +671,7 @@ def run_ocs_upgrade(
     csv_name_pre_upgrade = upgrade_ocs.get_csv_name_pre_upgrade()
     pre_upgrade_images = upgrade_ocs.get_pre_upgrade_image(csv_name_pre_upgrade)
     upgrade_ocs.load_version_config_file(upgrade_version)
+    start_time = time.time()
     if config.DEPLOYMENT.get("disconnected") and not config.DEPLOYMENT.get(
         "disconnected_env_skip_image_mirroring"
     ):
@@ -664,9 +717,11 @@ def run_ocs_upgrade(
             if ui_upgrade_supported:
                 ocs_odf_upgrade_ui()
             else:
-                if (
+                managed_ibmcloud_platform = (
                     config.ENV_DATA["platform"] == constants.IBMCLOUD_PLATFORM
-                ) and not (upgrade_in_current_source):
+                    and config.ENV_DATA["deployment_type"] == "managed"
+                )
+                if managed_ibmcloud_platform and not upgrade_in_current_source:
                     create_ocs_secret(config.ENV_DATA["cluster_namespace"])
                 if upgrade_version != "4.9":
                     # In the case of upgrade to ODF 4.9, the ODF operator should upgrade
@@ -686,9 +741,7 @@ def run_ocs_upgrade(
                         wait_for_install_plan_and_approve(
                             config.ENV_DATA["cluster_namespace"]
                         )
-                if (
-                    config.ENV_DATA["platform"] == constants.IBMCLOUD_PLATFORM
-                ) and not (upgrade_in_current_source):
+                if managed_ibmcloud_platform and not upgrade_in_current_source:
                     for attempt in range(2):
                         # We need to do it twice, because some of the SA are updated
                         # after the first load of OCS pod after upgrade. So we need to
@@ -715,12 +768,44 @@ def run_ocs_upgrade(
             channel=channel,
             csv_name_pre_upgrade=csv_name_pre_upgrade,
         ):
+            if upgrade_stats:
+                rbd_daemonset_status = rbd_daemonset.get_status()
+                cephfs_daemonset_status = cephfs_daemonset.get_status()
+                rbd_unavailable = (
+                    rbd_daemonset_status["desiredNumberScheduled"]
+                    - rbd_daemonset_status["numberReady"]
+                )
+                cephfs_unavailable = (
+                    cephfs_daemonset_status["desiredNumberScheduled"]
+                    - cephfs_daemonset_status["numberReady"]
+                )
+                if (
+                    rbd_unavailable
+                    > upgrade_stats["odf_upgrade"]["rbd_max_unavailable"]
+                ):
+                    upgrade_stats["odf_upgrade"][
+                        "rbd_max_unavailable"
+                    ] = rbd_unavailable
+                if (
+                    cephfs_unavailable
+                    > upgrade_stats["odf_upgrade"]["cephfs_max_unavailable"]
+                ):
+                    upgrade_stats["odf_upgrade"][
+                        "cephfs_max_unavailable"
+                    ] = cephfs_unavailable
+                log.debug(f"rbd daemonset status: {rbd_daemonset_status}")
+                log.debug(f"cephfs daemonset status: {cephfs_daemonset_status}")
             try:
                 if sample:
                     log.info("Upgrade success!")
                     break
             except TimeoutException:
                 raise TimeoutException("No new CSV found after upgrade!")
+        stop_time = time.time()
+        time_taken = stop_time - start_time
+        log.info(f"Upgrade took {time_taken} seconds to complete")
+        if upgrade_stats:
+            upgrade_stats["odf_upgrade"]["upgrade_time"] = time_taken
         old_image = upgrade_ocs.get_images_post_upgrade(
             channel, pre_upgrade_images, upgrade_version
         )
@@ -747,6 +832,8 @@ def run_ocs_upgrade(
         upgrade_ocs.get_parsed_versions()[1],
         upgrade_ocs.version_before_upgrade,
     )
+
+    verify_nb_db_psql_version()
 
     # update external secrets
     if config.DEPLOYMENT["external_mode"]:
@@ -782,6 +869,15 @@ def run_ocs_upgrade(
         # in pending state
         is_all_csvs_succeeded = check_all_csvs_are_succeeded(namespace=namespace)
         assert is_all_csvs_succeeded, "Not all CSV's are in succeeded state"
+        if not config.DEPLOYMENT["external_mode"]:
+            upgrade_version = version.get_semantic_version(upgrade_version, True)
+        if (
+            config.ENV_DATA.get("is_multus_enabled")
+            and upgrade_version == version.VERSION_4_16
+        ):
+            from ocs_ci.helpers.helpers import upgrade_multus_holder_design
+
+            upgrade_multus_holder_design()
 
         ocs_install_verification(
             timeout=600,
@@ -798,7 +894,7 @@ def ocs_odf_upgrade_ui():
     Pass proper versions and upgrade_ui.yaml while running this function for validation to pass
 
     """
-
+    set_update_strategy()
     login_ui()
     val_obj = ValidationUI()
     pagenav_obj = ValidationUI()
@@ -843,3 +939,44 @@ def ocs_odf_upgrade_ui():
     val_obj.take_screenshot()
     pagenav_obj.odf_overview_ui()
     pagenav_obj.odf_storagesystems_ui()
+
+
+def set_update_strategy(rbd_max_unavailable=None, cephfs_max_unavailable=None):
+    """
+    Update rook-ceph-operator-config configmap with parameters:
+    CSI_RBD_PLUGIN_UPDATE_STRATEGY_MAX_UNAVAILABLE and CSI_CEPHFS_PLUGIN_UPDATE_STRATEGY_MAX_UNAVAILABLE.
+    If values are not provided as parameters of this function then values are taken
+    from ocs-ci config. If the values are not set in ocs-ci config or function
+    parameters then they are not updated.
+
+    Args:
+        rbd_max_unavailable (int, str): Value of CSI_RBD_PLUGIN_UPDATE_STRATEGY_MAX_UNAVAILABLE
+            to be updated in rook-ceph-operator-config configmap.
+        cephfs_max_unavailable (int, str): Value of CSI_CEPHFS_PLUGIN_UPDATE_STRATEGY_MAX_UNAVAILABLE
+            to be updated in rook-ceph-operator-config configmap.
+
+    """
+    rbd_max = rbd_max_unavailable or config.UPGRADE.get(
+        "csi_rbd_plugin_update_strategy_max_unavailable"
+    )
+    cephfs_max = cephfs_max_unavailable or config.UPGRADE.get(
+        "csi_cephfs_plugin_update_strategy_max_unavailable"
+    )
+    if rbd_max:
+        config_map_patch = f'\'{{"data": {{"CSI_RBD_PLUGIN_UPDATE_STRATEGY_MAX_UNAVAILABLE": "{rbd_max}"}}}}\''
+        exec_cmd(
+            f"oc patch configmap -n {config.ENV_DATA['cluster_namespace']} "
+            f"{constants.ROOK_OPERATOR_CONFIGMAP} -p {config_map_patch}"
+        )
+        logger.info(
+            f"CSI_RBD_PLUGIN_UPDATE_STRATEGY_MAX_UNAVAILABLE is set to {rbd_max}"
+        )
+    if cephfs_max:
+        config_map_patch = f'\'{{"data": {{"CSI_CEPHFS_PLUGIN_UPDATE_STRATEGY_MAX_UNAVAILABLE": "{cephfs_max}"}}}}\''
+        exec_cmd(
+            f"oc patch configmap -n {config.ENV_DATA['cluster_namespace']} "
+            f"{constants.ROOK_OPERATOR_CONFIGMAP} -p {config_map_patch}"
+        )
+        logger.info(
+            f"CSI_CEPHFS_PLUGIN_UPDATE_STRATEGY_MAX_UNAVAILABLE is set to {rbd_max}"
+        )

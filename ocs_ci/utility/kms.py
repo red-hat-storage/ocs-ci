@@ -36,6 +36,7 @@ from ocs_ci.ocs.exceptions import (
 from ocs_ci.helpers import helpers
 from ocs_ci.ocs.resources import storage_cluster
 from ocs_ci.utility import templating, version
+from ocs_ci.utility.retry import retry
 from ocs_ci.utility.utils import (
     download_file,
     delete_file,
@@ -99,7 +100,13 @@ class Vault(KMS):
     A class which handles deployment and other
     configs related to vault
 
+    HCP is enterprise vault, clusters are deployed on AWS platform can communicate with no error.
+    for vsphere we use our community vault
+
     """
+
+    # creating class variable (shared across all instances)
+    _vault_path_token = None
 
     def __init__(self):
         super().__init__("vault")
@@ -116,17 +123,28 @@ class Vault(KMS):
         self.vault_namespace = None
         self.vault_deploy_mode = config.ENV_DATA.get("vault_deploy_mode")
         self.vault_backend_path = None
+        self.csi_vault_backend_path = None
         self.vault_backend_version = config.ENV_DATA.get(
             "VAULT_BACKEND", defaults.VAULT_DEFAULT_BACKEND_VERSION
         )
         self.kmsid = None
-        # Base64 encoded (with padding) token
-        self.vault_path_token = None
         self.vault_policy_name = None
         self.vault_kube_auth_path = "kubernetes"
         self.vault_kube_auth_role = constants.VAULT_KUBERNETES_AUTH_ROLE
         self.vault_kube_auth_namespace = None
         self.vault_cwd_kms_sa_name = constants.VAULT_CWD_KMS_SA_NAME
+
+    @property
+    def vault_path_token(self):
+        # Base64 encoded (with padding) token
+        if Vault._vault_path_token is None:
+            Vault._vault_path_token = self.generate_vault_token()
+        return Vault._vault_path_token
+
+    @vault_path_token.setter
+    def vault_path_token(self, value):
+        # For setting values in test cases
+        Vault._vault_path_token = value
 
     def deploy(self):
         """
@@ -327,6 +345,7 @@ class Vault(KMS):
             config.ENV_DATA, "VAULT_CACERT", defaults.VAULT_DEFAULT_CA_CERT
         )
         ca_data["metadata"]["name"] = self.ca_cert_name
+        ca_data["metadata"]["namespace"] = config.ENV_DATA["cluster_namespace"]
         ca_data["data"]["cert"] = self.ca_cert_base64
         self.create_resource(ca_data, prefix="ca")
 
@@ -342,12 +361,18 @@ class Vault(KMS):
                 constants.EXTERNAL_VAULT_CLIENT_CERT
             )
             client_cert_data["metadata"]["name"] = self.client_cert_name
+            client_cert_data["metadata"]["namespace"] = config.ENV_DATA[
+                "cluster_namespace"
+            ]
             client_cert_data["data"]["cert"] = self.client_cert_base64
             self.create_resource(client_cert_data, prefix="clientcert")
 
             # create client key secert
             client_key_data = templating.load_yaml(constants.EXTERNAL_VAULT_CLIENT_KEY)
             client_key_data["metadata"]["name"] = self.client_key_name
+            client_key_data["metadata"]["namespace"] = config.ENV_DATA[
+                "cluster_namespace"
+            ]
             client_key_data["data"]["key"] = self.client_key_base64
             self.create_resource(client_key_data, prefix="clientkey")
 
@@ -409,12 +434,14 @@ class Vault(KMS):
             token_data = templating.load_yaml(constants.EXTERNAL_VAULT_KMS_TOKEN)
             # token has to base64 encoded (with padding)
             token_data["data"]["token"] = encode(self.vault_path_token)
+            token_data["metadata"]["namespace"] = config.ENV_DATA["cluster_namespace"]
             self.create_resource(token_data, prefix="token")
 
         # create ocs-kms-connection-details
         connection_data = templating.load_yaml(
             constants.EXTERNAL_VAULT_KMS_CONNECTION_DETAILS
         )
+        connection_data["metadata"]["namespace"] = config.ENV_DATA["cluster_namespace"]
         connection_data["data"]["VAULT_ADDR"] = os.environ["VAULT_ADDR"]
         if Version.coerce(config.ENV_DATA["ocs_version"]) >= Version.coerce("4.10"):
             connection_data["data"]["VAULT_AUTH_METHOD"] = self.vault_auth_method
@@ -455,7 +482,7 @@ class Vault(KMS):
         if self.vault_sealed():
             logger.info("Vault is sealed, Unsealing now..")
             for i in range(3):
-                kkey = f"UNSEAL_KEY{i+1}"
+                kkey = f"UNSEAL_KEY{i + 1}"
                 self._vault_unseal(self.vault_conf[kkey])
             # Check if vault is unsealed or not
             if self.vault_sealed():
@@ -569,9 +596,10 @@ class Vault(KMS):
             raise VaultOperationError(
                 f"Failed to create policy f{self.vault_policy_name}"
             )
-        self.vault_path_token = self.generate_vault_token()
+        # Printing out here the Vault Path Token
+        logger.info(f"Vault Path Token is: ${self.vault_path_token}")
 
-    def generate_vault_token(self):
+    def generate_vault_token(self, ttl="768h"):
         """
         Generate a token for self.vault_policy_name
 
@@ -579,7 +607,11 @@ class Vault(KMS):
             str: vault token
 
         """
-        cmd = f"vault token create -policy={self.vault_policy_name} " f"--format=json"
+        cmd = (
+            f"vault token create -policy={self.vault_policy_name} "
+            "--format=json "
+            f"-ttl={ttl}"
+        )
         out = subprocess.check_output(shlex.split(cmd))
         json_out = json.loads(out)
         return json_out["auth"]["client_token"]
@@ -604,22 +636,46 @@ class Vault(KMS):
                 vault_conf = load_auth_config()["vault"]
             return vault_conf
 
-    def get_vault_connection_info(self, resource_name=None):
+    def get_vault_connection_info(
+        self,
+        resource_name=None,
+        resource_configmap=constants.VAULT_KMS_CONNECTION_DETAILS_RESOURCE,
+    ):
         """
-        Get resource info from ocs-kms-connection-defatils
+        Get resource info from ocs-kms-connection-details or csi-kms-connection-details
+        ConfigMap.
 
         Args:
             resource_name (str): name of the resource
 
+        Returns:
+            str or None: The resource information, or None if not found.
         """
-        connection_details = ocp.OCP(
+        cm_obj = ocp.OCP(
             kind="ConfigMap",
-            resource_name=constants.VAULT_KMS_CONNECTION_DETAILS_RESOURCE,
             namespace=config.ENV_DATA["cluster_namespace"],
         )
-        return connection_details.get().get("data")[resource_name]
 
-    def get_vault_backend_path(self):
+        if not cm_obj.is_exist(resource_configmap):
+            logger.info(f"Resource ConfigMap {resource_configmap} does not exist")
+            return None
+
+        cm_data = cm_obj.get(resource_configmap).get("data", {})
+
+        if resource_configmap == constants.VAULT_KMS_CONNECTION_DETAILS_RESOURCE:
+            return cm_data.get(resource_name)
+
+        if resource_configmap == constants.VAULT_KMS_CSI_CONNECTION_DETAILS:
+            for v in cm_data.values():
+                json_out = json.loads(v)
+                if json_out.get("KMS_SERVICE_NAME") == "vault":
+                    return json_out.get(resource_name)
+
+        return None
+
+    def get_vault_backend_path(
+        self, resource_configmap=constants.VAULT_KMS_CONNECTION_DETAILS_RESOURCE
+    ):
         """
         Fetch the vault backend path used for this deployment
         This can be obtained from kubernetes secret resource
@@ -635,11 +691,23 @@ class Vault(KMS):
               VAULT_BACKEND_PATH: ocs
 
         """
-        if not self.vault_backend_path:
-            self.vault_backend_path = self.get_vault_connection_info(
-                "VAULT_BACKEND_PATH"
-            )
-            logger.info(f"setting vault_backend_path = {self.vault_backend_path}")
+        if resource_configmap == constants.VAULT_KMS_CONNECTION_DETAILS_RESOURCE:
+            if not self.vault_backend_path:
+                self.vault_backend_path = self.get_vault_connection_info(
+                    resource_name="VAULT_BACKEND_PATH",
+                    resource_configmap=resource_configmap,
+                )
+                logger.info(f"setting vault_backend_path = {self.vault_backend_path}")
+
+        elif resource_configmap == constants.VAULT_KMS_CSI_CONNECTION_DETAILS:
+            if not self.csi_vault_backend_path:
+                self.csi_vault_backend_path = self.get_vault_connection_info(
+                    resource_name="VAULT_BACKEND_PATH",
+                    resource_configmap=resource_configmap,
+                )
+                logger.info(f"setting vault_backend_path = {self.vault_backend_path}")
+        else:
+            logger.error(f"Wrong resource_configmap : {resource_configmap}.")
 
     def get_vault_path_token(self):
         """
@@ -659,7 +727,7 @@ class Vault(KMS):
             type: Opaque
 
         """
-        if not self.vault_path_token:
+        if not Vault._vault_path_token:
             vault_token = ocp.OCP(
                 kind="Secret",
                 resource_name=constants.VAULT_KMS_TOKEN_RESOURCE,
@@ -685,22 +753,23 @@ class Vault(KMS):
             ]
             logger.info(f"Setting vault_kube_auth_role = {self.vault_kube_auth_role}")
 
-    def get_vault_policy(self):
+    def set_vault_policy(self):
         """
-        Get the policy name based on token from vault
+        Set the policy name matching the cluster name or one provided in config
 
         """
+        namespace_arg = ""
+        if self.vault_namespace:
+            namespace_arg = f"-namespace='{self.vault_namespace}'"
         self.vault_policy_name = config.ENV_DATA.get("VAULT_POLICY", None)
         if not self.vault_policy_name:
-            if config.ENV_DATA.get("VAULT_AUTH_METHOD") == constants.VAULT_TOKEN_AUTH:
-                cmd = f"vault token lookup {self.vault_path_token}"
-            else:
-                cmd = f"vault read auth/{self.vault_kube_auth_path}/role/{self.vault_kube_auth_role}"
-            out = subprocess.check_output(shlex.split(cmd))
-            json_out = json.loads(out)
-            logger.info(json_out)
-            for policy in json_out["data"]["policies"]:
-                if self.cluster_id in policy:
+            policies = json.loads(
+                run_cmd(f"vault policy list {namespace_arg} --format=json")
+            )
+            logger.info(policies)
+            cluster_name = get_cluster_name(config.ENV_DATA["cluster_path"])
+            for policy in policies:
+                if self.cluster_id in policy or cluster_name in policy:
                     self.vault_policy_name = policy
                     logger.info(f"setting vault_policy_name = {self.vault_policy_name}")
 
@@ -820,20 +889,35 @@ class Vault(KMS):
             # from token get policy
             if not self.cluster_id:
                 self.cluster_id = get_running_cluster_id()
-            self.get_vault_policy()
+            self.set_vault_policy()
         except (CommandFailed, IndexError):
             logger.error(
-                "Error occured during kms resource info gathering,"
+                "Error occurred during kms resource info gathering,"
                 "skipping vault cleanup"
             )
             return
 
         # Delete the policy and backend path from vault
         # we need root token of vault in the env
-        self.remove_vault_backend_path()
-        self.remove_vault_policy()
+        cleanup_errors = []
+        try:
+            self.remove_vault_backend_path(vault_namespace=self.vault_namespace)
+        except Exception as ex:
+            logger.error(ex)
+            cleanup_errors.append(ex)
+        try:
+            self.remove_vault_policy(vault_namespace=self.vault_namespace)
+        except Exception as ex:
+            logger.error(ex)
+            cleanup_errors.append(ex)
         if self.vault_namespace:
-            self.remove_vault_namespace()
+            try:
+                self.remove_vault_namespace()
+            except Exception as ex:
+                logger.error(ex)
+                cleanup_errors.append(ex)
+        if cleanup_errors:
+            raise cleanup_errors[0]
 
     def post_deploy_verification(self):
         """
@@ -882,7 +966,13 @@ class Vault(KMS):
                 raise NotFoundError("Vault key not found")
 
         # Check for NOOBAA key
-        if any(constants.VAULT_NOOBAA_ROOT_SECRET_PATH in k for k in kvlist):
+        noobaa_key_path = (
+            constants.NOOBAA_BACKEND_SECRET
+            if version.get_semantic_ocs_version_from_config() >= version.VERSION_4_18
+            else constants.VAULT_NOOBAA_ROOT_SECRET_PATH
+        )
+
+        if any(noobaa_key_path in k for k in kvlist):
             logger.info("Found Noobaa root secret path")
         else:
             logger.error("Noobaa root secret path not found")
@@ -1204,6 +1294,127 @@ class Vault(KMS):
         out = subprocess.check_output(shlex.split(cmd))
         if "Success" in out.decode():
             logger.info(f"Role {role_name} created successfully")
+
+    def get_pv_secret(self, device_handle):
+        """
+        Get secret stored in the vault KMS for the given device_handle
+
+        Args:
+            device_handle (str): PV device handle string
+
+        Returns:
+            secret (str): passphrase stored in the vault KMS for given device handle.
+        """
+        if not self.csi_vault_backend_path:
+            self.get_vault_backend_path(
+                resource_configmap=constants.VAULT_KMS_CSI_CONNECTION_DETAILS
+            )
+
+        cmd = f"vault kv get -format=json {self.csi_vault_backend_path}/{device_handle}"
+        out = subprocess.check_output(shlex.split(cmd))
+        json_out = json.loads(out)
+
+        def find_passphrase(obj):
+            """
+            Recursively searches for the 'passphrase' key in the JSON object.
+            """
+            if isinstance(obj, dict):
+                for key, value in obj.items():
+                    if key == "passphrase":
+                        return value
+                    elif isinstance(value, dict) or isinstance(value, list):
+                        result = find_passphrase(value)
+                        if result:
+                            return result
+            elif isinstance(obj, list):
+                for item in obj:
+                    result = find_passphrase(item)
+                    if result:
+                        return result
+            return None
+
+        secret = find_passphrase(json_out)
+
+        return secret
+
+    def get_osd_secret(self, device_handle):
+        """Fetch the OSD encryption key for the given device handle from Vault.
+
+        Args:
+            device_handle (str): The device handle for which to retrieve the OSD secret.
+
+        Returns:
+            str: The OSD encryption secret if found, otherwise None.
+        """
+        if not self.vault_backend_path:
+            self.get_vault_backend_path()
+
+        secret_key = f"rook-ceph-osd-encryption-key-{device_handle}"
+
+        # Construct the Vault command
+        cmd = f"vault kv get -format=json {self.vault_backend_path}/{secret_key}"
+
+        try:
+            # Execute the command and capture the output
+            out = subprocess.check_output(
+                shlex.split(cmd), stderr=subprocess.STDOUT, text=True
+            )
+
+            # Parse the JSON response
+            json_out = json.loads(out)
+
+            # Retrieve the secret
+            # secret_key = f"rook-ceph-osd-encryption-key-{device_handle}"
+            secret = json_out.get("data", {}).get(secret_key)
+
+            if not secret:
+                logger.error(
+                    f"Secret for key '{secret_key}' not found in Vault response."
+                )
+                return None
+
+            return secret
+        except subprocess.CalledProcessError as e:
+            logger.error(f"Error executing Vault command: {e.output.strip()}")
+        except json.JSONDecodeError as e:
+            logger.error(f"Invalid JSON output from Vault command. : {e}")
+
+        return None
+
+    def get_noobaa_secret(self):
+        """Fetches the NooBaa backend secret from the Vault.
+
+        Returns:
+            str: The NooBaa backend secret.
+        """
+        # Construct the Vault command
+        cmd = f"vault kv get -format=json {self.vault_backend_path}/{constants.NOOBAA_BACKEND_SECRET}"
+
+        try:
+            # Execute the command and capture the output
+            out = subprocess.check_output(
+                shlex.split(cmd), stderr=subprocess.STDOUT, text=True
+            )
+
+            # Parse the JSON response
+            json_out = json.loads(out)
+
+            # Retrieve the secret
+            secret = json_out["data"].get(json_out["data"].get("active_root_key"))
+
+            if not secret:
+                logger.error(
+                    f"Secret for key '{constants.NOOBAA_BACKEND_SECRET}' not found in Vault response."
+                )
+                return None
+
+            return secret
+        except subprocess.CalledProcessError as e:
+            logger.error(f"Error executing Vault command: {e.output.strip()}")
+        except json.JSONDecodeError as e:
+            logger.error(f"Invalid JSON output from Vault command. {e}")
+
+        return None
 
 
 class HPCS(KMS):
@@ -1560,6 +1771,7 @@ class KMIP(KMS):
         kmip_kms_secret["metadata"]["name"] = helpers.create_unique_resource_name(
             "thales-kmip", type
         )
+        kmip_kms_secret["metadata"]["namespace"] = config.ENV_DATA["cluster_namespace"]
         self.create_resource(kmip_kms_secret, prefix="thales-kmip-secret")
         logger.info(f"KMIP secret {kmip_kms_secret['metadata']['name']} created")
         return kmip_kms_secret["metadata"]["name"]
@@ -1655,24 +1867,30 @@ class KMIP(KMS):
         else:
             return json.loads(out)
 
-    def get_key_list_ciphertrust(self):
+    def get_key_list_ciphertrust(self, limit=100):
         """
         Lists all keys in CipherTrust Manager
+
+        Args:
+            limit (int): number of entries to limit the results
 
         Returns:
             (list): list containing the IDs of the keys
 
         """
         key_id_list = []
-        cmd = "ksctl keys list"
-        out = subprocess.check_output(shlex.split(cmd))
-        json_out = json.loads(out)
-        if json_out["total"] == 0:
-            raise NotFoundError("No keys found")
-        else:
-            for key in json_out["resources"]:
-                key_id_list.append(key["id"])
-            return key_id_list
+        total = None
+        while len(key_id_list) != total:
+            cmd = f"ksctl keys list --limit {limit} --skip {len(key_id_list)}"
+            out = subprocess.check_output(shlex.split(cmd))
+            json_out = json.loads(out)
+            total = json_out["total"]
+            if total == 0:
+                raise NotFoundError("No keys found")
+            else:
+                for key in json_out["resources"]:
+                    key_id_list.append(key["id"])
+                return key_id_list
 
     def get_osd_key_ids(self):
         """
@@ -1726,16 +1944,18 @@ class KMIP(KMS):
         """
         self.validate_ciphertrust_deployment()
 
+    @retry(NotFoundError, tries=2, delay=30)
     def validate_ciphertrust_deployment(self):
         """
         Verify whether OSD and NooBaa keys are stored in CipherTrust Manager
 
         """
         self.update_kmip_env_vars()
-        key_id_list = self.get_key_list_ciphertrust()
 
         # Check for OSD keys
         osd_key_ids = self.get_osd_key_ids()
+        # Loading key list after gathering OSD pods to avoid mismatch.
+        key_id_list = self.get_key_list_ciphertrust()
         if all(id in key_id_list for id in osd_key_ids):
             logger.info("KMIP: All OSD keys found in CipherTrust Manager")
         else:
@@ -2148,6 +2368,16 @@ def update_csi_kms_vault_connection_details(update_config):
     )
     templating.dump_data_to_temp_yaml(csi_kms_conf.data, resource_data_yaml.name)
     run_cmd(f"oc apply -f {resource_data_yaml.name}", timeout=300)
+
+
+def get_kms_details():
+    kms_provider = config.ENV_DATA["KMS_PROVIDER"]
+    try:
+        return kms_map[kms_provider]()
+    except KeyError:
+        raise KMSNotSupported(
+            f"Not a supported KMS deployment , provider: {kms_provider}"
+        )
 
 
 def get_kms_deployment():

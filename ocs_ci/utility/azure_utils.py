@@ -32,7 +32,7 @@ from ocs_ci.utility.utils import (
 )
 from ocs_ci.utility.ssl_certs import configure_ingress_and_api_certificates
 
-logger = logging.getLogger(name=__file__)
+logger = logging.getLogger(__name__)
 
 
 # default location of files with necessary azure cluster details
@@ -228,7 +228,7 @@ class AZURE:
         """
         if not self._resource_client:
             self._resource_client = ResourceManagementClient(
-                credentials=self.credentials, subscription_id=self._subscription_id
+                credential=self.credentials, subscription_id=self._subscription_id
             )
         return self._resource_client
 
@@ -483,6 +483,15 @@ class AZURE:
             f"{self._client_secret} --tenant {self._tenant_id}"
         )
         exec_cmd(login_cmd, secrets=[self._client_secret, self._tenant_id])
+
+    def set_auth_env_vars(self):
+        """
+        Set environment variables containing auth information.
+        """
+        logger.info("Setting Azure environment variables")
+        os.environ["AZURE_TENANT_ID"] = self._tenant_id
+        os.environ["AZURE_CLIENT_ID"] = self._client_id
+        os.environ["AZURE_CLIENT_SECRET"] = self._client_secret
 
 
 class AzureAroUtil(AZURE):

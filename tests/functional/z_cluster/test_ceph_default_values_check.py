@@ -21,7 +21,7 @@ from ocs_ci.ocs.cluster import get_pg_balancer_status, get_mon_config_value
 from ocs_ci.framework import config
 from ocs_ci.ocs.ocp import OCP
 from ocs_ci.ocs import constants
-from ocs_ci.ocs.cluster import get_mds_cache_memory_limit
+from ocs_ci.ocs.cluster import get_mds_cache_memory_limit, validate_num_of_pgs
 from ocs_ci.utility import version
 from ocs_ci.utility.retry import retry
 from ocs_ci.ocs.exceptions import CommandFailed
@@ -122,18 +122,12 @@ class TestCephDefaultValuesCheck(ManageTest):
         )
         ocs_version = version.get_semantic_ocs_version_from_config()
 
-        if ocs_version == version.VERSION_4_8:
-            stored_values = constants.ROOK_CEPH_CONFIG_VALUES_48.split("\n")
-        elif ocs_version == version.VERSION_4_9:
-            stored_values = constants.ROOK_CEPH_CONFIG_VALUES_49.split("\n")
-        elif ocs_version == version.VERSION_4_10:
-            stored_values = constants.ROOK_CEPH_CONFIG_VALUES_410.split("\n")
-        elif ocs_version == version.VERSION_4_11:
-            stored_values = constants.ROOK_CEPH_CONFIG_VALUES_411.split("\n")
-        elif ocs_version == version.VERSION_4_12 or ocs_version == version.VERSION_4_13:
+        if ocs_version == version.VERSION_4_12 or ocs_version == version.VERSION_4_13:
             stored_values = constants.ROOK_CEPH_CONFIG_VALUES_412.split("\n")
-        elif ocs_version >= version.VERSION_4_14:
+        elif ocs_version == version.VERSION_4_14 or ocs_version == version.VERSION_4_15:
             stored_values = constants.ROOK_CEPH_CONFIG_VALUES_414.split("\n")
+        elif ocs_version >= version.VERSION_4_16:
+            stored_values = constants.ROOK_CEPH_CONFIG_VALUES_416.split("\n")
         else:
             stored_values = constants.ROOK_CEPH_CONFIG_VALUES.split("\n")
         log.info(f"OCS version is {ocs_version}")
@@ -148,8 +142,6 @@ class TestCephDefaultValuesCheck(ManageTest):
     @post_ocs_upgrade
     @skipif_external_mode
     @skipif_mcg_only
-    @bugzilla("1951348")
-    @bugzilla("1944148")
     @pytest.mark.polarion_id("OCS-2554")
     def test_check_mds_cache_memory_limit(self):
         """
@@ -193,6 +185,7 @@ class TestCephDefaultValuesCheck(ManageTest):
             f"mds_cache_memory_limit is set with a value of {expected_mds_value_in_GB}GB"
         )
 
+    @runs_on_provider
     @bugzilla("2012930")
     @post_ocs_upgrade
     @pytest.mark.polarion_id("OCS-2739")
@@ -229,3 +222,38 @@ class TestCephDefaultValuesCheck(ManageTest):
             f"The expected values are:\n{stored_values}\n"
             f"The cluster's existing values are:{config_data}"
         )
+
+    @post_ocs_upgrade
+    def test_check_number_of_pgs(self, project_factory, pvc_factory, pod_factory):
+        """
+        Testcase to check number of pgs per pool
+
+        """
+        # Create a RWO PVC
+        project = project_factory()
+        pvc_obj = pvc_factory(
+            interface=constants.CEPHFILESYSTEM,
+            access_mode=constants.ACCESS_MODE_RWO,
+            status=constants.STATUS_BOUND,
+            project=project,
+            size=200,
+        )
+
+        # Create a pod using the PVC
+        pod_obj = pod_factory(
+            interface=constants.CEPHFILESYSTEM,
+            pvc=pvc_obj,
+            status=constants.STATUS_RUNNING,
+        )
+        pod_obj.run_io(
+            storage_type=constants.CEPHFILESYSTEM,
+            size="100M",
+            io_direction="write",
+            runtime=10,
+        )
+        expected_pgs = {
+            "ocs-storagecluster-cephblockpool": 1,
+            "ocs-storagecluster-cephfilesystem-data0": 1,
+            "ocs-storagecluster-cephfilesystem-metadata0": 1,
+        }
+        assert not validate_num_of_pgs(expected_pgs)

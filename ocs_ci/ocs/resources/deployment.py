@@ -1,6 +1,7 @@
 """
 General Deployment object
 """
+
 import logging
 
 from ocs_ci.framework import config

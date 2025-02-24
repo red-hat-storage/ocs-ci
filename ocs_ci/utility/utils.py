@@ -1,3 +1,4 @@
+from datetime import datetime
 from functools import reduce
 import base64
 import io
@@ -45,6 +46,7 @@ from ocs_ci.ocs.exceptions import (
     ClientDownloadError,
     CommandFailed,
     ConfigurationError,
+    ResourceNotFoundError,
     TagNotFoundException,
     TimeoutException,
     TimeoutExpiredError,
@@ -58,7 +60,6 @@ from ocs_ci.ocs.exceptions import (
     NoRunningCephToolBoxException,
     ClusterNotInSTSModeException,
 )
-
 from ocs_ci.utility import version as version_module
 from ocs_ci.utility.flexy import load_cluster_info
 from ocs_ci.utility.retry import retry
@@ -460,6 +461,7 @@ def run_cmd(
     threading_lock=None,
     silent=False,
     cluster_config=None,
+    output_file=None,
     **kwargs,
 ):
     """
@@ -477,6 +479,7 @@ def run_cmd(
         threading_lock (threading.RLock): threading.RLock object that is used
             for handling concurrent oc commands
         silent (bool): If True will silent errors from the server, default false
+        output_file (str): path where to write stderr from command - apply only when silent mode is True
 
     Raises:
         CommandFailed: In case the command execution fails
@@ -492,6 +495,7 @@ def run_cmd(
         threading_lock,
         silent=silent,
         cluster_config=cluster_config,
+        output_file=output_file,
         **kwargs,
     )
     return mask_secrets(completed_process.stdout.decode(), secrets)
@@ -569,14 +573,14 @@ def run_cmd_multicluster(
                 f"Switched the context to cluster:{cluster.ENV_DATA['cluster_name']}"
             )
             try:
-                completed_process[
-                    cluster.MULTICLUSTER["multicluster_index"]
-                ] = exec_cmd(
-                    cmd,
-                    secrets=secrets,
-                    timeout=timeout,
-                    ignore_error=ignore_error,
-                    **kwargs,
+                completed_process[cluster.MULTICLUSTER["multicluster_index"]] = (
+                    exec_cmd(
+                        cmd,
+                        secrets=secrets,
+                        timeout=timeout,
+                        ignore_error=ignore_error,
+                        **kwargs,
+                    )
                 )
             except CommandFailed:
                 # In case of failure, restore the cluster context to where we started
@@ -598,6 +602,8 @@ def exec_cmd(
     silent=False,
     use_shell=False,
     cluster_config=None,
+    lock_timeout=7200,
+    output_file=None,
     **kwargs,
 ):
     """
@@ -620,6 +626,8 @@ def exec_cmd(
         use_shell (bool): If True will pass the cmd without splitting
         cluster_config (MultiClusterConfig): In case of multicluster environment this object
                 will be non-null
+        lock_timeout (int): maximum timeout to wait for lock to prevent deadlocks (default 2 hours)
+        output_file (str): path where to write output of stderr from command - apply only when silent mode is True
 
     Raises:
         CommandFailed: In case the command execution fails
@@ -669,18 +677,20 @@ def exec_cmd(
                 log.info(f"Found oc plugin {subcmd}")
         cmd = list_insert_at_position(cmd, kube_index, ["--kubeconfig"])
         cmd = list_insert_at_position(cmd, kube_index + 1, [kubepath])
-    if threading_lock and cmd[0] == "oc":
-        threading_lock.acquire()
-    completed_process = subprocess.run(
-        cmd,
-        stdout=subprocess.PIPE,
-        stderr=subprocess.PIPE,
-        stdin=subprocess.PIPE,
-        timeout=timeout,
-        **kwargs,
-    )
-    if threading_lock and cmd[0] == "oc":
-        threading_lock.release()
+    try:
+        if threading_lock and cmd[0] == "oc":
+            threading_lock.acquire(timeout=lock_timeout)
+        completed_process = subprocess.run(
+            cmd,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            stdin=subprocess.PIPE,
+            timeout=timeout,
+            **kwargs,
+        )
+    finally:
+        if threading_lock and cmd[0] == "oc":
+            threading_lock.release()
     masked_stdout = mask_secrets(completed_process.stdout.decode(), secrets)
     if len(completed_process.stdout) > 0:
         log.debug(f"Command stdout: {masked_stdout}")
@@ -691,8 +701,13 @@ def exec_cmd(
     if len(completed_process.stderr) > 0:
         if not silent:
             log.warning(f"Command stderr: {masked_stderr}")
+        else:
+            if output_file:
+                with open(output_file, "a") as out_fd:
+                    out_fd.write(masked_stderr)
     else:
-        log.debug("Command stderr is empty")
+        if not silent:
+            log.debug("Command stderr is empty")
     log.debug(f"Command return code: {completed_process.returncode}")
     if completed_process.returncode and not ignore_error:
         masked_stderr = bin_xml_escape(filter_out_emojis(masked_stderr))
@@ -855,7 +870,31 @@ def get_openshift_installer(
         log.debug(f"Installer exists ({installer_binary_path}), skipping download.")
         # TODO: check installer version
     else:
-        version = expose_ocp_version(version)
+        try:
+            version = expose_ocp_version(version)
+        except Exception as e:
+            log.error(
+                f"Failed to download the openshift installer {version}. Exception '{e}'"
+            )
+            # check given version is GA'ed or not
+            version_major_minor = str(
+                version_module.get_semantic_version(version, only_major_minor=True)
+            )
+            # For GA'ed version, check for N, N-1 and N-2 versions
+            for current_version_count in range(3):
+                previous_version = version_module.get_previous_version(
+                    version_major_minor, current_version_count
+                )
+                log.debug(
+                    f"previous version with count {current_version_count} is {previous_version}"
+                )
+                if is_ocp_version_gaed(previous_version):
+                    # Download GA'ed version
+                    version = expose_ocp_version(f"{previous_version}-ga")
+                    break
+                else:
+                    log.debug(f"version {previous_version} is not GA'ed")
+
         log.info(f"Downloading openshift installer ({version}).")
         prepare_bin_dir()
         # record current working directory and switch to BIN_DIR
@@ -943,6 +982,7 @@ def get_rosa_cli(
     """
     bin_dir = os.path.expanduser(bin_dir or config.RUN["bin_dir"])
     rosa_filename = "rosa"
+    rosa_tarball_name = "rosa_Linux_x86_64.tar.gz"
     rosa_binary_path = os.path.join(bin_dir, rosa_filename)
     if os.path.isfile(rosa_binary_path) and force_download:
         delete_file(rosa_binary_path)
@@ -954,8 +994,10 @@ def get_rosa_cli(
         # record current working directory and switch to BIN_DIR
         previous_dir = os.getcwd()
         os.chdir(bin_dir)
-        url = f"https://github.com/openshift/rosa/releases/download/v{version}/rosa-linux-amd64"
-        download_file(url, rosa_filename)
+        # download rosa binary endpoints were changed to a tarball endpoints
+        url = f"https://github.com/openshift/rosa/releases/download/v{version}/{rosa_tarball_name}"
+        download_file(url, f"/tmp/{rosa_tarball_name}")
+        run_cmd(f"tar xzvf /tmp/{rosa_tarball_name} {rosa_filename}")
         # return to the previous working directory
         os.chdir(previous_dir)
 
@@ -1120,6 +1162,10 @@ def get_openshift_client(
                     "No backups exist and new binary was unable to be verified."
                 )
 
+        if not os.path.exists("kubectl"):
+            log.info("Creating kubectl link to oc binary.")
+            os.link("oc", "kubectl")
+
         # return to the previous working directory
         os.chdir(previous_dir)
 
@@ -1252,7 +1298,7 @@ def get_vault_cli(bind_dir=None, force_download=False):
 
 
 def ensure_nightly_build_availability(build_url):
-    base_build_url = build_url.rsplit("/", 1)[0]
+    base_build_url = build_url.rsplit("/", 1)[0] + "/"
     r = requests.get(base_build_url)
     extracting_condition = b"Extracting" in r.content
     if extracting_condition:
@@ -1533,6 +1579,30 @@ def get_random_str(size=13):
     """
     chars = string.ascii_lowercase + string.digits
     return "".join(random.choice(chars) for _ in range(size))
+
+
+def get_random_letters(size=13):
+    """
+    Generates the random string of 3 characters
+
+    Args:
+        size (int): number of letter characters to generate
+
+    Returns:
+        str: string of random characters of given size
+    """
+    return "".join(random.choice(string.ascii_lowercase) for _ in range(size))
+
+
+def date_in_minimal_format():
+    """
+    Get the current date in a minimal format, such as 61024 for 6 of October 2024. Suitable to add to resource names.
+
+    Returns:
+        str: The current date in a minimal
+    """
+    current_date = datetime.now()
+    return f"{current_date.day}{current_date.month}{current_date.year % 100}"
 
 
 def run_async(command):
@@ -1860,6 +1930,20 @@ def add_mem_stats(soup):
         )
 
 
+def add_info_about_mg_skips(soup):
+    from ocs_ci.ocs import utils
+
+    if utils.mg_fail_count:
+        failed_mg_text = soup.new_tag("b")
+        failed_mg_text.string = (
+            f"Must Gather collection has failed: {utils.mg_fail_count} times!"
+            f" Execution has skipped MG collection: {utils.mg_skip_count} times!"
+            " Please check why this has happened!"
+        )
+        main_header = soup.find("h1")
+        main_header.insert_after(failed_mg_text)
+
+
 def email_reports(session):
     """
     Email results of test run
@@ -1906,6 +1990,7 @@ def email_reports(session):
     if config.RUN["cli_params"].get("squad_analysis"):
         add_squad_analysis_to_email(session, soup)
     move_summary_to_top(soup)
+    add_info_about_mg_skips(soup)
     add_time_report_to_email(session, soup)
     part1 = MIMEText(soup, "html")
     add_mem_stats(soup)
@@ -1982,11 +2067,11 @@ def get_ocs_build_number():
             operator_name = defaults.HCI_CLIENT_ODF_OPERATOR_NAME
     else:
         operator_name = defaults.OCS_OPERATOR_NAME
-    ocs_csvs = get_csvs_start_with_prefix(
-        operator_name,
-        config.ENV_DATA["cluster_namespace"],
-    )
     try:
+        ocs_csvs = get_csvs_start_with_prefix(
+            operator_name,
+            config.ENV_DATA["cluster_namespace"],
+        )
         ocs_csv = ocs_csvs[0]
         csv_labels = ocs_csv["metadata"]["labels"]
         if "full_version" in csv_labels:
@@ -2131,9 +2216,11 @@ def get_ocp_version(seperator=None):
             if (
                 config.ENV_DATA["platform"] == constants.IBMCLOUD_PLATFORM
                 and config.ENV_DATA["deployment_type"] == "managed"
-            ):
+            ) or config.ENV_DATA["platform"] == constants.ROSA_HCP_PLATFORM:
                 # In IBM ROKS, there is some issue that openshiftVersion is not available
                 # after fresh deployment. As W/A we are taking the version from config only if not found.
+                # UPD:
+                # seems like ROSA HCP takes more time to propagate version to clusterversion on fresh deployments
                 log.warning(
                     "openshiftVersion key not found! Taking OCP version from config."
                 )
@@ -2418,7 +2505,7 @@ def wait_for_ceph_health_not_ok(timeout=300, sleep=10):
 
         """
 
-        status = run_ceph_health_cmd(constants.OPENSHIFT_STORAGE_NAMESPACE)
+        status = run_ceph_health_cmd(config.ENV_DATA["cluster_namespace"])
         return str(status).strip() != "HEALTH_OK"
 
     sampler = TimeoutSampler(
@@ -3431,9 +3518,16 @@ def destroy_cluster(installer, cluster_path, log_level="DEBUG"):
         # Execute destroy cluster using OpenShift installer
         log.info(f"Destroying cluster defined in {cluster_path}")
         run_cmd(destroy_cmd, timeout=1200)
-    except CommandFailed:
-        log.error(traceback.format_exc())
-        raise
+    except CommandFailed as ex:
+        error_message = str(ex)
+        # Check for the specific "ResourceGroup not found" error
+        if re.search(r"ResourceGroup .* not found", error_message):
+            log.warning(
+                f"Resource group not found. Assuming cluster is already destroyed. Exception {error_message}"
+            )
+        else:
+            log.error(traceback.format_exc())
+            raise
     except Exception:
         log.error(traceback.format_exc())
 
@@ -3832,7 +3926,8 @@ def update_container_with_mirrored_image(job_pod_dict):
             container = job_pod_dict["spec"]["containers"][0]
         else:
             container = job_pod_dict["spec"]["template"]["spec"]["containers"][0]
-        container["image"] = mirror_image(container["image"])
+        if "/" in container["image"]:
+            container["image"] = mirror_image(container["image"])
     return job_pod_dict
 
 
@@ -4641,6 +4736,48 @@ def get_pytest_fixture_value(request, fixture_name):
     return request.getfixturevalue(fixture_name)
 
 
+def get_client_type_by_name(cluster_name):
+    """
+    Get the client type by the cluster name
+
+    Args:
+        cluster_name (str): The cluster name
+
+    Returns:
+        str: The client type in lowercase(e.g. kubevirt, agent, non_hosted, etc.,)
+
+    """
+    from ocs_ci.deployment.helpers.hypershift_base import (
+        is_hosted_cluster,
+        get_hosted_cluster_type,
+    )
+
+    if not is_hosted_cluster(cluster_name):
+        return constants.NON_HOSTED_CLUSTER
+
+    return get_hosted_cluster_type(cluster_name)
+
+
+def switch_to_correct_client_type(client_type):
+    """
+    Switch to the correct client type
+
+    Args:
+        client_type (str): The client type(e.g. Kubevirt, Agent, non_hosted, etc.,)
+
+    """
+    client_indices = config.get_consumer_indexes_list()
+    for client_i in client_indices:
+        cluster_name = config.clusters[client_i].ENV_DATA["cluster_name"]
+        if get_client_type_by_name(cluster_name) == client_type:
+            # Switch to the correct client type
+            log.info(f"Switching to the client with the type '{client_type}'")
+            config.switch_ctx(client_i)
+            return
+
+    pytest.skip(f"The client type '{client_type}' does not exist in the run")
+
+
 def switch_to_correct_cluster_at_setup(request):
     """
     Switch to the correct cluster index at setup, according to the 'cluster_type' fixture parameter
@@ -4674,6 +4811,11 @@ def switch_to_correct_cluster_at_setup(request):
     # If the cluster is an MS cluster
     if not config.is_cluster_type_exist(cluster_type):
         pytest.skip(f"The cluster type '{cluster_type}' does not exist in the run")
+
+    client_type = get_pytest_fixture_value(request, "client_type")
+    if cluster_type == constants.HCI_CLIENT and client_type:
+        switch_to_correct_client_type(client_type)
+        return
 
     # Switch to the correct cluster type
     log.info(f"Switching to the cluster with the cluster type '{cluster_type}'")
@@ -4825,7 +4967,7 @@ def add_time_report_to_email(session, soup):
     summary_tag.insert_after(time_div)
 
 
-def get_oadp_version(namespace=constants.ACM_HUB_BACKUP_NAMESPACE):
+def get_oadp_version(namespace=constants.OADP_NAMESPACE):
     """
     Returns:
         str: returns version string
@@ -4840,7 +4982,7 @@ def get_oadp_version(namespace=constants.ACM_HUB_BACKUP_NAMESPACE):
             return csv["spec"]["version"]
 
 
-def get_acm_version():
+def get_acm_version(namespace=constants.ACM_HUB_NAMESPACE):
     """
     Get ACM version from CSV
 
@@ -4851,12 +4993,12 @@ def get_acm_version():
     from ocs_ci.ocs.resources.csv import get_csvs_start_with_prefix
 
     csv_list = get_csvs_start_with_prefix(
-        "advanced-cluster-management", namespace=constants.ACM_HUB_NAMESPACE
+        "advanced-cluster-management", namespace=namespace
     )
     for csv in csv_list:
         if "advanced-cluster-management" in csv["metadata"]["name"]:
             # extract version string
-            return csv["spec"]["version"]
+            return re.sub(r"-.", "", csv["spec"]["version"])
 
 
 def is_cluster_y_version_upgraded():
@@ -4901,16 +5043,25 @@ def exec_nb_db_query(query):
     Returns:
         list of str: The query result rows
 
+    Raises:
+        ResourceNotFoundError: If no NooBaa DB pod is found
+
     """
     # importing here to avoid circular imports
     from ocs_ci.ocs.resources import pod
 
-    nb_db_pod = pod.Pod(
-        **pod.get_pods_having_label(
-            label=constants.NOOBAA_DB_LABEL_47_AND_ABOVE,
-            namespace=constants.OPENSHIFT_STORAGE_NAMESPACE,
-        )[0]
-    )
+    try:
+        nb_db_pod = pod.Pod(
+            **pod.get_pods_having_label(
+                label=constants.NOOBAA_DB_LABEL_47_AND_ABOVE,
+                namespace=config.ENV_DATA["cluster_namespace"],
+            )[0]
+        )
+    except IndexError:
+        raise ResourceNotFoundError(
+            f"The NooBaa DB pod with label {constants.NOOBAA_DB_LABEL_47_AND_ABOVE} "
+            f"was not found in namespace {config.ENV_DATA['cluster_namespace']}"
+        )
 
     response = nb_db_pod.exec_cmd_on_pod(
         command=f'psql -U postgres -d nbcore -c "{query}"',
@@ -4945,7 +5096,7 @@ def get_role_arn_from_sub():
         odf_sub = OCP(
             kind=constants.SUBSCRIPTION,
             resource_name=constants.ODF_SUBSCRIPTION,
-            namespace=constants.OPENSHIFT_STORAGE_NAMESPACE,
+            namespace=config.ENV_DATA["cluster_namespace"],
         )
         for item in odf_sub.get()["spec"]["config"]["env"]:
             if item["name"] == "ROLEARN":
@@ -4967,7 +5118,7 @@ def get_glibc_version():
     cmd = "ldd --version ldd"
     res = exec_cmd(cmd)
     out = res.stdout.decode("utf-8")
-    version_match = re.search(r"ldd \(GNU libc\) (\d+\.\d+)", out)
+    version_match = re.search(r"ldd \((?:Ubuntu GLIBC|GNU libc)\D*(\d+\.\d+)", out)
     if version_match:
         return version_match.group(1)
     else:
@@ -4994,7 +5145,7 @@ def get_latest_release_version():
 
     """
     cmd = (
-        "curl -s https://mirror.openshift.com/pub/openshift-v4/clients/ocp/latest/release.txt | "
+        "curl -sL https://mirror.openshift.com/pub/openshift-v4/clients/ocp/latest/release.txt | "
         "awk '/^Name:/ {print $2}'"
     )
     try:
@@ -5041,3 +5192,127 @@ def sum_of_two_storage_sizes(storage_size1, storage_size2, convert_size=1024):
     size = size1 + size2
     new_storage_size = f"{size}{unit}"
     return new_storage_size
+
+
+def validate_dict_values(input_dict: dict) -> bool:
+    """
+    Validate that all values in the dictionary are the same when ignoring the last two digits.
+
+    Args:
+        input_dict (dict: {str:int}): The dictionary to validate.
+
+    Returns:
+        bool: True if all values pass the validation, False otherwise.
+
+    """
+    values = list(input_dict.values())
+    first_value = values[0] // 100
+    for value in values[1:]:
+        if value // 100 != first_value:
+            return False
+    return True
+
+
+def compare_dictionaries(
+    dict1: dict, dict2: dict, known_different_keys: list, tolerance: int = 10
+) -> dict:
+    """
+    Compares two dictionaries and returns a dictionary with the keys that have different values,
+    but allow a tolerance between this values.
+
+    Args:
+        dict1 (dict): dictionary to compare.
+        dict2 (dict): dictionary to compare.
+        known_different_keys (list): keys to ignore from the comparison.
+        tolerance (int): level of tolerance by precentage. Defaults to 10.
+
+    Returns:
+        dict: difrerences between the two dictionaries.
+    """
+    differences = dict()
+
+    for key in dict1.keys():
+        if key not in known_different_keys:
+            value1 = dict1[key]
+            value2 = dict2[key]
+
+            if isinstance(value1, (int)) and isinstance(value2, (int)):
+                # Calculate percentage difference
+                max_value = max(abs(value1), abs(value2))
+                if max_value != 0:
+                    diff_percentage = abs(value1 - value2) / max_value * 100
+
+                    if diff_percentage > tolerance:
+                        differences[key] = (value1, value2)
+                    elif 1 <= diff_percentage <= tolerance:
+                        log.warning(
+                            f"Key '{key}' has a {diff_percentage:.2f}% difference (values: {value1}, {value2})"
+                        )
+            elif value1 != value2:
+                differences[key] = (value1, value2)
+    log.info(f"Differences: {differences}")
+    return differences
+
+
+def extract_image_urls(string_data):
+    """
+    Extract all image URLs from the string.
+
+    Args:
+        string_data (str): The string data that contains the image URLs to extract.
+
+    Returns:
+        list: List of image URLs found in the string, or an empty list if none are found.
+
+    """
+    # Find all URLs that start with 'registry.redhat.io'
+    image_urls = re.findall(r'registry\.redhat\.io[^\s"]+', string_data)
+    return image_urls
+
+
+def is_z_stream_upgrade():
+    """
+    Check whether this is a z-stream upgrade scenario
+
+    Returns:
+        bool: True if its a z-stream upgrade else False
+
+    """
+    return config.UPGRADE.get("pre_upgrade_ocs_version", "") == config.UPGRADE.get(
+        "upgrade_ocs_version", ""
+    )
+
+
+def create_config_ini_file(params):
+    """
+    This function will create a config ini file for the params given.
+
+    Use case:
+    can be used in external-cluster-exporter script --config-file argument
+
+    Args:
+        params (str): Parameter to pass to be converted into config.ini file.
+
+    Returns:
+        str: Path to the config.ini file.
+    """
+    data = "[Configurations]\n"
+
+    pattern = r"--([\w-]+) ([.:\w-]+)"
+    matches = re.finditer(pattern, params, re.MULTILINE)
+    for match in matches:
+        arg, val = match.groups()
+        line = f"{arg} = {val}\n"
+        data += line
+    data = data.strip()
+    config_ini_file = NamedTemporaryFile(
+        mode="w+",
+        prefix="external-cluster-config-",
+        suffix=".ini",
+        delete=False,
+    )
+    with open(config_ini_file.name, "w") as fd:
+        fd.write(data)
+    log.info(f"config.ini file for cluster is located at {config_ini_file.name}")
+
+    return config_ini_file.name

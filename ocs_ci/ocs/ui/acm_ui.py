@@ -82,7 +82,12 @@ class AcmPageNavigator(BaseUI):
         self.choose_expanded_mode(
             mode=True, locator=self.acm_page_nav["Infrastructure"]
         )
-        self.do_click(locator=self.acm_page_nav["Clusters_page"], timeout=timeout)
+        self.do_click(
+            locator=self.acm_page_nav["Clusters_page"],
+            timeout=timeout,
+            enable_screenshot=True,
+            avoid_stale=True,
+        )
 
     def navigate_bare_metal_assets_page(self):
         """
@@ -120,6 +125,7 @@ class AcmPageNavigator(BaseUI):
             enable_screenshot=True,
         )
 
+    @retry(TimeoutException, tries=10, delay=10, backoff=5)
     def navigate_applications_page(self):
         """
         Navigate to ACM Applications Page
@@ -148,32 +154,46 @@ class AcmPageNavigator(BaseUI):
 
     def navigate_data_services(self):
         """
-        Navigate to Data Services page on ACM UI, supported for ACM version 2.7 and above
+        Navigate to Data Services page on ACM UI, supported for ACM version 2.9 and above
 
         """
-        log.info("Navigate to Data Policies page on ACM console")
+        log.info(
+            "Navigate to Disaster recovery Overview page under 'Data Services' on ACM console"
+        )
         find_element = self.wait_until_expected_text_is_found(
             locator=self.acm_page_nav["data-services"],
             expected_text="Data Services",
             timeout=240,
         )
         if find_element:
+            log.info("Data Services page found")
             element = self.driver.find_element_by_xpath(
                 "//button[normalize-space()='Data Services']"
             )
             if element.get_attribute("aria-expanded") == "false":
-                self.do_click(locator=self.acm_page_nav["data-services"])
-            data_policies = self.wait_until_expected_text_is_found(
-                locator=self.acm_page_nav["data-policies"],
-                expected_text="Data policies",
+                self.do_click(
+                    locator=self.acm_page_nav["data-services"],
+                    avoid_stale=True,
+                    enable_screenshot=True,
+                )
+            disaster_recovery = self.wait_until_expected_text_is_found(
+                locator=self.acm_page_nav["disaster-recovery"],
+                expected_text="Disaster recovery",
                 timeout=240,
             )
-            if data_policies:
+            if disaster_recovery:
                 self.do_click(
-                    locator=self.acm_page_nav["data-policies"], enable_screenshot=True
+                    locator=self.acm_page_nav["disaster-recovery"],
+                    enable_screenshot=True,
+                    avoid_stale=True,
+                )
+                log.info(
+                    "Successfully navigated to Disaster recovery Overview page under 'Data Services' on ACM console"
                 )
         else:
-            log.error("Couldn't navigate to data Services page on ACM UI")
+            log.error(
+                "Couldn't navigate to Disaster recovery Overview page under 'Data Services' on ACM console"
+            )
             raise NoSuchElementException
 
     def navigate_from_ocp_to_acm_cluster_page(self):
@@ -182,16 +202,6 @@ class AcmPageNavigator(BaseUI):
         console to ACM multicluster page
 
         """
-        # There is a modal dialog box which appears as soon as we login
-        # we need to click on close on that dialog box
-        if self.check_element_presence(
-            (
-                self.acm_page_nav["modal_dialog_close_button"][1],
-                self.acm_page_nav["modal_dialog_close_button"][0],
-            ),
-            timeout=200,
-        ):
-            self.do_click(self.acm_page_nav["modal_dialog_close_button"], timeout=300)
 
         if not self.check_element_presence(
             (
@@ -203,7 +213,20 @@ class AcmPageNavigator(BaseUI):
             log.error("local-cluster is not found, can not switch to ACM console")
             self.take_screenshot()
             raise NoSuchElementException
+        log.info("Click on local-cluster")
         self.do_click(self.acm_page_nav["click-local-cluster"])
+        log.info("Select All Clusters view")
+        self.do_click(self.acm_page_nav["all-clusters-view"])
+        # There is a modal dialog box which appears as soon as we login
+        # we need to click on close on that dialog box
+        if self.check_element_presence(
+            (
+                self.acm_page_nav["modal_dialog_close_button"][1],
+                self.acm_page_nav["modal_dialog_close_button"][0],
+            ),
+            timeout=200,
+        ):
+            self.do_click(self.acm_page_nav["modal_dialog_close_button"], timeout=300)
         log.info("Successfully navigated to ACM console")
         self.take_screenshot()
 
@@ -810,7 +833,7 @@ class ACMOCPPlatformVsphereIPI(ACMOCPClusterDeployment):
                 left_shift_offset = len(remote_text) - index
                 self.do_send_keys(
                     self.acm_page_nav["cc_vsphere_network_name"],
-                    f"{left_shift_offset*Keys.ARROW_LEFT}{constants.SPACE}",
+                    f"{left_shift_offset * Keys.ARROW_LEFT}{constants.SPACE}",
                 )
             except ValueError:
                 raise ACMClusterDeployException(

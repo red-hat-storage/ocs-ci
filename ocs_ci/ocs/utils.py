@@ -4,6 +4,7 @@ import logging
 import os
 import pickle
 import re
+import threading
 import time
 import traceback
 import subprocess
@@ -13,28 +14,55 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 
 import yaml
 from gevent import sleep
+from pathlib import Path
 from libcloud.common.exceptions import BaseHTTPError
 from libcloud.common.types import LibcloudError
 from libcloud.compute.providers import get_driver
 from libcloud.compute.types import Provider
 from paramiko.ssh_exception import SSHException
 
-from ocs_ci.framework import config as ocsci_config
-from ocs_ci.ocs import constants
+from ocs_ci.framework import config as ocsci_config, config
+from ocs_ci.ocs import constants, defaults
 from ocs_ci.ocs.external_ceph import RolesContainer, Ceph, CephNode
 from ocs_ci.ocs.clients import WinNode
-from ocs_ci.ocs.exceptions import CommandFailed, ExternalClusterDetailsException
-from ocs_ci.ocs.ocp import OCP
+from ocs_ci.ocs.exceptions import (
+    CommandFailed,
+    ExternalClusterDetailsException,
+    ResourceNotFoundError,
+    UnexpectedBehaviour,
+)
+from ocs_ci.ocs.ocp import OCP, get_images
 from ocs_ci.ocs.openstack import CephVMNode
 from ocs_ci.ocs.parallel import parallel
 from ocs_ci.ocs.resources.ocs import OCS
 from ocs_ci.utility import templating, version
 from ocs_ci.utility.prometheus import PrometheusAPI
 from ocs_ci.utility.retry import retry
-from ocs_ci.utility.utils import create_directory_path, mirror_image, run_cmd
+from ocs_ci.utility.utils import (
+    create_directory_path,
+    exec_nb_db_query,
+    mirror_image,
+    run_cmd,
+    get_oadp_version,
+    get_acm_version,
+)
+from ocs_ci.utility.version import (
+    get_dr_hub_operator_version,
+    get_dr_cluster_operator_version,
+    get_odf_multicluster_orchestrator_version,
+    get_ocp_gitops_operator_version,
+    get_submariner_operator_version,
+    get_volsync_operator_version,
+)
 
 
 log = logging.getLogger(__name__)
+mg_fail_count = 0
+mg_skip_count = 0
+mg_last_fail = None
+mg_collected_logs = 0
+mg_collected_types = set()
+mg_lock = threading.Lock()
 
 
 def create_ceph_nodes(cluster_conf, inventory, osp_cred, run_id, instances_name=None):
@@ -426,13 +454,13 @@ def set_cdn_repo(node, repos):
 
 def update_ca_cert(node, cert_url, timeout=120):
     if node.pkg_type == "deb":
-        cmd = "cd /usr/local/share/ca-certificates/ && {{ sudo curl -O {url} ; cd -; }}".format(
+        cmd = "cd /usr/local/share/ca-certificates/ && {{ sudo curl -OL {url} ; cd -; }}".format(
             url=cert_url
         )
         node.exec_command(cmd=cmd, timeout=timeout)
         node.exec_command(cmd="sudo update-ca-certificates", timeout=timeout)
     else:
-        cmd = "cd /etc/pki/ca-trust/source/anchors && {{ sudo curl -O {url} ; cd -; }}".format(
+        cmd = "cd /etc/pki/ca-trust/source/anchors && {{ sudo curl -OL {url} ; cd -; }}".format(
             url=cert_url
         )
         node.exec_command(cmd=cmd, timeout=timeout)
@@ -863,12 +891,14 @@ def setup_ceph_toolbox(force_setup=False, storage_cluster=None):
         # https://github.com/openshift/ocs-operator/pull/207/
         log.info("starting ceph toolbox pod")
         cmd = (
-            f"oc patch storagecluster {storage_cluster} -n openshift-storage --type "
+            f"oc patch storagecluster {storage_cluster} -n {config.ENV_DATA['cluster_namespace']} --type "
             'json --patch  \'[{ "op": "replace", "path": '
             '"/spec/enableCephTools", "value": true }]\''
         )
         run_cmd(cmd)
-        toolbox_pod = OCP(kind=constants.POD, namespace=namespace)
+        toolbox_pod = OCP(
+            kind=constants.POD, namespace=config.ENV_DATA["cluster_namespace"]
+        )
         toolbox_pod.wait_for_resource(
             condition="Running",
             selector="app=rook-ceph-tools",
@@ -910,7 +940,16 @@ def apply_oc_resource(
     occli.apply(cfg_file)
 
 
-def run_must_gather(log_dir_path, image, command=None, cluster_config=None):
+def run_must_gather(
+    log_dir_path,
+    image,
+    command=None,
+    cluster_config=None,
+    silent=False,
+    output_file=None,
+    skip_after_max_fail=False,
+    timeout=defaults.MUST_GATHER_TIMEOUT,
+):
     """
     Runs the must-gather tool against the cluster
 
@@ -919,26 +958,34 @@ def run_must_gather(log_dir_path, image, command=None, cluster_config=None):
         image (str): must-gather image registry path
         command (str): optional command to execute within the must-gather image
         cluster_config (MultiClusterConfig): Holds specifc cluster config object in case of multicluster
+        silent (bool): True if silent mode
+        output_file (bool): True if direct whole output to file instead of printing it out to log (apply
+          only if silent is True).
+        skip_after_max_fail (bool): When max number failed attempts to collect MG reached, will skip
+            MG collection.
+        timeout (int): Max timeout to wait for MG to complete before aborting the MG execution.
 
     Returns:
         mg_output (str): must-gather cli output
 
     """
-    # Must-gather has many changes on 4.6 which add more time to the collection.
-    # https://github.com/red-hat-storage/ocs-ci/issues/3240
+    global mg_fail_count, mg_last_fail, mg_collected_logs, mg_skip_count
+
+    max_mg_fail_attempts = config.REPORTING.get("max_mg_fail_attempts")
+    if skip_after_max_fail:
+        with mg_lock:
+            if mg_fail_count > max_mg_fail_attempts:
+                mg_skip_count += 1
+                log.warning(
+                    f"MG collection is skipped because MG already failed {mg_fail_count} times!"
+                    f" Last error occurred at: {mg_last_fail}"
+                )
+                return
     if not cluster_config:
         cluster_config = ocsci_config
     mg_output = ""
-    ocs_version = version.get_semantic_ocs_version_from_config()
-    if ocs_version >= version.VERSION_4_10:
-        timeout = 2100
-    elif ocs_version >= version.VERSION_4_6:
-        timeout = 1500
-    else:
-        timeout = 600
 
-    must_gather_timeout = cluster_config.REPORTING.get("must_gather_timeout", timeout)
-
+    timestamp = time.time()
     log.info(f"Must gather image: {image} will be used.")
     create_directory_path(log_dir_path)
     cmd = f"adm must-gather --image={image} --dest-dir={log_dir_path}"
@@ -946,28 +993,59 @@ def run_must_gather(log_dir_path, image, command=None, cluster_config=None):
         cmd += f" -- {command}"
 
     log.info(f"OCS logs will be placed in location {log_dir_path}")
+    if output_file:
+        output_file = os.path.join(log_dir_path, f"mg_output_{timestamp}.log")
+        log.info(f"Must gather std error log will be placed in: {output_file}")
     occli = OCP()
     try:
         mg_output = occli.exec_oc_cmd(
             cmd,
             out_yaml_format=False,
-            timeout=must_gather_timeout,
+            timeout=timeout,
             cluster_config=cluster_config,
+            silent=silent,
+            output_file=output_file,
         )
-    except CommandFailed as ex:
-        log.error(
-            f"Failed during must gather logs! Error: {ex}"
-            f"Must-Gather Output: {mg_output}"
-        )
+        if config.DEPLOYMENT["external_mode"]:
+            collect_ceph_external(path=log_dir_path)
+        with mg_lock:
+            mg_collected_logs += 1
+    except (CommandFailed, TimeoutExpired) as ex:
+        log.error(f"Failed during must gather logs! Error: {ex}")
+        with mg_lock:
+            mg_fail_count += 1
+            mg_last_fail = datetime.datetime.now()
+
+        if mg_output:
+            log.error(f"Must-Gather Output: {mg_output}")
         export_mg_pods_logs(log_dir_path=log_dir_path)
 
-    except TimeoutExpired as ex:
-        log.error(
-            f"Failed during must gather logs! Error: {ex}"
-            f"Must-Gather Output: {mg_output}"
-        )
-        export_mg_pods_logs(log_dir_path=log_dir_path)
     return mg_output
+
+
+def collect_ceph_external(path):
+    """
+    Collect ceph commands via cli tool on External mode cluster
+
+    Args:
+        path(str): The destination for saving the ceph files [output ceph commands]
+
+    """
+    try:
+        kubeconfig_path = os.path.join(
+            config.ENV_DATA["cluster_path"], config.RUN["kubeconfig_location"]
+        )
+        current_dir = Path(__file__).parent.parent.parent
+        script_path = os.path.join(current_dir, "scripts", "bash", "mg_external.sh")
+        run_cmd(
+            f"sh {script_path} {os.path.join(path, 'ceph_external')} {kubeconfig_path} "
+            f"{ocsci_config.ENV_DATA['cluster_namespace']}",
+            timeout=140,
+        )
+    except Exception as ex:
+        log.info(
+            f"Failed to execute the ceph commands script due to the error {str(ex)}"
+        )
 
 
 def export_mg_pods_logs(log_dir_path):
@@ -1126,11 +1204,16 @@ def _collect_ocs_logs(
     mcg=False,
     status_failure=True,
     ocs_flags=None,
+    silent=False,
+    output_file=None,
+    skip_after_max_fail=False,
+    timeout=defaults.MUST_GATHER_TIMEOUT,
 ):
     """
     This function runs in thread
 
     """
+    global mg_collected_types
     log.info(
         (
             f"RUNNING IN CTX: {cluster_config.ENV_DATA['cluster_name']} RUNID: = {cluster_config.RUN['run_id']}"
@@ -1176,12 +1259,18 @@ def _collect_ocs_logs(
             ocs_must_gather_image_and_tag = mirror_image(
                 ocs_must_gather_image_and_tag, cluster_config
             )
+
         mg_output = run_must_gather(
             ocs_log_dir_path,
             ocs_must_gather_image_and_tag,
             cluster_config=cluster_config,
             command=ocs_flags,
+            silent=silent,
+            output_file=output_file,
+            skip_after_max_fail=skip_after_max_fail,
+            timeout=timeout,
         )
+        mg_collected_types.add("ocs")
         if (
             ocsci_config.DEPLOYMENT.get("disconnected")
             and "cannot stat 'jq'" in mg_output
@@ -1195,14 +1284,23 @@ def _collect_ocs_logs(
         if cluster_config.DEPLOYMENT.get("disconnected"):
             ocp_must_gather_image = mirror_image(ocp_must_gather_image)
         run_must_gather(
-            ocp_log_dir_path, ocp_must_gather_image, cluster_config=cluster_config
+            ocp_log_dir_path,
+            ocp_must_gather_image,
+            cluster_config=cluster_config,
+            output_file=output_file,
+            skip_after_max_fail=skip_after_max_fail,
+            timeout=timeout,
         )
         run_must_gather(
             ocp_log_dir_path,
             ocp_must_gather_image,
             "/usr/bin/gather_service_logs worker",
             cluster_config=cluster_config,
+            output_file=output_file,
+            skip_after_max_fail=skip_after_max_fail,
+            timeout=timeout,
         )
+        mg_collected_types.add("ocp")
     if mcg:
         counter = 0
         while counter < 5:
@@ -1215,50 +1313,78 @@ def _collect_ocs_logs(
                 ):
                     break
                 collect_noobaa_db_dump(log_dir_path, cluster_config)
+                mg_collected_types.add("mcg")
                 break
             except CommandFailed as ex:
                 log.error(f"Failed to dump noobaa DB! Error: {ex}")
                 sleep(30)
     # Collect ACM logs only from ACM
-    if cluster_config.MULTICLUSTER.get("multicluster_mode", None) == "regional-dr":
-        if cluster_config.MULTICLUSTER.get("acm_cluster", False):
-            log.info("Collecting ACM logs")
-            image_prefix = '"acm_must_gather"'
-            acm_mustgather_path = os.path.join(log_dir_path, "acmlogs")
-            csv_cmd = (
-                f"oc --kubeconfig {cluster_config.RUN['kubeconfig']} "
-                f"get csv -l {constants.ACM_CSV_LABEL} -n open-cluster-management -o json"
-            )
-            jq_cmd = f"jq -r '.items[0].spec.relatedImages[]|select(.name=={image_prefix}).image'"
-            json_out = run_cmd(csv_cmd)
-            out = subprocess.run(
-                shlex.split(jq_cmd), input=json_out.encode(), stdout=subprocess.PIPE
-            )
-            acm_mustgather_image = out.stdout.decode()
-            run_must_gather(
-                acm_mustgather_path, acm_mustgather_image, cluster_config=cluster_config
-            )
+    # Collect this only once, with parallel ocp/ocs log collection, we want to collect acm logs only once
+    if ocs:
+        if cluster_config.MULTICLUSTER.get("multicluster_mode", None) == "regional-dr":
+            if cluster_config.MULTICLUSTER.get("acm_cluster", False):
+                log.info("Collecting ACM logs")
+                image_prefix = '"acm_must_gather"'
+                acm_mustgather_path = os.path.join(log_dir_path, "acmlogs")
+                csv_cmd = (
+                    f"oc --kubeconfig {cluster_config.RUN['kubeconfig']} "
+                    f"get csv -l {constants.ACM_CSV_LABEL} -n open-cluster-management -o json"
+                )
+                jq_cmd = f"jq -r '.items[0].spec.relatedImages[]|select(.name=={image_prefix}).image'"
+                json_out = run_cmd(csv_cmd)
+                out = subprocess.run(
+                    shlex.split(jq_cmd), input=json_out.encode(), stdout=subprocess.PIPE
+                )
+                acm_mustgather_image = out.stdout.decode()
+                run_must_gather(
+                    acm_mustgather_path,
+                    acm_mustgather_image,
+                    cluster_config=cluster_config,
+                )
 
-        submariner_log_path = os.path.join(
-            log_dir_path,
-            "submariner",
-        )
-        run_cmd(f"mkdir -p {submariner_log_path}")
-        cwd = os.getcwd()
-        run_cmd(f"chmod -R 777 {submariner_log_path}")
-        os.chdir(submariner_log_path)
-        submariner_log_collect = (
-            f"subctl gather --kubeconfig {cluster_config.RUN['kubeconfig']}"
-        )
-        log.info("Collecting submariner logs")
-        out = run_cmd(submariner_log_collect)
-        run_cmd(f"chmod -R 777 {submariner_log_path}")
-        os.chdir(cwd)
-        log.info(out)
+            # We want to skip submariner log collection if it's in import clusters phase
+            if not cluster_config.ENV_DATA.get(
+                "import_clusters_to_acm", False
+            ) or cluster_config.ENV_DATA.get("submariner_source", ""):
+                try:
+                    run_cmd("subctl")
+                except (CommandFailed, FileNotFoundError):
+                    log.debug("subctl binary not found, downloading now...")
+                    # Importing here to avoid circular import error
+                    from ocs_ci.deployment.acm import Submariner
+
+                    submariner = Submariner()
+                    submariner.download_binary()
+
+                submariner_log_path = os.path.join(
+                    log_dir_path,
+                    "submariner",
+                )
+                run_cmd(f"mkdir -p {submariner_log_path}")
+                cwd = os.getcwd()
+                run_cmd(f"chmod -R 777 {submariner_log_path}")
+                os.chdir(submariner_log_path)
+                submariner_log_collect = (
+                    f"subctl gather --kubeconfig {cluster_config.RUN['kubeconfig']}"
+                )
+                log.info("Collecting submariner logs")
+                out = run_cmd(submariner_log_collect)
+                run_cmd(f"chmod -R 777 {submariner_log_path}")
+                os.chdir(cwd)
+                log.info(out)
 
 
 def collect_ocs_logs(
-    dir_name, ocp=True, ocs=True, mcg=False, status_failure=True, ocs_flags=None
+    dir_name,
+    ocp=True,
+    ocs=True,
+    mcg=False,
+    status_failure=True,
+    ocs_flags=None,
+    silent=False,
+    output_file=None,
+    skip_after_max_fail=False,
+    timeout=defaults.MUST_GATHER_TIMEOUT,
 ):
     """
     Collects OCS logs
@@ -1272,23 +1398,69 @@ def collect_ocs_logs(
         status_failure (bool): Whether the collection is after success or failure,
             allows better naming for folders under logs directory
         ocs_flags (str): flags to ocs must gather command for example ["-- /usr/bin/gather -cs"]
+        silent (bool): True if silent mode
+        output_file (bool): True if direct whole output to file instead of printing it out to log (apply
+            only if silent is True).
+        skip_after_max_fail (bool): When max number failed attempts to collect MG reached, will skip
+            MG collection.
+        timeout (int): Max timeout to wait for MG to complete before aborting the MG execution.
 
     """
-    results = None
+    cwd = os.getcwd()
+    results = list()
     with ThreadPoolExecutor() as executor:
-        results = [
-            executor.submit(
-                _collect_ocs_logs,
-                cluster,
-                dir_name=dir_name,
-                ocp=ocp,
-                ocs=ocs,
-                mcg=mcg,
-                status_failure=status_failure,
-                ocs_flags=ocs_flags,
-            )
-            for cluster in ocsci_config.clusters
-        ]
+        for cluster in ocsci_config.clusters:
+            if ocp:
+                results.append(
+                    executor.submit(
+                        _collect_ocs_logs,
+                        cluster,
+                        dir_name=dir_name,
+                        ocp=ocp,
+                        ocs=False,
+                        mcg=False,
+                        status_failure=status_failure,
+                        ocs_flags=ocs_flags,
+                        silent=silent,
+                        output_file=output_file,
+                        skip_after_max_fail=skip_after_max_fail,
+                        timeout=timeout,
+                    )
+                )
+            if ocs:
+                results.append(
+                    executor.submit(
+                        _collect_ocs_logs,
+                        cluster,
+                        dir_name=dir_name,
+                        ocp=False,
+                        ocs=ocs,
+                        mcg=False,
+                        status_failure=status_failure,
+                        ocs_flags=ocs_flags,
+                        silent=silent,
+                        output_file=output_file,
+                        skip_after_max_fail=skip_after_max_fail,
+                        timeout=timeout,
+                    )
+                )
+            if mcg:
+                results.append(
+                    executor.submit(
+                        _collect_ocs_logs,
+                        cluster,
+                        dir_name=dir_name,
+                        ocp=False,
+                        ocs=False,
+                        mcg=mcg,
+                        status_failure=status_failure,
+                        ocs_flags=ocs_flags,
+                        silent=silent,
+                        output_file=output_file,
+                        skip_after_max_fail=skip_after_max_fail,
+                        timeout=timeout,
+                    )
+                )
 
     for f in as_completed(results):
         try:
@@ -1297,6 +1469,8 @@ def collect_ocs_logs(
             log.error("Must-gather collection failed")
             log.error(e)
             raise
+        finally:
+            os.chdir(cwd)
 
 
 def collect_prometheus_metrics(
@@ -1513,6 +1687,20 @@ def get_non_acm_cluster_config():
     return non_acm_list
 
 
+def get_non_acm_cluster_indexes():
+    """
+    Get config index of all non-acm clusters
+
+    Returns:
+        list: of integer indexes of non-acm clusters
+
+    """
+    non_acm_indexes = list()
+    for cluster in get_non_acm_cluster_config():
+        non_acm_indexes.append(cluster.MULTICLUSTER["multicluster_index"])
+    return non_acm_indexes
+
+
 def get_all_acm_indexes():
     """
     Get indexes fro all ACM clusters
@@ -1527,6 +1715,34 @@ def get_all_acm_indexes():
         if cluster.MULTICLUSTER["acm_cluster"]:
             acm_indexes.append(cluster.MULTICLUSTER["multicluster_index"])
     return acm_indexes
+
+
+def is_acm_cluster(cluster):
+    """
+    Checks given cluster is acm cluster
+
+    Args:
+        cluster (Object): cluster Config() object
+
+    Returns:
+        bool: return True if acm cluster otherwise False
+
+    """
+    return cluster.MULTICLUSTER["multicluster_index"] in get_all_acm_indexes()
+
+
+def is_recovery_cluster(cluster):
+    """
+    Checks given cluster is recovery cluster
+
+    Args:
+        cluster (Object): cluster Config() object
+
+    Returns:
+        bool: return True if recovery cluster otherwise False
+
+    """
+    return cluster.MULTICLUSTER.get("recovery_cluster")
 
 
 def enable_mco_console_plugin():
@@ -1577,12 +1793,69 @@ def get_primary_cluster_config():
     Get the primary cluster config object in a DR scenario
 
     Return:
-        framework.config: primary cluster config obhect from config.clusters
+        framework.config: primary cluster config object from config.clusters
 
     """
     for cluster in ocsci_config.clusters:
         if cluster.MULTICLUSTER["primary_cluster"]:
             return cluster
+
+
+def get_recovery_cluster_config():
+    """
+    Get the recovery cluster config object in a DR scenario
+
+    Return:
+        framework.config: primary cluster config obhect from config.clusters
+
+    """
+    for cluster in ocsci_config.clusters:
+        if cluster.MULTICLUSTER.get("recovery_cluster"):
+            return cluster
+
+
+def set_recovery_as_primary():
+    """
+    This function will set recovery cluster as primary cluster
+    after it is imported.
+    """
+    # 1. Popout primary from clusters list
+    cluster = get_primary_cluster_config()
+    ocsci_config.clusters.remove(cluster)
+
+    # 2.Reindexing After removing primary cluster
+    cluster_config_reindex()
+    log.info("Old primary cluster config removed from list")
+
+    # Decrement count from nclusters
+    ocsci_config.nclusters -= 1
+    log.info(f"Number of clusters present in env: {ocsci_config.nclusters}")
+
+    # Switch context to recovery
+    recovery_cluster_config = get_recovery_cluster_config()
+    recovery_cluster_name = recovery_cluster_config.ENV_DATA["cluster_name"]
+    log.info(f"recovery_cluster_name: {recovery_cluster_name}")
+    ocsci_config.switch_to_cluster_by_name(recovery_cluster_name)
+    recovery_cluster_config.MULTICLUSTER["recovery_cluster"] = False
+    recovery_cluster_config.MULTICLUSTER["primary_cluster"] = True
+
+
+def cluster_config_reindex():
+    for cluster in ocsci_config.clusters:
+        current_index = ocsci_config.clusters.index(cluster)
+        if current_index != cluster.MULTICLUSTER["multicluster_index"]:
+            cluster.MULTICLUSTER["multicluster_index"] = current_index
+
+    # switch cobntext to acm
+    ocsci_config.switch_acm_ctx()
+
+
+def get_primary_cluster_index():
+    """
+    Get the index of primary cluster in case of multicluster scenario
+    """
+    pcluster = get_primary_cluster_config()
+    return pcluster.MULTICLUSTER["multicluster_index"]
 
 
 def thread_init_class(class_init_operations, shutdown):
@@ -1681,3 +1954,146 @@ def collect_pod_container_rpm_package(dir_name):
                     go_log_file_name = f"{package_log_dir_path}/{pod_obj.name}-{container_name}-go-version.log"
                     with open(go_log_file_name, "w") as f:
                         f.write(go_output)
+
+
+def is_dr_scenario():
+    """
+    Check if it is RDR or MDR setup
+
+    Returns:
+        bool: return True if it is rdr or mdr setup otherwise False
+
+    """
+    return ocsci_config.MULTICLUSTER.get("multicluster_mode") in (
+        "metro-dr",
+        "regional-dr",
+    )
+
+
+def get_dr_operator_versions():
+    """
+    Get all DR operator versions on hub and primary clusters
+
+    Returns:
+        dict: return operator name as key and version as value
+
+    """
+    versions_dic = dict()
+    if is_dr_scenario():
+        with ocsci_config.RunWithAcmConfigContext():
+            acm_operator_version = get_acm_version()
+            if acm_operator_version:
+                versions_dic["acm_version"] = acm_operator_version
+            ocp_dr_hub_operator_version = get_dr_hub_operator_version()
+            if ocp_dr_hub_operator_version:
+                versions_dic["dr_hub_version"] = ocp_dr_hub_operator_version
+            odf_multicluster_orchestrator_version = (
+                get_odf_multicluster_orchestrator_version()
+            )
+            if odf_multicluster_orchestrator_version:
+                versions_dic["odf_multicluster_orchestrator_version"] = (
+                    odf_multicluster_orchestrator_version
+                )
+        with ocsci_config.RunWithPrimaryConfigContext():
+            oadp_operator_version = get_oadp_version()
+            if oadp_operator_version:
+                versions_dic["oadp_version"] = oadp_operator_version
+            ocp_dr_cluster_operator_version = get_dr_cluster_operator_version()
+            if ocp_dr_cluster_operator_version:
+                versions_dic["dr_cluster_version"] = ocp_dr_cluster_operator_version
+            gitops_operator_version = get_ocp_gitops_operator_version()
+            if gitops_operator_version:
+                versions_dic["gitops_version"] = gitops_operator_version
+            volsync_operator_version = get_volsync_operator_version()
+            if volsync_operator_version:
+                versions_dic["volsync_version"] = volsync_operator_version
+            submariner_operator_version = get_submariner_operator_version()
+            if submariner_operator_version:
+                versions_dic["submariner_version"] = submariner_operator_version
+    return versions_dic
+
+
+def get_nb_db_psql_version_from_image():
+    """
+    Get the NooBaa DB PostgreSQL version from the image name in the NooBaa DB statefulset
+
+    Returns:
+       str: The NooBaa DB PostgreSQL version
+
+    Raises:
+        ResourceNotFoundError: If the NooBaa DB statefulset is not available
+        UnexpectedBehaviour: If the NooBaa DB version could not be extracted from the
+                             NooBaa DB statefulset image
+
+    """
+    nb_db_sts_obj = OCP(
+        kind=constants.STATEFULSET,
+        namespace=ocsci_config.ENV_DATA["cluster_namespace"],
+        resource_name=constants.NOOBAA_DB_STATEFULSET,
+    )
+    if not nb_db_sts_obj.data:
+        raise ResourceNotFoundError(
+            f"NooBaa DB statefulset {constants.NOOBAA_DB_STATEFULSET} not found"
+        )
+
+    try:
+        images = get_images(nb_db_sts_obj.data)
+        psql_img = next(iter(images.values()))  # Only one image is expected
+        re_match = re.search(r"postgresql-(\d+(\.\d+)*)", psql_img)
+        return re_match.group(1)
+    except Exception as e:
+        raise UnexpectedBehaviour(
+            f"Failed to extract the NooBaa DB version from its stateful set: {e}"
+        )
+
+
+def query_nb_db_psql_version():
+    """
+    Query the NooBaa DB for its PostgreSQL version
+
+    Returns:
+        str: The NooBaa DB version
+
+    Raises:
+        ResourceNotFoundError: If the NooBaa DB pod was not found
+        UnexpectedBehaviour: If the NooBaa DB version could not be extracted from the
+                             NooBaa DB pod
+    """
+
+    try:
+        raw_output = exec_nb_db_query("SELECT version();")[0]
+    except IndexError:
+        raise UnexpectedBehaviour("Failed to query the NooBaa DB for its version")
+    return re.search(r"PostgreSQL (\S+)", raw_output).group(1)
+
+
+def get_expected_nb_db_psql_version():
+    """
+        Get the expected NooBaa DB version from the NooBaa CR
+
+        Returns:
+            str: The expected NooBaa DB version
+
+    Raises:
+            ResourceNotFoundError: If the NooBaa CR was not found
+            UnexpectedBehaviour: If the NooBaa DB version could not be extracted from the
+    """
+
+    nb_cr_obj = OCP(
+        kind=constants.NOOBAA_RESOURCE_NAME,
+        namespace=ocsci_config.ENV_DATA["cluster_namespace"],
+        resource_name=constants.NOOBAA_RESOURCE_NAME,
+    )
+    if not nb_cr_obj:
+        raise ResourceNotFoundError(
+            f"NooBaa CR {constants.NOOBAA_RESOURCE_NAME} not found"
+        )
+
+    try:
+        psql_image = nb_cr_obj.data["spec"]["dbImage"]
+        re_match = re.search(r"postgresql-(\d+(\.\d+)*)", psql_image)
+        return re_match.group(1)
+    except Exception as e:
+        raise UnexpectedBehaviour(
+            f"Failed to extract the NooBaa DB version from the NooBaa CR: {e}"
+        )

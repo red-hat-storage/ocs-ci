@@ -1,0 +1,2 @@
+ENV_DATA:
+  rhcs_external_use_config_file: true

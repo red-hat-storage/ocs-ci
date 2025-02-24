@@ -7,6 +7,7 @@ from ocs_ci.ocs.ui.page_objects.searchbar import SearchBar
 from ocs_ci.ocs.ui.page_objects.edit_label_form import EditLabelForm
 from ocs_ci.ocs.ui.page_objects.storage_system_details import StorageSystemDetails
 from ocs_ci.ocs.ui.page_objects.storage_system_tab import StorageSystemTab
+from ocs_ci.utility import version
 
 
 class BlockPools(StorageSystemDetails, CreateResourceForm, EditLabelForm, SearchBar):
@@ -123,3 +124,8 @@ class BlockPools(StorageSystemDetails, CreateResourceForm, EditLabelForm, Search
         )
 
         return self.check_element_presence(block_pool_from_list[::-1], timeout=10)
+
+    def proceed_resource_creation(self):
+        super().proceed_resource_creation()
+        if self.ocs_version_semantic >= version.VERSION_4_17:
+            self.do_click(self.bp_loc["pool_type_block"])

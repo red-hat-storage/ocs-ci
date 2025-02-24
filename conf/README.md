@@ -98,6 +98,7 @@ anywhere else.
 * `openshift_install_timeout` - Time (in seconds) to wait before timing out during OCP installation
 * `local_storage` - Deploy OCS with the local storage operator (aka LSO) (Default: false)
 * `local_storage_storagedeviceset_count` - This option allows one to control `spec.storageDeviceSets[0].count` of LSO backed StorageCluster.
+* `lso_standalone_deployment` - This option allows to deploy LSO separately (without actually deploying ODF)
 * `optional_operators_image` - If provided, it is used for LSO installation on unreleased OCP version
 * `disconnected` - Set if the cluster is deployed in a disconnected environment
 * `proxy` - Set if the cluster is deployed in a proxy environment
@@ -132,6 +133,10 @@ anywhere else.
 * `ingress_ssl_key` - Path for the key for custom ingress ssl certificate. (default: `data/ingress-cert.key`)
 * `ingress_ssl_ca_cert` - Path for the CA certificate used for signing the ingress_ssl_cert. (default: `data/ca.crt`)
 * `cert_signing_service_url` - Automatic Certification Authority signing service URL.
+* `custom_ssl_cert_provider` - Provider for ssl certificate, options: `ocs-qe-ca`, `letsencrypt` (default: `ocs-qe-ca`)
+    `ocs-qe-ca` option requires `cert_signing_service_url` parameter
+    `letsencrypt` option requires `certbot_dns_plugin` parameter
+* `certbot_dns_plugin` - Certbot DNS plugin for certificate signed by Let's Encrypt, options: `dns-route53` (default: `dns-route53`)
 * `proxy_http_proxy`, `proxy_https_proxy` - proxy configuration used for installation of cluster behind proxy (vSphere deployment via Flexy)
 * `disconnected_http_proxy`, `disconnected_https_proxy`, `disconnected_no_proxy` - proxy configuration used for installation of disconnect cluster (vSphere deployment via Flexy)
 * `disconnected_env_skip_image_mirroring` - skip index image prune and mirroring on disconnected environment (this expects that all the required images will be mirrored outside of ocs-ci)
@@ -139,13 +144,21 @@ anywhere else.
 * `disconnected_false_gateway` - false gateway used to make cluster effectively disconnected
 * `customized_deployment_storage_class` - Customize the storage class type in the deployment.
 * `ibmcloud_disable_addon` - Disable OCS addon
-* `in_transit_encryption` - Enable in-transit encryption.
 * `sc_encryption` - Enable StorageClass encryption.
 * `skip_ocp_installer_destroy` - Skip OCP installer to destroy the cluster -
   useful for enforcing force deploy steps only.
 * `sts_enabled` - Enable STS deployment functionality.
 * `metallb_operator` - Enable MetalLB operator installation during OCP deployment.
 * `multi_storagecluster` - Enable multi-storagecluster deployment when set to true.
+* `deploy_hosted_clusters` - Deploy hosted clusters.
+* `ssh_jump_host` - dict containing configuration for SSH jump host
+    * `host` - hostname or IP address of the SSH Jump host
+    * `user` - username for the ssh connection to the SSH jump host
+* `rosa_cli_version` - ROSA CLI version to be used for ROSA deployment
+* `ocm_cli_version` - OCM CLI version to be used for ROSA deployment
+* `force_download_rosa_cli` - Download the ROSA CLI even if one already exists in the bin_dir
+* `force_download_ocm_cli` - Download the OCM CLI even if one already exists in the bin_dir
+* `ipv6` - ipv6 single stack deployment of OCP and ODF.
 
 #### REPORTING
 
@@ -170,6 +183,8 @@ Reporting related config. (Do not store secret data in the repository!).
 * `save_mem_report` - If True, test run memory report CSV file will be saved in `RUN["log_dir"]/stats_log_dir_<run_id>`
   directory along with <test name>.peak_rss_table, <test name>.peak_vms_table reports. The option may be enforced by
   exporting env variable: export SAVE_MEM_REPORT=true
+* `max_mg_fail_attempts` - Maximum attempts to run MG commands to prevent
+  spending time on MG which is timeouting.
 
 #### ENV_DATA
 
@@ -187,7 +202,7 @@ higher priority).
 * `monitoring_enabled` - For testing OCS monitoring based on Prometheus (Default: false)
 * `persistent-monitoring` - Change monitoring backend to OCS (Default: true)
 * `platform` - Platform the cluster was created in or will be created in
-* `deployment_type` - 'ipi' or 'upi', Installer provisioned installation or user provisioned installation
+* `deployment_type` - 'ipi' or 'upi', Installer provisioned installation or user provisioned installation, 'managed_cp' for managed control plane nodes deployments, e.g. ROSA HCP
 * `region` - Platform region the cluster nodes are created in
 * `base_domain` - Base domain used for routing
 * `master_instance_type` - Instance type used for master nodes
@@ -199,6 +214,7 @@ higher priority).
 * `skip_ocp_deployment` - Skip the OCP deployment step or not (Default: false)
 * `skip_ocs_deployment` - Skip the OCS deployment step or not (Default: false)
 * `ocs_version` - Version of OCS that is being deployed
+* `acm_version` - Version of acm to be used for this run (applicable mostly to DR scenarios)
 * `vm_template` - VMWare template to use for RHCOS images
 * `fio_storageutilization_min_mbps` - Minimal write speed of FIO used in workload_fio_storageutilization
 * `TF_LOG_LEVEL` - Terraform log level
@@ -220,6 +236,7 @@ higher priority).
 * `rhcos_ami` - AMI to use for RHCOS workers, for UPI deployments
 * `skip_ntp_configuration` - Skip NTP configuration during flexy deployment (Default: false)
 * `encryption_at_rest` - Enable encryption at rest (OCS >= 4.6 only) (Default: false)
+* `in_transit_encryption` - Enable in-transit encryption.
 * `fips` - Enable FIPS (Default: false)
 * `master_num_cpus` - Number of CPUs for each master node
 * `worker_num_cpus` - Number of CPUs for each worker node
@@ -311,16 +328,32 @@ higher priority).
 * `clusters` - section for hosted clusters
     * `<cluster name>` - name of the cluster
       * `hosted_cluster_path` - path to the cluster directory to store auth_path, credentials files or cluster related files
-      * `ocp_version` - OCP version of the hosted cluster (e.g. "4.15.13")
-      * `cpu_cores_per_hosted_cluster` - number of CPU cores per hosted cluster
-      * `memory_per_hosted_cluster` - amount of memory per hosted cluster
-      * `nodepool_replicas` - number of replicas of nodepool for each cluster
-      * `hosted_odf_registry` - registry for hosted ODF
+      * `ocp_version` - OCP version of the hosted cluster in form x.y or x.y.z (e.g. "4.15.13" or "4.17")
+      * `cpu_cores_per_hosted_cluster` - number of CPU cores per hosted cluster (default: 6)
+      * `memory_per_hosted_cluster` - amount of memory per hosted cluster (default: 12Gi)
+      * `nodepool_replicas` - number of replicas of nodepool for each cluster (default: 2)
+      * `hosted_odf_registry` - registry for hosted ODF (default: quay.io/rhceph-dev/ocs-registry)
       * `hosted_odf_version` - version of ODF to be deployed on hosted clusters
+      * `cp_availability_policy` - "HighlyAvailable" or "SingleReplica"; if not provided the default value is "SingleReplica"
 * `wait_timeout_for_healthy_osd_in_minutes` - timeout waiting for healthy OSDs before continuing upgrade (see https://bugzilla.redhat.com/show_bug.cgi?id=2276694 for more details)
+* `osd_maintenance_timeout` - is a duration in minutes that determines how long an entire failureDomain like region/zone/host will be held in noout
 * `odf_provider_mode_deployment` - True if you would like to enable provider mode deployment.
 * `client_subcription_image` - ODF subscription image details for the storageclients.
 * `channel_to_client_subscription` - Channel value for the odf subscription image for storageclients.
+* `custom_vpc` - Applicable only for IMB Cloud IPI deployment where we want to create custom VPC and networking
+  with specific Address prefixes to prevent /18 CIDR to be used.
+* `ip_prefix` - Applicable only for IMB Cloud IPI deployment when custom_vpc, if not specified: 27 prefix will be used.
+* `ceph_threshold_backfill_full_ratio` - Configure backfillFullRatio the ceph osd full thresholds value in the StorageCluster CR.
+* `ceph_threshold_full_ratio` - Configure fullRatio the ceph osd full thresholds value in the StorageCluster CR.
+* `ceph_threshold_near_full_ratio` - Configure nearFullRatio the ceph osd full thresholds value in the StorageCluster CR.
+* `restrict_ssh_access_to_nodes` - Deploy and configure Ingress Node Firewall Operator to restrict SSH access to nodes.
+* `allow_ssh_access_from_subnets` - Defines a list of subnets wit allowed SSH access to nodes.
+* `skip_upgrade_checks` - If set to true Rook won't perform any upgrade checks on Ceph daemons during an upgrade.
+* `continue_upgrade_after_checks_even_if_not_healthy` -  if set to true Rook will continue the OSD daemon upgrade process even if the PGs are not clean.
+* `upgrade_osd_requires_healthy_pgs` - If set to true OSD upgrade process won't start until PGs are healthy.
+* `workaround_mark_disks_as_ssd` - WORKAROUND: mark disks as SSD (not rotational - `0` in `/sys/block/*d*/queue/rotational`)
+* `node_labels` - Comma-separated labels to be applied to the nodes in the cluster, e.g. 'cluster.ocs.openshift.io/openshift-storage="",node-role.kubernetes.io/infra=""', default - empty string
+* `use_config_file` - If set to true the external-cluster-details-exporter python script will use a config file to setup the external cluster.
 
 #### UPGRADE
 
@@ -333,6 +366,9 @@ Upgrade related configuration data.
 * `ocp_arch` - Architecture type of the OCP image
 * `upgrade_logging_channel` - OCP logging channel to upgrade with
 * `upgrade_ui` - Perform upgrade via UI (Not all the versions are supported, please look at the code)
+* `upgrade_acm_version` - ACM version to which we have to upgrade
+* `upgrade_acm_registry_image` - ACM Image tag from brew which should be used to upgrade
+example: <brew_registry_url>/rh-osbs/iib:565330
 
 #### AUTH
 
@@ -388,6 +424,8 @@ Configuration specific to external Ceph cluster
 * `external_cluster_details` - base64 encoded data of json output from exporter script
 * `rgw_secure` - boolean parameter which defines if external Ceph cluster RGW is secured using SSL
 * `rgw_cert_ca` - url pointing to CA certificate used to sign certificate for RGW with SSL
+* `use_rbd_namespace` - boolean parameter to use RBD namespace in pool
+* `rbd_namespace` - Name of RBD namespace to use in pool
 
 ##### login
 

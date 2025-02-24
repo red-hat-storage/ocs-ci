@@ -2,6 +2,7 @@
 All ACM related deployment classes and functions should go here.
 
 """
+
 import os
 import logging
 import tempfile
@@ -20,7 +21,7 @@ from ocs_ci.ocs.exceptions import (
     UnsupportedPlatformError,
 )
 from ocs_ci.utility import templating
-from ocs_ci.ocs.utils import get_non_acm_cluster_config
+from ocs_ci.ocs.utils import get_non_acm_cluster_config, get_primary_cluster_config
 from ocs_ci.utility.utils import (
     run_cmd,
     run_cmd_interactive,
@@ -85,6 +86,8 @@ class Submariner(object):
         self.dr_only_list = []
 
     def deploy(self):
+        # Download subctl binary in any case.
+        self.download_binary()
         if self.source == "upstream":
             self.deploy_upstream()
         elif self.source == "downstream":
@@ -93,7 +96,6 @@ class Submariner(object):
             raise Exception(f"The Submariner source: {self.source} is not recognized")
 
     def deploy_upstream(self):
-        self.download_binary()
         self.submariner_configure_upstream()
 
     def deploy_downstream(self):
@@ -110,7 +112,8 @@ class Submariner(object):
                 config.switch_ctx(cluster.MULTICLUSTER["multicluster_index"])
                 self.create_acm_brew_icsp()
             config.switch_ctx(old_ctx)
-        acm_obj.install_submariner_ui()
+        global_net = get_primary_cluster_config().ENV_DATA.get("enable_globalnet", True)
+        acm_obj.install_submariner_ui(globalnet=global_net)
         acm_obj.submariner_validation_ui()
 
     def create_acm_brew_icsp(self):

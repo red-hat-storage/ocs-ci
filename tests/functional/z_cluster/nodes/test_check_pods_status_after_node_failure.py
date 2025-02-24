@@ -7,7 +7,6 @@ from ocs_ci.framework.testlib import (
     ManageTest,
     tier4a,
     ignore_leftovers,
-    skipif_ibm_cloud,
     skipif_managed_service,
     skipif_hci_provider_and_client,
     skipif_external_mode,
@@ -141,7 +140,6 @@ class TestCheckPodsAfterNodeFailure(ManageTest):
 
         request.addfinalizer(finalizer)
 
-    @skipif_ibm_cloud
     def test_check_pods_status_after_node_failure(self, nodes, node_restart_teardown):
         """
         Test check pods status after a node failure event.
@@ -169,7 +167,7 @@ class TestCheckPodsAfterNodeFailure(ManageTest):
         log.info(f"The node '{node_name}' reached '{constants.NODE_NOT_READY}' status")
 
         log.info("Wait for a change in the node rook ceph pod statuses...")
-        timeout = 300
+        timeout = 420
         is_rook_ceph_pods_status_changed = wait_for_change_in_rook_ceph_pods(
             node_name, timeout=timeout
         )

@@ -22,8 +22,14 @@ from ocs_ci.ocs.resources.storage_cluster import (
     get_deviceset_count,
     resize_osd,
 )
-from ocs_ci.ocs.cluster import check_ceph_osd_tree, CephCluster
-from ocs_ci.utility.utils import ceph_health_check, TimeoutSampler, convert_device_size
+from ocs_ci.ocs.cluster import check_ceph_osd_tree, CephCluster, check_ceph_osd_df_tree
+from ocs_ci.ocs.ui.page_objects.page_navigator import PageNavigator
+from ocs_ci.utility.utils import (
+    ceph_health_check,
+    TimeoutSampler,
+    convert_device_size,
+    human_to_bytes_ui,
+)
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.ocp import OCP
 from ocs_ci.framework import config
@@ -33,6 +39,7 @@ from ocs_ci.ocs.constants import (
     AWS_PLATFORM,
     MAX_TOTAL_CLUSTER_CAPACITY,
     MAX_IBMCLOUD_TOTAL_CLUSTER_CAPACITY,
+    ROSA_HCP_PLATFORM,
 )
 
 
@@ -54,9 +61,8 @@ def check_resources_state_post_resize_osd(old_osd_pods, old_osd_pvcs, old_osd_pv
         old_osd_pvs (list): The old osd PV objects before resizing the osd
 
     Raises:
-        ResourceWrongStatusException: If the following occurs:
-            1. The OSD pods failed to reach the status Terminated or to be deleted
-            2. The old PVC and PV names are not equal to the current PVC and PV names
+        StorageSizeNotReflectedException: If the OSD pods failed to restart
+        ResourceWrongStatusException: The old PVC and PV names are not equal to the current PVC and PV names
 
     """
     old_osd_pods_count = len(old_osd_pods)
@@ -65,11 +71,11 @@ def check_resources_state_post_resize_osd(old_osd_pods, old_osd_pvcs, old_osd_pv
     res = wait_for_pods_to_be_in_statuses(
         expected_statuses=[constants.STATUS_TERMINATING],
         pod_names=old_osd_pod_names,
-        timeout=300,
+        timeout=900,
         sleep=20,
     )
     if not res:
-        raise ResourceWrongStatusException(
+        raise StorageSizeNotReflectedException(
             "The OSD pods failed to reach the status Terminated or to be deleted"
         )
 
@@ -187,16 +193,17 @@ def check_storage_size_is_reflected(expected_storage_size):
         )
 
     ceph_cluster = CephCluster()
-    ceph_capacity = ceph_cluster.get_ceph_capacity()
+    ceph_capacity = round(ceph_cluster.get_ceph_capacity())
+    expected_ceph_capacity = round(expected_storage_size_in_gb * get_deviceset_count())
+
     logger.info(
         f"Check that the Ceph capacity {ceph_capacity} is equal "
-        f"to the expected storage size {expected_storage_size_in_gb}"
+        f"to the expected Ceph capacity {expected_ceph_capacity}"
     )
-    expected_ceph_capacity = expected_storage_size_in_gb * get_deviceset_count()
-    if not int(ceph_capacity) == expected_ceph_capacity:
+    if not (ceph_capacity == expected_ceph_capacity):
         raise StorageSizeNotReflectedException(
             f"The Ceph capacity {ceph_capacity} is not equal to the "
-            f"expected size {expected_ceph_capacity}"
+            f"expected Ceph capacity {expected_ceph_capacity}"
         )
 
 
@@ -220,6 +227,10 @@ def check_ceph_state_post_resize_osd():
         raise CephHealthException(ex)
     if not check_ceph_osd_tree():
         raise CephHealthException("The ceph osd tree checks didn't finish successfully")
+    if not check_ceph_osd_df_tree():
+        raise CephHealthException(
+            "The ceph osd df tree output is not formatted correctly"
+        )
 
 
 def base_ceph_verification_steps_post_resize_osd(
@@ -331,7 +342,8 @@ def check_resize_osd_pre_conditions(expected_storage_size):
     """
     Check the resize osd pre-conditions:
     1. Check that the current storage size is less than the osd max size
-    2. If we use AWS, check that the osd resize count is no more than the AWS max resize count
+    2. If we use AWS or ROSA HCP platforms, check that the osd resize count is no more
+    than the AWS max resize count.
 
     If the conditions are not met, the test will be skipped.
 
@@ -361,8 +373,9 @@ def check_resize_osd_pre_conditions(expected_storage_size):
 
     config.RUN["resize_osd_count"] = config.RUN.get("resize_osd_count", 0)
     logger.info(f"resize osd count = {config.RUN['resize_osd_count']}")
+    platforms_to_skip = [AWS_PLATFORM, ROSA_HCP_PLATFORM]
     if (
-        config.ENV_DATA["platform"].lower() == AWS_PLATFORM
+        config.ENV_DATA["platform"].lower() in platforms_to_skip
         and config.RUN["resize_osd_count"] >= AWS_MAX_RESIZE_OSD_COUNT
     ):
         pytest.skip(
@@ -411,3 +424,52 @@ def basic_resize_osd(old_storage_size):
     logger.info(f"Increase the osd size to {new_storage_size}")
     resize_osd(new_storage_size)
     return new_storage_size
+
+
+def check_storage_size_is_reflected_in_ui():
+    """
+    Check that the current total storage size is reflected in the
+    UI 'ocs-storagecluster-storagesystem' page.
+
+    """
+    block_and_file = (
+        PageNavigator()
+        .nav_odf_default_page()
+        .nav_storage_systems_tab()
+        .nav_storagecluster_storagesystem_details()
+        .nav_block_and_file()
+    )
+    used, available = block_and_file.get_raw_capacity_card_values()
+    block_and_file.take_screenshot("raw_capacity_card_values")
+    # Get the used, available and total size in bytes
+    used_size_bytes = human_to_bytes_ui(used)
+    available_size_bytes = human_to_bytes_ui(available)
+    total_size_bytes = used_size_bytes + available_size_bytes
+
+    # Convert the used, available and total size to GB
+    bytes_to_gb = 1024**3
+    used_size_gb = used_size_bytes / bytes_to_gb
+    available_size_gb = available_size_bytes / bytes_to_gb
+    total_size_gb = round(total_size_bytes / bytes_to_gb)
+    logger.info(f"Used size = {used_size_gb}Gi")
+    logger.info(f"Available size = {available_size_gb}Gi")
+    logger.info(f"Total size = {total_size_gb}Gi")
+
+    ceph_cluster = CephCluster()
+    ceph_capacity = int(ceph_cluster.get_ceph_capacity())
+    ceph_total_size = ceph_capacity * len(get_osd_pods())
+
+    # There could be a small gap between the total size in the UI and the actual Ceph total size.
+    # So, instead of checking the accurate size, we check that the total size is within the expected range.
+    max_gap = 6 if ceph_total_size < 1500 else 12
+    expected_total_size_range_gb = range(
+        ceph_total_size - max_gap, ceph_total_size + max_gap
+    )
+    logger.info(
+        f"Check that the total UI size {total_size_gb}Gi is in the "
+        f"expected total size range {expected_total_size_range_gb}Gi"
+    )
+    assert total_size_gb in expected_total_size_range_gb, (
+        f"The total UI size {total_size_gb}Gi is not in the "
+        f"expected total size range {expected_total_size_range_gb}Gi"
+    )
