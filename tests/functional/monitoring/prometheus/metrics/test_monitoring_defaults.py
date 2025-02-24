@@ -289,6 +289,7 @@ def test_provider_metrics_available(threading_lock):
 @blue_squad
 @tier1
 @bugzilla("2297285")
+@skipif_external_mode
 @pytest.mark.polarion_id("OCS-XXX")
 def test_monitoring_ipv6(threading_lock):
     """
@@ -306,12 +307,9 @@ def test_monitoring_ipv6(threading_lock):
     )
     prometheus_pod_obj = None
     for pod_obj in pod_obj_list:
-        try:
-            if "prometheus-k8s" in pod_obj.name:
-                prometheus_pod_obj = pod_obj
-                break
-        except Exception as e:
-            logger.info(e)
+        if "prometheus-k8s" in pod_obj.name:
+            prometheus_pod_obj = pod_obj
+            break
     assert (
         prometheus_pod_obj is not None
     ), "Prometheus pod not found in the monitoring namespace"
