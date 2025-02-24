@@ -11,6 +11,7 @@ import re
 from urllib.parse import urljoin
 
 from ocs_ci.framework import config
+from ocs_ci.utility.retry import retry
 
 from ocs_ci.ocs.exceptions import OpenShiftAPIResponseException
 
@@ -111,6 +112,7 @@ class OpenShiftAPI(object):
         """
         return urljoin(self.api_base_url, endpoint)
 
+    @retry(OpenShiftAPIResponseException, tries=3, delay=20, backoff=1)
     def get_request(self, endpoint, params=None, json=True, ignore_failure=False):
         """
         send GET request to the API endpoint
@@ -135,6 +137,7 @@ class OpenShiftAPI(object):
             return resp.json()
         return resp
 
+    @retry(OpenShiftAPIResponseException, tries=3, delay=20, backoff=1)
     def post_request(self, endpoint, data=None, json=True, ignore_failure=False):
         """
         send POST request to the API endpoint
@@ -159,6 +162,7 @@ class OpenShiftAPI(object):
             return resp.json()
         return resp
 
+    @retry(OpenShiftAPIResponseException, tries=3, delay=20, backoff=1)
     def patch_request(self, endpoint, data=None, json=True, ignore_failure=False):
         """
         send PATCH request to the API endpoint
@@ -183,6 +187,7 @@ class OpenShiftAPI(object):
             return resp.json()
         return resp
 
+    @retry(OpenShiftAPIResponseException, tries=3, delay=20, backoff=1)
     def delete_request(self, endpoint, json=True, ignore_failure=False):
         """
         send DELETE request to the API endpoint
