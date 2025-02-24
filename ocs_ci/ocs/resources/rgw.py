@@ -62,6 +62,7 @@ class RGW(object):
                 endpoint = cephobjectstore["status"]["endpoints"]["secure"][0]
             else:
                 endpoint = cephobjectstore["status"]["endpoints"]["insecure"][0]
+
         else:
             route_ocp_obj = OCP(
                 kind=constants.ROUTE, namespace=config.ENV_DATA["cluster_namespace"]
@@ -70,6 +71,10 @@ class RGW(object):
                 resource_name=constants.RGW_ROUTE_INTERNAL_MODE
             )
             endpoint = f"http://{endpoint['status']['ingress'][0]['host']}"
+
+            # In disconnected and proxy deployments use the internal address
+            if config.DEPLOYMENT.get("disconnected") or config.DEPLOYMENT.get("proxy"):
+                endpoint = f"{constants.RGW_SERVICE_INTERNAL_MODE}.{self.namespace}.svc.cluster.local:80"
 
         creds_secret_obj = secret_ocp_obj.get(secret_name)
         access_key = base64.b64decode(
