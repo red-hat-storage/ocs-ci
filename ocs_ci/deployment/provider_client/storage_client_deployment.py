@@ -41,7 +41,6 @@ from ocs_ci.helpers.helpers import (
     verify_block_pool_exists,
 )
 from ocs_ci.ocs.exceptions import CommandFailed
-from ocs_ci.ocs.resources.catalog_source import CatalogSource
 
 
 log = logging.getLogger(__name__)
@@ -323,12 +322,6 @@ class ODFAndNativeStorageClientDeploymentOnProvider(object):
         live_deployment = config.DEPLOYMENT.get("live_deployment")
         if not live_deployment:
             create_catalog_source()
-            catalog_source = CatalogSource(
-                resource_name=constants.OCS_CATALOG_SOURCE_NAME,
-                namespace=constants.MARKETPLACE_NAMESPACE,
-            )
-            # Wait for catalog source is ready
-            catalog_source.wait_for_state("READY")
 
         log.info("Creating namespace and operator group.")
         olm_data = templating.load_yaml(constants.OLM_YAML, multi_document=True)
