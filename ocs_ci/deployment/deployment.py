@@ -462,8 +462,14 @@ class Deployment(object):
 
         """
         if config.DEPLOYMENT.get("deploy_mce"):
+            if config.ENV_DATA.get("skip_mce_check_if_present"):
+                check_mce_deployed = False
+                check_mce_ready = False
+            else:
+                check_mce_deployed = True
+                check_mce_ready = True
             mce_installer = MCEInstaller()
-            mce_installer.deploy_mce()
+            mce_installer.deploy_mce(check_mce_deployed, check_mce_ready)
             mce_installer.validate_mce_deployment()
 
     def do_deploy_oadp(self):
@@ -634,7 +640,13 @@ class Deployment(object):
             config.DEPLOYMENT.get("cnv_deployment")
             and config.ENV_DATA["skip_ocs_deployment"]
         ):
-            CNVInstaller().deploy_cnv()
+            if config.ENV_DATA.get("skip_cnv_check_if_present"):
+                check_cnv_deployed = False
+                check_cnv_ready = False
+            else:
+                check_cnv_deployed = True
+                check_cnv_ready = True
+            CNVInstaller().deploy_cnv(check_cnv_deployed, check_cnv_ready)
 
     def do_deploy_metallb(self):
         """
