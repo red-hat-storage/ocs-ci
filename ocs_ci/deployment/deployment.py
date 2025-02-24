@@ -69,6 +69,7 @@ from ocs_ci.ocs.exceptions import (
 )
 from ocs_ci.deployment.cert_manager import deploy_cert_manager
 from ocs_ci.deployment.zones import create_dummy_zone_labels
+from ocs_ci.deployment.mce import MCEInstaller
 from ocs_ci.deployment.netsplit import get_netsplit_mc
 from ocs_ci.ocs.monitoring import (
     create_configmap_cluster_monitoring_pod,
@@ -455,6 +456,16 @@ class Deployment(object):
         else:
             logger.warning("OCS deployment will be skipped")
 
+    def do_deploy_mce(self):
+        """
+        Deploy Multicluster Engine
+
+        """
+        if config.DEPLOYMENT.get("deploy_mce"):
+            mce_installer = MCEInstaller()
+            mce_installer.deploy_mce()
+            mce_installer.validate_mce_deployment()
+
     def do_deploy_oadp(self):
         """
         Deploy OADP Operator
@@ -721,6 +732,7 @@ class Deployment(object):
         self.do_deploy_fusion()
         self.do_deploy_fdf()
         self.do_deploy_odf_provider_mode()
+        self.do_deploy_mce()
         self.do_deploy_cnv()
         self.do_deploy_metallb()
         self.do_deploy_hosted_clusters()

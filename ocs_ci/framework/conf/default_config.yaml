@@ -121,6 +121,8 @@ DEPLOYMENT:
   sts_enabled: false
   ocm_cli_version: '0.1.75'
   rosa_cli_version: '1.2.49'
+  # Multicluster engine
+  deploy_mce: false
 
 
 
