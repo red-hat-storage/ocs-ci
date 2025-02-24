@@ -89,9 +89,9 @@ class MCEInstaller(object):
         else:
             logger.info(f"{self.namespace} already exists")
 
-    def create_multiclusterengine_operator(self):
+    def create_multiclusterengine_operatorgroup(self):
         """
-        Creates multiclusterengine operator
+        Creates multiclusterengine operator group
 
         """
         logger.info("Check if mce operator already exist")
@@ -99,11 +99,23 @@ class MCEInstaller(object):
             resource_name=constants.MULTICLUSTER_ENGINE
         ):
 
-            operatorgroup_yaml_file = templating.load_yaml(constants.MCE_OPERATOR_YAML)
+            operatorgroup_yaml_file = templating.load_yaml(
+                constants.MCE_OPERATOR_GROUP_YAML
+            )
             operatorgroup_yaml = OCS(**operatorgroup_yaml_file)
             operatorgroup_yaml.create()
             logger.info("mce OperatorGroup created successfully")
         self.multicluster_engine.wait_for_phase("Available")
+
+    def create_multiclusterengine_resource(self):
+        """
+        Creates multiclusterengine resource
+
+        """
+        resource_yaml_file = templating.load_yaml(constants.MCE_RESOURCE_YAML)
+        resource_yaml = OCS(**resource_yaml_file)
+        resource_yaml.create()
+        logger.info("mce resource created successfully")
 
     def create_mce_subscription(self):
         """
@@ -226,8 +238,10 @@ class MCEInstaller(object):
         self.create_mce_namespace()
         # create mce subscription
         self.create_mce_subscription()
-        # Deploy the multiclusterengine CR
-        self.create_multiclusterengine_operator()
+        # Deploy the multiclusterengine operatorgroup
+        self.create_multiclusterengine_operatorgroup()
+        # Create mce resource
+        self.create_multiclusterengine_resource()
         # Check hypershift ns created
         if not self.check_hypershift_namespace():
             cmd = f"oc create namespace {constants.HYPERSHIFT_NAMESPACE}"
