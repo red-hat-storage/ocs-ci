@@ -4,7 +4,7 @@ import pytest
 from ocs_ci.framework.pytest_customization.marks import (
     magenta_squad,
     workloads,
-    ignore_leftover_label,
+    ignore_leftovers,
 )
 from ocs_ci.framework.testlib import E2ETest
 from ocs_ci.helpers.cnv_helpers import (
@@ -25,8 +25,7 @@ logger = logging.getLogger(__name__)
 
 
 @pytest.mark.polarion_id("OCS-")
-@ignore_leftover_label(constants.OSD_APP_LABEL)
-@ignore_leftover_label(constants.OSD_PREPARE_APP_LABEL)
+@ignore_leftovers
 @magenta_squad
 @workloads
 class TestVmStorageCapacity(E2ETest):
