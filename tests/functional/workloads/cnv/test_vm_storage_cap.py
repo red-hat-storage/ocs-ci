@@ -24,17 +24,17 @@ from tests.functional.z_cluster.cluster_expansion.test_add_capacity import (
 logger = logging.getLogger(__name__)
 
 
+@pytest.mark.polarion_id("OCS-")
+@ignore_leftover_label(constants.OSD_APP_LABEL)
+@ignore_leftover_label(constants.OSD_PREPARE_APP_LABEL)
 @magenta_squad
 @workloads
-@pytest.mark.polarion_id("OCS-")
 class TestVmStorageCapacity(E2ETest):
     """
     Perform add capacity operation while the VMs are in different states
     and in the presence of snapshots and clones of the VMs.
     """
 
-    @ignore_leftover_label(constants.OSD_APP_LABEL)
-    @ignore_leftover_label(constants.OSD_PREPARE_APP_LABEL)
     def test_vm_storage_capacity(
         self,
         setup_cnv,
