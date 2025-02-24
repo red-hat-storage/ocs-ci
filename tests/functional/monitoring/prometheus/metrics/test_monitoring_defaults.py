@@ -19,9 +19,10 @@ from ocs_ci.framework.pytest_customization.marks import (
     skipif_external_mode,
 )
 from ocs_ci.framework.testlib import skipif_ocs_version, tier1
-from ocs_ci.ocs import constants, ocp
+from ocs_ci.ocs import constants, ocp, defaults
 from ocs_ci.ocs import metrics
 from ocs_ci.ocs.resources import pod
+from ocs_ci.utility.utils import run_cmd
 from ocs_ci.utility.prometheus import PrometheusAPI, check_query_range_result_enum
 from ocs_ci.helpers.helpers import storagecluster_independent_check
 from ocs_ci.framework.pytest_customization.marks import skipif_managed_service
@@ -283,3 +284,40 @@ def test_provider_metrics_available(threading_lock):
         "so that the list of metrics without results is empty."
     )
     assert list_of_metrics_without_results == [], msg
+
+
+@blue_squad
+@tier1
+@bugzilla("2297285")
+@pytest.mark.polarion_id("OCS-XXX")
+def test_monitoring_ipv6(threading_lock):
+    """
+    Procedure:
+    1. Retrieves the IPv6 addresses of rook-ceph-exporter pods.
+    2. Logs into the prometheus-k8s pod in the openshift-monitoring namespace.
+    3. Checks connectivity using curl to fetch metrics from each exporter's /metrics endpoint.
+    4. Asserts that the expected Ceph metric is present in the response.
+
+    """
+    exporter_pods = pod.get_pods_having_label(constants.EXPORTER_APP_LABEL)
+    ipv6_addresses = [pod_obj["status"]["podIP"] for pod_obj in exporter_pods]
+    pod_obj_list = pod.get_all_pods(
+        namespace=defaults.OCS_MONITORING_NAMESPACE, selector_label=["prometheus"]
+    )
+    prometheus_pod_obj = None
+    for pod_obj in pod_obj_list:
+        if "prometheus-k8s" in pod_obj.name:
+            prometheus_pod_obj = pod_obj
+            break
+    assert (
+        prometheus_pod_obj is not None
+    ), "Prometheus pod not found in the monitoring namespace"
+    for ipv6_address in ipv6_addresses:
+        cmd = (
+            f"oc rsh -n {defaults.OCS_MONITORING_NAMESPACE} {prometheus_pod_obj.name} "
+            f"curl -vv http://[{ipv6_address}]:9926/metrics"
+        )
+        out = run_cmd(cmd=cmd)
+        assert (
+            "ceph_AsyncMessenger_Worker_msgr_connection" in out
+        ), f"Expected Ceph metric not found in output for IP {ipv6_address}"
