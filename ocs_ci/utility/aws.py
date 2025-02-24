@@ -2194,6 +2194,25 @@ class AWS(object):
         logger.info("Deleting role %s policy: %s", role_name, policy_name)
         self.iam_client.delete_role_policy(RoleName=role_name, PolicyName=policy_name)
 
+    def delete_oidc_provider(self, provider_name):
+        """
+        Deletes the OIDC provider
+
+        Args:
+            provider_name (str): OIDC provider name
+                e.g: d3gcnqtx1lgapn.cloudfront.net
+
+        """
+        account_id = self.get_caller_identity()
+        oidc_provider_arn = f"arn:aws:iam::{account_id}:oidc-provider/{provider_name}"
+        try:
+            self.iam_client.delete_open_id_connect_provider(
+                OpenIDConnectProviderArn=oidc_provider_arn
+            )
+            logger.info(f"Deleted OIDC provider: {oidc_provider_arn}")
+        except Exception as e:
+            logger.error(f"Error deleting OIDC provider: {e}")
+
     def get_caller_identity(self):
         """
         Get STS Caller Identity Account ID
@@ -2616,6 +2635,12 @@ def delete_sts_iam_roles():
                 role_name, instance_profile["InstanceProfileName"]
             )
         aws.delete_iam_role(role_name)
+    auth_cluster = exec_cmd("oc get authentication cluster -o json")
+    auth_cluster_dict = json.loads(auth_cluster.stdout)
+    oidc_provider_name = auth_cluster_dict["spec"]["serviceAccountIssuer"].replace(
+        "https://", ""
+    )
+    aws.delete_oidc_provider(provider_name=oidc_provider_name)
 
 
 def delete_subnet_tags(tag, *subnet_ids):
