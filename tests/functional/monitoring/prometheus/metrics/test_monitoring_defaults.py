@@ -306,9 +306,12 @@ def test_monitoring_ipv6(threading_lock):
     )
     prometheus_pod_obj = None
     for pod_obj in pod_obj_list:
-        if "prometheus-k8s" in pod_obj.name:
-            prometheus_pod_obj = pod_obj
-            break
+        try:
+            if "prometheus-k8s" in pod_obj.name:
+                prometheus_pod_obj = pod_obj
+                break
+        except Exception as e:
+            logger.info(e)
     assert (
         prometheus_pod_obj is not None
     ), "Prometheus pod not found in the monitoring namespace"
