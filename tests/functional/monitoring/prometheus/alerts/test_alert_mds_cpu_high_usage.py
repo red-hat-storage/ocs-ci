@@ -2,7 +2,12 @@ import logging
 import pytest
 
 from concurrent.futures import ThreadPoolExecutor
-from ocs_ci.framework.pytest_customization.marks import blue_squad, skipif_ocs_version
+from ocs_ci.framework.pytest_customization.marks import (
+    blue_squad,
+    skipif_ocs_version,
+    aws_platform_required,
+    baremetal_deployment_required,
+)
 from ocs_ci.framework.testlib import E2ETest, tier2
 from ocs_ci.helpers import helpers
 from ocs_ci.ocs import cluster, constants
@@ -84,7 +89,9 @@ def active_mds_alert_values(threading_lock):
 
 @tier2
 @blue_squad
-@skipif_ocs_version("<4.18")
+@skipif_ocs_version("<4.15")
+@aws_platform_required
+@baremetal_deployment_required
 class TestMdsCpuAlerts(E2ETest):
     @pytest.fixture(scope="function", autouse=True)
     def teardown(self, request):
@@ -98,7 +105,9 @@ class TestMdsCpuAlerts(E2ETest):
         request.addfinalizer(finalizer)
 
     @pytest.mark.polarion_id("OCS-5581")
-    def test_alert_triggered(self, run_file_creator_io_with_cephfs, threading_lock):
+    def test_mds_cpu_alert_triggered(
+        self, run_file_creator_io_with_cephfs, threading_lock
+    ):
         """
         This test case is to verify the alert for MDS cpu high usage for only vertical scaling,
         alert for Horizontal scaling is skipped as it is not easy to achieve the rate(ceph_mds_request)>=1000.
