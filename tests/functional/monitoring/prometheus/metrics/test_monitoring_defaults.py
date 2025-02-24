@@ -5,6 +5,7 @@ check that OCS Monitoring is configured and available as expected.
 """
 
 import logging
+import ipaddress
 
 import pytest
 
@@ -314,9 +315,14 @@ def test_monitoring_ipv6(threading_lock):
         prometheus_pod_obj is not None
     ), "Prometheus pod not found in the monitoring namespace"
     for ipv6_address in ipv6_addresses:
+        formatted_ip = (
+            f"[{ipv6_address}]"
+            if ipaddress.ip_address(ipv6_address).version == 6
+            else ipv6_address
+        )
         cmd = (
             f"oc rsh -n {defaults.OCS_MONITORING_NAMESPACE} {prometheus_pod_obj.name} "
-            f"curl -vv http://[{ipv6_address}]:9926/metrics"
+            f"curl -vv http://{formatted_ip}:9926/metrics"
         )
         out = run_cmd(cmd=cmd)
         assert (
