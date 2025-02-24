@@ -65,24 +65,6 @@ class WorkloadUi(metaclass=SingletonMeta):
         with open(app_path) as file_stream:
             self.depl_cr = yaml.safe_load(file_stream)
 
-    def get_depl_name(self):
-        """
-        Retrieves the name of the testing app deployment.
-
-        Returns:
-            str: Name of the deployment.
-        """
-        return self.depl_cr["metadata"]["name"]
-
-    def set_depl_name(self, name):
-        """
-        Sets the name of the testing app deployment in the original YAML.
-
-        Args:
-            name (str): New name for the testing app deployment.
-        """
-        self.depl_cr["metadata"]["name"] = name
-
     def deploy_app(
         self,
         node: str = None,
@@ -140,9 +122,13 @@ class WorkloadUi(metaclass=SingletonMeta):
             if not namespace:
                 namespace = config.ENV_DATA["cluster_namespace"]
 
+            yaml_string = yaml.dump(depl_dict, default_flow_style=False, indent=2)
+            logger.info(f"Deploying app with yaml:\n{yaml_string}")
+
             yaml.dump(depl_dict, temp_file, default_flow_style=False)
             temp_file.flush()
             occli = OCP()
+
             occli.apply(temp_file.name)
 
         app_scaled_up = self.wait_app_scaled_up(60, depl_name, namespace)
@@ -202,13 +188,13 @@ class WorkloadUi(metaclass=SingletonMeta):
 
         for depl_obj in self.deployment_list:
             if depl_name == depl_obj.name:
-                bb_depl = depl_obj
+                the_depl = depl_obj
                 break
         else:
             logger.error(f"no deployment with the given name {depl_name} found")
             return None
-        res = bb_depl.delete(wait=True, force=force)
-        self.deployment_list.remove(bb_depl)
+        res = the_depl.delete(wait=True, force=force)
+        self.deployment_list.remove(the_depl)
         return res
 
     def delete_all_deployments(self):

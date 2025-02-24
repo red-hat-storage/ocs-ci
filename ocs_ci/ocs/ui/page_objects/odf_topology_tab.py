@@ -656,7 +656,10 @@ class TopologyTab(DataFoundationDefaultTab, AbstractTopologyView):
                   and the values are booleans indicating whether the deviation was detected or not.
         """
 
-        node_with_test_app, _ = self.workload_ui.deploy_app()
+        test_app_depl_name = "topology-test-app"
+        node_with_test_app, _ = self.workload_ui.deploy_app(
+            depl_name=test_app_depl_name
+        )
         sleep_time = 30
         logger.info(f"give {sleep_time}sec to render on ODF Topology view")
         time.sleep(sleep_time)
@@ -749,8 +752,8 @@ class TopologyTab(DataFoundationDefaultTab, AbstractTopologyView):
             if not sorted(deployments_names_list_cli) == sorted(
                 deployments_names_list_ui
             ):
-                self.take_screenshot()
-                self.copy_dom()
+                self.take_screenshot("cli_ui_depl_missmatch")
+                self.copy_dom("cli_ui_depl_missmatch")
                 logger.error(
                     f"deployments of the node '{node_name}' from UI do not match deployments from CLI\n"
                     f"deployments_list_cli = '{sorted(deployments_names_list_cli)}'\n"
@@ -758,12 +761,11 @@ class TopologyTab(DataFoundationDefaultTab, AbstractTopologyView):
                 )
                 topology_deviation[f"{node_name}__deployments_not_equal"] = True
 
-            test_app_depl_name = self.workload_ui.get_depl_name()
             if node_name == node_with_test_app and (
                 test_app_depl_name not in deployments_names_list_ui
             ):
-                self.take_screenshot()
-                self.copy_dom()
+                self.take_screenshot("test_app_not_in_node")
+                self.copy_dom("test_app_not_in_node")
                 logger.error(
                     f"test-app deployment '{test_app_depl_name}' deployed on the node '{node_with_test_app}' "
                     f"during the test was not found in UI"

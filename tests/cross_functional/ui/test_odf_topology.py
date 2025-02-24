@@ -4,6 +4,7 @@ import time
 import pytest
 import pandas as pd
 from ocs_ci.framework import config
+from ocs_ci.framework.logger_helper import log_step
 from ocs_ci.framework.pytest_customization.marks import (
     black_squad,
     polarion_id,
@@ -25,11 +26,11 @@ from ocs_ci.ocs.node import get_nodes, get_node_names
 from ocs_ci.ocs.ui.base_ui import take_screenshot
 from ocs_ci.ocs.ui.page_objects.page_navigator import PageNavigator
 from ocs_ci.ocs.ui.odf_topology import (
-    OdfTopologyHelper,
     get_deployment_details_cli,
     get_node_details_cli,
     get_node_names_of_the_pods_by_pattern,
 )
+from ocs_ci.ocs.ui.workload_ui import WorkloadUi
 from ocs_ci.utility.utils import ceph_health_check
 from ocs_ci.utility import prometheus
 from ocs_ci.helpers import helpers
@@ -59,14 +60,14 @@ def teardown_nodes_job(request, nodes):
 
 
 @pytest.fixture()
-def teardown_depl_busybox(request):
+def teardown_workload_depl(request):
     def finalizer():
         """
-        Make sure busybox deployment removed
+        Make sure workload deployments are removed
 
         """
 
-        OdfTopologyHelper().delete_busybox()
+        WorkloadUi().delete_all_deployments()
 
     request.addfinalizer(finalizer)
 
@@ -85,7 +86,7 @@ class TestODFTopology(object):
     @bugzilla("2245068")
     @polarion_id("OCS-4901")
     def test_validate_topology_configuration(
-        self, setup_ui_class, teardown_depl_busybox, pvc_factory, teardown_factory
+        self, setup_ui_class, teardown_workload_depl, pvc_factory, teardown_factory
     ):
         """
         Test to validate configuration of ODF Topology for internal and external deployments,
@@ -178,6 +179,12 @@ class TestODFTopology(object):
             node_details_ui, orient="index", columns=["details_ui"]
         )
 
+        # details of UI and CLI are often have mismatch, depending on different platforms and versions; see output
+        cli_details_beautified = node_details_df_cli.to_markdown(
+            headers="keys", index=True, tablefmt="grid"
+        )
+        logger.info(f"node_details_df_cli:\n{cli_details_beautified}")
+
         deviations_df = pd.concat([node_details_df_cli, node_details_df_ui], axis=1)
         deviations_df["Differences"] = (
             deviations_df["details_cli"] != deviations_df["details_ui"]
@@ -190,7 +197,7 @@ class TestODFTopology(object):
         pd.set_option("display.max_colwidth", 100)
         if deviations_df["Differences"].any():
             pytest.fail(
-                f"details of the node {random_node_name} from UI does not match details from CLI"
+                f"details of the node {random_node_name} from UI do not match details from CLI"
                 f"\n{deviations_df}"
             )
 
@@ -200,35 +207,49 @@ class TestODFTopology(object):
         """
         Test to validate ODF Topology deployments details
 
-        1. Get node names and pick random node
-        2. Read topology CLI of the nodes and the storage related deployments
-        3. Get node names and pick random node
+        1. Open Management console, login and navigate to ODF topology tab
+        2. Get node names and pick random node
+        3. Read topology CLI of the nodes and the storage related deployments
         4. Get random deployment name from random node
-        5. Open Management console, login and navigate to ODF topology tab
-        6. Navigate into node that was previously picked
-        7. Select deployment previously picked as random and open sidebar and click on details tab
-        8. Read deployment details from CLI
-        9. Read deployment details from UI
-        10. Concatenate details from CLI and from UI and find differences
+        5. Navigate into node that was previously picked
+        6. Select deployment previously picked as random and open sidebar and click on details tab
+        7. Read deployment details from CLI
+        8. Read deployment details from UI
+        9. Concatenate details from CLI and from UI and find differences
         """
+        log_step("Open Management console, login and navigate to ODF topology tab")
         topology_tab = PageNavigator().nav_odf_default_page().nav_topology_tab()
 
+        log_step("Get random node and deployment")
         node_names = get_node_names()
         random_node_name = random.choice(node_names)
+
+        log_step("Read topology CLI of the nodes and the storage related deployments")
         topology_cli = topology_tab.topology_helper.read_topology_cli_all()
+
+        log_step("Get random deployment name from random node")
         random_deployment = random.choice(
             topology_cli[random_node_name].dropna().index.to_list()
         )
 
         topology_tab.nodes_view.read_presented_topology()
+
+        log_step("Navigate into node that was previously picked")
         random_odf_topology_deployment_view = topology_tab.nodes_view.nav_into_node(
             node_name_option=random_node_name
         )
         random_odf_topology_deployment_view.read_presented_topology()
+
+        log_step(
+            "Select deployment previously picked as random and open sidebar and click on details tab"
+        )
         random_odf_topology_deployment_view.open_side_bar_of_entity(random_deployment)
         random_odf_topology_deployment_view.open_details_tab()
 
+        log_step("Read deployment details from CLI")
         deployment_details_cli = get_deployment_details_cli(random_deployment)
+
+        log_step("Read deployment details from UI")
         deployment_details_ui = random_odf_topology_deployment_view.read_details()
 
         deployment_details_cli_df = pd.DataFrame.from_dict(
@@ -238,6 +259,7 @@ class TestODFTopology(object):
             deployment_details_ui, orient="index", columns=["details_ui"]
         )
 
+        log_step("Concatenate details from CLI and from UI and find differences")
         deviations_df = pd.concat(
             [deployment_details_cli_df, deployment_details_ui_df], axis=1
         )
