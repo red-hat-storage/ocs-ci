@@ -1075,16 +1075,24 @@ def storageclass_factory_class(request, secret_factory_class, ceph_pool_factory_
 
 @pytest.fixture(scope="session")
 def storageclass_factory_session(
-    request, secret_factory_session, ceph_pool_factory_session
+    request,
+    secret_factory_session,
+    ceph_pool_factory_session,
 ):
     return storageclass_factory_fixture(
-        request, secret_factory_session, ceph_pool_factory_session
+        request,
+        secret_factory_session,
+        ceph_pool_factory_session,
     )
 
 
 @pytest.fixture(scope="function")
 def storageclass_factory(request, secret_factory, ceph_pool_factory):
-    return storageclass_factory_fixture(request, secret_factory, ceph_pool_factory)
+    return storageclass_factory_fixture(
+        request,
+        secret_factory,
+        ceph_pool_factory,
+    )
 
 
 def storageclass_factory_fixture(
