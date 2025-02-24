@@ -1,5 +1,6 @@
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.ocp import OCP
+from ocs_ci.framework import config
 from ocs_ci.ocs.ui.page_objects.data_foundation_tabs_common import (
     CreateResourceForm,
 )
@@ -41,7 +42,7 @@ class NameSpaceStoreTab(ObjectStorage, CreateResourceForm):
         """
         existing_namespace_store_names = str(
             OCP().exec_oc_cmd(
-                "get namespacestore --all-namespaces -o custom-columns=':metadata.name'"
+                f"get namespacestore -n {config.ENV_DATA['cluster_namespace']} -o custom-columns=':metadata.name'"
             )
         )
         return self._check_resource_name_not_exists_rule(

@@ -333,7 +333,8 @@ generic_locators = {
         "//*[@class='pf-c-helper-text__item-text'] | "
         "//div[@data-test='field-requirements-popover']"
         "//*[@class='pf-v5-c-helper-text__item-text'] | "
-        "//ul//span[@class='pf-v5-c-helper-text__item-text']",
+        "//ul//span[@class='pf-v5-c-helper-text__item-text'] | "
+        "//ul[@class='pf-v5-c-helper-text']",
         By.XPATH,
     ),
     "ocp-overview-status-storage-popup-btn": (
