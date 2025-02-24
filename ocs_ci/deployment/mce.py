@@ -208,7 +208,7 @@ class MCEInstaller(object):
             check_mce_ready (bool): If True, check if mce is ready. If so, skip the deployment.
         """
         if check_mce_deployed:
-            if self.mce_hyperconverged_installed():
+            if self.mce_installed():
                 logger.info("mce operator is already deployed, skipping the deployment")
                 return
 
@@ -236,6 +236,39 @@ class MCEInstaller(object):
                 raise CommandFailed("Failed to create hypershift namespace")
         # Check supported versions in supported-versions configmap
         self.check_supported_versions()
+
+    def mce_installed(self):
+        """
+        Check if MCE is already installed.
+
+        Returns:
+             bool: True if MCE is installed, False otherwise
+        """
+        ocp = OCP(kind=constants.ROOK_OPERATOR, namespace=self.namespace)
+        return ocp.check_resource_existence(
+            timeout=12, should_exist=True, resource_name=constants.MCE_OPERATOR
+        )
+
+    def post_install_verification(self, raise_exception=False):
+        """
+        Performs MCE post-installation verification, with raise_exception = False may be used safely to run on
+        clusters with MCE installed or not installed.
+
+        Args:
+            raise_exception: If True, allow function to fail the job and raise an exception. If false, return False
+        instead of raising an exception.
+
+        Returns:
+            bool: True if the verification conditions are met, False otherwise
+        Raises:
+            TimeoutExpiredError: If the verification conditions are not met within the timeout
+            and raise_exception is True.
+            ResourceNotFoundError if the namespace does not exist and raise_exception is True.
+            ResourceWrongStatusException if the nodes are not ready, verification fails and raise_exception
+            is True.
+        """
+        # TODO: implement
+        pass
 
     def validate_mce_deployment(self):
         """
