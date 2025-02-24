@@ -49,9 +49,6 @@ class TestPvPool:
     Test pv pool related operations
     """
 
-    @pytest.mark.skip(
-        reason="Skipped because of https://github.com/red-hat-storage/ocs-ci/issues/3323"
-    )
     @pytest.mark.polarion_id("OCS-2332")
     @tier3
     def test_write_to_full_bucket(
@@ -59,59 +56,77 @@ class TestPvPool:
     ):
         """
         Test to check the full capacity functionality of a pv based backing store.
+
+        1. Create a bucket with pv based backing store
+        2. Fill the bucket until writing fails due to no capacity
+        3. Free up some space in the bucket
+        4. Confirm that uploading is possible again now that there is space
         """
+        # 1. Create a bucket with pv based backing store
+        interface = "CLI"
         bucketclass_dict = {
-            "interface": "OC",
+            "interface": interface,
             "backingstore_dict": {
                 "pv": [
                     (
                         1,
                         MIN_PV_BACKINGSTORE_SIZE_IN_GB,
                         "ocs-storagecluster-ceph-rbd",
+                        "100m",
+                        "500Mi",
+                        "100m",
+                        "500Mi",
                     )
                 ]
             },
         }
-        bucket = bucket_factory(1, "OC", bucketclass=bucketclass_dict)[0]
+        bucket = bucket_factory(1, interface, bucketclass=bucketclass_dict)[0]
 
-        for i in range(1, 18):
-            # add some data to the first pod
+        # 2. Fill the bucket until writing fails due to no capacity
+        uploaded_objs = []
+        max_data_in_mb = MIN_PV_BACKINGSTORE_SIZE_IN_GB * 1024
+        file_size_in_mb = 500
+
+        for i in range(max_data_in_mb // file_size_in_mb):
+            # Generate test file on the pod.
             awscli_pod_session.exec_cmd_on_pod(
-                "dd if=/dev/urandom of=/tmp/testfile bs=1M count=1000"
+                f"dd if=/dev/urandom of=/tmp/testfile bs=1M count={file_size_in_mb}"
             )
             try:
+                # Try copying the file to S3.
+                obj_name = f"testfile_{i}"
                 awscli_pod_session.exec_s3_cmd_on_pod(
-                    f"cp /tmp/testfile s3://{bucket.name}/testfile{i}", mcg_obj_session
+                    f"cp /tmp/testfile s3://{bucket.name}/{obj_name}",
+                    mcg_obj_session,
                 )
+                uploaded_objs.append(obj_name)
             except CommandFailed:
+                # Confirm that the failure was due to capacity being reached.
                 assert check_pv_backingstore_status(
-                    bucket.bucketclass.backingstores[0],
+                    bucket.bucketclass.backingstores[0].name,
                     config.ENV_DATA["cluster_namespace"],
                     "`NO_CAPACITY`",
                 ), "Failed to fill the bucket"
-            awscli_pod_session.exec_cmd_on_pod("rm -f /tmp/testfile")
-        try:
+                break
+
+        # 3. Free up some space in the bucket
+        for obj in uploaded_objs[:3]:
             awscli_pod_session.exec_s3_cmd_on_pod(
-                f"cp s3://{bucket.name}/testfile1 /tmp/testfile", mcg_obj_session
+                f"rm s3://{bucket.name}/{obj}", mcg_obj_session
             )
-        except CommandFailed as e:
-            raise e
+
+        # 4. Confirm that uploading is possible again now that there is space
         try:
             awscli_pod_session.exec_s3_cmd_on_pod(
-                f"rm s3://{bucket.name}/testfile1", mcg_obj_session
-            )
-        except CommandFailed as e:
-            raise e
-        try:
-            awscli_pod_session.exec_s3_cmd_on_pod(
-                f"cp /tmp/testfile s3://{bucket.name}/testfile1", mcg_obj_session
+                f"cp /tmp/testfile s3://{bucket.name}/{uploaded_objs[0]}",
+                mcg_obj_session,
             )
         except CommandFailed:
             assert not check_pv_backingstore_status(
-                bucket.bucketclass.backingstores[0],
+                bucket.bucketclass.backingstores[0].name,
                 config.ENV_DATA["cluster_namespace"],
                 "`NO_CAPACITY`",
-            ), "Failed to re-upload the removed file file"
+            ), "Failed to re-upload the removed file"
 
     @pytest.mark.polarion_id("OCS-2333")
     @tier2
