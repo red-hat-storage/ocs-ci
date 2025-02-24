@@ -211,13 +211,18 @@ class TestReplicaOne:
         pgs_before_workload = get_osd_pgs_used()
         kb_before_workload = get_osd_kb_used_data()
 
-        # Add debug logging
         log.info(f"Starting FIO on pod {testing_pod.name}")
         log.info(
             f"Pod status before FIO: {testing_pod.get().get('status').get('phase')}"
         )
 
-        testing_pod.run_io(storage_type="fs", size="50g", timeout=1200)
+        testing_pod.run_io(
+            storage_type="fs",
+            size="10g",
+            runtime=0,
+            rate="50m",
+            timeout=600,
+        )
 
         # Add FIO process check
         try:
@@ -228,7 +233,7 @@ class TestReplicaOne:
         except Exception as e:
             log.error(f"Error checking FIO process: {e}")
 
-        testing_pod.get_fio_results(timeout=1200)
+        testing_pod.get_fio_results(timeout=600)
         pgs_after_workload = get_osd_pgs_used()
         log.info(
             f"{pgs_before_workload} PGS before test\n{pgs_after_workload} PGS after test"
