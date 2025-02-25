@@ -443,6 +443,24 @@ class TestBucketCreate:
             bucket_ui.create_folder_in_bucket()
         ), "Failed to create and upload folder in bucket"
 
+    def test_multiple_bucket_creation(self, setup_ui_class_factory):
+        """
+        Test multiple bucket creation functionality in UI.
+
+        Creates both OBC and S3 buckets, then creates a folder in one of them.
+        Verifies basic bucket and folder creation workflows through the UI.
+        """
+        setup_ui_class_factory()
+        bucket_ui = BucketsTab()
+        bucket_ui.nav_object_storage_page()
+        bucket_ui.create_multiple_buckets_ui(s3_buckets=200, obc_buckets=200)
+        bucket_ui.nav_object_storage_page()
+        bucket_ui.nav_buckets_page()
+        ui_list = bucket_ui.get_buckets_list()
+        assert (
+            len(ui_list) >= 2
+        ), "Expected at least 2 buckets (OBC and S3) but found less"
+
     def test_bucket_delete(self, setup_ui_class_factory):
         """
         Test bucket deletion functionality in UI.

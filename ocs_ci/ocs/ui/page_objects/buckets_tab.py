@@ -192,6 +192,54 @@ class BucketsTab(ObjectStorage, ConfirmDialog):
         logger.info(f"Found {len(buckets), buckets} buckets")
         return buckets
 
+    def create_multiple_buckets_ui(
+        self, s3_buckets: int = 0, obc_buckets: int = 0
+    ) -> list:
+        """
+        Creates multiple S3 and OBC buckets.
+
+        Args:
+            s3_buckets (int): Number of S3 buckets to create.
+            obc_buckets (int): Number of OBC buckets to create.
+
+        Returns:
+            list: List of created bucket names.
+
+        Raises:
+            ValueError: If both s3_buckets and obc_buckets are 0.
+        """
+        if s3_buckets <= 0 and obc_buckets <= 0:
+            raise ValueError("At least one bucket type must have a positive count")
+
+        created_buckets = []
+
+        # Create S3 buckets
+        for i in range(s3_buckets):
+            logger.info(f"Creating S3 bucket #{i + 1}")
+            bucket = self.create_bucket_ui(method="s3")
+            created_buckets.append(bucket)
+
+            # Navigate back to buckets page for next creation
+            if i < s3_buckets - 1 or obc_buckets > 0:
+                self.navigate_buckets_page()
+                self.page_has_loaded(sleep_time=2)
+                logger.info("Navigated back to buckets page for next creation")
+
+        # Create OBC buckets
+        for i in range(obc_buckets):
+            logger.info(f"Creating OBC bucket #{i + 1}")
+            bucket = self.create_bucket_ui(method="obc")
+            created_buckets.append(bucket)
+
+            # Navigate back to buckets page for next creation
+            if i < obc_buckets - 1:
+                self.navigate_buckets_page()
+                self.page_has_loaded(sleep_time=2)
+                logger.info("Navigated back to buckets page for next creation")
+
+        logger.info(f"Successfully created {len(created_buckets)} buckets")
+        return created_buckets
+
     def delete_bucket_ui(self, delete_via, expect_fail, resource_name):
         """
         Delete an Object Bucket via the UI
