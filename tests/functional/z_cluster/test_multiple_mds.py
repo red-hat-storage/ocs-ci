@@ -24,7 +24,7 @@ from ocs_ci.ocs.resources import pod
 from ocs_ci.helpers.sanity_helpers import Sanity
 from ocs_ci.ocs import node, constants
 from ocs_ci.ocs.resources.pod import get_mds_pods
-from ocs_ci.utility.utils import ceph_health_check_base, TimeoutSampler
+from ocs_ci.utility.utils import ceph_health_check, TimeoutSampler
 from tests.functional.z_cluster.nodes.test_node_replacement_proactive import (
     delete_and_create_osd_node,
 )
@@ -79,7 +79,7 @@ class TestMultipleMds:
                 )
 
             log.info("Checking for Ceph Health OK")
-            ceph_health_check_base()
+            ceph_health_check()
 
         request.addfinalizer(finalizer)
 
