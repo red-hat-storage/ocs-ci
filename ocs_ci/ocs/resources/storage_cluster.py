@@ -511,6 +511,9 @@ def ocs_install_verification(
                 rbd_provisioner_secret = (
                     f"{constants.RBD_PROVISIONER_SECRET}-{cluster_name}-{rbd_name}"
                 )
+                if rbd_namespace:
+                    rbd_node_secret += f"-{rbd_namespace}"
+                    rbd_provisioner_secret += f"-{rbd_namespace}"
                 assert (
                     sc_rbd["parameters"]["csi.storage.k8s.io/node-stage-secret-name"]
                     == rbd_node_secret

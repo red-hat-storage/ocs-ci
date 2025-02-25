@@ -145,6 +145,7 @@ class ExternalCluster(object):
             params = f"{params} --rados-namespace {rbd_namespace}"
             if "restricted-auth-permission" not in params:
                 params += " --restricted-auth-permission true"
+                config.ENV_DATA["restricted-auth-permission"] = True
             if "cluster-name" not in params:
                 params += f" --k8s-cluster-name {cluster_name}"
 
