@@ -25,7 +25,7 @@ class RGW(object):
             kind="storageclass", namespace=namespace, resource_name=sc_name
         )
         self.s3_internal_endpoint = (
-            self.storageclass.get().get("parameters").get("endpoint")
+            f"https://{constants.RGW_SERVICE_INTERNAL_MODE}.{self.namespace}.svc:443"
         )
         self.region = self.storageclass.get().get("parameters").get("region")
         # Todo: Implement retrieval in cases where CephObjectStoreUser is available
@@ -71,10 +71,6 @@ class RGW(object):
                 resource_name=constants.RGW_ROUTE_INTERNAL_MODE
             )
             endpoint = f"http://{endpoint['status']['ingress'][0]['host']}"
-
-            # In disconnected and proxy deployments use the internal address
-            if config.DEPLOYMENT.get("disconnected") or config.DEPLOYMENT.get("proxy"):
-                endpoint = f"https://{constants.RGW_SERVICE_INTERNAL_MODE}.{self.namespace}.svc:443"
 
         creds_secret_obj = secret_ocp_obj.get(secret_name)
         access_key = base64.b64decode(
