@@ -74,7 +74,7 @@ class RGW(object):
 
             # In disconnected and proxy deployments use the internal address
             if config.DEPLOYMENT.get("disconnected") or config.DEPLOYMENT.get("proxy"):
-                endpoint = f"{constants.RGW_SERVICE_INTERNAL_MODE}.{self.namespace}.svc.cluster.local:80"
+                endpoint = f"https://{constants.RGW_SERVICE_INTERNAL_MODE}.{self.namespace}.svc:443"
 
         creds_secret_obj = secret_ocp_obj.get(secret_name)
         access_key = base64.b64decode(
