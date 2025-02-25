@@ -139,6 +139,8 @@ def get_node_details_cli(node_name) -> dict:
     _address_dict = {item["type"]: item["address"] for item in _addresses}
     node_details["addresses"] = (
         f"External IP: {_address_dict.get('ExternalIP')}; "
+        if _address_dict.get("ExternalIP")
+        else ""
         f"Hostname: {_address_dict.get('Hostname')}; "
         f"Internal IP: {_address_dict.get('InternalIP')}"
     )
