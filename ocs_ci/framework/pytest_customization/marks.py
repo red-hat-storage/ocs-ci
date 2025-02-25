@@ -39,6 +39,7 @@ from ocs_ci.ocs.constants import (
     ROSA_HCP_PLATFORM,
     VAULT_KMS_PROVIDER,
 )
+from ocs_ci.framework.pytest_customization.marks import skipif_ibm_cloud_managed
 from ocs_ci.utility import version
 from ocs_ci.utility.aws import update_config_from_s3
 from ocs_ci.utility.utils import load_auth_config
@@ -54,6 +55,7 @@ tier4a = compose(tier4, pytest.mark.tier4a)
 tier4b = compose(tier4, pytest.mark.tier4b)
 tier4c = compose(tier4, pytest.mark.tier4c)
 tier_after_upgrade = pytest.mark.tier_after_upgrade(value=5)
+ui = compose(skipif_ibm_cloud_managed, pytest.mark.ui)
 
 
 # build acceptance
