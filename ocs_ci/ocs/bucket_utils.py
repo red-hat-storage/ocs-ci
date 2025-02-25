@@ -2688,7 +2688,7 @@ def delete_object_tags(
     """
     logger.info(f"Deleting tags of objects in bucket {bucket}")
     for object_key in object_keys:
-        object_key = f"prefix/{object_key}" if prefix else object_key
+        object_key = f"{prefix}/{object_key}" if prefix else object_key
         io_pod.exec_cmd_on_pod(
             craft_s3_command(
                 f"delete-object-tagging --bucket {bucket} --key {object_key}",

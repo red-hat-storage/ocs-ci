@@ -266,6 +266,23 @@ class BucketNotificationsManager:
         if wait:
             MCG.wait_for_ready_status()
 
+    def create_and_register_kafka_topic_with_noobaa(self, topic_name="", wait=True):
+        """
+        Create a Kafka topic and register it with NooBaa via a connection secret
+
+        Args:
+            topic_name(str|optional): Name of the Kafka topic
+            wait(bool): Whether to wait for the NooBaa resources to be ready
+
+        Returns:
+            tuple: Kafka topic name and MCG's Path to the connection config file
+        """
+        topic = self.create_kafka_topic(topic_name)
+        secret, conn_config_path = self.create_kafka_conn_secret(topic)
+        self.add_notif_conn_to_noobaa_cr(secret, wait)
+
+        return topic, conn_config_path
+
     def put_bucket_notification(
         self, awscli_pod, mcg_obj, bucket, events, conn_config_path, wait=True
     ):
