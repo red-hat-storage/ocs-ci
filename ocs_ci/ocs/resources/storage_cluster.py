@@ -511,6 +511,9 @@ def ocs_install_verification(
                 rbd_provisioner_secret = (
                     f"{constants.RBD_PROVISIONER_SECRET}-{cluster_name}-{rbd_name}"
                 )
+                if rbd_namespace:
+                    rbd_node_secret += f"-{rbd_namespace}"
+                    rbd_provisioner_secret += f"-{rbd_namespace}"
                 assert (
                     sc_rbd["parameters"]["csi.storage.k8s.io/node-stage-secret-name"]
                     == rbd_node_secret
@@ -617,12 +620,21 @@ def ocs_install_verification(
     log.info("Verify CSI users and caps for external cluster")
     if config.DEPLOYMENT["external_mode"] and ocs_version >= version.VERSION_4_10:
         if config.ENV_DATA["restricted-auth-permission"]:
-            ceph_csi_users = [
+            ceph_csi_cephfs_users = [
                 f"client.csi-cephfs-node-{cluster_name}-{cephfs_name}",
                 f"client.csi-cephfs-provisioner-{cluster_name}-{cephfs_name}",
+            ]
+            ceph_csi_rbd_users = [
                 f"client.csi-rbd-node-{cluster_name}-{rbd_name}",
                 f"client.csi-rbd-provisioner-{cluster_name}-{rbd_name}",
             ]
+            if rbd_namespace:
+                # Add the rbd namespace suffix to the ceph csi rbd users
+                ceph_csi_rbd_users = [
+                    f"{csi_user}-{rbd_namespace}" for csi_user in ceph_csi_rbd_users
+                ]
+
+            ceph_csi_users = ceph_csi_cephfs_users + ceph_csi_rbd_users
             log.debug(f"CSI users for restricted auth permissions are {ceph_csi_users}")
             expected_csi_users = copy.deepcopy(ceph_csi_users)
         else:

@@ -94,6 +94,9 @@ from ocs_ci.ocs.resources.pod import (
     validate_pods_are_respinned_and_running_state,
     get_pods_having_label,
     get_pod_count,
+    wait_for_ceph_cmd_execute_successfully,
+    get_operator_pods,
+    delete_pods,
 )
 from ocs_ci.ocs.resources.storage_cluster import (
     ocs_install_verification,
@@ -1990,6 +1993,11 @@ class Deployment(object):
         logger.info("Checking ceph health for external cluster")
         if not config.DEPLOYMENT.get("multi_storagecluster"):
             try:
+                res = wait_for_ceph_cmd_execute_successfully(timeout=120, sleep=10)
+                if not res:
+                    logger.info("Trying to restart the rook-ceph-operator pod...")
+                    operator_pods = get_operator_pods()
+                    delete_pods(operator_pods)
                 ceph_health_check(
                     tries=30,
                     delay=10,
