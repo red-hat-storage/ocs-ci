@@ -8,7 +8,7 @@ import logging
 import pytest
 
 from ocs_ci.framework import config
-from ocs_ci.framework.pytest_customization.marks import blue_squad
+from ocs_ci.framework.pytest_customization.marks import blue_squad, jira
 from ocs_ci.framework.testlib import (
     bugzilla,
     tier3,
@@ -22,6 +22,7 @@ from ocs_ci.utility.prometheus import PrometheusAPI, check_query_range_result_en
 logger = logging.getLogger(__name__)
 
 
+@jira("DFBUGS-308")
 @blue_squad
 @tier3
 @pytest.mark.polarion_id("OCS-1306")
