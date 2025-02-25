@@ -76,12 +76,7 @@ from ocs_ci.ocs.resources.bucket_policy import gen_bucket_policy
 from ocs_ci.ocs.resources.mcg_replication_policy import AwsLogBasedReplicationPolicy
 from ocs_ci.ocs.resources.mockup_bucket_logger import MockupBucketLogger
 from ocs_ci.ocs.scale_lib import FioPodScale
-from ocs_ci.ocs.utils import (
-    setup_ceph_toolbox,
-    collect_ocs_logs,
-    collect_pod_container_rpm_package,
-    get_dr_operator_versions,
-)
+from ocs_ci.ocs import utils
 from ocs_ci.ocs.resources.deployment import Deployment
 from ocs_ci.ocs.resources.job import get_job_obj
 from ocs_ci.ocs.resources.backingstore import (
@@ -1629,7 +1624,7 @@ def additional_testsuite_properties(record_testsuite_property, pytestconfig):
     # add markers as separated property
     markers = ocsci_config.RUN["cli_params"].get("-m", "").replace(" ", "-")
     record_testsuite_property("rp_markers", markers)
-    dr_operator_versions = get_dr_operator_versions()
+    dr_operator_versions = utils.get_dr_operator_versions()
     for dr_operator_name, dr_operator_version in dr_operator_versions.items():
         record_testsuite_property(f"rp_{dr_operator_name}", dr_operator_version)
 
@@ -3931,7 +3926,7 @@ def ceph_toolbox(request):
     ):
         try:
             # Creating toolbox pod
-            setup_ceph_toolbox()
+            utils.setup_ceph_toolbox()
         except CommandFailed:
             log.info("Failed to create toolbox")
 
@@ -4481,10 +4476,47 @@ def collect_logs_fixture(request):
         if not ocsci_config.RUN["cli_params"].get("deploy") and not ocsci_config.RUN[
             "cli_params"
         ].get("teardown"):
+            failure_in_mg = []
             if ocsci_config.REPORTING["collect_logs_on_success_run"]:
-                collect_ocs_logs("testcases", ocs=False, status_failure=False)
-                collect_ocs_logs("testcases", ocp=False, status_failure=False)
-                collect_pod_container_rpm_package("testcases")
+                for mg_target in ["ocs", "ocp"]:
+                    try:
+                        if (
+                            utils.mg_collected_logs
+                            and mg_target in utils.mg_collected_types
+                            and (
+                                utils.mg_fail_count
+                                < config.REPORTING["max_mg_fail_attempts"]
+                            )
+                        ):
+                            log.info(
+                                f"Skipping {mg_target} MG Collection as we have collected logs at least once during run"
+                            )
+                        else:
+                            timeout = defaults.MUST_GATHER_TIMEOUT
+                            if mg_target == "ocs":
+                                timeout = 7200
+                            log.info("Collecting OCP logs on Success run!")
+                            utils.collect_ocs_logs(
+                                "testcases",
+                                ocs="ocs" == mg_target,
+                                ocp="ocp" == mg_target,
+                                status_failure=False,
+                                silent=True,
+                                output_file=True,
+                                timeout=timeout,
+                            )
+                    except Exception as ex:
+                        failure_in_mg.append((mg_target, ex))
+                        log.error(
+                            f"Failure in collecting {mg_target} must gather! Exception: {ex}"
+                        )
+            try:
+                utils.collect_pod_container_rpm_package("testcases")
+            except Exception as ex:
+                failure_in_mg.append(("rpm_package_info", ex))
+                log.error(f"Failure in collectin RPM package info! Exception: {ex}")
+            if failure_in_mg:
+                raise failure_in_mg[0][1]
 
     request.addfinalizer(finalizer)
 
