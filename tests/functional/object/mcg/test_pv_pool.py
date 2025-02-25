@@ -35,6 +35,7 @@ from ocs_ci.ocs.bucket_utils import (
     copy_random_individual_objects,
 )
 from ocs_ci.ocs import constants
+from ocs_ci.utility.retry import retry
 
 logger = logging.getLogger(__name__)
 LOCAL_DIR_PATH = "/awsfiles"
@@ -116,17 +117,12 @@ class TestPvPool:
             )
 
         # 4. Confirm that uploading is possible again now that there is space
-        try:
-            awscli_pod_session.exec_s3_cmd_on_pod(
-                f"cp /tmp/testfile s3://{bucket.name}/{uploaded_objs[0]}",
-                mcg_obj_session,
-            )
-        except CommandFailed:
-            assert not check_pv_backingstore_status(
-                bucket.bucketclass.backingstores[0].name,
-                config.ENV_DATA["cluster_namespace"],
-                "`NO_CAPACITY`",
-            ), "Failed to re-upload the removed file"
+        retry((CommandFailed,), tries=10, delay=30, backoff=1)(
+            awscli_pod_session.exec_s3_cmd_on_pod
+        )(
+            f"cp /tmp/testfile s3://{bucket.name}/{uploaded_objs[0]}",
+            mcg_obj_session,
+        )
 
     @pytest.mark.polarion_id("OCS-2333")
     @tier2
