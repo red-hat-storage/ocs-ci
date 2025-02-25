@@ -1894,7 +1894,13 @@ class Deployment(object):
 
         # get external cluster details
         host, user, password, ssh_key = get_external_cluster_client()
-        external_cluster = ExternalCluster(host, user, password, ssh_key)
+        external_cluster = ExternalCluster(
+            host,
+            user,
+            password,
+            ssh_key,
+            jump_host=config.EXTERNAL_MODE.get("ssh_jump_host"),
+        )
         external_cluster.get_external_cluster_details()
 
         # get admin keyring
