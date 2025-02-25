@@ -372,6 +372,8 @@ def ocs_install_verification(
     log.info("Verifying storage classes")
     storage_class = OCP(kind=constants.STORAGECLASS, namespace=namespace)
     storage_cluster_name = config.ENV_DATA["storage_cluster_name"]
+    rbd_namespace = config.EXTERNAL_MODE.get("rbd_namespace")
+
     if config.ENV_DATA.get("custom_default_storageclass_names"):
         custom_sc = get_storageclass_names_from_storagecluster_spec()
         if not all(
@@ -390,9 +392,13 @@ def ocs_install_verification(
             custom_sc[constants.OCS_COMPONENTS_MAP["blockpools"]],
         }
     else:
+        if external and rbd_namespace:
+            sc_rbd = f"{constants.DEFAULT_EXTERNAL_MODE_STORAGECLASS_RBD_NAMESPACE_PREFIX}-{rbd_namespace}"
+        else:
+            sc_rbd = f"{storage_cluster_name}-ceph-rbd"
         required_storage_classes = {
             f"{storage_cluster_name}-cephfs",
-            f"{storage_cluster_name}-ceph-rbd",
+            sc_rbd,
         }
     skip_storage_classes = set()
     if disable_cephfs or provider_cluster:
@@ -505,6 +511,9 @@ def ocs_install_verification(
                 rbd_provisioner_secret = (
                     f"{constants.RBD_PROVISIONER_SECRET}-{cluster_name}-{rbd_name}"
                 )
+                if rbd_namespace:
+                    rbd_node_secret += f"-{rbd_namespace}"
+                    rbd_provisioner_secret += f"-{rbd_namespace}"
                 assert (
                     sc_rbd["parameters"]["csi.storage.k8s.io/node-stage-secret-name"]
                     == rbd_node_secret
