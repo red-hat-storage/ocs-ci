@@ -53,9 +53,12 @@ class TestFailoverAndRelocateWithDiscoveredApps:
             ),
         ],
     )
-
-    def test_failover_and_relocate_discovered_apps(self, discovered_apps_dr_workload, primary_cluster_down,
-        pvc_interface,):
+    def test_failover_and_relocate_discovered_apps(
+        self,
+        discovered_apps_dr_workload,
+        primary_cluster_down,
+        pvc_interface,
+    ):
         """
         Tests to verify application failover and Relocate with Discovered Apps
         There are two test cases:
@@ -180,7 +183,6 @@ class TestFailoverAndRelocateWithDiscoveredApps:
             rdr_workload.workload_namespace,
             timeout=1200,
             discovered_apps=True,
-
         )
 
         if pvc_interface == constants.CEPHFILESYSTEM:
