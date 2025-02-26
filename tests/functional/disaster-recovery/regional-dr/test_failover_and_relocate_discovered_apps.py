@@ -65,30 +65,30 @@ class TestFailoverAndRelocateWithDiscoveredApps:
     @pytest.mark.parametrize(
         argnames=["primary_cluster_down", "pvc_interface"],
         argvalues=[
-            # pytest.param(
-            #     False,
-            #     constants.CEPHBLOCKPOOL,
-            #     # marks=pytest.mark.polarion_id(polarion_id_primary_up),
-            #     id="primary_up-rbd",
-            # ),
-            # pytest.param(
-            #     True,
-            #     constants.CEPHBLOCKPOOL,
-            #     # marks=pytest.mark.polarion_id(polarion_id_primary_down),
-            #     id="primary_down-rbd",
-            # ),
+            pytest.param(
+                False,
+                constants.CEPHBLOCKPOOL,
+                # marks=pytest.mark.polarion_id(polarion_id_primary_up),
+                id="primary_up-rbd",
+            ),
+            pytest.param(
+                True,
+                constants.CEPHBLOCKPOOL,
+                # marks=pytest.mark.polarion_id(polarion_id_primary_down),
+                id="primary_down-rbd",
+            ),
             pytest.param(
                 False,
                 constants.CEPHFILESYSTEM,
                 # marks=pytest.mark.polarion_id(polarion_id_primary_up_cephfs),
                 id="primary_up-cephfs",
             ),
-            # pytest.param(
-            #     True,
-            #     constants.CEPHFILESYSTEM,
-            #     # marks=pytest.mark.polarion_id(polarion_id_primary_down_cephfs),
-            #     id="primary_down-cephfs",
-            # ),
+            pytest.param(
+                True,
+                constants.CEPHFILESYSTEM,
+                # marks=pytest.mark.polarion_id(polarion_id_primary_down_cephfs),
+                id="primary_down-cephfs",
+            ),
         ],
     )
 
