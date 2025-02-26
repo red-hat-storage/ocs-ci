@@ -18,6 +18,7 @@ import yaml
 
 from botocore.exceptions import EndpointConnectionError, BotoCoreError
 
+from ocs_ci.deployment.fusion import FusionDeployment
 from ocs_ci.deployment.ocp import OCPDeployment as BaseOCPDeployment
 from ocs_ci.deployment.helpers.external_cluster_helpers import (
     ExternalCluster,
@@ -574,32 +575,8 @@ class Deployment(object):
         Install IBM Fusion operator
         """
         if config.DEPLOYMENT.get("fusion_deployment"):
-            # create catalog source
-            create_fusion_catalog_source()
-
-            # create namespace and operator group
-            logger.info("Creating namespace for IBM Fusion.")
-            run_cmd(f"oc create -f {constants.FUSION_NS_YAML}")
-
-            # deploy fusion
-            from ocs_ci.deployment.fusion import deploy_fusion
-
-            deploy_fusion()
-
-            # wait for subscription and csv to found
-            fusion_operator = defaults.FUSION_OPERATOR_NAME
-            fusion_namespace = defaults.FUSION_NAMESPACE
-            self.wait_for_subscription(fusion_operator, fusion_namespace)
-            self.wait_for_csv(fusion_operator, fusion_namespace)
-            logger.info(f"Sleeping for 30 seconds after {fusion_operator} created")
-            time.sleep(30)
-
-            # wait for package manifest to found and csv in Succeeded state
-            package_manifest = PackageManifest(resource_name=fusion_operator)
-            package_manifest.wait_for_resource(timeout=120)
-            csv_name = package_manifest.get_current_csv()
-            csv = CSV(resource_name=csv_name, namespace=fusion_namespace)
-            csv.wait_for_phase("Succeeded", timeout=300)
+            fusion_deployment = FusionDeployment()
+            fusion_deployment.deploy()
 
     def do_deploy_fdf(self):
         """
