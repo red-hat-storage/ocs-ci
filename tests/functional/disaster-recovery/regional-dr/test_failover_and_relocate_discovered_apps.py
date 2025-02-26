@@ -7,7 +7,6 @@ from ocs_ci.framework import config
 from ocs_ci.framework.testlib import acceptance, tier1, skipif_ocs_version
 from ocs_ci.framework.pytest_customization.marks import rdr, turquoise_squad
 from ocs_ci.helpers import dr_helpers
-from ocs_ci.ocs import constants
 from ocs_ci.ocs.resources.drpc import DRPC
 from ocs_ci.ocs import constants
 
@@ -190,7 +189,7 @@ class TestFailoverAndRelocateWithDiscoveredApps:
                 rdr_workload.workload_namespace
             )
             # Verify the creation of ReplicationDestination resources on primary cluster
-            config.switch_to_cluster_by_name(secondary_cluster_name)
+            config.switch_to_cluster_by_name(primary_cluster_name_after_failover)
             dr_helpers.wait_for_replication_destinations_creation(
                 rdr_workload.workload_pvc_count, rdr_workload.workload_namespace
             )
