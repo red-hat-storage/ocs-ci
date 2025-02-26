@@ -161,6 +161,16 @@ version.
 * `force_download_rosa_cli` - Download the ROSA CLI even if one already exists in the bin_dir
 * `force_download_ocm_cli` - Download the OCM CLI even if one already exists in the bin_dir
 * `ipv6` - ipv6 single stack deployment of OCP and ODF.
+* `fusion_deployment` - Enable Fusion deployment.
+* `fusion_channel` - Channel to deploy Fusion operator with.
+* `fusion_pre_release` - Deploy pre-release version of Fusion.
+* `fusion_pre_release_sds_version` - SDS version, used to build path to Fusion pre-release image.
+* `fusion_pre_release_image` - Pre-release image version of Fusion to deploy.
+* `fdf_deployment` - Enable Fusion Data Foundation deployment.
+* `fdf_pre_release`: Deploy pre-release version of FDF.
+* `fdf_image_tag`: FDF image tag, used to retrieve fdf_pre_release_image_digest.
+* `fdf_pre_release_registry`: Registry where the pre-release image of FDF is hosted.
+* `fdf_pre_release_image_digest`: sha256 of the pre-release image of FDF to deploy.
 
 #### REPORTING
 
