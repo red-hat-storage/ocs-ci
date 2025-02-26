@@ -484,7 +484,8 @@ def finish_cluster_load():
     logger.info("Finishing cluster load!")
     config.RUN["load_status"] = "finished"
     if cluster_load_thread:
-        cluster_load_thread.join()
+        logger.info("Waiting for 60 seconds to get cluster load thread finished!")
+        cluster_load_thread.join(timeout=60)
     logger.info("Cluster load thread finished!")
     if cluster_load_error:
         raise cluster_load_error
