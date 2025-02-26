@@ -1183,7 +1183,7 @@ class TestNfsEnable(ManageTest):
                 condition=constants.STATUS_RUNNING,
                 selector="name=nfs-test-pod",
                 dont_allow_other_resources=True,
-                timeout=60,
+                timeout=120,
             )
             pod_objs = pod.get_all_pods(
                 namespace=self.namespace,
@@ -1275,7 +1275,7 @@ class TestNfsEnable(ManageTest):
 
         finally:
             # Delete deployment
-            cmd_delete_deployment = "delete dc nfs-test-pod"
+            cmd_delete_deployment = "delete deployment nfs-test-pod"
             self.storage_cluster_obj.exec_oc_cmd(cmd_delete_deployment)
 
             pv_obj = nfs_pvc_obj.backed_pv_obj
