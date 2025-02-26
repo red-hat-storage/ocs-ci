@@ -1382,6 +1382,7 @@ OPERATOR_CS_QUAY_API_QUERY = (
     "tag/?onlyActiveTags=true&limit={tag_limit}&page={page}"
 )
 OPTIONAL_OPERATORS_SELECTOR = "catalog=optional-operators"
+OPTIONAL_OPERATORS = "optional-operators"
 OCS_OPERATOR_BUNDLE_IMAGE = "quay.io/rhceph-dev/ocs-operator-bundle"
 OCS_CATALOG_SOURCE_NAME = "ocs-catalogsource"
 

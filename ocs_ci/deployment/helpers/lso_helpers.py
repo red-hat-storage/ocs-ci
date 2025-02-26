@@ -250,6 +250,11 @@ def create_optional_operators_catalogsource_non_ga(force=False):
             constants.LOCAL_STORAGE_OPTIONAL_OPERATORS, multi_document=True
         )
     )
+    for operator in optional_operators_data:
+        if operator.get("metadata", {}).get("name") == constants.OPTIONAL_OPERATORS:
+            image = operator["spec"]["image"].split(":")[0]
+            ocp_version_image = f"{image}:v{ocp_version}"
+            operator["spec"]["image"] = ocp_version_image
     optional_operators_yaml = tempfile.NamedTemporaryFile(
         mode="w+", prefix="optional_operators", delete=False
     )
