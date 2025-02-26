@@ -5,12 +5,18 @@ import time
 from threading import Event
 from concurrent.futures.thread import ThreadPoolExecutor
 from datetime import datetime
+
 from ocs_ci.ocs import hsbench
 from ocs_ci.ocs.bucket_utils import (
     s3_delete_objects,
     list_objects_in_batches,
     s3_delete_object,
     random_object_round_trip_verification,
+    gen_empty_file_and_upload,
+    rm_object_recursive,
+    expire_objects_in_bucket,
+    verify_objs_deleted_from_objmds,
+    sample_if_objects_expired,
 )
 from ocs_ci.framework.pytest_customization.marks import (
     bugzilla,
@@ -18,6 +24,11 @@ from ocs_ci.framework.pytest_customization.marks import (
     scale,
     mcg,
     orange_squad,
+)
+from ocs_ci.ocs.resources.mcg_lifecycle_policies import (
+    LifecyclePolicy,
+    ExpirationRule,
+    LifecycleFilter,
 )
 from ocs_ci.utility.retry import retry
 from ocs_ci.ocs.exceptions import CommandFailed
@@ -190,3 +201,114 @@ class TestDeleteObjects:
         # stop the io running in the background
         event.set()
         io_thread.result()
+
+    @pytest.fixture(scope="session")
+    def create_bucket_and_verify_object_expiration(
+        self, request, mcg_obj_session, bucket_factory_session
+    ):
+        """
+        This session scoped fixture creates the bucket and
+        make sures all objects in the bucket are expired at teardown.
+        Implementing this way helps us unblock other tests while the
+        object expiration happens in the background.
+
+        """
+        bucket = None
+
+        def factory():
+            nonlocal bucket
+            bucket = bucket_factory_session()[0]
+            return bucket
+
+        def teardown():
+            if bucket:
+                # Verify that all the objects are marked as deleted
+                verify_objs_deleted_from_objmds(bucket.name, timeout=72000, sleep=90)
+
+                # Verify the object expiration/deletion by listing from the buckets also
+                sample_if_objects_expired(mcg_obj_session, bucket.name)
+                log.info("All the objects are deleted/expired")
+
+        request.addfinalizer(teardown)
+        return factory
+
+    @bugzilla("2279742")
+    @bugzilla("2279964")
+    @polarion_id("OCS-6097")
+    @polarion_id("OCS-6096")
+    @pytest.mark.parametrize(
+        argnames=["is_expiration"],
+        argvalues=[
+            pytest.param(False),
+            pytest.param(True),
+        ],
+    )
+    def test_delete_objects_with_expiration(
+        self,
+        is_expiration,
+        create_bucket_and_verify_object_expiration,
+        reduce_expiration_interval,
+        scale_noobaa_resources_session,
+        change_lifecycle_schedule_min,
+        change_lifecycle_batch_size,
+        awscli_pod_session,
+        test_directory_setup,
+        mcg_obj_session,
+    ):
+        """
+        This test aims to test deletion of objects through normal recursive and expiration
+        method. then verify that the all the objects in the bucket are marked with deletion
+        time.
+
+        """
+
+        # reduce expiration interval to 1 minute
+        reduce_expiration_interval(interval=1)
+        log.info("Reduced expiration interval to 1 minute")
+
+        # change lifecycle schedule minutes
+        change_lifecycle_schedule_min(interval=1)
+        log.info("Change lifecycle schedyle minute to 1 minute")
+
+        # change lifecycle batch size to 10K to enable faster deletion
+        change_lifecycle_batch_size(new_lifecycle_batch_size=10000)
+        log.info("Increased the lifecycle batch size to 10K")
+
+        # create the bucket
+        bucket = create_bucket_and_verify_object_expiration()
+        log.info(f"Created bucket {bucket.name}")
+
+        # generate 1 million empty file objects and upload them
+        # to the bucket parallely
+        gen_empty_file_and_upload(
+            mcg_obj_session,
+            awscli_pod_session,
+            test_directory_setup.origin_dir,
+            amount=1000000,
+            bucket=bucket.name,
+            threads=10,
+            timeout=10800,
+        )
+        log.info(f"Uploaded 1 million objects to the bucket {bucket.name}")
+
+        if is_expiration:
+            # change the creation time for the objects in the bucket
+            expire_objects_in_bucket(bucket.name)
+            log.info(
+                f"Changed creation date for the objects in the bucket {bucket.name}"
+            )
+
+            # apply the object expiration policy to the bucket
+            log.info(f"Setting object expiration on bucket: {bucket.name}")
+            lifecycle_policy = LifecyclePolicy(
+                ExpirationRule(days=1, filter=LifecycleFilter())
+            )
+            mcg_obj_session.s3_client.put_bucket_lifecycle_configuration(
+                Bucket=bucket.name, LifecycleConfiguration=lifecycle_policy.as_dict()
+            )
+        else:
+            # remove the objects in the bucket recursively
+            rm_object_recursive(
+                awscli_pod_session, bucket.name, mcg_obj_session, timeout=7200
+            )
+            log.info("Deleted objects from the bucket recursively")
