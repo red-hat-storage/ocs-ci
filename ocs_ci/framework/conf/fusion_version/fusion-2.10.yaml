@@ -1,10 +1,10 @@
 DEPLOYMENT:
   fusion_deployment: True
   fdf_deployment: True
-  channel: v2.0
-  fusion_pre_ga_sds_version: 2.10.0
-  fusion_pre_ga_image: 2.10.0-31566152
-  fusion_pre_ga: true
+  fusion_channel: v2.0
+  fusion_pre_release_sds_version: 2.10.0
+  fusion_pre_release_image: 2.10.0-31566152
+  fusion_pre_release: true
 
 
 ENV_DATA:

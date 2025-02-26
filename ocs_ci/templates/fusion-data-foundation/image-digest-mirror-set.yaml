@@ -17,9 +17,6 @@ spec:
             - docker-na-public.artifactory.swg-devops.com/hyc-abell-devops-team-dev-docker-local/df/ocs-metrics-exporter-rhel9
           source: cp.icr.io/cp/df/ocs-metrics-exporter-rhel9
         - mirrors:
-            - docker-na-public.artifactory.swg-devops.com/hyc-abell-devops-team-dev-docker-local/df/odf-cli-rhel9
-          source: cp.icr.io/cp/df/odf-cli-rhel9
-        - mirrors:
             - docker-na-public.artifactory.swg-devops.com/hyc-abell-devops-team-dev-docker-local/df/odf-console-rhel9
           source: cp.icr.io/cp/df/odf-console-rhel9
         - mirrors:
@@ -32,35 +29,23 @@ spec:
             - docker-na-public.artifactory.swg-devops.com/hyc-abell-devops-team-dev-docker-local/df/odf-multicluster-console-rhel9
           source: cp.icr.io/cp/df/odf-multicluster-console-rhel9
         - mirrors:
-            - docker-na-public.artifactory.swg-devops.com/hyc-abell-devops-team-dev-docker-local/df/ibm-ceph/ceph-6-rhel9
-          source: cp.icr.io/cp/ibm-ceph/ceph-6-rhel9
+            - docker-na-public.artifactory.swg-devops.com/hyc-abell-devops-team-dev-docker-local/df/ibm-ceph/ceph-8-rhel9
+          source: cp.icr.io/cp/ibm-ceph/ceph-8-rhel9
         - mirrors:
-            - docker-na-public.artifactory.swg-devops.com/hyc-abell-devops-team-dev-docker-local/df/mcg-operator-bundle
-          source: icr.io/cpopen/mcg-operator-bundle
+            - docker-na-public.artifactory.swg-devops.com/hyc-abell-devops-team-dev-docker-local/df/cephcsi-operator
+          source: icr.io/cpopen/cephcsi-operator
         - mirrors:
             - docker-na-public.artifactory.swg-devops.com/hyc-abell-devops-team-dev-docker-local/df/mcg-operator
           source: icr.io/cpopen/mcg-operator
         - mirrors:
-            - docker-na-public.artifactory.swg-devops.com/hyc-abell-devops-team-dev-docker-local/df/ocs-client-operator-bundle
-          source: icr.io/cpopen/ocs-client-operator-bundle
-        - mirrors:
             - docker-na-public.artifactory.swg-devops.com/hyc-abell-devops-team-dev-docker-local/df/ocs-client-operator
           source: icr.io/cpopen/ocs-client-operator
-        - mirrors:
-            - docker-na-public.artifactory.swg-devops.com/hyc-abell-devops-team-dev-docker-local/df/ocs-operator-bundle
-          source: icr.io/cpopen/ocs-operator-bundle
         - mirrors:
             - docker-na-public.artifactory.swg-devops.com/hyc-abell-devops-team-dev-docker-local/df/ocs-operator
           source: icr.io/cpopen/ocs-operator
         - mirrors:
-            - docker-na-public.artifactory.swg-devops.com/hyc-abell-devops-team-dev-docker-local/df/odf-csi-addons-operator-bundle
-          source: icr.io/cpopen/odf-csi-addons-operator-bundle
-        - mirrors:
             - docker-na-public.artifactory.swg-devops.com/hyc-abell-devops-team-dev-docker-local/df/odf-csi-addons-operator
           source: icr.io/cpopen/odf-csi-addons-operator
-        - mirrors:
-            - docker-na-public.artifactory.swg-devops.com/hyc-abell-devops-team-dev-docker-local/df/odf-multicluster-operator-bundle
-          source: icr.io/cpopen/odf-multicluster-operator-bundle
         - mirrors:
             - docker-na-public.artifactory.swg-devops.com/hyc-abell-devops-team-dev-docker-local/df/odf-multicluster-operator
           source: icr.io/cpopen/odf-multicluster-operator
@@ -68,107 +53,80 @@ spec:
             - docker-na-public.artifactory.swg-devops.com/hyc-abell-devops-team-dev-docker-local/df/odf-must-gather
           source: icr.io/cpopen/odf-must-gather
         - mirrors:
-            - docker-na-public.artifactory.swg-devops.com/hyc-abell-devops-team-dev-docker-local/df/odf-operator-bundle
-          source: icr.io/cpopen/odf-operator-bundle
-        - mirrors:
             - docker-na-public.artifactory.swg-devops.com/hyc-abell-devops-team-dev-docker-local/df/odf-operator
           source: icr.io/cpopen/odf-operator
-        - mirrors:
-            - docker-na-public.artifactory.swg-devops.com/hyc-abell-devops-team-dev-docker-local/df/odr-cluster-operator-bundle
-          source: icr.io/cpopen/odr-cluster-operator-bundle
-        - mirrors:
-            - docker-na-public.artifactory.swg-devops.com/hyc-abell-devops-team-dev-docker-local/df/odr-hub-operator-bundle
-          source: icr.io/cpopen/odr-hub-operator-bundle
         - mirrors:
             - docker-na-public.artifactory.swg-devops.com/hyc-abell-devops-team-dev-docker-local/df/odr-operator
           source: icr.io/cpopen/odr-operator
         - mirrors:
-            - docker-na-public.artifactory.swg-devops.com/hyc-abell-devops-team-dev-docker-local/df/odr-recipe-operator-bundle
-          source: icr.io/cpopen/odr-recipe-operator-bundle
-        - mirrors:
             - docker-na-public.artifactory.swg-devops.com/hyc-abell-devops-team-dev-docker-local/df/rook-ceph-operator
           source: icr.io/cpopen/rook-ceph-operator
         - mirrors:
-            - docker-na-public.artifactory.swg-devops.com/hyc-abell-devops-team-dev-docker-local/df/openshift/ose-csi-external-attacher-rhel8
-          source: registry.redhat.io/openshift4/ose-csi-external-attacher-rhel8
+            - docker-na-public.artifactory.swg-devops.com/hyc-abell-devops-team-dev-docker-local/df/odf4/odf-cli-rhel9
+          source: registry.redhat.io/odf4/odf-cli-rhel9
         - mirrors:
-            - docker-na-public.artifactory.swg-devops.com/hyc-abell-devops-team-dev-docker-local/df/openshift/ose-csi-external-attacher-rhel8
-          source: registry.redhat.io/openshift4/ose-csi-external-attacher-rhel8
+            - docker-na-public.artifactory.swg-devops.com/hyc-abell-devops-team-dev-docker-local/df/openshift/ose-csi-external-attacher-rhel9
+          source: registry.redhat.io/openshift4/ose-csi-external-attacher-rhel9
         - mirrors:
-            - docker-na-public.artifactory.swg-devops.com/hyc-abell-devops-team-dev-docker-local/df/openshift/ose-csi-external-attacher-rhel8
-          source: registry.redhat.io/openshift4/ose-csi-external-attacher-rhel8
+            - docker-na-public.artifactory.swg-devops.com/hyc-abell-devops-team-dev-docker-local/df/openshift/ose-csi-external-attacher-rhel9
+          source: registry.redhat.io/openshift4/ose-csi-external-attacher-rhel9
         - mirrors:
-            - docker-na-public.artifactory.swg-devops.com/hyc-abell-devops-team-dev-docker-local/df/openshift/ose-csi-external-attacher-rhel8
-          source: registry.redhat.io/openshift4/ose-csi-external-attacher-rhel8
+            - docker-na-public.artifactory.swg-devops.com/hyc-abell-devops-team-dev-docker-local/df/openshift/ose-csi-external-attacher-rhel9
+          source: registry.redhat.io/openshift4/ose-csi-external-attacher-rhel9
         - mirrors:
-            - docker-na-public.artifactory.swg-devops.com/hyc-abell-devops-team-dev-docker-local/df/openshift/ose-csi-external-attacher
-          source: registry.redhat.io/openshift4/ose-csi-external-attacher
+            - docker-na-public.artifactory.swg-devops.com/hyc-abell-devops-team-dev-docker-local/df/openshift/ose-csi-external-provisioner-rhel9
+          source: registry.redhat.io/openshift4/ose-csi-external-provisioner-rhel9
         - mirrors:
-            - docker-na-public.artifactory.swg-devops.com/hyc-abell-devops-team-dev-docker-local/df/openshift/ose-csi-external-provisioner
-          source: registry.redhat.io/openshift4/ose-csi-external-provisioner
+            - docker-na-public.artifactory.swg-devops.com/hyc-abell-devops-team-dev-docker-local/df/openshift/ose-csi-external-provisioner-rhel9
+          source: registry.redhat.io/openshift4/ose-csi-external-provisioner-rhel9
         - mirrors:
-            - docker-na-public.artifactory.swg-devops.com/hyc-abell-devops-team-dev-docker-local/df/openshift/ose-csi-external-provisioner
-          source: registry.redhat.io/openshift4/ose-csi-external-provisioner
+            - docker-na-public.artifactory.swg-devops.com/hyc-abell-devops-team-dev-docker-local/df/openshift/ose-csi-external-provisioner-rhel9
+          source: registry.redhat.io/openshift4/ose-csi-external-provisioner-rhel9
         - mirrors:
-            - docker-na-public.artifactory.swg-devops.com/hyc-abell-devops-team-dev-docker-local/df/openshift/ose-csi-external-provisioner
-          source: registry.redhat.io/openshift4/ose-csi-external-provisioner
+            - docker-na-public.artifactory.swg-devops.com/hyc-abell-devops-team-dev-docker-local/df/openshift/ose-csi-external-resizer-rhel9
+          source: registry.redhat.io/openshift4/ose-csi-external-resizer-rhel9
         - mirrors:
-            - docker-na-public.artifactory.swg-devops.com/hyc-abell-devops-team-dev-docker-local/df/openshift/ose-csi-external-provisioner
-          source: registry.redhat.io/openshift4/ose-csi-external-provisioner
+            - docker-na-public.artifactory.swg-devops.com/hyc-abell-devops-team-dev-docker-local/df/openshift/ose-csi-external-resizer-rhel9
+          source: registry.redhat.io/openshift4/ose-csi-external-resizer-rhel9
         - mirrors:
-            - docker-na-public.artifactory.swg-devops.com/hyc-abell-devops-team-dev-docker-local/df/openshift/ose-csi-external-provisioner
-          source: registry.redhat.io/openshift4/ose-csi-external-provisioner
+            - docker-na-public.artifactory.swg-devops.com/hyc-abell-devops-team-dev-docker-local/df/openshift/ose-csi-external-resizer-rhel9
+          source: registry.redhat.io/openshift4/ose-csi-external-resizer-rhel9
         - mirrors:
-            - docker-na-public.artifactory.swg-devops.com/hyc-abell-devops-team-dev-docker-local/df/openshift/ose-csi-external-resizer
-          source: registry.redhat.io/openshift4/ose-csi-external-resizer
+            - docker-na-public.artifactory.swg-devops.com/hyc-abell-devops-team-dev-docker-local/df/openshift/ose-csi-external-snapshotter-rhel9
+          source: registry.redhat.io/openshift4/ose-csi-external-snapshotter-rhel9
         - mirrors:
-            - docker-na-public.artifactory.swg-devops.com/hyc-abell-devops-team-dev-docker-local/df/openshift/ose-csi-external-resizer
-          source: registry.redhat.io/openshift4/ose-csi-external-resizer
+            - docker-na-public.artifactory.swg-devops.com/hyc-abell-devops-team-dev-docker-local/df/openshift/ose-csi-external-snapshotter-rhel9
+          source: registry.redhat.io/openshift4/ose-csi-external-snapshotter-rhel9
         - mirrors:
-            - docker-na-public.artifactory.swg-devops.com/hyc-abell-devops-team-dev-docker-local/df/openshift/ose-csi-external-resizer
-          source: registry.redhat.io/openshift4/ose-csi-external-resizer
+            - docker-na-public.artifactory.swg-devops.com/hyc-abell-devops-team-dev-docker-local/df/openshift/ose-csi-external-snapshotter-rhel9
+          source: registry.redhat.io/openshift4/ose-csi-external-snapshotter-rhel9
         - mirrors:
-            - docker-na-public.artifactory.swg-devops.com/hyc-abell-devops-team-dev-docker-local/df/openshift/ose-csi-external-resizer
-          source: registry.redhat.io/openshift4/ose-csi-external-resizer
+            - docker-na-public.artifactory.swg-devops.com/hyc-abell-devops-team-dev-docker-local/df/openshift/ose-csi-node-driver-registrar-rhel9
+          source: registry.redhat.io/openshift4/ose-csi-node-driver-registrar-rhel9
         - mirrors:
-            - docker-na-public.artifactory.swg-devops.com/hyc-abell-devops-team-dev-docker-local/df/openshift/ose-csi-external-resizer
-          source: registry.redhat.io/openshift4/ose-csi-external-resizer
+            - docker-na-public.artifactory.swg-devops.com/hyc-abell-devops-team-dev-docker-local/df/openshift/ose-csi-node-driver-registrar-rhel9
+          source: registry.redhat.io/openshift4/ose-csi-node-driver-registrar-rhel9
         - mirrors:
-            - docker-na-public.artifactory.swg-devops.com/hyc-abell-devops-team-dev-docker-local/df/openshift/ose-csi-external-snapshotter-rhel8
-          source: registry.redhat.io/openshift4/ose-csi-external-snapshotter-rhel8
+            - docker-na-public.artifactory.swg-devops.com/hyc-abell-devops-team-dev-docker-local/df/openshift/ose-csi-node-driver-registrar-rhel9
+          source: registry.redhat.io/openshift4/ose-csi-node-driver-registrar-rhel9
         - mirrors:
-            - docker-na-public.artifactory.swg-devops.com/hyc-abell-devops-team-dev-docker-local/df/openshift/ose-csi-external-snapshotter-rhel8
-          source: registry.redhat.io/openshift4/ose-csi-external-snapshotter-rhel8
+            - docker-na-public.artifactory.swg-devops.com/hyc-abell-devops-team-dev-docker-local/df/openshift/ose-kube-rbac-proxy-rhel9
+          source: registry.redhat.io/openshift4/ose-kube-rbac-proxy-rhel9
         - mirrors:
-            - docker-na-public.artifactory.swg-devops.com/hyc-abell-devops-team-dev-docker-local/df/openshift/ose-csi-external-snapshotter-rhel8
-          source: registry.redhat.io/openshift4/ose-csi-external-snapshotter-rhel8
+            - docker-na-public.artifactory.swg-devops.com/hyc-abell-devops-team-dev-docker-local/df/openshift/ose-oauth-proxy-rhel9
+          source: registry.redhat.io/openshift4/ose-oauth-proxy-rhel9
         - mirrors:
-            - docker-na-public.artifactory.swg-devops.com/hyc-abell-devops-team-dev-docker-local/df/openshift/ose-csi-external-snapshotter-rhel8
-          source: registry.redhat.io/openshift4/ose-csi-external-snapshotter-rhel8
+            - docker-na-public.artifactory.swg-devops.com/hyc-abell-devops-team-dev-docker-local/df/openshift/ose-prometheus-alertmanager-rhel9
+          source: registry.redhat.io/openshift4/ose-prometheus-alertmanager-rhel9
         - mirrors:
-            - docker-na-public.artifactory.swg-devops.com/hyc-abell-devops-team-dev-docker-local/df/openshift/ose-csi-external-snapshotter
-          source: registry.redhat.io/openshift4/ose-csi-external-snapshotter
+            - docker-na-public.artifactory.swg-devops.com/hyc-abell-devops-team-dev-docker-local/df/openshift/ose-prometheus-config-reloader-rhel9
+          source: registry.redhat.io/openshift4/ose-prometheus-config-reloader-rhel9
         - mirrors:
-            - docker-na-public.artifactory.swg-devops.com/hyc-abell-devops-team-dev-docker-local/df/openshift/ose-csi-node-driver-registrar
-          source: registry.redhat.io/openshift4/ose-csi-node-driver-registrar
+            - docker-na-public.artifactory.swg-devops.com/hyc-abell-devops-team-dev-docker-local/df/openshift/ose-prometheus-rhel9-operator
+          source: registry.redhat.io/openshift4/ose-prometheus-rhel9-operator
         - mirrors:
-            - docker-na-public.artifactory.swg-devops.com/hyc-abell-devops-team-dev-docker-local/df/openshift/ose-csi-node-driver-registrar
-          source: registry.redhat.io/openshift4/ose-csi-node-driver-registrar
-        - mirrors:
-            - docker-na-public.artifactory.swg-devops.com/hyc-abell-devops-team-dev-docker-local/df/openshift/ose-csi-node-driver-registrar
-          source: registry.redhat.io/openshift4/ose-csi-node-driver-registrar
-        - mirrors:
-            - docker-na-public.artifactory.swg-devops.com/hyc-abell-devops-team-dev-docker-local/df/openshift/ose-csi-node-driver-registrar
-          source: registry.redhat.io/openshift4/ose-csi-node-driver-registrar
-        - mirrors:
-            - docker-na-public.artifactory.swg-devops.com/hyc-abell-devops-team-dev-docker-local/df/openshift/ose-csi-node-driver-registrar
-          source: registry.redhat.io/openshift4/ose-csi-node-driver-registrar
-        - mirrors:
-            - docker-na-public.artifactory.swg-devops.com/hyc-abell-devops-team-dev-docker-local/df/openshift/ose-kube-rbac-proxy
-          source: registry.redhat.io/openshift4/ose-kube-rbac-proxy
-        - mirrors:
-            - docker-na-public.artifactory.swg-devops.com/hyc-abell-devops-team-dev-docker-local/df/openshift/ose-oauth-proxy
-          source: registry.redhat.io/openshift4/ose-oauth-proxy
+            - docker-na-public.artifactory.swg-devops.com/hyc-abell-devops-team-dev-docker-local/df/openshift/ose-prometheus-rhel9
+          source: registry.redhat.io/openshift4/ose-prometheus-rhel9
         - mirrors:
             - docker-na-public.artifactory.swg-devops.com/hyc-abell-devops-team-dev-docker-local/df/rhel8/postgresql-12
           source: registry.redhat.io/rhel8/postgresql-12

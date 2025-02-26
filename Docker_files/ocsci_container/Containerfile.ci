@@ -3,7 +3,7 @@ FROM registry.access.redhat.com/ubi9/ubi:latest as BUILDER
 ENV OCS_CI_DIR=/opt/ocs-ci
 WORKDIR "${OCS_CI_DIR}"
 
-RUN dnf install --nodocs -y python39 python3.9-devel git libcurl-devel gcc openssl-devel libxml2-devel
+RUN dnf install --nodocs -y python39 python3.9-devel git libcurl-devel gcc openssl-devel libxml2-devel skopeo
 
 # Copy the entire source tree to the image
 # TODO: Check to see if there are any more files we can drop from the image
