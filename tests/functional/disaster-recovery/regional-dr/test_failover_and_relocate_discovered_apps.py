@@ -262,7 +262,7 @@ class TestFailoverAndRelocateWithDiscoveredApps:
                 rdr_workload.workload_namespace
             )
             # Verify the creation of ReplicationDestination resources on primary cluster
-            config.switch_to_cluster_by_name(secondary_cluster_name)
+            config.switch_to_cluster_by_name(primary_cluster_name_after_failover)
             dr_helpers.wait_for_replication_destinations_creation(
                 rdr_workload.workload_pvc_count, rdr_workload.workload_namespace
             )
