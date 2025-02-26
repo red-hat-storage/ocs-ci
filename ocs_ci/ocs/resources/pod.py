@@ -190,7 +190,7 @@ class Pod(OCS):
             cmd = f"exec {self.name} -c {container_name} -- {command}"
         else:
             cmd = f"rsh {self.name} "
-            cmd += {command}
+            cmd += command
         return self.ocp.exec_oc_cmd(
             cmd,
             out_yaml_format,
