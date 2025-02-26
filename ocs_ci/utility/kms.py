@@ -1349,6 +1349,9 @@ class Vault(KMS):
         if not self.vault_backend_path:
             self.get_vault_backend_path()
 
+        self.gather_init_vault_conf()
+        self.update_vault_env_vars()
+
         secret_key = f"rook-ceph-osd-encryption-key-{device_handle}"
 
         # Construct the Vault command
@@ -1387,6 +1390,9 @@ class Vault(KMS):
         Returns:
             str: The NooBaa backend secret.
         """
+        self.gather_init_vault_conf()
+        self.update_vault_env_vars()
+
         # Construct the Vault command
         cmd = f"vault kv get -format=json {self.vault_backend_path}/{constants.NOOBAA_BACKEND_SECRET}"
 
