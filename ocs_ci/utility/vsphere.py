@@ -5,6 +5,7 @@ This module contains the vSphere related methods
 import logging
 import os
 import ssl
+import time
 
 import atexit
 
@@ -507,7 +508,7 @@ class VSPHERE(object):
         """
         return [vm.summary.guest.ipAddress for vm in vms]
 
-    def stop_vms(self, vms, force=True, wait=True):
+    def stop_vms(self, vms, force=True, wait=True, timeout=600):
         """
         Stop VMs
 
@@ -516,6 +517,7 @@ class VSPHERE(object):
             force (bool): True for VM ungraceful power off, False for
                 graceful VM shutdown
             wait (bool): Wait for the VMs to stop
+            timeout (int): Timeout in seconds
 
         """
         if force:
@@ -528,13 +530,15 @@ class VSPHERE(object):
 
             # Can't use WaitForTasks as it requires VMWare tools installed
             # on the guests to check for Shutdown task completion
-            _ = [vm.ShutdownGuest() for vm in vms]
+            for vm in vms:
+                vm.ShutdownGuest()
+                time.sleep(10)
 
             def get_vms_power_status(vms):
                 return [self.get_vm_power_status(vm) for vm in vms]
 
             if wait:
-                for statuses in TimeoutSampler(600, 5, get_vms_power_status, vms):
+                for statuses in TimeoutSampler(timeout, 5, get_vms_power_status, vms):
                     logger.info(
                         f"Waiting for VMs {[vm.name for vm in vms]} to power off. "
                         f"Current VMs statuses: {statuses}"
