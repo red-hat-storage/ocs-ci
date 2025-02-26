@@ -543,7 +543,7 @@ class Vault(KMS):
                     f"Failed to create path f{self.vault_backend_path}"
                 )
         if not backend_path:
-            self.vault_create_policy()
+            self.vault_create_policy(policy_name=self.vault_policy_name)
 
     def vault_create_policy(self, policy_name=None):
         """
