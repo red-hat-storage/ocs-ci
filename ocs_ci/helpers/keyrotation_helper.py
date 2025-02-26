@@ -278,6 +278,8 @@ class OSDKeyrotation(KeyRotation):
             in [constants.VAULT_KMS_PROVIDER, constants.HPCS_KMS_PROVIDER]
         ):
             self.kms = get_kms_details()
+            self.kms.gather_init_vault_conf()
+            self.kms.update_vault_env_vars()
 
     def _get_deviceset(self):
         """
