@@ -1583,6 +1583,7 @@ HCI_PROVIDER_CLIENT_PLATFORMS = [
     HCI_VSPHERE,
 ]
 
+IBM_REGIONS = ["us-east", "us-south", "us"]
 IBM_CLOUD_SUBNETS = {
     # Washington D.C.
     "us-east": {
