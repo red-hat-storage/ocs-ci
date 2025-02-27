@@ -123,13 +123,19 @@ class TestVmShutdownStart(E2ETest):
         csum = cal_md5sum_vm(vm_obj=res_vm_obj, file_path=file_paths[0])
         source_csums[res_vm_obj.name] = csum
 
-        # Keep vms in different states (power on, paused, stoped)
-        vm_for_stop.stop()
-        vm_for_snap.pause()
-
         # Initiate abrupt shutdown the cluster nodes as per OCP official documentation
         worker_nodes = get_nodes(node_type="worker")
         master_nodes = get_nodes(node_type="master")
+
+        if not force:
+            logger.info("Stopping all the vms before graceful shutdown")
+            for vm_obj in all_vms:
+                if vm_obj.printableStatus() != constants.CNV_VM_STOPPED:
+                    vm_obj.stop()
+        else:
+            # Keep vms in different states (power on, paused, stoped)
+            vm_for_stop.stop()
+            vm_for_snap.pause()
 
         shutdown_type = "abruptly" if force else "gracefully"
         logger.info(f"{shutdown_type.capitalize()} shutting down worker & master nodes")
@@ -159,7 +165,7 @@ class TestVmShutdownStart(E2ETest):
         logger.info("Waiting for pods to come in running state.")
         wait_for_pods_to_be_running(timeout=500)
 
-        # check cluster health
+        # Check cluster health
         try:
             logger.info("Making sure ceph health is OK")
             Sanity().health_check(tries=50, cluster_check=False)
@@ -171,13 +177,19 @@ class TestVmShutdownStart(E2ETest):
         cnv_obj = CNVInstaller()
         cnv_obj.post_install_verification()
 
-        # Verify that VMs status post start
-        vm_for_clone.start()
-        vm_for_stop.start()
-        for vm in (vm_for_clone, vm_for_stop):
-            assert (
-                vm.printableStatus() == constants.VM_RUNNING
-            ), f"{vm.name} did not reach the running state."
+        if not force:
+            logger.info("Start all the vms after graceful shutdown")
+            for vm_obj in all_vms:
+                if vm_obj.printableStatus() != constants.VM_RUNNING:
+                    vm_obj.start()
+        else:
+            # Verify that VMs status post start
+            vm_for_clone.start()
+            vm_for_stop.start()
+            for vm in (vm_for_clone, vm_for_stop):
+                assert (
+                    vm.printableStatus() == constants.VM_RUNNING
+                ), f"{vm.name} did not reach the running state."
 
         # Verifies vm status after start and ssh connectivity
         vm_for_clone.verify_vm(verify_ssh=True)
