@@ -67,7 +67,6 @@ team_marks = [manage, ecosystem, e2e]
 # components  and other markers
 ocp = pytest.mark.ocp
 rook = pytest.mark.rook
-ui = pytest.mark.ui
 mcg = pytest.mark.mcg
 rgw = pytest.mark.rgw
 csi = pytest.mark.csi
