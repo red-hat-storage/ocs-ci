@@ -5,6 +5,7 @@ import tempfile
 import time
 from concurrent.futures import ThreadPoolExecutor
 from ocs_ci.deployment.cnv import CNVInstaller
+from ocs_ci.deployment.hyperconverged import HyperConverged
 from ocs_ci.deployment.mce import MCEInstaller
 from ocs_ci.deployment.deployment import Deployment
 from ocs_ci.deployment.helpers.hypershift_base import (
@@ -22,6 +23,7 @@ from ocs_ci.ocs.exceptions import (
     CommandFailed,
     TimeoutExpiredError,
     ResourceWrongStatusException,
+    UnexpectedDeploymentConfiguration,
 )
 from ocs_ci.ocs.ocp import OCP
 from ocs_ci.ocs.resources.catalog_source import CatalogSource
@@ -36,8 +38,6 @@ from ocs_ci.utility.retry import retry
 from ocs_ci.utility.utils import (
     exec_cmd,
     TimeoutSampler,
-    get_ocp_version,
-    get_latest_release_version,
 )
 from ocs_ci.utility.version import get_semantic_version
 from ocs_ci.ocs.resources.storage_client import StorageClient
@@ -260,12 +260,50 @@ class HostedClients(HyperShiftBase):
             # operators and finish the rest preparation steps. For the rest of the clusters we will only deploy OCP
             # with hcp command.
             first_ocp_deployment = index == 0
-            cluster_name = hosted_ocp_cluster.deploy_ocp(
-                deploy_cnv=first_ocp_deployment,
-                deploy_acm_hub=first_ocp_deployment,
+
+            # Put logic on checking and deploying dependencies here
+            if first_ocp_deployment:
+                # ACM installation is a default for Provider/Converged deployments
+                deploy_acm_hub = config.ENV_DATA.get("deploy_acm_hub_cluster", True)
+                # CNV installation is a default for Provider/Converged deployments
+                deploy_cnv = config.DEPLOYMENT.get("cnv_deployment", True)
+                deploy_mce = config.DEPLOYMENT.get("mce_deployment", False)
+                deploy_hyperconverged = config.ENV_DATA.get(
+                    "deploy_hyperconverged", False
+                )
+
+                # Validate conflicting deployments
+                if deploy_acm_hub and deploy_mce:
+                    raise UnexpectedDeploymentConfiguration(
+                        "Conflict: Both 'deploy_acm_hub_cluster' and 'mce_deployment' are enabled. Choose one."
+                    )
+                if deploy_cnv and deploy_hyperconverged:
+                    raise UnexpectedDeploymentConfiguration(
+                        "Conflict: Both 'cnv_deployment' and 'deploy_hyperconverged' are enabled. Choose one."
+                    )
+
+            else:
+                deploy_acm_hub = False
+                deploy_cnv = False
+                deploy_hyperconverged = False
+                deploy_mce = False
+
+            if not config.ENV_DATA["platform"].lower() in HCI_PROVIDER_CLIENT_PLATFORMS:
+                raise ProviderModeNotFoundException()
+
+            if not config.ENV_DATA.get("deploy_acm_hub_cluster", True):
+                deploy_acm_hub = False
+
+            hosted_ocp_cluster.deploy_dependencies(
+                deploy_acm_hub=deploy_acm_hub,
+                deploy_cnv=deploy_cnv,
                 deploy_metallb=first_ocp_deployment,
                 download_hcp_binary=first_ocp_deployment,
+                deploy_hyperconverged=deploy_hyperconverged,
+                deploy_mce=deploy_mce,
             )
+
+            cluster_name = hosted_ocp_cluster.deploy_ocp()
             if cluster_name:
                 cluster_names.append(cluster_name)
 
@@ -361,7 +399,12 @@ class HostedClients(HyperShiftBase):
 
 
 class HypershiftHostedOCP(
-    HyperShiftBase, MetalLBInstaller, CNVInstaller, Deployment, MCEInstaller
+    HyperShiftBase,
+    MetalLBInstaller,
+    CNVInstaller,
+    Deployment,
+    MCEInstaller,
+    HyperConverged,
 ):
     def __init__(self, name):
         Deployment.__init__(self)
@@ -369,6 +412,7 @@ class HypershiftHostedOCP(
         MetalLBInstaller.__init__(self)
         CNVInstaller.__init__(self)
         MCEInstaller.__init__(self)
+        HyperConverged.__init__(self)
         self.name = name
         if config.ENV_DATA.get("clusters", {}).get(self.name):
             cluster_path = (
@@ -384,36 +428,16 @@ class HypershiftHostedOCP(
                 f"Cluster path for desired cluster with name '{self.name}' was not found in ENV_DATA.clusters"
             )
 
-    def deploy_ocp(
-        self,
-        deploy_cnv=True,
-        deploy_acm_hub=True,
-        deploy_metallb=True,
-        download_hcp_binary=True,
-        deploy_mce=True,
-    ):
+    def deploy_ocp(self, **kwargs) -> str:
         """
         Deploy hosted OCP cluster on provisioned Provider platform
 
         Args:
-            deploy_cnv: (bool) Deploy CNV
-            deploy_acm_hub: (bool) Deploy ACM Hub
-            deploy_metallb: (bool) Deploy MetalLB
-            download_hcp_binary: (bool) Download HCP binary
+            **kwargs: Additional arguments for create_kubevirt_ocp_cluster (currently not in use)
 
         Returns:
             str: Name of the hosted cluster
         """
-        if not config.ENV_DATA["platform"].lower() in HCI_PROVIDER_CLIENT_PLATFORMS:
-            raise ProviderModeNotFoundException()
-
-        if not config.ENV_DATA.get("deploy_acm_hub_cluster", True):
-            deploy_acm_hub = False
-
-        self.deploy_dependencies(
-            deploy_acm_hub, deploy_cnv, deploy_metallb, download_hcp_binary, deploy_mce
-        )
-
         ocp_version = str(config.ENV_DATA["clusters"][self.name].get("ocp_version"))
         if ocp_version and len(ocp_version.split(".")) == 2:
             # if ocp_version is provided in form x.y, we need to get the full form x.y.z
@@ -461,6 +485,7 @@ class HypershiftHostedOCP(
         deploy_metallb,
         download_hcp_binary,
         deploy_mce,
+        deploy_hyperconverged,
     ):
         """
         Deploy dependencies for hosted OCP cluster
@@ -470,8 +495,17 @@ class HypershiftHostedOCP(
             deploy_metallb: bool Deploy MetalLB
             download_hcp_binary: bool Download HCP binary
             deploy_mce: bool Deploy mce
+            deploy_hyperconverged: bool Deploy Hyperconverged
 
         """
+
+        # log out all args in one log.info
+        logger.info(
+            f"Deploying dependencies for hosted OCP cluster '{self.name}': "
+            f"deploy_acm_hub={deploy_acm_hub}, deploy_cnv={deploy_cnv}, "
+            f"deploy_metallb={deploy_metallb}, download_hcp_binary={download_hcp_binary}, "
+            f"deploy_mce={deploy_mce}, deploy_hyperconverged={deploy_hyperconverged}"
+        )
         initial_default_sc = helpers.get_default_storage_class()
         logger.info(f"Initial default StorageClass: {initial_default_sc}")
         if not initial_default_sc == constants.CEPHBLOCKPOOL_SC:
@@ -483,8 +517,15 @@ class HypershiftHostedOCP(
             except CommandFailed as e:
                 logger.error(f"Failed to change default StorageClass: {e}")
 
-        if deploy_cnv:
+        if deploy_cnv and not deploy_hyperconverged:
             self.deploy_cnv(check_cnv_ready=True)
+        elif deploy_hyperconverged and not deploy_cnv:
+            self.deploy_hyperconverged()
+        elif deploy_cnv and deploy_hyperconverged:
+            raise UnexpectedDeploymentConfiguration(
+                "Both deploy_cnv and deploy_hyperconverged are set to True. "
+                "Please choose only one of them."
+            )
         if deploy_acm_hub:
             self.deploy_acm_hub()
         if deploy_metallb:
@@ -494,30 +535,6 @@ class HypershiftHostedOCP(
         if deploy_mce and not deploy_acm_hub:
             self.deploy_mce()
             self.validate_mce_deployment()
-
-        provider_ocp_version = str(
-            get_semantic_version(get_ocp_version(), only_major_minor=True)
-        )
-        latest_released_ocp_version = str(
-            get_semantic_version(get_latest_release_version(), only_major_minor=True)
-        )
-
-        if provider_ocp_version > latest_released_ocp_version:
-            logger.info("running on unreleased OCP version")
-            if config.ENV_DATA.get("install_hypershift_upstream"):
-                try:
-                    self.disable_multicluster_engine()
-                    # avoid timelapse error "
-                    # Error: [serviceaccounts "operator" is forbidden: unable to create new content"
-                    logger.info(
-                        "Sleeping for 5 minutes after disable_multicluster_engine()"
-                    )
-                    time.sleep(5 * 60)
-                    self.install_hypershift_upstream_on_cluster()
-                except CommandFailed as e:
-                    raise AssertionError(
-                        f"Failed to install Hypershift on the cluster: {e}"
-                    )
 
         # Enable central infrastructure management service for agent
         if config.DEPLOYMENT.get("hosted_cluster_platform") == "agent":

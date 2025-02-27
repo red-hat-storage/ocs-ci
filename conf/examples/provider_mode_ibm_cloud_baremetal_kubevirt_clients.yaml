@@ -11,6 +11,8 @@ DEPLOYMENT:
   metallb_operator: true
   cnv_latest_stable: true
   local_storage: true
+  mce_deployment: false # use when unreleased version on Clients is needed
+  deploy_hyperconverged: false # use when unreleased version on Clients is needed
 ENV_DATA:
   platform: "hci_baremetal"
   cluster_type: "provider" # it is necessary to run the Hosted clusters deployment on the Provider cluster
