@@ -1349,12 +1349,13 @@ class IBMCloudObjectStorage:
         if objects:
             try:
                 # Form the delete request
-                delete_request = {"Objects": [{"Key": obj} for obj in objects]}
-                response = self.cos_client.delete_objects(
-                    Bucket=bucket_name, Delete=delete_request
-                )
-                logger.info(f"Deleted items for {bucket_name}")
-                logger.debug(json.dumps(response.get("Deleted"), indent=4))
+                for obj in objects:
+                    delete_request = {"Objects": [{"Key": obj}]}
+                    response = self.cos_client.delete_objects(
+                        Bucket=bucket_name, Delete=delete_request
+                    )
+                    logger.info(f"Deleted items for {bucket_name}")
+                    logger.debug(json.dumps(response.get("Deleted"), indent=4))
             except ClientError as ce:
                 logger.error(f"CLIENT ERROR: {ce}")
             except Exception as e:
@@ -1373,10 +1374,13 @@ class IBMCloudObjectStorage:
             self.delete_objects(bucket_name=bucket_name)
             self.cos_client.delete_bucket(Bucket=bucket_name)
             logger.info(f"Bucket: {bucket_name} deleted!")
+            return True
         except ClientError as ce:
             logger.error(f"CLIENT ERROR: {ce}")
+            return False
         except Exception as e:
             logger.error(f"Unable to delete bucket: {e}")
+            return False
 
     def get_buckets(self):
         """
@@ -1397,6 +1401,22 @@ class IBMCloudObjectStorage:
         except Exception as e:
             logger.error(f"Unable to retrieve list buckets: {e}")
         return bucket_list
+
+    def get_buckets_data(self):
+        """
+        Fetches the buckets
+        """
+        buckets_data = []
+        logger.info("Retrieving list of buckets data")
+        try:
+            buckets = self.cos_client.list_buckets()
+            for bucket in buckets["Buckets"]:
+                buckets_data.append(bucket)
+        except ClientError as ce:
+            logger.error(f"CLIENT ERROR: {ce}")
+        except Exception as e:
+            logger.error(f"Unable to retrieve list buckets: {e}")
+        return buckets_data
 
 
 def get_bucket_regions_map():
