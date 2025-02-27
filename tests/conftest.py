@@ -8586,6 +8586,9 @@ def update_current_active_test_marks_global(request):
         list: The marks of the current test
 
     """
+    if request.node.cls and request.node.cls.__name__ == "TestFailurePropagator":
+        return  # Skip updating marks for tests in TestFailurePropagator
+
     marks = [mark.name for mark in request.node.iter_markers()]
     ocs_ci.framework.pytest_customization.marks.current_test_marks = marks
 
