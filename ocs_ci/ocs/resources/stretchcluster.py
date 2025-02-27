@@ -209,10 +209,10 @@ class StretchCluster(OCS):
             try:
                 pause_count = 0
                 time_var = start_time
+                logger.info(f"Current logreader pod: {pod_obj.name}")
                 pod_log = get_pod_logs(
                     pod_name=pod_obj.name, namespace=constants.STRETCH_CLUSTER_NAMESPACE
                 )
-                logger.info(f"Current pod: {pod_obj.name}")
                 while time_var <= (end_time + timedelta(minutes=1)):
                     t_time = time_var.strftime("%H:%M")
                     if f" {t_time}" not in pod_log:
@@ -256,9 +256,9 @@ class StretchCluster(OCS):
             for file_name in self.logfile_map[label][0]:
                 pause_count = 0
                 try:
+                    logger.info(f"Current log file: {file_name}")
                     file_log = pod_obj.exec_sh_cmd_on_pod(command=f"cat {file_name}")
                     time_var = start_time
-                    logger.info(f"Current file: {file_name}")
                     while time_var <= (end_time + timedelta(minutes=1)):
                         t_time = time_var.strftime("%H:%M")
                         if f"T{t_time}" not in file_log:
@@ -269,7 +269,7 @@ class StretchCluster(OCS):
                         time_var = time_var + timedelta(minutes=1)
                     if pause_count > 5:
                         paused += 1
-                except Exception as err:
+                except CommandFailed as err:
                     if (
                         "No such file or directory" in err.args[0]
                         and label == constants.LOGWRITER_RBD_LABEL
@@ -282,7 +282,7 @@ class StretchCluster(OCS):
                         else:
                             raise UnexpectedBehaviour
                         failed += 1
-                    elif failed <= max_fail_expected:
+                    elif failed < max_fail_expected:
                         failed += 1
                         break
                     else:
