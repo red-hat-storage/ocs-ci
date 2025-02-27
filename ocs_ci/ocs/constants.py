@@ -2778,7 +2778,10 @@ MCE_SUBSCRIPTION_YAML = os.path.join(
     TEMPLATE_DEPLOYMENT_DIR_MCE, "mce_subscription.yaml"
 )
 MCE_OPERATOR = "multicluster-engine"
-MCE_OPERATOR_YAML = os.path.join(TEMPLATE_DEPLOYMENT_DIR_MCE, "mce_operator.yaml")
+MCE_RESOURCE_YAML = os.path.join(TEMPLATE_DEPLOYMENT_DIR_MCE, "mce_resource.yaml")
+MCE_OPERATOR_GROUP_YAML = os.path.join(
+    TEMPLATE_DEPLOYMENT_DIR_MCE, "mce_operatorgroup.yaml"
+)
 HYPERSHIFT_NAMESPACE = "hypershift"
 SUPPORTED_VERSIONS_CONFIGMAP = "supported-versions"
 IMAGE_OVERRIDE_JSON = os.path.join(TEMPLATE_DEPLOYMENT_DIR_MCE, "image-override.json")

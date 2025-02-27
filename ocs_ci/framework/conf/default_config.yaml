@@ -121,6 +121,8 @@ DEPLOYMENT:
   sts_enabled: false
   ocm_cli_version: '0.1.75'
   rosa_cli_version: '1.2.49'
+  # Multicluster engine
+  deploy_mce: false
 
 
 
@@ -230,6 +232,9 @@ ENV_DATA:
   rhel7.9_worker_ami: 'ami-058a93d58c5797698'
   rhel8.4_worker_ami: 'ami-074bab065c112399f'
   cluster_type: ""
+  # Provider mode dependencies checks during deployment for presence
+  skip_mce_check_if_present: false
+  skip_cnv_check_if_present: false
 
   # RHEL template which are used for vSphere platform
   rhel7_template: 'rhel79_ocs4qe'
