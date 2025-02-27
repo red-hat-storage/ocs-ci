@@ -41,7 +41,6 @@ from ocs_ci.helpers.helpers import (
     verify_block_pool_exists,
 )
 from ocs_ci.ocs.exceptions import CommandFailed
-from ocs_ci.ocs.resources.catalog_source import CatalogSource
 
 
 log = logging.getLogger(__name__)
