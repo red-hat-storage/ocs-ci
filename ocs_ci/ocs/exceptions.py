@@ -14,6 +14,14 @@ class CephHealthException(Exception):
     pass
 
 
+class CephHealthRecoveredException(Exception):
+    pass
+
+
+class CephHealthNotRecoveredException(Exception):
+    pass
+
+
 class NoobaaHealthException(Exception):
     pass
 
