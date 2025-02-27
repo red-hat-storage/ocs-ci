@@ -921,30 +921,30 @@ def ceph_pool_factory_fixture(request, replica=3, compression=None):
 
 
 @pytest.fixture(scope="class")
-def storageclass_factory_class(request, ceph_pool_factory_class, secret_factory_class):
+def storageclass_factory_class(request, secret_factory_class, ceph_pool_factory_class):
     return storageclass_factory_fixture(
-        request, ceph_pool_factory_class, secret_factory_class
+        request, secret_factory_class, ceph_pool_factory_class
     )
 
 
 @pytest.fixture(scope="session")
 def storageclass_factory_session(
-    request, ceph_pool_factory_session, secret_factory_session
+    request, secret_factory_session, ceph_pool_factory_session
 ):
     return storageclass_factory_fixture(
-        request, ceph_pool_factory_session, secret_factory_session
+        request, secret_factory_session, ceph_pool_factory_session
     )
 
 
 @pytest.fixture(scope="function")
-def storageclass_factory(request, ceph_pool_factory, secret_factory):
-    return storageclass_factory_fixture(request, ceph_pool_factory, secret_factory)
+def storageclass_factory(request, secret_factory, ceph_pool_factory):
+    return storageclass_factory_fixture(request, secret_factory, ceph_pool_factory)
 
 
 def storageclass_factory_fixture(
     request,
-    ceph_pool_factory,
     secret_factory,
+    ceph_pool_factory,
 ):
     """
     Create a storage class factory. Default is RBD based.
