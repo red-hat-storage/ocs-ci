@@ -61,6 +61,7 @@ from ocs_ci.ocs.exceptions import (
     CommandFailed,
     TimeoutExpiredError,
     CephHealthException,
+    CephHealthExceptionNotRecovered,
     ResourceWrongStatusException,
     UnsupportedPlatformError,
     PoolDidNotReachReadyState,
@@ -1831,7 +1832,8 @@ def health_checker(request, tier_marks_name, upgrade_marks_name):
                     # "flip-flopping ceph health OK and warn because of:
                     # HEALTH_WARN Reduced data availability: 2 pgs peering
                     ceph_health_check(
-                        namespace=ocsci_config.ENV_DATA["cluster_namespace"]
+                        namespace=ocsci_config.ENV_DATA["cluster_namespace"],
+                        fix_ceph_health=True,
                     )
                     log.info("Ceph health check passed at teardown!")
                     if ocsci_config.DEPLOYMENT.get("multi_storagecluster"):
@@ -1876,6 +1878,7 @@ def health_checker(request, tier_marks_name, upgrade_marks_name):
                     namespace=ocsci_config.ENV_DATA["cluster_namespace"],
                     tries=10,
                     delay=15,
+                    fix_ceph_health=True,
                 )
                 if not ocsci_config.DEPLOYMENT.get("multi_storagecluster"):
                     if status:
@@ -1890,7 +1893,7 @@ def health_checker(request, tier_marks_name, upgrade_marks_name):
                             "Ceph health check passed for internal and multi-storagecluster external at setup"
                         )
                         return
-            except CephHealthException:
+            except (CephHealthException, CephHealthExceptionNotRecovered):
                 ocsci_config.RUN["skipped_tests_ceph_health"] += 1
                 skipped = True
                 # skip because ceph is not in good health
