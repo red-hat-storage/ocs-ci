@@ -506,6 +506,34 @@ DEFAULT_EXTERNAL_MODE_VOLUMESNAPSHOTCLASS_RBD = (
 DEFAULT_VOLUMESNAPSHOTCLASS_CEPHFS_MS_PC = f"{DEFAULT_CLUSTERNAME}-cephfs"
 DEFAULT_VOLUMESNAPSHOTCLASS_RBD_MS_PC = f"{DEFAULT_CLUSTERNAME}-ceph-rbd"
 
+# hyperconverged defaults
+HYPERCONVERGED_NAMESPACE = "kubevirt-hyperconverged"
+# MCE_NAMESPACE_YAML = os.path.join(TEMPLATE_DEPLOYMENT_DIR_MCE, "mce_namespace.yaml")
+TEMPLATE_DEPLOYMENT_DIR_HYPERCONVERGED = os.path.join(
+    TEMPLATE_DIR, "hyperconverged-deployment"
+)
+HYPERCONVERGED_NAMESPACE_YAML = os.path.join(
+    TEMPLATE_DEPLOYMENT_DIR_HYPERCONVERGED, "hyperconverged_namespace.yaml"
+)
+HYPERCONVERGED_OPERATOR_GROUP_YAML = os.path.join(
+    TEMPLATE_DEPLOYMENT_DIR_HYPERCONVERGED, "hyperconverged_operator_group.yaml"
+)
+HYPERCONVERGED_OPERATOR_GROUP_NAME = "hyperconverged-operator-group"
+HYPERCONVERGED_CATALOGSOURCE = "hyperconverged-catalogsource"
+HYPERVERGED_CATALOGSOURCE_YAML = os.path.join(
+    TEMPLATE_DEPLOYMENT_DIR_HYPERCONVERGED, "hyperconverged-catsrc.yaml"
+)
+HYPERCONVERGED_SUBSCRIPTION = "community-kubevirt-hyperconverged"
+HYPERCONVERGED_SUBSCRIPTION_YAML = os.path.join(
+    TEMPLATE_DEPLOYMENT_DIR_HYPERCONVERGED, "hyperconverged_subscription.yaml"
+)
+HYPERCONVERGED_KIND = "HyperConverged"
+HYPERCONVERGED_NAME = "kubevirt-hyperconverged"
+HYPERCONVERGED_YAML = os.path.join(
+    TEMPLATE_DEPLOYMENT_DIR_HYPERCONVERGED, "hyperconverged.yaml"
+)
+
+
 # CNV deployment constants
 CNV_NAMESPACE = "openshift-cnv"
 CNV_QUAY_NIGHTLY_IMAGE = "quay.io/openshift-cnv/nightly-catalog"
