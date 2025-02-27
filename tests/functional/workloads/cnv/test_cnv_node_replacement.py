@@ -15,7 +15,6 @@ from tests.functional.z_cluster.nodes.test_node_replacement_proactive import (
 )
 from ocs_ci.helpers.helpers import (
     verify_storagecluster_nodetopology,
-    clear_crash_warning_and_osd_removal_leftovers,
 )
 from ocs_ci.helpers.sanity_helpers import Sanity
 
@@ -134,18 +133,29 @@ class TestCnvNodeReplace(E2ETest):
             verify_storagecluster_nodetopology
         ), "Storagecluster node topology is having an entry of non ocs node(s) - Not expected"
 
-        # ToDo: check VMs status
+        # Check VMs status
+        assert (
+            vm_for_stop.printableStatus() == constants.CNV_VM_STOPPED
+        ), "VM did not stop with preserved state after device replacement."
+        logger.info("After device replacement, stopped VM preserved state.")
 
-        # Perform post device replacement data integrity check
+        assert (
+            vm_for_snap.printableStatus() == constants.VM_PAUSED
+        ), "VM did not pause with preserved state after device replacement."
+        logger.info("After device replacement, paused VM preserved state.")
+
+        logger.info("Starting vms")
+        vm_for_stop.start()
+        vm_for_clone.start()
+        vm_for_snap.unpause()
+
+        # Perform post node replacement data integrity check
         for vm_obj in all_vms:
             new_csum = cal_md5sum_vm(vm_obj=vm_obj, file_path=file_paths[0])
             assert source_csums[vm_obj.name] == new_csum, (
                 f"ERROR: Failed data integrity before replacing device and after replacing the device "
                 f"for VM '{vm_obj.name}'."
             )
-
-        logger.info("Clear crash warnings and osd removal leftovers")
-        clear_crash_warning_and_osd_removal_leftovers()
 
         for vm_obj in all_vms:
             vm_obj.stop()
