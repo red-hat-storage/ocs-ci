@@ -601,6 +601,7 @@ ROOK_CEPH_DETECT_VERSION_LABEL = "app=rook-ceph-detect-version"
 CEPH_FILE_CONTROLLER_DETECT_VERSION_LABEL = "app=ceph-file-controller-detect-version"
 CONTROLLER_DETECT_VERSION_NAME = "controller-detect-version"
 OSD_KEY_ROTATION_POD_NAME = "rook-ceph-osd-key-rotation"
+ROOK_CEPH_DETECT_VERSION_POD_NAME = "rook-ceph-detect-version"
 CEPH_OBJECT_CONTROLLER_DETECT_VERSION_LABEL = (
     "app=ceph-object-controller-detect-version"
 )

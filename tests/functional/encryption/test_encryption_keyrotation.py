@@ -341,3 +341,6 @@ class TestOSDKeyrotationWithKMS:
             # Wait for I/O operations to complete
             for future in futures:
                 future.result()
+
+        # Disable Keyrotation
+        self.keyrotation.disable_keyrotation()
