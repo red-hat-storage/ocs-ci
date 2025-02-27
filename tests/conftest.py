@@ -8587,6 +8587,11 @@ def update_current_active_test_marks_global(request):
 
     """
     marks = [mark.name for mark in request.node.iter_markers()]
+
+    # Utility tests might have other marks only to trigger them so they should be ignored
+    if "ocs_ci_utility" in marks:
+        marks = ["ocs_ci_utility"]
+
     ocs_ci.framework.pytest_customization.marks.current_test_marks = marks
 
 

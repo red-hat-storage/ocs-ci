@@ -20,6 +20,7 @@ from ocs_ci.framework.pytest_customization.marks import (
     workloads,
     performance,
     scale,
+    ocs_ci_utility,
 )
 
 log = logging.getLogger(__name__)
@@ -42,6 +43,7 @@ log = logging.getLogger(__name__)
 @workloads
 @performance
 @scale
+@ocs_ci_utility
 class TestFailurePropagator:
     """
     Test class for failure propagator test case
