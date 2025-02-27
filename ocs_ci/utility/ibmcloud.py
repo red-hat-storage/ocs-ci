@@ -412,14 +412,14 @@ class IBMCloud(object):
                 and config.ENV_DATA["deployment_type"] == "managed"
             )
             if ibm_cloud_managed:
-                timeout = 1800
+                timeout = 3000
             # When the node is reachable then the node reaches status Ready.
             logger.info(f"Waiting for nodes: {node_names} to reach ready state")
             wait_for_nodes_status(
                 node_names=node_names,
                 status=constants.NODE_READY,
                 timeout=timeout,
-                sleep=5,
+                sleep=15,
             )
 
     def stop_nodes(self, nodes, wait=True):
