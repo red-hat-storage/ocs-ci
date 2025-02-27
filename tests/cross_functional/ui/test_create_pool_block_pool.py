@@ -6,6 +6,7 @@ from ocs_ci.framework.pytest_customization.marks import (
     tier1,
     skipif_ui_not_support,
     skipif_hci_provider_or_client,
+    skipif_external_mode,
     green_squad,
     bugzilla,
 )
@@ -35,6 +36,7 @@ need_to_delete = []
 
 
 @skipif_ui_not_support("block_pool")
+@skipif_external_mode
 @pytest.mark.parametrize(
     argnames=["replica", "compression"],
     argvalues=[
