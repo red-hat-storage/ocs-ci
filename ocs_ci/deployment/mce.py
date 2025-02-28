@@ -89,9 +89,9 @@ class MCEInstaller(object):
         else:
             logger.info(f"{self.namespace} already exists")
 
-    def create_multiclusterengine_operator(self):
+    def create_multiclusterengine_operatorgroup(self):
         """
-        Creates multiclusterengine operator
+        Creates multiclusterengine operator group
 
         """
         logger.info("Check if mce operator already exist")
@@ -99,11 +99,23 @@ class MCEInstaller(object):
             resource_name=constants.MULTICLUSTER_ENGINE
         ):
 
-            operatorgroup_yaml_file = templating.load_yaml(constants.MCE_OPERATOR_YAML)
+            operatorgroup_yaml_file = templating.load_yaml(
+                constants.MCE_OPERATOR_GROUP_YAML
+            )
             operatorgroup_yaml = OCS(**operatorgroup_yaml_file)
             operatorgroup_yaml.create()
             logger.info("mce OperatorGroup created successfully")
         self.multicluster_engine.wait_for_phase("Available")
+
+    def create_multiclusterengine_resource(self):
+        """
+        Creates multiclusterengine resource
+
+        """
+        resource_yaml_file = templating.load_yaml(constants.MCE_RESOURCE_YAML)
+        resource_yaml = OCS(**resource_yaml_file)
+        resource_yaml.create()
+        logger.info("mce resource created successfully")
 
     def create_mce_subscription(self):
         """
@@ -208,7 +220,7 @@ class MCEInstaller(object):
             check_mce_ready (bool): If True, check if mce is ready. If so, skip the deployment.
         """
         if check_mce_deployed:
-            if self.mce_hyperconverged_installed():
+            if self.mce_installed():
                 logger.info("mce operator is already deployed, skipping the deployment")
                 return
 
@@ -226,8 +238,10 @@ class MCEInstaller(object):
         self.create_mce_namespace()
         # create mce subscription
         self.create_mce_subscription()
-        # Deploy the multiclusterengine CR
-        self.create_multiclusterengine_operator()
+        # Deploy the multiclusterengine operatorgroup
+        self.create_multiclusterengine_operatorgroup()
+        # Create mce resource
+        self.create_multiclusterengine_resource()
         # Check hypershift ns created
         if not self.check_hypershift_namespace():
             cmd = f"oc create namespace {constants.HYPERSHIFT_NAMESPACE}"
@@ -236,6 +250,39 @@ class MCEInstaller(object):
                 raise CommandFailed("Failed to create hypershift namespace")
         # Check supported versions in supported-versions configmap
         self.check_supported_versions()
+
+    def mce_installed(self):
+        """
+        Check if MCE is already installed.
+
+        Returns:
+             bool: True if MCE is installed, False otherwise
+        """
+        ocp = OCP(kind=constants.ROOK_OPERATOR, namespace=self.namespace)
+        return ocp.check_resource_existence(
+            timeout=12, should_exist=True, resource_name=constants.MCE_OPERATOR
+        )
+
+    def post_install_verification(self, raise_exception=False):
+        """
+        Performs MCE post-installation verification, with raise_exception = False may be used safely to run on
+        clusters with MCE installed or not installed.
+
+        Args:
+            raise_exception: If True, allow function to fail the job and raise an exception. If false, return False
+        instead of raising an exception.
+
+        Returns:
+            bool: True if the verification conditions are met, False otherwise
+        Raises:
+            TimeoutExpiredError: If the verification conditions are not met within the timeout
+            and raise_exception is True.
+            ResourceNotFoundError if the namespace does not exist and raise_exception is True.
+            ResourceWrongStatusException if the nodes are not ready, verification fails and raise_exception
+            is True.
+        """
+        # TODO: implement
+        pass
 
     def validate_mce_deployment(self):
         """
