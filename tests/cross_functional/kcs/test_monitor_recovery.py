@@ -1,6 +1,5 @@
 import collections
 import logging
-import base64
 import time
 import os
 from os.path import join
@@ -43,7 +42,7 @@ from ocs_ci.ocs.resources.pod import (
 )
 from ocs_ci.ocs.resources import pod
 from ocs_ci.ocs import ocp, constants, defaults, bucket_utils
-from ocs_ci.helpers.helpers import wait_for_resource_state
+from ocs_ci.helpers.helpers import wait_for_resource_state, get_secret_names
 from ocs_ci.utility.retry import retry
 from ocs_ci.utility.utils import exec_cmd
 
@@ -128,22 +127,27 @@ class TestMonitorRecovery(E2ETest):
         logger.info("Corrupting ceph monitors by deleting store.db")
         corrupt_ceph_monitors()
 
-        logger.info("Backing up all the deployments")
+        logger.info("Starting the monitor recovery procedure")
+        logger.info("Scaling down rook-ceph-operator and ocs operator deployments")
+        mon_recovery.scale_rook_ocs_operators(replica=0)
+
+        logger.info("Backing up all the deployments in openshift-storage namespace")
         mon_recovery.backup_deployments()
         dep_revert, mds_revert = mon_recovery.deployments_to_revert()
 
-        logger.info("Starting the monitor recovery procedure")
-        logger.info("Scaling down rook and ocs operators")
-        mon_recovery.scale_rook_ocs_operators(replica=0)
-
         logger.info(
-            "Preparing script and patching OSDs to remove LivenessProbe and sleep to infinity"
+            "Patching OSD deployments to remove LivenessProbe and sleep to infinity"
         )
-        mon_recovery.prepare_monstore_script()
         mon_recovery.patch_sleep_on_osds()
-        switch_to_project(config.ENV_DATA["cluster_namespace"])
 
-        logger.info("Getting mon-store from OSDs")
+        switch_to_project(config.ENV_DATA["cluster_namespace"])
+        logger.info("Copy tar to the OSDs")
+        mon_recovery.copy_tar_to_pods(pod_type="osd")
+
+        logger.info("Preparing the recover_mon.sh script")
+        mon_recovery.prepare_monstore_script()
+
+        logger.info("Getting mon-store from OSDs by running recover_mon.sh script")
         mon_recovery.run_mon_store()
 
         logger.info("Patching MONs to sleep infinitely")
@@ -152,11 +156,36 @@ class TestMonitorRecovery(E2ETest):
         logger.info("Updating initial delay on all monitors")
         update_mon_initial_delay()
 
+        logger.info("Copy tar to the MONs")
+        mon_recovery.copy_tar_to_pods(pod_type="mon")
+
+        logger.info("Copy the previously retrieved monstore to the mon-a pod")
+        mon_pods = get_mon_pods(namespace=config.ENV_DATA["cluster_namespace"])
+        mon_a = mon_pods[0]
+        logger.info(f"Copying mon-store into monitor: {mon_a.name}")
+        ocp_obj = MonitorRecovery()
+        ocp_obj._exec_oc_cmd(cmd=f"cp /tmp/monstore {mon_a.name}:/tmp/")
+
+        logger.info(
+            "Getting into the mon-a pod and changing the ownership of the retrieved monstore"
+        )
+        _exec_cmd_on_pod(cmd="chown -R ceph:ceph /tmp/monstore", pod_obj=mon_a)
+
+        logger.info(
+            "Getting the keyrings of all the Ceph daemons (OSD, MGR, MDS and RGW) from their respective secrets"
+        )
+        file_path = mon_recovery.get_ceph_daemons_keyrings()
+
+        logger.info("Copy the ceph daemons key ring to mon-a")
+        mon_pods = get_mon_pods(namespace=config.ENV_DATA["cluster_namespace"])
+        mon_a = mon_pods[0]
+        logger.info(
+            f"Copying the mon keyring stored locally from {file_path} to monitor: {mon_a.name}"
+        )
+        ocp_obj._exec_oc_cmd(cmd=f"cp {file_path} {mon_a.name}:/tmp/keyring")
+
         logger.info("Generating monitor map command using the IPs")
         mon_map_cmd = generate_monmap_cmd()
-
-        logger.info("Getting ceph keyring from ocs secrets")
-        mon_recovery.get_ceph_keyrings()
 
         logger.info("Rebuilding Monitors to recover store db")
         mon_recovery.monitor_rebuild(mon_map_cmd)
@@ -246,8 +275,8 @@ class MonitorRecovery(object):
 
         """
         self.backup_dir = tempfile.mkdtemp(prefix="mon-backup-")
-        self.keyring_dir = tempfile.mkdtemp(dir=self.backup_dir, prefix="keyring-")
-        self.keyring_files = []
+        self.keyring_dir = tempfile.mkdtemp(dir=self.backup_dir, prefix="keyring")
+        # self.keyring_files = []
         self.dep_ocp = OCP(
             kind=constants.DEPLOYMENT, namespace=config.ENV_DATA["cluster_namespace"]
         )
@@ -308,6 +337,38 @@ class MonitorRecovery(object):
         for osd in get_osd_pods():
             wait_for_resource_state(resource=osd, state=constants.STATUS_RUNNING)
 
+    def copy_tar_to_pods(self, pod_type="osd"):
+        """
+        Copies local tar binary to the specified type of pods (OSD or MON) pod
+        using cat
+
+        Args:
+            pod_type (str): Type of pod ("osd" or "mon"). Defaults to "osd".
+
+        Raises:
+            ValueError: If the pod_type is neither "osd" nor "mon".
+
+        """
+        if pod_type == "osd":
+            pod_objs = get_osd_pods()
+        elif pod_type == "mon":
+            pod_objs = get_mon_pods()
+        else:
+            logger.error(f"Invalid pod type: {pod_type}. Use 'osd' or 'mon' ")
+            raise ValueError(f"Invalid pod type: {pod_type}. Use 'osd' or 'mon' ")
+        for pod_obj in pod_objs:
+            logger.info(f"Copying tar binary to pod: {pod_obj.name}")
+            cmd = (
+                f"cat /usr/bin/tar | oc exec -i {pod_obj.name} -n {constants.OPENSHIFT_STORAGE_NAMESPACE} -- bash -c "
+                f"'cat > /usr/bin/tar'"
+            )
+            self._exec_oc_cmd(cmd)
+            logger.info(
+                f"Setting execute permissions on /usr/bin/tar in pod: {pod_obj.name}"
+            )
+            cmd = "chmod +x /usr/bin/tar"
+            _exec_cmd_on_pod(cmd=cmd, pod_obj=pod_obj)
+
     def prepare_monstore_script(self):
         """
         Prepares the script to retrieve the `monstore` cluster map from OSDs
@@ -316,25 +377,35 @@ class MonitorRecovery(object):
         recover_mon = """
         #!/bin/bash
         ms=/tmp/monstore
+
         rm -rf $ms
         mkdir $ms
+
         for osd_pod in $(oc get po -l app=rook-ceph-osd -oname -n openshift-storage); do
+
             echo "Starting with pod: $osd_pod"
-            podname=$(echo $osd_pod| cut -c5-)
+
+            podname=$(echo $osd_pod|sed 's/pod\\///g')
             oc exec $osd_pod -- rm -rf $ms
+            oc exec $osd_pod -- mkdir $ms
             oc cp $ms $podname:$ms
+
             rm -rf $ms
             mkdir $ms
-            dp=/var/lib/ceph/osd/ceph-$(oc get $osd_pod -ojsonpath='{ .metadata.labels.ceph_daemon_id }')
-            op=update-mon-db
-            ot=ceph-objectstore-tool
+
             echo "pod in loop: $osd_pod ; done deleting local dirs"
-            oc exec $osd_pod -- $ot --type bluestore --data-path $dp --op $op --no-mon-config --mon-store-path $ms
+
+            oc exec $osd_pod -- ceph-objectstore-tool --type bluestore --data-path \\
+            /var/lib/ceph/osd/ceph-$(oc get $osd_pod -ojsonpath='{ .metadata.labels.ceph_daemon_id }') \\
+            --op update-mon-db --no-mon-config --mon-store-path $ms
             echo "Done with COT on pod: $osd_pod"
+
             oc cp $podname:$ms $ms
+
             echo "Finished pulling COT data from pod: $osd_pod"
         done
-    """
+        """
+
         with open(f"{self.backup_dir}/recover_mon.sh", "w") as file:
             file.write(recover_mon)
         exec_cmd(cmd=f"chmod +x {self.backup_dir}/recover_mon.sh")
@@ -390,73 +461,47 @@ class MonitorRecovery(object):
             mon_map_cmd (str): mon-store tool command
 
         """
-        logger.info("Re-spinning the mon pods")
-        for mon in get_mon_pods(namespace=config.ENV_DATA["cluster_namespace"]):
-            mon.delete()
         mon_pods = get_mon_pods(namespace=config.ENV_DATA["cluster_namespace"])
-        for mon in mon_pods:
-            wait_for_resource_state(resource=mon, state=constants.STATUS_RUNNING)
         mon_a = mon_pods[0]
         logger.info(f"Working on monitor: {mon_a.name}")
-
-        logger.info(f"Copying mon-store into monitor: {mon_a.name}")
-        self._exec_oc_cmd(f"cp /tmp/monstore {mon_a.name}:/tmp/")
-
-        logger.info("Changing ownership of monstore to ceph")
-        _exec_cmd_on_pod(cmd="chown -R ceph:ceph /tmp/monstore", pod_obj=mon_a)
-        self.copy_and_import_keys(mon_obj=mon_a)
-        logger.info("Creating monitor map")
-        _exec_cmd_on_pod(cmd=mon_map_cmd, pod_obj=mon_a)
 
         rebuild_mon_cmd = "ceph-monstore-tool /tmp/monstore rebuild -- --keyring /tmp/keyring --monmap /tmp/monmap"
         logger.info("Running command to rebuild monitor")
         mon_a.exec_cmd_on_pod(command=rebuild_mon_cmd, out_yaml_format=False)
 
-        logger.info(f"Copying store.db directory from monitor: {mon_a.name}")
-        self._exec_oc_cmd(
-            f"cp {mon_a.name}:/tmp/monstore/store.db {self.backup_dir}/store.db"
-        )
+        logger.info("Changing ownership of monstore to ceph")
+        _exec_cmd_on_pod(cmd="chown -R ceph:ceph /tmp/monstore", pod_obj=mon_a)
 
+        logger.info("Copy the rebuild store.db file to the monstore directory")
+        _exec_cmd_on_pod(
+            cmd="mv /tmp/monstore/store.db /var/lib/ceph/mon/ceph-a/store.db",
+            pod_obj=mon_a,
+        )
+        logger.info("Changing ownership of monstore to ceph")
+        _exec_cmd_on_pod(
+            cmd="chown -R ceph:ceph /var/lib/ceph/mon/ceph-a/store.db", pod_obj=mon_a
+        )
+        logger.info(
+            f"Copying store.db directory from monitor: {mon_a.name} to {self.backup_dir}"
+        )
+        self._exec_oc_cmd(
+            cmd=f"cp {mon_a.name}:/var/lib/ceph/mon/ceph-a/store.db {self.backup_dir}/"
+        )
         logger.info("Copying store.db to rest of the monitors")
         for mon in get_mon_pods(namespace=config.ENV_DATA["cluster_namespace"]):
-            cmd = (
-                f"cp {self.backup_dir}/store.db {mon.name}:/var/lib/ceph/mon/ceph-"
-                f"{mon.get().get('metadata').get('labels').get('ceph_daemon_id')}/ "
-            )
-            logger.info(f"Copying store.db to monitor: {mon.name}")
-            self._exec_oc_cmd(cmd)
-            logger.info("Changing ownership of store.db to ceph:ceph")
-            _exec_cmd_on_pod(
-                cmd=f"chown -R ceph:ceph /var/lib/ceph/mon/ceph-"
-                f"{mon.get().get('metadata').get('labels').get('ceph_daemon_id')}/store.db",
-                pod_obj=mon,
-            )
-
-    def copy_and_import_keys(self, mon_obj):
-        """
-        Copies the keys and imports it using ceph-auth
-
-        Args:
-            mon_obj (obj): Monitor object
-
-        """
-        logger.info(f"Copying keyring files to monitor: {mon_obj.name}")
-        for k_file in self.keyring_files:
-            cmd = f"cp {k_file} {mon_obj.name}:/tmp/"
-            logger.info(f"Copying keyring: {k_file} into mon {mon_obj.name}")
-            self._exec_oc_cmd(cmd)
-
-        logger.info(f"Importing ceph keyrings to a temporary file on: {mon_obj.name}")
-        _exec_cmd_on_pod(
-            cmd="cp /etc/ceph/keyring-store/keyring /tmp/keyring", pod_obj=mon_obj
-        )
-        for k_file in self.keyring_files:
-            k_file = k_file.split("/")
-            logger.info(f"Importing keyring {k_file[-1]}")
-            _exec_cmd_on_pod(
-                cmd=f"ceph-authtool /tmp/keyring --import-keyring /tmp/{k_file[-1]}",
-                pod_obj=mon_obj,
-            )
+            if not mon.get().get("metadata").get("labels").get("ceph_daemon_id") == "a":
+                cmd = (
+                    f"cp {self.backup_dir}/store.db {mon.name}:/var/lib/ceph/mon/ceph-"
+                    f"{mon.get().get('metadata').get('labels').get('ceph_daemon_id')}/ "
+                )
+                logger.info(f"Copying store.db to monitor: {mon.name}")
+                self._exec_oc_cmd(cmd)
+                logger.info("Changing ownership of store.db to ceph:ceph")
+                _exec_cmd_on_pod(
+                    cmd=f"chown -R ceph:ceph /var/lib/ceph/mon/ceph-"
+                    f"{mon.get().get('metadata').get('labels').get('ceph_daemon_id')}/store.db",
+                    pod_obj=mon,
+                )
 
     def revert_patches(self, deployment_paths):
         """
@@ -528,48 +573,86 @@ class MonitorRecovery(object):
             )
         return to_revert_patches_path, to_revert_mds_path
 
-    def get_ceph_keyrings(self):
+    def get_all_keyring_secrets(self):
+        """
+        Get all the keyring secrets
+
+        Returns:
+            list: A list of keyring secrets
+
+        """
+        all_secrets = get_secret_names()
+        keyring_secrets = [keyring for keyring in all_secrets if "keyring" in keyring]
+        return keyring_secrets
+
+    def get_ceph_daemons_keyrings(self):
         """
         Gets all ceph and csi related keyring from OCS secrets
 
+        Returns:
+            file: A formatted file with ceph daemons keyrings
+
         """
-        mon_k = get_ceph_caps(["rook-ceph-mons-keyring"])
-        if config.ENV_DATA["platform"].lower() in constants.ON_PREM_PLATFORMS:
-            rgw_k = get_ceph_caps(
-                ["rook-ceph-rgw-ocs-storagecluster-cephobjectstore-a-keyring"]
-            )
-        else:
-            rgw_k = None
-        mgr_k = get_ceph_caps(["rook-ceph-mgr-a-keyring"])
-        mds_k = get_ceph_caps(
-            [
-                "rook-ceph-mds-ocs-storagecluster-cephfilesystem-a-keyring",
-                "rook-ceph-mds-ocs-storagecluster-cephfilesystem-b-keyring",
-            ]
-        )
-        crash_k = get_ceph_caps(["rook-ceph-crash-collector-keyring"])
-        fs_node_k = get_ceph_caps([constants.CEPHFS_NODE_SECRET])
-        rbd_node_k = get_ceph_caps([constants.RBD_NODE_SECRET])
-        fs_provisinor_k = get_ceph_caps([constants.CEPHFS_PROVISIONER_SECRET])
-        rbd_provisinor_k = get_ceph_caps([constants.RBD_PROVISIONER_SECRET])
+        logger.info("Getting the daemons keyrings...")
+        all_keyring_secrets = self.get_all_keyring_secrets()
+        formatted_data = []
+        for keyring_secret in all_keyring_secrets:
+            cmd = f"oc get secret {keyring_secret} -ojson  | jq .data.keyring | xargs echo | base64 -d"
+            out = exec_cmd(cmd=cmd, shell=True)
+            out_str = out.stdout.decode("utf-8")
+            tmp_lines = out_str.strip().splitlines()
+            keyring_data = [line.replace("\t", "").strip() for line in tmp_lines]
+            pod_name = keyring_data[0].strip()
+            formatted_data.append(f"{pod_name}:")
+            for block in keyring_data:
+                if block == "[client.admin]" and "[mon.]" in keyring_data:
+                    logger.info(
+                        "Skipping adding the [client.admin] details present in rook-ceph-mons-keyring"
+                        "as the secret details are already fecthed with rook-ceph-admin-keyring"
+                    )
+                    break
+                key = None
+                caps = []
+                if block.startswith("key ="):
+                    key = block.split(" = ")[1].strip()
+                elif "caps" in block:
+                    caps.append(block.strip())
+                if key:
+                    logger.info(f"Found key :{key}")
+                    formatted_data.append(f"    key = {key}")
+                for cap in caps:
+                    logger.info(f"Found cap :{cap}")
+                    formatted_data.append(f"    {cap}")
+        with open(f"{self.keyring_dir}/keyring-mon-a", "w") as f:
+            f.write("\n".join(formatted_data))
+            logger.info(f"Output saved to {self.keyring_dir}/keyring-mon-a")
 
-        keyring_caps = {
-            "mons": mon_k,
-            "rgws": rgw_k,
-            "mgrs": mgr_k,
-            "mdss": mds_k,
-            "crash": crash_k,
-            "fs_node": fs_node_k,
-            "rbd_node": rbd_node_k,
-            "fs_provisinor": fs_provisinor_k,
-            "rbd_provisinor": rbd_provisinor_k,
-        }
+        logger.info("Getting the OSDs keys")
+        osd_pods = get_osd_pods()
+        for osd_pod in osd_pods:
+            osd_id = osd_pod.get().get("metadata").get("labels").get("ceph-osd-id")
+            cmd = f"oc exec -i {osd_pod.name} -- bash -c 'cat /var/lib/ceph/osd/ceph-{osd_id}/keyring' "
+            out = exec_cmd(cmd=cmd, shell=True)
+            out_osd_str = out.stdout.decode("utf-8")
+            lines = out_osd_str.strip().splitlines()
+            osd_keyring_data = [line.replace("\t", "").strip() for line in lines]
+            pod_name = osd_keyring_data[0].strip()
+            formatted_data.append(f"{pod_name}:")
+            key = None
+            for block in osd_keyring_data:
+                if block.startswith("key ="):
+                    key = block.split(" = ")[1].strip()
+                if key:
+                    formatted_data.append(f"    key = {key}")
+                    formatted_data.append('    caps mgr = "allow profile osd"')
+                    formatted_data.append('    caps mon = "allow profile osd"')
+                    formatted_data.append('    caps osd = "allow *"')
 
-        for secret, caps in keyring_caps.items():
-            if caps:
-                with open(f"{self.keyring_dir}/{secret}.keyring", "w") as fd:
-                    fd.write(caps)
-                    self.keyring_files.append(f"{self.keyring_dir}/{secret}.keyring")
+        with open(f"{self.keyring_dir}/keyring-mon-a", "w") as f:
+            f.write("\n".join(formatted_data) + "\n")
+        logger.info(f"Keyring data saved to {self.keyring_dir}/keyring-mon-a")
+
+        return f"{self.keyring_dir}/keyring-mon-a"
 
     def patch_sleep_on_mds(self):
         """
@@ -605,7 +688,7 @@ class MonitorRecovery(object):
             wait_for_resource_state(resource=mds, state=constants.STATUS_RUNNING)
 
     @retry(CommandFailed, tries=10, delay=10, backoff=1)
-    def _exec_oc_cmd(self, cmd):
+    def _exec_oc_cmd(self, cmd, out_yaml_format=True):
         """
         Exec oc cmd with retry
 
@@ -613,7 +696,7 @@ class MonitorRecovery(object):
             cmd (str): Command
 
         """
-        self.ocp_obj.exec_oc_cmd(cmd)
+        self.ocp_obj.exec_oc_cmd(cmd, out_yaml_format=out_yaml_format)
 
 
 @retry(CommandFailed, tries=10, delay=10, backoff=1)
@@ -803,110 +886,6 @@ def get_spun_dc_pods(pod_list):
     logger.info(f"Previous pods: {[pod_obj.name for pod_obj in pod_list]}")
     logger.info(f"Re-spun pods: {[pod_obj.name for pod_obj in new_pods]}")
     return new_pods
-
-
-def get_ceph_caps(secret_resource):
-    """
-    Gets ocs secrets and decodes it to get ceph keyring
-
-    Args:
-        secret_resource (any): secret resource name
-
-    Returns:
-        str: Auth keyring
-
-    """
-    keyring = ""
-
-    fs_node_caps = """
-        caps mds = "allow rw"
-        caps mgr = "allow rw"
-        caps mon = "allow r"
-        caps osd = "allow rw tag cephfs *=*"
-"""
-    rbd_node_caps = """
-        caps mgr = "allow rw"
-        caps mon = "profile rbd"
-        caps osd = "profile rbd"
-"""
-    fs_provisinor_caps = """
-        caps mgr = "allow rw"
-        caps mon = "allow r"
-        caps osd = "allow rw tag cephfs metadata=*"
-"""
-    rbd_provisinor_caps = """
-        caps mgr = "allow rw"
-        caps mon = "profile rbd"
-        caps osd = "profile rbd"
-"""
-
-    for resource in secret_resource:
-        resource_obj = ocp.OCP(
-            resource_name=resource,
-            kind=constants.SECRET,
-            namespace=config.ENV_DATA["cluster_namespace"],
-        )
-        if constants.CEPHFS_NODE_SECRET in resource:
-            keyring = (
-                keyring
-                + base64.b64decode(resource_obj.get().get("data").get("adminKey"))
-                .decode()
-                .rstrip("\n")
-                + "\n"
-            )
-            keyring = (
-                "[client.csi-cephfs-node]" + "\n" + "\t" + "key = "
-                f"{keyring}" + fs_node_caps
-            )
-
-        elif constants.RBD_NODE_SECRET in resource:
-            keyring = (
-                keyring
-                + base64.b64decode(resource_obj.get().get("data").get("userKey"))
-                .decode()
-                .rstrip("\n")
-                + "\n"
-            )
-            keyring = (
-                "[client.csi-rbd-node]" + "\n" + "\t" + "key = "
-                f"{keyring}" + rbd_node_caps
-            )
-
-        elif constants.CEPHFS_PROVISIONER_SECRET in resource:
-            keyring = (
-                keyring
-                + base64.b64decode(resource_obj.get().get("data").get("adminKey"))
-                .decode()
-                .rstrip("\n")
-                + "\n"
-            )
-            keyring = (
-                "[client.csi-cephfs-provisioner]" + "\n" + "\t" + "key = "
-                f"{keyring}" + fs_provisinor_caps
-            )
-
-        elif constants.RBD_PROVISIONER_SECRET in resource:
-            keyring = (
-                keyring
-                + base64.b64decode(resource_obj.get().get("data").get("userKey"))
-                .decode()
-                .rstrip("\n")
-                + "\n"
-            )
-            keyring = (
-                "[client.csi-rbd-provisioner]" + "\n" + "\t" + "key = "
-                f"{keyring}" + rbd_provisinor_caps
-            )
-
-        else:
-            keyring = (
-                keyring
-                + base64.b64decode(resource_obj.get().get("data").get("keyring"))
-                .decode()
-                .rstrip("\n")
-                + "\n"
-            )
-    return keyring
 
 
 def generate_monmap_cmd():
