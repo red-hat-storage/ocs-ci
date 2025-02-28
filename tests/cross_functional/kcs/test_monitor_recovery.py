@@ -276,7 +276,6 @@ class MonitorRecovery(object):
         """
         self.backup_dir = tempfile.mkdtemp(prefix="mon-backup-")
         self.keyring_dir = tempfile.mkdtemp(dir=self.backup_dir, prefix="keyring")
-        # self.keyring_files = []
         self.dep_ocp = OCP(
             kind=constants.DEPLOYMENT, namespace=config.ENV_DATA["cluster_namespace"]
         )
