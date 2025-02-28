@@ -137,7 +137,12 @@ class CNVInstaller(object):
             cnv_subscription_yaml_data, cnv_subscription_manifest.name
         )
         logger.info("Creating subscription for CNV operator")
-        run_cmd(f"oc create -f {cnv_subscription_manifest.name}")
+        try:
+            run_cmd(f"oc create -f {cnv_subscription_manifest.name}")
+        except exceptions.CommandFailed as ef:
+            if "already exists" in str(ef):
+                logger.info("Subscription already exists")
+
         self.wait_for_the_resource_to_discover(
             kind=constants.SUBSCRIPTION_WITH_ACM,
             namespace=self.namespace,
@@ -482,7 +487,9 @@ class CNVInstaller(object):
         os_machine_type = (
             "amd64"
             if os_machine_type == "x86_64"
-            else "arm64" if os_machine_type == "arm 64" else os_machine_type
+            else "arm64"
+            if os_machine_type == "arm 64"
+            else os_machine_type
         )
         if (
             not virtctl_download_url
