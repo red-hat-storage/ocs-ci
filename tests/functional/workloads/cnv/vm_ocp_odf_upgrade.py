@@ -437,7 +437,6 @@ class TestOcvUpgrade(E2ETest):
                     archive_ceph_crashes(ct_pod)
                 raise err
 
-        # Simulate odf upgrade process
         run_ocs_upgrade(upgrade_stats=upgrade_stats)
 
         """Ensuring all the vms are in their expected state"""
@@ -460,7 +459,6 @@ class TestOcvUpgrade(E2ETest):
 
         """verify all OCV pods are running"""
         logger.info("Verifying all OCV pods are running")
-        # Below label needs to be present
 
         assert check_pods_in_running_state(
             namespace=constants.CNV_NAMESPACE
