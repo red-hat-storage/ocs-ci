@@ -266,6 +266,23 @@ class BucketNotificationsManager:
         if wait:
             MCG.wait_for_ready_status()
 
+    def create_and_register_kafka_topic_with_noobaa(self, topic_name="", wait=True):
+        """
+        Create a Kafka topic and register it with NooBaa via a connection secret
+
+        Args:
+            topic_name(str|optional): Name of the Kafka topic
+            wait(bool): Whether to wait for the NooBaa resources to be ready
+
+        Returns:
+            tuple: Kafka topic name and MCG's Path to the connection config file
+        """
+        topic = self.create_kafka_topic(topic_name)
+        secret, conn_config_path = self.create_kafka_conn_secret(topic)
+        self.add_notif_conn_to_noobaa_cr(secret, wait)
+
+        return topic, conn_config_path
+
     def put_bucket_notification(
         self, awscli_pod, mcg_obj, bucket, events, conn_config_path, wait=True
     ):
@@ -302,7 +319,7 @@ class BucketNotificationsManager:
             logger.info("Waiting for put-bucket-notification to propagate")
             sleep(60)
 
-    def get_bucket_notification(self, awscli_pod, mcg_obj, bucket):
+    def get_bucket_notification_configuration(self, awscli_pod, mcg_obj, bucket):
         """
         Get the bucket notification configuration of a bucket
 
@@ -316,7 +333,7 @@ class BucketNotificationsManager:
         """
         return awscli_pod.exec_cmd_on_pod(
             command=craft_s3_command(
-                f"get-bucket-notification --bucket {bucket}",
+                f"get-bucket-notification-configuration --bucket {bucket}",
                 mcg_obj=mcg_obj,
                 api=True,
             )

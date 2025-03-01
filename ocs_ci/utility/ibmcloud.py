@@ -1397,3 +1397,59 @@ class IBMCloudObjectStorage:
         except Exception as e:
             logger.error(f"Unable to retrieve list buckets: {e}")
         return bucket_list
+
+
+def get_bucket_regions_map():
+    """
+    Fetches the buckets and their regions
+
+    Returns:
+        dict: Dictionary with bucket name as Key and region as value
+
+    """
+    bucket_region_map = {}
+    api_key = config.AUTH["ibmcloud"]["api_key"]
+    service_instance_id = config.AUTH["ibmcloud"]["cos_instance_crn"]
+    endpoint_url = constants.IBM_COS_GEO_ENDPOINT_TEMPLATE.format("us-east")
+    cos_client = IBMCloudObjectStorage(
+        api_key=api_key,
+        service_instance_id=service_instance_id,
+        endpoint_url=endpoint_url,
+    )
+
+    # Fetch the buckets. It will list from all the regions
+    buckets = cos_client.get_buckets()
+    for region in constants.IBM_REGIONS:
+        if not buckets:
+            break
+        logger.info(f"Initializing COS client for region {region}")
+        endpoint_url = constants.IBM_COS_GEO_ENDPOINT_TEMPLATE.format(region)
+        cos_client_region = ibm_boto3.client(
+            "s3",
+            ibm_api_key_id=api_key,
+            ibm_service_instance_id=service_instance_id,
+            config=IBMBotocoreConfig(signature_version="oauth"),
+            endpoint_url=endpoint_url,
+        )
+        processed_buckets = []
+        for each_bucket in buckets:
+            logger.debug(f"Fetching bucket location for {each_bucket}")
+            try:
+                bucket_location = cos_client_region.get_bucket_location(
+                    Bucket=each_bucket
+                )
+                bucket_region = bucket_location.get("LocationConstraint").split(
+                    "-standard"
+                )[0]
+                bucket_region_map[each_bucket] = bucket_region
+                processed_buckets.append(each_bucket)
+            except Exception as e:
+                logger.warning(
+                    f"[Expected] Failed to get region for {each_bucket} in {region}: {e}"
+                )
+
+        # remove processed buckets from buckets list
+        for bucket_name in processed_buckets:
+            buckets.remove(bucket_name)
+
+    return bucket_region_map

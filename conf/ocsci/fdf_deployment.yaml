@@ -1,7 +1,7 @@
 DEPLOYMENT:
   fusion_deployment: True
   fdf_deployment: True
-  channel: v2.0
+  fusion_channel: v2.0
 
 ENV_DATA:
   skip_ocs_deployment: true

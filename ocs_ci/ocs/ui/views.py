@@ -333,7 +333,8 @@ generic_locators = {
         "//*[@class='pf-c-helper-text__item-text'] | "
         "//div[@data-test='field-requirements-popover']"
         "//*[@class='pf-v5-c-helper-text__item-text'] | "
-        "//ul//span[@class='pf-v5-c-helper-text__item-text']",
+        "//ul//span[@class='pf-v5-c-helper-text__item-text'] | "
+        "//ul[@class='pf-v5-c-helper-text']",
         By.XPATH,
     ),
     "ocp-overview-status-storage-popup-btn": (
@@ -469,7 +470,7 @@ obc = {
     "select_administrator": (
         "//a[contains(@class,'c-dropdown__menu-item')]"
         "//h2[contains(@class, 'c-title pf-m-md')][normalize-space()='Administrator'] | "
-        "//h2[.='Administrator']",
+        "//h2[.='Administrator']/ancestor::button[@class='pf-v5-c-menu__item']",
         By.XPATH,
     ),
     "obc_menu_name": (
@@ -1152,6 +1153,33 @@ acm_configuration_4_16 = {
     ),
 }
 
+acm_configuration_4_18 = {
+    "inconsistent-warning-alert": (
+        "//h4[@class='pf-v5-c-alert__title']",
+        By.XPATH,
+    ),
+    "cancel-action-modal": ("#modal-cancel-action", By.CSS_SELECTOR),
+    "clear-filter": (
+        "div[class='pf-v5-c-toolbar__content pf-m-chip-container'] "
+        "div[class='pf-v5-c-toolbar__item'] button[type='button']",
+        By.CSS_SELECTOR,
+    ),
+    "apply-filter": ("//div[@class='pf-v5-c-select']", By.XPATH),
+    "kebab-action": (
+        "(//td[@class='pf-v5-c-table__td pf-v5-c-table__action']//button)[1]",
+        By.XPATH,
+    ),
+    "failover-app": (
+        "//span[contains(text(),'Failover application')]",
+        By.XPATH,
+    ),
+    "relocate-app": (
+        "//span[contains(text(),'Relocate application')]",
+        By.XPATH,
+    ),
+    "close-action-modal": ("button[aria-label='Close']", By.CSS_SELECTOR),
+}
+
 add_capacity = {
     "ocs_operator": (
         'a[data-test-operator-row="OpenShift Container Storage"]',
@@ -1520,7 +1548,7 @@ validation = {
     # Header of the dropdown element by attributes is very similar to the dropdown item itself.
     "select_administrator": (
         "//h2[@data-test-id='perspective-switcher-menu-option' and normalize-space()='Administrator']/ancestor"
-        "::button[@role='option']",
+        "::button[@role='option'] | //h2[.='Administrator']/ancestor::button[@class='pf-v5-c-menu__item']",
         By.XPATH,
     ),
 }
@@ -1797,7 +1825,8 @@ validation_4_17 = {
     ),
     "select_administrator": (
         "//a[@class='pf-c-dropdown__menu-item']//h2[@class='pf-c-title pf-m-md'][normalize-space()='Administrator'] | "
-        "//a[@class='pf-m-icon pf-v5-c-dropdown__menu-item']//h2[normalize-space()='Administrator']",
+        "//a[@class='pf-m-icon pf-v5-c-dropdown__menu-item']//h2[normalize-space()='Administrator'] | "
+        "//h2[.='Administrator']/ancestor::button[@class='pf-v5-c-menu__item']",
         By.XPATH,
     ),
 }
@@ -1842,7 +1871,8 @@ topology = {
     "node_label": ("//*[@class='pf-topology__node__label']", By.XPATH),
     # status is in class name of the node_status_axis one from pf-m-warning / pf-m-danger / pf-m-success
     "node_status_class_axis": (
-        "//*[@class='pf-topology__node__label']//*[contains(text(), '{}')]/parent::*/parent::*/parent::*/parent::*",
+        "//*[@class='pf-topology__node__label']//*[contains(text(), '{}')]"
+        "/ancestor::*[starts-with(@class, 'pf-topology__node ')]",
         By.XPATH,
     ),
     "select_entity": (
@@ -1850,13 +1880,16 @@ topology = {
         By.XPATH,
     ),
     "entity_box_select_indicator": (
-        "//*[@class='pf-topology__node__label']"
-        "//*[contains(text(), '{}')]/../../../..",
+        "//*[@class='pf-topology__node__label']//*[contains(text(), '{}')]"
+        "/ancestor::*[starts-with(@class, 'pf-topology__node ')]",
         By.XPATH,
     ),
+    # this is complex locator, it is used to find node with specific name and via its ancestor find the arrow to enter
+    # to click and show the node topology
     "enter_into_entity_arrow": (
-        "(//*[@class='pf-topology__node__label']//*[contains(text(), '{}')]/parent::*/parent::*/parent::*/parent::*"
-        "//*[@class='pf-topology__node__decorator'])[2]",
+        "//*[contains(text(), '{}')]"
+        "/ancestor::*[starts-with(@class, 'pf-topology__node ')]"
+        "//*[@class='pf-topology__node__decorator' and @role='button' and not(@aria-label)]",
         By.XPATH,
     ),
     "cluster_state_ready": (
@@ -1867,9 +1900,19 @@ topology = {
         "//*[@class='pf-topology__group odf-topology__group odf-topology__group-state--error']",
         By.XPATH,
     ),
-    # node_group_name may be 'zone-<num>' or 'rack-<num>'
+    # node_group_name may be 'zone-<num>' or 'rack-<num>', exclude other elements that are not node groups
     "node_group_name": (
-        "//*[@data-kind='node' and @data-type='group' and not (@transform)]",
+        "//*[@data-kind='node' and @data-type='group' "
+        "and not(@transform) "
+        "and *[contains(@class, 'odf-topology__group--zone')]]",
+        By.XPATH,
+    ),
+    # topology node parent, that aggregates n of nodes or n of deployments
+    # may be ocs-storagecluster or name of the node
+    "topology_node_parent": (
+        "//*[@class='pf-topology__group__label' "
+        "and *[contains(@class, 'pf-topology__node__label__badge')] "
+        "and *[contains(@class, 'pf-topology__node__label__icon')] ]",
         By.XPATH,
     ),
     "zoom_out": ("zoom-out", By.ID),
@@ -2125,6 +2168,7 @@ locators = {
             **acm_configuration_4_13,
             **acm_configuration_4_14,
             **acm_configuration_4_16,
+            **acm_configuration_4_18,
         },
         "validation": {
             **validation,

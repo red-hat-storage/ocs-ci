@@ -17,11 +17,10 @@ data:
       - odf_system_raw_capacity_used_bytes
       - ceph_rbd_mirror_snapshot_sync_bytes
       - ceph_rbd_mirror_snapshot_snapshots
-      - ceph_rbd_mirror_snapshot_sync_time_sum
     matches:
       - __name__="csv_succeeded",exported_namespace="openshift-storage",name=~"odf-operator.*"
       - __name__="csv_succeeded",exported_namespace="openshift-dr-system",name=~"odr-cluster-operator.*"
-      - __name__="csv_succeeded",exported_namespace="openshift-operators",name=~"volsync.*"
+      - __name__="kube_running_pod_ready",namespace=~"volsync-system|openshift-operators",pod=~"volsync.*" 
     recording_rules:
       - record: count_persistentvolumeclaim_total
         expr: count(kube_persistentvolumeclaim_info)

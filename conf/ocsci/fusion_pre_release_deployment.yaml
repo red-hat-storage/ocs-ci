@@ -1,0 +1,11 @@
+DEPLOYMENT:
+  fusion_deployment: true
+  fdf_deployment: true
+  fusion_channel: v2.0
+  fusion_pre_release_sds_version: 2.8.0
+  fusion_pre_release_image: 2.8.1-23197396
+  fusion_pre_release: true
+
+
+ENV_DATA:
+  skip_ocs_deployment: true

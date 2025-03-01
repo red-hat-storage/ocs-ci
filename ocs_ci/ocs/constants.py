@@ -33,6 +33,7 @@ TEMPLATE_DEPLOYMENT_DIR_FUSION = os.path.join(TEMPLATE_DIR, "fusion")
 TEMPLATE_DEPLOYMENT_DIR_LVMO = os.path.join(TEMPLATE_DIR, "lvmo-deployment")
 TEMPLATE_MULTICLUSTER_DIR = os.path.join(TEMPLATE_DEPLOYMENT_DIR, "multicluster")
 TEMPLATE_DEPLOYMENT_DIR_CNV = os.path.join(TEMPLATE_DIR, "cnv-deployment")
+TEMPLATE_DEPLOYMENT_DIR_MCE = os.path.join(TEMPLATE_DIR, "mce-deployment")
 TEMPLATE_DEPLOYMENT_DIR_METALLB = os.path.join(TEMPLATE_DIR, "metallb-deployment")
 TEMPLATE_DEPLOYMENT_DIR_NMSTATE = os.path.join(TEMPLATE_DIR, "nmstate-deployment")
 TEMPLATE_DEPLOYMENT_DIR_INF = os.path.join(
@@ -99,6 +100,7 @@ CHRONY_TEMPLATE = os.path.join(
 HUGE_PAGES_TEMPLATE = os.path.join(TEMPLATE_DIR, "ocp-deployment", "huge_pages.yaml")
 NAMESPACE_TEMPLATE = os.path.join(TEMPLATE_DIR, "ocp-deployment", "namespace.yaml")
 BUSYBOX_TEMPLATE = os.path.join(TEMPLATE_DIR, "ocp-deployment", "busybox.yaml")
+UBI8_TEMPLATE = os.path.join(TEMPLATE_DIR, "app-deployments", "ubi8-simple.yaml")
 NETWORK_POLICY_PROVIDER_TO_CLIENT_TEMPLATE = os.path.join(
     TEMPLATE_DIR, "ocs-deployment", "provider-mode", "network_policy_provider_mode.yaml"
 )
@@ -406,6 +408,7 @@ PROVIDER_CLUSTER_RESOURCE_KINDS = [
     "storagesystems",
     "storagesystem",
 ]
+PROVIDER_SUBSCRIPTION = "subs"
 
 OCS_CLIENT_OPERATOR_CONTROLLER_MANAGER_PREFIX = "ocs-client-operator-controller-manager"
 OCS_CLIENT_OPERATOR_CONSOLE = "ocs-client-operator-console"
@@ -598,6 +601,7 @@ ROOK_CEPH_DETECT_VERSION_LABEL = "app=rook-ceph-detect-version"
 CEPH_FILE_CONTROLLER_DETECT_VERSION_LABEL = "app=ceph-file-controller-detect-version"
 CONTROLLER_DETECT_VERSION_NAME = "controller-detect-version"
 OSD_KEY_ROTATION_POD_NAME = "rook-ceph-osd-key-rotation"
+ROOK_CEPH_DETECT_VERSION_POD_NAME = "rook-ceph-detect-version"
 CEPH_OBJECT_CONTROLLER_DETECT_VERSION_LABEL = (
     "app=ceph-object-controller-detect-version"
 )
@@ -1379,6 +1383,7 @@ OPERATOR_CS_QUAY_API_QUERY = (
     "tag/?onlyActiveTags=true&limit={tag_limit}&page={page}"
 )
 OPTIONAL_OPERATORS_SELECTOR = "catalog=optional-operators"
+OPTIONAL_OPERATORS = "optional-operators"
 OCS_OPERATOR_BUNDLE_IMAGE = "quay.io/rhceph-dev/ocs-operator-bundle"
 OCS_CATALOG_SOURCE_NAME = "ocs-catalogsource"
 
@@ -1579,6 +1584,7 @@ HCI_PROVIDER_CLIENT_PLATFORMS = [
     HCI_VSPHERE,
 ]
 
+IBM_REGIONS = ["us-east", "us-south", "us"]
 IBM_CLOUD_SUBNETS = {
     # Washington D.C.
     "us-east": {
@@ -1759,6 +1765,9 @@ DR_HUB_OPERATOR_SUBSCRIPTION_LABEL = (
     "operators.coreos.com/odr-hub-operator.openshift-operators"
 )
 DR_CLUSTER_OPERATOR_SUBSCRIPTION = "ramen-dr-cluster-subscription"
+RBD_MIRROR_DAEMON_DEPLOYMENT = "rook-ceph-rbd-mirror-a"
+MDS_DAEMON_DEPLOYMENT_ONE = "rook-ceph-mds-ocs-storagecluster-cephfilesystem-a"
+MDS_DAEMON_DEPLOYMENT_TWO = "rook-ceph-mds-ocs-storagecluster-cephfilesystem-b"
 
 # UI Deployment constants
 HTPASSWD_SECRET_NAME = "htpass-secret"
@@ -2761,6 +2770,21 @@ SUBCTL_DOWNSTREAM_URL = "registry.redhat.io/rhacm2/"
 ACM_BREW_REPO = SUBMARINER_BREW_REPO
 
 # Multicluster related
+MCE_NAMESPACE = "multicluster-engine"
+MCE_NAMESPACE_YAML = os.path.join(TEMPLATE_DEPLOYMENT_DIR_MCE, "mce_namespace.yaml")
+MCE_CATSRC_YAML = os.path.join(TEMPLATE_DEPLOYMENT_DIR_MCE, "mce_catsrc.yaml")
+MCE_CATSRC_NAME = "mce-catalogsource"
+MCE_SUBSCRIPTION_YAML = os.path.join(
+    TEMPLATE_DEPLOYMENT_DIR_MCE, "mce_subscription.yaml"
+)
+MCE_OPERATOR = "multicluster-engine"
+MCE_RESOURCE_YAML = os.path.join(TEMPLATE_DEPLOYMENT_DIR_MCE, "mce_resource.yaml")
+MCE_OPERATOR_GROUP_YAML = os.path.join(
+    TEMPLATE_DEPLOYMENT_DIR_MCE, "mce_operatorgroup.yaml"
+)
+HYPERSHIFT_NAMESPACE = "hypershift"
+SUPPORTED_VERSIONS_CONFIGMAP = "supported-versions"
+IMAGE_OVERRIDE_JSON = os.path.join(TEMPLATE_DEPLOYMENT_DIR_MCE, "image-override.json")
 
 # OpenSSL Certificate parameters
 OPENSSL_KEY_SIZE = 2048
@@ -3138,6 +3162,7 @@ FDF_SPECTRUM_FUSION_CR = os.path.join(FDF_TEMPLATE_DIR, "spectrum-fusion.yaml")
 FDF_NAMESPACE = "ibm-spectrum-fusion-ns"
 ISF_CATALOG_SOURCE_NAME = "isf-catalog"
 ISF_OPERATOR_SOFTWARE_CATALOG_SOURCE_YAML = "catalog-source.yaml.j2"
+FDF_IMAGE_DIGEST_MIRROR_SET_FILENAME = "idms.yaml"
 
 CREATE = "create"
 EDIT = "edit"

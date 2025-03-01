@@ -101,13 +101,17 @@ class TestReplicationWithVersioning(MCGTest):
         update_replication_policy(source_bucket.name, replication_policy.to_dict())
 
         # 3. Write some versions to the source bucket
-        source_etags = upload_obj_versions(
+        upload_obj_versions(
             mcg_obj,
             awscli_pod,
             source_bucket.name,
             obj_key=obj_key,
             amount=versions_amount,
         )
+        source_versions = get_obj_versions(
+            mcg_obj, awscli_pod, source_bucket.name, obj_key
+        )
+        source_etags = [v["ETag"] for v in source_versions]
         logger.info(f"Uploaded versions with etags: {source_etags}")
 
         # 4. Verify the versions were replicated to the target bucket in the same order

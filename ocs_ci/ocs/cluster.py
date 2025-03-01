@@ -20,6 +20,7 @@ import math
 
 from datetime import datetime
 from semantic_version import Version
+
 from ocs_ci.ocs.utils import thread_init_class
 
 import ocs_ci.ocs.resources.pod as pod
@@ -34,6 +35,7 @@ from ocs_ci.ocs.exceptions import (
     TimeoutExpiredError,
     ResourceWrongStatusException,
     CephHealthException,
+    ActiveMdsValueNotMatch,
 )
 from ocs_ci.ocs.resources import ocs, storage_cluster
 import ocs_ci.ocs.constants as constant
@@ -52,7 +54,7 @@ from ocs_ci.utility.utils import (
 from ocs_ci.ocs.node import get_node_ip_addresses, wait_for_nodes_status
 from ocs_ci.ocs.utils import get_pod_name_by_pattern
 from ocs_ci.framework import config
-from ocs_ci.ocs import ocp, constants, exceptions
+from ocs_ci.ocs import ocp, constants, exceptions, defaults
 from ocs_ci.ocs.exceptions import PoolNotFound
 from ocs_ci.ocs.resources.pvc import get_all_pvc_objs
 from ocs_ci.ocs.ocp import OCP, wait_for_cluster_connectivity
@@ -3823,3 +3825,120 @@ def get_age_of_cluster_in_days():
     seconds_per_day = 24 * 60 * 60
     time_diff_in_days = time_difference_in_sec / seconds_per_day
     return math.ceil(time_diff_in_days)
+
+
+def get_active_mds_count_cephfilesystem():
+    """
+    Get the active mds pod count from cephfilesystem yaml.
+
+    Returns:
+         mds_active_count (int): Active mds pod count.
+
+    """
+    cephfs = ocp.OCP(
+        kind=constants.CEPHFILESYSTEM,
+        namespace=config.ENV_DATA["cluster_namespace"],
+    )
+    fs_data = cephfs.get(defaults.CEPHFILESYSTEM_NAME)
+    mds_active_count = fs_data.get("spec").get("metadataServer").get("activeCount")
+    return mds_active_count
+
+
+def adjust_active_mds_count_storagecluster(target_count):
+    """
+    Adjust the activeMetadataServers count in the Storage cluster to the target_count.
+    The function increases or decreases the count to match the target value sequentially.
+
+    Args:
+        target_count (int): The desired count for activeMetadataServers.
+
+    Raises:
+        ActiveMdsValueNotMatch: if activeMetadataServers count does not match.
+
+    """
+    # Retrieve the current activeMetadataServers count
+    current_count_cephfilesystem = get_active_mds_count_cephfilesystem()
+    sc = storage_cluster.get_storage_cluster(
+        namespace=config.ENV_DATA["cluster_namespace"]
+    )
+    resource_name = sc.get()["items"][0]["metadata"]["name"]
+
+    step = 1 if current_count_cephfilesystem < target_count else -1
+    for _ in range(current_count_cephfilesystem, target_count + step, step):
+        if current_count_cephfilesystem == target_count:
+            logger.info("The current count is equal to the target count.")
+        else:
+            # Determine the new count by incrementing or decrementing
+            current_count_cephfilesystem = current_count_cephfilesystem + step
+            param = (
+                f'{{"spec": {{"managedResources": {{"cephFilesystems": '
+                f'{{"activeMetadataServers": {current_count_cephfilesystem}}}}}}}}}'
+            )
+            sc.patch(resource_name=resource_name, params=param, format_type="merge")
+
+    # Retrieve the updated count
+    current_params = sc.get(resource_name=resource_name)
+    current_count_cephfilesystem = current_params["spec"]["managedResources"][
+        "cephFilesystems"
+    ]["activeMetadataServers"]
+    if current_count_cephfilesystem != target_count:
+        raise ActiveMdsValueNotMatch(
+            f"Failed to update activeMetadataServers to {target_count}"
+        )
+
+    logger.info(
+        "Wait until the active mds pod count from cephfilesystem matches the target count"
+    )
+    try:
+        TimeoutSampler(
+            timeout=300,
+            sleep=10,
+            func=get_active_mds_count_cephfilesystem,
+        ).wait_for_func_value(target_count)
+        logger.info(f"Target activeMetadataServers count {target_count} reached.")
+    except TimeoutExpiredError:
+        raise ActiveMdsValueNotMatch(
+            f"Failed to change the active count to {target_count} within timeout."
+        )
+
+
+def get_active_mds_pod_objs():
+    """
+    Gets active mds pods objs.
+
+    Returns:
+        active_mds_pods (list): Active mds pod objs.
+
+    """
+    ct_pod = pod.get_ceph_tools_pod()
+    ceph_mdsmap = ct_pod.exec_ceph_cmd("ceph fs status")
+    # Extract the mdsmap list from the data
+    mdsmap = ceph_mdsmap["mdsmap"]
+
+    # Filter and get the names of active MDS pods
+    ceph_daemon_name = [mds["name"] for mds in mdsmap if mds["state"] == "active"]
+    mds_pods = get_mds_pods()
+    active_mds_pods = [
+        mdspod
+        for mdspod in mds_pods
+        if any(daemon_name in mdspod.name for daemon_name in ceph_daemon_name)
+    ]
+    return active_mds_pods
+
+
+def get_mds_counts():
+    """
+    Fetch active and standby-replay MDS counts.
+
+    Returns:
+        tuple: A tuple containing two integers:
+            - active_pod_count (int): The number of active MDS pods.
+            - standby_replay_count (int): The number of standby-replay MDS pods.
+    """
+    ct_pod = pod.get_ceph_tools_pod()
+    ceph_mdsmap = ct_pod.exec_ceph_cmd("ceph fs status")["mdsmap"]
+    active_pod_count = sum(1 for mds in ceph_mdsmap if mds["state"] == "active")
+    standby_replay_count = sum(
+        1 for mds in ceph_mdsmap if mds["state"] == "standby-replay"
+    )
+    return active_pod_count, standby_replay_count

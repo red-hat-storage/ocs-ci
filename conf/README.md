@@ -105,7 +105,9 @@ anywhere else.
 * `mirror_registry` - Hostname of the mirror registry
 * `mirror_registry_user` - Username for disconnected cluster mirror registry
 * `mirror_registry_password` - Password for disconnected cluster mirror registry
-* `opm_index_prune_binary_image` - Required only for IBM Power Systems and IBM Z images: Operator Registry base image with the tag that matches the target OpenShift Container Platform cluster major and minor version.
+* `opm_index_prune_binary_image` - Required only for IBM Power Systems and IBM Z images: Operator Registry base image with the tag that matches the target OpenShift Container Platform cluster major and minor
+* `deploy_mce`- Boolean, Deploy mce if True
+version.
   (for example: `registry.redhat.io/openshift4/ose-operator-registry:v4.9`)
   [doc](https://access.redhat.com/documentation/en-us/openshift_container_platform/4.9/html/operators/administrator-tasks#olm-pruning-index-image_olm-managing-custom-catalogs)
 * `min_noobaa_endpoints` - Sets minimum noobaa endpoints (Workaround for https://github.com/red-hat-storage/ocs-ci/issues/2861)
@@ -159,6 +161,16 @@ anywhere else.
 * `force_download_rosa_cli` - Download the ROSA CLI even if one already exists in the bin_dir
 * `force_download_ocm_cli` - Download the OCM CLI even if one already exists in the bin_dir
 * `ipv6` - ipv6 single stack deployment of OCP and ODF.
+* `fusion_deployment` - Enable Fusion deployment.
+* `fusion_channel` - Channel to deploy Fusion operator with.
+* `fusion_pre_release` - Deploy pre-release version of Fusion.
+* `fusion_pre_release_sds_version` - SDS version, used to build path to Fusion pre-release image.
+* `fusion_pre_release_image` - Pre-release image version of Fusion to deploy.
+* `fdf_deployment` - Enable Fusion Data Foundation deployment.
+* `fdf_pre_release`: Deploy pre-release version of FDF.
+* `fdf_image_tag`: FDF image tag, used to retrieve fdf_pre_release_image_digest.
+* `fdf_pre_release_registry`: Registry where the pre-release image of FDF is hosted.
+* `fdf_pre_release_image_digest`: sha256 of the pre-release image of FDF to deploy.
 
 #### REPORTING
 

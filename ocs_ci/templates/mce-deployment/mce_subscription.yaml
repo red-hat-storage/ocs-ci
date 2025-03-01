@@ -1,0 +1,11 @@
+apiVersion: operators.coreos.com/v1alpha1
+kind: Subscription
+metadata:
+  name: multicluster-engine
+  namespace: multicluster-engine
+spec:
+  channel: stable
+  installPlanApproval: Automatic
+  name: multicluster-engine
+  source: mce-catalogsource
+  sourceNamespace: openshift-marketplace

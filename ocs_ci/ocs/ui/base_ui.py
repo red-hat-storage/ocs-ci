@@ -947,6 +947,7 @@ def login_ui(console_url=None, username=None, password=None):
     try:
         wait = WebDriverWait(driver, 15)
         if username is not None:
+            logger.info(f"Trying to log in as {username}")
             element = wait.until(
                 ec.element_to_be_clickable(
                     (
@@ -957,6 +958,7 @@ def login_ui(console_url=None, username=None, password=None):
                 message="Title element containing text 'Log in with my_htpasswd' is not present",
             )
         else:
+            logger.info("Trying to log in as kubeadmin")
             element = wait.until(
                 ec.element_to_be_clickable(
                     (
@@ -982,6 +984,7 @@ def login_ui(console_url=None, username=None, password=None):
     password_el = wait_for_element_to_be_clickable(login_loc["password"], 60)
     password_el.send_keys(password)
 
+    logger.info("Username and password filled in, clicking Log in")
     confirm_login_el = wait_for_element_to_be_clickable(login_loc["click_login"], 60)
     confirm_login_el.click()
 
@@ -1009,7 +1012,8 @@ def login_ui(console_url=None, username=None, password=None):
                 f"Platform {config.ENV_DATA['platform']} is not supported"
             )
 
-    if default_console is True and username is constants.KUBEADMIN:
+    # Log in process needs to be retried if navigator sidebar is not visible
+    if default_console is True:
         wait_for_element_to_be_visible(page_nav_loc["page_navigator_sidebar"], 180)
 
     # Skip tour if it appears, if not found, continue without clicking
@@ -1057,7 +1061,7 @@ def proceed_to_login_console():
     """
     driver = SeleniumDriver()
     login_loc = locators[get_ocp_version()]["login"]
-    if driver.title == login_loc["pre_login_page_title"]:
+    if login_loc["pre_login_page_title"].lower() in driver.title.lower():
         proceed_btn = driver.find_element(
             by=login_loc["proceed_to_login_btn"][1],
             value=login_loc["proceed_to_login_btn"][0],

@@ -2688,7 +2688,7 @@ def delete_object_tags(
     """
     logger.info(f"Deleting tags of objects in bucket {bucket}")
     for object_key in object_keys:
-        object_key = f"prefix/{object_key}" if prefix else object_key
+        object_key = f"{prefix}/{object_key}" if prefix else object_key
         io_pod.exec_cmd_on_pod(
             craft_s3_command(
                 f"delete-object-tagging --bucket {bucket} --key {object_key}",
@@ -2957,48 +2957,22 @@ def upload_obj_versions(mcg_obj, awscli_pod, bucket_name, obj_key, amount=1, siz
         amount (int): Number of versions to create
         size (str): Size of the object. I.E 1M
 
-    Returns:
-        list: List of ETag values of versions in latest to oldest order
     """
     file_dir = os.path.join("/tmp", str(uuid4()))
     awscli_pod.exec_cmd_on_pod(f"mkdir {file_dir}")
-
-    etags = []
 
     for i in range(amount):
         file_path = os.path.join(file_dir, f"{obj_key}_{i}")
         awscli_pod.exec_cmd_on_pod(
             command=f"dd if=/dev/urandom of={file_path} bs={size} count=1"
         )
-        # Use debug and redirect it to stdout to get
-        # the uploaded object's ETag in the response
-        resp = awscli_pod.exec_cmd_on_pod(
+        awscli_pod.exec_cmd_on_pod(
             command=craft_s3_command(
-                f"cp {file_path} s3://{bucket_name}/{obj_key} --debug 2>&1",
+                f"cp {file_path} s3://{bucket_name}/{obj_key}",
                 mcg_obj=mcg_obj,
             ),
             out_yaml_format=False,
         )
-
-        # Parse the ETag from the response
-        # Filter the line containing the JSON
-        line = next(filter(lambda line: "ETag" in line, resp.splitlines()))
-        json_start = line.index("{")
-        json_str = line[json_start:]
-
-        # Fix quotes to read as dict
-        json_str = json_str.replace("'", '"')
-        json_str = json_str.replace('""', '"')
-
-        # Convert to dict and extract the ETag
-        new_etag = json.loads(json_str).get("ETag")
-
-        # Later versions should precede the older ones
-        # this achieves the expected order of versions
-        # we'd get from list-object-versions
-        etags.insert(0, new_etag)
-
-    return etags
 
 
 def get_obj_versions(mcg_obj, awscli_pod, bucket_name, obj_key):

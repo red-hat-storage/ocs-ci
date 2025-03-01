@@ -69,6 +69,7 @@ from ocs_ci.ocs.exceptions import (
 )
 from ocs_ci.deployment.cert_manager import deploy_cert_manager
 from ocs_ci.deployment.zones import create_dummy_zone_labels
+from ocs_ci.deployment.mce import MCEInstaller
 from ocs_ci.deployment.netsplit import get_netsplit_mc
 from ocs_ci.ocs.monitoring import (
     create_configmap_cluster_monitoring_pod,
@@ -455,6 +456,22 @@ class Deployment(object):
         else:
             logger.warning("OCS deployment will be skipped")
 
+    def do_deploy_mce(self):
+        """
+        Deploy Multicluster Engine
+
+        """
+        if config.DEPLOYMENT.get("deploy_mce"):
+            if config.ENV_DATA.get("skip_mce_check_if_present"):
+                check_mce_deployed = False
+                check_mce_ready = False
+            else:
+                check_mce_deployed = True
+                check_mce_ready = True
+            mce_installer = MCEInstaller()
+            mce_installer.deploy_mce(check_mce_deployed, check_mce_ready)
+            mce_installer.validate_mce_deployment()
+
     def do_deploy_oadp(self):
         """
         Deploy OADP Operator
@@ -623,7 +640,13 @@ class Deployment(object):
             config.DEPLOYMENT.get("cnv_deployment")
             and config.ENV_DATA["skip_ocs_deployment"]
         ):
-            CNVInstaller().deploy_cnv()
+            if config.ENV_DATA.get("skip_cnv_check_if_present"):
+                check_cnv_deployed = False
+                check_cnv_ready = False
+            else:
+                check_cnv_deployed = True
+                check_cnv_ready = True
+            CNVInstaller().deploy_cnv(check_cnv_deployed, check_cnv_ready)
 
     def do_deploy_metallb(self):
         """
@@ -721,6 +744,7 @@ class Deployment(object):
         self.do_deploy_fusion()
         self.do_deploy_fdf()
         self.do_deploy_odf_provider_mode()
+        self.do_deploy_mce()
         self.do_deploy_cnv()
         self.do_deploy_metallb()
         self.do_deploy_hosted_clusters()
@@ -2746,15 +2770,17 @@ def create_fusion_catalog_source():
     Create catalog source for fusion operator
     """
     logger.info("Adding CatalogSource for IBM Fusion")
-    fusion_pre_ga = config.DEPLOYMENT.get("fusion_pre_ga", False)
+    fusion_pre_release = config.DEPLOYMENT.get("fusion_pre_release", False)
 
-    if fusion_pre_ga:
+    if fusion_pre_release:
         render_data = {
-            "sds_version": config.DEPLOYMENT.get("fusion_pre_ga_sds_version"),
-            "image_tag": config.DEPLOYMENT.get("fusion_pre_ga_image"),
+            "sds_version": config.DEPLOYMENT.get("fusion_pre_release_sds_version"),
+            "image_tag": config.DEPLOYMENT.get("fusion_pre_release_image"),
         }
         catalog_source_name = constants.ISF_CATALOG_SOURCE_NAME
-        _templating = templating.Templating(base_path=constants.FDF_TEMPLATE_DIR)
+        _templating = templating.Templating(
+            base_path=constants.TEMPLATE_DEPLOYMENT_DIR_FUSION
+        )
         template = _templating.render_template(
             constants.ISF_OPERATOR_SOFTWARE_CATALOG_SOURCE_YAML, render_data
         )
