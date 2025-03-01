@@ -68,7 +68,7 @@ class TestVmStorageCapacity(E2ETest):
             number_of_vm=3,
         )
 
-        logger.info("Stopping and pausing VMs in random order...")
+        logger.info("Stopping VMs in random order...")
         vm_stopped = random.sample(vm_list, 1)
         for vm_obj in vm_stopped:
             logger.info(f"Stopping VM: {vm_obj.name}")
@@ -76,6 +76,7 @@ class TestVmStorageCapacity(E2ETest):
             snapshot_factory(vm_obj.get_vm_pvc_obj())
             vm_list.remove(vm_obj)
 
+        logger.info("Pausing VMs in random order...")
         vm_pause = random.sample(vm_list, 1)
         for vm in vm_pause:
             logger.info(f"Pausing VM: {vm.name}")
