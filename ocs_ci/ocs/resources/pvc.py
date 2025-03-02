@@ -691,9 +691,27 @@ def get_pvc_size(pvc_obj, convert_size=1024):
         int: PVC size
 
     """
+    valid_units = ("Ti", "Gi", "Mi", "Ki", "Bi")
     unformatted_size = (
         pvc_obj.data.get("spec").get("resources").get("requests").get("storage")
     )
+    # If requested size is missing or does not contain a valid unit, fallback to actual storage size
+    if (
+        not unformatted_size
+        or not isinstance(unformatted_size, str)
+        or not any(unformatted_size.endswith(unit) for unit in valid_units)
+    ):
+        log.warning(
+            f"The requested storage '{unformatted_size}' is missing a unit (Ti, Gi, Mi, Ki, Bi). "
+            "Getting the PVC size from the actual storage value."
+        )
+        unformatted_size = (
+            pvc_obj.data.get("status", {}).get("capacity", {}).get("storage")
+        )
+
+    if not unformatted_size:
+        raise ValueError("PVC size could not be determined from spec or status.")
+
     return convert_device_size(unformatted_size, "GB", convert_size)
 
 
