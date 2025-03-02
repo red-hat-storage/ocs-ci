@@ -773,10 +773,14 @@ class MCG:
             if "ttl" in namespace_policy:
                 cmd += f" --ttl=={namespace_policy['ttl']}"
             self.exec_mcg_cmd(cmd)
+        elif namespace_policy_type == constants.NAMESPACE_POLICY_TYPE_MULTI.lower():
+            cmd += f" --read-resources='{namestores_name_str}'"
+            cmd += f" --write-resource='{namespacestores[0].name}'"
+            self.exec_mcg_cmd(cmd)
         else:
             raise NotImplementedError(
                 f"Cli creating of bucketclass on namespacestore "
-                f"with policy {namespace_policy_type} is not implemented yet"
+                f"with policy {namespace_policy_type} is supported"
             )
 
     def check_if_mirroring_is_done(self, bucket_name, timeout=300):
