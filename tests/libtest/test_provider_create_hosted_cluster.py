@@ -56,7 +56,16 @@ class TestProviderHosted(object):
         logger.info("Test deploy hosted OCP on provider platform")
         cluster_name = list(config.ENV_DATA["clusters"].keys())[-1]
 
-        HypershiftHostedOCP(cluster_name).deploy_ocp()
+        hypershift_hosted = HypershiftHostedOCP(cluster_name)
+        hypershift_hosted.deploy_dependencies(
+            deploy_acm_hub=True,
+            deploy_cnv=True,
+            deploy_metallb=True,
+            download_hcp_binary=True,
+            deploy_hyperconverged=False,
+            deploy_mce=False,
+        )
+        hypershift_hosted.deploy_ocp()
 
     @hci_provider_required
     def test_provider_deploy_OCP_hosted_skip_cnv_and_lb(self):
@@ -67,10 +76,16 @@ class TestProviderHosted(object):
             "Test deploy hosted OCP on provider platform with metallb and cnv ready"
         )
         cluster_name = list(config.ENV_DATA["clusters"].keys())[-1]
-
-        HypershiftHostedOCP(cluster_name).deploy_ocp(
-            deploy_cnv=False, deploy_metallb=False, download_hcp_binary=True
+        hypershift_hosted = HypershiftHostedOCP(cluster_name)
+        hypershift_hosted.deploy_dependencies(
+            deploy_acm_hub=True,
+            deploy_cnv=False,
+            deploy_metallb=False,
+            download_hcp_binary=True,
+            deploy_hyperconverged=False,
+            deploy_mce=False,
         )
+        hypershift_hosted.deploy_ocp()
 
     @hci_provider_required
     def test_provider_deploy_OCP_hosted_skip_cnv(self):
@@ -80,7 +95,16 @@ class TestProviderHosted(object):
         logger.info("Test deploy hosted OCP on provider platform with cnv ready")
         cluster_name = list(config.ENV_DATA["clusters"].keys())[-1]
 
-        HypershiftHostedOCP(cluster_name).deploy_ocp(deploy_cnv=False)
+        hypershift_hosted = HypershiftHostedOCP(cluster_name)
+        hypershift_hosted.deploy_dependencies(
+            deploy_acm_hub=True,
+            deploy_cnv=False,
+            deploy_metallb=True,
+            download_hcp_binary=True,
+            deploy_hyperconverged=False,
+            deploy_mce=False,
+        )
+        HypershiftHostedOCP(cluster_name).deploy_ocp()
 
     @hci_provider_required
     def test_provider_deploy_OCP_hosted_multiple(self):
@@ -113,6 +137,7 @@ class TestProviderHosted(object):
         Test install ODF on hosted cluster
         """
         logger.info("Deploy hosted OCP on provider platform multiple times")
+
         HostedClients().do_deploy()
 
     @runs_on_provider
@@ -224,6 +249,8 @@ class TestProviderHosted(object):
             deploy_cnv=False,
             deploy_metallb=False,
             download_hcp_binary=False,
+            deploy_hyperconverged=False,
+            deploy_mce=False,
         )
         assert validate_acm_hub_install(), "ACM not installed or MCE not configured"
 
@@ -240,6 +267,8 @@ class TestProviderHosted(object):
             deploy_cnv=True,
             deploy_metallb=False,
             download_hcp_binary=False,
+            deploy_hyperconverged=False,
+            deploy_mce=False,
         )
         assert hypershift_hosted.cnv_hyperconverged_installed(), "CNV not installed"
 
@@ -256,6 +285,8 @@ class TestProviderHosted(object):
             deploy_cnv=False,
             deploy_metallb=True,
             download_hcp_binary=False,
+            deploy_hyperconverged=False,
+            deploy_mce=False,
         )
         assert hypershift_hosted.metallb_instance_created(), "Metallb not installed"
 
@@ -272,6 +303,8 @@ class TestProviderHosted(object):
             deploy_cnv=False,
             deploy_metallb=False,
             download_hcp_binary=True,
+            deploy_hyperconverged=False,
+            deploy_mce=False,
         )
         assert hypershift_hosted.hcp_binary_exists(), "HCP binary not downloaded"
 
@@ -327,14 +360,42 @@ class TestProviderHosted(object):
             deploy_metallb=False,
             download_hcp_binary=False,
             deploy_mce=True,
+            deploy_hyperconverged=False,
         )
 
     @hci_provider_required
-    def test_provider_deploy_OCP_hosted_skip_acm(self):
+    def test_provider_deploy_ocp_hosted_skip_acm(self):
         """
         Test deploy hosted OCP on provider platform with cnv ready beforehand
+        ! Suitable for released version of OCP only (no mce and hyperconverged)
         """
         logger.info("Test deploy hosted OCP on provider platform with cnv ready")
         cluster_name = list(config.ENV_DATA["clusters"].keys())[-1]
+        hypershift_hosted = HypershiftHostedOCP(cluster_name)
 
-        HypershiftHostedOCP(cluster_name).deploy_ocp(deploy_acm_hub=False)
+        hypershift_hosted.deploy_dependencies(
+            deploy_acm_hub=False,
+            deploy_cnv=True,
+            deploy_metallb=True,
+            download_hcp_binary=True,
+            deploy_mce=False,
+            deploy_hyperconverged=False,
+        )
+
+        HypershiftHostedOCP(cluster_name).deploy_ocp()
+
+    def test_deploy_hyperconverged(self):
+        """
+        Test deploy hyperconverged operator
+        ! Hyperconverged is used instead of unreleased CNV, to overcome catalogsource limitations on client clusters
+        """
+        logger.info("Test deploy hyperconverged operator")
+        hypershift_hosted = HypershiftHostedOCP("dummy")
+        hypershift_hosted.deploy_dependencies(
+            deploy_acm_hub=False,
+            deploy_cnv=False,
+            deploy_metallb=False,
+            download_hcp_binary=False,
+            deploy_mce=False,
+            deploy_hyperconverged=True,
+        )

@@ -1,0 +1,14 @@
+apiVersion: operators.coreos.com/v1alpha1
+kind: Subscription
+metadata:
+  name: community-kubevirt-hyperconverged
+  namespace: kubevirt-hyperconverged
+spec:
+  # candidate-v1.14 is the latest version of the kubevirt-hyperconverged operator that supports OCP 4.18,
+  # 1.15 is the latest version that supports OCP 4.19
+  # rule is OCP version - 3.4
+  channel: candidate-v{hyperconverged_version}
+  installPlanApproval: Automatic
+  name: community-kubevirt-hyperconverged
+  source: hyperconverged-catalogsource
+  sourceNamespace: openshift-marketplace
