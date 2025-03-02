@@ -71,7 +71,6 @@ team_marks = [manage, ecosystem, e2e]
 # components  and other markers
 ocp = pytest.mark.ocp
 rook = pytest.mark.rook
-ui = pytest.mark.ui
 mcg = pytest.mark.mcg
 rgw = pytest.mark.rgw
 csi = pytest.mark.csi
@@ -729,3 +728,5 @@ vault_kms_deployment_required = pytest.mark.skipif(
     not in [VAULT_KMS_PROVIDER, HPCS_KMS_PROVIDER],
     reason="This test requires both Vault or HPCS KMS deployment to be enabled and a valid KMS provider.",
 )
+
+ui = compose(skipif_ibm_cloud_managed, pytest.mark.ui)
