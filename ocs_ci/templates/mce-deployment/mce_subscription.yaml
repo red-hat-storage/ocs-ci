@@ -4,8 +4,8 @@ metadata:
   name: multicluster-engine
   namespace: multicluster-engine
 spec:
-  channel: stable
+  channel: stable-2.8
   installPlanApproval: Automatic
   name: multicluster-engine
-  source: mce-catalogsource
+  source: qe-app-registry
   sourceNamespace: openshift-marketplace

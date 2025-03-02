@@ -5,9 +5,11 @@ This module contains functionality required for mce installation.
 import logging
 import tempfile
 
-from ocs_ci.framework import config
-from ocs_ci.ocs.resources.ocs import OCS
+from ocs_ci.deployment.qe_app_registry import QeAppRegistry
+from ocs_ci.ocs import ocp
 from ocs_ci.ocs.ocp import OCP
+from ocs_ci.ocs.resources.ocs import OCS
+from ocs_ci.framework import config
 from ocs_ci.utility import templating
 from ocs_ci.ocs import constants
 from ocs_ci.utility.utils import (
@@ -15,7 +17,7 @@ from ocs_ci.utility.utils import (
     exec_cmd,
 )
 from ocs_ci.ocs.resources.catalog_source import CatalogSource
-from ocs_ci.ocs import ocp
+from ocs_ci.ocs.resources.deployment import Deployment
 from ocs_ci.utility.utils import get_running_ocp_version
 from ocs_ci.ocs.exceptions import CommandFailed, UnavailableResourceException
 
@@ -28,22 +30,30 @@ class MCEInstaller(object):
     """
 
     def __init__(self):
-        self.namespace = constants.MCE_NAMESPACE
+        self.mce_namespace = constants.MCE_NAMESPACE
         self.ns_obj = ocp.OCP(kind=constants.NAMESPACES)
         self.hypershift_override_image_cm = "hypershift-override-images-new"
         self.multicluster_engine = ocp.OCP(
             kind="MultiClusterEngine",
             resource_name=constants.MULTICLUSTER_ENGINE,
+            namespace=self.mce_namespace,
         )
         self.catsrc = ocp.OCP(
             kind=constants.CATSRC, namespace=constants.MARKETPLACE_NAMESPACE
         )
         self.subs = ocp.OCP(kind=constants.PROVIDER_SUBSCRIPTION)
 
-    def create_mce_catalog_source(self):
+    def _create_mce_catalog_source(self):
         """
         Creates a catalogsource for mce operator.
 
+        We use qe-app-registry catalog source to install latest version
+        In future if we want to install particular image we can use subscription.spec.startingCSV:<image> like
+        quay.io:443/acm-d/mce-custom-registry:2.13.0-DOWNSTREAM-2025-03-02-02-49-35
+        In this case we don't need another channel in subscription but may reuse stable-2.8 channel
+
+        ! Important. This catalog source does not work without ICSP, this catsrc is not used in a moment.
+        ! This method was left for reference only.
         """
         if not self.catsrc.is_exist(
             resource_name=constants.MCE_CATSRC_NAME,
@@ -79,15 +89,13 @@ class MCEInstaller(object):
             CommandFailed: If the 'oc create' command fails.
         """
         if not self.ns_obj.is_exist(
-            resource_name=self.namespace,
+            resource_name=self.mce_namespace,
         ):
-            logger.info(f"Creating namespace {self.namespace} for mce resources")
+            logger.info(f"Creating namespace {self.mce_namespace} for mce resources")
             namespace_yaml_file = templating.load_yaml(constants.MCE_NAMESPACE_YAML)
             namespace_yaml = OCS(**namespace_yaml_file)
             namespace_yaml.create()
-            logger.info(f"MCE namespace {self.namespace} was created successfully")
-        else:
-            logger.info(f"{self.namespace} already exists")
+            logger.info(f"MCE namespace {self.mce_namespace} was created successfully")
 
     def create_multiclusterengine_operatorgroup(self):
         """
@@ -98,14 +106,12 @@ class MCEInstaller(object):
         if not self.multicluster_engine.is_exist(
             resource_name=constants.MULTICLUSTER_ENGINE
         ):
-
             operatorgroup_yaml_file = templating.load_yaml(
                 constants.MCE_OPERATOR_GROUP_YAML
             )
             operatorgroup_yaml = OCS(**operatorgroup_yaml_file)
             operatorgroup_yaml.create()
             logger.info("mce OperatorGroup created successfully")
-        self.multicluster_engine.wait_for_phase("Available")
 
     def create_multiclusterengine_resource(self):
         """
@@ -128,26 +134,23 @@ class MCEInstaller(object):
                 constants.MCE_SUBSCRIPTION_YAML
             )
 
-            if config.DEPLOYMENT.get("mce_latest_stable"):
-                mce_subscription_yaml_data["spec"][
-                    "source"
-                ] = constants.OPERATOR_CATALOG_SOURCE_NAME
-                mce_channel = "stable"
-            else:
-                mce_channel = config.DEPLOYMENT.get("mce_channel")
+            # ! Important, channel-2.8 becomes available after OCP 4.18 release
+            if config.DEPLOYMENT.get("mce_channel"):
+                mce_subscription_yaml_data["spec"]["channel"] = config.DEPLOYMENT.get(
+                    "mce_channel"
+                )
 
-            mce_subscription_yaml_data["spec"]["channel"] = mce_channel
             mce_subscription_manifest = tempfile.NamedTemporaryFile(
                 mode="w+", prefix="mce_subscription_manifest", delete=False
             )
             templating.dump_data_to_temp_yaml(
                 mce_subscription_yaml_data, mce_subscription_manifest.name
             )
-            logger.info("Creating subscription for mce operator")
-            run_cmd(f"oc create -f {mce_subscription_manifest.name}")
+            logger.info("Creating subscription for the mce operator")
+            exec_cmd(f"oc create -f {mce_subscription_manifest.name}")
             OCP(
                 kind=constants.SUBSCRIPTION_COREOS,
-                namespace=self.namespace,
+                namespace=self.mce_namespace,
                 resource_name=constants.MCE_OPERATOR,
             ).check_resource_existence(
                 should_exist=True, resource_name=constants.MCE_OPERATOR
@@ -160,7 +163,9 @@ class MCEInstaller(object):
         Check hypershift namespace created
 
         """
-        logger.info(f"hypershift namespace {self.namespace} was created successfully")
+        logger.info(
+            f"hypershift namespace {self.mce_namespace} was created successfully"
+        )
         is_hypershift_ns_available = self.ns_obj.is_exist(
             resource_name=constants.HYPERSHIFT_NAMESPACE,
         )
@@ -176,15 +181,20 @@ class MCEInstaller(object):
             namespace=constants.HYPERSHIFT_NAMESPACE,
         )
 
-        if not configmaps_obj.is_exist(
-            resource_name=constants.SUPPORTED_VERSIONS_CONFIGMAP
+        if not configmaps_obj.check_resource_existence(
+            should_exist=True,
+            timeout=60,
+            resource_name=constants.SUPPORTED_VERSIONS_CONFIGMAP,
         ):
             raise UnavailableResourceException(
-                f"Configmap {constants.SUPPORTED_VERSIONS_CONFIGMAP} does not exist in hypershift namespace"
+                f"Configmap {constants.SUPPORTED_VERSIONS_CONFIGMAP} does not exist "
+                f"in {constants.HYPERSHIFT_NAMESPACE} namespace"
             )
 
-        cmd = "oc get cm -n hypershift supported-versions -o jsonpath='{.data.supported-versions}'"
+        cmd = f"oc get cm -n {constants.HYPERSHIFT_NAMESPACE} supported-versions "
+        cmd += "-o jsonpath='{.data.supported-versions}'"
         cmd_res = exec_cmd(cmd, shell=True)
+        supported_versions = ""
         if cmd_res.returncode == 0:
             supported_versions = cmd_res.stdout.decode("utf-8")
             logger.info(f"Supported versions: {supported_versions}")
@@ -199,7 +209,7 @@ class MCEInstaller(object):
         # Create image override configmap using the image override json
         cmd = (
             f"oc create cm {self.hypershift_override_image_cm} --from-file={constants.IMAGE_OVERRIDE_JSON}"
-            "-n {self.namespace}"
+            f"-n {self.mce_namespace}"
         )
         cmd_res = exec_cmd(cmd, shell=True)
         if cmd_res.returncode:
@@ -211,43 +221,36 @@ class MCEInstaller(object):
         )
         self.multicluster_engine.wait_until_running()
 
-    def deploy_mce(self, check_mce_deployed=False, check_mce_ready=False):
+    def deploy_mce(self):
         """
         Installs mce enabling software emulation.
 
-        Args:
-            check_mce_deployed (bool): If True, check if mce is already deployed. If so, skip the deployment.
-            check_mce_ready (bool): If True, check if mce is ready. If so, skip the deployment.
         """
-        if check_mce_deployed:
-            if self.mce_installed():
-                logger.info("mce operator is already deployed, skipping the deployment")
-                return
 
-        if check_mce_ready:
-            if self.post_install_verification(raise_exception=False):
-                logger.info("mce operator ready, skipping the deployment")
-                return
+        if not self.mce_installed():
+            logger.info("Installing mce")
+            # we create catsrc with nightly builds only if config.DEPLOYMENT does not have mce_latest_stable
+            qe_app_registry = QeAppRegistry()
+            qe_app_registry.icsp()
+            qe_app_registry.catalog_source()
+            self.create_mce_namespace()
+            self.create_mce_subscription()
+            self.create_multiclusterengine_operatorgroup()
 
-        logger.info("Installing mce")
-        # we create catsrc with nightly builds only if config.DEPLOYMENT does not have mce_latest_stable
-        if not config.DEPLOYMENT.get("mce_latest_stable"):
-            # Create mce catalog source
-            self.create_mce_catalog_source()
-        # Create multicluster-engine namespace
-        self.create_mce_namespace()
-        # create mce subscription
-        self.create_mce_subscription()
-        # Deploy the multiclusterengine operatorgroup
-        self.create_multiclusterengine_operatorgroup()
-        # Create mce resource
-        self.create_multiclusterengine_resource()
-        # Check hypershift ns created
-        if not self.check_hypershift_namespace():
-            cmd = f"oc create namespace {constants.HYPERSHIFT_NAMESPACE}"
-            cmd_res = exec_cmd(cmd, shell=True)
-            if cmd_res.returncode:
-                raise CommandFailed("Failed to create hypershift namespace")
+        # check whether mce instance is created, if it is installed but mce don't pass validation we can not heal it in
+        # script here, hence no sense for full validation of mce
+        if not self.mce_exists():
+
+            # Create mce resource
+            self.create_multiclusterengine_resource()
+            # Check hypershift ns created
+            if not self.check_hypershift_namespace():
+                cmd = f"oc create namespace {constants.HYPERSHIFT_NAMESPACE}"
+                cmd_res = exec_cmd(cmd, shell=True)
+                if cmd_res.returncode:
+                    raise CommandFailed("Failed to create hypershift namespace")
+
+        self.wait_mce_resources()
         # Check supported versions in supported-versions configmap
         self.check_supported_versions()
 
@@ -258,36 +261,48 @@ class MCEInstaller(object):
         Returns:
              bool: True if MCE is installed, False otherwise
         """
-        ocp = OCP(kind=constants.ROOK_OPERATOR, namespace=self.namespace)
-        return ocp.check_resource_existence(
-            timeout=12, should_exist=True, resource_name=constants.MCE_OPERATOR
+        ocp_obj = OCP(kind=constants.ROOK_OPERATOR)
+        # unlike other k8s resources, operators are OLM manager resources that identified by merged name.namespace
+        return ocp_obj.check_resource_existence(
+            timeout=12,
+            should_exist=True,
+            resource_name=constants.MCE_OPERATOR_OPERATOR_NAME_WITH_NS,
         )
 
-    def post_install_verification(self, raise_exception=False):
+    def mce_exists(self):
         """
-        Performs MCE post-installation verification, with raise_exception = False may be used safely to run on
-        clusters with MCE installed or not installed.
-
-        Args:
-            raise_exception: If True, allow function to fail the job and raise an exception. If false, return False
-        instead of raising an exception.
+        Check if MCE exists
 
         Returns:
-            bool: True if the verification conditions are met, False otherwise
-        Raises:
-            TimeoutExpiredError: If the verification conditions are not met within the timeout
-            and raise_exception is True.
-            ResourceNotFoundError if the namespace does not exist and raise_exception is True.
-            ResourceWrongStatusException if the nodes are not ready, verification fails and raise_exception
-            is True.
+            bool: True if MCE exists, False otherwise
         """
-        # TODO: implement
-        pass
+        return self.multicluster_engine.is_exist(
+            resource_name=constants.MULTICLUSTER_ENGINE
+        )
 
-    def validate_mce_deployment(self):
+    def wait_mce_resources(self):
         """
-        Validate mce operator installation
+        Wait for mce Available state and deployments Ready state
+
+        Raises:
+            TimeoutExpiredError: If the deployment is not in the 'Available' state within the timeout
         """
-        if self.mce_hyperconverged_installed():
-            logger.info("mce operator is already deployed")
-            return
+        if not self.mce_exists():
+            raise UnavailableResourceException("MCE resource is not created")
+        deployments = [
+            "multicluster-engine-operator",
+            "ocm-controller",
+            "cluster-manager",
+            "ocm-webhook",
+        ]
+
+        for resource_name in deployments:
+            depl_ocp_obj = OCP(
+                kind=constants.DEPLOYMENT,
+                namespace=self.mce_namespace,
+                resource_name=resource_name,
+            )
+            deployment_obj = Deployment(
+                **depl_ocp_obj.get(retry=60, wait=10, dont_raise=True)
+            )
+            deployment_obj.wait_for_available_replicas(timeout=600)

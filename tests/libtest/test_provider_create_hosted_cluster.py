@@ -346,8 +346,6 @@ class TestProviderHosted(object):
                 storage_class in storage_class_classes
             ), "Storage classes ae not created as expected"
 
-    @runs_on_provider
-    @hci_provider_required
     def test_deploy_mce(self):
         """
         Test deploy mce without installting acm

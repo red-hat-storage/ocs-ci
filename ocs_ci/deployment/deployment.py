@@ -462,15 +462,8 @@ class Deployment(object):
 
         """
         if config.DEPLOYMENT.get("deploy_mce"):
-            if config.ENV_DATA.get("skip_mce_check_if_present"):
-                check_mce_deployed = False
-                check_mce_ready = False
-            else:
-                check_mce_deployed = True
-                check_mce_ready = True
             mce_installer = MCEInstaller()
-            mce_installer.deploy_mce(check_mce_deployed, check_mce_ready)
-            mce_installer.validate_mce_deployment()
+            mce_installer.deploy_mce()
 
     def do_deploy_oadp(self):
         """
