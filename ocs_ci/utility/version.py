@@ -2,9 +2,9 @@
 """
 Module for version related util functions.
 """
-
 import re
 from semantic_version import Version
+import yaml
 
 from ocs_ci.framework import config
 from ocs_ci.ocs import defaults
@@ -297,18 +297,26 @@ def get_volsync_operator_version(namespace=constants.SUBMARINER_OPERATOR_NAMESPA
             return csv["spec"]["version"]
 
 
-def get_ocp_versions_rosa():
+def get_ocp_versions_rosa(yaml_format=False):
     """
     Get the list of available versions for ROSA.
+
+    Args:
+        yaml_format (bool): Use yaml output from rosa command and parse it as yaml.
 
     Returns:
         str: a list of available versions for ROSA in string format
     """
     from ocs_ci.utility.utils import exec_cmd
 
-    cmd = "rosa list versions"
-    output = exec_cmd(cmd, timeout=1800)
-    return output.stdout.decode()
+    yaml_arg = "-o yaml" if yaml_format else ""
+
+    cmd = f"rosa list versions {yaml_arg}"
+    output = exec_cmd(cmd, timeout=1800).stdout.decode()
+    if yaml_format:
+        return yaml.safe_load(output)
+    else:
+        return output
 
 
 def ocp_version_available_on_rosa(version):
