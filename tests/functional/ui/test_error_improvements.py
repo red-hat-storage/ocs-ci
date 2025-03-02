@@ -14,6 +14,7 @@ from ocs_ci.framework.pytest_customization.marks import (
     runs_on_provider,
     skipif_disconnected_cluster,
     external_mode_required,
+    jira,
 )
 from ocs_ci.framework.testlib import ManageTest
 from ocs_ci.ocs.ocp import OCP
@@ -46,6 +47,7 @@ class TestErrorMessageImprovements(ManageTest):
         backing_store_tab.check_error_messages()
 
     @mcg
+    @jira("DFBUGS-410")
     @bugzilla("2193109")
     @polarion_id("OCS-4867")
     def test_obc_creation_rules(self, setup_ui_class):
