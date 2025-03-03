@@ -1,6 +1,7 @@
 import logging
 import semantic_version
 
+from ocs_ci.ocs.exceptions import HyperConvergedNotDeployedException
 from ocs_ci.ocs.ocp import OCP
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.resources.deployment import Deployment
@@ -10,6 +11,7 @@ from ocs_ci.ocs.utils import get_pod_name_by_pattern
 from ocs_ci.ocs.version import get_ocp_version
 from ocs_ci.utility import templating
 from ocs_ci.ocs.resources.catalog_source import CatalogSource
+from ocs_ci.utility.utils import wait_custom_resource_defenition_available
 
 logger = logging.getLogger(__name__)
 
@@ -150,7 +152,7 @@ class HyperConverged:
             should_exist=True, resource_name=constants.HYPERCONVERGED_NAME
         )
         # wait for pods to be up and running
-        deployments = ["virt-api", "virt-controller", "virt-exporterproxy"]
+        deployments = ["virt-operator", "virt-api", "virt-controller"]
 
         for resource_name in deployments:
             depl_ocp_obj = OCP(
@@ -172,6 +174,10 @@ class HyperConverged:
         HyperConverged.create_operator_group(self)
         HyperConverged.create_catalog_source(self)
         HyperConverged.create_subscription(self)
+        if not wait_custom_resource_defenition_available(constants.HYPERCONVERGED_CRD):
+            raise HyperConvergedNotDeployedException(
+                f"crd {constants.HYPERCONVERGED_CRD} is unavailable"
+            )
         HyperConverged.create_hyperconverged_instance(self)
 
 
@@ -184,13 +190,14 @@ def get_hyperconverged_corresponding_version(ocp_version: str) -> str:
     - Hyperconverged Minor = OCP Minor - 4
 
     Args:
-        ocp_version: OCP version as a string (e.g., "4.18")
+        ocp_version: OCP version as a string (e.g., "4.18" or "4.18.3")
     Returns:
         Corresponding Hyperconverged version as a string (e.g., "1.14")
     """
-    ocp_semver = semantic_version.Version(
-        ocp_version + ".0"
-    )  # Ensure valid semantic versioning
+    if not semantic_version.validate(ocp_version):
+        ocp_version += ".0"  # Ensure valid semantic versioning if patch is missing
+
+    ocp_semver = semantic_version.Version(ocp_version)
     hyperconverged_major = ocp_semver.major - 3
     hyperconverged_minor = ocp_semver.minor - 4
 
@@ -210,7 +217,12 @@ def get_ocp_corresponding_version(hyperconverged_version: str) -> str:
     Returns:
         Corresponding OCP version as a string (e.g., "4.18")
     """
-    hyperconverged_semver = semantic_version.Version(hyperconverged_version + ".0")
+    if not semantic_version.validate(hyperconverged_version):
+        hyperconverged_version += (
+            ".0"  # Ensure valid semantic versioning if patch is missing
+        )
+
+    hyperconverged_semver = semantic_version.Version(hyperconverged_version)
     ocp_major = hyperconverged_semver.major + 3
     ocp_minor = hyperconverged_semver.minor + 4
 

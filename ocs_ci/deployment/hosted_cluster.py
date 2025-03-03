@@ -264,10 +264,10 @@ class HostedClients(HyperShiftBase):
             # Put logic on checking and deploying dependencies here
             if first_ocp_deployment:
                 # ACM installation is a default for Provider/Converged deployments
-                deploy_acm_hub = config.ENV_DATA.get("deploy_acm_hub_cluster", True)
+                deploy_acm_hub = config.ENV_DATA.get("deploy_acm_hub_cluster", False)
                 # CNV installation is a default for Provider/Converged deployments
-                deploy_cnv = config.DEPLOYMENT.get("cnv_deployment", True)
-                deploy_mce = config.DEPLOYMENT.get("mce_deployment", False)
+                deploy_cnv = config.DEPLOYMENT.get("cnv_deployment", False)
+                deploy_mce = config.DEPLOYMENT.get("deploy_mce", False)
                 deploy_hyperconverged = config.ENV_DATA.get(
                     "deploy_hyperconverged", False
                 )
@@ -275,7 +275,7 @@ class HostedClients(HyperShiftBase):
                 # Validate conflicting deployments
                 if deploy_acm_hub and deploy_mce:
                     raise UnexpectedDeploymentConfiguration(
-                        "Conflict: Both 'deploy_acm_hub_cluster' and 'mce_deployment' are enabled. Choose one."
+                        "Conflict: Both 'deploy_acm_hub_cluster' and 'deploy_mce' are enabled. Choose one."
                     )
                 if deploy_cnv and deploy_hyperconverged:
                     raise UnexpectedDeploymentConfiguration(
@@ -290,9 +290,6 @@ class HostedClients(HyperShiftBase):
 
             if not config.ENV_DATA["platform"].lower() in HCI_PROVIDER_CLIENT_PLATFORMS:
                 raise ProviderModeNotFoundException()
-
-            if not config.ENV_DATA.get("deploy_acm_hub_cluster", True):
-                deploy_acm_hub = False
 
             hosted_ocp_cluster.deploy_dependencies(
                 deploy_acm_hub=deploy_acm_hub,
@@ -356,7 +353,7 @@ class HostedClients(HyperShiftBase):
         """
 
         if not (self.hcp_binary_exists() and self.hypershift_binary_exists()):
-            self.download_hcp_binary_with_podman()
+            self.update_hcp_binary()
 
         for name in config.ENV_DATA.get("clusters").keys():
             path = config.ENV_DATA.get("clusters").get(name).get("hosted_cluster_path")
@@ -526,14 +523,21 @@ class HypershiftHostedOCP(
                 "Both deploy_cnv and deploy_hyperconverged are set to True. "
                 "Please choose only one of them."
             )
-        if deploy_acm_hub:
+
+        if deploy_acm_hub and not deploy_mce:
             self.deploy_acm_hub()
+        elif deploy_mce and not deploy_acm_hub:
+            self.deploy_mce()
+        elif deploy_acm_hub and deploy_mce:
+            raise UnexpectedDeploymentConfiguration(
+                "Both deploy_acm_hub and deploy_mce are set to True. "
+                "Please choose only one of them."
+            )
+
         if deploy_metallb:
             self.deploy_lb()
         if download_hcp_binary:
             self.update_hcp_binary()
-        if deploy_mce and not deploy_acm_hub:
-            self.deploy_mce()
 
         # Enable central infrastructure management service for agent
         if config.DEPLOYMENT.get("hosted_cluster_platform") == "agent":

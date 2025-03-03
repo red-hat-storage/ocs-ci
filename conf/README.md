@@ -338,7 +338,6 @@ higher priority).
 * `metallb_version` - MetalLB operator version to install
 * `deploy_acm_hub_cluster` - Deploy ACM hub cluster or not (Default: false)
 * `cnv_deployment` - Deploy CNV or not (Default: false) necessary for Converged clusters with hosted clients
-* `mce_deployment` - Deploy MCE or not (Default: false)
 * `deploy_hyperconverged` - Deploy hyperconverged operator or not (Default: false).  Necessary for Converged clusters with hosted clients with unreleased OCP version
 * `clusters` - section for hosted clusters
     * `<cluster name>` - name of the cluster

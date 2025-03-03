@@ -15,11 +15,16 @@ from ocs_ci.ocs import constants
 from ocs_ci.utility.utils import (
     run_cmd,
     exec_cmd,
+    wait_custom_resource_defenition_available,
 )
 from ocs_ci.ocs.resources.catalog_source import CatalogSource
 from ocs_ci.ocs.resources.deployment import Deployment
 from ocs_ci.utility.utils import get_running_ocp_version
-from ocs_ci.ocs.exceptions import CommandFailed, UnavailableResourceException
+from ocs_ci.ocs.exceptions import (
+    CommandFailed,
+    UnavailableResourceException,
+    MultiClusterEngineNotDeployedException,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -235,6 +240,12 @@ class MCEInstaller(object):
             qe_app_registry.catalog_source()
             self.create_mce_namespace()
             self.create_mce_subscription()
+            if not wait_custom_resource_defenition_available(
+                constants.MULTICLUSTER_ENGINE_CRD
+            ):
+                raise MultiClusterEngineNotDeployedException(
+                    f"crd {constants.MULTICLUSTER_ENGINE_CRD} is unavailable"
+                )
             self.create_multiclusterengine_operatorgroup()
 
         # check whether mce instance is created, if it is installed but mce don't pass validation we can not heal it in

@@ -249,6 +249,7 @@ EXTERNAL_CLUSTER_SCRIPT_CONFIG = "rook-ceph-external-cluster-script-config"
 ENCRYPTIONKEYROTATIONCRONJOB = "encryptionkeyrotationcronjobs.csiaddons.openshift.io"
 ENCRYPTIONKEYROTATIONJOB = "encryptionkeyrotationjobs.csiaddons.openshift.io"
 DEFAULT_CEPH_DEVICECLASS = "defaultCephDeviceClass"
+CRD_KIND = "CustomResourceDefinition"
 
 # Provisioners
 AWS_EFS_PROVISIONER = "openshift.org/aws-efs"
@@ -532,6 +533,7 @@ HYPERCONVERGED_NAME = "kubevirt-hyperconverged"
 HYPERCONVERGED_YAML = os.path.join(
     TEMPLATE_DEPLOYMENT_DIR_HYPERCONVERGED, "hyperconverged.yaml"
 )
+HYPERCONVERGED_CRD = "hyperconvergeds.hco.kubevirt.io"
 
 
 # CNV deployment constants
@@ -2811,6 +2813,7 @@ MCE_RESOURCE_YAML = os.path.join(TEMPLATE_DEPLOYMENT_DIR_MCE, "mce_resource.yaml
 MCE_OPERATOR_GROUP_YAML = os.path.join(
     TEMPLATE_DEPLOYMENT_DIR_MCE, "mce_operatorgroup.yaml"
 )
+MULTICLUSTER_ENGINE_CRD = "multiclusterengines.multicluster.openshift.io"
 HYPERSHIFT_NAMESPACE = "hypershift"
 SUPPORTED_VERSIONS_CONFIGMAP = "supported-versions"
 IMAGE_OVERRIDE_JSON = os.path.join(TEMPLATE_DEPLOYMENT_DIR_MCE, "image-override.json")
