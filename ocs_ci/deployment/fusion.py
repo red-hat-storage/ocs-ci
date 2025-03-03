@@ -32,6 +32,7 @@ class FusionDeployment:
         """
         Install IBM Fusion Operator
         """
+        logger.info("Installing IBM Fusion")
         self.create_catalog_source()
         self.create_namespace_and_operator_group()
         self.create_subscription()
@@ -105,6 +106,7 @@ class FusionDeployment:
         """
         Verify the Fusion deployment was successful
         """
+        logger.info("Verifying Fusion is deployed")
         logger.info("Waiting for Subscription and CSV to be found")
         wait_for_subscription(self.operator_name, self.namespace)
         wait_for_csv(self.operator_name, self.namespace)
@@ -117,6 +119,7 @@ class FusionDeployment:
         csv_name = package_manifest.get_current_csv()
         csv = CSV(resource_name=csv_name, namespace=self.namespace)
         csv.wait_for_phase("Succeeded", timeout=300, sleep=10)
+        logger.info("Fusion deployed successfully")
 
 
 def wait_for_subscription(subscription_name, namespace):
