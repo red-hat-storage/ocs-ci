@@ -688,7 +688,7 @@ class TestMCGReplicationWithVersioningSystemTest:
             test_directory_setup.origin_dir,
             pattern=object_key,
             prefix=prefix_1,
-            num_versions=2,
+            num_versions=4,
         )
         logger.info(
             f"Updated object {object_key} with new version data in bucket {bucket_1.name}"
@@ -718,7 +718,7 @@ class TestMCGReplicationWithVersioningSystemTest:
             test_directory_setup.origin_dir,
             pattern=object_key,
             prefix=prefix_1,
-            num_versions=2,
+            num_versions=4,
         )
         logger.info(
             f"Updated object {object_key} with new version data in bucket {bucket_1.name}"
