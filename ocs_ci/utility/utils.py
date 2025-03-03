@@ -43,6 +43,8 @@ from ocs_ci.framework import GlobalVariables as GV
 from ocs_ci.ocs import constants, defaults
 from ocs_ci.ocs.exceptions import (
     CephHealthException,
+    CephHealthRecoveredException,
+    CephHealthNotRecoveredException,
     ClientDownloadError,
     CommandFailed,
     ConfigurationError,
@@ -2382,13 +2384,79 @@ def wait_for_ceph_health_not_ok(timeout=300, sleep=10):
     sampler.wait_for_func_status(True)
 
 
-def ceph_health_check(namespace=None, tries=20, delay=30):
+def ceph_health_resolve_daemon_crash():
+    """
+    Fix ceph health issue with daemon crash
+    """
+    log.warning("Trying to fix the issue with daemon crash by archiving crashes")
+    from ocs_ci.ocs.resources.pod import get_ceph_tools_pod
+
+    ct_pod = get_ceph_tools_pod()
+    ceph_crash_info_display(ct_pod)
+    archive_ceph_crashes(ct_pod)
+
+
+def ceph_health_recover(health_status, namespace=None):
+    """
+    Function which tries to recover ceph health to be HEALTH OK
+
+    Args:
+        health_status (str): Ceph health status
+        namespace (str): Namespace of OCS
+
+    Raises:
+        CephHealthNotRecoveredException: When Ceph health was not recovered
+        CephHealthRecoveredException: When Ceph health was recovered
+
+    """
+    ceph_health_fixes = [
+        {
+            "pattern": r"daemons have recently crashed",
+            "func": ceph_health_resolve_daemon_crash,
+            "func_args": [],
+            "func_kwargs": {},
+            "ceph_health_tries": 5,
+            "ceph_health_delay": 30,
+        },
+        # TODO: Add more patterns and fix functions
+    ]
+    for fix_dict in ceph_health_fixes:
+        pattern = fix_dict["pattern"]
+        if re.search(pattern, health_status):
+            log.info(
+                "Trying to fix Ceph Health because we found in Health status the matching pattern"
+                f": '{pattern}'!"
+            )
+            fix_dict["func"](
+                *fix_dict.get("func_args", []), **fix_dict.get("func_kwargs", {})
+            )
+            try:
+                ceph_health_check(
+                    namespace,
+                    tries=fix_dict.get("ceph_health_tries", 5),
+                    delay=fix_dict.get("ceph_health_delay", 30),
+                )
+            except Exception as ex:
+                raise CephHealthNotRecoveredException(
+                    f"Attempt to try to recover the Ceph Health failed! Exception: {ex}"
+                )
+            raise CephHealthRecoveredException(
+                "Ceph health was not OK and got forcibly recovered to not block other tests"
+                f" after the issue: {pattern} !"
+                " This might be because of product bug, so please do not ignore this error and"
+                " analyze why this has happened!"
+            )
+
+
+def ceph_health_check(namespace=None, tries=20, delay=30, fix_ceph_health=False):
     """
     Args:
         namespace (str): Namespace of OCS
             (default: config.ENV_DATA['cluster_namespace'])
         tries (int): Number of retries
         delay (int): Delay in seconds between retries
+        fix_ceph_health (bool): If True, it will try to fix the health to be OK
+            even if it will recover, we will get an exception CephHealthRecoveredException
 
     Returns:
         bool: ceph_health_check_base return value with default retries of 20,
@@ -2407,21 +2475,24 @@ def ceph_health_check(namespace=None, tries=20, delay=30):
         tries=tries,
         delay=delay,
         backoff=1,
-    )(ceph_health_check_base)(namespace)
+    )(ceph_health_check_base)(namespace, fix_ceph_health)
 
 
-def ceph_health_check_base(namespace=None):
+def ceph_health_check_base(namespace=None, fix_ceph_health=False):
     """
     Exec `ceph health` cmd on tools pod to determine health of cluster.
 
     Args:
         namespace (str): Namespace of OCS
             (default: config.ENV_DATA['cluster_namespace'])
+        fix_ceph_health (bool): If True, it will try to fix the health to be OK
+            even if it will recover, we will get an exception CephHealthRecoveredException
 
     Raises:
         CephHealthException: If the ceph health returned is not HEALTH_OK
         CommandFailed: If the command to retrieve the tools pod name or the
             command to get ceph health returns a non-zero exit code
+
     Returns:
         boolean: True if HEALTH_OK
 
@@ -2433,6 +2504,8 @@ def ceph_health_check_base(namespace=None):
         log.info("Ceph cluster health is HEALTH_OK.")
         return True
     else:
+        if fix_ceph_health:
+            ceph_health_recover(health, namespace)
         raise CephHealthException(f"Ceph cluster health is not OK. Health: {health}")
 
 
