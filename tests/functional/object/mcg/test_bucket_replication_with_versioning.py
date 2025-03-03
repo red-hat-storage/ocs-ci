@@ -197,20 +197,17 @@ class TestReplicationWithVersioning(MCGTest):
             )
 
         # 4. Verify the versions were replicated to their targets in the same order
-        wait_for_object_versions_match(
-            mcg_obj,
-            awscli_pod,
-            bucket_a.name,
-            bucket_b.name,
-            obj_key=f"{a_to_b_prefix}/{obj_key}",
-        )
-        wait_for_object_versions_match(
-            mcg_obj,
-            awscli_pod,
-            bucket_b.name,
-            bucket_a.name,
-            obj_key=f"{b_to_a_prefix}/{obj_key}",
-        )
+        for first_bucket, second_bucket, prefix in [
+            (bucket_a.name, bucket_b.name, a_to_b_prefix),
+            (bucket_b.name, bucket_a.name, b_to_a_prefix),
+        ]:
+            wait_for_object_versions_match(
+                mcg_obj,
+                awscli_pod,
+                first_bucket,
+                second_bucket,
+                obj_key=f"{prefix}/{obj_key}",
+            )
 
     @tier3
     @polarion_id("OCS-6345")
