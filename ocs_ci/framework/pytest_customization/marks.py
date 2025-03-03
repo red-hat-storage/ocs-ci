@@ -642,6 +642,9 @@ yellow_squad = pytest.mark.yellow_squad
 # Ignore test during squad decorator check in pytest collection
 ignore_owner = pytest.mark.ignore_owner
 
+# Marks to identify tests that only serve as utility for ocs-ci
+ocs_ci_utility = pytest.mark.ocs_ci_utility
+
 # Marks to identify the cluster type in which the test case should run
 runs_on_provider = pytest.mark.runs_on_provider
 
