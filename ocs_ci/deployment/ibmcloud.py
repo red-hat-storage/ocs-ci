@@ -174,6 +174,8 @@ class IBMCloudIPI(CloudDeploymentBase):
                     f"Switching region to {other_region} due to lack of load balancers"
                 )
                 ibmcloud.set_region(other_region)
+            else:
+                ibmcloud.login()
         if config.ENV_DATA.get("custom_vpc"):
             self.prepare_custom_vpc_and_network()
         self.ocp_deployment = self.OCPDeployment()
