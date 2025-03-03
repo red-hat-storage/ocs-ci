@@ -20,6 +20,7 @@ from ocs_ci.ocs.resources.pod import (
     get_pods_having_label,
     wait_for_pods_to_be_running,
 )
+from ocs_ci.utility.retry import retry
 
 logger = logging.getLogger(__name__)
 
@@ -121,16 +122,25 @@ class BucketNotificationsManager:
 
         # Label the PVC and PV to tolerate as leftovers after the test
         pvc_name = provided_notifs_pvc or constants.DEFAULT_MCG_BUCKET_NOTIFS_PVC
-        pvc_ocp_obj = OCP(
+        pvc_ocp_obj = pvc_ocp_obj = OCP(
             namespace=self.namespace,
             kind="pvc",
             resource_name=pvc_name,
         )
 
         # First get attempts may fail if MCG just created the PVC due to the patch
-        pvc_dict = pvc_ocp_obj.get(retry=5, wait=5)
+        @retry((CommandFailed, KeyError), tries=5, delay=10, backoff=1)
+        def _get_pv_name():
+            pvc_ocp_obj = OCP(
+                namespace=self.namespace,
+                kind="pvc",
+                resource_name=pvc_name,
+            )
+            pv_name = pvc_ocp_obj.get()["spec"]["volumeName"]
+            return pv_name
 
-        pv_name = pvc_dict["spec"]["volumeName"]
+        pv_name = _get_pv_name()
+
         pv_ocp_obj = OCP(
             namespace=self.namespace,
             kind="pv",
