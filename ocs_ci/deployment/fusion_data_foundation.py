@@ -25,8 +25,6 @@ class FusionDataFoundationDeployment:
         """
         Installs IBM Fusion Data Foundation.
         """
-        logger.info("Verifying Fusion is deployed")
-        # TODO: verify fusion deployed to cluster
         logger.info("Installing IBM Fusion Data Foundation")
         create_image_tag_mirror_set()
         self.create_image_digest_mirror_set()
