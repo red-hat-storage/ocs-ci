@@ -750,7 +750,9 @@ class MCG:
         Args:
             name (str): The name to be given to the bucket class
             namespacestores (list): The namespaces stores to use as part of the policy
-            namespace_policy (dict): The namespace policy to be used
+            namespace_policy (dict): The namespace policy to be used. The supported namespace policy types are
+                Single, Cache and Multiple. For Cache NSS, default noobaa backingstore is used as the cache.
+                In the case of Multi namespace policy type, first namespace store is used as the write resource.
 
         Returns:
             OCS: The bucket class resource
@@ -780,7 +782,7 @@ class MCG:
         else:
             raise NotImplementedError(
                 f"Cli creating of bucketclass on namespacestore "
-                f"with policy {namespace_policy_type} is supported"
+                f"with policy {namespace_policy_type} is not supported"
             )
 
     def check_if_mirroring_is_done(self, bucket_name, timeout=300):
