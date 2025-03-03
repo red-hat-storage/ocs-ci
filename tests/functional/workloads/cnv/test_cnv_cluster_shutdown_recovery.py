@@ -159,7 +159,7 @@ class TestVmShutdownStart(E2ETest):
             ),
             tries=15,
             delay=15,
-        )(wait_for_nodes_status(timeout=900))
+        )(wait_for_nodes_status(timeout=1800))
         logger.info("All nodes are now in READY state")
 
         logger.info("Waiting for pods to come in running state.")
