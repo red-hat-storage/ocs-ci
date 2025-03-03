@@ -192,7 +192,7 @@ class Deployment(object):
         self.cluster_path = config.ENV_DATA["cluster_path"]
         self.namespace = config.ENV_DATA["cluster_namespace"]
         self.sts_role_arn = None
-        self.clusters_combined_name = None
+        self.clusters_combined_name = ""
 
     class OCPDeployment(BaseOCPDeployment):
         """
@@ -340,7 +340,6 @@ class Deployment(object):
                     )
                 # Generating a common name by combining cluster names so that it can be used
                 # in future for example in kms policy name.
-                self.clusters_combined_name = ""
                 self.clusters_combined_name += cluster["metadata"]["name"]
 
     def do_deploy_ocs(self):
