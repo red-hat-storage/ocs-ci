@@ -58,6 +58,8 @@ from ocs_ci.ocs.exceptions import (
     CommandFailed,
     TimeoutExpiredError,
     CephHealthException,
+    CephHealthNotRecoveredException,
+    CephHealthRecoveredException,
     ResourceWrongStatusException,
     UnsupportedPlatformError,
     PoolDidNotReachReadyState,
@@ -1673,6 +1675,7 @@ def upgrade_marks_name():
 @pytest.fixture(scope="function", autouse=True)
 def health_checker(request, tier_marks_name, upgrade_marks_name):
     skipped = False
+    ceph_health_recovered_exception = None
     dev_mode = ocsci_config.RUN["cli_params"].get("dev_mode")
     mcg_only_deployment = ocsci_config.ENV_DATA["mcg_only_deployment"]
     if mcg_only_deployment:
@@ -1712,7 +1715,8 @@ def health_checker(request, tier_marks_name, upgrade_marks_name):
                     # "flip-flopping ceph health OK and warn because of:
                     # HEALTH_WARN Reduced data availability: 2 pgs peering
                     ceph_health_check(
-                        namespace=ocsci_config.ENV_DATA["cluster_namespace"]
+                        namespace=ocsci_config.ENV_DATA["cluster_namespace"],
+                        fix_ceph_health=True,
                     )
                     log.info("Ceph health check passed at teardown!")
                     if ocsci_config.DEPLOYMENT.get("multi_storagecluster"):
@@ -1744,6 +1748,20 @@ def health_checker(request, tier_marks_name, upgrade_marks_name):
                 ):
                     ceph_health_check_multi_storagecluster_external()
                 raise
+        if ceph_health_recovered_exception:
+            """
+            Handling a rare scenario where the teardown of the previous test completed successfully,
+            but the setup of the next test detects an unhealthy Ceph state:
+            - If a test case encounters a Ceph health issue during setup and it later recovers,
+              we still need to fail the test during teardown to make the issue noticeable.
+            - However, if Ceph health recovered before running the test, we proceed with execution
+              to avoid losing test coverage.
+            """
+            log.error(
+                "We are failing the test case because it was not healthy in the setup phase"
+                " and the health status was forcibly recovered!"
+            )
+            raise ceph_health_recovered_exception
 
     request.addfinalizer(finalizer)
     for mark in node.iter_markers():
@@ -1757,6 +1775,7 @@ def health_checker(request, tier_marks_name, upgrade_marks_name):
                     namespace=ocsci_config.ENV_DATA["cluster_namespace"],
                     tries=10,
                     delay=15,
+                    fix_ceph_health=True,
                 )
                 if not ocsci_config.DEPLOYMENT.get("multi_storagecluster"):
                     if status:
@@ -1771,11 +1790,17 @@ def health_checker(request, tier_marks_name, upgrade_marks_name):
                             "Ceph health check passed for internal and multi-storagecluster external at setup"
                         )
                         return
-            except CephHealthException:
+            except (CephHealthException, CephHealthNotRecoveredException):
                 ocsci_config.RUN["skipped_tests_ceph_health"] += 1
                 skipped = True
                 # skip because ceph is not in good health
                 pytest.skip("Ceph health check failed at setup")
+            except CephHealthRecoveredException as ex:
+                log.warning(
+                    "Ceph health was not OK but was recovered! We will execute the test case"
+                    " and it will fail in the teardown to get this issue analyzed!"
+                )
+                ceph_health_recovered_exception = ex
 
 
 @pytest.fixture(scope="session", autouse=True)
