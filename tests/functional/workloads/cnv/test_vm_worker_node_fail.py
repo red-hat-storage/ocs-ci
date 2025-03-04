@@ -33,19 +33,8 @@ class TestVmWorkerNodeResiliency(E2ETest):
 
     short_nw_fail_time = 300
 
-    @pytest.fixture()
-    def setup(self, request):
-        """ """
-
-        def finalizer():
-            ceph_health_check(tries=80)
-
-        request.addfinalizer(finalizer)
-
     def test_vm_worker_node_failure(
-        self,
-        # setup_cnv,
-        nodes,
+        self, setup_cnv, nodes, project_factory, multi_cnv_workload
     ):
         """
         Test case to ensure that both OpenShift Virtualization and ODF
@@ -58,7 +47,19 @@ class TestVmWorkerNodeResiliency(E2ETest):
         odf_namespace = constants.OPENSHIFT_STORAGE_NAMESPACE
         cnv_namespace = constants.CNV_NAMESPACE
 
-        log.info("Starting the test_vm_worker_node_failure test")
+        proj_obj = project_factory()
+        vm_objs_def, vm_objs_aggr, sc_objs_def, sc_objs_aggr = multi_cnv_workload(
+            namespace=proj_obj.namespace
+        )
+        vm_list = vm_objs_def + vm_objs_aggr
+
+        log.info(f"Total VMs to process: {len(vm_list)}")
+
+        initial_vm_states = {
+            vm_obj.name: [vm_obj.printableStatus(), vm_obj.get_vmi_instance().node()]
+            for vm_obj in vm_objs_def + vm_objs_aggr
+        }
+        log.info(f"Initial VM states: {initial_vm_states}")
 
         """Precheck before doing worker node failure"""
         log.info("Performing pre-failure health checks for ODF and CNV namespaces")
@@ -157,5 +158,21 @@ class TestVmWorkerNodeResiliency(E2ETest):
             result=True
         ), f"Not all pods are running in {cnv_namespace} after node failure and recovery"
 
+        final_vm_states = {
+            vm_obj.name: [vm_obj.printableStatus(), vm_obj.get_vmi_instance().node()]
+            for vm_obj in vm_objs_def + vm_objs_aggr
+        }
+        log.info(f"Final VM states: {final_vm_states}")
+
+        for vm_name in initial_vm_states:
+            assert initial_vm_states[vm_name][0] == final_vm_states[vm_name][0], (
+                f"VM {vm_name}: State mismatch. Initial: {initial_vm_states[vm_name][0]}, "
+                f"Final: {final_vm_states[vm_name][0]}"
+            )
+            if initial_vm_states[vm_name][1] == node_name:
+                assert (
+                    initial_vm_states[vm_name][1] != final_vm_states[vm_name][1]
+                ), f"VM {vm_name}: Rescheduling failed. Initially on node {node_name}, still on the same node."
+        ceph_health_check(tries=80)
         log.info("Post-failure pod health checks completed.")
         log.info("Successfully completed the test_vm_worker_node_failure test")

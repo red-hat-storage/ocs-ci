@@ -695,6 +695,15 @@ class VirtualMachine(Virtctl):
         if self.ns_obj:
             self.ns_obj.delete_project(project_name=self.namespace)
 
+    def get_vmi_instance(self):
+        """
+        Get the vmi instance of VM
+
+        Returns:
+            VMI object: returns VMI instance of VM
+        """
+        return self.vmi_obj
+
 
 class VMCloner(VirtualMachine):
     """
