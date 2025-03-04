@@ -1,6 +1,6 @@
 # Usage
 
-For full usage run: `run-ci --help`
+Usage of `run-ci` command and other tools provided by ocs-ci repository.
 
 # usage for getting various ocs image versions
 
@@ -48,6 +48,61 @@ argument to get tag for 4.8 version (if no version provided, the OCS-CI default
 will be used).
 
 The quay access_token is required to be set in data/auth.yaml file.
+
+# Usage for rosa-ocp-version tool
+
+For full usage run: `rosa-ocp-version --help`:
+```bash
+$ rosa-ocp-version -h
+usage: rosa-ocp-version [-h] [--debug] [--get-available-versions] [--check-available-version OCP_VERSION] --ocsci-conf OCSCI_CONF
+
+Get information about available OCP versions from ROSA
+
+options:
+  -h, --help            show this help message and exit
+  --debug, -d           Print logging messages (mainly useful for debugging).
+  --get-available-versions, -a
+                        Get all available OCP versions from ROSA
+  --check-available-version OCP_VERSION, -c OCP_VERSION
+                        Check if provided OCP version is available in ROSA, if available, returns latest z-stream version
+  --ocsci-conf OCSCI_CONF
+                        OCM Credentials configuration file in yaml format. Example file: --- AUTH: openshiftdedicated: token: '<TOKEN>'
+```
+
+## Get list of all available OCP versions in ROSA
+
+```bash
+$ rosa-ocp-version --ocsci-conf path/to/credentials-file.yaml --get-available-versions
+4.17.14
+4.17.12
+4.17.11
+4.17.10
+4.17.9
+4.17.8
+4.17.7
+4.17.6
+4.17.5
+4.17.4
+...
+```
+
+## check if provided OCP version is available in ROSA
+
+```bash
+$ rosa-ocp-version --ocsci-conf path/to/credentials-file.yaml --check-available-version 4.17
+4.17.14
+$ echo $?
+0
+
+$ rosa-ocp-version --ocsci-conf path/to/credentials-file.yaml --check-available-version 4.18
+Version 4.18 not available in ROSA.
+$ echo $?
+255
+```
+
+# Usage for run-ci tool
+
+For full usage run: `run-ci --help`
 
 ## Required configuration
 
