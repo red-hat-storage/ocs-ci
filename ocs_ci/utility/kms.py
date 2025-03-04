@@ -147,7 +147,7 @@ class Vault(KMS):
     @property
     def kms_vault_policy_name(self):
         cluster_name = config.ENV_DATA.get("cluster_name")
-        if config.multicluster and config.DEPLOYMENT.get("same_vault_token"):
+        if config.multicluster:
             with config.RunWithPrimaryConfigContext():
                 cluster_name = config.ENV_DATA.get("cluster_name")
         policy_name = f"kpn_{cluster_name}"
