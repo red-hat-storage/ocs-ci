@@ -4,4 +4,3 @@
 ---
 DEPLOYMENT:
   sc_encryption: true
-  same_vault_token: true
