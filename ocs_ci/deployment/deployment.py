@@ -192,7 +192,6 @@ class Deployment(object):
         self.cluster_path = config.ENV_DATA["cluster_path"]
         self.namespace = config.ENV_DATA["cluster_namespace"]
         self.sts_role_arn = None
-        self.clusters_combined_name = ""
 
     class OCPDeployment(BaseOCPDeployment):
         """
@@ -338,9 +337,6 @@ class Deployment(object):
                     exec_cmd(
                         f"oc create -f {constants.CLUSTERROLEBINDING_APPSET_PULLMODEL_PATH}"
                     )
-                # Generating a common name by combining cluster names so that it can be used
-                # in future for example in kms policy name.
-                self.clusters_combined_name += cluster["metadata"]["name"]
 
     def do_deploy_ocs(self):
         """
@@ -1265,8 +1261,6 @@ class Deployment(object):
         # creating StorageCluster
         if config.DEPLOYMENT.get("kms_deployment"):
             kms = KMS.get_kms_deployment()
-            if hasattr(kms, "vault_policy_name"):
-                kms.vault_policy_name = f"kpn_{self.clusters_combined_name[:250]}"  # truncating to max character limit
             kms.deploy()
 
         if config.ENV_DATA["mcg_only_deployment"]:
