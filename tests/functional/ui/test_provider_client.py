@@ -1,6 +1,8 @@
 import logging
+import time
 
 # from ocs_ci.ocs import constants
+from ocs_ci.framework import config
 import ocs_ci.ocs.resources.pod as pod
 from ocs_ci.framework.testlib import (
     skipif_ocs_version,
@@ -11,6 +13,7 @@ from ocs_ci.framework.testlib import (
     black_squad,
     hci_provider_required,
 )
+from ocs_ci.utility.utils import exec_cmd
 from ocs_ci.ocs.resources import storageconsumer
 from ocs_ci.ocs.ui.page_objects.page_navigator import PageNavigator
 
@@ -116,3 +119,39 @@ class TestOnboardingTokenGenerationWithQuota(ManageTest):
         """
         storage_clients_page = PageNavigator().nav_to_storageclients_page()
         storage_clients_page.validate_unlimited_quota_utilization_info()
+
+    def test_usage_for_limited_quita_clients(self, setup_ui_class):
+        """
+        Test that quota usage is shown correctly on
+        Clients page as calculated by size of PVCs
+        """
+        storage_clients_page = PageNavigator().nav_to_storageclients_page()
+        client_clusters = storageconsumer.get_all_client_clusters()
+        for client in client_clusters:
+            quota = storage_clients_page.get_client_quota_from_ui(client)
+            if quota != "Unlimited":
+                client_index = storage_clients_page.find_client_cluster_index(client)
+                # verify that utilization is 0 before any PVCs are created
+                storage_clients_page.validate_quota_utilization(
+                    index=client_index, utilization=0
+                )
+        with config.get_consumer_with_resticted_quota_index():
+            client_cluster = config.cluster_ctx.MULTICLUSTER["multicluster_index"]
+            logger.info(f"Client cluster key: {client_cluster}")
+            cluster_id = exec_cmd(
+                "oc get clusterversion version -o jsonpath='{.spec.clusterID}'"
+            ).stdout.decode("utf-8")
+            client_name = f"storageconsumer-{cluster_id}"
+            client = storageconsumer.StorageConsumer(
+                client_name, consumer_context=client_cluster
+            )
+            quota = storage_clients_page.get_client_quota_from_ui(client)
+            pvc = client.fill_up_quota_percentage(percentage=50, quota=quota)
+            # wait for quota utilization changes to propagate to UI
+        time.sleep(300)
+        client_index = storage_clients_page.find_client_cluster_index(client)
+        storage_clients_page.validate_quota_utilization(
+            index=client_index, utilization=50
+        )
+        with config.get_consumer_with_resticted_quota_index():
+            pvc.ocp.wait_for_delete(resource_name=pvc.name, timeout=180)

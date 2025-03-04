@@ -694,6 +694,7 @@ storage_clients = {
     "quota_decreased_alert": ("//h4[@class='pf-v5-c-alert__title']", By.XPATH),
     "confirm_quota_change": ("//button[@data-test-id='confirm-action']", By.XPATH),
     "available_storage": (),
+    "quota_utilization": ("//td[@id='storageQuotaUtilRatio']", By.XPATH),
 }
 
 page_nav = {

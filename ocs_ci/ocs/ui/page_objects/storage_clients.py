@@ -96,9 +96,24 @@ class StorageClients(BaseUI):
             str: quota of the client
         """
         client_index = self.find_client_cluster_index(client_cluster_name)
-        quota_element = self.get_elements(self.storage_clients_loc["client_quota"])[
+        quota_element = self.get_elements(self.storage_clients_loc["quota_percentage"])[
             client_index
         ]
+        return quota_element.text
+
+    def get_quota_utilization_from_ui(self, client_cluster_name):
+        """
+        Get client's quota utilization percentage from Storage Client's page
+        as calculated by the size of PVCs
+        Args:
+            client_cluster_name(str): name of the client cluster
+        Returns:
+            str: quota utilization of the client
+        """
+        client_index = self.find_client_cluster_index(client_cluster_name)
+        utilization_element = self.get_elements(
+            self.storage_clients_loc["client_quota"]
+        )[client_index]
         return quota_element.text
 
     def edit_quota(
@@ -185,3 +200,18 @@ class StorageClients(BaseUI):
                 assert (
                     utilization_elements[i].text == "-"
                 ), f"Quota utilization is shown as {utilization_elements[i].text}"
+
+    def validate_quota_utilization(self, index, value=0):
+        """
+        Verify that the quota utilization of the client
+        has expected value
+
+        Args:
+            index(int): index of the client on clients page
+            value(int): expected quota utilization value
+        """
+        utilization_elements = self.get_elements(
+            self.storage_clients_loc["quota_utilization"]
+        )
+        value_str = f"{value}%"
+        assert utilization_elements[index].text == value_str
