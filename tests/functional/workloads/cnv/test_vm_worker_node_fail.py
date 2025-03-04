@@ -43,7 +43,6 @@ class TestVmWorkerNodeResiliency(E2ETest):
         OSD pods, or mon pods)
         """
 
-        # Define namespaces for ODF and CNV
         odf_namespace = constants.OPENSHIFT_STORAGE_NAMESPACE
         cnv_namespace = constants.CNV_NAMESPACE
 
@@ -90,7 +89,7 @@ class TestVmWorkerNodeResiliency(E2ETest):
         """Drain the node/node failure/add taint: NoExecute"""
         worker_nodes = node.get_osd_running_nodes()
         node_name = random.sample(worker_nodes, 1)
-        node_name = node_name[0]  # Extract the node name from the list
+        node_name = node_name[0]
         log.info(f"Selected worker node for failure: {node_name}")
 
         log.info(f"Simulating network failure on node: {node_name}")
@@ -107,7 +106,7 @@ class TestVmWorkerNodeResiliency(E2ETest):
         sleep(self.short_nw_fail_time)
 
         log.info(f"Attempting to restart node: {node_name}")
-        node_obj = node.get_node_objs([node_name])  # Pass node_name as a list
+        node_obj = node.get_node_objs([node_name])
         if config.ENV_DATA["platform"].lower() == constants.GCP_PLATFORM:
             nodes.restart_nodes_by_stop_and_start(node_obj, force=False)
         else:
@@ -118,7 +117,6 @@ class TestVmWorkerNodeResiliency(E2ETest):
             node.wait_for_nodes_status(
                 node_names=[node_name],
                 status=constants.NODE_READY,
-                # Pass node_name as a list
             )
             log.info("Verifying all pods are running after node recovery")
             if not pod.wait_for_pods_to_be_running(timeout=720):
@@ -129,9 +127,7 @@ class TestVmWorkerNodeResiliency(E2ETest):
             log.error(
                 f"Pods did not return to running state, attempting node restart: {e}"
             )
-            nodes.restart_nodes(
-                node.get_node_objs([node_name])
-            )  # Pass node_name as a list
+            nodes.restart_nodes(node.get_node_objs([node_name]))
 
         log.info("Performing Ceph health check after node recovery")
         ceph_health_check(tries=80)
@@ -175,4 +171,3 @@ class TestVmWorkerNodeResiliency(E2ETest):
                 ), f"VM {vm_name}: Rescheduling failed. Initially on node {node_name}, still on the same node."
         ceph_health_check(tries=80)
         log.info("Post-failure pod health checks completed.")
-        log.info("Successfully completed the test_vm_worker_node_failure test")
