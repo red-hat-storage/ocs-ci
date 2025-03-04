@@ -801,6 +801,19 @@ def run_ocs_upgrade(
                     break
             except TimeoutException:
                 raise TimeoutException("No new CSV found after upgrade!")
+        if config.UPGRADE.get(
+            "csi_rbd_plugin_update_strategy_max_unavailable_upgrade_middle"
+        ) or config.UPGRADE.get(
+            "csi_cephfs_plugin_update_strategy_max_unavailable_upgrade_middle"
+        ):
+            set_update_strategy(
+                config.UPGRADE.get(
+                    "csi_rbd_plugin_update_strategy_max_unavailable_upgrade_middle"
+                ),
+                config.UPGRADE.get(
+                    "csi_cephfs_plugin_update_strategy_max_unavailable_upgrade_middle"
+                ),
+            )
         stop_time = time.time()
         time_taken = stop_time - start_time
         log.info(f"Upgrade took {time_taken} seconds to complete")

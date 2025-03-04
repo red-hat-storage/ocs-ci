@@ -303,6 +303,9 @@ UPGRADE:
   # Otherwise it is changed to the provided value before ODF upgrade.
   csi_rbd_plugin_update_strategy_max_unavailable: null
   csi_cephfs_plugin_update_strategy_max_unavailable: null
+  # Values to be set after upgrade started - used for resiliancy testing
+  csi_rbd_plugin_update_strategy_max_unavailable_upgrade_middle: null
+  csi_cephfs_plugin_update_strategy_max_unavailable_upgrade_middle: null
 
 # This section stores secret and uploaded from home dir or s3
 # for entry into this section, please email ecosystem team
