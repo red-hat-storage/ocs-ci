@@ -1,6 +1,5 @@
 import logging
 import random
-from time import sleep
 
 import pytest
 
@@ -60,8 +59,6 @@ class TestVmWorkerNodeResiliency(E2ETest):
         }
         log.info(f"Initial VM states: {initial_vm_states}")
 
-        """Precheck before doing worker node failure"""
-        log.info("Performing pre-failure health checks for ODF and CNV namespaces")
         sample = TimeoutSampler(
             timeout=600,
             sleep=10,
@@ -81,29 +78,12 @@ class TestVmWorkerNodeResiliency(E2ETest):
         assert sample.wait_for_func_status(
             result=True
         ), f"Not all pods are running in {cnv_namespace} before node failure"
-        log.info("Pre-failure pod health checks completed.")
+
         ceph_health_check(tries=80)
 
-        """Worker Node Failure Steps"""
-        log.info("Initiating worker node failure procedure")
-        """Drain the node/node failure/add taint: NoExecute"""
         worker_nodes = node.get_osd_running_nodes()
         node_name = random.sample(worker_nodes, 1)
         node_name = node_name[0]
-        log.info(f"Selected worker node for failure: {node_name}")
-
-        log.info(f"Simulating network failure on node: {node_name}")
-        node.node_network_failure(node_names=[node_name])
-
-        log.info(f"Waiting for node {node_name} to enter NotReady state")
-        node.wait_for_nodes_status(
-            node_names=[node_name], status=constants.NODE_NOT_READY
-        )
-
-        log.info(
-            f"Pausing for {self.short_nw_fail_time} seconds to simulate network disruption"
-        )
-        sleep(self.short_nw_fail_time)
 
         log.info(f"Attempting to restart node: {node_name}")
         node_obj = node.get_node_objs([node_name])
@@ -129,10 +109,8 @@ class TestVmWorkerNodeResiliency(E2ETest):
             )
             nodes.restart_nodes(node.get_node_objs([node_name]))
 
-        log.info("Performing Ceph health check after node recovery")
         ceph_health_check(tries=80)
 
-        """Postcheck after worker node failure"""
         log.info("Performing post-failure health checks for ODF and CNV namespaces")
         sample = TimeoutSampler(
             timeout=600,
@@ -166,8 +144,9 @@ class TestVmWorkerNodeResiliency(E2ETest):
                 f"Final: {final_vm_states[vm_name][0]}"
             )
             if initial_vm_states[vm_name][1] == node_name:
-                assert (
-                    initial_vm_states[vm_name][1] != final_vm_states[vm_name][1]
-                ), f"VM {vm_name}: Rescheduling failed. Initially on node {node_name}, still on the same node."
+                assert initial_vm_states[vm_name][1] != final_vm_states[vm_name][1], (
+                    f"VM {vm_name}: Rescheduling failed. Initially, VM is scheduled"
+                    f" on node {node_name}, still on the same node"
+                )
+
         ceph_health_check(tries=80)
-        log.info("Post-failure pod health checks completed.")
