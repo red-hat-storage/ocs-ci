@@ -1,6 +1,7 @@
 import logging
 import os
 import stat
+from pathlib import Path
 
 from tempfile import NamedTemporaryFile
 
@@ -12,7 +13,12 @@ from ocs_ci.utility.utils import download_file, exec_cmd
 logger = logging.getLogger(__name__)
 
 
-def generate_onboarding_token(private_key: str = None):
+def generate_onboarding_token(
+    private_key: str = None,
+    use_ticketgen_with_quota: bool = False,
+    subject_role: str = None,
+    storage_quota: int = None,
+):
     """
     Generate Onboarding token for consumer cluster via following steps:
 
@@ -27,6 +33,9 @@ def generate_onboarding_token(private_key: str = None):
 
     Args:
         private_key (str): private key for Managed Service
+        use_ticketgen_with_quota (bool): If True, the ticketgen.sh script will be run with -q flag
+        subject_role (str): Role of the subject, this role has a default in ticketgen-with-quota.sh - ocs-client
+        storage_quota (int): Quota for the storage cluster
 
     Raises:
         CommandFailed: In case the script ticketgen.sh fails.
@@ -38,12 +47,31 @@ def generate_onboarding_token(private_key: str = None):
     """
     logger.debug("Generate onboarding token for ODF to ODF deployment")
     ticketgen_script_path = os.path.join(constants.DATA_DIR, "ticketgen.sh")
-    # download ticketgen.sh script
-    logger.debug("Download and prepare ticketgen.sh script")
-    download_file(
-        "https://raw.githubusercontent.com/red-hat-storage/ocs-operator/main/hack/ticketgen/ticketgen.sh",
-        ticketgen_script_path,
-    )
+
+    if not use_ticketgen_with_quota:
+        logger.debug("Download and prepare ticketgen.sh script")
+        download_file(
+            "https://raw.githubusercontent.com/red-hat-storage/ocs-operator/main/hack/ticketgen/ticketgen.sh",
+            ticketgen_script_path,
+        )
+        if not Path(ticketgen_script_path).exists():
+            raise FileNotFoundError(
+                f"Failed to download ticketgen.sh script to {ticketgen_script_path}"
+            )
+    else:
+        logger.info("using ticketgen.sh script with --quota flag")
+        script_path = (
+            Path(__file__).resolve().parents[2]
+            / "scripts"
+            / "bash"
+            / "ticketgen-with-quota.sh"
+        )
+        if not script_path.exists():
+            raise FileNotFoundError(
+                f"Failed to find ticketgen-with-quota.sh script in {script_path}"
+            )
+        ticketgen_script_path = str(script_path)
+
     # add execute permission to the ticketgen.sh script
     current_file_permissions = os.stat(ticketgen_script_path)
     os.chmod(
@@ -67,13 +95,34 @@ def generate_onboarding_token(private_key: str = None):
             '  private_key: "..."\n'
             '  public_key: "..."'
         )
+
+    script_cmd = f"{ticketgen_script_path}"
+
+    if use_ticketgen_with_quota:
+
+        from ocs_ci.ocs.ocp import OCP
+
+        sc_obj = OCP(
+            kind=constants.STORAGECLUSTER,
+            namespace=config.ENV_DATA["cluster_namespace"],
+        )
+        uid = sc_obj.get()["items"][0]["metadata"]["uid"]
+        script_cmd += f" -c {uid} "
+
+        if subject_role:
+            script_cmd += f" -r {subject_role}"
+        if storage_quota:
+            script_cmd += f" -q {storage_quota}"
+
     with NamedTemporaryFile(
         mode="w", prefix="private", suffix=".pem", delete=True
     ) as key_file:
         key_file.write(private_key)
         key_file.flush()
         logger.debug("Generate Onboarding token")
-        ticketgen_result = exec_cmd(f"{ticketgen_script_path} {key_file.name}")
+        script_cmd += f" {key_file.name}"
+        ticketgen_result = exec_cmd(script_cmd)
+
     ticketgen_output = ticketgen_result.stdout.decode()
     if ticketgen_result.stderr:
         raise CommandFailed(

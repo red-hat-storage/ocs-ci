@@ -632,6 +632,11 @@ class HostedODF(HypershiftHostedOCP):
             constants.PROVIDER_MODE_STORAGE_CLIENT
         )
         self.storage_client_name = storage_client_data["metadata"]["name"]
+        self.storage_quota = (
+            config.ENV_DATA.get("clusters", {})
+            .get(self.name, {})
+            .get("storage_quota", None)
+        )
 
     @kubeconfig_exists_decorator
     def exec_oc_cmd(self, cmd, timeout=300, ignore_error=False, **kwargs):
@@ -976,7 +981,11 @@ class HostedODF(HypershiftHostedOCP):
         )
 
         try:
-            token = generate_onboarding_token(private_key=decoded_key)
+            token = generate_onboarding_token(
+                private_key=decoded_key,
+                use_ticketgen_with_quota=True,
+                storage_quota=self.storage_quota,
+            )
         except Exception as e:
             logger.error(f"Error during onboarding token generation: {e}")
             token = ""

@@ -1,7 +1,7 @@
 import logging
 import semantic_version
 
-from ocs_ci.ocs.exceptions import HyperConvergedNotDeployedException
+from ocs_ci.ocs.exceptions import HyperConvergedNotDeployedException, CommandFailed
 from ocs_ci.ocs.ocp import OCP
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.resources.deployment import Deployment
@@ -11,6 +11,7 @@ from ocs_ci.ocs.utils import get_pod_name_by_pattern
 from ocs_ci.ocs.version import get_ocp_version
 from ocs_ci.utility import templating
 from ocs_ci.ocs.resources.catalog_source import CatalogSource
+from ocs_ci.utility.retry import retry
 from ocs_ci.utility.utils import wait_custom_resource_defenition_available
 
 logger = logging.getLogger(__name__)
@@ -147,7 +148,10 @@ class HyperConverged:
                 constants.HYPERCONVERGED_YAML
             )
             hyperconverged_instance_yaml = OCS(**hyperconverged_instance_yaml_file)
-            hyperconverged_instance_yaml.create()
+            retry(CommandFailed, tries=10, delay=60)(
+                hyperconverged_instance_yaml.create
+            )()
+
         self.hyperconverged.check_resource_existence(
             should_exist=True, resource_name=constants.HYPERCONVERGED_NAME
         )

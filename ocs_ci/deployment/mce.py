@@ -239,6 +239,7 @@ class MCEInstaller(object):
             qe_app_registry.icsp()
             qe_app_registry.catalog_source()
             self.create_mce_namespace()
+            self.create_multiclusterengine_operatorgroup()
             self.create_mce_subscription()
             if not wait_custom_resource_defenition_available(
                 constants.MULTICLUSTER_ENGINE_CRD
@@ -246,7 +247,6 @@ class MCEInstaller(object):
                 raise MultiClusterEngineNotDeployedException(
                     f"crd {constants.MULTICLUSTER_ENGINE_CRD} is unavailable"
                 )
-            self.create_multiclusterengine_operatorgroup()
 
         # check whether mce instance is created, if it is installed but mce don't pass validation we can not heal it in
         # script here, hence no sense for full validation of mce

@@ -464,7 +464,7 @@ class Deployment(object):
         """
         if config.ENV_DATA["skip_ocs_deployment"]:
 
-            if config.DEPLOYMENT.get("deploy_mce"):
+            if config.ENV_DATA.get("deploy_mce"):
                 mce_installer = MCEInstaller()
                 mce_installer.deploy_mce()
 
