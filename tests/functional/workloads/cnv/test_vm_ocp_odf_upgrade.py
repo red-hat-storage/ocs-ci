@@ -8,7 +8,7 @@ from ocs_ci.deployment.disconnected import mirror_ocp_release_images
 from ocs_ci.framework import config
 from ocs_ci.framework.pytest_customization.marks import magenta_squad, workloads
 from ocs_ci.framework.testlib import E2ETest
-from ocs_ci.helpers.cnv_helpers import get_vm_status, run_dd_io, cal_md5sum_vm
+from ocs_ci.helpers.cnv_helpers import run_dd_io, cal_md5sum_vm
 from ocs_ci.helpers.keyrotation_helper import PVKeyrotation
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.cluster import (
@@ -233,7 +233,7 @@ class TestOcvUpgrade(E2ETest):
     def test_ocv_upgrd(self, setup_cnv, upgrade_stats):
 
         initial_vm_states = {
-            vm_obj.name: get_vm_status(vm_obj)
+            vm_obj.name: vm_obj.printableStatus()
             for vm_obj in self.vm_list_pause
             + self.vm_list_stop
             + self.vm_list_running
@@ -442,7 +442,7 @@ class TestOcvUpgrade(E2ETest):
         """Ensuring all the vms are in their expected state"""
         logger.info("Validating VM states after upgrade.")
         final_vm_states = {
-            vm_obj.name: get_vm_status(vm_obj)
+            vm_obj.name: vm_obj.printableStatus()
             for vm_obj in self.vm_list_pause
             + self.vm_list_stop
             + self.vm_list_running
