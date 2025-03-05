@@ -1,28 +1,49 @@
 # Fusion and Fusion Data Foundation
 
+## Requirements
+
+Fusion deployments require an OCP cluster.
+
+FDF deployments require an OCP cluster with Fusion deployed.
+
+In addition to the typical ocs-ci requirements for execution, we also require [skopeo](https://github.com/containers/skopeo/blob/main/install.md#installing-skopeo) for retrieving image data from the pre-release registry.
+
 ## Fusion
 
-We support the deployment of Fusion on top of OCP deployments.
+We support the deployment of Fusion on top of OCP deployments by using the `deploy-fusion` entry-point. You can see more info about this entry-point with `deploy-fusion --help`.
 
-The following config file should be passed when deploying Fusion:
+You can deploy Fusion with the following command:
+
+`deploy-fusion --cluster-name CLUSTER_NAME --cluster-path CLUSTER_PATH`
+
+Note these are the same `CLUSTER_NAME` and `CLUSTER_PATH` you passed to `run-ci` to deploy OCP.
+
+By default this will deploy the GA version of Fusion with the following config file:
 
 `conf/ocsci/fusion_deployment.yaml`
 
-For pre-release versions of Fusion, you can use this config (or any in this directory depending on the version you need):
+For pre-release versions of Fusion, you can use the same command with an additional config for the version you wish to install.
 
-`ocs_ci/framework/conf/fusion_version/fusion-2.8.yaml`
-
+```
+deploy-fusion --cluster-name CLUSTER_NAME --cluster-path CLUSTER_PATH --conf ocs_ci/framework/conf/fusion_version/fusion-2.8.yaml
+```
 
 ## Fusion Data Foundation
 
-We also support the deployment of Fusion Data Foundation as an alternative to ODF when Fusion is installed.
+We also support the deployment of Fusion Data Foundation as an alternative to ODF when Fusion is installed. Similar to Fusion there is an entry-point created for FDF deployments, `deploy-fdf`. You can see more info about this entry-point with `deploy-fdf --help`.
 
-The following config file should be passed when deploying FDF:
+You can deploy FDF with the following command:
+
+`deploy-fdf --cluster-name CLUSTER_NAME --cluster-path CLUSTER_PATH`
+
+Note these are the same `CLUSTER_NAME` and `CLUSTER_PATH` you passed to `run-ci` to deploy OCP.
+
+By default this will deploy the GA version of FDF with the following config file:
 
 `conf/ocsci/fdf_deployment.yaml`
 
-For pre-release versions of FDF, you can use this config (or any in this directory depending on the version you need):
+For pre-release versions of FDF, you can use the same command with an additional config for the version you wish to install.
 
-`ocs_ci/framework/conf/fdf_version/fdf-4.18.yaml`
-
-We also require [skopeo](https://github.com/containers/skopeo/blob/main/install.md#installing-skopeo) for retrieving image data from the pre-release registry.
+```
+deploy-fdf --cluster-name CLUSTER_NAME --cluster-path CLUSTER_PATH --conf ocs_ci/framework/conf/fdf_version/fdf-4.18.yaml
+```
