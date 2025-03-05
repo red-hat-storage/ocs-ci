@@ -5,7 +5,7 @@ import yaml
 from datetime import datetime, timezone
 
 from ocs_ci.framework import config
-from ocs_ci.utility.ibmcloud import IBMCloudObjectStorage
+from ocs_ci.utility.ibmcloud import IBMCloudObjectStorage, get_bucket_regions_map
 from ocs_ci.ocs import constants
 from ocs_ci import framework
 from ocs_ci.cleanup.ibm import defaults
@@ -74,8 +74,17 @@ def delete_buckets(hours):
         service_instance_id=service_instance_id,
         endpoint_url=endpoint_url,
     )
-    buckets = cos.get_buckets_data()
-    bucket_delete_names = buckets_to_delete(buckets, hours)
+    buckets_time = cos.get_buckets_data()
+    buckets_region = get_bucket_regions_map()
+    buckets_combine = {}
+    for bucket_name, bucket_region in buckets_region.items():
+        for bucket_time in buckets_time:
+            if bucket_time["Name"] == bucket_name:
+                buckets_combine[bucket_name] = [
+                    bucket_region,
+                    buckets_time[0]["CreationDate"],
+                ]
+    bucket_delete_names = buckets_to_delete(buckets_combine, hours)
     for bucket_delete_name in bucket_delete_names:
         res = cos.delete_bucket(bucket_delete_name)
         if res is False:
@@ -93,9 +102,8 @@ def buckets_to_delete(buckets, hours):
     """
     buckets_delete = []
     current_date = datetime.now(timezone.utc)
-    for bucket in buckets:
-        bucket_name = bucket["Name"]
-        age_in_hours = (current_date - bucket["CreationDate"]).total_seconds() / 3600
+    for bucket_name, bucket_data in buckets.items():
+        age_in_hours = (current_date - bucket_data[1]).total_seconds() / 3600
         hours_bucket = hours
         for prefix, max_age_hours in defaults.BUCKET_PREFIXES_SPECIAL_RULES.items():
             if re.match(prefix, bucket_name):
