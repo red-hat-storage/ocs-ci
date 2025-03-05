@@ -47,9 +47,9 @@ class TestAddNode(ManageTest):
         """
         Test to add ocs nodes and wait till rebalance is completed.
 
-        Following operations will be verify After adding node to the cluster.
-        1. Enable intransit encryprion and verify.
-        2. Disable intransit encryptiojn and verify.
+        Following operations will be performed after adding node to the cluster.
+        1. Enable intransit encryption and verify.
+        2. Disable intransit encryption and verify.
 
         """
         add_nodes(ocs_nodes=True)
@@ -62,7 +62,7 @@ class TestAddNode(ManageTest):
         if not get_in_transit_encryption_config_state():
             set_in_transit_encryption()
 
-        logger.info("Verifying the in-transit encryption is enable on setup.")
+        logger.info("Verifying the in-transit encryption is enabled on setup.")
         assert (
             in_transit_encryption_verification()
         ), "Failed to set IN-transit encryption after adding worker node to cluster"
