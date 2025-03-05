@@ -69,12 +69,12 @@ def delete_buckets(hours):
     api_key = config.AUTH["ibmcloud"]["api_key"]
     service_instance_id = config.AUTH["ibmcloud"]["cos_instance_crn"]
     endpoint_url = constants.IBM_COS_GEO_ENDPOINT_TEMPLATE.format("us")
-    cos = IBMCloudObjectStorage(
+    ibmcloud_storage_obj = IBMCloudObjectStorage(
         api_key=api_key,
         service_instance_id=service_instance_id,
         endpoint_url=endpoint_url,
     )
-    buckets_time = cos.get_buckets_data()
+    buckets_time = ibmcloud_storage_obj.get_buckets_data()
     buckets_region = get_bucket_regions_map()
     buckets_combine = {}
     for bucket_name, bucket_region in buckets_region.items():
@@ -84,11 +84,11 @@ def delete_buckets(hours):
                     bucket_region,
                     buckets_time[0]["CreationDate"],
                 ]
-    bucket_delete_names = buckets_to_delete(buckets_combine, hours)
-    for bucket_delete_name in bucket_delete_names:
-        res = cos.delete_bucket(bucket_delete_name)
+    buckets_delete = buckets_to_delete(buckets_combine, hours)
+    for bucket_name, bucket_region in buckets_delete.items():
+        res = ibmcloud_storage_obj.delete_bucket(bucket_name, bucket_region)
         if res is False:
-            status.append(bucket_delete_name)
+            status.append(bucket_name)
     if len(status) > 0:
         raise Exception(f"Failed to delelte buckets {status}")
 
@@ -100,7 +100,7 @@ def buckets_to_delete(buckets, hours):
     Args:
 
     """
-    buckets_delete = []
+    buckets_delete = {}
     current_date = datetime.now(timezone.utc)
     for bucket_name, bucket_data in buckets.items():
         age_in_hours = (current_date - bucket_data[1]).total_seconds() / 3600
@@ -111,5 +111,5 @@ def buckets_to_delete(buckets, hours):
         if hours_bucket == "never":
             continue
         if hours_bucket < age_in_hours:
-            buckets_delete.append(bucket_name)
-    return buckets_delete[:10]
+            buckets_delete[bucket_name] = bucket_data[0]
+    return buckets_delete
