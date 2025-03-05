@@ -34,3 +34,7 @@ class ClusterNameNotProvidedError(Exception):
 
 class InvalidVariantError(Exception):
     pass
+
+
+class ClusterNotAccessibleError(Exception):
+    pass
