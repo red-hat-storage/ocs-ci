@@ -2486,7 +2486,9 @@ class Deployment(object):
         # Create AddOnDeploymentConfig to install add-ons in a different multicluster engine operator namespace so that
         # the multicluster engine operator can self-manage with the local-cluster add-ons while
         # ACM manages multicluster engine operator at the same time
-        logger.info("Creating AddOnDeploymentConfig")
+        logger.info(
+            "Configuring Red Hat Advanced Cluster Management to import multicluster engine operator clusters"
+        )
         addon_deployment_config = helpers.create_resource(
             **templating.load_yaml(constants.ACM_ADDON_DEPLOYMENT_CONFIG_YAML)
         )
@@ -2532,8 +2534,15 @@ class Deployment(object):
             **templating.load_yaml(constants.KLUSTERLET_CONFIG_MCE_IMPORT_YAML)
         )
 
+        logger.info(
+            "Configured Red Hat ACM to import multicluster engine operator clusters"
+        )
+
         # Configuration for backup and restore. Add backup label to the default and new addondeploymentconfig,
         # clustermanagementaddon and KlusterletConfig
+        logger.info(
+            "Add label for backup in addondeploymentconfigs, clustermanagementaddons and klusterletconfig"
+        )
         backup_label = "cluster.open-cluster-management.io/backup=true"
         addon_deployment_config.add_label(label=backup_label)
         addon_deployment_config.ocp.add_label(
