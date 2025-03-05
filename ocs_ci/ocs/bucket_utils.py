@@ -7,9 +7,8 @@ import logging
 import os
 import shlex
 import time
-from asyncio import as_completed
-from concurrent.futures.thread import ThreadPoolExecutor
 
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from uuid import uuid4
 
 import boto3
@@ -3128,7 +3127,7 @@ def gen_empty_file_and_upload(
         sync_object_directory(
             aws_pod,
             f"{dir}/{index}",
-            f"s3://{bucket}",
+            f"s3://{bucket}/{prefix}" if prefix else f"s3://{bucket}",
             mcg_obj,
             timeout=timeout,
         )
