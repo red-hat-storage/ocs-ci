@@ -5,7 +5,11 @@ from shutil import which
 import time
 
 from ocs_ci import framework
-from ocs_ci.framework.exceptions import ClusterNameNotProvidedError, InvalidVariantError
+from ocs_ci.framework.exceptions import (
+    ClusterNameNotProvidedError,
+    ClusterNotAccessibleError,
+    InvalidVariantError,
+)
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.exceptions import CommandFailed
 from ocs_ci.utility import utils
@@ -152,7 +156,7 @@ def generate_run_id() -> int:
     return run_id
 
 
-def set_kubeconfig(kubeconfig_path: str) -> bool:
+def set_kubeconfig(kubeconfig_path: str):
     """
     Export environment variable KUBECONFIG for future calls of OC commands
     or other API calls
@@ -160,23 +164,22 @@ def set_kubeconfig(kubeconfig_path: str) -> bool:
     Args:
         kubeconfig_path (str): path to kubeconfig file to be exported
 
-    Returns:
-        boolean: True if successfully connected to cluster, False otherwise
+    Raises:
+        ClusterNotAccessibleError: if the cluster is inaccessible
     """
     logger.info("Testing access to cluster with %s", kubeconfig_path)
     if not os.path.isfile(kubeconfig_path):
-        logger.warning("The kubeconfig file %s doesn't exist!", kubeconfig_path)
-        return False
+        raise ClusterNotAccessibleError(
+            "The kubeconfig file %s doesn't exist!", kubeconfig_path
+        )
     os.environ["KUBECONFIG"] = kubeconfig_path
     if not which("oc"):
         get_openshift_client()
     try:
         run_cmd("oc cluster-info")
     except CommandFailed as ex:
-        logger.error("Cluster is not ready to use: %s", ex)
-        return False
+        raise ClusterNotAccessibleError("Cluster is not ready to use: %s", ex)
     logger.info("Access to cluster is OK!")
-    return True
 
 
 def setup_bin_dir() -> None:
