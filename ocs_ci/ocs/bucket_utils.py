@@ -2953,16 +2953,20 @@ def upload_obj_versions(mcg_obj, awscli_pod, bucket_name, obj_key, amount=1, siz
         mcg_obj (MCG): MCG object
         awscli_pod (Pod): Pod object where AWS CLI is installed
         bucket_name (str): Name of the bucket
-        obj_key (str): Object key
+        obj_key (str): S3 path to the object in the bucket
         amount (int): Number of versions to create
         size (str): Size of the object. I.E 1M
 
     """
-    file_dir = os.path.join("/tmp", str(uuid4()))
-    awscli_pod.exec_cmd_on_pod(f"mkdir {file_dir}")
+    prefix = os.path.dirname(obj_key)  # Might be empty
+    file_dir = os.path.join("/tmp", bucket_name, prefix, str(uuid4()))
+    awscli_pod.exec_cmd_on_pod(f"mkdir -p {file_dir}")
+
+    logger.info(f"Uploading {amount} versions to {bucket_name}")
 
     for i in range(amount):
-        file_path = os.path.join(file_dir, f"{obj_key}_{i}")
+        obj_name_without_prefix = os.path.basename(obj_key)
+        file_path = os.path.join(file_dir, f"{obj_name_without_prefix}_{i}")
         awscli_pod.exec_cmd_on_pod(
             command=f"dd if=/dev/urandom of={file_path} bs={size} count=1"
         )
@@ -2983,7 +2987,7 @@ def get_obj_versions(mcg_obj, awscli_pod, bucket_name, obj_key):
         mcg_obj (MCG): MCG object
         awscli_pod (Pod): Pod object where AWS CLI is installed
         bucket_name (str): Name of the bucket
-        obj_key (str): Object key
+        obj_key (str): S3 path to the object in the bucket
 
     Returns:
         list: List of dictionaries containing the versions data
@@ -3006,3 +3010,78 @@ def get_obj_versions(mcg_obj, awscli_pod, bucket_name, obj_key):
             d["ETag"] = d["ETag"].strip('"')
 
     return versions_dicts
+
+
+def compare_object_versions(mcg_obj, awscli_pod, first_bucket, second_bucket, obj_key):
+    """
+    Compare the versions of an object in two different buckets
+
+    Args:
+        mcg_obj (MCG): MCG object
+        awscli_pod (Pod): Pod object where AWS CLI is installed
+        first_bucket (str): Name of the first bucket
+        second_bucket (str): Name of the second bucket
+        obj_key (str): S3 path to the object in the bucket
+
+    Returns:
+        bool: True if the versions match, False otherwise
+    """
+    logger.info(
+        f"Comparing the versions of {obj_key} in {first_bucket} and {second_bucket}"
+    )
+
+    source_versions = get_obj_versions(mcg_obj, awscli_pod, first_bucket, obj_key)
+    source_etags = [v["ETag"] for v in source_versions]
+    target_versions = get_obj_versions(mcg_obj, awscli_pod, second_bucket, obj_key)
+    target_etags = [v["ETag"] for v in target_versions]
+    if source_etags != target_etags:
+        logger.warning(
+            (
+                f"The versions of {obj_key} in {first_bucket} and {second_bucket} do not match:"
+                f"{source_etags} != {target_etags}"
+            )
+        )
+        return False
+    logger.info(
+        f"The versions of {obj_key} in {first_bucket} and {second_bucket} match"
+    )
+    return True
+
+
+def wait_for_object_versions_match(
+    mcg_obj, awscli_pod, first_bucket, second_bucket, obj_key, timeout=600
+):
+    """
+    Verify that the versions of an object in two different buckets match within a timeout
+
+    Args:
+        mcg_obj (MCG): MCG object
+        awscli_pod (Pod): Pod object where AWS CLI is installed
+        first_bucket (str): Name of the first bucket
+        second_bucket (str): Name of the second bucket
+        obj_key (str): Full S3 path to the object
+        timeout (int): The maximum time in seconds to wait for the versions to match
+
+    Raises:
+        TimeoutExpiredError: If the versions do not match within the timeout
+    """
+    try:
+        for versions_are_same in TimeoutSampler(
+            timeout=timeout,
+            sleep=30,
+            func=compare_object_versions,
+            mcg_obj=mcg_obj,
+            awscli_pod=awscli_pod,
+            first_bucket=first_bucket,
+            second_bucket=second_bucket,
+            obj_key=obj_key,
+        ):
+            if versions_are_same:
+                break
+    except TimeoutExpiredError as e:
+        err_msg = (
+            f"The versions of {obj_key} in {first_bucket} and {second_bucket} "
+            f"did not match within {timeout} seconds"
+        )
+        logger.error(err_msg)
+        raise TimeoutExpiredError(f"{str(e)}\n\n{err_msg}")

@@ -750,7 +750,9 @@ class MCG:
         Args:
             name (str): The name to be given to the bucket class
             namespacestores (list): The namespaces stores to use as part of the policy
-            namespace_policy (dict): The namespace policy to be used
+            namespace_policy (dict): The namespace policy to be used. The supported namespace policy types are
+            Single, Cache and Multi. For Cache NSS, default backing store is used as the cache.
+            In the case of Multi namespace policy type, first namespace store is used as the write resource.
 
         Returns:
             OCS: The bucket class resource
@@ -773,10 +775,14 @@ class MCG:
             if "ttl" in namespace_policy:
                 cmd += f" --ttl=={namespace_policy['ttl']}"
             self.exec_mcg_cmd(cmd)
+        elif namespace_policy_type == constants.NAMESPACE_POLICY_TYPE_MULTI.lower():
+            cmd += f" --read-resources='{namestores_name_str}'"
+            cmd += f" --write-resource='{namespacestores[0].name}'"
+            self.exec_mcg_cmd(cmd)
         else:
             raise NotImplementedError(
                 f"Cli creating of bucketclass on namespacestore "
-                f"with policy {namespace_policy_type} is not implemented yet"
+                f"with policy {namespace_policy_type} is not supported"
             )
 
     def check_if_mirroring_is_done(self, bucket_name, timeout=300):

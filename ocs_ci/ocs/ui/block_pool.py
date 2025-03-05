@@ -416,6 +416,7 @@ class BlockPoolUI(PageNavigator):
         if self.pool_raw_capacity_loaded(pool_name):
             cmd = f"rados df --pool={pool_name}"
             ct_pod = pod.get_ceph_tools_pod()
+            time.sleep(120)
             df_op = ct_pod.exec_cmd_on_pod(command=cmd)
             logger.info(f"{df_op=}")
             # splitting the ouptut with spaces
@@ -428,6 +429,7 @@ class BlockPoolUI(PageNavigator):
             )
 
             bf_obj = BlockAndFile()
+            time.sleep(120)
             used_raw_capacity_in_UI, _ = bf_obj.get_raw_capacity_card_values()
             (
                 used_capacity_in_UI,

@@ -165,6 +165,22 @@ class TestNamespace(MCGTest):
             ),
             pytest.param(
                 {
+                    "interface": "CLI",
+                    "namespace_policy_dict": {
+                        "type": "Multi",
+                        "namespacestore_dict": {
+                            "rgw": [(2, None)],
+                        },
+                    },
+                },
+                marks=[
+                    tier1,
+                    on_prem_platform_required,
+                    pytest.mark.polarion_id("OCS-6351"),
+                ],
+            ),
+            pytest.param(
+                {
                     "interface": "OC",
                     "namespace_policy_dict": {
                         "type": "Single",
@@ -236,6 +252,7 @@ class TestNamespace(MCGTest):
             "RGW-OC-Single",
             "RGW-CLI-Single",
             "RGW-CLI-Cache",
+            "RGW-CLI-Multi",
             "IBM-OC-Single",
             "AWS+Azure-OC-Multi",
             "AWS+AWS-OC-Multi",
