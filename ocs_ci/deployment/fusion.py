@@ -50,7 +50,9 @@ class FusionDeployment:
                 "image_tag": config.DEPLOYMENT.get("fusion_pre_release_image"),
             }
             catalog_source_name = constants.ISF_CATALOG_SOURCE_NAME
-            _templating = templating.Templating(base_path=constants.FDF_TEMPLATE_DIR)
+            _templating = templating.Templating(
+                base_path=constants.TEMPLATE_DEPLOYMENT_DIR_FUSION
+            )
             template = _templating.render_template(
                 constants.ISF_OPERATOR_SOFTWARE_CATALOG_SOURCE_YAML, render_data
             )
