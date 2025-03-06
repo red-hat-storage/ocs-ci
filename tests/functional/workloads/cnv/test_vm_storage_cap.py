@@ -54,7 +54,6 @@ class TestVmStorageCapacity(E2ETest):
         data integrity.
         """
         file_paths = ["/source_file.txt", "/new_file.txt"]
-        # Setup csi-kms-connection-details configmap and project
         proj_obj, kms, sc_obj_def = setup_kms_and_storageclass(
             pv_encryption_kms_setup_factory, storageclass_factory, project_factory
         )

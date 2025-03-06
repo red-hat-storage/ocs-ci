@@ -447,6 +447,16 @@ def verify_hotplug(vm_obj, disks_before_hotplug):
 
 @retry(AssertionError, tries=5, delay=10, backoff=1)
 def all_nodes_ready():
+    """
+    Verify that all nodes in the cluster are in Ready state.
+
+    Returns:
+        bool: True if all nodes are in Ready state, False otherwise.
+
+    Raises:
+        AssertionError: If any node is not in Ready state
+        after multiple retries
+    """
     nodes = get_node_objs()
     for node in nodes:
         assert (
@@ -459,6 +469,19 @@ def all_nodes_ready():
 def setup_kms_and_storageclass(
     pv_encryption_kms_setup_factory, storageclass_factory, project_factory
 ):
+    """
+    Sets up KMS (Key Management System) and StorageClass for encryption.
+
+    Args:
+        pv_encryption_kms_setup_factory : Factory function to create KMS setup
+        storageclass_factory : Factory function to create StorageClass with
+        default compression
+        project_factory : Factory function to create a Project (Namespace)
+
+    Returns:
+        tuple: A tuple containing the Project object,
+        KMS object, and StorageClass object
+    """
     proj_obj = project_factory()
 
     logger.info("Setting up csi-kms-connection-details configmap")
@@ -486,12 +509,32 @@ def setup_kms_and_storageclass(
 def create_and_clone_vms(
     cnv_workload, clone_vm_workload, proj_obj, sc_obj_def, file_paths, number_of_vm
 ):
+    """
+    Creates Virtual Machines (VMs) and clones them, verifying data integrity
+
+    Args:
+        cnv_workload : Factory function to create the base VM workload
+        clone_vm_workload : Factory function to clone a VM
+        proj_obj (object): Project (Namespace) object
+        sc_obj_def (dict): StorageClass object
+        file_paths (list): List of file paths
+        number_of_vm (int): Number of VMs to create and clone
+
+    Returns:
+        tuple: A tuple containing lists of created VMs, cloned VMs, and checksums.
+    """
     vm_list = []
     vm_list_clone = []
     source_csum = {}
     res_csum = {}
 
     def create_and_clone_vm(index):
+        """
+        Creates a single VM, writes data to it, clones it, and
+        verifies data integrity
+        Args:
+            index (int): Index of the VM being created
+        """
         vm_obj = cnv_workload(
             storageclass=sc_obj_def.name,
             namespace=proj_obj.namespace,
