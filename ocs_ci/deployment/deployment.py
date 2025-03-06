@@ -104,6 +104,7 @@ from ocs_ci.ocs.resources.pod import (
     delete_pods,
     wait_for_pods_by_label_count,
     wait_for_pods_to_be_running,
+    wait_for_pods_to_be_in_statuses,
 )
 from ocs_ci.ocs.resources.storage_cluster import (
     ocs_install_verification,
@@ -2472,16 +2473,29 @@ class Deployment(object):
             "component=work-manager",
             "addon-agent=managed-serviceaccount",
         ]:
-            wait_for_pods_by_label_count(
+            if not wait_for_pods_by_label_count(
                 label=pod_label,
                 expected_count=1,
                 namespace=constants.ACM_ADDONS_NAMESPACE,
                 timeout=300,
                 sleep=10,
+            ):
+                raise ResourceNotFoundError(
+                    f"Pod with label {pod_label} not found in the namespace {constants.ACM_ADDONS_NAMESPACE}"
+                )
+
+        # Verify the status of existing pods in the default addons namespace
+        all_pods = get_all_pods(namespace=constants.ACM_ADDONS_NAMESPACE)
+        if not wait_for_pods_to_be_in_statuses(
+            expected_statuses=[constants.STATUS_RUNNING, constants.STATUS_COMPLETED],
+            pod_names=[pod_obj.name for pod_obj in all_pods],
+            namespace=constants.ACM_ADDONS_NAMESPACE,
+            timeout=300,
+            sleep=10,
+        ):
+            raise ResourceWrongStatusException(
+                f"Some pods in the namespace {constants.ACM_ADDONS_NAMESPACE} are not in expected status."
             )
-        wait_for_pods_to_be_running(
-            namespace=constants.ACM_ADDONS_NAMESPACE, timeout=300, sleep=15
-        )
 
         # Create AddOnDeploymentConfig to install add-ons in a different multicluster engine operator namespace so that
         # the multicluster engine operator can self-manage with the local-cluster add-ons while
