@@ -27,7 +27,11 @@ from ocs_ci.ocs.node import (
 )
 from ocs_ci.ocs.cluster import validate_existence_of_blocking_pdb
 from ocs_ci.framework import config
-from ocs_ci.framework.pytest_customization.marks import brown_squad, skipif_rosa_hcp
+from ocs_ci.framework.pytest_customization.marks import (
+    brown_squad,
+    skipif_rosa_hcp,
+    skipif_compact_mode,
+)
 from ocs_ci.framework.testlib import (
     tier1,
     tier2,
@@ -311,6 +315,7 @@ class TestNodesMaintenance(ManageTest):
 
     @tier2
     @pytest.mark.polarion_id("OCS-1274")
+    @skipif_compact_mode
     def test_2_nodes_different_types(
         self, pvc_factory, pod_factory, bucket_factory, rgw_bucket_factory
     ):
