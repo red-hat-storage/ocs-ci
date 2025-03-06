@@ -456,24 +456,6 @@ def all_nodes_ready():
     return True
 
 
-def get_vm_status(vm_obj):
-    """
-    Get the status of a VM.
-
-    Args:
-        vm_obj (VM): The VM object.
-
-    Returns:
-        str: The status of the VM.
-    """
-    try:
-        status_info = vm_obj.get()
-        return status_info.get("status", {}).get("printableStatus", "Unknown")
-    except Exception as e:
-        logger.error(f"Failed to get VM status for {vm_obj.name}: {e}")
-        return "Error"
-
-
 def setup_kms_and_storageclass(
     pv_encryption_kms_setup_factory, storageclass_factory, project_factory
 ):

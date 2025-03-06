@@ -10,7 +10,6 @@ from ocs_ci.framework.testlib import E2ETest
 from ocs_ci.helpers.cnv_helpers import (
     all_nodes_ready,
     cal_md5sum_vm,
-    get_vm_status,
     setup_kms_and_storageclass,
     create_and_clone_vms,
 )
@@ -84,7 +83,7 @@ class TestVmStorageCapacity(E2ETest):
             vm_list.remove(vm)
 
         initial_vm_states = {
-            vm_obj.name: get_vm_status(vm_obj)
+            vm_obj.name: vm_obj.printableStatus()
             for vm_obj in vm_list + vm_list_clone + vm_stopped + vm_pause
         }
         logger.info(f"Initial VM states: {initial_vm_states}")
@@ -108,7 +107,7 @@ class TestVmStorageCapacity(E2ETest):
         )
 
         final_vm_states = {
-            vm_obj.name: get_vm_status(vm_obj)
+            vm_obj.name: vm_obj.printableStatus()
             for vm_obj in vm_list + vm_list_clone + vm_stopped + vm_pause
         }
         logger.info(f"Final VM states: {final_vm_states}")
