@@ -9,6 +9,7 @@ from ocs_ci.framework.pytest_customization.marks import (
     polarion_id,
     black_squad,
     tier2,
+    ui,
 )
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.cluster import is_hci_provider_cluster
@@ -79,6 +80,7 @@ def alerts_expected():
 @skipif_hci_client
 @polarion_id("OCS-5509")
 @skipif_disconnected_cluster
+@ui
 def test_runbooks(setup_ui, alerts_expected):
     """
     Test runbooks for alerts. Texts are validated manually and hash values are created based on the texts.
