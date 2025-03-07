@@ -320,8 +320,9 @@ class TestChangeReclaimPolicyOfPv(ManageTest):
         pool_name = (
             default_ceph_block_pool() if interface == constants.CEPHBLOCKPOOL else None
         )
-        for pvc_name, uuid in pvc_uuid_map.items():
-            assert verify_volume_deleted_in_backend(
-                interface=interface, image_uuid=uuid, pool_name=pool_name
-            ), f"Volume associated with PVC {pvc_name} still exists in backend"
+        with config.RunWithProviderConfigContextIfAvailable():
+            for pvc_name, uuid in pvc_uuid_map.items():
+                assert verify_volume_deleted_in_backend(
+                    interface=interface, image_uuid=uuid, pool_name=pool_name
+                ), f"Volume associated with PVC {pvc_name} still exists in backend"
         log.info("Verified: Image/Subvolume removed from backend.")
