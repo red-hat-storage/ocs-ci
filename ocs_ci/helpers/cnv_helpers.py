@@ -521,12 +521,12 @@ def create_and_clone_vms(
         number_of_vm (int): Number of VMs to create and clone
 
     Returns:
-        tuple: A tuple containing lists of created VMs, cloned VMs, and checksums.
+        tuple: A tuple containing lists of created VMs, cloned VMs, and
+        a common checksum dictionary
     """
     vm_list = []
     vm_list_clone = []
-    source_csum = {}
-    res_csum = {}
+    checksum_map = {}  # Common checksum map for both source and cloned VMs
 
     def create_and_clone_vm(index):
         """
@@ -541,21 +541,20 @@ def create_and_clone_vms(
             volume_interface=constants.VM_VOLUME_PVC,
         )
         vm_list.append(vm_obj)
-        source_csum[vm_obj.name] = run_dd_io(
-            vm_obj=vm_obj, file_path=file_paths[0], verify=True
-        )
-        logger.info(f" before cloning source csum: {source_csum[vm_obj.name]}")
+        source_csum = run_dd_io(vm_obj=vm_obj, file_path=file_paths[0], verify=True)
+        checksum_map[vm_obj.name] = source_csum
+        logger.info(f"Source checksum for {vm_obj.name}: {source_csum}")
         clone_vm_obj = clone_vm_workload(vm_obj, namespace=vm_obj.namespace)
         vm_list_clone.append(clone_vm_obj)
-        res_csum[clone_vm_obj.name] = cal_md5sum_vm(
-            vm_obj=clone_vm_obj, file_path=file_paths[0]
-        )
+        clone_csum = cal_md5sum_vm(vm_obj=clone_vm_obj, file_path=file_paths[0])
+        checksum_map[clone_vm_obj.name] = clone_csum
+        logger.info(f"Clone checksum for {clone_vm_obj.name}: {clone_csum}")
         assert (
-            res_csum[clone_vm_obj.name] == source_csum[vm_obj.name]
-        ), f"Failed: MD5 comparison between source {vm_obj.name} and its cloned VMs"
+            source_csum == clone_csum
+        ), f"Checksum mismatch between source {vm_obj.name} and clone {clone_vm_obj.name}"
 
     with concurrent.futures.ThreadPoolExecutor() as executor:
         futures = [executor.submit(create_and_clone_vm, i) for i in range(number_of_vm)]
         concurrent.futures.wait(futures)
 
-    return vm_list, vm_list_clone, source_csum, res_csum
+    return vm_list, vm_list_clone, checksum_map
