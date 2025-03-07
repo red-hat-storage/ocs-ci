@@ -693,8 +693,9 @@ storage_clients = {
     "storage_available": ("//span[@data-test='status-text']", By.XPATH),
     "quota_decreased_alert": ("//h4[@class='pf-v5-c-alert__title']", By.XPATH),
     "confirm_quota_change": ("//button[@data-test-id='confirm-action']", By.XPATH),
-    "available_storage": (),
+    "available_storage": ("//span[@data-test='status-text']", By.XPATH),
     "quota_utilization": ("//td[@id='storageQuotaUtilRatio']", By.XPATH),
+    "quota_alert": ("//span[@class='pf-v5-c-progress__status-icon']", By.XPATH),
 }
 
 page_nav = {

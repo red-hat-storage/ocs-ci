@@ -1219,7 +1219,7 @@ def measure_fill_up_client_quota(
 ):
     """
     Create PVCs on the client cluster where quota is restricted
-    to reach 85% of the quota, measure the time when it was created and
+    to reach 80% of the quota, measure the time when it was created and
     alerts that were triggered during this event.
 
     Returns:
@@ -1244,6 +1244,66 @@ def measure_fill_up_client_quota(
         nonlocal client
         quota = config.ENV_DATA["quota"]
         pvc = client.fill_up_quota_percentage(percentage=80, quota=quota)
+        # run_time of operation
+        run_time = 60 * 3
+        logger.info(f"Waiting for {run_time} seconds")
+        time.sleep(run_time)
+        return
+
+    def teardown():
+        nonlocal pvc
+        with config.get_consumer_with_resticted_quota_index():
+            pvc.ocp.wait_for_delete(resource_name=pvc.name, timeout=180)
+
+    request.addfinalizer(teardown)
+
+    test_file = os.path.join(measurement_dir, "measure_change_client_version.json")
+    measured_op = measure_operation(
+        use_up_quota_80_percent,
+        test_file,
+        threading_lock=threading_lock,
+        metadata={"client_name": client_name},
+    )
+
+    teardown()
+
+    return measured_op
+
+
+@pytest.fixture
+def measure_fill_up_and_increase_quota(
+    request,
+    measurement_dir,
+    threading_lock,
+):
+    """
+    Create PVCs on the client cluster where quota is restricted
+    to reach 85% of the quota, then increase quota. measure the time when it was created and
+    alerts that were triggered during this event.
+
+    Returns:
+        dict: Contains information about `start` and `stop` time
+            for creating and then deleting the PVC
+    """
+    logger.info("Switch to client cluster with restricted quota")
+    with config.get_consumer_with_resticted_quota_index():
+        client_cluster = config.cluster_ctx.MULTICLUSTER["multicluster_index"]
+        logger.info(f"Client cluster key: {client_cluster}")
+        cluster_id = exec_cmd(
+            "oc get clusterversion version -o jsonpath='{.spec.clusterID}'"
+        ).stdout.decode("utf-8")
+        client_name = f"storageconsumer-{cluster_id}"
+    client = storageconsumer.StorageConsumer(
+        client_name, consumer_context=client_cluster
+    )
+    pvc = None
+
+    def use_up_quota_80_percent():
+        nonlocal pvc
+        nonlocal client
+        quota = config.ENV_DATA["quota"]
+        pvc = client.fill_up_quota_percentage(percentage=80, quota=quota)
+
         # run_time of operation
         run_time = 60 * 3
         logger.info(f"Waiting for {run_time} seconds")

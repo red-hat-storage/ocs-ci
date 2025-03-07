@@ -147,11 +147,37 @@ class TestOnboardingTokenGenerationWithQuota(ManageTest):
             )
             quota = storage_clients_page.get_client_quota_from_ui(client)
             pvc = client.fill_up_quota_percentage(percentage=50, quota=quota)
-            # wait for quota utilization changes to propagate to UI
-        time.sleep(300)
+        # wait for quota utilization changes to propagate to UI
+        time.sleep(240)
         client_index = storage_clients_page.find_client_cluster_index(client)
         storage_clients_page.validate_quota_utilization(
             index=client_index, utilization=50
         )
+        with config.get_consumer_with_resticted_quota_index():
+            pvc.ocp.wait_for_delete(resource_name=pvc.name, timeout=180)
+
+    def test_no_quota_alert_under_80(self, setup_ui_class):
+        """
+        Test that there is no alert if the PVC created
+        is less than 80% of the quota
+        """
+        storage_clients_page = PageNavigator().nav_to_storageclients_page()
+        with config.get_consumer_with_resticted_quota_index():
+            client_cluster = config.cluster_ctx.MULTICLUSTER["multicluster_index"]
+            logger.info(f"Client cluster key: {client_cluster}")
+            cluster_id = exec_cmd(
+                "oc get clusterversion version -o jsonpath='{.spec.clusterID}'"
+            ).stdout.decode("utf-8")
+            client_name = f"storageconsumer-{cluster_id}"
+            client = storageconsumer.StorageConsumer(
+                client_name, consumer_context=client_cluster
+            )
+            quota = storage_clients_page.get_client_quota_from_ui(client)
+            pvc = client.fill_up_quota_percentage(percentage=79, quota=quota)
+        # wait for quota utilization changes to propagate to UI
+        time.sleep(240)
+        assert (
+            not storage_clients_page.is_quota_alert_present()
+        ), "Quota alert is present on Clients page"
         with config.get_consumer_with_resticted_quota_index():
             pvc.ocp.wait_for_delete(resource_name=pvc.name, timeout=180)

@@ -1297,6 +1297,7 @@ ALERT_STORAGECLIENTHEARTBEATMISSED = "StorageClientHeartbeatMissed"
 ALERT_STORAGECLIENTINCOMPATIBLEOPERATORVERSION = (
     "StorageClientIncompatibleOperatorVersion"
 )
+ALERT_QUOTA_THRESHOLD_REACHED = "StorageQuotaUtilizationThresholdReached"
 
 ALERT_CEPH_OSD_VERSION_MISMATCH = "CephOSDVersionMismatch"
 ALERT_PERSISTENT_VOLUME_USAGE_CRITICAL = "PersistentVolumeUsageCritical"

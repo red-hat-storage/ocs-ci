@@ -201,17 +201,31 @@ class StorageClients(BaseUI):
                     utilization_elements[i].text == "-"
                 ), f"Quota utilization is shown as {utilization_elements[i].text}"
 
-    def validate_quota_utilization(self, index, value=0):
+    def validate_quota_utilization(self, index, utilization=0):
         """
         Verify that the quota utilization of the client
         has expected value
 
         Args:
             index(int): index of the client on clients page
-            value(int): expected quota utilization value
+            utilization(int): expected quota utilization value
         """
         utilization_elements = self.get_elements(
             self.storage_clients_loc["quota_utilization"]
         )
-        value_str = f"{value}%"
-        assert utilization_elements[index].text == value_str
+        utilization_str = f"{utilization}%"
+        assert utilization_elements[index].text == utilization_str
+
+    def is_quota_alert_present(self):
+        """
+        Check if quota alert is present on Clients page
+
+        Returns:
+            True: if quota alert is present
+            False otherwise
+        """
+        try:
+            self.get_elements(self.storage_clients_loc["quota_alert"])
+            return True
+        except WebDriverException:
+            return False
