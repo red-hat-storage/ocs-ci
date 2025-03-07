@@ -131,7 +131,7 @@ class TestVmShutdownStart(E2ETest):
             logger.info("Stopping all the vms before graceful shutdown")
             for vm_obj in all_vms:
                 if vm_obj.printableStatus() != constants.CNV_VM_STOPPED:
-                    vm_obj.stop()
+                    vm_obj.stop(wait=True)
         else:
             # Keep vms in different states (power on, paused, stoped)
             vm_for_stop.stop()
