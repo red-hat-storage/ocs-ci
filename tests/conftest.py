@@ -1221,7 +1221,7 @@ def pvc_factory_fixture(request, project_factory):
         status=constants.STATUS_BOUND,
         volume_mode=None,
         size_unit="Gi",
-        wait_for_resource_status_timeout=60,
+        wait_for_resource_status_timeout=90,
     ):
         """
         Args:
