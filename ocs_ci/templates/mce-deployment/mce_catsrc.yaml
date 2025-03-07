@@ -4,5 +4,6 @@ metadata:
   name: mce-catalogsource
   namespace: openshift-marketplace
 spec:
-  image: quay.io:443/acm-d/mce-custom-registry:2.13.0-DOWNSTREAM-2025-02-25-05-34-41
+  # latest version of the catalog image for OCP 4.18
+  image: quay.io:443/acm-d/mce-custom-registry:2.8-latest
   sourceType: grpc

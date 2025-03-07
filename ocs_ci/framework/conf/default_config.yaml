@@ -123,6 +123,10 @@ DEPLOYMENT:
   rosa_cli_version: '1.2.49'
   # Multicluster engine
   deploy_mce: false
+  # ! Pay attention. stable-2.8 is not available until OCP 4.18 becomes available
+  mce_channel: "stable-2.8"
+  # catalogsource format of image with tag; latest unreleased, that is supported by OCP 4.18
+  mce_image: ""
 
 
 
@@ -232,15 +236,14 @@ ENV_DATA:
   rhel7.9_worker_ami: 'ami-058a93d58c5797698'
   rhel8.4_worker_ami: 'ami-074bab065c112399f'
   cluster_type: ""
-  # Provider mode dependencies checks during deployment for presence
-  skip_mce_check_if_present: false
-  skip_cnv_check_if_present: false
 
   # RHEL template which are used for vSphere platform
   rhel7_template: 'rhel79_ocs4qe'
   rhel8_template: 'rhel87_ocs4qe'
   # ACM HUB deployment
   deploy_acm_hub_cluster: false
+  # HyperConverged deployment
+  deploy_hyperconverged: false
 
   # Managed service git stat  default configurations
   # Managed StorageCluster size in TiB

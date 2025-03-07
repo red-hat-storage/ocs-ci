@@ -5389,3 +5389,30 @@ def create_config_ini_file(params):
     log.info(f"config.ini file for cluster is located at {config_ini_file.name}")
 
     return config_ini_file.name
+
+
+def wait_custom_resource_defenition_available(crd_name, timeout=600):
+    """
+    Wait for the custom resource definition to be available
+
+    Args:
+        crd_name (str): Name of the custom resource definition
+        timeout (int): Time in seconds to wait for the CRD to be available
+    Returns:
+        bool: True if CRD is available, False otherwise
+
+    """
+    from ocs_ci.ocs.ocp import OCP
+
+    wait = 10
+    retry_num = timeout // wait
+    crd_obj = OCP(kind=constants.CRD_KIND)
+    return bool(
+        crd_obj.get(
+            resource_name=crd_name,
+            out_yaml_format=False,
+            retry=retry_num,
+            wait=wait,
+            dont_raise=True,
+        )
+    )

@@ -249,6 +249,7 @@ EXTERNAL_CLUSTER_SCRIPT_CONFIG = "rook-ceph-external-cluster-script-config"
 ENCRYPTIONKEYROTATIONCRONJOB = "encryptionkeyrotationcronjobs.csiaddons.openshift.io"
 ENCRYPTIONKEYROTATIONJOB = "encryptionkeyrotationjobs.csiaddons.openshift.io"
 DEFAULT_CEPH_DEVICECLASS = "defaultCephDeviceClass"
+CRD_KIND = "CustomResourceDefinition"
 
 # Provisioners
 AWS_EFS_PROVISIONER = "openshift.org/aws-efs"
@@ -505,6 +506,35 @@ DEFAULT_EXTERNAL_MODE_VOLUMESNAPSHOTCLASS_RBD = (
 )
 DEFAULT_VOLUMESNAPSHOTCLASS_CEPHFS_MS_PC = f"{DEFAULT_CLUSTERNAME}-cephfs"
 DEFAULT_VOLUMESNAPSHOTCLASS_RBD_MS_PC = f"{DEFAULT_CLUSTERNAME}-ceph-rbd"
+
+# hyperconverged defaults
+HYPERCONVERGED_NAMESPACE = "kubevirt-hyperconverged"
+# MCE_NAMESPACE_YAML = os.path.join(TEMPLATE_DEPLOYMENT_DIR_MCE, "mce_namespace.yaml")
+TEMPLATE_DEPLOYMENT_DIR_HYPERCONVERGED = os.path.join(
+    TEMPLATE_DIR, "hyperconverged-deployment"
+)
+HYPERCONVERGED_NAMESPACE_YAML = os.path.join(
+    TEMPLATE_DEPLOYMENT_DIR_HYPERCONVERGED, "hyperconverged_namespace.yaml"
+)
+HYPERCONVERGED_OPERATOR_GROUP_YAML = os.path.join(
+    TEMPLATE_DEPLOYMENT_DIR_HYPERCONVERGED, "hyperconverged_operator_group.yaml"
+)
+HYPERCONVERGED_OPERATOR_GROUP_NAME = "hyperconverged-operator-group"
+HYPERCONVERGED_CATALOGSOURCE = "hyperconverged-catalogsource"
+HYPERVERGED_CATALOGSOURCE_YAML = os.path.join(
+    TEMPLATE_DEPLOYMENT_DIR_HYPERCONVERGED, "hyperconverged-catsrc.yaml"
+)
+HYPERCONVERGED_SUBSCRIPTION = "community-kubevirt-hyperconverged"
+HYPERCONVERGED_SUBSCRIPTION_YAML = os.path.join(
+    TEMPLATE_DEPLOYMENT_DIR_HYPERCONVERGED, "hyperconverged_subscription.yaml"
+)
+HYPERCONVERGED_KIND = "HyperConverged"
+HYPERCONVERGED_NAME = "kubevirt-hyperconverged"
+HYPERCONVERGED_YAML = os.path.join(
+    TEMPLATE_DEPLOYMENT_DIR_HYPERCONVERGED, "hyperconverged.yaml"
+)
+HYPERCONVERGED_CRD = "hyperconvergeds.hco.kubevirt.io"
+
 
 # CNV deployment constants
 CNV_NAMESPACE = "openshift-cnv"
@@ -2778,10 +2808,12 @@ MCE_SUBSCRIPTION_YAML = os.path.join(
     TEMPLATE_DEPLOYMENT_DIR_MCE, "mce_subscription.yaml"
 )
 MCE_OPERATOR = "multicluster-engine"
+MCE_OPERATOR_OPERATOR_NAME_WITH_NS = f"{MCE_OPERATOR}.{MCE_NAMESPACE}"
 MCE_RESOURCE_YAML = os.path.join(TEMPLATE_DEPLOYMENT_DIR_MCE, "mce_resource.yaml")
 MCE_OPERATOR_GROUP_YAML = os.path.join(
     TEMPLATE_DEPLOYMENT_DIR_MCE, "mce_operatorgroup.yaml"
 )
+MULTICLUSTER_ENGINE_CRD = "multiclusterengines.multicluster.openshift.io"
 HYPERSHIFT_NAMESPACE = "hypershift"
 SUPPORTED_VERSIONS_CONFIGMAP = "supported-versions"
 IMAGE_OVERRIDE_JSON = os.path.join(TEMPLATE_DEPLOYMENT_DIR_MCE, "image-override.json")

@@ -336,7 +336,9 @@ higher priority).
             * `node_network_configuration_policy_destination_route` - The destination route of NodeNetworkConfigurationPolicy CR
 * `hcp_version` - version of HCP client to be deployed on machine running the tests
 * `metallb_version` - MetalLB operator version to install
-* `install_hypershift_upstream` - Install hypershift from upstream or not (Default: false). Necessary for unreleased OCP/CNV versions
+* `deploy_acm_hub_cluster` - Deploy ACM hub cluster or not (Default: false)
+* `cnv_deployment` - Deploy CNV or not (Default: false) necessary for Converged clusters with hosted clients
+* `deploy_hyperconverged` - Deploy hyperconverged operator or not (Default: false).  Necessary for Converged clusters with hosted clients with unreleased OCP version
 * `clusters` - section for hosted clusters
     * `<cluster name>` - name of the cluster
       * `hosted_cluster_path` - path to the cluster directory to store auth_path, credentials files or cluster related files
@@ -347,6 +349,7 @@ higher priority).
       * `hosted_odf_registry` - registry for hosted ODF (default: quay.io/rhceph-dev/ocs-registry)
       * `hosted_odf_version` - version of ODF to be deployed on hosted clusters
       * `cp_availability_policy` - "HighlyAvailable" or "SingleReplica"; if not provided the default value is "SingleReplica"
+      * `storage_quota` - storage quota for the hosted cluster
 * `wait_timeout_for_healthy_osd_in_minutes` - timeout waiting for healthy OSDs before continuing upgrade (see https://bugzilla.redhat.com/show_bug.cgi?id=2276694 for more details)
 * `osd_maintenance_timeout` - is a duration in minutes that determines how long an entire failureDomain like region/zone/host will be held in noout
 * `odf_provider_mode_deployment` - True if you would like to enable provider mode deployment.
