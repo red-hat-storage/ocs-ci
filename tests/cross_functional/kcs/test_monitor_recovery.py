@@ -69,7 +69,7 @@ class TestMonitorRecovery(E2ETest):
     @pytest.fixture(autouse=True)
     def mon_recovery_setup(
         self,
-        dc_pod_factory,
+        deployment_pod_factory,
         mcg_obj,
         bucket_factory,
     ):
@@ -86,12 +86,12 @@ class TestMonitorRecovery(E2ETest):
         # Create project, pvc, dc pods
         self.dc_pods = []
         self.dc_pods.append(
-            dc_pod_factory(
+            deployment_pod_factory(
                 interface=constants.CEPHBLOCKPOOL,
             )
         )
         self.dc_pods.append(
-            dc_pod_factory(
+            deployment_pod_factory(
                 interface=constants.CEPHFILESYSTEM,
                 access_mode=constants.ACCESS_MODE_RWX,
             )
@@ -114,7 +114,7 @@ class TestMonitorRecovery(E2ETest):
 
     def test_monitor_recovery(
         self,
-        dc_pod_factory,
+        deployment_pod_factory,
         mcg_obj,
         bucket_factory,
     ):
@@ -211,10 +211,10 @@ class TestMonitorRecovery(E2ETest):
 
         # New pvc, dc pods, obcs
         new_dc_pods = [
-            dc_pod_factory(
+            deployment_pod_factory(
                 interface=constants.CEPHBLOCKPOOL,
             ),
-            dc_pod_factory(
+            deployment_pod_factory(
                 interface=constants.CEPHFILESYSTEM,
             ),
         ]
