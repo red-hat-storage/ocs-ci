@@ -333,7 +333,9 @@ class VSPHERE(object):
                     raise VMMaxDisksReachedException
         return unit_number
 
-    def add_disk(self, vm, size, disk_type="thin", ssd=False):
+    def add_disk(
+        self, vm, size, disk_type="thin", ssd=False, stop_vm=True, start_vm=True
+    ):
         """
         Attaches disk to VM
 
@@ -342,9 +344,11 @@ class VSPHERE(object):
             size (int) : size of disk in GB
             disk_type (str) : disk type
             ssd (bool): if True, mark disk as SSD
+            stop_vm (bool): If True and disk type is SSD, stop the VM before adding the new disk
+            start_vm (bool): If True and disk type is SSD, start the VM after adding the new disk
 
         """
-        if ssd:
+        if stop_vm and ssd:
             self.stop_vms(vms=[vm])
         logger.info(f"Adding disk to {vm.config.name}")
         spec = vim.vm.ConfigSpec()
@@ -375,23 +379,42 @@ class VSPHERE(object):
         WaitForTask(vm.ReconfigVM_Task(spec=spec))
         logger.info(f"{size}GB disk added successfully to {vm.config.name}")
 
-        if ssd:
+        if start_vm and ssd:
             self.start_vms(vms=[vm])
 
-    def add_disks(self, num_disks, vm, size, disk_type="thin", ssd=False):
+    def add_disks_with_same_size(
+        self, num_disks, vm, size, disk_type="thin", ssd=False
+    ):
         """
-        Adds multiple disks to the VM
+        Adds multiple disks to the VM with the same size
 
         Args:
-            num_disks: number of disks to add
+            num_disks (int): number of disks to add
             vm (vim.VirtualMachine): VM instance
             size (int) : size of disk in GB
             disk_type (str) : disk type
             ssd (bool): if True, mark disk as SSD
 
         """
-        for _ in range(int(num_disks)):
-            self.add_disk(vm, size, disk_type, ssd)
+        disk_sizes = [size] * num_disks
+        self.add_disks(vm, disk_sizes, disk_type, ssd)
+
+    def add_disks(self, vm, disk_sizes, disk_type="thin", ssd=False):
+        """
+        Adds multiple disks to the VM
+
+        Args:
+            vm (vim.VirtualMachine): VM instance
+            disk_sizes (list) : List of the disk sizes in GB
+            disk_type (str) : disk type
+            ssd (bool): if True, mark disk as SSD
+
+        """
+        self.stop_vms(vms=[vm])
+        for size in disk_sizes:
+            self.add_disk(vm, size, disk_type, ssd, stop_vm=False, start_vm=False)
+
+        self.start_vms(vms=[vm])
 
     def add_rdm_disk(self, vm, device_name, disk_mode=None, compatibility_mode=None):
         """
