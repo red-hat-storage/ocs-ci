@@ -1844,6 +1844,40 @@ class VSPHERE(object):
                 )
             logger.info(f"Network adapter added to {vm.name} successfully.")
 
+    def wait_for_vm_status(self, vm, desired_status, timeout=300, interval=10):
+        """
+        Wait for the VM to reach the desired status.
+
+        :param vm: The virtual machine object
+        :param desired_status: The desired status (e.g., 'poweredOn', 'poweredOff')
+        :param timeout: Maximum time (in seconds) to wait for the VM to reach the desired status
+        :param interval: Time (in seconds) between each status check
+        :return: True if the VM reaches the desired status, False otherwise
+        """
+        import time
+
+        start_time = time.time()
+
+        while time.time() - start_time < timeout:
+            current_status = vm.runtime.powerState
+
+            # Check if the VM has reached the desired status
+            if current_status == desired_status:
+                logger.info(
+                    f"VM {vm.name} has reached the desired status: {desired_status}"
+                )
+                return True
+
+            logger.info(
+                f"Current status of VM {vm.name} is {current_status}, waiting for {desired_status}..."
+            )
+            time.sleep(interval)
+
+        logger.info(
+            f"VM {vm.name} did not reach the desired status {desired_status} within the timeout period."
+        )
+        return False
+
     def get_vms_by_string(self, str_to_match):
         """
         Gets the VM's with search string
