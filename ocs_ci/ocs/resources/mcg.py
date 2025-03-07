@@ -255,6 +255,14 @@ class MCG:
         # TODO assert the bucket passed the Pending state
         return {row.split()[1] for row in obc_lst}
 
+    def cli_list_all_buckets(self) -> list[str]:
+        """
+        Returns:
+            set: A set of all bucket names
+
+        """
+        return self.exec_mcg_cmd("bucket list").stdout.strip().split("\n")[1:]
+
     def s3_list_all_objects_in_bucket(self, bucketname):
         """
         Returns:
