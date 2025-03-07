@@ -257,5 +257,11 @@ class BlockAndFile(StorageSystemDetails):
         average = float(
             re.search(r"-?\d+\.*\d*", collected_tpl_of_days_and_avg[1]).group()
         )
+
+        """
+        If the displayed UI size is in MiB then convert into GiB
+        """
+        if re.search('MiB$', collected_tpl_of_days_and_avg[1]):
+            average /= (2**10)
         logger.info(f"'Average of storage consumption per day' from the UI : {average}")
         return average
