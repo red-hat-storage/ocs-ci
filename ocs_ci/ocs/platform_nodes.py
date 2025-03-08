@@ -551,7 +551,13 @@ class VMWareNodes(NodesBase):
             f"{self.platform.upper()}{self.deployment_type.upper()}Node"
         ]
         node_cls_obj = node_cls(node_conf, node_type, num_nodes)
-        node_cls_obj.add_node()
+        use_terraform = True
+        if (
+            cluster.is_lso_cluster()
+            and config.ENV_DATA["platform"] == constants.VSPHERE_PLATFORM
+        ):
+            use_terraform = False
+        node_cls_obj.add_node(use_terraform=use_terraform)
 
     def terminate_nodes(self, nodes, wait=True):
         """
@@ -1922,15 +1928,19 @@ class VSPHEREUPINode(VMWareNodes):
 
             # If CSR exists for new node, create dictionary with the csr info
             # e.g: {'compute-1': ['csr-64vkw']}
-            ignore_existing_csr = None
-            if new_node in existing_csr_data:
-                nodes_approve_csr_num -= 1
-                ignore_existing_csr = {new_node: existing_csr_data[new_node]}
+            try:
 
-            wait_for_all_nodes_csr_and_approve(
-                expected_node_num=nodes_approve_csr_num,
-                ignore_existing_csr=ignore_existing_csr,
-            )
+                ignore_existing_csr = None
+                if new_node in existing_csr_data:
+                    nodes_approve_csr_num -= 1
+                    ignore_existing_csr = {new_node: existing_csr_data[new_node]}
+
+                wait_for_all_nodes_csr_and_approve(
+                    expected_node_num=nodes_approve_csr_num,
+                    ignore_existing_csr=ignore_existing_csr,
+                )
+            except TimeoutExpiredError as e:
+                logger.info(f"Exception: {e}")
 
     def add_nodes_with_terraform(self):
         """
@@ -1996,7 +2006,9 @@ class VSPHEREUPINode(VMWareNodes):
         Add nodes without terraform
         """
         # generate new node names
-        new_nodes_names = self.generate_node_names_for_vsphere(self.compute_count)
+        # new_nodes_names = self.generate_node_names_for_vsphere(self.compute_count)
+        new_nodes_names = self.get_missing_node_name()
+        logger.info(f"self.compute_count: {self.compute_count}")
         logger.info(f"New node names: {new_nodes_names}")
 
         # get the worker ignition
@@ -2044,6 +2056,33 @@ class VSPHEREUPINode(VMWareNodes):
                     logger.info("setting host name")
                     self.wait_for_connection_and_set_host_name(ip, node_name)
                     break
+
+    def get_missing_node_name(self, prefix="compute-"):
+        """
+
+        :param prefix:
+        :return:
+        """
+        compute_vms = self.vsphere.get_compute_vms_in_pool(
+            self.cluster_name, self.datacenter, self.cluster
+        )
+        compute_node_names = [compute_vm.name for compute_vm in compute_vms]
+        logger.info(f"Current node names: {compute_node_names}")
+        compute_node_names.sort()
+        existing_suffixes = [int(node.split("-")[-1]) for node in compute_node_names]
+
+        xor_all = 0
+        xor_suffixes = 0
+        total_nodes = len(compute_node_names) + 1
+
+        for i in range(0, total_nodes):
+            xor_all ^= i
+
+        for num in existing_suffixes:
+            xor_suffixes ^= num
+
+        missing_node_suffix = xor_all ^ xor_suffixes
+        return [f"{prefix}{missing_node_suffix}"]
 
     def generate_node_names_for_vsphere(self, count, prefix="compute-"):
         """
@@ -2658,6 +2697,21 @@ class VMWareLSONodes(VMWareNodes):
             return volume_path
         else:
             raise VolumePathNotFoundException
+
+    def terminate_nodes(self, nodes, wait=True):
+        """
+        Terminate the VMs.
+        The VMs will be deleted only from the inventory and not from the disk.
+        After deleting the VMs, it will also modify terraform state file of the removed VMs
+
+        Args:
+            nodes (list): The OCS objects of the nodes
+            wait (bool): True for waiting the VMs to terminate,
+            False otherwise
+
+        """
+        vmware_upi_obj = VMWareUPINodes()
+        vmware_upi_obj.terminate_nodes(nodes=nodes)
 
 
 class RHVNodes(NodesBase):
