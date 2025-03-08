@@ -1229,7 +1229,6 @@ def delete_and_create_osd_node_vsphere_upi_lso(osd_node_name, use_existing_node=
     log.info(f"osd ids to remove = {osd_ids}")
     # Save the node hostname before deleting the node
     osd_node_hostname_label = get_node_hostname_label(osd_node)
-
     log.info("Scale down node deployments...")
     scale_down_deployments(osd_node_name)
     log.info("Scale down deployments finished successfully")
@@ -1245,7 +1244,7 @@ def delete_and_create_osd_node_vsphere_upi_lso(osd_node_name, use_existing_node=
     # If we use LSO, we need to create and attach a new disk manually
     new_node = get_node_objs(node_names=[new_node_name])[0]
     for i in range(num_of_new_pvs):
-        add_disk_to_node(new_node)
+        add_disk_to_node(new_node, ssd=True)
 
     new_node_hostname_label = get_node_hostname_label(new_node)
     log.info(
