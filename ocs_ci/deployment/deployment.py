@@ -797,7 +797,8 @@ class Deployment(object):
         verify_all_nodes_created()
         set_selinux_permissions()
         set_registry_to_managed_state()
-        add_stage_cert()
+        if config.ENV_DATA.get("platform") != constants.ROSA_HCP_PLATFORM:
+            add_stage_cert()
         if config.ENV_DATA.get("huge_pages"):
             enable_huge_pages()
         if config.DEPLOYMENT.get("dummy_zone_node_labels"):
