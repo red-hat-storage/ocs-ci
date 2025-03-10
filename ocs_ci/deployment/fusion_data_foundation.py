@@ -26,25 +26,23 @@ class FusionDataFoundationDeployment:
         Installs IBM Fusion Data Foundation.
         """
         logger.info("Installing IBM Fusion Data Foundation")
-        create_image_tag_mirror_set()
-        self.create_image_digest_mirror_set()
         create_spectrum_fusion_cr()
         if self.pre_release:
+            create_image_tag_mirror_set()
+            create_image_digest_mirror_set()
             setup_fdf_pre_release_deployment()
         create_fdf_service_cr()
         verify_fdf_installation()
 
-    def create_image_digest_mirror_set(self):
-        """
-        Create ImageDigestMirrorSet.
-        """
-        logger.info("Creating FDF ImageDigestMirrorSet")
-        if self.pre_release:
-            image_digest_mirror_set = extract_image_digest_mirror_set()
-            run_cmd(f"oc create -f {image_digest_mirror_set}")
-            os.remove(image_digest_mirror_set)
-        else:
-            run_cmd(f"oc create -f {constants.FDF_IMAGE_DIGEST_MIRROR_SET}")
+
+def create_image_digest_mirror_set():
+    """
+    Create ImageDigestMirrorSet.
+    """
+    logger.info("Creating FDF ImageDigestMirrorSet")
+    image_digest_mirror_set = extract_image_digest_mirror_set()
+    run_cmd(f"oc create -f {image_digest_mirror_set}")
+    os.remove(image_digest_mirror_set)
 
 
 def create_image_tag_mirror_set():
