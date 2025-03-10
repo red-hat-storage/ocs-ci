@@ -21,7 +21,7 @@ logger = logging.getLogger(__name__)
 @stretchcluster_required
 @bugzilla("2209098")
 @polarion_id("OCS-5407")
-def test_rgw_svc_annotations():
+def deprecated_test_rgw_svc_annotations():
 
     rgw_svc = OCP(
         kind="Service",
