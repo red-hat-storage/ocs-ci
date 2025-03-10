@@ -128,7 +128,7 @@ class Vault(KMS):
             "VAULT_BACKEND", defaults.VAULT_DEFAULT_BACKEND_VERSION
         )
         self.kmsid = None
-        self.vault_policy_name = self.kms_vault_policy_name()
+        self.vault_policy_name = self.kms_vault_policy_name
         self.vault_kube_auth_path = "kubernetes"
         self.vault_kube_auth_role = constants.VAULT_KUBERNETES_AUTH_ROLE
         self.vault_kube_auth_namespace = None
