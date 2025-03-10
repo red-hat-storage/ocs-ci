@@ -1,7 +1,7 @@
 import sys
 
 from ocs_ci.deployment.fusion import FusionDeployment
-from ocs_ci.utility.framework.fusion_fdf_init import Initializer
+from ocs_ci.utility.framework.fusion_fdf_init import Initializer, create_junit_report
 
 
 def main(argv=None):
@@ -16,5 +16,10 @@ def main(argv=None):
     init.set_cluster_connection()
 
     # Fusion deployment
+    fusion_deployment()
+
+
+@create_junit_report("FusionDeployment", "fusion_deployment")
+def fusion_deployment():
     fusion = FusionDeployment()
     fusion.deploy()
