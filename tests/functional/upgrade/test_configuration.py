@@ -6,6 +6,7 @@ from ocs_ci.framework import config
 from ocs_ci.framework.pytest_customization.marks import (
     pre_upgrade,
     post_upgrade,
+    runs_on_provider,
     brown_squad,
     tier1,
 )
@@ -48,6 +49,7 @@ def pre_upgrade_crush_map():
 
 @pre_upgrade
 @brown_squad
+@runs_on_provider
 def test_load_crush_map(pre_upgrade_crush_map):
     """
     Load CRUSH map.
@@ -58,6 +60,7 @@ def test_load_crush_map(pre_upgrade_crush_map):
 @post_upgrade
 @brown_squad
 @pytest.mark.polarion_id("OCS-1936")
+@runs_on_provider
 def test_crush_map_unchanged(pre_upgrade_crush_map):
     """
     Test that CRUSH map loaded before upgrade is the same as CRUSH map after
@@ -69,6 +72,7 @@ def test_crush_map_unchanged(pre_upgrade_crush_map):
 @post_upgrade
 @pytest.mark.polarion_id("OCS-6275")
 @brown_squad
+@runs_on_provider
 def test_max_unavaialable_rbd(upgrade_stats):
     """
     Test that the number of unavailable RBD daemonset plugin pods during ODF
@@ -88,6 +92,7 @@ def test_max_unavaialable_rbd(upgrade_stats):
 @post_upgrade
 @pytest.mark.polarion_id("OCS-6278")
 @brown_squad
+@runs_on_provider
 def test_max_unavaialable_cephfs(upgrade_stats):
     """
     Test that the number of unavailable CephFS daemonset plugin pods during ODF
@@ -116,6 +121,7 @@ def test_max_unavaialable_cephfs(upgrade_stats):
     ],
 )
 @brown_squad
+@runs_on_provider
 def test_update_strategy_config_change(
     daemonset, value_to_set, expected_value, rook_operator_configmap_cleanup
 ):
