@@ -114,7 +114,7 @@ class StorageClients(BaseUI):
         utilization_element = self.get_elements(
             self.storage_clients_loc["client_quota"]
         )[client_index]
-        return quota_element.text
+        return utilization_element.text
 
     def edit_quota(
         self, client_cluster_name, new_value=None, new_units=False, increase_by_one=True
