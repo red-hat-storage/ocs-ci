@@ -11,6 +11,7 @@ from ocs_ci.framework.testlib import (
     skipif_disconnected_cluster,
     skipif_proxy_cluster,
     tier2,
+    polarion_id,
 )
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.bucket_utils import (
@@ -58,6 +59,7 @@ class TestObjOwnerMD(MCGTest):
         return acc_creds
 
     @tier2
+    @polarion_id("OCS-6360")
     def test_obj_owner_in_s3_buckets(
         self,
         mcg_obj,
@@ -156,6 +158,7 @@ class TestObjOwnerMD(MCGTest):
                     "interface": "CLI",
                     "backingstore_dict": {"aws": [(1, "us-east-2")]},
                 },
+                marks=[pytest.mark.polarion_id("OCS-6361")],
             ),
             pytest.param(
                 {
@@ -165,6 +168,7 @@ class TestObjOwnerMD(MCGTest):
                         "namespacestore_dict": {"aws": [(1, "us-east-2")]},
                     },
                 },
+                marks=[pytest.mark.polarion_id("OCS-6362")],
             ),
             pytest.param(
                 {
@@ -174,6 +178,7 @@ class TestObjOwnerMD(MCGTest):
                         "namespacestore_dict": {"azure": [(1, None)]},
                     },
                 },
+                marks=[pytest.mark.polarion_id("OCS-6363")],
             ),
             pytest.param(
                 {
@@ -183,6 +188,7 @@ class TestObjOwnerMD(MCGTest):
                         "namespacestore_dict": {"ibmcos": [(1, None)]},
                     },
                 },
+                marks=[pytest.mark.polarion_id("OCS-6364")],
             ),
         ],
         ids=[
