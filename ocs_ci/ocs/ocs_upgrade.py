@@ -685,11 +685,11 @@ def run_ocs_upgrade(
         upgrade_ocs.set_upgrade_images()
         live_deployment = config.DEPLOYMENT["live_deployment"]
         disable_addon = config.DEPLOYMENT.get("ibmcloud_disable_addon")
-        if (
+        managed_ibmcloud_platform = (
             config.ENV_DATA["platform"] == constants.IBMCLOUD_PLATFORM
-            and live_deployment
-            and not disable_addon
-        ):
+            and config.ENV_DATA["deployment_type"] == "managed"
+        )
+        if managed_ibmcloud_platform and live_deployment and not disable_addon:
             clustername = config.ENV_DATA.get("cluster_name")
             cmd = f"ibmcloud ks cluster addon disable openshift-data-foundation --cluster {clustername} -f"
             run_ibmcloud_cmd(cmd)
@@ -717,10 +717,6 @@ def run_ocs_upgrade(
             if ui_upgrade_supported:
                 ocs_odf_upgrade_ui()
             else:
-                managed_ibmcloud_platform = (
-                    config.ENV_DATA["platform"] == constants.IBMCLOUD_PLATFORM
-                    and config.ENV_DATA["deployment_type"] == "managed"
-                )
                 if managed_ibmcloud_platform and not upgrade_in_current_source:
                     create_ocs_secret(config.ENV_DATA["cluster_namespace"])
                 if upgrade_version != "4.9":

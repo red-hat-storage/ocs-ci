@@ -42,7 +42,7 @@ THRESHOLDS = [
 
 
 @pytest.fixture()
-def thresholds_teardown_fixture(self, request):
+def thresholds_teardown_fixture(request):
     """
     Teardown function
 
