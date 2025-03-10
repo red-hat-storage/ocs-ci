@@ -13,12 +13,49 @@ from ocs_ci.framework.testlib import (
     tier2,
     skipif_external_mode,
     brown_squad,
+    pre_upgrade,
+    post_upgrade,
 )
 
 logger = logging.getLogger(__name__)
 
+THRESHOLDS = [
+    {
+        "sc_key": "backfillFullRatio",
+        "value": "0.81",
+        "default_value": "0.8",
+        "ceph_key": "backfillfull_ratio",
+    },
+    {
+        "sc_key": "fullRatio",
+        "value": "0.86",
+        "default_value": "0.85",
+        "ceph_key": "full_ratio",
+    },
+    {
+        "sc_key": "nearFullRatio",
+        "value": "0.77",
+        "default_value": "0.75",
+        "ceph_key": "nearfull_ratio",
+    },
+]
 
-@tier2
+
+@pytest.fixture()
+def thresholds_teardown_fixture(self, request):
+    """
+    Teardown function
+
+    """
+
+    def finalizer():
+        configure_cephcluster_params_in_storagecluster_cr(
+            params=THRESHOLDS, default_values=True
+        )
+
+    request.addfinalizer(finalizer)
+
+
 @brown_squad
 @skipif_external_mode
 @pytest.mark.polarion_id("OCS-6224")
@@ -28,58 +65,15 @@ class TestStorageClusterCephFullThresholdsParams(ManageTest):
 
     """
 
-    TRESHOLDS = [
-        {
-            "sc_key": "backfillFullRatio",
-            "value": "0.81",
-            "default_value": "0.8",
-            "ceph_key": "backfillfull_ratio",
-        },
-        {
-            "sc_key": "fullRatio",
-            "value": "0.86",
-            "default_value": "0.85",
-            "ceph_key": "full_ratio",
-        },
-        {
-            "sc_key": "nearFullRatio",
-            "value": "0.77",
-            "default_value": "0.75",
-            "ceph_key": "nearfull_ratio",
-        },
-    ]
-
-    @pytest.fixture(autouse=True)
-    def teardown_fixture(self, request):
-        """
-        Teardown function
-
-        """
-
-        def finalizer():
-            configure_cephcluster_params_in_storagecluster_cr(
-                params=self.TRESHOLDS, default_values=True
-            )
-
-        request.addfinalizer(finalizer)
-
-    def test_storagecluster_ceph_full_thresholds_params(self):
-        """
-        Procedure:
-        1.Configure storagecluster CR
-        2.Wait 2 seconds
-        3.Verify ceph full thresholds parameters on cephcluster CR and storagecluster CR are same
-        4.Verify parameters with ceph CLI 'ceph osd dump'
-        5.Configure the default params on storagecluster [treardown]
-
-        """
+    def setup_thresholds_params(self):
         configure_cephcluster_params_in_storagecluster_cr(
-            params=self.TRESHOLDS, default_values=False
+            params=THRESHOLDS, default_values=False
         )
 
         logger.info("Wait 2 sec the cephcluster will updated")
         time.sleep(2)
 
+    def verify_thresholds_params(self):
         logger.info(
             "Verify upgrade parameters on cephcluster CR and storagecluster CR are same"
         )
@@ -88,7 +82,7 @@ class TestStorageClusterCephFullThresholdsParams(ManageTest):
             namespace=config.ENV_DATA["cluster_namespace"],
             resource_name=constants.CEPH_CLUSTER_NAME,
         )
-        for parameter in self.TRESHOLDS:
+        for parameter in THRESHOLDS:
             actual_value = cephcluster_obj.data["spec"]["storage"][parameter["sc_key"]]
             assert (
                 str(actual_value).lower() == str(parameter["value"]).lower()
@@ -100,7 +94,7 @@ class TestStorageClusterCephFullThresholdsParams(ManageTest):
             func=run_cmd_verify_cli_output,
             cmd="ceph osd dump",
             expected_output_lst=(
-                tuple(f"{d['ceph_key']} {d['value']}" for d in self.TRESHOLDS)
+                tuple(f"{d['ceph_key']} {d['value']}" for d in THRESHOLDS)
             ),
             cephtool_cmd=True,
             ocs_operator_cmd=False,
@@ -110,3 +104,44 @@ class TestStorageClusterCephFullThresholdsParams(ManageTest):
             raise Exception(
                 "The ceph full thresholds storagecluster parameters are not updated in ceph tool"
             )
+
+    @tier2
+    def test_storagecluster_ceph_full_thresholds_params(
+        self, thresholds_teardown_fixture
+    ):
+        """
+        Procedure:
+        1.Configure storagecluster CR
+        2.Wait 2 seconds
+        3.Verify ceph full thresholds parameters on cephcluster CR and storagecluster CR are same
+        4.Verify parameters with ceph CLI 'ceph osd dump'
+        5.Configure the default params on storagecluster [treardown]
+
+        """
+        self.setup_thresholds_params()
+        self.verify_thresholds_params()
+
+    @pre_upgrade
+    def test_pre_upgrade_storagecluster_ceph_full_thresholds_params(self):
+        """
+        Procedure:
+        1.Configure storagecluster CR
+        2.Wait 2 seconds
+        3.Verify ceph full thresholds parameters on cephcluster CR and storagecluster CR are same
+        4.Verify parameters with ceph CLI 'ceph osd dump'
+
+        """
+        self.setup_thresholds_params()
+        self.verify_thresholds_params()
+
+    @post_upgrade
+    def test_post_upgrade_storagecluster_ceph_full_thresholds_params(
+        self, thresholds_teardown_fixture
+    ):
+        """
+        Procedure:
+        1.Verify ceph full thresholds parameters on cephcluster CR and storagecluster CR are same
+        2.Verify parameters with ceph CLI 'ceph osd dump'
+
+        """
+        self.verify_thresholds_params()
