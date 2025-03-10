@@ -260,9 +260,12 @@ class HyperShiftBase:
                 f"hypershift binary download failed to path:{self.hypershift_binary_path}"
             )
 
-    def download_hcp_binary_with_podman(self):
+    def _download_hcp_binary_with_podman(self):
         """
         Download hcp binary to bin_dir
+
+        !!! This method is not used in the code, but it is kept for reference !!!
+        Use install_hcp_and_hypershift_from_git instead
         """
         if self.hcp_binary_exists():
             logger.info(

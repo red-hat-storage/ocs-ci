@@ -3,9 +3,12 @@ kind: Subscription
 metadata:
   name: multicluster-engine
   namespace: multicluster-engine
+  labels:
+    operators.coreos.com/multicluster-engine.multicluster-engine: ""
 spec:
-  channel: stable
+  channel: stable-2.8
   installPlanApproval: Automatic
   name: multicluster-engine
-  source: mce-catalogsource
+  source: qe-app-registry
   sourceNamespace: openshift-marketplace
+  startingCSV: multicluster-engine.v2.8.0
