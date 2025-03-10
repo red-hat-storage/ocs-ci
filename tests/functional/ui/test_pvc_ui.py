@@ -82,6 +82,8 @@ class TestPvcUserInterface(object):
         """
         Test create, resize and delete pvc via UI
 
+        Also verifies OCS-1572, OCS-1586, OCS-1587 for PVC details page
+
         """
 
         setup_ui_class_factory()
