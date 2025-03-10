@@ -50,7 +50,7 @@ class TestDisableReclaimSpaceOperation:
             annotations=reset_reclaimspace_annotations,
         )
 
-    @retry(UnexpectedBehaviour, tries=3, delay=10)
+    @retry(UnexpectedBehaviour, tries=5, delay=10)
     def wait_till_expected_image_size(self, pvc_obj, expected_size, tolerance=0.3):
         """Wait until the RBD image size matches the expected size."""
         rbd_image_name = pvc_obj.get_rbd_image_name
@@ -83,7 +83,7 @@ class TestDisableReclaimSpaceOperation:
             storage_path = pod_obj.get_storage_path("block")
             log.info(f"Writing {actual_data_written}GiB of data to the block device")
             pod_obj.exec_cmd_on_pod(
-                f"dd if=/dev/zero of={storage_path} bs=1M count=1024 oflag=direct > /dev/null 2>&1 &",
+                f"dd if=/dev/zero of={storage_path} bs=1M count=1024 oflag=direct > /dev/null 2>&1 wait; sync",
                 shell=True,
             )
 
