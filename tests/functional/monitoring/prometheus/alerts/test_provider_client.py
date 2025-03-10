@@ -96,15 +96,16 @@ def test_change_client_ocs_version_and_stop_heartbeat(
 def test_quota_fillup_80_alert(measure_fill_up_client_quota, threading_lock):
     api = prometheus.PrometheusAPI(threading_lock=threading_lock)
 
-    # get alerts from time when manager deployment was scaled down
+    # get alerts from time when the PVC utilizing quota was present
     alerts = measure_fill_up_client_quota.get("prometheus_alerts")
     client_name = measure_fill_up_client_quota.get("metadata").get("client_name")
     target_alerts = [
         {
             "label": constants.ALERT_QUOTA_THRESHOLD_REACHED,
             "msg": (
-                f"Storage Client ({client_name}) heartbeat missed for more than 120 (s) "
-                f"in namespace:cluster {cluster_namespace}:{cluster_name}."
+                f"ODF client ({client_name}) - (hcp418-1.apps.ibm-baremetal6.qe.rh-ocs.com)"
+                "storage consumption has surpassed 80% of the configured quota, "
+                "this might result in issues in the creation of new PV/PVCs on the target cluster"
             ),
             "severity": "warning",
         },
