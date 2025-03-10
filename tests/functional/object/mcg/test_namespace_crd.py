@@ -150,6 +150,61 @@ class TestNamespace(MCGTest):
                 {
                     "interface": "CLI",
                     "namespace_policy_dict": {
+                        "type": "Single",
+                        "namespacestore_dict": {"aws": [(1, None)]},
+                    },
+                },
+                marks=[
+                    tier1,
+                    on_prem_platform_required,
+                    pytest.mark.polarion_id("OCS-6353"),
+                ],
+            ),
+            pytest.param(
+                {
+                    "interface": "CLI",
+                    "namespace_policy_dict": {
+                        "type": "Single",
+                        "namespacestore_dict": {"azure": [(1, None)]},
+                    },
+                },
+                marks=[
+                    tier1,
+                    on_prem_platform_required,
+                    pytest.mark.polarion_id("OCS-6354"),
+                ],
+            ),
+            pytest.param(
+                {
+                    "interface": "CLI",
+                    "namespace_policy_dict": {
+                        "type": "Single",
+                        "namespacestore_dict": {"ibmcos": [(1, None)]},
+                    },
+                },
+                marks=[
+                    tier1,
+                    on_prem_platform_required,
+                    pytest.mark.polarion_id("OCS-6355"),
+                ],
+            ),
+            pytest.param(
+                {
+                    "interface": "CLI",
+                    "namespace_policy_dict": {
+                        "type": "Single",
+                        "namespacestore_dict": {"gcp": [(1, None)]},
+                    },
+                },
+                marks=[
+                    tier1,
+                    pytest.mark.polarion_id("OCS-6356"),
+                ],
+            ),
+            pytest.param(
+                {
+                    "interface": "CLI",
+                    "namespace_policy_dict": {
                         "type": "Cache",
                         "ttl": 300000,
                         "namespacestore_dict": {
@@ -251,6 +306,10 @@ class TestNamespace(MCGTest):
             "Azure-OC-Single",
             "RGW-OC-Single",
             "RGW-CLI-Single",
+            "AWS-CLI-Single",
+            "AZURE-CLI-Single",
+            "IBM-CLI-Single",
+            "GCP-CLI-Single",
             "RGW-CLI-Cache",
             "RGW-CLI-Multi",
             "IBM-OC-Single",

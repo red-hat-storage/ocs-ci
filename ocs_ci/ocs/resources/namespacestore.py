@@ -245,6 +245,11 @@ def cli_create_namespacestore(
             f"--secret-key {get_attr_chain(cld_mgr, 'ibmcos_client.secret_key')} "
             f"--target-bucket {uls_name}"
         ),
+        constants.GCP_PLATFORM: lambda: (
+            f"google-cloud-storage {nss_name} "
+            f"--private-key-json-file {constants.GOOGLE_CREDS_JSON_PATH} "
+            f"--target-bucket {uls_name}"
+        ),
         constants.NAMESPACE_FILESYSTEM: lambda: (
             f"nsfs {nss_name} "
             f"--pvc-name {uls_name} "
