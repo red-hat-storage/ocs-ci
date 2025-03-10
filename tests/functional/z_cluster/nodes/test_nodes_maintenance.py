@@ -369,7 +369,7 @@ class TestNodesMaintenance(ManageTest):
         self,
         pvc_factory,
         pod_factory,
-        dc_pod_factory,
+        deployment_pod_factory,
         interface,
         bucket_factory,
         rgw_bucket_factory,
@@ -405,7 +405,9 @@ class TestNodesMaintenance(ManageTest):
         )
         dc_pod_obj = []
         for i in range(2):
-            dc_pod = dc_pod_factory(interface=interface, node_selector={"dc": "fedora"})
+            dc_pod = deployment_pod_factory(
+                interface=interface, node_selector={"dc": "fedora"}
+            )
             pod.run_io_in_bg(dc_pod, fedora_dc=True)
             dc_pod_obj.append(dc_pod)
 
