@@ -98,8 +98,17 @@ def test_quota_fillup_80_alert(measure_fill_up_client_quota, threading_lock):
 
     # get alerts from time when manager deployment was scaled down
     alerts = measure_fill_up_client_quota.get("prometheus_alerts")
-    # client_name = measure_fill_up_client_quota.get("metadata").get("client_name")
-    target_alerts = []
+    client_name = measure_fill_up_client_quota.get("metadata").get("client_name")
+    target_alerts = [
+        {
+            "label": constants.ALERT_QUOTA_THRESHOLD_REACHED,
+            "msg": (
+                f"Storage Client ({client_name}) heartbeat missed for more than 120 (s) "
+                f"in namespace:cluster {cluster_namespace}:{cluster_name}."
+            ),
+            "severity": "warning",
+        },
+    ]
     states = ["firing"]
 
     for target_alert in target_alerts:
