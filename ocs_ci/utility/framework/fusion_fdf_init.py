@@ -4,6 +4,8 @@ import os
 from shutil import which
 import time
 
+from junitparser import TestCase, TestSuite, JUnitXml, Failure
+
 from ocs_ci import framework
 from ocs_ci.framework.exceptions import (
     ClusterNameNotProvidedError,
@@ -25,8 +27,8 @@ DEFAULT_CONFIGS = {
     "fdf": os.path.join(constants.CONF_DIR, "ocsci", "fdf_deployment.yaml"),
 }
 LOG_NAMES = {
-    "fusion": "fusion-deployment",
-    "fdf": "fdf-deployment",
+    "fusion": "fusion_deployment",
+    "fdf": "fusion_data_foundation_deployment",
 }
 
 
@@ -108,7 +110,7 @@ class Initializer(object):
         """
         log_dir = config.RUN["log_dir"]
         log_level = config.RUN.get("log_level", "INFO")
-        log_name = f"{self.log_basename}-{self.run_id}"
+        log_name = f"{self.log_basename}_{self.run_id}"
         log_formatter = logging.Formatter(constants.LOG_FORMAT)
         root_logger = logging.getLogger()
         root_logger.setLevel(log_level)
@@ -192,3 +194,37 @@ def setup_bin_dir() -> None:
             os.path.expanduser(framework.config.RUN["bin_dir"])
         )
         utils.add_path_to_env_path(framework.config.RUN["bin_dir"])
+
+
+def create_junit_report(suite_name, case_name):
+    """
+    Decorator which generates a junit report xml for the wrapped function.
+
+    Args:
+        suite_name (str): Name of the Test Suite
+        case_name (str): Name of the Test Case
+    """
+
+    def decorator(func):
+        def wrapper(*args, **kwargs):
+            test_case = TestCase(case_name)
+            test_suite = TestSuite(suite_name)
+
+            try:
+                func(*args, **kwargs)
+            except Exception as e:
+                test_case.result = [Failure(e)]
+
+            test_suite.add_testcase(test_case)
+            xml = JUnitXml()
+            xml.add_testsuite(test_suite)
+
+            from ocs_ci.framework import config
+
+            log_dir = config.RUN["log_dir"]
+            run_id = config.RUN["run_id"]
+            xml.write(os.path.join(log_dir, f"{case_name}_{run_id}.xml"))
+
+        return wrapper
+
+    return decorator
