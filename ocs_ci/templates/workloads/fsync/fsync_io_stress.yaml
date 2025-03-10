@@ -1,0 +1,36 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  labels:
+    appname: fedora-fsync-1
+    workloadpattern: fsync_io
+  name: fsync-1
+spec:
+  selector:
+    matchLabels:
+      workload: fsyncio-1
+  strategy:
+    type: Recreate
+  template:
+    metadata:
+      labels:
+        workload: fsyncio-1
+    spec:
+      containers:
+      - command: ["/bin/sh", "-c"]
+        args:
+          - python3 /script/fsync.py
+        image: quay.io/nagreddy/test:fsync
+        env:
+          - name: no_of_files
+            value: "200"
+        imagePullPolicy: Always
+        name: fsync_io
+        volumeMounts:
+        - mountPath: /mnt/test
+          name: mypvc
+      volumes:
+      - name: mypvc
+        persistentVolumeClaim:
+          claimName: test-pvc-1
+          readOnly: false
