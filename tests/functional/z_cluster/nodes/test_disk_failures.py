@@ -4,7 +4,7 @@ import pytest
 
 from ocs_ci.ocs import node, constants
 from ocs_ci.framework import config
-from ocs_ci.framework.pytest_customization.marks import brown_squad, jira
+from ocs_ci.framework.pytest_customization.marks import brown_squad
 from ocs_ci.framework.testlib import (
     tier4a,
     ignore_leftovers,
@@ -140,7 +140,6 @@ class TestDiskFailures(ManageTest):
         """
         self.sanity_helpers = Sanity()
 
-    @jira("DFBUGS-849")
     @skipif_managed_service
     @skipif_ibm_cloud
     @skipif_hci_provider_and_client
