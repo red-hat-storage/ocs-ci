@@ -259,7 +259,8 @@ class BlockAndFile(StorageSystemDetails):
         )
 
         """
-        If the displayed UI size is in MiB then convert into GiB
+        The displayed UI size can be either in MiB or GiB.
+        If the size is in MiB then convert into GiB.
         """
         if re.search('MiB$', collected_tpl_of_days_and_avg[1]):
             average /= (2**10)
