@@ -10,7 +10,7 @@ from ocs_ci import framework
 from ocs_ci.framework.exceptions import (
     ClusterNameNotProvidedError,
     ClusterNotAccessibleError,
-    InvalidVariantError,
+    InvalidDeploymentType,
 )
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.exceptions import CommandFailed
@@ -33,23 +33,24 @@ LOG_NAMES = {
 
 
 class Initializer(object):
-    def __init__(self, variant: str) -> None:
+    def __init__(self, deployment_type: str) -> None:
         """
         Create initializer object.
 
         Args:
-            variant (str): Type of cluster deployment to init
+            deployment_type (str): Type of cluster deployment to init
 
         Raises:
-            InvalidVariantError: If the provided variant is invalid
+            InvalidDeploymentType: If the provided deployment_type is invalid
         """
         try:
-            self.default_config = DEFAULT_CONFIGS[variant]
-            self.log_basename = LOG_NAMES[variant]
+            self.default_config = DEFAULT_CONFIGS[deployment_type]
+            self.log_basename = LOG_NAMES[deployment_type]
             self.run_id = generate_run_id()
         except KeyError:
-            raise InvalidVariantError(
-                f"Variant '{variant}' is invalid. Please provide one of the following: {list(DEFAULT_CONFIGS.keys())}"
+            raise InvalidDeploymentType(
+                f"Deployment type'{deployment_type}' is invalid. "
+                f"Please provide one of the following: {list(DEFAULT_CONFIGS.keys())}"
             )
 
     def init_config(self, args: list) -> None:
