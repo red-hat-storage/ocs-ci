@@ -6,6 +6,7 @@ import os
 import base64
 import logging
 import re
+import uuid
 
 from ocs_ci.helpers.helpers import create_unique_resource_name, create_resource
 from ocs_ci.ocs import constants
@@ -440,3 +441,64 @@ def verify_hotplug(vm_obj, disks_before_hotplug):
             f"Error occurred while verifying hotplug in VM {vm_obj.name}: {str(error)}"
         )
         return False
+
+
+def add_fs_mount_hotplug(vm_obj, hotpl_new_disk, make_permanent=True):
+    """
+    Verifies if a disk has been hot-plugged into/removed
+    from a VM and mounts it permanently.
+
+    Args:
+        make_permanent(bool): for making hot-plug fs permanent mount
+        hotpl_new_disk (string): Name of disk information as
+        hot-plug in lsblk (e.g., "vdb1").
+        vm_obj (VM object): The virtual machine object to check.
+
+    Returns:
+        string: mount point path on success, None on failure
+    """
+    device_path = f"/dev/{hotpl_new_disk}"
+    mount_point = f"/mnt/{uuid.uuid4().hex[:5]}"
+    mkfs_cmd = f"mkfs.ext4 -F {device_path}"
+    mkdir_cmd = f"mkdir -p {mount_point}"
+    mount_cmd = f"mount {device_path} {mount_point}"
+    lsblk_cmd = "lsblk"
+    fstab_entry = f"{device_path} {mount_point}"
+    fstab_cmd = f"echo {fstab_entry} | sudo tee -a /etc/fstab"
+
+    try:
+        logger.info(f"Creating ext4 filesystem on {device_path}")
+        vm_obj.run_ssh_cmd(mkfs_cmd)
+
+        logger.info(f"Creating mount point at {mount_point}")
+        vm_obj.run_ssh_cmd(mkdir_cmd)
+
+        logger.info(f"Mounting {device_path} to {mount_point}")
+        vm_obj.run_ssh_cmd(mount_cmd)
+
+        if make_permanent:
+            logger.info(
+                f"Adding entry to /etc/fstab to make mount permanent: {fstab_cmd}"
+            )
+            vm_obj.run_ssh_cmd(fstab_cmd)
+
+        logger.info("Verifying the mount of the new disk...")
+        lsblk_output = vm_obj.run_ssh_cmd(lsblk_cmd)
+        logger.info(f"lsblk output:\n{lsblk_output}")
+
+        mount_point_found = False
+        for line in lsblk_output.splitlines():
+            if mount_point in line:
+                mount_point_found = True
+                break
+
+        if mount_point_found:
+            logger.info(
+                "Disk successfully hotplugged, mounted, " "and verified as permanent."
+            )
+            return mount_point
+        logger.warning(f"Mount point {mount_point} not found in lsblk output.")
+        return None
+    except Exception as error:
+        logger.error(f"Error occurred while mounting fs in VM {vm_obj.name}: {error}")
+        return None
