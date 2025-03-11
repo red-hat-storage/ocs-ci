@@ -245,6 +245,11 @@ def cli_create_namespacestore(
             f"--secret-key {get_attr_chain(cld_mgr, 'ibmcos_client.secret_key')} "
             f"--target-bucket {uls_name}"
         ),
+        constants.GCP_PLATFORM: lambda: (
+            f"google-cloud-storage {nss_name} "
+            f"--private-key-json-file {constants.GOOGLE_CREDS_JSON_PATH} "
+            f"--target-bucket {uls_name}"
+        ),
         constants.NAMESPACE_FILESYSTEM: lambda: (
             f"nsfs {nss_name} "
             f"--pvc-name {uls_name} "
@@ -277,7 +282,7 @@ def oc_create_namespacestore(
         nss_tup (tuple): A tuple containing the NSFS namespacestore details, in this order:
             pvc_name (str): Name of the PVC that will host the namespace filesystem
             pvc_size (int): Size in Gi of the PVC that will host the namespace filesystem
-            sub_path (str): The path to a sub directory inside the PVC FS which the NSS will use as the root directory
+            sub_path (str): The path to a subdirectory inside the PVC FS which the NSS will use as the root directory
             fs_backend (str): The file system backend type - CEPH_FS | GPFS | NFSv4. Defaults to None.
 
     """
