@@ -445,8 +445,7 @@ def verify_hotplug(vm_obj, disks_before_hotplug):
 
 def add_fs_mount_hotplug(vm_obj, hotpl_new_disk, make_permanent=True):
     """
-    Verifies if a disk has been hot-plugged into/removed
-    from a VM and mounts it permanently.
+    Verifies if a disk has been hot-plugged in VM with FS mount permanently
 
     Args:
         make_permanent(bool): for making hot-plug fs permanent mount
