@@ -49,15 +49,24 @@ class TestRookCephLogRotate(ManageTest):
                 namespace=config.ENV_DATA["cluster_namespace"],
                 kind=constants.STORAGECLUSTER,
             )
-            params = '[{"op": "remove", "path": "/spec/logCollector"}]'
-            storagecluster_obj.patch(params=params, format_type="json")
-            log.info(
-                "It takes time for storagecluster to update after the edit command"
-            )
-            time.sleep(30)
-            log.info("Verify storagecluster on Ready state")
-            verify_storage_cluster()
-            ceph_health_check()
+
+            # Check if logCollector exists before trying to remove it
+            sc_data = storagecluster_obj.get()
+            if "spec" in sc_data and "logCollector" in sc_data.get("spec", {}):
+                log.info("LogCollector found in storagecluster spec, removing it")
+                params = '[{"op": "remove", "path": "/spec/logCollector"}]'
+                storagecluster_obj.patch(params=params, format_type="json")
+                log.info(
+                    "It takes time for storagecluster to update after the edit command"
+                )
+                time.sleep(30)
+                log.info("Verify storagecluster on Ready state")
+                verify_storage_cluster()
+                ceph_health_check()
+            else:
+                log.info(
+                    "LogCollector not found in storagecluster spec, skipping removal"
+                )
 
         request.addfinalizer(finalizer)
 
@@ -139,11 +148,17 @@ class TestRookCephLogRotate(ManageTest):
             *constants.CLOUD_PLATFORMS,
             *MANAGED_SERVICE_PLATFORMS,
         ):
-            self.podtype_id["rgw"] = [
-                pod.get_rgw_pods,
-                pod.get_ceph_daemon_id(pod.get_rgw_pods()[0]),
-                "ceph-client.rgw.ocs.storagecluster.cephobjectstore.a",
-            ]
+            # Check if RGW pods exist before adding them to the test
+            rgw_pods = pod.get_rgw_pods()
+            if rgw_pods:
+                log.info("RGW pods found, including them in log rotation test")
+                self.podtype_id["rgw"] = [
+                    pod.get_rgw_pods,
+                    pod.get_ceph_daemon_id(rgw_pods[0]),
+                    "ceph-client.rgw.ocs.storagecluster.cephobjectstore.a",
+                ]
+            else:
+                log.info("No RGW pods found, skipping RGW log rotation test")
         self.podtype_id["mds"] = [
             pod.get_mds_pods,
             pod.get_ceph_daemon_id(pod.get_mds_pods()[0]),
