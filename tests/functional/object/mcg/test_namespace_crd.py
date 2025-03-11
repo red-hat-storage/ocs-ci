@@ -156,7 +156,6 @@ class TestNamespace(MCGTest):
                 },
                 marks=[
                     tier1,
-                    on_prem_platform_required,
                     pytest.mark.polarion_id("OCS-6353"),
                 ],
             ),
@@ -170,7 +169,6 @@ class TestNamespace(MCGTest):
                 },
                 marks=[
                     tier1,
-                    on_prem_platform_required,
                     pytest.mark.polarion_id("OCS-6354"),
                 ],
             ),
@@ -184,7 +182,6 @@ class TestNamespace(MCGTest):
                 },
                 marks=[
                     tier1,
-                    on_prem_platform_required,
                     pytest.mark.polarion_id("OCS-6355"),
                 ],
             ),
