@@ -4,7 +4,6 @@ metadata:
   name: ocs-storagecluster
   namespace: openshift-storage
 spec:
-  allowRemoteStorageConsumers: true
   arbiter: {}
   encryption:
     kms: {}
