@@ -67,7 +67,6 @@ team_marks = [manage, ecosystem, e2e]
 # components  and other markers
 ocp = pytest.mark.ocp
 rook = pytest.mark.rook
-ui = pytest.mark.ui
 mcg = pytest.mark.mcg
 rgw = pytest.mark.rgw
 csi = pytest.mark.csi
@@ -688,3 +687,5 @@ skipif_kms_deployment = pytest.mark.skipif(
     config.DEPLOYMENT.get("kms_deployment") is True,
     reason="This test is not supported for KMS deployment.",
 )
+
+ui = compose(skipif_ibm_cloud_managed, pytest.mark.ui)
