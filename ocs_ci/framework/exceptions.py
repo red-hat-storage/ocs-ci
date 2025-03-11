@@ -32,7 +32,7 @@ class ClusterNameNotProvidedError(Exception):
         return "Please provide a valid --cluster-name."
 
 
-class InvalidVariantError(Exception):
+class InvalidDeploymentType(Exception):
     pass
 
 
