@@ -1,0 +1,18 @@
+---
+# This config is suppose to work on most of DCs we have.
+DEPLOYMENT:
+  allow_lower_instance_requirements: false
+  ocs_operator_nodes_to_label: 6
+ENV_DATA:
+  platform: 'vsphere'
+  deployment_type: 'ipi'
+  worker_replicas: 6
+  master_replicas: 3
+  worker_num_cpus: '20'
+  master_num_cpus: '8'
+  master_memory: '32768'
+  compute_memory: '65536'
+  fio_storageutilization_min_mbps: 10.0
+REPORTING:
+  polarion:
+    deployment_id: 'OCS-2363'
