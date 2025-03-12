@@ -439,6 +439,7 @@ def verify_hotplug(vm_obj, disks_before_hotplug):
         logger.error(
             f"Error occurred while verifying hotplug in VM {vm_obj.name}: {str(error)}"
         )
+        return False
 
 
 def expand_pvc_and_verify(vm_obj, new_size):

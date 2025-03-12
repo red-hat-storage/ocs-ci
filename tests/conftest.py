@@ -212,6 +212,8 @@ from ocs_ci.utility.decorators import switch_to_default_cluster_index_at_last
 from ocs_ci.helpers.keyrotation_helper import PVKeyrotation
 from ocs_ci.ocs.resources.storage_cluster import set_in_transit_encryption
 from ocs_ci.helpers.e2e_helpers import verify_osd_used_capacity_greater_than_expected
+from ocp_resources.resource import get_client
+
 
 log = logging.getLogger(__name__)
 
@@ -9231,6 +9233,7 @@ def pytest_sessionfinish(session, exitstatus):
         log.exception("During finishing the Cluster load an exception was hit!")
 
 
+<<<<<<< HEAD
 @pytest.fixture()
 def run_fio_till_cluster_full(
     request, teardown_project_factory, pvc_factory, pod_factory
@@ -9483,3 +9486,14 @@ def setup_nfs(request, setup_rbac):
                 nfs_sc_obj.delete()
 
         request.addfinalizer(teardown)
+
+@pytest.fixture(scope="session")
+def admin_client():
+    """
+    Get DynamicClient
+    """
+    kubeconfig_path = os.path.join(
+        ocsci_config.ENV_DATA["cluster_path"],
+        ocsci_config.RUN.get("kubeconfig_location"),
+    )
+    return get_client(config_file=kubeconfig_path)

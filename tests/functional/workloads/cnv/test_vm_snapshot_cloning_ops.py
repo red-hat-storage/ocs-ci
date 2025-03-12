@@ -4,7 +4,9 @@ import pytest
 from ocs_ci.framework.pytest_customization.marks import magenta_squad, workloads
 from ocs_ci.framework.testlib import E2ETest
 from ocs_ci.helpers.cnv_helpers import cal_md5sum_vm, run_dd_io, expand_pvc_and_verify
-from ocs_ci.ocs import constants
+from ocs_ci.helpers.helpers import create_unique_resource_name
+from ocp_resources.virtual_machine_restore import VirtualMachineRestore
+from ocp_resources.virtual_machine_snapshot import VirtualMachineSnapshot
 
 log = logging.getLogger(__name__)
 
@@ -114,9 +116,7 @@ class TestVmSnapshotClone(E2ETest):
         pvc_expand_before_snapshot,
         pvc_expand_after_restore,
         multi_cnv_workload,
-        snapshot_factory,
-        snapshot_restore_factory,
-        cnv_workload,
+        admin_client,
     ):
         """
         This test performs the VM PVC snapshot operations
@@ -144,7 +144,6 @@ class TestVmSnapshotClone(E2ETest):
         failed_vms = []
         for vm_obj in vm_list:
             # Expand PVC if `pvc_expand_before_snapshot` is True
-            pvc_obj = vm_obj.get_vm_pvc_obj()
             new_size = 50
             if pvc_expand_before_snapshot:
                 try:
@@ -158,37 +157,84 @@ class TestVmSnapshotClone(E2ETest):
                         f"Storage Compression: {'default' if vm_obj in vm_objs_def else 'aggressive'})"
                     )
                     continue
+
             # Writing IO on source VM
             source_csum = run_dd_io(vm_obj=vm_obj, file_path=file_paths[0], verify=True)
 
-            # Stopping VM before taking snapshot of the VM PVC
+            snapshot_name = f"snapshot-{vm_obj.name}"
+            # Explicitly create the VirtualMachineSnapshot instance
+            with VirtualMachineSnapshot(
+                name=snapshot_name,
+                namespace=vm_obj.namespace,
+                vm_name=vm_obj.name,
+                client=admin_client,
+                teardown=False,
+            ) as vm_snapshot:
+                vm_snapshot.wait_snapshot_done()
+
+            # Write file after snapshot
+            run_dd_io(vm_obj=vm_obj, file_path=file_paths[1])
+
+            # Stopping VM before restoring
             vm_obj.stop()
 
-            # Taking Snapshot of PVC
-            snap_obj = snapshot_factory(pvc_obj)
+            # Explicitly create the VirtualMachineRestore instance
+            restore_snapshot_name = create_unique_resource_name(
+                vm_snapshot.name, "restore"
+            )
+            try:
+                with VirtualMachineRestore(
+                    name=restore_snapshot_name,
+                    namespace=vm_obj.namespace,
+                    vm_name=vm_obj.name,
+                    snapshot_name=vm_snapshot.name,
+                    client=admin_client,
+                    teardown=False,
+                ) as vm_restore:
+                    vm_restore.wait_restore_done()  # Wait for restore completion
+                    vm_obj.start()
+                    vm_obj.wait_for_ssh_connectivity(timeout=1200)
+            finally:
+                vm_snapshot.delete()
 
-            # Restore the snapshot
-            res_snap_obj = snapshot_restore_factory(
-                snapshot_obj=snap_obj,
-                storageclass=vm_obj.sc_name,
-                volume_mode=snap_obj.parent_volume_mode,
-                access_mode=vm_obj.pvc_access_mode,
-                status=constants.STATUS_BOUND,
-                timeout=300,
+            # Verify file written after snapshot is not present.
+            command = f"test -f {file_paths[1]} && echo 'File exists' || echo 'File not found'"
+            output = vm_obj.run_ssh_cmd(
+                command=command,
             )
 
-            # Create new VM using the restored PVC
-            res_vm_obj = cnv_workload(
-                volume_interface=constants.VM_VOLUME_PVC,
-                storageclass=vm_obj.sc_name,
-                source_url=constants.CNV_FEDORA_SOURCE,
-                existing_pvc_obj=res_snap_obj,
-                namespace=vm_obj.namespace,
-            )
+            # Check if file is not present
+            if "File exists" in output:
+                raise FileExistsError(
+                    (
+                        f"ERROR: File '{file_paths[1]}' still exists after snapshot restore!"
+                    )
+                )
+            log.info(f"File '{file_paths[1]}' is NOT present (expected).")
 
             # Expand PVC if `pvc_expand_after_restore` is True
             if pvc_expand_after_restore:
                 try:
+                    if vm_obj.volume_interface == "DVT":
+                        vm_obj.pvc_name = (
+                            vm_obj.get()
+                            .get("spec")
+                            .get("template")
+                            .get("spec")
+                            .get("volumes")[0]
+                            .get("dataVolume")
+                            .get("name")
+                        )
+                    else:
+                        vm_obj.pvc_name = (
+                            vm_obj.get()
+                            .get("spec")
+                            .get("template")
+                            .get("spec")
+                            .get("volumes")[0]
+                            .get("persistentVolumeClaim")
+                            .get("claimName")
+                        )
                     expand_pvc_and_verify(vm_obj, new_size)
                 except ValueError as e:
                     log.error(
@@ -201,13 +247,13 @@ class TestVmSnapshotClone(E2ETest):
                     continue
 
             # Validate data integrity of file written before taking snapshot
-            res_csum = cal_md5sum_vm(vm_obj=res_vm_obj, file_path=file_paths[0])
+            res_csum = cal_md5sum_vm(vm_obj=vm_obj, file_path=file_paths[0])
             assert (
                 source_csum == res_csum
-            ), f"Failed: MD5 comparison between source {vm_obj.name} and restored {res_vm_obj.name} VMs"
+            ), f"Failed: MD5 comparison between source {vm_obj.name} and restored {vm_restore.name} VMs"
 
             # Write new file to VM
-            run_dd_io(vm_obj=res_vm_obj, file_path=file_paths[1], verify=True)
-            res_vm_obj.stop()
+            run_dd_io(vm_obj=vm_obj, file_path=file_paths[1], verify=True)
+
         if failed_vms:
             assert False, f"Test case failed for VMs: {', '.join(failed_vms)}"
