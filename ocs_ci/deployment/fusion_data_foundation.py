@@ -35,6 +35,14 @@ class FusionDataFoundationDeployment:
         verify_fdf_installation()
 
 
+def create_image_tag_mirror_set():
+    """
+    Create ImageTagMirrorSet.
+    """
+    logger.info("Creating FDF ImageTagMirrorSet")
+    run_cmd(f"oc create -f {constants.FDF_IMAGE_TAG_MIRROR_SET}")
+
+
 def create_image_digest_mirror_set():
     """
     Create ImageDigestMirrorSet.
@@ -43,14 +51,6 @@ def create_image_digest_mirror_set():
     image_digest_mirror_set = extract_image_digest_mirror_set()
     run_cmd(f"oc create -f {image_digest_mirror_set}")
     os.remove(image_digest_mirror_set)
-
-
-def create_image_tag_mirror_set():
-    """
-    Create ImageTagMirrorSet.
-    """
-    logger.info("Creating FDF ImageTagMirrorSet")
-    run_cmd(f"oc create -f {constants.FDF_IMAGE_TAG_MIRROR_SET}")
 
 
 def create_spectrum_fusion_cr():
