@@ -5920,10 +5920,10 @@ def find_cephblockpoolradosnamespace(storageclient_uid=None):
         f"StorageClient is {storageclient_name} with uid {storageclient_uid}. StorageConsumer is {storageconsumer}"
     )
 
+    cephbpradosns = ""
     storage_request_obj = ocp.OCP(
         kind="StorageRequest", namespace=config.ENV_DATA["cluster_namespace"]
     )
-
     for storage_request_dict in storage_request_obj.get()["items"]:
         if (
             storageconsumer
@@ -5975,11 +5975,10 @@ def find_cephfilesystemsubvolumegroup(storageclient_uid=None):
         f"StorageClient is {storageclient_name} with uid {storageclient_uid}. StorageConsumer is {storageconsumer}"
     )
 
+    cephbfssubvolumegroup = ""
     storage_request_obj = ocp.OCP(
         kind="StorageRequest", namespace=config.ENV_DATA["cluster_namespace"]
     )
-    cephbfssubvolumegroup = ""
-
     for storage_request_dict in storage_request_obj.get()["items"]:
         if (
             storageconsumer
