@@ -525,7 +525,7 @@ class MultiClusterConfig:
         """
         indexes = config.get_consumer_indexes_list()
         if indexes:
-            return [RunWithConfigContext(index) for index in indexes]
+            return [self.RunWithConfigContext(index) for index in indexes]
         else:
             logger.info(
                 "No consumer cluster found. Executing the code on current cluster."
