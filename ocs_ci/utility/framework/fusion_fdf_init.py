@@ -42,6 +42,7 @@ class Initializer(object):
 
         Raises:
             InvalidDeploymentType: If the provided deployment_type is invalid
+
         """
         try:
             self.default_config = DEFAULT_CONFIGS[deployment_type]
@@ -49,7 +50,7 @@ class Initializer(object):
             self.run_id = generate_run_id()
         except KeyError:
             raise InvalidDeploymentType(
-                f"Deployment type'{deployment_type}' is invalid. "
+                f"Deployment type '{deployment_type}' is invalid. "
                 f"Please provide one of the following: {list(DEFAULT_CONFIGS.keys())}"
             )
 
@@ -63,6 +64,7 @@ class Initializer(object):
         Raises:
             FileNotFoundError: If the provided cluster_path is not found
             ClusterNameNotProvidedError: If the cluster_name isn't provided or found
+
         """
         framework.config.init_cluster_configs()
         load_config([self.default_config])
@@ -72,7 +74,7 @@ class Initializer(object):
         cluster_path = os.path.expanduser(args.cluster_path)
 
         if not os.path.exists(cluster_path):
-            raise FileNotFoundError(f"No such file or directory: {cluster_path}")
+            raise FileNotFoundError(f"No such directory: {cluster_path}")
         else:
             config.ENV_DATA["cluster_path"] = cluster_path
         if not cluster_name:
@@ -90,6 +92,7 @@ class Initializer(object):
 
         Returns:
             list: List of parsed args
+
         """
         logger.info("Parsing arguments")
         parser = argparse.ArgumentParser()
@@ -152,6 +155,7 @@ def generate_run_id() -> int:
 
     Returns:
         int: Unique identifier for the run
+
     """
     logger.debug("Generating run_id from timestamp")
     run_id = int(time.time())
@@ -169,6 +173,7 @@ def set_kubeconfig(kubeconfig_path: str):
 
     Raises:
         ClusterNotAccessibleError: if the cluster is inaccessible
+
     """
     logger.info("Testing access to cluster with %s", kubeconfig_path)
     if not os.path.isfile(kubeconfig_path):
@@ -204,6 +209,7 @@ def create_junit_report(suite_name, case_name):
     Args:
         suite_name (str): Name of the Test Suite
         case_name (str): Name of the Test Case
+
     """
 
     def decorator(func):

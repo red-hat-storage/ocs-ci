@@ -42,7 +42,7 @@ class FusionDeployment:
         """
         Create Fusion CatalogSource
         """
-        logger.info("Adding CatalogSource for IBM Fusion")
+        logger.info("Adding CatalogSource")
 
         if self.pre_release:
             render_data = {
@@ -81,7 +81,7 @@ class FusionDeployment:
         """
         Create Fusion Subscription
         """
-        logger.info("Installing IBM Fusion")
+        logger.info("Creating Subscription")
         subscription_fusion_yaml_data = templating.load_yaml(FUSION_SUBSCRIPTION_YAML)
         subscription_fusion_yaml_data["spec"]["channel"] = config.DEPLOYMENT[
             "fusion_channel"
@@ -101,7 +101,7 @@ class FusionDeployment:
         """
         Create Fusion Namespace and OperatorGroup
         """
-        logger.info("Creating namespace and OperatorGroup.")
+        logger.info("Creating Namespace and OperatorGroup.")
         run_cmd(f"oc create -f {constants.FUSION_NS_YAML}")
 
     def verify(self):
