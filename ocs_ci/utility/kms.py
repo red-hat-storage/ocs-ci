@@ -574,17 +574,40 @@ class Vault(KMS):
             VaultOperationError exception
 
         """
-        policy = (
-            f'path "{self.vault_backend_path}/*" {{\n'
-            f'  capabilities = ["create", "read", "update","delete"]'
-            f"\n}}\n"
-            f'path "sys/mounts" {{\n'
-            f'capabilities = ["read"]\n'
-            f"}}"
-        )
-        vault_hcl = tempfile.NamedTemporaryFile(mode="w+", prefix="test", delete=False)
-        with open(vault_hcl.name, "w") as hcl:
-            hcl.write(policy)
+        # Check if policy still exists
+        cmd_list_policy = "vault policy list --format=json"
+
+        out = subprocess.check_output(shlex.split(cmd_list_policy))
+        json_out = json.loads(out)
+        if self.vault_policy_name in json_out:
+            # if policy already exists append the secondary cluster backend path to the policy
+            poilcy_data = (
+                f"\n}}\n"
+                f'path "{self.vault_backend_path}/*" {{\n'
+                f'  capabilities = ["create", "read", "update","delete"]'
+            )
+            vault_hcl = tempfile.NamedTemporaryFile(
+                mode="a+", prefix="test", delete=False
+            )
+            logger.info(
+                f"Appending secondary cluster backend path to policy: {self.vault_policy_name}"
+            )
+            with open(vault_hcl.name, "a") as hcl:
+                hcl.write(poilcy_data)
+        else:
+            policy = (
+                f'path "{self.vault_backend_path}/*" {{\n'
+                f'  capabilities = ["create", "read", "update","delete"]'
+                f"\n}}\n"
+                f'path "sys/mounts" {{\n'
+                f'capabilities = ["read"]\n'
+                f"}}"
+            )
+            vault_hcl = tempfile.NamedTemporaryFile(
+                mode="w+", prefix="test", delete=False
+            )
+            with open(vault_hcl.name, "w") as hcl:
+                hcl.write(policy)
 
         if policy_name:
             self.vault_policy_name = policy_name
