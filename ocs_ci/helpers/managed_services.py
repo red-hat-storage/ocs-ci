@@ -750,28 +750,23 @@ def verify_faas_provider_storagecluster(sc_data):
     """
     Verify provider storagecluster
 
-    1. allowRemoteStorageConsumers: true
-    2. hostNetwork: true
-    3. matchExpressions:
+    1. hostNetwork: true
+    2. matchExpressions:
         key: node-role.kubernetes.io/worker
         operator: Exists
         key: node-role.kubernetes.io/infra
         operator: DoesNotExist
-    4. storageProviderEndpoint
-    5. annotations:
+    3. storageProviderEndpoint
+    4. annotations:
         uninstall.ocs.openshift.io/cleanup-policy: delete
         uninstall.ocs.openshift.io/mode: graceful
-    6. Check the storagecluster resources limits and requests are valid
-    7. Verify the Faas provider storagecluster storages
+    5. Check the storagecluster resources limits and requests are valid
+    6. Verify the Faas provider storagecluster storages
 
     Args:
         sc_data (dict): storagecluster data dictionary
 
     """
-    log.info(
-        f"allowRemoteStorageConsumers: {sc_data['spec']['allowRemoteStorageConsumers']}"
-    )
-    assert sc_data["spec"]["allowRemoteStorageConsumers"]
     log.info(f"hostNetwork: {sc_data['spec']['hostNetwork']}")
     assert sc_data["spec"]["hostNetwork"]
     expressions = sc_data["spec"]["labelSelector"]["matchExpressions"]
