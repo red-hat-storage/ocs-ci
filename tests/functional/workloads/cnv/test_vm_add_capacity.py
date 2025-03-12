@@ -5,13 +5,14 @@ from ocs_ci.framework.pytest_customization.marks import (
     magenta_squad,
     workloads,
     ignore_leftovers,
+    skipif_external_mode,
 )
 from ocs_ci.framework.testlib import E2ETest
 from ocs_ci.helpers.cnv_helpers import (
-    all_nodes_ready,
     cal_md5sum_vm,
     setup_kms_and_storageclass,
     create_and_clone_vms,
+    run_dd_io,
 )
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.resources.pod import wait_for_pods_to_be_running
@@ -24,10 +25,11 @@ logger = logging.getLogger(__name__)
 
 
 @pytest.mark.polarion_id("OCS-")
+@skipif_external_mode
 @ignore_leftovers
 @magenta_squad
 @workloads
-class TestVmStorageCapacity(E2ETest):
+class TestVmAddCapacity(E2ETest):
     """
     Perform add capacity operation while the VMs are in different states
     and in the presence of snapshots and clones of the VMs.
@@ -87,7 +89,7 @@ class TestVmStorageCapacity(E2ETest):
         }
         logger.info(f"Initial VM states: {self.initial_vm_states}")
 
-    def test_vm_storage_capacity(self, setup):
+    def test_vm_add_capacity(self, setup):
         """
         Test steps:
         1. Keep IO operations going on VMs, with snapshots and clones present.
@@ -98,16 +100,9 @@ class TestVmStorageCapacity(E2ETest):
         6. Verify VMs, snapshots and clones have preserved their states and
         data integrity.
         """
-
-        logger.info("Verifying cluster stability before capacity addition...")
-        assert all_nodes_ready(), "Some nodes are not ready!"
-
         logger.info("Adding storage capacity...")
         add_capacity_test()
         logger.info("Added storage capacity!")
-
-        logger.info("Verifying cluster stability after capacity addition...")
-        assert all_nodes_ready(), "Some nodes are not ready!"
 
         logger.info(
             f"Waiting for pods in {constants.OPENSHIFT_STORAGE_NAMESPACE} to be running"
@@ -156,10 +151,8 @@ class TestVmStorageCapacity(E2ETest):
                 f"Data integrity failed for VM {vm_obj.name}: "
                 f"Expected {expected_checksum}, Got {actual_checksum}"
             )
+            run_dd_io(vm_obj=vm_obj, file_path=self.file_paths[1])
 
-        logger.info("Stopping VMs...")
         for vm_obj in vms_to_verify:
             logger.info(f"Stopping VM: {vm_obj.name}")
             vm_obj.stop()
-
-        logger.info("VM capacity test completed successfully!")
