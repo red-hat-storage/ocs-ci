@@ -5906,8 +5906,8 @@ def find_cephblockpoolradosnamespace(storageclient_uid=None):
         )
         clients_info = client_obj.get().get("items")
         storageclient_uid = clients_info[0]["metadata"]["uid"]
+        storageclient_name = clients_info[0]["metadata"]["name"]
 
-    storageconsumer = ""
     storageconsumer_obj = ocp.OCP(
         kind=constants.STORAGECONSUMER,
         namespace=config.ENV_DATA["cluster_namespace"],
@@ -5916,11 +5916,14 @@ def find_cephblockpoolradosnamespace(storageclient_uid=None):
         if storageconsumer_dict["status"]["client"]["clientId"] == storageclient_uid:
             storageconsumer = storageconsumer_dict["metadata"]["name"]
             break
+    logger.info(
+        f"StorageClient is {storageclient_name} with uid {storageclient_uid}. StorageConsumer is {storageconsumer}"
+    )
 
     storage_request_obj = ocp.OCP(
         kind="StorageRequest", namespace=config.ENV_DATA["cluster_namespace"]
     )
-    cephbpradosns = ""
+
     for storage_request_dict in storage_request_obj.get()["items"]:
         if (
             storageconsumer
@@ -5958,6 +5961,7 @@ def find_cephfilesystemsubvolumegroup(storageclient_uid=None):
         )
         clients_info = client_obj.get().get("items")
         storageclient_uid = clients_info[0]["metadata"]["uid"]
+        storageclient_name = clients_info[0]["metadata"]["name"]
 
     storageconsumer_obj = ocp.OCP(
         kind=constants.STORAGECONSUMER,
@@ -5967,6 +5971,9 @@ def find_cephfilesystemsubvolumegroup(storageclient_uid=None):
         if storageconsumer_dict["status"]["client"]["clientId"] == storageclient_uid:
             storageconsumer = storageconsumer_dict["metadata"]["name"]
             break
+    logger.info(
+        f"StorageClient is {storageclient_name} with uid {storageclient_uid}. StorageConsumer is {storageconsumer}"
+    )
 
     storage_request_obj = ocp.OCP(
         kind="StorageRequest", namespace=config.ENV_DATA["cluster_namespace"]
