@@ -12,15 +12,11 @@ spec:
   flexibleScaling: true
   hostNetwork: true
   managedResources:
-    cephBlockPools:
-      disableSnapshotClass: true
-      disableStorageClass: true
+    cephBlockPools: {}
     cephCluster: {}
     cephConfig: {}
     cephDashboard: {}
-    cephFilesystems:
-      disableSnapshotClass: true
-      disableStorageClass: true
+    cephFilesystems: {}
     cephNonResilientPools: {}
     cephObjectStoreUsers: {}
     cephObjectStores:
