@@ -9,6 +9,7 @@ from ocs_ci.framework.testlib import (
     polarion_id,
     post_upgrade,
     skipif_managed_service,
+    skipif_mcg_only,
     skipif_hci_provider_and_client,
     skipif_external_mode,
 )
@@ -42,6 +43,7 @@ class TestCrossScCloneSnapRestore(ManageTest):
             pytest.param(*[constants.CEPHFILESYSTEM]),
         ],
     )
+    @skipif_mcg_only
     @polarion_id("OCS-5872")
     @polarion_id("OCS-5873")
     def test_cross_class_same_pool_clone_snap_restore(
@@ -179,6 +181,7 @@ class TestCrossScCloneSnapRestore(ManageTest):
             pytest.param(*[constants.CEPHFILESYSTEM], 2, 3, False),
         ],
     )
+    @skipif_mcg_only
     @polarion_id("OCS-5871")
     @polarion_id("OCS-5874")
     @polarion_id("OCS-5875")
