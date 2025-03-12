@@ -5907,6 +5907,7 @@ def find_cephblockpoolradosnamespace(storageclient_uid=None):
         clients_info = client_obj.get().get("items")
         storageclient_uid = clients_info[0]["metadata"]["uid"]
 
+    storageconsumer = ""
     storageconsumer_obj = ocp.OCP(
         kind=constants.STORAGECONSUMER,
         namespace=config.ENV_DATA["cluster_namespace"],
@@ -5920,7 +5921,6 @@ def find_cephblockpoolradosnamespace(storageclient_uid=None):
         kind="StorageRequest", namespace=config.ENV_DATA["cluster_namespace"]
     )
     cephbpradosns = ""
-
     for storage_request_dict in storage_request_obj.get()["items"]:
         if (
             storageconsumer
