@@ -354,6 +354,9 @@ MACHINE_CONFIG_YAML = os.path.join(
 OCS_STORAGE_CLUSTER_YAML = os.path.join(
     PROVIDER_MODE_OCS_DEPLOYMENT_PATH, "ocs_storagecluster.yaml"
 )
+OCS_STORAGE_CLUSTER_CONVERGED_YAML = os.path.join(
+    PROVIDER_MODE_OCS_DEPLOYMENT_PATH, "ocs_storagecluster_converged.yaml"
+)
 OCS_STORAGE_CLUSTER_UPDATED_YAML = os.path.join(
     PROVIDER_MODE_OCS_DEPLOYMENT_PATH, "ocs_storagecluster_updated.yaml"
 )
