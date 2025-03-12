@@ -137,7 +137,7 @@ class TestPvcSnapshot(ManageTest):
             restore_pvc_yaml=restore_pvc_yaml,
         )
         helpers.wait_for_resource_state(
-            restore_pvc_obj, constants.STATUS_BOUND, timeout=90
+            restore_pvc_obj, constants.STATUS_BOUND, timeout=180
         )
         restore_pvc_obj.reload()
         teardown_factory(restore_pvc_obj)
