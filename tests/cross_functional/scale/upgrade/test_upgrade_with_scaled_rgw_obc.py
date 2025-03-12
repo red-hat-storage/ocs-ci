@@ -9,6 +9,7 @@ from ocs_ci.framework.pytest_customization.marks import (
     pre_upgrade,
     post_upgrade,
     skipif_managed_service,
+    skipif_mcg_only,
     skipif_bm,
     skipif_external_mode,
     vsphere_platform_required,
@@ -41,6 +42,7 @@ obc_scaled_data_file = f"{log_path}/obc_scale_rgw_data_file.yaml"
 @skipif_external_mode
 @skipif_bm
 @skipif_managed_service
+@skipif_mcg_only
 @pytest.mark.polarion_id("OCS-3987")
 def test_scale_obc_rgw_pre_upgrade(tmp_path, mcg_job_factory, timeout=60):
     """
