@@ -59,6 +59,9 @@ class TestVmSingleWorkerNodeFailure(E2ETest):
 
         log.info(f"Total VMs to process: {len(vm_list)}")
 
+        for vm_obj in vm_list:
+            source_csum[vm_obj.name] = run_dd_io(vm_obj=vm_obj, file_path=file_paths[0])
+
         initial_vm_states = {
             vm_obj.name: [vm_obj.printableStatus(), vm_obj.get_vmi_instance().node()]
             for vm_obj in vm_objs_def + vm_objs_aggr
