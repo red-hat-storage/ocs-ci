@@ -36,7 +36,6 @@ log = logging.getLogger(__name__)
 @encryption_at_rest_required
 @skipif_kms_deployment
 @green_squad
-@tier1
 class TestEncryptionKeyrotation:
     @pytest.fixture(autouse=True)
     def teardown(self, request):
@@ -51,6 +50,7 @@ class TestEncryptionKeyrotation:
         request.addfinalizer(finalizer)
 
     @pytest.mark.polarion_id("OCS-5790")
+    @tier1
     def test_osd_keyrotation(self):
         """
         Test to verify the key rotation of the OSD
@@ -172,6 +172,7 @@ class TestEncryptionKeyrotation:
         )
 
     @pytest.mark.polarion_id("OCS-5791")
+    @tier1
     def test_noobaa_keyrotation(self, minutes=3):
         """
         Test to verify the keyrotation for noobaa.
