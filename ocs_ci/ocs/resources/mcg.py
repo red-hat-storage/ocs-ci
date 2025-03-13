@@ -78,96 +78,101 @@ class MCG:
         """
         Constructor for the MCG class
         """
-        self.namespace = config.ENV_DATA["cluster_namespace"]
-        self.operator_pod = Pod(
-            **get_pods_having_label(
-                constants.NOOBAA_OPERATOR_POD_LABEL, self.namespace
-            )[0]
-        )
-        self.core_pod = Pod(
-            **get_pods_having_label(constants.NOOBAA_CORE_POD_LABEL, self.namespace)[0]
-        )
-        wait_for_resource_state(
-            resource=self.operator_pod, state=constants.STATUS_RUNNING, timeout=300
-        )
-
-        if (
-            not os.path.isfile(constants.NOOBAA_OPERATOR_LOCAL_CLI_PATH)
-            or self.get_mcg_cli_version().minor
-            != version.get_semantic_ocs_version_from_config().minor
-        ):
-            logger.info(
-                "The expected MCG CLI binary could not be found,"
-                " downloading the expected version"
+        with config.RunWithProviderConfigContextIfAvailable():
+            self.namespace = config.ENV_DATA["cluster_namespace"]
+            self.operator_pod = Pod(
+                **get_pods_having_label(
+                    constants.NOOBAA_OPERATOR_POD_LABEL, self.namespace
+                )[0]
             )
-            retrieve_cli_binary(cli_type="mcg")
-
-        """
-        The certificate will be copied on each mcg_obj instantiation since
-        the process is so light and quick, that the time required for the redundant
-        copy is neglible in comparison to the time a hash comparison will take.
-        """
-        retrieve_default_ingress_crt()
-
-        get_noobaa = OCP(kind="noobaa", namespace=self.namespace).get()
-
-        self.s3_endpoint = (
-            get_noobaa.get("items")[0]
-            .get("status")
-            .get("services")
-            .get("serviceS3")
-            .get("externalDNS")[0]
-        )
-        self.s3_internal_endpoint = (
-            get_noobaa.get("items")[0]
-            .get("status")
-            .get("services")
-            .get("serviceS3")
-            .get("internalDNS")[0]
-        )
-        self.sts_endpoint = (
-            get_noobaa.get("items")[0]
-            .get("status")
-            .get("services")
-            .get("serviceSts")
-            .get("externalDNS")[0]
-        )
-        self.sts_internal_endpoint = (
-            get_noobaa.get("items")[0]
-            .get("status")
-            .get("services")
-            .get("serviceSts")
-            .get("internalDNS")[0]
-        )
-        self.mgmt_endpoint = (
-            get_noobaa.get("items")[0]
-            .get("status")
-            .get("services")
-            .get("serviceMgmt")
-            .get("externalDNS")[0]
-        ) + "/rpc"
-        self.region = config.ENV_DATA["region"]
-
-        noobaa_cr_services = get_noobaa.get("items")[0].get("status").get("services")
-        self.data_to_mask = flatten_multilevel_dict(noobaa_cr_services)
-
-        self.update_s3_creds()
-
-        if config.ENV_DATA["platform"].lower() == "aws" and kwargs.get(
-            "create_aws_creds"
-        ):
-            (
-                self.cred_req_obj,
-                self.aws_access_key_id,
-                self.aws_access_key,
-            ) = self.request_aws_credentials()
-
-            self.aws_s3_resource = boto3.resource(
-                "s3",
-                endpoint_url="https://s3.amazonaws.com",
-                aws_access_key_id=self.aws_access_key_id,
-                aws_secret_access_key=self.aws_access_key,
+            self.core_pod = Pod(
+                **get_pods_having_label(
+                    constants.NOOBAA_CORE_POD_LABEL, self.namespace
+                )[0]
             )
+            wait_for_resource_state(
+                resource=self.operator_pod, state=constants.STATUS_RUNNING, timeout=300
+            )
+
+            if (
+                not os.path.isfile(constants.NOOBAA_OPERATOR_LOCAL_CLI_PATH)
+                or self.get_mcg_cli_version().minor
+                != version.get_semantic_ocs_version_from_config().minor
+            ):
+                logger.info(
+                    "The expected MCG CLI binary could not be found,"
+                    " downloading the expected version"
+                )
+                retrieve_cli_binary(cli_type="mcg")
+
+            """
+            The certificate will be copied on each mcg_obj instantiation since
+            the process is so light and quick, that the time required for the redundant
+            copy is neglible in comparison to the time a hash comparison will take.
+            """
+            retrieve_default_ingress_crt()
+
+            get_noobaa = OCP(kind="noobaa", namespace=self.namespace).get()
+
+            self.s3_endpoint = (
+                get_noobaa.get("items")[0]
+                .get("status")
+                .get("services")
+                .get("serviceS3")
+                .get("externalDNS")[0]
+            )
+            self.s3_internal_endpoint = (
+                get_noobaa.get("items")[0]
+                .get("status")
+                .get("services")
+                .get("serviceS3")
+                .get("internalDNS")[0]
+            )
+            self.sts_endpoint = (
+                get_noobaa.get("items")[0]
+                .get("status")
+                .get("services")
+                .get("serviceSts")
+                .get("externalDNS")[0]
+            )
+            self.sts_internal_endpoint = (
+                get_noobaa.get("items")[0]
+                .get("status")
+                .get("services")
+                .get("serviceSts")
+                .get("internalDNS")[0]
+            )
+            self.mgmt_endpoint = (
+                get_noobaa.get("items")[0]
+                .get("status")
+                .get("services")
+                .get("serviceMgmt")
+                .get("externalDNS")[0]
+            ) + "/rpc"
+            self.region = config.ENV_DATA["region"]
+
+            noobaa_cr_services = (
+                get_noobaa.get("items")[0].get("status").get("services")
+            )
+            self.data_to_mask = flatten_multilevel_dict(noobaa_cr_services)
+
+            self.update_s3_creds()
+
+            if config.ENV_DATA["platform"].lower() == "aws" and kwargs.get(
+                "create_aws_creds"
+            ):
+                (
+                    self.cred_req_obj,
+                    self.aws_access_key_id,
+                    self.aws_access_key,
+                ) = self.request_aws_credentials()
+
+                self.aws_s3_resource = boto3.resource(
+                    "s3",
+                    endpoint_url="https://s3.amazonaws.com",
+                    aws_access_key_id=self.aws_access_key_id,
+                    aws_secret_access_key=self.aws_access_key,
+                )
 
     def retrieve_nb_token(self, timeout=300, sleep=30):
         """
