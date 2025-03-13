@@ -586,7 +586,7 @@ class Vault(KMS):
             '   capabilities = ["create", "read", "update","delete"]'
             f"\n}}\n"
         )
-        policy_sys_mount = 'path "sys/mounts" {{\n   capabilities = ["read"]\n}}'
+        policy_sys_mount = 'path "sys/mounts" {\n   capabilities = ["read"]\n}'
         if existing_policy_data is None:
             policy = policy_backend_path + policy_sys_mount
         else:
