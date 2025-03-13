@@ -24,7 +24,7 @@ from tests.functional.z_cluster.cluster_expansion.test_add_capacity import (
 logger = logging.getLogger(__name__)
 
 
-@pytest.mark.polarion_id("OCS-")
+@pytest.mark.polarion_id("OCS-6395")
 @skipif_external_mode
 @ignore_leftovers
 @magenta_squad
