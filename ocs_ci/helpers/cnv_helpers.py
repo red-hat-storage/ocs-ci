@@ -6,6 +6,7 @@ import os
 import base64
 import logging
 import re
+import time
 
 from ocs_ci.helpers.helpers import create_unique_resource_name, create_resource
 from ocs_ci.ocs import constants
@@ -478,3 +479,58 @@ def expand_pvc_and_verify(vm_obj, new_size):
         )
     logger.info(f"PVC expansion successful for VM {vm_obj.name}.")
     return True
+def get_vm_distro(vm_obj):
+    """
+    Fetch the Virtual Machine's OS distribution running in OpenShift Virtualization (CNV).
+
+    Args:
+        vm_name (str): Name of the VM.
+
+    Returns:
+        output of command
+    """
+    DISTROS = {"fedora": "dnf", "Debian": "apt-get", "RHEL": "yum", "Alpine": "apk"}
+
+    # Extract OS from labels if available
+    os_distro = vm_obj.vmi_obj.get().get("status").get("guestOSInfo").get("id")
+
+    pkg_mgr = DISTROS[os_distro]
+
+    if os_distro == "Debian":
+        cmd = f"{pkg_mgr} update"
+        vm_obj.run_ssh_cmd(cmd)
+        logger.info("Sleep 5 seconds after update to make sure the lock is released")
+        time.sleep(5)
+
+    cmd = f"{pkg_mgr} -y install fio"
+    return vm_obj.run_ssh_cmd(cmd)
+
+
+def run_fio(vm_obj, file_path):
+    """
+    Runs continuous I/O using fio on the OpenShift Virtualization VM.
+
+    Args:
+        vm_obj (obj): The virtual machine object.
+        file_path (str): The full path of the file to write on
+
+    Raises:
+        Raises exception
+
+    """
+
+    get_vm_distro(vm_obj)
+    try:
+        # FIO command for continuous I/O
+        fio_command = (
+            "nohup fio --name=continuous_io --rw=randwrite --bs=4k --size=5G --numjobs=2 "
+            f"--runtime=0 --ioengine=libaio --iodepth=32 --direct=1 --filename={file_path} > fio_output.log 2>&1 &"
+        )
+
+        logger.info(f" Running FIO on VM: {vm_obj.name}")
+        vm_obj.run_ssh_cmd(fio_command)
+
+        logger.info("FIO execution started successfully!")
+
+    except Exception as e:
+        logger.error(f" Error: {e}")
