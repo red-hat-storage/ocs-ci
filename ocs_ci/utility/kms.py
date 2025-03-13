@@ -566,7 +566,11 @@ class Vault(KMS):
         existing_policy_data = None
         read_policy_cmd = f"vault policy read {self.vault_policy_name}"
         try:
-            existing_policy_data = subprocess.check_output(shlex.split(read_policy_cmd))
+            existing_policy_data = subprocess.check_output(
+                shlex.split(read_policy_cmd)
+            ).decode(
+                "utf-8"
+            )  # converting byte output to string.
             logger.info(f"Existing policy found!:\n{existing_policy_data}")
         except Exception:
             logger.info("No existing policy found!")
