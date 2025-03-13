@@ -252,6 +252,7 @@ class TestEncryptionKeyrotation:
         log.info("Changing the keyrotation value to default.")
         noobaa_keyrotation.set_keyrotation_schedule("@weekly")
 
+    @pytest.mark.polarion_id("OCS-5963")
     def test_bucket_checksum_with_noobaa_keyrotation(
         self, mcg_obj_session, awscli_pod_session, bucket_factory, test_directory_setup
     ):
