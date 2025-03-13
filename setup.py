@@ -29,7 +29,7 @@ setup(
         "boto3==1.24.96",
         "munch==2.5.0",
         "pytest-progress==1.2.5",
-        "pytest==6.2.5",
+        "pytest==8.3.3",
         "pytest-logger==0.5.1",
         "pytest-html==3.1.1",
         "pytest-metadata==1.11.0",
