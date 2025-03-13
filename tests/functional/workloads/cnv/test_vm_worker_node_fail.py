@@ -60,7 +60,9 @@ class TestVmSingleWorkerNodeFailure(E2ETest):
         log.info(f"Total VMs to process: {len(vm_list)}")
 
         for vm_obj in vm_list:
-            source_csum[vm_obj.name] = run_dd_io(vm_obj=vm_obj, file_path=file_paths[0])
+            source_csum[vm_obj.name] = run_dd_io(
+                vm_obj=vm_obj, file_path=file_paths[0], verify=True
+            )
 
         initial_vm_states = {
             vm_obj.name: [vm_obj.printableStatus(), vm_obj.get_vmi_instance().node()]
@@ -131,17 +133,6 @@ class TestVmSingleWorkerNodeFailure(E2ETest):
             result=True
         ), f"Not all pods are running in {cnv_namespace} after node failure and recovery"
 
-        for vm_obj in vm_list:
-            vm_obj.wait_for_ssh_connectivity()
-            new_csum[vm_obj.name] = cal_md5sum_vm(
-                vm_obj=vm_obj, file_path=file_paths[0]
-            )
-            assert source_csum[vm_obj.name] == new_csum[vm_obj.name], (
-                f"Failed: MD5 comparison failed in VM {vm_obj.name} before "
-                "and after worker node failure"
-            )
-            run_dd_io(vm_obj=vm_obj, file_path=file_paths[1])
-
         final_vm_states = {
             vm_obj.name: [vm_obj.printableStatus(), vm_obj.get_vmi_instance().node()]
             for vm_obj in vm_objs_def + vm_objs_aggr
@@ -158,3 +149,15 @@ class TestVmSingleWorkerNodeFailure(E2ETest):
                     f"VM {vm_name}: Rescheduling failed. Initially, VM is scheduled"
                     f" on node {node_name}, still on the same node"
                 )
+
+        for vm_obj in vm_list:
+            vm_obj.wait_for_ssh_connectivity()
+            new_csum[vm_obj.name] = cal_md5sum_vm(
+                vm_obj=vm_obj, file_path=file_paths[0]
+            )
+            assert source_csum[vm_obj.name] == new_csum[vm_obj.name], (
+                f"Failed: MD5 comparison failed in VM {vm_obj.name} before "
+                f"{source_csum[vm_obj.name]}"
+                f"and after {new_csum[vm_obj.name]} worker node failure"
+            )
+            run_dd_io(vm_obj=vm_obj, file_path=file_paths[1])
