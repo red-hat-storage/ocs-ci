@@ -3,13 +3,12 @@ import random
 
 import pytest
 
-from ocs_ci.framework import config
 from ocs_ci.framework.pytest_customization.marks import (
     magenta_squad,
     workloads,
-    ignore_leftovers,
 )
 from ocs_ci.framework.testlib import E2ETest
+from ocs_ci.helpers.cnv_helpers import run_dd_io, cal_md5sum_vm
 from ocs_ci.ocs import constants, node
 from ocs_ci.ocs.resources import pod
 from ocs_ci.ocs.resources.pod import wait_for_pods_to_be_running
@@ -21,29 +20,27 @@ log = logging.getLogger(__name__)
 
 @magenta_squad
 @workloads
-@ignore_leftovers
-@pytest.mark.polarion_id("OCS-")
-class TestVmWorkerNodeResiliency(E2ETest):
+@pytest.mark.polarion_id("OCS-6396")
+class TestVmSingleWorkerNodeFailure(E2ETest):
     """
     Test case for ensuring that both OpenShift Virtualization
     and ODF can recover from a worker node failure that hosts critical pods
     (such as OpenShift Virtualization VMs, OSD pods, or mon pods)
     """
 
-    short_nw_fail_time = 300
-
-    def test_vm_worker_node_failure(
+    def test_vm_single_worker_node_failure(
         self, setup_cnv, nodes, project_factory, multi_cnv_workload
     ):
         """
-        Test case to ensure that both OpenShift Virtualization and ODF
-        can recover from a worker node failure that
-        hosts critical pods (such as OpenShift Virtualization VMs,
-        OSD pods, or mon pods)
+        Test Steps:
+
         """
 
         odf_namespace = constants.OPENSHIFT_STORAGE_NAMESPACE
         cnv_namespace = constants.CNV_NAMESPACE
+        file_paths = ["/source_file.txt", "/new_file.txt"]
+        source_csum = {}
+        new_csum = {}
 
         proj_obj = project_factory()
         vm_objs_def, vm_objs_aggr, sc_objs_def, sc_objs_aggr = multi_cnv_workload(
@@ -59,27 +56,10 @@ class TestVmWorkerNodeResiliency(E2ETest):
         }
         log.info(f"Initial VM states: {initial_vm_states}")
 
-        sample = TimeoutSampler(
-            timeout=600,
-            sleep=10,
-            func=wait_for_pods_to_be_running,
-            namespace=odf_namespace,
-        )
-        assert sample.wait_for_func_status(
-            result=True
-        ), f"Not all pods are running in {odf_namespace} before node failure"
-
-        sample = TimeoutSampler(
-            timeout=600,
-            sleep=10,
-            func=wait_for_pods_to_be_running,
-            namespace=cnv_namespace,
-        )
-        assert sample.wait_for_func_status(
-            result=True
-        ), f"Not all pods are running in {cnv_namespace} before node failure"
-
-        ceph_health_check(tries=80)
+        for vm_obj in vm_list:
+            source_csum[vm_obj.name] = run_dd_io(
+                vm_obj=vm_obj, file_path=file_paths[0], verify=True
+            )
 
         worker_nodes = node.get_osd_running_nodes()
         node_name = random.sample(worker_nodes, 1)
@@ -87,10 +67,7 @@ class TestVmWorkerNodeResiliency(E2ETest):
 
         log.info(f"Attempting to restart node: {node_name}")
         node_obj = node.get_node_objs([node_name])
-        if config.ENV_DATA["platform"].lower() == constants.GCP_PLATFORM:
-            nodes.restart_nodes_by_stop_and_start(node_obj, force=False)
-        else:
-            nodes.restart_nodes_by_stop_and_start(node_obj)
+        nodes.restart_nodes_by_stop_and_start(node_obj)
 
         log.info(f"Waiting for node {node_name} to return to Ready state")
         try:
@@ -107,7 +84,6 @@ class TestVmWorkerNodeResiliency(E2ETest):
             log.error(
                 f"Pods did not return to running state, attempting node restart: {e}"
             )
-            nodes.restart_nodes(node.get_node_objs([node_name]))
 
         ceph_health_check(tries=80)
 
@@ -149,4 +125,12 @@ class TestVmWorkerNodeResiliency(E2ETest):
                     f" on node {node_name}, still on the same node"
                 )
 
-        ceph_health_check(tries=80)
+        for vm_obj in vm_list:
+            new_csum[vm_obj.name] = cal_md5sum_vm(
+                vm_obj=vm_obj, file_path=file_paths[0]
+            )
+            assert source_csum[vm_obj.name] == new_csum[vm_obj.name], (
+                f"Failed: MD5 comparison failed in VM {vm_obj.name} before "
+                "and after worker node failure"
+            )
+            run_dd_io(vm_obj=vm_obj, file_path=file_paths[1])
