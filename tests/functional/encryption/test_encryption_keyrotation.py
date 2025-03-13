@@ -4,6 +4,7 @@ import json
 
 from ocs_ci.framework.pytest_customization.marks import (
     tier1,
+    tier2,
     green_squad,
     encryption_at_rest_required,
     skipif_kms_deployment,
@@ -253,8 +254,9 @@ class TestEncryptionKeyrotation:
         noobaa_keyrotation.set_keyrotation_schedule("@weekly")
 
     @pytest.mark.polarion_id("OCS-5963")
+    @tier2
     def test_bucket_checksum_with_noobaa_keyrotation(
-        self, mcg_obj_session, awscli_pod_session, bucket_factory, test_directory_setup
+        self, mcg_obj, awscli_pod, bucket_factory, test_directory_setup
     ):
         """
         Test to verify the keyrotation for noobaa.
@@ -276,38 +278,38 @@ class TestEncryptionKeyrotation:
         full_object_path = f"s3://{bucketname}"
 
         write_random_test_objects_to_bucket(
-            awscli_pod_session,
+            awscli_pod,
             bucketname,
             data_dir,
-            mcg_obj=mcg_obj_session,
+            mcg_obj=mcg_obj,
             pattern="obj-",
         )
         # object before key rotation to be placed in seperate dir
-        awscli_pod_session.exec_cmd_on_pod("mkdir before_keyrotation_dir")
+        awscli_pod.exec_cmd_on_pod("mkdir before_keyrotation_dir")
         sync_object_directory(
-            awscli_pod_session,
+            awscli_pod,
             full_object_path,
             "before_keyrotation_dir",
-            mcg_obj_session,
+            mcg_obj,
         )
 
         # do noobaa keyrotation for 5 minutes
         self.test_noobaa_keyrotation(minutes=5)
 
         # object after key rotation to be placed in seperate dir
-        awscli_pod_session.exec_cmd_on_pod("mkdir after_keyrotation_dir")
+        awscli_pod.exec_cmd_on_pod("mkdir after_keyrotation_dir")
         sync_object_directory(
-            awscli_pod_session,
+            awscli_pod,
             full_object_path,
             "after_keyrotation_dir",
-            mcg_obj_session,
+            mcg_obj,
         )
 
         # checking checksum of objects before and after keyrotation
         verify_s3_object_integrity(
             original_object_path="before_keyrotation_dir/obj-0",
             result_object_path="after_keyrotation_dir/obj-0",
-            awscli_pod=awscli_pod_session,
+            awscli_pod=awscli_pod,
         ),
 
 
