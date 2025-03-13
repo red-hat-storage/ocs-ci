@@ -22,6 +22,7 @@ from ocs_ci.framework.testlib import (
     skipif_ocs_version,
     skipif_disconnected_cluster,
     tier1,
+    tier2,
     skipif_ui_not_support,
     ui,
 )
@@ -417,11 +418,11 @@ class TestObcUserInterface(object):
         assert test_obc.check_resource_existence(should_exist=False)
 
 
-@tier1
+@ui
 @black_squad
 @tier1
-@pytest.mark.polarion_id("OCS-6334")
 class TestBucketCreate:
+    @pytest.mark.polarion_id("OCS-6334")
     def test_bucket_create(self, setup_ui_class_factory):
         """
         Test bucket creation functionality in UI.
@@ -443,6 +444,7 @@ class TestBucketCreate:
             bucket_ui.create_folder_in_bucket()
         ), "Failed to create and upload folder in bucket"
 
+    @pytest.mark.polarion_id("OCS-6397")
     def test_empty_bucket_delete(self, setup_ui_class_factory):
         """
         Test bucket deletion functionality in UI.
@@ -492,6 +494,7 @@ class TestBucketCreate:
         ), f"Bucket {bucket_to_delete} was not deleted successfully"
         logger.info(f"Successfully deleted bucket: {bucket_to_delete}")
 
+    @pytest.mark.polarion_id("OCS-6398")
     def test_bucket_list_comparison(self, setup_ui_class_factory, mcg_obj):
         """
         Test that the bucket list from UI matches the bucket list from CLI.
@@ -554,6 +557,10 @@ class TestBucketCreate:
             cli_buckets
         ), f"UI bucket count ({len(all_ui_buckets)}) does not match CLI bucket count ({len(cli_buckets)})"
 
+    @ui
+    @tier2
+    @black_squad
+    @pytest.mark.polarion_id("OCS-6399")
     def test_bucket_pagination(self, setup_ui_class_factory, mcg_obj):
         """
         Test bucket pagination functionality in UI.
