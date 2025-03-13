@@ -161,3 +161,4 @@ class TestVmSingleWorkerNodeFailure(E2ETest):
                 f"and after {new_csum[vm_obj.name]} worker node failure"
             )
             run_dd_io(vm_obj=vm_obj, file_path=file_paths[1])
+            vm_obj.stop()
