@@ -7,6 +7,7 @@ import logging
 from ocs_ci.framework import config
 from ocs_ci.ocs import constants, ocp
 from ocs_ci.ocs.resources.ocs import OCS
+from ocs_ci.ocs.version import if_version
 from ocs_ci.utility.utils import exec_cmd
 
 log = logging.getLogger(__name__)
@@ -19,13 +20,13 @@ class StorageConsumer:
 
     def __init__(self, consumer_name, consumer_context=None):
         """
-        This CR has optional fields:
+        Starting from ODF 4.19 (Converged) this CR has optional Spec fields:
         StorageQuotaInGiB          int
         StorageClasses             []
         VolumeSnapshotClasses      []
         VolumeGroupSnapshotClasses []
 
-        and optional  Status fields:
+        Starting from ODF 4.19 (Converged) this CR has optional Status fields:
         Client                ClientStatus
         RadosNamespace        RadosNamespaceStatus
         CephFsSubVolumeGroup  SubVolumeGroupStatus
@@ -133,6 +134,7 @@ class StorageConsumer:
             ][0]
         return cronjob
 
+    @if_version(">4.18")
     def get_client_status(self):
         """
         Get client status from storageconsumer resource and apply patch.
@@ -144,6 +146,7 @@ class StorageConsumer:
         with config.RunWithConfigContext(self.consumer_context):
             return self.ocp.get(resource_name=self.name).get("status").get("client")
 
+    @if_version(">4.18")
     def get_rados_namespace_status(self):
         """
         Get rados namespace status from storageconsumer resource and apply patch.
@@ -159,6 +162,7 @@ class StorageConsumer:
                 .get("radosNamespace")
             )
 
+    @if_version(">4.18")
     def get_cephfs_subvolume_group_status(self):
         """
         Get cephfs subvolume group status from storageconsumer resource and apply patch.
@@ -174,6 +178,7 @@ class StorageConsumer:
                 .get("cephFsSubVolumeGroup")
             )
 
+    @if_version(">4.18")
     def get_ceph_csi_client_profiles(self):
         """
         Get ceph csi client profiles from storageconsumer resource and apply patch.
@@ -204,6 +209,7 @@ class StorageConsumer:
                 .get("storageQuotaInGiB")
             )
 
+    @if_version(">4.18")
     def get_storage_classes(self):
         """
         Get storage classes from storageconsumer resource and apply patch.
@@ -229,6 +235,7 @@ class StorageConsumer:
             patch_param = f'{{"spec": {{"storageQuotaInGiB": {quota}}}}}'
             self.ocp.patch(resource_name=self.name, params=patch_param)
 
+    @if_version(">4.18")
     def add_custom_storage_class(self, storage_class):
         """
         Add storage class to storageconsumer resource and apply patch.
@@ -241,6 +248,7 @@ class StorageConsumer:
             patch_param = f'{{"spec": {{"storageClasses": ["{storage_class}"]}}}}'
             self.ocp.patch(resource_name=self.name, params=patch_param)
 
+    @if_version(">4.18")
     def remove_custom_storage_class(self, storage_class):
         """
         Remove storage class from storageconsumer resource and apply patch.
@@ -260,6 +268,7 @@ class StorageConsumer:
                 )
                 self.ocp.patch(resource_name=self.name, params=patch_param)
 
+    @if_version(">4.18")
     def add_custom_volume_snapshot_class(self, snapshot_class):
         """
         Add volume snapshot class to storageconsumer resource and apply patch.
@@ -274,6 +283,7 @@ class StorageConsumer:
             )
             self.ocp.patch(resource_name=self.name, params=patch_param)
 
+    @if_version(">4.18")
     def remove_custom_volume_snapshot_class(self, snapshot_class):
         """
         Remove volume snapshot class from storageconsumer resource and apply patch.
@@ -293,6 +303,7 @@ class StorageConsumer:
                 patch_param = f'{{"spec": {{"volumeSnapshotClasses": {current_snapshot_classes}}}}}'
                 self.ocp.patch(resource_name=self.name, params=patch_param)
 
+    @if_version(">4.18")
     def add_custom_volume_group_snapshot_class(self, group_snapshot_class):
         """
         Add volume group snapshot class to storageconsumer resource  and apply patch.
@@ -305,6 +316,7 @@ class StorageConsumer:
             patch_param = f'{{"spec": {{"volumeGroupSnapshotClasses": ["{group_snapshot_class}"]}}}}'
             self.ocp.patch(resource_name=self.name, params=patch_param)
 
+    @if_version(">4.18")
     def remove_custom_volume_group_snapshot_class(self, group_snapshot_class):
         """
         Remove volume group snapshot class from storageconsumer resource and apply patch.
