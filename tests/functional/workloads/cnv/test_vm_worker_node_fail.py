@@ -1,6 +1,4 @@
 import logging
-import random
-
 import pytest
 
 from ocs_ci.framework.pytest_customization.marks import (
@@ -32,15 +30,26 @@ class TestVmSingleWorkerNodeFailure(E2ETest):
         self, setup_cnv, nodes, project_factory, multi_cnv_workload
     ):
         """
+        This test performs a worker node failure and verifies that
+        VMs are rescheduled and data integrity is maintained.
+
         Test Steps:
-
+            1. Deploy multiple VMs.
+            2. Identify the worker node hosting the most VMs.
+            3. Simulate node failure by restarting it.
+            4. Verify node and pod recovery.
+            5. Verify ODF and CNV health.
+            6. Verify VM state and successful rescheduling.
+            7. Verify data integrity using MD5 checksums.
+            8. Run I/O test on recovered VMs.
         """
-
         odf_namespace = constants.OPENSHIFT_STORAGE_NAMESPACE
         cnv_namespace = constants.CNV_NAMESPACE
         file_paths = ["/source_file.txt", "/new_file.txt"]
+
         source_csum = {}
         new_csum = {}
+        node_vm_count = {}
 
         proj_obj = project_factory()
         vm_objs_def, vm_objs_aggr, sc_objs_def, sc_objs_aggr = multi_cnv_workload(
@@ -54,16 +63,27 @@ class TestVmSingleWorkerNodeFailure(E2ETest):
             vm_obj.name: [vm_obj.printableStatus(), vm_obj.get_vmi_instance().node()]
             for vm_obj in vm_objs_def + vm_objs_aggr
         }
-        log.info(f"Initial VM states: {initial_vm_states}")
+        worker_nodes = node.get_worker_nodes()
 
-        for vm_obj in vm_list:
-            source_csum[vm_obj.name] = run_dd_io(
-                vm_obj=vm_obj, file_path=file_paths[0], verify=True
+        for vm_name, (vm_status, worker_node) in initial_vm_states.items():
+            if worker_node in node_vm_count:
+                node_vm_count[worker_node] += 1
+            else:
+                node_vm_count[worker_node] = 1
+
+        valid_node_vm_count = {
+            k: v for k, v in node_vm_count.items() if k in worker_nodes
+        }
+
+        if valid_node_vm_count:
+            max_vm_node = max(valid_node_vm_count, key=valid_node_vm_count.get)
+            log.info(
+                f"Node with the maximum number of VMs: {max_vm_node} with {valid_node_vm_count[max_vm_node]} VMs"
             )
-
-        worker_nodes = node.get_osd_running_nodes()
-        node_name = random.sample(worker_nodes, 1)
-        node_name = node_name[0]
+            node_name = max_vm_node
+        else:
+            log.error("No valid worker nodes found in node_vm_count.")
+            node_name = None
 
         log.info(f"Attempting to restart node: {node_name}")
         node_obj = node.get_node_objs([node_name])
