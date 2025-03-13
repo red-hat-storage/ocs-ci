@@ -122,7 +122,7 @@ class BucketNotificationsManager:
 
         # Label the PVC and PV to tolerate as leftovers after the test
         pvc_name = provided_notifs_pvc or constants.DEFAULT_MCG_BUCKET_NOTIFS_PVC
-        pvc_ocp_obj = pvc_ocp_obj = OCP(
+        pvc_ocp_obj = OCP(
             namespace=self.namespace,
             kind="pvc",
             resource_name=pvc_name,
