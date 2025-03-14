@@ -6,7 +6,12 @@ from ocs_ci.framework.pytest_customization.marks import (
     skipif_ocs_version,
     bugzilla,
 )
-from ocs_ci.framework.testlib import E2ETest, tier2, skipif_external_mode
+from ocs_ci.framework.testlib import (
+    E2ETest,
+    tier2,
+    skipif_external_mode,
+    cloud_platform_required,
+)
 from ocs_ci.helpers.e2e_helpers import run_metadata_io_with_cephfs
 from ocs_ci.ocs import cluster
 from ocs_ci.ocs.resources.pod import get_pod_logs
@@ -20,6 +25,7 @@ log = logging.getLogger(__name__)
 @brown_squad
 @skipif_ocs_version("<4.15")
 @skipif_external_mode
+@cloud_platform_required
 class TestMdsCacheTrimStandby(E2ETest):
     @pytest.fixture(scope="function", autouse=True)
     def teardown(self, request):
