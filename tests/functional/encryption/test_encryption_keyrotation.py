@@ -243,7 +243,7 @@ class TestEncryptionKeyrotation:
         ), f"Keyrotation schedule is not set to every {minutes} minutes in Noobaa object."
 
         try:
-            self.compare_old_keys_with_new_keys(
+            self.compare_noobaa_old_keys_with_new_keys(
                 noobaa_keyrotation, old_noobaa_backend_key, old_noobaa_volume_key
             )
         except UnexpectedBehaviour:
