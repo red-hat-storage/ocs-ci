@@ -262,7 +262,7 @@ def update_uefi_boot_order(
         first_option_string (str): String identifying the boot option which should be set to first place
         ocp_node (str): OCP Node name used to access the server via oc debug command
         host (dict): configuration of the server to make ssh connection or None
-                the dict could contain following keys: host, user and private_key or password
+            the dict could contain following keys: host, user and private_key or password
         ignore_error (bool): If True, do not raise an exception if the command fails for some reason.
 
     Raises:
