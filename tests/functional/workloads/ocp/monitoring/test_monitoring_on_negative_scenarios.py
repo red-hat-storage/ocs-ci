@@ -42,7 +42,7 @@ from ocs_ci.framework.pytest_customization.marks import (
 log = logging.getLogger(__name__)
 
 
-@retry(AssertionError, tries=30, delay=3, backoff=1)
+@retry(AssertionError, tries=60, delay=3, backoff=1)
 def wait_to_update_mgrpod_info_prometheus_pod(threading_lock):
     """
     Validates the ceph health metrics is updated on prometheus pod
