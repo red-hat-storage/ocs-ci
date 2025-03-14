@@ -10,6 +10,7 @@ from ocs_ci.framework.testlib import (
     MCGTest,
     skipif_disconnected_cluster,
     skipif_proxy_cluster,
+    skipif_kms_deployment,
     tier2,
 )
 from ocs_ci.ocs import constants
@@ -183,6 +184,7 @@ class TestObjOwnerMD(MCGTest):
                         "namespacestore_dict": {"ibmcos": [(1, None)]},
                     },
                 },
+                marks=[skipif_kms_deployment],
             ),
         ],
         ids=[
