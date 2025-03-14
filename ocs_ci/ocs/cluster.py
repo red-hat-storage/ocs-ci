@@ -305,10 +305,10 @@ class CephCluster(object):
         # TODO: add an attribute in CephHealthException, called "reason"
         # which should tell because of which exact cluster entity health
         # is not ok ?
+        self.scan_cluster()
+
         expected_mon_count = self.mon_count
         expected_mds_count = self.mds_count
-
-        self.scan_cluster()
 
         if config.ENV_DATA[
             "platform"
