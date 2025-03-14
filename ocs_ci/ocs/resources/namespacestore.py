@@ -233,7 +233,7 @@ def cli_create_namespacestore(
         ),
         constants.RGW_PLATFORM: lambda: (
             f"s3-compatible {nss_name} "
-            f"--endpoint {get_attr_chain(cld_mgr, 'rgw_client.endpoint')} "
+            f"--endpoint {get_attr_chain(cld_mgr, 'rgw_client.s3_internal_endpoint')} "
             f"--access-key {get_attr_chain(cld_mgr, 'rgw_client.access_key')} "
             f"--secret-key {get_attr_chain(cld_mgr, 'rgw_client.secret_key')} "
             f"--target-bucket {uls_name}"
@@ -327,7 +327,7 @@ def oc_create_namespacestore(
             "type": "s3-compatible",
             "s3Compatible": {
                 "targetBucket": uls_name,
-                "endpoint": get_attr_chain(cld_mgr, "rgw_client.endpoint"),
+                "endpoint": get_attr_chain(cld_mgr, "rgw_client.s3_internal_endpoint"),
                 "signatureVersion": "v2",
                 "secret": {
                     "name": get_attr_chain(cld_mgr, "rgw_client.secret.name"),
