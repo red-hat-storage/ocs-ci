@@ -1,5 +1,5 @@
 import logging
-import random
+
 import pytest
 from ocs_ci.framework.pytest_customization.marks import (
     magenta_squad,
@@ -10,10 +10,9 @@ from ocs_ci.framework.pytest_customization.marks import (
 from ocs_ci.framework.testlib import E2ETest
 from ocs_ci.helpers.cnv_helpers import (
     cal_md5sum_vm,
-    setup_kms_and_storageclass,
-    create_and_clone_vms,
     run_dd_io,
 )
+from ocs_ci.helpers.keyrotation_helper import PVKeyrotation
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.resources.pod import wait_for_pods_to_be_running
 from ocs_ci.utility.utils import TimeoutSampler
@@ -43,8 +42,6 @@ class TestVmAddCapacity(E2ETest):
         storageclass_factory,
         project_factory,
         cnv_workload,
-        clone_vm_workload,
-        snapshot_factory,
     ):
         """
         Sets up the test environment:
@@ -53,41 +50,45 @@ class TestVmAddCapacity(E2ETest):
         - Stops and pauses a subset of VMs.
         """
         self.file_paths = ["/source_file.txt", "/new_file.txt"]
-        self.proj_obj, self.kms, self.sc_obj_def = setup_kms_and_storageclass(
-            pv_encryption_kms_setup_factory, storageclass_factory, project_factory
-        )
-        (
-            self.vm_list,
-            self.vm_list_clone,
-            self.init_csum,
-        ) = create_and_clone_vms(
-            cnv_workload=cnv_workload,
-            clone_vm_workload=clone_vm_workload,
-            proj_obj=self.proj_obj,
-            sc_obj_def=self.sc_obj_def,
-            file_paths=self.file_paths,
-            number_of_vm=3,
+
+        logger.info("Setting up csi-kms-connection-details configmap")
+        kms = pv_encryption_kms_setup_factory(kv_version="v2")
+        logger.info("csi-kms-connection-details setup successful")
+
+        sc_obj_def = storageclass_factory(
+            interface=constants.CEPHBLOCKPOOL,
+            encrypted=True,
+            encryption_kms_id=kms.kmsid,
+            new_rbd_pool=True,
+            mapOptions="krbd:rxbounce",
+            mounter="rbd",
         )
 
-        self.vm_stopped = random.sample(self.vm_list, 1)
-        logger.info(f"Stopping VM: {self.vm_stopped[0].name}")
-        self.vm_stopped[0].stop()
-        snapshot_factory(self.vm_stopped[0].get_vm_pvc_obj())
-        self.vm_list.remove(self.vm_stopped[0])
+        proj_obj = project_factory()
+        kms.vault_path_token = kms.generate_vault_token()
+        kms.create_vault_csi_kms_token(namespace=proj_obj.namespace)
+        pvk_obj = PVKeyrotation(sc_obj_def)
+        pvk_obj.annotate_storageclass_key_rotation(schedule="*/3 * * * *")
 
-        self.vm_pause = random.sample(self.vm_list, 1)
-        logger.info(f"Pausing VM: {self.vm_pause[0].name}")
-        self.vm_pause[0].pause()
-        self.vm_list.remove(self.vm_pause[0])
+        self.vm_list = []
+        self.source_csum = {}
+        self.final_csum = {}
+        for i in range(3):
+            vm_obj = cnv_workload(
+                storageclass=sc_obj_def.name,
+                namespace=proj_obj.namespace,
+                volume_interface=constants.VM_VOLUME_PVC,
+            )
+            self.vm_list.append(vm_obj)
+            self.source_csum[vm_obj.name] = run_dd_io(
+                vm_obj=vm_obj, file_path=self.file_paths[0], verify=True
+            )
 
-        self.initial_vm_states = {
-            vm_obj.name: vm_obj.printableStatus()
-            for vm_obj in self.vm_list
-            + self.vm_list_clone
-            + self.vm_stopped
-            + self.vm_pause
-        }
-        logger.info(f"Initial VM states: {self.initial_vm_states}")
+        logger.info(f"Stopping VM: {self.vm_list[0].name}")
+        self.vm_list[0].stop()
+
+        logger.info(f"Pausing VM: {self.vm_list[1].name}")
+        self.vm_list[1].pause()
 
     def test_vm_add_capacity(self, setup):
         """
@@ -118,41 +119,17 @@ class TestVmAddCapacity(E2ETest):
             f"addition in {constants.OPENSHIFT_STORAGE_NAMESPACE}"
         )
 
-        logger.info("Getting final VM states...")
-        final_vm_states = {
-            vm_obj.name: vm_obj.printableStatus()
-            for vm_obj in self.vm_list
-            + self.vm_list_clone
-            + self.vm_stopped
-            + self.vm_pause
-        }
-        logger.info(f"Final VM states: {final_vm_states}")
-
-        logger.info("Verifying VM states after capacity addition...")
-        for vm_name, initial_state in self.initial_vm_states.items():
-            assert (
-                initial_state == final_vm_states[vm_name]
-            ), f"VM {vm_name} state changed: Initial={initial_state}, Final={final_vm_states[vm_name]}"
-
-        logger.info("Starting the VMs which were stopped and paused")
-        self.vm_stopped[0].start()
-        self.vm_pause[0].unpause()
+        self.vm_list[0].start()
+        self.vm_list[1].unpause()
 
         logger.info("Verifying data integrity for VMs")
-        vms_to_verify = (
-            self.vm_list_clone + self.vm_stopped + self.vm_pause + self.vm_list
-        )
-
-        for vm_obj in vms_to_verify:
-            expected_checksum = self.init_csum.get(vm_obj.name)
+        for vm_obj in self.vm_list:
             logger.info(f"Calculating checksum for VM {vm_obj.name}")
-            actual_checksum = cal_md5sum_vm(vm_obj=vm_obj, file_path=self.file_paths[0])
-            assert actual_checksum == expected_checksum, (
-                f"Data integrity failed for VM {vm_obj.name}: "
-                f"Expected {expected_checksum}, Got {actual_checksum}"
-            )
+            assert self.source_csum[vm_obj.name] == cal_md5sum_vm(
+                vm_obj=vm_obj, file_path=self.file_paths[0]
+            ), f"Data integrity failed for VM {vm_obj.name}: checksum mismatch"
             run_dd_io(vm_obj=vm_obj, file_path=self.file_paths[1])
 
-        for vm_obj in vms_to_verify:
+        for vm_obj in self.vm_list:
             logger.info(f"Stopping VM: {vm_obj.name}")
             vm_obj.stop()

@@ -2,14 +2,12 @@
 Helper functions specific for CNV
 """
 
-import concurrent.futures
 import os
 import base64
 import logging
 import re
 
 from ocs_ci.helpers.helpers import create_unique_resource_name, create_resource
-from ocs_ci.helpers.keyrotation_helper import PVKeyrotation
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.exceptions import CommandFailed
 from ocs_ci.ocs.ocp import OCP
@@ -442,97 +440,3 @@ def verify_hotplug(vm_obj, disks_before_hotplug):
             f"Error occurred while verifying hotplug in VM {vm_obj.name}: {str(error)}"
         )
         return False
-
-
-def setup_kms_and_storageclass(
-    pv_encryption_kms_setup_factory, storageclass_factory, project_factory
-):
-    """
-    Sets up KMS (Key Management System) and StorageClass for encryption.
-
-    Args:
-        pv_encryption_kms_setup_factory : Factory function to create KMS setup
-        storageclass_factory : Factory function to create StorageClass with
-        default compression
-        project_factory : Factory function to create a Project (Namespace)
-
-    Returns:
-        tuple: A tuple containing the Project object,
-        KMS object, and StorageClass object
-    """
-    proj_obj = project_factory()
-
-    logger.info("Setting up csi-kms-connection-details configmap")
-    kms = pv_encryption_kms_setup_factory(kv_version="v2")
-    logger.info("csi-kms-connection-details setup successful")
-
-    sc_obj_def = storageclass_factory(
-        interface=constants.CEPHBLOCKPOOL,
-        encrypted=True,
-        encryption_kms_id=kms.kmsid,
-        new_rbd_pool=True,
-        mapOptions="krbd:rxbounce",
-        mounter="rbd",
-    )
-
-    kms.vault_path_token = kms.generate_vault_token()
-    kms.create_vault_csi_kms_token(namespace=proj_obj.namespace)
-
-    pvk_obj = PVKeyrotation(sc_obj_def)
-    pvk_obj.annotate_storageclass_key_rotation(schedule="*/3 * * * *")
-
-    return proj_obj, kms, sc_obj_def
-
-
-def create_and_clone_vms(
-    cnv_workload, clone_vm_workload, proj_obj, sc_obj_def, file_paths, number_of_vm
-):
-    """
-    Creates Virtual Machines (VMs) and clones them, verifying data integrity
-
-    Args:
-        cnv_workload : Factory function to create the base VM workload
-        clone_vm_workload : Factory function to clone a VM
-        proj_obj (object): Project (Namespace) object
-        sc_obj_def (dict): StorageClass object
-        file_paths (list): List of file paths
-        number_of_vm (int): Number of VMs to create and clone
-
-    Returns:
-        tuple: A tuple containing lists of created VMs, cloned VMs, and
-        a common checksum dictionary
-    """
-    vm_list = []
-    vm_list_clone = []
-    checksum_map = {}  # Common checksum map for both source and cloned VMs
-
-    def create_and_clone_vm(index):
-        """
-        Creates a single VM, writes data to it, clones it, and
-        verifies data integrity
-        Args:
-            index (int): Index of the VM being created
-        """
-        vm_obj = cnv_workload(
-            storageclass=sc_obj_def.name,
-            namespace=proj_obj.namespace,
-            volume_interface=constants.VM_VOLUME_PVC,
-        )
-        vm_list.append(vm_obj)
-        source_csum = run_dd_io(vm_obj=vm_obj, file_path=file_paths[0], verify=True)
-        checksum_map[vm_obj.name] = source_csum
-        logger.info(f"Source checksum for {vm_obj.name}: {source_csum}")
-        clone_vm_obj = clone_vm_workload(vm_obj, namespace=vm_obj.namespace)
-        vm_list_clone.append(clone_vm_obj)
-        clone_csum = cal_md5sum_vm(vm_obj=clone_vm_obj, file_path=file_paths[0])
-        checksum_map[clone_vm_obj.name] = clone_csum
-        logger.info(f"Clone checksum for {clone_vm_obj.name}: {clone_csum}")
-        assert (
-            source_csum == clone_csum
-        ), f"Checksum mismatch between source {vm_obj.name} and clone {clone_vm_obj.name}"
-
-    with concurrent.futures.ThreadPoolExecutor() as executor:
-        futures = [executor.submit(create_and_clone_vm, i) for i in range(number_of_vm)]
-        concurrent.futures.wait(futures)
-
-    return vm_list, vm_list_clone, checksum_map
