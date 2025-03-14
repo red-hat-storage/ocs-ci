@@ -2469,6 +2469,7 @@ def check_pods_in_running_state(
             and ("rook-ceph-drain-canary" not in p.name)
             and ("debug" not in p.name)
             and (constants.REPORT_STATUS_TO_PROVIDER_POD not in p.name)
+            and ("status-reporter" not in p.name)
         ):
             status = ocp_pod_obj.get_resource(p.name, "STATUS")
             if skip_for_status:
