@@ -2346,6 +2346,22 @@ def delete_deploymentconfig_pods(pod_obj):
                 )
 
 
+def delete_deployment_pods(pod_obj):
+    """
+    Delete a Deployment and all the pods that are controlled by it
+
+    Args:
+         pod_obj (Pod): Pod object
+
+    """
+    deploy_ocp_obj = ocp.OCP(kind=constants.DEPLOYMENT, namespace=pod_obj.namespace)
+    pod_data_list = deploy_ocp_obj.get().get("items")
+    if pod_data_list:
+        for pod_data in pod_data_list:
+            if pod_obj.get_labels().get("name") == pod_data.get("metadata").get("name"):
+                deploy_ocp_obj.delete(resource_name=pod_data.get_labels().get("name"))
+
+
 def wait_for_new_osd_pods_to_come_up(number_of_osd_pods_before):
     status_options = ["Init:1/4", "Init:2/4", "Init:3/4", "PodInitializing", "Running"]
     try:

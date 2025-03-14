@@ -910,7 +910,12 @@ NFS_APP_POD_YAML = os.path.join(TEMPLATE_APP_POD_DIR, "nfs_test_app.yaml")
 
 FEDORA_DC_YAML = os.path.join(TEMPLATE_APP_POD_DIR, "fedora_dc.yaml")
 
+FEDORA_DEPLOY_YAML = os.path.join(TEMPLATE_APP_POD_DIR, "fedora_deployment.yaml")
+
 PERF_DC_YAML = os.path.join(TEMPLATE_APP_POD_DIR, "performance_dc.yaml")
+
+PERF_DEPLOY_YAML = os.path.join(TEMPLATE_APP_POD_DIR, "performance_deployment.yaml")
+
 
 FEDORA_SERVICE_CA_YAML = os.path.join(TEMPLATE_APP_POD_DIR, "fedoraServiceCA.yaml")
 
