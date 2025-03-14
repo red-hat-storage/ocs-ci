@@ -26,6 +26,17 @@ class TestVmSingleWorkerNodeFailure(E2ETest):
     (such as OpenShift Virtualization VMs, OSD pods, or mon pods)
     """
 
+    @pytest.fixture(autouse=True)
+    def teardown(self, request, nodes):
+        """
+        Make sure all nodes are up again
+        """
+
+        def finalizer():
+            nodes.restart_nodes_by_stop_and_start_teardown()
+
+        request.addfinalizer(finalizer)
+
     def test_vm_single_worker_node_failure(
         self, setup_cnv, nodes, project_factory, multi_cnv_workload
     ):
