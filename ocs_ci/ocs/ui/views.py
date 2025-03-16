@@ -2133,6 +2133,34 @@ bucket_tab = {
         "//*[@id='yaml-create']",
         By.XPATH,
     ),
+    "pagination_next_button": (
+        "button[class='pf-v5-c-button pf-m-plain pf-v5-u-ml-xs'] svg",
+        By.CSS_SELECTOR,
+    ),
+    "pagination_prev_button": (
+        "button[class='pf-v5-c-button pf-m-plain pf-v5-u-mr-xs'] svg",
+        By.CSS_SELECTOR,
+    ),
+    "bucket_list_items": (
+        "//a[starts-with(@href, '/odf/object-storage/buckets/')]",
+        By.XPATH,
+    ),
+    "bucket_action_button": (
+        "tbody tr:nth-child(1) td:last-child button:first-child",
+        By.CSS_SELECTOR,
+    ),
+    "bucket_delete_option": (
+        "tbody li:nth-child(2) button:nth-child(1) span:nth-child(1) span:nth-child(1)",
+        By.CSS_SELECTOR,
+    ),
+    "bucket_confirm_button": (
+        ".pf-v5-c-button.pf-m-danger.pf-m-progress",
+        By.CSS_SELECTOR,
+    ),
+    "bucket_confirm_input": (
+        "form input[id]",
+        By.CSS_SELECTOR,
+    ),  # Input field for bucket name confirmation
 }
 locators = {
     "4.18": {
