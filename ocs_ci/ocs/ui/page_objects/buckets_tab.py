@@ -139,7 +139,7 @@ class BucketsTab(ObjectStorage, ConfirmDialog):
         self.do_send_keys(self.bucket_tab["folder_name_input"], folder_name)
         self.do_click(self.bucket_tab["submit_button_folder"])
 
-        folder_path = generate_folder_with_files(num_files=400)
+        folder_path, _ = generate_folder_with_files(num_files=400)
 
         logger.info("=== DEBUG: STARTING FILE UPLOAD ===")
 
