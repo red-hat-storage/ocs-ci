@@ -494,10 +494,11 @@ class OCSUpgrade(object):
             subscription_name = constants.ODF_SUBSCRIPTION
         else:
             subscription_name = constants.OCS_SUBSCRIPTION
+        provider_cluster = config.ENV_DATA["cluster_type"].lower() == "provider"
         kind_name = (
             "subscription.operators.coreos.com"
             if config.multicluster
-            else "subscription"
+            else "subs" if provider_cluster else "subscription"
         )
         subscription = OCP(
             resource_name=subscription_name,
