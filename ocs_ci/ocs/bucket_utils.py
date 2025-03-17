@@ -2144,7 +2144,13 @@ def update_replication_policy(bucket_name, replication_policy_dict):
 
 
 def get_replication_policy(bucket_name):
+    """
+    Get the replication policy on a bucket
 
+    Args:
+        bucket_name (str): Name of the bucket
+
+    """
     return OCP(
         kind="obc",
         namespace=config.ENV_DATA["cluster_namespace"],

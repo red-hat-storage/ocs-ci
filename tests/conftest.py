@@ -8492,9 +8492,17 @@ def change_lifecycle_batch_size(
 
 @pytest.fixture()
 def reduce_replication_delay(add_env_vars_to_noobaa_core_class):
+    """
+    Fixture to reduce the replication cycle delay
+
+    """
 
     def factory(interval=1):
+        """
+        Factory function to reduce the replication
+        cycle delay
 
+        """
         new_delay_in_milliseconfs = interval * 60 * 1000
         new_env_var_touples = [
             (constants.BUCKET_REPLICATOR_DELAY_PARAM, new_delay_in_milliseconfs),
