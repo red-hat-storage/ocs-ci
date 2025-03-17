@@ -344,7 +344,7 @@ def update_uefi_boot_order(
     boot_order_list.remove(selected_option)
     boot_order_list.insert(0, selected_option)
 
-    cmd = f"efibootmgr --bootorder {','.join(boot_order_list)}"
+    cmd = f"sudo efibootmgr --bootorder {','.join(boot_order_list)}"
     try:
         efi_cfg_str = run_command(cmd)
     except Exception as ex:
