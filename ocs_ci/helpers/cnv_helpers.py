@@ -506,29 +506,56 @@ def get_vm_distro(vm_obj):
     return vm_obj.run_ssh_cmd(cmd)
 
 
-def run_fio(vm_obj, file_path):
+def run_fio(
+    vm_obj,
+    size="1G",
+    io_direction="randrw",
+    jobs=1,
+    runtime=60,
+    depth=4,
+    rate="1m",
+    bs="4K",
+    direct=1,
+    verify=True,
+    verify_method="crc32c",
+    filename="/testfile",
+):
     """
-    Runs continuous I/O using fio on the OpenShift Virtualization VM.
+    Execute FIO on a CNV Virtual Machine with data integrity checks.
 
     Args:
-        vm_obj (obj): The virtual machine object.
-        file_path (str): The full path of the file to write on
+        size (str): Size of the test file (e.g., '1G').
+        io_direction (str): Read/write mode ('rw', 'randwrite', 'randread').
+        rw_ratio (int): Read/write mix percentage (default: 75% read, 25% write).
+        jobs (int): Number of FIO jobs to run.
+        runtime (int): Duration of IO test (seconds).
+        depth (int): I/O depth.
+        rate (str): I/O rate limit.
+        bs (str): Block size (default: '4K').
+        direct (int): Use direct I/O (1 = Yes, 0 = No).
+        verify (bool): Enable data integrity verification.
+        verify_method (str): Data integrity check method ('crc32c', 'md5', etc.).
+        filename (str): Path of the test file in the VM.
 
-    Raises:
-        Raises exception
-
+    Returns:
+        str: Output of the FIO execution.
     """
-
     get_vm_distro(vm_obj)
-    try:
-        # FIO command for continuous I/O
-        fio_command = (
-            "nohup fio --name=continuous_io --rw=randwrite --bs=4k --size=5G --numjobs=2 "
-            f"--runtime=0 --ioengine=libaio --iodepth=32 --direct=1 --filename={file_path} > fio_output.log 2>&1 &"
-        )
 
+    # Construct the FIO command
+    fio_cmd = (
+        f"fio --name=cnv_fio_test "
+        f"--rw={io_direction} --bs={bs} --size={size} --numjobs={jobs} "
+        f"--iodepth={depth} --rate={rate} --runtime={runtime} --filename={filename} "
+        f"--direct={direct} "
+    )
+
+    if verify:
+        fio_cmd += f" --verify={verify_method} --verify_fatal=1"
+
+    try:
         logger.info(f" Running FIO on VM: {vm_obj.name}")
-        vm_obj.run_ssh_cmd(fio_command)
+        vm_obj.run_ssh_cmd(fio_cmd)
 
         logger.info("FIO execution started successfully!")
 
