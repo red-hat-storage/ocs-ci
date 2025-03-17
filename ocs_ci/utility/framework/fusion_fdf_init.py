@@ -4,7 +4,7 @@ import os
 from shutil import which
 import time
 
-from junitparser import TestCase, TestSuite, JUnitXml, Failure
+from junitparser import TestCase, TestSuite, JUnitXml, Failure, Properties, Property
 
 from ocs_ci import framework
 from ocs_ci.framework.exceptions import (
@@ -202,20 +202,32 @@ def setup_bin_dir() -> None:
         utils.add_path_to_env_path(framework.config.RUN["bin_dir"])
 
 
-def create_junit_report(suite_name, case_name):
+def create_junit_report(
+    suite_name: str, case_name: str, suite_props: dict = None, case_props: dict = None
+):
     """
     Decorator which generates a junit report xml for the wrapped function.
 
     Args:
         suite_name (str): Name of the Test Suite
         case_name (str): Name of the Test Case
+        suite_props (dict, optional): Properties to add to the Test Suite. Defaults to None.
+        case_props (dict, optional): Properties to add to the Test Case. Defaults to None.
 
     """
 
     def decorator(func):
         def wrapper(*args, **kwargs):
-            test_case = TestCase(case_name)
+            test_case = TestCaseWithProps(case_name)
             test_suite = TestSuite(suite_name)
+            _suite_props = suite_props or {}
+            _case_props = case_props or {}
+
+            for key, value in _case_props.items():
+                test_case.add_property(key, value)
+
+            for key, value in _suite_props.items():
+                test_suite.add_property(key, value)
 
             try:
                 func(*args, **kwargs)
@@ -226,12 +238,33 @@ def create_junit_report(suite_name, case_name):
             xml = JUnitXml()
             xml.add_testsuite(test_suite)
 
-            from ocs_ci.framework import config
-
             log_dir = config.RUN["log_dir"]
             run_id = config.RUN["run_id"]
-            xml.write(os.path.join(log_dir, f"{case_name}_{run_id}.xml"))
+            filepath = os.path.join(log_dir, f"{case_name}_{run_id}.xml")
+
+            logger.info(f"Writing report to {filepath}")
+            xml.write(filepath)
 
         return wrapper
 
     return decorator
+
+
+class TestCaseWithProps(TestCase):
+    """
+    TestCase with the ability to add custom properties.
+    """
+
+    def add_property(self, name, value):
+        """
+        Adds a property to the testsuite.
+
+        See :class:`Property` and :class:`Properties`
+        """
+
+        props = self.child(Properties)
+        if props is None:
+            props = Properties()
+            self.append(props)
+        prop = Property(name, value)
+        props.add_property(prop)
