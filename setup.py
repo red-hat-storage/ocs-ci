@@ -74,7 +74,7 @@ setup(
         "greenlet==3.0rc3",
         "ovirt-engine-sdk-python==4.4.11",
         "junitparser==3.1.0",
-        "flaky==3.7.0",
+        "flaky==3.8.1",
         "ocp-network-split",
         "pyopenssl==24.2.1",
         "pyparsing==2.4.7",
