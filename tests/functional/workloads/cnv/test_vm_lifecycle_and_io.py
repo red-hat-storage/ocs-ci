@@ -34,7 +34,7 @@ class TestVmOperations(E2ETest):
         6) Delete the VM (as part of factory teardown)
 
         """
-        file_path = "/tmp/io_tests"
+        file_path = "/io_tests"
         volume_interface = [
             constants.VM_VOLUME_PVC,
             constants.VM_VOLUME_DV,
@@ -49,5 +49,5 @@ class TestVmOperations(E2ETest):
             )
             vm_obj.scp_from_vm(local_path="/tmp", vm_src_path="/dd_file.txt")
 
-            run_fio(vm_obj, file_path)
+            run_fio(vm_obj, filename=file_path)
             vm_obj.stop()
