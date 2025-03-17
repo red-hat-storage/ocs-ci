@@ -1282,7 +1282,7 @@ def count_cluster_osd():
     return osd_count
 
 
-@retry(PDBNotCreatedException, tries=9, backoff=2)
+@retry((PDBNotCreatedException, AssertionError), tries=9, backoff=2)
 def validate_pdb_creation():
     """
     Validate creation of PDBs for MON, MDS and OSD pods.
