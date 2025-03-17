@@ -39,7 +39,7 @@ from ocs_ci.utility.utils import TimeoutSampler
 logger = logging.getLogger(__name__)
 
 
-class TestObjectExpiration:
+class TestObjectExpirationSystemTest:
     @pytest.fixture(autouse=True)
     def init_sanity(self):
         """
