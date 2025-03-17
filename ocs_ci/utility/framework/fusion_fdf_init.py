@@ -146,7 +146,7 @@ class Initializer(object):
             config.ENV_DATA["cluster_path"], config.RUN["kubeconfig_location"]
         )
         setup_bin_dir()
-        set_kubeconfig(config.RUN["kubeconfig"])
+        check_cluster_access(config.RUN["kubeconfig"])
 
 
 def generate_run_id() -> int:
@@ -163,13 +163,12 @@ def generate_run_id() -> int:
     return run_id
 
 
-def set_kubeconfig(kubeconfig_path: str):
+def check_cluster_access(kubeconfig_path: str):
     """
-    Export environment variable KUBECONFIG for future calls of OC commands
-    or other API calls
+    Checks access to cluster with provided kubeconfig.
 
     Args:
-        kubeconfig_path (str): path to kubeconfig file to be exported
+        kubeconfig_path (str): path to kubeconfig file
 
     Raises:
         ClusterNotAccessibleError: if the cluster is inaccessible
@@ -180,11 +179,10 @@ def set_kubeconfig(kubeconfig_path: str):
         raise ClusterNotAccessibleError(
             "The kubeconfig file %s doesn't exist!", kubeconfig_path
         )
-    os.environ["KUBECONFIG"] = kubeconfig_path
     if not which("oc"):
         get_openshift_client()
     try:
-        run_cmd("oc cluster-info")
+        run_cmd(f"oc --kubeconfig {kubeconfig_path} cluster-info")
     except CommandFailed as ex:
         raise ClusterNotAccessibleError("Cluster is not ready to use: %s", ex)
     logger.info("Access to cluster is OK!")

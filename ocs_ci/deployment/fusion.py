@@ -27,6 +27,7 @@ class FusionDeployment:
         self.pre_release = config.DEPLOYMENT.get("fusion_pre_release", False)
         self.operator_name = defaults.FUSION_OPERATOR_NAME
         self.namespace = defaults.FUSION_NAMESPACE
+        self.kubeconfig = config.RUN["kubeconfig"]
 
     def deploy(self):
         """
@@ -68,7 +69,9 @@ class FusionDeployment:
         templating.dump_data_to_temp_yaml(
             fusion_catalog_source_data, fusion_catalog_source_manifest.name
         )
-        run_cmd(f"oc apply -f {fusion_catalog_source_manifest.name}")
+        run_cmd(
+            f"oc --kubeconfig {self.kubeconfig} apply -f {fusion_catalog_source_manifest.name}"
+        )
         ibm_catalog_source = CatalogSource(
             resource_name=catalog_source_name,
             namespace=constants.MARKETPLACE_NAMESPACE,
@@ -94,15 +97,18 @@ class FusionDeployment:
         templating.dump_data_to_temp_yaml(
             subscription_fusion_yaml_data, subscription_fusion_manifest.name
         )
-        run_cmd(f"oc create -f {subscription_fusion_manifest.name}")
+        run_cmd(
+            f"oc --kubeconfig {self.kubeconfig} create -f {subscription_fusion_manifest.name}"
+        )
 
-    @staticmethod
-    def create_namespace_and_operator_group():
+    def create_namespace_and_operator_group(self):
         """
         Create Fusion Namespace and OperatorGroup
         """
         logger.info("Creating Namespace and OperatorGroup.")
-        run_cmd(f"oc create -f {constants.FUSION_NS_YAML}")
+        run_cmd(
+            f"oc --kubeconfig {self.kubeconfig} create -f {constants.FUSION_NS_YAML}"
+        )
 
     def verify(self):
         """
