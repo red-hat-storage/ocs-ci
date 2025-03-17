@@ -29,10 +29,10 @@ from ocs_ci.ocs.bucket_utils import (
     write_random_test_objects_to_bucket,
     upload_test_objects_to_source_and_wait_for_replication,
     update_replication_policy,
-    get_obj_versions,
     upload_random_objects_to_source_and_wait_for_replication,
     get_replication_policy,
     s3_put_bucket_versioning,
+    wait_for_object_versions_match,
 )
 from ocs_ci.ocs import ocp
 from ocs_ci.ocs.resources.pvc import get_pvc_objs
@@ -54,7 +54,7 @@ from ocs_ci.ocs.exceptions import (
     ResourceWrongStatusException,
     TimeoutExpiredError,
 )
-from ocs_ci.utility.utils import TimeoutSampler
+
 
 logger = logging.getLogger(__name__)
 
@@ -459,6 +459,29 @@ class TestMCGReplicationWithVersioningSystemTest:
         setup_mcg_bg_features,
         validate_mcg_bg_features,
     ):
+        """
+        System test to verify the bucket replication with versioning when there
+        are some disruptive and backup operations are performed.
+
+        Steps:
+
+        1. Run MCG background feature setup and validation
+        2. Setup two buckets with bi-directional replication enabled
+        3. Upload object and verify replication works between the buckets
+        4. Enable versioning on the buckets and also enable sync_versions=True on
+           replication policy as well
+        5. Upload objects to second bucket and verify replication, version sync works
+        6. Upload objects to first bucket and shutdown noobaa core pod node. Verify
+           replication and version sync works
+        7. Upload objects to the second bucket and restart all noobaa pods. Verify
+           replication and version sync works
+        8. Take the backup of Noobaa DB.
+        9. Upload objects to the first bucket and verify replication works but not the
+           version sync
+        10. Recover Noobaa DB from the backup
+        11. Upload objects to the second bucket. Verify replication and version sync works
+
+        """
 
         feature_setup_map = setup_mcg_bg_features(
             num_of_buckets=5,
@@ -476,7 +499,7 @@ class TestMCGReplicationWithVersioningSystemTest:
         reduce_replication_delay()
 
         # Setup two buckets with bi-directional replication enabled
-        # deletion sync enabled
+        # deletion sync disabled
         bucketclass_dict = {
             "interface": "OC",
             "backingstore_dict": {"aws": [(1, "eu-central-1")]},
@@ -520,51 +543,6 @@ class TestMCGReplicationWithVersioningSystemTest:
             "Enabled sync versions in the replication policy for both the buckets"
         )
 
-        # This function samples if versions of objects in both the buckets under
-        # given prefix matches or not
-        def sample_if_versions_match(bucket_1, bucket_2, prefix):
-            def verify_object_version_etags(bucket_1, bucket_2, prefix):
-                bucket_1_etags = [
-                    v["ETag"]
-                    for v in get_obj_versions(
-                        mcg_obj_session,
-                        awscli_pod_session,
-                        bucket_1.name,
-                        f"{prefix}/{object_key}0",
-                    )
-                ]
-                bucket_2_etags = [
-                    v["ETag"]
-                    for v in get_obj_versions(
-                        mcg_obj_session,
-                        awscli_pod_session,
-                        bucket_2.name,
-                        f"{prefix}/{object_key}0",
-                    )
-                ]
-                logger.info(
-                    f"\n{bucket_1.name} Etags: {bucket_1_etags}"
-                    f"\n{bucket_2.name} Etags: {bucket_2_etags}"
-                )
-                return bucket_1_etags == bucket_2_etags
-
-            try:
-                for verified in TimeoutSampler(
-                    timeout=600,
-                    sleep=30,
-                    func=verify_object_version_etags,
-                    bucket_1=bucket_1,
-                    bucket_2=bucket_2,
-                    prefix=prefix,
-                ):
-                    if verified:
-                        return True
-            except TimeoutExpiredError:
-                logger.error(
-                    "\nEtags dont match for both the buckets even after timeout. hence they dont have same versions"
-                )
-                return False
-
         # Update previously uploaded object with new data and new version
         self.upload_objects_with_retry(
             mcg_obj_session,
@@ -579,9 +557,13 @@ class TestMCGReplicationWithVersioningSystemTest:
             f"Updated object {object_key} with new version data in bucket {bucket_2.name}"
         )
 
-        assert sample_if_versions_match(
-            bucket_1, bucket_2, prefix_2
-        ), f"Source bucket and target buckets dont have matching versions for the object {object_key}"
+        wait_for_object_versions_match(
+            mcg_obj_session,
+            awscli_pod_session,
+            bucket_1,
+            bucket_2,
+            obj_key=f"{prefix_2}/{object_key}",
+        )
         logger.info(
             f"Replication works from {bucket_2.name} to {bucket_1.name} and has all the versions of object {object_key}"
         )
@@ -615,9 +597,12 @@ class TestMCGReplicationWithVersioningSystemTest:
             # Wait for the upload to finish
             future.result()
 
-            assert sample_if_versions_match(bucket_1, bucket_2, prefix_1), (
-                f"Source bucket and target buckets dont have matching"
-                f" versions for the object {object_key}"
+            wait_for_object_versions_match(
+                mcg_obj_session,
+                awscli_pod_session,
+                bucket_1,
+                bucket_2,
+                obj_key=f"{prefix_1}/{object_key}",
             )
             logger.info(
                 f"Replication works from {bucket_1.name} to {bucket_2.name} and"
@@ -650,9 +635,12 @@ class TestMCGReplicationWithVersioningSystemTest:
             # Wait for the upload to finish
             future.result()
 
-            assert sample_if_versions_match(bucket_1, bucket_2, prefix_2), (
-                f"Source bucket and target buckets dont have matching "
-                f"versions for the object {object_key}"
+            wait_for_object_versions_match(
+                mcg_obj_session,
+                awscli_pod_session,
+                bucket_1,
+                bucket_2,
+                obj_key=f"{prefix_2}/{object_key}",
             )
             logger.info(
                 f"Replication works from {bucket_2.name} to {bucket_1.name} "
@@ -674,7 +662,7 @@ class TestMCGReplicationWithVersioningSystemTest:
         update_replication_policy(bucket_1.name, replication_2)
 
         # Change the replication cycle delay to 3 minutes
-        logger.info("Reduce the bucket replication delay cycle to 3 minutes")
+        logger.info("Reduce the bucket replication delay cycle to 5 minutes")
         reduce_replication_delay(interval=5)
 
         # Update previously uploaded object with new data and new version
@@ -692,14 +680,21 @@ class TestMCGReplicationWithVersioningSystemTest:
             f"Updated object {object_key} with new version data in bucket {bucket_1.name}"
         )
 
-        assert not sample_if_versions_match(bucket_1, bucket_2, prefix_1), (
-            f"Source bucket and target buckets have matching versions for the object"
-            f" {object_key} even when the sync version was disabled"
-        )
-        logger.info(
-            f"Sync versions didnt work as expected, both {bucket_1.name} "
-            f"and {bucket_2.name} have different versions"
-        )
+        try:
+            wait_for_object_versions_match(
+                mcg_obj_session,
+                awscli_pod_session,
+                bucket_1,
+                bucket_2,
+                obj_key=f"{prefix_1}/{object_key}",
+            )
+        except TimeoutExpiredError:
+            logger.info(
+                f"Sync versions didnt work as expected, both {bucket_1.name} "
+                f"and {bucket_2.name} have different versions"
+            )
+        else:
+            assert False, "Sync version worked even when sync_versions was disabled!!"
 
         # Recover the noobaa db from the backup and perform
         # object deletion and verify deletion sync works
@@ -722,9 +717,13 @@ class TestMCGReplicationWithVersioningSystemTest:
             f"Updated object {object_key} with new version data in bucket {bucket_1.name}"
         )
 
-        assert sample_if_versions_match(
-            bucket_1, bucket_2, prefix_1
-        ), f"Source bucket and target buckets dont have matching versions for the object {object_key}"
+        wait_for_object_versions_match(
+            mcg_obj_session,
+            awscli_pod_session,
+            bucket_1,
+            bucket_2,
+            obj_key=f"{prefix_1}/{object_key}",
+        )
         logger.info(
             f"Replication works from {bucket_1.name} to {bucket_2.name} and"
             f" has all the versions of object {object_key}"
