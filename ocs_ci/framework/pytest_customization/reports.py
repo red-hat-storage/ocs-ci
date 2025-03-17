@@ -1,7 +1,6 @@
 import os
 import pytest
 import logging
-from py.xml import html
 from ocs_ci.utility.utils import (
     dump_config_to_file,
     email_reports,
@@ -10,7 +9,7 @@ from ocs_ci.utility.utils import (
 )
 from ocs_ci.framework import config as ocsci_config
 from ocs_ci.framework import GlobalVariables as GV
-
+from yattag import Doc
 
 log = logging.getLogger(__name__)
 
@@ -20,7 +19,10 @@ def pytest_html_results_table_header(cells):
     """
     Add Description header to the table
     """
-    cells.insert(2, html.th("Description"))
+    doc, tag, text = Doc().tagtext()
+    with tag("th"):
+        text("Description")
+    cells.insert(2, doc.getvalue())
 
 
 @pytest.mark.optionalhook
@@ -28,10 +30,10 @@ def pytest_html_results_table_row(report, cells):
     """
     Add content to the column Description
     """
-    try:
-        cells.insert(2, html.td(report.description))
-    except AttributeError:
-        cells.insert(2, html.td("--- no description ---"))
+    doc, tag, text = Doc().tagtext()
+    with tag("td"):
+        text(getattr(report, "description", "--- no description ---"))
+    cells.insert(2, doc.getvalue())
     # if logs_url is defined, replace local path Log File links to the logs_url
     if ocsci_config.RUN.get("logs_url"):
         for tag in cells[4][0]:
