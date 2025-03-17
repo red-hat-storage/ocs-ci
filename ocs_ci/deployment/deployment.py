@@ -956,7 +956,8 @@ class Deployment(object):
         live_deployment = config.DEPLOYMENT.get("live_deployment")
         platform = config.ENV_DATA["platform"]
         aws_sts_deployment = (
-            config.DEPLOYMENT.get("sts_enabled") and platform == constants.AWS_PLATFORM
+            config.DEPLOYMENT.get("sts_enabled")
+            and platform in constants.AWS_STS_PLATFORMS
         )
         azure_sts_deployment = (
             config.DEPLOYMENT.get("sts_enabled")
@@ -1139,7 +1140,8 @@ class Deployment(object):
         local_storage = config.DEPLOYMENT.get("local_storage")
         platform = config.ENV_DATA.get("platform").lower()
         aws_sts_deployment = (
-            config.DEPLOYMENT.get("sts_enabled") and platform == constants.AWS_PLATFORM
+            config.DEPLOYMENT.get("sts_enabled")
+            and platform in constants.AWS_STS_PLATFORMS
         )
 
         if ui_deployment and ui_deployment_conditions():
