@@ -20,58 +20,104 @@ logger = logging.getLogger(__name__)
 class FusionDataFoundationDeployment:
     def __init__(self):
         self.pre_release = config.DEPLOYMENT.get("fdf_pre_release", False)
+        self.kubeconfig = config.RUN["kubeconfig"]
 
     def deploy(self):
         """
         Installs IBM Fusion Data Foundation.
         """
         logger.info("Installing IBM Fusion Data Foundation")
-        create_spectrum_fusion_cr()
+        self.create_spectrum_fusion_cr()
         if self.pre_release:
-            create_image_tag_mirror_set()
-            create_image_digest_mirror_set()
-            setup_fdf_pre_release_deployment()
-        create_fdf_service_cr()
+            self.create_image_tag_mirror_set()
+            self.create_image_digest_mirror_set()
+            self.setup_fdf_pre_release_deployment()
+        self.create_fdf_service_cr()
         verify_fdf_installation()
 
+    def create_image_tag_mirror_set(self):
+        """
+        Create ImageTagMirrorSet.
+        """
+        logger.info("Creating FDF ImageTagMirrorSet")
+        run_cmd(
+            f"oc --kubeconfig {self.kubeconfig} create -f {constants.FDF_IMAGE_TAG_MIRROR_SET}"
+        )
 
-def create_image_tag_mirror_set():
-    """
-    Create ImageTagMirrorSet.
-    """
-    logger.info("Creating FDF ImageTagMirrorSet")
-    run_cmd(f"oc create -f {constants.FDF_IMAGE_TAG_MIRROR_SET}")
+    def create_image_digest_mirror_set(self):
+        """
+        Create ImageDigestMirrorSet.
+        """
+        logger.info("Creating FDF ImageDigestMirrorSet")
+        image_digest_mirror_set = extract_image_digest_mirror_set()
+        run_cmd(
+            f"oc --kubeconfig {self.kubeconfig} create -f {image_digest_mirror_set}"
+        )
+        os.remove(image_digest_mirror_set)
 
+    def create_spectrum_fusion_cr(self):
+        """
+        Create SpectrumFusion CR if it doesn't already exist.
+        """
+        if spectrum_fusion_existstance_check():
+            spectrum_fusion_status_check()
+            logger.info("SpectrumFusion already exists and is Completed")
+        else:
+            logger.info("Creating SpectrumFusion")
+            run_cmd(
+                f"oc --kubeconfig {self.kubeconfig} create -f {constants.FDF_SPECTRUM_FUSION_CR}"
+            )
+            spectrum_fusion_status_check()
 
-def create_image_digest_mirror_set():
-    """
-    Create ImageDigestMirrorSet.
-    """
-    logger.info("Creating FDF ImageDigestMirrorSet")
-    image_digest_mirror_set = extract_image_digest_mirror_set()
-    run_cmd(f"oc create -f {image_digest_mirror_set}")
-    os.remove(image_digest_mirror_set)
+    def create_fdf_service_cr(self):
+        """
+        Create Fusion Data Foundation Service CR.
+        """
+        logger.info("Creating FDF service CR")
+        run_cmd(
+            f"oc --kubeconfig {self.kubeconfig} create -f {constants.FDF_SERVICE_CR}"
+        )
 
+    def setup_fdf_pre_release_deployment(self):
+        """
+        Perform steps to prepare for a Pre-release deployment of FDF.
+        """
+        fdf_image_tag = config.DEPLOYMENT.get("fdf_image_tag")
+        fdf_catalog_name = defaults.FUSION_CATALOG_NAME
+        fdf_registry = config.DEPLOYMENT.get("fdf_pre_release_registry")
+        fdf_image_digest = config.DEPLOYMENT.get("fdf_pre_release_image_digest")
+        pull_secret = os.path.join(constants.DATA_DIR, "pull-secret")
 
-def create_spectrum_fusion_cr():
-    """
-    Create SpectrumFusion CR if it doesn't already exist.
-    """
-    if spectrum_fusion_existstance_check():
-        spectrum_fusion_status_check()
-        logger.info("SpectrumFusion already exists and is Completed")
-    else:
-        logger.info("Creating SpectrumFusion")
-        run_cmd(f"oc create -f {constants.FDF_SPECTRUM_FUSION_CR}")
-        spectrum_fusion_status_check()
+        if not fdf_image_digest:
+            logger.info("Retrieving imageDigest")
+            cmd = f"skopeo inspect docker://{fdf_registry}/{fdf_catalog_name}:{fdf_image_tag} --authfile {pull_secret}"
+            catalog_data = run_cmd(cmd)
+            fdf_image_digest = json.loads(catalog_data).get("Digest")
+            logger.info(f"Retrieved image digest: {fdf_image_digest}")
+            config.DEPLOYMENT["fdf_pre_release_image_digest"] = fdf_image_digest
 
-
-def create_fdf_service_cr():
-    """
-    Create Fusion Data Foundation Service CR.
-    """
-    logger.info("Creating FDF service CR")
-    run_cmd(f"oc create -f {constants.FDF_SERVICE_CR}")
+        logger.info("Updating FusionServiceDefinition")
+        params_dict = {
+            "spec": {
+                "onboarding": {
+                    "serviceOperatorSubscription": {
+                        "multiVersionCatSrcDetails": {
+                            "ocp418-t": {
+                                "imageDigest": fdf_image_digest,
+                                "registryPath": fdf_registry,
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        params = json.dumps(params_dict)
+        cmd = (
+            f"oc --kubeconfig {self.kubeconfig} -n {constants.FDF_NAMESPACE} patch FusionServiceDefinition "
+            f"data-foundation-service -p '{params}' --type merge"
+        )
+        out = run_cmd(cmd)
+        assert "patched" in out
 
 
 def verify_fdf_installation():
@@ -149,48 +195,6 @@ def fusion_service_instance_health_check():
     install_percent = instance_status["installStatus"]["progressPercentage"]
     assert service_health == "Healthy"
     assert install_percent == 100
-
-
-def setup_fdf_pre_release_deployment():
-    """
-    Perform steps to prepare for a Pre-release deployment of FDF.
-    """
-    fdf_image_tag = config.DEPLOYMENT.get("fdf_image_tag")
-    fdf_catalog_name = defaults.FUSION_CATALOG_NAME
-    fdf_registry = config.DEPLOYMENT.get("fdf_pre_release_registry")
-    fdf_image_digest = config.DEPLOYMENT.get("fdf_pre_release_image_digest")
-    pull_secret = os.path.join(constants.DATA_DIR, "pull-secret")
-
-    if not fdf_image_digest:
-        logger.info("Retrieving imageDigest")
-        cmd = f"skopeo inspect docker://{fdf_registry}/{fdf_catalog_name}:{fdf_image_tag} --authfile {pull_secret}"
-        catalog_data = run_cmd(cmd)
-        fdf_image_digest = json.loads(catalog_data).get("Digest")
-        logger.info(f"Retrieved image digest: {fdf_image_digest}")
-        config.DEPLOYMENT["fdf_pre_release_image_digest"] = fdf_image_digest
-
-    logger.info("Updating FusionServiceDefinition")
-    params_dict = {
-        "spec": {
-            "onboarding": {
-                "serviceOperatorSubscription": {
-                    "multiVersionCatSrcDetails": {
-                        "ocp418-t": {
-                            "imageDigest": fdf_image_digest,
-                            "registryPath": fdf_registry,
-                        }
-                    }
-                }
-            }
-        }
-    }
-    params = json.dumps(params_dict)
-    cmd = (
-        f"oc -n {constants.FDF_NAMESPACE} patch FusionServiceDefinition "
-        f"data-foundation-service -p '{params}' --type merge"
-    )
-    out = run_cmd(cmd)
-    assert "patched" in out
 
 
 def extract_image_digest_mirror_set():
