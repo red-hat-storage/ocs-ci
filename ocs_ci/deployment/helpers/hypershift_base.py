@@ -6,7 +6,8 @@ import tempfile
 import time
 from datetime import datetime
 
-from ocs_ci.deployment.helpers.icsp_parser import parse_ICSP_json_to_mirrors_file
+# from ocs_ci.deployment.helpers._parser import parse_ICSP_json_to_mirrors_file
+from ocs_ci.deployment.helpers.idms_parser import parse_IDMS_json_to_mirrors_file
 from ocs_ci.deployment.ocp import download_pull_secret
 from ocs_ci.framework import config
 from ocs_ci.ocs import constants
@@ -187,6 +188,9 @@ class HyperShiftBase:
         self.ocp = OCP()
         self.icsp_mirrors_path = tempfile.NamedTemporaryFile(
             mode="w+", prefix="icsp_mirrors-", delete=False
+        ).name
+        self.idms_mirrors_path = tempfile.NamedTemporaryFile(
+            mode="w+", prefix="idms_mirrors-", delete=False
         ).name
 
     def hcp_binary_exists(self):
@@ -405,7 +409,8 @@ class HyperShiftBase:
             f"--cores {cpu_cores} "
             f"--root-volume-size {root_volume_size} "
             f"--pull-secret {pull_secret_path} "
-            f"--image-content-sources {self.icsp_mirrors_path} "
+            # f"--image-content-sources {self.icsp_mirrors_path} "
+            f"--image-content-sources {self.idms_mirrors_path} "
             "--annotations 'hypershift.openshift.io/skip-release-image-validation=true' "
             "--olm-catalog-placement Guest"
         )
@@ -649,29 +654,30 @@ class HyperShiftBase:
 
     def save_mirrors_list_to_file(self):
         """
-        Save ICSP mirrors list to a file
-
+        Save IDMS mirrors list to a file
+        Note: here this function has been converted from icsp to idms
         """
-        if os.path.getsize(self.icsp_mirrors_path) > 0:
+        if os.path.getsize(self.idms_mirrors_path) > 0:
             logger.info(
-                f"ICSP mirrors list already exists at '{self.icsp_mirrors_path}'"
+                f"IDMS mirrors list already exists at '{self.idms_mirrors_path}'"
             )
             return
-        logger.info(f"Saving ICSP mirrors list to '{self.icsp_mirrors_path}'")
+        logger.info(f"Saving IDMS mirrors list to '{self.idms_mirrors_path}'")
 
-        icsp_json = self.ocp.exec_oc_cmd("get imagecontentsourcepolicy -o json")
-        parse_ICSP_json_to_mirrors_file(icsp_json, self.icsp_mirrors_path)
+        idms_json = self.ocp.exec_oc_cmd("get imagedigestmirrorsets -o json")
+        parse_IDMS_json_to_mirrors_file(idms_json, self.idms_mirrors_path)
 
     def update_mirrors_list_to_file(self):
         """
-        Update ICSP list to a file
+        Update IDMS list to a file
+        Note: here this function has been converted from icsp to idms
         """
-        if os.path.isfile(self.icsp_mirrors_path):
-            logger.info(f"Updating ICSP list from '{self.icsp_mirrors_path}'")
-            exec_cmd(f"rm -f {self.icsp_mirrors_path}")
+        if os.path.isfile(self.idms_mirrors_path):
+            logger.info(f"Updating IDMS list from '{self.idms_mirrors_path}'")
+            exec_cmd(f"rm -f {self.idms_mirrors_path}")
         else:
-            self.icsp_mirrors_path = tempfile.NamedTemporaryFile(
-                mode="w+", prefix="icsp_mirrors-", delete=False
+            self.idms_mirrors_path = tempfile.NamedTemporaryFile(
+                mode="w+", prefix="idms_mirrors-", delete=False
             ).name
         self.save_mirrors_list_to_file()
 
