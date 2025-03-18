@@ -73,7 +73,7 @@ class TestVmAddCapacity(E2ETest):
         self.vm_list = []
         self.source_csum = {}
         self.final_csum = {}
-        for i in range(3):
+        for vm_index in range(3):
             vm_obj = cnv_workload(
                 storageclass=sc_obj_def.name,
                 namespace=proj_obj.namespace,
@@ -85,10 +85,12 @@ class TestVmAddCapacity(E2ETest):
             )
 
         logger.info(f"Stopping VM: {self.vm_list[0].name}")
-        self.vm_list[0].stop()
+        self.vm_stopped = self.vm_list[0]
+        self.vm_stopped.stop()
 
         logger.info(f"Pausing VM: {self.vm_list[1].name}")
-        self.vm_list[1].pause()
+        self.vm_paused = self.vm_list[1]
+        self.vm_paused.pause()
 
     def test_vm_add_capacity(self, setup):
         """
@@ -119,8 +121,8 @@ class TestVmAddCapacity(E2ETest):
             f"addition in {constants.OPENSHIFT_STORAGE_NAMESPACE}"
         )
 
-        self.vm_list[0].start()
-        self.vm_list[1].unpause()
+        self.vm_stopped.start()
+        self.vm_paused.unpause()
 
         logger.info("Verifying data integrity for VMs")
         for vm_obj in self.vm_list:
