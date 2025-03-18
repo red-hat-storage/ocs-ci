@@ -1,0 +1,42 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ fio_name }}  # FIO workload name
+  namespace: {{ namespace }}  # OpenShift namespace
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: {{ fio_name }}
+  template:
+    metadata:
+      labels:
+        app: {{ fio_name }}
+    spec:
+      replicas: 1  
+      containers:
+        - name: fio
+          image: quay.io/ocsci/nginx:fio
+          command:
+            - fio
+          args:
+            - "--name={{ fio_name }}"
+            - "--rw=randwrite"
+            - "--size=4G"
+            - "--bs=4k"
+            - "--numjobs=4"
+            - "--runtime=0"
+            - "--group_reporting"
+            - "--time_based"
+            - --output=/path/to/your/result_file.txt
+            - "--filename=/dev/rbdblock"  # Block device path
+          volumeDevices:  # Using volumeDevices for Block mode
+            - name: fio-volume
+              devicePath: /dev/rbdblock  # Path to block device inside the container
+      restartPolicy: Always
+      volumes:
+        - name: fio-volume
+          persistentVolumeClaim:
+            claimName: {{ pvc_claim_name }}  # PVC claim name for block device
+  strategy:
+    type: Recreate
