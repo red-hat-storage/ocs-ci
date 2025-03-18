@@ -401,13 +401,13 @@ def ocs_install_verification(
             sc_rbd,
         }
     skip_storage_classes = set()
-    if disable_cephfs or provider_cluster:
+    if disable_cephfs:
         skip_storage_classes.update(
             {
                 f"{storage_cluster_name}-cephfs",
             }
         )
-    if disable_blockpools or provider_cluster:
+    if disable_blockpools:
         skip_storage_classes.update(
             {
                 f"{storage_cluster_name}-ceph-rbd",
@@ -429,7 +429,7 @@ def ocs_install_verification(
     # required storage class names should be observed in the cluster under test
     missing_scs = required_storage_classes.difference(storage_class_names)
     if len(missing_scs) > 0:
-        log.error("few storage classess are not present: %s", missing_scs)
+        log.error("few storage classes are not present: %s", missing_scs)
     assert list(missing_scs) == []
 
     # Verify OSDs are distributed
