@@ -89,7 +89,7 @@ class TestStorageClassReclamespace:
             storage_path = pod_obj.get_storage_path("block")
             log.info("Writing 2.0GiB of data to the block device")
             pod_obj.exec_cmd_on_pod(
-                f"dd if=/dev/zero of={storage_path} bs=1M count=2048 oflag=direct > /dev/null 2>&1 &",
+                f"dd if=/dev/zero of={storage_path} bs=1M count=2048 oflag=direct > /dev/null 2>&1 & wait; sync",
                 shell=True,
             )
 
