@@ -70,6 +70,7 @@ class TestFailoverAndRelocateWithDiscoveredApps:
             old_primary=primary_cluster_name_before_failover,
             workload_namespace=rdr_workload.workload_namespace,
             workload_dir=rdr_workload.workload_dir,
+            vrg_name=rdr_workload.discovered_apps_placement_name,
         )
 
         # Verify resources creation on secondary cluster (failoverCluster)
@@ -79,6 +80,7 @@ class TestFailoverAndRelocateWithDiscoveredApps:
             rdr_workload.workload_pod_count,
             rdr_workload.workload_namespace,
             discovered_apps=True,
+            vrg_name=rdr_workload.discovered_apps_placement_name,
         )
 
         # Doing Relocate
