@@ -4897,9 +4897,7 @@ def pvc_clone_factory_fixture(request):
 @pytest.fixture(scope="session", autouse=True)
 def reportportal_customization(request):
     if ocsci_config.REPORTING.get("rp_launch_url"):
-        request.config._metadata["RP Launch URL:"] = ocsci_config.REPORTING[
-            "rp_launch_url"
-        ]
+        request.config.stash["RP Launch URL:"] = ocsci_config.REPORTING["rp_launch_url"]
 
 
 @pytest.fixture(scope="function")

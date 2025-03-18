@@ -414,7 +414,7 @@ def pytest_configure(config):
             # add logs url
             logs_url = ocsci_config.RUN.get("logs_url")
             if logs_url:
-                config._metadata["Logs URL"] = logs_url
+                config.stash["Logs URL"] = logs_url
 
             if ocsci_config.RUN["cli_params"].get("teardown") or (
                 "deployment" in markers_arg
@@ -442,10 +442,10 @@ def pytest_configure(config):
                 continue
             # remove extraneous metadata
             for extra_meta in ["Python", "Packages", "Plugins", "Platform"]:
-                if config._metadata.get(extra_meta):
-                    del config._metadata[extra_meta]
+                if config.stash.get(extra_meta, False):
+                    del config.stash[extra_meta]
 
-            config._metadata["Test Run Name"] = get_testrun_name()
+            config.stash["Test Run Name"] = get_testrun_name()
             check_clusters()
             if ocsci_config.RUN.get("cephcluster"):
                 gather_version_info_for_report(config)
@@ -464,26 +464,26 @@ def gather_version_info_for_report(config):
     try:
         # add cluster version
         clusterversion = get_cluster_version()
-        config._metadata["Cluster Version"] = clusterversion
+        config.stash["Cluster Version"] = clusterversion
 
         # add ceph version
         if not ocsci_config.ENV_DATA["mcg_only_deployment"]:
             ceph_version = get_ceph_version()
-            config._metadata["Ceph Version"] = ceph_version
+            config.stash["Ceph Version"] = ceph_version
 
             # add csi versions
             csi_versions = get_csi_versions()
-            config._metadata["cephfsplugin"] = csi_versions.get("csi-cephfsplugin")
-            config._metadata["rbdplugin"] = csi_versions.get("csi-rbdplugin")
+            config.stash["cephfsplugin"] = csi_versions.get("csi-cephfsplugin")
+            config.stash["rbdplugin"] = csi_versions.get("csi-rbdplugin")
 
         # add ocs operator version
-        config._metadata["OCS operator"] = get_ocs_build_number()
+        config.stash["OCS operator"] = get_ocs_build_number()
         mods = {}
         mods = get_version_info(namespace=ocsci_config.ENV_DATA["cluster_namespace"])
         skip_list = ["ocs-operator"]
         for key, val in mods.items():
             if key not in skip_list:
-                config._metadata[key] = val.rsplit("/")[-1]
+                config.stash[key] = val.rsplit("/")[-1]
         gather_version_completed = True
     except ResourceNotFoundError:
         log.exception("Problem occurred when looking for some resource!")
