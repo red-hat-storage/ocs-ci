@@ -48,6 +48,12 @@ def pytest_html_results_table_row(report, cells):
                 )
 
 
+def pytest_html_results_table_html(report, data):
+    if report.passed:
+        del data[:]
+        data.append("<div class='empty log'>No log output captured.</div>")
+
+
 @pytest.mark.hookwrapper
 def pytest_runtest_makereport(item, call):
     """
