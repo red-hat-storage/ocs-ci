@@ -937,7 +937,7 @@ def oc_create_rgw_backingstore(cld_mgr, backingstore_name, uls_name, region):
         "type": "s3-compatible",
         "s3Compatible": {
             "targetBucket": uls_name,
-            "endpoint": cld_mgr.rgw_client.endpoint,
+            "endpoint": cld_mgr.rgw_client.s3_internal_endpoint,
             "signatureVersion": "v2",
             "secret": {
                 "name": cld_mgr.rgw_client.secret.name,
@@ -961,7 +961,7 @@ def cli_create_rgw_backingstore(mcg_obj, cld_mgr, backingstore_name, uls_name, r
     """
     mcg_obj.exec_mcg_cmd(
         f"backingstore create s3-compatible {backingstore_name} "
-        f"--endpoint {cld_mgr.rgw_client.endpoint} "
+        f"--endpoint {cld_mgr.rgw_client.s3_internal_endpoint} "
         f"--access-key {cld_mgr.rgw_client.access_key} "
         f"--secret-key {cld_mgr.rgw_client.secret_key} "
         f"--target-bucket {uls_name}",

@@ -96,6 +96,7 @@ class CloudManager(ABC):
                 "SECRET_PREFIX": "RGW",
                 "DATA_PREFIX": "AWS",
                 "ENDPOINT": endpoint,
+                "S3_INTERNAL_ENDPOINT": rgw_conn.s3_internal_endpoint,
                 "RGW_ACCESS_KEY_ID": access_key,
                 "RGW_SECRET_ACCESS_KEY": secret_key,
             }
@@ -219,6 +220,7 @@ class S3Client(CloudClient):
         key_id = auth_dict.get(f"{self.secret_prefix}_ACCESS_KEY_ID")
         access_key = auth_dict.get(f"{self.secret_prefix}_SECRET_ACCESS_KEY")
         self.endpoint = auth_dict.get("ENDPOINT") or endpoint
+        self.s3_internal_endpoint = auth_dict.get("S3_INTERNAL_ENDPOINT") or None
         self.region = auth_dict.get("REGION")
         self.access_key = key_id
         self.secret_key = access_key
