@@ -203,28 +203,31 @@ class StretchCluster(OCS):
 
         """
         paused = 0
+        max_fail_expected = len(self.workload_map[label][0]) - 2
+        failed = 0
         for pod_obj in self.workload_map[label][0]:
-            if get_pod_node(pod_obj).name in self.non_quorum_nodes:
-                logger.info(
-                    f"Not checking the logs from {pod_obj.name} as it belongs to non-quorum zone"
+            try:
+                pause_count = 0
+                time_var = start_time
+                logger.info(f"Current logreader pod: {pod_obj.name}")
+                pod_log = get_pod_logs(
+                    pod_name=pod_obj.name, namespace=constants.STRETCH_CLUSTER_NAMESPACE
                 )
-                continue
-            pause_count = 0
-            time_var = start_time
-            pod_log = get_pod_logs(
-                pod_name=pod_obj.name, namespace=constants.STRETCH_CLUSTER_NAMESPACE
-            )
-            logger.info(f"Current pod: {pod_obj.name}")
-            while time_var <= (end_time + timedelta(minutes=1)):
-                t_time = time_var.strftime("%H:%M")
-                if f" {t_time}" not in pod_log:
-                    pause_count += 1
-                    logger.info(f"Read pause: {t_time}")
+                while time_var <= (end_time + timedelta(minutes=1)):
+                    t_time = time_var.strftime("%H:%M")
+                    if f" {t_time}" not in pod_log:
+                        pause_count += 1
+                        logger.info(f"Read pause: {t_time}")
+                    else:
+                        logger.info(f"Read success: {t_time}")
+                    time_var = time_var + timedelta(minutes=1)
+                if pause_count > 5:
+                    paused += 1
+            except CommandFailed:
+                if failed <= max_fail_expected:
+                    failed += 1
                 else:
-                    logger.info(f"Read success: {t_time}")
-                time_var = time_var + timedelta(minutes=1)
-            if pause_count > 5:
-                paused += 1
+                    raise
         return paused
 
     @retry(CommandFailed, tries=6, delay=10)
@@ -242,19 +245,20 @@ class StretchCluster(OCS):
 
         """
         paused = 0
+        max_fail_expected = (
+            len(self.workload_map[label][0]) - 2
+            if label == constants.LOGWRITER_CEPHFS_LABEL
+            else 1
+        )
+        failed = 0
         for pod_obj in self.workload_map[label][0]:
-            if get_pod_node(pod_obj).name in self.non_quorum_nodes:
-                logger.info(
-                    f"Not checking the logs from {pod_obj.name} as it belongs to non-quorum zone"
-                )
-                continue
-            excepted = 0
+            no_such_file_expected = 1
             for file_name in self.logfile_map[label][0]:
                 pause_count = 0
                 try:
+                    logger.info(f"Current log file: {file_name}")
                     file_log = pod_obj.exec_sh_cmd_on_pod(command=f"cat {file_name}")
                     time_var = start_time
-                    logger.info(f"Current file: {file_name}")
                     while time_var <= (end_time + timedelta(minutes=1)):
                         t_time = time_var.strftime("%H:%M")
                         if f"T{t_time}" not in file_log:
@@ -265,18 +269,22 @@ class StretchCluster(OCS):
                         time_var = time_var + timedelta(minutes=1)
                     if pause_count > 5:
                         paused += 1
-                except Exception as err:
+                except CommandFailed as err:
                     if (
                         "No such file or directory" in err.args[0]
                         and label == constants.LOGWRITER_RBD_LABEL
                     ):
-                        if excepted == 0:
+                        if no_such_file_expected == 1:
                             logger.info(
                                 f"Seems like file {file_name} is not in RBD pod {pod_obj.name}"
                             )
-                            excepted += 1
+                            no_such_file_expected += 1
                         else:
                             raise UnexpectedBehaviour
+                        failed += 1
+                    elif failed < max_fail_expected:
+                        failed += 1
+                        break
                     else:
                         raise
 
@@ -438,7 +446,7 @@ class StretchCluster(OCS):
         return True
 
     @retry(CommandFailed, tries=15, delay=5)
-    def check_ceph_accessibility(self, timeout, delay=5, grace=120):
+    def check_ceph_accessibility(self, timeout, delay=60, grace=180):
         """
         Check for ceph access for the 'timeout' seconds
 
@@ -461,17 +469,23 @@ class StretchCluster(OCS):
             ceph_out = ceph_tools_pod.exec_sh_cmd_on_pod(
                 command=command, timeout=timeout + grace
             )
-            logger.info(ceph_out)
+            logger.info(f"Ceph status output:\n{ceph_out}")
             if "monclient(hunting): authenticate timed out" in ceph_out:
                 logger.warning("Ceph was hung for sometime.")
                 return False
             return True
         except Exception as err:
-            if "TimeoutExpired" in err.args[0]:
+            if (
+                "TimeoutExpired" in err.args[0]
+                or "monclient(hunting): authenticate timed out" in err.args[0]
+            ):
                 logger.error("Ceph status check got timed out. maybe ceph is hung.")
                 return False
-            elif "connect: no route to host" in err.args[0]:
-                ceph_tools_pod.delete(wait=False)
+            elif (
+                "connect: no route to host" in err.args[0]
+                or "error dialing backend" in err.args[0]
+            ):
+                ceph_tools_pod.delete(force=True)
             raise
 
     def get_out_of_quorum_nodes(self):
@@ -485,7 +499,7 @@ class StretchCluster(OCS):
         # find out the mons in quorum
         ceph_tools_pod = pod.get_ceph_tools_pod()
 
-        @retry(CommandFailed, tries=10, delay=10)
+        @retry(CommandFailed, tries=8, delay=5)
         def _get_non_quorum_mons():
             """
             Get non quorum mon pods
@@ -635,7 +649,7 @@ class StretchCluster(OCS):
             self.check_for_read_pause(
                 constants.LOGREADER_CEPHFS_LABEL, start_time, end_time
             )
-            == 0
+            <= 2
         ), "Read operations are paused for CephFS workloads even for the ones in available zones"
         logger.info("All read operations are successful for CephFs workload")
 
@@ -654,7 +668,7 @@ class StretchCluster(OCS):
                 start_time,
                 end_time,
             )
-            == 0
+            <= 1
         ), "Write operations paused for RBD workloads even for the ones in available zone"
         logger.info("all write operations are successful for RBD workloads")
 

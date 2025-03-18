@@ -2484,6 +2484,7 @@ def get_not_running_pods(selector=None, namespace=config.ENV_DATA["cluster_names
         if (
             status != constants.STATUS_RUNNING
             and status != constants.STATUS_TERMINATING
+            and status != constants.STATUS_COMPLETED
         ):
             pods_not_running.append(pod)
 

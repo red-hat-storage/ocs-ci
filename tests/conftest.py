@@ -6993,8 +6993,25 @@ def discovered_apps_dr_workload(request):
     return factory
 
 
+@pytest.fixture(scope="class")
+def cnv_workload_class(request):
+    """
+    Class scoped fixture to deploy CNV workload
+
+    """
+    return cnv_workload_factory(request)
+
+
 @pytest.fixture()
 def cnv_workload(request):
+    """
+    Function scoped fixture to deploy CNV workload
+
+    """
+    return cnv_workload_factory(request)
+
+
+def cnv_workload_factory(request):
     """
     Deploys CNV based workloads
 
@@ -8541,21 +8558,24 @@ def setup_cnv(request):
     """
     cnv_obj = CNVInstaller()
     installed = False
-    if not cnv_obj.post_install_verification():
-        cnv_obj.deploy_cnv(check_cnv_deployed=False, check_cnv_ready=False)
-        installed = True
+    try:
+        if not cnv_obj.post_install_verification():
+            installed = True
+            cnv_obj.deploy_cnv()
 
-    def finalizer():
-        """
-        Clean up CNV deployment
+    finally:
 
-        """
+        def finalizer():
+            """
+            Clean up CNV deployment
 
-        # Uninstall CNV only if installed by this fixture
-        if installed:
-            cnv_obj.uninstall_cnv()
+            """
 
-    request.addfinalizer(finalizer)
+            # Uninstall CNV only if installed by this fixture
+            if installed:
+                cnv_obj.uninstall_cnv()
+
+        request.addfinalizer(finalizer)
 
 
 @pytest.fixture(scope="class")
