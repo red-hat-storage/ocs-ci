@@ -3,7 +3,10 @@ import pytest
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
 from ocs_ci.ocs import constants
-from ocs_ci.framework.pytest_customization.marks import ignore_leftover_label
+from ocs_ci.framework.pytest_customization.marks import (
+    ignore_leftover_label,
+    polarion_id,
+)
 from ocs_ci.ocs.bucket_utils import (
     write_random_test_objects_to_bucket,
     s3_delete_object,
@@ -24,6 +27,8 @@ from ocs_ci.ocs.resources.pod import (
     get_pods_having_label,
     Pod,
     get_noobaa_core_pod,
+    get_noobaa_db_pod,
+    get_noobaa_endpoint_pods,
 )
 from ocs_ci.utility.utils import TimeoutSampler
 
@@ -74,6 +79,7 @@ class TestBucketNotificationSystemTest:
                 logger.info(f"Verified {event_name} for all the buckets.")
                 break
 
+    @polarion_id("OCS-6406")
     def test_bucket_notification_system_test(
         self,
         nodes,
@@ -167,7 +173,17 @@ class TestBucketNotificationSystemTest:
 
             # 5. Tag object from the bucket and restart noobaa pod nodes
             # Verify ObjectTagging:Put events has occurred for all the buckets
-            noobaa_pod_nodes = [get_pod_node(get_noobaa_core_pod())]
+            noobaa_pods = [
+                get_noobaa_core_pod(),
+                get_noobaa_db_pod(),
+            ] + get_noobaa_endpoint_pods()
+            noobaa_pod_nodes = [get_pod_node(pod_obj) for pod_obj in noobaa_pods]
+            aws_cli_pod_node = get_pod_node(awscli_pod).name
+            for node_obj in noobaa_pod_nodes:
+                if node_obj.name != aws_cli_pod_node:
+                    node_to_shutdown = [node_obj]
+                    break
+
             future_objs = []
             for bucket in buckets_created:
                 logger.info(f"Tagging object {obj_written[1]} from the bucket {bucket}")
@@ -181,8 +197,8 @@ class TestBucketNotificationSystemTest:
                     )
                 )
 
-            logger.info(f"Stopping Noobaa pod node {noobaa_pod_nodes[0]}")
-            nodes.stop_nodes(nodes=noobaa_pod_nodes)
+            logger.info(f"Stopping Noobaa pod node {node_to_shutdown}")
+            nodes.stop_nodes(nodes=node_to_shutdown)
 
             for future in as_completed(future_objs):
                 future.result()
@@ -200,7 +216,7 @@ class TestBucketNotificationSystemTest:
             )
 
             logger.info("Starting Noobaa pod nodes")
-            nodes.start_nodes(nodes=noobaa_pod_nodes)
+            nodes.start_nodes(nodes=node_to_shutdown)
 
             # 6. Remove object from the bucket and restart kafka pods
             # Verify ObjectRemoved event has occurred
