@@ -95,14 +95,16 @@ class TestVmAddCapacity(E2ETest):
     def test_vm_add_capacity(self, setup):
         """
         Test steps:
-        1. Keep IO operations going on VMs, with snapshots and clones present.
+        1. Keep IO operations going on VMs
         2. Keep VMs in different states (running, paused, stopped).
         3. Perform add capacity using official docs.
         4. Verify Cluster Stability and Data Integrity.
         5. Ensure the additional storage has been added.
-        6. Verify VMs, snapshots and clones have preserved their states and
-        data integrity.
+        6. Verify VMs have preserved their states and data integrity.
         """
+        initial_vm_states = {
+            vm_obj.name: vm_obj.printableStatus() for vm_obj in self.vm_list
+        }
         logger.info("Adding storage capacity...")
         add_capacity_test()
         logger.info("Added storage capacity!")
@@ -120,6 +122,17 @@ class TestVmAddCapacity(E2ETest):
             "Not all pods are running after capacity "
             f"addition in {constants.OPENSHIFT_STORAGE_NAMESPACE}"
         )
+
+        final_vm_states = {
+            vm_obj.name: vm_obj.printableStatus() for vm_obj in self.vm_list
+        }
+        logger.info(f"Final VM states: {final_vm_states}")
+        for vm_name in initial_vm_states:
+            assert initial_vm_states[vm_name] == final_vm_states[vm_name], (
+                f"VM state mismatch for {vm_name}: "
+                f"initial state was {initial_vm_states[vm_name]}, "
+                f"but final state is {final_vm_states[vm_name]}"
+            )
 
         self.vm_stopped.start()
         self.vm_paused.unpause()
