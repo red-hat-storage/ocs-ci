@@ -53,6 +53,7 @@ logger = logging.getLogger(__name__)
 @pre_upgrade
 @tier2
 @skipif_managed_service
+@skipif_mcg_only
 @skipif_hci_provider_and_client
 def test_workload_with_checksum(workload_storageutilization_checksum_rbd):
     """
