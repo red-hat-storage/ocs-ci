@@ -46,6 +46,7 @@ from ocs_ci.ocs.resources.pod import (
     get_noobaa_pods,
     wait_for_noobaa_pods_running,
     get_pod_node,
+    get_noobaa_endpoint_pods,
 )
 
 from ocs_ci.utility.retry import retry
@@ -420,7 +421,7 @@ class TestLogBasedReplicationWithDisruptions:
 
 class TestMCGReplicationWithVersioningSystemTest:
 
-    @retry(CommandFailed, tries=5, delay=30)
+    @retry(CommandFailed, tries=7, delay=30)
     def upload_objects_with_retry(
         self,
         mcg_obj_session,
@@ -445,6 +446,7 @@ class TestMCGReplicationWithVersioningSystemTest:
             timeout=600,
         )
 
+    @polarion_id("OCS-6407")
     def test_bucket_replication_with_versioning_system_test(
         self,
         awscli_pod_session,
@@ -560,8 +562,8 @@ class TestMCGReplicationWithVersioningSystemTest:
         wait_for_object_versions_match(
             mcg_obj_session,
             awscli_pod_session,
-            bucket_1,
-            bucket_2,
+            bucket_1.name,
+            bucket_2.name,
             obj_key=f"{prefix_2}/{object_key}",
         )
         logger.info(
@@ -574,9 +576,17 @@ class TestMCGReplicationWithVersioningSystemTest:
 
             # Update object uploaded previously from the second bucket and
             # then shutdown the noobaa core and db pod nodes
-            noobaa_pods = [get_noobaa_core_pod()]
+            noobaa_pods = [
+                get_noobaa_core_pod(),
+                get_noobaa_db_pod(),
+            ] + get_noobaa_endpoint_pods()
+            noobaa_pod_nodes = [get_pod_node(pod_obj) for pod_obj in noobaa_pods]
+            aws_cli_pod_node = get_pod_node(awscli_pod_session).name
+            for node_obj in noobaa_pod_nodes:
+                if node_obj.name != aws_cli_pod_node:
+                    node_to_shutdown = [node_obj]
+                    break
 
-            nodes_to_shutdown = [get_pod_node(pod_obj) for pod_obj in noobaa_pods]
             logger.info(
                 f"Updating object {object_key} with new version data in bucket {bucket_1.name}"
             )
@@ -591,8 +601,8 @@ class TestMCGReplicationWithVersioningSystemTest:
                 prefix=prefix_1,
             )
 
-            nodes.stop_nodes(list(set(nodes_to_shutdown)))
-            logger.info(f"Stopped these noobaa pod nodes {nodes_to_shutdown}")
+            nodes.stop_nodes(node_to_shutdown)
+            logger.info(f"Stopped these noobaa pod nodes {node_to_shutdown}")
 
             # Wait for the upload to finish
             future.result()
@@ -600,8 +610,8 @@ class TestMCGReplicationWithVersioningSystemTest:
             wait_for_object_versions_match(
                 mcg_obj_session,
                 awscli_pod_session,
-                bucket_1,
-                bucket_2,
+                bucket_1.name,
+                bucket_2.name,
                 obj_key=f"{prefix_1}/{object_key}",
             )
             logger.info(
@@ -610,10 +620,11 @@ class TestMCGReplicationWithVersioningSystemTest:
             )
 
             logger.info("Starting nodes now...")
-            nodes.start_nodes(nodes=nodes_to_shutdown)
+            nodes.start_nodes(nodes=node_to_shutdown)
             wait_for_noobaa_pods_running()
 
             # Update object uploaded previously from the first bucket and then restart the noobaa pods
+            noobaa_pods = get_noobaa_pods()
             logger.info(
                 f"Updating object {object_key} with new version data in bucket {bucket_2.name}"
             )
@@ -638,8 +649,8 @@ class TestMCGReplicationWithVersioningSystemTest:
             wait_for_object_versions_match(
                 mcg_obj_session,
                 awscli_pod_session,
-                bucket_1,
-                bucket_2,
+                bucket_1.name,
+                bucket_2.name,
                 obj_key=f"{prefix_2}/{object_key}",
             )
             logger.info(
@@ -684,8 +695,8 @@ class TestMCGReplicationWithVersioningSystemTest:
             wait_for_object_versions_match(
                 mcg_obj_session,
                 awscli_pod_session,
-                bucket_1,
-                bucket_2,
+                bucket_1.name,
+                bucket_2.name,
                 obj_key=f"{prefix_1}/{object_key}",
             )
         except TimeoutExpiredError:
@@ -720,8 +731,8 @@ class TestMCGReplicationWithVersioningSystemTest:
         wait_for_object_versions_match(
             mcg_obj_session,
             awscli_pod_session,
-            bucket_1,
-            bucket_2,
+            bucket_1.name,
+            bucket_2.name,
             obj_key=f"{prefix_1}/{object_key}",
         )
         logger.info(
