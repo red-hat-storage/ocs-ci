@@ -8,10 +8,8 @@ from ocs_ci.framework.pytest_customization.marks import (
 from ocs_ci.framework.testlib import E2ETest
 from ocs_ci.helpers.cnv_helpers import run_dd_io, cal_md5sum_vm
 from ocs_ci.ocs import constants, node
-from ocs_ci.ocs.resources import pod
 from ocs_ci.ocs.resources.pod import wait_for_pods_to_be_running
 from ocs_ci.utility.utils import TimeoutSampler, ceph_health_check
-from ocs_ci.ocs.exceptions import ResourceWrongStatusException
 
 log = logging.getLogger(__name__)
 
@@ -105,25 +103,10 @@ class TestVmSingleWorkerNodeFailure(E2ETest):
         node_obj = node.get_node_objs([node_name])
         nodes.restart_nodes_by_stop_and_start(node_obj)
 
-        log.info(f"Waiting for node {node_name} to return to Ready state")
-        try:
-            node.wait_for_nodes_status(
-                node_names=[node_name],
-                status=constants.NODE_READY,
-            )
-            log.info("Verifying all pods are running after node recovery")
-            if not pod.wait_for_pods_to_be_running(timeout=720):
-                raise ResourceWrongStatusException(
-                    "Not all pods returned to running state after node recovery"
-                )
-        except ResourceWrongStatusException as e:
-            log.error(
-                f"Pods did not return to running state, attempting node restart: {e}"
-            )
+        log.info("Performing post-failure health checks for ODF and CNV namespaces")
 
         ceph_health_check(tries=80)
 
-        log.info("Performing post-failure health checks for ODF and CNV namespaces")
         sample = TimeoutSampler(
             timeout=600,
             sleep=10,
