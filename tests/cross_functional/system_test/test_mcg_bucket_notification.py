@@ -3,7 +3,10 @@ import pytest
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
 from ocs_ci.ocs import constants
-from ocs_ci.framework.pytest_customization.marks import ignore_leftover_label
+from ocs_ci.framework.pytest_customization.marks import (
+    ignore_leftover_label,
+    polarion_id,
+)
 from ocs_ci.ocs.bucket_utils import (
     write_random_test_objects_to_bucket,
     s3_delete_object,
@@ -74,6 +77,7 @@ class TestBucketNotificationSystemTest:
                 logger.info(f"Verified {event_name} for all the buckets.")
                 break
 
+    @polarion_id("OCS-6406")
     def test_bucket_notification_system_test(
         self,
         nodes,
