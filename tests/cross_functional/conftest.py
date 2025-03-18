@@ -406,7 +406,8 @@ def noobaa_db_backup(request, snapshot_factory):
 
         """
         for pvc_obj in restore_pvc_objs:
-            pvc_obj.delete()
+            if pvc_obj.ocp.get(resource_name=pvc_obj.name, dont_raise=True):
+                pvc_obj.delete()
 
     request.addfinalizer(teardown)
     return factory
