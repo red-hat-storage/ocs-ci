@@ -511,12 +511,13 @@ def run_fio(
     size="1G",
     io_direction="randrw",
     jobs=1,
-    runtime=60,
+    runtime=0,
     depth=4,
     rate="1m",
     bs="4K",
     direct=1,
     verify=True,
+    background=True,
     verify_method="crc32c",
     filename="/testfile",
 ):
@@ -534,6 +535,7 @@ def run_fio(
         bs (str): Block size (default: '4K').
         direct (int): Use direct I/O (1 = Yes, 0 = No).
         verify (bool): Enable data integrity verification.
+        background(bool): Enable Background running.
         verify_method (str): Data integrity check method ('crc32c', 'md5', etc.).
         filename (str): Path of the test file in the VM.
 
@@ -544,17 +546,21 @@ def run_fio(
 
     # Construct the FIO command
     fio_cmd = (
-        f"fio --name=cnv_fio_test "
+        f"nohup fio --name=cnv_fio_test "
         f"--rw={io_direction} --bs={bs} --size={size} --numjobs={jobs} "
-        f"--iodepth={depth} --rate={rate} --runtime={runtime} --filename={filename} "
+        f"--iodepth={depth} --rate={rate} --runtime={runtime} --time_based --filename={filename} "
         f"--direct={direct} "
     )
 
     if verify:
         fio_cmd += f" --verify={verify_method} --verify_fatal=1"
 
+    # Run FIO in the background so it persists even if SSH session closes
+    if background:
+        fio_cmd += " > /tmp/fio_output.log 2>&1 &"
+
     try:
-        logger.info(f" Running FIO on VM: {vm_obj.name}")
+        logger.info(f" Starting FIO on VM: {vm_obj.name}")
         vm_obj.run_ssh_cmd(fio_cmd)
 
         logger.info("FIO execution started successfully!")
