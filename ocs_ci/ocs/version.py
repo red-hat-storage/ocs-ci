@@ -22,6 +22,7 @@ import os.path
 import pprint
 import re
 import sys
+from functools import wraps
 
 from ocs_ci import framework
 from ocs_ci.framework import config
@@ -29,7 +30,7 @@ from ocs_ci.ocs import constants, node, ocp
 from ocs_ci.ocs.ocp import OCP
 from ocs_ci.ocs.exceptions import CommandFailed
 from ocs_ci.utility import utils
-
+from ocs_ci.utility.utils import skipif_ocs_version
 
 logger = logging.getLogger(__name__)
 
@@ -275,3 +276,20 @@ def main():
         return
 
     report_ocs_version(cluster_version, image_dict, file_obj=sys.stdout)
+
+
+def if_version(expressions):
+    def decorator(func):
+        @wraps(func)
+        def wrapper(*args, **kwargs):
+            if skipif_ocs_version(expressions):
+                return func(*args, **kwargs)
+            else:
+                logger.warning(
+                    f"Skipping {func.__name__} because the OCS version "
+                    f"does not match the required version {expressions}"
+                )
+
+        return wrapper
+
+    return decorator
