@@ -64,8 +64,8 @@ class TestUpgradeForProviderClient(ManageTest):
             for GA to GA upgrade
         """
         # self.test_upgrade_ocp.test_upgrade_ocp(reduce_and_resume_cluster_load)
-        # self.acm_hub_upgrade_obj.run_upgrade()
-        # self.cnv_installer_obj.upgrade_cnv()
+        self.acm_hub_upgrade_obj.run_upgrade()
+        self.cnv_installer_obj.upgrade_cnv()
         self.metallb_installer_obj.upgrade_metallb()
         run_ocs_upgrade()
         self.storage_clients.verify_version_of_odf_client_operator()
