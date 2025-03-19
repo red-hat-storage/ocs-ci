@@ -123,14 +123,12 @@ class TestVmSnapshotClone(E2ETest):
 
         Test steps:
         1. Create VMs, add data(e.g., files) to all the VMs
-        2. Create a snapshot for a VM backed pvc
+        2. Create a snapshot of VM
             a. Expand PVC if `pvc_expand_before_snapshot` is True.
             b. Verify the availability of expanded portion for IOs
-        3. Restore the snapshot (to same access mode of the parent PVC and storage_class) by following the
-        documented procedure from ODF official docs
-        4. Create new vm using restored pvc Verify existing data of the VM are not changed.
-             a. Expand PVC if `pvc_expand_after_restore` is True
-             b. Verify the availability of expanded portion for IOs
+        3. Restore the snapshot into same VM and Verify data avaialble before snapshot of the VM are not changed
+            a. Expand PVC if `pvc_expand_after_restore` is True
+            b. Verify the availability of expanded portion for IOs
         5. Add further data(e.g., new file) to the VM
         6. Repeat the above procedure for all the VMs in the system
         7. Stop all the VMs created as part of this test.
