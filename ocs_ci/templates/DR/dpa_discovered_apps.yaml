@@ -15,4 +15,5 @@ spec:
       defaultPlugins:
         - openshift
         - aws
+        - kubevirt
       noDefaultBackupLocation: true
