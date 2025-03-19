@@ -142,6 +142,9 @@ def verify_image_versions(old_images, upgrade_version, version_before_upgrade):
     default_noobaa_pods = 3
     noobaa_pods = default_noobaa_pods
     noobaa_pod_obj = get_noobaa_pods()
+    if upgrade_version >= parse_version("4.19"):
+        log.info("Increased default noobaa pod count by 1 due to cnpg pod")
+        default_noobaa_pods += 1
     if (
         config.ENV_DATA.get("mcg_only_deployment")
         and config.ENV_DATA["platform"].lower() == constants.VSPHERE_PLATFORM
