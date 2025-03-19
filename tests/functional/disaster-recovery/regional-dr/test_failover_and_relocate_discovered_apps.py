@@ -13,6 +13,8 @@ from ocs_ci.ocs import constants
 from ocs_ci.ocs.resources.pod import wait_for_pods_to_be_running
 from ocs_ci.utility.utils import ceph_health_check
 from ocs_ci.ocs import constants
+from ocs_ci.ocs.resources.pod import wait_for_pods_to_be_running
+from ocs_ci.utility.utils import ceph_health_check
 
 logger = logging.getLogger(__name__)
 
@@ -68,25 +70,23 @@ class TestFailoverAndRelocateWithDiscoveredApps:
             pytest.param(
                 False,
                 constants.CEPHBLOCKPOOL,
-                # marks=pytest.mark.polarion_id(polarion_id_primary_up),
                 id="primary_up-rbd",
             ),
             pytest.param(
                 True,
                 constants.CEPHBLOCKPOOL,
-                # marks=pytest.mark.polarion_id(polarion_id_primary_down),
                 id="primary_down-rbd",
             ),
             pytest.param(
                 False,
                 constants.CEPHFILESYSTEM,
-                # marks=pytest.mark.polarion_id(polarion_id_primary_up_cephfs),
+                marks=skipif_ocs_version("<4.18"),
                 id="primary_up-cephfs",
             ),
             pytest.param(
                 True,
                 constants.CEPHFILESYSTEM,
-                # marks=pytest.mark.polarion_id(polarion_id_primary_down_cephfs),
+                marks=skipif_ocs_version("<4.18"),
                 id="primary_down-cephfs",
             ),
         ],
@@ -96,6 +96,7 @@ class TestFailoverAndRelocateWithDiscoveredApps:
         discovered_apps_dr_workload,
         primary_cluster_down,
         pvc_interface,
+        nodes_multicluster,
     ):
         """
         Tests to verify application failover and Relocate with Discovered Apps
@@ -196,7 +197,6 @@ class TestFailoverAndRelocateWithDiscoveredApps:
             timeout=1200,
             discovered_apps=True,
             vrg_name=rdr_workload.discovered_apps_placement_name,
-
         )
 
         if pvc_interface == constants.CEPHFILESYSTEM:
