@@ -180,6 +180,16 @@ class NodesBase(object):
     def attach_volume(self, volume, node):
         raise NotImplementedError("Attach volume functionality is not implemented")
 
+    def create_and_attach_volume(self, node, size, ssd=False):
+        raise NotImplementedError(
+            "Create and attach volume functionality is not implemented"
+        )
+
+    def create_and_attach_volumes(self, node, volume_sizes, ssd=False):
+        raise NotImplementedError(
+            "Create and attach volumes functionality is not implemented"
+        )
+
     def wait_for_volume_attach(self, volume):
         raise NotImplementedError(
             "Wait for volume attach functionality is not implemented"
@@ -477,7 +487,7 @@ class VMWareNodes(NodesBase):
 
     def create_and_attach_volumes(self, node, volume_sizes, ssd=False):
         """
-        Create a new volumes and attach them to the given VM
+        Create new volumes and attach them to the given VM
 
         Args:
             node (OCS): The OCS object representing the node
