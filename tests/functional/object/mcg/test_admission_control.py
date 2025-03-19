@@ -371,6 +371,7 @@ class TestAdmissionWebhooks(MCGTest):
         else:
             assert False, "Store patch succeeded unexpectedly"
 
+    @tier3
     @skipif_mcg_only
     @polarion_id("OCS-2792")
     def test_pvpool_downscaling(self, backingstore_factory_session):
