@@ -747,6 +747,7 @@ def pytest_runtest_makereport(item, call):
         ocp_markers_to_collect = {
             "performance",
             "purple_squad",
+            "rdr",
         }
         if ocp_markers_to_collect & item_markers:
             ocp_logs_collection = True
