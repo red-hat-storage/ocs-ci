@@ -846,6 +846,7 @@ def get_openshift_installer(
     else:
         installer_filename = "openshift-install"
     installer_binary_path = os.path.join(bin_dir, installer_filename)
+    config.ENV_DATA["installer_path"] = installer_binary_path
     client_binary_path = os.path.join(bin_dir, "oc")
     client_exist = os.path.isfile(client_binary_path)
     custom_ocp_image = config.DEPLOYMENT.get("custom_ocp_image")
@@ -877,7 +878,6 @@ def get_openshift_installer(
         os.chdir(previous_dir)
 
     installer_version = run_cmd(f"{installer_binary_path} version")
-    config.ENV_DATA["installer_path"] = installer_binary_path
     log.info(f"OpenShift Installer version: {installer_version}")
     return installer_binary_path
 
