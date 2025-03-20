@@ -7,7 +7,7 @@ from datetime import datetime, timezone, timedelta
 
 from ocs_ci.helpers.stretchcluster_helper import (
     recover_from_ceph_stuck,
-    recover_workload_pods_post_recovery,
+    check_for_logwriter_workload_pods,
 )
 from ocs_ci.ocs.resources.stretchcluster import StretchCluster
 from ocs_ci.ocs.ocp import OCP
@@ -18,14 +18,12 @@ from ocs_ci.ocs.resources.pod import (
     get_ceph_tools_pod,
     wait_for_pods_to_be_in_statuses,
     get_debug_pods,
-    get_not_running_pods,
 )
 from ocs_ci.helpers.sanity_helpers import Sanity
 from ocs_ci.ocs.exceptions import (
     CommandFailed,
     ResourceWrongStatusException,
     CephHealthException,
-    UnexpectedBehaviour,
 )
 from ocs_ci.utility.retry import retry
 from ocs_ci.framework.pytest_customization.marks import (
@@ -42,10 +40,7 @@ log = logging.getLogger(__name__)
 @turquoise_squad
 class TestZoneShutdownsAndCrashes:
 
-    zones = constants.ZONES_LABELS
-    # We dont want to select arbiter zone randomly for the shutdown/crash
-    # because its not valid test scenario
-    zones.remove("arbiter")
+    zones = constants.DATA_ZONE_LABELS
 
     @pytest.fixture()
     def init_sanity(self, request, nodes):
@@ -175,22 +170,13 @@ class TestZoneShutdownsAndCrashes:
             sc_obj.cephfs_logreader_job,
         ) = setup_logwriter_cephfs_workload_factory(read_duration=0)
 
-        # Generate 2 minutes worth of logs before inducing the netsplit
-        log.info("Generating 2 mins worth of log")
-        time.sleep(120)
-
-        sc_obj.get_logwriter_reader_pods(label=constants.LOGWRITER_CEPHFS_LABEL)
-        sc_obj.get_logwriter_reader_pods(label=constants.LOGREADER_CEPHFS_LABEL)
-        sc_obj.get_logwriter_reader_pods(
-            label=constants.LOGWRITER_RBD_LABEL, exp_num_replicas=2
-        )
-        log.info("All the workloads pods are successfully up and running")
-
         start_time = None
         end_time = None
 
         for i in range(iteration):
             log.info(f"------ Iteration {i+1} ------")
+            check_for_logwriter_workload_pods(sc_obj, nodes=nodes)
+            log.info("CephFS and RBD workloads are running successfully")
 
             # note the file names created
             sc_obj.get_logfile_map(label=constants.LOGWRITER_CEPHFS_LABEL)
@@ -246,18 +232,21 @@ class TestZoneShutdownsAndCrashes:
                 log.error("Something went wrong!")
 
             # Validate all nodes are in READY state and up
-            retry(
-                (
-                    CommandFailed,
-                    TimeoutError,
-                    AssertionError,
-                    ResourceWrongStatusException,
-                ),
-                tries=30,
-                delay=15,
-            )(wait_for_nodes_status(timeout=1800))
+            wait_for_nodes_status(timeout=600)
+
             log.info(f"Nodes of zone {zone} are started successfully")
             log.info(f"Failure started at {start_time} and ended at {end_time}")
+
+            # get all the running logwriter pods
+            sc_obj.get_logwriter_reader_pods(
+                label=constants.LOGWRITER_CEPHFS_LABEL, exp_num_replicas=0
+            )
+            sc_obj.get_logwriter_reader_pods(
+                label=constants.LOGREADER_CEPHFS_LABEL, exp_num_replicas=0
+            )
+            sc_obj.get_logwriter_reader_pods(
+                label=constants.LOGWRITER_RBD_LABEL, exp_num_replicas=0
+            )
 
             if not immediate:
                 sc_obj.post_failure_checks(
@@ -266,23 +255,6 @@ class TestZoneShutdownsAndCrashes:
                 log.info(
                     "Successfully verified with post failure checks for the workloads"
                 )
-
-            try:
-                sc_obj.get_logwriter_reader_pods(label=constants.LOGWRITER_CEPHFS_LABEL)
-                sc_obj.get_logwriter_reader_pods(
-                    label=constants.LOGREADER_CEPHFS_LABEL,
-                    statuses=[constants.STATUS_RUNNING, constants.STATUS_COMPLETED],
-                )
-                sc_obj.get_logwriter_reader_pods(
-                    label=constants.LOGWRITER_RBD_LABEL, exp_num_replicas=2
-                )
-            except UnexpectedBehaviour:
-
-                log.info("some pods are not running, so trying the work-around")
-                pods_not_running = get_not_running_pods(
-                    namespace=constants.STRETCH_CLUSTER_NAMESPACE
-                )
-                recover_workload_pods_post_recovery(sc_obj, pods_not_running)
 
             log.info(f"Waiting {delay} mins before the next iteration!")
             time.sleep(delay * 60)
@@ -293,11 +265,8 @@ class TestZoneShutdownsAndCrashes:
             )
             log.info("Successfully verified with post failure checks for the workloads")
 
-        sc_obj.cephfs_logreader_job.delete()
-        log.info(sc_obj.cephfs_logreader_pods)
-        for pod in sc_obj.cephfs_logreader_pods:
-            pod.wait_for_pod_delete(timeout=120)
-        log.info("All old CephFS logreader pods are deleted")
+        # update the logwriter/reader pod details with the latest
+        check_for_logwriter_workload_pods(sc_obj, nodes=nodes)
 
         # check for any data loss
         assert sc_obj.check_for_data_loss(
@@ -386,18 +355,10 @@ class TestZoneShutdownsAndCrashes:
             sc_obj.cephfs_logreader_job,
         ) = setup_logwriter_cephfs_workload_factory(read_duration=0)
 
-        # Generate 5 minutes worth of logs before inducing the netsplit
-        log.info("Generating 2 mins worth of log")
-        time.sleep(120)
-
-        sc_obj.get_logwriter_reader_pods(label=constants.LOGWRITER_CEPHFS_LABEL)
-        sc_obj.get_logwriter_reader_pods(label=constants.LOGREADER_CEPHFS_LABEL)
-        sc_obj.get_logwriter_reader_pods(
-            label=constants.LOGWRITER_RBD_LABEL, exp_num_replicas=2
-        )
-
         for i in range(iteration):
             log.info(f"------ Iteration {i+1} ------")
+            check_for_logwriter_workload_pods(sc_obj, nodes=nodes)
+            log.info("All logwriter workload pods are running successfully")
 
             # note the file names created
             sc_obj.get_logfile_map(label=constants.LOGWRITER_CEPHFS_LABEL)
@@ -446,51 +407,33 @@ class TestZoneShutdownsAndCrashes:
 
             # wait for the nodes to come back to READY status
             log.info("Waiting for the nodes to come up automatically after the crash")
-            retry(
-                (
-                    CommandFailed,
-                    TimeoutError,
-                    AssertionError,
-                    ResourceWrongStatusException,
-                ),
-                tries=30,
-                delay=15,
-            )(wait_for_nodes_status(timeout=1800))
+            wait_for_nodes_status(timeout=600)
 
             end_time = datetime.now(timezone.utc)
             log.info(f"Start time : {start_time} & End time : {end_time}")
+
+            # get all the running logwriter pods
+            sc_obj.get_logwriter_reader_pods(
+                label=constants.LOGWRITER_CEPHFS_LABEL, exp_num_replicas=0
+            )
+            sc_obj.get_logwriter_reader_pods(
+                label=constants.LOGREADER_CEPHFS_LABEL, exp_num_replicas=0
+            )
+            sc_obj.get_logwriter_reader_pods(
+                label=constants.LOGWRITER_RBD_LABEL, exp_num_replicas=0
+            )
 
             # check the ceph access again after the nodes are completely up
             sc_obj.post_failure_checks(
                 start_time, end_time, wait_for_read_completion=False
             )
 
-            try:
-                sc_obj.get_logwriter_reader_pods(label=constants.LOGWRITER_CEPHFS_LABEL)
-                sc_obj.get_logwriter_reader_pods(
-                    label=constants.LOGREADER_CEPHFS_LABEL,
-                    statuses=["Running", "Completed"],
-                )
-                sc_obj.get_logwriter_reader_pods(
-                    label=constants.LOGWRITER_RBD_LABEL, exp_num_replicas=2
-                )
-            except UnexpectedBehaviour:
-
-                log.info("some pods are not running, so trying the work-around")
-                pods_not_running = get_not_running_pods(
-                    namespace=constants.STRETCH_CLUSTER_NAMESPACE
-                )
-                recover_workload_pods_post_recovery(sc_obj, pods_not_running)
-
             log.info(f"Waiting {delay} mins before the next iteration!")
             time.sleep(delay * 60)
 
-        sc_obj.cephfs_logreader_job.delete()
-        for pod in sc_obj.cephfs_logreader_pods:
-            pod.wait_for_pod_delete(timeout=120)
-        log.info("All old logreader pods are deleted")
-
         # check for any data loss
+        check_for_logwriter_workload_pods(sc_obj, nodes=nodes)
+
         assert sc_obj.check_for_data_loss(
             constants.LOGWRITER_CEPHFS_LABEL
         ), "[CephFS] Data is lost"

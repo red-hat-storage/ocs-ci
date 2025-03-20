@@ -3,18 +3,15 @@ import logging
 import time
 import ocpnetsplit
 
-from ocs_ci.utility.utils import wait_for_ceph_health_not_ok
-from ocs_ci.utility.retry import retry
 from ocs_ci.framework.pytest_customization.marks import (
     turquoise_squad,
     tier1,
     stretchcluster_required,
 )
 from ocs_ci.helpers.stretchcluster_helper import (
-    recover_workload_pods_post_recovery,
+    check_for_logwriter_workload_pods,
     recover_from_ceph_stuck,
 )
-from ocs_ci.ocs.exceptions import UnexpectedBehaviour, CommandFailed
 
 from ocs_ci.ocs.resources.stretchcluster import StretchCluster
 from ocs_ci.ocs.exceptions import CephHealthException
@@ -27,7 +24,6 @@ from ocs_ci.ocs.resources.pvc import get_pvc_objs
 from ocs_ci.ocs.resources.pod import (
     wait_for_pods_to_be_in_statuses,
     get_ceph_tools_pod,
-    get_not_running_pods,
 )
 
 logger = logging.getLogger(__name__)
@@ -54,7 +50,7 @@ class TestNetSplit:
             except CephHealthException as e:
                 assert (
                     "HEALTH_WARN" in e.args[0]
-                ), f"Ignoring Ceph health warnings: {e.args[0]}"
+                ), f"Ceph seems to be in HEALTH_ERR state: {e.args[0]}"
                 get_ceph_tools_pod().exec_ceph_cmd(ceph_cmd="ceph crash archive-all")
                 logger.info("Archived ceph crash!")
 
@@ -63,10 +59,39 @@ class TestNetSplit:
     @pytest.mark.parametrize(
         argnames="zones, duration",
         argvalues=[
-            pytest.param(constants.NETSPLIT_DATA_1_DATA_2, 13),
-            pytest.param(constants.NETSPLIT_ARBITER_DATA_1, 13),
-            pytest.param(constants.NETSPLIT_ARBITER_DATA_1_AND_ARBITER_DATA_2, 13),
-            pytest.param(constants.NETSPLIT_ARBITER_DATA_1_AND_DATA_1_DATA_2, 13),
+            pytest.param(
+                constants.NETSPLIT_DATA_1_DATA_2,
+                15,
+                marks=[
+                    pytest.mark.polarion_id("OCS-5069"),
+                    pytest.mark.polarion_id("OCS-5071"),
+                    pytest.mark.bugzilla("2265992"),
+                ],
+            ),
+            pytest.param(
+                constants.NETSPLIT_ARBITER_DATA_1,
+                15,
+                marks=[
+                    pytest.mark.polarion_id("OCS-5072"),
+                    pytest.mark.polarion_id("OCS-5074"),
+                ],
+            ),
+            pytest.param(
+                constants.NETSPLIT_ARBITER_DATA_1_AND_ARBITER_DATA_2,
+                15,
+                marks=[
+                    pytest.mark.polarion_id("OCS-5083"),
+                    pytest.mark.polarion_id("OCS-5085"),
+                ],
+            ),
+            pytest.param(
+                constants.NETSPLIT_ARBITER_DATA_1_AND_DATA_1_DATA_2,
+                15,
+                marks=[
+                    pytest.mark.polarion_id("OCS-5077"),
+                    pytest.mark.polarion_id("OCS-5079"),
+                ],
+            ),
         ],
         ids=[
             "Data-1-Data-2",
@@ -114,16 +139,8 @@ class TestNetSplit:
         ) = setup_logwriter_cephfs_workload_factory(read_duration=(duration + 10))
         logger.info("Workloads are running")
 
-        # Generate 5 minutes worth of logs before inducing the netsplit
-        logger.info("Generating 2 mins worth of log")
-        time.sleep(120)
-
         # note all the pod names
-        sc_obj.get_logwriter_reader_pods(label=constants.LOGWRITER_CEPHFS_LABEL)
-        sc_obj.get_logwriter_reader_pods(label=constants.LOGREADER_CEPHFS_LABEL)
-        sc_obj.get_logwriter_reader_pods(
-            label=constants.LOGWRITER_RBD_LABEL, exp_num_replicas=2
-        )
+        check_for_logwriter_workload_pods(sc_obj, nodes=nodes)
 
         # note the file names created and each file start write time
         # note the file names created
@@ -142,52 +159,33 @@ class TestNetSplit:
         )
         logger.info(f"Netsplit induced at {start_time} for zones {zones}")
 
-        # wait for the ceph to be unhealthy
-        wait_for_ceph_health_not_ok()
-
-        # get the nodes which are present in the
-        # out of quorum zone
-        retry(CommandFailed, tries=5, delay=10)(sc_obj.get_out_of_quorum_nodes)()
-
-        # note the end time (UTC)
-        if not sc_obj.check_ceph_accessibility(timeout=(duration * 60)):
+        # check for ceph accessibility and note the end time (UTC)
+        timeout = (end_time - datetime.now(timezone.utc)).total_seconds()
+        if not sc_obj.check_ceph_accessibility(timeout=int(timeout)):
             assert recover_from_ceph_stuck(
                 sc_obj
             ), "Something went wrong. not expected. please check rook-ceph logs"
         time_now = datetime.now(timezone.utc)
         if time_now < end_time:
             time.sleep((end_time - time_now).total_seconds())
-
         logger.info(f"Ended netsplit at {end_time}")
+
+        # get all the running logwriter pods
+        sc_obj.get_logwriter_reader_pods(
+            label=constants.LOGWRITER_CEPHFS_LABEL, exp_num_replicas=0
+        )
+        sc_obj.get_logwriter_reader_pods(
+            label=constants.LOGREADER_CEPHFS_LABEL, exp_num_replicas=0
+        )
+        sc_obj.get_logwriter_reader_pods(
+            label=constants.LOGWRITER_RBD_LABEL, exp_num_replicas=0
+        )
 
         # check if all the read operations are successful during the failure window, check for every minute
         sc_obj.post_failure_checks(start_time, end_time, wait_for_read_completion=False)
 
-        # wait for the logreader workload to finish
-        try:
-            sc_obj.get_logwriter_reader_pods(label=constants.LOGWRITER_CEPHFS_LABEL)
-            sc_obj.get_logwriter_reader_pods(
-                label=constants.LOGREADER_CEPHFS_LABEL,
-                statuses=["Running", "Completed"],
-            )
-            sc_obj.get_logwriter_reader_pods(
-                label=constants.LOGWRITER_RBD_LABEL, exp_num_replicas=2
-            )
-        except UnexpectedBehaviour:
-
-            logger.info("some pods are not running, so trying the work-around")
-            pods_not_running = get_not_running_pods(
-                namespace=constants.STRETCH_CLUSTER_NAMESPACE
-            )
-            recover_workload_pods_post_recovery(sc_obj, pods_not_running)
-
-        sc_obj.cephfs_logreader_job.delete()
-        logger.info(sc_obj.cephfs_logreader_pods)
-        for pod in sc_obj.cephfs_logreader_pods:
-            pod.wait_for_pod_delete(timeout=120)
-        logger.info("All old CephFS logreader pods are deleted")
-
         # check for any data loss
+        check_for_logwriter_workload_pods(sc_obj, nodes=nodes)
         assert sc_obj.check_for_data_loss(
             constants.LOGWRITER_CEPHFS_LABEL
         ), "[CephFS] Data is lost"
@@ -198,6 +196,11 @@ class TestNetSplit:
         logger.info("[RBD] No data loss is seen")
 
         # check for data corruption
+        sc_obj.cephfs_logreader_job.delete()
+        logger.info(sc_obj.cephfs_logreader_pods)
+        for pod in sc_obj.cephfs_logreader_pods:
+            pod.wait_for_pod_delete(timeout=120)
+        logger.info("All old CephFS logreader pods are deleted")
         pvc = get_pvc_objs(
             pvc_names=[
                 sc_obj.cephfs_logwriter_dep.get()["spec"]["template"]["spec"][
@@ -209,7 +212,6 @@ class TestNetSplit:
         logreader_workload_factory(
             pvc=pvc, logreader_path=constants.LOGWRITER_CEPHFS_READER, duration=5
         )
-
         sc_obj.get_logwriter_reader_pods(constants.LOGREADER_CEPHFS_LABEL)
 
         wait_for_pods_to_be_in_statuses(
