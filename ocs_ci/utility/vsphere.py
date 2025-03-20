@@ -424,11 +424,14 @@ class VSPHERE(object):
             ssd (bool): if True, mark disk as SSD
 
         """
-        self.stop_vms(vms=[vm])
-        for size in disk_sizes:
-            self.add_disk(vm, size, disk_type, ssd)
+        if ssd:
+            self.stop_vms(vms=[vm])
 
-        self.start_vms(vms=[vm])
+        for size in disk_sizes:
+            self._configure_disk_for_vm(vm, size, disk_type, ssd)
+
+        if ssd:
+            self.start_vms(vms=[vm])
 
     def add_rdm_disk(self, vm, device_name, disk_mode=None, compatibility_mode=None):
         """
