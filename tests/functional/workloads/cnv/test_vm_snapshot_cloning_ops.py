@@ -3,10 +3,15 @@ import pytest
 
 from ocs_ci.framework.pytest_customization.marks import magenta_squad, workloads
 from ocs_ci.framework.testlib import E2ETest
+
 from ocs_ci.helpers.cnv_helpers import cal_md5sum_vm, run_dd_io, expand_pvc_and_verify
 from ocs_ci.helpers.helpers import create_unique_resource_name
 from ocp_resources.virtual_machine_restore import VirtualMachineRestore
 from ocp_resources.virtual_machine_snapshot import VirtualMachineSnapshot
+from ocs_ci.ocs import constants
+from ocp_resources.virtual_machine_clone import VirtualMachineClone
+from ocs_ci.ocs.cnv.virtual_machine import VirtualMachine
+
 
 log = logging.getLogger(__name__)
 
@@ -56,12 +61,11 @@ class TestVmSnapshotClone(E2ETest):
     )
     def test_vm_clone_with_expansion(
         self,
-        setup_cnv,
+        qsetup_cnv,
         project_factory,
         pvc_expand_before_clone,
         pvc_expand_after_clone,
         multi_cnv_workload,
-        clone_vm_workload,
     ):
         """
         This test performs the VM cloning and IOs created using different
@@ -96,7 +100,7 @@ class TestVmSnapshotClone(E2ETest):
         log.info(f"Total VMs to process: {len(vm_list)}")
         failed_vms = []
         for vm_obj in vm_list:
-            # Expand PVC if `pvc_expand_before_snapshot` is True
+            # Expand PVC if `pvc_expand_before_clone` is True
             pvc_obj = vm_obj.get_vm_pvc_obj()
             if pvc_expand_before_clone:
                 new_size = 50
@@ -134,41 +138,47 @@ class TestVmSnapshotClone(E2ETest):
             )
             source_csum = run_dd_io(vm_obj=vm_obj, file_path=file_paths[0], verify=True)
             log.info(f"Source checksum for {vm_obj.name}: {source_csum}")
-            log.info(f"Stopping VM {vm_obj.name}...")
-            vm_obj.stop()
             log.info(f"Cloning VM {vm_obj.name}...")
-            clone_obj = clone_vm_workload(
-                vm_obj=vm_obj,
-                volume_interface=vm_obj.volume_interface,
+
+            target_name = f"clone-{vm_obj.name}"
+            with VirtualMachineClone(
+                name="clone-vm-test",
                 namespace=vm_obj.namespace,
-            )
+                source_name=vm_obj.name,
+                target_name=target_name,
+            ) as vmc:
+                vmc.wait_for_status(status=VirtualMachineClone.Status.SUCCEEDED)
+
+            cloned_vm = VirtualMachine(name=target_name, namespace=vm_obj.namespace)
+            cloned_vm.start(wait=True)
+            cloned_vm.wait_for_ssh_connectivity()
             log.info(
-                f"Clone created successfully for VM {vm_obj.name}: " f"{clone_obj.name}"
+                f"Clone created successfully for VM {vm_obj.name}: " f"{cloned_vm.name}"
             )
-            new_csum = cal_md5sum_vm(vm_obj=clone_obj, file_path=file_paths[0])
+            new_csum = cal_md5sum_vm(vm_obj=cloned_vm, file_path=file_paths[0])
             assert source_csum == new_csum, (
                 f"Failed: MD5 comparison between source {vm_obj.name} "
-                f"and cloned {clone_obj.name} VMs"
+                f"and cloned {cloned_vm.name} VMs"
             )
             # Expand PVC if `pvc_expand_after_restore` is True
             if pvc_expand_after_clone:
                 new_size = 50
                 try:
-                    clone_pvc_obj = clone_obj.get_vm_pvc_obj()
+                    clone_pvc_obj = cloned_vm.get_vm_pvc_obj()
                     clone_pvc_obj.resize_pvc(new_size=new_size, verify=True)
                     assert (
                         clone_pvc_obj.get_vm_pvc_obj().size == new_size
-                    ), f"Failed: VM PVC Expansion on cloned VM {clone_obj.name} "
+                    ), f"Failed: VM PVC Expansion on cloned VM {cloned_vm.name} "
 
                     # Get rootdisk name
                     disk = (
-                        vm_obj.vmi_obj.get()
+                        cloned_vm.vmi_obj.get()
                         .get("status")
                         .get("volumeStatus")[1]["target"]
                     )
                     devicename = f"/dev/{disk}"
 
-                    result = vm_obj.run_ssh_cmd(
+                    result = cloned_vm.run_ssh_cmd(
                         command=f"lsblk -d -n -o SIZE {devicename}"
                     ).strip()
                     if result == f"{new_size}G":
@@ -180,14 +190,14 @@ class TestVmSnapshotClone(E2ETest):
                         )
                 except ValueError as e:
                     log.error(
-                        f"Error for VM {vm_obj}: {e}. Continuing with the next VM."
+                        f"Error for VM {cloned_vm}: {e}. Continuing with the next VM."
                     )
-                    failed_vms.append(vm_obj.name)
+                    failed_vms.append(cloned_vm.name)
                     continue
-            run_dd_io(vm_obj=clone_obj, file_path=file_paths[1])
-
+            run_dd_io(vm_obj=cloned_vm, file_path=file_paths[1])
         if failed_vms:
             assert False, f"Test case failed for VMs: {', '.join(failed_vms)}"
+        cloned_vm.delete()
 
     @workloads
     @pytest.mark.parametrize(
