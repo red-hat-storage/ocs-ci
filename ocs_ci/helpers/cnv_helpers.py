@@ -517,9 +517,10 @@ def run_fio(
     bs="4K",
     direct=1,
     verify=True,
-    background=True,
     verify_method="crc32c",
     filename="/testfile",
+    fio_log_path="/tmp/fio_output.log",
+    fio_service_name="fio_test",
 ):
     """
     Execute FIO on a CNV Virtual Machine with data integrity checks.
@@ -538,6 +539,7 @@ def run_fio(
         background(bool): Enable Background running.
         verify_method (str): Data integrity check method ('crc32c', 'md5', etc.).
         filename (str): Path of the test file in the VM.
+        fio_log_path (str): Path where FIO logs will be stored.
 
     Returns:
         str: Output of the FIO execution.
@@ -546,7 +548,7 @@ def run_fio(
 
     # Construct the FIO command
     fio_cmd = (
-        f"nohup fio --name=cnv_fio_test "
+        f"fio --name=cnv_fio_test "
         f"--rw={io_direction} --bs={bs} --size={size} --numjobs={jobs} "
         f"--iodepth={depth} --rate={rate} --runtime={runtime} --time_based --filename={filename} "
         f"--direct={direct} "
@@ -555,15 +557,51 @@ def run_fio(
     if verify:
         fio_cmd += f" --verify={verify_method} --verify_fatal=1"
 
-    # Run FIO in the background so it persists even if SSH session closes
-    if background:
-        fio_cmd += " > /tmp/fio_output.log 2>&1 &"
-
     try:
         logger.info(f" Starting FIO on VM: {vm_obj.name}")
-        vm_obj.run_ssh_cmd(fio_cmd)
-
+        create_fio_service(vm_obj, fio_cmd, fio_service_name)
         logger.info("FIO execution started successfully!")
 
     except Exception as e:
         logger.error(f" Error: {e}")
+
+
+def create_fio_service(vm_obj, fio_cmd, fio_service_name):
+    """
+    Create a systemd service for FIO to ensure it runs persistently and
+    resumes after VM reboots.
+    """
+    service_content = f"""[Unit]
+    Description=Persistent FIO Workload
+    After=network.target
+
+    [Service]
+    Type=simple
+    WorkingDirectory=/tmp
+    ExecStart={fio_cmd}
+    Restart=always
+    RestartSec=5
+
+    [Install]
+    WantedBy=multi-user.target
+    """
+
+    # Write the systemd service file
+    vm_obj.run_ssh_cmd(
+        f"echo '{service_content}' | sudo tee /etc/systemd/system/{fio_service_name}.service"
+    )
+
+    # Enable and start the service
+    vm_obj.run_ssh_cmd("systemctl daemon-reload")
+    vm_obj.run_ssh_cmd(f"systemctl enable {fio_service_name}")
+    vm_obj.run_ssh_cmd(f"systemctl start {fio_service_name}")
+
+    logger.info("FIO service setup complete.")
+
+
+def check_fio_status(vm_obj, fio_service_name):
+    """
+    Check if FIO is running after restart.
+    """
+    output = vm_obj.run_ssh_cmd(f"systemctl status {fio_service_name}")
+    return "running" in output
