@@ -1,0 +1,13 @@
+---
+# This configuration file is for defining update strategy for CEPHFS CSI Plugin
+# Part of Epic RHSTOR-5280- Reduce the time required to upgrade ODF
+# This is supported from 4.18 and above version .
+# Config Specifically for test scenario
+# TODO: Update the polarian ID once scenario is added in polarian
+# https://docs.google.com/spreadsheets/d/1CL9rFM8kFcO4WNNOH2L_oTpH4qgGGTFm45GtoQshSDs/edit?pli=1&gid=362364787#gid=362364787&range=B20
+#REPORTING:
+#  polarion:
+#    upgrade_id: 'OCS-XXXX'
+UPGRADE:
+  # 20% is recommended default configuration
+  csi_cephfs_plugin_update_strategy_max_unavailable: 20%
