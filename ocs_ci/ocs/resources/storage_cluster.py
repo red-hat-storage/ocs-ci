@@ -64,6 +64,7 @@ from ocs_ci.ocs.node import (
 from ocs_ci.ocs.utils import get_primary_cluster_config
 from ocs_ci.ocs.version import get_ocp_version
 from ocs_ci.utility.version import (
+    get_ocs_version_from_csv,
     get_semantic_version,
     VERSION_4_11,
     get_semantic_ocp_running_version,
@@ -253,6 +254,15 @@ def ocs_install_verification(
         constants.NOOBAA_CORE_POD_LABEL: 1,
         constants.NOOBAA_ENDPOINT_POD_LABEL: min_eps,
     }
+
+    odf_running_version = get_ocs_version_from_csv(only_major_minor=True)
+    if odf_running_version >= version.VERSION_4_19:
+        resources_dict.update(
+            {
+                constants.NOOBAA_CNPG_POD_LABEL: 1,
+            }
+        )
+
     if config.ENV_DATA.get("noobaa_external_pgsql"):
         del resources_dict[nb_db_label]
 
