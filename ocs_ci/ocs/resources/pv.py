@@ -55,6 +55,23 @@ def get_pv_status(pv_obj):
     return pv_obj.get("status").get("phase")
 
 
+def get_pv_in_status(storage_class, status="Bound"):
+    """
+    It looks for pv with particular storageclass in particular status
+
+    Args:
+        storage_class (str): storage class
+        status (str): status of the pv
+
+    Returns:
+        list of pv objects
+
+    """
+
+    pvs = [pv for pv in get_pv_objs_in_sc(storage_class) if get_pv_status(pv) == status]
+    return pvs
+
+
 def get_pv_name(pv_obj):
     """
     Get the name of the pv object

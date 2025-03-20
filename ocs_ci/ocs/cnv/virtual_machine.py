@@ -560,6 +560,8 @@ class VirtualMachine(Virtctl):
         """
         Delete the VirtualMachine
         """
+        if self.ready():
+            self.stop()
         if self.secret_obj:
             self.secret_obj.delete()
         self.vm_ocp_obj.delete(resource_name=self._vm_name)

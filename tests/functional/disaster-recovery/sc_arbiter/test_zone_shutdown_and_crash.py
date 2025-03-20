@@ -5,9 +5,10 @@ import random
 import concurrent.futures as futures
 from datetime import datetime, timezone, timedelta
 
+from ocs_ci.helpers.cnv_helpers import cal_md5sum_vm
 from ocs_ci.helpers.stretchcluster_helper import (
     recover_from_ceph_stuck,
-    recover_workload_pods_post_recovery,
+    check_for_logwriter_workload_pods,
 )
 from ocs_ci.ocs.resources.stretchcluster import StretchCluster
 from ocs_ci.ocs.ocp import OCP
@@ -18,14 +19,12 @@ from ocs_ci.ocs.resources.pod import (
     get_ceph_tools_pod,
     wait_for_pods_to_be_in_statuses,
     get_debug_pods,
-    get_not_running_pods,
 )
 from ocs_ci.helpers.sanity_helpers import Sanity
 from ocs_ci.ocs.exceptions import (
     CommandFailed,
     ResourceWrongStatusException,
     CephHealthException,
-    UnexpectedBehaviour,
 )
 from ocs_ci.utility.retry import retry
 from ocs_ci.framework.pytest_customization.marks import (
@@ -43,29 +42,6 @@ log = logging.getLogger(__name__)
 class TestZoneShutdownsAndCrashes:
 
     zones = constants.DATA_ZONE_LABELS
-
-    def check_for_logwriter_workload_pods(
-        self,
-        sc_obj,
-    ):
-
-        try:
-            sc_obj.get_logwriter_reader_pods(label=constants.LOGWRITER_CEPHFS_LABEL)
-            sc_obj.get_logwriter_reader_pods(
-                label=constants.LOGREADER_CEPHFS_LABEL,
-                statuses=[constants.STATUS_RUNNING, constants.STATUS_COMPLETED],
-            )
-            sc_obj.get_logwriter_reader_pods(
-                label=constants.LOGWRITER_RBD_LABEL, exp_num_replicas=2
-            )
-        except UnexpectedBehaviour:
-
-            log.info("some pods are not running, so trying the work-around")
-            pods_not_running = get_not_running_pods(
-                namespace=constants.STRETCH_CLUSTER_NAMESPACE
-            )
-            recover_workload_pods_post_recovery(sc_obj, pods_not_running)
-        log.info("All the workloads pods are successfully up and running")
 
     @pytest.fixture()
     def init_sanity(self, request, nodes):
@@ -212,7 +188,7 @@ class TestZoneShutdownsAndCrashes:
         vm_obj.run_ssh_cmd(
             command="dd if=/dev/zero of=/file_1.txt bs=1024 count=102400"
         )
-        md5sum_before = vm_obj.run_ssh_cmd(command="md5sum /file_1.txt")
+        md5sum_before = cal_md5sum_vm(vm_obj, file_path="/file_1.txt")
 
         start_time = None
         end_time = None
@@ -220,7 +196,7 @@ class TestZoneShutdownsAndCrashes:
         for i in range(iteration):
             log.info(f"------ Iteration {i+1} ------")
 
-            self.check_for_logwriter_workload_pods(sc_obj)
+            check_for_logwriter_workload_pods(sc_obj, nodes=nodes)
             log.info("CephFS and RBD workloads are running successfully")
 
             # note the file names created
@@ -277,16 +253,8 @@ class TestZoneShutdownsAndCrashes:
                 log.error("Something went wrong!")
 
             # Validate all nodes are in READY state and up
-            retry(
-                (
-                    CommandFailed,
-                    TimeoutError,
-                    AssertionError,
-                    ResourceWrongStatusException,
-                ),
-                tries=30,
-                delay=15,
-            )(wait_for_nodes_status(timeout=1800))
+            wait_for_nodes_status(timeout=600)
+
             log.info(f"Nodes of zone {zone} are started successfully")
             log.info(f"Failure started at {start_time} and ended at {end_time}")
 
@@ -312,7 +280,7 @@ class TestZoneShutdownsAndCrashes:
             time.sleep(delay * 60)
 
         # check vm data written before the failure for integrity
-        md5sum_after = vm_obj.run_ssh_cmd(command="md5sum /file_1.txt")
+        md5sum_after = cal_md5sum_vm(vm_obj, file_path="/file_1.txt")
         assert (
             md5sum_before == md5sum_after
         ), "Data integrity of the file inside VM is not maintained during the failure"
@@ -342,7 +310,7 @@ class TestZoneShutdownsAndCrashes:
             log.info("Successfully verified with post failure checks for the workloads")
 
         # update the logwriter/reader pod details with the latest
-        self.check_for_logwriter_workload_pods(sc_obj)
+        check_for_logwriter_workload_pods(sc_obj, nodes=nodes)
 
         # check for any data loss through logwriter logs
         assert sc_obj.check_for_data_loss(
@@ -452,11 +420,14 @@ class TestZoneShutdownsAndCrashes:
         vm_obj.run_ssh_cmd(
             command="dd if=/dev/zero of=/file_1.txt bs=1024 count=102400"
         )
-        md5sum_before = vm_obj.run_ssh_cmd(command="md5sum /file_1.txt")
+        md5sum_before = cal_md5sum_vm(vm_obj, file_path="/file_1.txt")
+        log.info(
+            f"This is the file_1.txt content:\n{vm_obj.run_ssh_cmd(command='cat /file_1.txt')}"
+        )
 
         for i in range(iteration):
             log.info(f"------ Iteration {i+1} ------")
-            self.check_for_logwriter_workload_pods(sc_obj)
+            check_for_logwriter_workload_pods(sc_obj, nodes=nodes)
             log.info("All logwriter workload pods are running successfully")
 
             # note the file names created
@@ -506,16 +477,7 @@ class TestZoneShutdownsAndCrashes:
 
             # wait for the nodes to come back to READY status
             log.info("Waiting for the nodes to come up automatically after the crash")
-            retry(
-                (
-                    CommandFailed,
-                    TimeoutError,
-                    AssertionError,
-                    ResourceWrongStatusException,
-                ),
-                tries=30,
-                delay=15,
-            )(wait_for_nodes_status(timeout=1800))
+            wait_for_nodes_status(timeout=600)
 
             end_time = datetime.now(timezone.utc)
             log.info(f"Crash start time : {start_time} & Crash end time : {end_time}")
@@ -539,7 +501,10 @@ class TestZoneShutdownsAndCrashes:
             time.sleep(delay * 60)
 
         # check vm data written before the failure for integrity
-        md5sum_after = vm_obj.run_ssh_cmd(command="md5sum /file_1.txt")
+        md5sum_after = cal_md5sum_vm(vm_obj, file_path="/file_1.txt")
+        log.info(
+            f"This is the file_1.txt content:\n{vm_obj.run_ssh_cmd(command='cat /file_1.txt')}"
+        )
         assert (
             md5sum_before == md5sum_after
         ), "Data integrity of the file inside VM is not maintained during the failure"
@@ -562,7 +527,7 @@ class TestZoneShutdownsAndCrashes:
         log.info("Stoped the VM successfully")
 
         # check for any data loss
-        self.check_for_logwriter_workload_pods(sc_obj)
+        check_for_logwriter_workload_pods(sc_obj, nodes=nodes)
 
         assert sc_obj.check_for_data_loss(
             constants.LOGWRITER_CEPHFS_LABEL

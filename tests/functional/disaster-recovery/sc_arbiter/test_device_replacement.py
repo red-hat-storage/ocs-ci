@@ -1,100 +1,45 @@
-import pytest
 import logging
-
 from datetime import datetime, timezone
+
 from ocs_ci.framework.pytest_customization.marks import (
-    turquoise_squad,
     stretchcluster_required,
+    turquoise_squad,
+    polarion_id,
     tier1,
 )
 from ocs_ci.helpers.cnv_helpers import cal_md5sum_vm
 from ocs_ci.ocs import constants
-from ocs_ci.ocs.resources import storage_cluster
-from ocs_ci.ocs.resources.pod import (
-    get_pod_restarts_count,
-    get_ceph_tools_pod,
-    wait_for_pods_to_be_in_statuses,
-)
+from ocs_ci.ocs.resources.pod import wait_for_pods_to_be_in_statuses
+
+from ocs_ci.ocs.osd_operations import osd_device_replacement
 from ocs_ci.ocs.resources.stretchcluster import StretchCluster
 
 logger = logging.getLogger(__name__)
 
 
 @tier1
-@turquoise_squad
 @stretchcluster_required
-class TestAddCapacityStretchCluster:
-    """
-    Add capacity to the Stretch cluster with arbiter configuration
-
-    """
-
-    @staticmethod
-    def add_capacity_to_stretch_cluster():
-        """
-        Perform add capacity on a stretch cluster
-
-        """
-        # get osd pods restart count before
-        osd_pods_restart_count_before = get_pod_restarts_count(
-            label=constants.OSD_APP_LABEL
-        )
-
-        # add capacity to the cluster
-        storage_cluster.add_capacity_lso(ui_flag=False)
-        logger.info("Successfully added capacity")
-
-        # get osd pods restart count after
-        osd_pods_restart_count_after = get_pod_restarts_count(
-            label=constants.OSD_APP_LABEL
-        )
-
-        # assert if any osd pods restart
-        assert sum(osd_pods_restart_count_before.values()) == sum(
-            osd_pods_restart_count_after.values()
-        ), "Some of the osd pods have restarted during the add capacity"
-        logger.info("osd pod restarts counts are same before and after.")
-
-        # assert if osd weights for both the zones are not balanced
-        tools_pod = get_ceph_tools_pod()
-        zone1_osd_weight = tools_pod.exec_sh_cmd_on_pod(
-            command=f"ceph osd tree | grep 'zone {constants.DATA_ZONE_LABELS[0]}' | awk '{{print $2}}'",
-        )
-        zone2_osd_weight = tools_pod.exec_sh_cmd_on_pod(
-            command=f"ceph osd tree | grep 'zone {constants.DATA_ZONE_LABELS[1]}' | awk '{{print $2}}'",
-        )
-
-        assert float(zone1_osd_weight.strip()) == float(
-            zone2_osd_weight.strip()
-        ), "OSD weights are not balanced"
-        logger.info("OSD weights are balanced")
-
-    @pytest.mark.order("last")
-    @pytest.mark.parametrize(
-        argnames=["iterations"],
-        argvalues=[
-            pytest.param(
-                3,
-                marks=[
-                    pytest.mark.polarion_id("OCS-5474"),
-                    pytest.mark.bugzilla("2143858"),
-                ],
-            ),
-        ],
-    )
-    def test_cluster_expansion(
+@turquoise_squad
+class TestDeviceReplacementInStretchCluster:
+    @polarion_id("OCS-5047")
+    def test_device_replacement(
         self,
+        nodes,
         setup_logwriter_cephfs_workload_factory,
         setup_logwriter_rbd_workload_factory,
         logreader_workload_factory,
-        iterations,
-        setup_cnv,
         cnv_workload,
+        setup_cnv,
     ):
-
         """
-        Test cluster exapnsion and health when add capacity is performed
-        continuously
+        Test device replacement in stretch cluster while logwriter workload
+        for both CephFs and RBD is running
+
+        Steps:
+            1) Run logwriter/reader workload for both CephFs and RBD volumes
+            2) Perform device replacement procedure
+            3) Verify no data loss
+            4) Verify no data corruption
 
         """
 
@@ -125,11 +70,9 @@ class TestAddCapacityStretchCluster:
         sc_obj.get_logfile_map(label=constants.LOGWRITER_CEPHFS_LABEL)
         sc_obj.get_logfile_map(label=constants.LOGWRITER_RBD_LABEL)
 
-        # add capacity to the cluster
-        for iteration in range(iterations):
-            logger.info(f"[{iteration+1}] adding capacity to the cluster now...")
-            self.add_capacity_to_stretch_cluster()
-            logger.info("successfully added capacity to the cluster")
+        # run device replacement procedure
+        logger.info("Running device replacement procedure now")
+        osd_device_replacement(nodes)
 
         # check Io for any failures
         end_time = datetime.now(timezone.utc)
@@ -140,9 +83,9 @@ class TestAddCapacityStretchCluster:
         md5sum_after = cal_md5sum_vm(vm_obj, file_path="/file_1.txt")
         assert (
             md5sum_before == md5sum_after
-        ), "Data integrity of the file inside VM is not maintained during the add capacity"
+        ), "Data integrity of the file inside VM is not maintained during the device replacement"
         logger.info(
-            "Data integrity of the file inside VM is maintained during the add capacity"
+            "Data integrity of the file inside VM is maintained during the device replacement"
         )
 
         # check if new data can be created
