@@ -6,6 +6,7 @@ import os
 import base64
 import logging
 import re
+import time
 
 from ocs_ci.helpers.helpers import create_unique_resource_name, create_resource
 from ocs_ci.ocs import constants
@@ -440,3 +441,131 @@ def verify_hotplug(vm_obj, disks_before_hotplug):
             f"Error occurred while verifying hotplug in VM {vm_obj.name}: {str(error)}"
         )
         return False
+
+
+def get_vm_distro(vm_obj):
+    """
+    Fetch the Virtual Machine's OS distribution running in OpenShift Virtualization (CNV).
+
+    Args:
+        vm_name (str): Name of the VM.
+
+    Returns:
+        output of command
+    """
+    DISTROS = {"fedora": "dnf", "Debian": "apt-get", "RHEL": "yum", "Alpine": "apk"}
+
+    # Extract OS from labels if available
+    os_distro = vm_obj.vmi_obj.get().get("status").get("guestOSInfo").get("id")
+
+    pkg_mgr = DISTROS[os_distro]
+
+    if os_distro == "Debian":
+        cmd = f"{pkg_mgr} update"
+        vm_obj.run_ssh_cmd(cmd)
+        logger.info("Sleep 5 seconds after update to make sure the lock is released")
+        time.sleep(5)
+
+    cmd = f"{pkg_mgr} -y install fio"
+    return vm_obj.run_ssh_cmd(cmd)
+
+
+def run_fio(
+    vm_obj,
+    size="1G",
+    io_direction="randrw",
+    jobs=1,
+    runtime=0,
+    depth=4,
+    rate="1m",
+    bs="4K",
+    direct=1,
+    verify=True,
+    verify_method="crc32c",
+    filename="/testfile",
+    fio_log_path="/tmp/fio_output.log",
+    fio_service_name="fio_test",
+):
+    """
+    Execute FIO on a CNV Virtual Machine with data integrity checks.
+
+    Args:
+        size (str): Size of the test file (e.g., '1G').
+        io_direction (str): Read/write mode ('rw', 'randwrite', 'randread').
+        rw_ratio (int): Read/write mix percentage (default: 75% read, 25% write).
+        jobs (int): Number of FIO jobs to run.
+        runtime (int): Duration of IO test (seconds).
+        depth (int): I/O depth.
+        rate (str): I/O rate limit.
+        bs (str): Block size (default: '4K').
+        direct (int): Use direct I/O (1 = Yes, 0 = No).
+        verify (bool): Enable data integrity verification.
+        background(bool): Enable Background running.
+        verify_method (str): Data integrity check method ('crc32c', 'md5', etc.).
+        filename (str): Path of the test file in the VM.
+        fio_log_path (str): Path where FIO logs will be stored.
+
+    Returns:
+        str: Output of the FIO execution.
+    """
+    get_vm_distro(vm_obj)
+
+    # Construct the FIO command
+    fio_cmd = (
+        f"fio --name=cnv_fio_test "
+        f"--rw={io_direction} --bs={bs} --size={size} --numjobs={jobs} "
+        f"--iodepth={depth} --rate={rate} --runtime={runtime} --time_based --filename={filename} "
+        f"--direct={direct} "
+    )
+
+    if verify:
+        fio_cmd += f" --verify={verify_method} --verify_fatal=1"
+
+    try:
+        logger.info(f" Starting FIO on VM: {vm_obj.name}")
+        create_fio_service(vm_obj, fio_cmd, fio_service_name)
+        logger.info("FIO execution started successfully!")
+
+    except Exception as e:
+        logger.error(f" Error: {e}")
+
+
+def create_fio_service(vm_obj, fio_cmd, fio_service_name):
+    """
+    Create a systemd service for FIO to ensure it runs persistently and
+    resumes after VM reboots.
+    """
+    service_content = f"""[Unit]
+    Description=Persistent FIO Workload
+    After=network.target
+
+    [Service]
+    Type=simple
+    WorkingDirectory=/tmp
+    ExecStart={fio_cmd}
+    Restart=always
+    RestartSec=5
+
+    [Install]
+    WantedBy=multi-user.target
+    """
+
+    # Write the systemd service file
+    vm_obj.run_ssh_cmd(
+        f"echo '{service_content}' | sudo tee /etc/systemd/system/{fio_service_name}.service"
+    )
+
+    # Enable and start the service
+    vm_obj.run_ssh_cmd("systemctl daemon-reload")
+    vm_obj.run_ssh_cmd(f"systemctl enable {fio_service_name}")
+    vm_obj.run_ssh_cmd(f"systemctl start {fio_service_name}")
+
+    logger.info("FIO service setup complete.")
+
+
+def check_fio_status(vm_obj, fio_service_name):
+    """
+    Check if FIO is running after restart.
+    """
+    output = vm_obj.run_ssh_cmd(f"systemctl status {fio_service_name}")
+    return "running" in output
