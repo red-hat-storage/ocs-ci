@@ -7102,7 +7102,7 @@ def discovered_apps_dr_workload(request):
     """
     instances = []
 
-    def factory(kubeobject=1):
+    def factory(kubeobject=1, recipe=1):
         """
         Args:
             kubeobject (int): Number if Discovered Apps workload with kube object protection to be created
@@ -7143,6 +7143,29 @@ def discovered_apps_dr_workload(request):
                 ],
                 workload_placement_name=workload_details[
                     "dr_workload_app_placement_name"
+                ],
+            )
+        for index in range(recipe):
+            workload_details = ocsci_config.ENV_DATA[workload_key][index]
+            workload = BusyboxDiscoveredApps(
+                workload_dir=workload_details["workload_dir"],
+                workload_pod_count=workload_details["pod_count"],
+                workload_pvc_count=workload_details["pvc_count"],
+                workload_namespace=workload_details["workload_namespace"],
+                workload_placement_name=workload_details[
+                    "dr_workload_app_placement_name"
+                ],
+                discovered_apps_recipe_name_key=workload_details[
+                    "dr_workload_app_recipe_name_key"
+                ],
+                discovered_apps_recipe_name_value=workload_details[
+                    "dr_workload_app_recipe_name_value"
+                ],
+                discovered_apps_recipe_namespace_key=workload_details[
+                    "dr_workload_app_recipe_namespace_key"
+                ],
+                discovered_apps_recipe_namespace_value=workload_details[
+                    "dr_workload_app_recipe_namespace_value"
                 ],
             )
             instances.append(workload)
