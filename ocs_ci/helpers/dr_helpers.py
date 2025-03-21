@@ -301,7 +301,7 @@ def check_mirroring_status_ok(
     Args:
         replaying_images (int): Expected number of images in replaying state
         cephblockpoolradosns (string): The name of the cephblockpoolradosnamespace
-        storageclient_id(string): The uid of the storageclient in the client cluster where the application is running.
+        storageclient_uid(string): The uid of the storageclient in the client cluster where the application is running.
             Applicable for provider - client configuration.
 
     Returns:
@@ -314,12 +314,10 @@ def check_mirroring_status_ok(
     if is_hci_cluster():
         logger.info("Get the cephblockpoolradosnamespace associated with storageclient")
         cephbpradosns = (
-            config.ENV_DATA.get("radosnamespace_name", False) or cephblockpoolradosns
+            cephblockpoolradosns
+            or config.ENV_DATA.get("radosnamespace_name", None)
+            or find_cephblockpoolradosnamespace(storageclient_uid=storageclient_uid)
         )
-        if not cephbpradosns:
-            cephbpradosns = find_cephblockpoolradosnamespace(
-                storageclient_uid=storageclient_uid
-            )
 
         if not cephbpradosns:
             raise NotFoundError("Couldn't identify the cephblockpoolradosnamespace")
@@ -1001,7 +999,7 @@ def verify_backend_volume_deletion(
         backend_volumes (list): List of RBD images or CephFS subvolumes
         cephblockpoolradosns (str): The name of the cephblockpoolradosnamespace
         cephfssubvolumegroup (str): The name of the cephfilesystemsubvolumegroup
-        storageclient_id(string): The uid of the storageclient in the client cluster where the application is running.
+        storageclient_uid(string): The uid of the storageclient in the client cluster where the application is running.
             Applicable for provider - client configuration.
 
     Returns:
@@ -1020,15 +1018,13 @@ def verify_backend_volume_deletion(
 
     if is_hci_cluster():
         cephbpradosns = (
-            config.ENV_DATA.get("radosnamespace_name", False) or cephblockpoolradosns
+            cephblockpoolradosns
+            or config.ENV_DATA.get("radosnamespace_name", None)
+            or find_cephblockpoolradosnamespace(storageclient_uid=storageclient_uid)
         )
-        if not cephbpradosns:
-            cephbpradosns = find_cephblockpoolradosnamespace(
-                storageclient_uid=storageclient_uid
-            )
 
         if not cephbpradosns:
-            raise NotFoundError("Couldn't identify the cephblockpoolradosnamespace")
+            raise NotFoundError("Could not identify the cephblockpoolradosnamespace")
         namespace_param = f"--namespace {cephbpradosns}"
 
         subvolumegroup = (
