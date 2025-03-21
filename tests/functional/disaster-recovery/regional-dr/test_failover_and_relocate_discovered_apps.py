@@ -219,6 +219,7 @@ class TestFailoverAndRelocateWithDiscoveredApps:
             rdr_workload.workload_namespace,
             timeout=1200,
             discovered_apps=True,
+            vrg_name=rdr_workload.discovered_apps_placement_name,
         )
 
         if pvc_interface == constants.CEPHFILESYSTEM:
