@@ -248,7 +248,9 @@ def ocs_install_verification(
     )
     resources_dict = {
         nb_db_label: 1,
+        constants.CSI_ADDONS_CONTROLLER_MANAGER_LABEL: 1,
         constants.OCS_OPERATOR_LABEL: 1,
+        constants.ODF_OPERATOR_CONTROL_MANAGER_LABEL: 1,
         constants.OPERATOR_LABEL: 1,
         constants.NOOBAA_OPERATOR_POD_LABEL: 1,
         constants.NOOBAA_CORE_POD_LABEL: 1,
@@ -310,13 +312,6 @@ def ocs_install_verification(
     if fusion_aas_consumer or client_cluster:
         del resources_dict[constants.OCS_OPERATOR_LABEL]
         del resources_dict[constants.OPERATOR_LABEL]
-
-    if ocs_version >= version.VERSION_4_9:
-        resources_dict.update(
-            {
-                constants.ODF_OPERATOR_CONTROL_MANAGER_LABEL: 1,
-            }
-        )
 
     if ocs_version >= version.VERSION_4_15 and not client_cluster:
         resources_dict.update(
