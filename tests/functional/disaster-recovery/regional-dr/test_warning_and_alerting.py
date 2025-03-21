@@ -12,6 +12,7 @@ from ocs_ci.framework.testlib import skipif_ocs_version, tier1
 from ocs_ci.framework.pytest_customization.marks import (
     rdr,
     turquoise_squad,
+    polarion_id,
 )
 from ocs_ci.helpers import dr_helpers, helpers
 from ocs_ci.ocs import constants
@@ -21,6 +22,7 @@ from ocs_ci.helpers.dr_helpers_ui import (
     verify_drpolicy_ui,
 )
 from ocs_ci.ocs.exceptions import UnexpectedBehaviour
+from ocs_ci.ocs.ui.base_ui import wait_for_element_to_be_clickable
 from ocs_ci.ocs.ui.validation_ui import ValidationUI
 from ocs_ci.ocs.ui.views import locators
 from ocs_ci.ocs.utils import (
@@ -34,33 +36,52 @@ from ocs_ci.ocs.resources.drpc import DRPC
 logger = logging.getLogger(__name__)
 
 
+def modify_deployment_count(status=""):
+    """
+    We scale down rbd-mirror daemon deployment on the secondary cluster and mds daemons on the primary cluster
+    and scale them back to their original count
+
+    Args:
+        status (str): "down" by default sets replica count to 0, anything else like "up" will set it back to 1
+    """
+    if not status:
+        status = "down"
+    replica_count = 0 if status == "down" else 1
+    primary_config = get_primary_cluster_config()
+    primary_index = primary_config.MULTICLUSTER.get("multicluster_index")
+    secondary_index = [
+        s.MULTICLUSTER["multicluster_index"]
+        for s in get_non_acm_cluster_config()
+        if s.MULTICLUSTER["multicluster_index"] != primary_index
+    ][0]
+
+    logger.info(
+        "Change replica count for rbd-mirror deployment on the secondary cluster "
+        "and mds deployments on the primary cluster"
+    )
+    config.switch_ctx(secondary_index)
+    helpers.modify_deployment_replica_count(
+        deployment_name=constants.RBD_MIRROR_DAEMON_DEPLOYMENT,
+        replica_count=replica_count,
+    )
+    if status != "down":
+        ceph_health_check(tries=10, delay=30)
+    config.switch_ctx(primary_index)
+    helpers.modify_deployment_replica_count(
+        deployment_name=constants.MDS_DAEMON_DEPLOYMENT_ONE, replica_count=replica_count
+    )
+    helpers.modify_deployment_replica_count(
+        deployment_name=constants.MDS_DAEMON_DEPLOYMENT_TWO, replica_count=replica_count
+    )
+    if status != "down":
+        ceph_health_check(tries=10, delay=30)
+    logger.info("Replica count updated successfully")
+
+
 @pytest.fixture
 def scale_up_deployment(request):
     def teardown():
-        primary_config = get_primary_cluster_config()
-        primary_index = primary_config.MULTICLUSTER.get("multicluster_index")
-        secondary_index = [
-            s.MULTICLUSTER["multicluster_index"]
-            for s in get_non_acm_cluster_config()
-            if s.MULTICLUSTER["multicluster_index"] != primary_index
-        ][0]
-
-        logger.info(
-            "Scale up rbd-mirror deployment on the secondary cluster and mds deployments on the primary cluster"
-        )
-        config.switch_ctx(secondary_index)
-        helpers.modify_deployment_replica_count(
-            deployment_name=constants.RBD_MIRROR_DAEMON_DEPLOYMENT, replica_count=1
-        )
-        ceph_health_check(tries=10, delay=30)
-        config.switch_ctx(primary_index)
-        helpers.modify_deployment_replica_count(
-            deployment_name=constants.MDS_DAEMON_DEPLOYMENT_ONE, replica_count=1
-        )
-        helpers.modify_deployment_replica_count(
-            deployment_name=constants.MDS_DAEMON_DEPLOYMENT_TWO, replica_count=1
-        )
-        ceph_health_check(tries=10, delay=30)
+        modify_deployment_count(status="up")
 
     request.addfinalizer(teardown)
 
@@ -68,7 +89,6 @@ def scale_up_deployment(request):
 @rdr
 @tier1
 @turquoise_squad
-@skipif_ocs_version("<4.18")
 class TestRDRWarningAndAlerting:
     """
     Test class for RDR Warning and Alerting
@@ -91,6 +111,7 @@ class TestRDRWarningAndAlerting:
         ],
     )
     # TODO: Update polarion IDs
+    @skipif_ocs_version("<4.18")
     def test_rdr_inconsistent_data_warning_alert(
         self, action, setup_acm_ui, dr_workload, scale_up_deployment
     ):
@@ -162,20 +183,7 @@ class TestRDRWarningAndAlerting:
                 dr_helpers.verify_last_group_sync_time(obj, scheduling_interval)
             )
         logger.info("Verified lastGroupSyncTime")
-        logger.info(
-            "Scale down rbd-mirror deployment on the secondary cluster and mds deployments on the primary cluster"
-        )
-        config.switch_to_cluster_by_name(secondary_cluster_name)
-        helpers.modify_deployment_replica_count(
-            deployment_name=constants.RBD_MIRROR_DAEMON_DEPLOYMENT, replica_count=0
-        )
-        config.switch_to_cluster_by_name(primary_cluster_name)
-        helpers.modify_deployment_replica_count(
-            deployment_name=constants.MDS_DAEMON_DEPLOYMENT_ONE, replica_count=0
-        )
-        helpers.modify_deployment_replica_count(
-            deployment_name=constants.MDS_DAEMON_DEPLOYMENT_TWO, replica_count=0
-        )
+        modify_deployment_count()
         config.switch_acm_ctx()
         logger.info(
             f"Waiting for {wait_time * 60} seconds to allow warning alert to appear"
@@ -248,20 +256,7 @@ class TestRDRWarningAndAlerting:
                     )
                     raise NoAlertPresentException
 
-        logger.info(
-            "Scale up rbd-mirror deployment on the secondary cluster and mds deployments on the primary cluster"
-        )
-        config.switch_to_cluster_by_name(secondary_cluster_name)
-        helpers.modify_deployment_replica_count(
-            deployment_name=constants.RBD_MIRROR_DAEMON_DEPLOYMENT, replica_count=1
-        )
-        config.switch_to_cluster_by_name(primary_cluster_name)
-        helpers.modify_deployment_replica_count(
-            deployment_name=constants.MDS_DAEMON_DEPLOYMENT_ONE, replica_count=1
-        )
-        helpers.modify_deployment_replica_count(
-            deployment_name=constants.MDS_DAEMON_DEPLOYMENT_TWO, replica_count=1
-        )
+        modify_deployment_count(status="up")
         logger.info(
             f"Waiting for {wait_time * 60} seconds to allow warning alert to disappear"
         )
@@ -350,12 +345,25 @@ class TestRDRWarningAndAlerting:
                     )
                     logger.info("Action modal closed successfully")
 
+    @polarion_id("OCS-5304")
+    @polarion_id("OCS-5305")
+    @polarion_id("OCS-5311")
+    @polarion_id("OCS-5312")
+    @polarion_id("OCS-5329")
+    @polarion_id("OCS-5330")
+    @polarion_id("OCS-5348")
+    @skipif_ocs_version("<4.14")
     def test_rdr_volumesyncronizationdelayalert(
         self, setup_acm_ui, dr_workload, scale_up_deployment
     ):
         """
-        Test to verify that "VolumeSynchronizationDelay" critical level alert is fired on the DR dashboard
-        when the lastGroupSyncTime is lagging behind 3x the sync interval or more for a particular DR protected workload
+        Test to verify that "VolumeSynchronizationDelay" warning and critical level alert is fired on the DR dashboard.
+
+        Warning level alert is fired when lastGroupSyncTime is lagging behind 2x the sync interval
+        from current time in UTC but is less than 3x
+
+        Critical level alert is fired when lastGroupSyncTime is lagging behind 3x the sync interval
+        from current time in UTC or more
 
         No DR action is performed in this test case. We scale down rbd-mirror daemon deployment on the secondary cluster
         and mds daemons on the primary cluster and scale them up back to their original count.
@@ -389,15 +397,11 @@ class TestRDRWarningAndAlerting:
         scheduling_interval = dr_helpers.get_scheduling_interval(
             rdr_workload[0].workload_namespace
         )
-        wait_time = 2 * scheduling_interval  # Time in minutes
-        logger.info(f"Waiting for {wait_time} minutes to run IOs")
-        sleep(wait_time * 60)
+
+        buffer_time = 1 + (2 * scheduling_interval)
 
         primary_cluster_name = dr_helpers.get_current_primary_cluster_name(
             rdr_workload[0].workload_namespace
-        )
-        secondary_cluster_name = dr_helpers.get_current_secondary_cluster_name(
-            rdr_workload[0].workload_namespace, rdr_workload[0].workload_type
         )
 
         config.switch_acm_ctx()
@@ -409,142 +413,158 @@ class TestRDRWarningAndAlerting:
 
         page_nav.refresh_web_console()
         config.switch_to_cluster_by_name(primary_cluster_name)
-        drpc_subscription = DRPC(namespace=rdr_workload[0].workload_namespace)
-        drpc_appset = DRPC(
-            namespace=constants.GITOPS_CLUSTER_NAMESPACE,
-            resource_name=f"{rdr_workload[1].appset_placement_name}-drpc",
-        )
-        drpc_objs = [drpc_subscription, drpc_appset]
-        before_failover_last_group_sync_time = []
-        for obj in drpc_objs:
-            before_failover_last_group_sync_time.append(
-                dr_helpers.verify_last_group_sync_time(obj, scheduling_interval)
-            )
-        logger.info("Verified lastGroupSyncTime")
-        logger.info(
-            "Scale down rbd-mirror deployment on the secondary cluster and mds deployments on the primary cluster"
-        )
-        config.switch_to_cluster_by_name(secondary_cluster_name)
-        helpers.modify_deployment_replica_count(
-            deployment_name=constants.RBD_MIRROR_DAEMON_DEPLOYMENT, replica_count=0
-        )
-        config.switch_to_cluster_by_name(primary_cluster_name)
-        helpers.modify_deployment_replica_count(
-            deployment_name=constants.MDS_DAEMON_DEPLOYMENT_ONE, replica_count=0
-        )
-        helpers.modify_deployment_replica_count(
-            deployment_name=constants.MDS_DAEMON_DEPLOYMENT_TWO, replica_count=0
-        )
+
+        modify_deployment_count()
         config.switch_acm_ctx()
-        logger.info(f"Waiting for {wait_time * 60} seconds to allow alert to appear")
-        sleep(wait_time * 60)
         verify_drpolicy_ui(acm_obj, scheduling_interval=scheduling_interval)
-        logger.info("Click on Critical alerts")
-        critical_alert = acm_loc["critical-alert"].get_attribute("aria-expanded")
-        logger.info(f"Critical alert state: {critical_alert}")
-        if not critical_alert:
-            self.do_click(
-                locator=acm_loc["critical-alert"],
-                avoid_stale=True,
-                enable_screenshot=True,
+
+        logger.info("Click on Warning alerts")
+        warning_alert = acm_obj.find_an_element_by_xpath(
+            "//*[@id='alert-toggle-warning']"
+        ).get_attribute("aria-expanded")
+        logger.info(f"State of Warning alert option is: {warning_alert}")
+        if warning_alert == "false":
+            logger.info("Expand Warning alert option on the DR dashboard")
+            warning_alert = wait_for_element_to_be_clickable(acm_loc["warning-alert"])
+            acm_obj.driver.execute_script("arguments[0].click();", warning_alert)
+            acm_obj.take_screenshot()
+            logger.info(
+                "Successfully expanded Warning alert option on the DR dashboard"
             )
+        logger.info(
+            f"Wait for {buffer_time} minutes for VolumeSynchronizationDelay Warning alert to be fired"
+        )
         alert_1 = acm_obj.wait_until_expected_text_is_found(
-            locator=acm_loc["volsyncdelayalert1"],
+            locator=acm_loc["volsyncdelaywarningalert1"],
             expected_text="VolumeSynchronizationDelay",
-            timeout=120,
+            timeout=buffer_time * 60,
         )
         if alert_1:
             logger.info(
-                "Critical level 'VolumeSynchronizationDelay' alert found on the DR dashboard"
+                "Warning level first 'VolumeSynchronizationDelay' alert found on the DR dashboard"
             )
         else:
             logger.error(
-                "Critical level 'VolumeSynchronizationDelay' alert not found on the DR dashboard"
+                "First Warning level 'VolumeSynchronizationDelay' alert not found on the DR dashboard"
+            )
+            raise NoAlertPresentException
+
+        alert_2 = acm_obj.wait_until_expected_text_is_found(
+            locator=acm_loc["volsyncdelaywarningalert2"],
+            expected_text="VolumeSynchronizationDelay",
+            timeout=180,
+        )
+        if alert_2:
+            logger.info(
+                "Warning level second 'VolumeSynchronizationDelay' alert found on the DR dashboard"
+            )
+        else:
+            logger.error(
+                "Second Warning level 'VolumeSynchronizationDelay' alert not found on the DR dashboard"
+            )
+            raise NoAlertPresentException
+        if warning_alert == "true":
+            logger.info("Close Warning alert option on the DR dashboard")
+            warning_alert = wait_for_element_to_be_clickable(acm_loc["warning-alert"])
+            acm_obj.driver.execute_script("arguments[0].click();", warning_alert)
+            acm_obj.take_screenshot()
+            logger.info("Successfully closed Warning alert option on the DR dashboard")
+        logger.info("Click on Critical alerts")
+        critical_alert = acm_obj.find_an_element_by_xpath(
+            "//*[@id='alert-toggle-critical']"
+        ).get_attribute("aria-expanded")
+        logger.info(f"State of Critical alert option is: {critical_alert}")
+        if critical_alert == "false":
+            logger.info("Expand Critical alert option on the DR dashboard")
+            critical_alert = wait_for_element_to_be_clickable(acm_loc["critical-alert"])
+            acm_obj.driver.execute_script("arguments[0].click();", critical_alert)
+            acm_obj.take_screenshot()
+            logger.info(
+                "Successfully expanded Critical alert option on the DR dashboard"
+            )
+        time.sleep(60)
+        logger.info(
+            f"Wait for {scheduling_interval} minutes for VolumeSynchronizationDelay Critical alert to be fired"
+        )
+        alert_1 = acm_obj.wait_until_expected_text_is_found(
+            locator=acm_loc["volsyncdelayalert1"],
+            expected_text="VolumeSynchronizationDelay",
+            timeout=scheduling_interval * 60,
+        )
+        if alert_1:
+            logger.info(
+                "Critical level first 'VolumeSynchronizationDelay' alert found on the DR dashboard"
+            )
+        else:
+            logger.error(
+                "First Critical level 'VolumeSynchronizationDelay' alert not found on the DR dashboard"
             )
             raise NoAlertPresentException
 
         alert_2 = acm_obj.wait_until_expected_text_is_found(
             locator=acm_loc["volsyncdelayalert2"],
             expected_text="VolumeSynchronizationDelay",
-            timeout=120,
+            timeout=180,
         )
         if alert_2:
             logger.info(
-                "Critical level 'VolumeSynchronizationDelay' alert found on the DR dashboard"
+                "Critical level second 'VolumeSynchronizationDelay' alert found on the DR dashboard"
             )
         else:
             logger.error(
-                "Critical level 'VolumeSynchronizationDelay' alert not found on the DR dashboard"
+                "Second Critical level 'VolumeSynchronizationDelay' alert not found on the DR dashboard"
             )
             raise NoAlertPresentException
 
+        modify_deployment_count(status="up")
         logger.info(
-            "Scale up rbd-mirror deployment on the secondary cluster and mds deployments on the primary cluster"
+            f"Waiting for {2 * scheduling_interval} minutes to allow data sync to complete"
+            f" so that VolumeSyncronizationDelay alert disappears"
         )
-        config.switch_to_cluster_by_name(secondary_cluster_name)
-        helpers.modify_deployment_replica_count(
-            deployment_name=constants.RBD_MIRROR_DAEMON_DEPLOYMENT, replica_count=1
-        )
-        config.switch_to_cluster_by_name(primary_cluster_name)
-        helpers.modify_deployment_replica_count(
-            deployment_name=constants.MDS_DAEMON_DEPLOYMENT_ONE, replica_count=1
-        )
-        helpers.modify_deployment_replica_count(
-            deployment_name=constants.MDS_DAEMON_DEPLOYMENT_TWO, replica_count=1
-        )
-        logger.info(
-            f"Waiting for {wait_time * 60} seconds to allow warning alert to disappear"
-        )
-        sleep(wait_time * 60)
-
-        for obj, initial_last_group_sync_time in zip(
-            drpc_objs, before_failover_last_group_sync_time
-        ):
-            dr_helpers.verify_last_group_sync_time(
-                obj, scheduling_interval, initial_last_group_sync_time
-            )
-        logger.info("lastGroupSyncTime updated after pods are recovered")
-
-        config.switch_acm_ctx()
-        # Allow additional time for alert to disappear
-        logger.info("Allowing additional time for alert to disappear")
-        time.sleep(120)
+        sleep(2 * scheduling_interval * 60)
         verify_drpolicy_ui(acm_obj, scheduling_interval=scheduling_interval)
         logger.info("Click on Critical alerts")
-        critical_alert = acm_loc["critical-alert"].get_attribute("aria-expanded")
-        logger.info(f"Critical alert state: {critical_alert}")
-        if not critical_alert:
-            self.do_click(
-                locator=acm_loc["critical-alert"],
-                avoid_stale=True,
-                enable_screenshot=True,
+        critical_alert = acm_obj.find_an_element_by_xpath(
+            "//*[@id='alert-toggle-critical']"
+        ).get_attribute("aria-expanded")
+        logger.info(f"State of Critical alert option is: {critical_alert}")
+        if critical_alert == "false":
+            logger.info("Expand Critical alert option on the DR dashboard")
+            critical_alert = wait_for_element_to_be_clickable(acm_loc["critical-alert"])
+            acm_obj.driver.execute_script("arguments[0].click();", critical_alert)
+            acm_obj.take_screenshot()
+            logger.info(
+                "Successfully expanded Critical alert option on the DR dashboard"
             )
         alert_1 = acm_obj.wait_until_expected_text_is_found(
             locator=acm_loc["volsyncdelayalert1"],
             expected_text="VolumeSynchronizationDelay",
-            timeout=120,
+            timeout=15,
         )
         if alert_1:
             logger.error(
-                "Critical level 'VolumeSynchronizationDelay' alert is still being fired on the DR dashboard"
+                "First Critical level 'VolumeSynchronizationDelay' alert is still being fired on the DR dashboard"
             )
             raise UnexpectedBehaviour
         else:
             logger.info(
-                "Critical level 'VolumeSynchronizationDelay' alert disappeared from the DR dashboard"
+                "First Critical level 'VolumeSynchronizationDelay' alert disappeared from the DR dashboard"
             )
 
         alert_2 = acm_obj.wait_until_expected_text_is_found(
             locator=acm_loc["volsyncdelayalert2"],
             expected_text="VolumeSynchronizationDelay",
-            timeout=120,
+            timeout=15,
         )
         if alert_2:
             logger.error(
-                "Critical level 'VolumeSynchronizationDelay' alert is still being fired on the DR dashboard"
+                "Second Critical level 'VolumeSynchronizationDelay' alert is still being fired on the DR dashboard"
             )
             raise UnexpectedBehaviour
         else:
             logger.info(
-                "Critical level 'VolumeSynchronizationDelay' alert disappeared from the DR dashboard"
+                "Second Critical level 'VolumeSynchronizationDelay' alert disappeared from the DR dashboard"
             )
+        logger.info(
+            "VolumeSynchronizationDelay alert disappeared successfully on the DR dashboard"
+        )
