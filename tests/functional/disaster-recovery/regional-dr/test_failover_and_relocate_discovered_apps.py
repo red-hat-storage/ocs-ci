@@ -67,16 +67,16 @@ class TestFailoverAndRelocateWithDiscoveredApps:
     @pytest.mark.parametrize(
         argnames=["primary_cluster_down", "pvc_interface"],
         argvalues=[
-            # pytest.param(
-            #     False,
-            #     constants.CEPHBLOCKPOOL,
-            #     id="primary_up-rbd",
-            # ),
-            # pytest.param(
-            #     True,
-            #     constants.CEPHBLOCKPOOL,
-            #     id="primary_down-rbd",
-            # ),
+            pytest.param(
+                False,
+                constants.CEPHBLOCKPOOL,
+                id="primary_up-rbd",
+            ),
+            pytest.param(
+                True,
+                constants.CEPHBLOCKPOOL,
+                id="primary_down-rbd",
+            ),
             pytest.param(
                 False,
                 constants.CEPHFILESYSTEM,
