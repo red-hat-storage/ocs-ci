@@ -17,7 +17,8 @@ ENV_DATA:
   multus_cluster_net_interface: "ens224"
   multus_create_public_net: true
   multus_create_cluster_net: true
-  multus_public_net_namespace: "default"
+  multus_public_net_namespace: "openshift-storage"
+  multus_cluster_net_namespace: "openshift-storage"
 
 REPORTING:
   polarion:
