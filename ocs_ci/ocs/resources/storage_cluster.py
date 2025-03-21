@@ -747,9 +747,6 @@ def ocs_install_verification(
     # Let's wait for storage system after ceph health is OK to prevent fails on
     # Progressing': 'True' state.
 
-    if not (fusion_aas or client_cluster):
-        verify_storage_system()
-
     if config.ENV_DATA.get("fips"):
         # In case that fips is enabled when deploying,
         # a verification of the installation of it will run
@@ -907,7 +904,6 @@ def mcg_only_install_verification(ocs_registry_image=None):
     """
     log.info("Verifying MCG Only installation")
     basic_verification(ocs_registry_image)
-    verify_storage_system()
     verify_backing_store()
     verify_mcg_only_pods()
 
@@ -970,59 +966,6 @@ def verify_ocs_csv(ocs_registry_image=None):
                 f"OCS registry image version: {ocs_registry_image} mismatch "
                 f"with CSV version {csv_version}"
             )
-
-
-@retry(AssertionError, 60, 10, 1)
-def verify_storage_system():
-    """
-    Verify storage system status
-    """
-    hci_managed_service = (
-        config.ENV_DATA["platform"].lower() in constants.HCI_PC_OR_MS_PLATFORM
-    )
-    live_deployment = config.DEPLOYMENT.get("live_deployment")
-    ocp_version = version.get_semantic_ocp_version_from_config()
-    ocs_version = version.get_semantic_ocs_version_from_config()
-    if live_deployment and (
-        (ocp_version == version.VERSION_4_10 and ocs_version == version.VERSION_4_9)
-        or (ocp_version == version.VERSION_4_11 and ocs_version == version.VERSION_4_10)
-    ):
-        log.warning(
-            "Because of the BZ 2075422, we are skipping storage system validation!"
-        )
-        return
-    if config.UPGRADE.get("upgrade_ocs_version"):
-        upgrade_ocs_version = version.get_semantic_version(
-            config.UPGRADE.get("upgrade_ocs_version"), only_major_minor=True
-        )
-        if live_deployment and (
-            (
-                ocp_version == version.VERSION_4_10
-                and upgrade_ocs_version == version.VERSION_4_10
-            )
-            or (
-                ocp_version == version.VERSION_4_11
-                and upgrade_ocs_version == version.VERSION_4_11
-            )
-        ):
-            log.warning(
-                "Because of the BZ 2075422, we are skipping storage system validation after upgrade"
-            )
-            return
-    if ocs_version >= version.VERSION_4_9 and not hci_managed_service:
-        log.info("Verifying storage system status")
-        storage_system = OCP(
-            kind=constants.STORAGESYSTEM, namespace=config.ENV_DATA["cluster_namespace"]
-        )
-        storage_system_data = storage_system.get()
-        storage_system_status = {}
-        for condition in storage_system_data["items"][0]["status"]["conditions"]:
-            storage_system_status[condition["type"]] = condition["status"]
-        log.debug(f"storage system status: {storage_system_status}")
-        assert storage_system_status == constants.STORAGE_SYSTEM_STATUS, (
-            f"Storage System status is not in expected state. Expected {constants.STORAGE_SYSTEM_STATUS}"
-            f" but found {storage_system_status}"
-        )
 
 
 def verify_storage_cluster():
