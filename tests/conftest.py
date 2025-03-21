@@ -71,6 +71,7 @@ from ocs_ci.ocs.exceptions import (
     StorageClassNotDeletedFromUI,
     ResourceNotDeleted,
     MissingDecoratorError,
+    MissingRequiredConfigKeyError,
 )
 from ocs_ci.ocs.mcg_workload import mcg_job_factory as mcg_job_factory_implementation
 from ocs_ci.ocs.node import get_node_objs, schedule_nodes
@@ -5191,7 +5192,11 @@ def setup_acm_ui(request):
 
 def setup_acm_ui_fixture(request):
     if not ocsci_config.RUN.get("dr_action_via_ui"):
-        return
+        log.error(
+            "'dr_action_via_ui' params are missing, please pass conf/ocsci/dr_ui.yaml config to "
+            "run UI tests on Regional DR setup"
+        )
+        return MissingRequiredConfigKeyError
     restore_ctx_index = ocsci_config.cur_index
     ocsci_config.switch_acm_ctx()
     driver = login_to_acm()
