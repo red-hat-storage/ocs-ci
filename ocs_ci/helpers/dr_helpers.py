@@ -10,10 +10,12 @@ from datetime import datetime
 
 from ocs_ci.framework import config
 from ocs_ci.ocs import constants, ocp
+from ocs_ci.ocs.cluster import is_hci_cluster
 from ocs_ci.ocs.defaults import RBD_NAME
 from ocs_ci.ocs.exceptions import (
     TimeoutExpiredError,
     UnexpectedBehaviour,
+    NotFoundError,
 )
 from ocs_ci.ocs.resources.drpc import DRPC
 from ocs_ci.ocs.resources.pod import get_all_pods, get_ceph_tools_pod
@@ -37,8 +39,11 @@ from ocs_ci.utility.utils import (
     run_cmd,
     exec_cmd,
 )
-from ocs_ci.helpers.helpers import run_cmd_verify_cli_output
-
+from ocs_ci.helpers.helpers import (
+    run_cmd_verify_cli_output,
+    find_cephblockpoolradosnamespace,
+    find_cephfilesystemsubvolumegroup,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -287,22 +292,47 @@ def relocate(
     config.switch_ctx(restore_index)
 
 
-def check_mirroring_status_ok(replaying_images=None):
+def check_mirroring_status_ok(
+    replaying_images=None, cephblockpoolradosns=None, storageclient_uid=None
+):
     """
     Check if mirroring status has health OK and expected number of replaying images
 
     Args:
         replaying_images (int): Expected number of images in replaying state
+        cephblockpoolradosns (string): The name of the cephblockpoolradosnamespace
+        storageclient_uid(string): The uid of the storageclient in the client cluster where the application is running.
+            Applicable for provider - client configuration.
 
     Returns:
         bool: True if status contains expected health and states values, False otherwise
 
+    Raises:
+        NotFoundError: If the configuration is provider mode and the name of the cephblockpoolradosnamespace
+            is not obtained
     """
-    cbp_obj = ocp.OCP(
-        kind=constants.CEPHBLOCKPOOL,
-        resource_name=constants.DEFAULT_CEPHBLOCKPOOL,
-        namespace=config.ENV_DATA["cluster_namespace"],
-    )
+    if is_hci_cluster():
+        logger.info("Get the cephblockpoolradosnamespace associated with storageclient")
+        cephbpradosns = (
+            cephblockpoolradosns
+            or config.ENV_DATA.get("radosnamespace_name", None)
+            or find_cephblockpoolradosnamespace(storageclient_uid=storageclient_uid)
+        )
+
+        if not cephbpradosns:
+            raise NotFoundError("Couldn't identify the cephblockpoolradosnamespace")
+
+        cbp_obj = ocp.OCP(
+            kind=constants.CEPHBLOCKPOOLRADOSNS,
+            namespace=config.ENV_DATA["cluster_namespace"],
+            resource_name=cephbpradosns,
+        )
+    else:
+        cbp_obj = ocp.OCP(
+            kind=constants.CEPHBLOCKPOOL,
+            resource_name=constants.DEFAULT_CEPHBLOCKPOOL,
+            namespace=config.ENV_DATA["cluster_namespace"],
+        )
     mirroring_status = cbp_obj.get().get("status").get("mirroringStatus").get("summary")
     logger.info(f"Mirroring status: {mirroring_status}")
     health_keys = ["daemon_health", "health", "image_health"]
@@ -331,12 +361,19 @@ def check_mirroring_status_ok(replaying_images=None):
             logger.warning(
                 f"Unexpected states. Current replaying count is {current_value} but expected {expected_value}"
             )
-            return False
+            # Continue test if the bug https://issues.redhat.com/browse/DFBUGS-1525 is hit
+            current_stopped_value = mirroring_status.get("states").get("stopped")
+
+            if current_stopped_value in expected_value:
+                logger.warning("Counting 'stopped' value due to the bug DFBUGS-1525")
+                return True
+            else:
+                return False
 
     return True
 
 
-def wait_for_mirroring_status_ok(replaying_images=None, timeout=300):
+def wait_for_mirroring_status_ok(replaying_images=None, timeout=600):
     """
     Wait for mirroring status to reach health OK and expected number of replaying
     images for each of the ODF cluster
@@ -391,7 +428,7 @@ def get_pv_count(namespace):
     workload_pvs = [
         pv
         for pv in all_pvs
-        if pv.get("spec").get("claimRef").get("namespace") == namespace
+        if pv.get("spec").get("claimRef", {}).get("namespace") == namespace
     ]
     return len(workload_pvs)
 
@@ -949,16 +986,28 @@ def get_backend_volumes_for_pvcs(namespace):
     return backend_volumes
 
 
-def verify_backend_volume_deletion(backend_volumes):
+def verify_backend_volume_deletion(
+    backend_volumes,
+    cephblockpoolradosns=None,
+    cephfssubvolumegroup=None,
+    storageclient_uid=None,
+):
     """
     Check whether RBD images/CephFS subvolumes are deleted in the backend.
 
     Args:
         backend_volumes (list): List of RBD images or CephFS subvolumes
+        cephblockpoolradosns (str): The name of the cephblockpoolradosnamespace
+        cephfssubvolumegroup (str): The name of the cephfilesystemsubvolumegroup
+        storageclient_uid(string): The uid of the storageclient in the client cluster where the application is running.
+            Applicable for provider - client configuration.
 
     Returns:
         bool: True if volumes are deleted and False if volumes are not deleted
 
+    Raises:
+        NotFoundError: If the configuration is provider mode and the name of the cephblockpoolradosnamespace
+            is not obtained
     """
     ct_pod = get_ceph_tools_pod()
     rbd_pool_name = (
@@ -966,11 +1015,39 @@ def verify_backend_volume_deletion(backend_volumes):
         if config.DEPLOYMENT["external_mode"]
         else constants.DEFAULT_CEPHBLOCKPOOL
     )
-    rbd_images = ct_pod.exec_cmd_on_pod(f"rbd ls {rbd_pool_name} --format json")
+
+    if is_hci_cluster():
+        cephbpradosns = (
+            cephblockpoolradosns
+            or config.ENV_DATA.get("radosnamespace_name", None)
+            or find_cephblockpoolradosnamespace(storageclient_uid=storageclient_uid)
+        )
+
+        if not cephbpradosns:
+            raise NotFoundError("Could not identify the cephblockpoolradosnamespace")
+        namespace_param = f"--namespace {cephbpradosns}"
+
+        subvolumegroup = (
+            config.ENV_DATA.get("subvolumegroup_name", False) or cephfssubvolumegroup
+        )
+        if not subvolumegroup:
+            subvolumegroup = find_cephfilesystemsubvolumegroup(
+                storageclient_uid=storageclient_uid
+            )
+
+        if not subvolumegroup:
+            raise NotFoundError("Couldn't identify the cephfilesystemsubvolumegroup")
+    else:
+        namespace_param = ""
+        subvolumegroup = "csi"
+
+    rbd_images = ct_pod.exec_cmd_on_pod(
+        f"rbd ls {rbd_pool_name} {namespace_param} --format json"
+    )
 
     fs_name = ct_pod.exec_ceph_cmd("ceph fs ls")[0]["name"]
     cephfs_cmd_output = ct_pod.exec_cmd_on_pod(
-        f"ceph fs subvolume ls {fs_name} --group_name csi"
+        f"ceph fs subvolume ls {fs_name} --group_name {subvolumegroup}"
     )
     cephfs_subvolumes = [subvolume["name"] for subvolume in cephfs_cmd_output]
 
