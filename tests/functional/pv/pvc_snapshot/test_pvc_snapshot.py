@@ -156,7 +156,7 @@ class TestPvcSnapshot(ManageTest):
 
         # Confirm that the pod is running
         helpers.wait_for_resource_state(
-            resource=restore_pod_obj, state=constants.STATUS_RUNNING
+            resource=restore_pod_obj, state=constants.STATUS_RUNNING, timeout=120
         )
         restore_pod_obj.reload()
         teardown_factory(restore_pod_obj)

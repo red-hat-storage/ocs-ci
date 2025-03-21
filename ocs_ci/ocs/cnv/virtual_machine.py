@@ -353,14 +353,14 @@ class VirtualMachine(Virtctl):
             resource_name=self._vm_name, condition=status, timeout=timeout
         )
 
-    def start(self, timeout=600, wait=True):
+    def start(self, wait_timeout=600, wait=True, verify_ssh=True):
         """
         Start the VirtualMachine.
 
         Args:
             timeout (int): Timeout value in seconds.
-            wait (bool): True to wait for the VirtualMachine to reach the "Running" status.
-
+            wait_timeout (bool): True to wait for the VirtualMachine to reach the "Running" status.
+            verify_ssh (bool): True to wait for the VirtualMachine for ssh success
         """
         if (
             self.printableStatus() == constants.CNV_VM_STOPPED
@@ -379,8 +379,11 @@ class VirtualMachine(Virtctl):
         logger.info(f"Successfully started VM: {self._vm_name}")
 
         if wait:
-            self.wait_for_vm_status(status=constants.VM_RUNNING, timeout=timeout)
+            self.wait_for_vm_status(status=constants.VM_RUNNING, timeout=wait_timeout)
             logger.info(f"VM:{self._vm_name} reached Running state")
+
+        if verify_ssh:
+            self.wait_for_ssh_connectivity(timeout=1200)
 
     def check_if_vmi_does_not_exist(self):
         """
@@ -631,11 +634,12 @@ class VirtualMachine(Virtctl):
             self.wait_for_vm_status(status=constants.VM_PAUSED)
             logger.info(f"VM: {self._vm_name} reached Paused state")
 
-    def unpause(self, wait=True):
+    def unpause(self, wait=True, verify_ssh=True):
         """
         Unpause the VirtualMachine.
 
         Args:
+            verify_ssh: verify_ssh (bool): True to wait for the VirtualMachine for ssh success
             wait (bool): True to wait for the VirtualMachine to reach the "Running" status.
 
         """
@@ -644,6 +648,8 @@ class VirtualMachine(Virtctl):
         if wait:
             self.wait_for_vm_status(status=constants.VM_RUNNING)
             logger.info(f"VM: {self._vm_name} reached Running state")
+        if verify_ssh:
+            self.wait_for_ssh_connectivity(timeout=1200)
 
     def ready(self):
         """
@@ -694,6 +700,15 @@ class VirtualMachine(Virtctl):
                 )
         if self.ns_obj:
             self.ns_obj.delete_project(project_name=self.namespace)
+
+    def get_vmi_instance(self):
+        """
+        Get the vmi instance of VM
+
+        Returns:
+            VMI object: returns VMI instance of VM
+        """
+        return self.vmi_obj
 
 
 class VMCloner(VirtualMachine):

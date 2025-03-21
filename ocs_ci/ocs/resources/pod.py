@@ -175,7 +175,6 @@ class Pod(OCS):
             command (str): The command to execute on the given pod
             out_yaml_format (bool): whether to return yaml loaded python
                 object OR to return raw output
-
             secrets (list): A list of secrets to be masked with asterisks
                 This kwarg is popped in order to not interfere with
                 subprocess.run(``**kwargs``)
@@ -188,7 +187,7 @@ class Pod(OCS):
             Munch Obj: This object represents a returned yaml file
         """
         if container_name:
-            cmd = f"exec {self.name} -c {container_name} {command}"
+            cmd = f"exec {self.name} -c {container_name} -- {command}"
         else:
             cmd = f"rsh {self.name} "
             cmd += command
