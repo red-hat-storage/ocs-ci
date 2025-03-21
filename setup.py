@@ -102,6 +102,7 @@ setup(
         "pytest-jira==0.3.21",
         "certbot==3.0.0",
         "certbot-dns-route53==3.0.0",
+        "openshift-python-wrapper",
     ],
     entry_points={
         "console_scripts": [
