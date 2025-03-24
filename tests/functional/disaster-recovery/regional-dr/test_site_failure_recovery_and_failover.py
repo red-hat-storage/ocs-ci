@@ -4,13 +4,13 @@ from concurrent.futures import ThreadPoolExecutor
 
 from ocs_ci.framework.pytest_customization.marks import tier4a, turquoise_squad
 from ocs_ci.framework import config
+from ocs_ci.helpers import dr_helpers
 from ocs_ci.ocs.acm.acm import validate_cluster_import
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.node import get_node_objs, wait_for_nodes_status
 from ocs_ci.helpers.dr_helpers import (
     failover,
     restore_backup,
-    create_backup_schedule,
     get_current_primary_cluster_name,
     get_current_secondary_cluster_name,
     get_passive_acm_index,
@@ -20,8 +20,12 @@ from ocs_ci.helpers.dr_helpers import (
     wait_for_all_resources_deletion,
     relocate,
     get_scheduling_interval,
+    create_klusterlet_config,
+    remove_parameter_klusterlet_config,
+    configure_rdr_hub_recovery,
 )
 from ocs_ci.ocs.exceptions import UnexpectedBehaviour
+from ocs_ci.ocs.resources.drpc import DRPC
 from ocs_ci.ocs.resources.pod import wait_for_pods_to_be_running
 from ocs_ci.ocs.utils import get_active_acm_index
 from ocs_ci.utility.utils import TimeoutSampler, ceph_health_check
@@ -31,37 +35,65 @@ logger = logging.getLogger(__name__)
 
 @tier4a
 @turquoise_squad
-class TestSiteFailureAndRecoverHub:
+class TestSiteFailureRecoveryAndfailover:
     """
-    Perform site failure and hub recovery by moving to passive hub using backlup and restore then perform failover on
-    the DR protected workloads running on the down managed cluster
+    Perform site-failure by bringing down the active hub and the primary managed cluster, then perform hub recovery
+    by moving to passive hub using backlup and restore, and then failover the DR protected workloads
+    running on the down managed cluster to the secondary managed cluster.
     """
 
-    def test_site_failure_and_failover(self, nodes_multicluster, dr_workload):
+    def test_site_failure_and_failover(self, dr_workload, nodes_multicluster):
         """
-        Tests to verify failover on all apps when active hub along with primary managed cluster is down
+        Tests to verify failover on all apps during site-failure when active hub along with primary managed cluster
+        is down
         """
 
-        # Deploy Subscription and Appset based application
+        # Deploy Subscription and Appset based application of both RBD and CephFS SC
         rdr_workload = dr_workload(
-            num_of_subscription=1, num_of_appset=1, switch_ctx=get_passive_acm_index()
+            num_of_subscription=1,
+            num_of_appset=1,
+            pvc_interface=constants.CEPHBLOCKPOOL,
         )
-        logger.info(type(rdr_workload))
+        dr_workload(
+            num_of_subscription=1,
+            num_of_appset=1,
+            pvc_interface=constants.CEPHFILESYSTEM,
+        )
+        drpc_objs = []
+        for wl in rdr_workload:
+            if wl.workload_type == constants.SUBSCRIPTION:
+                drpc_objs.append(DRPC(namespace=wl.workload_namespace))
+            else:
+                drpc_objs.append(
+                    DRPC(
+                        namespace=constants.GITOPS_CLUSTER_NAMESPACE,
+                        resource_name=f"{wl.appset_placement_name}-drpc",
+                    )
+                )
+
         primary_cluster_name = get_current_primary_cluster_name(
             rdr_workload[0].workload_namespace
         )
         secondary_cluster_name = get_current_secondary_cluster_name(
             rdr_workload[0].workload_namespace
         )
+
+        # Verify the creation of ReplicationDestination resources on secondary cluster in case of CephFS
+        config.switch_to_cluster_by_name(secondary_cluster_name)
+        for wl in rdr_workload:
+            if wl.pvc_interface == constants.CEPHFILESYSTEM:
+                dr_helpers.wait_for_replication_destinations_creation(
+                    wl.workload_pvc_count, wl.workload_namespace
+                )
+
         scheduling_interval = get_scheduling_interval(
             rdr_workload[0].workload_namespace, rdr_workload[0].workload_type
         )
-        # Create backup-schedule on active hub
-        create_backup_schedule()
+
         two_times_scheduling_interval = 2 * scheduling_interval  # Time in minutes
-        wait_time = 300
-        logger.info(f"Wait {wait_time} until backup is taken ")
-        time.sleep(wait_time)
+        wait_time = 420
+
+        assert configure_rdr_hub_recovery()
 
         # Get the primary managed cluster nodes
         logger.info("Getting Primary managed cluster node details")
@@ -70,12 +102,10 @@ class TestSiteFailureAndRecoverHub:
         active_primary_cluster_node_objs = get_node_objs()
 
         # Get the active hub cluster nodes
-        logger.info("Getting Active cluster node details")
+        logger.info("Getting Active Hub cluster node details")
         config.switch_ctx(get_active_acm_index())
         active_hub_index = config.cur_index
         active_hub_cluster_node_objs = get_node_objs()
-
-        # ToDo Add verification for dpa and policy
 
         # Shutdown active hub and primary managed cluster nodes
         logger.info(
@@ -91,15 +121,22 @@ class TestSiteFailureAndRecoverHub:
             "All nodes of active hub cluster are powered off, "
             f"wait {wait_time} seconds before restoring backups on the passive hub"
         )
+        time.sleep(wait_time)
 
         config.switch_ctx(get_passive_acm_index())
         # Restore new hub
+        logger.info("Restore backups on the passive hub cluster")
         restore_backup()
         logger.info(f"Wait {wait_time} until restores are taken ")
         time.sleep(wait_time)
 
         # Verify the restore is completed
+        logger.info("Verify if backup restore is successful or not")
         verify_restore_is_completed()
+
+        # Create KlusterletConfig
+        logger.info("Create clusterlet config")
+        create_klusterlet_config()
 
         # Validate the surviving managed cluster is successfully imported on the new hub
         for sample in TimeoutSampler(
@@ -126,13 +163,23 @@ class TestSiteFailureAndRecoverHub:
                 raise UnexpectedBehaviour(
                     f"import of cluster: {secondary_cluster_name} failed post hub recovery"
                 )
-            # Wait for drpolicy to be in validated state
+        # Wait for drpolicy to be in validated state
+        logger.info("Verify status of DR Policy on the new hub")
         verify_drpolicy_cli(switch_ctx=get_passive_acm_index())
 
         logger.info(f"Wait for {wait_time} for drpc status to be restored")
         time.sleep(wait_time)
 
+        # Edit the global KlusterletConfig on the new hub and remove
+        # the parameter appliedManifestWorkEvictionGracePeriod and its value.
+        logger.info(
+            "Edit the global KlusterletConfig on the new hub and "
+            "remove the parameter appliedManifestWorkEvictionGracePeriod and its value."
+        )
+        remove_parameter_klusterlet_config()
+
         # Failover action via CLI
+        logger.info("Failover workloads after hub recovery")
         failover_results = []
         with ThreadPoolExecutor() as executor:
             for wl in rdr_workload:
@@ -202,14 +249,42 @@ class TestSiteFailureAndRecoverHub:
         logger.info("Wait for approx. an hour to surpass 1hr eviction period timeout")
         time.sleep(3600)
         logger.info("Checking for Ceph Health OK")
-        ceph_health_check()
+        ceph_health_check(tries=40, delay=30)
 
         # Verify application are deleted from old cluster
         for wl in rdr_workload:
             wait_for_all_resources_deletion(wl.workload_namespace)
 
+        for wl in rdr_workload:
+            if wl.pvc_interface == constants.CEPHFILESYSTEM:
+                # Verify the deletion of ReplicationDestination resources on secondary cluster
+                config.switch_to_cluster_by_name(secondary_cluster_name)
+                dr_helpers.wait_for_replication_destinations_deletion(
+                    wl.workload_namespace
+                )
+                # Verify the creation of ReplicationDestination resources on primary cluster
+                config.switch_to_cluster_by_name(primary_cluster_name)
+                dr_helpers.wait_for_replication_destinations_creation(
+                    wl.workload_pvc_count, wl.workload_namespace
+                )
+
+        dr_helpers.wait_for_mirroring_status_ok(
+            replaying_images=sum(
+                [
+                    wl.workload_pvc_count
+                    for wl in rdr_workload
+                    if wl.pvc_interface == constants.CEPHBLOCKPOOL
+                ]
+            )
+        )
+
         logger.info(f"Waiting for {two_times_scheduling_interval} minutes to run IOs")
         time.sleep(two_times_scheduling_interval * 60)
+
+        for drpc in drpc_objs:
+            dr_helpers.verify_last_group_sync_time(
+                drpc_obj=drpc, scheduling_interval=scheduling_interval
+            )
 
         relocate_results = []
         with ThreadPoolExecutor() as executor:
@@ -243,7 +318,35 @@ class TestSiteFailureAndRecoverHub:
                 wl.workload_namespace,
             )
 
+        for wl in rdr_workload:
+            if wl.pvc_interface == constants.CEPHFILESYSTEM:
+                # Verify the deletion of ReplicationDestination resources on primary cluster
+                config.switch_to_cluster_by_name(primary_cluster_name)
+                dr_helpers.wait_for_replication_destinations_deletion(
+                    wl.workload_namespace
+                )
+                # Verify the creation of ReplicationDestination resources on secondary cluster
+                config.switch_to_cluster_by_name(secondary_cluster_name)
+                dr_helpers.wait_for_replication_destinations_creation(
+                    wl.workload_pvc_count, wl.workload_namespace
+                )
+
+        dr_helpers.wait_for_mirroring_status_ok(
+            replaying_images=sum(
+                [
+                    wl.workload_pvc_count
+                    for wl in rdr_workload
+                    if wl.pvc_interface == constants.CEPHBLOCKPOOL
+                ]
+            )
+        )
+
         # Verify resources deletion from previous primary or current secondary cluster
         config.switch_to_cluster_by_name(secondary_cluster_name)
         for wl in rdr_workload:
             wait_for_all_resources_deletion(wl.workload_namespace)
+
+        for drpc in drpc_objs:
+            dr_helpers.verify_last_group_sync_time(
+                drpc_obj=drpc, scheduling_interval=scheduling_interval
+            )

@@ -6896,6 +6896,7 @@ def dr_workload(request):
                 workload_dir=workload_details["workload_dir"],
                 workload_pod_count=workload_details["pod_count"],
                 workload_pvc_count=workload_details["pvc_count"],
+                pvc_interface=pvc_interface,
             )
             instances.append(workload)
             total_pvc_count += workload_details["pvc_count"]
@@ -6915,6 +6916,7 @@ def dr_workload(request):
                 ],
                 workload_pvc_selector=workload_details["dr_workload_app_pvc_selector"],
                 appset_model=appset_model,
+                pvc_interface=pvc_interface,
             )
             instances.append(workload)
             total_pvc_count += workload_details["pvc_count"]
