@@ -88,9 +88,12 @@ class TestKeyRotationWithClusterFull(E2ETest):
             measure=False, delete=False, num_of_pvcs=30
         )
         multi_pvc_clone_factory(pvc_obj=pvc_obj[:11])
-        snap_list = multi_snapshot_factory(pvc_obj=pvc_obj[:11])
-        for snapshot in snap_list:
-            snapshot_restore_factory(snapshot_obj=snapshot)
+
+        # Commenting below code due to ocs-ci issue 11605
+
+        # snap_list = multi_snapshot_factory(pvc_obj=pvc_obj[:11])
+        # for snapshot in snap_list:
+        #     snapshot_restore_factory(snapshot_obj=snapshot)
 
         time_interval_to_rotate_key_in_minutes = str(5)
         tries = 10
