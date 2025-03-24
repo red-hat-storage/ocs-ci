@@ -16,6 +16,11 @@ from ocs_ci.ocs.exceptions import (
 from ocs_ci.helpers.sanity_helpers import Sanity
 from ocs_ci.deployment.cnv import CNVInstaller
 from ocs_ci.ocs.resources.pod import wait_for_pods_to_be_running
+from ocp_resources.virtual_machine_clone import VirtualMachineClone
+from ocs_ci.ocs.cnv.virtual_machine import VirtualMachine
+from ocp_resources.virtual_machine_restore import VirtualMachineRestore
+from ocp_resources.virtual_machine_snapshot import VirtualMachineSnapshot
+from ocs_ci.helpers.helpers import create_unique_resource_name
 
 logger = logging.getLogger(__name__)
 
@@ -40,10 +45,7 @@ class TestVmShutdownStart(E2ETest):
         setup_cnv,
         project_factory,
         multi_cnv_workload,
-        clone_vm_workload,
-        snapshot_factory,
-        snapshot_restore_factory,
-        cnv_workload,
+        admin_client,
         nodes,
     ):
         """
@@ -51,8 +53,8 @@ class TestVmShutdownStart(E2ETest):
 
         Test steps:
         1. Create VMs using fixture multi_cnv_workload
-        2. Create a clone of a VM PVC and new vm using cloned pvc.
-        3. Create a snapshot for a VM backed pvc,Restore snapshot,Create new vm using restored pvc.
+        2. Create a clone of a VM.
+        3. Create a snapshot of a VM ,Create new vm using Restore snapshot,
         4. Keep vms in different states (power on, paused, stoped)
         5. Initiate shutdown the cluster nodes as per OCP official documentation
             5.1 If force = True - abrupt shutdown
@@ -86,42 +88,58 @@ class TestVmShutdownStart(E2ETest):
         # Choose VMs randomaly
         vm_for_clone, vm_for_stop, vm_for_snap = random.sample(all_vms, 3)
 
-        # Create VM using cloned pvc of source VM PVC
-        vm_for_clone.stop()
-        clone_obj = clone_vm_workload(
-            vm_obj=vm_for_clone,
-            volume_interface=vm_for_clone.volume_interface,
+        # Create Clone of VM
+        target_name = f"clone-{vm_for_clone.name}"
+        with VirtualMachineClone(
+            name="clone-vm-test",
             namespace=vm_for_clone.namespace,
+            source_name=vm_for_clone.name,
+            target_name=target_name,
+        ) as vmc:
+            vmc.wait_for_status(status=VirtualMachineClone.Status.SUCCEEDED)
+        cloned_vm = VirtualMachine(
+            vm_name=target_name, namespace=vm_for_clone.namespace
         )
-        all_vms.append(clone_obj)
-        csum = cal_md5sum_vm(vm_obj=clone_obj, file_path=file_paths[0])
-        source_csums[clone_obj.name] = csum
+        cloned_vm.start(wait=True)
+        cloned_vm.wait_for_ssh_connectivity()
+        all_vms.append(cloned_vm)
+        csum = cal_md5sum_vm(vm_obj=cloned_vm, file_path=file_paths[0])
+        source_csums[cloned_vm.name] = csum
 
         # Create a snapshot
-        # Taking Snapshot of PVC
-        pvc_obj = vm_for_snap.get_vm_pvc_obj()
-        snap_obj = snapshot_factory(pvc_obj)
+        snapshot_name = f"snapshot-{vm_for_snap.name}"
+        # Explicitly create the VirtualMachineSnapshot instance
+        with VirtualMachineSnapshot(
+            name=snapshot_name,
+            namespace=vm_for_snap.namespace,
+            vm_name=vm_for_snap.name,
+            client=admin_client,
+            teardown=False,
+        ) as vm_snapshot:
+            vm_snapshot.wait_snapshot_done()
 
-        # Restore the snapshot
-        res_snap_obj = snapshot_restore_factory(
-            snapshot_obj=snap_obj,
-            storageclass=vm_for_snap.sc_name,
-            volume_mode=snap_obj.parent_volume_mode,
-            access_mode=vm_for_snap.pvc_access_mode,
-            status=constants.STATUS_BOUND,
-            timeout=300,
-        )
+        # Stopping VM before restoring
+        vm_for_snap.stop()
 
-        # Create new VM using the restored PVC
-        res_vm_obj = cnv_workload(
-            source_url=constants.CNV_FEDORA_SOURCE,
-            storageclass=vm_for_snap.sc_name,
-            existing_pvc_obj=res_snap_obj,
-            namespace=vm_obj.namespace,
-        )
-        all_vms.append(res_vm_obj)
-        csum = cal_md5sum_vm(vm_obj=res_vm_obj, file_path=file_paths[0])
-        source_csums[res_vm_obj.name] = csum
+        # Explicitly create the VirtualMachineRestore instance
+        restore_snapshot_name = create_unique_resource_name(vm_snapshot.name, "restore")
+        try:
+            with VirtualMachineRestore(
+                name=restore_snapshot_name,
+                namespace=vm_for_snap.namespace,
+                vm_name=vm_for_snap.name,
+                snapshot_name=vm_snapshot.name,
+                client=admin_client,
+                teardown=False,
+            ) as vm_restore:
+                vm_restore.wait_restore_done()  # Wait for restore completion
+                vm_for_snap.start()
+                vm_for_snap.wait_for_ssh_connectivity(timeout=1200)
+        finally:
+            vm_snapshot.delete()
+
+        csum = cal_md5sum_vm(vm_obj=vm_for_snap, file_path=file_paths[0])
+        source_csums[vm_for_snap.name] = csum
 
         # Initiate abrupt shutdown the cluster nodes as per OCP official documentation
         worker_nodes = get_nodes(node_type="worker")
