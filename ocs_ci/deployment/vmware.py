@@ -165,7 +165,7 @@ class VSPHEREBASE(Deployment):
         # Add disks to all worker nodes
         for vm in vms:
             if "compute" in vm.name:
-                self.vsphere.add_disks(
+                self.vsphere.add_disks_with_same_size(
                     config.ENV_DATA.get("extra_disks", 1), vm, size, disk_type, ssd
                 )
 
@@ -1078,7 +1078,7 @@ class VSPHEREUPI(VSPHEREBASE):
                     pool=config.ENV_DATA["cluster_name"],
                 )
 
-                vsphere.add_disks(
+                vsphere.add_disks_with_same_size(
                     config.DEPLOYMENT["lvmo_disks"],
                     vm,
                     config.DEPLOYMENT["lvmo_disks_size"],
