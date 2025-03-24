@@ -114,8 +114,6 @@ class TestZoneShutdownsAndCrashes:
                 False,
                 5,
                 marks=[
-                    pytest.mark.bugzilla("2121452"),
-                    pytest.mark.bugzilla("2113062"),
                     pytest.mark.polarion_id("OCS-5088"),
                 ],
             ),

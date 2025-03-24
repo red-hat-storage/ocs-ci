@@ -22,7 +22,6 @@ logger = logging.getLogger(__name__)
 
 @ignore_leftovers
 @flowtests
-@pytest.mark.bugzilla("1869303")
 class TestBaseOperationNodeDrain(E2ETest):
     """
     Tests Story/Flow based test scenario: Node Drain
