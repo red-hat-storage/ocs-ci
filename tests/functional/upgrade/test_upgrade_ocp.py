@@ -1,7 +1,6 @@
 import logging
 import os
 
-from pkg_resources import parse_version
 from semantic_version import Version
 
 from ocs_ci.ocs import ocp
@@ -19,6 +18,7 @@ from ocs_ci.utility.utils import (
     ceph_health_check,
     load_config_file,
 )
+from ocs_ci.utility.version import get_semantic_version
 from ocs_ci.framework.testlib import ManageTest, ocp_upgrade, ignore_leftovers
 from ocs_ci.ocs.cluster import CephCluster, CephHealthMonitor
 from ocs_ci.utility.ocp_upgrade import (
@@ -60,10 +60,10 @@ class TestUpgradeOCP(ManageTest):
 
         version = Version.coerce(ocp_upgrade_version)
         short_ocp_upgrade_version = ".".join([str(version.major), str(version.minor)])
-        version_before_upgrade = parse_version(
+        version_before_upgrade = get_semantic_version(
             config.DEPLOYMENT.get("installer_version")
         )
-        version_post_upgrade = parse_version(ocp_upgrade_version)
+        version_post_upgrade = get_semantic_version(ocp_upgrade_version)
         version_change = version_post_upgrade > version_before_upgrade
         if version_change:
             version_config_file = os.path.join(
