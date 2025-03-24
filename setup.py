@@ -37,7 +37,6 @@ setup(
         "gspread==3.6.0",
         "google-auth-oauthlib==0.7.1",
         "oauth2client==4.1.3",
-        "pytest_marker_bugzilla>=0.9.3",
         "pyvmomi==7.0",
         "python-hcl2==3.0.1",
         "python-dateutil==2.9.0",
