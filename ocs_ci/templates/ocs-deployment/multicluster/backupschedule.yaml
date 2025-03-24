@@ -4,7 +4,7 @@ metadata:
   name: schedule-acm
   namespace: open-cluster-management-backup
 spec:
-  veleroSchedule: 0 */1 * * *
-  veleroTtl: 48h
+  veleroSchedule: "*/5 * * * *"
+  veleroTtl: 96h
   useManagedServiceAccount: true
   managedServiceAccountTTL: 96h

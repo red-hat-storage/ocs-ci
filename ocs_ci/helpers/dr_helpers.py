@@ -29,6 +29,7 @@ from ocs_ci.ocs.utils import (
     get_passive_acm_index,
     enable_mco_console_plugin,
     set_recovery_as_primary,
+    get_all_acm_indexes,
 )
 from ocs_ci.utility import version, templating
 from ocs_ci.utility.retry import retry
@@ -1915,3 +1916,43 @@ def verify_last_kubeobject_protection_time(drpc_obj, kubeobject_sync_interval):
     logger.info("Verified lastKubeObjectProtectionTime value within expected range")
     config.switch_ctx(restore_index)
     return last_kubeobject_protection_time
+
+
+def configure_rdr_hub_recovery():
+    """
+    RDR helper function to create backup schedule on the active hub cluster needed for hub recovery
+    using backup and restore.
+
+    This function ensures all pre-reqs are verified before hub recovery is performed.
+
+    """
+    # Create backup-schedule on active hub
+    config.switch_acm_ctx()
+    logger.info("Create backup schedule on the active hub cluster")
+    create_backup_schedule()
+    wait_time = 420
+    logger.info(f"Wait {wait_time} seconds until backup is taken ")
+    time.sleep(wait_time)
+    logger.info(
+        "Check pre-reqs on both the hub clusters before performing hub recovery"
+    )
+    acm_indexes = get_all_acm_indexes()
+    for _ in acm_indexes:
+        config.switch_ctx(_)
+        verify_backup_is_taken()
+        # To avoid circular import
+        from ocs_ci.deployment.deployment import (
+            Deployment,
+            get_multicluster_dr_deployment,
+        )
+
+        dr_conf = Deployment().get_rdr_conf()
+        rdrclass_obj = get_multicluster_dr_deployment()(dr_conf)
+        rdrclass_obj.validate_dpa()
+        assert rdrclass_obj.validate_policy_compliance_status(
+            resource_name="backup-restore-enabled",
+            resource_namespace="open-cluster-management-backup",
+            compliance_state="Compliant",
+        )
+    logger.info("All pre-reqs verified for performing hub recovery")
+    return True
