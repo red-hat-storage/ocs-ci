@@ -61,7 +61,7 @@ class TestVmSnapshotClone(E2ETest):
     )
     def test_vm_clone_with_expansion(
         self,
-        qsetup_cnv,
+        setup_cnv,
         project_factory,
         pvc_expand_before_clone,
         pvc_expand_after_clone,
@@ -148,8 +148,7 @@ class TestVmSnapshotClone(E2ETest):
                 target_name=target_name,
             ) as vmc:
                 vmc.wait_for_status(status=VirtualMachineClone.Status.SUCCEEDED)
-
-            cloned_vm = VirtualMachine(name=target_name, namespace=vm_obj.namespace)
+            cloned_vm = VirtualMachine(vm_name=target_name, namespace=vm_obj.namespace)
             cloned_vm.start(wait=True)
             cloned_vm.wait_for_ssh_connectivity()
             log.info(
@@ -164,11 +163,29 @@ class TestVmSnapshotClone(E2ETest):
             if pvc_expand_after_clone:
                 new_size = 50
                 try:
+                    # Update  self.pvc_name from vm yaml same as 11071 PR
+                    if cloned_vm.volume_interface == "DVT":
+                        cloned_vm.pvc_name = (
+                            cloned_vm.get()
+                            .get("spec")
+                            .get("template")
+                            .get("spec")
+                            .get("volumes")[0]
+                            .get("dataVolume")
+                            .get("name")
+                        )
+                    else:
+                        cloned_vm.pvc_name = (
+                            cloned_vm.get()
+                            .get("spec")
+                            .get("template")
+                            .get("spec")
+                            .get("volumes")[0]
+                            .get("persistentVolumeClaim")
+                            .get("claimName")
+                        )
                     clone_pvc_obj = cloned_vm.get_vm_pvc_obj()
                     clone_pvc_obj.resize_pvc(new_size=new_size, verify=True)
-                    assert (
-                        clone_pvc_obj.get_vm_pvc_obj().size == new_size
-                    ), f"Failed: VM PVC Expansion on cloned VM {cloned_vm.name} "
 
                     # Get rootdisk name
                     disk = (
