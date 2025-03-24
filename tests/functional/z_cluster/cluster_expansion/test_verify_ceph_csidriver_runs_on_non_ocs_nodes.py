@@ -24,7 +24,6 @@ logger = logging.getLogger(__name__)
 @skipif_multus_enabled
 @tier2
 @pytest.mark.polarion_id("OCS-2490")
-@pytest.mark.bugzilla("1794389")
 @ignore_leftovers
 class TestCheckTolerationForCephCsiDriverDs(ManageTest):
     """

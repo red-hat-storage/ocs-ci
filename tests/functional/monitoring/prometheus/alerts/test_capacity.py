@@ -18,7 +18,6 @@ log = logging.getLogger(__name__)
 
 @blue_squad
 @pytest.mark.polarion_id("OCS-899")
-@pytest.mark.bugzilla("1943137")
 @tier2
 @gather_metrics_on_fail(
     "ceph_cluster_total_used_bytes", "cluster:memory_usage_bytes:sum"
@@ -86,7 +85,6 @@ def test_rbd_capacity_workload_alerts(
 
 @blue_squad
 @pytest.mark.polarion_id("OCS-1934")
-@pytest.mark.bugzilla("1943137")
 @tier2
 @gather_metrics_on_fail(
     "ceph_cluster_total_used_bytes", "cluster:memory_usage_bytes:sum"

@@ -67,7 +67,6 @@ class TestNetSplit:
                 marks=[
                     pytest.mark.polarion_id("OCS-5069"),
                     pytest.mark.polarion_id("OCS-5071"),
-                    pytest.mark.bugzilla("2265992"),
                 ],
             ),
             pytest.param(

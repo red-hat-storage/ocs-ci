@@ -91,7 +91,6 @@ class TestDynamicPvc(ManageTest):
                 *[constants.CEPHBLOCKPOOL, constants.RECLAIM_POLICY_RETAIN],
                 marks=[
                     pytest.mark.polarion_id("OCS-530"),
-                    pytest.mark.bugzilla("1772990"),
                     skipif_managed_service,
                     skipif_hci_provider_and_client,
                 ],
@@ -100,17 +99,12 @@ class TestDynamicPvc(ManageTest):
                 *[constants.CEPHBLOCKPOOL, constants.RECLAIM_POLICY_DELETE],
                 marks=[
                     pytest.mark.polarion_id("OCS-533"),
-                    pytest.mark.bugzilla("1750916"),
-                    pytest.mark.bugzilla("1772990"),
                 ],
             ),
             pytest.param(
                 *[constants.CEPHFILESYSTEM, constants.RECLAIM_POLICY_RETAIN],
                 marks=[
                     pytest.mark.polarion_id("OCS-525"),
-                    pytest.mark.bugzilla("1751866"),
-                    pytest.mark.bugzilla("1750916"),
-                    pytest.mark.bugzilla("1772990"),
                     skipif_managed_service,
                     skipif_hci_provider_and_client,
                 ],
@@ -119,9 +113,6 @@ class TestDynamicPvc(ManageTest):
                 *[constants.CEPHFILESYSTEM, constants.RECLAIM_POLICY_DELETE],
                 marks=[
                     pytest.mark.polarion_id("OCS-526"),
-                    pytest.mark.bugzilla("1751866"),
-                    pytest.mark.bugzilla("1750916"),
-                    pytest.mark.bugzilla("1772990"),
                 ],
             ),
         ],
@@ -241,8 +232,6 @@ class TestDynamicPvc(ManageTest):
 
     @acceptance
     @tier1
-    @pytest.mark.bugzilla("1750916")
-    @pytest.mark.bugzilla("1751866")
     @pytest.mark.parametrize(
         argnames=["interface_type", "reclaim_policy"],
         argvalues=[
