@@ -80,7 +80,7 @@ class TestOCSWorkerNodeShutdown(ManageTest):
         # Validate all nodes are in READY state and up
         retry(
             (CommandFailed, TimeoutError, AssertionError, ResourceWrongStatusException),
-            tries=30,
+            tries=28,
             delay=15,
         )(wait_for_nodes_status(timeout=1800))
 
