@@ -13,7 +13,6 @@ log = logging.getLogger(__name__)
 class TestStorageClassEncryptionOptions:
     @green_squad
     @tier1
-    @pytest.mark.bugzilla("2246388")
     @skipif_ocs_version("<4.13")
     @pytest.mark.polarion_id("OCS-5386")
     def test_storageclass_encryption_options(

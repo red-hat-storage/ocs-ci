@@ -150,7 +150,6 @@ def test_ceph_rbd_metrics_available(threading_lock):
 @skipif_mcg_only
 @blue_squad
 @tier1
-@pytest.mark.bugzilla("2203795")
 @metrics_for_external_mode_required
 @pytest.mark.polarion_id("OCS-1268")
 @skipif_managed_service

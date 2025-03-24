@@ -375,7 +375,6 @@ class TestReplication(MCGTest):
                 marks=[
                     tier2,
                     pytest.mark.polarion_id("OCS-2680"),
-                    pytest.mark.bugzilla("2168788"),
                 ],
             ),
             pytest.param(
@@ -408,7 +407,6 @@ class TestReplication(MCGTest):
                 None,
                 marks=[
                     tier2,
-                    pytest.mark.bugzilla("2168788"),
                 ],
             ),
         ],

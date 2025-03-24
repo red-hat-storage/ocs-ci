@@ -1,5 +1,4 @@
 import logging
-import pytest
 
 from ocs_ci.ocs.ocp import OCP
 from ocs_ci.ocs import constants
@@ -37,7 +36,6 @@ class TestNamespaceStoreUI(object):
     @tier1
     @runs_on_provider
     @skipif_ibm_cloud_managed
-    @pytest.mark.bugzilla("2158922")
     @polarion_id("OCS-5125")
     def test_create_namespace_store_ui(self, setup_ui_class_factory, pvc_factory):
         """

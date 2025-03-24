@@ -24,7 +24,6 @@ logger = logging.getLogger(__name__)
 @skipif_ocs_version("<4.10")
 @ignore_leftover_label(constants.OSD_APP_LABEL)
 @pytest.mark.polarion_id("OCS-3731")
-@pytest.mark.bugzilla("2032656")
 class TestDeleteOSDDeployment(ManageTest):
     """
     This test case deletes all the OSD deployments one after the other.

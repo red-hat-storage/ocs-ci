@@ -24,7 +24,7 @@ log = logging.getLogger(__name__)
         ),
         pytest.param(
             *[constants.CEPHFILESYSTEM],
-            marks=[pytest.mark.polarion_id("OCS-853"), pytest.mark.bugzilla("1745344")],
+            marks=[pytest.mark.polarion_id("OCS-853")],
         ),
     ],
 )
@@ -82,7 +82,6 @@ class TestPVCFullWithIORWO(ManageTest):
 
 @green_squad
 @pytest.mark.polarion_id("OCS-854")
-@pytest.mark.bugzilla("1745344")
 @tier2
 class TestPVCFullWithIORWX(ManageTest):
     """

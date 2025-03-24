@@ -79,7 +79,6 @@ class TestAddCapacityStretchCluster:
                 3,
                 marks=[
                     pytest.mark.polarion_id("OCS-5474"),
-                    pytest.mark.bugzilla("2143858"),
                 ],
             ),
         ],

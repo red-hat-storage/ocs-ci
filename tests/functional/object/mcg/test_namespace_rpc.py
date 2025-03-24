@@ -437,7 +437,6 @@ class TestNamespace(MCGTest):
         )
 
     @pytest.mark.polarion_id("OCS-2280")
-    @pytest.mark.bugzilla("1900760")
     @tier3
     def test_create_resource_with_invalid_target_bucket_rpc(
         self, mcg_obj, mcg_connection_factory

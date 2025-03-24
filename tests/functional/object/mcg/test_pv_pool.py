@@ -185,7 +185,6 @@ class TestPvPool:
                 marks=[
                     tier2,
                     pytest.mark.polarion_id("OCS-3932"),
-                    pytest.mark.bugzilla("2064599"),
                     pytest.mark.skipif_ocs_version("<4.11"),
                 ],
             ),

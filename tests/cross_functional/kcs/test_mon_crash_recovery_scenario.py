@@ -30,7 +30,6 @@ log = logging.getLogger(__name__)
     reason="Skip due to issue https://github.com/red-hat-storage/ocs-ci/issues/8531"
 )
 @pytest.mark.polarion_id("OCS-4942")
-@pytest.mark.bugzilla("2151591")
 @skipif_external_mode
 class TestMonCrashRecoveryScenario:
     @pytest.fixture(autouse=True)

@@ -169,7 +169,6 @@ class TestBucketDeletion(MCGTest):
                 ), "Couldn't verify delete non-exist OBC with cli"
         logger.info(f"Delete non-exist OBC {name} failed as expected")
 
-    @pytest.mark.bugzilla("1753109")
     @pytest.mark.polarion_id("OCS-1924")
     def test_s3_bucket_delete_1t_objects(self, mcg_obj, awscli_pod_session):
         """
