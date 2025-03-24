@@ -53,12 +53,11 @@ class TestMdsCacheTrimStandby(E2ETest):
           if cache trim is happening in Standby mds pod.
 
         """
-        run_metadata_io_with_cephfs(dc_pod_factory, no_of_io_pods=5)
         log.info(
             "Starting metadata IO in the background. Monitoring for MDS cache alerts."
         )
-
-        trim_msgs = ["cache trim"]
+        run_metadata_io_with_cephfs(dc_pod_factory, no_of_io_pods=5)
+        trim_msg = "cache trim"
         cache_warning = "MDSs report oversized cache"
 
         for sampler in TimeoutSampler(
@@ -78,22 +77,18 @@ class TestMdsCacheTrimStandby(E2ETest):
 
         log.info(f"Active MDS memory utilization: {active_mds_mem_util}%")
         log.info(f"Standby-replay MDS memory utilization: {sr_mds_mem_util}%")
-        ceph_health_detail = cluster.ceph_health_detail()
 
         standby_replay_mds_log = get_pod_logs(
             pod_name=cluster.get_mds_standby_replay_info()["standby_replay_pod"]
         )
 
-        cache_trim_validation = [
-            msg for msg in trim_msgs if msg in standby_replay_mds_log
-        ]
-
-        assert (
-            cache_trim_validation
-        ), f"Cache trim messages not found in standby-replay MDS logs: {standby_replay_mds_log}"
+        if not any(msg in standby_replay_mds_log for msg in trim_msg):
+            raise AssertionError(
+                f"Cache trim messages not found in standby-replay MDS logs: {standby_replay_mds_log}"
+            )
 
         log.info("MDS cache trim is happening on standby-replay MDS")
-
+        ceph_health_detail = cluster.ceph_health_detail()
         if cache_warning not in ceph_health_detail:
             log.info("No cache oversized warnings detected in Ceph health details.")
         elif cache_warning in standby_replay_mds_log:

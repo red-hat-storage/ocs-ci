@@ -24,7 +24,6 @@ from ocs_ci.ocs.cluster import (
     get_ceph_df_detail,
 )
 from ocs_ci.ocs import cluster
-from ocs_ci.utility.utils import ceph_health_check
 from ocs_ci.ocs.node import get_worker_nodes
 from ocs_ci.helpers import helpers
 from ocs_ci.ocs import constants
@@ -445,24 +444,23 @@ def run_metadata_io_with_cephfs(dc_pod_factory, no_of_io_pods=3):
     active_mds_node = cluster.get_active_mds_info()["node_name"]
     sr_mds_node = cluster.get_mds_standby_replay_info()["node_name"]
     worker_nodes = get_worker_nodes()
-    target_node = []
-    ceph_health_check()
-    for node in worker_nodes:
-        if (node != active_mds_node) and (node != sr_mds_node):
-            target_node.append(node)
+    target_node = [
+        node for node in worker_nodes if node != active_mds_node and node != sr_mds_node
+    ]
+
     for dc_pod in range(no_of_io_pods):
         logger.info("Create fedora dc pod")
         pod_obj = dc_pod_factory(
             size="30",
             access_mode=access_mode,
             interface=interface,
-            node_name=target_node[0],
+            node_name=random.choice(target_node),
         )
         logger.info("Copy meta_data_io.py to fedora pod ")
         cmd = f"oc cp {file} {pod_obj.namespace}/{pod_obj.name}:/"
         helpers.run_cmd(cmd=cmd)
-        logger.info("meta_data_io.py copied successfully ")
-        logger.info("Run meta data IO on fedora pod ")
+        logger.info(f"meta_data_io.py copied successfully to pod {pod_obj.name}.")
+        logger.info(f"Running meta_data_io.py on pod {pod_obj.name}.")
         metaio_executor = ThreadPoolExecutor(max_workers=1)
         metaio_executor.submit(
             pod_obj.exec_sh_cmd_on_pod, command="python3 meta_data_io.py"
