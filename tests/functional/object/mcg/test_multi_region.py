@@ -6,7 +6,6 @@ from ocs_ci.framework import config
 from ocs_ci.framework.pytest_customization.marks import (
     tier1,
     tier4a,
-    bugzilla,
     skipif_ocs_version,
     skipif_aws_creds_are_missing,
     skipif_managed_service,
@@ -86,7 +85,6 @@ class TestMultiRegion(MCGTest):
         ), "Multiregion bucket did not have two backingstores attached"
 
     @tier4a
-    @bugzilla("1827317")
     @skipif_ocs_version("==4.4")
     @pytest.mark.polarion_id("OCS-1784")
     def test_multiregion_mirror(
@@ -181,7 +179,6 @@ class TestMultiRegion(MCGTest):
         )
 
     @tier2
-    @bugzilla("2294723")
     @skipif_ocs_version("<4.17")
     @pytest.mark.polarion_id("OCS-6249")
     def test_multiregion_spread_to_mirror(

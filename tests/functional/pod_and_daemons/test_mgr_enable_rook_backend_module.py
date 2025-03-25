@@ -11,7 +11,7 @@ from ocs_ci.framework.pytest_customization.marks import (
 from ocs_ci.helpers.helpers import run_cmd_verify_cli_output
 from ocs_ci.ocs.exceptions import CommandFailed
 from ocs_ci.ocs.resources import pod
-from ocs_ci.framework.testlib import bugzilla, ManageTest
+from ocs_ci.framework.testlib import ManageTest
 from ocs_ci.utility.utils import TimeoutSampler
 
 log = logging.getLogger(__name__)
@@ -22,7 +22,6 @@ log = logging.getLogger(__name__)
 @skipif_external_mode
 @skipif_ocs_version("<4.15")
 @jira("DFBUGS-1284")
-@bugzilla("2274165")
 @pytest.mark.polarion_id("OCS-6240")
 class TestMgrRookModule(ManageTest):
     """

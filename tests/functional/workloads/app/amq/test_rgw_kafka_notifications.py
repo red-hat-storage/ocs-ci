@@ -12,7 +12,6 @@ from ocs_ci.framework.testlib import (
     E2ETest,
     tier1,
     on_prem_platform_required,
-    bugzilla,
     skipif_external_mode,
     skipif_disconnected_cluster,
     rgw,
@@ -50,9 +49,6 @@ def check_kafka_messages(kafkadrop_host, kafka_topic_name):
 @rgw
 @magenta_squad
 @tier1
-@bugzilla("2209616")
-@bugzilla("1937187")
-@bugzilla("1958818")
 @on_prem_platform_required
 @skipif_external_mode
 @skipif_disconnected_cluster

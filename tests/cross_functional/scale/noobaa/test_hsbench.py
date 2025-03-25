@@ -6,7 +6,6 @@ from ocs_ci.framework.testlib import E2ETest, scale
 from ocs_ci.framework.pytest_customization.marks import (
     orange_squad,
     vsphere_platform_required,
-    bugzilla,
     skipif_ocs_version,
     mcg,
     rgw,
@@ -75,7 +74,6 @@ class TestHsBench(E2ETest):
         utils.ceph_health_check()
 
     @mcg
-    @bugzilla("1998680")
     @skipif_ocs_version("<4.9")
     @pytest.mark.polarion_id("OCS-2698")
     def test_s3_benchmark_object_bucket(self, s3bench, mcg_obj, bucket_factory):

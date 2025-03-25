@@ -9,7 +9,6 @@ from ocs_ci.framework.testlib import (
     ManageTest,
     tier1,
     acceptance,
-    bugzilla,
 )
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.node import get_worker_nodes
@@ -50,7 +49,6 @@ class TestPvcAssignPodNode(ManageTest):
         ), f"Logs should not contain the error message '{error_msg}'"
 
     @acceptance
-    @bugzilla("2136852")
     @tier1
     @pytest.mark.parametrize(
         argnames=["interface"],

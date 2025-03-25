@@ -11,7 +11,6 @@ from ocs_ci.framework.pytest_customization.marks import skipif_rhel_os, brown_sq
 from ocs_ci.framework.testlib import (
     ManageTest,
     tier2,
-    bugzilla,
     skipif_ocs_version,
     skipif_external_mode,
     runs_on_provider,
@@ -32,7 +31,6 @@ log = logging.getLogger(__name__)
 @tier2
 @skipif_external_mode
 @skipif_ocs_version("<4.7")
-@bugzilla("1904917")
 @pytest.mark.polarion_id("OCS-2491")
 @pytest.mark.polarion_id("OCS-2492")
 @pytest.mark.polarion_id("OCS-2493")

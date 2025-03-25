@@ -3,7 +3,6 @@ import time
 
 from ocs_ci.framework.logger_helper import log_step
 from ocs_ci.framework.pytest_customization.marks import (
-    bugzilla,
     on_prem_platform_required,
     black_squad,
     runs_on_provider,
@@ -350,7 +349,6 @@ class TestObcUserInterface(object):
     @ui
     @tier1
     @runs_on_provider
-    @bugzilla("2097772")
     def test_obc_creation_and_deletion(
         self,
         setup_ui_class_factory,

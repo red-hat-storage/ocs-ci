@@ -49,7 +49,6 @@ from ocs_ci.ocs.constants import (
 )
 from ocs_ci.framework.pytest_customization.marks import (
     skipif_managed_service,
-    bugzilla,
     red_squad,
     runs_on_provider,
     mcg,
@@ -1176,7 +1175,6 @@ class TestS3BucketPolicy(MCGTest):
     @tier2
     @pytest.mark.polarion_id("OCS-3920")
     @skipif_ocs_version("<4.10")
-    @bugzilla("2054540")
     def test_multipart_with_policy(self, mcg_obj, bucket_factory):
         """
         Test Multipart upload with bucket policy set on the bucket

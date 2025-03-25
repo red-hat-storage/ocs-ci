@@ -12,7 +12,6 @@ from ocs_ci.ocs.resources.pod import (
     get_pod_node,
 )
 from ocs_ci.framework.pytest_customization.marks import (
-    bugzilla,
     polarion_id,
     tier3,
     red_squad,
@@ -47,7 +46,6 @@ def setup_nb_endpoint():
 @mcg
 @red_squad
 @stretchcluster_required
-@bugzilla("2109101")
 @polarion_id("OCS-5406")
 def test_nb_endpoint_topology_spread_constraints(setup_nb_endpoint):
 

@@ -6,7 +6,6 @@ import pytest
 from ocs_ci.framework import config
 from ocs_ci.framework.testlib import (
     MCGTest,
-    bugzilla,
     ignore_leftover_label,
     mcg,
     red_squad,
@@ -59,7 +58,7 @@ class TestBucketLogs(MCGTest):
     @pytest.mark.parametrize(
         argnames=["use_provided_logs_pvc"],
         argvalues=[
-            pytest.param(False, marks=[polarion_id("OCS-6242"), bugzilla("2302842")]),
+            pytest.param(False, marks=[polarion_id("OCS-6242")]),
             pytest.param(
                 True,
                 marks=[polarion_id("OCS-6243"), skipif_mcg_only],
@@ -171,7 +170,7 @@ class TestBucketLogs(MCGTest):
     @pytest.mark.parametrize(
         argnames=["use_provided_logs_pvc"],
         argvalues=[
-            pytest.param(False, marks=[polarion_id("OCS-6244"), bugzilla("2302842")]),
+            pytest.param(False, marks=[polarion_id("OCS-6244")]),
             pytest.param(
                 True,
                 marks=[polarion_id("OCS-6245"), skipif_mcg_only],

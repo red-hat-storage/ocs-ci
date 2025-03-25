@@ -11,7 +11,6 @@ from ocs_ci.framework.testlib import (
     tier1,
     polarion_id,
     skipif_external_mode,
-    bugzilla,
     skipif_hci_provider_and_client,
 )
 from ocs_ci.ocs.cluster import CephCluster
@@ -150,7 +149,6 @@ class TestRbdSpaceReclaim(ManageTest):
             log.info(f"{fio_filename4} is intact")
 
     @tier1
-    @bugzilla("2046677")
     @skipif_hci_provider_and_client
     @skipif_external_mode
     @pytest.mark.parametrize(

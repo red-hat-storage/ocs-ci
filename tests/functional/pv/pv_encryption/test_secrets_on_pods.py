@@ -1,7 +1,7 @@
 import logging
 import yaml
 
-from ocs_ci.framework.testlib import ManageTest, bugzilla, tier1, green_squad
+from ocs_ci.framework.testlib import ManageTest, tier1, green_squad
 from ocs_ci.utility.utils import run_cmd
 from ocs_ci.framework import config
 from ocs_ci.framework.pytest_customization.marks import skipif_external_mode
@@ -28,7 +28,6 @@ EXPECTED_NAMES = {
 class TestSecretsAndSecurityContext(ManageTest):
     @tier1
     @green_squad
-    @bugzilla("2171965")
     def test_secrets_in_env_variables(self):
         """
         Testing if secrets are used in env variables of pods
@@ -60,7 +59,6 @@ class TestSecretsAndSecurityContext(ManageTest):
 
     @tier1
     @green_squad
-    @bugzilla("2180732")
     @skipif_external_mode
     def test_securityContext_in_Crashcollector(self):
         """
