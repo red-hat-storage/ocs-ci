@@ -347,12 +347,6 @@ class TestRDRWarningAndAlerting:
                     )
                     logger.info("Action modal closed successfully")
 
-    @polarion_id("OCS-5304")
-    @polarion_id("OCS-5305")
-    @polarion_id("OCS-5311")
-    @polarion_id("OCS-5312")
-    @polarion_id("OCS-5329")
-    @polarion_id("OCS-5330")
     @polarion_id("OCS-5348")
     @skipif_ocs_version("<4.14")
     def test_rdr_volumesyncronizationdelayalert(
