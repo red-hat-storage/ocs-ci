@@ -87,9 +87,8 @@ class TestKeyRotationWithClusterFull(E2ETest):
         pvc_obj, pod_obj = multi_pvc_pod_lifecycle_factory(
             measure=False, delete=False, num_of_pvcs=30
         )
-        multi_pvc_clone_factory(pvc_obj=pvc_obj[:11])
-
         # Commenting below code due to ocs-ci issue 11605
+        # multi_pvc_clone_factory(pvc_obj=pvc_obj[:11])
 
         # snap_list = multi_snapshot_factory(pvc_obj=pvc_obj[:11])
         # for snapshot in snap_list:
