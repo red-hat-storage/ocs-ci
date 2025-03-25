@@ -13,7 +13,6 @@ from ocs_ci.framework.pytest_customization.marks import (
     magenta_squad,
     system_test,
     polarion_id,
-    bugzilla,
 )
 from ocs_ci.ocs.cluster import (
     change_ceph_full_ratio,
@@ -24,7 +23,6 @@ logger = logging.getLogger(__name__)
 
 
 @system_test
-@bugzilla("2182962")
 @polarion_id("OCS-5763")
 @pytest.mark.parametrize(
     argnames=["interface_type"],

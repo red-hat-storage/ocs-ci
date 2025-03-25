@@ -42,7 +42,6 @@ from ocs_ci.framework.testlib import (
     ignore_leftovers,
     ipi_deployment_required,
     skipif_bm,
-    bugzilla,
     skipif_managed_service,
     skipif_hci_provider_and_client,
     skipif_more_than_three_workers,
@@ -476,8 +475,6 @@ class TestNodesMaintenance(ManageTest):
         # Perform cluster and Ceph health checks
         self.sanity_helpers.health_check()
 
-    @bugzilla("1861104")
-    @bugzilla("1946573")
     @skipif_managed_service
     @skipif_hci_provider_and_client
     @skipif_more_than_three_workers

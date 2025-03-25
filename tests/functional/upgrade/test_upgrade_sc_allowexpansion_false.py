@@ -5,7 +5,6 @@ from ocs_ci.framework import config
 from ocs_ci.ocs import constants
 from ocs_ci.framework.testlib import (
     ManageTest,
-    bugzilla,
 )
 from ocs_ci.framework.pytest_customization.marks import (
     pre_ocs_upgrade,
@@ -23,7 +22,6 @@ log = logging.getLogger(__name__)
 upgrade_ocs_version = config.UPGRADE.get("upgrade_ocs_version")
 
 
-@bugzilla("2125815")
 @pytest.mark.polarion_id("OCS-4689")
 @pytest.mark.skipif(
     not (

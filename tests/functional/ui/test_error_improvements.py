@@ -8,7 +8,6 @@ from ocs_ci.framework.pytest_customization.marks import (
     black_squad,
     polarion_id,
     tier3,
-    bugzilla,
     skipif_ocs_version,
     mcg,
     ui,
@@ -35,7 +34,6 @@ logger = logging.getLogger(__name__)
 class TestErrorMessageImprovements(ManageTest):
     @mcg
     @flaky(max_runs=2)
-    @bugzilla("2193109")
     @polarion_id("OCS-4865")
     def test_backing_store_creation_rules(self, setup_ui_class):
         """
@@ -51,7 +49,6 @@ class TestErrorMessageImprovements(ManageTest):
 
     @mcg
     @jira("DFBUGS-410")
-    @bugzilla("2193109")
     @polarion_id("OCS-4867")
     def test_obc_creation_rules(self, setup_ui_class):
         """
@@ -69,7 +66,6 @@ class TestErrorMessageImprovements(ManageTest):
 
     @mcg
     @flaky(max_runs=2)
-    @bugzilla("2193109")
     @polarion_id("OCS-4869")
     def test_bucket_class_creation_rules(self, setup_ui_class):
         """
@@ -88,7 +84,6 @@ class TestErrorMessageImprovements(ManageTest):
 
     @mcg
     @flaky(max_runs=2)
-    @bugzilla("2193109")
     @polarion_id("OCS-4871")
     @skipif_disconnected_cluster
     def test_namespace_store_creation_rules(
@@ -118,8 +113,6 @@ class TestErrorMessageImprovements(ManageTest):
         namespace_store_tab.proceed_resource_creation()
         namespace_store_tab.check_error_messages()
 
-    @bugzilla("2215910")
-    @bugzilla("2193109")
     @polarion_id("OCS-4873")
     @skipif_hci_provider_or_client
     def test_blocking_pool_creation_rules(self, cephblockpool_factory_ui_class):
@@ -149,7 +142,6 @@ class TestErrorMessageImprovements(ManageTest):
 
         blocking_pool_tab.check_error_messages()
 
-    @bugzilla("2193109")
     @polarion_id("OCS-4875")
     @flaky(max_runs=2)
     @external_mode_required

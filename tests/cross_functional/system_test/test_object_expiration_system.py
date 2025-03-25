@@ -11,7 +11,6 @@ from ocs_ci.utility.retry import retry
 from ocs_ci.helpers.sanity_helpers import Sanity
 from ocs_ci.ocs import constants
 from ocs_ci.framework.pytest_customization.marks import (
-    bugzilla,
     system_test,
     magenta_squad,
 )
@@ -55,7 +54,6 @@ class TestObjectExpirationSystemTest:
         return response["KeyCount"] == 0
 
     @system_test
-    @bugzilla("2039309")
     @skipif_ocs_version("<4.11")
     @pytest.mark.polarion_id("OCS-4852")
     @magenta_squad

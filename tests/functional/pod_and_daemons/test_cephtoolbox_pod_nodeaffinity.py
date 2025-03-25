@@ -3,7 +3,7 @@ import pytest
 import random
 
 from ocs_ci.framework import config
-from ocs_ci.framework.pytest_customization.marks import bugzilla, brown_squad
+from ocs_ci.framework.pytest_customization.marks import brown_squad
 from ocs_ci.framework.testlib import tier1, tier4b, polarion_id
 from ocs_ci.ocs import ocp, constants
 from ocs_ci.ocs.node import (
@@ -24,7 +24,6 @@ log = logging.getLogger(__name__)
 
 
 @brown_squad
-@bugzilla("2249640")
 class TestCephtoolboxPod:
     @pytest.fixture(scope="session", autouse=True)
     def teardown(self, request):

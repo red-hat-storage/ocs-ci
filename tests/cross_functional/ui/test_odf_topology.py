@@ -10,7 +10,6 @@ from ocs_ci.framework.pytest_customization.marks import (
     polarion_id,
     tier3,
     skipif_external_mode,
-    bugzilla,
     skipif_ibm_cloud_managed,
     skipif_ocs_version,
     skipif_managed_service,
@@ -81,9 +80,6 @@ def teardown_workload_depl(request):
 @skipif_ocs_version("<4.13")
 class TestODFTopology(object):
     @tier3
-    @bugzilla("2209251")
-    @bugzilla("2233027")
-    @bugzilla("2245068")
     @polarion_id("OCS-4901")
     def test_validate_topology_configuration(
         self, setup_ui_class, teardown_workload_depl, pvc_factory, teardown_factory
@@ -276,7 +272,6 @@ class TestODFTopology(object):
 
     @tier4a
     @jira("DFBUGS-418")
-    @bugzilla("2242132")
     @ignore_leftovers
     @polarion_id("OCS-4905")
     @skipif_hci_provider_or_client

@@ -2,7 +2,6 @@ import logging
 import pytest
 
 from ocs_ci.framework.pytest_customization.marks import (
-    bugzilla,
     skipif_ocs_version,
     skipif_disconnected_cluster,
     skipif_proxy_cluster,
@@ -23,7 +22,6 @@ logger = logging.getLogger(__name__)
 @skipif_disconnected_cluster
 @skipif_proxy_cluster
 class TestS3WithJavaSDK:
-    @bugzilla("2064304")
     @pytest.mark.parametrize(
         argnames=["is_multipart"],
         argvalues=[

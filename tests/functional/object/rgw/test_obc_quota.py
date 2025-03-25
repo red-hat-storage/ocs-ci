@@ -14,7 +14,6 @@ from ocs_ci.ocs.exceptions import CommandFailed
 from ocs_ci.framework.pytest_customization.marks import (
     tier1,
     tier2,
-    bugzilla,
     skipif_ocs_version,
     skipif_mcg_only,
     red_squad,
@@ -29,7 +28,6 @@ logger = logging.getLogger(__name__)
 @rgw
 @red_squad
 @runs_on_provider
-@bugzilla("1940823")
 @skipif_ocs_version("<4.10")
 @skipif_mcg_only
 class TestOBCQuota:
@@ -123,7 +121,6 @@ class TestOBCQuota:
         else:
             logger.info(f"New quota {new_quota_str} got applied!!")
 
-    @bugzilla("2188032")
     @polarion_id("OCS-6178")
     @pytest.mark.parametrize(
         argnames="amount,interface,quota",

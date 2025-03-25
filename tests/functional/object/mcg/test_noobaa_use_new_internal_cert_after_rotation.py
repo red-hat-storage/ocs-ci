@@ -5,7 +5,6 @@ from ocs_ci.ocs.exceptions import UnexpectedBehaviour
 from ocs_ci.framework.pytest_customization.marks import (
     tier1,
     polarion_id,
-    bugzilla,
     skipif_ocs_version,
     red_squad,
     mcg,
@@ -69,7 +68,6 @@ def verify_cert_validity(noobaa_endpoint_pods, old_validity):
 @red_squad
 @tier1
 @skipif_ocs_version("<4.12")
-@bugzilla("2237903")
 @polarion_id("OCS-6191")
 class TestNoobaaUseNewInternalCertAfterRotation:
     def test_noobaa_use_new_internal_cert_after_rotation(self):

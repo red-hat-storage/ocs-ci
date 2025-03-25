@@ -8,7 +8,6 @@ from ocs_ci.ocs.bucket_utils import (
     write_random_objects_in_pod,
 )
 from ocs_ci.framework.pytest_customization.marks import (
-    bugzilla,
     polarion_id,
     red_squad,
     runs_on_provider,
@@ -22,7 +21,6 @@ logger = logging.getLogger(__name__)
 @tier2
 @mcg
 @runs_on_provider
-@bugzilla("2183092")
 @polarion_id("OCS-5217")
 @red_squad
 class TestVirtualHostedBuckets:

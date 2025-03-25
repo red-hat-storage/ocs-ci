@@ -3,7 +3,6 @@ import logging
 from ocs_ci.framework import config
 from ocs_ci.framework.pytest_customization.marks import (
     tier2,
-    bugzilla,
     polarion_id,
     red_squad,
     runs_on_provider,
@@ -18,7 +17,6 @@ logger = logging.getLogger(__name__)
 @mcg
 @red_squad
 @runs_on_provider
-@bugzilla("2246328")
 @polarion_id("OCS-5216")
 def test_s3_regenerate_creds(mcg_obj, project_factory):
     """

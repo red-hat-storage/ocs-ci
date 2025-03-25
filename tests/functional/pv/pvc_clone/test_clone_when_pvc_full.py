@@ -9,7 +9,6 @@ from ocs_ci.framework.testlib import (
     ManageTest,
     tier2,
     polarion_id,
-    bugzilla,
     skipif_ocp_version,
 )
 from ocs_ci.ocs.resources import pod
@@ -27,7 +26,6 @@ log = logging.getLogger(__name__)
 @skipif_ocs_version("<4.6")
 @skipif_ocp_version("<4.6")
 @polarion_id("OCS-2353")
-@bugzilla(2042318)
 class TestCloneWhenFull(ManageTest):
     """
     Tests to verify PVC clone when PVC is full

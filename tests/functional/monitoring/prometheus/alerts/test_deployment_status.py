@@ -4,7 +4,6 @@ import pytest
 from ocs_ci.framework.pytest_customization.marks import blue_squad, provider_mode
 from ocs_ci.framework.testlib import (
     tier4c,
-    bugzilla,
     skipif_managed_service,
     runs_on_provider,
     skipif_ocs_version,
@@ -94,7 +93,6 @@ def test_ceph_monitor_stopped(measure_stop_ceph_mon, threading_lock):
 @provider_mode
 @blue_squad
 @tier4c
-@bugzilla("1944513")
 @pytest.mark.polarion_id("OCS-2724")
 @pytest.mark.parametrize("create_mon_quorum_loss", [True])
 @skipif_managed_service

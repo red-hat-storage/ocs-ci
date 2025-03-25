@@ -14,7 +14,6 @@ from botocore import UNSIGNED
 from botocore.config import Config
 import botocore.exceptions as boto3exception
 
-from ocs_ci.framework.pytest_customization import marks
 from ocs_ci.framework.testlib import (
     MCGTest,
     on_prem_platform_required,
@@ -23,7 +22,6 @@ from ocs_ci.framework.testlib import (
     tier1,
     tier2,
     tier4c,
-    bugzilla,
 )
 from ocs_ci.ocs.bucket_utils import (
     sync_object_directory,
@@ -1071,7 +1069,7 @@ class TestNamespace(MCGTest):
         argvalues=[
             pytest.param(
                 *["noobaa-db"],
-                marks=[pytest.mark.polarion_id("OCS-2291"), bugzilla("2165907")],
+                marks=[pytest.mark.polarion_id("OCS-2291")],
             ),
             pytest.param(*["noobaa-core"], marks=pytest.mark.polarion_id("OCS-2319")),
             pytest.param(
@@ -1287,7 +1285,6 @@ class TestNamespace(MCGTest):
 
     @pytest.mark.polarion_id("OCS-2504")
     @tier2
-    @marks.bugzilla("1927367")
     def test_ns_bucket_unsigned_access(
         self, mcg_obj, bucket_factory, namespace_store_factory
     ):
