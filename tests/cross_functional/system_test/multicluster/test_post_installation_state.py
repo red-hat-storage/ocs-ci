@@ -12,7 +12,6 @@ from ocs_ci.framework.testlib import (
     pc_or_ms_provider_required,
     tier1,
     runs_on_provider,
-    bugzilla,
 )
 from ocs_ci.ocs.exceptions import CommandFailed
 
@@ -161,7 +160,6 @@ class TestPostInstallationState(ManageTest):
         assert len(log_lines) > 100
 
     @tier1
-    @bugzilla("2117312")
     @runs_on_provider
     @pytest.mark.polarion_id("OCS-2695")
     def test_connection_time_out(self):

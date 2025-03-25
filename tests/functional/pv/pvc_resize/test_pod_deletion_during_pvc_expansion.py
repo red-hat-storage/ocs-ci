@@ -13,7 +13,6 @@ from ocs_ci.framework.testlib import (
     skipif_ocs_version,
     ManageTest,
     tier4c,
-    bugzilla,
     polarion_id,
 )
 
@@ -22,7 +21,6 @@ log = logging.getLogger(__name__)
 
 @green_squad
 @tier4c
-@bugzilla("2164617")
 @polarion_id("OCS-4877")
 @skipif_ocs_version("<4.13")
 class TestPodRespinDuringPvcExpansion(ManageTest):

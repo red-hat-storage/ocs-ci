@@ -9,7 +9,6 @@ from ocs_ci.framework.pytest_customization.marks import (
     pre_upgrade,
     post_upgrade,
     skipif_aws_creds_are_missing,
-    bugzilla,
     red_squad,
     brown_squad,
     mcg,
@@ -109,7 +108,6 @@ def test_pod_io(
 
 
 @post_upgrade
-@bugzilla("1974343")
 @pytest.mark.polarion_id("OCS-2629")
 @brown_squad
 def test_pod_log_after_upgrade():
@@ -134,7 +132,6 @@ def test_pod_log_after_upgrade():
 
 
 @post_upgrade
-@bugzilla("1973179")
 @pytest.mark.polarion_id("OCS-2666")
 @mcg
 @red_squad

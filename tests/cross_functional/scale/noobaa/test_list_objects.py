@@ -9,7 +9,7 @@ from ocs_ci.ocs.bucket_utils import (
 )
 from ocs_ci.framework.pytest_customization.marks import orange_squad, mcg
 from ocs_ci.framework.testlib import E2ETest
-from ocs_ci.framework.testlib import scale, bugzilla, skipif_ocs_version
+from ocs_ci.framework.testlib import scale, skipif_ocs_version
 from ocs_ci.ocs.resources.mcg import MCG
 
 
@@ -25,7 +25,6 @@ class TestListOfObjects(E2ETest):
 
     """
 
-    @bugzilla("2052079")
     @skipif_ocs_version("<4.8")
     @pytest.mark.polarion_id("OCS-3926")
     def test_list_large_number_of_objects(
@@ -107,12 +106,6 @@ class TestListOfObjects(E2ETest):
             "Check does all objects are listed correctly!!!"
         )
 
-    @bugzilla("2110504")
-    @bugzilla("2141555")
-    @bugzilla("2135782")
-    @bugzilla("2149226")
-    @bugzilla("2150005")
-    @bugzilla("2150006")
     @skipif_ocs_version("<4.9")
     @pytest.mark.polarion_id("OCS-4650")
     def test_list_with_prefix_delimiter(self, bucket_factory, scale_cli_pod, mcg_obj):

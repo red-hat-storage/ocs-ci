@@ -3,7 +3,7 @@ import logging
 
 from ocs_ci.framework import config
 from ocs_ci.framework.pytest_customization.marks import magenta_squad
-from ocs_ci.framework.testlib import ManageTest, workloads, polarion_id, bugzilla
+from ocs_ci.framework.testlib import ManageTest, workloads, polarion_id
 from ocs_ci.ocs import constants, node
 from ocs_ci.utility import templating
 from ocs_ci.ocs.resources.pod import Pod
@@ -43,8 +43,6 @@ class TestJenkinsSimulation(ManageTest):
 
     @workloads
     @polarion_id("OCS-4668")
-    @bugzilla("2096395")
-    @bugzilla("2132270")
     def test_git_clone(self, pod, interface_iterate):
         """
         git clones a large repository

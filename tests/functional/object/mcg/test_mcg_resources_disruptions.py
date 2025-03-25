@@ -3,7 +3,6 @@ from ocs_ci.framework import config
 
 import pytest
 
-from ocs_ci.framework.pytest_customization import marks
 from ocs_ci.framework.testlib import (
     MCGTest,
     ignore_leftovers,
@@ -231,7 +230,6 @@ class TestMCGResourcesDisruptions(MCGTest):
 
     @tier3
     @pytest.mark.polarion_id("OCS-2513")
-    @marks.bugzilla("1903573")
     @skipif_managed_service
     @skipif_ocs_version("<4.7")
     def test_db_scc(self, teardown):

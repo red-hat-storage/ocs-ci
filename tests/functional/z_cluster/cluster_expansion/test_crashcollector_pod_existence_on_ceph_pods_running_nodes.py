@@ -26,7 +26,6 @@ from ocs_ci.framework.testlib import (
     tier2,
     ignore_leftovers,
     ManageTest,
-    bugzilla,
     skipif_external_mode,
 )
 from ocs_ci.utility.utils import TimeoutSampler
@@ -37,7 +36,6 @@ logger = logging.getLogger(__name__)
 @brown_squad
 @tier2
 @ignore_leftovers
-@bugzilla("1898808")
 @skipif_bm
 @skipif_external_mode
 @skipif_managed_service

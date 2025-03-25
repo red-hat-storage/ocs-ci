@@ -5,7 +5,6 @@ import logging
 from ocs_ci.framework import config
 from ocs_ci.framework.pytest_customization.marks import (
     tier2,
-    bugzilla,
     red_squad,
     runs_on_provider,
     skipif_ocs_version,
@@ -29,7 +28,6 @@ logger = logging.getLogger(__name__)
 @runs_on_provider
 @skipif_ocs_version("<4.17")
 @polarion_id("OCS-6252")
-@bugzilla("2301657")
 def test_bucket_delete_using_obc_creds(mcg_obj, bucket_factory):
     """
     Verify that deletion of an OBC's bucket is denied when using the

@@ -10,7 +10,6 @@ from ocs_ci.ocs.resources.pod import (
 )
 from ocs_ci.framework.pytest_customization.marks import (
     tier2,
-    bugzilla,
     polarion_id,
     vsphere_platform_required,
     red_squad,
@@ -102,7 +101,6 @@ class TestNoobaaDbNFSMount:
 
     @tier2
     @vsphere_platform_required
-    @bugzilla("2115616")
     @polarion_id("OCS-4950")
     def test_db_nfs_mount(self, mount_ngix_pod, mount_noobaa_db_pod):
         """

@@ -37,7 +37,6 @@ CPU_USAGE_POD = (
 @tier1
 @flaky(rerun_filter=ignore_next_measurement_file)
 @marks.polarion_id("OCS-2364")
-@marks.bugzilla("1849309")
 @skipif_managed_service
 def test_mcg_cpu_usage(workload_idle, threading_lock):
     """

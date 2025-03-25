@@ -11,7 +11,6 @@ from ocs_ci.ocs.bucket_utils import (
     sync_object_directory,
 )
 from ocs_ci.framework.pytest_customization.marks import (
-    bugzilla,
     polarion_id,
     skipif_disconnected_cluster,
     skipif_aws_creds_are_missing,
@@ -172,7 +171,6 @@ class TestCachedBuckets(MCGTest):
         logger.info("[Success] Cached bucket got updated with latest object!")
 
     @tier2
-    @bugzilla("2024107")
     @polarion_id("OCS-4652")
     def test_cached_buckets_with_s3_sync(
         self, test_directory_setup, setup, cld_mgr, mcg_obj, awscli_pod_session

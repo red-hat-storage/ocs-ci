@@ -40,7 +40,6 @@ from ocs_ci.ocs.node import (
 from ocs_ci.utility.retry import retry
 from ocs_ci.ocs.resources import storage_cluster
 from ocs_ci.framework.pytest_customization.marks import (
-    bugzilla,
     brown_squad,
 )
 from ocs_ci.helpers.sanity_helpers import Sanity
@@ -58,7 +57,6 @@ logger = logging.getLogger(__name__)
 @skipif_tainted_nodes
 @skipif_managed_service
 @skipif_hci_provider_and_client
-@bugzilla("1992472")
 class TestNonOCSTaintAndTolerations(E2ETest):
     """
     Test to test non ocs taints on ocs nodes

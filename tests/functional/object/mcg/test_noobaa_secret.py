@@ -18,7 +18,6 @@ from ocs_ci.framework import config
 from ocs_ci.framework.pytest_customization.marks import (
     tier2,
     polarion_id,
-    bugzilla,
     skipif_ocs_version,
     skipif_disconnected_cluster,
     red_squad,
@@ -79,7 +78,6 @@ def cleanup(request):
 @skipif_ocs_version("<4.11")
 @skipif_disconnected_cluster
 class TestNoobaaSecrets:
-    @bugzilla("1992090")
     @polarion_id("OCS-4466")
     def test_duplicate_noobaa_secrets(
         self,
@@ -143,7 +141,6 @@ class TestNoobaaSecrets:
             "Duplicate secrets are not allowed! only the first secret is being referred"
         )
 
-    @bugzilla("2090956")
     @polarion_id("OCS-4467")
     def test_noobaa_secret_deletion_method1(
         self, backingstore_factory, teardown_factory, mcg_obj, cleanup
@@ -186,8 +183,6 @@ class TestNoobaaSecrets:
             "Secret remains even after the linked backingstores are deleted, as expected!"
         )
 
-    @bugzilla("2090956")
-    @bugzilla("1992090")
     @polarion_id("OCS-4468")
     def test_noobaa_secret_deletion_method2(self, teardown_factory, mcg_obj, cleanup):
         """
@@ -350,7 +345,6 @@ class TestNoobaaSecrets:
 @mcg
 @post_upgrade
 @red_squad
-@bugzilla("2219522")
 @polarion_id("OCS-5205")
 @runs_on_provider
 @tier1
@@ -370,7 +364,6 @@ def test_noobaa_root_secret():
 @mcg
 @post_upgrade
 @red_squad
-@bugzilla("2152143")
 @polarion_id("OCS-6296")
 @runs_on_provider
 @tier1
@@ -390,7 +383,6 @@ def test_noobaa_secret_in_env_variable():
 @mcg
 @red_squad
 @tier1
-@bugzilla("2277186")
 @polarion_id("OCS-6184")
 def test_operator_logs_for_secret():
     """

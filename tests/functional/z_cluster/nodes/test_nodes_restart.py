@@ -8,7 +8,6 @@ from ocs_ci.framework.testlib import (
     ignore_leftovers,
     ManageTest,
     cloud_platform_required,
-    bugzilla,
     skipif_no_lso,
     skipif_vsphere_ipi,
     skipif_ibm_cloud,
@@ -100,7 +99,6 @@ class TestNodesRestart(ManageTest):
         )(pvc_factory, pod_factory, bucket_factory, rgw_bucket_factory)
 
     @tier4b
-    @bugzilla("1754287")
     @pytest.mark.polarion_id("OCS-2015")
     def test_rolling_nodes_restart(
         self, nodes, pvc_factory, pod_factory, bucket_factory, rgw_bucket_factory
@@ -385,7 +383,6 @@ class TestNodesRestart(ManageTest):
 
     @tier4b
     @skipif_no_lso
-    @bugzilla("1873938")
     @pytest.mark.polarion_id("OCS-2448")
     def test_pv_after_reboot_node(self, nodes):
         """

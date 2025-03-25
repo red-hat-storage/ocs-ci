@@ -10,7 +10,6 @@ from ocs_ci.framework.testlib import (
     E2ETest,
     tier4c,
     ignore_leftovers,
-    bugzilla,
     runs_on_provider,
 )
 from ocs_ci.helpers.sanity_helpers import Sanity
@@ -51,7 +50,6 @@ class TestPvcCreationAfterDelMonService(E2ETest):
             # Get the index of consumer cluster
             self.consumer_cluster_index = config.get_consumer_indexes_list()[0]
 
-    @bugzilla("1858195")
     @runs_on_provider
     @skipif_ocs_version("<4.6")
     @pytest.mark.polarion_id("OCS-2494")
@@ -330,7 +328,6 @@ class TestPvcCreationAfterDelMonService(E2ETest):
 
         request.addfinalizer(finalizer)
 
-    @bugzilla("1969733")
     @skipif_ocs_version("<4.7")
     @runs_on_provider
     @pytest.mark.polarion_id("OCS-2611")

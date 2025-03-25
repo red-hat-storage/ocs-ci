@@ -4,7 +4,6 @@ import logging
 from ocs_ci.framework.pytest_customization.marks import (
     mcg,
     red_squad,
-    bugzilla,
     polarion_id,
     tier2,
 )
@@ -22,7 +21,6 @@ logger = logging.getLogger(__name__)
 class TestBucketClass:
 
     @tier2
-    @bugzilla("2272084")
     @polarion_id("OCS-6295")
     def test_bucketclass_modification(
         self,
