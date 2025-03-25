@@ -528,7 +528,7 @@ class MultiClusterConfig:
         if indexes:
             return [self.RunWithConfigContext(index) for index in indexes]
         else:
-            logger.info(
+            logger.warning(
                 "No consumer cluster found. Executing the code on current cluster."
             )
             return nullcontext()
