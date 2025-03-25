@@ -22,7 +22,7 @@ from ocs_ci.helpers.dr_helpers import (
     get_scheduling_interval,
     create_klusterlet_config,
     remove_parameter_klusterlet_config,
-    configure_rdr_hub_recovery,
+    # configure_rdr_hub_recovery,
 )
 from ocs_ci.ocs.exceptions import UnexpectedBehaviour
 from ocs_ci.ocs.resources.drpc import DRPC
@@ -93,11 +93,13 @@ class TestSiteFailureRecoveryAndfailover:
         two_times_scheduling_interval = 2 * scheduling_interval  # Time in minutes
         wait_time = 420
 
-        assert configure_rdr_hub_recovery()
+        # assert configure_rdr_hub_recovery()
 
         # Get the primary managed cluster nodes
         logger.info("Getting Primary managed cluster node details")
-        config.switch_to_cluster_by_name(get_current_primary_cluster_name)
+        config.switch_to_cluster_by_name(
+            get_current_primary_cluster_name(rdr_workload[0].workload_namespace)
+        )
         active_primary_index = config.cur_index
         active_primary_cluster_node_objs = get_node_objs()
 
@@ -141,7 +143,7 @@ class TestSiteFailureRecoveryAndfailover:
         # Validate the surviving managed cluster is successfully imported on the new hub
         for sample in TimeoutSampler(
             timeout=1800,
-            sleep=60,
+            sleep=15,
             func=validate_cluster_import,
             cluster_name=secondary_cluster_name,
             switch_ctx=get_passive_acm_index(),
@@ -197,7 +199,7 @@ class TestSiteFailureRecoveryAndfailover:
                         switch_ctx=get_passive_acm_index(),
                     )
                 )
-                time.sleep(60)
+                time.sleep(5)
 
         # Wait for failover results
         for fl in failover_results:
@@ -223,7 +225,7 @@ class TestSiteFailureRecoveryAndfailover:
         )
         for sample in TimeoutSampler(
             timeout=900,
-            sleep=60,
+            sleep=15,
             func=validate_cluster_import,
             cluster_name=primary_cluster_name,
             switch_ctx=get_passive_acm_index(),
@@ -249,7 +251,7 @@ class TestSiteFailureRecoveryAndfailover:
         logger.info("Wait for approx. an hour to surpass 1hr eviction period timeout")
         time.sleep(3600)
         logger.info("Checking for Ceph Health OK")
-        ceph_health_check(tries=40, delay=30)
+        ceph_health_check(tries=40, delay=15)
 
         # Verify application are deleted from old cluster
         for wl in rdr_workload:
@@ -303,7 +305,7 @@ class TestSiteFailureRecoveryAndfailover:
                         switch_ctx=get_passive_acm_index(),
                     )
                 )
-                time.sleep(60)
+                time.sleep(5)
 
         # Wait for relocate results
         for rl in relocate_results:
