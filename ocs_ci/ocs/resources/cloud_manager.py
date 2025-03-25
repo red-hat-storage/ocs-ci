@@ -2,6 +2,7 @@ import base64
 import json
 import logging
 from abc import ABC, abstractmethod
+import os
 
 import boto3
 import google.api_core.exceptions as GoogleExceptions
@@ -14,7 +15,11 @@ from google.cloud.storage.bucket import Bucket as GCPBucket
 from google.oauth2 import service_account
 
 from ocs_ci.framework import config
-from ocs_ci.helpers.helpers import create_resource, create_unique_resource_name
+from ocs_ci.helpers.helpers import (
+    create_resource,
+    create_unique_resource_name,
+    storagecluster_independent_check,
+)
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.exceptions import (
     CommandFailed,
@@ -27,6 +32,8 @@ from ocs_ci.utility import templating
 from ocs_ci.utility.aws import update_config_from_s3
 from ocs_ci.utility.utils import (
     TimeoutSampler,
+    exec_cmd,
+    get_random_str,
     load_auth_config,
     get_role_arn_from_sub,
 )
@@ -101,6 +108,24 @@ class CloudManager(ABC):
                 "RGW_SECRET_ACCESS_KEY": secret_key,
             }
             setattr(self, "rgw_client", cloud_map["RGW"](auth_dict=cred_dict["RGW"]))
+
+            # In external mode with SSL enabled RGW we need to download a CA and set it as an environment variable
+            # for boto3 operations
+            if storagecluster_independent_check() and config.EXTERNAL_MODE.get(
+                "rgw_secure"
+            ):
+                logger.info("Downloading CA cert for RGW")
+                try:
+                    ssl_rgw_ca_path = f"/tmp/rgw-ca-{get_random_str(size=4)}.crt"
+                    exec_cmd(
+                        f"wget --no-verbose -O {ssl_rgw_ca_path} {config.EXTERNAL_MODE['rgw_cert_ca']}"
+                    )
+                    os.environ["AWS_CA_BUNDLE"] = ssl_rgw_ca_path
+                except CommandFailed as e:
+                    logger.error(
+                        f"Failed to download CA cert for RGW: {e}\n"
+                        "Boto3 operations might fail due to missing CA cert."
+                    )
         except CommandFailed:
             setattr(self, "rgw_client", None)
 
