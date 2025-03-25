@@ -247,12 +247,12 @@ class TestNonOCSTaintAndTolerations(E2ETest):
         # Validate all nodes and services are in READY state and up
         retry(
             (CommandFailed, TimeoutError, AssertionError, ResourceWrongStatusException),
-            tries=60,
+            tries=28,
             delay=15,
         )(ocp.wait_for_cluster_connectivity(tries=400))
         retry(
             (CommandFailed, TimeoutError, AssertionError, ResourceWrongStatusException),
-            tries=60,
+            tries=28,
             delay=15,
         )(wait_for_nodes_status(timeout=1800))
 
