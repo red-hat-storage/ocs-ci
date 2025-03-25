@@ -22,7 +22,7 @@ from ocs_ci.helpers.dr_helpers import (
     get_scheduling_interval,
     create_klusterlet_config,
     remove_parameter_klusterlet_config,
-    # configure_rdr_hub_recovery,
+    configure_rdr_hub_recovery,
 )
 from ocs_ci.ocs.exceptions import UnexpectedBehaviour
 from ocs_ci.ocs.resources.drpc import DRPC
@@ -93,7 +93,7 @@ class TestSiteFailureRecoveryAndfailover:
         two_times_scheduling_interval = 2 * scheduling_interval  # Time in minutes
         wait_time = 420
 
-        # assert configure_rdr_hub_recovery()
+        assert configure_rdr_hub_recovery()
 
         # Get the primary managed cluster nodes
         logger.info("Getting Primary managed cluster node details")
@@ -223,6 +223,10 @@ class TestSiteFailureRecoveryAndfailover:
         logger.info(
             "Check if recovered managed cluster is successfully imported on the new hub"
         )
+        logger.info(
+            "Create restore resource once again to avoid failure of import of the recovered managed cluster"
+        )
+        restore_backup()
         for sample in TimeoutSampler(
             timeout=900,
             sleep=15,
@@ -251,7 +255,7 @@ class TestSiteFailureRecoveryAndfailover:
         logger.info("Wait for approx. an hour to surpass 1hr eviction period timeout")
         time.sleep(3600)
         logger.info("Checking for Ceph Health OK")
-        ceph_health_check(tries=40, delay=15)
+        ceph_health_check(tries=40, delay=30)
 
         # Verify application are deleted from old cluster
         for wl in rdr_workload:
