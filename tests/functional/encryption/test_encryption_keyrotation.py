@@ -424,6 +424,9 @@ class TestOSDKeyrotationWithKMS:
         self.keyrotation.disable_keyrotation()
 
 
+@encryption_at_rest_required
+@vault_kms_deployment_required
+@skipif_external_mode
 class TestNoobaaKeyrotationWithKMS:
     @pytest.fixture(autouse=True)
     def teardown(self, request):
