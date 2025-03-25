@@ -39,8 +39,8 @@ logger = logging.getLogger(__name__)
 
 def modify_deployment_count(status=""):
     """
-    We scale down rbd-mirror daemon deployment on the secondary cluster and mds daemons on the primary cluster
-    and scale them back to their original count
+    We scale down rbd-mirror daemon deployment on the secondary managed cluster and mds daemons on the primary managed
+    cluster and scale them back to their original count
 
     Args:
         status (str): "down" by default sets replica count to 0, anything else like "up" will set it back to 1
