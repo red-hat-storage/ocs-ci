@@ -27,10 +27,6 @@ from ocs_ci.utility.utils import (
 
 logger = logging.getLogger(__name__)
 
-DEFAULT_CONFIGS = {
-    "fusion": os.path.join(constants.CONF_DIR, "ocsci", "fusion_deployment.yaml"),
-    "fdf": os.path.join(constants.CONF_DIR, "ocsci", "fdf_deployment.yaml"),
-}
 LOG_NAMES = {
     "fusion": "fusion_deployment",
     "fdf": "fusion_data_foundation_deployment",
@@ -51,13 +47,12 @@ class Initializer(object):
         """
         try:
             self.deployment_type = deployment_type
-            self.default_config = DEFAULT_CONFIGS[deployment_type]
             self.log_basename = LOG_NAMES[deployment_type]
             self.run_id = generate_run_id()
         except KeyError:
             raise InvalidDeploymentType(
                 f"Deployment type '{deployment_type}' is invalid. "
-                f"Please provide one of the following: {list(DEFAULT_CONFIGS.keys())}"
+                f"Please provide one of the following: {list(LOG_NAMES.keys())}"
             )
 
     def init_config(self, args: list) -> None:
@@ -73,7 +68,6 @@ class Initializer(object):
 
         """
         framework.config.init_cluster_configs()
-        load_config([self.default_config])
         load_config(args.conf)
         logger.debug("Verifying cluster_name and cluster_path")
         cluster_name = args.cluster_name

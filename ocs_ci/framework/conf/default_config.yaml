@@ -127,6 +127,7 @@ DEPLOYMENT:
   mce_channel: "stable-2.8"
   # catalogsource format of image with tag; latest unreleased, that is supported by OCP 4.18
   mce_image: ""
+  fusion_channel: v2.0
 
 
 
