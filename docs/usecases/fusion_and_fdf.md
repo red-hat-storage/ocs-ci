@@ -18,9 +18,7 @@ You can deploy Fusion with the following command:
 
 Note these are the same `CLUSTER_NAME` and `CLUSTER_PATH` you passed to `run-ci` to deploy OCP.
 
-By default this will deploy the GA version of Fusion with the following config file:
-
-`conf/ocsci/fusion_deployment.yaml`
+By default this will deploy the latest supported GA version of Fusion.
 
 For pre-release versions of Fusion, you can use the same command with an additional config for the version you wish to install.
 
@@ -38,9 +36,7 @@ You can deploy FDF with the following command:
 
 Note these are the same `CLUSTER_NAME` and `CLUSTER_PATH` you passed to `run-ci` to deploy OCP.
 
-By default this will deploy the GA version of FDF with the following config file:
-
-`conf/ocsci/fdf_deployment.yaml`
+By default this will deploy the latest supported GA version of FDF.
 
 For pre-release versions of FDF, you can use the same command with an additional config for the version you wish to install.
 
