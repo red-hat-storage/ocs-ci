@@ -17,6 +17,7 @@ from ocs_ci.ocs import constants
 from ocs_ci.ocs.dr.dr_workload import (
     validate_data_integrity_vm,
     CnvWorkloadDiscoveredApps,
+    modify_pod_pvc_name,
 )
 from ocs_ci.ocs.node import get_node_objs, wait_for_nodes_status
 from ocs_ci.ocs.resources.pod import wait_for_pods_to_be_running
@@ -205,7 +206,7 @@ class TestCNVClonedSnapshotVolumesWithDiscoveredApps:
             selected_volumes = cloned_or_restored_volumes[0]
             logger.info(f"Testing with cloned volumes: {selected_volumes}")
 
-        cnv_obj.modify_pod_pvc_name()
+        modify_pod_pvc_name()
         cnv_obj.deploy_workload_flattening()
 
         # Stop primary cluster nodes
@@ -216,8 +217,9 @@ class TestCNVClonedSnapshotVolumesWithDiscoveredApps:
             f"Stopping nodes of primary cluster: {primary_cluster_name_before_failover}"
         )
         nodes_multicluster[primary_cluster_index].stop_nodes(primary_cluster_nodes)
-        logger.info("Wait for 5mins after stopping nodes")
-        time.sleep(300)
+        wait_time = 5
+        logger.info(f"Wait for {wait_time} mins after stopping nodes")
+        time.sleep(wait_time * 60)
         dr_helpers.failover(
             failover_cluster=secondary_cluster_name,
             namespace=cnv_workloads[0].workload_namespace,
@@ -228,8 +230,9 @@ class TestCNVClonedSnapshotVolumesWithDiscoveredApps:
         logger.info("Start the nodes of down cluster")
         nodes_multicluster[primary_cluster_index].start_nodes(primary_cluster_nodes)
         wait_for_nodes_status([node.name for node in primary_cluster_nodes])
-        logger.info("Wait for 180 seconds for pods to stabilize")
-        sleep(180)
+        another_wait_time = 3
+        logger.info(f"Wait for {another_wait_time} mins for pods to stabilize")
+        sleep(another_wait_time * 60)
         logger.info("Wait for all the pods in openshift-storage to be in running state")
         assert wait_for_pods_to_be_running(
             timeout=720
