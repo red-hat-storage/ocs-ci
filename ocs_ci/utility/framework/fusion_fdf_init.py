@@ -17,7 +17,12 @@ from ocs_ci.ocs.exceptions import CommandFailed
 from ocs_ci.utility import utils
 from ocs_ci.utility.framework.initialization import load_config
 from ocs_ci.framework import config
-from ocs_ci.utility.utils import get_cluster_name, get_openshift_client, run_cmd
+from ocs_ci.utility.utils import (
+    get_cluster_name,
+    get_openshift_client,
+    get_running_ocp_version,
+    run_cmd,
+)
 
 
 logger = logging.getLogger(__name__)
@@ -45,6 +50,7 @@ class Initializer(object):
 
         """
         try:
+            self.deployment_type = deployment_type
             self.default_config = DEFAULT_CONFIGS[deployment_type]
             self.log_basename = LOG_NAMES[deployment_type]
             self.run_id = generate_run_id()
@@ -148,6 +154,52 @@ class Initializer(object):
         setup_bin_dir()
         check_cluster_access(config.RUN["kubeconfig"])
 
+    def get_test_suite_props(self) -> dict:
+        """
+        Get TestSuite properties
+
+        Returns:
+            dict: TestSuite properties
+
+        """
+        props = {}
+        props["run_id"] = config.RUN.get("run_id")
+        props["cluster_path"] = config.ENV_DATA.get("cluster_path")
+        props["logs_dir"] = config.RUN.get("log_dir")
+        props["ocp_version"] = get_running_ocp_version(
+            kubeconfig=config.RUN["kubeconfig"]
+        )
+
+        if config.DEPLOYMENT.get("fusion_pre_release"):
+            props["fusion_pre_release_image"] = config.DEPLOYMENT.get(
+                "fusion_pre_release_image"
+            )
+
+        if self.deployment_type == "fdf":
+            if config.DEPLOYMENT.get("fdf_pre_release"):
+                props["fdf_image_tag"] = config.DEPLOYMENT.get("fdf_image_tag")
+                props["fdf_pre_release_registry"] = config.DEPLOYMENT.get(
+                    "fdf_pre_release_registry"
+                )
+                props["fdf_pre_release_image_digest"] = config.DEPLOYMENT.get(
+                    "fdf_pre_release_image_digest"
+                )
+
+        return props
+
+    @staticmethod
+    def get_test_case_props() -> dict:
+        """
+        Get TestCase properties
+
+        Returns:
+            dict: TestCase properties
+
+        """
+        props = {}
+        props["squad"] = "Purple"
+        return props
+
 
 def generate_run_id() -> int:
     """
@@ -221,6 +273,9 @@ def create_junit_report(
             _suite_props = suite_props or {}
             _case_props = case_props or {}
 
+            logger.debug(f"TestSuite Props: {_suite_props}")
+            logger.debug(f"TestCase Props: {_case_props}")
+
             for key, value in _case_props.items():
                 test_case.add_property(key, value)
 
@@ -232,6 +287,8 @@ def create_junit_report(
             except Exception as e:
                 test_case.result = [Failure(e)]
 
+            add_installed_version_props(test_suite)
+
             test_suite.add_testcase(test_case)
             xml = JUnitXml()
             xml.add_testsuite(test_suite)
@@ -241,11 +298,28 @@ def create_junit_report(
             filepath = os.path.join(log_dir, f"{case_name}_{run_id}.xml")
 
             logger.info(f"Writing report to {filepath}")
-            xml.write(filepath)
+            xml.write(filepath, pretty=True)
 
         return wrapper
 
     return decorator
+
+
+def add_installed_version_props(test_suite: TestSuite):
+    """
+    Adds custom properties to TestSuite which contain installed
+    versions for Fusion and Fusion Data Foundation.
+
+    Args:
+        test_suite (TestSuite): TestSuite to add properties to.
+
+    Returns:
+        TestSuite: Returns the TestSuite object with new properties added.
+    """
+    for key in ["fusion_version", "fdf_version"]:
+        value = config.ENV_DATA.get(key)
+        if value:
+            test_suite.add_property(key, value)
 
 
 class TestCaseWithProps(TestCase):

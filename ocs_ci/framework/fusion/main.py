@@ -15,11 +15,16 @@ def main(argv=None):
     init.init_logging()
     init.set_cluster_connection()
 
+    # JUnit report custom properties
+    suite_props = init.get_test_suite_props()
+    case_props = init.get_test_case_props()
+
+    @create_junit_report(
+        "FusionDeployment", "fusion_deployment", suite_props, case_props
+    )
+    def fusion_deployment():
+        fusion = FusionDeployment()
+        fusion.deploy()
+
     # Fusion deployment
     fusion_deployment()
-
-
-@create_junit_report("FusionDeployment", "fusion_deployment")
-def fusion_deployment():
-    fusion = FusionDeployment()
-    fusion.deploy()

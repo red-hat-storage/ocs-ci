@@ -18,15 +18,21 @@ def main(argv=None):
 
     # Verify fusion is deployed
     fusion = FusionDeployment()
-    fusion.verify()
+    fusion.verify(sleep=0)
+
+    # JUnit report custom properties
+    suite_props = init.get_test_suite_props()
+    case_props = init.get_test_case_props()
+
+    @create_junit_report(
+        "FusionDataFoundationDeployment",
+        "fusion_data_foundation_deployment",
+        suite_props,
+        case_props,
+    )
+    def fdf_deployment():
+        fdf = FusionDataFoundationDeployment()
+        fdf.deploy()
 
     # FDF deployment
     fdf_deployment()
-
-
-@create_junit_report(
-    "FusionDataFoundationDeployment", "fusion_data_foundation_deployment"
-)
-def fdf_deployment():
-    fdf = FusionDataFoundationDeployment()
-    fdf.deploy()

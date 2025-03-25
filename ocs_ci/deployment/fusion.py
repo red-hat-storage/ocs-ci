@@ -110,16 +110,23 @@ class FusionDeployment:
             f"oc --kubeconfig {self.kubeconfig} create -f {constants.FUSION_NS_YAML}"
         )
 
-    def verify(self):
+    def verify(self, sleep=30):
         """
-        Verify the Fusion deployment was successful
+        Verify the Fusion deployment was successful.
+
+        Args:
+            sleep (int, optional): Seconds to wait before checking status. Defaults to 30.
+
         """
         logger.info("Verifying Fusion is deployed")
         logger.info("Waiting for Subscription and CSV to be found")
         wait_for_subscription(self.operator_name, self.namespace)
         wait_for_csv(self.operator_name, self.namespace)
-        logger.info(f"Sleeping for 30 seconds after {self.operator_name} created")
-        time.sleep(30)
+        if sleep:
+            logger.info(
+                f"Sleeping for {sleep} seconds after {self.operator_name} created"
+            )
+            time.sleep(sleep)
 
         logger.info("Waiting for PackageManifest to be found and CSV Succeeded")
         package_manifest = PackageManifest(resource_name=self.operator_name)
@@ -127,7 +134,26 @@ class FusionDeployment:
         csv_name = package_manifest.get_current_csv()
         csv = CSV(resource_name=csv_name, namespace=self.namespace)
         csv.wait_for_phase("Succeeded", timeout=300, sleep=10)
+        self.get_installed_version()
         logger.info("Fusion deployed successfully")
+
+    def get_installed_version(self):
+        """
+        Retrieve the installed Fusion version.
+
+        Returns:
+            str: Installed Fusion version.
+
+        """
+        logger.info("Retrieving installed Fusion version")
+        results = run_cmd(
+            f"oc describe subscription {self.operator_name} -n {self.namespace} --kubeconfig {self.kubeconfig}"
+        )
+        build = yaml.safe_load(results)["Status"]["Current CSV"]
+        version = ".".join(build.split(".")[1:])
+        config.ENV_DATA["fusion_version"] = version
+        logger.info(f"Installed Fusion version: {version}")
+        return version
 
 
 def wait_for_subscription(subscription_name, namespace):
