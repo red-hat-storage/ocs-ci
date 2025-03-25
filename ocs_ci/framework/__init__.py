@@ -273,6 +273,19 @@ class MultiClusterConfig:
 
         raise ClusterNotFoundException("Didn't find the provider cluster")
 
+    def get_provider_cluster_indexes(self):
+        """
+        Get the provider cluster indexes
+
+        Returns:
+            list: The indexes of provider clusters
+        """
+        provider_indexes_list = []
+        for cluster_index, cluster in enumerate(self.clusters):
+            if cluster.ENV_DATA["cluster_type"] == "provider":
+                provider_indexes_list.append(cluster_index)
+        return provider_indexes_list
+
     def get_consumer_indexes_list(self):
         """
         Get the consumer cluster indexes
