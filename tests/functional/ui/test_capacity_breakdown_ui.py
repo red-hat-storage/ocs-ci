@@ -17,6 +17,7 @@ from ocs_ci.framework.pytest_customization.marks import (
     tier3,
     black_squad,
     runs_on_provider,
+    skipif_ibm_cloud_managed,
 )
 from ocs_ci.helpers import helpers
 from ocs_ci.ocs import constants
@@ -128,6 +129,7 @@ class TestCapacityBreakdownUI(ManageTest):
     @ui
     @black_squad
     @tier3
+    @skipif_ibm_cloud_managed
     @polarion_id("OCS-5122")
     def test_requested_capacity_breakdown(
         self, setup_ui_class, teardown_project_factory
