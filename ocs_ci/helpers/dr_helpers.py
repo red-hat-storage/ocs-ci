@@ -376,6 +376,7 @@ def check_mirroring_status_ok(
 
 
 def wait_for_mirroring_status_ok(replaying_images=None, timeout=600):
+
     """
     Wait for mirroring status to reach health OK and expected number of replaying
     images for each of the ODF cluster
@@ -410,6 +411,8 @@ def wait_for_mirroring_status_ok(replaying_images=None, timeout=600):
             )
             logger.error(error_msg)
             raise TimeoutExpiredError(error_msg)
+        if replace_cluster:
+            break
 
     config.switch_ctx(restore_index)
     return True
@@ -1628,6 +1631,8 @@ def disable_dr_from_app(secondary_cluster_name):
             cmd = f"oc patch placement {name} -n {namespace}  -p '{params}' --type=json"
             run_cmd(cmd)
 
+    time.sleep(60)
+
     # Delete all drpc
     run_cmd("oc delete drpc --all -A")
     sample = TimeoutSampler(
@@ -1675,7 +1680,7 @@ def apply_drpolicy_to_workload(workload, drcluster_name):
         run_cmd(f"oc create -f {wl.drcp_data_yaml.name}")
 
 
-def replace_cluster(workload, primary_cluster_name, secondary_cluster_name):
+def replace_cluster(workload, primary_cluster_name, secondary_cluster_name, rdr=False):
     """
     Function to do core replace cluster task
 
@@ -1714,6 +1719,10 @@ def replace_cluster(workload, primary_cluster_name, secondary_cluster_name):
     label = "openshift.io/cluster-monitoring='true'"
     ocp_obj.add_label(resource_name=constants.OPENSHIFT_OPERATORS, label=label)
 
+    # Uninstall submariner for rdr
+    if rdr:
+        uninstall_submariner_on_replacecluster(replacement_cluster=primary_cluster_name)
+
     # Detach old primary
     run_cmd(cmd=f"oc delete managedcluster {primary_cluster_name}")
 
@@ -1724,9 +1733,6 @@ def replace_cluster(workload, primary_cluster_name, secondary_cluster_name):
         raise Exception("Old primary cluster is not dettached.")
     else:
         logger.info("Old primary cluster is dettached")
-
-    # Uninstall submariner for rdr
-    uninstall_submariner()
 
     # Import Recovery cluster
     from ocs_ci.ocs.acm.acm import (
@@ -1739,14 +1745,29 @@ def replace_cluster(workload, primary_cluster_name, secondary_cluster_name):
     # Verify recovery cluster is imported
     validate_cluster_import(cluster_name_recoevry)
 
-    # Install submariner for RDR
-    from ocs_ci.deployment.acm import Submariner
-
-    sub_obj = Submariner()
-    sub_obj.deploy_downstream()
-
     # Set recovery cluster as primary context wise
     set_recovery_as_primary()
+
+    # Create clusterrolebinding for appset pull model on recovery cluster
+    logger.info("Create clusterrolebinding on recovery cluster "
+                "for appset pull model gitops deployment"
+            )
+
+    run_cmd(cmd=f"oc create -f {constants.CLUSTERROLEBINDING_APPSET_PULLMODEL_PATH}")
+
+    # Add the new submariner into existing cluster set
+    if rdr:
+        config.switch_acm_ctx()
+        cluster_sets = run_cmd(cmd="oc get ManagedClusterSet")
+        import re
+        pattern = r"clusterset-submariner-[a-z0-9]+"
+        match = re.search(pattern,cluster_sets)
+        cluster_set = match.group(0)
+        from ocs_ci.ocs.acm.acm import AcmAddClusters, login_to_acm
+        login_to_acm()
+        acm_obj = AcmAddClusters()
+        acm_obj.install_submariner_on_recoverycluster_ui(cluster_set=cluster_set)
+        acm_obj.submariner_validation_ui(cluster_set=cluster_set)
 
     config.switch_acm_ctx()
 
@@ -1773,7 +1794,8 @@ def replace_cluster(workload, primary_cluster_name, secondary_cluster_name):
     apply_drpolicy_to_workload(workload, secondary_cluster_name)
 
     # Configure DRClusters for fencing automation
-    configure_drcluster_for_fencing()
+    if not rdr:
+        configure_drcluster_for_fencing()
 
 
 def do_discovered_apps_cleanup(
@@ -1982,15 +2004,3 @@ def configure_rdr_hub_recovery():
     )
     logger.info("All pre-reqs verified for performing hub recovery")
     return True
-
-
-def uninstall_submariner():
-    """
-    Uninstall of submariner
-    """
-    config.switch_acm_ctx()
-
-    # get submariner name
-    submariner = run_cmd(cmd="oc get SubmarinerConfig")
-    run_cmd(cmd=f"oc delete SubmarinerConfig {submariner}")
-    run_cmd(cmd=f"oc delete ManagedClusterAddon {submariner}")
