@@ -37,7 +37,7 @@ class TestMdsCacheTrimStandby(E2ETest):
         request.addfinalizer(finalizer)
 
     @pytest.mark.polarion_id("OCS-6280")
-    def test_mds_cache_trim_on_standby_replay(self, dc_pod_factory):
+    def test_mds_cache_trim_on_standby_replay(self, deployment_pod_factory):
         """
         Verifies whether the MDS cache is trimmed or not in standby-replay mode.
 
@@ -56,7 +56,7 @@ class TestMdsCacheTrimStandby(E2ETest):
         log.info(
             "Starting metadata IO in the background. Monitoring for MDS cache alerts."
         )
-        run_metadata_io_with_cephfs(dc_pod_factory, no_of_io_pods=5)
+        run_metadata_io_with_cephfs(deployment_pod_factory, no_of_io_pods=5)
         trim_msg = "cache trim"
         cache_warning = "MDSs report oversized cache"
 
