@@ -424,7 +424,7 @@ class BusyBox(DRWorkload):
                 config.switch_ctx(cluster.MULTICLUSTER["multicluster_index"])
                 dr_helpers.wait_for_all_resources_deletion(
                     namespace=self.workload_namespace,
-                    check_replication_resources_state=False,
+                    workload_cleanup=True,
                 )
 
             log.info("Verify backend images or subvolumes are deleted")
@@ -657,7 +657,7 @@ class BusyBox_AppSet(DRWorkload):
                 config.switch_ctx(cluster.MULTICLUSTER["multicluster_index"])
                 dr_helpers.wait_for_all_resources_deletion(
                     namespace=self.workload_namespace,
-                    check_replication_resources_state=False,
+                    workload_cleanup=True,
                 )
 
             log.info("Verify backend images or subvolumes are deleted")
@@ -962,7 +962,7 @@ class CnvWorkload(DRWorkload):
                 secret_obj.delete()
                 dr_helpers.wait_for_all_resources_deletion(
                     namespace=self.workload_namespace,
-                    check_replication_resources_state=False,
+                    workload_cleanup=True,
                 )
                 log.info(f"Verify VM: {self.vm_name} is deletion")
                 vm_obj = ocp.OCP(
