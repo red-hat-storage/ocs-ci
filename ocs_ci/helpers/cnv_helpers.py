@@ -18,6 +18,10 @@ from ocs_ci.helpers.helpers import (
 )
 from ocs_ci.framework import config
 from ocs_ci.utility.retry import retry
+from ocp_resources.virtual_machine_clone import VirtualMachineClone
+from ocs_ci.ocs.cnv.virtual_machine import VirtualMachine
+from ocp_resources.virtual_machine_restore import VirtualMachineRestore
+from ocp_resources.virtual_machine_snapshot import VirtualMachineSnapshot
 
 
 logger = logging.getLogger(__name__)
@@ -619,3 +623,60 @@ def check_fio_status(vm_obj, fio_service_name="fio_test"):
     """
     output = vm_obj.run_ssh_cmd(f"systemctl status {fio_service_name}")
     return "running" in output
+def clone_or_snapshot_vm(action, vm, admin_client=None, file_path=None, all_vms=None):
+    """
+    Perform VM cloning or snapshot creation/restoration.
+
+    Args:
+        action (str): Either "clone" or "snapshot".
+        vm (VirtualMachine): The VM to perform the action on.
+        admin_client: Admin client for snapshot operations.
+        file_path (str): File path for checksum validation.
+        all_vms (list): List of all VMs.
+    """
+    if action == "clone":
+        target_name = f"clone-{vm.name}"
+        with VirtualMachineClone(
+            name="clone-vm-test",
+            namespace=vm.namespace,
+            source_name=vm.name,
+            target_name=target_name,
+        ) as vmc:
+            vmc.wait_for_status(status=VirtualMachineClone.Status.SUCCEEDED)
+        cloned_vm = VirtualMachine(vm_name=target_name, namespace=vm.namespace)
+        cloned_vm.start(wait=True)
+        cloned_vm.wait_for_ssh_connectivity()
+        all_vms.append(cloned_vm)
+        return cloned_vm
+
+    elif action == "snapshot":
+        snapshot_name = f"snapshot-{vm.name}"
+        with VirtualMachineSnapshot(
+            name=snapshot_name,
+            namespace=vm.namespace,
+            vm_name=vm.name,
+            client=admin_client,
+            teardown=False,
+        ) as vm_snapshot:
+            vm_snapshot.wait_snapshot_done()
+
+        logger.info("Stopping the vm before restoring snapshot")
+        vm.stop()
+        restore_snapshot_name = create_unique_resource_name(vm_snapshot.name, "restore")
+        try:
+            with VirtualMachineRestore(
+                name=restore_snapshot_name,
+                namespace=vm.namespace,
+                vm_name=vm.name,
+                snapshot_name=vm_snapshot.name,
+                client=admin_client,
+                teardown=False,
+            ) as vm_restore:
+                vm_restore.wait_restore_done()
+                vm.start()
+                vm.wait_for_ssh_connectivity(timeout=1200)
+        finally:
+            vm_snapshot.delete()
+        return vm
+    else:
+        raise ValueError("Invalid action specified. Use 'clone' or 'snapshot'.")
