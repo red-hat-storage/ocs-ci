@@ -5,7 +5,7 @@ import random
 
 from ocs_ci.framework.pytest_customization.marks import magenta_squad, workloads
 from ocs_ci.framework.testlib import E2ETest
-from ocs_ci.helpers.cnv_helpers import cal_md5sum_vm, run_dd_io
+from ocs_ci.helpers.cnv_helpers import cal_md5sum_vm, run_dd_io, clone_or_snapshot_vm
 from ocs_ci.ocs import constants
 from ocs_ci.utility.retry import retry
 from ocs_ci.ocs.node import get_nodes, wait_for_nodes_status
@@ -16,11 +16,6 @@ from ocs_ci.ocs.exceptions import (
 from ocs_ci.helpers.sanity_helpers import Sanity
 from ocs_ci.deployment.cnv import CNVInstaller
 from ocs_ci.ocs.resources.pod import wait_for_pods_to_be_running
-from ocp_resources.virtual_machine_clone import VirtualMachineClone
-from ocs_ci.ocs.cnv.virtual_machine import VirtualMachine
-from ocp_resources.virtual_machine_restore import VirtualMachineRestore
-from ocp_resources.virtual_machine_snapshot import VirtualMachineSnapshot
-from ocs_ci.helpers.helpers import create_unique_resource_name
 
 logger = logging.getLogger(__name__)
 
@@ -89,55 +84,20 @@ class TestVmShutdownStart(E2ETest):
         vm_for_clone, vm_for_stop, vm_for_snap = random.sample(all_vms, 3)
 
         # Create Clone of VM
-        target_name = f"clone-{vm_for_clone.name}"
-        with VirtualMachineClone(
-            name="clone-vm-test",
-            namespace=vm_for_clone.namespace,
-            source_name=vm_for_clone.name,
-            target_name=target_name,
-        ) as vmc:
-            vmc.wait_for_status(status=VirtualMachineClone.Status.SUCCEEDED)
-        cloned_vm = VirtualMachine(
-            vm_name=target_name, namespace=vm_for_clone.namespace
+        cloned_vm = clone_or_snapshot_vm(
+            "clone",
+            vm_for_clone,
+            admin_client=admin_client,
+            all_vms=all_vms,
+            file_path=file_paths[0],
         )
-        cloned_vm.start(wait=True)
-        cloned_vm.wait_for_ssh_connectivity()
-        all_vms.append(cloned_vm)
         csum = cal_md5sum_vm(vm_obj=cloned_vm, file_path=file_paths[0])
         source_csums[cloned_vm.name] = csum
 
         # Create a snapshot
-        snapshot_name = f"snapshot-{vm_for_snap.name}"
-        # Explicitly create the VirtualMachineSnapshot instance
-        with VirtualMachineSnapshot(
-            name=snapshot_name,
-            namespace=vm_for_snap.namespace,
-            vm_name=vm_for_snap.name,
-            client=admin_client,
-            teardown=False,
-        ) as vm_snapshot:
-            vm_snapshot.wait_snapshot_done()
-
-        # Stopping VM before restoring
-        vm_for_snap.stop()
-
-        # Explicitly create the VirtualMachineRestore instance
-        restore_snapshot_name = create_unique_resource_name(vm_snapshot.name, "restore")
-        try:
-            with VirtualMachineRestore(
-                name=restore_snapshot_name,
-                namespace=vm_for_snap.namespace,
-                vm_name=vm_for_snap.name,
-                snapshot_name=vm_snapshot.name,
-                client=admin_client,
-                teardown=False,
-            ) as vm_restore:
-                vm_restore.wait_restore_done()  # Wait for restore completion
-                vm_for_snap.start()
-                vm_for_snap.wait_for_ssh_connectivity(timeout=1200)
-        finally:
-            vm_snapshot.delete()
-
+        vm_for_snap = clone_or_snapshot_vm(
+            "snapshot", vm_for_snap, admin_client=admin_client, file_path=file_paths[0]
+        )
         csum = cal_md5sum_vm(vm_obj=vm_for_snap, file_path=file_paths[0])
         source_csums[vm_for_snap.name] = csum
 
