@@ -232,4 +232,3 @@ class TestFailoverAndRelocateWithDiscoveredApps:
             dr_helpers.wait_for_replication_destinations_creation(
                 rdr_workload.workload_pvc_count, rdr_workload.workload_namespace
             )
-        # TODO: Add data integrity checks
