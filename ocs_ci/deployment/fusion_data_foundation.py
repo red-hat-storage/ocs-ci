@@ -6,6 +6,8 @@ import json
 import logging
 import os
 
+import yaml
+
 from ocs_ci.ocs import constants, defaults
 from ocs_ci.ocs.exceptions import CommandFailed
 from ocs_ci.framework import config
@@ -33,7 +35,7 @@ class FusionDataFoundationDeployment:
             self.create_image_digest_mirror_set()
             self.setup_fdf_pre_release_deployment()
         self.create_fdf_service_cr()
-        verify_fdf_installation()
+        self.verify_fdf_installation()
 
     def create_image_tag_mirror_set(self):
         """
@@ -119,14 +121,32 @@ class FusionDataFoundationDeployment:
         out = run_cmd(cmd)
         assert "patched" in out
 
+    def verify_fdf_installation(self):
+        """
+        Verify the FDF installation was successful.
+        """
+        logger.info("Verifying FDF installation")
+        fusion_service_instance_health_check()
+        self.get_installed_version()
+        logger.info("FDF successfully installed")
 
-def verify_fdf_installation():
-    """
-    Verify the FDF installation was successful.
-    """
-    logger.info("Verifying FDF installation")
-    fusion_service_instance_health_check()
-    logger.info("FDF successfully installed")
+    def get_installed_version(self):
+        """
+        Retrieve the installed FDF version.
+
+        Returns:
+            str: Installed FDF version.
+
+        """
+        logger.info("Retrieving installed FDF version")
+        results = run_cmd(
+            f"oc describe FusionServiceInstance {constants.FDF_SERVICE_NAME} "
+            f"-n {constants.FDF_NAMESPACE} --kubeconfig {self.kubeconfig}"
+        )
+        version = yaml.safe_load(results)["Status"]["Current Version"]
+        config.ENV_DATA["fdf_version"] = version
+        logger.info(f"Installed FDF version: {version}")
+        return version
 
 
 def spectrum_fusion_existstance_check():
