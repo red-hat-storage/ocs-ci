@@ -3261,7 +3261,7 @@ class IBMCloudBMNodes(NodesBase):
                             machines
                         )
                     )
-                    assert (
+                    assert not (
                         machines_not_off
                     ), f"Nodes corresponding to the machines {machines_not_off} are not off."
                 else:
