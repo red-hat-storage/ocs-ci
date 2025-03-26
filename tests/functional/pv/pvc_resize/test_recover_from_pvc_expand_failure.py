@@ -65,7 +65,7 @@ class TestRecoverPvcExpandFailure(ManageTest):
                 f"Expanding size of PVC {pvc_obj.name} to {pvc_size_expanded}Gi"
             )
             assert not pvc_obj.resize_pvc(
-                pvc_size_expanded, True
+                pvc_size_expanded, True, timeout=60
             ), f"Unexpected: Expansion of PVC '{pvc_obj.name}' completed"
             logger.info(pvc_obj.describe())
         logger.info(f"All PVCs failed to expanded to the size {pvc_size_expanded}Gi")
