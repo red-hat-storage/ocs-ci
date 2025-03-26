@@ -89,7 +89,6 @@ class TestKeyRotationWithClusterFull(E2ETest):
         )
         # Commenting below code due to ocs-ci issue 11605
         # multi_pvc_clone_factory(pvc_obj=pvc_obj[:11])
-
         # snap_list = multi_snapshot_factory(pvc_obj=pvc_obj[:11])
         # for snapshot in snap_list:
         #     snapshot_restore_factory(snapshot_obj=snapshot)
