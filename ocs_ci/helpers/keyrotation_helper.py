@@ -240,11 +240,9 @@ class NoobaaKeyrotation(KeyRotation):
             ValueError: If failed to retrieve the backend secret.
         """
         if kms_deployment:
-            noobaa_backend_root_key = "active_root_key"
-            noobaa_backend_secret = fetch_noobaa_secret_from_vault(
-                self.kms.vault_backend_path
+            (noobaa_backend_root_key, noobaa_backend_secret) = (
+                fetch_noobaa_secret_from_vault(self.kms.vault_backend_path)
             )
-            logging.info(f"noobaa_backend_secret : {noobaa_backend_secret}")
         else:
             cmd = (
                 f" get secret {constants.NOOBAA_BACKEND_SECRET} -o jsonpath='{{.data}}'"
