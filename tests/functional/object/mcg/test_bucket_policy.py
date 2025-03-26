@@ -6,6 +6,7 @@ import botocore.exceptions as boto3exception
 import json
 import uuid
 
+from ocs_ci.ocs.cluster import CephCluster
 from ocs_ci.ocs.exceptions import (
     NoBucketPolicyResponse,
     InvalidStatusCode,
@@ -53,7 +54,10 @@ from ocs_ci.framework.pytest_customization.marks import (
     runs_on_provider,
     mcg,
     provider_mode,
+    post_upgrade,
+    pre_upgrade,
 )
+from ocs_ci.ocs.resources.storage_cluster import verify_backing_store
 from ocs_ci.utility import version
 from ocs_ci.utility.retry import retry
 
@@ -1286,3 +1290,52 @@ class TestS3BucketPolicy(MCGTest):
         assert (
             not missing_policies
         ), f"Some bucket_policies are not created : {missing_policies}"
+
+
+class TestNoobaaUpgradeWithBucketPolicy:
+
+    @pre_upgrade
+    def test_create_bucket_policy_before_upgrade(
+        self,
+        request,
+        bucket_factory_session,
+        mcg_obj_session,
+    ):
+        # Create a bucket and create obc object
+        obc_name = bucket_factory_session(amount=1, interface="OC")[0].name
+        obc_obj = OBC(obc_name)
+
+        # Generate bucket policy
+        bucket_policy_generated = gen_bucket_policy(
+            user_list=obc_obj.obc_account,
+            actions_list=["PutBucketPolicy", "GetBucketPolicy", "DeleteBucketPolicy"],
+            resources_list=[obc_obj.bucket_name],
+        )
+        bucket_policy = json.dumps(bucket_policy_generated)
+
+        logger.info(
+            "Caching the bucket and bucket policy info for post upgrade verification"
+        )
+        request.config.cache.set("bucket_policy_bucket", obc_name)
+        request.config.cache.set("bucket_policy", bucket_policy)
+
+    @post_upgrade
+    def test_verify_noobaa_after_upgrade(self, request, mcg_obj_session):
+
+        logger.info("Extracting the bucket and bucket policy info from the cache")
+        obc_name = request.config.cache.get("bucket_policy_bucket", None)
+        bucket_policy = request.config.cache.get("bucket_policy", None)
+        assert (
+            obc_name and bucket_policy
+        ), "Seem like either pre-upgrade test for this failed or unable to cache the bucket/bucket policy info"
+
+        # Check noobaa health
+        logger.info("Verifying noobaa health")
+        CephCluster().noobaa_health_check()
+
+        # Check backingstore health
+        verify_backing_store()
+
+        logger.info(f"Creating policy by admin on bucket: {obc_name}")
+        put_policy = put_bucket_policy(mcg_obj_session, obc_name, bucket_policy)
+        logger.info(f"Put bucket policy response from admin: {put_policy}")
