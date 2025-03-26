@@ -126,7 +126,7 @@ class Vault(KMS):
             "VAULT_BACKEND", defaults.VAULT_DEFAULT_BACKEND_VERSION
         )
         self.kmsid = None
-        self.vault_policy_name = None
+        self.vault_policy_name = self.kms_vault_policy_name
         self.vault_kube_auth_path = "kubernetes"
         self.vault_kube_auth_role = constants.VAULT_KUBERNETES_AUTH_ROLE
         self.vault_kube_auth_namespace = None
@@ -143,6 +143,16 @@ class Vault(KMS):
     def vault_path_token(self, value):
         # For setting values in test cases
         Vault._vault_path_token = value
+
+    @property
+    def kms_vault_policy_name(self):
+        cluster_name = config.ENV_DATA.get("cluster_name")
+        if config.multicluster:
+            with config.RunWithPrimaryConfigContext():
+                cluster_name = config.ENV_DATA.get("cluster_name")
+        policy_name = f"kpn_{cluster_name}"
+        logger.info(f"Vault policy name will be {policy_name}")
+        return policy_name
 
     def deploy(self):
         """
@@ -543,7 +553,7 @@ class Vault(KMS):
                     f"Failed to create path f{self.vault_backend_path}"
                 )
         if not backend_path:
-            self.vault_create_policy()
+            self.vault_create_policy(policy_name=self.vault_policy_name)
 
     def vault_create_policy(self, policy_name=None):
         """
@@ -553,16 +563,30 @@ class Vault(KMS):
             VaultOperationError exception
 
         """
-        policy = (
+        existing_policy_data = None
+        read_policy_cmd = f"vault policy read {self.vault_policy_name}"
+        try:
+            output = subprocess.check_output(shlex.split(read_policy_cmd))
+            existing_policy_data = json.loads(output)["policy"]
+            logger.info(f"Existing policy found!:\n{existing_policy_data}")
+        except Exception:
+            logger.info("No existing policy found!")
+        policy_backend_path = (
             f'path "{self.vault_backend_path}/*" {{\n'
-            f'  capabilities = ["create", "read", "update","delete"]'
+            '   capabilities = ["create", "read", "update","delete"]'
             f"\n}}\n"
-            f'path "sys/mounts" {{\n'
-            f'capabilities = ["read"]\n'
-            f"}}"
         )
-        vault_hcl = tempfile.NamedTemporaryFile(mode="w+", prefix="test", delete=False)
-        with open(vault_hcl.name, "w") as hcl:
+        policy_sys_mount = 'path "sys/mounts" {\n   capabilities = ["read"]\n}'
+        if existing_policy_data is None:
+            policy = policy_backend_path + policy_sys_mount
+        else:
+            policy = policy_backend_path + existing_policy_data
+        vault_hcl = tempfile.NamedTemporaryFile(mode="a+", prefix="test", delete=False)
+        logger.info(
+            f"Creating or updating policy: {self.vault_policy_name} with content:\n"
+            f"{policy}"
+        )
+        with open(vault_hcl.name, "a") as hcl:
             hcl.write(policy)
 
         if policy_name:
@@ -760,20 +784,25 @@ class Vault(KMS):
         Args:
             vault namespace (str): Namespace in Vault, if exists, where the backend path is created
         """
-
-        if vault_namespace:
-            cmd = f"vault policy delete -namespace={vault_namespace} {self.vault_policy_name} "
-        else:
-            cmd = f"vault policy delete {self.vault_policy_name}"
-        subprocess.check_output(shlex.split(cmd))
-
         # Check if policy still exists
         if vault_namespace:
-            cmd = f"vault policy list -namespace={vault_namespace} --format=json"
+            cmd_list_policy = (
+                f"vault policy list -namespace={vault_namespace} --format=json"
+            )
         else:
-            cmd = "vault policy list --format=json"
+            cmd_list_policy = "vault policy list --format=json"
 
-        out = subprocess.check_output(shlex.split(cmd))
+        out = subprocess.check_output(shlex.split(cmd_list_policy))
+        json_out = json.loads(out)
+        if self.vault_policy_name in json_out:
+            if vault_namespace:
+                cmd = f"vault policy delete -namespace={vault_namespace} {self.vault_policy_name} "
+            else:
+                cmd = f"vault policy delete {self.vault_policy_name}"
+            subprocess.check_output(shlex.split(cmd))
+
+        # Check if policy still exists
+        out = subprocess.check_output(shlex.split(cmd_list_policy))
         json_out = json.loads(out)
         if self.vault_policy_name in json_out:
             raise KMSResourceCleaneupError(
