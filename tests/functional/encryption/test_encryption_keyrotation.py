@@ -1,6 +1,7 @@
 import logging
 import pytest
 import json
+from time import sleep
 
 from ocs_ci.framework.pytest_customization.marks import (
     tier1,
@@ -535,6 +536,10 @@ class TestNoobaaKeyrotationWithKMS:
         # Set keyrotatiojn schedule to every given minutes.
         schedule = f"*/{minutes} * * * *"
         noobaa_keyrotation.set_keyrotation_schedule(schedule)
+
+        sleep(
+            600
+        )  # adding sleep to compensate the time taken to reflect the schedule on noobaa
 
         # Verify keyrotation is set for every given minute in storagecluster and noobaa object.
         assert (
