@@ -103,7 +103,14 @@ class TestNodesMaintenance(ManageTest):
     @pytest.fixture(autouse=True)
     def init_sanity(self):
         """
-        Initialize Sanity instance
+        Fixture to initialize Sanity instance based on the cluster type
+
+        """
+        self.init_sanity_method()
+
+    def init_sanity_method(self):
+        """
+        Method to initialize Sanity instance based on the cluster type
 
         """
         if storagecluster_independent_check():
@@ -193,6 +200,14 @@ class TestNodesMaintenance(ManageTest):
         schedule_nodes([typed_node_name])
 
         # Perform cluster and Ceph health checks
+        if (
+            node_type == "worker"
+            and config.ENV_DATA.get("platform") == constants.ROSA_HCP_PLATFORM
+        ):
+            # in ROSA HCP, the mon pod remains in a Terminating state for an extended period,
+            # resulting in one additional mon pod being epexcted during the health check
+            self.init_sanity_method()
+
         self.sanity_helpers.health_check(tries=90)
 
     @tier4a
