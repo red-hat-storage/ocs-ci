@@ -3250,7 +3250,7 @@ class IBMCloudBMNodes(NodesBase):
                 )
             except CommandFailed as err:
                 # Consider the situation where the cluster is not accessible after nodes are down,
-                # example: when all nods are off
+                # example: when all the nodes are off
                 if "Unable to connect to the server" in str(err):
                     logger.info(
                         f"Unable to connect to the server to check the nodes NotReady status. "
