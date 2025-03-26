@@ -585,6 +585,8 @@ class Vault(KMS):
             raise VaultOperationError(
                 f"Failed to create policy f{self.vault_policy_name}"
             )
+        # Printing out here the Vault Path Token
+        logger.info(f"Vault Path Token is: ${self.vault_path_token}")
 
     def generate_vault_token(self, ttl="768h"):
         """
