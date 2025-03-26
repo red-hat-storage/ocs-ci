@@ -23,6 +23,7 @@ from ocs_ci.ocs.constants import (
     VM_DISK_TYPE,
     VM_DISK_MODE,
     VM_POWERED_OFF,
+    VM_POWERED_ON,
     DISK_MODE,
     COMPATABILITY_MODE,
     DISK_PATH_PREFIX,
@@ -562,7 +563,11 @@ class VSPHERE(object):
         """
         if force:
             logger.info(f"Powering off VMs: {[vm.name for vm in vms]}")
-            tasks = [vm.PowerOff() for vm in vms]
+            tasks = [
+                vm.PowerOff()
+                for vm in vms
+                if self.get_vm_power_status(vm) == VM_POWERED_ON
+            ]
             WaitForTasks(tasks, self._si)
 
         else:
