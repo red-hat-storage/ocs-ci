@@ -1667,6 +1667,9 @@ class Deployment(object):
         ocs_version = version.get_semantic_ocs_version_from_config()
         disable_noobaa = config.COMPONENTS.get("disable_noobaa", False)
         noobaa_cmd_arg = f"--param ignoreNoobaa={str(disable_noobaa).lower()}"
+        dr_cmd_arg = ""
+        if config.MULTICLUSTER.get("multicluster_mode") == constants.RDR_MODE:
+            dr_cmd_arg = "--param prepareForDisasterRecovery=true"
         device_size = int(
             config.ENV_DATA.get("device_size", defaults.DEVICE_SIZE_IBM_CLOUD_MANAGED)
         )
@@ -1679,7 +1682,7 @@ class Deployment(object):
         osd_size_arg = f"--param osdSize={device_size}Gi"
         cmd = (
             f"ibmcloud ks cluster addon enable openshift-data-foundation --cluster {clustername} -f --version "
-            f"{ocs_version}.0 {noobaa_cmd_arg} {osd_size_arg}"
+            f"{ocs_version}.0 {noobaa_cmd_arg} {osd_size_arg} {dr_cmd_arg}"
         )
         run_ibmcloud_cmd(cmd)
         time.sleep(120)
@@ -3033,6 +3036,15 @@ class MultiClusterDROperatorsDeploy(object):
             dr_policy_hub_data["spec"]["drClusters"][index] = cluster.ENV_DATA[
                 "cluster_name"
             ]
+        ibm_cloud_managed = (
+            config.ENV_DATA["platform"] == constants.IBMCLOUD_PLATFORM
+            and config.ENV_DATA["deployment_type"] == "managed"
+        )
+        if ibm_cloud_managed:
+            dr_policy_hub_data["metadata"][
+                "name"
+            ] = constants.RDR_DR_POLICY_IBM_CLOUD_MANAGED
+            dr_policy_hub_data["spec"]["schedulingInterval"] = "10m"
 
         if config.MULTICLUSTER["multicluster_mode"] == "metro-dr":
             dr_policy_hub_data["metadata"]["name"] = constants.MDR_DR_POLICY
