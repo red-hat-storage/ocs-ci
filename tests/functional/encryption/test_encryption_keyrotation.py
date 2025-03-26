@@ -538,7 +538,7 @@ class TestNoobaaKeyrotationWithKMS:
         noobaa_keyrotation.set_keyrotation_schedule(schedule)
 
         sleep(
-            600
+            120
         )  # adding sleep to compensate the time taken to reflect the schedule on noobaa
 
         # Verify keyrotation is set for every given minute in storagecluster and noobaa object.
