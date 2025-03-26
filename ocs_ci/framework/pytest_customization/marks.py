@@ -588,12 +588,10 @@ metrics_for_external_mode_required = pytest.mark.skipif(
     reason="Metrics is not enabled for external mode OCS <4.6",
 )
 
-rdr_ui_failover_config_required = pytest.mark.skipif(
-    not config.RUN.get("rdr_failover_via_ui"), reason="RDR UI failover config needed"
-)
-
-rdr_ui_relocate_config_required = pytest.mark.skipif(
-    not config.RUN.get("rdr_relocate_via_ui"), reason="RDR UI relocate config needed"
+rdr_ui = pytest.mark.skipif(
+    not config.RUN.get("rdr_failover_via_ui")
+    or not config.RUN.get("rdr_relocate_via_ui"),
+    reason="RDR UI failover or relocate config needed",
 )
 
 # Filter warnings
