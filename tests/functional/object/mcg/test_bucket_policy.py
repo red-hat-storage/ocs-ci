@@ -56,6 +56,7 @@ from ocs_ci.framework.pytest_customization.marks import (
     provider_mode,
     post_upgrade,
     pre_upgrade,
+    polarion_id,
 )
 from ocs_ci.ocs.resources.storage_cluster import verify_backing_store
 from ocs_ci.utility import version
@@ -1292,7 +1293,13 @@ class TestS3BucketPolicy(MCGTest):
         ), f"Some bucket_policies are not created : {missing_policies}"
 
 
+@polarion_id("OCS-6540")
 class TestNoobaaUpgradeWithBucketPolicy:
+    """
+    Test noobaa status post upgrade when there is bucket
+    with some bucket policy
+
+    """
 
     @pre_upgrade
     def test_create_bucket_policy_before_upgrade(
@@ -1301,6 +1308,10 @@ class TestNoobaaUpgradeWithBucketPolicy:
         bucket_factory_session,
         mcg_obj_session,
     ):
+        """
+        Create bucket with some bucket policy before the upgrade
+
+        """
         # Create a bucket and create obc object
         obc_name = bucket_factory_session(amount=1, interface="OC")[0].name
         obc_obj = OBC(obc_name)
@@ -1321,7 +1332,10 @@ class TestNoobaaUpgradeWithBucketPolicy:
 
     @post_upgrade
     def test_verify_noobaa_after_upgrade(self, request, mcg_obj_session):
+        """
+        Verify the noobaa health and verify the bucket policy post upgrade
 
+        """
         logger.info("Extracting the bucket and bucket policy info from the cache")
         obc_name = request.config.cache.get("bucket_policy_bucket", None)
         bucket_policy = request.config.cache.get("bucket_policy", None)
