@@ -616,7 +616,9 @@ def create_host_inventory():
             )
             secret_info = secret_obj.get()
             secret_data = templating.load_yaml(constants.OCS_SECRET_YAML)
-            secret_data["data"][".dockerconfigjson"] = secret_info["data"][".dockerconfigjson"]
+            secret_data["data"][".dockerconfigjson"] = secret_info["data"][
+                ".dockerconfigjson"
+            ]
             secret_data["metadata"]["namespace"] = infra_env_namespace
             secret_data["metadata"]["name"] = "pull-secret"
             secret_manifest = tempfile.NamedTemporaryFile(
