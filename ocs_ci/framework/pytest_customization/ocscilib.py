@@ -33,6 +33,7 @@ from ocs_ci.ocs.resources.ocs import get_version_info
 from ocs_ci.ocs.utils import collect_ocs_logs, collect_prometheus_metrics
 from ocs_ci.utility.utils import (
     dump_config_to_file,
+    exec_cmd,
     get_ceph_version,
     get_cluster_name,
     get_cluster_version,
@@ -529,6 +530,45 @@ def process_cluster_cli_params(config):
     cluster_path = os.path.expanduser(cluster_path)
     if not os.path.exists(cluster_path):
         os.makedirs(cluster_path)
+
+    # create kubconfig if doesn't exists and OCP url and kubeadmin password is provided
+    kubeconfig_path = os.path.join(
+        cluster_path, ocsci_config.RUN["kubeconfig_location"]
+    )
+    if not os.path.isfile(kubeconfig_path) and not get_cli_param(
+        config, "deploy", default=False
+    ):
+        if os.environ.get("KUBEADMIN_PASSWORD") and os.environ.get("OCP_URL"):
+            log.info(
+                "Generating kubeconfig file from provided kubeadmin password and OCP URL"
+            )
+            # check and correct OCP URL (change it to API url if console url provided and add port if needed
+            ocp_api_url = os.environ.get("OCP_URL").replace(
+                "console-openshift-console.apps", "api"
+            )
+            if ":6443" not in ocp_api_url:
+                ocp_api_url = ocp_api_url.rstrip("/") + ":6443"
+
+            cmd = (
+                f"oc login --username {ocsci_config.RUN['username']} --password {os.environ['KUBEADMIN_PASSWORD']} "
+                f"{ocp_api_url} "
+                f"--kubeconfig {kubeconfig_path} "
+                "--insecure-skip-tls-verify=true"
+            )
+            result = exec_cmd(cmd, secrets=(os.environ["KUBEADMIN_PASSWORD"],))
+            if result.returncode:
+                log.warning(f"executed command: {cmd}")
+                log.warning(f"returncode: {result.returncode}")
+                log.warning(f"stdout: {result.stdout}")
+                log.warning(f"stderr: {result.stderr}")
+            else:
+                log.warning(f"Kubeconfig file were created: {kubeconfig_path}.")
+        else:
+            log.warning(
+                "Kubeconfig doesn't exists and KUBEADMIN_PASSWORD and OCP_URL "
+                "environment variables were not provided."
+            )
+
     # Importing here cause once the function is invoked we have already config
     # loaded, so this is OK to import once you sure that config is loaded.
     from ocs_ci.ocs.openshift_ops import OCP
