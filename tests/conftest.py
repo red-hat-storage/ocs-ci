@@ -2953,7 +2953,7 @@ def nb_stress_cli_pod_fixture(request, scope_name):
     assert stress_cli_sts_obj, "Failed to create S3CLI STS"
 
     wait_for_pods_by_label_count(
-        constants.STRESS_CLI_APP_LABEL, exptected_count=2, namespace=namespace
+        constants.STRESS_CLI_APP_LABEL, expected_count=2, namespace=namespace
     )
     stress_cli_pod_objs = retry(IndexError, tries=3, delay=15)(
         lambda: [
@@ -9332,4 +9332,3 @@ def pytest_sessionfinish(session, exitstatus):
 def disable_debug_logs():
     log.info("Disabling debug logs for the current session")
     logging.disable(logging.DEBUG)
-
