@@ -22,6 +22,7 @@ import os.path
 import pprint
 import re
 import sys
+from functools import wraps
 
 from ocs_ci import framework
 from ocs_ci.framework import config
@@ -29,7 +30,7 @@ from ocs_ci.ocs import constants, node, ocp
 from ocs_ci.ocs.ocp import OCP
 from ocs_ci.ocs.exceptions import CommandFailed
 from ocs_ci.utility import utils
-
+from ocs_ci.utility.utils import skipif_ocs_version
 
 logger = logging.getLogger(__name__)
 
@@ -275,3 +276,37 @@ def main():
         return
 
     report_ocs_version(cluster_version, image_dict, file_obj=sys.stdout)
+
+
+def if_version(expressions):
+    """
+    Decorator to skip the function if the OCS version does not match the required version
+
+    ! Important note: This decorator is silently skipping the function
+    if the OCS version does not match the required version. Only warning message will be added to the log.
+    If the test should fail when wrapped function was skipped, use this decorator in combination with pytest 'assert'.
+
+    Args:
+        expressions (str OR list): condition for which we need to check, eg:
+            A single expression string '>=4.2' OR
+            A list of expressions like ['<4.3', '>4.2'], ['<=4.3', '>=4.2']
+
+    Returns:
+         result of executing the function if the OCS version matches the required version
+
+    """
+
+    def decorator(func):
+        @wraps(func)
+        def wrapper(*args, **kwargs):
+            if skipif_ocs_version(expressions):
+                return func(*args, **kwargs)
+            else:
+                logger.warning(
+                    f"Skipping {func.__name__} because the OCS version "
+                    f"does not match the required version {expressions}"
+                )
+
+        return wrapper
+
+    return decorator
