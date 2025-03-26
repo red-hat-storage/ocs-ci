@@ -166,7 +166,11 @@ class ExternalCluster(object):
             str: absolute path to exporter script
 
         """
-        script_path = generate_exporter_script()
+        ocs_version = version.get_semantic_ocs_version_from_config()
+        use_configmap = True
+        if ocs_version <= version.VERSION_4_18:
+            use_configmap = False
+        script_path = generate_exporter_script(use_configmap=use_configmap)
         upload_file(
             self.host, script_path, script_path, self.user, self.password, self.ssh_key
         )

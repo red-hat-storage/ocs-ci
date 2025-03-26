@@ -35,7 +35,6 @@ from ocs_ci.ocs.exceptions import (
     NoRunningCephToolBoxException,
     TolerationNotFoundException,
 )
-from ocs_ci.ocs.resources.pvc import get_all_pvcs_in_storageclass
 
 from ocs_ci.ocs.utils import setup_ceph_toolbox, get_pod_name_by_pattern
 from ocs_ci.ocs.resources.ocs import OCS
@@ -175,7 +174,6 @@ class Pod(OCS):
             command (str): The command to execute on the given pod
             out_yaml_format (bool): whether to return yaml loaded python
                 object OR to return raw output
-
             secrets (list): A list of secrets to be masked with asterisks
                 This kwarg is popped in order to not interfere with
                 subprocess.run(``**kwargs``)
@@ -188,7 +186,7 @@ class Pod(OCS):
             Munch Obj: This object represents a returned yaml file
         """
         if container_name:
-            cmd = f"exec {self.name} -c {container_name} {command}"
+            cmd = f"exec {self.name} -c {container_name} -- {command}"
         else:
             cmd = f"rsh {self.name} "
             cmd += command
@@ -2346,6 +2344,22 @@ def delete_deploymentconfig_pods(pod_obj):
                 )
 
 
+def delete_deployment_pods(pod_obj):
+    """
+    Delete a Deployment and all the pods that are controlled by it
+
+    Args:
+         pod_obj (Pod): Pod object
+
+    """
+    deploy_ocp_obj = ocp.OCP(kind=constants.DEPLOYMENT, namespace=pod_obj.namespace)
+    pod_data_list = deploy_ocp_obj.get().get("items")
+    if pod_data_list:
+        for pod_data in pod_data_list:
+            if pod_obj.get_labels().get("name") == pod_data.get("metadata").get("name"):
+                deploy_ocp_obj.delete(resource_name=pod_data.get_labels().get("name"))
+
+
 def wait_for_new_osd_pods_to_come_up(number_of_osd_pods_before):
     status_options = ["Init:1/4", "Init:2/4", "Init:3/4", "PodInitializing", "Running"]
     try:
@@ -2453,6 +2467,7 @@ def check_pods_in_running_state(
             and ("rook-ceph-drain-canary" not in p.name)
             and ("debug" not in p.name)
             and (constants.REPORT_STATUS_TO_PROVIDER_POD not in p.name)
+            and ("status-reporter" not in p.name)
         ):
             status = ocp_pod_obj.get_resource(p.name, "STATUS")
             if skip_for_status:
@@ -2912,9 +2927,17 @@ def delete_osd_removal_job(osd_id=None):
     else:
         job_name = f"ocs-osd-removal-{osd_id}"
 
-    osd_removal_job = get_job_obj(
-        job_name, namespace=config.ENV_DATA["cluster_namespace"]
-    )
+    try:
+        osd_removal_job = get_job_obj(
+            job_name, namespace=config.ENV_DATA["cluster_namespace"]
+        )
+    except CommandFailed as ex:
+        if "NotFound" in str(ex):
+            logger.info(f"Didn't find the job {job_name}")
+            return True
+        else:
+            raise ex
+
     osd_removal_job.delete()
     try:
         osd_removal_job.ocp.wait_for_delete(resource_name=job_name)
@@ -4067,9 +4090,30 @@ def get_lvs_osd_pods(lvs_name):
         list: List of the osd pods
 
     """
+    from ocs_ci.ocs.resources.pvc import get_all_pvcs_in_storageclass
+
     pvcs = get_all_pvcs_in_storageclass(lvs_name)
     pvc_names = [pvc.name for pvc in pvcs]
     osd_pods = get_osd_pods()
     lvs_pods = [p for p in osd_pods if get_pvc_name(p) in pvc_names]
 
     return lvs_pods
+
+
+def get_pods_pvcs(pod_objs, namespace=None):
+    """
+    Get the PVC objects of the given pod objects
+
+    Args:
+        pod_objs (list): List of the pod objects
+        namespace (str): Name of namespace
+
+    Returns:
+        list: The PVC objects
+
+    """
+    from ocs_ci.ocs.resources.pvc import get_pvc_objs
+
+    namespace = namespace or config.ENV_DATA["cluster_namespace"]
+    pvc_names = [get_pvc_name(p) for p in pod_objs]
+    return get_pvc_objs(pvc_names, namespace)

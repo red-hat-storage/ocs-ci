@@ -42,7 +42,6 @@ class TestNoobaaBackupAndRecovery(E2ETest):
         self.sanity_helpers = Sanity()
 
     @pytest.mark.polarion_id("OCS-2605")
-    @pytest.mark.bugzilla("1924047")
     @skipif_ocs_version("<4.6")
     def test_noobaa_db_backup_and_recovery(
         self,
@@ -97,7 +96,6 @@ class TestNoobaaBackupAndRecovery(E2ETest):
         return warps3
 
     @pytest.mark.polarion_id("OCS-4842")
-    @pytest.mark.bugzilla("214035")
     @skipif_ocs_version("<4.8")
     def test_noobaa_db_backup_recovery_locally(
         self,

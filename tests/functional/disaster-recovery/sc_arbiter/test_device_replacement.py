@@ -6,6 +6,7 @@ from ocs_ci.framework.pytest_customization.marks import (
     turquoise_squad,
     polarion_id,
     tier1,
+    jira,
 )
 from ocs_ci.helpers.cnv_helpers import cal_md5sum_vm
 from ocs_ci.ocs import constants
@@ -20,6 +21,7 @@ logger = logging.getLogger(__name__)
 @tier1
 @stretchcluster_required
 @turquoise_squad
+@jira("DFBUGS-1273")
 class TestDeviceReplacementInStretchCluster:
 
     @polarion_id("OCS-5047")

@@ -5,7 +5,6 @@ import random
 from ocs_ci.framework import config
 from ocs_ci.framework.pytest_customization.marks import (
     skipif_ocs_version,
-    bugzilla,
     tier2,
     skipif_external_mode,
     magenta_squad,
@@ -29,7 +28,6 @@ logger = logging.getLogger(__name__)
 @magenta_squad
 @tier2
 @skipif_external_mode
-@bugzilla("2103256")
 @skipif_ocs_version("<4.12")
 class TestMaintenancePod(E2ETest):
     def test_maintenance_pod_for_osd(self, ceph_objectstore_factory):

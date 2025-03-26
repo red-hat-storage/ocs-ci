@@ -1006,7 +1006,9 @@ def run_must_gather(
             silent=silent,
             output_file=output_file,
         )
-        if config.DEPLOYMENT["external_mode"]:
+        if config.DEPLOYMENT["external_mode"] and not ocsci_config.RUN.get(
+            "is_ocp_deployment_failed"
+        ):
             collect_ceph_external(path=log_dir_path)
         with mg_lock:
             mg_collected_logs += 1

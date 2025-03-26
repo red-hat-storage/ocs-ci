@@ -5,7 +5,6 @@ import pytest
 
 from ocs_ci.framework import config
 from ocs_ci.framework.pytest_customization.marks import (
-    bugzilla,
     skipif_ocs_version,
     magenta_squad,
 )
@@ -55,9 +54,6 @@ class TestQuayWorkload(E2ETest):
     Tests Quay operator
     """
 
-    @bugzilla("1947796")
-    @bugzilla("1959331")
-    @bugzilla("1959333")
     @pytest.mark.polarion_id("OCS-2596")
     @skipif_ocs_version("<4.6")
     def test_quay(self, quay_operator, mcg_obj):

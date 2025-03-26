@@ -260,6 +260,14 @@ class MCG:
         # TODO assert the bucket passed the Pending state
         return {row.split()[1] for row in obc_lst}
 
+    def cli_list_all_buckets(self) -> list[str]:
+        """
+        Returns:
+            set: A set of all bucket names
+
+        """
+        return self.exec_mcg_cmd("bucket list").stdout.strip().split("\n")[1:]
+
     def s3_list_all_objects_in_bucket(self, bucketname):
         """
         Returns:
@@ -776,7 +784,7 @@ class MCG:
             self.exec_mcg_cmd(cmd)
         elif namespace_policy_type == constants.NAMESPACE_POLICY_TYPE_CACHE.lower():
             cmd += f" --hub-resource={namestores_name_str}"
-            cmd += " --backingstores=constants.DEFAULT_NOOBAA_BACKINGSTORE"
+            cmd += f" --backingstores={constants.DEFAULT_NOOBAA_BACKINGSTORE}"
             if "ttl" in namespace_policy:
                 cmd += f" --ttl=={namespace_policy['ttl']}"
             self.exec_mcg_cmd(cmd)

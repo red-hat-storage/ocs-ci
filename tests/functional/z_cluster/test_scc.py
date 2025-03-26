@@ -18,7 +18,6 @@ from ocs_ci.ocs.resources.pod import (
 )
 from ocs_ci.ocs.resources.deployment import Deployment
 from ocs_ci.framework.pytest_customization.marks import (
-    bugzilla,
     polarion_id,
     tier2,
     skipif_ocs_version,
@@ -33,7 +32,6 @@ logger = logging.getLogger(__name__)
 @brown_squad
 class TestSCC:
     @tier2
-    @bugzilla("1938647")
     @polarion_id("OCS-4483")
     @skipif_hci_provider_and_client
     def test_custom_scc_with_pod_respin(self, scc_factory):
@@ -152,7 +150,6 @@ class TestSCC:
         return simple_app_dc_obj, simple_app_pod, pvc.backed_pv_obj
 
     @tier2
-    @bugzilla("2024870")
     @polarion_id("OCS-4692")
     @skipif_ocs_version("<4.10")
     def test_fsgroupchangepolicy_when_depoyment_scaled(self, setup):

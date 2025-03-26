@@ -114,8 +114,6 @@ class TestZoneShutdownsAndCrashes:
                 False,
                 5,
                 marks=[
-                    pytest.mark.bugzilla("2121452"),
-                    pytest.mark.bugzilla("2113062"),
                     pytest.mark.polarion_id("OCS-5088"),
                 ],
             ),
@@ -253,16 +251,7 @@ class TestZoneShutdownsAndCrashes:
                 log.error("Something went wrong!")
 
             # Validate all nodes are in READY state and up
-            retry(
-                (
-                    CommandFailed,
-                    TimeoutError,
-                    AssertionError,
-                    ResourceWrongStatusException,
-                ),
-                tries=28,
-                delay=15,
-            )(wait_for_nodes_status(timeout=1800))
+            wait_for_nodes_status(timeout=600)
             log.info(f"Nodes of zone {zone} are started successfully")
             log.info(f"Failure started at {start_time} and ended at {end_time}")
 
@@ -429,6 +418,9 @@ class TestZoneShutdownsAndCrashes:
             command="dd if=/dev/zero of=/file_1.txt bs=1024 count=102400"
         )
         md5sum_before = cal_md5sum_vm(vm_obj, file_path="/file_1.txt")
+        log.info(
+            f"This is the file_1.txt content:\n{vm_obj.run_ssh_cmd(command='cat /file_1.txt')}"
+        )
 
         for i in range(iteration):
             log.info(f"------ Iteration {i+1} ------")
@@ -482,16 +474,7 @@ class TestZoneShutdownsAndCrashes:
 
             # wait for the nodes to come back to READY status
             log.info("Waiting for the nodes to come up automatically after the crash")
-            retry(
-                (
-                    CommandFailed,
-                    TimeoutError,
-                    AssertionError,
-                    ResourceWrongStatusException,
-                ),
-                tries=28,
-                delay=15,
-            )(wait_for_nodes_status(timeout=1800))
+            wait_for_nodes_status(timeout=600)
 
             end_time = datetime.now(timezone.utc)
             log.info(f"Crash start time : {start_time} & Crash end time : {end_time}")
@@ -516,6 +499,9 @@ class TestZoneShutdownsAndCrashes:
 
         # check vm data written before the failure for integrity
         md5sum_after = cal_md5sum_vm(vm_obj, file_path="/file_1.txt")
+        log.info(
+            f"This is the file_1.txt content:\n{vm_obj.run_ssh_cmd(command='cat /file_1.txt')}"
+        )
         assert (
             md5sum_before == md5sum_after
         ), "Data integrity of the file inside VM is not maintained during the failure"

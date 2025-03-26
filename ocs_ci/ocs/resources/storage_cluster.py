@@ -64,6 +64,7 @@ from ocs_ci.ocs.node import (
 from ocs_ci.ocs.utils import get_primary_cluster_config
 from ocs_ci.ocs.version import get_ocp_version
 from ocs_ci.utility.version import (
+    get_ocs_version_from_csv,
     get_semantic_version,
     VERSION_4_11,
     get_semantic_ocp_running_version,
@@ -247,12 +248,23 @@ def ocs_install_verification(
     )
     resources_dict = {
         nb_db_label: 1,
+        constants.CSI_ADDONS_CONTROLLER_MANAGER_LABEL: 1,
         constants.OCS_OPERATOR_LABEL: 1,
+        constants.ODF_OPERATOR_CONTROL_MANAGER_LABEL: 1,
         constants.OPERATOR_LABEL: 1,
         constants.NOOBAA_OPERATOR_POD_LABEL: 1,
         constants.NOOBAA_CORE_POD_LABEL: 1,
         constants.NOOBAA_ENDPOINT_POD_LABEL: min_eps,
     }
+
+    odf_running_version = get_ocs_version_from_csv(only_major_minor=True)
+    if odf_running_version >= version.VERSION_4_19:
+        resources_dict.update(
+            {
+                constants.NOOBAA_CNPG_POD_LABEL: 1,
+            }
+        )
+
     if config.ENV_DATA.get("noobaa_external_pgsql"):
         del resources_dict[nb_db_label]
 
@@ -300,13 +312,6 @@ def ocs_install_verification(
     if fusion_aas_consumer or client_cluster:
         del resources_dict[constants.OCS_OPERATOR_LABEL]
         del resources_dict[constants.OPERATOR_LABEL]
-
-    if ocs_version >= version.VERSION_4_9:
-        resources_dict.update(
-            {
-                constants.ODF_OPERATOR_CONTROL_MANAGER_LABEL: 1,
-            }
-        )
 
     if ocs_version >= version.VERSION_4_15 and not client_cluster:
         resources_dict.update(
@@ -401,13 +406,13 @@ def ocs_install_verification(
             sc_rbd,
         }
     skip_storage_classes = set()
-    if disable_cephfs or provider_cluster:
+    if disable_cephfs:
         skip_storage_classes.update(
             {
                 f"{storage_cluster_name}-cephfs",
             }
         )
-    if disable_blockpools or provider_cluster:
+    if disable_blockpools:
         skip_storage_classes.update(
             {
                 f"{storage_cluster_name}-ceph-rbd",
@@ -429,7 +434,7 @@ def ocs_install_verification(
     # required storage class names should be observed in the cluster under test
     missing_scs = required_storage_classes.difference(storage_class_names)
     if len(missing_scs) > 0:
-        log.error("few storage classess are not present: %s", missing_scs)
+        log.error("few storage classes are not present: %s", missing_scs)
     assert list(missing_scs) == []
 
     # Verify OSDs are distributed

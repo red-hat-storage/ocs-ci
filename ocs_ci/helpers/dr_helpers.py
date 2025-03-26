@@ -10,10 +10,12 @@ from datetime import datetime
 
 from ocs_ci.framework import config
 from ocs_ci.ocs import constants, ocp
+from ocs_ci.ocs.cluster import is_hci_cluster
 from ocs_ci.ocs.defaults import RBD_NAME
 from ocs_ci.ocs.exceptions import (
     TimeoutExpiredError,
     UnexpectedBehaviour,
+    NotFoundError,
 )
 from ocs_ci.ocs.resources.drpc import DRPC
 from ocs_ci.ocs.resources.pod import get_all_pods, get_ceph_tools_pod
@@ -37,8 +39,11 @@ from ocs_ci.utility.utils import (
     run_cmd,
     exec_cmd,
 )
-from ocs_ci.helpers.helpers import run_cmd_verify_cli_output
-
+from ocs_ci.helpers.helpers import (
+    run_cmd_verify_cli_output,
+    find_cephblockpoolradosnamespace,
+    find_cephfilesystemsubvolumegroup,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -282,26 +287,52 @@ def relocate(
             old_primary=old_primary,
             workload_namespace=workload_instance.workload_namespace,
             workload_dir=workload_instance.workload_dir,
+            vrg_name=workload_instance.discovered_apps_placement_name,
         )
     config.switch_ctx(restore_index)
 
 
-def check_mirroring_status_ok(replaying_images=None):
+def check_mirroring_status_ok(
+    replaying_images=None, cephblockpoolradosns=None, storageclient_uid=None
+):
     """
     Check if mirroring status has health OK and expected number of replaying images
 
     Args:
         replaying_images (int): Expected number of images in replaying state
+        cephblockpoolradosns (string): The name of the cephblockpoolradosnamespace
+        storageclient_uid(string): The uid of the storageclient in the client cluster where the application is running.
+            Applicable for provider - client configuration.
 
     Returns:
         bool: True if status contains expected health and states values, False otherwise
 
+    Raises:
+        NotFoundError: If the configuration is provider mode and the name of the cephblockpoolradosnamespace
+            is not obtained
     """
-    cbp_obj = ocp.OCP(
-        kind=constants.CEPHBLOCKPOOL,
-        resource_name=constants.DEFAULT_CEPHBLOCKPOOL,
-        namespace=config.ENV_DATA["cluster_namespace"],
-    )
+    if is_hci_cluster():
+        logger.info("Get the cephblockpoolradosnamespace associated with storageclient")
+        cephbpradosns = (
+            cephblockpoolradosns
+            or config.ENV_DATA.get("radosnamespace_name", None)
+            or find_cephblockpoolradosnamespace(storageclient_uid=storageclient_uid)
+        )
+
+        if not cephbpradosns:
+            raise NotFoundError("Couldn't identify the cephblockpoolradosnamespace")
+
+        cbp_obj = ocp.OCP(
+            kind=constants.CEPHBLOCKPOOLRADOSNS,
+            namespace=config.ENV_DATA["cluster_namespace"],
+            resource_name=cephbpradosns,
+        )
+    else:
+        cbp_obj = ocp.OCP(
+            kind=constants.CEPHBLOCKPOOL,
+            resource_name=constants.DEFAULT_CEPHBLOCKPOOL,
+            namespace=config.ENV_DATA["cluster_namespace"],
+        )
     mirroring_status = cbp_obj.get().get("status").get("mirroringStatus").get("summary")
     logger.info(f"Mirroring status: {mirroring_status}")
     health_keys = ["daemon_health", "health", "image_health"]
@@ -330,12 +361,19 @@ def check_mirroring_status_ok(replaying_images=None):
             logger.warning(
                 f"Unexpected states. Current replaying count is {current_value} but expected {expected_value}"
             )
-            return False
+            # Continue test if the bug https://issues.redhat.com/browse/DFBUGS-1525 is hit
+            current_stopped_value = mirroring_status.get("states").get("stopped")
+
+            if current_stopped_value in expected_value:
+                logger.warning("Counting 'stopped' value due to the bug DFBUGS-1525")
+                return True
+            else:
+                return False
 
     return True
 
 
-def wait_for_mirroring_status_ok(replaying_images=None, timeout=300):
+def wait_for_mirroring_status_ok(replaying_images=None, timeout=600):
     """
     Wait for mirroring status to reach health OK and expected number of replaying
     images for each of the ODF cluster
@@ -390,7 +428,7 @@ def get_pv_count(namespace):
     workload_pvs = [
         pv
         for pv in all_pvs
-        if pv.get("spec").get("claimRef").get("namespace") == namespace
+        if pv.get("spec").get("claimRef", {}).get("namespace") == namespace
     ]
     return len(workload_pvs)
 
@@ -488,39 +526,64 @@ def check_vr_state(state, namespace):
         return False
 
 
-def check_vrg_existence(namespace):
+def check_vrg_existence(namespace, vrg_name=""):
     """
     Check if VRG resource exists in the given namespace
 
     Args:
         namespace (str): the namespace of the VRG resource
+        vrg_name (str): Name of VRG
 
     """
-    vrg_list = (
-        ocp.OCP(kind=constants.VOLUME_REPLICATION_GROUP, namespace=namespace)
-        .get()
-        .get("items")
-    )
+    try:
+
+        vrg_list = (
+            ocp.OCP(
+                kind=constants.VOLUME_REPLICATION_GROUP,
+                namespace=namespace,
+                resource_name=vrg_name,
+            )
+            .get()
+            .get("items")
+        )
+    except CommandFailed as e:
+        if (
+            f'Error from server (NotFound): volumereplicationgroups.ramendr.openshift.io "{vrg_name}" not found'
+            in str(e)
+        ):
+            logger.info(f"VRG {vrg_name} not found in namespace {namespace}.")
+            vrg_list = []
+
     if len(vrg_list) > 0:
         return True
     else:
         return False
 
 
-def check_vrg_state(state, namespace):
+def check_vrg_state(state, namespace, resource_name=None):
     """
     Check if VRG in the given namespace is in expected state
 
     Args:
         state (str): The VRG state to check for (e.g. 'primary', 'secondary')
         namespace (str): the namespace of the VRG resources
+        resource_name (str): Name of VRG resource
 
     Returns:
         bool: True if VRG is in expected state or was deleted, False otherwise
 
     """
-    vrg_obj = ocp.OCP(kind=constants.VOLUME_REPLICATION_GROUP, namespace=namespace)
-    vrg_list = vrg_obj.get().get("items")
+
+    vrg_obj = ocp.OCP(
+        kind=constants.VOLUME_REPLICATION_GROUP,
+        namespace=namespace,
+    )
+    if resource_name:
+        vrg_list = vrg_obj.get(resource_name=resource_name)
+        vrg_list_index = vrg_list
+    else:
+        vrg_list = vrg_obj.get().get("items")
+        vrg_list_index = vrg_list[0]
 
     # Skip state check if resource was deleted
     if len(vrg_list) == 0 and state.lower() == "secondary":
@@ -531,10 +594,9 @@ def check_vrg_state(state, namespace):
         else:
             logger.info("VRG resource not found")
             return False
-
-    vrg_name = vrg_list[0]["metadata"]["name"]
-    desired_state = vrg_list[0]["spec"]["replicationState"]
-    current_state = vrg_list[0]["status"]["state"]
+    vrg_name = vrg_list_index["metadata"]["name"]
+    desired_state = vrg_list_index["spec"]["replicationState"]
+    current_state = vrg_list_index["status"]["state"]
     logger.info(
         f"VRG: {vrg_name} desired state is {desired_state}, current state is {current_state}"
     )
@@ -549,7 +611,7 @@ def check_vrg_state(state, namespace):
 
 
 def wait_for_replication_resources_creation(
-    vr_count, namespace, timeout, discovered_apps=False
+    vr_count, namespace, timeout, discovered_apps=False, vrg_name=None
 ):
     """
     Wait for replication resources to be created
@@ -560,6 +622,7 @@ def wait_for_replication_resources_creation(
         timeout (int): time in seconds to wait for VR or ReplicationSource resources to be created
             or reach expected state
         discovered_apps (bool): If true then deployed workload is discovered_apps
+        vrg_name (str): Name of VRG
 
     Raises:
         TimeoutExpiredError: In case replication resources not created
@@ -615,6 +678,7 @@ def wait_for_replication_resources_creation(
         func=check_vrg_state,
         state="primary",
         namespace=vrg_namespace,
+        resource_name=vrg_name,
     )
     if not sample.wait_for_func_status(result=True):
         error_msg = "VRG hasn't reached expected state primary within the time limit."
@@ -623,7 +687,7 @@ def wait_for_replication_resources_creation(
 
 
 def wait_for_replication_resources_deletion(
-    namespace, timeout, check_state=True, discovered_apps=False
+    namespace, timeout, check_state=True, discovered_apps=False, vrg_name=None
 ):
     """
     Wait for replication resources to be deleted
@@ -634,6 +698,7 @@ def wait_for_replication_resources_deletion(
             state or deleted
         check_state (bool): True for checking resources state before deletion, False otherwise
         discovered_apps (bool): If true then deployed workload is discovered_apps
+        vrg_name (str): Name of VRG
 
     Raises:
         TimeoutExpiredError: In case replication resources not deleted
@@ -670,6 +735,7 @@ def wait_for_replication_resources_deletion(
             func=check_vrg_state,
             state="secondary",
             namespace=vrg_namespace,
+            resource_name=vrg_name,
         )
         if not sample.wait_for_func_status(result=True):
             error_msg = (
@@ -684,7 +750,11 @@ def wait_for_replication_resources_deletion(
     ):
         logger.info("Waiting for VRG to be deleted")
         sample = TimeoutSampler(
-            timeout=timeout, sleep=5, func=check_vrg_existence, namespace=vrg_namespace
+            timeout=timeout,
+            sleep=5,
+            func=check_vrg_existence,
+            namespace=vrg_namespace,
+            vrg_name=vrg_name,
         )
         if not sample.wait_for_func_status(result=False):
             error_msg = "VRG resource not deleted"
@@ -709,6 +779,7 @@ def wait_for_all_resources_creation(
     timeout=900,
     skip_replication_resources=False,
     discovered_apps=False,
+    vrg_name=None,
 ):
     """
     Wait for workload and replication resources to be created
@@ -720,6 +791,7 @@ def wait_for_all_resources_creation(
         timeout (int): time in seconds to wait for resource creation
         skip_replication_resources (bool): if true vr status wont't be check
         discovered_apps (bool): If true then deployed workload is discovered_apps
+        vrg_name (str): Name of VRG
 
 
     """
@@ -741,24 +813,29 @@ def wait_for_all_resources_creation(
     )
     if not skip_replication_resources:
         wait_for_replication_resources_creation(
-            pvc_count, namespace, timeout, discovered_apps
+            pvc_count, namespace, timeout, discovered_apps, vrg_name
         )
 
 
 def wait_for_all_resources_deletion(
     namespace,
-    check_replication_resources_state=True,
     timeout=1000,
     discovered_apps=False,
+    workload_cleanup=False,
+    vrg_name=None,
 ):
     """
     Wait for workload and replication resources to be deleted
 
     Args:
         namespace (str): the namespace of the workload
-        check_replication_resources_state (bool): True for checking replication resources state, False otherwise
         timeout (int): time in seconds to wait for resource deletion
         discovered_apps (bool): If true then deployed workload is discovered_apps
+        workload_cleanup (bool): Set to True when performing final workload cleanup.
+            If True:
+            - PVC and PV deletion will always be checked
+            - Replication resources state check will be skipped.
+        vrg_name (str): Name of VRG
 
     """
     logger.info("Waiting for all pods to be deleted")
@@ -769,11 +846,12 @@ def wait_for_all_resources_deletion(
                 resource_name=pod_obj.name, timeout=timeout, sleep=5
             )
 
+    check_state = not workload_cleanup
     wait_for_replication_resources_deletion(
-        namespace, timeout, check_replication_resources_state, discovered_apps
+        namespace, timeout, check_state, discovered_apps, vrg_name
     )
 
-    if not (
+    if workload_cleanup or not (
         config.MULTICLUSTER["multicluster_mode"] == "regional-dr"
         and "cephfs" in namespace
     ):
@@ -786,7 +864,7 @@ def wait_for_all_resources_deletion(
             )
 
     if config.MULTICLUSTER["multicluster_mode"] != "metro-dr":
-        if "cephfs" not in namespace:
+        if workload_cleanup or "cephfs" not in namespace:
             logger.info("Waiting for all PVs to be deleted")
             sample = TimeoutSampler(
                 timeout=timeout,
@@ -886,6 +964,9 @@ def get_backend_volumes_for_pvcs(namespace):
         logger.info(f"Fetching backend volume names for PVCs in namespace: {namespace}")
         all_pvcs = get_all_pvc_objs(namespace=namespace)
         for pvc_obj in all_pvcs:
+            if pvc_obj.name.startswith("volsync"):
+                continue
+
             if pvc_obj.backed_sc in [
                 constants.DEFAULT_STORAGECLASS_RBD,
                 constants.DEFAULT_EXTERNAL_MODE_STORAGECLASS_RBD,
@@ -905,16 +986,28 @@ def get_backend_volumes_for_pvcs(namespace):
     return backend_volumes
 
 
-def verify_backend_volume_deletion(backend_volumes):
+def verify_backend_volume_deletion(
+    backend_volumes,
+    cephblockpoolradosns=None,
+    cephfssubvolumegroup=None,
+    storageclient_uid=None,
+):
     """
     Check whether RBD images/CephFS subvolumes are deleted in the backend.
 
     Args:
         backend_volumes (list): List of RBD images or CephFS subvolumes
+        cephblockpoolradosns (str): The name of the cephblockpoolradosnamespace
+        cephfssubvolumegroup (str): The name of the cephfilesystemsubvolumegroup
+        storageclient_uid(string): The uid of the storageclient in the client cluster where the application is running.
+            Applicable for provider - client configuration.
 
     Returns:
         bool: True if volumes are deleted and False if volumes are not deleted
 
+    Raises:
+        NotFoundError: If the configuration is provider mode and the name of the cephblockpoolradosnamespace
+            is not obtained
     """
     ct_pod = get_ceph_tools_pod()
     rbd_pool_name = (
@@ -922,11 +1015,39 @@ def verify_backend_volume_deletion(backend_volumes):
         if config.DEPLOYMENT["external_mode"]
         else constants.DEFAULT_CEPHBLOCKPOOL
     )
-    rbd_images = ct_pod.exec_cmd_on_pod(f"rbd ls {rbd_pool_name} --format json")
+
+    if is_hci_cluster():
+        cephbpradosns = (
+            cephblockpoolradosns
+            or config.ENV_DATA.get("radosnamespace_name", None)
+            or find_cephblockpoolradosnamespace(storageclient_uid=storageclient_uid)
+        )
+
+        if not cephbpradosns:
+            raise NotFoundError("Could not identify the cephblockpoolradosnamespace")
+        namespace_param = f"--namespace {cephbpradosns}"
+
+        subvolumegroup = (
+            config.ENV_DATA.get("subvolumegroup_name", False) or cephfssubvolumegroup
+        )
+        if not subvolumegroup:
+            subvolumegroup = find_cephfilesystemsubvolumegroup(
+                storageclient_uid=storageclient_uid
+            )
+
+        if not subvolumegroup:
+            raise NotFoundError("Couldn't identify the cephfilesystemsubvolumegroup")
+    else:
+        namespace_param = ""
+        subvolumegroup = "csi"
+
+    rbd_images = ct_pod.exec_cmd_on_pod(
+        f"rbd ls {rbd_pool_name} {namespace_param} --format json"
+    )
 
     fs_name = ct_pod.exec_ceph_cmd("ceph fs ls")[0]["name"]
     cephfs_cmd_output = ct_pod.exec_cmd_on_pod(
-        f"ceph fs subvolume ls {fs_name} --group_name csi"
+        f"ceph fs subvolume ls {fs_name} --group_name {subvolumegroup}"
     )
     cephfs_subvolumes = [subvolume["name"] for subvolume in cephfs_cmd_output]
 
@@ -957,7 +1078,7 @@ def wait_for_backend_volume_deletion(backend_volumes, timeout=600):
     """
     sample = TimeoutSampler(
         timeout=timeout,
-        sleep=5,
+        sleep=10,
         func=verify_backend_volume_deletion,
         backend_volumes=backend_volumes,
     )
@@ -1636,7 +1757,7 @@ def replace_cluster(workload, primary_cluster_name, secondary_cluster_name):
 
 
 def do_discovered_apps_cleanup(
-    drpc_name, old_primary, workload_namespace, workload_dir
+    drpc_name, old_primary, workload_namespace, workload_dir, vrg_name
 ):
     """
     Function to clean up Resources
@@ -1646,6 +1767,8 @@ def do_discovered_apps_cleanup(
         old_primary (str): Name of old primary where cleanup will happen
         workload_namespace (str): Workload namespace
         workload_dir (str): Dir location of workload
+        vrg_name (str): Name of VRG
+
     """
     restore_index = config.cur_index
     config.switch_acm_ctx()
@@ -1654,7 +1777,9 @@ def do_discovered_apps_cleanup(
     config.switch_to_cluster_by_name(old_primary)
     workload_path = constants.DR_WORKLOAD_REPO_BASE_DIR + "/" + workload_dir
     run_cmd(f"oc delete -k {workload_path} -n {workload_namespace} --wait=false")
-    wait_for_all_resources_deletion(namespace=workload_namespace, discovered_apps=True)
+    wait_for_all_resources_deletion(
+        namespace=workload_namespace, discovered_apps=True, vrg_name=vrg_name
+    )
     config.switch_acm_ctx()
     drpc_obj.wait_for_progression_status(status=constants.STATUS_COMPLETED)
     config.switch_ctx(restore_index)

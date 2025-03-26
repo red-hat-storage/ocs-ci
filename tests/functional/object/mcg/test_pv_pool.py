@@ -4,7 +4,6 @@ import pytest
 
 from ocs_ci.framework import config
 from ocs_ci.framework.pytest_customization.marks import (
-    bugzilla,
     polarion_id,
     skipif_mcg_only,
     tier2,
@@ -165,7 +164,6 @@ class TestPvPool:
         logger.info("Scale out was successful")
 
     @polarion_id("OCS-4929")
-    @bugzilla("2189866")
     @pytest.mark.parametrize(
         argnames=["bucketclass_dict"],
         argvalues=[
@@ -185,7 +183,6 @@ class TestPvPool:
                 marks=[
                     tier2,
                     pytest.mark.polarion_id("OCS-3932"),
-                    pytest.mark.bugzilla("2064599"),
                     pytest.mark.skipif_ocs_version("<4.11"),
                 ],
             ),
@@ -309,7 +306,6 @@ class TestPvPool:
         )
 
     @tier2
-    @bugzilla("2187789")
     @polarion_id("OCS-4862")
     def test_ephemeral_for_pv_bs(self, backingstore_factory):
         """
@@ -352,7 +348,6 @@ class TestPvPool:
 
     @fips_required
     @tier2
-    @bugzilla("2247731")
     @polarion_id("OCS-5422")
     def test_pvpool_bs_in_fips(self, backingstore_factory):
         """

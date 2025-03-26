@@ -24,7 +24,6 @@ logger = logging.getLogger(__name__)
 @skipif_ocs_version("<4.6")
 @skipif_ocp_version("<4.6")
 @marks.polarion_id("OCS-2376")
-@marks.bugzilla("1873162")
 @skipif_managed_service
 def test_hpa_noobaa_endpoint_metric():
     """

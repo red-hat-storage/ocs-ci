@@ -10,6 +10,7 @@ from ocs_ci.framework.pytest_customization.marks import (
     skipif_external_mode,
     vault_kms_deployment_required,
 )
+from ocs_ci.framework.testlib import skipif_disconnected_cluster
 from ocs_ci.helpers.keyrotation_helper import (
     NoobaaKeyrotation,
     OSDKeyrotation,
@@ -242,6 +243,7 @@ class TestEncryptionKeyrotation:
 @encryption_at_rest_required
 @vault_kms_deployment_required
 @skipif_external_mode
+@skipif_disconnected_cluster
 class TestOSDKeyrotationWithKMS:
     @pytest.fixture(autouse=True)
     def setup(

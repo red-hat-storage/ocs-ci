@@ -13,7 +13,6 @@ from ocs_ci.framework.pytest_customization.marks import (
     metrics_for_external_mode_required,
     blue_squad,
     skipif_mcg_only,
-    bugzilla,
     runs_on_provider,
     provider_client_platform_required,
     provider_mode,
@@ -150,7 +149,6 @@ def test_ceph_rbd_metrics_available(threading_lock):
 @skipif_mcg_only
 @blue_squad
 @tier1
-@pytest.mark.bugzilla("2203795")
 @metrics_for_external_mode_required
 @pytest.mark.polarion_id("OCS-1268")
 @skipif_managed_service
@@ -181,7 +179,6 @@ def test_ceph_metrics_available(threading_lock):
 
 
 @skipif_external_mode
-@bugzilla("2238400")
 @skipif_mcg_only
 @blue_squad
 @tier1

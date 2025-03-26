@@ -10,7 +10,6 @@ from ocs_ci.ocs.scale_noobaa_lib import (
 from ocs_ci.framework.testlib import E2ETest, scale
 from ocs_ci.framework.pytest_customization.marks import (
     ignore_leftovers,
-    bugzilla,
     orange_squad,
     mcg,
 )
@@ -40,7 +39,6 @@ class TestWarp(E2ETest):
     to ensure that noobaa pods are still in a running state
     """
 
-    @bugzilla("2089630")
     @pytest.mark.polarion_id("OCS-4001")
     @pytest.mark.parametrize(
         argnames="amount,interface,bucketclass_dict",

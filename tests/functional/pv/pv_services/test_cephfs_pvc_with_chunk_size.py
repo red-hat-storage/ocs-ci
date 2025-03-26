@@ -4,7 +4,6 @@ import time
 
 from concurrent.futures import ThreadPoolExecutor
 from ocs_ci.framework.testlib import (
-    bugzilla,
     E2ETest,
     skipif_ocp_version,
     skipif_ocs_version,
@@ -22,7 +21,6 @@ log = logging.getLogger(__name__)
 
 
 @tier2
-@bugzilla("2171225")
 @pytest.mark.polarion_id("OCS-5772")
 @green_squad
 @skipif_external_mode

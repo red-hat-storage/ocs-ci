@@ -13,7 +13,6 @@ from ocs_ci.framework.pytest_customization.marks import brown_squad
 from ocs_ci.framework.testlib import (
     E2ETest,
     tier2,
-    bugzilla,
     skipif_ocs_version,
     skipif_external_mode,
 )
@@ -34,7 +33,6 @@ DD_COUNT = 64
 
 @brown_squad
 @tier2
-@bugzilla("1964055")
 @pytest.mark.polarion_id("OCS-2733")
 @skipif_ocs_version("<4.9")
 class TestMonDataAvailWarn(E2ETest):

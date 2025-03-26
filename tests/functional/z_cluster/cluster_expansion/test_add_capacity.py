@@ -46,6 +46,7 @@ from ocs_ci.ocs.resources.storage_cluster import (
 from ocs_ci.ocs.ui.helpers_ui import ui_add_capacity_conditions, ui_add_capacity
 from ocs_ci.utility.utils import is_cluster_y_version_upgraded
 from ocs_ci.utility import version
+from ocs_ci.utility.retry import retry
 
 
 logger = logging.getLogger(__name__)
@@ -103,7 +104,7 @@ def add_capacity_test(ui_flag=False):
 
     # Verify OSDs are encrypted.
     if config.ENV_DATA.get("encryption_at_rest"):
-        osd_encryption_verification()
+        retry((ValueError), tries=5, delay=20)(osd_encryption_verification())
 
     # verify device classes
     ocs_version = version.get_semantic_ocs_version_from_config()

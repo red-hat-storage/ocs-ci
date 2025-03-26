@@ -462,18 +462,14 @@ class Deployment(object):
     def do_deploy_mce(self):
         """
         Deploy Multicluster Engine
+        Shall run on OCP deployment phase
 
         """
-        if config.DEPLOYMENT.get("deploy_mce"):
-            if config.ENV_DATA.get("skip_mce_check_if_present"):
-                check_mce_deployed = False
-                check_mce_ready = False
-            else:
-                check_mce_deployed = True
-                check_mce_ready = True
-            mce_installer = MCEInstaller()
-            mce_installer.deploy_mce(check_mce_deployed, check_mce_ready)
-            mce_installer.validate_mce_deployment()
+        if config.ENV_DATA["skip_ocs_deployment"]:
+
+            if config.ENV_DATA.get("deploy_mce"):
+                mce_installer = MCEInstaller()
+                mce_installer.deploy_mce()
 
     def do_deploy_oadp(self):
         """
@@ -651,6 +647,21 @@ class Deployment(object):
                 check_cnv_ready = True
             CNVInstaller().deploy_cnv(check_cnv_deployed, check_cnv_ready)
 
+    def do_deploy_hyperconverged(self):
+        """
+        Deploy HyperConverged Operator and resources that works instead of CNV operator.
+        Should run on OCP deployment phase
+        """
+        if config.ENV_DATA["skip_ocs_deployment"]:
+
+            if config.ENV_DATA.get(
+                "deploy_hyperconverged"
+            ) and not config.DEPLOYMENT.get("cnv_deployment"):
+                from ocs_ci.deployment.hyperconverged import HyperConverged
+
+                hyperconverged = HyperConverged()
+                hyperconverged.deploy_hyperconverged()
+
     def do_deploy_metallb(self):
         """
         Deploy MetalLB
@@ -749,6 +760,7 @@ class Deployment(object):
         self.do_deploy_odf_provider_mode()
         self.do_deploy_mce()
         self.do_deploy_cnv()
+        self.do_deploy_hyperconverged()
         self.do_deploy_metallb()
         self.do_deploy_hosted_clusters()
 
@@ -800,7 +812,8 @@ class Deployment(object):
         verify_all_nodes_created()
         set_selinux_permissions()
         set_registry_to_managed_state()
-        add_stage_cert()
+        if config.ENV_DATA.get("platform") != constants.ROSA_HCP_PLATFORM:
+            add_stage_cert()
         if config.ENV_DATA.get("huge_pages"):
             enable_huge_pages()
         if config.DEPLOYMENT.get("dummy_zone_node_labels"):
@@ -943,7 +956,8 @@ class Deployment(object):
         live_deployment = config.DEPLOYMENT.get("live_deployment")
         platform = config.ENV_DATA["platform"]
         aws_sts_deployment = (
-            config.DEPLOYMENT.get("sts_enabled") and platform == constants.AWS_PLATFORM
+            config.DEPLOYMENT.get("sts_enabled")
+            and platform in constants.AWS_STS_PLATFORMS
         )
         azure_sts_deployment = (
             config.DEPLOYMENT.get("sts_enabled")
@@ -1126,7 +1140,8 @@ class Deployment(object):
         local_storage = config.DEPLOYMENT.get("local_storage")
         platform = config.ENV_DATA.get("platform").lower()
         aws_sts_deployment = (
-            config.DEPLOYMENT.get("sts_enabled") and platform == constants.AWS_PLATFORM
+            config.DEPLOYMENT.get("sts_enabled")
+            and platform in constants.AWS_STS_PLATFORMS
         )
 
         if ui_deployment and ui_deployment_conditions():

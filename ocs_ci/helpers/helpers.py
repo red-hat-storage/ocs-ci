@@ -248,7 +248,6 @@ def create_pod(
     pod_dict_path=None,
     sa_name=None,
     security_context=None,
-    dc_deployment=False,
     raw_block_pv=False,
     raw_block_device=constants.RAW_BLOCK_DEVICE,
     replica_count=1,
@@ -257,7 +256,6 @@ def create_pod(
     command=None,
     command_args=None,
     ports=None,
-    deploy_pod_status=constants.STATUS_COMPLETED,
     subpath=None,
     deployment=False,
     scc=None,
@@ -277,7 +275,6 @@ def create_pod(
         pod_dict_path (str): YAML path for the pod
         sa_name (str): Serviceaccount name
         security_context (dict): Set security context on container in the form of dictionary
-        dc_deployment (bool): True if creating pod as deploymentconfig
         raw_block_pv (bool): True for creating raw block pv based pod, False otherwise
         raw_block_device (str): raw block device for the pod
         replica_count (int): Replica count for deployment config
@@ -288,8 +285,6 @@ def create_pod(
         command_args (list): The arguments to be sent to the command running
             on the pod
         ports (dict): Service ports
-        deploy_pod_status (str): Expected status of deploy pod. Applicable
-            only if dc_deployment is True
         subpath (str): Value of subPath parameter in pod yaml
         deployment (bool): True for Deployment creation, False otherwise
         scc (dict): Set security context on pod like fsGroup, runAsUer, runAsGroup
@@ -312,19 +307,20 @@ def create_pod(
     else:
         pod_dict = pod_dict_path if pod_dict_path else constants.CSI_CEPHFS_POD_YAML
         interface = constants.CEPHFS_INTERFACE
-    if dc_deployment or deployment:
+    if deployment:
         pod_dict = pod_dict_path if pod_dict_path else constants.FEDORA_DC_YAML
     pod_data = templating.load_yaml(pod_dict)
     if not pod_name:
         pod_name = create_unique_resource_name(f"test-{interface}", "pod")
     pod_data["metadata"]["name"] = pod_name
     pod_data["metadata"]["namespace"] = namespace
-    if dc_deployment or deployment:
+    if deployment:
         pod_data["metadata"]["labels"]["app"] = pod_name
         pod_data["spec"]["template"]["metadata"]["labels"]["name"] = pod_name
+        pod_data["spec"]["selector"]["matchLabels"]["name"] = pod_name
         pod_data["spec"]["replicas"] = replica_count
     if pvc_name:
-        if dc_deployment or deployment:
+        if deployment:
             pod_data["spec"]["template"]["spec"]["volumes"][0]["persistentVolumeClaim"][
                 "claimName"
             ] = pvc_name
@@ -341,7 +337,7 @@ def create_pod(
                     "readOnly"
                 ] = pvc_read_only_mode
     if ports:
-        if dc_deployment:
+        if deployment:
             pod_data["spec"]["template"]["spec"]["containers"][0]["ports"] = ports
         else:
             pod_data["spec"]["containers"][0]["ports"][0] = ports
@@ -351,6 +347,7 @@ def create_pod(
             constants.FEDORA_DC_YAML,
             constants.FIO_DC_YAML,
             constants.FIO_DEPLOYMENT_YAML,
+            constants.FEDORA_DEPLOY_YAML,
         ]:
             temp_dict = [
                 {
@@ -362,7 +359,10 @@ def create_pod(
                     .get("name"),
                 }
             ]
-            if pod_dict_path == constants.FEDORA_DC_YAML:
+            if (
+                pod_dict_path == constants.FEDORA_DC_YAML
+                or constants.FEDORA_DEPLOY_YAML
+            ):
                 del pod_data["spec"]["template"]["spec"]["containers"][0][
                     "volumeMounts"
                 ]
@@ -394,44 +394,44 @@ def create_pod(
                 pod_data.get("spec").get("volumes")[0].get("name")
             )
     if security_context:
-        if dc_deployment or deployment:
+        if deployment:
             pod_data["spec"]["template"]["spec"]["containers"][0][
                 "securityContext"
             ] = security_context
         else:
             pod_data["spec"]["containers"][0]["securityContext"] = security_context
     if command:
-        if dc_deployment or deployment:
+        if deployment:
             pod_data["spec"]["template"]["spec"]["containers"][0]["command"] = command
         else:
             pod_data["spec"]["containers"][0]["command"] = command
     if command_args:
-        if dc_deployment or deployment:
+        if deployment:
             pod_data["spec"]["template"]["spec"]["containers"][0]["args"] = command_args
         else:
             pod_data["spec"]["containers"][0]["args"] = command_args
     if scc:
-        if dc_deployment:
+        if deployment:
             pod_data["spec"]["template"]["securityContext"] = scc
         else:
             pod_data["spec"]["securityContext"] = scc
     if node_name:
-        if dc_deployment or deployment:
+        if deployment:
             pod_data["spec"]["template"]["spec"]["nodeName"] = node_name
         else:
             pod_data["spec"]["nodeName"] = node_name
 
     if node_selector:
-        if dc_deployment or deployment:
+        if deployment:
             pod_data["spec"]["template"]["spec"]["nodeSelector"] = node_selector
         else:
             pod_data["spec"]["nodeSelector"] = node_selector
 
-    if sa_name and (dc_deployment or deployment):
+    if sa_name and deployment:
         pod_data["spec"]["template"]["spec"]["serviceAccountName"] = sa_name
 
     if volumemounts:
-        if dc_deployment:
+        if deployment:
             pod_data["spec"]["template"]["spec"]["containers"][0][
                 "volumeMounts"
             ] = volumemounts
@@ -439,7 +439,7 @@ def create_pod(
             pod_data["spec"]["containers"][0]["volumeMounts"] = volumemounts
 
     if subpath:
-        if dc_deployment or deployment:
+        if deployment:
             pod_data["spec"]["template"]["spec"]["containers"][0]["volumeMounts"][0][
                 "subPath"
             ] = subpath
@@ -455,23 +455,7 @@ def create_pod(
     # configure http[s]_proxy env variable, if required
     update_container_with_proxy_env(pod_data)
 
-    if dc_deployment:
-        dc_obj = create_resource(**pod_data)
-        logger.info(dc_obj.name)
-        assert (ocp.OCP(kind="pod", namespace=namespace)).wait_for_resource(
-            condition=deploy_pod_status,
-            resource_name=pod_name + "-1-deploy",
-            resource_count=0,
-            timeout=360,
-            sleep=3,
-        )
-        dpod_list = pod.get_all_pods(namespace=namespace)
-        for dpod in dpod_list:
-            labels = dpod.get().get("metadata").get("labels")
-            if not any("deployer-pod-for" in label for label in labels):
-                if pod_name in dpod.name:
-                    return dpod
-    elif deployment:
+    if deployment:
         deployment_obj = create_resource(**pod_data)
         logger.info(deployment_obj.name)
         deployment_name = deployment_obj.name
@@ -2485,7 +2469,7 @@ def create_pods_parallel(
     pod_dict_path=None,
     sa_name=None,
     raw_block_pv=False,
-    dc_deployment=False,
+    deployment=False,
     node_selector=None,
 ):
     """
@@ -2498,7 +2482,8 @@ def create_pods_parallel(
         pod_dict_path (str): pod_dict_path for yaml
         sa_name (str): sa_name for providing permission
         raw_block_pv (bool): Either RAW block or not
-        dc_deployment (bool): Either DC deployment or not
+        deployment (bool): True for Deployment creation,
+                False otherwise
         node_selector (dict): dict of key-value pair to be used for nodeSelector field
             eg: {'nodetype': 'app-pod'}
 
@@ -2526,7 +2511,7 @@ def create_pods_parallel(
                                 raw_block_pv=raw_block_pv,
                                 pod_dict_path=pod_dict_path,
                                 sa_name=sa_name,
-                                dc_deployment=dc_deployment,
+                                deployment=deployment,
                                 node_selector=node_selector,
                             )
                         )
@@ -2541,7 +2526,7 @@ def create_pods_parallel(
                             raw_block_pv=raw_block_pv,
                             pod_dict_path=pod_dict_path,
                             sa_name=sa_name,
-                            dc_deployment=dc_deployment,
+                            deployment=deployment,
                             node_selector=node_selector,
                         )
                     )
@@ -5885,3 +5870,113 @@ def create_rbd_deviceclass_storageclass(
     sc_obj = create_resource(**sc_data)
     sc_obj.reload()
     return sc_obj
+
+
+def find_cephblockpoolradosnamespace(storageclient_uid=None):
+    """
+    Find the cephblockpoolradosnamespace related to a storageclient. This should run on provider cluster in a
+        provider mode setup.
+
+    Args:
+        storageclient_id(string): The uid of the storageclient for which the cephblockpoolradosnamespace to be fetched
+
+    Returns:
+        str: The name of the cephblockpoolradosnamespace, if present
+
+    """
+    if not storageclient_uid:
+        logger.info(
+            "Storageclient uid is not provided. Default to the native client cephblockpoolradosnamespace assuming "
+            "only one storageclient is present."
+        )
+        client_obj = ocp.OCP(
+            kind=constants.STORAGECLIENT, namespace=config.ENV_DATA["cluster_namespace"]
+        )
+        clients_info = client_obj.get().get("items")
+        storageclient_uid = clients_info[0]["metadata"]["uid"]
+        storageclient_name = clients_info[0]["metadata"]["name"]
+
+    storageconsumer_obj = ocp.OCP(
+        kind=constants.STORAGECONSUMER,
+        namespace=config.ENV_DATA["cluster_namespace"],
+    )
+    for storageconsumer_dict in storageconsumer_obj.get()["items"]:
+        if storageconsumer_dict["status"]["client"]["clientId"] == storageclient_uid:
+            storageconsumer = storageconsumer_dict["metadata"]["name"]
+            break
+    logger.info(
+        f"StorageClient is {storageclient_name} with uid {storageclient_uid}. StorageConsumer is {storageconsumer}"
+    )
+
+    cephbpradosns = ""
+    storage_request_obj = ocp.OCP(
+        kind="StorageRequest", namespace=config.ENV_DATA["cluster_namespace"]
+    )
+    for storage_request_dict in storage_request_obj.get()["items"]:
+        if (
+            storageconsumer
+            in storage_request_dict["metadata"]["ownerReferences"][0].values()
+        ):
+            for ceph_resources in storage_request_dict["status"]["cephResources"]:
+                if "CephBlockPoolRadosNamespace" in ceph_resources.values():
+                    cephbpradosns = ceph_resources["name"]
+                    break
+        if cephbpradosns:
+            break
+
+    return cephbpradosns
+
+
+def find_cephfilesystemsubvolumegroup(storageclient_uid=None):
+    """
+    Find the cephfilesystemsubvolumegroup related to a storageclient. This should run on provider cluster in a
+        provider mode setup.
+
+    Args:
+        storageclient_id(string): The uid of the storageclient for which the cephfilesystemsubvolumegroup to be fetched
+
+    Returns:
+        str: The name of the cephfilesystemsubvolumegroup, if present
+
+    """
+    if not storageclient_uid:
+        logger.info(
+            "Storageclient uid is not provided. Default to the native client cephfilesystemsubvolumegroup assuming "
+            "only one storageclient is present."
+        )
+        client_obj = ocp.OCP(
+            kind=constants.STORAGECLIENT, namespace=config.ENV_DATA["cluster_namespace"]
+        )
+        clients_info = client_obj.get().get("items")
+        storageclient_uid = clients_info[0]["metadata"]["uid"]
+        storageclient_name = clients_info[0]["metadata"]["name"]
+
+    storageconsumer_obj = ocp.OCP(
+        kind=constants.STORAGECONSUMER,
+        namespace=config.ENV_DATA["cluster_namespace"],
+    )
+    for storageconsumer_dict in storageconsumer_obj.get()["items"]:
+        if storageconsumer_dict["status"]["client"]["clientId"] == storageclient_uid:
+            storageconsumer = storageconsumer_dict["metadata"]["name"]
+            break
+    logger.info(
+        f"StorageClient is {storageclient_name} with uid {storageclient_uid}. StorageConsumer is {storageconsumer}"
+    )
+
+    cephbfssubvolumegroup = ""
+    storage_request_obj = ocp.OCP(
+        kind="StorageRequest", namespace=config.ENV_DATA["cluster_namespace"]
+    )
+    for storage_request_dict in storage_request_obj.get()["items"]:
+        if (
+            storageconsumer
+            in storage_request_dict["metadata"]["ownerReferences"][0].values()
+        ):
+            for ceph_resources in storage_request_dict["status"]["cephResources"]:
+                if "CephFilesystemSubVolumeGroup" in ceph_resources.values():
+                    cephbfssubvolumegroup = ceph_resources["name"]
+                    break
+        if cephbfssubvolumegroup:
+            break
+
+    return cephbfssubvolumegroup

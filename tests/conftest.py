@@ -106,7 +106,6 @@ from ocs_ci.ocs.resources.objectbucket import BUCKET_MAP
 from ocs_ci.ocs.resources.ocs import OCS
 from ocs_ci.ocs.resources.pod import (
     get_rgw_pods,
-    delete_deploymentconfig_pods,
     get_pods_having_label,
     get_deployments_having_label,
     Pod,
@@ -117,6 +116,7 @@ from ocs_ci.ocs.resources.pod import (
     get_noobaa_pods,
     get_pod_count,
     wait_for_pods_by_label_count,
+    delete_deployment_pods,
 )
 from ocs_ci.ocs.resources.pvc import (
     PVC,
@@ -1221,7 +1221,7 @@ def pvc_factory_fixture(request, project_factory):
         status=constants.STATUS_BOUND,
         volume_mode=None,
         size_unit="Gi",
-        wait_for_resource_status_timeout=60,
+        wait_for_resource_status_timeout=90,
     ):
         """
         Args:
@@ -1355,7 +1355,7 @@ def pod_factory_fixture(request, pvc_factory):
         node_name=None,
         pod_dict_path=None,
         raw_block_pv=False,
-        deployment_config=False,
+        deployment=False,
         service_account=None,
         security_context=None,
         node_selector=None,
@@ -1364,7 +1364,6 @@ def pod_factory_fixture(request, pvc_factory):
         command=None,
         command_args=None,
         subpath=None,
-        deployment=False,
         pvc_read_only_mode=None,
         priorityClassName=None,
     ):
@@ -1383,8 +1382,6 @@ def pod_factory_fixture(request, pvc_factory):
             pod_dict_path (str): YAML path for the pod.
             raw_block_pv (bool): True for creating raw block pv based pod,
                 False otherwise.
-            deployment_config (bool): True for DeploymentConfig creation,
-                False otherwise
             service_account (OCS): Service account object, in case DeploymentConfig
                 is to be created
             security_context (dict): security context in the form of dictionary
@@ -1413,7 +1410,7 @@ def pod_factory_fixture(request, pvc_factory):
                 node_name=node_name,
                 pod_dict_path=pod_dict_path,
                 raw_block_pv=raw_block_pv,
-                dc_deployment=deployment_config,
+                deployment=deployment,
                 sa_name=sa_name,
                 replica_count=replica_count,
                 pod_name=pod_name,
@@ -1422,19 +1419,16 @@ def pod_factory_fixture(request, pvc_factory):
                 command=command,
                 command_args=command_args,
                 subpath=subpath,
-                deployment=deployment,
                 pvc_read_only_mode=pvc_read_only_mode,
                 priorityClassName=priorityClassName,
             )
             assert pod_obj, "Failed to create pod"
 
-        if deployment_config or deployment:
+        if deployment:
             d_name = pod_obj.get_labels().get("name")
             d_ocp_dict = ocp.OCP(
                 kind=(
-                    constants.DEPLOYMENTCONFIG
-                    if deployment_config
-                    else constants.DEPLOYMENT
+                    constants.DEPLOYMENTCONFIG if deployment else constants.DEPLOYMENT
                 ),
                 namespace=pod_obj.namespace,
             ).get(resource_name=d_name)
@@ -1447,7 +1441,7 @@ def pod_factory_fixture(request, pvc_factory):
             helpers.wait_for_resource_state(pod_obj, status, timeout=300)
             pod_obj.reload()
         pod_obj.pvc = pvc
-        if deployment_config or deployment:
+        if deployment:
             return d_obj
         return pod_obj
 
@@ -1615,9 +1609,9 @@ def service_account_factory_fixture(request):
 
 
 @pytest.fixture()
-def dc_pod_factory(request, pvc_factory, service_account_factory):
+def deployment_pod_factory(request, pvc_factory, service_account_factory):
     """
-    Create deploymentconfig pods
+    Create deployment pods
     """
     instances = []
 
@@ -1658,7 +1652,7 @@ def dc_pod_factory(request, pvc_factory, service_account_factory):
 
         """
         if custom_data:
-            dc_pod_obj = helpers.create_resource(**custom_data)
+            deploy_pod_obj = helpers.create_resource(**custom_data)
         else:
             pvc = pvc or pvc_factory(
                 interface=interface, size=size, access_mode=access_mode
@@ -1666,34 +1660,34 @@ def dc_pod_factory(request, pvc_factory, service_account_factory):
             sa_obj = sa_obj or service_account_factory(
                 project=pvc.project, service_account=service_account
             )
-            dc_pod_obj = helpers.create_pod(
+            deploy_pod_obj = helpers.create_pod(
                 interface_type=interface,
                 pvc_name=pvc.name,
                 do_reload=False,
                 namespace=pvc.namespace,
                 sa_name=sa_obj.name,
-                dc_deployment=True,
+                deployment=True,
                 replica_count=replica_count,
                 node_name=node_name,
                 node_selector=node_selector,
                 raw_block_pv=raw_block_pv,
-                pod_dict_path=constants.FEDORA_DC_YAML,
+                pod_dict_path=constants.FEDORA_DEPLOY_YAML,
             )
-        instances.append(dc_pod_obj)
-        log.info(dc_pod_obj.name)
+        instances.append(deploy_pod_obj)
+        log.info(deploy_pod_obj.name)
         if wait:
             helpers.wait_for_resource_state(
-                dc_pod_obj, constants.STATUS_RUNNING, timeout=180
+                deploy_pod_obj, constants.STATUS_RUNNING, timeout=180
             )
-        dc_pod_obj.pvc = pvc
-        return dc_pod_obj
+        deploy_pod_obj.pvc = pvc
+        return deploy_pod_obj
 
     def finalizer():
         """
         Delete dc pods
         """
         for instance in instances:
-            delete_deploymentconfig_pods(instance)
+            delete_deployment_pods(instance)
 
     request.addfinalizer(finalizer)
     return factory
@@ -3868,9 +3862,12 @@ def measurement_dir(tmp_path):
 
 
 @pytest.fixture()
-def multi_dc_pod(multi_pvc_factory, dc_pod_factory, service_account_factory):
+def multi_deployment_pods(
+    multi_pvc_factory, deployment_pod_factory, service_account_factory
+):
     """
-    Prepare multiple dc pods for the test
+    Prepare multiple deployment pods for the test
+
     Returns:
         any: Pod instances
     """
@@ -3913,7 +3910,7 @@ def multi_dc_pod(multi_pvc_factory, dc_pod_factory, service_account_factory):
                 if create_rbd_block_rwx_pod:
                     dc_pods_res.append(
                         p.submit(
-                            dc_pod_factory,
+                            deployment_pod_factory,
                             interface=constants.CEPHBLOCKPOOL,
                             pvc=pvc_obj,
                             raw_block_pv=True,
@@ -3923,7 +3920,7 @@ def multi_dc_pod(multi_pvc_factory, dc_pod_factory, service_account_factory):
                 else:
                     dc_pods_res.append(
                         p.submit(
-                            dc_pod_factory,
+                            deployment_pod_factory,
                             interface=dict_types[pool_type],
                             pvc=pvc_obj,
                             sa_obj=sa_obj,
@@ -6453,7 +6450,7 @@ def create_pvcs_and_pods(multi_pvc_factory, pod_factory, service_account_factory
         num_of_rbd_pvc=None,
         num_of_cephfs_pvc=None,
         replica_count=1,
-        deployment_config=False,
+        deployment=False,
         sc_rbd=None,
         sc_cephfs=None,
         pod_dict_path=None,
@@ -6479,7 +6476,7 @@ def create_pvcs_and_pods(multi_pvc_factory, pod_factory, service_account_factory
                 elements in the list 'access_modes_cephfs'. Pass 0 for not
                 creating CephFS PVC
             replica_count (int): The replica count for deployment config
-            deployment_config (bool): True for DeploymentConfig creation,
+            deployment (bool): True for Deployment creation,
                 False otherwise
             sc_rbd (OCS): RBD storage class. ocs_ci.ocs.resources.ocs.OCS instance
                 of 'StorageClass' kind
@@ -6545,7 +6542,7 @@ def create_pvcs_and_pods(multi_pvc_factory, pod_factory, service_account_factory
             pvc_info = pvc_obj.get()
             setattr(pvc_obj, "volume_mode", pvc_info["spec"]["volumeMode"])
 
-        sa_obj = service_account_factory(project=project) if deployment_config else None
+        sa_obj = service_account_factory(project=project) if deployment else None
 
         pods_dc = []
         pods = []
@@ -6557,7 +6554,7 @@ def create_pvcs_and_pods(multi_pvc_factory, pod_factory, service_account_factory
             else:
                 interface = constants.CEPHBLOCKPOOL
 
-            if deployment_config:
+            if deployment:
                 pod_dict_path = pod_dict_path or constants.FEDORA_DC_YAML
             elif pvc_obj.volume_mode == "Block":
                 pod_dict_path = pod_dict_path or constants.CSI_RBD_RAW_BLOCK_POD_YAML
@@ -6575,12 +6572,12 @@ def create_pvcs_and_pods(multi_pvc_factory, pod_factory, service_account_factory
                     pvc=pvc_obj,
                     pod_dict_path=pod_dict_path,
                     raw_block_pv=pvc_obj.volume_mode == "Block",
-                    deployment_config=deployment_config,
+                    deployment=deployment,
                     service_account=sa_obj,
                     replica_count=replica_count,
                 )
                 pod_obj.pvc = pvc_obj
-                pods_dc.append(pod_obj) if deployment_config else pods.append(pod_obj)
+                pods_dc.append(pod_obj) if deployment else pods.append(pod_obj)
 
         # Get pod objects if deployment_config is True
         # pods_dc will be an empty list if deployment_config is False
@@ -7105,7 +7102,7 @@ def discovered_apps_dr_workload(request):
     """
     instances = []
 
-    def factory(kubeobject=1):
+    def factory(kubeobject=1, recipe=0, pvc_interface=constants.CEPHBLOCKPOOL):
         """
         Args:
             kubeobject (int): Number if Discovered Apps workload with kube object protection to be created
@@ -7123,8 +7120,8 @@ def discovered_apps_dr_workload(request):
         total_pvc_count = 0
         workload_key = "dr_workload_discovered_apps_rbd"
         # TODO: When cephfs is ready
-        # if pvc_interface == constants.CEPHFILESYSTEM:
-        #     workload_key = "dr_workload_discovered_apps_cephfs"
+        if pvc_interface == constants.CEPHFILESYSTEM:
+            workload_key = "dr_workload_discovered_apps_cephfs"
         for index in range(kubeobject):
             workload_details = ocsci_config.ENV_DATA[workload_key][index]
             workload = BusyboxDiscoveredApps(

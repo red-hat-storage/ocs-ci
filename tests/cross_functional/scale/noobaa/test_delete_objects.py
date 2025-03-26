@@ -13,7 +13,6 @@ from ocs_ci.ocs.bucket_utils import (
     random_object_round_trip_verification,
 )
 from ocs_ci.framework.pytest_customization.marks import (
-    bugzilla,
     polarion_id,
     scale,
     mcg,
@@ -75,7 +74,6 @@ class TestDeleteObjects:
             time.sleep(60)
         log.info(f"Successfully verified background io for the bucket {bucket_name}")
 
-    @bugzilla("2181535")
     @polarion_id("OCS-4916")
     @pytest.mark.parametrize(
         argnames=["delete_mode"],

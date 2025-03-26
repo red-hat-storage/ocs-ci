@@ -60,13 +60,13 @@ def login():
     logger.info("Successfully logged in to ROSA")
 
 
-def create_cluster(cluster_name, version, region):
+def create_cluster(cluster_name, version_str, region):
     """
     Create OCP cluster.
 
     Args:
         cluster_name (str): Cluster name
-        version (str): cluster version
+        version_str (str): cluster version
         region (str): Cluster region
 
     """
@@ -82,8 +82,8 @@ def create_cluster(cluster_name, version, region):
             f"is not valid ROSA OCP version. "
             f"Selecting latest rosa version for deployment"
         )
-        logger.info(f"Looking for z-stream version of {version}")
-        rosa_ocp_version = version.get_latest_rosa_ocp_version(version)
+        logger.info(f"Looking for z-stream version of {version_str}")
+        rosa_ocp_version = version.get_latest_rosa_ocp_version(version_str)
         logger.info(f"Using OCP version {rosa_ocp_version}")
 
     if rosa_hcp:
@@ -349,12 +349,12 @@ def get_rosa_service_details(cluster):
     return json.loads(service_info)
 
 
-def validate_ocp_version(version):
+def validate_ocp_version(version_str):
     """
     Validate the version whether given version is z-stream version available for ROSA.
 
     Args:
-        version (str): OCP version string
+        version_str (str): OCP version string
 
     Returns:
         bool: True if given version is available in z-stream version for ROSA
@@ -364,12 +364,12 @@ def validate_ocp_version(version):
     out = utils.run_cmd(cmd)
     output = json.loads(out)
     available_versions = [info["raw_id"] for info in output]
-    if version in available_versions:
-        logger.info(f"OCP versions {version} is available for ROSA")
+    if version_str in available_versions:
+        logger.info(f"OCP versions {version_str} is available for ROSA")
         return True
     else:
         logger.info(
-            f"Given OCP versions {version} is not available for ROSA. "
+            f"Given OCP versions {version_str} is not available for ROSA. "
             f"Valid OCP versions supported on ROSA are : {available_versions}"
         )
         return False

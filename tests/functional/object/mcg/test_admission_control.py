@@ -14,7 +14,6 @@ from ocs_ci.framework.testlib import (
     ignore_leftovers,
     tier3,
     polarion_id,
-    bugzilla,
     runs_on_provider,
 )
 from ocs_ci.helpers.helpers import create_resource, create_unique_resource_name
@@ -31,7 +30,6 @@ logger = logging.getLogger(__name__)
 # Thus, it falsely recognizes leftovers that are deleted in a later stage
 @ignore_leftovers
 @runs_on_provider
-@bugzilla("1981732")
 class TestAdmissionWebhooks(MCGTest):
     @pytest.mark.parametrize(
         argnames="spec_dict,err_msg",

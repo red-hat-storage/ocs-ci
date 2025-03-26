@@ -233,7 +233,7 @@ def cli_create_namespacestore(
         ),
         constants.RGW_PLATFORM: lambda: (
             f"s3-compatible {nss_name} "
-            f"--endpoint {get_attr_chain(cld_mgr, 'rgw_client.endpoint')} "
+            f"--endpoint {get_attr_chain(cld_mgr, 'rgw_client.s3_internal_endpoint')} "
             f"--access-key {get_attr_chain(cld_mgr, 'rgw_client.access_key')} "
             f"--secret-key {get_attr_chain(cld_mgr, 'rgw_client.secret_key')} "
             f"--target-bucket {uls_name}"
@@ -243,6 +243,11 @@ def cli_create_namespacestore(
             f"--endpoint {get_attr_chain(cld_mgr, 'ibmcos_client.endpoint')} "
             f"--access-key {get_attr_chain(cld_mgr, 'ibmcos_client.access_key')} "
             f"--secret-key {get_attr_chain(cld_mgr, 'ibmcos_client.secret_key')} "
+            f"--target-bucket {uls_name}"
+        ),
+        constants.GCP_PLATFORM: lambda: (
+            f"google-cloud-storage {nss_name} "
+            f"--private-key-json-file {constants.GOOGLE_CREDS_JSON_PATH} "
             f"--target-bucket {uls_name}"
         ),
         constants.NAMESPACE_FILESYSTEM: lambda: (
@@ -277,7 +282,7 @@ def oc_create_namespacestore(
         nss_tup (tuple): A tuple containing the NSFS namespacestore details, in this order:
             pvc_name (str): Name of the PVC that will host the namespace filesystem
             pvc_size (int): Size in Gi of the PVC that will host the namespace filesystem
-            sub_path (str): The path to a sub directory inside the PVC FS which the NSS will use as the root directory
+            sub_path (str): The path to a subdirectory inside the PVC FS which the NSS will use as the root directory
             fs_backend (str): The file system backend type - CEPH_FS | GPFS | NFSv4. Defaults to None.
 
     """
@@ -322,7 +327,7 @@ def oc_create_namespacestore(
             "type": "s3-compatible",
             "s3Compatible": {
                 "targetBucket": uls_name,
-                "endpoint": get_attr_chain(cld_mgr, "rgw_client.endpoint"),
+                "endpoint": get_attr_chain(cld_mgr, "rgw_client.s3_internal_endpoint"),
                 "signatureVersion": "v2",
                 "secret": {
                     "name": get_attr_chain(cld_mgr, "rgw_client.secret.name"),

@@ -7,7 +7,6 @@ from uuid import uuid4
 
 from ocs_ci.framework import config
 from ocs_ci.framework.pytest_customization.marks import (
-    bugzilla,
     tier2,
     skipif_ocs_version,
     red_squad,
@@ -50,7 +49,6 @@ class TestObjectVersioning:
         return filename
 
     @tier2
-    @bugzilla("2111544")
     @skipif_ocs_version("<4.10")
     @pytest.mark.parametrize(
         argnames=["versioned"],
@@ -147,7 +145,6 @@ class TestObjectVersioning:
 
 @mcg
 @red_squad
-@bugzilla("2240714")
 @polarion_id("OCS-6177")
 class TestGetObjectByVersionID:
 

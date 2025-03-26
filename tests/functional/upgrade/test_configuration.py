@@ -8,6 +8,7 @@ from ocs_ci.framework.pytest_customization.marks import (
     post_upgrade,
     runs_on_provider,
     brown_squad,
+    skipif_mcg_only,
     tier1,
 )
 from ocs_ci.ocs import constants
@@ -50,6 +51,7 @@ def pre_upgrade_crush_map():
 @pre_upgrade
 @brown_squad
 @runs_on_provider
+@skipif_mcg_only
 def test_load_crush_map(pre_upgrade_crush_map):
     """
     Load CRUSH map.
@@ -59,6 +61,7 @@ def test_load_crush_map(pre_upgrade_crush_map):
 
 @post_upgrade
 @brown_squad
+@skipif_mcg_only
 @pytest.mark.polarion_id("OCS-1936")
 @runs_on_provider
 def test_crush_map_unchanged(pre_upgrade_crush_map):

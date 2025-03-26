@@ -217,6 +217,7 @@ class CephCluster(object):
         self._ceph_pods = pod.get_all_pods(self._namespace)
         # TODO: Workaround for BZ1748325:
         mons = pod.get_mon_pods(self.mon_selector, self.namespace)
+        self.mons = []
         for mon in mons:
             if mon.ocp.get_resource_status(mon.name) == constant.STATUS_RUNNING:
                 self.mons.append(mon)
@@ -305,10 +306,10 @@ class CephCluster(object):
         # TODO: add an attribute in CephHealthException, called "reason"
         # which should tell because of which exact cluster entity health
         # is not ok ?
+        self.scan_cluster()
+
         expected_mon_count = self.mon_count
         expected_mds_count = self.mds_count
-
-        self.scan_cluster()
 
         if config.ENV_DATA[
             "platform"
@@ -1282,7 +1283,7 @@ def count_cluster_osd():
     return osd_count
 
 
-@retry(PDBNotCreatedException, tries=9, backoff=2)
+@retry((PDBNotCreatedException, AssertionError), tries=9, backoff=2)
 def validate_pdb_creation():
     """
     Validate creation of PDBs for MON, MDS and OSD pods.

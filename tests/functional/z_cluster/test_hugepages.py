@@ -17,7 +17,6 @@ from ocs_ci.ocs.resources.pod import (
 )
 from ocs_ci.framework.pytest_customization.marks import brown_squad
 from ocs_ci.framework.testlib import (
-    bugzilla,
     skipif_external_mode,
     skipif_ocs_version,
     ignore_leftovers,
@@ -31,8 +30,6 @@ log = logging.getLogger(__name__)
 @brown_squad
 @tier2
 @skipif_ocs_version("<4.8")
-@bugzilla("1995271")
-@bugzilla("2001933")
 @pytest.mark.polarion_id("OCS-2754")
 @ignore_leftovers
 class TestHugePages(E2ETest):

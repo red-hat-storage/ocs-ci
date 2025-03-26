@@ -6,7 +6,6 @@ import pytest
 from ocs_ci.framework.pytest_customization.marks import (
     tier3,
     polarion_id,
-    bugzilla,
     red_squad,
     runs_on_provider,
     mcg,
@@ -99,7 +98,6 @@ def setup_browser(request):
 @mcg
 @red_squad
 @runs_on_provider
-@bugzilla("2183480")
 @polarion_id("OCS-5153")
 def test_verify_aws_regions_list(setup_browser):
     """

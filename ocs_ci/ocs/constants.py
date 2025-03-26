@@ -249,6 +249,7 @@ EXTERNAL_CLUSTER_SCRIPT_CONFIG = "rook-ceph-external-cluster-script-config"
 ENCRYPTIONKEYROTATIONCRONJOB = "encryptionkeyrotationcronjobs.csiaddons.openshift.io"
 ENCRYPTIONKEYROTATIONJOB = "encryptionkeyrotationjobs.csiaddons.openshift.io"
 DEFAULT_CEPH_DEVICECLASS = "defaultCephDeviceClass"
+CRD_KIND = "CustomResourceDefinition"
 
 # Provisioners
 AWS_EFS_PROVISIONER = "openshift.org/aws-efs"
@@ -506,6 +507,35 @@ DEFAULT_EXTERNAL_MODE_VOLUMESNAPSHOTCLASS_RBD = (
 DEFAULT_VOLUMESNAPSHOTCLASS_CEPHFS_MS_PC = f"{DEFAULT_CLUSTERNAME}-cephfs"
 DEFAULT_VOLUMESNAPSHOTCLASS_RBD_MS_PC = f"{DEFAULT_CLUSTERNAME}-ceph-rbd"
 
+# hyperconverged defaults
+HYPERCONVERGED_NAMESPACE = "kubevirt-hyperconverged"
+# MCE_NAMESPACE_YAML = os.path.join(TEMPLATE_DEPLOYMENT_DIR_MCE, "mce_namespace.yaml")
+TEMPLATE_DEPLOYMENT_DIR_HYPERCONVERGED = os.path.join(
+    TEMPLATE_DIR, "hyperconverged-deployment"
+)
+HYPERCONVERGED_NAMESPACE_YAML = os.path.join(
+    TEMPLATE_DEPLOYMENT_DIR_HYPERCONVERGED, "hyperconverged_namespace.yaml"
+)
+HYPERCONVERGED_OPERATOR_GROUP_YAML = os.path.join(
+    TEMPLATE_DEPLOYMENT_DIR_HYPERCONVERGED, "hyperconverged_operator_group.yaml"
+)
+HYPERCONVERGED_OPERATOR_GROUP_NAME = "hyperconverged-operator-group"
+HYPERCONVERGED_CATALOGSOURCE = "hyperconverged-catalogsource"
+HYPERVERGED_CATALOGSOURCE_YAML = os.path.join(
+    TEMPLATE_DEPLOYMENT_DIR_HYPERCONVERGED, "hyperconverged-catsrc.yaml"
+)
+HYPERCONVERGED_SUBSCRIPTION = "community-kubevirt-hyperconverged"
+HYPERCONVERGED_SUBSCRIPTION_YAML = os.path.join(
+    TEMPLATE_DEPLOYMENT_DIR_HYPERCONVERGED, "hyperconverged_subscription.yaml"
+)
+HYPERCONVERGED_KIND = "HyperConverged"
+HYPERCONVERGED_NAME = "kubevirt-hyperconverged"
+HYPERCONVERGED_YAML = os.path.join(
+    TEMPLATE_DEPLOYMENT_DIR_HYPERCONVERGED, "hyperconverged.yaml"
+)
+HYPERCONVERGED_CRD = "hyperconvergeds.hco.kubevirt.io"
+
+
 # CNV deployment constants
 CNV_NAMESPACE = "openshift-cnv"
 CNV_QUAY_NIGHTLY_IMAGE = "quay.io/openshift-cnv/nightly-catalog"
@@ -586,7 +616,7 @@ CSI_RBDPLUGIN_PROVISIONER_LABEL = "app=csi-rbdplugin-provisioner"
 CSI_CEPHFSPLUGIN_LABEL = "app=csi-cephfsplugin"
 CSI_RBDPLUGIN_LABEL = "app=csi-rbdplugin"
 OCS_OPERATOR_LABEL = "name=ocs-operator"
-ODF_OPERATOR_CONTROL_MANAGER_LABEL = "control-plane=controller-manager"
+ODF_OPERATOR_CONTROL_MANAGER_LABEL = "app.kubernetes.io/name=odf-operator"
 ROOK_CEPH_DRAIN_CANARY = "rook-ceph-drain-canary"
 LOCAL_STORAGE_OPERATOR_LABEL = "name=local-storage-operator"
 UX_BACKEND_APP_LABEL = "app=ux-backend-server"
@@ -597,6 +627,7 @@ NOOBAA_DB_LABEL_46_AND_UNDER = "noobaa-db=noobaa"
 NOOBAA_DB_LABEL_47_AND_ABOVE = "noobaa-db=postgres"
 NOOBAA_ENDPOINT_POD_LABEL = "noobaa-s3=noobaa"
 NOOBAA_DEFAULT_BACKINGSTORE_LABEL = "pool=noobaa-default-backing-store"
+NOOBAA_CNPG_POD_LABEL = "app.kubernetes.io/name=cloudnative-pg"
 ROOK_CEPH_DETECT_VERSION_LABEL = "app=rook-ceph-detect-version"
 CEPH_FILE_CONTROLLER_DETECT_VERSION_LABEL = "app=ceph-file-controller-detect-version"
 CONTROLLER_DETECT_VERSION_NAME = "controller-detect-version"
@@ -880,7 +911,12 @@ NFS_APP_POD_YAML = os.path.join(TEMPLATE_APP_POD_DIR, "nfs_test_app.yaml")
 
 FEDORA_DC_YAML = os.path.join(TEMPLATE_APP_POD_DIR, "fedora_dc.yaml")
 
+FEDORA_DEPLOY_YAML = os.path.join(TEMPLATE_APP_POD_DIR, "fedora_deployment.yaml")
+
 PERF_DC_YAML = os.path.join(TEMPLATE_APP_POD_DIR, "performance_dc.yaml")
+
+PERF_DEPLOY_YAML = os.path.join(TEMPLATE_APP_POD_DIR, "performance_deployment.yaml")
+
 
 FEDORA_SERVICE_CA_YAML = os.path.join(TEMPLATE_APP_POD_DIR, "fedoraServiceCA.yaml")
 
@@ -1568,6 +1604,7 @@ BAREMETAL_PLATFORMS = [
     HCI_BAREMETAL,
     IBM_POWER_PLATFORM,
 ]
+AWS_STS_PLATFORMS = [AWS_PLATFORM, ROSA_PLATFORM, ROSA_HCP_PLATFORM]
 
 IPI_DEPL_TYPE = "ipi"
 UPI_DEPL_TYPE = "upi"
@@ -2262,6 +2299,10 @@ DISCON_CL_REQUIRED_PACKAGES_PER_ODF_VERSION[
     "odf-dependencies",
 ]
 
+DISCON_CL_REQUIRED_PACKAGES_PER_ODF_VERSION["4.19"] = (
+    DISCON_CL_REQUIRED_PACKAGES_PER_ODF_VERSION["4.18"]
+)
+
 # PSI-openstack constants
 NOVA_CLNT_VERSION = "2.0"
 CINDER_CLNT_VERSION = "3.0"
@@ -2778,10 +2819,12 @@ MCE_SUBSCRIPTION_YAML = os.path.join(
     TEMPLATE_DEPLOYMENT_DIR_MCE, "mce_subscription.yaml"
 )
 MCE_OPERATOR = "multicluster-engine"
+MCE_OPERATOR_OPERATOR_NAME_WITH_NS = f"{MCE_OPERATOR}.{MCE_NAMESPACE}"
 MCE_RESOURCE_YAML = os.path.join(TEMPLATE_DEPLOYMENT_DIR_MCE, "mce_resource.yaml")
 MCE_OPERATOR_GROUP_YAML = os.path.join(
     TEMPLATE_DEPLOYMENT_DIR_MCE, "mce_operatorgroup.yaml"
 )
+MULTICLUSTER_ENGINE_CRD = "multiclusterengines.multicluster.openshift.io"
 HYPERSHIFT_NAMESPACE = "hypershift"
 SUPPORTED_VERSIONS_CONFIGMAP = "supported-versions"
 IMAGE_OVERRIDE_JSON = os.path.join(TEMPLATE_DEPLOYMENT_DIR_MCE, "image-override.json")

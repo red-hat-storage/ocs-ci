@@ -687,6 +687,14 @@ class HyperConvergedHealthException(Exception):
     pass
 
 
+class HyperConvergedNotDeployedException(Exception):
+    pass
+
+
+class MultiClusterEngineNotDeployedException(Exception):
+    pass
+
+
 class OpenShiftAPIResponseException(Exception):
     def __init__(self, response):
         self.response = response

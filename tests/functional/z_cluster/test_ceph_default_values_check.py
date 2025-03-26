@@ -3,7 +3,6 @@ import logging
 import pytest
 
 from ocs_ci.framework.pytest_customization.marks import (
-    bugzilla,
     skipif_ocs_version,
     brown_squad,
 )
@@ -34,7 +33,6 @@ log = logging.getLogger(__name__)
 @tier1
 @skipif_external_mode
 @pytest.mark.polarion_id("OCS-2231")
-@bugzilla("1908414")
 class TestCephDefaultValuesCheck(ManageTest):
     def test_ceph_default_values_check(self):
         """
@@ -186,7 +184,6 @@ class TestCephDefaultValuesCheck(ManageTest):
         )
 
     @runs_on_provider
-    @bugzilla("2012930")
     @post_ocs_upgrade
     @pytest.mark.polarion_id("OCS-2739")
     @skipif_managed_service

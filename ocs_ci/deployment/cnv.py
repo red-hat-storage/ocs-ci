@@ -32,6 +32,7 @@ from ocs_ci.ocs import exceptions
 from ocs_ci.ocs.resources.catalog_source import CatalogSource
 from ocs_ci.ocs.resources.install_plan import wait_for_install_plan_and_approve
 from ocs_ci.ocs.resources.csv import CSV, get_csvs_start_with_prefix
+from ocs_ci.utility.retry import retry
 from ocs_ci.utility.utils import TimeoutSampler
 from ocs_ci.ocs import ocp
 from ocs_ci.ocs.resources.pod import wait_for_pods_to_be_running
@@ -137,13 +138,15 @@ class CNVInstaller(object):
             cnv_subscription_yaml_data, cnv_subscription_manifest.name
         )
         logger.info("Creating subscription for CNV operator")
-        run_cmd(f"oc create -f {cnv_subscription_manifest.name}")
+        retry(exceptions.CommandFailed, tries=25, delay=60, backoff=1)(run_cmd)(
+            f"oc apply -f {cnv_subscription_manifest.name}"
+        )
         self.wait_for_the_resource_to_discover(
             kind=constants.SUBSCRIPTION_WITH_ACM,
             namespace=self.namespace,
             resource_name=constants.KUBEVIRT_HYPERCONVERGED,
         )
-        wait_for_install_plan_and_approve(self.namespace)
+        wait_for_install_plan_and_approve(self.namespace, timeout=1500)
         cnv_package_manifest = PackageManifest(
             resource_name=constants.KUBEVIRT_HYPERCONVERGED,
             subscription_plan_approval="Manual",
@@ -151,7 +154,7 @@ class CNVInstaller(object):
         )
         # Wait for package manifest is ready
         cnv_package_manifest.wait_for_resource(
-            resource_name=constants.KUBEVIRT_HYPERCONVERGED, timeout=300
+            resource_name=constants.KUBEVIRT_HYPERCONVERGED, timeout=600
         )
         # csv sometimes takes more time to discover
         for csv in TimeoutSampler(
@@ -165,7 +168,7 @@ class CNVInstaller(object):
                 break
         csv_name = csv[0]["metadata"]["name"]
         csv_obj = CSV(resource_name=csv_name, namespace=self.namespace)
-        csv_obj.wait_for_phase(phase="Succeeded", timeout=720)
+        csv_obj.wait_for_phase(phase="Succeeded", timeout=900)
 
     def wait_for_the_resource_to_discover(self, kind, namespace, resource_name):
         """
@@ -551,7 +554,9 @@ class CNVInstaller(object):
         )
         try:
             # Download the archive
-            response = requests.get(virtctl_download_url, verify=False)
+            response = retry(requests.exceptions.RequestException, tries=10, delay=30)(
+                requests.get
+            )(virtctl_download_url, verify=False)
             response.raise_for_status()
         except requests.exceptions.RequestException as e:
             logger.error(

@@ -55,7 +55,6 @@ logger = logging.getLogger(__name__)
 @ignore_leftovers
 @pytest.mark.order("last")
 @pytest.mark.polarion_id("OCS-3911")
-@pytest.mark.bugzilla("1973256")
 @skipif_ocs_version("<4.6")
 @skipif_ocp_version("<4.10")
 @skipif_openshift_dedicated
@@ -69,7 +68,7 @@ class TestMonitorRecovery(E2ETest):
     @pytest.fixture(autouse=True)
     def mon_recovery_setup(
         self,
-        dc_pod_factory,
+        deployment_pod_factory,
         mcg_obj,
         bucket_factory,
     ):
@@ -86,12 +85,12 @@ class TestMonitorRecovery(E2ETest):
         # Create project, pvc, dc pods
         self.dc_pods = []
         self.dc_pods.append(
-            dc_pod_factory(
+            deployment_pod_factory(
                 interface=constants.CEPHBLOCKPOOL,
             )
         )
         self.dc_pods.append(
-            dc_pod_factory(
+            deployment_pod_factory(
                 interface=constants.CEPHFILESYSTEM,
                 access_mode=constants.ACCESS_MODE_RWX,
             )
@@ -114,7 +113,7 @@ class TestMonitorRecovery(E2ETest):
 
     def test_monitor_recovery(
         self,
-        dc_pod_factory,
+        deployment_pod_factory,
         mcg_obj,
         bucket_factory,
     ):
@@ -211,10 +210,10 @@ class TestMonitorRecovery(E2ETest):
 
         # New pvc, dc pods, obcs
         new_dc_pods = [
-            dc_pod_factory(
+            deployment_pod_factory(
                 interface=constants.CEPHBLOCKPOOL,
             ),
-            dc_pod_factory(
+            deployment_pod_factory(
                 interface=constants.CEPHFILESYSTEM,
             ),
         ]

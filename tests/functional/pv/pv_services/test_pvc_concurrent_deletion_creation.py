@@ -10,7 +10,7 @@ from ocs_ci.ocs import constants
 from ocs_ci.ocs.node import get_node_objs
 from ocs_ci.ocs.resources.pvc import delete_pvcs
 from ocs_ci.framework.pytest_customization.marks import green_squad, provider_mode
-from ocs_ci.framework.testlib import tier2, ManageTest, bugzilla
+from ocs_ci.framework.testlib import tier2, ManageTest
 from ocs_ci.helpers.helpers import (
     wait_for_resource_state,
     verify_volume_deleted_in_backend,
@@ -22,7 +22,6 @@ log = logging.getLogger(__name__)
 
 @provider_mode
 @green_squad
-@bugzilla("1734259")
 @tier2
 @pytest.mark.parametrize(
     argnames="interface",

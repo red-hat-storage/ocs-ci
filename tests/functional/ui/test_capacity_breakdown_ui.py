@@ -8,7 +8,6 @@ from ocs_ci.framework.testlib import (
     ManageTest,
     tier2,
     skipif_ui_not_support,
-    bugzilla,
     skipif_ocs_version,
     ui,
 )
@@ -68,7 +67,6 @@ class TestCapacityBreakdownUI(ManageTest):
     @ui
     @runs_on_provider
     @tier2
-    @bugzilla("1832297")
     @skipif_ocs_version("!=4.8")
     @skipif_ui_not_support("validation")
     @green_squad
@@ -130,7 +128,6 @@ class TestCapacityBreakdownUI(ManageTest):
     @ui
     @black_squad
     @tier3
-    @bugzilla("2225223")
     @polarion_id("OCS-5122")
     def test_requested_capacity_breakdown(
         self, setup_ui_class, teardown_project_factory

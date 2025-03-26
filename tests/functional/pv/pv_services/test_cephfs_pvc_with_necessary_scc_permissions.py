@@ -6,7 +6,6 @@ from ocs_ci.framework.pytest_customization.marks import green_squad
 from ocs_ci.framework.testlib import (
     ManageTest,
     tier1,
-    bugzilla,
     polarion_id,
 )
 from ocs_ci.helpers.helpers import wait_for_resource_state
@@ -29,7 +28,6 @@ def validate_permissions(pod_obj):
 @green_squad
 @tier1
 @polarion_id("OCS-4931")
-@bugzilla("2182943")
 class TestToVerifyfsgroupSetOnSubpathVolumeForCephfsPVC(ManageTest):
     """
     Test to verify fsgroup set on subpath volume for cephfs PVC
