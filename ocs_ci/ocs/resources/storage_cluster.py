@@ -17,6 +17,7 @@ from ocs_ci.deployment.helpers.external_cluster_helpers import (
     ExternalCluster,
     get_external_cluster_client,
 )
+from ocs_ci.deployment.helpers.odf_deployment_helpers import is_storage_system_needed
 from ocs_ci.helpers.managed_services import (
     verify_provider_topology,
     get_ocs_osd_deployer_version,
@@ -742,7 +743,7 @@ def ocs_install_verification(
     # Let's wait for storage system after ceph health is OK to prevent fails on
     # Progressing': 'True' state.
 
-    if not (fusion_aas or client_cluster):
+    if not (fusion_aas or client_cluster) and is_storage_system_needed():
         verify_storage_system()
 
     if config.ENV_DATA.get("fips"):
@@ -902,7 +903,8 @@ def mcg_only_install_verification(ocs_registry_image=None):
     """
     log.info("Verifying MCG Only installation")
     basic_verification(ocs_registry_image)
-    verify_storage_system()
+    if is_storage_system_needed():
+        verify_storage_system()
     verify_backing_store()
     verify_mcg_only_pods()
 
