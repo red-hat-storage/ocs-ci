@@ -279,6 +279,23 @@ def main():
 
 
 def if_version(expressions):
+    """
+    Decorator to skip the function if the OCS version does not match the required version
+
+    ! Important note: This decorator is silently skipping the function
+    if the OCS version does not match the required version. Only warning message will be added to the log.
+    If the test should fail when wrapped function was skipped, use this decorator in combination with pytest 'assert'.
+
+    Args:
+        expressions (str OR list): condition for which we need to check, eg:
+            A single expression string '>=4.2' OR
+            A list of expressions like ['<4.3', '>4.2'], ['<=4.3', '>=4.2']
+
+    Returns:
+         result of executing the function if the OCS version matches the required version
+
+    """
+
     def decorator(func):
         @wraps(func)
         def wrapper(*args, **kwargs):
