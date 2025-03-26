@@ -44,6 +44,7 @@ from ocs_ci.helpers.helpers import (
     run_cmd_verify_cli_output,
     find_cephblockpoolradosnamespace,
     find_cephfilesystemsubvolumegroup,
+    create_unique_resource_name,
 )
 
 logger = logging.getLogger(__name__)
@@ -1402,6 +1403,9 @@ def restore_backup():
     restore_index = config.cur_index
     config.switch_ctx(get_passive_acm_index())
     restore_schedule = templating.load_yaml(constants.DR_RESTORE_YAML)
+    restore_schedule["metadata"]["name"] = create_unique_resource_name(
+        resource_description="acm", resource_type="restore"
+    )
     restore_schedule_yaml = tempfile.NamedTemporaryFile(
         mode="w+", prefix="restore", delete=False
     )

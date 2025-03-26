@@ -259,7 +259,7 @@ class TestSiteFailureRecoveryAndfailover:
 
         # Verify application are deleted from old cluster
         for wl in rdr_workload:
-            wait_for_all_resources_deletion(wl.workload_namespace)
+            wait_for_all_resources_deletion(wl.workload_namespace, timeout=1800)
 
         for wl in rdr_workload:
             if wl.pvc_interface == constants.CEPHFILESYSTEM:
