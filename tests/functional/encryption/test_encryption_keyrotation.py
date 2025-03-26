@@ -425,6 +425,7 @@ class TestOSDKeyrotationWithKMS:
         self.keyrotation.disable_keyrotation()
 
 
+@green_squad
 @encryption_at_rest_required
 @vault_kms_deployment_required
 @skipif_external_mode
@@ -562,7 +563,7 @@ class TestNoobaaKeyrotationWithKMS:
         noobaa_keyrotation.set_keyrotation_schedule("@weekly")
 
     @pytest.mark.polarion_id("OCS-5963")
-    @tier1
+    @tier2
     def test_bucket_checksum_with_noobaa_keyrotation(
         self, mcg_obj, awscli_pod, bucket_factory, test_directory_setup
     ):
