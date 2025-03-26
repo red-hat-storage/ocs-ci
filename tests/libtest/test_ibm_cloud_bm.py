@@ -12,23 +12,27 @@ from ocs_ci.framework.pytest_customization.marks import (
 logger = logging.getLogger(__name__)
 
 
-@pytest.fixture(autouse=True)
-def teardown(request):
-    def finalizer():
-        logger.info("Running restart_nodes_by_stop_and_start_teardown")
-        ibmcloud = IBMCloudBMNodes()
-        ibmcloud.restart_nodes_by_stop_and_start_teardown()
-
-    request.addfinalizer(finalizer)
-
-
 @libtest
 @provider_client_platform_required
-def test_restart_nodes_by_stop_and_start():
+class TestIbmCloudBmNodes:
     """
-    Test all nodes stop and start in  IBM Cloud Bare Metal platform
+    Test node operations in IBM Cloud Bare Metal platform
     """
-    ibmcloud = IBMCloudBMNodes()
-    nodes = get_all_nodes()
-    node_objs = get_node_objs(nodes)
-    ibmcloud.restart_nodes_by_stop_and_start(node_objs)
+
+    @pytest.fixture(autouse=True)
+    def teardown(self, request):
+        def finalizer():
+            logger.info("Running restart_nodes_by_stop_and_start_teardown")
+            ibmcloud = IBMCloudBMNodes()
+            ibmcloud.restart_nodes_by_stop_and_start_teardown()
+
+        request.addfinalizer(finalizer)
+
+    def test_restart_nodes_by_stop_and_start(self):
+        """
+        Test all nodes stop and start in IBM Cloud Bare Metal platform
+        """
+        ibmcloud = IBMCloudBMNodes()
+        nodes = get_all_nodes()
+        node_objs = get_node_objs(nodes)
+        ibmcloud.restart_nodes_by_stop_and_start(node_objs)
