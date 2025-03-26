@@ -261,6 +261,11 @@ class NodesBase(object):
             "wait for nodes to stop or terminate functionality is not implemented"
         )
 
+    def disable_nodes_network_temporarily(self, nodes, duration=20):
+        raise NotImplementedError(
+            "disable enable node network temporarily functionality is not implemented"
+        )
+
 
 class VMWareNodes(NodesBase):
     """
@@ -597,6 +602,33 @@ class VMWareNodes(NodesBase):
                 datastore_name=self.datastore,
                 datacenter_name=self.datacenter,
             )
+
+    def disable_nodes_network_temporarily(self, nodes, duration=20):
+        """
+        Temporarily disables and re-enables the network interface of a given node.
+
+        Args:
+            node (OCS): The OCS object representing the node.
+            duration (int): Time in seconds to keep the interface disabled. Default is 10.
+        """
+        vms = self.get_vms(nodes)
+        for vm in vms:
+            ip = vm.summary.guest.ipAddress
+
+            if not ip:
+                logger.warning(f"Could not retrieve IP address for node {vm.name}")
+                return
+
+            logger.info(f"Disabling network interface for node: {vm.name} (IP: {ip})")
+            self.vsphere.change_vm_network_state(ip, self.datacenter, connect=False)
+
+            logger.debug(
+                f"Sleeping for {duration} seconds with network disabled on {vm.name}"
+            )
+            time.sleep(duration)
+
+            logger.info(f"Enabling network interface for node: {vm.name} (IP: {ip})")
+            self.vsphere.change_vm_network_state(ip, self.datacenter, connect=True)
 
 
 class AWSNodes(NodesBase):
