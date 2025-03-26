@@ -41,3 +41,20 @@ def get_required_csvs():
         operators_4_18_additions = [defaults.ODF_DEPENDENCIES]
         ocs_operator_names.extend(operators_4_18_additions)
     return ocs_operator_names
+
+
+def is_storage_system_needed():
+    """
+    Checks whether creation of storage system is needed or not
+
+    Returns:
+        bool: True if storage system is need, otherwise False
+
+    """
+    # Build 4.19.0-59 is stable build where we can create storage system ( normal flow )
+    version_for_storage_system = "4.19.0-59"
+    odf_version = version.get_semantic_running_odf_version()
+    semantic_version_for_storage_system = version.get_semantic_version(
+        version_for_storage_system
+    )
+    return odf_version <= semantic_version_for_storage_system

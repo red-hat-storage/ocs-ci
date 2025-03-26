@@ -28,7 +28,10 @@ from ocs_ci.deployment.helpers.mcg_helpers import (
     mcg_only_post_deployment_checks,
 )
 from ocs_ci.ocs.resources.storage_cluster import verify_storage_cluster_extended
-from ocs_ci.deployment.helpers.odf_deployment_helpers import get_required_csvs
+from ocs_ci.deployment.helpers.odf_deployment_helpers import (
+    get_required_csvs,
+    is_storage_system_needed,
+)
 from ocs_ci.deployment.acm import Submariner
 from ocs_ci.deployment.ingress_node_firewall import restrict_ssh_access_to_nodes
 from ocs_ci.deployment.helpers.lso_helpers import (
@@ -1370,19 +1373,36 @@ class Deployment(object):
                     replace_to=config.DEPLOYMENT["csv_change_to"],
                 )
 
-        # patch the custom odf-operator image
-        odf_csv = get_csv_name_start_with_prefix(
-            csv_prefix=defaults.ODF_OPERATOR_NAME,
-            namespace=config.ENV_DATA["cluster_namespace"],
-        )
-        patch_cmd = (
-            f"oc patch csv -n {config.ENV_DATA['cluster_namespace']} "
-            f'--type json --patch \'[{{"op": "replace", "path": '
-            f'"/spec/install/spec/deployments/0/spec/template/spec/containers/0/image", '
-            f'"value": "quay.io/nigoyal/odf-operator:vijay" }}]\' '
-            f"{odf_csv}"
-        )
-        exec_cmd(patch_cmd)
+        if is_storage_system_needed():
+            logger.info("Creating StorageSystem")
+            # change namespace of storage system if needed
+            storage_system_data = templating.load_yaml(
+                constants.STORAGE_SYSTEM_ODF_YAML
+            )
+            storage_system_data["metadata"]["namespace"] = self.namespace
+            storage_system_data["spec"]["namespace"] = self.namespace
+
+            # create storage system
+            if ocs_version >= version.VERSION_4_9:
+                templating.dump_data_to_temp_yaml(
+                    storage_system_data, constants.STORAGE_SYSTEM_ODF_YAML
+                )
+                log_step("Apply StorageSystem CR")
+                exec_cmd(f"oc apply -f {constants.STORAGE_SYSTEM_ODF_YAML}")
+        else:
+            # patch the custom odf-operator image
+            odf_csv = get_csv_name_start_with_prefix(
+                csv_prefix=defaults.ODF_OPERATOR_NAME,
+                namespace=config.ENV_DATA["cluster_namespace"],
+            )
+            patch_cmd = (
+                f"oc patch csv -n {config.ENV_DATA['cluster_namespace']} "
+                f'--type json --patch \'[{{"op": "replace", "path": '
+                f'"/spec/install/spec/deployments/0/spec/template/spec/containers/0/image", '
+                f'"value": "quay.io/nigoyal/odf-operator:vijay" }}]\' '
+                f"{odf_csv}"
+            )
+            exec_cmd(patch_cmd)
 
         ocp_version = version.get_semantic_ocp_version_from_config()
         if managed_ibmcloud:
