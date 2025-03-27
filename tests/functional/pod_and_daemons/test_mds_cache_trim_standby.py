@@ -44,6 +44,7 @@ class TestMdsCacheTrimStandby(E2ETest):
         Verifies whether the MDS cache is trimmed or not in standby-replay mode.
 
         Steps:
+
         1. Run metadata IO on at least 5 pods, so that the memory consumption will be rapid and high.
         2. When mds memory utilisation reached 75% [it is similar to 150% of cache utilisation], there is a possibility
         to trigger MDS cache oversized warning.
