@@ -3,11 +3,14 @@ A module for all StorageConsumer functionalities and abstractions.
 """
 
 import logging
+import tempfile
 
 from ocs_ci.framework import config
 from ocs_ci.ocs import constants, ocp
 from ocs_ci.ocs.resources.ocs import OCS
 from ocs_ci.ocs.version import if_version
+from ocs_ci.utility import templating
+from ocs_ci.utility.templating import dump_data_to_temp_yaml
 from ocs_ci.utility.utils import exec_cmd
 
 log = logging.getLogger(__name__)
@@ -21,16 +24,16 @@ class StorageConsumer:
     def __init__(self, consumer_name, consumer_context=None):
         """
         Starting from ODF 4.19 (Converged) this CR has optional Spec fields:
-        StorageQuotaInGiB          int
-        StorageClasses             []
-        VolumeSnapshotClasses      []
-        VolumeGroupSnapshotClasses []
+        StorageQuotaInGiB               int
+        ResourceNameMappingConfigMap    string
+        StorageClasses                  []
+        VolumeSnapshotClasses           []
+        VolumeGroupSnapshotClasses      []
 
         Starting from ODF 4.19 (Converged) this CR has optional Status fields:
-        Client                ClientStatus
-        RadosNamespace        RadosNamespaceStatus
-        CephFsSubVolumeGroup  SubVolumeGroupStatus
-        CephCsiClientProfiles [] ClientProfileStatus
+        Client                          ClientStatus
+        OnboardingTicketSecret          string
+        LastHeartbeat                   string
 
         Args:
             consumer_name (string): name of the StorageConsumer resource
@@ -134,6 +137,19 @@ class StorageConsumer:
             ][0]
         return cronjob
 
+    def get_last_heartbeat(self):
+        """
+        Get the last heartbeat cronjob.
+
+        Returns:
+            dict:last heartbeat timestamp
+
+        """
+        with config.RunWithConfigContext(self.consumer_context):
+            return (
+                self.ocp.get(resource_name=self.name).get("status").get("lastHeartbeat")
+            )
+
     @if_version(">4.18")
     def get_client_status(self):
         """
@@ -145,54 +161,6 @@ class StorageConsumer:
         """
         with config.RunWithConfigContext(self.consumer_context):
             return self.ocp.get(resource_name=self.name).get("status").get("client")
-
-    @if_version(">4.18")
-    def get_rados_namespace_status(self):
-        """
-        Get rados namespace status from storageconsumer resource and apply patch.
-
-        Returns:
-            dict: rados namespace status
-
-        """
-        with config.RunWithConfigContext(self.consumer_context):
-            return (
-                self.ocp.get(resource_name=self.name)
-                .get("status")
-                .get("radosNamespace")
-            )
-
-    @if_version(">4.18")
-    def get_cephfs_subvolume_group_status(self):
-        """
-        Get cephfs subvolume group status from storageconsumer resource and apply patch.
-
-        Returns:
-            dict: cephfs subvolume group status
-
-        """
-        with config.RunWithConfigContext(self.consumer_context):
-            return (
-                self.ocp.get(resource_name=self.name)
-                .get("status")
-                .get("cephFsSubVolumeGroup")
-            )
-
-    @if_version(">4.18")
-    def get_ceph_csi_client_profiles(self):
-        """
-        Get ceph csi client profiles from storageconsumer resource and apply patch.
-
-        Returns:
-            dict: ceph csi client profiles
-
-        """
-        with config.RunWithConfigContext(self.consumer_context):
-            return (
-                self.ocp.get(resource_name=self.name)
-                .get("status")
-                .get("cephCsiClientProfiles")
-            )
 
     def get_storage_quota_in_gib(self):
         """
@@ -207,6 +175,41 @@ class StorageConsumer:
                 self.ocp.get(resource_name=self.name)
                 .get("spec")
                 .get("storageQuotaInGiB")
+            )
+
+    @if_version(">4.18")
+    def get_resource_name_mapping_config_map_from_spec(self):
+        """
+        Get ResourceNameMappingConfigMap from storageconsumer resource.
+        It is optional, reflect the configMap we used, user provided or generated
+        This is a name of the configmap, resource that stores ceph rns, svg names and more
+
+        Returns:
+            string: ResourceNameMappingConfigMap
+
+        """
+        with config.RunWithConfigContext(self.consumer_context):
+            return (
+                self.ocp.get(resource_name=self.name)
+                .get("spec")
+                .get("resourceNameMappingConfigMap")
+            )
+
+    @if_version(">4.18")
+    def get_resource_name_mapping_config_map_from_status(self):
+        """
+        Get ResourceNameMappingConfigMap from storageconsumer resource from Status.
+        This is a name of the configmap, resource that stores ceph rns, svg names and more
+
+        Returns:
+            string: ResourceNameMappingConfigMap
+
+        """
+        with config.RunWithConfigContext(self.consumer_context):
+            return (
+                self.ocp.get(resource_name=self.name)
+                .get("status")
+                .get("resourceNameMappingConfigMap")
             )
 
     @if_version(">4.18")
@@ -236,7 +239,7 @@ class StorageConsumer:
             self.ocp.patch(resource_name=self.name, params=patch_param)
 
     @if_version(">4.18")
-    def add_custom_storage_class(self, storage_class):
+    def set_storage_classes(self, storage_class):
         """
         Add storage class to storageconsumer resource and apply patch.
 
@@ -269,9 +272,9 @@ class StorageConsumer:
                 self.ocp.patch(resource_name=self.name, params=patch_param)
 
     @if_version(">4.18")
-    def add_custom_volume_snapshot_class(self, snapshot_class):
+    def set_custom_volume_snapshot_class(self, snapshot_class):
         """
-        Add volume snapshot class to storageconsumer resource and apply patch.
+        Set volume snapshot class to storageconsumer resource and apply patch.
 
         Args:
             snapshot_class (string): volume snapshot class
@@ -304,9 +307,9 @@ class StorageConsumer:
                 self.ocp.patch(resource_name=self.name, params=patch_param)
 
     @if_version(">4.18")
-    def add_custom_volume_group_snapshot_class(self, group_snapshot_class):
+    def set_custom_volume_group_snapshot_class(self, group_snapshot_class):
         """
-        Add volume group snapshot class to storageconsumer resource  and apply patch.
+        Set volume group snapshot class to storageconsumer resource  and apply patch.
 
         Args:
             group_snapshot_class (string): volume group snapshot class
@@ -335,3 +338,74 @@ class StorageConsumer:
                 current_group_snapshot_classes.remove(group_snapshot_class)
                 patch_param = f'{{"spec": {{"volumeGroupSnapshotClasses": {current_group_snapshot_classes}}}}}'
                 self.ocp.patch(resource_name=self.name, params=patch_param)
+
+    @if_version(">4.18")
+    def get_onboarding_ticket_secret(self):
+        """
+        Get OnboardingTicketSecret from storageconsumer resource status. Optional field.
+        Reference to name of an onboarding secret cr.
+
+        Returns:
+            string: OnboardingTicketSecret
+
+        """
+        with config.RunWithConfigContext(self.consumer_context):
+            return (
+                self.ocp.get(resource_name=self.name)
+                .get("status")
+                .get("onboardingTicketSecret")
+            )
+
+    @if_version(">4.18")
+    def create_storage_consumer(
+        self,
+        storage_classes,
+        volume_snapshot_classes,
+        volume_group_snapshot_classes,
+        storage_quota_in_gib,
+        resource_name_mapping_config_map_name,
+    ):
+        """
+        Create a storage consumer
+
+        Args:
+            storage_classes (list): List of storage classes
+            volume_snapshot_classes (list): List of volume snapshot classes
+            volume_group_snapshot_classes (list): List of volume group snapshot classes
+            storage_quota_in_gib (int): Storage quota in GiB
+            resource_name_mapping_config_map_name (str): Resource name mapping config map
+
+        Returns:
+            dict: Dictionary with consumer data
+
+        """
+        with config.RunWithConfigContext(self.consumer_context):
+            storage_consumer_data = templating.load_yaml(
+                constants.STORAGE_CONSUMER_YAML
+            )
+            storage_consumer_data["metadata"]["name"] = self.name
+            if storage_classes:
+                storage_consumer_data["spec"]["storageClasses"] = storage_classes
+            if volume_snapshot_classes:
+                storage_consumer_data["spec"][
+                    "volumeSnapshotClasses"
+                ] = volume_snapshot_classes
+            if volume_group_snapshot_classes:
+                storage_consumer_data["spec"][
+                    "volumeGroupSnapshotClasses"
+                ] = volume_group_snapshot_classes
+            if storage_quota_in_gib:
+                storage_consumer_data["spec"][
+                    "storageQuotaInGiB"
+                ] = storage_quota_in_gib
+            if resource_name_mapping_config_map_name:
+                storage_consumer_data["spec"]["resourceNameMappingConfigMap"][
+                    "name"
+                ] = resource_name_mapping_config_map_name
+
+            storage_consumer_file = tempfile.NamedTemporaryFile(
+                mode="w+", prefix="storage_consumer", delete=False
+            )
+            dump_data_to_temp_yaml(storage_consumer_data, storage_consumer_file.name)
+
+            return self.ocp.create(yaml_file=storage_consumer_file.name)
