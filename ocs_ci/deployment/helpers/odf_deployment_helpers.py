@@ -6,6 +6,7 @@ ODF deployment.
 import logging
 
 from ocs_ci.ocs import defaults
+from ocs_ci.ocs.resources.pod import get_ceph_tools_pod
 from ocs_ci.utility import version
 
 logger = logging.getLogger(__name__)
@@ -41,3 +42,18 @@ def get_required_csvs():
         operators_4_18_additions = [defaults.ODF_DEPENDENCIES]
         ocs_operator_names.extend(operators_4_18_additions)
     return ocs_operator_names
+
+
+def set_ceph_config(entity, config_name, value):
+    """
+    Sets the ceph config values
+
+    Args:
+        entity (str): The Ceph entity like "osd", "mon", "mds", etc. but can be "global" as well.
+        config_name (str): Name of the Ceph config option (e.g., "bluestore_slow_ops_warn_lifetime").
+        value (str): The value to set for the config.
+
+    """
+    cmd = f"ceph config set {entity} {config_name} {value}"
+    toolbox = get_ceph_tools_pod()
+    toolbox.exec_ceph_cmd(cmd)
