@@ -1101,9 +1101,9 @@ class BusyboxDiscoveredApps(DRWorkload):
         self.workload_dir = kwargs.get("workload_dir")
         self.discovered_apps_placement_name = kwargs.get("workload_placement_name")
         self.drpc_yaml_file = os.path.join(constants.DRPC_PATH)
+        self.drpc_recipe_yaml_file = os.path.join(constants.DRPC_RECIPE_PATH)
         self.placement_yaml_file = os.path.join(constants.PLACEMENT_PATH)
         self.recipe_yaml_file = os.path.join(constants.RECIPE_PATH)
-        self.secret_yaml_file = os.path.join(constants.SECRET_PATH)
         self.kubeobject_capture_interval_int = generate_kubeobject_capture_interval()
         self.kubeobject_capture_interval = f"{self.kubeobject_capture_interval_int}m"
         self.protection_type = kwargs.get("protection_type")
@@ -1134,6 +1134,9 @@ class BusyboxDiscoveredApps(DRWorkload):
         )
         self.discovered_apps_recipe_namespace_value = kwargs.get(
             "discovered_apps_recipe_namespace_value"
+        )
+        self.discovered_apps_name_selector_value = kwargs.get(
+            "discovered_apps_name_selector_value"
         )
 
     def deploy_workload(self, recipe=None):
@@ -1197,22 +1200,6 @@ class BusyboxDiscoveredApps(DRWorkload):
             vrg_name=vrg_name or self.discovered_apps_placement_name,
         )
 
-    def create_secret(self):
-        """
-        Create secret for discovered apps
-
-        """
-
-        secret_yaml_data = templating.load_yaml(self.secret_yaml_file)
-        secret_yaml_data["metadata"]["name"] = self.workload_namespace + "-secret"
-        secret_yaml_data["metadata"]["namespace"] = self.workload_namespace
-        secret_yaml = tempfile.NamedTemporaryFile(
-            mode="w+", prefix="secret", delete=False
-        )
-        templating.dump_data_to_temp_yaml(secret_yaml_data, secret_yaml.name)
-        log.info(f"Creating Placement for workload {self.workload_name}")
-        run_cmd(f"oc create -f {secret_yaml.name}")
-
     def create_recipe_with_checkhooks(self):
         """
         Create recipe with checkhooks for discovered apps
@@ -1251,11 +1238,11 @@ class BusyboxDiscoveredApps(DRWorkload):
                     self.workload_namespace
                 ]
         recipe_yaml = tempfile.NamedTemporaryFile(
-            mode="w+", prefix="secret", delete=False
+            mode="w+", prefix="recipe", delete=False
         )
         templating.dump_data_to_temp_yaml(recipe_yaml_data, recipe_yaml.name)
         log.info(f"Creating recipe for workload {self.workload_name}")
-        run_cmd(f"oc create -f {recipe_yaml.name}")
+        run_cmd(f"oc create -f {recipe_yaml.name} -n {self.workload_namespace}")
 
     def create_placement(self, placement_name=None):
         """
@@ -1282,7 +1269,7 @@ class BusyboxDiscoveredApps(DRWorkload):
         log.info(f"Creating Placement for workload {self.workload_name}")
         run_cmd(f"oc create -f {placement_yaml.name}")
 
-    def create_drpc(
+    def create_dprc(
         self,
         drpc_name=None,
         placement_name=None,
@@ -1302,7 +1289,6 @@ class BusyboxDiscoveredApps(DRWorkload):
             pvc_selector_value (str): Value for pvc selector
 
         """
-
         drpc_yaml_data = templating.load_yaml(self.drpc_yaml_file)
         drpc_yaml_data["spec"].setdefault("kubeObjectProtection", {})
         drpc_yaml_data["spec"]["kubeObjectProtection"].setdefault("kubeObjectSelector")

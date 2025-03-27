@@ -148,7 +148,6 @@ ENV_DATA:
       dr_workload_app_recipe_namespace_key: "namespace",
       dr_workload_app_recipe_namespace_value: "busybox-dict-1",
       dr_workload_app_recipe_name_selector_value: "busybox-*",
-
     },
     { name: "busybox-dict-2-cephfs", workload_dir: "rdr/busybox/cephfs/workloads/app-busybox-2",
       pod_count: 10, pvc_count: 10,

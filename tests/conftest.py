@@ -7237,6 +7237,7 @@ def discovered_apps_dr_workload(request):
 
                 if multi_ns:
                     multi_ns_list.append(workload.workload_namespace)
+
             instances.append(workload)
             total_pvc_count += workload_details["pvc_count"]
             workload.deploy_workload(recipe=False)
