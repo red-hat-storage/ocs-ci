@@ -9,9 +9,8 @@ import os
 import yaml
 
 from ocs_ci.ocs import constants, defaults
-from ocs_ci.ocs.exceptions import CommandFailed
 from ocs_ci.framework import config
-from ocs_ci.ocs.resources.ocs import OCP, OCS
+from ocs_ci.ocs.resources.ocs import OCP
 from ocs_ci.utility.retry import retry
 from ocs_ci.utility.utils import run_cmd
 
@@ -29,7 +28,6 @@ class FusionDataFoundationDeployment:
         Installs IBM Fusion Data Foundation.
         """
         logger.info("Installing IBM Fusion Data Foundation")
-        self.create_spectrum_fusion_cr()
         if self.pre_release:
             self.create_image_tag_mirror_set()
             self.create_image_digest_mirror_set()
@@ -56,20 +54,6 @@ class FusionDataFoundationDeployment:
             f"oc --kubeconfig {self.kubeconfig} create -f {image_digest_mirror_set}"
         )
         os.remove(image_digest_mirror_set)
-
-    def create_spectrum_fusion_cr(self):
-        """
-        Create SpectrumFusion CR if it doesn't already exist.
-        """
-        if spectrum_fusion_existstance_check():
-            spectrum_fusion_status_check()
-            logger.info("SpectrumFusion already exists and is Completed")
-        else:
-            logger.info("Creating SpectrumFusion")
-            run_cmd(
-                f"oc --kubeconfig {self.kubeconfig} create -f {constants.FDF_SPECTRUM_FUSION_CR}"
-            )
-            spectrum_fusion_status_check()
 
     def create_fdf_service_cr(self):
         """
@@ -147,52 +131,6 @@ class FusionDataFoundationDeployment:
         config.ENV_DATA["fdf_version"] = version
         logger.info(f"Installed FDF version: {version}")
         return version
-
-
-def spectrum_fusion_existstance_check():
-    """
-    Check for the existance of SpectrumFusion.
-
-    Returns:
-        bool: Existance of SpectrumFusion
-
-    """
-    spectrumfusion = OCS(
-        kind="SpectrumFusion",
-        metadata={
-            "namespace": constants.FDF_NAMESPACE,
-            "name": "spectrumfusion",
-        },
-    )
-    try:
-        spectrumfusion.reload()
-    except CommandFailed as e:
-        error_msg = '"spectrumfusion" not found'
-        if error_msg in str(e):
-            return False
-    return True
-
-
-@retry((AssertionError, KeyError), 10, 5)
-def spectrum_fusion_status_check():
-    """
-    Ensure SpectrumFusion is in the Completed state.
-
-    Raises:
-        AssertionError: If SpectrumFusion is not in a completed state.
-        KeyError: If the status isn't present in the SpectrumFusion data.
-
-    """
-    spectrumfusion = OCS(
-        kind="SpectrumFusion",
-        metadata={
-            "namespace": constants.FDF_NAMESPACE,
-            "name": "spectrumfusion",
-        },
-    )
-    spectrumfusion.reload()
-    spectrumfusion_status = spectrumfusion.data["status"]["status"]
-    assert spectrumfusion_status == "Completed"
 
 
 @retry((AssertionError, KeyError), 20, 60, backoff=1)
