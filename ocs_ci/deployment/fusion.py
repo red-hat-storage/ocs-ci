@@ -14,8 +14,10 @@ from ocs_ci.ocs.constants import FUSION_SUBSCRIPTION_YAML, ISF_CATALOG_SOURCE_NA
 from ocs_ci.ocs.resources.catalog_source import CatalogSource
 from ocs_ci.ocs.ocp import OCP
 from ocs_ci.ocs.resources.csv import CSV
+from ocs_ci.ocs.resources.ocs import OCS
 from ocs_ci.ocs.resources.packagemanifest import PackageManifest
 from ocs_ci.utility import templating
+from ocs_ci.utility.retry import retry
 from ocs_ci.utility.utils import TimeoutSampler, run_cmd
 
 
@@ -38,6 +40,7 @@ class FusionDeployment:
         self.create_namespace_and_operator_group()
         self.create_subscription()
         self.verify()
+        self.create_spectrum_fusion_cr()
 
     def create_catalog_source(self):
         """
@@ -155,6 +158,16 @@ class FusionDeployment:
         logger.info(f"Installed Fusion version: {version}")
         return version
 
+    def create_spectrum_fusion_cr(self):
+        """
+        Create SpectrumFusion CR.
+        """
+        logger.info("Creating SpectrumFusion")
+        run_cmd(
+            f"oc --kubeconfig {self.kubeconfig} create -f {constants.SPECTRUM_FUSION_CR}"
+        )
+        spectrum_fusion_status_check()
+
 
 def wait_for_subscription(subscription_name, namespace):
     """
@@ -194,3 +207,25 @@ def wait_for_csv(csv_name, namespace):
                 logger.info(f"CSV found: {found_csv_name}")
                 return
             logger.debug(f"Still waiting for the CSV: {csv_name}")
+
+
+@retry((AssertionError, KeyError), 10, 5)
+def spectrum_fusion_status_check():
+    """
+    Ensure SpectrumFusion is in the Completed state.
+
+    Raises:
+        AssertionError: If SpectrumFusion is not in a completed state.
+        KeyError: If the status isn't present in the SpectrumFusion data.
+
+    """
+    spectrumfusion = OCS(
+        kind="SpectrumFusion",
+        metadata={
+            "namespace": defaults.FUSION_NAMESPACE,
+            "name": "spectrumfusion",
+        },
+    )
+    spectrumfusion.reload()
+    spectrumfusion_status = spectrumfusion.data["status"]["status"]
+    assert spectrumfusion_status == "Completed"
