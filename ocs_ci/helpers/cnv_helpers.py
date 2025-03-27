@@ -19,7 +19,7 @@ from ocs_ci.helpers.helpers import (
 from ocs_ci.framework import config
 from ocs_ci.utility.retry import retry
 from ocp_resources.virtual_machine_clone import VirtualMachineClone
-from ocs_ci.ocs.cnv.virtual_machine import VirtualMachine
+from ocs_ci.ocs.cnv import virtual_machine
 from ocp_resources.virtual_machine_restore import VirtualMachineRestore
 from ocp_resources.virtual_machine_snapshot import VirtualMachineSnapshot
 
@@ -643,7 +643,9 @@ def clone_or_snapshot_vm(action, vm, admin_client=None, file_path=None, all_vms=
             target_name=target_name,
         ) as vmc:
             vmc.wait_for_status(status=VirtualMachineClone.Status.SUCCEEDED)
-        cloned_vm = VirtualMachine(vm_name=target_name, namespace=vm.namespace)
+        cloned_vm = virtual_machine.VirtualMachine(
+            vm_name=target_name, namespace=vm.namespace
+        )
         cloned_vm.start(wait=True)
         cloned_vm.wait_for_ssh_connectivity()
         all_vms.append(cloned_vm)
