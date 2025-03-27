@@ -1308,11 +1308,13 @@ class BusyboxDiscoveredApps(DRWorkload):
             log.info("Deleting DRPC")
             config.switch_acm_ctx()
             run_cmd(
-                f"oc delete drpc -n {constants.DR_OPS_NAMESAPCE} {drpc_name or self.discovered_apps_placement_name} {ignore_not_found_param}"
+                f"oc delete drpc -n {constants.DR_OPS_NAMESAPCE} {drpc_name or self.discovered_apps_placement_name} "
+                f"{ignore_not_found_param}"
             )
             log.info("Deleting Placement")
             run_cmd(
-                f"oc delete placement -n {constants.DR_OPS_NAMESAPCE} {self.discovered_apps_placement_name}-placement-1 {ignore_not_found_param}"
+                f"oc delete placement -n {constants.DR_OPS_NAMESAPCE} "
+                f"{self.discovered_apps_placement_name}-placement-1 {ignore_not_found_param}"
             )
 
         for cluster in get_non_acm_cluster_config():

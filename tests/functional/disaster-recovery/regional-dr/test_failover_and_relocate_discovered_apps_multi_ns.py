@@ -1,14 +1,12 @@
 import logging
 from time import sleep
 
-from ocs_ci.deployment.deployment import Deployment, get_multicluster_dr_deployment
 from ocs_ci.framework import config
 from ocs_ci.framework.testlib import acceptance, tier1, skipif_ocs_version
 from ocs_ci.framework.pytest_customization.marks import rdr, turquoise_squad
 from ocs_ci.helpers import dr_helpers
 from ocs_ci.helpers.dr_helpers import (
     do_discovered_apps_cleanup_multi_ns,
-    wait_for_replication_resources_creation,
     wait_for_vrg_state,
 )
 from ocs_ci.ocs import constants
@@ -133,9 +131,7 @@ class TestFailoverAndRelocateWithDiscoveredApps:
         dr_helpers.verify_last_kubeobject_protection_time(
             drpc_obj, rdr_workload[0].kubeobject_capture_interval_int
         )
-        import pdb
 
-        # pdb.set_trace()
         dr_helpers.relocate(
             preferred_cluster=secondary_cluster_name,
             namespace=rdr_workload[0].workload_namespace,
