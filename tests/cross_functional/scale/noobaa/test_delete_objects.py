@@ -1,4 +1,5 @@
 import logging
+
 import pytest
 import time
 
@@ -12,12 +13,21 @@ from ocs_ci.ocs.bucket_utils import (
     list_objects_in_batches,
     s3_delete_object,
     random_object_round_trip_verification,
+    gen_empty_file_and_upload,
+    expire_objects_in_bucket,
+    rm_object_recursive,
+    verify_objs_deleted_from_objmds,
+    sample_if_objects_expired,
 )
 from ocs_ci.framework.pytest_customization.marks import (
     polarion_id,
     scale,
     mcg,
     orange_squad,
+)
+from ocs_ci.ocs.resources.mcg_lifecycle_policies import (
+    LifecyclePolicy,
+    ExpirationRule,
 )
 
 from ocs_ci.utility.retry import retry
@@ -190,3 +200,101 @@ class TestDeleteObjects:
         # stop the io running in the background
         event.set()
         io_thread.result()
+
+    @pytest.fixture(scope="session")
+    def create_bucket_verify_object_deletion(
+        self, request, bucket_factory_session, mcg_obj_session
+    ):
+        buckets = list()
+        expirations = list()
+
+        def factory(exp):
+            """
+            Factory function to create the bucket
+
+            """
+            expirations.append(exp)
+            bucket = bucket_factory_session(amount=1, interface="OC")[0]
+            buckets.append(bucket)
+            return bucket
+
+        def teardown():
+            """
+            Teardown function to verify the object deletion
+            in the bucket
+
+            """
+            for bucket, expiration in zip(buckets, expirations):
+                if expiration:
+                    sample_if_objects_expired(
+                        mcg_obj_session, bucket.name, timeout=36000, sleep=60
+                    )
+                verify_objs_deleted_from_objmds(bucket.name, timeout=7200, sleep=60)
+                log.info("Verified that all objects are deleted and marked deleted")
+
+        request.addfinalizer(teardown)
+        return factory
+
+    @pytest.mark.parametrize(
+        argnames=["expiration"],
+        argvalues=[
+            pytest.param(True),
+            pytest.param(False),
+        ],
+    )
+    def test_delete_objs_by_expiration_and_recursive_deletion(
+        self,
+        create_bucket_verify_object_deletion,
+        mcg_obj_session,
+        awscli_pod_session,
+        test_directory_setup,
+        reduce_expiration_interval,
+        change_lifecycle_schedule_min,
+        expiration,
+    ):
+        """
+        Test to verify object deletion through object mds when we delete or expire
+        objects in bucket at scale
+
+        """
+
+        # Reduce the expiration interval and lifecycle schedule delay
+        log.info(
+            "Reducing the expiration interval and lifecycle schedule delay to 1 minute"
+        )
+        reduce_expiration_interval(1)
+        change_lifecycle_schedule_min(1)
+
+        # Create the bucket
+        log.info("Create the bucket")
+        bucket = create_bucket_verify_object_deletion(exp=expiration)
+
+        # Generate and upload objects to the
+        # bucket parallely
+        gen_empty_file_and_upload(
+            mcg_obj_session,
+            awscli_pod_session,
+            test_directory_setup.origin_dir,
+            amount=500000,
+            bucket=bucket.name,
+            threads=10,
+            timeout=7200,
+        )
+
+        # If expiration then setup the expiration and manually
+        # expire the objects. Else recursively delete the objects.
+        if expiration:
+            log.info(f"Setting object expiration on bucket: {bucket}")
+            lifecycle_policy = LifecyclePolicy(ExpirationRule(days=1))
+            mcg_obj_session.s3_client.put_bucket_lifecycle_configuration(
+                Bucket=bucket.name, LifecycleConfiguration=lifecycle_policy.as_dict()
+            )
+
+            log.info(f"Manually expiring objects in the bucket {bucket.name}")
+            expire_objects_in_bucket(bucket.name)
+
+        else:
+            log.info("Deleting the objects inside the bucket recursively")
+            rm_object_recursive(
+                awscli_pod_session, f"{bucket.name}", mcg_obj_session, timeout=3600
+            )
