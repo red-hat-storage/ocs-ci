@@ -20,7 +20,16 @@ spec:
       - key: appname
         operator: In
         values:
-        - busybox
+        - busybox_app1-1
+        - busybox_app1-2
+        - busybox_app1-3
+        - busybox_app1-4
+        - busybox_app1-5
+        - busybox_app1-6
+        - busybox_app1-7
+        - busybox_app1-8
+        - busybox_app1-9
+        - busybox_app1_10
     name: PLACEHOLDER
     type: resource
   workflows:
@@ -39,7 +48,7 @@ spec:
     type: check
     namespace: PLACEHOLDER
     selectResource: deployment
-    nameSelector: busybox
+    nameSelector: "busybox-*"
     timeout: 800
     onError: fail
     chks:
@@ -50,11 +59,20 @@ spec:
   volumes:
     includedNamespaces:
     - PLACEHOLDER
-    name: varlog
+    name: mypvc
     type: volume
     labelSelector:
       matchExpressions:
       - key: appname
         operator: In
         values:
-        - busybox
+        - busybox_app1-1
+        - busybox_app1-2
+        - busybox_app1-3
+        - busybox_app1-4
+        - busybox_app1-5
+        - busybox_app1-6
+        - busybox_app1-7
+        - busybox_app1-8
+        - busybox_app1-9
+        - busybox_app1_10
