@@ -67,8 +67,8 @@ def upload_objs_to_buckets(
             completion
 
     """
-    src_path = "/complex_directory/"
 
+    src_path = "/complex_directory/"
     logger.info(f"Uploading objects to all the buckets under prefix {iteration_no}")
     try:
         with concurrent.futures.ThreadPoolExecutor() as executor:
@@ -100,7 +100,12 @@ def upload_objs_to_buckets(
     finally:
         if event:
             logger.info(
-                "Setting the event to indicate that upload objects operation is either completed or failed"
+                f"OBJECT UPLOAD: Total of {multiplier*1000000} objects got uploaded or "
+                f"attempted to uploaded in this iteration {iteration_no+1}"
+            )
+            logger.info(
+                "OBJECT UPLOAD: Setting the event to indicate that upload objects "
+                "operation is either completed or failed"
             )
             event.set()
 
@@ -123,7 +128,7 @@ def run_noobaa_metadata_intense_ops(
     """
     bucket_type, bucket_obj = bucket
     bucket_name = bucket_obj.name
-    base_timeout = 6000
+    base_timeout = 20000
     timeout = base_timeout * multiplier
 
     # Run metadata specific to bucket
@@ -161,7 +166,10 @@ def run_noobaa_metadata_intense_ops(
             total_buckets_created += len(buckets_created)
             if event.is_set():
                 logger.info(
-                    f"Successfully completed bucket creation/deletion operation in the background"
+                    f"METADATA OP: Total of {total_buckets_created} created in the current iteration {iteration_no+1}"
+                )
+                logger.info(
+                    f"METADATA OP: Successfully completed bucket creation/deletion operation in the background"
                     f" for the current iteration {iteration_no+1}"
                 )
                 break
@@ -186,6 +194,7 @@ def run_noobaa_metadata_intense_ops(
             timeout=timeout,
             recursive=True,
         )
+        tot_objs_updated = 0
         while True:
             for obj in objs_in_bucket:
                 object_key = obj.split("/")[-1]
@@ -200,12 +209,16 @@ def run_noobaa_metadata_intense_ops(
                 logger.info(
                     f"METADATA OP: Updated metadata for object {object_key} in bucket {bucket_name}"
                 )
-
+                tot_objs_updated += 1
                 if event.is_set():
                     break
             if event.is_set():
                 logger.info(
-                    f"Successfully completed the metadata update operation"
+                    f"METADATA OP: Total of {tot_objs_updated} metadata got updated "
+                    f"in the current iteration {iteration_no+1}"
+                )
+                logger.info(
+                    f"METADATA OP: Successfully completed the metadata update operation"
                     f" in the background for the iteration {iteration_no+1}"
                 )
                 break
@@ -215,8 +228,7 @@ def run_noobaa_metadata_intense_ops(
         This function performs noobaa account creation and update operation
 
         """
-
-        # create 100K of noobaa accounts
+        tot_nb_acc = 0
         while True:
             nb_accounts_created = list()
             for i in range(0, 10):
@@ -229,7 +241,7 @@ def run_noobaa_metadata_intense_ops(
                 logger.info(
                     f"METADATA OP: Created Noobaa account {nb_account.account_name}"
                 )
-
+            tot_nb_acc += len(nb_accounts_created)
             for nb_acc in nb_accounts_created:
                 nb_acc.update_account_email(new_email=f"new-{nb_acc.email_id}")
                 logger.info(
@@ -244,7 +256,11 @@ def run_noobaa_metadata_intense_ops(
 
             if event.is_set():
                 logger.info(
-                    f"Successfully completed noobaa account creation/update/deletion operation"
+                    f"METADATA OP: Total of {tot_nb_acc} accounts got created/updated/deleted "
+                    f"in the current iteration {iteration_no+1}"
+                )
+                logger.info(
+                    f"METADATA OP: Successfully completed noobaa account creation/update/deletion operation"
                     f" in the background for the iteration {iteration_no+1}"
                 )
                 break
@@ -276,7 +292,7 @@ def delete_objs_from_bucket(pod_obj, bucket, iteration_no, event=None, multiplie
     """
     bucket_type, bucket_obj = bucket
     bucket_name = bucket_obj.name
-    base_timeout = 6000
+    base_timeout = 20000
     timeout = base_timeout * multiplier
 
     if bucket_type.upper() == "RGW":
@@ -285,7 +301,8 @@ def delete_objs_from_bucket(pod_obj, bucket, iteration_no, event=None, multiplie
         mcg_obj = MCG()
 
     logger.info(
-        f"DELETE OP: Delete objects recursively from the bucket {bucket_name} under prefix {iteration_no}"
+        f"DELETE OP: Delete objects recursively from the bucket "
+        f"{bucket_name} under prefix {iteration_no}"
     )
 
     rm_object_recursive(
@@ -296,7 +313,12 @@ def delete_objs_from_bucket(pod_obj, bucket, iteration_no, event=None, multiplie
         timeout=timeout,
     )
     logger.info(
-        f"Successfully completed object deletion operation on bucket {bucket_name} under prefix {iteration_no}"
+        f"DELETE OP: Total of {(multiplier-1)*1000000} objects got deleted "
+        f"in the current iteration {iteration_no+1}"
+    )
+    logger.info(
+        f"DELETE OP: Successfully completed object deletion operation on "
+        f"bucket {bucket_name} under prefix {iteration_no}"
     )
 
 
@@ -319,7 +341,8 @@ def list_objs_from_bucket(bucket, iteration_no, event=None):
         mcg_obj = MCG()
 
     logger.info(
-        f"LIST OP: Listing objects from the bucket {bucket_name} under prefix {iteration_no}"
+        f"LIST OP: Listing objects from the bucket {bucket_name} "
+        f"under prefix {iteration_no}"
     )
     while True:
         s3_list_objects_v2(
@@ -328,7 +351,12 @@ def list_objs_from_bucket(bucket, iteration_no, event=None):
 
         if event.is_set():
             logger.info(
-                f"Successfully completed object list operation on bucket {bucket_name} under prefix {iteration_no}"
+                f"LIST OP: Total of {(iteration_no+1)*1000000} got listed "
+                f"in the current iteration {iteration_no+1}"
+            )
+            logger.info(
+                f"LIST OP: Successfully completed object list operation on "
+                f"bucket {bucket_name} under prefix {iteration_no}"
             )
             break
 
@@ -350,7 +378,7 @@ def download_objs_from_bucket(
     """
     bucket_type, bucket_obj = bucket
     bucket_name = bucket_obj.name
-    base_timeout = 6000
+    base_timeout = 20000
     timeout = base_timeout * multiplier
 
     if bucket_type.upper() == "RGW":
@@ -359,7 +387,8 @@ def download_objs_from_bucket(
         mcg_obj = MCG()
 
     logger.info(
-        f"DOWNLOAD OP: Download objects from the bucket {bucket_name} under prefix {iteration_no}"
+        f"DOWNLOAD OP: Download objects from the bucket "
+        f"{bucket_name} under prefix {iteration_no}"
     )
     while True:
         sync_object_directory(
@@ -370,14 +399,21 @@ def download_objs_from_bucket(
             timeout=timeout,
         )
         logger.info(
-            f"Downloaded objects from {bucket_name}/{iteration_no} to {target_dir}"
+            f"DOWNLOAD OP: Downloaded objects from {bucket_name}/{iteration_no} to {target_dir}"
         )
-        logger.info(f"Cleaning up the downloaded objects from {target_dir}")
+        logger.info(
+            f"DOWNLOAD OP: Cleaning up the downloaded objects from {target_dir}"
+        )
         pod_obj.exec_cmd_on_pod(command=f"rm -rf {target_dir}")
 
         if event.is_set():
             logger.info(
-                f"Successfully completed object download operation on bucket {bucket_name} under prefix {iteration_no}"
+                f"DOWNLOAD OP: Total of {(multiplier-1)*1000000} objects got "
+                f"downloaded in the current iteration {iteration_no+1}"
+            )
+            logger.info(
+                f"DOWNLOAD OP: Successfully completed object download "
+                f"operation on bucket {bucket_name} under prefix {iteration_no}"
             )
             break
 
