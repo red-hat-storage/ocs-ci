@@ -2176,17 +2176,28 @@ class Deployment(object):
 
         # Increase bluestore_slow_ops_warn_threshold and bluestore_slow_ops_warn_lifetime
         # till https://issues.redhat.com/browse/DFBUGS-1913 is resolved
-        if self.platform == constants.VSPHERE_PLATFORM:
-            set_ceph_config(
-                entity="global",
-                config_name="bluestore_slow_ops_warn_threshold",
-                value="7",
-            )
-            set_ceph_config(
-                entity="global",
-                config_name="bluestore_slow_ops_warn_lifetime",
-                value="10",
-            )
+
+        if (
+            self.platform == constants.VSPHERE_PLATFORM
+            and version.get_semantic_ocs_version_from_config() >= version.VERSION_4_19
+        ):
+            # using try/except to not fail deployments since these values are good to have
+            # for vsphere platform
+            try:
+                set_ceph_config(
+                    entity="global",
+                    config_name="bluestore_slow_ops_warn_threshold",
+                    value="7",
+                )
+                set_ceph_config(
+                    entity="global",
+                    config_name="bluestore_slow_ops_warn_lifetime",
+                    value="10",
+                )
+            except Exception as ex:
+                logger.error(
+                    f"Failed to set values for bluestore_slow_ops. Exception is: {ex}"
+                )
 
         # Verify health of ceph cluster
         logger.info("Done creating rook resources, waiting for HEALTH_OK")
