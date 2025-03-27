@@ -1392,7 +1392,7 @@ class Vault(KMS):
         if not self.vault_backend_path:
             self.get_vault_backend_path()
 
-        return fetch_noobaa_secret_from_vault(self.vault_backend_path)
+        return fetch_noobaa_secret_from_vault(self.vault_backend_path)[1]
 
 
 class HPCS(KMS):
@@ -2652,6 +2652,7 @@ def fetch_noobaa_secret_from_vault(vault_backend_path):
 
         # Retrieve the secret
         data_section = json_out.get("data", {}).get("data", json_out.get("data", {}))
+        key = data_section.get("active_root_key")
         secret = data_section.get(data_section.get("active_root_key"))
 
         if not secret:
@@ -2659,10 +2660,10 @@ def fetch_noobaa_secret_from_vault(vault_backend_path):
                 f"Secret for key '{constants.NOOBAA_BACKEND_SECRET}' not found in Vault response."
             )
 
-        return secret
+        return (key, secret)
     except subprocess.CalledProcessError as e:
         logger.error(f"Error executing Vault command: {e.output.strip()}")
     except json.JSONDecodeError as e:
         logger.error(f"Invalid JSON output from Vault command. {e}")
 
-    return None
+    return (None, None)
