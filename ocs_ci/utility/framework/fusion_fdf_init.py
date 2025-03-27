@@ -175,9 +175,6 @@ class Initializer(object):
                 props["fdf_pre_release_registry"] = config.DEPLOYMENT.get(
                     "fdf_pre_release_registry"
                 )
-                props["fdf_pre_release_image_digest"] = config.DEPLOYMENT.get(
-                    "fdf_pre_release_image_digest"
-                )
 
         return props
 
@@ -281,7 +278,7 @@ def create_junit_report(
             except Exception as e:
                 test_case.result = [Failure(e)]
 
-            add_installed_version_props(test_suite)
+            add_post_deployment_props(test_suite)
 
             test_suite.add_testcase(test_case)
             xml = JUnitXml()
@@ -299,19 +296,27 @@ def create_junit_report(
     return decorator
 
 
-def add_installed_version_props(test_suite: TestSuite):
+def add_post_deployment_props(test_suite: TestSuite):
     """
-    Adds custom properties to TestSuite which contain installed
-    versions for Fusion and Fusion Data Foundation.
+    Adds custom properties to TestSuite that require values
+    determined during or after the deployment.
 
     Args:
         test_suite (TestSuite): TestSuite to add properties to.
 
     Returns:
         TestSuite: Returns the TestSuite object with new properties added.
+
     """
+    # config.ENV_DATA values
     for key in ["fusion_version", "fdf_version"]:
         value = config.ENV_DATA.get(key)
+        if value:
+            test_suite.add_property(key, value)
+
+    # config.DEPLOYMENT values
+    for key in ["fdf_pre_release_image_digest"]:
+        value = config.DEPLOYMENT.get(key)
         if value:
             test_suite.add_property(key, value)
 
