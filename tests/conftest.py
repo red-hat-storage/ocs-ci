@@ -72,6 +72,7 @@ from ocs_ci.ocs.exceptions import (
     ResourceNotDeleted,
     MissingDecoratorError,
     MissingRequiredConfigKeyError,
+    UnsupportedWorkloadError,
 )
 from ocs_ci.ocs.mcg_workload import mcg_job_factory as mcg_job_factory_implementation
 from ocs_ci.ocs.node import get_node_objs, schedule_nodes
@@ -7119,13 +7120,16 @@ def discovered_apps_dr_workload(request):
     """
     instances = []
 
-    def factory(kubeobject=1, recipe=0, pvc_interface=constants.CEPHBLOCKPOOL):
+    def factory(
+        kubeobject=1, recipe=0, pvc_interface=constants.CEPHBLOCKPOOL, multi_ns=False
+    ):
         """
         Args:
             kubeobject (int): Number if Discovered Apps workload with kube object protection to be created
             recipe (int): Number if Discovered Apps workload with recipe protection to be created
             pvc_interface (str): 'CephBlockPool' or 'CephFileSystem'.
                 This decides whether a RBD based or CephFS based resource is created. RBD is default.
+            multi_ns (bool): True for Multi Namespace
 
         Raises:
             ResourceNotDeleted: In case workload resources not deleted properly
@@ -7136,11 +7140,16 @@ def discovered_apps_dr_workload(request):
         """
         total_pvc_count = 0
         workload_key = "dr_workload_discovered_apps_rbd"
+        multi_ns_list = []
         # TODO: When cephfs is ready
+        if multi_ns and kubeobject <= 1:
+            raise UnsupportedWorkloadError("kubeobject count should be more then 2")
         if pvc_interface == constants.CEPHFILESYSTEM:
             workload_key = "dr_workload_discovered_apps_cephfs"
+        workload_details_list = ocsci_config.ENV_DATA[workload_key]
+
         for index in range(kubeobject):
-            workload_details = ocsci_config.ENV_DATA[workload_key][index]
+            workload_details = workload_details_list[index]
             workload = BusyboxDiscoveredApps(
                 workload_dir=workload_details["workload_dir"],
                 workload_pod_count=workload_details["pod_count"],
@@ -7161,17 +7170,45 @@ def discovered_apps_dr_workload(request):
                 workload_placement_name=workload_details[
                     "dr_workload_app_placement_name"
                 ],
+                discovered_apps_multi_ns=multi_ns,
             )
+            if multi_ns:
+                multi_ns_list.append(workload.workload_namespace)
             instances.append(workload)
             total_pvc_count += workload_details["pvc_count"]
             workload.deploy_workload()
-
+        if multi_ns:
+            if pvc_interface == constants.CEPHBLOCKPOOL:
+                pvc_type = constants.RBD_INTERFACE
+            elif pvc_interface == constants.CEPHFILESYSTEM:
+                pvc_type = constants.CEPHFS_INTERFACE
+            drpc_name = f"busybox-multi-nsssi-{pvc_type}-" + "-".join(map(str, range(1, kubeobject + 1)))
+            placement_name =drpc_name+"-placement-1"
+            for index in range(kubeobject):
+                instances[index].discovered_apps_placement_name = drpc_name
+            instances[0].create_placement(placement_name=placement_name)
+            instances[0].create_dprc(
+                drpc_name=drpc_name,
+                placement_name=placement_name,
+                protected_namespaces=multi_ns_list,
+                pvc_selector_key=workload_details_list[0]["multi_ns_dr_workload_app_pvc_selector_key"],
+                pvc_selector_value=workload_details_list[0]["multi_ns_dr_workload_app_pvc_selector_value"]
+            )
+            for index in range(kubeobject):
+                instances[index].verify_workload_deployment(vrg_name=drpc_name)
         return instances
 
     def teardown():
-        for instance in instances:
+        for index, instance in enumerate(instances):
             try:
-                instance.delete_workload()
+                log.info(instance.__dict__)
+                drpc_name=None
+                if instance.discovered_apps_multi_ns:
+                    is_last = index == len(instances) - 1
+                    drpc_name=instance.discovered_apps_placement_name
+                else:
+                    is_last=False
+                instance.delete_workload(skip_vrg_check=not is_last, drpc_name=drpc_name)
             except ResourceNotDeleted:
                 raise ResourceNotDeleted("Workload deletion was unsuccessful")
 
