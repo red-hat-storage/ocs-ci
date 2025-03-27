@@ -8225,6 +8225,55 @@ def reduce_expiration_interval(add_env_vars_to_noobaa_core_class):
 
 
 @pytest.fixture()
+def change_lifecycle_schedule_min(add_env_vars_to_noobaa_core_class):
+    """
+    Change the lifecycle schedule minute. i.e, that is delay between
+    the each run when lifecycle expiration is identfied.
+
+    """
+
+    def factory(interval):
+        """
+        Args:
+            interval (int): New interval in minute/s
+
+        """
+        new_interval_in_milliseconds = 60 * interval * 1000
+        add_env_vars_to_noobaa_core_class(
+            [(constants.LIFECYCLE_SCHED_MINUTES, new_interval_in_milliseconds)]
+        )
+
+    return factory
+
+
+@pytest.fixture()
+def change_lifecycle_batch_size(
+    add_env_vars_to_noobaa_core_class, add_env_vars_to_noobaa_endpoint_class
+):
+    """
+    Change the batch size for the object lifecycle
+    by modifying the environment variable LIFECYCLE_BATCH_SIZE
+
+    """
+
+    def factory(new_lifecycle_batch_size):
+        """
+        Args:
+            new_lifecycle_batch_size (int): New value for the lifecycle batch size
+
+        """
+        add_env_vars_to_noobaa_core_class(
+            [(constants.LIFECYCLE_BATCH_SIZE_PARAM, new_lifecycle_batch_size)]
+        )
+
+        add_env_vars_to_noobaa_endpoint_class(
+            [(constants.LIFECYCLE_BATCH_SIZE_PARAM, new_lifecycle_batch_size)]
+        )
+
+    return factory
+
+
+@pytest.fixture()
 def reset_conn_score():
     """
     This is a fixture that will reset the connections scores for

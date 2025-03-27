@@ -5,6 +5,7 @@ import time
 from threading import Event
 from concurrent.futures.thread import ThreadPoolExecutor
 from datetime import datetime
+
 from ocs_ci.ocs import hsbench
 from ocs_ci.ocs.bucket_utils import (
     s3_delete_objects,
@@ -18,6 +19,7 @@ from ocs_ci.framework.pytest_customization.marks import (
     mcg,
     orange_squad,
 )
+
 from ocs_ci.utility.retry import retry
 from ocs_ci.ocs.exceptions import CommandFailed
 
