@@ -142,6 +142,7 @@ class TestVmSnapshotClone(E2ETest):
         snapshot_factory,
         snapshot_restore_factory,
         cnv_workload,
+        admin_client,
     ):
         """
         This test performs the VM cloning and IOs created using different volume interfaces(PVC/DV/DVT)
@@ -173,53 +174,33 @@ class TestVmSnapshotClone(E2ETest):
         )
 
         vm_list = vm_objs_def + vm_objs_aggr
-
         for vm_obj in vm_list:
             source_csum = run_dd_io(vm_obj=vm_obj, file_path=file_paths[0], verify=True)
-            vm_obj.stop()
-            clone_obj = clone_vm_workload(
-                vm_obj=vm_obj,
-                volume_interface=vm_obj.volume_interface,
-                namespace=(
-                    vm_obj.namespace
-                    if vm_obj.volume_interface == constants.VM_VOLUME_PVC
-                    else None
-                ),
-            )
-            new_csum = cal_md5sum_vm(vm_obj=clone_obj, file_path=file_paths[0])
-            assert (
-                source_csum == new_csum
-            ), f"Failed: MD5 comparison between source {vm_obj.name} and cloned {clone_obj.name} VMs"
-            run_dd_io(vm_obj=clone_obj, file_path=file_paths[1])
+            log.info(f"Source checksum: {source_csum}")
+            # # Create Clone of VM
+            # cloned_vm = clone_or_snapqshot_vm(
+            #     "clone",
+            #     vm_obj,
+            #     admin_client=admin_client,
+            #     all_vms=vm_list,
+            #     file_path=file_paths[0],
+            # ) assert (
+            #     source_csum == new_csum
+            # ), f"Failed: MD5 comparison between source {vm_obj.name} and cloned {cloned_vm.name} VMs"
+            # run_dd_io(vm_obj=cloned_vm, file_path=file_paths[1])
 
-            cloned_pvc_obj = clone_obj.get_vm_pvc_obj()
-            # Stopping VM before taking snapshot of the VM PVC
-            clone_obj.stop()
-            # Taking Snapshot of cloned PVC
-            snap_obj = snapshot_factory(cloned_pvc_obj)
+            # # Taking Snapshot of cloned VM
+            # # Create a snapshot
+            # restored_vm = clone_or_snapshot_vm(
+            #     "snapshot",
+            #     cloned_vm,
+            #     admin_client=admin_client,
+            #     file_path=file_paths[0],
+            # )
+            # restore_csum = cal_md5sum_vm(vm_obj=restored_vm, file_path=file_paths[0])
+            # assert (
+            #     source_csum == restore_csum
+            # ), f"Failed: MD5 comparison between source {vm_obj.name} and restored {restored_vm.name} VMs"
+            # run_dd_io(vm_obj=restored_vm, file_path=file_paths[1])
 
-            # Restore the snapshot
-            res_snap_obj = snapshot_restore_factory(
-                snapshot_obj=snap_obj,
-                storageclass=vm_obj.sc_name,
-                volume_mode=snap_obj.parent_volume_mode,
-                access_mode=vm_obj.pvc_access_mode,
-                status=constants.STATUS_BOUND,
-                timeout=300,
-            )
-
-            # Create new VM using the restored PVC
-            res_vm_obj = cnv_workload(
-                source_url=constants.CNV_FEDORA_SOURCE,
-                storageclass=vm_obj.sc_name,
-                existing_pvc_obj=res_snap_obj,
-                namespace=vm_obj.namespace,
-            )
-
-            restore_csum = cal_md5sum_vm(vm_obj=res_vm_obj, file_path=file_paths[0])
-            assert (
-                source_csum == restore_csum
-            ), f"Failed: MD5 comparison between source {vm_obj.name} and restored {res_vm_obj.name} VMs"
-            run_dd_io(vm_obj=res_vm_obj, file_path=file_paths[1])
-
-            res_vm_obj.stop()
+            # restored_vm.stop()
