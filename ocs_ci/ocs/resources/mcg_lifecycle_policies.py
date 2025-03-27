@@ -302,3 +302,32 @@ class NoncurrentVersionExpirationRule(LifecycleRule):
         rule_dict["NoncurrentVersionExpiration"] = d
 
         return rule_dict
+
+
+class AbortIncompleteMultipartUploadRule(LifecycleRule):
+    """
+    A class for handling the parsing of an MCG object expiration rule
+    """
+
+    def __init__(
+        self,
+        days_after_initiation,
+        filter=LifecycleFilter(),
+        is_enabled=True,
+    ):
+        """
+        Constructor method for the class
+
+        Args:
+            days_after_initiation (int): Number of days after which the multipart upload will be aborted
+            filter (LifecycleFilter): Optional object filter
+        """
+        super().__init__(filter=filter, is_enabled=is_enabled)
+        self.days_after_initiation = days_after_initiation
+
+    def as_dict(self):
+        rule_dict = super().as_dict()
+        rule_dict["AbortIncompleteMultipartUpload"] = {
+            "DaysAfterInitiation": self.days_after_initiation
+        }
+        return rule_dict
