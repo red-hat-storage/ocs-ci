@@ -2427,6 +2427,9 @@ def check_if_objects_expired(mcg_obj, bucket_name, prefix=""):
     response = s3_list_objects_v2(
         mcg_obj, bucketname=bucket_name, prefix=prefix, delimiter="/"
     )
+    logger.info(
+        f'Current objects count for bucket {bucket_name}: {response["KeyCount"]}'
+    )
     if response["KeyCount"] != 0:
         return False
     return True
