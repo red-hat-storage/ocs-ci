@@ -6,8 +6,11 @@ from ocs_ci.framework import config
 from ocs_ci.framework.testlib import acceptance, tier1, skipif_ocs_version
 from ocs_ci.framework.pytest_customization.marks import rdr, turquoise_squad
 from ocs_ci.helpers import dr_helpers
-from ocs_ci.helpers.dr_helpers import do_discovered_apps_cleanup_multi_ns, wait_for_replication_resources_creation, \
-    wait_for_vrg_state
+from ocs_ci.helpers.dr_helpers import (
+    do_discovered_apps_cleanup_multi_ns,
+    wait_for_replication_resources_creation,
+    wait_for_vrg_state,
+)
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.resources.drpc import DRPC
 
@@ -37,21 +40,27 @@ class TestFailoverAndRelocateWithDiscoveredApps:
         rdr_workload = discovered_apps_dr_workload(kubeobject=2, multi_ns=True)
         primary_cluster_name_before_failover = (
             dr_helpers.get_current_primary_cluster_name(
-                rdr_workload[0].workload_namespace, discovered_apps=True,
-                resource_name=rdr_workload[0].discovered_apps_placement_name
+                rdr_workload[0].workload_namespace,
+                discovered_apps=True,
+                resource_name=rdr_workload[0].discovered_apps_placement_name,
             )
         )
         config.switch_to_cluster_by_name(primary_cluster_name_before_failover)
         secondary_cluster_name = dr_helpers.get_current_secondary_cluster_name(
-            rdr_workload[0].workload_namespace, discovered_apps=True,
-            resource_name=rdr_workload[0].discovered_apps_placement_name
+            rdr_workload[0].workload_namespace,
+            discovered_apps=True,
+            resource_name=rdr_workload[0].discovered_apps_placement_name,
         )
 
         scheduling_interval = dr_helpers.get_scheduling_interval(
-            rdr_workload[0].workload_namespace, discovered_apps=True,
-            resource_name=rdr_workload[0].discovered_apps_placement_name
+            rdr_workload[0].workload_namespace,
+            discovered_apps=True,
+            resource_name=rdr_workload[0].discovered_apps_placement_name,
         )
-        drpc_obj = DRPC(namespace=constants.DR_OPS_NAMESAPCE, resource_name=rdr_workload[0].discovered_apps_placement_name)
+        drpc_obj = DRPC(
+            namespace=constants.DR_OPS_NAMESAPCE,
+            resource_name=rdr_workload[0].discovered_apps_placement_name,
+        )
         wait_time = 2 * scheduling_interval  # Time in minutes
         logger.info(f"Waiting for {wait_time} minutes to run IOs")
         sleep(wait_time * 60)
@@ -70,9 +79,9 @@ class TestFailoverAndRelocateWithDiscoveredApps:
         )
         logger.info("Doing Cleanup Operations")
         do_discovered_apps_cleanup_multi_ns(
-            old_primary=primary_cluster_name_before_failover,workload_instance=rdr_workload
+            old_primary=primary_cluster_name_before_failover,
+            workload_instance=rdr_workload,
         )
-
 
         # Verify resources creation on secondary cluster (failoverCluster)
         config.switch_to_cluster_by_name(secondary_cluster_name)
@@ -85,29 +94,34 @@ class TestFailoverAndRelocateWithDiscoveredApps:
                 discovered_apps=True,
                 skip_replication_resources=False,
                 vrg_name=rdr_workload[index].discovered_apps_placement_name,
-                skip_vrg_check=True
+                skip_vrg_check=True,
             )
 
-        wait_for_vrg_state(vrg_state="primary", vrg_namespace=constants.DR_OPS_NAMESAPCE, resource_name=rdr_workload[index].discovered_apps_placement_name)
+        wait_for_vrg_state(
+            vrg_state="primary",
+            vrg_namespace=constants.DR_OPS_NAMESAPCE,
+            resource_name=rdr_workload[index].discovered_apps_placement_name,
+        )
 
         # Doing Relocate
         primary_cluster_name_after_failover = (
             dr_helpers.get_current_primary_cluster_name(
-                rdr_workload[0].workload_namespace, discovered_apps=True,
-                resource_name=rdr_workload[0].discovered_apps_placement_name
+                rdr_workload[0].workload_namespace,
+                discovered_apps=True,
+                resource_name=rdr_workload[0].discovered_apps_placement_name,
             )
         )
         config.switch_to_cluster_by_name(primary_cluster_name_before_failover)
         secondary_cluster_name = dr_helpers.get_current_secondary_cluster_name(
-            rdr_workload[0].workload_namespace, discovered_apps=True,
-            resource_name=rdr_workload[0].discovered_apps_placement_name
+            rdr_workload[0].workload_namespace,
+            discovered_apps=True,
+            resource_name=rdr_workload[0].discovered_apps_placement_name,
         )
 
-
-
         scheduling_interval = dr_helpers.get_scheduling_interval(
-            rdr_workload[0].workload_namespace, discovered_apps=True,
-            resource_name=rdr_workload[0].discovered_apps_placement_name
+            rdr_workload[0].workload_namespace,
+            discovered_apps=True,
+            resource_name=rdr_workload[0].discovered_apps_placement_name,
         )
 
         logger.info("Running Relocate Steps")
@@ -120,6 +134,7 @@ class TestFailoverAndRelocateWithDiscoveredApps:
             drpc_obj, rdr_workload[0].kubeobject_capture_interval_int
         )
         import pdb
+
         # pdb.set_trace()
         dr_helpers.relocate(
             preferred_cluster=secondary_cluster_name,
@@ -128,7 +143,7 @@ class TestFailoverAndRelocateWithDiscoveredApps:
             discovered_apps=True,
             old_primary=primary_cluster_name_after_failover,
             workload_instance=rdr_workload,
-            multi_ns=True
+            multi_ns=True,
         )
 
         # logger.info("Doing Cleanup Operations")

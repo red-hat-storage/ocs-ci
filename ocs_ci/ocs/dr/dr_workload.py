@@ -1120,9 +1120,7 @@ class BusyboxDiscoveredApps(DRWorkload):
         self.discovered_apps_pod_selector_value = kwargs.get(
             "discovered_apps_pod_selector_value"
         )
-        self.discovered_apps_multi_ns = kwargs.get(
-            "discovered_apps_multi_ns"
-        )
+        self.discovered_apps_multi_ns = kwargs.get("discovered_apps_multi_ns")
 
     def deploy_workload(self):
         """
@@ -1198,7 +1196,14 @@ class BusyboxDiscoveredApps(DRWorkload):
         log.info(f"Creating Placement for workload {self.workload_name}")
         run_cmd(f"oc create -f {placement_yaml.name}")
 
-    def create_dprc(self, drpc_name=None, placement_name=None, protected_namespaces=None, pvc_selector_key=None, pvc_selector_value=None):
+    def create_dprc(
+        self,
+        drpc_name=None,
+        placement_name=None,
+        protected_namespaces=None,
+        pvc_selector_key=None,
+        pvc_selector_value=None,
+    ):
         """
         Create DRPC for discovered Apps
 
@@ -1219,7 +1224,9 @@ class BusyboxDiscoveredApps(DRWorkload):
         del drpc_yaml_data["spec"]["pvcSelector"]["matchLabels"]
 
         log.info(self.discovered_apps_pvc_selector_key)
-        drpc_yaml_data["metadata"]["name"] = drpc_name or self.discovered_apps_placement_name
+        drpc_yaml_data["metadata"]["name"] = (
+            drpc_name or self.discovered_apps_placement_name
+        )
         drpc_yaml_data["metadata"]["namespace"] = constants.DR_OPS_NAMESAPCE
         drpc_yaml_data["spec"]["preferredCluster"] = self.preferred_primary_cluster
         drpc_yaml_data["spec"]["drPolicyRef"]["name"] = self.dr_policy_name
@@ -1232,13 +1239,13 @@ class BusyboxDiscoveredApps(DRWorkload):
         )
         templating.dump_data_to_temp_yaml(drpc_yaml_data, drcp_data_yaml.name)
         log.info(drcp_data_yaml.name)
-        drpc_yaml_data["spec"]["pvcSelector"]["matchExpressions"][0][
-            "key"
-        ] = pvc_selector_key or self.discovered_apps_pvc_selector_key
+        drpc_yaml_data["spec"]["pvcSelector"]["matchExpressions"][0]["key"] = (
+            pvc_selector_key or self.discovered_apps_pvc_selector_key
+        )
         drpc_yaml_data["spec"]["pvcSelector"]["matchExpressions"][0]["operator"] = "In"
-        drpc_yaml_data["spec"]["pvcSelector"]["matchExpressions"][0]["values"][
-            0
-        ] = pvc_selector_value or self.discovered_apps_pvc_selector_value
+        drpc_yaml_data["spec"]["pvcSelector"]["matchExpressions"][0]["values"][0] = (
+            pvc_selector_value or self.discovered_apps_pvc_selector_value
+        )
         if protected_namespaces:
             drpc_yaml_data["spec"]["protectedNamespaces"] = protected_namespaces
         else:
@@ -1320,7 +1327,7 @@ class BusyboxDiscoveredApps(DRWorkload):
                 discovered_apps=True,
                 workload_cleanup=True,
                 vrg_name=self.discovered_apps_placement_name,
-                skip_vrg_check=skip_vrg_check
+                skip_vrg_check=skip_vrg_check,
             )
             run_cmd(f"oc delete project {self.workload_namespace}")
 

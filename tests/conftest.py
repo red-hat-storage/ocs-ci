@@ -7182,8 +7182,10 @@ def discovered_apps_dr_workload(request):
                 pvc_type = constants.RBD_INTERFACE
             elif pvc_interface == constants.CEPHFILESYSTEM:
                 pvc_type = constants.CEPHFS_INTERFACE
-            drpc_name = f"busybox-multi-nsssi-{pvc_type}-" + "-".join(map(str, range(1, kubeobject + 1)))
-            placement_name =drpc_name+"-placement-1"
+            drpc_name = f"busybox-multi-ns-{pvc_type}-" + "-".join(
+                map(str, range(1, kubeobject + 1))
+            )
+            placement_name = drpc_name + "-placement-1"
             for index in range(kubeobject):
                 instances[index].discovered_apps_placement_name = drpc_name
             instances[0].create_placement(placement_name=placement_name)
@@ -7191,8 +7193,12 @@ def discovered_apps_dr_workload(request):
                 drpc_name=drpc_name,
                 placement_name=placement_name,
                 protected_namespaces=multi_ns_list,
-                pvc_selector_key=workload_details_list[0]["multi_ns_dr_workload_app_pvc_selector_key"],
-                pvc_selector_value=workload_details_list[0]["multi_ns_dr_workload_app_pvc_selector_value"]
+                pvc_selector_key=workload_details_list[0][
+                    "multi_ns_dr_workload_app_pvc_selector_key"
+                ],
+                pvc_selector_value=workload_details_list[0][
+                    "multi_ns_dr_workload_app_pvc_selector_value"
+                ],
             )
             for index in range(kubeobject):
                 instances[index].verify_workload_deployment(vrg_name=drpc_name)
@@ -7202,13 +7208,15 @@ def discovered_apps_dr_workload(request):
         for index, instance in enumerate(instances):
             try:
                 log.info(instance.__dict__)
-                drpc_name=None
+                drpc_name = None
                 if instance.discovered_apps_multi_ns:
                     is_last = index == len(instances) - 1
-                    drpc_name=instance.discovered_apps_placement_name
+                    drpc_name = instance.discovered_apps_placement_name
                 else:
-                    is_last=False
-                instance.delete_workload(skip_vrg_check=not is_last, drpc_name=drpc_name)
+                    is_last = False
+                instance.delete_workload(
+                    skip_vrg_check=not is_last, drpc_name=drpc_name
+                )
             except ResourceNotDeleted:
                 raise ResourceNotDeleted("Workload deletion was unsuccessful")
 
