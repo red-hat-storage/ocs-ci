@@ -174,6 +174,8 @@ class TestSiteFailureRecoveryAndfailover:
 
         # Edit the global KlusterletConfig on the new hub and remove
         # the parameter appliedManifestWorkEvictionGracePeriod and its value.
+        # ToDo:  appliedManifestWorkEvictionGracePeriod should only be removed if the
+        #  Progression in DRPC is not in Paused state and all the workloads have successfully recovered.
         logger.info(
             "Edit the global KlusterletConfig on the new hub and "
             "remove the parameter appliedManifestWorkEvictionGracePeriod and its value."
