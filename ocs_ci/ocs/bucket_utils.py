@@ -2410,6 +2410,51 @@ def expire_objects_in_bucket(bucket_name, object_keys=[], prefix=""):
     )
 
 
+def expire_parts(upload_id):
+    """
+    Expire multipart upload parts in a bucket by changing their creation date to one year back.
+
+    Args:
+        upload_id (str): The ID of the multipart upload
+
+    """
+    one_year_ago = time.time() - 60 * 60 * 24 * 365
+    psql_query = (
+        "UPDATE objectmultiparts "
+        "SET data = jsonb_set(data, '{create_time}', "
+        f"to_jsonb(to_timestamp({one_year_ago}))) "
+        f"WHERE data->>'obj' = '{upload_id}'"
+    )
+    psql_query += ";"
+    exec_nb_db_query(psql_query)
+
+
+def expire_multipart_upload(upload_id):
+    """
+    Expire multipart upload in a bucket by changing their creation date to one year back.
+
+    Args:
+        bucket (str): The name of the bucket where the multipart upload parts reside
+    """
+    one_year_ago = time.time() - 60 * 60 * 24 * 365
+
+    # In the DB the creation time is the same as the ID
+    # and that ID's first 8 characters are the initial timestamp
+    # in hex
+
+    # first two characters of the hex are 0x
+    new_upload_started = hex(int(one_year_ago))[2:] + upload_id[8:]
+
+    psql_query = (
+        "UPDATE objectmds "
+        "SET data = jsonb_set(data, '{upload_started}', "
+        f"'\\\"{new_upload_started}\\\"') "
+        f"WHERE _id = '{upload_id}'"
+    )
+    psql_query += ";"
+    exec_nb_db_query(psql_query)
+
+
 def check_if_objects_expired(mcg_obj, bucket_name, prefix=""):
     """
     Checks if objects in the bucket is expired
@@ -3158,7 +3203,7 @@ def gen_empty_file_and_upload(
             command=f"mkdir -p {dir}/{index} && for i in $(seq {begin} {end});do touch {dir}/{index}/{pattern}-$i;done",
             timeout=timeout,
         )
-        logger.info(f"Uploading batch of {end-begin} objects to the bucket {bucket}")
+        logger.info(f"Uploading batch of {end - begin} objects to the bucket {bucket}")
         sync_object_directory(
             aws_pod,
             f"{dir}/{index}",
