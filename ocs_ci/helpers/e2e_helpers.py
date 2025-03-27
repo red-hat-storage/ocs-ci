@@ -1,5 +1,4 @@
 import logging
-
 import random
 import copy
 import re
@@ -19,7 +18,11 @@ from ocs_ci.ocs.bucket_utils import (
 )
 from ocs_ci.ocs.resources.pod import get_rgw_pods, get_pod_logs
 from ocs_ci.utility.utils import exec_cmd, run_cmd
-
+from ocs_ci.ocs.cluster import (
+    get_percent_used_capacity,
+    get_osd_utilization,
+    get_ceph_df_detail,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -392,3 +395,27 @@ def validate_mcg_object_expiration(
 
 def validate_mcg_nsfs_feature():
     logger.info("This is not implemented")
+
+
+def verify_osd_used_capacity_greater_than_expected(expected_used_capacity):
+    """
+    Verify OSD percent used capacity greate than ceph_full_ratio
+
+    Args:
+        expected_used_capacity (float): expected used capacity
+
+    Returns:
+         bool: True if used_capacity greater than expected_used_capacity, False otherwise
+
+    """
+    used_capacity = get_percent_used_capacity()
+    logger.info(f"Used Capacity is {used_capacity}%")
+    ceph_df_detail = get_ceph_df_detail()
+    logger.info(f"ceph df detail: {ceph_df_detail}")
+    osds_utilization = get_osd_utilization()
+    logger.info(f"osd utilization: {osds_utilization}")
+    for osd_id, osd_utilization in osds_utilization.items():
+        if osd_utilization > expected_used_capacity:
+            logger.info(f"OSD ID:{osd_id}:{osd_utilization} greater than 85%")
+            return True
+    return False

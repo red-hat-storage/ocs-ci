@@ -646,3 +646,101 @@ class PVKeyrotation(KeyRotation):
 
         log.info("Completed key rotation state changes for all specified PVCs.")
         return True
+
+
+def validate_key_rotation_schedules(schedule):
+    """
+    Validate key rotation schedules across different components.
+
+    Args:
+        schedule (str): The expected key rotation schedule.
+
+    Raises:
+        ValueError: If the schedule does not match in any of the components.
+    """
+    log.info(f"Starting key rotation schedule validation for schedule: {schedule}.")
+
+    components = [
+        ("Storage Cluster", OSDKeyrotation().get_keyrotation_schedule),
+        ("Rook Object", OSDKeyrotation().get_osd_keyrotation_schedule),
+        ("NooBaa Object", NoobaaKeyrotation().get_noobaa_keyrotation_schedule),
+    ]
+
+    for name, get_schedule in components:
+        current_schedule = get_schedule()
+        if current_schedule != schedule:
+            raise ValueError(
+                f"{name} key rotation schedule mismatch: expected {schedule}, got {current_schedule}."
+            )
+        log.info(f"{name} key rotation schedule verified successfully.")
+
+    log.info("Key rotation schedule validation completed successfully.")
+    return True
+
+
+def verify_new_key_after_rotation(tries, delays):
+    """
+    This function records existing keys for OSD, Noobaa volume and backend
+    and compare with the new keys generated on given schedule.
+
+    """
+    osd_keyrotation = OSDKeyrotation()
+    noobaa_keyrotation = NoobaaKeyrotation()
+
+    log.info("Record existing OSD keys before rotation is happened.")
+    osd_keys_before_rotation = {}
+    for device in osd_keyrotation.deviceset:
+        osd_keys_before_rotation[device] = osd_keyrotation.get_osd_dm_crypt(device)
+
+    log.info("Record Noobaa volume and backend keys before rotation.")
+    (
+        old_noobaa_backend_key,
+        old_noobaa_backend_secret,
+    ) = noobaa_keyrotation.get_noobaa_backend_secret()
+    log.info(
+        f" Noobaa backend secrets before Rotation {old_noobaa_backend_key} : {old_noobaa_backend_secret}"
+    )
+
+    (
+        old_noobaa_volume_key,
+        old_noobaa_volume_secret,
+    ) = noobaa_keyrotation.get_noobaa_volume_secret()
+    log.info(
+        f"Noobaa Volume secrets before Rotation {old_noobaa_volume_key} : {old_noobaa_volume_secret}"
+    )
+
+    @retry(UnexpectedBehaviour, tries=tries, delay=delays)
+    def compare_old_keys_with_new_keys():
+        """
+        Compare old keys with new keys.
+
+        """
+        (
+            new_noobaa_backend_key,
+            new_noobaa_backend_secret,
+        ) = noobaa_keyrotation.get_noobaa_backend_secret()
+        (
+            new_noobaa_volume_key,
+            new_noobaa_volume_secret,
+        ) = noobaa_keyrotation.get_noobaa_volume_secret()
+
+        if new_noobaa_backend_key == old_noobaa_backend_key:
+            raise UnexpectedBehaviour("Noobaa Key Rotation is not happend")
+
+        if new_noobaa_volume_key == old_noobaa_volume_key:
+            raise UnexpectedBehaviour("Noobaa Key Rotation is not happend.")
+
+        log.info(
+            f"Noobaa Backend key rotated {new_noobaa_backend_key} : {new_noobaa_backend_secret}"
+        )
+        log.info(
+            f"Noobaa Volume key rotated {new_noobaa_volume_key} : {new_noobaa_volume_secret}"
+        )
+
+    try:
+        osd_keyrotation.verify_keyrotation(osd_keys_before_rotation, tries=10, delay=30)
+        compare_old_keys_with_new_keys()
+
+    except UnexpectedBehaviour:
+        log.error("Key rotation is Not happened after schedule is passed. ")
+        assert False
