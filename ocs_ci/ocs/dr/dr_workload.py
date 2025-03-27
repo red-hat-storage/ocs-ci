@@ -1099,6 +1099,7 @@ class BusyboxDiscoveredApps(DRWorkload):
         self.workload_dir = kwargs.get("workload_dir")
         self.discovered_apps_placement_name = kwargs.get("workload_placement_name")
         self.drpc_yaml_file = os.path.join(constants.DRPC_PATH)
+        self.drpc_recipe_yaml_file = os.path.join(constants.DRPC_RECIPE_PATH)
         self.placement_yaml_file = os.path.join(constants.PLACEMENT_PATH)
         self.recipe_yaml_file = os.path.join(constants.RECIPE_PATH)
         self.secret_yaml_file = os.path.join(constants.SECRET_PATH)
@@ -1154,9 +1155,13 @@ class BusyboxDiscoveredApps(DRWorkload):
             config.switch_acm_ctx()
             self.create_placement()
         else:
+            log.info("Creating workload with recipe")
             self.create_secret()
-            self.create_recipe_with_checkhooks()
-        self.create_drpc()
+            for cluster in get_non_acm_cluster_config():
+                config.switch_ctx(cluster.MULTICLUSTER["multicluster_index"])
+                self.create_recipe_with_checkhooks()
+        config.switch_acm_ctx()
+        self.create_drpc_for_apps_with_recipe()
         self.verify_workload_deployment()
 
     def _deploy_prereqs(self):
@@ -1198,8 +1203,8 @@ class BusyboxDiscoveredApps(DRWorkload):
             mode="w+", prefix="secret", delete=False
         )
         templating.dump_data_to_temp_yaml(secret_yaml_data, secret_yaml.name)
-        log.info(f"Creating Placement for workload {self.workload_name}")
-        run_cmd(f"oc create -f {secret_yaml.name}")
+        log.info(f"Creating secret for workload {self.workload_name}")
+        run_cmd(f"oc create -f {secret_yaml.name} -n {self.workload_namespace}")
 
     def create_recipe_with_checkhooks(self):
         """
@@ -1239,11 +1244,11 @@ class BusyboxDiscoveredApps(DRWorkload):
                     self.workload_namespace
                 ]
         recipe_yaml = tempfile.NamedTemporaryFile(
-            mode="w+", prefix="secret", delete=False
+            mode="w+", prefix="recipe", delete=False
         )
         templating.dump_data_to_temp_yaml(recipe_yaml_data, recipe_yaml.name)
         log.info(f"Creating recipe for workload {self.workload_name}")
-        run_cmd(f"oc create -f {recipe_yaml.name}")
+        run_cmd(f"oc create -f {recipe_yaml.name} -n {self.workload_namespace}")
 
     def create_placement(self):
         """
@@ -1267,12 +1272,9 @@ class BusyboxDiscoveredApps(DRWorkload):
         log.info(f"Creating Placement for workload {self.workload_name}")
         run_cmd(f"oc create -f {placement_yaml.name}")
 
-    def create_drpc(self, recipe=None):
+    def create_drpc(self):
         """
         Create DRPC for discovered Apps
-
-        Args:
-            recipe (bool): true if deploying workload with recipe, false otherwise
 
         """
 
@@ -1293,50 +1295,72 @@ class BusyboxDiscoveredApps(DRWorkload):
             self.discovered_apps_placement_name + "-placement-1"
         )
         drpc_yaml_data["spec"]["placementRef"]["namespace"] = constants.DR_OPS_NAMESAPCE
+        drcp_data_yaml = tempfile.NamedTemporaryFile(
+            mode="w+", prefix="drpc", delete=False
+        )
+        templating.dump_data_to_temp_yaml(drpc_yaml_data, drcp_data_yaml.name)
+        log.info(drcp_data_yaml.name)
+        drpc_yaml_data["spec"]["pvcSelector"]["matchExpressions"][0][
+            "key"
+        ] = self.discovered_apps_pvc_selector_key
+        drpc_yaml_data["spec"]["pvcSelector"]["matchExpressions"][0]["operator"] = "In"
+        drpc_yaml_data["spec"]["pvcSelector"]["matchExpressions"][0]["values"][
+            0
+        ] = self.discovered_apps_pvc_selector_value
+        drpc_yaml_data["spec"]["protectedNamespaces"][0] = self.workload_namespace
+        drpc_yaml_data["spec"]["kubeObjectProtection"][
+            "captureInterval"
+        ] = self.kubeobject_capture_interval
+        drpc_yaml_data["spec"]["kubeObjectProtection"]["kubeObjectSelector"][
+            "matchExpressions"
+        ][0]["key"] = self.discovered_apps_pod_selector_key
+        drpc_yaml_data["spec"]["kubeObjectProtection"]["kubeObjectSelector"][
+            "matchExpressions"
+        ][0]["operator"] = "In"
+        drpc_yaml_data["spec"]["kubeObjectProtection"]["kubeObjectSelector"][
+            "matchExpressions"
+        ][0]["values"][0] = self.discovered_apps_pod_selector_value
+        drcp_data_yaml = tempfile.NamedTemporaryFile(
+            mode="w+", prefix="drpc", delete=False
+        )
+        templating.dump_data_to_temp_yaml(drpc_yaml_data, drcp_data_yaml.name)
+        log.info("Creating DRPC")
+        run_cmd(f"oc create -f {drcp_data_yaml.name}")
+
+    def create_drpc_for_apps_with_recipe(self):
+        """
+        Create drpc for discovered apps with recipe
+        """
+
+        drpc_yaml_data = templating.load_yaml(self.drpc_recipe_yaml_file)
+        drpc_yaml_data["spec"].setdefault("kubeObjectProtection", {})
+        drpc_yaml_data["spec"]["kubeObjectProtection"].setdefault("kubeObjectSelector")
+        drpc_yaml_data["spec"].setdefault("protectedNamespaces", []).append(
+            self.workload_namespace
+        )
+        drpc_yaml_data["metadata"]["name"] = self.discovered_apps_placement_name
+        drpc_yaml_data["metadata"]["namespace"] = constants.DR_OPS_NAMESAPCE
+        drpc_yaml_data["spec"]["preferredCluster"] = self.preferred_primary_cluster
+        drpc_yaml_data["spec"]["drPolicyRef"]["name"] = self.dr_policy_name
+        drpc_yaml_data["spec"]["placementRef"]["name"] = (
+            self.discovered_apps_placement_name + "-placement-1"
+        )
+        drpc_yaml_data["spec"]["placementRef"]["namespace"] = constants.DR_OPS_NAMESAPCE
         drpc_data_yaml = tempfile.NamedTemporaryFile(
             mode="w+", prefix="drpc", delete=False
         )
         templating.dump_data_to_temp_yaml(drpc_yaml_data, drpc_data_yaml.name)
         log.info(drpc_data_yaml.name)
-        if not recipe:
-            log.info("Deploying workload without enabling recipe")
-            drpc_yaml_data["spec"]["pvcSelector"]["matchExpressions"][0][
-                "key"
-            ] = self.discovered_apps_pvc_selector_key
-            drpc_yaml_data["spec"]["pvcSelector"]["matchExpressions"][0][
-                "operator"
-            ] = "In"
-            drpc_yaml_data["spec"]["pvcSelector"]["matchExpressions"][0]["values"][
-                0
-            ] = self.discovered_apps_pvc_selector_value
-            drpc_yaml_data["spec"]["protectedNamespaces"][0] = self.workload_namespace
-            drpc_yaml_data["spec"]["kubeObjectProtection"][
-                "captureInterval"
-            ] = self.kubeobject_capture_interval
-            drpc_yaml_data["spec"]["kubeObjectProtection"]["kubeObjectSelector"][
-                "matchExpressions"
-            ][0]["key"] = self.discovered_apps_pod_selector_key
-            drpc_yaml_data["spec"]["kubeObjectProtection"]["kubeObjectSelector"][
-                "matchExpressions"
-            ][0]["operator"] = "In"
-            drpc_yaml_data["spec"]["kubeObjectProtection"]["kubeObjectSelector"][
-                "matchExpressions"
-            ][0]["values"][0] = self.discovered_apps_pod_selector_value
-            drpc_data_yaml = tempfile.NamedTemporaryFile(
-                mode="w+", prefix="drpc", delete=False
-            )
-        else:
-            log.info("Deploying workload with recipe")
-            drpc_yaml_data["spec"]["kubeObjectProtection"][
-                "captureInterval"
-            ] = self.kubeobject_capture_interval
-            drpc_yaml_data["spec"]["kubeObjectProtection"]["recipeRef"]["name"] = (
-                self.workload_name + "-recipe-1"
-            )
-            drpc_yaml_data["spec"]["kubeObjectProtection"]["recipeRef"][
-                "namespace"
-            ] = self.workload_namespace
-
+        log.info("Deploying workload with recipe")
+        drpc_yaml_data["spec"]["kubeObjectProtection"][
+            "captureInterval"
+        ] = self.kubeobject_capture_interval
+        drpc_yaml_data["spec"]["kubeObjectProtection"]["recipeRef"]["name"] = (
+            self.workload_name + "-recipe-1"
+        )
+        drpc_yaml_data["spec"]["kubeObjectProtection"]["recipeRef"][
+            "namespace"
+        ] = self.workload_namespace
         templating.dump_data_to_temp_yaml(drpc_yaml_data, drpc_data_yaml.name)
         log.info("Creating DRPC")
         run_cmd(f"oc create -f {drpc_data_yaml.name}")
@@ -1376,11 +1400,14 @@ class BusyboxDiscoveredApps(DRWorkload):
             log.info("Deleting DRPC")
             config.switch_acm_ctx()
             run_cmd(
-                f"oc delete drpc -n {constants.DR_OPS_NAMESAPCE} {self.discovered_apps_placement_name}"
+                f"oc delete drpc -n {constants.DR_OPS_NAMESAPCE} {self.discovered_apps_placement_name}",
+                ignore_error=True,
             )
             log.info("Deleting Placement")
             run_cmd(
-                f"oc delete placement -n {constants.DR_OPS_NAMESAPCE} {self.discovered_apps_placement_name}-placement-1"
+                f"oc delete placement -n {constants.DR_OPS_NAMESAPCE} "
+                f"{self.discovered_apps_placement_name}-placement-1",
+                ignore_error=True,
             )
 
         for cluster in get_non_acm_cluster_config():
@@ -1388,6 +1415,17 @@ class BusyboxDiscoveredApps(DRWorkload):
             log.info(f"Deleting workload from {cluster.ENV_DATA['cluster_name']}")
             run_cmd(
                 f"oc delete -k {self.workload_path} -n {self.workload_namespace}",
+                ignore_error=True,
+            )
+            log.info(f"Deleting recipe from {cluster.ENV_DATA['cluster_name']}")
+            run_cmd(
+                cmd=f"oc delete recipe {self.discovered_apps_recipe_name_value} -n {self.workload_namespace}",
+                ignore_error=True,
+            )
+            log.info(f"Deleting secret from {cluster.ENV_DATA['cluster_name']}")
+            secret_name = self.workload_namespace + "-secret"
+            run_cmd(
+                cmd=f"oc delete secret {secret_name} -n {self.workload_namespace}",
                 ignore_error=True,
             )
             dr_helpers.wait_for_all_resources_deletion(

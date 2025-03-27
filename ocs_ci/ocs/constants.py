@@ -3040,6 +3040,7 @@ UI_INPUT_RULES_STORAGE_SYSTEM = {
 
 # DR
 DRPC_PATH = os.path.join(TEMPLATE_DIR, "DR", "drpc.yaml")
+DRPC_RECIPE_PATH = os.path.join(TEMPLATE_DIR, "DR", "drpc_with_recipe.yaml")
 RECIPE_PATH = os.path.join(TEMPLATE_DIR, "DR", "recipe_with_checkhooks.yaml")
 SECRET_PATH = os.path.join(TEMPLATE_DIR, "DR", "secret.yaml")
 PLACEMENT_PATH = os.path.join(TEMPLATE_DIR, "DR", "placement.yaml")
