@@ -9,7 +9,8 @@ from ocs_ci.framework.testlib import (
     E2ETest,
     tier2,
     skipif_external_mode,
-    skipif_vsphere_ipi,
+    cloud_platform_required,
+    baremetal_deployment_required,
 )
 from ocs_ci.helpers.e2e_helpers import run_metadata_io_with_cephfs
 from ocs_ci.ocs import cluster
@@ -23,7 +24,8 @@ log = logging.getLogger(__name__)
 @bugzilla("2141422")
 @brown_squad
 @skipif_external_mode
-@skipif_vsphere_ipi
+@cloud_platform_required
+@baremetal_deployment_required
 class TestMdsCacheTrimStandby(E2ETest):
     @pytest.fixture(scope="function", autouse=True)
     def teardown(self, request):
