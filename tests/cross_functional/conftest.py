@@ -1872,6 +1872,9 @@ def setup_stress_testing_bucket(bucket_factory_session, rgw_bucket_factory_sessi
 
     def factory():
 
+        # These are the bucket configs needed for
+        # creating buckets. They support buckets on
+        # AWS, AZURE, PV-POOL and RGW
         bucket_configs = {
             "aws": {
                 "interface": "CLI",
@@ -1890,12 +1893,23 @@ def setup_stress_testing_bucket(bucket_factory_session, rgw_bucket_factory_sessi
             "rgw": None,
         }
 
+        # We loop through each bucket configs and
+        # create one bucket after another
         bucket_objects = dict()
-
         logger.info("Creating buckets for stress testing")
         for type, bucketclass_dict in bucket_configs.items():
             if type == "rgw":
-                bucket = rgw_bucket_factory_session(interface="rgw-oc")[0]
+
+                # We only create RGW buckets if there is support for RGW
+                # in the cluster platform. RGW is only supported in on-prem
+                # platforms i.e, Vsphere, Baremetal etc.
+                if config.ENV_DATA["platform"].lower() in constants.ON_PREM_PLATFORMS:
+                    bucket = rgw_bucket_factory_session(interface="rgw-oc")[0]
+                else:
+                    logger.info(
+                        "Can't create RGW bucket as there is no support for RGW in non-onprem platforms"
+                    )
+                    continue
             else:
                 bucket = bucket_factory_session(
                     interface="CLI", bucketclass=bucketclass_dict

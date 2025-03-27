@@ -158,7 +158,8 @@ class TestNoobaaUnderStress:
 
                 # Perform object download on
                 # a randomly selected bucket
-                bucket = random.choice(buckets)
+                if len(buckets) != 0:
+                    bucket = random.choice(buckets)
                 futures_obj.append(
                     executor.submit(
                         download_objs_from_bucket,
@@ -170,7 +171,8 @@ class TestNoobaaUnderStress:
                         multiplier=multiplier,
                     )
                 )
-                buckets.remove(bucket)
+                if len(buckets) != 0:
+                    buckets.remove(bucket)
 
                 # Wait until all the object operations are done
                 logger.info(
