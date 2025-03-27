@@ -66,7 +66,6 @@ from ocs_ci.ocs.resources.pod import (
     get_mds_pods,
     wait_for_pods_to_be_in_statuses,
 )
-from ocs_ci.utility.decorators import switch_to_orig_index_at_last
 
 logger = logging.getLogger(__name__)
 
@@ -3411,7 +3410,6 @@ def client_cluster_health_check():
     logger.info("The client cluster health check passed successfully")
 
 
-@switch_to_orig_index_at_last
 def client_clusters_health_check():
     """
     Check the client clusters health using the function 'client_cluster_health_check'.
@@ -3423,10 +3421,9 @@ def client_clusters_health_check():
         CephHealthException: In case there are extra Ceph pods on the cluster
 
     """
-    client_indices = config.get_consumer_indexes_list()
-    for client_i in client_indices:
-        config.switch_ctx(client_i)
-        client_cluster_health_check()
+    for client_context in config.get_client_contexts_if_available():
+        with client_context:
+            client_cluster_health_check()
 
     logger.info("The client clusters health check passed successfully")
 

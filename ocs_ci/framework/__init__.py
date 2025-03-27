@@ -13,6 +13,7 @@ import os
 import yaml
 import logging
 from collections.abc import Mapping
+from contextlib import nullcontext
 from dataclasses import dataclass, field, fields
 from ocs_ci.ocs.exceptions import ClusterNotFoundException
 
@@ -529,6 +530,21 @@ class MultiClusterConfig:
                 logger.debug("No Consumer was found - using current cluster")
                 switch_index = config.cur_index
             super().__init__(switch_index)
+
+    def get_client_contexts_if_available(self):
+        """
+        Get contexts that can be used for context iteration of client clusters.
+        If there are no client contexts available then use simple nullcontext to not break
+        functionality and still execute the code on current cluster.
+        """
+        indexes = config.get_consumer_indexes_list()
+        if indexes:
+            return [self.RunWithConfigContext(index) for index in indexes]
+        else:
+            logger.warning(
+                "No consumer cluster found. Executing the code on current cluster."
+            )
+            return nullcontext()
 
     def insert_cluster_config(self, index, new_config):
         """
