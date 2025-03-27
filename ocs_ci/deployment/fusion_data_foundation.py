@@ -140,10 +140,10 @@ class FusionDataFoundationDeployment:
         """
         logger.info("Retrieving installed FDF version")
         results = run_cmd(
-            f"oc describe FusionServiceInstance {constants.FDF_SERVICE_NAME} "
-            f"-n {constants.FDF_NAMESPACE} --kubeconfig {self.kubeconfig}"
+            f"oc get FusionServiceInstance {constants.FDF_SERVICE_NAME} "
+            f"-n {constants.FDF_NAMESPACE} --kubeconfig {self.kubeconfig} -o yaml"
         )
-        version = yaml.safe_load(results)["Status"]["Current Version"]
+        version = yaml.safe_load(results)["status"]["currentVersion"]
         config.ENV_DATA["fdf_version"] = version
         logger.info(f"Installed FDF version: {version}")
         return version
@@ -206,7 +206,7 @@ def fusion_service_instance_health_check():
 
     """
     instance = OCP(
-        resource_name="odfmanager",
+        resource_name=constants.FDF_SERVICE_NAME,
         kind="FusionServiceInstance",
         namespace=constants.FDF_NAMESPACE,
     )

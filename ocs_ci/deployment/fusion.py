@@ -147,9 +147,9 @@ class FusionDeployment:
         """
         logger.info("Retrieving installed Fusion version")
         results = run_cmd(
-            f"oc describe subscription {self.operator_name} -n {self.namespace} --kubeconfig {self.kubeconfig}"
+            f"oc get subscription {self.operator_name} -n {self.namespace} --kubeconfig {self.kubeconfig} -o yaml"
         )
-        build = yaml.safe_load(results)["Status"]["Current CSV"]
+        build = yaml.safe_load(results)["status"]["installedCSV"]
         version = ".".join(build.split(".")[1:])
         config.ENV_DATA["fusion_version"] = version
         logger.info(f"Installed Fusion version: {version}")
