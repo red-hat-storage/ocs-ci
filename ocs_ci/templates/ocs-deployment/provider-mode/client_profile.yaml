@@ -1,0 +1,17 @@
+apiVersion: csi.ceph.io/v1alpha1
+kind: ClientProfile
+metadata:
+  name: sample-clientprofile
+spec:
+  cephConnectionRef:
+    name: ocs-storagecluster # by default storageCluster name
+  cephFs:
+    # fuseMountOptions provides a user-space file system interface and is often used for mounting file systems like CephFS
+    fuseMountOptions: {}
+    kernelMountOptions: {}
+    # radosNamespace is to ensure ceph fs has namespace for storing metadata (OMAP data)
+    radosNamespace: {}
+    subVolumeGroup: {}
+  nfs: {}
+  rbd:
+    radosNamespace: rados-namespace
