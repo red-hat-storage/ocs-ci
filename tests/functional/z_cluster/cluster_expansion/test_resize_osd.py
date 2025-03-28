@@ -83,6 +83,12 @@ class TestResizeOSD(ManageTest):
         Init all the data for the resize osd test
 
         """
+        self.io_in_bg_paused = False
+        if config.RUN.get("io_in_bg"):
+            # Pause the IO in Background as we already have IO running in this test
+            config.RUN["load_status"] = "to_be_paused"
+            self.io_in_bg_paused = True
+
         self.old_storage_size = get_storage_size()
         size_to_increase = (
             get_pytest_fixture_value(request, "size_to_increase")
@@ -115,6 +121,10 @@ class TestResizeOSD(ManageTest):
         """
 
         def finalizer():
+            if self.io_in_bg_paused:
+                # Resume the IO in Background
+                config.RUN["load_status"] = "to_be_resumed"
+
             update_resize_osd_count(self.old_storage_size)
 
         request.addfinalizer(finalizer)
