@@ -168,11 +168,12 @@ class IBMCloudBM(object):
         self.stop_machines(machines)
         self.start_machines(machines)
 
-    def check_if_machines_are_off_from_sensor_data(self, machines):
+    def get_machines_that_are_not_off_from_sensor_data(self, machines):
         """
         Retrieve a server’s hardware state via its internal sensors and check if RPM Sensor data is present.
-        Data from RPM sensors won't be available if the machine is off. To be used only as an alternate method.
-        A command resulting in the power status of the machine is not available.
+        Data from RPM sensors won't be available if the machine is OFF. To be used only as an alternate method.
+        A command resulting in the power status of the machine is not available. This method is not recommended to
+        identify the machines that are ON and functional
 
         Args:
             machines (list): List of the IBMCLoud Bare metal machines objects
