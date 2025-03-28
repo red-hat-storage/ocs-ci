@@ -33,7 +33,6 @@ from ocs_ci.ocs.resources.mcg_lifecycle_policies import (
 from ocs_ci.utility.retry import retry
 from ocs_ci.ocs.exceptions import CommandFailed
 
-
 log = logging.getLogger(__name__)
 
 
@@ -206,17 +205,17 @@ class TestDeleteObjects:
     def create_bucket_verify_object_deletion(
         self, request, bucket_factory_session, mcg_obj_session
     ):
-        bucket = None
-        expiration = False
+        buckets = list()
+        expirations = list()
 
         def factory(exp):
             """
             Factory function to create the bucket
 
             """
-            global bucket, expiration
-            expiration = exp
+            expirations.append(exp)
             bucket = bucket_factory_session(amount=1, interface="OC")[0]
+            buckets.append(bucket)
             return bucket
 
         def teardown():
@@ -225,12 +224,13 @@ class TestDeleteObjects:
             in the bucket
 
             """
-            if expiration:
-                sample_if_objects_expired(
-                    mcg_obj_session, bucket.name, timeout=7200, sleep=60
-                )
-            verify_objs_deleted_from_objmds(bucket.name, timeout=7200, sleep=60)
-            log.info("Verified that all objects are deleted and marked deleted")
+            for bucket, expiration in zip(buckets, expirations):
+                if expiration:
+                    sample_if_objects_expired(
+                        mcg_obj_session, bucket.name, timeout=36000, sleep=60
+                    )
+                verify_objs_deleted_from_objmds(bucket.name, timeout=7200, sleep=60)
+                log.info("Verified that all objects are deleted and marked deleted")
 
         request.addfinalizer(teardown)
         return factory
@@ -252,7 +252,11 @@ class TestDeleteObjects:
         change_lifecycle_schedule_min,
         expiration,
     ):
-        """ """
+        """
+        Test to verify object deletion through object mds when we delete or expire
+        objects in bucket at scale
+
+        """
 
         # Reduce the expiration interval and lifecycle schedule delay
         log.info(
@@ -271,7 +275,7 @@ class TestDeleteObjects:
             mcg_obj_session,
             awscli_pod_session,
             test_directory_setup.origin_dir,
-            amount=5000,
+            amount=500000,
             bucket=bucket.name,
             threads=10,
             timeout=7200,
@@ -283,7 +287,7 @@ class TestDeleteObjects:
             log.info(f"Setting object expiration on bucket: {bucket}")
             lifecycle_policy = LifecyclePolicy(ExpirationRule(days=1))
             mcg_obj_session.s3_client.put_bucket_lifecycle_configuration(
-                Bucket=bucket, LifecycleConfiguration=lifecycle_policy.as_dict()
+                Bucket=bucket.name, LifecycleConfiguration=lifecycle_policy.as_dict()
             )
 
             log.info(f"Manually expiring objects in the bucket {bucket.name}")
@@ -292,5 +296,5 @@ class TestDeleteObjects:
         else:
             log.info("Deleting the objects inside the bucket recursively")
             rm_object_recursive(
-                awscli_pod_session, f"s3:{bucket.name}", mcg_obj_session, timeout=3600
+                awscli_pod_session, f"{bucket.name}", mcg_obj_session, timeout=3600
             )
