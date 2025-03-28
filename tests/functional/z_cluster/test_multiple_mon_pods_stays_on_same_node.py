@@ -44,7 +44,6 @@ POD_OBJ = OCP(kind=POD, namespace=config.ENV_DATA["cluster_namespace"])
 @ignore_leftovers
 @skipif_ocs_version("<4.8")
 @pytest.mark.polarion_id("OCS-2593")
-@pytest.mark.bugzilla("1974204")
 @skipif_no_lso
 class TestMultipleMonPodsStaysOnSameNode(ManageTest):
     """

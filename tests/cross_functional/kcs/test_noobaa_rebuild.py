@@ -28,8 +28,6 @@ logger = logging.getLogger(__name__)
 @tier3
 @ignore_leftovers
 @pytest.mark.polarion_id("OCS-2653")
-@pytest.mark.bugzilla("1991361")
-@pytest.mark.bugzilla("2019577")
 @skipif_managed_service
 @skipif_external_mode
 class TestNoobaaRebuild(E2ETest):

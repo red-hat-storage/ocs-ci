@@ -295,7 +295,6 @@ class TestMetadata(ManageTest):
                 constants.DEFAULT_STORAGECLASS_RBD,
                 marks=[
                     pytest.mark.polarion_id("OCS-4679"),
-                    pytest.mark.bugzilla("2039269"),
                 ],
             ),
         ],

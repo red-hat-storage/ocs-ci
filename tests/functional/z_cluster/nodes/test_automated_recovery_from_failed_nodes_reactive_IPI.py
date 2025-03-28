@@ -89,7 +89,6 @@ class TestAutomatedRecoveryFromFailedNodes(ManageTest):
                 *["rbd", "shutdown"],
                 marks=[
                     pytest.mark.polarion_id("OCS-2102"),
-                    pytest.mark.bugzilla("1845666"),
                 ],
             ),
             pytest.param(
@@ -99,7 +98,6 @@ class TestAutomatedRecoveryFromFailedNodes(ManageTest):
                 *["cephfs", "shutdown"],
                 marks=[
                     pytest.mark.polarion_id("OCS-2104"),
-                    pytest.mark.bugzilla("1845666"),
                 ],
             ),
             pytest.param(

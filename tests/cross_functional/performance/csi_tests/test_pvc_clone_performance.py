@@ -422,7 +422,6 @@ class TestPVCClonePerformance(PASTest):
                 *[constants.CEPHFILESYSTEM, 7, 1800],
                 marks=[
                     pytest.mark.polarion_id("OCS-2674"),
-                    pytest.mark.bugzilla("2101874"),
                 ],
             ),
         ],
