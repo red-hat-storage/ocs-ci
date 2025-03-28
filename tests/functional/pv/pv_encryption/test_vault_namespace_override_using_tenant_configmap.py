@@ -13,7 +13,6 @@ from ocs_ci.framework.testlib import (
     skipif_proxy_cluster,
     ManageTest,
     tier1,
-    bugzilla,
     config,
 )
 from ocs_ci.helpers.helpers import create_unique_resource_name, create_pods
@@ -51,7 +50,6 @@ else:
 )
 @tier1
 @skipif_ocs_version("<4.10")
-@bugzilla("2050056")
 @kms_config_required
 @skipif_managed_service
 @skipif_hci_provider_and_client

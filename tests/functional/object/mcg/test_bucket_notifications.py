@@ -7,7 +7,6 @@ import pytest
 
 from ocs_ci.framework.testlib import (
     MCGTest,
-    bugzilla,
     jira,
     ignore_leftover_label,
     mcg,
@@ -73,7 +72,7 @@ class TestBucketNotifications(MCGTest):
     @pytest.mark.parametrize(
         argnames=["use_provided_pvc"],
         argvalues=[
-            pytest.param(False, marks=[polarion_id("OCS-6329"), bugzilla("2302842")]),
+            pytest.param(False, marks=[polarion_id("OCS-6329")]),
             pytest.param(
                 True,
                 marks=[polarion_id("OCS-6330"), skipif_mcg_only],

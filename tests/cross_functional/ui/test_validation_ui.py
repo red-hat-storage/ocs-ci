@@ -9,7 +9,6 @@ from ocs_ci.framework.testlib import (
     skipif_ocs_version,
     polarion_id,
     ui,
-    bugzilla,
 )
 from ocs_ci.framework.pytest_customization.marks import (
     black_squad,
@@ -54,7 +53,6 @@ class TestUserInterfaceValidation(object):
     @ui
     @runs_on_provider
     @tier1
-    @bugzilla("2155743")
     @polarion_id("OCS-2575")
     @skipif_ui_not_support("validation")
     def test_dashboard_validation_ui(self, setup_ui_class_factory):

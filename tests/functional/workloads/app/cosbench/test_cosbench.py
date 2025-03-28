@@ -1,7 +1,7 @@
 import logging
 import pytest
 
-from ocs_ci.framework.pytest_customization.marks import bugzilla, magenta_squad
+from ocs_ci.framework.pytest_customization.marks import magenta_squad
 from ocs_ci.framework.testlib import E2ETest, workloads
 from ocs_ci.ocs.cosbench import Cosbench
 
@@ -29,7 +29,6 @@ class TestCosbenchWorkload(E2ETest):
 
     """
 
-    @bugzilla("2010453")
     @pytest.mark.parametrize(
         argnames="objects, size, size_unit",
         argvalues=[

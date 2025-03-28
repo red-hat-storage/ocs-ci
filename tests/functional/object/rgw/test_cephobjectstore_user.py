@@ -8,7 +8,6 @@ from ocs_ci.helpers.helpers import create_unique_resource_name
 from ocs_ci.ocs.resources.ocs import OCS
 
 from ocs_ci.framework.pytest_customization.marks import (
-    bugzilla,
     polarion_id,
     red_squad,
     rgw,
@@ -38,7 +37,6 @@ class TestObjectStoreUserCaps:
         return test_cosu_obj
 
     @tier3
-    @bugzilla("2196858")
     @polarion_id("OCS-5423")
     def test_cephobjectstore_user_roles_cap(self, create_test_cosu):
         """

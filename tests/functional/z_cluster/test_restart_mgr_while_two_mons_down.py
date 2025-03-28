@@ -17,7 +17,6 @@ from ocs_ci.framework.pytest_customization.marks import (
 from ocs_ci.framework.testlib import (
     ManageTest,
     tier2,
-    bugzilla,
     polarion_id,
 )
 
@@ -26,7 +25,6 @@ log = logging.getLogger(__name__)
 
 @brown_squad
 @tier2
-@bugzilla("1990031")
 @polarion_id("OCS-2696")
 @skipif_external_mode
 class TestRestartMgrWhileTwoMonsDown(ManageTest):

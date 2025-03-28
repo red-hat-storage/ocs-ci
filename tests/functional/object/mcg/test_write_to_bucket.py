@@ -35,7 +35,6 @@ from ocs_ci.ocs.bucket_utils import (
 
 from ocs_ci.framework.pytest_customization.marks import (
     skipif_managed_service,
-    bugzilla,
     skipif_ocs_version,
     on_prem_platform_required,
     jira,
@@ -425,7 +424,6 @@ class TestBucketIO(MCGTest):
             )
 
     @tier2
-    @bugzilla("2054074")
     @skipif_ocs_version("<4.10")
     @pytest.mark.polarion_id("OCS-4000")
     def test_content_encoding_with_write(
@@ -464,8 +462,6 @@ class TestBucketIO(MCGTest):
         )
 
     @tier2
-    @bugzilla("2259189")
-    @bugzilla("2264480")
     @pytest.mark.polarion_id("OCS-5773")
     def test_nb_db_activity_logs_on_io(
         self,

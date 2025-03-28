@@ -9,7 +9,6 @@ from ocs_ci.framework.testlib import (
     tier1,
     polarion_id,
     skipif_ocp_version,
-    bugzilla,
 )
 from ocs_ci.ocs.resources import pod
 from ocs_ci.helpers import helpers
@@ -22,7 +21,6 @@ log = logging.getLogger(__name__)
 @skipif_ocs_version("<4.16")
 @skipif_ocp_version("<4.16")
 @polarion_id("OCS-6176")
-@bugzilla("2264900")
 class TestRestoreSnapshotWhenParentPVCDeleted(ManageTest):
     """
     Tests to verify restore a pvc from snapshot when the parent PVC is deleted

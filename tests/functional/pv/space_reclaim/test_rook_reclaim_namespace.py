@@ -15,7 +15,6 @@ from ocs_ci.helpers.helpers import (
 from ocs_ci.framework.testlib import (
     ManageTest,
     tier2,
-    bugzilla,
     skipif_ocs_version,
 )
 
@@ -24,7 +23,6 @@ log = logging.getLogger(__name__)
 
 @green_squad
 @tier2
-@bugzilla("2214838")
 @skipif_ocs_version("<4.13")
 @pytest.mark.polarion_id("OCS-5424")
 class TestRookReclaimNamespace(ManageTest):

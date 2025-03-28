@@ -11,7 +11,6 @@ from ocs_ci.framework.testlib import (
     ManageTest,
     cloud_platform_required,
     vsphere_platform_required,
-    bugzilla,
     skipif_ibm_cloud,
     skipif_external_mode,
     skipif_managed_service,
@@ -148,7 +147,6 @@ class TestDiskFailures(ManageTest):
     @skipif_hci_provider_and_client
     @cloud_platform_required
     @pytest.mark.polarion_id("OCS-1085")
-    @bugzilla("1825675")
     def test_detach_attach_worker_volume(
         self, nodes, pvc_factory, pod_factory, bucket_factory, rgw_bucket_factory
     ):
@@ -282,7 +280,6 @@ class TestDiskFailures(ManageTest):
             pvc_factory, pod_factory, bucket_factory, rgw_bucket_factory
         )
 
-    @bugzilla("1830702")
     @vsphere_platform_required
     @pytest.mark.polarion_id("OCS-2172")
     @skipif_external_mode
@@ -304,7 +301,6 @@ class TestDiskFailures(ManageTest):
             bucket_creation_timeout=800,
         )
 
-    @bugzilla("2234479")
     @vsphere_platform_required
     @skipif_ocs_version("<4.15")
     @pytest.mark.polarion_id("OCS-5502")

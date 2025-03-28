@@ -22,7 +22,6 @@ from ocs_ci.utility.utils import run_cmd
 from ocs_ci.utility.templating import dump_data_to_temp_yaml
 from ocs_ci.framework.pytest_customization.marks import (
     tier1,
-    bugzilla,
     polarion_id,
     magenta_squad,
 )
@@ -225,7 +224,6 @@ class TestSelinuxrelabel(E2ETest):
         """
         res_pod.delete_deployment_pods(self.pod_obj)
 
-    @bugzilla("1988284")
     @polarion_id("OCS-5132")
     @pytest.mark.parametrize("copies", [5])
     def deprecated_test_selinux_relabel_for_existing_pvc(

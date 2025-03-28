@@ -18,7 +18,6 @@ from ocs_ci.framework.pytest_customization.marks import (
     skipif_managed_service,
     skipif_hci_provider_and_client,
     skipif_bmpsi,
-    bugzilla,
     skipif_external_mode,
     skipif_ms_consumer,
     skipif_hci_client,
@@ -325,7 +324,6 @@ class TestNodeReplacement(ManageTest):
 @tier4a
 @brown_squad
 @ignore_leftovers
-@bugzilla("1840539")
 @pytest.mark.polarion_id("OCS-2535")
 @skipif_external_mode
 @skipif_managed_service

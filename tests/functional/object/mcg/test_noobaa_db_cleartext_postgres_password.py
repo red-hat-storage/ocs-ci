@@ -1,6 +1,6 @@
 import logging
 
-from ocs_ci.framework.testlib import tier2, BaseTest, bugzilla, polarion_id
+from ocs_ci.framework.testlib import tier2, BaseTest, polarion_id
 from ocs_ci.framework.pytest_customization.marks import red_squad, mcg
 from ocs_ci.framework import config
 from ocs_ci.helpers.helpers import get_noobaa_db_credentials_from_secret
@@ -19,7 +19,6 @@ class TestNoobaaSecurity(BaseTest):
 
     """
 
-    @bugzilla("2274193")
     @polarion_id("OCS-5787")
     def test_noobaa_db_cleartext_postgres_password(self):
         """
@@ -45,7 +44,6 @@ class TestNoobaaSecurity(BaseTest):
             "set=password" not in nooobaa_db_pod_logs
         ), f"noobaa-db pod logs include password logs:{nooobaa_db_pod_logs}"
 
-    @bugzilla("2240778")
     @polarion_id("OCS-6183")
     def test_nb_db_password_in_core_and_endpoint(self):
         """
