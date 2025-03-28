@@ -762,3 +762,36 @@ def verify_new_key_after_rotation(tries, delays):
     except UnexpectedBehaviour:
         log.error("Key rotation is Not happened after schedule is passed. ")
         assert False
+@retry(UnexpectedBehaviour, tries=10, delay=20)
+def compare_noobaa_old_keys_with_new_keys(
+    noobaa_keyrotation, old_noobaa_backend_key, old_noobaa_volume_key
+):
+    """
+    Compare noobaa old keys with new keys.
+    args:
+        noobaa_keyrotation: obj: NoobaaKeyrotation object
+        old_noobaa_backend_key: str: old noobaa backend key
+        old_noobaa_volume_key: str: old noobaa_volume_key
+
+    """
+    (
+        new_noobaa_backend_key,
+        new_noobaa_backend_secret,
+    ) = noobaa_keyrotation.get_noobaa_backend_secret(kms_deployment=True)
+    (
+        new_noobaa_volume_key,
+        new_noobaa_volume_secret,
+    ) = noobaa_keyrotation.get_noobaa_volume_secret()
+
+    if new_noobaa_backend_key == old_noobaa_backend_key:
+        raise UnexpectedBehaviour("Noobaa Key Rotation is not happend")
+
+    if new_noobaa_volume_key == old_noobaa_volume_key:
+        raise UnexpectedBehaviour("Noobaa Key Rotation is not happend.")
+
+    log.info(
+        f"Noobaa Backend key rotated {new_noobaa_backend_key} : {new_noobaa_backend_secret}"
+    )
+    log.info(
+        f"Noobaa Volume key rotated {new_noobaa_volume_key} : {new_noobaa_volume_secret}"
+    )

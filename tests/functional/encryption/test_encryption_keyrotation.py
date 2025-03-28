@@ -17,6 +17,7 @@ from ocs_ci.helpers.keyrotation_helper import (
     NoobaaKeyrotation,
     OSDKeyrotation,
     KeyRotation,
+    compare_noobaa_old_keys_with_new_keys,
 )
 
 from ocs_ci.ocs.exceptions import UnexpectedBehaviour
@@ -138,40 +139,6 @@ class TestEncryptionKeyrotation:
         log.info("Changing the keyrotation value to default.")
         osd_keyrotation.set_keyrotation_schedule("@weekly")
 
-    @retry(UnexpectedBehaviour, tries=10, delay=20)
-    def compare_noobaa_old_keys_with_new_keys(
-        self, noobaa_keyrotation, old_noobaa_backend_key, old_noobaa_volume_key
-    ):
-        """
-        Compare noobaa old keys with new keys.
-        args:
-            noobaa_keyrotation: obj: NoobaaKeyrotation object
-            old_noobaa_backend_key: str: old noobaa backend key
-            old_noobaa_volume_key: str: old noobaa_volume_key
-
-        """
-        (
-            new_noobaa_backend_key,
-            new_noobaa_backend_secret,
-        ) = noobaa_keyrotation.get_noobaa_backend_secret()
-        (
-            new_noobaa_volume_key,
-            new_noobaa_volume_secret,
-        ) = noobaa_keyrotation.get_noobaa_volume_secret()
-
-        if new_noobaa_backend_key == old_noobaa_backend_key:
-            raise UnexpectedBehaviour("Noobaa Key Rotation is not happend")
-
-        if new_noobaa_volume_key == old_noobaa_volume_key:
-            raise UnexpectedBehaviour("Noobaa Key Rotation is not happend.")
-
-        log.info(
-            f"Noobaa Backend key rotated {new_noobaa_backend_key} : {new_noobaa_backend_secret}"
-        )
-        log.info(
-            f"Noobaa Volume key rotated {new_noobaa_volume_key} : {new_noobaa_volume_secret}"
-        )
-
     @pytest.mark.polarion_id("OCS-5791")
     @tier1
     def test_noobaa_keyrotation(self, minutes=3):
@@ -244,7 +211,7 @@ class TestEncryptionKeyrotation:
         ), f"Keyrotation schedule is not set to every {minutes} minutes in Noobaa object."
 
         try:
-            self.compare_noobaa_old_keys_with_new_keys(
+            compare_noobaa_old_keys_with_new_keys(
                 noobaa_keyrotation, old_noobaa_backend_key, old_noobaa_volume_key
             )
         except UnexpectedBehaviour:
@@ -442,39 +409,6 @@ class TestNoobaaKeyrotationWithKMS:
 
         request.addfinalizer(finalizer)
 
-    @retry(UnexpectedBehaviour, tries=10, delay=20)
-    def compare_noobaa_old_keys_with_new_keys(
-        self, noobaa_keyrotation, old_noobaa_backend_key, old_noobaa_volume_key
-    ):
-        """
-        Compare noobaa old keys with new keys.
-        args:
-            noobaa_keyrotation: obj: NoobaaKeyrotation object
-            old_noobaa_volume_key: str: old noobaa_volume_key
-
-        """
-        (
-            new_noobaa_backend_key,
-            new_noobaa_backend_secret,
-        ) = noobaa_keyrotation.get_noobaa_backend_secret(kms_deployment=True)
-        (
-            new_noobaa_volume_key,
-            new_noobaa_volume_secret,
-        ) = noobaa_keyrotation.get_noobaa_volume_secret()
-
-        if new_noobaa_backend_key == old_noobaa_backend_key:
-            raise UnexpectedBehaviour("Noobaa Key Rotation is not happend")
-
-        if new_noobaa_volume_key == old_noobaa_volume_key:
-            raise UnexpectedBehaviour("Noobaa Key Rotation is not happend.")
-
-        log.info(
-            f"Noobaa Backend key rotated {new_noobaa_backend_key} : {new_noobaa_backend_secret}"
-        )
-        log.info(
-            f"Noobaa Volume key rotated {new_noobaa_volume_key} : {new_noobaa_volume_secret}"
-        )
-
     @pytest.mark.polarion_id("OCS-5791")
     @tier1
     def test_noobaa_keyrotation(self, minutes=3):
@@ -551,7 +485,7 @@ class TestNoobaaKeyrotationWithKMS:
         ), f"Keyrotation schedule is not set to every {minutes} minutes in Noobaa object."
 
         try:
-            self.compare_noobaa_old_keys_with_new_keys(
+            compare_noobaa_old_keys_with_new_keys(
                 noobaa_keyrotation, old_noobaa_backend_key, old_noobaa_volume_key
             )
         except UnexpectedBehaviour:
