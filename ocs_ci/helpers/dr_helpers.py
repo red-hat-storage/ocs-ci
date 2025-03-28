@@ -114,7 +114,7 @@ def get_current_secondary_cluster_name(
         namespace = constants.DR_OPS_NAMESAPCE
         logger.info("------------1")
         primary_cluster_name = get_current_primary_cluster_name(
-            namespace=namespace, resource_name=resource_name
+            namespace=namespace, resource_name=resource_name, discovered_apps=discovered_apps
         )
         logger.info("------------2")
         drpolicy_data = DRPC(
