@@ -772,7 +772,7 @@ def wait_for_replication_resources_deletion(
                 logger.error(error_msg)
                 raise TimeoutExpiredError(error_msg)
 
-        if not skip_vrg_check:
+        if skip_vrg_check:
             wait_for_vrg_state(
                 vrg_state="secondary",
                 vrg_namespace=vrg_namespace,
