@@ -92,6 +92,7 @@ jira = pytest.mark.jira
 acm_import = pytest.mark.acm_import
 rdr = pytest.mark.rdr
 mdr = pytest.mark.mdr
+resiliency = pytest.mark.resiliency
 
 tier_marks = [
     tier1,
@@ -110,6 +111,7 @@ tier_marks = [
     scale_long_run,
     scale_changed_layout,
     workloads,
+    resiliency,
 ]
 
 # upgrade related markers
