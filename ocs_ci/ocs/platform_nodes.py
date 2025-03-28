@@ -3257,7 +3257,7 @@ class IBMCloudBMNodes(NodesBase):
                         f"Trying alternate method to verify nodes {node_names} has stopped"
                     )
                     machines_not_off = (
-                        self.ibmcloud_bm.check_if_machines_are_off_from_sensor_data(
+                        self.ibmcloud_bm.get_machines_that_are_not_off_from_sensor_data(
                             machines
                         )
                     )
