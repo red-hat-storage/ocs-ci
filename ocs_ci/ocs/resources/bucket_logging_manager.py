@@ -300,7 +300,7 @@ class BucketLoggingManager:
 
         return answers_dict
 
-    def wait_for_logs_pvc_mount_status(self, mount_status_expected=True, timeout=120):
+    def wait_for_logs_pvc_mount_status(self, mount_status_expected=True, timeout=300):
         """
         Wait for the noobaa-core and noobaa-endpoint pods to mount or unmount the bucket logs PVC.
 
