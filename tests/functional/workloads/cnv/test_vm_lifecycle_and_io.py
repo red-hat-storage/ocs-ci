@@ -4,6 +4,7 @@ import pytest
 from ocs_ci.framework.pytest_customization.marks import magenta_squad, workloads
 from ocs_ci.framework.testlib import E2ETest
 from ocs_ci.ocs import constants
+from ocs_ci.helpers.cnv_helpers import run_fio, check_fio_status
 
 log = logging.getLogger(__name__)
 
@@ -16,7 +17,7 @@ class TestVmOperations(E2ETest):
     Tests for VM operations
     """
 
-    def test_vm_lifecycle_and_io(self, cnv_workload, setup_cnv):
+    def test_vm_lifecycle_and_io(self, setup_cnv, cnv_workload):
         """
         This test performs the VM lifecycle operations and IO
 
@@ -33,6 +34,8 @@ class TestVmOperations(E2ETest):
         6) Delete the VM (as part of factory teardown)
 
         """
+        file_path = "/io_tests"
+        fio_service_name = "fio_test"
         volume_interface = [
             constants.VM_VOLUME_PVC,
             constants.VM_VOLUME_DV,
@@ -42,8 +45,10 @@ class TestVmOperations(E2ETest):
             vm_obj = cnv_workload(
                 volume_interface=vl_if, source_url=constants.CNV_FEDORA_SOURCE
             )
-            vm_obj.run_ssh_cmd(
-                command="dd if=/dev/zero of=/dd_file.txt bs=1024 count=102400"
-            )
-            vm_obj.scp_from_vm(local_path="/tmp", vm_src_path="/dd_file.txt")
+
+            run_fio(vm_obj, filename=file_path, fio_service_name="fio_test")
+
+            vm_obj.restart()
+            if check_fio_status(vm_obj, fio_service_name):
+                log.info("FIO resumed after restarting VM")
             vm_obj.stop()
