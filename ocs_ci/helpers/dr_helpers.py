@@ -772,9 +772,7 @@ def wait_for_replication_resources_deletion(
                 logger.error(error_msg)
                 raise TimeoutExpiredError(error_msg)
 
-        logger.info(f"vrg check====={skip_vrg_check}")
         if not skip_vrg_check:
-            logger.info("Inside skip_vrg_check")
             wait_for_vrg_state(
                 vrg_state="secondary",
                 vrg_namespace=vrg_namespace,
@@ -799,7 +797,7 @@ def wait_for_replication_resources_deletion(
             logger.info(error_msg)
             raise TimeoutExpiredError(error_msg)
 
-    if config.MULTICLUSTER["multicluster_mode"] != "metro-dr":
+    if config.MULTICLUSTER["multicluster_mode"] != "metro-dr" and not skip_vrg_check:
         logger.info(f"Waiting for all {resource_kind} to be deleted")
         sample = TimeoutSampler(
             timeout=timeout,
