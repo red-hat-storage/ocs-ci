@@ -11,6 +11,7 @@ from ocs_ci.ocs.resources.pod import (
     delete_pods,
     wait_for_pods_to_be_in_statuses,
     get_ceph_tools_pod,
+    get_operator_pods,
 )
 from ocs_ci.ocs.resources.pvc import get_deviceset_pvcs, get_deviceset_pvs, get_pvc_size
 from ocs_ci.ocs.resources.pv import get_pv_size
@@ -228,9 +229,17 @@ def check_ceph_state_post_resize_osd():
     if not check_ceph_osd_tree():
         raise CephHealthException("The ceph osd tree checks didn't finish successfully")
     if not check_ceph_osd_df_tree():
-        raise CephHealthException(
-            "The ceph osd df tree output is not formatted correctly"
+        logger.warning(
+            "The ceph osd df tree output is not formatted correctly. Trying to restart the "
+            "rook-ceph-operator pod and perform again the ceph osd df tree checks again..."
         )
+        operator_pods = get_operator_pods()
+        delete_pods(operator_pods, wait=False)
+        sample = TimeoutSampler(timeout=180, sleep=20, func=check_ceph_osd_df_tree)
+        if not sample.wait_for_func_status(result=True):
+            raise CephHealthException(
+                "The ceph osd df tree output is not formatted correctly"
+            )
 
 
 def base_ceph_verification_steps_post_resize_osd(
