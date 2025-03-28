@@ -91,6 +91,7 @@ class OCP(object):
             (not cluster_kubeconfig)
             and config.multicluster
             and config.ENV_DATA.get("odf_provider_mode_deployment", False)
+            and len(config.get_provider_cluster_indexes()) == 1
             and kind.lower() in constants.PROVIDER_CLUSTER_RESOURCE_KINDS
         ):
             provider_cluster_index = config.get_provider_index()
