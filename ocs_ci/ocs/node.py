@@ -25,6 +25,7 @@ from ocs_ci.ocs.machinepool import MachinePools
 from ocs_ci.ocs.ocp import OCP
 from ocs_ci.ocs.resources.ocs import OCS
 from ocs_ci.ocs import constants, exceptions, ocp, defaults
+from ocs_ci.ocs.resources.pvc import get_pvc_size
 from ocs_ci.utility import version
 from ocs_ci.utility.retry import retry
 from ocs_ci.utility.utils import TimeoutSampler, convert_device_size, get_az_count
@@ -33,10 +34,10 @@ from ocs_ci.ocs.resources import pod
 from ocs_ci.utility.utils import set_selinux_permissions, get_ocp_version
 from ocs_ci.ocs.resources.pv import (
     get_pv_objs_in_sc,
-    verify_new_pvs_available_in_sc,
-    delete_released_pvs_in_sc,
     get_pv_size,
     get_node_pv_objs,
+    wait_for_pvs_in_lvs_to_reach_status,
+    delete_released_pvs_in_sc,
 )
 from ocs_ci.utility.version import get_semantic_version
 from ocs_ci.utility.rosa import (
@@ -1210,12 +1211,19 @@ def delete_and_create_osd_node_vsphere_upi_lso(osd_node_name, use_existing_node=
         str: The new node name
 
     """
-    sc_name = constants.LOCAL_BLOCK_RESOURCE
-    old_pv_objs = get_pv_objs_in_sc(sc_name)
+    from ocs_ci.ocs.platform_nodes import PlatformNodesFactory
+    from ocs_ci.ocs.resources.storage_cluster import get_deviceset_sc_name_per_count
+
+    plt = PlatformNodesFactory()
+    node_util = plt.get_nodes_platform()
 
     osd_node = get_node_objs(node_names=[osd_node_name])[0]
     osd_ids = get_node_osd_ids(osd_node_name)
     assert osd_ids, f"The node {osd_node_name} does not have osd pods"
+    node_osd_pods = pod.get_osd_pods_having_ids(osd_ids)
+    old_pvc_objs = pod.get_pods_pvcs(node_osd_pods)
+    old_pvc_sizes = [get_pvc_size(pvc) for pvc in old_pvc_objs]
+    log.info(f"old pvc sizes = {old_pvc_sizes}")
 
     ocs_version = config.ENV_DATA["ocs_version"]
     assert not (
@@ -1225,11 +1233,9 @@ def delete_and_create_osd_node_vsphere_upi_lso(osd_node_name, use_existing_node=
         f"The ocs-osd-removal job works with multiple ids only from ocs version 4.7"
     )
 
-    osd_id = osd_ids[0]
     log.info(f"osd ids to remove = {osd_ids}")
     # Save the node hostname before deleting the node
     osd_node_hostname_label = get_node_hostname_label(osd_node)
-
     log.info("Scale down node deployments...")
     scale_down_deployments(osd_node_name)
     log.info("Scale down deployments finished successfully")
@@ -1240,12 +1246,9 @@ def delete_and_create_osd_node_vsphere_upi_lso(osd_node_name, use_existing_node=
     assert new_node_name, "Failed to create a new node"
     log.info(f"New node created successfully. Node name: {new_node_name}")
 
-    num_of_new_pvs = len(osd_ids)
-    log.info(f"Number of the expected new pvs = {num_of_new_pvs}")
     # If we use LSO, we need to create and attach a new disk manually
-    new_node = get_node_objs(node_names=[new_node_name])[0]
-    for i in range(num_of_new_pvs):
-        add_disk_to_node(new_node)
+    new_node = get_node_objs([new_node_name])[0]
+    node_util.create_and_attach_volumes(new_node, volume_sizes=old_pvc_sizes, ssd=True)
 
     new_node_hostname_label = get_node_hostname_label(new_node)
     log.info(
@@ -1257,30 +1260,29 @@ def delete_and_create_osd_node_vsphere_upi_lso(osd_node_name, use_existing_node=
     )
     assert res, "Failed to add the new node to LVD and LVS"
 
-    log.info("Verify new pvs are available...")
-    is_new_pvs_available = verify_new_pvs_available_in_sc(
-        old_pv_objs, sc_name, num_of_new_pvs=num_of_new_pvs
-    )
-    assert is_new_pvs_available, "New pvs are not available"
-    log.info("Finished verifying that the new pv is available")
-
     osd_removal_job = pod.run_osd_removal_job(osd_ids)
     assert osd_removal_job, "ocs-osd-removal failed to create"
-    is_completed = (pod.verify_osd_removal_job_completed_successfully(osd_id),)
-    assert is_completed, "ocs-osd-removal-job is not in status 'completed'"
+    for osd_id in osd_ids:
+        is_completed = pod.verify_osd_removal_job_completed_successfully(osd_id)
+        assert is_completed, "ocs-osd-removal-job is not in status 'completed'"
     log.info("ocs-osd-removal-job completed successfully")
 
-    expected_num_of_deleted_pvs = [0, num_of_new_pvs]
-    num_of_deleted_pvs = delete_released_pvs_in_sc(sc_name)
-    assert num_of_deleted_pvs in expected_num_of_deleted_pvs, (
-        f"num of deleted PVs is {num_of_deleted_pvs} "
-        f"instead of the expected values {expected_num_of_deleted_pvs}"
+    deviceset_sc_name_per_count = get_deviceset_sc_name_per_count()
+    log.info("Verify that the new PVs have been created...")
+    for sc_name, pv_count in deviceset_sc_name_per_count.items():
+        wait_for_pvs_in_lvs_to_reach_status(
+            sc_name, pv_count, constants.STATUS_BOUND, timeout=420
+        )
+    log.info(
+        "Finished verifying that the new PVs have been created."
+        "Delete the PVs that are in a Released state..."
     )
-    log.info(f"num of deleted PVs is {num_of_deleted_pvs}")
-    log.info("Successfully deleted old pvs")
+    for sc_name in deviceset_sc_name_per_count.keys():
+        delete_released_pvs_in_sc(sc_name)
 
-    is_deleted = pod.delete_osd_removal_job(osd_id)
-    assert is_deleted, "Failed to delete ocs-osd-removal-job"
+    for osd_id in osd_ids:
+        is_deleted = pod.delete_osd_removal_job(osd_id)
+        assert is_deleted, "Failed to delete ocs-osd-removal-job"
     log.info("ocs-osd-removal-job deleted successfully")
 
     return new_node_name
@@ -1403,7 +1405,7 @@ def node_replacement_verification_steps_user_side(
 
     # It can take some time until all the ocs pods are up and running
     # after the process of node replacement
-    if not pod.wait_for_pods_to_be_running():
+    if not pod.check_pods_after_node_replacement():
         log.warning("Not all the pods in running state")
         return False
 
@@ -1773,16 +1775,23 @@ def replace_old_node_in_lvd_and_lvs(old_node_name, new_node_name):
         namespace=defaults.LOCAL_STORAGE_NAMESPACE,
     )
 
-    ocp_lvs_obj = OCP(
-        kind=constants.LOCAL_VOLUME_SET,
-        namespace=defaults.LOCAL_STORAGE_NAMESPACE,
-        resource_name=constants.LOCAL_BLOCK_RESOURCE,
+    lvs_obj = OCP(
+        kind=constants.LOCAL_VOLUME_SET, namespace=defaults.LOCAL_STORAGE_NAMESPACE
     )
+    lvs_items = lvs_obj.data["items"]
+    lvs_names = [lvs_data["metadata"]["name"] for lvs_data in lvs_items]
 
-    lvd_result = ocp_lvd_obj.patch(params=params, format_type="json")
-    lvs_result = ocp_lvs_obj.patch(params=params, format_type="json")
+    patch_results = []
+    for lvs_name in lvs_names:
+        ocp_lvs_obj = OCP(
+            kind=constants.LOCAL_VOLUME_SET,
+            namespace=defaults.LOCAL_STORAGE_NAMESPACE,
+            resource_name=lvs_name,
+        )
+        patch_results.append(ocp_lvd_obj.patch(params=params, format_type="json"))
+        patch_results.append(ocp_lvs_obj.patch(params=params, format_type="json"))
 
-    return lvd_result and lvs_result
+    return all(patch_results)
 
 
 def get_node_hostname_label(node_obj):
