@@ -172,16 +172,6 @@ class TestSiteFailureRecoveryAndfailover:
         logger.info(f"Wait for {wait_time} for drpc status to be restored")
         time.sleep(wait_time)
 
-        # Edit the global KlusterletConfig on the new hub and remove
-        # the parameter appliedManifestWorkEvictionGracePeriod and its value.
-        # ToDo:  appliedManifestWorkEvictionGracePeriod should only be removed if the
-        #  Progression in DRPC is not in Paused state and all the workloads have successfully recovered.
-        logger.info(
-            "Edit the global KlusterletConfig on the new hub and "
-            "remove the parameter appliedManifestWorkEvictionGracePeriod and its value."
-        )
-        remove_parameter_klusterlet_config()
-
         # Failover action via CLI
         logger.info("Failover workloads after hub recovery")
         failover_results = []
@@ -289,10 +279,21 @@ class TestSiteFailureRecoveryAndfailover:
         logger.info(f"Waiting for {two_times_scheduling_interval} minutes to run IOs")
         time.sleep(two_times_scheduling_interval * 60)
 
+        config.switch_ctx(get_passive_acm_index())
         for drpc in drpc_objs:
             dr_helpers.verify_last_group_sync_time(
                 drpc_obj=drpc, scheduling_interval=scheduling_interval
             )
+
+        # Edit the global KlusterletConfig on the new hub and remove
+        # the parameter appliedManifestWorkEvictionGracePeriod and its value.
+        # ToDo:  appliedManifestWorkEvictionGracePeriod should only be removed if
+        #  no DRPCs are in the Paused `PROGRESSION` and are in Completed state only`
+        logger.info(
+            "Edit the global KlusterletConfig on the new hub and "
+            "remove the parameter appliedManifestWorkEvictionGracePeriod and its value."
+        )
+        remove_parameter_klusterlet_config()
 
         relocate_results = []
         with ThreadPoolExecutor() as executor:
@@ -354,6 +355,7 @@ class TestSiteFailureRecoveryAndfailover:
         for wl in rdr_workload:
             wait_for_all_resources_deletion(wl.workload_namespace)
 
+        config.switch_ctx(get_passive_acm_index())
         for drpc in drpc_objs:
             dr_helpers.verify_last_group_sync_time(
                 drpc_obj=drpc, scheduling_interval=scheduling_interval
