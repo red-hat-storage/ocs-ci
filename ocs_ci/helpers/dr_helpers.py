@@ -112,12 +112,15 @@ def get_current_secondary_cluster_name(
         namespace = constants.GITOPS_CLUSTER_NAMESPACE
     if discovered_apps:
         namespace = constants.DR_OPS_NAMESAPCE
+        logger.info("------------1")
         primary_cluster_name = get_current_primary_cluster_name(
             namespace=namespace, resource_name=resource_name
         )
+        logger.info("------------2")
         drpolicy_data = DRPC(
             namespace=namespace, resource_name=resource_name
         ).drpolicy_obj.get()
+        logger.info("------------3")
     else:
         primary_cluster_name = get_current_primary_cluster_name(namespace)
         drpolicy_data = DRPC(namespace=namespace).drpolicy_obj.get()
