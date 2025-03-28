@@ -16,6 +16,7 @@ ENV_DATA:
   is_multus_enabled: true
   multus_public_net_interface: "ens224"
   multus_cluster_net_interface: "ens224"
+  multus_cluster_net_namespace: "default"
   multus_create_public_net: true
   multus_create_cluster_net: true
   multus_public_net_namespace: "default"
