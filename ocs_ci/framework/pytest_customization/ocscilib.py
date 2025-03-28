@@ -557,24 +557,27 @@ def process_cluster_cli_params(config):
     if not os.path.isfile(kubeconfig_path) and not get_cli_param(
         config, "deploy", default=False
     ):
-        if os.environ.get("KUBEADMIN_PASSWORD") and os.environ.get("OCP_URL"):
+        if ocsci_config.RUN.get("kubeadmin_password") and ocsci_config.RUN.get(
+            "ocp_url"
+        ):
             log.info(
                 "Generating kubeconfig file from provided kubeadmin password and OCP URL"
             )
             # check and correct OCP URL (change it to API url if console url provided and add port if needed
-            ocp_api_url = os.environ.get("OCP_URL").replace(
+            ocp_api_url = ocsci_config.RUN.get("ocp_url").replace(
                 "console-openshift-console.apps", "api"
             )
             if ":6443" not in ocp_api_url:
                 ocp_api_url = ocp_api_url.rstrip("/") + ":6443"
 
             cmd = (
-                f"oc login --username {ocsci_config.RUN['username']} --password {os.environ['KUBEADMIN_PASSWORD']} "
+                f"oc login --username {ocsci_config.RUN['username']} "
+                f"--password {ocsci_config.RUN['kubeadmin_password']} "
                 f"{ocp_api_url} "
                 f"--kubeconfig {kubeconfig_path} "
                 "--insecure-skip-tls-verify=true"
             )
-            result = exec_cmd(cmd, secrets=(os.environ["KUBEADMIN_PASSWORD"],))
+            result = exec_cmd(cmd, secrets=(ocsci_config.RUN["kubeadmin_password"],))
             if result.returncode:
                 log.warning(f"executed command: {cmd}")
                 log.warning(f"returncode: {result.returncode}")
@@ -584,7 +587,7 @@ def process_cluster_cli_params(config):
                 log.warning(f"Kubeconfig file were created: {kubeconfig_path}.")
         else:
             log.warning(
-                "Kubeconfig doesn't exists and KUBEADMIN_PASSWORD and OCP_URL "
+                "Kubeconfig doesn't exists and RUN['kubeadmin_password'] and RUN['ocp_url'] "
                 "environment variables were not provided."
             )
 
