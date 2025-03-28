@@ -16,6 +16,10 @@ RUN:
   log_dir: "/tmp"
   run_id: null  # this will be redefined in the execution
   kubeconfig_location: 'auth/kubeconfig' # relative from cluster_dir
+  # kubeadmin_password: '' # kubeadmin password used as alternative way to
+  # login to the OCP cluster (if kubeconfig is not available)
+  # ocp_url: '' # OCP Cluster URL (api or console) used to login to OCP cluster
+  # if kubeconfig is not available
   cli_params: {}  # this will be filled with CLI parameters data
   # If the client version ends with .nightly, the version will be exposed
   # to the latest accepted OCP nightly build version
