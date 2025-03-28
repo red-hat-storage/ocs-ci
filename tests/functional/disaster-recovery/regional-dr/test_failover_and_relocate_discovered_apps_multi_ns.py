@@ -34,7 +34,7 @@ class TestFailoverAndRelocateWithDiscoveredApps:
             2) Relocate back to primary
 
         """
-
+        logger.info("===========1")
         rdr_workload = discovered_apps_dr_workload(kubeobject=2, multi_ns=True)
         primary_cluster_name_before_failover = (
             dr_helpers.get_current_primary_cluster_name(
@@ -43,22 +43,26 @@ class TestFailoverAndRelocateWithDiscoveredApps:
                 resource_name=rdr_workload[0].discovered_apps_placement_name,
             )
         )
+        logger.info("===========2")
         config.switch_to_cluster_by_name(primary_cluster_name_before_failover)
+        logger.info("===========3")
         secondary_cluster_name = dr_helpers.get_current_secondary_cluster_name(
             rdr_workload[0].workload_namespace,
             discovered_apps=True,
             resource_name=rdr_workload[0].discovered_apps_placement_name,
         )
-
+        logger.info("===========4")
         scheduling_interval = dr_helpers.get_scheduling_interval(
             rdr_workload[0].workload_namespace,
             discovered_apps=True,
             resource_name=rdr_workload[0].discovered_apps_placement_name,
         )
+        logger.info("===========5")
         drpc_obj = DRPC(
             namespace=constants.DR_OPS_NAMESAPCE,
             resource_name=rdr_workload[0].discovered_apps_placement_name,
         )
+        logger.info("===========6")
         wait_time = 2 * scheduling_interval  # Time in minutes
         logger.info(f"Waiting for {wait_time} minutes to run IOs")
         sleep(wait_time * 60)
