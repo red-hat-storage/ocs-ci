@@ -1874,6 +1874,7 @@ def do_discovered_apps_cleanup_multi_ns(
             discovered_apps=True,
             vrg_name=vrg_name,
             skip_vrg_check=True,
+            timeout=1500
         )
 
     wait_for_vrg_state(
