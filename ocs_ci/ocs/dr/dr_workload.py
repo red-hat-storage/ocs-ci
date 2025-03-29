@@ -72,6 +72,7 @@ class BusyBox(DRWorkload):
 
         self.workload_type = kwargs.get("workload_type", constants.SUBSCRIPTION)
         self.workload_namespace = kwargs.get("workload_namespace", None)
+        self.pvc_interface = kwargs.get("pvc_interface", None)
         self.app_name = kwargs.get("app_name", None)
         self.workload_pod_count = kwargs.get("workload_pod_count")
         self.workload_pvc_count = kwargs.get("workload_pvc_count")
@@ -466,6 +467,7 @@ class BusyBox_AppSet(DRWorkload):
 
         self.workload_type = kwargs.get("workload_type", constants.APPLICATION_SET)
         self.workload_namespace = kwargs.get("workload_namespace", None)
+        self.pvc_interface = kwargs.get("pvc_interface", None)
         self.workload_pod_count = kwargs.get("workload_pod_count")
         self.workload_pvc_count = kwargs.get("workload_pvc_count")
         self.dr_policy_name = kwargs.get(
