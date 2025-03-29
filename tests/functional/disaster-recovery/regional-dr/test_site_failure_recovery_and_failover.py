@@ -110,6 +110,7 @@ class TestSiteFailureRecoveryAndfailover:
         active_hub_cluster_node_objs = get_node_objs()
 
         drpc_cmd = run_cmd("oc get drpc -o wide -A")
+        logger.info("DRPC output from current active hub cluster before site-failure")
         logger.info(drpc_cmd)
 
         # Shutdown active hub and primary managed cluster nodes
@@ -120,7 +121,7 @@ class TestSiteFailureRecoveryAndfailover:
             active_primary_cluster_node_objs
         )
         logger.info("All nodes of primary managed cluster are powered off")
-        time.sleep(180)
+        time.sleep(300)
         nodes_multicluster[active_hub_index].stop_nodes(active_hub_cluster_node_objs)
         logger.info(
             "All nodes of active hub cluster are powered off, "
@@ -174,6 +175,17 @@ class TestSiteFailureRecoveryAndfailover:
 
         logger.info(f"Wait for {wait_time} for drpc status to be restored")
         time.sleep(wait_time)
+
+        # Edit the global KlusterletConfig on the new hub and remove
+        # the parameter appliedManifestWorkEvictionGracePeriod and its value.
+        # ToDo:  appliedManifestWorkEvictionGracePeriod should only be removed if
+        #  no DRPCs are in the Paused `PROGRESSION` and are in Completed state only`
+        logger.info(
+            "Edit the global KlusterletConfig on the new hub and "
+            "remove the parameter appliedManifestWorkEvictionGracePeriod and its value."
+        )
+        remove_parameter_klusterlet_config()
+        logger.info("DRPC output from new hub cluster before failover")
         logger.info(drpc_cmd)
 
         # Failover action via CLI
@@ -211,6 +223,7 @@ class TestSiteFailureRecoveryAndfailover:
             )
 
         config.switch_ctx(get_passive_acm_index())
+        logger.info("DRPC output from new hub cluster after successful failover")
         logger.info(drpc_cmd)
 
         config.switch_to_cluster_by_name(primary_cluster_name)
@@ -251,20 +264,10 @@ class TestSiteFailureRecoveryAndfailover:
                     f"Import of cluster: {primary_cluster_name} failed post hub recovery"
                 )
 
-        # logger.info("Wait for approx. an hour to surpass 1hr eviction period timeout")
-        # time.sleep(3600)
-
-        config.switch_ctx(get_passive_acm_index())
-        # Edit the global KlusterletConfig on the new hub and remove
-        # the parameter appliedManifestWorkEvictionGracePeriod and its value.
-        # ToDo:  appliedManifestWorkEvictionGracePeriod should only be removed if
-        #  no DRPCs are in the Paused `PROGRESSION` and are in Completed state only`
         logger.info(
-            "Edit the global KlusterletConfig on the new hub and "
-            "remove the parameter appliedManifestWorkEvictionGracePeriod and its value."
+            "Wait for approx. an hour to surpass 1hr of default eviction period timeout"
         )
-        remove_parameter_klusterlet_config()
-        logger.info(drpc_cmd)
+        time.sleep(3600)
 
         config.switch_to_cluster_by_name(primary_cluster_name)
         logger.info("Checking for Ceph Health OK")
@@ -301,6 +304,10 @@ class TestSiteFailureRecoveryAndfailover:
         time.sleep(two_times_scheduling_interval * 60)
 
         config.switch_ctx(get_passive_acm_index())
+        logger.info(
+            "DRPC output from new hub cluster after successful failover and cleanup"
+        )
+        logger.info(drpc_cmd)
         for drpc in drpc_objs:
             dr_helpers.verify_last_group_sync_time(
                 drpc_obj=drpc, scheduling_interval=scheduling_interval
@@ -330,6 +337,7 @@ class TestSiteFailureRecoveryAndfailover:
             rl.result()
 
         config.switch_ctx(get_passive_acm_index())
+        logger.info("DRPC output from new hub cluster after relocate")
         logger.info(drpc_cmd)
 
         # Verify resources creation on preferredCluster
