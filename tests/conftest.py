@@ -7182,7 +7182,7 @@ def discovered_apps_dr_workload(request):
                 pvc_type = constants.RBD_INTERFACE
             elif pvc_interface == constants.CEPHFILESYSTEM:
                 pvc_type = constants.CEPHFS_INTERFACE
-            drpc_name = f"busybox-multi-ns5-{pvc_type}-" + "-".join(
+            drpc_name = f"busybox-multi-ns6-{pvc_type}-" + "-".join(
                 map(str, range(1, kubeobject + 1))
             )
             placement_name = drpc_name + "-placement-1"

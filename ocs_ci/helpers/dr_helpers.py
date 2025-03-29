@@ -1869,6 +1869,8 @@ def do_discovered_apps_cleanup_multi_ns(
         run_cmd(
             f"oc delete -k {workload_path} -n {workload_namespace} --wait=false --force "
         )
+    for workload_instance_index in workload_instance:
+        workload_namespace = workload_instance_index.workload_namespace
         wait_for_all_resources_deletion(
             namespace=workload_namespace,
             discovered_apps=True,
