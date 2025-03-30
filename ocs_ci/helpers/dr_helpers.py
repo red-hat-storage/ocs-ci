@@ -1958,5 +1958,12 @@ def configure_rdr_hub_recovery():
             resource_namespace="open-cluster-management-backup",
             compliance_state="Compliant",
         )
+    config.switch_ctx(get_passive_acm_index())
+    logger.info(
+        "Add label for cluster-monitoring needed to fire VolumeSyncronizationDelay alert on the Hub cluster"
+    )
+    exec_cmd(
+        "oc label namespace openshift-operators openshift.io/cluster-monitoring='true'"
+    )
     logger.info("All pre-reqs verified for performing hub recovery")
     return True
