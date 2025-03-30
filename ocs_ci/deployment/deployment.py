@@ -1225,7 +1225,9 @@ class Deployment(object):
                 for node in worker_nodes:
                     for interface in interfaces:
                         ip_link_cmd = f"ip link set promisc on {interface}"
-                        node_obj.exec_oc_debug_cmd(node=node, cmd_list=[ip_link_cmd])
+                        node_obj.exec_oc_debug_cmd(
+                            node=node, cmd_list=[ip_link_cmd], namespace="default"
+                        )
 
             if create_public_net:
                 nad_to_load = constants.MULTUS_PUBLIC_NET_YAML
