@@ -113,7 +113,9 @@ def get_current_secondary_cluster_name(
     if discovered_apps:
         namespace = constants.DR_OPS_NAMESAPCE
         primary_cluster_name = get_current_primary_cluster_name(
-            namespace=namespace, resource_name=resource_name, discovered_apps=discovered_apps
+            namespace=namespace,
+            resource_name=resource_name,
+            discovered_apps=discovered_apps,
         )
         drpolicy_data = DRPC(
             namespace=namespace, resource_name=resource_name
@@ -781,9 +783,11 @@ def wait_for_replication_resources_deletion(
             )
 
     ocs_version = version.get_semantic_ocs_version_from_config()
-    if not check_state or (
-        ocs_version <= version.VERSION_4_17 and "cephfs" not in namespace
-    ) and not skip_vrg_check:
+    if (
+        not check_state
+        or (ocs_version <= version.VERSION_4_17 and "cephfs" not in namespace)
+        and not skip_vrg_check
+    ):
         logger.info("Waiting for VRG to be deleted")
         sample = TimeoutSampler(
             timeout=timeout,
