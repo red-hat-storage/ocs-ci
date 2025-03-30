@@ -112,15 +112,12 @@ def get_current_secondary_cluster_name(
         namespace = constants.GITOPS_CLUSTER_NAMESPACE
     if discovered_apps:
         namespace = constants.DR_OPS_NAMESAPCE
-        logger.info("------------1")
         primary_cluster_name = get_current_primary_cluster_name(
             namespace=namespace, resource_name=resource_name, discovered_apps=discovered_apps
         )
-        logger.info("------------2")
         drpolicy_data = DRPC(
             namespace=namespace, resource_name=resource_name
         ).drpolicy_obj.get()
-        logger.info("------------3")
     else:
         primary_cluster_name = get_current_primary_cluster_name(namespace)
         drpolicy_data = DRPC(namespace=namespace).drpolicy_obj.get()
@@ -1876,7 +1873,6 @@ def do_discovered_apps_cleanup_multi_ns(
             discovered_apps=True,
             vrg_name=vrg_name,
             skip_vrg_check=True,
-            timeout=1500
         )
 
     wait_for_vrg_state(

@@ -1,6 +1,6 @@
 ENV_DATA:
   dr_workload_repo_url: "https://github.com/red-hat-storage/ocs-workloads.git"
-  dr_workload_repo_branch: "add_more_pvc_label"
+  dr_workload_repo_branch: "master"
   dr_workload_subscription_rbd: [
     {name: "busybox-1", workload_dir: "rdr/busybox/rbd/subscription_with_placementrule/app-busybox-1",
      pod_count: 10, pvc_count: 10
@@ -110,7 +110,7 @@ ENV_DATA:
       dr_workload_app_pod_selector_value: "simple_io",
       dr_workload_app_pvc_selector_key: "appname",
       dr_workload_app_pvc_selector_value: "busybox_app1",
-      workload_namespace: "busybox-dict-85-rbd",
+      workload_namespace: "busybox-dict-1-rbd",
       dr_workload_app_placement_name: "busybox-dict-1-rbd",
       multi_ns_dr_workload_app_pvc_selector_key: "workloadpattern",
       multi_ns_dr_workload_app_pvc_selector_value: "simple_io_pvc",
@@ -121,7 +121,7 @@ ENV_DATA:
        dr_workload_app_pod_selector_value: "simple_io",
        dr_workload_app_pvc_selector_key: "appname",
        dr_workload_app_pvc_selector_value: "busybox_app2",
-       workload_namespace: "busybox-dict-86-rbd",
+       workload_namespace: "busybox-dict-1-rbd",
        dr_workload_app_placement_name: "busybox-dict-2-rbd",
        multi_ns_dr_workload_app_pvc_selector_key: "workloadpattern",
        multi_ns_dr_workload_app_pvc_selector_value: "simple_io_pvc",
