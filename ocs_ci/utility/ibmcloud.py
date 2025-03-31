@@ -1315,15 +1315,19 @@ class IBMCloudObjectStorage:
 
     def get_bucket_objects(self, bucket_name, prefix=None):
         """
-        Fetches the objects in a bucket
+        Return a list of object keys from the specified bucket.
 
         Args:
+<<<<<<< HEAD
             bucket_name (str): Name of the bucket
             prefix (str): Prefix for the objects to fetch
+=======
+            bucket_name (str): Name of the bucket.
+            bucket_region (str): Region of the bucket.
+>>>>>>> e35e1fa18 (fix doc string)
 
         Returns:
-            list: List of objects in a bucket
-
+            list: Object keys in the bucket.
         """
         bucket_objects = []
         logger.info(f"Retrieving bucket contents from {bucket_name}")
