@@ -114,6 +114,7 @@ setup(
             "ocs-build=ocs_ci.utility.ocs_build:main",
             "get-ssl-cert=ocs_ci.utility.ssl_certs:main",
             "rosa-ocp-version=ocs_ci.utility.rosa:rosa_ocp_version_endpoint",
+            "ibm-cleanup=ocs_ci.cleanup.ibm.cleanup:ibm_cleanup",
         ],
     },
     zip_safe=True,
