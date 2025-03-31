@@ -1,7 +1,10 @@
+import logging
 from selenium.webdriver.common.by import By
 from ocs_ci.framework import config
 from ocs_ci.ocs import constants
+from ocs_ci.utility.utils import get_ocp_version
 
+logger = logging.getLogger(__name__)
 
 osd_sizes = ("512", "2048", "4096")
 
@@ -2181,6 +2184,61 @@ bucket_tab = {
     ),  # Input field for bucket name confirmation
 }
 locators = {
+    "4.19": {
+        "login": {**login, **login_4_11, **login_4_14},
+        "page": {**page_nav, **page_nav_4_10, **page_nav_4_14},
+        "generic": generic_locators,
+        "add_capacity": {**add_capacity, **add_capacity_4_11, **add_capacity_4_12},
+        "deployment": {
+            **deployment,
+            **deployment_4_7,
+            **deployment_4_9,
+            **deployment_4_10,
+            **deployment_4_11,
+            **deployment_4_12,
+            **deployment_4_15,
+            **deployment_4_16,
+            **deployment_4_17,
+        },
+        "obc": obc,
+        "pvc": {
+            **pvc,
+            **pvc_4_7,
+            **pvc_4_8,
+            **pvc_4_9,
+            **pvc_4_12,
+            **pvc_4_14,
+        },
+        "acm_page": {
+            **acm_page_nav,
+            **acm_configuration,
+            **acm_configuration_4_11,
+            **acm_configuration_4_12,
+            **acm_configuration_4_13,
+            **acm_configuration_4_14,
+            **acm_configuration_4_16,
+            **acm_configuration_4_18,
+        },
+        "validation": {
+            **validation,
+            **validation_4_8,
+            **validation_4_9,
+            **validation_4_10,
+            **validation_4_11,
+            **validation_4_12,
+            **validation_4_13,
+            **validation_4_14,
+            **validation_4_17,
+            **validation_4_18,
+        },
+        "block_pool": {**block_pool, **block_pool_4_12, **block_pool_4_13},
+        "storageclass": {**storageclass, **storageclass_4_9},
+        "bucketclass": bucketclass,
+        "topology": topology,
+        "mcg_stores": mcg_stores,
+        "alerting": alerting,
+        "bucket_tab": bucket_tab,
+    },
     "4.18": {
         "login": {**login, **login_4_11, **login_4_14},
         "page": {**page_nav, **page_nav_4_10, **page_nav_4_14},
@@ -2584,6 +2642,22 @@ locators = {
         "validation": validation,
     },
 }
+
+
+def locators_for_current_ocp_version():
+    ocp_version = get_ocp_version()
+    if ocp_version in locators:
+        return locators[ocp_version]
+    else:
+        sorted_versions = sorted(
+            locators.keys(), key=lambda x: list(map(int, x.split(".")))
+        )
+        latest_version = sorted_versions[-1]
+        logger.warning(
+            f"The locators for new OCP version: {ocp_version} are not defined yet!"
+            f"Locators for latest defined version of OCP: {latest_version} will be used!"
+        )
+        return locators[latest_version]
 
 
 locate_aws_regions = {

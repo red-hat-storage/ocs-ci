@@ -857,7 +857,6 @@ def get_openshift_installer(
     else:
         installer_filename = "openshift-install"
     installer_binary_path = os.path.join(bin_dir, installer_filename)
-    config.ENV_DATA["installer_path"] = installer_binary_path
     client_binary_path = os.path.join(bin_dir, "oc")
     client_exist = os.path.isfile(client_binary_path)
     custom_ocp_image = config.DEPLOYMENT.get("custom_ocp_image")
@@ -3464,9 +3463,8 @@ def skipif_ui_not_support(ui_test):
         'True' if test needs to be skipped else 'False'
 
     """
-    from ocs_ci.ocs.ui.views import locators
+    from ocs_ci.ocs.ui.views import locators_for_current_ocp_version
 
-    ocp_version = get_running_ocp_version()
     if (
         (
             # Skip for IMB Cloud managed AKA ROKS
@@ -3478,7 +3476,7 @@ def skipif_ui_not_support(ui_test):
     ):
         return True
     try:
-        locators[ocp_version][ui_test]
+        locators_for_current_ocp_version()[ui_test]
     except KeyError:
         return True
     return False

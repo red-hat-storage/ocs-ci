@@ -25,13 +25,13 @@ from ocs_ci.helpers.dr_helpers_ui import (
 from ocs_ci.ocs.exceptions import UnexpectedBehaviour
 from ocs_ci.ocs.ui.base_ui import wait_for_element_to_be_clickable
 from ocs_ci.ocs.ui.validation_ui import ValidationUI
-from ocs_ci.ocs.ui.views import locators
+from ocs_ci.ocs.ui.views import locators_for_current_ocp_version
 from ocs_ci.ocs.utils import (
     enable_mco_console_plugin,
     get_primary_cluster_config,
     get_non_acm_cluster_config,
 )
-from ocs_ci.utility.utils import get_ocp_version, ceph_health_check
+from ocs_ci.utility.utils import ceph_health_check
 from ocs_ci.ocs.resources.drpc import DRPC
 
 logger = logging.getLogger(__name__)
@@ -168,8 +168,7 @@ class TestRDRWarningAndAlerting:
         acm_obj = AcmAddClusters()
         page_nav = ValidationUI()
 
-        ocp_version = get_ocp_version()
-        acm_loc = locators[ocp_version]["acm_page"]
+        acm_loc = locators_for_current_ocp_version()["acm_page"]
 
         page_nav.refresh_web_console()
         config.switch_to_cluster_by_name(primary_cluster_name)
@@ -404,8 +403,7 @@ class TestRDRWarningAndAlerting:
         acm_obj = AcmAddClusters()
         page_nav = ValidationUI()
 
-        ocp_version = get_ocp_version()
-        acm_loc = locators[ocp_version]["acm_page"]
+        acm_loc = locators_for_current_ocp_version()["acm_page"]
 
         page_nav.refresh_web_console()
         config.switch_to_cluster_by_name(primary_cluster_name)
