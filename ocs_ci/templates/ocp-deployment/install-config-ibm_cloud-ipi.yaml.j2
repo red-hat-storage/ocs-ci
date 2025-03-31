@@ -1,11 +1,6 @@
 apiVersion: {{ api_version | default('v1') }}
 baseDomain: {{ base_domain | default('ibmcloud2.qe.rh-ocs.com') }}
 credentialsMode: Manual
-# W/A for https://issues.redhat.com/browse/OCPBUGS-53258
-publish: External
-featureSet: CustomNoUpgrade
-featureGates: ["ClusterAPIInstall=true"]
-# END OF W/A
 compute:
 - architecture: amd64
   hyperthreading: Enabled
