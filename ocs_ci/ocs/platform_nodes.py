@@ -29,6 +29,7 @@ from ocs_ci.ocs.exceptions import (
     VolumePathNotFoundException,
     UnsupportedOSType,
     UnavailableResourceException,
+    CommandFailed,
 )
 from ocs_ci.framework import config, merge_dict
 from ocs_ci.ocs.machinepool import (
@@ -3243,9 +3244,28 @@ class IBMCloudBMNodes(NodesBase):
         self.ibmcloud_bm.stop_machines(machines)
         if wait:
             node_names = [n.name for n in nodes]
-            wait_for_nodes_status(
-                node_names, constants.NODE_NOT_READY, timeout=180, sleep=5
-            )
+            try:
+                wait_for_nodes_status(
+                    node_names, constants.NODE_NOT_READY, timeout=180, sleep=5
+                )
+            except CommandFailed as err:
+                # Consider the situation where the cluster is not accessible after nodes are down,
+                # example: when all the nodes are off
+                if "Unable to connect to the server" in str(err):
+                    logger.info(
+                        f"Unable to connect to the server to check the nodes NotReady status. "
+                        f"Trying alternate method to verify nodes {node_names} has stopped"
+                    )
+                    machines_not_off = (
+                        self.ibmcloud_bm.get_machines_that_are_not_off_from_sensor_data(
+                            machines
+                        )
+                    )
+                    assert not (
+                        machines_not_off
+                    ), f"Nodes corresponding to the machines {machines_not_off} are not off."
+                else:
+                    raise
 
     def start_nodes(self, nodes, wait=True):
         """
