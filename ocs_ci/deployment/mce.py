@@ -188,7 +188,7 @@ class MCEInstaller(object):
 
         if not configmaps_obj.check_resource_existence(
             should_exist=True,
-            timeout=60,
+            timeout=120,
             resource_name=constants.SUPPORTED_VERSIONS_CONFIGMAP,
         ):
             raise UnavailableResourceException(
