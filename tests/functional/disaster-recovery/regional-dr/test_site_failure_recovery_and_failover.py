@@ -5,7 +5,11 @@ from concurrent.futures import ThreadPoolExecutor
 from ocs_ci.framework.pytest_customization.marks import tier4a, turquoise_squad
 from ocs_ci.framework import config
 from ocs_ci.helpers import dr_helpers
-from ocs_ci.ocs.acm.acm import validate_cluster_import
+from ocs_ci.ocs.acm.acm import (
+    validate_cluster_import,
+    get_clusters_env,
+    copy_kubeconfig,
+)
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.node import get_node_objs, wait_for_nodes_status
 from ocs_ci.helpers.dr_helpers import (
@@ -26,8 +30,10 @@ from ocs_ci.helpers.dr_helpers import (
 )
 from ocs_ci.ocs.exceptions import UnexpectedBehaviour
 from ocs_ci.ocs.resources.drpc import DRPC
+from ocs_ci.ocs.resources.ocs import OCS
 from ocs_ci.ocs.resources.pod import wait_for_pods_to_be_running
-from ocs_ci.ocs.utils import get_active_acm_index
+from ocs_ci.ocs.utils import get_active_acm_index, get_primary_cluster_config
+from ocs_ci.utility import templating
 from ocs_ci.utility.utils import TimeoutSampler, ceph_health_check, run_cmd
 
 logger = logging.getLogger(__name__)
@@ -224,13 +230,26 @@ class TestSiteFailureRecoveryAndfailover:
             active_primary_cluster_node_objs
         )
         wait_for_nodes_status([node.name for node in active_primary_cluster_node_objs])
+        config.switch_ctx(get_passive_acm_index())
         logger.info(
             "Check if recovered managed cluster is successfully imported on the new hub"
         )
-        logger.info(
-            "Create restore resource once again to avoid failure of import of the recovered managed cluster"
+        logger.info("Create and apply the auto-import-secret.yaml")
+        clusters_env = get_clusters_env()
+        primary_index = get_primary_cluster_config().MULTICLUSTER["multicluster_index"]
+        down_cluster_name = clusters_env.get(f"cluster_name_{primary_index}")
+        down_cluster_kubeconfig = copy_kubeconfig(
+            file=clusters_env.get(f"kubeconfig_location_c{primary_index}"),
+            return_str=True,
         )
-        restore_backup()
+        auto_import_secret = templating.load_yaml(
+            "ocs_ci/templates/acm-deployment/auto-import-secret.yaml"
+        )
+        auto_import_secret["metadata"]["namespace"] = down_cluster_name
+        auto_import_secret["stringData"]["autoImportRetry"] = "50"
+        auto_import_secret["stringData"]["kubeconfig"] = down_cluster_kubeconfig
+        auto_import_secret_obj = OCS(**auto_import_secret)
+        auto_import_secret_obj.apply(**auto_import_secret)
         for sample in TimeoutSampler(
             timeout=900,
             sleep=15,
