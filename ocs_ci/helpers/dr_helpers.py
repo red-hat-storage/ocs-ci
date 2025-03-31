@@ -1552,6 +1552,7 @@ def create_klusterlet_config():
     )
     templating.dump_data_to_temp_yaml(klusterlet_config, klusterlet_config_yaml.name)
     run_cmd(f"oc create -f {klusterlet_config_yaml.name}")
+    logger.info("Klusterletconfig is successfully created on the passive hub")
     config.switch_ctx(old_ctx)
 
 
@@ -1568,6 +1569,9 @@ def remove_parameter_klusterlet_config():
     remove_op = [{"op": "remove", "path": "/spec"}]
     klusterlet_config_obj.patch(
         resource_name=name, params=json.dumps(remove_op), format_type="json"
+    )
+    logger.info(
+        "appliedManifestWorkEvictionGracePeriod and it's value is successfully removed from KlusterletConfig"
     )
     config.switch_ctx(old_ctx)
 
