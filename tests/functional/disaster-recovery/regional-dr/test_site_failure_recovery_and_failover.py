@@ -249,6 +249,7 @@ class TestSiteFailureRecoveryAndfailover:
         auto_import_secret["stringData"]["autoImportRetry"] = "50"
         auto_import_secret["stringData"]["kubeconfig"] = down_cluster_kubeconfig
         auto_import_secret_obj = OCS(**auto_import_secret)
+        config.switch_ctx(get_passive_acm_index())
         auto_import_secret_obj.apply(**auto_import_secret)
         for sample in TimeoutSampler(
             timeout=900,
