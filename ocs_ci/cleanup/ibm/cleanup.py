@@ -64,7 +64,18 @@ def ibm_cleanup():
 
 
 def delete_buckets(hours):
-    """ """
+    """
+    Delete IBM Cloud Object Storage buckets older than the specified number of hours.
+
+    This function retrieves all available buckets, determines their creation time and region,
+    filters out those that are older than the given threshold (in hours), and attempts to delete them.
+
+    Args:
+        hours (int): The age threshold in hours. Buckets older than this value will be deleted.
+
+    Raises:
+        Exception: If one or more buckets fail to be deleted, an exception is raised listing their names.
+    """
     status = []
     api_key = config.AUTH["ibmcloud"]["api_key"]
     service_instance_id = config.AUTH["ibmcloud"]["cos_instance_crn"]
@@ -95,10 +106,21 @@ def delete_buckets(hours):
 
 def buckets_to_delete(buckets, hours):
     """
-    Buckets to Delete
+    Identify buckets that should be deleted based on their age.
+
+    This function compares the creation time of each bucket against the specified threshold (in hours).
+    It also applies special rules defined in `defaults.BUCKET_PREFIXES_SPECIAL_RULES`, which can override
+    the default age threshold for specific bucket name patterns. If the rule is set to "never", the bucket
+    is excluded from deletion.
 
     Args:
+        buckets (dict): A dictionary where keys are bucket names and values are lists of:
+                        [region (str), creation_date (datetime object)].
+        hours (int): The age threshold in hours. Buckets older than this will be considered for deletion,
+                     unless overridden by a special rule.
 
+    Returns:
+        dict: A dictionary of bucket names mapped to their region, representing buckets to be deleted.
     """
     buckets_delete = {}
     current_date = datetime.now(timezone.utc)
