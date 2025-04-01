@@ -2459,11 +2459,6 @@ def check_pods_in_running_state(
     for p in list_of_pods:
         # we don't want to compare osd-prepare and canary pods as they get created freshly when an osd need to be added.
         if (
-            "rook-ceph-osd-prepare" not in p.name
-            and "rook-ceph-drain-canary" not in p.name
-        ):
-            status = ocp_pod_obj.get_resource(p.name, "STATUS")
-        if (
             ("rook-ceph-osd-prepare" not in p.name)
             and ("rook-ceph-drain-canary" not in p.name)
             and ("debug" not in p.name)
