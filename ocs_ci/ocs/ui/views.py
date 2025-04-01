@@ -42,6 +42,9 @@ login_4_11 = {
 login_4_14 = {
     "ocp_page": "Cluster · Red Hat OpenShift",
 }
+login_4_19 = {
+    "click_login": ("co-login-button", By.ID),
+}
 
 deployment = {
     "click_install_ocs": ('a[data-test-id="operator-install-btn"]', By.CSS_SELECTOR),
@@ -2185,7 +2188,7 @@ bucket_tab = {
 }
 locators = {
     "4.19": {
-        "login": {**login, **login_4_11, **login_4_14},
+        "login": {**login, **login_4_11, **login_4_14, **login_4_19},
         "page": {**page_nav, **page_nav_4_10, **page_nav_4_14},
         "generic": generic_locators,
         "add_capacity": {**add_capacity, **add_capacity_4_11, **add_capacity_4_12},
