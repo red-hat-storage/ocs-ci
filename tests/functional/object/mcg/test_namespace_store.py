@@ -5,6 +5,7 @@ from ocs_ci.helpers.helpers import create_unique_resource_name
 from ocs_ci.ocs.bucket_utils import (
     write_random_objects_in_pod,
     write_individual_s3_objects,
+    s3_head_bucket,
 )
 from ocs_ci.ocs.resources.objectbucket import OBC
 from ocs_ci.ocs.resources.cloud_manager import CloudManager
@@ -12,12 +13,17 @@ from ocs_ci.ocs.resources.namespacestore import (
     cli_create_namespacestore,
     NamespaceStore,
 )
+from ocs_ci.framework.pytest_customization.marks import polarion_id, mcg, red_squad
+
 
 logger = logging.getLogger(__name__)
 
 
+@red_squad
+@mcg
 class TestNamespaceStore:
 
+    @polarion_id("OCS-6550")
     def test_namespacestore_with_rgw(
         self,
         rgw_bucket_factory,
@@ -26,6 +32,11 @@ class TestNamespaceStore:
         test_directory_setup,
         awscli_pod,
     ):
+        """
+        Test coverage for the scenarios mentioned in the
+        bug: https://issues.redhat.com/browse/DFBUGS-700
+
+        """
 
         # Create a RGW bucket which will be used as backend for NS
         rgw_bucket = rgw_bucket_factory(amount=1)[0]
@@ -35,6 +46,10 @@ class TestNamespaceStore:
         # can be used to create NS
         rgw_obc_object = OBC(rgw_bucket.name)
         cld_mgr = CloudManager(obc_obj=rgw_obc_object)
+
+        # Verify you can access the bucket using
+        # rgw bucket credentials
+        s3_head_bucket(rgw_obc_object, rgw_bucket.name)
 
         # Create the Namespacestore using the credentials
         # of rgw bucket
@@ -59,6 +74,7 @@ class TestNamespaceStore:
             },
         }
         bucket = bucket_factory(interface="CLI", bucketclass=bucketclass_dict)[0]
+        logger.info(f"Created bucket {bucket.name}")
 
         # Write objects to the bucket one by one
         obj_list = write_random_objects_in_pod(
@@ -72,6 +88,7 @@ class TestNamespaceStore:
             target_dir=test_directory_setup.origin_dir,
             bucket_name=bucket.name,
         )
+        logger.info(f"Successfully uploaded objects to the bucket {bucket.name}")
 
         # Verify NS health
         nss_obj.verify_health()
