@@ -7155,8 +7155,9 @@ def discovered_apps_dr_workload(request):
                 workload_pod_count=workload_details["pod_count"],
                 workload_pvc_count=workload_details["pvc_count"],
                 workload_namespace=(
-                    workload_details["workload_namespace"] + "-multi-ns" if multi_ns else workload_details[
-                        "workload_namespace"]
+                    workload_details["workload_namespace"] + "-multi-ns"
+                    if multi_ns
+                    else workload_details["workload_namespace"]
                 ),
                 discovered_apps_pvc_selector_key=workload_details[
                     "dr_workload_app_pvc_selector_key"
