@@ -3,7 +3,6 @@ import json
 import logging
 from abc import ABC, abstractmethod
 
-import boto3
 import google.api_core.exceptions as GoogleExceptions
 from azure.core.exceptions import ResourceNotFoundError, AzureError
 from azure.storage.blob import BlobServiceClient
@@ -21,6 +20,10 @@ from ocs_ci.ocs.exceptions import (
     TimeoutExpiredError,
     ResourceWrongStatusException,
     ClusterNotInSTSModeException,
+)
+from ocs_ci.ocs.resources.boto3_wrapper import (
+    Boto3WrapperForAWS,
+    BaseBoto3Wrapper,
 )
 from ocs_ci.ocs.resources.rgw import RGW
 from ocs_ci.utility import templating
@@ -224,13 +227,19 @@ class S3Client(CloudClient):
         self.region = auth_dict.get("REGION")
         self.access_key = key_id
         self.secret_key = access_key
+        self.buckets_to_region_dict = {}
 
-        self.client = boto3.resource(
-            "s3",
+        s3_client_wrapper = (
+            Boto3WrapperForAWS
+            if self.data_prefix.lower() == "aws"
+            else BaseBoto3Wrapper
+        )
+        self.client = s3_client_wrapper(
             verify=verify,
             endpoint_url=self.endpoint,
-            aws_access_key_id=self.access_key,
-            aws_secret_access_key=self.secret_key,
+            access_key=self.access_key,
+            secret_key=self.secret_key,
+            region=self.region,
         )
         self.secret = self.create_s3_secret(self.secret_prefix, self.data_prefix)
 
@@ -260,6 +269,7 @@ class S3Client(CloudClient):
             self.client.create_bucket(
                 Bucket=name, CreateBucketConfiguration={"LocationConstraint": region}
             )
+        self.buckets_to_region_dict[name] = region
 
     def internal_delete_uls(self, name):
         """
@@ -279,7 +289,7 @@ class S3Client(CloudClient):
             # TODO: Check why bucket policy deletion fails on IBM COS
             # when bucket have no policy set
             if "aws" in name:
-                self.client.meta.client.delete_bucket_policy(Bucket=name)
+                self.client.delete_bucket_policy(Bucket=name)
             self.client.Bucket(name).objects.all().delete()
             self.client.Bucket(name).delete()
             deletion_result = True
@@ -288,8 +298,6 @@ class S3Client(CloudClient):
             logger.warning(f"Deletion of Underlying Storage {name} failed.")
 
         return deletion_result
-
-        # Todo: rename client to resource (or find an alternative)
 
     def get_all_uls_names(self):
         """
@@ -310,8 +318,7 @@ class S3Client(CloudClient):
 
         """
         try:
-            # Todo: rename client to resource (or find an alternative)
-            self.client.meta.client.head_bucket(Bucket=uls_name)
+            self.client.head_bucket(Bucket=uls_name)
             logger.info(f"{uls_name} exists")
             return True
         except ClientError:
@@ -344,11 +351,9 @@ class S3Client(CloudClient):
                 ],
             }
             bucket_policy = json.dumps(bucket_policy)
-            self.client.meta.client.put_bucket_policy(
-                Bucket=aws_bucket_name, Policy=bucket_policy
-            )
+            self.client.put_bucket_policy(Bucket=aws_bucket_name, Policy=bucket_policy)
         else:
-            self.client.meta.client.delete_bucket_policy(Bucket=aws_bucket_name)
+            self.client.delete_bucket_policy(Bucket=aws_bucket_name)
 
     def create_s3_secret(self, secret_prefix, data_prefix):
         """
