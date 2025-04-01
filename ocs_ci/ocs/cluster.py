@@ -217,6 +217,7 @@ class CephCluster(object):
         self._ceph_pods = pod.get_all_pods(self._namespace)
         # TODO: Workaround for BZ1748325:
         mons = pod.get_mon_pods(self.mon_selector, self.namespace)
+        self.mons = []
         for mon in mons:
             if mon.ocp.get_resource_status(mon.name) == constant.STATUS_RUNNING:
                 self.mons.append(mon)

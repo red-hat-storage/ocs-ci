@@ -81,6 +81,9 @@ def check_node_replacement_verification_steps(
             and config.ENV_DATA["deployment_type"] == "upi"
         ):
             new_osd_node_name = old_node_name
+            # This is a workaround due to the issue https://github.com/red-hat-storage/ocs-ci/issues/11553
+            if config.RUN.get("use_existing_node"):
+                new_osd_node_name = new_node_name
         else:
             new_osd_node_name = node.wait_for_new_osd_node(old_osd_node_names, timeout)
         log.info(f"Newly created OSD name: {new_osd_node_name}")
@@ -160,13 +163,15 @@ def delete_and_create_osd_node(osd_node_name):
         if config.ENV_DATA["platform"].lower() == constants.AWS_PLATFORM:
             new_node_name = node.delete_and_create_osd_node_aws_upi(osd_node_name)
         elif config.ENV_DATA["platform"].lower() == constants.VSPHERE_PLATFORM:
+            # This is a workaround due to the issue https://github.com/red-hat-storage/ocs-ci/issues/11553
+            use_existing_node = config.RUN.get("use_existing_node", False)
             if is_lso_cluster():
                 new_node_name = node.delete_and_create_osd_node_vsphere_upi_lso(
-                    osd_node_name, use_existing_node=False
+                    osd_node_name, use_existing_node=use_existing_node
                 )
             else:
                 new_node_name = node.delete_and_create_osd_node_vsphere_upi(
-                    osd_node_name, use_existing_node=False
+                    osd_node_name, use_existing_node=use_existing_node
                 )
     elif dt == constants.MANAGED_CP_DEPL_TYPE:
         new_node_name = node.delete_and_create_osd_node_managed_cp(osd_node_name)
@@ -282,9 +287,12 @@ class TestNodeReplacement(ManageTest):
     """
 
     @pytest.fixture(autouse=True)
-    def teardown(self):
-        log.info("Clear crash warnings and osd removal leftovers")
-        clear_crash_warning_and_osd_removal_leftovers()
+    def teardown(self, request):
+        def finalizer():
+            log.info("Clear crash warnings and osd removal leftovers")
+            clear_crash_warning_and_osd_removal_leftovers()
+
+        request.addfinalizer(finalizer)
 
     @pytest.fixture(autouse=True)
     def init_sanity(self):
