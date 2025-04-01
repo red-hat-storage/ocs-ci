@@ -765,3 +765,40 @@ def wait_for_pvcs_in_lvs_to_reach_status(
             f"expected status {expected_status} after {timeout} seconds"
         )
         return False
+
+
+def create_volume_group_snapshot(
+    label_key, label_value, vgs_yaml, vgs_name, namespace, vsclass_name=None, wait=False
+):
+    """
+    Create VGS
+
+    Args:
+        label_value (str): label
+        vgs_yaml (str): The path of snapshot yaml
+        vgs_name (str): The name of the snapshot to be created
+        namespace (str): The namespace for the snapshot creation
+        vsclass_name (str): The name of the snapshot class
+        wait (bool): True to wait for snapshot to be ready, False otherwise
+
+    Returns:
+        OCS object
+
+    """
+    snapshot_data = templating.load_yaml(vgs_yaml)
+    snapshot_data["metadata"]["name"] = vgs_name
+    snapshot_data["metadata"]["namespace"] = namespace
+    if vsclass_name:
+        snapshot_data["spec"]["volumeSnapshotClassName"] = vsclass_name
+    snapshot_data["spec"]["source"]["selector"]["matchLabels"][label_key] = label_value
+    ocs_obj = OCS(**snapshot_data)
+    created_snap = ocs_obj.create(do_reload=True)
+    assert created_snap, f"Failed to create volumegroupsnapshot {vgs_name}"
+    if wait:
+        ocs_obj.ocp.wait_for_resource(
+            condition="true",
+            resource_name=ocs_obj.name,
+            column=constants.STATUS_READYTOUSE,
+            timeout=120,
+        )
+    return ocs_obj

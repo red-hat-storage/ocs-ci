@@ -1,0 +1,10 @@
+apiVersion: groupsnapshot.storage.k8s.io/v1beta1
+kind: VolumeGroupSnapshot
+metadata:
+  name: cephfs-volume-group-snapshot
+spec:
+  volumeGroupSnapshotClassName: ocs-storagecluster-cephfs-groupsnapclass
+  source:
+    selector:
+      matchLabels:
+        group: myGroup
