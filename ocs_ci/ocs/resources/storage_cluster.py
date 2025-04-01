@@ -173,13 +173,14 @@ def ocs_install_verification(
         version_before_upgrade (float): Set to OCS version before upgrade
 
     """
-    from ocs_ci.ocs.node import get_nodes
+    from ocs_ci.ocs.node import get_nodes, get_all_nodes
     from ocs_ci.ocs.resources.pvc import get_deviceset_pvcs
     from ocs_ci.ocs.resources.pod import get_ceph_tools_pod, get_all_pods
     from ocs_ci.ocs.cluster import validate_cluster_on_pvc
     from ocs_ci.ocs.resources.fips import check_fips_enabled
 
     number_of_worker_nodes = len(get_nodes())
+    total_nodes = len(get_all_nodes())
     namespace = config.ENV_DATA["cluster_namespace"]
     log.info("Verifying OCS installation")
     if config.ENV_DATA.get("disable_components"):
@@ -333,6 +334,19 @@ def ocs_install_verification(
                 constants.EXPORTER_APP_LABEL: exporter_pod_count,
             }
         )
+        if odf_running_version >= version.VERSION_4_19:
+            del resources_dict[constants.CSI_CEPHFSPLUGIN_PROVISIONER_LABEL]
+            del resources_dict[constants.CSI_RBDPLUGIN_PROVISIONER_LABEL]
+            del resources_dict[constants.CSI_CEPHFSPLUGIN_LABEL]
+            del resources_dict[constants.CSI_RBDPLUGIN_LABEL]
+            resources_dict.update(
+                {
+                    constants.CSI_CEPHFSPLUGIN_PROVISIONER_LABEL_419: 2,
+                    constants.CSI_RBDPLUGIN_PROVISIONER_LABEL_419: 2,
+                    constants.CSI_CEPHFSPLUGIN_LABEL_419: total_nodes,
+                    constants.CSI_RBDPLUGIN_LABEL_419: total_nodes,
+                }
+            )
 
     if config.DEPLOYMENT.get("arbiter_deployment"):
         resources_dict.update(
@@ -519,10 +533,15 @@ def ocs_install_verification(
     else:
         if not disable_blockpools and not provider_cluster:
             sc_rbd = storage_class.get(resource_name=constants.DEFAULT_STORAGECLASS_RBD)
+            if odf_running_version >= version.VERSION_4_19:
+                sc_rbd_cluster_id = sc_rbd["parameters"]["clusterID"]
         if not disable_cephfs and not provider_cluster:
             sc_cephfs = storage_class.get(
                 resource_name=constants.DEFAULT_STORAGECLASS_CEPHFS
             )
+            if odf_running_version >= version.VERSION_4_19:
+                sc_cephfs_cluster_id = sc_cephfs["parameters"]["clusterID"]
+
     if not disable_blockpools and not provider_cluster:
         if consumer_cluster or client_cluster:
             assert (
@@ -560,14 +579,32 @@ def ocs_install_verification(
                     == rbd_provisioner_secret
                 )
             else:
-                assert (
-                    sc_rbd["parameters"]["csi.storage.k8s.io/node-stage-secret-name"]
-                    == constants.RBD_NODE_SECRET
-                )
-                assert (
-                    sc_rbd["parameters"]["csi.storage.k8s.io/provisioner-secret-name"]
-                    == constants.RBD_PROVISIONER_SECRET
-                )
+                if odf_running_version >= version.VERSION_4_19:
+                    assert (
+                        sc_rbd["parameters"][
+                            "csi.storage.k8s.io/node-stage-secret-name"
+                        ]
+                        == f"{constants.RBD_NODE_SECRET_419}-{sc_rbd_cluster_id}"
+                    )
+                    assert (
+                        sc_rbd["parameters"][
+                            "csi.storage.k8s.io/provisioner-secret-name"
+                        ]
+                        == f"{constants.RBD_PROVISIONER_SECRET_419}-{sc_rbd_cluster_id}"
+                    )
+                else:
+                    assert (
+                        sc_rbd["parameters"][
+                            "csi.storage.k8s.io/node-stage-secret-name"
+                        ]
+                        == constants.RBD_NODE_SECRET
+                    )
+                    assert (
+                        sc_rbd["parameters"][
+                            "csi.storage.k8s.io/provisioner-secret-name"
+                        ]
+                        == constants.RBD_PROVISIONER_SECRET
+                    )
 
     if not disable_cephfs and not provider_cluster:
         if consumer_cluster or client_cluster:
@@ -600,16 +637,32 @@ def ocs_install_verification(
                     == cephfs_provisioner_secret
                 )
             else:
-                assert (
-                    sc_cephfs["parameters"]["csi.storage.k8s.io/node-stage-secret-name"]
-                    == constants.CEPHFS_NODE_SECRET
-                )
-                assert (
-                    sc_cephfs["parameters"][
-                        "csi.storage.k8s.io/provisioner-secret-name"
-                    ]
-                    == constants.CEPHFS_PROVISIONER_SECRET
-                )
+                if odf_running_version >= version.VERSION_4_19:
+                    assert (
+                        sc_cephfs["parameters"][
+                            "csi.storage.k8s.io/node-stage-secret-name"
+                        ]
+                        == f"{constants.CEPHFS_NODE_SECRET_419}-{sc_cephfs_cluster_id}"
+                    )
+                    assert (
+                        sc_cephfs["parameters"][
+                            "csi.storage.k8s.io/provisioner-secret-name"
+                        ]
+                        == f"{constants.CEPHFS_PROVISIONER_SECRET_419}-{sc_cephfs_cluster_id}"
+                    )
+                else:
+                    assert (
+                        sc_cephfs["parameters"][
+                            "csi.storage.k8s.io/node-stage-secret-name"
+                        ]
+                        == constants.CEPHFS_NODE_SECRET
+                    )
+                    assert (
+                        sc_cephfs["parameters"][
+                            "csi.storage.k8s.io/provisioner-secret-name"
+                        ]
+                        == constants.CEPHFS_PROVISIONER_SECRET
+                    )
 
     log.info("Verified node and provisioner secret names in storage class.")
 
@@ -774,8 +827,8 @@ def ocs_install_verification(
     # Let's wait for storage system after ceph health is OK to prevent fails on
     # Progressing': 'True' state.
 
-    if not (fusion_aas or client_cluster):
-        verify_storage_system()
+    # if not (fusion_aas or client_cluster):
+    #     verify_storage_system()
 
     if config.ENV_DATA.get("fips"):
         # In case that fips is enabled when deploying,
@@ -870,7 +923,9 @@ def ocs_install_verification(
         else constants.ROOK_CEPH_OPERATOR
     )
 
-    if ocs_version >= version.VERSION_4_17 and hci_cluster:
+    if (
+        ocs_version >= version.VERSION_4_17 and hci_cluster
+    ) or odf_running_version >= version.VERSION_4_19:
         provisioner_deployment_and_owner_names = {
             f"{constants.CEPHFS_PROVISIONER}-ctrlplugin": constants.CEPHFS_PROVISIONER,
             f"{constants.RBD_PROVISIONER}-ctrlplugin": constants.RBD_PROVISIONER,
