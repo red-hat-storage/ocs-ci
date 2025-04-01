@@ -39,7 +39,7 @@ class TestNamespaceStore:
         """
 
         # Create a RGW bucket which will be used as backend for NS
-        rgw_bucket = rgw_bucket_factory(amount=1)[0]
+        rgw_bucket = rgw_bucket_factory(amount=1, interface="RGW-OC")[0]
         logger.info(f"Created RGW bucket {rgw_bucket.name}")
 
         # Create OBC and CloudManager object for the above bucket, hence it
