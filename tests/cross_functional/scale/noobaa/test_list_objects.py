@@ -13,6 +13,7 @@ from ocs_ci.framework.testlib import E2ETest
 from ocs_ci.framework.pytest_customization.marks import (
     scale,
     skipif_ocs_version,
+    jira,
 )
 from ocs_ci.ocs.resources.mcg import MCG
 
@@ -155,6 +156,7 @@ class TestListOfObjects(E2ETest):
         )
         log.info("Test succeeded without any errors!")
 
+    @jira("DFBUGS-1123")
     @pytest.mark.polarion_id("OCS-6095")
     def test_list_objects_single_dir(
         self,
