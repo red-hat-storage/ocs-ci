@@ -50,8 +50,8 @@ class TestSiteFailureRecoveryAndFailover:
 
     def test_site_failure_and_failover(self, dr_workload, nodes_multicluster):
         """
-        Tests to verify failover on all apps during site-failure when active hub along with primary managed cluster
-        is down
+        Test to verify failover of all workloads after site-failure where the active hub along with
+        the primary managed cluster is down
         """
 
         # Deploy Subscription and Appset based application of both RBD and CephFS SC
