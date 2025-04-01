@@ -85,7 +85,7 @@ class TestNamespaceStore:
             awscli_pod,
             bucket_factory,
             obj_list,
-            target_dir=test_directory_setup.origin_dir,
+            target_dir=f"{test_directory_setup.origin_dir}/",
             bucket_name=bucket.name,
         )
         logger.info(f"Successfully uploaded objects to the bucket {bucket.name}")
