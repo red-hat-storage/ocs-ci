@@ -15,9 +15,16 @@ from ocs_ci.ocs.bucket_utils import (
     create_multipart_upload,
     expire_multipart_upload,
     expire_parts,
+    get_obj_versions,
     list_multipart_upload,
     list_uploaded_parts,
+    put_bucket_versioning_via_awscli,
+    upload_obj_versions,
     upload_parts,
+)
+from ocs_ci.ocs.resources.mcg_lifecycle_policies import (
+    LifecyclePolicy,
+    NoncurrentVersionExpirationRule,
 )
 
 
@@ -53,7 +60,7 @@ class TestObjectExpiration(MCGTest):
         self, mcg_obj, bucket_factory, awscli_pod, test_directory_setup
     ):
         """
-        1. Create an MCG S3 bucket
+        1. Create an MCG bucket
         2. Set lifecycle configuration to abort incomplete multipart uploads after 1 day
         3. Create a multipart upload for the bucket
         4. Upload a few parts
@@ -131,3 +138,49 @@ class TestObjectExpiration(MCGTest):
         #     if len(upload) == 0:
         #         break
         #     logger.warning(f"Upload has not expired yet: \n{upload}")
+
+    @tier1
+    @pytest.mark.polarion_id("OCS-")  # TODO
+    def test_noncurrent_version_expiration_non_current_days(
+        self, mcg_obj, bucket_factory, awscli_pod
+    ):
+        """
+        1. Create an MCG bucket with versioning enabled
+        2. Set lifecycle configuration to delete non-current versions after 5 days
+        3. Upload versions
+        4. Manually set the age of each version to be one day older than its predecessor
+        5. Wait for the older versions to expire
+        """
+        key = "test_obj"
+        older_versions_amount = 5
+
+        # 1. Create an MCG bucket with versioning enabled
+        bucket = bucket_factory(interface="OC")[0].name
+        put_bucket_versioning_via_awscli(mcg_obj, awscli_pod, bucket.name)
+
+        # 2. Set lifecycle configuration
+        lifecycle_policy = LifecyclePolicy(
+            NoncurrentVersionExpirationRule(non_current_days=5)
+        )
+        mcg_obj.s3_client.put_bucket_lifecycle_configuration(
+            Bucket=bucket, LifecycleConfiguration=lifecycle_policy.as_dict()
+        )
+
+        # 3. Upload versions
+        # older versions + newer versions + the current version
+        amount = 2 * older_versions_amount + 1
+        upload_obj_versions(
+            mcg_obj,
+            awscli_pod,
+            bucket,
+            key,
+            amount=amount,
+        )
+
+        # 4. Manually set the age of each version to be one day older than its predecessor
+        uploaded_versions = get_obj_versions(mcg_obj, awscli_pod, bucket, key)
+        version_ids = [version["VersionId"] for version in uploaded_versions]
+
+        for i, version_id in enumerate(version_ids):
+            if i == 0:
+                continue
