@@ -339,7 +339,7 @@ def mirror_index_image_via_oc_mirror(index_image, packages, icsp=None, idms=None
         "--dest-skip-tls --ignore-history"
     )
     if icsp or idms:
-        cmd += " --continue-on-error --skip-missing"
+        cmd += " --continue-on-error --skip-missing --v2"
     try:
         exec_cmd(cmd, timeout=18000)
     except CommandFailed:
