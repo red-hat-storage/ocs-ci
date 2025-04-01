@@ -2,6 +2,7 @@
 """
 Module for version related util functions.
 """
+import logging
 import re
 from semantic_version import Version
 import yaml
@@ -13,6 +14,8 @@ from ocs_ci.ocs.exceptions import (
     UnsupportedPlatformVersionError,
 )
 from ocs_ci.ocs import constants
+
+log = logging.getLogger(__name__)
 
 
 def get_semantic_version(
@@ -411,3 +414,32 @@ def drop_z_version(version_str):
     """
     version = Version.coerce(version_str)
     return f"{version.major}.{version.minor}"
+
+
+def get_running_odf_version():
+    """
+    Get current running ODF version
+    Returns:
+        string: ODF version
+    """
+    # Importing here to avoid circular imports
+    from ocs_ci.ocs.resources import csv
+
+    namespace = config.ENV_DATA["cluster_namespace"]
+    odf_csv = csv.get_csvs_start_with_prefix(
+        csv_prefix=defaults.ODF_OPERATOR_NAME, namespace=namespace
+    )
+    odf_full_version = odf_csv[0]["metadata"]["labels"]["full_version"]
+    log.info(f"ODF full version is {odf_full_version}")
+    return odf_full_version
+
+
+def get_semantic_running_odf_version():
+    """
+    Get current running ODF semantic version
+    Returns:
+        semantic_version.base.Version: Object of semantic ODF running version.
+    """
+    odf_full_version = get_running_odf_version()
+    odf_version = get_semantic_version(version=odf_full_version)
+    return odf_version

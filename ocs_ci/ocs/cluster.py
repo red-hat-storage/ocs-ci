@@ -51,6 +51,7 @@ from ocs_ci.utility.utils import (
     get_trim_mean,
     ceph_health_check,
 )
+from ocs_ci.utility.version import get_semantic_running_odf_version
 from ocs_ci.ocs.node import get_node_ip_addresses, wait_for_nodes_status
 from ocs_ci.ocs.utils import get_pod_name_by_pattern
 from ocs_ci.framework import config
@@ -1318,6 +1319,14 @@ def validate_pdb_creation():
         if config.ENV_DATA["platform"].lower() == constants.VSPHERE_PLATFORM:
             pdb_count = constants.PDB_COUNT_ARBITER_VSPHERE
             pdb_required.append(constants.RGW_PDB)
+
+    version_for_noobaa_db_pg_pdb = "4.19.0-69"
+    semantic_version_for_noobaa_db_pg_pdb = version.get_semantic_version(
+        version_for_noobaa_db_pg_pdb
+    )
+    if get_semantic_running_odf_version() >= semantic_version_for_noobaa_db_pg_pdb:
+        pdb_count += 1
+        pdb_required.append(constants.NOOBAA_DB_PG_PDB)
 
     if len(item_list) != pdb_count:
         raise PDBNotCreatedException(

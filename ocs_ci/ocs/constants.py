@@ -1862,6 +1862,7 @@ OSD_PDB = "rook-ceph-osd"
 MON_PDB = "rook-ceph-mon-pdb"
 MGR_PDB = "rook-ceph-mgr-pdb"
 RGW_PDB = "rook-ceph-rgw-ocs-storagecluster-cephobjectstore"
+NOOBAA_DB_PG_PDB = "noobaa-db-pg-cluster-primary"
 PDB_COUNT = 3
 PDB_COUNT_2_MGR = 4
 PDB_COUNT_ARBITER = 4
