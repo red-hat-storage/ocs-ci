@@ -1296,17 +1296,30 @@ def validate_pdb_creation():
         kind="PodDisruptionBudget", namespace=config.ENV_DATA["cluster_namespace"]
     )
     item_list = pdb_obj.get().get("items")
-    pdb_count = constants.PDB_COUNT
-    pdb_required = [constants.MDS_PDB, constants.MON_PDB, constants.OSD_PDB]
+    odf_version = get_semantic_running_odf_version()
 
-    if version.get_semantic_ocs_version_from_config() >= version.VERSION_4_15:
-        pdb_count = constants.PDB_COUNT_2_MGR
-        pdb_required = [
-            constants.MDS_PDB,
-            constants.MON_PDB,
-            constants.OSD_PDB,
-            constants.MGR_PDB,
-        ]
+    pdb_count = constants.PDB_COUNT_2_MGR
+    pdb_required = [
+        constants.MDS_PDB,
+        constants.MON_PDB,
+        constants.OSD_PDB,
+        constants.MGR_PDB,
+    ]
+
+    # 4.19.0-59 is the stable build which doesn't contain the updated PDB count for Noobaa DB
+    version_without_noobaa_db_pg_pdb = "4.19.0-59"
+    semantic_version_for_without_noobaa_db_pg_pdb = version.get_semantic_version(
+        version_without_noobaa_db_pg_pdb
+    )
+    version_for_noobaa_db_pg_pdb = "4.19.0-69"
+    semantic_version_for_noobaa_db_pg_pdb = version.get_semantic_version(
+        version_for_noobaa_db_pg_pdb
+    )
+    # we need to support the version for Konflux builds as well
+    version_for_konflux_noobaa_db_pg_pdb = "4.19.0-15"
+    semantic_version_for_konflux_noobaa_db_pg_pdb = version.get_semantic_version(
+        version_for_konflux_noobaa_db_pg_pdb
+    )
 
     if config.DEPLOYMENT.get("arbiter_deployment"):
         pdb_count = constants.PDB_COUNT_ARBITER
@@ -1320,11 +1333,12 @@ def validate_pdb_creation():
             pdb_count = constants.PDB_COUNT_ARBITER_VSPHERE
             pdb_required.append(constants.RGW_PDB)
 
-    version_for_noobaa_db_pg_pdb = "4.19.0-69"
-    semantic_version_for_noobaa_db_pg_pdb = version.get_semantic_version(
-        version_for_noobaa_db_pg_pdb
-    )
-    if get_semantic_running_odf_version() >= semantic_version_for_noobaa_db_pg_pdb:
+    if odf_version == semantic_version_for_without_noobaa_db_pg_pdb:
+        logger.info(f"Required PDB count is {pdb_count}")
+    elif (
+        odf_version >= semantic_version_for_noobaa_db_pg_pdb
+        or odf_version >= semantic_version_for_konflux_noobaa_db_pg_pdb
+    ):
         pdb_count += 1
         pdb_required.append(constants.NOOBAA_DB_PG_PDB)
 
