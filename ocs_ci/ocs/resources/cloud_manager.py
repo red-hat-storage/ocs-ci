@@ -40,7 +40,7 @@ class CloudManager(ABC):
 
     """
 
-    def __init__(self):
+    def __init__(self, obc_obj=None):
         cloud_map = {
             "AWS_STS": AwsSTSClient,
             "AWS": S3Client,
@@ -91,7 +91,13 @@ class CloudManager(ABC):
 
         try:
             rgw_conn = RGW()
-            endpoint, access_key, secret_key = rgw_conn.get_credentials()
+            if obc_obj:
+                secret_name = obc_obj.secret_obc_obj
+            else:
+                secret_name = constants.NOOBAA_OBJECTSTOREUSER_SECRET
+            endpoint, access_key, secret_key = rgw_conn.get_credentials(
+                secret_name=secret_name
+            )
             cred_dict["RGW"] = {
                 "SECRET_PREFIX": "RGW",
                 "DATA_PREFIX": "AWS",
