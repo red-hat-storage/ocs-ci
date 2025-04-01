@@ -68,6 +68,7 @@ from ocs_ci.utility.version import (
     get_semantic_version,
     VERSION_4_11,
     get_semantic_ocp_running_version,
+    get_semantic_running_odf_version,
 )
 from ocs_ci.helpers.helpers import (
     get_secret_names,
@@ -256,6 +257,37 @@ def ocs_install_verification(
         constants.NOOBAA_CORE_POD_LABEL: 1,
         constants.NOOBAA_ENDPOINT_POD_LABEL: min_eps,
     }
+
+    # From 4.19.0-69, we have noobaa-db-pg-cluster-1 and noobaa-db-pg-cluster-2 pods
+    # 4.19.0-59 is the stable build which contains ONLY noobaa-db-pg-0 pod
+    odf_full_version = get_semantic_running_odf_version()
+    version_without_noobaa_db_pg_cluster = "4.19.0-59"
+    semantic_version_for_without_noobaa_db_pg_cluster = version.get_semantic_version(
+        version_without_noobaa_db_pg_cluster
+    )
+
+    version_for_noobaa_db_pg_cluster = "4.19.0-69"
+    semantic_version_for_noobaa_db_pg_cluster = version.get_semantic_version(
+        version_for_noobaa_db_pg_cluster
+    )
+    # we need to support the version for Konflux builds as well
+    version_for_konflux_noobaa_db_pg_cluster = "4.19.0-15"
+    semantic_version_for_konflux_noobaa_db_pg_cluster = version.get_semantic_version(
+        version_for_konflux_noobaa_db_pg_cluster
+    )
+
+    if odf_full_version == semantic_version_for_without_noobaa_db_pg_cluster:
+        log.info(f"Noobaa DB label {nb_db_label}")
+    elif (
+        odf_full_version >= semantic_version_for_noobaa_db_pg_cluster
+        or odf_full_version >= semantic_version_for_konflux_noobaa_db_pg_cluster
+    ):
+        del resources_dict[nb_db_label]
+        resources_dict.update(
+            {
+                constants.NOOBAA_DB_LABEL_419_AND_ABOVE: 2,
+            }
+        )
 
     odf_running_version = get_ocs_version_from_csv(only_major_minor=True)
     if odf_running_version >= version.VERSION_4_19:
