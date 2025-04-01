@@ -734,15 +734,20 @@ def wait_for_all_resources_creation(
 
 
 def wait_for_all_resources_deletion(
-    namespace, check_replication_resources_state=True, timeout=1000
+    namespace,
+    timeout=1000,
+    workload_cleanup=False,
 ):
     """
     Wait for workload and replication resources to be deleted
 
     Args:
         namespace (str): the namespace of the workload
-        check_replication_resources_state (bool): True for checking replication resources state, False otherwise
         timeout (int): time in seconds to wait for resource deletion
+        workload_cleanup (bool): Set to True when performing final workload cleanup.
+            If True:
+            - PVC and PV deletion will always be checked
+            - Replication resources state check will be skipped.
 
     """
     logger.info("Waiting for all pods to be deleted")
@@ -753,11 +758,10 @@ def wait_for_all_resources_deletion(
                 resource_name=pod_obj.name, timeout=timeout, sleep=5
             )
 
-    wait_for_replication_resources_deletion(
-        namespace, timeout, check_replication_resources_state
-    )
+    check_state = not workload_cleanup
+    wait_for_replication_resources_deletion(namespace, timeout, check_state)
 
-    if not (
+    if workload_cleanup or not (
         config.MULTICLUSTER["multicluster_mode"] == "regional-dr"
         and "cephfs" in namespace
     ):
@@ -770,7 +774,7 @@ def wait_for_all_resources_deletion(
             )
 
     if config.MULTICLUSTER["multicluster_mode"] != "metro-dr":
-        if "cephfs" not in namespace:
+        if workload_cleanup or "cephfs" not in namespace:
             logger.info("Waiting for all PVs to be deleted")
             sample = TimeoutSampler(
                 timeout=timeout,
@@ -870,6 +874,9 @@ def get_backend_volumes_for_pvcs(namespace):
         logger.info(f"Fetching backend volume names for PVCs in namespace: {namespace}")
         all_pvcs = get_all_pvc_objs(namespace=namespace)
         for pvc_obj in all_pvcs:
+            if pvc_obj.name.startswith("volsync"):
+                continue
+
             if pvc_obj.backed_sc in [
                 constants.DEFAULT_STORAGECLASS_RBD,
                 constants.DEFAULT_EXTERNAL_MODE_STORAGECLASS_RBD,
@@ -941,7 +948,7 @@ def wait_for_backend_volume_deletion(backend_volumes, timeout=600):
     """
     sample = TimeoutSampler(
         timeout=timeout,
-        sleep=5,
+        sleep=10,
         func=verify_backend_volume_deletion,
         backend_volumes=backend_volumes,
     )
