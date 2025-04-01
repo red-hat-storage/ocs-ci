@@ -27,9 +27,9 @@ from ocs_ci.helpers.dr_helpers_ui import (
 from ocs_ci.ocs.node import get_node_objs, wait_for_nodes_status
 from ocs_ci.ocs.resources.pod import wait_for_pods_to_be_running
 from ocs_ci.ocs.ui.validation_ui import ValidationUI
-from ocs_ci.ocs.ui.views import locators
+from ocs_ci.ocs.ui.views import locators_for_current_ocp_version
 from ocs_ci.ocs.utils import enable_mco_console_plugin
-from ocs_ci.utility.utils import ceph_health_check, get_ocp_version
+from ocs_ci.utility.utils import ceph_health_check
 
 logger = logging.getLogger(__name__)
 
@@ -82,8 +82,7 @@ class TestRDRMonitoringDashboardUI:
         acm_obj = AcmAddClusters()
         page_nav = ValidationUI()
 
-        ocp_version = get_ocp_version()
-        acm_loc = locators[ocp_version]["acm_page"]
+        acm_loc = locators_for_current_ocp_version()["acm_page"]
 
         page_nav.refresh_web_console()
         check_cluster_status_on_acm_console(acm_obj)

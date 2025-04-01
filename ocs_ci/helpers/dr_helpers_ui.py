@@ -17,9 +17,8 @@ from ocs_ci.ocs.ui.base_ui import (
     wait_for_element_to_be_clickable,
     wait_for_element_to_be_visible,
 )
-from ocs_ci.ocs.ui.views import locators
+from ocs_ci.ocs.ui.views import locators_for_current_ocp_version
 from ocs_ci.ocs.ui.helpers_ui import format_locator
-from ocs_ci.utility.utils import get_ocp_version
 from ocs_ci.ocs.utils import get_non_acm_cluster_config
 
 log = logging.getLogger(__name__)
@@ -70,8 +69,7 @@ def check_cluster_status_on_acm_console(
                             Default is set to ready
 
     """
-    ocp_version = get_ocp_version()
-    acm_loc = locators[ocp_version]["acm_page"]
+    acm_loc = locators_for_current_ocp_version()["acm_page"]
     acm_obj.navigate_clusters_page()
     if down_cluster_name:
         log.info(
@@ -166,8 +164,7 @@ def verify_drpolicy_ui(acm_obj, scheduling_interval):
         scheduling_interval (int): Scheduling interval in the DRPolicy to be verified on ACM UI
 
     """
-    ocp_version = get_ocp_version()
-    acm_loc = locators[ocp_version]["acm_page"]
+    acm_loc = locators_for_current_ocp_version()["acm_page"]
     acm_obj.navigate_data_services()
     log.info("Click on 'Policies' tab under Disaster recovery")
     acm_obj.do_click(
@@ -233,8 +230,7 @@ def failover_relocate_ui(
 
     """
     if workload_to_move and policy_name and failover_or_preferred_cluster:
-        ocp_version = get_ocp_version()
-        acm_loc = locators[ocp_version]["acm_page"]
+        acm_loc = locators_for_current_ocp_version()["acm_page"]
         verify_drpolicy_ui(acm_obj, scheduling_interval=scheduling_interval)
         acm_obj.navigate_applications_page()
         clear_filter = acm_obj.wait_until_expected_text_is_found(
@@ -438,8 +434,7 @@ def verify_failover_relocate_status_ui(
         timeout (int): timeout to wait for certain elements to be found on the ACM UI
 
     """
-    ocp_version = get_ocp_version()
-    acm_loc = locators[ocp_version]["acm_page"]
+    acm_loc = locators_for_current_ocp_version()["acm_page"]
     data_policy_hyperlink = acm_obj.wait_until_expected_text_is_found(
         locator=acm_loc["data-policy-hyperlink"],
         expected_text="1 policy",
@@ -497,8 +492,7 @@ def check_cluster_operator_status(acm_obj, timeout=30):
         bool: False if expected text Degraded is found, True otherwise
 
     """
-    ocp_version = get_ocp_version()
-    acm_loc = locators[ocp_version]["acm_page"]
+    acm_loc = locators_for_current_ocp_version()["acm_page"]
     log.info("Check the Cluster operator status")
     cluster_operator_status = acm_obj.wait_until_expected_text_is_found(
         locator=acm_loc["cluster-operator-status"],
@@ -567,8 +561,7 @@ def application_count_on_ui(acm_obj):
         enrolled in disaster recovery on DR dashboard
 
     """
-    ocp_version = get_ocp_version()
-    acm_loc = locators[ocp_version]["acm_page"]
+    acm_loc = locators_for_current_ocp_version()["acm_page"]
     log.info("Fetch the ACM managed applications count on ACM UI")
     managed_app_text = acm_obj.get_element_text(acm_loc["managed_app_count"])
     log.info(f"Text on managed app count is '{managed_app_text}'")
@@ -601,8 +594,7 @@ def health_and_peer_connection_check_on_ui(
 
     """
 
-    ocp_version = get_ocp_version()
-    acm_loc = locators[ocp_version]["acm_page"]
+    acm_loc = locators_for_current_ocp_version()["acm_page"]
     for cluster in [cluster1, cluster2]:
         log.info(f"Select managed cluster {cluster} from cluster dropdown")
         acm_obj.do_click(acm_loc["cluster-dropdown"], enable_screenshot=True)
@@ -654,8 +646,7 @@ def protected_volume_count_per_cluster(acm_obj, cluster_name):
         DR protected total volume count on the selected cluster
 
     """
-    ocp_version = get_ocp_version()
-    acm_loc = locators[ocp_version]["acm_page"]
+    acm_loc = locators_for_current_ocp_version()["acm_page"]
     log.info(f"Select managed cluster {cluster_name} from cluster dropdown")
     acm_obj.do_click(acm_loc["cluster-dropdown"], enable_screenshot=True)
     acm_obj.do_click(format_locator(acm_loc["cluster"], cluster_name))
@@ -682,8 +673,7 @@ def check_apps_running_on_selected_cluster(
         True if all the apps are found on selected managed cluster, False if any of the apps are missing
 
     """
-    ocp_version = get_ocp_version()
-    acm_loc = locators[ocp_version]["acm_page"]
+    acm_loc = locators_for_current_ocp_version()["acm_page"]
     log.info(f"Select managed cluster {cluster_name} from cluster dropdown")
     acm_obj.do_click(acm_loc["cluster-dropdown"], enable_screenshot=True)
     acm_obj.do_click(format_locator(acm_loc["cluster"], cluster_name))
@@ -717,8 +707,7 @@ def verify_application_present_in_ui(acm_obj, workloads_to_check=[], timeout=60)
 
     """
     if workloads_to_check:
-        ocp_version = get_ocp_version()
-        acm_loc = locators[ocp_version]["acm_page"]
+        acm_loc = locators_for_current_ocp_version()["acm_page"]
         acm_obj.navigate_applications_page()
         for app in workloads_to_check:
             log.info("Click on search bar")
@@ -759,8 +748,7 @@ def delete_application_ui(acm_obj, workloads_to_delete=[], timeout=70):
     if verify_application_present_in_ui(
         acm_obj, workloads_to_check=workloads_to_delete, timeout=timeout
     ):
-        ocp_version = get_ocp_version()
-        acm_loc = locators[ocp_version]["acm_page"]
+        acm_loc = locators_for_current_ocp_version()["acm_page"]
         acm_obj.navigate_applications_page()
         for app in workloads_to_delete:
             log.info("Click on search bar")

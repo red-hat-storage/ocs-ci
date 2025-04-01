@@ -1,7 +1,7 @@
 import logging
 
 from selenium.webdriver.common.by import By
-from ocs_ci.ocs.ui.views import locators
+from ocs_ci.ocs.ui.views import locators, locators_for_current_ocp_version
 from ocs_ci.utility.utils import get_ocp_version
 from ocs_ci.framework import config
 from ocs_ci.ocs import constants
@@ -31,14 +31,11 @@ def ui_deployment_conditions():
     is_proxy = config.DEPLOYMENT.get("proxy")
     is_infra_nodes = config.DEPLOYMENT.get("infra_nodes")
 
-    try:
-        locators[ocp_version]["deployment"]
-    except KeyError as e:
-        logger.info(
-            f"OCS deployment via UI is not supported on ocp version {ocp_version}"
+    if ocp_version not in locators:
+        logger.warning(
+            f"OCS deployment via UI might not be supported on ocp version {ocp_version}"
+            "But we will try to deploy with locators from previous OCP version!"
         )
-        logger.error(e)
-        return False
 
     if platform.lower() not in (
         constants.AWS_PLATFORM,
@@ -107,7 +104,7 @@ def ui_add_capacity_conditions():
     is_proxy = config.DEPLOYMENT.get("proxy")
 
     try:
-        locators[ocp_version]["add_capacity"]
+        locators_for_current_ocp_version()["add_capacity"]
     except KeyError as e:
         logger.info(
             f"Add capacity via UI is not supported on ocp version {ocp_version}"
@@ -123,6 +120,7 @@ def ui_add_capacity_conditions():
     ):
         logger.info(f"Add capacity via UI is not supported on platform {platform}")
         return False
+    # TODO: check if the same approach can work from locators_for_current_ocp_version to rely on previous locators?
     elif ocp_version not in (
         "4.7",
         "4.8",

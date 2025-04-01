@@ -33,7 +33,7 @@ from ocs_ci.ocs.exceptions import (
     NotSupportedProxyConfiguration,
 )
 from ocs_ci.ocs.ocp import get_ocp_url
-from ocs_ci.ocs.ui.views import locators
+from ocs_ci.ocs.ui.views import locators_for_current_ocp_version
 from ocs_ci.utility.templating import Templating
 from ocs_ci.utility.retry import retry
 from ocs_ci.utility import version
@@ -125,31 +125,48 @@ class BaseUI:
             Path(self.dom_folder).mkdir(parents=True, exist_ok=True)
         logger.debug(f"dom files folder:{self.dom_folder}")
 
-        self.ocp_version = get_ocp_version()
         self.running_ocp_semantic_version = version.get_semantic_ocp_running_version()
         self.ocp_version_full = version.get_semantic_ocp_version_from_config()
         self.ocs_version_semantic = version.get_semantic_ocs_version_from_config()
         self.ocp_version_semantic = version.get_semantic_ocp_version_from_config()
 
-        self.page_nav = self.deep_get(locators, self.ocp_version, "page")
-        self.generic_locators = self.deep_get(locators, self.ocp_version, "generic")
-        self.validation_loc = self.deep_get(locators, self.ocp_version, "validation")
-        self.dep_loc = self.deep_get(locators, self.ocp_version, "deployment")
-        self.pvc_loc = self.deep_get(locators, self.ocp_version, "pvc")
-        self.bp_loc = self.deep_get(locators, self.ocp_version, "block_pool")
-        self.sc_loc = self.deep_get(locators, self.ocp_version, "storageclass")
-        self.ocs_loc = self.deep_get(locators, self.ocp_version, "ocs_operator")
-        self.bucketclass = self.deep_get(locators, self.ocp_version, "bucketclass")
-        self.mcg_stores = self.deep_get(locators, self.ocp_version, "mcg_stores")
-        self.acm_page_nav = self.deep_get(locators, self.ocp_version, "acm_page")
-        self.obc_loc = self.deep_get(locators, self.ocp_version, "obc")
-        self.add_capacity_ui_loc = self.deep_get(
-            locators, self.ocp_version, "add_capacity"
+        self.page_nav = self.deep_get(locators_for_current_ocp_version(), "page")
+        self.generic_locators = self.deep_get(
+            locators_for_current_ocp_version(), "generic"
         )
-        self.topology_loc = self.deep_get(locators, self.ocp_version, "topology")
-        self.storage_clients_loc = self.deep_get(locators, self.ocp_version, "storage")
-        self.alerting_loc = self.deep_get(locators, self.ocp_version, "alerting")
-        self.bucket_tab = self.deep_get(locators, self.ocp_version, "bucket_tab")
+        self.validation_loc = self.deep_get(
+            locators_for_current_ocp_version(), "validation"
+        )
+        self.dep_loc = self.deep_get(locators_for_current_ocp_version(), "deployment")
+        self.pvc_loc = self.deep_get(locators_for_current_ocp_version(), "pvc")
+        self.bp_loc = self.deep_get(locators_for_current_ocp_version(), "block_pool")
+        self.sc_loc = self.deep_get(locators_for_current_ocp_version(), "storageclass")
+        self.ocs_loc = self.deep_get(locators_for_current_ocp_version(), "ocs_operator")
+        self.bucketclass = self.deep_get(
+            locators_for_current_ocp_version(), "bucketclass"
+        )
+        self.mcg_stores = self.deep_get(
+            locators_for_current_ocp_version(), "mcg_stores"
+        )
+        self.acm_page_nav = self.deep_get(
+            locators_for_current_ocp_version(), "acm_page"
+        )
+        self.obc_loc = self.deep_get(locators_for_current_ocp_version(), "obc")
+        self.add_capacity_ui_loc = self.deep_get(
+            locators_for_current_ocp_version(), "add_capacity"
+        )
+        self.topology_loc = self.deep_get(
+            locators_for_current_ocp_version(), "topology"
+        )
+        self.storage_clients_loc = self.deep_get(
+            locators_for_current_ocp_version(), "storage"
+        )
+        self.alerting_loc = self.deep_get(
+            locators_for_current_ocp_version(), "alerting"
+        )
+        self.bucket_tab = self.deep_get(
+            locators_for_current_ocp_version(), "bucket_tab"
+        )
 
     def __repr__(self):
         return f"{self.__class__.__name__} Web Page"
@@ -934,9 +951,8 @@ def login_ui(console_url=None, username=None, password=None):
     if password is None:
         password = get_kubeadmin_password()
         password = password.rstrip()
-    ocp_version = get_ocp_version()
-    login_loc = locators[ocp_version]["login"]
-    page_nav_loc = locators[ocp_version]["page"]
+    login_loc = locators_for_current_ocp_version()["login"]
+    page_nav_loc = locators_for_current_ocp_version()["page"]
     driver = SeleniumDriver()
     driver.maximize_window()
     driver.implicitly_wait(10)
@@ -1002,7 +1018,7 @@ def login_ui(console_url=None, username=None, password=None):
             # timeout is unusually high for different scenarios when default page is not loaded immediately
             logger.info("Navigate to 'Local Cluster' page")
             navigate_to_local_cluster(
-                acm_page=locators[ocp_version]["acm_page"], timeout=180
+                acm_page=locators_for_current_ocp_version()["acm_page"], timeout=180
             )
             logger.info(
                 f"'Local Cluster' page is loaded, current url: {driver.current_url}"
@@ -1060,7 +1076,7 @@ def proceed_to_login_console():
 
     """
     driver = SeleniumDriver()
-    login_loc = locators[get_ocp_version()]["login"]
+    login_loc = locators_for_current_ocp_version()["login"]
     if login_loc["pre_login_page_title"].lower() in driver.title.lower():
         proceed_btn = driver.find_element(
             by=login_loc["proceed_to_login_btn"][1],
@@ -1085,7 +1101,7 @@ def navigate_to_local_cluster(**kwargs):
     if "acm_page" in kwargs:
         acm_page_loc = kwargs["acm_page"]
     else:
-        acm_page_loc = locators[get_ocp_version()]["acm_page"]
+        acm_page_loc = locators_for_current_ocp_version()["acm_page"]
     if "timeout" in kwargs:
         timeout = kwargs["timeout"]
     else:
@@ -1115,7 +1131,7 @@ def navigate_to_all_clusters(**kwargs):
     if "acm_page" in kwargs:
         acm_page = kwargs["acm_page"]
     else:
-        acm_page = locators[get_ocp_version()]["acm_page"]
+        acm_page = locators_for_current_ocp_version()["acm_page"]
     if "timeout" in kwargs:
         timeout = kwargs["timeout"]
     else:

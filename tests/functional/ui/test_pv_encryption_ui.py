@@ -20,7 +20,7 @@ from ocs_ci.ocs.resources.pvc import get_all_pvc_objs
 from ocs_ci.ocs.ui.storageclass import StorageClassUI
 
 from ocs_ci.ocs.ui.pvc_ui import PvcUI
-from ocs_ci.ocs.ui.views import locators
+from ocs_ci.ocs.ui.views import locators_for_current_ocp_version
 from ocs_ci.utility import kms
 from ocs_ci.framework.pytest_customization.marks import black_squad
 from ocs_ci.framework.testlib import (
@@ -28,7 +28,7 @@ from ocs_ci.framework.testlib import (
     tier1,
     skipif_ocs_version,
 )
-from ocs_ci.utility.utils import get_vault_cli, get_ocp_version
+from ocs_ci.utility.utils import get_vault_cli
 from ocs_ci.ocs import constants
 from ocs_ci.utility import version
 from ocs_ci.ocs.node import verify_crypt_device_present_onnode
@@ -221,8 +221,7 @@ class TestPVEncryption(ManageTest):
             else:
                 raise ResourceNotFoundError(f"Vault: Key not found for {pvc[0].name}")
 
-        ocp_version = get_ocp_version()
-        self.pvc_loc = locators[ocp_version]["pvc"]
+        self.pvc_loc = locators_for_current_ocp_version()["pvc"]
 
         # Verify whether encrypted device is present inside the pod and run IO
         logger.info(
