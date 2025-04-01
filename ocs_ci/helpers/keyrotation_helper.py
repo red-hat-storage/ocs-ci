@@ -762,6 +762,8 @@ def verify_new_key_after_rotation(tries, delays):
     except UnexpectedBehaviour:
         log.error("Key rotation is Not happened after schedule is passed. ")
         assert False
+
+
 @retry(UnexpectedBehaviour, tries=10, delay=20)
 def compare_noobaa_old_keys_with_new_keys(
     noobaa_keyrotation, old_noobaa_backend_key, old_noobaa_volume_key

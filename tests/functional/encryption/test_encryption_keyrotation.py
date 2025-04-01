@@ -149,12 +149,12 @@ class TestEncryptionKeyrotation:
 
         Steps:
             1. Disable Keyrotation and verify its Disable status at noobaa and storagecluster end.
-            3. Record existing NooBaa Volume and backend keys before rotation is happen.
-            4. Set keyrotation status to every given minutes (default is 3 min)
-            5. wait for given minute (default is 3 min).
-            6. Verify the keyrotation is happen NooBaa volume and backend keys
+            2. Record existing NooBaa Volume and backend keys before rotation is happen.
+            3. Set keyrotation status to every given minutes (default is 3 min)
+            4. wait for given minute (default is 3 min).
+            5. Verify the keyrotation is happen NooBaa volume and backend keys
                 by comparing the old keys with new keys.
-            7. Change the keyrotation value to default.
+            6. Change the keyrotation value to default.
         """
 
         # Get the noobaa object.
@@ -419,12 +419,12 @@ class TestNoobaaKeyrotationWithKMS:
 
         Steps:
             1. Disable Keyrotation and verify its Disable status at noobaa and storagecluster end.
-            3. Record existing NooBaa Volume and backend keys before rotation is happen.
-            4. Set keyrotation status to every given minutes (default is 3 min)
-            5. wait for given minute (default is 3 min).
-            6. Verify the keyrotation is happen NooBaa volume and backend keys
+            2. Record existing NooBaa Volume and backend keys before rotation is happen.
+            3. Set keyrotation status to every given minutes (default is 3 min)
+            4. wait for given minute (default is 3 min).
+            5. Verify the keyrotation is happen NooBaa volume and backend keys
                 by comparing the old keys with new keys.
-            7. Change the keyrotation value to default.
+            6. Change the keyrotation value to default.
         """
 
         # Get the noobaa object.
