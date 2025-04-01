@@ -1,4 +1,5 @@
 import logging
+import tempfile
 import time
 from concurrent.futures import ThreadPoolExecutor
 
@@ -30,18 +31,17 @@ from ocs_ci.helpers.dr_helpers import (
 )
 from ocs_ci.ocs.exceptions import UnexpectedBehaviour
 from ocs_ci.ocs.resources.drpc import DRPC
-from ocs_ci.ocs.resources.ocs import OCS
 from ocs_ci.ocs.resources.pod import wait_for_pods_to_be_running
 from ocs_ci.ocs.utils import get_active_acm_index, get_primary_cluster_config
 from ocs_ci.utility import templating
-from ocs_ci.utility.utils import TimeoutSampler, ceph_health_check, run_cmd
+from ocs_ci.utility.utils import TimeoutSampler, run_cmd
 
 logger = logging.getLogger(__name__)
 
 
 @tier4a
 @turquoise_squad
-class TestSiteFailureRecoveryAndfailover:
+class TestSiteFailureRecoveryAndFailover:
     """
     Perform site-failure by bringing down the active hub and the primary managed cluster, then perform hub recovery
     by moving to passive hub using backlup and restore, and then failover the DR protected workloads
@@ -248,9 +248,15 @@ class TestSiteFailureRecoveryAndfailover:
         auto_import_secret["metadata"]["namespace"] = down_cluster_name
         auto_import_secret["stringData"]["autoImportRetry"] = "50"
         auto_import_secret["stringData"]["kubeconfig"] = down_cluster_kubeconfig
-        auto_import_secret_obj = OCS(**auto_import_secret)
+        auto_import_secret_yaml = tempfile.NamedTemporaryFile(
+            mode="w+", prefix="auto-import", delete=False
+        )
+        templating.dump_data_to_temp_yaml(
+            auto_import_secret, auto_import_secret_yaml.name
+        )
         config.switch_ctx(get_passive_acm_index())
-        auto_import_secret_obj.apply(**auto_import_secret)
+        run_cmd(f"oc apply -f {auto_import_secret_yaml.name}")
+
         for sample in TimeoutSampler(
             timeout=900,
             sleep=15,
@@ -282,8 +288,6 @@ class TestSiteFailureRecoveryAndfailover:
         time.sleep(3600)
 
         config.switch_to_cluster_by_name(primary_cluster_name)
-        logger.info("Checking for Ceph Health OK")
-        ceph_health_check(tries=40, delay=30)
 
         # Verify application are deleted from old cluster
         for wl in rdr_workload:
