@@ -108,6 +108,12 @@ class MockupBucketLogger:
         Uploads randomly generated objects to the bucket and upload a matching
         mockup log
 
+        Args:
+            bucket_name (str): Name of the bucket
+            file_dir (str): File directory where the objects are present
+            obj_list (list): List of the objects
+            prefix (str): Prefix under which object needs to be uploaded
+
         """
 
         logger.info(
