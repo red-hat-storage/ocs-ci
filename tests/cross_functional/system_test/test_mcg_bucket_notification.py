@@ -6,6 +6,9 @@ from ocs_ci.ocs import constants
 from ocs_ci.framework.pytest_customization.marks import (
     ignore_leftover_label,
     polarion_id,
+    mcg,
+    magenta_squad,
+    system_test,
 )
 from ocs_ci.ocs.bucket_utils import (
     write_random_test_objects_to_bucket,
@@ -33,6 +36,9 @@ from ocs_ci.ocs.resources.pod import (
 from ocs_ci.utility.utils import TimeoutSampler
 
 
+@mcg
+@system_test
+@magenta_squad
 @ignore_leftover_label(constants.CUSTOM_MCG_LABEL)
 class TestBucketNotificationSystemTest:
 
@@ -139,7 +145,7 @@ class TestBucketNotificationSystemTest:
 
         # 3. Create the five buckets that is needed for the testing
         buckets_created = []
-        for i in range(NUM_OF_BUCKETS):
+        for _ in range(NUM_OF_BUCKETS):
             bucket = bucket_factory()[0]
             logger.info(f"Enabling bucket notification for the bucket {bucket.name}")
             notify_manager.put_bucket_notification(
@@ -171,7 +177,7 @@ class TestBucketNotificationSystemTest:
 
         with ThreadPoolExecutor(max_workers=5) as executor:
 
-            # 5. Tag object from the bucket and restart noobaa pod nodes
+            # 5. Tag object from the bucket and stop/start noobaa pod nodes
             # Verify ObjectTagging:Put events has occurred for all the buckets
             noobaa_pods = [
                 get_noobaa_core_pod(),
@@ -220,11 +226,10 @@ class TestBucketNotificationSystemTest:
 
             # 6. Remove object from the bucket and restart kafka pods
             # Verify ObjectRemoved event has occurred
-            kafka_kind_label = "strimzi.io/kind=Kafka"
             kafka_pods = [
                 Pod(**pod_info)
                 for pod_info in get_pods_having_label(
-                    label=kafka_kind_label, namespace=constants.AMQ_NAMESPACE
+                    label=constants.KAFKA_KIND_LABEL, namespace=constants.AMQ_NAMESPACE
                 )
             ]
             future_objs = []

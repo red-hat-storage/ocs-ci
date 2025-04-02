@@ -1376,6 +1376,9 @@ def s3_put_object_tagging(s3_obj, bucketname, object_key, tags):
         object_key (str): Key of the object
         tags (List): List of key value pair of tags
 
+    Returns:
+        dict: response from put_object_tagging
+
     """
 
     return s3_obj.s3_client.put_object_tagging(
