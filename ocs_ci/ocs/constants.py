@@ -253,6 +253,7 @@ ENCRYPTIONKEYROTATIONCRONJOB = "encryptionkeyrotationcronjobs.csiaddons.openshif
 ENCRYPTIONKEYROTATIONJOB = "encryptionkeyrotationjobs.csiaddons.openshift.io"
 DEFAULT_CEPH_DEVICECLASS = "defaultCephDeviceClass"
 CRD_KIND = "CustomResourceDefinition"
+OCS_OPERATOR_CONFIG_MAP = "ocs-operator-config"
 
 # Provisioners
 AWS_EFS_PROVISIONER = "openshift.org/aws-efs"
