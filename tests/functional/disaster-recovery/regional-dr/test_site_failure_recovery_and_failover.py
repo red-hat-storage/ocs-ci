@@ -44,7 +44,7 @@ logger = logging.getLogger(__name__)
 class TestSiteFailureRecoveryAndFailover:
     """
     Perform site-failure by bringing down the active hub and the primary managed cluster, then perform hub recovery
-    by moving to passive hub using backlup and restore, and then failover the DR protected workloads
+    by moving to passive hub using backup and restore, and then failover the DR protected workloads
     running on the down managed cluster to the secondary managed cluster.
     """
 
