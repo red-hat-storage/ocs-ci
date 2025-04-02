@@ -16,6 +16,7 @@ from ocs_ci.ocs.exceptions import CommandFailed, NotFoundError
 from ocs_ci.ocs.resources.catalog_source import CatalogSource, disable_default_sources
 from ocs_ci.utility.deployment import get_and_apply_icsp_from_catalog
 from ocs_ci.utility import templating
+from ocs_ci.utility.retry import retry
 from ocs_ci.utility.utils import (
     create_directory_path,
     exec_cmd,
@@ -215,6 +216,7 @@ def prune_and_mirror_index_image(
     return cs_file
 
 
+@retry((CommandFailed,), tries=3, delay=10, backoff=2)
 def mirror_index_image_via_oc_mirror(index_image, packages, icsp=None):
     """
     Mirror all images required for ODF deployment and testing to mirror
