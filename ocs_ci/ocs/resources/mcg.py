@@ -27,6 +27,7 @@ from ocs_ci.ocs.exceptions import (
     UnsupportedPlatformError,
 )
 from ocs_ci.ocs.ocp import OCP
+from ocs_ci.ocs.resources.boto3_wrapper import Boto3WrapperForAWS
 from ocs_ci.ocs.resources.pod import (
     get_noobaa_pods,
     get_pods_having_label,
@@ -162,8 +163,7 @@ class MCG:
                 self.aws_access_key,
             ) = self.request_aws_credentials()
 
-            self.aws_s3_resource = boto3.resource(
-                "s3",
+            self.aws_s3_resource = Boto3WrapperForAWS(
                 endpoint_url="https://s3.amazonaws.com",
                 aws_access_key_id=self.aws_access_key_id,
                 aws_secret_access_key=self.aws_access_key,

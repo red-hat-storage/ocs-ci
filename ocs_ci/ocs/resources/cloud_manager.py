@@ -237,8 +237,8 @@ class S3Client(CloudClient):
         self.client = s3_client_wrapper(
             verify=verify,
             endpoint_url=self.endpoint,
-            access_key=self.access_key,
-            secret_key=self.secret_key,
+            aws_access_key_id=self.access_key,
+            aws_secret_access_key=self.secret_key,
             region=self.region,
         )
         self.secret = self.create_s3_secret(self.secret_prefix, self.data_prefix)
@@ -453,13 +453,13 @@ class GoogleClient(CloudClient):
 
     def verify_uls_exists(self, uls_name):
         """
-        Verifies whether a Underlying Storage with the given uls_name exists
+            Verifies whether a Underlying Storage with the given uls_name exists
 
         Args:
-           uls_name (str): The Underlying Storage name to be verified
+               uls_name (str): The Underlying Storage name to be verified
 
-        Returns:
-             bool: True if Underlying Storage exists, False otherwise
+            Returns:
+                 bool: True if Underlying Storage exists, False otherwise
 
         """
         try:
