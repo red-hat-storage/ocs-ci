@@ -53,7 +53,7 @@ class PvcUI(PageNavigator):
 
         ocs_version = version.get_semantic_ocs_version_from_config()
         logger.info("Select Access Mode")
-        if ocs_version >= version.VERSION_4_16:
+        if ocs_version >= version.VERSION_4_15:
             if access_mode == "ReadWriteMany":
                 self.do_click(self.pvc_loc["access_mode_button"])
                 self.do_click(self.pvc_loc["access_rwx"])
