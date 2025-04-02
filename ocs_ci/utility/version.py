@@ -419,8 +419,10 @@ def drop_z_version(version_str):
 def get_running_odf_version():
     """
     Get current running ODF version
+
     Returns:
         string: ODF version
+
     """
     # Importing here to avoid circular imports
     from ocs_ci.ocs.resources import csv
@@ -437,8 +439,10 @@ def get_running_odf_version():
 def get_semantic_running_odf_version():
     """
     Get current running ODF semantic version
+
     Returns:
         semantic_version.base.Version: Object of semantic ODF running version.
+
     """
     odf_full_version = get_running_odf_version()
     odf_version = get_semantic_version(version=odf_full_version)

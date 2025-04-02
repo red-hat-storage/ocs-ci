@@ -267,10 +267,6 @@ def ocs_install_verification(
         version_without_noobaa_db_pg_cluster
     )
 
-    version_for_noobaa_db_pg_cluster = "4.19.0-69"
-    semantic_version_for_noobaa_db_pg_cluster = version.get_semantic_version(
-        version_for_noobaa_db_pg_cluster
-    )
     # we need to support the version for Konflux builds as well
     version_for_konflux_noobaa_db_pg_cluster = "4.19.0-15"
     semantic_version_for_konflux_noobaa_db_pg_cluster = version.get_semantic_version(
@@ -279,10 +275,7 @@ def ocs_install_verification(
 
     if odf_full_version == semantic_version_for_without_noobaa_db_pg_cluster:
         log.info(f"Noobaa DB label {nb_db_label}")
-    elif (
-        odf_full_version >= semantic_version_for_noobaa_db_pg_cluster
-        or odf_full_version >= semantic_version_for_konflux_noobaa_db_pg_cluster
-    ):
+    elif odf_full_version >= semantic_version_for_konflux_noobaa_db_pg_cluster:
         del resources_dict[nb_db_label]
         resources_dict.update(
             {
@@ -334,7 +327,9 @@ def ocs_install_verification(
                 constants.EXPORTER_APP_LABEL: exporter_pod_count,
             }
         )
-        if odf_running_version >= version.VERSION_4_19:
+        if odf_full_version == semantic_version_for_without_noobaa_db_pg_cluster:
+            log.debug(f"Resource dictionary {resources_dict}")
+        elif odf_full_version >= semantic_version_for_konflux_noobaa_db_pg_cluster:
             del resources_dict[constants.CSI_CEPHFSPLUGIN_PROVISIONER_LABEL]
             del resources_dict[constants.CSI_RBDPLUGIN_PROVISIONER_LABEL]
             del resources_dict[constants.CSI_CEPHFSPLUGIN_LABEL]
@@ -533,14 +528,10 @@ def ocs_install_verification(
     else:
         if not disable_blockpools and not provider_cluster:
             sc_rbd = storage_class.get(resource_name=constants.DEFAULT_STORAGECLASS_RBD)
-            if odf_running_version >= version.VERSION_4_19:
-                sc_rbd_cluster_id = sc_rbd["parameters"]["clusterID"]
         if not disable_cephfs and not provider_cluster:
             sc_cephfs = storage_class.get(
                 resource_name=constants.DEFAULT_STORAGECLASS_CEPHFS
             )
-            if odf_running_version >= version.VERSION_4_19:
-                sc_cephfs_cluster_id = sc_cephfs["parameters"]["clusterID"]
 
     if not disable_blockpools and not provider_cluster:
         if consumer_cluster or client_cluster:
@@ -579,20 +570,7 @@ def ocs_install_verification(
                     == rbd_provisioner_secret
                 )
             else:
-                if odf_running_version >= version.VERSION_4_19:
-                    assert (
-                        sc_rbd["parameters"][
-                            "csi.storage.k8s.io/node-stage-secret-name"
-                        ]
-                        == f"{constants.RBD_NODE_SECRET_419}-{sc_rbd_cluster_id}"
-                    )
-                    assert (
-                        sc_rbd["parameters"][
-                            "csi.storage.k8s.io/provisioner-secret-name"
-                        ]
-                        == f"{constants.RBD_PROVISIONER_SECRET_419}-{sc_rbd_cluster_id}"
-                    )
-                else:
+                if odf_running_version <= version.VERSION_4_18:
                     assert (
                         sc_rbd["parameters"][
                             "csi.storage.k8s.io/node-stage-secret-name"
@@ -637,20 +615,7 @@ def ocs_install_verification(
                     == cephfs_provisioner_secret
                 )
             else:
-                if odf_running_version >= version.VERSION_4_19:
-                    assert (
-                        sc_cephfs["parameters"][
-                            "csi.storage.k8s.io/node-stage-secret-name"
-                        ]
-                        == f"{constants.CEPHFS_NODE_SECRET_419}-{sc_cephfs_cluster_id}"
-                    )
-                    assert (
-                        sc_cephfs["parameters"][
-                            "csi.storage.k8s.io/provisioner-secret-name"
-                        ]
-                        == f"{constants.CEPHFS_PROVISIONER_SECRET_419}-{sc_cephfs_cluster_id}"
-                    )
-                else:
+                if odf_running_version <= version.VERSION_4_18:
                     assert (
                         sc_cephfs["parameters"][
                             "csi.storage.k8s.io/node-stage-secret-name"
@@ -827,8 +792,12 @@ def ocs_install_verification(
     # Let's wait for storage system after ceph health is OK to prevent fails on
     # Progressing': 'True' state.
 
-    # if not (fusion_aas or client_cluster):
-    #     verify_storage_system()
+    if not (fusion_aas or client_cluster):
+        if (
+            odf_full_version == semantic_version_for_without_noobaa_db_pg_cluster
+            or odf_running_version < version.VERSION_4_19
+        ):
+            verify_storage_system()
 
     if config.ENV_DATA.get("fips"):
         # In case that fips is enabled when deploying,
@@ -922,20 +891,10 @@ def ocs_install_verification(
         if hci_cluster
         else constants.ROOK_CEPH_OPERATOR
     )
-
     if (
-        ocs_version >= version.VERSION_4_17 and hci_cluster
-    ) or odf_running_version >= version.VERSION_4_19:
-        provisioner_deployment_and_owner_names = {
-            f"{constants.CEPHFS_PROVISIONER}-ctrlplugin": constants.CEPHFS_PROVISIONER,
-            f"{constants.RBD_PROVISIONER}-ctrlplugin": constants.RBD_PROVISIONER,
-        }
-        nodeplugin_daemonset_and_owner_names = {
-            f"{constants.CEPHFS_PROVISIONER}-nodeplugin": constants.CEPHFS_PROVISIONER,
-            f"{constants.RBD_PROVISIONER}-nodeplugin": constants.RBD_PROVISIONER,
-        }
-        csi_owner_kind = constants.DRIVER
-    else:
+        odf_full_version == semantic_version_for_without_noobaa_db_pg_cluster
+        or odf_running_version < version.VERSION_4_19
+    ):
         provisioner_deployment_and_owner_names = {
             "csi-cephfsplugin-provisioner": csi_owner_name,
             "csi-rbdplugin-provisioner": csi_owner_name,
@@ -945,6 +904,18 @@ def ocs_install_verification(
             "csi-rbdplugin": csi_owner_name,
         }
         csi_owner_kind = constants.CONFIGMAP if hci_cluster else constants.DEPLOYMENT
+    elif (
+        odf_full_version >= semantic_version_for_konflux_noobaa_db_pg_cluster
+    ) or hci_cluster:
+        provisioner_deployment_and_owner_names = {
+            f"{constants.CEPHFS_PROVISIONER}-ctrlplugin": constants.CEPHFS_PROVISIONER,
+            f"{constants.RBD_PROVISIONER}-ctrlplugin": constants.RBD_PROVISIONER,
+        }
+        nodeplugin_daemonset_and_owner_names = {
+            f"{constants.CEPHFS_PROVISIONER}-nodeplugin": constants.CEPHFS_PROVISIONER,
+            f"{constants.RBD_PROVISIONER}-nodeplugin": constants.RBD_PROVISIONER,
+        }
+        csi_owner_kind = constants.DRIVER
     deployment_kind = OCP(kind=constants.DEPLOYMENT, namespace=namespace)
     daemonset_kind = OCP(kind=constants.DAEMONSET, namespace=namespace)
     for (
