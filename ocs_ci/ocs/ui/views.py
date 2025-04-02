@@ -501,6 +501,8 @@ pvc = {
         "//dd[contains(text(),'{}') and @data-test-id='pvc-capacity']",
         By.XPATH,
     ),
+    "access_mode_button": ("button[class='pf-v5-c-menu-toggle']", By.CSS_SELECTOR),
+    "access_rwx": ("//li//button//*[contains(text(), 'RWX')]", By.XPATH),
 }
 
 pvc_4_6 = {
