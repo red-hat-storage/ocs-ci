@@ -419,6 +419,9 @@ class TestLogBasedReplicationWithDisruptions:
         logger.info("No issues seen with the MCG bg feature validation")
 
 
+@mcg
+@magenta_squad
+@system_test
 class TestMCGReplicationWithVersioningSystemTest:
 
     @retry(CommandFailed, tries=7, delay=30)
@@ -433,6 +436,21 @@ class TestMCGReplicationWithVersioningSystemTest:
         prefix,
         num_versions=1,
     ):
+        """
+        Upload random objects to the bucket and retry if fails with
+        CommandFailed exception.
+
+        Args:
+            mcg_obj_session (MCG): MCG object
+            source_bucket (OBC): Bucket object
+            target_bucket (OBC): Bucket object
+            mockup_logger (MockupLogger): Mockup logger object
+            file_dir (str): Source for generating objects
+            pattern (str): File object pattern
+            prefix (str): Prefix under which objects need to be uploaded
+            num_versions (int): Number of object versions
+
+        """
         upload_random_objects_to_source_and_wait_for_replication(
             mcg_obj_session,
             source_bucket,
