@@ -16,6 +16,7 @@ from ocs_ci.framework.testlib import (
     skipif_managed_service,
 )
 from ocs_ci.framework import config
+from ocs_ci.ocs.exceptions import CommandFailed
 from ocs_ci.ocs.resources.pod import (
     get_all_pods,
     wait_for_pods_to_be_running,
@@ -29,6 +30,7 @@ from ocs_ci.ocs.node import (
 from ocs_ci.ocs.resources import storage_cluster
 from ocs_ci.framework.pytest_customization.marks import bugzilla, brown_squad
 from ocs_ci.helpers.sanity_helpers import Sanity
+from ocs_ci.utility.retry import retry
 
 logger = logging.getLogger(__name__)
 
@@ -188,7 +190,9 @@ class TestNonOCSTaintAndTolerations(E2ETest):
         logger.info(
             "Check non-ocs toleration on all newly created pods under openshift-storage NS"
         )
-        check_toleration_on_pods(toleration_key="xyz")
+        retry(CommandFailed, tries=5, delay=10,)(
+            check_toleration_on_pods
+        )(toleration_key="xyz")
         if config.DEPLOYMENT["external_mode"]:
             cephcluster = CephClusterExternal()
             cephcluster.cluster_health_check()
