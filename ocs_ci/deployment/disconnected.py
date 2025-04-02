@@ -336,7 +336,7 @@ def mirror_index_image_via_oc_mirror(index_image, packages, icsp=None, idms=None
     cmd = (
         f"oc mirror --config {imageset_config_file} "
         f"docker://{config.DEPLOYMENT['mirror_registry']} "
-        "--dest-skip-tls --ignore-history"
+        # "--dest-skip-tls --ignore-history"
     )
     if icsp or idms:
         cmd += " --continue-on-error --skip-missing --v2"
