@@ -101,13 +101,18 @@ class MockupBucketLogger:
 
         self._upload_mockup_logs(bucket_name, [obj_name], "PUT")
 
-
     def upload_random_objects_and_log(
         self, bucket_name, file_dir, obj_list, prefix=None
     ):
         """
         Uploads randomly generated objects to the bucket and upload a matching
         mockup log
+
+        Args:
+            bucket_name (str): Name of the bucket
+            file_dir (str): File directory where the objects are present
+            obj_list (list): List of the objects
+            prefix (str): Prefix under which object needs to be uploaded
 
         """
 
@@ -125,7 +130,6 @@ class MockupBucketLogger:
         self._upload_mockup_logs(bucket_name=bucket_name, obj_list=obj_list, op="PUT")
 
     def delete_objs_and_log(self, bucket_name, objs, prefix=""):
-
         """
         Delete list of objects from the MCG bucket and write
         matching mockup logs

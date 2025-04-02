@@ -2150,6 +2150,9 @@ def get_replication_policy(bucket_name):
     Args:
         bucket_name (str): Name of the bucket
 
+    Returns:
+        Dict: replication policy
+
     """
     return OCP(
         kind="obc",
@@ -2901,7 +2904,7 @@ def upload_random_objects_to_source_and_wait_for_replication(
     """
 
     logger.info(f"Randomly generating {amount} object/s")
-    for i in range(num_versions):
+    for _ in range(num_versions):
         obj_list = write_random_objects_in_pod(
             io_pod=mockup_logger.awscli_pod,
             file_dir=file_dir,
