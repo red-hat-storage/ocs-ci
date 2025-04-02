@@ -282,6 +282,17 @@ class TestSiteFailureRecoveryAndFailover:
                     f"Import of cluster: {primary_cluster_name} failed post hub recovery"
                 )
 
+        # Edit the global KlusterletConfig on the new hub and remove
+        # the parameter appliedManifestWorkEvictionGracePeriod and its value.
+        # appliedManifestWorkEvictionGracePeriod should only be removed if
+        # no DRPCs are in the Paused `PROGRESSION` or if `PROGRESSION` is in Cleaning Up state in case workloads are
+        # successfully FailedOver or Relocated after hub recovery was performed`
+        logger.info(
+            "Edit the global KlusterletConfig on the new hub and "
+            "remove the parameter appliedManifestWorkEvictionGracePeriod and its value."
+        )
+        remove_parameter_klusterlet_config()
+
         logger.info(
             "Wait for approx. an hour to surpass 1hr of default eviction period timeout"
         )
@@ -327,18 +338,8 @@ class TestSiteFailureRecoveryAndFailover:
         logger.info(drpc_cmd)
         for drpc in drpc_objs:
             dr_helpers.verify_last_group_sync_time(
-                drpc_obj=drpc, scheduling_interval=scheduling_interval
+                drpc_obj=drpc, scheduling_interval=scheduling_interval, switch_ctx=True
             )
-
-        # Edit the global KlusterletConfig on the new hub and remove
-        # the parameter appliedManifestWorkEvictionGracePeriod and its value.
-        # ToDo:  appliedManifestWorkEvictionGracePeriod should only be removed if
-        #  no DRPCs are in the Paused `PROGRESSION` and are in Completed state only`
-        logger.info(
-            "Edit the global KlusterletConfig on the new hub and "
-            "remove the parameter appliedManifestWorkEvictionGracePeriod and its value."
-        )
-        remove_parameter_klusterlet_config()
 
         relocate_results = []
         with ThreadPoolExecutor() as executor:
@@ -408,5 +409,5 @@ class TestSiteFailureRecoveryAndFailover:
         config.switch_ctx(get_passive_acm_index())
         for drpc in drpc_objs:
             dr_helpers.verify_last_group_sync_time(
-                drpc_obj=drpc, scheduling_interval=scheduling_interval
+                drpc_obj=drpc, scheduling_interval=scheduling_interval, switch_ctx=True
             )
