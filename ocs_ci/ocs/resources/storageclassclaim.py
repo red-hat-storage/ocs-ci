@@ -10,6 +10,7 @@ from ocs_ci.helpers.helpers import create_unique_resource_name
 from ocs_ci.ocs.ocp import OCP
 from ocs_ci.ocs.resources.ocs import OCS
 from ocs_ci.ocs import constants
+from ocs_ci.ocs.version import if_version
 from ocs_ci.utility import templating
 
 log = logging.getLogger(__name__)
@@ -50,6 +51,7 @@ class StorageClassClaim(OCS):
         return self.data.get("spec").get("type")
 
 
+@if_version("<4.19")
 def create_storageclassclaim(
     interface_type,
     storage_class_claim_name=None,
