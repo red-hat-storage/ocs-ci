@@ -335,7 +335,7 @@ class TestProviderHosted(object):
             check_phase_of_rados_namespace()
         ), "The radosnamespace is not in Ready phase"
 
-        # Validate storageclassrequests created
+        # Validate storageclasses created
         storage_class_classes = get_all_storageclass_names()
         storage_class_claims = [
             constants.CEPHBLOCKPOOL_SC,
