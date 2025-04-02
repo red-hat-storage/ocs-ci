@@ -1931,6 +1931,7 @@ def collect_pod_container_rpm_package(dir_name):
             constants.CONTROLLER_DETECT_VERSION_NAME,
             constants.OSD_KEY_ROTATION_POD_NAME,
             constants.ROOK_CEPH_DETECT_VERSION_POD_NAME,
+            constants.STATUS_REPORTER,
         )
         if any(pod in pod_obj.name for pod in ignore_pods):
             continue
