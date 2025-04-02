@@ -9,7 +9,6 @@ from ocs_ci.framework import config
 from ocs_ci.ocs.acm.acm import AcmAddClusters, validate_cluster_import
 from ocs_ci.ocs.dr.dr_workload import validate_data_integrity
 from ocs_ci.ocs import constants
-from ocs_ci.deployment.deployment import Deployment
 from ocs_ci.ocs.node import get_node_objs
 from ocs_ci.helpers.dr_helpers import (
     enable_fence,
@@ -119,10 +118,6 @@ class TestActiveHubDownAndRestore:
         wait_time = 300
         logger.info(f"Wait {wait_time} until backup is taken ")
         time.sleep(wait_time)
-
-        # Install gitops operator on passive hub
-        dep_obj = Deployment()
-        dep_obj.deploy_gitops_operator(switch_ctx=get_passive_acm_index())
 
         # Get the active hub nodes
         config.switch_ctx(get_active_acm_index())
