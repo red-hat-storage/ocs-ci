@@ -79,8 +79,9 @@ class TestOCSWorkerNodeShutdown(ManageTest):
         # Validate all nodes are in READY state and up
         retry(
             (CommandFailed, TimeoutError, AssertionError, ResourceWrongStatusException),
-            tries=28,
-            delay=15,
+            tries=20,
+            delay=10,
+            backoff=1.5,
         )(wait_for_nodes_status(timeout=1800))
 
         # Check the node are Ready state and check cluster is health ok
