@@ -213,7 +213,7 @@ class MCEInstaller(object):
         """
         # Create image override configmap using the image override json
         cmd = (
-            f"oc create cm {self.hypershift_override_image_cm} --from-file={constants.IMAGE_OVERRIDE_JSON}"
+            f"oc create cm {self.hypershift_override_image_cm} --from-file={constants.IMAGE_OVERRIDE_JSON} "
             f"-n {self.mce_namespace}"
         )
         cmd_res = exec_cmd(cmd, shell=True)
