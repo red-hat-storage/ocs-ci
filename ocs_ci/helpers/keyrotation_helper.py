@@ -8,7 +8,11 @@ from ocs_ci.framework import config
 from ocs_ci.ocs.resources.pvc import get_deviceset_pvcs
 from ocs_ci.ocs.exceptions import UnexpectedBehaviour
 from ocs_ci.utility.retry import retry
-from ocs_ci.utility.kms import get_kms_details, is_kms_enabled
+from ocs_ci.utility.kms import (
+    get_kms_details,
+    is_kms_enabled,
+    fetch_noobaa_secret_from_vault,
+)
 
 log = logging.getLogger(__name__)
 
@@ -184,6 +188,10 @@ class NoobaaKeyrotation(KeyRotation):
         Initializes NoobaaKeyrotation object.
         """
         super().__init__()
+        self.kms = get_kms_details()
+        self.kms.gather_init_vault_conf()
+        self.kms.update_vault_env_vars()
+        self.kms.get_vault_backend_path()
 
     def get_noobaa_keyrotation_schedule(self):
         """
@@ -219,9 +227,11 @@ class NoobaaKeyrotation(KeyRotation):
         log.info("Noobaa Keyrotation is disabled.")
         return False
 
-    def get_noobaa_backend_secret(self):
+    def get_noobaa_backend_secret(self, kms_deployment=False):
         """
         Retrieves the backend secret for Noobaa.
+
+        kms_deployment: Boolean: Sets as False, if True it will check NOOBAA_BACKEND_SECRET in vault
 
         Returns:
             tuple (str, str): containing the Noobaa backend root key and secret.
@@ -229,11 +239,19 @@ class NoobaaKeyrotation(KeyRotation):
         Raises:
             ValueError: If failed to retrieve the backend secret.
         """
-        cmd = f" get secret {constants.NOOBAA_BACKEND_SECRET} -o jsonpath='{{.data}}'"
-
-        cmd_out = self._exec_oc_cmd(cmd=cmd)
-        noobaa_backend_root_key = base64.b64decode(cmd_out["active_root_key"]).decode()
-        noobaa_backend_secret = cmd_out[noobaa_backend_root_key]
+        if kms_deployment:
+            (noobaa_backend_root_key, noobaa_backend_secret) = (
+                fetch_noobaa_secret_from_vault(self.kms.vault_backend_path)
+            )
+        else:
+            cmd = (
+                f" get secret {constants.NOOBAA_BACKEND_SECRET} -o jsonpath='{{.data}}'"
+            )
+            cmd_out = self._exec_oc_cmd(cmd=cmd)
+            noobaa_backend_root_key = base64.b64decode(
+                cmd_out["active_root_key"]
+            ).decode()
+            noobaa_backend_secret = cmd_out[noobaa_backend_root_key]
         log.info(
             f"Noobaa Backend root key : {noobaa_backend_root_key}, Noobaa backend secrets : {noobaa_backend_secret}"
         )
@@ -744,3 +762,38 @@ def verify_new_key_after_rotation(tries, delays):
     except UnexpectedBehaviour:
         log.error("Key rotation is Not happened after schedule is passed. ")
         assert False
+
+
+@retry(UnexpectedBehaviour, tries=10, delay=20)
+def compare_noobaa_old_keys_with_new_keys(
+    noobaa_keyrotation, old_noobaa_backend_key, old_noobaa_volume_key
+):
+    """
+    Compare noobaa old keys with new keys.
+    args:
+        noobaa_keyrotation: obj: NoobaaKeyrotation object
+        old_noobaa_backend_key: str: old noobaa backend key
+        old_noobaa_volume_key: str: old noobaa_volume_key
+
+    """
+    (
+        new_noobaa_backend_key,
+        new_noobaa_backend_secret,
+    ) = noobaa_keyrotation.get_noobaa_backend_secret(kms_deployment=True)
+    (
+        new_noobaa_volume_key,
+        new_noobaa_volume_secret,
+    ) = noobaa_keyrotation.get_noobaa_volume_secret()
+
+    if new_noobaa_backend_key == old_noobaa_backend_key:
+        raise UnexpectedBehaviour("Noobaa Key Rotation is not happend")
+
+    if new_noobaa_volume_key == old_noobaa_volume_key:
+        raise UnexpectedBehaviour("Noobaa Key Rotation is not happend.")
+
+    log.info(
+        f"Noobaa Backend key rotated {new_noobaa_backend_key} : {new_noobaa_backend_secret}"
+    )
+    log.info(
+        f"Noobaa Volume key rotated {new_noobaa_volume_key} : {new_noobaa_volume_secret}"
+    )
