@@ -1,0 +1,22 @@
+---
+# this is schema that we can use to create the ConfigMap for the OCS Operator. Created automatically by the OCS Operator
+apiVersion: v1
+data:
+  CSI_CLUSTER_NAME: {}
+  CSI_ENABLE_TOPOLOGY: {}
+  CSI_TOPOLOGY_DOMAIN_LABELS: {}
+  ROOK_CSI_DISABLE_DRIVER: {}
+  ROOK_CSI_ENABLE_CEPHFS: {}
+  ROOK_CSI_ENABLE_NFS: {}
+  ROOK_CURRENT_NAMESPACE_ONLY: {}
+kind: ConfigMap
+metadata:
+  name: ocs-operator-config
+  namespace: {}
+#  ownerReferences:
+#  - apiVersion: {}
+#    blockOwnerDeletion: true
+#    controller: true
+#    kind: {}
+#    name: {}
+#    uid: {}
