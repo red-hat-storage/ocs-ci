@@ -2841,13 +2841,13 @@ class RBDDRDeployOps(object):
         for out in out_list:
             if not out:
                 continue
-            logger.info(out.stdout)
+            logger.info(out.stdout.decode())
             if out.stdout.decode() != "true":
                 logger.error(
                     f"On cluster {config.clusters[index].ENV_DATA['cluster_name']}"
                 )
                 raise ResourceWrongStatusException(
-                    "CephBlockPool", expected="true", got=out
+                    "CephBlockPool", expected="true", got=out.stdout.decode()
                 )
             index = +1
 
