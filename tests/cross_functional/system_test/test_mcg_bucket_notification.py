@@ -9,6 +9,10 @@ from ocs_ci.framework.pytest_customization.marks import (
     mcg,
     magenta_squad,
     system_test,
+    skipif_disconnected_cluster,
+    skipif_proxy_cluster,
+    skipif_noobaa_external_pgsql,
+    skipif_external_mode,
 )
 from ocs_ci.ocs.bucket_utils import (
     write_random_test_objects_to_bucket,
@@ -38,6 +42,10 @@ from ocs_ci.utility.utils import TimeoutSampler
 
 @mcg
 @system_test
+@skipif_disconnected_cluster
+@skipif_proxy_cluster
+@skipif_noobaa_external_pgsql
+@skipif_external_mode
 @magenta_squad
 @ignore_leftover_label(constants.CUSTOM_MCG_LABEL)
 class TestBucketNotificationSystemTest:
