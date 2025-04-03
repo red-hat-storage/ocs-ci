@@ -10,6 +10,6 @@ DEPLOYMENT:
   ignition_version: "3.2.0"
 ENV_DATA:
   vm_template: "rhcos-418.94.202410090804-0-vmware.x86_64"
-  acm_hub_channel: release-2.12
-  acm_version: "2.12"
-  submariner_version: "0.19.0"
+  acm_hub_channel: release-2.13
+  acm_version: "2.13"
+  submariner_version: "0.20.0"
