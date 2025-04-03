@@ -379,10 +379,16 @@ class TestPvPool:
             "Pv pool backingstore didnt goto Rejected phase after noobaa-core pod restarts"
         )
 
+    @polarion_id("OCS-6552")
     def test_pv_pool_with_nfs(
         self, setup_nfs, bucket_factory, awscli_pod, test_directory_setup, mcg_obj
     ):
+        """
+        Test pv-pool backingstore creation using the NFS storageclass which doesn't support
+        xattr.
+            dfbug: https://issues.redhat.com/browse/DFBUGS-1114
 
+        """
         # Create bucket based of pv-pool backingstore
         bucketclass_dict = {
             "interface": "OC",
