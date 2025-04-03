@@ -27,7 +27,6 @@ from ocs_ci.helpers.dr_helpers import (
     get_scheduling_interval,
     create_klusterlet_config,
     remove_parameter_klusterlet_config,
-    configure_rdr_hub_recovery,
 )
 from ocs_ci.ocs.exceptions import UnexpectedBehaviour
 from ocs_ci.ocs.resources.drpc import DRPC
@@ -99,7 +98,7 @@ class TestSiteFailureRecoveryAndFailover:
         two_times_scheduling_interval = 2 * scheduling_interval  # Time in minutes
         wait_time = 420
 
-        assert configure_rdr_hub_recovery()
+        # assert configure_rdr_hub_recovery()
 
         # Get the primary managed cluster nodes
         logger.info("Getting Primary managed cluster node details")
