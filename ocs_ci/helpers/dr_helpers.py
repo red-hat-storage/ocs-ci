@@ -1117,7 +1117,7 @@ def verify_last_group_sync_time(
         drpc_obj (obj): DRPC object
         scheduling_interval (int): The scheduling interval in minutes
         initial_last_group_sync_time (str): Previous lastGroupSyncTime value (optional).
-        switch_ctx (str): Switch to the cluster index by the cluster name
+        switch_ctx (int): Switch to the cluster based upon its index value
 
     Returns:
         str: Current lastGroupSyncTime

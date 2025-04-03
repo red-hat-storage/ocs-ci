@@ -3484,7 +3484,7 @@ class MultiClusterDROperatorsDeploy(object):
         """
         Validate policy status for given resource
 
-        Returns: True if complaince check passes else raises ResourceWrongStatusException when resource state
+        Returns: True if compliance check passes else raises ResourceWrongStatusException when resource state
         does not match
 
         """
