@@ -28,6 +28,7 @@ from ocs_ci.ocs.constants import (
 )
 from ocs_ci.ocs.exceptions import (
     CommandFailed,
+    ConfigurationError,
     ResourceNotFoundError,
 )
 from ocs_ci.ocs.cluster import check_clusters
@@ -550,12 +551,14 @@ def process_cluster_cli_params(config):
     if not os.path.exists(cluster_path):
         os.makedirs(cluster_path)
 
-    # create kubconfig if doesn't exists and OCP url and kubeadmin password is provided
+    # create kubeconfig if doesn't exists and OCP url and kubeadmin password is provided
     kubeconfig_path = os.path.join(
         cluster_path, ocsci_config.RUN["kubeconfig_location"]
     )
-    if not os.path.isfile(kubeconfig_path) and not get_cli_param(
-        config, "deploy", default=False
+    if not os.path.isfile(kubeconfig_path) and not (
+        get_cli_param(config, "deploy", default=False)
+        or get_cli_param(config, "teardown", default=False)
+        or get_cli_param(config, "kubeconfig")
     ):
         if ocsci_config.RUN.get("kubeadmin_password") and ocsci_config.RUN.get(
             "ocp_url"
@@ -586,7 +589,7 @@ def process_cluster_cli_params(config):
             else:
                 log.warning(f"Kubeconfig file were created: {kubeconfig_path}.")
         else:
-            log.warning(
+            raise ConfigurationError(
                 "Kubeconfig doesn't exists and RUN['kubeadmin_password'] and RUN['ocp_url'] "
                 "environment variables were not provided."
             )
