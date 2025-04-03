@@ -279,7 +279,7 @@ class ODFAndNativeStorageClientDeploymentOnProvider(object):
                 check_phase_of_rados_namespace()
             ), "The radosnamespace is not in Ready phase"
 
-            # Validate storageclassrequests created
+            # Validate storageclasses created
             storage_class_classes = get_all_storageclass_names()
             for storage_class in self.storage_class_claims:
                 assert (

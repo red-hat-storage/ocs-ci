@@ -5877,6 +5877,9 @@ def find_cephblockpoolradosnamespace(storageclient_uid=None):
     Find the cephblockpoolradosnamespace related to a storageclient. This should run on provider cluster in a
         provider mode setup.
 
+    ! Important. from 4.19 onwards, the StorageRequest is deprecated.
+    ! rns will be fetched from configmap of storageConsumer
+
     Args:
         storageclient_id(string): The uid of the storageclient for which the cephblockpoolradosnamespace to be fetched
 
@@ -5931,6 +5934,9 @@ def find_cephfilesystemsubvolumegroup(storageclient_uid=None):
     """
     Find the cephfilesystemsubvolumegroup related to a storageclient. This should run on provider cluster in a
         provider mode setup.
+
+    ! Important. from 4.19 onwards, the StorageRequest is deprecated.
+    ! cephfilesystemsubvolumegroup will be fetched from configmap of storageConsumer
 
     Args:
         storageclient_id(string): The uid of the storageclient for which the cephfilesystemsubvolumegroup to be fetched
