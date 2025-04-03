@@ -619,6 +619,14 @@ CSI_CEPHFSPLUGIN_PROVISIONER_LABEL = "app=csi-cephfsplugin-provisioner"
 CSI_RBDPLUGIN_PROVISIONER_LABEL = "app=csi-rbdplugin-provisioner"
 CSI_CEPHFSPLUGIN_LABEL = "app=csi-cephfsplugin"
 CSI_RBDPLUGIN_LABEL = "app=csi-rbdplugin"
+CSI_CEPHFSPLUGIN_PROVISIONER_LABEL_419 = (
+    "app=openshift-storage.cephfs.csi.ceph.com-ctrlplugin"
+)
+CSI_RBDPLUGIN_PROVISIONER_LABEL_419 = (
+    "app=openshift-storage.rbd.csi.ceph.com-ctrlplugin"
+)
+CSI_CEPHFSPLUGIN_LABEL_419 = "app=openshift-storage.cephfs.csi.ceph.com-nodeplugin"
+CSI_RBDPLUGIN_LABEL_419 = "app=openshift-storage.rbd.csi.ceph.com-nodeplugin"
 OCS_OPERATOR_LABEL = "name=ocs-operator"
 ODF_OPERATOR_CONTROL_MANAGER_LABEL = "app.kubernetes.io/name=odf-operator"
 ROOK_CEPH_DRAIN_CANARY = "rook-ceph-drain-canary"
@@ -629,6 +637,7 @@ NOOBAA_CORE_POD_LABEL = "noobaa-core=noobaa"
 NOOBAA_OPERATOR_POD_LABEL = "noobaa-operator=deployment"
 NOOBAA_DB_LABEL_46_AND_UNDER = "noobaa-db=noobaa"
 NOOBAA_DB_LABEL_47_AND_ABOVE = "noobaa-db=postgres"
+NOOBAA_DB_LABEL_419_AND_ABOVE = "cnpg.io/cluster=noobaa-db-pg-cluster"
 NOOBAA_ENDPOINT_POD_LABEL = "noobaa-s3=noobaa"
 NOOBAA_DEFAULT_BACKINGSTORE_LABEL = "pool=noobaa-default-backing-store"
 NOOBAA_CNPG_POD_LABEL = "app.kubernetes.io/name=cloudnative-pg"
@@ -1864,6 +1873,7 @@ OSD_PDB = "rook-ceph-osd"
 MON_PDB = "rook-ceph-mon-pdb"
 MGR_PDB = "rook-ceph-mgr-pdb"
 RGW_PDB = "rook-ceph-rgw-ocs-storagecluster-cephobjectstore"
+NOOBAA_DB_PG_PDB = "noobaa-db-pg-cluster-primary"
 PDB_COUNT = 3
 PDB_COUNT_2_MGR = 4
 PDB_COUNT_ARBITER = 4
@@ -1882,6 +1892,10 @@ RBD_PROVISIONER_SECRET = "rook-csi-rbd-provisioner"
 RBD_NODE_SECRET = "rook-csi-rbd-node"
 CEPHFS_PROVISIONER_SECRET = "rook-csi-cephfs-provisioner"
 CEPHFS_NODE_SECRET = "rook-csi-cephfs-node"
+RBD_PROVISIONER_SECRET_419 = "rbd-provisioner"
+RBD_NODE_SECRET_419 = "rbd-node"
+CEPHFS_PROVISIONER_SECRET_419 = "cephfs-provisioner"
+CEPHFS_NODE_SECRET_419 = "cephfs-node"
 FUSION_AGENT_CONFIG_SECRET = "managed-fusion-agent-config"
 # OSU = ObjectStoreUser, shortened for compliance with flake8+black because of line length issues
 OSU_SECRET_BASE = "rook-ceph-object-user-ocs-{}storagecluster-cephobjectstore-{}-{}"
