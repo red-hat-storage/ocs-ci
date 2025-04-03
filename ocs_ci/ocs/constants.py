@@ -92,6 +92,7 @@ MANIFESTS_DIR = "manifests"
 PROVIDER_CLIENT_DEPLOYMENT_DIR = os.path.join(
     TEMPLATE_DIR, "provider-client-deployment"
 )
+RESILIENCY_DIR = os.path.join(TOP_DIR, "ocs_ci", "resiliency")
 
 # OCP Deployment constants
 CHRONY_TEMPLATE = os.path.join(
