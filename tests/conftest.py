@@ -122,6 +122,7 @@ from ocs_ci.ocs.resources.pod import (
     wait_for_pods_by_label_count,
     delete_deployment_pods,
     cal_md5sum,
+    wait_for_pods_to_be_in_statuses,
 )
 from ocs_ci.ocs.resources.pvc import (
     PVC,
@@ -189,6 +190,7 @@ from ocs_ci.helpers.helpers import (
     get_current_test_name,
     modify_deployment_replica_count,
     modify_statefulset_replica_count,
+    create_resource,
 )
 from ocs_ci.ocs.ceph_debug import CephObjectStoreTool, MonStoreTool, RookCephPlugin
 from ocs_ci.ocs.bucket_utils import get_rgw_restart_counts
@@ -9326,3 +9328,113 @@ def run_fio_till_cluster_full(
 
     request.addfinalizer(teardown)
     return factory
+
+
+@pytest.fixture()
+def nfs_project(project_factory):
+
+    def factory():
+        # Create namespace and label with cluster-monitoring=true
+        project_factory(project_name=constants.NFS_NAMESPACE_NAME)
+        label = "openshift.io/cluster-monitoring=true"
+        project_obj = OCP(kind=constants.NAMESPACE)
+        project_obj.add_label(resource_name="openshift-nfs-storage", label=label)
+        return project_obj
+
+    return factory
+
+
+@pytest.fixture()
+def setup_rbac(request, nfs_project):
+
+    # Create NFS project
+    nfs_project()
+
+    # Create NFS ServiceAccount
+    nfs_sa_data = templating.load_yaml(constants.NFS_SA_YAML_DIR)
+    create_resource(**nfs_sa_data)
+    nfs_sa_obj = OCS(**nfs_sa_data)
+
+    # Create ClusterRole
+    nfs_clusterrole_data = templating.load_yaml(constants.NFS_CLUSTER_ROLE_YAML_DIR)
+    create_resource(**nfs_clusterrole_data)
+    nfs_cluster_role = OCS(**nfs_clusterrole_data)
+
+    # Create ClusterRoleBinding
+    nfs_cluster_role_binding_data = templating.load_yaml(
+        constants.NFS_CLUSTER_ROLE_BINDING_YAML_DIR
+    )
+    create_resource(**nfs_cluster_role_binding_data)
+    nfs_cluster_role_binding = OCS(**nfs_cluster_role_binding_data)
+
+    # Create Role
+    nfs_role_data = templating.load_yaml(constants.NFS_ROLE_YAML_DIR)
+    create_resource(**nfs_role_data)
+    nfs_role = OCS(**nfs_role_data)
+
+    # Create RoleBinding
+    nfs_role_binding_data = templating.load_yaml(constants.NFS_ROLE_BINDING_YAML_DIR)
+    create_resource(**nfs_role_binding_data)
+    nfs_role_binding = OCS(**nfs_role_binding_data)
+
+    def teardown():
+
+        nfs_role_binding.delete()
+        nfs_role.delete()
+        nfs_cluster_role_binding.delete()
+        nfs_cluster_role.delete()
+        nfs_sa_obj.delete()
+
+    request.addfinalizer(teardown)
+
+
+@pytest.fixture()
+def setup_nfs(request, setup_rbac):
+
+    try:
+        # Update the service account with the right permissions
+        add_scc_policy(constants.NFS_SCC_NAME, constants.NFS_NAMESPACE_NAME)
+
+        # Create nfs storageclass
+        nfs_sc_data = templating.load_yaml(constants.NFS_SC_YAML_DIR)
+        create_resource(**nfs_sc_data)
+        nfs_sc_obj = OCS(**nfs_sc_data)
+        assert nfs_sc_obj.ocp.get(
+            dont_raise=True
+        ), f"Storageclass {constants.NFS_SC_NAME} doesnt exist"
+
+        # Update the deployment with ocs-ci noobaa nfs server
+        # noobaa nfs mount path and create the deployment
+        nfs_client_prov_dep_data = templating.load_yaml(
+            constants.NFS_DEPLOYMENT_YAML_DIR
+        )
+        nfs_client_prov_dep_data["spec"]["template"]["spec"]["containers"][0]["env"][1][
+            "value"
+        ] = config.ENV_DATA.get("nb_nfs_server")
+        nfs_client_prov_dep_data["spec"]["template"]["spec"]["containers"][0]["env"][2][
+            "value"
+        ] = config.ENV_DATA.get("nb_nfs_mount")
+        nfs_client_prov_dep_data["spec"]["template"]["spec"]["volumes"][0]["nfs"][
+            "server"
+        ] = config.ENV_DATA.get("nb_nfs_server")
+        nfs_client_prov_dep_data["spec"]["template"]["spec"]["volumes"][0]["nfs"][
+            "path"
+        ] = config.ENV_DATA.get("nb_nfs_mount")
+        log.info("Creating NFS client provisioner deployment")
+        create_resource(**nfs_client_prov_dep_data)
+        nfs_client_dep_obj = OCS(**nfs_client_prov_dep_data)
+
+        log.info("Waiting for NFS client provisioner pods to be running")
+        wait_for_pods_to_be_in_statuses(
+            expected_statuses=constants.STATUS_RUNNING,
+            namespace=constants.NFS_NAMESPACE_NAME,
+        )
+
+    finally:
+
+        def teardown():
+
+            nfs_client_dep_obj.delete()
+            nfs_sc_obj.delete()
+
+    request.addfinalizer(teardown)
