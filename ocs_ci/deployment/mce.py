@@ -224,7 +224,7 @@ class MCEInstaller(object):
         self.multicluster_engine.annotate(
             annotation=f"imageOverridesCM={self.hypershift_override_image_cm}"
         )
-        self.multicluster_engine.wait_until_running()
+        self.wait_mce_resources()
 
     def deploy_mce(self):
         """
