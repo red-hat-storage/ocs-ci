@@ -9333,69 +9333,99 @@ def run_fio_till_cluster_full(
 @pytest.fixture()
 def nfs_project(project_factory):
 
-    def factory():
-        # Create namespace and label with cluster-monitoring=true
-        project_factory(project_name=constants.NFS_NAMESPACE_NAME)
-        label = "openshift.io/cluster-monitoring=true"
-        project_obj = OCP(kind=constants.NAMESPACE)
-        project_obj.add_label(resource_name="openshift-nfs-storage", label=label)
-        return project_obj
-
-    return factory
+    # Create NFS namespace and label with cluster-monitoring=true
+    project_factory(project_name=constants.NFS_NAMESPACE_NAME)
+    label = "openshift.io/cluster-monitoring=true"
+    project_obj = OCP(kind=constants.NAMESPACE)
+    project_obj.add_label(resource_name=constants.NFS_NAMESPACE_NAME, label=label)
 
 
 @pytest.fixture()
 def setup_rbac(request, nfs_project):
+    """
+    Setup RBAC for the NFS client provisioner
 
-    # Create NFS project
-    nfs_project()
+    """
+    nfs_sa_obj = nfs_cluster_role = nfs_cluster_role_binding = nfs_role = (
+        nfs_role_binding
+    ) = None
 
-    # Create NFS ServiceAccount
-    nfs_sa_data = templating.load_yaml(constants.NFS_SA_YAML_DIR)
-    create_resource(**nfs_sa_data)
-    nfs_sa_obj = OCS(**nfs_sa_data)
+    try:
+        # Create NFS ServiceAccount
+        log.info("Creating NFS service account")
+        nfs_sa_data = templating.load_yaml(constants.NFS_SA_YAML_DIR)
+        create_resource(**nfs_sa_data)
+        nfs_sa_obj = OCS(**nfs_sa_data)
 
-    # Create ClusterRole
-    nfs_clusterrole_data = templating.load_yaml(constants.NFS_CLUSTER_ROLE_YAML_DIR)
-    create_resource(**nfs_clusterrole_data)
-    nfs_cluster_role = OCS(**nfs_clusterrole_data)
+        # Create ClusterRole
+        log.info("Creating NFS cluster role")
+        nfs_clusterrole_data = templating.load_yaml(constants.NFS_CLUSTER_ROLE_YAML_DIR)
+        create_resource(**nfs_clusterrole_data)
+        nfs_cluster_role = OCS(**nfs_clusterrole_data)
 
-    # Create ClusterRoleBinding
-    nfs_cluster_role_binding_data = templating.load_yaml(
-        constants.NFS_CLUSTER_ROLE_BINDING_YAML_DIR
-    )
-    create_resource(**nfs_cluster_role_binding_data)
-    nfs_cluster_role_binding = OCS(**nfs_cluster_role_binding_data)
+        # Create ClusterRoleBinding
+        log.info("Creating NFS cluster role binding")
+        nfs_cluster_role_binding_data = templating.load_yaml(
+            constants.NFS_CLUSTER_ROLE_BINDING_YAML_DIR
+        )
+        create_resource(**nfs_cluster_role_binding_data)
+        nfs_cluster_role_binding = OCS(**nfs_cluster_role_binding_data)
 
-    # Create Role
-    nfs_role_data = templating.load_yaml(constants.NFS_ROLE_YAML_DIR)
-    create_resource(**nfs_role_data)
-    nfs_role = OCS(**nfs_role_data)
+        # Create Role
+        log.info("Creating NFS role")
+        nfs_role_data = templating.load_yaml(constants.NFS_ROLE_YAML_DIR)
+        create_resource(**nfs_role_data)
+        nfs_role = OCS(**nfs_role_data)
 
-    # Create RoleBinding
-    nfs_role_binding_data = templating.load_yaml(constants.NFS_ROLE_BINDING_YAML_DIR)
-    create_resource(**nfs_role_binding_data)
-    nfs_role_binding = OCS(**nfs_role_binding_data)
+        # Create RoleBinding
+        log.info("Creating NFS role binding")
+        nfs_role_binding_data = templating.load_yaml(
+            constants.NFS_ROLE_BINDING_YAML_DIR
+        )
+        create_resource(**nfs_role_binding_data)
+        nfs_role_binding = OCS(**nfs_role_binding_data)
 
-    def teardown():
+    finally:
 
-        nfs_role_binding.delete()
-        nfs_role.delete()
-        nfs_cluster_role_binding.delete()
-        nfs_cluster_role.delete()
-        nfs_sa_obj.delete()
+        def teardown():
+            if nfs_role_binding:
+                log.info(f"Deleting NFS role binding {nfs_role_binding.name}")
+                nfs_role_binding.delete()
+            if nfs_role:
+                log.info(f"Deleting NFS role {nfs_role.name}")
+                nfs_role.delete()
+            if nfs_cluster_role_binding:
+                log.info(
+                    f"Deleting NFS cluster role binding {nfs_cluster_role_binding.name}"
+                )
+                nfs_cluster_role_binding.delete()
+            if nfs_cluster_role:
+                log.info(f"Deleting NFS cluster role {nfs_cluster_role.name}")
+                nfs_cluster_role.delete()
+            if nfs_sa_obj:
+                log.info(f"Deleting NFS service account {nfs_sa_obj.name}")
+                nfs_sa_obj.delete()
 
-    request.addfinalizer(teardown)
+        request.addfinalizer(teardown)
 
 
 @pytest.fixture()
 def setup_nfs(request, setup_rbac):
+    """
+    Setup NFS client provisioner
+
+    """
+    nfs_sc_obj = nfs_client_dep_obj = None
 
     try:
         # Update the service account with the right permissions
+        log.info(
+            f"Updating NFS service account {constants.NFS_SC_NAME} with the right permissions"
+        )
         add_scc_policy(constants.NFS_SCC_NAME, constants.NFS_NAMESPACE_NAME)
 
         # Create nfs storageclass
+        log.info("Creating NFS storageclass")
         nfs_sc_data = templating.load_yaml(constants.NFS_SC_YAML_DIR)
         create_resource(**nfs_sc_data)
         nfs_sc_obj = OCS(**nfs_sc_data)
@@ -9405,6 +9435,9 @@ def setup_nfs(request, setup_rbac):
 
         # Update the deployment with ocs-ci noobaa nfs server
         # noobaa nfs mount path and create the deployment
+        log.info(
+            "Updating NFS client provisioner data with Noobaa NFS server and NFS mount path info"
+        )
         nfs_client_prov_dep_data = templating.load_yaml(
             constants.NFS_DEPLOYMENT_YAML_DIR
         )
@@ -9433,8 +9466,13 @@ def setup_nfs(request, setup_rbac):
     finally:
 
         def teardown():
+            if nfs_client_dep_obj:
+                log.info(
+                    f"Deleting NFS client provisioner deployment {nfs_client_dep_obj.name}"
+                )
+                nfs_client_dep_obj.delete()
+            if nfs_sc_obj:
+                log.info(f"Deleting NFS storageclass {nfs_sc_obj.name}")
+                nfs_sc_obj.delete()
 
-            nfs_client_dep_obj.delete()
-            nfs_sc_obj.delete()
-
-    request.addfinalizer(teardown)
+        request.addfinalizer(teardown)

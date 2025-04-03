@@ -17,6 +17,7 @@ from ocs_ci.framework.pytest_customization.marks import (
 from ocs_ci.ocs.bucket_utils import (
     wait_for_pv_backingstore,
     check_pv_backingstore_status,
+    write_random_test_objects_to_bucket,
 )
 from ocs_ci.ocs.resources.pod import (
     get_pods_having_label,
@@ -376,4 +377,32 @@ class TestPvPool:
         ), "Pv pool backingstore reached rejected phase after noobaa core pod restart"
         logger.info(
             "Pv pool backingstore didnt goto Rejected phase after noobaa-core pod restarts"
+        )
+
+    def test_pv_pool_with_nfs(
+        self, setup_nfs, bucket_factory, awscli_pod, test_directory_setup, mcg_obj
+    ):
+
+        # Create bucket based of pv-pool backingstore
+        bucketclass_dict = {
+            "interface": "OC",
+            "backingstore_dict": {
+                "pv": [
+                    (
+                        3,
+                        MIN_PV_BACKINGSTORE_SIZE_IN_GB,
+                        constants.NFS_SC_NAME,
+                    )
+                ]
+            },
+        }
+        bucket = bucket_factory(1, "OC", bucketclass=bucketclass_dict)[0]
+
+        # Write some data to the bucket
+        write_random_test_objects_to_bucket(
+            awscli_pod,
+            bucket.name,
+            test_directory_setup.origin_dir,
+            amount=5,
+            mcg_obj=mcg_obj,
         )

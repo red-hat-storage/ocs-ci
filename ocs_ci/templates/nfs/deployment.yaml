@@ -5,7 +5,7 @@ metadata:
   labels:
     app: nfs-client-provisioner
   # replace with namespace where provisioner is deployed
-  namespace: openshift-nfs-storage
+  namespace: nfs-storage
 spec:
   replicas: 1
   strategy:

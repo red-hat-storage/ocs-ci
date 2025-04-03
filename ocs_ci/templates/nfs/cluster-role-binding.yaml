@@ -6,7 +6,7 @@ subjects:
   - kind: ServiceAccount
     name: nfs-client-provisioner
     # replace with namespace where provisioner is deployed
-    namespace: openshift-nfs-storage
+    namespace: nfs-storage
 roleRef:
   kind: ClusterRole
   name: nfs-client-provisioner-runner
