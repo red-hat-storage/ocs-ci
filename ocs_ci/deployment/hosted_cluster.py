@@ -26,6 +26,7 @@ from ocs_ci.ocs.exceptions import (
     UnexpectedDeploymentConfiguration,
 )
 from ocs_ci.ocs.ocp import OCP
+from ocs_ci.ocs.resources import storage_cluster
 from ocs_ci.ocs.resources.catalog_source import CatalogSource
 from ocs_ci.ocs.resources.csv import check_all_csvs_are_succeeded
 from ocs_ci.ocs.resources.ocs import OCS
@@ -117,6 +118,8 @@ class HostedClients(HyperShiftBase):
                 namespace_to_create_storage_client=f"clusters-{cluster_name}"
             )
 
+        self.check_odf_prerequisites()
+
         # stage 4 deploy ODF on all hosted clusters if not already deployed
         for cluster_name in cluster_names:
 
@@ -185,6 +188,33 @@ class HostedClients(HyperShiftBase):
         ), "Storage client was not set up on all hosted ODF clusters"
 
         return hosted_odf_clusters_installed
+
+    def check_odf_prerequisites(self):
+        """
+        Check prerequisites for ODF installation and Client cluster connection
+        """
+        # Storage Cluster resource of hub cluster should have hostNetwork set to true
+        # If hostNetwork is true, then providerAPIServerServiceType is set to NodePort automatically
+
+        sc = storage_cluster.get_storage_cluster()
+        sc.check_phase(constants.STATUS_READY)
+        if sc.data["spec"].get("hostNetwork"):
+            logger.info(
+                "Storage Cluster resource of hub cluster has hostNetwork set to true"
+            )
+            if sc.data["spec"].get("providerAPIServerServiceType") == "NodePort":
+                logger.info(
+                    "Storage Cluster resource of hub cluster has providerAPIServerServiceType set to NodePort"
+                )
+                return
+            else:
+                raise AssertionError(
+                    "Storage Cluster resource of hub cluster has providerAPIServerServiceType not set to NodePort"
+                )
+        else:
+            raise AssertionError(
+                "Storage Cluster resource of hub cluster has hostNetwork not set to true"
+            )
 
     def config_has_hosted_odf_image(self, cluster_name):
         """
