@@ -20,11 +20,15 @@ log = logging.getLogger(__name__)
 @yellow_squad
 @tier1
 @polarion_id("OCS-4628")
-@skipif_ocs_version("<4.11")
+@skipif_ocs_version(["<4.11", ">4.16"])
 @pc_or_ms_consumer_required
 class TestStorageClassClaim(ManageTest):
     """
     Tests to verify storageclassclaim
+
+    ! Important. StorageClassClaim was deprecated in ODF 4.16 in favor of StorageClaim.
+    ! StorageClaim was deprecated in ODF 4.19 with data stored in StorageClient
+    ! To delete when reached EOL of ODF 4.16
     """
 
     def test_verify_storageclassclaim(

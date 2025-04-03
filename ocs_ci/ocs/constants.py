@@ -216,7 +216,9 @@ VOLUME_REPLICATION_GROUP = "VolumeReplicationGroup"
 RECLAIMSPACECRONJOB = "reclaimspacecronjob"
 LVMCLUSTER = "odf-lvmcluster"
 LVMSCLUSTER = "lvmscluster"
+# Deprecated in favour of StorageClaim starting from 4.16
 STORAGECLASSCLAIM = "StorageClassClaim"
+# Deprecated and data moved to StorageClient starting from 4.19
 STORAGECLAIM = "StorageClaim"
 STORAGECONSUMER = "StorageConsumer"
 MACHINEHEALTHCHECK = "machinehealthcheck"
