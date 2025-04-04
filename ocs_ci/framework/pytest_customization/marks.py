@@ -598,7 +598,7 @@ rdr_ui = pytest.mark.skipif(
 
 dr_hub_recovery = pytest.mark.skipif(
     config.nclusters != 4,
-    reason="DR hub recovery requires 4 clusters to be run",
+    reason="DR hub recovery requires 4th OCP cluster to be available for Passive hub",
 )
 
 # Filter warnings
