@@ -21,6 +21,8 @@ from ocs_ci.framework.pytest_customization.marks import (
     magenta_squad,
     mcg,
     polarion_id,
+    skipif_aws_creds_are_missing,
+    skipif_disconnected_cluster,
 )
 from ocs_ci.ocs.node import get_worker_nodes, get_node_objs
 from ocs_ci.ocs.bucket_utils import (
@@ -422,6 +424,8 @@ class TestLogBasedReplicationWithDisruptions:
 @mcg
 @magenta_squad
 @system_test
+@skipif_aws_creds_are_missing
+@skipif_disconnected_cluster
 class TestMCGReplicationWithVersioningSystemTest:
 
     @retry(CommandFailed, tries=7, delay=30)
