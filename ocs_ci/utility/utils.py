@@ -2848,16 +2848,17 @@ def clone_repo(
         run_cmd(f"git checkout {to_checkout}", cwd=location)
 
 
-def get_latest_ds_olm_tag(upgrade=False, latest_tag=None):
+def get_latest_ds_olm_tag(upgrade=False, latest_tag=None, stable_upgrade_version=False):
     """
     This function returns latest tag of OCS downstream registry or one before
     latest if upgrade parameter is True
 
     Args:
-        upgrade (str): If True then it returns one version of the build before
+        upgrade (bool): If True then it returns one version of the build before
             the latest.
         latest_tag (str): Tag of the latest build. If not specified
             config.DEPLOYMENT['default_latest_tag'] or 'latest' will be used.
+        stable_upgrade_version (bool): If True then it returns stable upgrade version.
 
     Returns:
         str: latest tag for downstream image from quay registry
@@ -2867,6 +2868,8 @@ def get_latest_ds_olm_tag(upgrade=False, latest_tag=None):
 
     """
     latest_tag = latest_tag or config.DEPLOYMENT.get("default_latest_tag", "latest")
+    if stable_upgrade_version:
+        latest_tag = config.UPGRADE.get("default_latest_stable_upgrade_tag", latest_tag)
     tags = get_ocs_olm_operator_tags()
     latest_image = None
     ocs_version = config.ENV_DATA["ocs_version"]
