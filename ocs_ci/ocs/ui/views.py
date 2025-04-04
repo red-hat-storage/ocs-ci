@@ -286,7 +286,8 @@ deployment_4_17 = {
 generic_locators = {
     "project_selector": (
         "//span[@class='pf-c-menu-toggle__text' and contains(text(), 'Project:')] | "
-        "//span[@class='pf-v5-c-menu-toggle__text' and contains(text(), 'Project:')]",
+        "//span[@class='pf-v5-c-menu-toggle__text' and contains(text(), 'Project:')] |"
+        "//span[@class='pf-v6-c-menu-toggle__text' and contains(text(), 'Project:')]",
         By.XPATH,
     ),
     "select_openshift-storage_project": (
@@ -388,7 +389,8 @@ generic_locators = {
         By.XPATH,
     ),
     "show_default_projects_toggle": (
-        "input[class='pf-c-switch__input'], input[class='pf-v5-c-switch__input']",
+        "input[class='pf-c-switch__input'], input[class='pf-v5-c-switch__input'], "
+        "input[class='pf-v6-c-switch__input']",
         By.CSS_SELECTOR,
     ),
     "developer_selected": ("//h2[.='Developer']", By.XPATH),
@@ -582,7 +584,10 @@ pvc = {
         "//dd[contains(text(),'{}') and @data-test-id='pvc-capacity']",
         By.XPATH,
     ),
-    "access_mode_button": ("button[class='pf-v5-c-menu-toggle']", By.CSS_SELECTOR),
+    "access_mode_button": (
+        "button[class='pf-v5-c-menu-toggle'], button[class='pf-v6-c-menu-toggle']",
+        By.CSS_SELECTOR,
+    ),
     "access_rwx": ("//li//button//*[contains(text(), 'RWX')]", By.XPATH),
 }
 
