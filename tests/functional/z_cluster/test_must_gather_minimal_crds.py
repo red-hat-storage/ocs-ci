@@ -27,10 +27,12 @@ class TestMustGather(ManageTest):
             "clusterscoped",
             "noobaa",
             "dr",
+            "node_selector",
+            "host_network",
         ],
         argvalues=[
             pytest.param(
-                *[False, False, False, False, False, False],
+                *[False, False, False, False, False, False, False, False],
                 marks=[
                     pytest.mark.polarion_id("OCS-6307"),
                     skipif_external_mode,
@@ -40,7 +42,7 @@ class TestMustGather(ManageTest):
                 ],
             ),
             pytest.param(
-                *[True, False, False, True, False, False],
+                *[True, False, False, True, False, False, False, False],
                 marks=[
                     pytest.mark.polarion_id("OCS-6312"),
                     skipif_external_mode,
@@ -50,7 +52,7 @@ class TestMustGather(ManageTest):
                 ],
             ),
             pytest.param(
-                *[False, True, False, False, False, False],
+                *[False, True, False, False, False, False, False, False],
                 marks=[
                     pytest.mark.polarion_id("OCS-6313"),
                     skipif_external_mode,
@@ -60,7 +62,7 @@ class TestMustGather(ManageTest):
                 ],
             ),
             pytest.param(
-                *[False, False, True, False, False, False],
+                *[False, False, True, False, False, False, False, False],
                 marks=[
                     pytest.mark.polarion_id("OCS-6314"),
                     skipif_external_mode,
@@ -70,7 +72,7 @@ class TestMustGather(ManageTest):
                 ],
             ),
             pytest.param(
-                *[False, False, False, True, False, False],
+                *[False, False, False, True, False, False, False, False],
                 marks=[
                     pytest.mark.polarion_id("OCS-6315"),
                     skipif_external_mode,
@@ -80,7 +82,7 @@ class TestMustGather(ManageTest):
                 ],
             ),
             pytest.param(
-                *[False, False, False, False, True, False],
+                *[False, False, False, False, True, False, False, False],
                 marks=[
                     pytest.mark.polarion_id("OCS-6311"),
                     skipif_external_mode,
@@ -90,9 +92,20 @@ class TestMustGather(ManageTest):
                 ],
             ),
             pytest.param(
-                *[False, False, False, False, False, True],
+                *[False, False, False, False, False, True, False, False],
                 marks=[
                     pytest.mark.polarion_id("OCS-6310"),
+                    skipif_external_mode,
+                    skipif_ms_consumer,
+                    skipif_hci_client,
+                    tier2,
+                    stretchcluster_required_skipif,
+                ],
+            ),
+            pytest.param(
+                *[False, False, False, False, False, False, True, True],
+                marks=[
+                    pytest.mark.polarion_id("OCS-6514"),
                     skipif_external_mode,
                     skipif_ms_consumer,
                     skipif_hci_client,
@@ -103,7 +116,15 @@ class TestMustGather(ManageTest):
         ],
     )
     def test_must_gather_minimal_crd_modular(
-        self, ceph, ceph_logs, namespaced, clusterscoped, noobaa, dr
+        self,
+        ceph,
+        ceph_logs,
+        namespaced,
+        clusterscoped,
+        noobaa,
+        dr,
+        node_selector,
+        host_network,
     ):
         """
         Tests OCS must gather with --minimal-crd flag and modular flags
@@ -116,8 +137,12 @@ class TestMustGather(ManageTest):
         4.Verify paths exist in must gather directory
         5.Verify paths do not exist in must gather directory
         """
-
-        flags_cmd = "/usr/bin/gather --minimal "
+        flags_cmd = ""
+        if node_selector:
+            flags_cmd += '--node-selector="node-role.kubernetes.io/control-plane" '
+        if host_network:
+            flags_cmd += "--host-network=true "
+        flags_cmd += "/usr/bin/gather --minimal "
         paths_exist = list()
         paths_not_exist = list()
         paths_exist += const_must_gather.MINIMAL
