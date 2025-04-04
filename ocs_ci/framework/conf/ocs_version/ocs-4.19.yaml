@@ -9,3 +9,5 @@ ENV_DATA:
 REPORTING:
   default_ocs_must_gather_latest_tag: 'latest-4.19'
   default_ocs_must_gather_image: "quay.io/rhceph-dev/ocs-must-gather"
+UPGRADE:
+  default_latest_stable_upgrade_tag: 'latest-stable-upgrade-4.19'
