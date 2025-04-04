@@ -14,6 +14,7 @@ from ocs_ci.framework.pytest_customization.marks import (
     red_squad,
     mcg,
     sts_deployment_required,
+    skipif_fips_enabled,
 )
 from ocs_ci.framework.testlib import MCGTest
 from ocs_ci.helpers.helpers import create_unique_resource_name
@@ -78,7 +79,7 @@ class TestBucketDeletion(MCGTest):
                     "CLI",
                     {"interface": "OC", "backingstore_dict": {"ibmcos": [(1, None)]}},
                 ],
-                marks=[tier1],
+                marks=[tier1, skipif_fips_enabled],
             ),
             pytest.param(
                 *[
