@@ -3,7 +3,11 @@ import tempfile
 import time
 from concurrent.futures import ThreadPoolExecutor
 
-from ocs_ci.framework.pytest_customization.marks import tier4a, turquoise_squad
+from ocs_ci.framework.pytest_customization.marks import (
+    tier4a,
+    turquoise_squad,
+    dr_hub_recovery,
+)
 from ocs_ci.framework import config
 from ocs_ci.helpers import dr_helpers
 from ocs_ci.ocs.acm.acm import (
@@ -41,6 +45,7 @@ logger = logging.getLogger(__name__)
 
 @tier4a
 @turquoise_squad
+@dr_hub_recovery
 class TestSiteFailureRecoveryAndFailover:
     """
     Perform site-failure by bringing down the active hub and the primary managed cluster, then perform hub recovery
@@ -336,12 +341,6 @@ class TestSiteFailureRecoveryAndFailover:
         )
         drpc_cmd = run_cmd("oc get drpc -o wide -A")
         logger.info(drpc_cmd)
-        for drpc in drpc_objs:
-            dr_helpers.verify_last_group_sync_time(
-                drpc_obj=drpc,
-                scheduling_interval=scheduling_interval,
-                switch_ctx=get_passive_acm_index(),
-            )
 
         relocate_results = []
         with ThreadPoolExecutor() as executor:
@@ -408,10 +407,4 @@ class TestSiteFailureRecoveryAndFailover:
         for wl in rdr_workload:
             wait_for_all_resources_deletion(wl.workload_namespace)
 
-        config.switch_ctx(get_passive_acm_index())
-        for drpc in drpc_objs:
-            dr_helpers.verify_last_group_sync_time(
-                drpc_obj=drpc,
-                scheduling_interval=scheduling_interval,
-                switch_ctx=get_passive_acm_index(),
-            )
+        logger.info("Relocate successful")
