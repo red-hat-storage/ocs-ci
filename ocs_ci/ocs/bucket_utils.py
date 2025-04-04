@@ -3259,9 +3259,9 @@ def verify_objs_deleted_from_objmds(bucket_name, timeout=600, sleep=30):
     logger.info("All the objects are marked expired")
 
 
-def verify_deletion_marker(mcg_obj, awscli_pod, bucket_name, object_key):
+def verify_soft_deletion(mcg_obj, awscli_pod, bucket_name, object_key):
     """
-    Verify if deletion marker exists for the given object key
+    Verify if deletion marker exists and IsLatest for the given object key
 
     Args:
         mcg_obj (MCG): MCG object
