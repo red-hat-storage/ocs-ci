@@ -389,7 +389,8 @@ generic_locators = {
         By.XPATH,
     ),
     "show_default_projects_toggle": (
-        "input[class='pf-c-switch__input'], input[class='pf-v5-c-switch__input']",
+        "input[class='pf-c-switch__input'], input[class='pf-v5-c-switch__input'], "
+        "input[class='pf-v6-c-switch__input']",
         By.CSS_SELECTOR,
     ),
     "developer_selected": ("//h2[.='Developer']", By.XPATH),
