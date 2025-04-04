@@ -286,7 +286,8 @@ deployment_4_17 = {
 generic_locators = {
     "project_selector": (
         "//span[@class='pf-c-menu-toggle__text' and contains(text(), 'Project:')] | "
-        "//span[@class='pf-v5-c-menu-toggle__text' and contains(text(), 'Project:')]",
+        "//span[@class='pf-v5-c-menu-toggle__text' and contains(text(), 'Project:')] |"
+        "//span[@class='pf-v6-c-menu-toggle__text' and contains(text(), 'Project:')]",
         By.XPATH,
     ),
     "select_openshift-storage_project": (
