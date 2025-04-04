@@ -3425,9 +3425,9 @@ def delete_all_objects_in_batches(
         batch_deleter.delete_sequentially()
 
 
-def verify_deletion_marker(mcg_obj, awscli_pod, bucket_name, object_key):
+def verify_soft_deletion(mcg_obj, awscli_pod, bucket_name, object_key):
     """
-    Verify if deletion marker exists for the given object key
+    Verify if deletion marker exists and IsLatest for the given object key
 
     Args:
         mcg_obj (MCG): MCG object
