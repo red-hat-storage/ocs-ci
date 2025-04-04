@@ -1108,7 +1108,6 @@ def verify_last_group_sync_time(
     drpc_obj,
     scheduling_interval,
     initial_last_group_sync_time=None,
-    switch_ctx=None,
 ):
     """
     Verifies that the lastGroupSyncTime for a given DRPC object is within the expected range.
@@ -1117,7 +1116,6 @@ def verify_last_group_sync_time(
         drpc_obj (obj): DRPC object
         scheduling_interval (int): The scheduling interval in minutes
         initial_last_group_sync_time (str): Previous lastGroupSyncTime value (optional).
-        switch_ctx (int): Switch to the cluster based upon its index value
 
     Returns:
         str: Current lastGroupSyncTime
@@ -1128,7 +1126,7 @@ def verify_last_group_sync_time(
 
     """
     restore_index = config.cur_index
-    config.switch_ctx(switch_ctx) if switch_ctx else config.switch_acm_ctx()
+    config.switch_acm_ctx()
     if initial_last_group_sync_time:
         for last_group_sync_time in TimeoutSampler(
             (3 * scheduling_interval * 60), 15, drpc_obj.get_last_group_sync_time
