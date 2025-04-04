@@ -32,7 +32,7 @@ from ocs_ci.ocs.defaults import (
     OCS_OPERATOR_NAME,
 )
 from ocs_ci.ocs.ocp import get_images, OCP
-from ocs_ci.ocs.node import get_nodes
+from ocs_ci.ocs.node import get_nodes, get_all_nodes
 from ocs_ci.ocs.resources.catalog_source import CatalogSource, disable_specific_source
 from ocs_ci.ocs.resources.daemonset import DaemonSet
 from ocs_ci.ocs.resources.csv import (
@@ -140,6 +140,7 @@ def verify_image_versions(old_images, upgrade_version, version_before_upgrade):
 
     """
     number_of_worker_nodes = len(get_nodes())
+    total_nodes = len(get_all_nodes())
     verify_pods_upgraded(old_images, selector=constants.OCS_OPERATOR_LABEL)
     verify_pods_upgraded(old_images, selector=constants.OPERATOR_LABEL)
     default_noobaa_pods = 3
@@ -193,21 +194,58 @@ def verify_image_versions(old_images, upgrade_version, version_before_upgrade):
         else:
             raise
     if not config.ENV_DATA.get("mcg_only_deployment"):
+        odf_full_version = version.get_semantic_running_odf_version()
+        version_without_noobaa_db_pg_cluster = "4.19.0-59"
+        semantic_version_for_without_noobaa_db_pg_cluster = (
+            version.get_semantic_version(version_without_noobaa_db_pg_cluster)
+        )
+
+        # we need to support the version for Konflux builds as well
+        version_for_konflux_noobaa_db_pg_cluster = "4.19.0-15"
+        semantic_version_for_konflux_noobaa_db_pg_cluster = (
+            version.get_semantic_version(version_for_konflux_noobaa_db_pg_cluster)
+        )
+        # cephfs and rbdplugin label and count
+        csi_cephfsplugin_label = constants.CSI_CEPHFSPLUGIN_LABEL
+        csi_rbdplugin_label = constants.CSI_RBDPLUGIN_LABEL
+        csi_cephfsplugin_provisioner_label = (
+            constants.CSI_CEPHFSPLUGIN_PROVISIONER_LABEL
+        )
+        csi_rbdplugin_provisioner_label = constants.CSI_RBDPLUGIN_PROVISIONER_LABEL
+        count_csi_cephfsplugin_label = count_csi_rbdplugin_label = (
+            number_of_worker_nodes
+        )
+
+        if odf_full_version == semantic_version_for_without_noobaa_db_pg_cluster:
+            log.info(
+                f"Label for cephfsplugin and rbdplugin are {csi_cephfsplugin_label} and {csi_rbdplugin_label}"
+            )
+        elif odf_full_version >= semantic_version_for_konflux_noobaa_db_pg_cluster:
+            csi_cephfsplugin_label = constants.CSI_CEPHFSPLUGIN_LABEL_419
+            csi_rbdplugin_label = constants.CSI_RBDPLUGIN_LABEL_419
+            csi_cephfsplugin_provisioner_label = (
+                constants.CSI_CEPHFSPLUGIN_PROVISIONER_LABEL_419
+            )
+            csi_rbdplugin_provisioner_label = (
+                constants.CSI_RBDPLUGIN_PROVISIONER_LABEL_419
+            )
+            count_csi_cephfsplugin_label = count_csi_rbdplugin_label = total_nodes
+
         verify_pods_upgraded(
             old_images,
-            selector=constants.CSI_CEPHFSPLUGIN_LABEL,
-            count=number_of_worker_nodes,
+            selector=csi_cephfsplugin_label,
+            count=count_csi_cephfsplugin_label,
         )
         verify_pods_upgraded(
-            old_images, selector=constants.CSI_CEPHFSPLUGIN_PROVISIONER_LABEL, count=2
+            old_images, selector=csi_cephfsplugin_provisioner_label, count=2
         )
         verify_pods_upgraded(
             old_images,
-            selector=constants.CSI_RBDPLUGIN_LABEL,
-            count=number_of_worker_nodes,
+            selector=csi_rbdplugin_label,
+            count=count_csi_rbdplugin_label,
         )
         verify_pods_upgraded(
-            old_images, selector=constants.CSI_RBDPLUGIN_PROVISIONER_LABEL, count=2
+            old_images, selector=csi_rbdplugin_provisioner_label, count=2
         )
     if not (
         config.DEPLOYMENT.get("external_mode")
