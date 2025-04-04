@@ -38,15 +38,18 @@ class LogBasedReplicationPolicy(McgReplicationPolicy, ABC):
         self,
         destination_bucket,
         sync_deletions=False,
+        sync_versions=False,
         prefix="",
     ):
         super().__init__(destination_bucket, prefix)
         self.sync_deletions = sync_deletions
+        self.sync_versions = sync_versions
 
     @abstractmethod
     def to_dict(self):
         dict = super().to_dict()
         dict["rules"][0]["sync_deletions"] = self.sync_deletions
+        dict["rules"][0]["sync_versions"] = self.sync_versions
         dict["log_replication_info"] = {}
 
         return dict
@@ -65,8 +68,9 @@ class AwsLogBasedReplicationPolicy(LogBasedReplicationPolicy):
         logs_bucket="",
         prefix="",
         logs_location_prefix="",
+        sync_versions=False,
     ):
-        super().__init__(destination_bucket, sync_deletions, prefix)
+        super().__init__(destination_bucket, sync_deletions, sync_versions, prefix)
         self.logs_bucket = logs_bucket
         self.logs_location_prefix = logs_location_prefix
 
