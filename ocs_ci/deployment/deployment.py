@@ -3480,8 +3480,8 @@ class MultiClusterDROperatorsDeploy(object):
         """
         Validate policy status for given resource
 
-        Raises:
-            ResourceWrongStatusException: Raised when resource state does not match
+        Returns: True if compliance check passes else raises ResourceWrongStatusException when resource state
+        does not match
 
         """
 
@@ -3493,6 +3493,7 @@ class MultiClusterDROperatorsDeploy(object):
         compliance_status = compliance_output.get()
         if compliance_status["status"]["compliant"] == compliance_state:
             logger.info("Compliance status Matches ")
+            return True
         else:
             raise ResourceWrongStatusException("Compliance status does not match")
 

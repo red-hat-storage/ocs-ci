@@ -3,4 +3,4 @@ kind: KlusterletConfig
 metadata:
   name: global
 spec:
-  appliedManifestWorkEvictionGracePeriod: "24h"
+  appliedManifestWorkEvictionGracePeriod: "168h"

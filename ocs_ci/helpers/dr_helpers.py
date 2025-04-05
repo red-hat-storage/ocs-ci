@@ -29,6 +29,7 @@ from ocs_ci.ocs.utils import (
     get_passive_acm_index,
     enable_mco_console_plugin,
     set_recovery_as_primary,
+    get_all_acm_indexes,
 )
 from ocs_ci.utility import version, templating
 from ocs_ci.utility.retry import retry
@@ -43,6 +44,7 @@ from ocs_ci.helpers.helpers import (
     run_cmd_verify_cli_output,
     find_cephblockpoolradosnamespace,
     find_cephfilesystemsubvolumegroup,
+    create_unique_resource_name,
 )
 
 logger = logging.getLogger(__name__)
@@ -1103,7 +1105,9 @@ def get_all_drpolicy():
 
 
 def verify_last_group_sync_time(
-    drpc_obj, scheduling_interval, initial_last_group_sync_time=None
+    drpc_obj,
+    scheduling_interval,
+    initial_last_group_sync_time=None,
 ):
     """
     Verifies that the lastGroupSyncTime for a given DRPC object is within the expected range.
@@ -1401,6 +1405,9 @@ def restore_backup():
     restore_index = config.cur_index
     config.switch_ctx(get_passive_acm_index())
     restore_schedule = templating.load_yaml(constants.DR_RESTORE_YAML)
+    restore_schedule["metadata"]["name"] = create_unique_resource_name(
+        resource_description="acm", resource_type="restore"
+    )
     restore_schedule_yaml = tempfile.NamedTemporaryFile(
         mode="w+", prefix="restore", delete=False
     )
@@ -1547,6 +1554,7 @@ def create_klusterlet_config():
     )
     templating.dump_data_to_temp_yaml(klusterlet_config, klusterlet_config_yaml.name)
     run_cmd(f"oc create -f {klusterlet_config_yaml.name}")
+    logger.info("Klusterletconfig is successfully created on the passive hub")
     config.switch_ctx(old_ctx)
 
 
@@ -1563,6 +1571,9 @@ def remove_parameter_klusterlet_config():
     remove_op = [{"op": "remove", "path": "/spec"}]
     klusterlet_config_obj.patch(
         resource_name=name, params=json.dumps(remove_op), format_type="json"
+    )
+    logger.info(
+        "appliedManifestWorkEvictionGracePeriod and it's value is successfully removed from KlusterletConfig"
     )
     config.switch_ctx(old_ctx)
 
@@ -1915,3 +1926,50 @@ def verify_last_kubeobject_protection_time(drpc_obj, kubeobject_sync_interval):
     logger.info("Verified lastKubeObjectProtectionTime value within expected range")
     config.switch_ctx(restore_index)
     return last_kubeobject_protection_time
+
+
+def configure_rdr_hub_recovery():
+    """
+    RDR helper function to create backup schedule on the active hub cluster needed for hub recovery
+    using backup and restore.
+
+    This function ensures all pre-reqs are verified before hub recovery is performed.
+
+    """
+    # Create backup-schedule on active hub
+    config.switch_acm_ctx()
+    logger.info("Create backup schedule on the active hub cluster")
+    create_backup_schedule()
+    wait_time = 420
+    logger.info(f"Wait {wait_time} seconds until backup is taken ")
+    time.sleep(wait_time)
+    logger.info(
+        "Check pre-reqs on both the hub clusters before performing hub recovery"
+    )
+    acm_indexes = get_all_acm_indexes()
+    for _ in acm_indexes:
+        config.switch_ctx(_)
+        verify_backup_is_taken()
+        # To avoid circular import
+        from ocs_ci.deployment.deployment import (
+            Deployment,
+            get_multicluster_dr_deployment,
+        )
+
+        dr_conf = Deployment().get_rdr_conf()
+        rdrclass_obj = get_multicluster_dr_deployment()(dr_conf)
+        rdrclass_obj.validate_dpa()
+        assert rdrclass_obj.validate_policy_compliance_status(
+            resource_name="backup-restore-enabled",
+            resource_namespace="open-cluster-management-backup",
+            compliance_state="Compliant",
+        )
+    config.switch_ctx(get_passive_acm_index())
+    logger.info(
+        "Add label for cluster-monitoring needed to fire VolumeSyncronizationDelay alert on the Hub cluster"
+    )
+    exec_cmd(
+        "oc label namespace openshift-operators openshift.io/cluster-monitoring='true'"
+    )
+    logger.info("All pre-reqs verified for performing hub recovery")
+    return True

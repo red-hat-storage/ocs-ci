@@ -129,6 +129,7 @@ from ocs_ci.ocs.resources.pvc import (
     get_all_pvc_objs,
     get_pvc_objs,
 )
+from ocs_ci.ocs.utils import get_passive_acm_index
 from ocs_ci.ocs.version import get_ocs_version, get_ocp_version_dict, report_ocs_version
 from ocs_ci.ocs.cluster_load import ClusterLoad, wrap_msg
 from ocs_ci.utility import (
@@ -6896,6 +6897,7 @@ def dr_workload(request):
                 workload_dir=workload_details["workload_dir"],
                 workload_pod_count=workload_details["pod_count"],
                 workload_pvc_count=workload_details["pvc_count"],
+                pvc_interface=pvc_interface,
             )
             instances.append(workload)
             total_pvc_count += workload_details["pvc_count"]
@@ -6915,6 +6917,7 @@ def dr_workload(request):
                 ],
                 workload_pvc_selector=workload_details["dr_workload_app_pvc_selector"],
                 appset_model=appset_model,
+                pvc_interface=pvc_interface,
             )
             instances.append(workload)
             total_pvc_count += workload_details["pvc_count"]
@@ -6927,6 +6930,10 @@ def dr_workload(request):
         return instances
 
     def teardown():
+        if getattr(request.node, "teardown_using_new_hub", False):
+            config.switch_ctx(get_passive_acm_index())
+            log.info("Deleting workloads using new hub after hub recovery")
+
         failed_to_delete = []
         for instance in instances:
             try:
