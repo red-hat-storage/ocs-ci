@@ -53,11 +53,13 @@ class TestSiteFailureRecoveryAndFailover:
     running on the down managed cluster to the secondary managed cluster.
     """
 
-    def test_site_failure_and_failover(self, dr_workload, nodes_multicluster):
+    def test_site_failure_and_failover(self, dr_workload, nodes_multicluster, request):
         """
         Test to verify failover of all workloads after site-failure where the active hub along with
         the primary managed cluster is down
         """
+
+        request.node.teardown_using_new_hub = True
 
         # Deploy Subscription and Appset based application of both RBD and CephFS SC
         rdr_workload = dr_workload(
