@@ -230,7 +230,7 @@ class ObjectBucket(ABC):
             # Increase the timeout to 15 minutes if the test is tier4
             timeout = 120
             if any("tier4" in mark for mark in get_current_test_marks()):
-                timeout = 600
+                timeout = 900
             self.verify_deletion(timeout)
         if original_context:
             config.switch_ctx(original_context)
