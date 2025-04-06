@@ -3478,6 +3478,12 @@ class MultiClusterDROperatorsDeploy(object):
         except CommandFailed:
             raise ResourceNotFoundError("Secret Not found")
 
+    @retry(
+        exception_to_check=ResourceWrongStatusException,  # or a specific one
+        tries=8,
+        delay=15,
+        backoff=2,
+    )
     def validate_policy_compliance_status(
         self, resource_name, resource_namespace, compliance_state
     ):
