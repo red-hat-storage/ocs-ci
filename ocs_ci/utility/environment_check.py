@@ -114,6 +114,9 @@ def assign_get_values(env_status_dict, key, kind=None, exclude_labels=None):
             if name.startswith(constants.REPORT_STATUS_TO_PROVIDER_POD):
                 log.debug(f"ignoring item: {name}")
                 continue
+            if name.startswith("storageclient") and constants.STATUS_REPORTER in name:
+                log.debug(f"ignoring item: {name}")
+                continue
         if item.get("kind") == constants.NAMESPACE:
             name = item.get("metadata").get("generateName")
             if name == "openshift-must-gather-":
