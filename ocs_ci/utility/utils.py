@@ -5106,6 +5106,35 @@ def is_cluster_y_version_upgraded():
     return is_upgraded
 
 
+def get_primary_nb_db_pod(namespace=config.ENV_DATA["cluster_namespace"]):
+    """
+    Get the NooBaa DB pod that has been assigned the
+    primary role by the CNPG operator.
+
+    Returns:
+        Pod: The NooBaa DB pod object
+
+    Raises:
+        ResourceNotFoundError: If no NooBaa DB pod is found
+    """
+    # importing here to avoid circular imports
+    from ocs_ci.ocs.resources import pod
+
+    try:
+        nb_db_pod = pod.Pod(
+            **pod.get_pods_having_label(
+                label=constants.NB_DB_PRIMARY_POD_LABEL,
+                namespace=namespace,
+            )[0]
+        )
+    except IndexError:
+        raise ResourceNotFoundError(
+            f"The NooBaa DB pod with label {constants.NB_DB_PRIMARY_POD_LABEL} "
+            f"was not found in namespace {namespace}"
+        )
+    return nb_db_pod
+
+
 def exec_nb_db_query(query):
     """
     Send a psql query to the Noobaa DB
@@ -5123,22 +5152,7 @@ def exec_nb_db_query(query):
         ResourceNotFoundError: If no NooBaa DB pod is found
 
     """
-    # importing here to avoid circular imports
-    from ocs_ci.ocs.resources import pod
-
-    try:
-        nb_db_pod = pod.Pod(
-            **pod.get_pods_having_label(
-                label=constants.NOOBAA_DB_LABEL_47_AND_ABOVE,
-                namespace=config.ENV_DATA["cluster_namespace"],
-            )[0]
-        )
-    except IndexError:
-        raise ResourceNotFoundError(
-            f"The NooBaa DB pod with label {constants.NOOBAA_DB_LABEL_47_AND_ABOVE} "
-            f"was not found in namespace {config.ENV_DATA['cluster_namespace']}"
-        )
-
+    nb_db_pod = get_primary_nb_db_pod()
     response = nb_db_pod.exec_cmd_on_pod(
         command=f'psql -U postgres -d nbcore -c "{query}"',
         out_yaml_format=False,
