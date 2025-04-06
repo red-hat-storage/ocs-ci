@@ -954,6 +954,24 @@ def ocs_install_verification(
             sc_obj.get().get("items")[0].get("spec").get("providerAPIServerServiceType")
             == constants.SERVICE_TYPE_NODEPORT
         ), f"Provider API server service type is not {constants.SERVICE_TYPE_NODEPORT}"
+    log.info("Verified the providerAPIServerServiceType setting in StorageCluster")
+    log.info("Verifying the csi driver ownership")
+    csi_driver_list = [constants.RBD_PROVISIONER, constants.CEPHFS_PROVISIONER]
+    if odf_running_version >= version.VERSION_4_19 or hci_cluster:
+        csi_driver_obj = OCP(kind=constants.DRIVER, namespace=namespace)
+        for driver in csi_driver_list:
+            csi_driver = csi_driver_obj.get(resource_name=driver)
+            owner_references = csi_driver["metadata"].get("ownerReferences")
+            assert (
+                len(owner_references) == 1
+            ), f"Found more than 1 or none owner reference for {driver} driver"
+            assert (
+                owner_references[0].get("kind") == constants.CONFIGMAP
+            ), f"Owner reference of {driver} driver is not of kind ConfigMap"
+            assert (
+                owner_references[0].get("name") == constants.CLIENT_OPERATOR_CONFIGMAP
+            ), f"Owner reference of {driver} driver is not {constants.CLIENT_OPERATOR_CONFIGMAP}"
+    log.info("Verified the ownerReferences for CSI drivers")
 
 
 def mcg_only_install_verification(ocs_registry_image=None):
