@@ -31,6 +31,7 @@ from ocs_ci.helpers.dr_helpers import (
     get_scheduling_interval,
     create_klusterlet_config,
     remove_parameter_klusterlet_config,
+    configure_rdr_hub_recovery,
 )
 from ocs_ci.ocs.exceptions import UnexpectedBehaviour
 from ocs_ci.ocs.resources.drpc import DRPC
@@ -58,7 +59,7 @@ class TestSiteFailureRecoveryAndFailover:
         the primary managed cluster is down
         """
 
-        request.node.teardown_using_new_hub = config.switch_ctx(get_passive_acm_index())
+        request.node.teardown_using_new_hub = True
 
         # Deploy Subscription and Appset based application of both RBD and CephFS SC
         rdr_workload = dr_workload(
@@ -105,7 +106,7 @@ class TestSiteFailureRecoveryAndFailover:
         two_times_scheduling_interval = 2 * scheduling_interval  # Time in minutes
         wait_time = 420
 
-        # assert configure_rdr_hub_recovery()
+        assert configure_rdr_hub_recovery()
 
         # Get the primary managed cluster nodes
         logger.info("Getting Primary managed cluster node details")
