@@ -690,6 +690,9 @@ NOOBAA_CORE_POD = "noobaa-core-0"
 NOOBAA_DB_SECRET = "noobaa-db"
 NOOBAA_S3_SERVING_CERT = "noobaa-s3-serving-cert"
 
+# NooBaa DB CNPG
+NB_DB_PRIMARY_POD_LABEL = "cnpg.io/instanceRole=primary"
+
 # Auth Yaml
 OCSCI_DATA_BUCKET = "ocs-ci-data"
 AUTHYAML = "auth.yaml"
