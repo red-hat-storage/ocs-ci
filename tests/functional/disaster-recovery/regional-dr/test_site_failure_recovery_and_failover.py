@@ -59,7 +59,7 @@ class TestSiteFailureRecoveryAndFailover:
         the primary managed cluster is down
         """
 
-        request.node.teardown_using_new_hub = True
+        request.node.teardown_using_new_hub = config.switch_ctx(get_passive_acm_index())
 
         # Deploy Subscription and Appset based application of both RBD and CephFS SC
         rdr_workload = dr_workload(
