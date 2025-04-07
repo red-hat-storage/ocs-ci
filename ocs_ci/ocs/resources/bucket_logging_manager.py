@@ -393,8 +393,8 @@ class BucketLoggingManager:
         Raises:
             TimeoutError: If the logs were not transferred in time
         """
-
         logger.info("Waiting for the intermediate logs to move to the logs bucket")
+        inter_logs_found = False
         try:
             for sample_logs in TimeoutSampler(
                 timeout=timeout,
@@ -402,16 +402,30 @@ class BucketLoggingManager:
                 func=self.get_interm_logs,
                 logs_bucket=logs_bucket,
             ):
-                if not sample_logs:
-                    # An empty result indicates that the logs have been moved
+                if not sample_logs and not inter_logs_found:
+                    logger.info("No intermediate logs were found yet")
+                elif sample_logs and not inter_logs_found:
+                    inter_logs_found = True
+                    logger.info(
+                        "Some intermediate logs were found, waiting for them to be moved"
+                    )
+                elif sample_logs and inter_logs_found:
+                    logger.info(
+                        "Still waiting for the intermediate logs to be moved to the logs bucket"
+                    )
+                elif not sample_logs and inter_logs_found:
+                    logger.info("Intermediate logs have been moved to the logs bucket")
                     break
         except TimeoutError:
-            logger.error(
-                (
-                    "The intermediate logs were not transferred to"
-                    f" the logs bucket {logs_bucket} in time"
+            if not inter_logs_found:
+                logger.error("Intermediate logs were not found in the logging PVC")
+            else:
+                logger.error(
+                    (
+                        "The intermediate logs were not transferred to"
+                        f" the logs bucket {logs_bucket} in time"
+                    )
                 )
-            )
             raise
 
     def get_bucket_logs(self, logs_bucket, source_bucket=None):
