@@ -129,7 +129,6 @@ from ocs_ci.ocs.resources.pvc import (
     get_all_pvc_objs,
     get_pvc_objs,
 )
-from ocs_ci.ocs.utils import get_passive_acm_index
 from ocs_ci.ocs.version import get_ocs_version, get_ocp_version_dict, report_ocs_version
 from ocs_ci.ocs.cluster_load import ClusterLoad, wrap_msg
 from ocs_ci.utility import (
@@ -6933,12 +6932,7 @@ def dr_workload(request):
         failed_to_delete = []
         for instance in instances:
             try:
-                # Here, we override the context needed in case of hub recovery
-                if getattr(request.node, "teardown_using_new_hub", False):
-                    new_ctx = config.switch_ctx(get_passive_acm_index())
-                    instance.delete_workload(switch_ctx=new_ctx)
-                else:
-                    instance.delete_workload(switch_ctx=ctx[0])
+                instance.delete_workload(switch_ctx=ctx[0])
             except ResourceNotDeleted:
                 failed_to_delete.append(instance.workload_namespace)
 
