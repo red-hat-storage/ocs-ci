@@ -21,7 +21,7 @@ class StorageConsumer:
     Base StorageConsumer class
     """
 
-    def __init__(self, consumer_name, consumer_context=None):
+    def __init__(self, consumer_name, consumer_context):
         """
         Starting from ODF 4.19 (Converged) this CR has optional Spec fields:
         StorageQuotaInGiB               int

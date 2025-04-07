@@ -14,7 +14,7 @@ class ClientProfile:
     Base ClientProfile class
     """
 
-    def __init__(self, client_profile_name, consumer_context=None):
+    def __init__(self, client_profile_name, consumer_context):
 
         self.consumer_context = consumer_context
         self.name = client_profile_name
