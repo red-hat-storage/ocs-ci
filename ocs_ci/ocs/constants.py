@@ -255,11 +255,9 @@ ENCRYPTIONKEYROTATIONCRONJOB = "encryptionkeyrotationcronjobs.csiaddons.openshif
 ENCRYPTIONKEYROTATIONJOB = "encryptionkeyrotationjobs.csiaddons.openshift.io"
 DEFAULT_CEPH_DEVICECLASS = "defaultCephDeviceClass"
 CRD_KIND = "CustomResourceDefinition"
-"""
-ClientProfileSpec defines the desired state of Ceph CSI
-configuration for volumes and snapshots configured to use
-this profile
-"""
+# ClientProfileSpec defines the desired state of Ceph CSI
+# configuration for volumes and snapshots configured to use
+# this profile
 CLIENT_PROFILE = "ClientProfile"
 OCS_OPERATOR_CONFIG_MAP = "ocs-operator-config"
 
