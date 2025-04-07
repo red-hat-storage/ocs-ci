@@ -255,6 +255,10 @@ ENCRYPTIONKEYROTATIONCRONJOB = "encryptionkeyrotationcronjobs.csiaddons.openshif
 ENCRYPTIONKEYROTATIONJOB = "encryptionkeyrotationjobs.csiaddons.openshift.io"
 DEFAULT_CEPH_DEVICECLASS = "defaultCephDeviceClass"
 CRD_KIND = "CustomResourceDefinition"
+# ClientProfileSpec defines the desired state of Ceph CSI
+# configuration for volumes and snapshots configured to use
+# this profile
+CLIENT_PROFILE = "ClientProfile"
 OCS_OPERATOR_CONFIG_MAP = "ocs-operator-config"
 SERVICE_TYPE_NODEPORT = "NodePort"
 
@@ -352,6 +356,9 @@ PROVIDER_MODE_STORAGE_CLASS_CLAIM_CEPHFS = os.path.join(
 )
 PROVIDER_MODE_STORAGE_CLASS_CLAIM_RBD = os.path.join(
     PROVIDER_MODE_OCS_DEPLOYMENT_PATH, "storage_class_claim_rbd.yaml"
+)
+CLIENT_PROFILE_PATH = os.path.join(
+    PROVIDER_MODE_OCS_DEPLOYMENT_PATH, "client_profile.yaml"
 )
 
 MACHINE_CONFIG_YAML = os.path.join(
@@ -523,7 +530,6 @@ DEFAULT_VOLUMESNAPSHOTCLASS_RBD_MS_PC = f"{DEFAULT_CLUSTERNAME}-ceph-rbd"
 
 # hyperconverged defaults
 HYPERCONVERGED_NAMESPACE = "kubevirt-hyperconverged"
-# MCE_NAMESPACE_YAML = os.path.join(TEMPLATE_DEPLOYMENT_DIR_MCE, "mce_namespace.yaml")
 TEMPLATE_DEPLOYMENT_DIR_HYPERCONVERGED = os.path.join(
     TEMPLATE_DIR, "hyperconverged-deployment"
 )
