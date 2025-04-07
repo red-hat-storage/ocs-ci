@@ -561,8 +561,14 @@ def pytest_runtest_setup(item):
     if ocsci_config.multicluster and ocsci_config.UPGRADE.get("upgrade", False):
         for mark in item.iter_markers():
             if mark.name == "config_index":
-                log.info("Switching the test context to index: {mark.args[0]}")
+                log.info(f"Switching the test context to index: {mark.args[0]}")
                 ocsci_config.switch_ctx(mark.args[0])
+    if ocsci_config.multicluster:
+        for mark in item.iter_markers():
+            if mark.name == "run_on_all_clients":
+                context = item.callspec.params.get("cluster_index")
+                log.info(f"Switching the test context to index: {context}")
+                ocsci_config.switch_ctx(context)
 
 
 def pytest_fixture_setup(fixturedef, request):
@@ -578,6 +584,11 @@ def pytest_fixture_setup(fixturedef, request):
             for mark in request.node.iter_markers():
                 if mark.name == "config_index":
                     ocsci_config.switch_ctx(mark.args[0])
+    if ocsci_config.multicluster:
+        for mark in item.iter_markers():
+            if mark.name == "run_on_all_clients":
+                context = item.callspec.params.get("cluster_index")
+                ocsci_config.switch_ctx(context)
 
 
 @pytest.fixture()
