@@ -378,6 +378,10 @@ STORAGE_CLIENT_SUBSCRIPTION_YAML = os.path.join(
 NATIVE_STORAGE_CLIENT_YAML = os.path.join(
     PROVIDER_CLIENT_DEPLOYMENT_DIR, "native_storage_client.yaml"
 )
+STORAGE_CONSUMER_YAML = os.path.join(
+    PROVIDER_MODE_OCS_DEPLOYMENT_PATH, "storage_consumer.yaml"
+)
+
 
 PROVIDER_CLUSTER_RESOURCE_KINDS = [
     "cephblockpoolradosnamespaces",
