@@ -1568,6 +1568,7 @@ class Deployment(object):
         # rules to be enabled on underlaying platform).
         if config.DEPLOYMENT.get("host_network"):
             cluster_data["spec"]["hostNetwork"] = True
+            logger.info("Host network is enabled")
 
         cluster_data["spec"]["storageDeviceSets"] = [deviceset_data]
 
