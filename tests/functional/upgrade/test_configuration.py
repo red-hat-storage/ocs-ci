@@ -10,7 +10,6 @@ from ocs_ci.framework.pytest_customization.marks import (
     brown_squad,
     skipif_mcg_only,
     tier1,
-    tier4a,
 )
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.ocp import OCP
@@ -155,16 +154,20 @@ def test_update_strategy_config_change(
     argnames=["daemonset", "value_to_set"],
     argvalues=[
         pytest.param(
-            "csi-rbdplugin", 0, marks=[tier4a, pytest.mark.polarion_id("OCS-6517")]
+            "csi-rbdplugin",
+            0,
+            marks=[pytest.mark.tier4a, pytest.mark.polarion_id("OCS-6517")],
         ),
         pytest.param(
-            "csi-rbdplugin", "0%", marks=[tier4a, pytest.mark.polarion_id("OCS-6518")]
+            "csi-rbdplugin",
+            "0%",
+            marks=[pytest.mark.tier4a, pytest.mark.polarion_id("OCS-6518")],
         ),
         # pytest.param(
-        #    "csi-cephfsplugin", 0, marks=[tier4a, pytest.mark.polarion_id("OCS-6517")]
+        #    "csi-cephfsplugin", 0, marks=[pytest.mark.tier4a, pytest.mark.polarion_id("OCS-6517")]
         # ),
         # pytest.param(
-        #    "csi-cephfsplugin", "0%", marks=[tier4a, pytest.mark.polarion_id("OCS-6518")],
+        #    "csi-cephfsplugin", "0%", marks=[pytest.mark.tier4a, pytest.mark.polarion_id("OCS-6518")],
         # ),
     ],
 )
