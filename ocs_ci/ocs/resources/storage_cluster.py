@@ -2348,9 +2348,9 @@ def verify_consumer_resources():
     ocs_version = version.get_semantic_ocs_version_from_config()
 
     # Verify the default Storageclassclaims
-    if ocs_version >= version.VERSION_4_11:
+    if version.VERSION_4_16 <= ocs_version < version.VERSION_4_19:
         storage_class_claim = OCP(
-            kind=constants.STORAGECLASSCLAIM,
+            kind=constants.STORAGECLAIM,
             namespace=config.ENV_DATA["cluster_namespace"],
         )
         for sc_claim in [

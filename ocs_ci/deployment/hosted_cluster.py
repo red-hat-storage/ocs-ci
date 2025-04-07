@@ -32,6 +32,7 @@ from ocs_ci.ocs.resources.ocs import OCS
 from ocs_ci.ocs.resources.pod import (
     wait_for_pods_to_be_in_statuses_concurrently,
 )
+from ocs_ci.ocs.version import if_version
 from ocs_ci.utility import templating, version
 from ocs_ci.utility.deployment import get_ocp_ga_version
 from ocs_ci.utility.managedservice import generate_onboarding_token
@@ -40,7 +41,6 @@ from ocs_ci.utility.utils import (
     exec_cmd,
     TimeoutSampler,
 )
-from ocs_ci.utility.version import get_semantic_version
 from ocs_ci.ocs.resources.storage_client import StorageClient
 
 logger = logging.getLogger(__name__)
@@ -791,17 +791,19 @@ class HostedODF(HypershiftHostedOCP):
             return False
 
         # starting from ODF 4.16 on StorageClient creation Storage Claims created automatically
+        # StorageClassClaims are deprecated from ODF 4.16 in favor of StorageClaims
+        # StorageClaims are deprecated from ODF 4.19 and data from CR available in StorageClient
+        if version.get_semantic_ocs_version_from_config() < version.VERSION_4_19:
+            if not self.wait_storage_claim_cephfs():
+                logger.error("Storage class claim cephfs does not exist")
+                return False
+
+            logger.info("Verify Storage Class rbd exists")
+            if not self.wait_storage_claim_rbd():
+                logger.error("Storage class claim rbd does not exist")
+                return False
 
         logger.info("Verify Storage Class cephfs exists")
-        if not self.wait_storage_claim_cephfs():
-            logger.error("Storage class claim cephfs does not exist")
-            return False
-
-        logger.info("Verify Storage Class rbd exists")
-        if not self.wait_storage_claim_rbd():
-            logger.error("Storage class claim rbd does not exist")
-            return False
-
         cephfs_storage_class_name = f"{self.storage_client_name}-cephfs"
         if not self.storage_class_exists(cephfs_storage_class_name):
             logger.error(f"cephfs storage class does not exist on cluster {self.name}")
@@ -1230,6 +1232,7 @@ class HostedODF(HypershiftHostedOCP):
         logger.info(f"Provider address: {storage_provider_endpoint}")
         return storage_provider_endpoint
 
+    @if_version("<4.19")
     def wait_storage_claim_cephfs(self):
         """
         Wait for storage class claim for CephFS to be created
@@ -1246,6 +1249,7 @@ class HostedODF(HypershiftHostedOCP):
                 return True
         return False
 
+    @if_version("<4.19")
     @kubeconfig_exists_decorator
     def storage_claim_exists_cephfs(self):
         """
@@ -1261,13 +1265,6 @@ class HostedODF(HypershiftHostedOCP):
         if "latest" in hosted_odf_version:
             hosted_odf_version = hosted_odf_version.split("-")[-1]
 
-        if get_semantic_version(hosted_odf_version, True) < version.VERSION_4_16:
-            ocp = OCP(
-                kind=constants.STORAGECLASSCLAIM,
-                namespace=self.namespace_client,
-                cluster_kubeconfig=self.cluster_kubeconfig,
-            )
-        else:
             ocp = OCP(
                 kind=constants.STORAGECLAIM,
                 namespace=config.ENV_DATA["cluster_namespace"],
@@ -1285,6 +1282,7 @@ class HostedODF(HypershiftHostedOCP):
             should_exist=True,
         )
 
+    @if_version("<4.19")
     @kubeconfig_exists_decorator
     def create_storage_claim_cephfs(self):
         """
@@ -1317,6 +1315,7 @@ class HostedODF(HypershiftHostedOCP):
 
         return self.storage_claim_exists_cephfs()
 
+    @if_version("<4.19")
     def wait_storage_claim_rbd(self):
         """
         Wait for storage class claim for RBD to be created
@@ -1333,6 +1332,7 @@ class HostedODF(HypershiftHostedOCP):
                 return True
         return False
 
+    @if_version("<4.19")
     @kubeconfig_exists_decorator
     def storage_claim_exists_rbd(self):
         """
@@ -1348,30 +1348,24 @@ class HostedODF(HypershiftHostedOCP):
         if "latest" in hosted_odf_version:
             hosted_odf_version = hosted_odf_version.split("-")[-1]
 
-        if get_semantic_version(hosted_odf_version, True) < version.VERSION_4_16:
-            ocp = OCP(
-                kind=constants.STORAGECLASSCLAIM,
-                namespace=self.namespace_client,
-                cluster_kubeconfig=self.cluster_kubeconfig,
-            )
-        else:
-            ocp = OCP(
-                kind=constants.STORAGECLAIM,
-                namespace=config.ENV_DATA["cluster_namespace"],
-                cluster_kubeconfig=self.cluster_kubeconfig,
-            )
+        ocp_obj = OCP(
+            kind=constants.STORAGECLAIM,
+            namespace=config.ENV_DATA["cluster_namespace"],
+            cluster_kubeconfig=self.cluster_kubeconfig,
+        )
 
         if hasattr(self, "storage_client_name"):
             storage_claim_name = self.storage_client_name + "-ceph-rbd"
         else:
             storage_claim_name = "storage-client-ceph-rbd"
 
-        return ocp.check_resource_existence(
+        return ocp_obj.check_resource_existence(
             timeout=self.timeout_check_resources_exist_sec,
             resource_name=storage_claim_name,
             should_exist=True,
         )
 
+    @if_version("<4.19")
     @kubeconfig_exists_decorator
     def create_storage_claim_rbd(self):
         """
