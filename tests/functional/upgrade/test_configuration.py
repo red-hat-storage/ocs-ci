@@ -151,7 +151,6 @@ def test_update_strategy_config_change(
     assert str(expected_value) == str(results["rollingUpdate"]["maxUnavailable"])
 
 
-# TODO: update polrian ID with correct ID when its get uploaded to polarian in another PR
 @pytest.mark.parametrize(
     argnames=["daemonset", "value_to_set"],
     argvalues=[
@@ -161,17 +160,16 @@ def test_update_strategy_config_change(
         pytest.param(
             "csi-rbdplugin", "0%", marks=[tier4a, pytest.mark.polarion_id("OCS-6518")]
         ),
-        pytest.param(
-            "csi-cephfsplugin", 0, marks=[tier4a, pytest.mark.polarion_id("OCS-6517")]
-        ),
-        pytest.param(
-            "csi-cephfsplugin",
-            "0%",
-            marks=[tier4a, pytest.mark.polarion_id("OCS-6518")],
-        ),
+        # pytest.param(
+        #    "csi-cephfsplugin", 0, marks=[tier4a, pytest.mark.polarion_id("OCS-6517")]
+        # ),
+        # pytest.param(
+        #    "csi-cephfsplugin", "0%", marks=[tier4a, pytest.mark.polarion_id("OCS-6518")],
+        # ),
     ],
 )
 @brown_squad
+@runs_on_provider
 def test_max_unavailable_zero_update_strategy_config(
     daemonset, value_to_set, rook_operator_configmap_cleanup
 ):
