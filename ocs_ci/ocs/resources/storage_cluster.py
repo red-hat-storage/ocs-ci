@@ -948,6 +948,13 @@ def ocs_install_verification(
             owner_references[0].get("name") == csi_owner_name
         ), f"Owner reference of {constants.DAEMONSET} {plugin_name} is not {csi_owner_name} {csi_owner_kind}"
     log.info("Verified the ownerReferences CSI plugin daemonsets")
+    log.info("Verifying the providerAPIServerServiceType setting in StorageCluster")
+    sc_obj = get_storage_cluster()
+    if sc_obj.get().get("items")[0].get("spec").get("hostNetwork"):
+        assert (
+            sc_obj.get().get("items")[0].get("spec").get("providerAPIServerServiceType")
+            == constants.SERVICE_TYPE_NODEPORT
+        ), f"Provider API server service type is not {constants.SERVICE_TYPE_NODEPORT}"
 
 
 def mcg_only_install_verification(ocs_registry_image=None):
