@@ -1,9 +1,10 @@
 ---
 name: Bug Report
-about:
+about: Bug Report
 title: "[Bug]: "
 labels: bug
-assignees: ""
+assignees: ''
+
 ---
 
 ### Description
