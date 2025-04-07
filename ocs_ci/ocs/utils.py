@@ -1705,7 +1705,7 @@ def get_non_acm_cluster_indexes():
 
 def get_all_acm_indexes():
     """
-    Get indexes fro all ACM clusters
+    Get indexes from all ACM clusters
     This is more relevant in case of MDR scenario
 
     Returns:
@@ -1745,6 +1745,23 @@ def is_recovery_cluster(cluster):
 
     """
     return cluster.MULTICLUSTER.get("recovery_cluster")
+
+
+def get_all_acm_and_recovery_indexes():
+    """
+    Get indexes from all ACM  and Recovery clusters
+
+    Returns:
+        list: List of all ACM and Recovery cluster indexes
+
+    """
+    acm_recovery_indexes = []
+    for cluster in ocsci_config.clusters:
+        if cluster.MULTICLUSTER["acm_cluster"] or cluster.MULTICLUSTER.get(
+            "recovery_cluster"
+        ):
+            acm_recovery_indexes.append(cluster.MULTICLUSTER["multicluster_index"])
+    return acm_recovery_indexes
 
 
 def enable_mco_console_plugin():

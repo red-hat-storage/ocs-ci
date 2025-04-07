@@ -118,6 +118,7 @@ from ocs_ci.ocs.utils import (
     collect_ocs_logs,
     enable_console_plugin,
     get_all_acm_indexes,
+    get_all_acm_and_recovery_indexes,
     get_active_acm_index,
     enable_mco_console_plugin,
     label_pod_security_admission,
@@ -2839,7 +2840,7 @@ class RBDDRDeployOps(object):
             f" -o=jsonpath='{st_string}'"
         )
         out_list = run_cmd_multicluster(
-            query_mirroring, skip_index=get_all_acm_indexes()
+            query_mirroring, skip_index=get_all_acm_and_recovery_indexes()
         )
         index = 0
         for out in out_list:
