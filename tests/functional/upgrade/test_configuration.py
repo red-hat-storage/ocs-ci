@@ -163,12 +163,16 @@ def test_update_strategy_config_change(
             "0%",
             marks=[pytest.mark.tier4a, pytest.mark.polarion_id("OCS-6518")],
         ),
-        # pytest.param(
-        #    "csi-cephfsplugin", 0, marks=[pytest.mark.tier4a, pytest.mark.polarion_id("OCS-6517")]
-        # ),
-        # pytest.param(
-        #    "csi-cephfsplugin", "0%", marks=[pytest.mark.tier4a, pytest.mark.polarion_id("OCS-6518")],
-        # ),
+        pytest.param(
+            "csi-cephfsplugin",
+            0,
+            marks=[pytest.mark.tier4a, pytest.mark.polarion_id("OCS-6517")],
+        ),
+        pytest.param(
+            "csi-cephfsplugin",
+            "0%",
+            marks=[pytest.mark.tier4a, pytest.mark.polarion_id("OCS-6518")],
+        ),
     ],
 )
 @brown_squad
