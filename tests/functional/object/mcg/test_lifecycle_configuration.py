@@ -16,6 +16,7 @@ from ocs_ci.framework.testlib import MCGTest
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.bucket_utils import (
     change_versions_creation_date_in_noobaa_db,
+    change_versions_creation_date_in_noobaa_db,
     create_multipart_upload,
     expire_multipart_upload_in_noobaa_db,
     get_obj_versions,
@@ -95,6 +96,16 @@ class TestLifecycleConfiguration(MCGTest):
         bucket = bucket_factory(interface="OC")[0].name
 
         # 2. Set lifecycle configuration
+        lifecycle_policy = LifecyclePolicy(
+            AbortIncompleteMultipartUploadRule(days_after_initiation=1)
+        )
+        mcg_obj.s3_client.put_bucket_lifecycle_configuration(
+            Bucket=bucket, LifecycleConfiguration=lifecycle_policy.as_dict()
+        )
+        logger.info(
+            f"Sleeping for {PROP_SLEEP_TIME} seconds to let the policy propagate"
+        )
+        sleep(PROP_SLEEP_TIME)
         lifecycle_policy = LifecyclePolicy(
             AbortIncompleteMultipartUploadRule(days_after_initiation=1)
         )
