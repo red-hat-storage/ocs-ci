@@ -331,6 +331,7 @@ class StorageClient:
                     ), "storageclaim is not in expected status"
         log.info(sc_claim)
 
+    @if_version("<4.19")
     @retry(AssertionError, 20, 10, 1)
     def verify_storagerequest_exists(
         self, storageclient_name=None, namespace=config.ENV_DATA["cluster_namespace"]
@@ -377,8 +378,8 @@ class StorageClient:
             expected_storageclient_status (str): expected storageclient phase; default value is 'Connected'
 
         Returns:
-            storagerequest_phase (bool): returns true if the
-                    storagerequest_phase == expected_storageclient_status
+            storageclient_phase (bool): returns true if the
+                    storageclient_phase == expected_storageclient_status
 
         """
         if not namespace:
