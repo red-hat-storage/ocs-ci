@@ -197,6 +197,7 @@ Reporting related config. (Do not store secret data in the repository!).
   exporting env variable: export SAVE_MEM_REPORT=true
 * `max_mg_fail_attempts` - Maximum attempts to run MG commands to prevent
   spending time on MG which is timeouting.
+* `rp_additional_info` - any additional information placed to Report Portal launch description
 
 #### ENV_DATA
 
