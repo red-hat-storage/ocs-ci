@@ -2348,6 +2348,35 @@ def upload_bulk_buckets(s3_obj, buckets, amount=1, object_key="obj-key-0", prefi
             )
 
 
+def change_versions_creation_date_in_noobaa_db(
+    bucket_name, object_key, version_ids, new_creation_time
+):
+    """
+    Change the creation date of versions at the noobaa-db.
+
+    Args:
+        bucket_name (str): The name of the bucket where the versions reside
+        object_key (str): The object key to change its version creation date
+        version_ids (list): A list of version IDs to change their creation date
+        new_creation_time (float): The new creation time in unix timestamp in seconds
+    """
+    # The version ID is at the form nbver-123 while in the DB it is 123
+    version_ids = [version_id.split("-")[1] for version_id in version_ids]
+
+    psql_query = (
+        "UPDATE objectmds "
+        "SET data = jsonb_set(data, '{create_time}', "
+        f"to_jsonb(to_timestamp({new_creation_time}))) "
+        "WHERE data->>'bucket' IN ( "
+        "SELECT _id "
+        "FROM buckets "
+        f"WHERE data->>'name' = '{bucket_name}')"
+        f" AND data->>'key' = '{object_key}'"
+        f" AND data->>'version_seq' = ANY(ARRAY{version_ids});"
+    )
+    exec_nb_db_query(psql_query)
+
+
 def change_objects_creation_date_in_noobaa_db(
     bucket_name, object_keys=[], new_creation_time=0
 ):
@@ -2358,7 +2387,7 @@ def change_objects_creation_date_in_noobaa_db(
         bucket_name (str): The name of the bucket where the objects reside
         object_keys (list, optional): A list of object keys to change their creation date
             Note: If object_keys is empty, all objects in the bucket will be changed.
-        new_creation_time (int): The new creation time in unix timestamp in seconds
+        new_creation_time (float): The new creation time in unix timestamp in seconds
 
     Example usage:
         # Change the creation date of objects obj1 and obj2 in bucket my-bucket to one minute back
