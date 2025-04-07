@@ -31,6 +31,7 @@ from ocs_ci.ocs.resources.storage_cluster import verify_storage_cluster_extended
 from ocs_ci.deployment.helpers.odf_deployment_helpers import (
     get_required_csvs,
     set_ceph_config,
+    is_storage_system_needed,
 )
 from ocs_ci.deployment.acm import Submariner
 from ocs_ci.deployment.ingress_node_firewall import restrict_ssh_access_to_nodes
@@ -1332,13 +1333,16 @@ class Deployment(object):
                     replace_to=config.DEPLOYMENT["csv_change_to"],
                 )
 
-        # change namespace of storage system if needed
-        storage_system_data = templating.load_yaml(constants.STORAGE_SYSTEM_ODF_YAML)
-        storage_system_data["metadata"]["namespace"] = self.namespace
-        storage_system_data["spec"]["namespace"] = self.namespace
+        if is_storage_system_needed():
+            logger.info("Creating StorageSystem")
+            # change namespace of storage system if needed
+            storage_system_data = templating.load_yaml(
+                constants.STORAGE_SYSTEM_ODF_YAML
+            )
+            storage_system_data["metadata"]["namespace"] = self.namespace
+            storage_system_data["spec"]["namespace"] = self.namespace
 
-        # create storage system
-        if ocs_version >= version.VERSION_4_9:
+            # create storage system
             templating.dump_data_to_temp_yaml(
                 storage_system_data, constants.STORAGE_SYSTEM_ODF_YAML
             )
