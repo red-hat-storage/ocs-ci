@@ -208,7 +208,10 @@ from ocs_ci.helpers.longevity_helpers import (
 from ocs_ci.ocs.longevity import start_app_workload
 from ocs_ci.utility.decorators import switch_to_default_cluster_index_at_last
 from ocs_ci.helpers.keyrotation_helper import PVKeyrotation
-from ocs_ci.ocs.resources.storage_cluster import set_in_transit_encryption
+from ocs_ci.ocs.resources.storage_cluster import (
+    set_in_transit_encryption,
+    get_ceph_interface_per_storageclasses,
+)
 from ocs_ci.helpers.e2e_helpers import verify_osd_used_capacity_greater_than_expected
 
 
@@ -6527,6 +6530,7 @@ def create_pvcs_and_pods(multi_pvc_factory, pod_factory, service_account_factory
         sc_rbd=None,
         sc_cephfs=None,
         pod_dict_path=None,
+        status=None,
     ):
         """
         Args:
@@ -6556,6 +6560,8 @@ def create_pvcs_and_pods(multi_pvc_factory, pod_factory, service_account_factory
             sc_cephfs (OCS): Cephfs storage class. ocs_ci.ocs.resources.ocs.OCS instance
                 of 'StorageClass' kind
             pod_dict_path (str): YAML path for the pod.
+            status (str): If provided then factory waits for object to reach
+                desired state.
 
         Returns:
             tuple: List of pvcs and pods
@@ -6581,32 +6587,38 @@ def create_pvcs_and_pods(multi_pvc_factory, pod_factory, service_account_factory
             else len(access_modes_cephfs)
         )
 
-        pvcs_rbd = multi_pvc_factory(
-            interface=constants.CEPHBLOCKPOOL,
-            storageclass=sc_rbd,
-            size=pvc_size,
-            access_modes=access_modes_rbd,
-            status=constants.STATUS_BOUND,
-            num_of_pvc=num_of_rbd_pvc,
-            timeout=180,
-        )
-        for pvc_obj in pvcs_rbd:
-            pvc_obj.interface = constants.CEPHBLOCKPOOL
+        status = status or constants.STATUS_BOUND
+        pvcs_rbd = []
+        pvcs_cephfs = []
+
+        if num_of_rbd_pvc > 0:
+            pvcs_rbd = multi_pvc_factory(
+                interface=constants.CEPHBLOCKPOOL,
+                storageclass=sc_rbd,
+                size=pvc_size,
+                access_modes=access_modes_rbd,
+                status=status,
+                num_of_pvc=num_of_rbd_pvc,
+                timeout=180,
+            )
+            for pvc_obj in pvcs_rbd:
+                pvc_obj.interface = constants.CEPHBLOCKPOOL
 
         project = pvcs_rbd[0].project if pvcs_rbd else None
 
-        pvcs_cephfs = multi_pvc_factory(
-            interface=constants.CEPHFILESYSTEM,
-            project=project,
-            storageclass=sc_cephfs,
-            size=pvc_size,
-            access_modes=access_modes_cephfs,
-            status=constants.STATUS_BOUND,
-            num_of_pvc=num_of_cephfs_pvc,
-            timeout=180,
-        )
-        for pvc_obj in pvcs_cephfs:
-            pvc_obj.interface = constants.CEPHFILESYSTEM
+        if num_of_cephfs_pvc > 0:
+            pvcs_cephfs = multi_pvc_factory(
+                interface=constants.CEPHFILESYSTEM,
+                project=project,
+                storageclass=sc_cephfs,
+                size=pvc_size,
+                access_modes=access_modes_cephfs,
+                status=status,
+                num_of_pvc=num_of_cephfs_pvc,
+                timeout=180,
+            )
+            for pvc_obj in pvcs_cephfs:
+                pvc_obj.interface = constants.CEPHFILESYSTEM
 
         pvcs = pvcs_cephfs + pvcs_rbd
 
@@ -9667,3 +9679,100 @@ def admin_client():
     from ocp_resources.resource import get_client
 
     return get_client(config_file=kubeconfig_path)
+
+
+@pytest.fixture
+def create_pvcs_and_pods_all_storageclasses(create_pvcs_and_pods):
+    """
+    Create rbd, cephfs PVCs and dc pods on all ceph storage classes. To be used for test cases which need
+    rbd and cephfs PVCs with different access modes.
+
+    """
+
+    def factory(
+        pvc_size=3,
+        pods_for_rwx=1,
+        access_modes_rbd=None,
+        access_modes_cephfs=None,
+        num_of_rbd_pvc=None,
+        num_of_cephfs_pvc=None,
+        replica_count=1,
+        deployment=False,
+        pod_dict_path=None,
+        status=None,
+    ):
+        """
+        Args:
+            pvc_size (int): The requested size for the PVC in GB
+            pods_for_rwx (int): Number of pods to be created if PVC
+                access mode is RWX
+            access_modes_rbd (list): List of access modes. One of the
+                access modes will be chosen for creating each PVC. To specify
+                volume mode, append volume mode in the access mode name
+                separated by '-'. Default is set as
+                ['ReadWriteOnce', 'ReadWriteOnce-Block', 'ReadWriteMany-Block']
+            access_modes_cephfs (list): List of access modes.
+                One of the access modes will be chosen for creating each PVC.
+                Default is set as ['ReadWriteOnce', 'ReadWriteMany']
+            num_of_rbd_pvc (int): Number of rbd PVCs to be created. Value
+                should be greater than or equal to the number of elements in
+                the list 'access_modes_rbd'. Pass 0 for not creating RBD PVC.
+            num_of_cephfs_pvc (int): Number of cephfs PVCs to be created
+                Value should be greater than or equal to the number of
+                elements in the list 'access_modes_cephfs'. Pass 0 for not
+                creating CephFS PVC
+            replica_count (int): The replica count for deployment config
+            deployment (bool): True for Deployment creation,
+                False otherwise
+            pod_dict_path (str): YAML path for the pod.
+            status (str): If provided then factory waits for object to reach
+                desired state.
+
+        Returns:
+            tuple: List of pvcs and pods
+        """
+        pvcs = []
+        pods = []
+        ceph_interface_per_storageclasses = get_ceph_interface_per_storageclasses()
+        interfaces = [constants.CEPHBLOCKPOOL, constants.CEPHFILESYSTEM]
+
+        for interface in interfaces:
+            storageclasses = ceph_interface_per_storageclasses[interface]
+            for sc in storageclasses:
+                if not status:
+                    volume_binding_mode = sc.data.get("volumeBindingMode")
+                    if volume_binding_mode == constants.IMMEDIATE_VOLUMEBINDINGMODE:
+                        status = constants.STATUS_BOUND
+                    else:
+                        status = None
+
+                if interface == constants.CEPHBLOCKPOOL:
+                    # If the interface is Cephblockpool we will not create the cephfs
+                    # pvcs and pods in this iteration
+                    num_of_current_cephfs_pvc = 0
+                    num_of_rbd_current_pvc = num_of_rbd_pvc
+                else:
+                    # If the interface is Cephfilesystem we will not create the rbd
+                    # pvcs and pods in this iteration
+                    num_of_rbd_current_pvc = 0
+                    num_of_current_cephfs_pvc = num_of_cephfs_pvc
+
+                current_pvcs, current_pods = create_pvcs_and_pods(
+                    pvc_size=pvc_size,
+                    pods_for_rwx=pods_for_rwx,
+                    access_modes_rbd=access_modes_rbd,
+                    access_modes_cephfs=access_modes_cephfs,
+                    num_of_rbd_pvc=num_of_rbd_current_pvc,
+                    num_of_cephfs_pvc=num_of_current_cephfs_pvc,
+                    replica_count=replica_count,
+                    deployment=deployment,
+                    pod_dict_path=pod_dict_path,
+                    status=status,
+                )
+
+                pvcs.extend(current_pvcs)
+                pods.extend(current_pods)
+
+        return pvcs, pods
+
+    return factory
