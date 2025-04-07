@@ -111,6 +111,9 @@ def get_rp_launch_description():
     logs_url = config.RUN.get("logs_url")
     if logs_url:
         description += f"Logs URL: {logs_url}\n"
+    additional_info = config.REPORTING.get("rp_additional_info")
+    if additional_info:
+        description += f"Additional information: {additional_info}\n"
     return description
 
 
