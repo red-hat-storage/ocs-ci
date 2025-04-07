@@ -8,6 +8,7 @@ from ocs_ci.framework.pytest_customization.marks import (
     skipif_hci_provider_or_client,
     skipif_external_mode,
     green_squad,
+    jira,
 )
 from ocs_ci.framework.testlib import skipif_ocs_version, ManageTest, ui
 from ocs_ci.ocs.exceptions import (
@@ -21,6 +22,7 @@ from ocs_ci.ocs.cluster import (
     validate_compression,
     validate_replica_data,
     check_pool_compression_replica_ceph_level,
+    get_ceph_pool_property,
     validate_num_of_pgs,
 )
 from ocs_ci.ocs.ui.block_pool import BlockPoolUI
@@ -195,3 +197,24 @@ class TestPoolUserInterface(ManageTest):
         logger.info(
             f"The deviceClass of the pool {self.pool_name} is {cbp_output['spec']['deviceClass']}"
         )
+
+    @ui
+    @jira("DFBUGS-2059")
+    @tier1
+    @skipif_ocs_version("<4.19")
+    def test_pool_target_ratio(
+        self,
+        replica,
+        compression,
+        namespace,
+        storage,
+        setup_ui,
+    ):
+        """
+        Test target size ratio of pools created in UI
+        """
+        logger.info(f"Checking target size ratio of {self.pool_name}")
+        pool_ratio = get_ceph_pool_property(self.pool_name, "target_size_ratio")
+        assert 0 < float(
+            pool_ratio
+        ), f"Target size ratio of {self.pool_name}: '{pool_ratio}'"
