@@ -9,7 +9,7 @@ from ocs_ci.helpers.dr_helpers import get_active_acm_index
 from ocs_ci.ocs.node import get_node_objs
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.resources.drpc import DRPC
-from ocs_ci.framework.testlib import tier2
+from ocs_ci.framework.testlib import tier4a
 from ocs_ci.helpers.dr_helpers import (
     get_scheduling_interval,
     verify_last_group_sync_time,
@@ -27,7 +27,8 @@ from ocs_ci.helpers.dr_helpers import (
 logger = logging.getLogger(__name__)
 
 
-@tier2
+@pytest.mark.order("last")
+@tier4a
 @rdr
 @turquoise_squad
 class TestReplaceCluster:
@@ -46,32 +47,28 @@ class TestReplaceCluster:
         drpc_objs = []
 
         # Deploy Subscription based application
-        workloads = dr_workload(num_of_subscription=1, num_of_appset=1, replace_cluster=True)
+        workloads = dr_workload(num_of_subscription=0, num_of_appset=1)
         self.namespace = workloads[0].workload_namespace
         self.workload_type = workloads[0].workload_type
 
-        # Get drpc
-        drpc_subscription = DRPC(namespace=workloads[0].workload_namespace)
-        drpc_objs.append(drpc_subscription)
-
         drpc_appset = DRPC(
             namespace=constants.GITOPS_CLUSTER_NAMESPACE,
-            resource_name=f"{workloads[1].appset_placement_name}-drpc",
+            resource_name=f"{workloads[0].appset_placement_name}-drpc",
         )
         drpc_objs.append(drpc_appset)
 
-
-
         # Create application on Primary managed cluster
-        set_current_primary_cluster_context(self.namespace)
+        set_current_primary_cluster_context(
+            self.namespace, workload_type=self.workload_type
+        )
         primary_cluster_index = config.cur_index
         node_objs = get_node_objs()
         self.primary_cluster_name = get_current_primary_cluster_name(
-            namespace=self.namespace
+            namespace=self.namespace, workload_type=self.workload_type
         )
 
         scheduling_interval = get_scheduling_interval(
-            workloads[0].workload_namespace
+            workloads[0].workload_namespace, workload_type=self.workload_type
         )
         wait_time = 2 * scheduling_interval  # Time in minutes
         logger.info(f"Waiting for {wait_time} minutes to run IOs")
@@ -84,13 +81,14 @@ class TestReplaceCluster:
             )
         logger.info("Verified lastGroupSyncTime before failover.")
 
-
         # Stop primary cluster nodes
         logger.info("Stopping primary cluster nodes...")
         nodes_multicluster[primary_cluster_index].stop_nodes(node_objs)
 
         # Application Failover to Secondary managed cluster
-        secondary_cluster_name = get_current_secondary_cluster_name(self.namespace)
+        secondary_cluster_name = get_current_secondary_cluster_name(
+            self.namespace, workload_type=self.workload_type
+        )
         failover_results = []
         with ThreadPoolExecutor() as executor:
             for wl in workloads:
@@ -124,10 +122,14 @@ class TestReplaceCluster:
             )
 
         # Replace cluster configuration
-        replace_cluster(workloads, self.primary_cluster_name, secondary_cluster_name, rdr=True)
+        replace_cluster(
+            workloads, self.primary_cluster_name, secondary_cluster_name, rdr=True
+        )
 
         # Application Relocate to Primary managed cluster
-        secondary_cluster_name = get_current_secondary_cluster_name(self.namespace)
+        secondary_cluster_name = get_current_secondary_cluster_name(
+            self.namespace, workload_type=self.workload_type
+        )
         relocate_results = []
         with ThreadPoolExecutor() as executor:
             for wl in workloads:
@@ -137,6 +139,7 @@ class TestReplaceCluster:
                         preferred_cluster=secondary_cluster_name,
                         namespace=wl.workload_namespace,
                         switch_ctx=get_active_acm_index(),
+                        workload_type=wl.workload_type,
                         workload_placement_name=(
                             wl.appset_placement_name
                             if wl.workload_type != constants.SUBSCRIPTION
@@ -159,12 +162,16 @@ class TestReplaceCluster:
 
             # Verify resources creation on preferredCluster
             set_current_primary_cluster_context(wl.workload_namespace, wl.workload_type)
-            self.primary_cluster_name = get_current_primary_cluster_name(self.namespace)
+            self.primary_cluster_name = get_current_primary_cluster_name(
+                self.namespace, workload_type=self.workload_type
+            )
             wait_for_all_resources_creation(
                 wl.workload_pvc_count,
                 wl.workload_pod_count,
                 wl.workload_namespace,
             )
+
+        time.sleep(wait_time * 60)
 
         # Verify lastGroupSyncTime post relocate
         for obj in drpc_objs:

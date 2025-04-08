@@ -390,8 +390,6 @@ class AcmAddClusters(AcmPageNavigator):
 
         """
 
-        ocs_version = version.get_semantic_ocs_version_from_config()
-
         cluster_env = get_clusters_env()
         primary_index = get_primary_cluster_config().MULTICLUSTER["multicluster_index"]
         cluster_name_a = cluster_env.get(f"cluster_name_{primary_index}")
@@ -411,10 +409,12 @@ class AcmAddClusters(AcmPageNavigator):
         self.page_has_loaded(retries=15, sleep_time=5)
 
         log.info("Clicking on the 'Add clusters' button...")
-        self.do_click(self.page_nav["add-cluster"],enable_screenshot=True)
+        self.do_click(self.page_nav["add-cluster"], enable_screenshot=True)
 
         log.info("Clicking on the Manage resource assignments link...")
-        self.do_click(self.page_nav["manage-resource-assignments"],enable_screenshot=True)
+        self.do_click(
+            self.page_nav["manage-resource-assignments"], enable_screenshot=True
+        )
 
         log.info(f"Search and select the recovery cluster '{cluster_name_a}'")
         self.do_send_keys(self.page_nav["search-cluster"], text=cluster_name_a)
@@ -429,15 +429,23 @@ class AcmAddClusters(AcmPageNavigator):
         self.do_click(self.page_nav["submariner-tab"])
 
         log.info("Clicking on the install submariner button")
-        self.do_click(self.page_nav["install-submariner-btn"],enable_screenshot=True,avoid_stale=True,)
+        self.do_click(
+            self.page_nav["install-submariner-btn"],
+            enable_screenshot=True,
+            avoid_stale=True,
+        )
         self.do_click(self.page_nav["target-clusters"])
-        self.do_click(format_locator(self.page_nav["cluster-name-selection"], cluster_name_a))
+        self.do_click(
+            format_locator(self.page_nav["cluster-name-selection"], cluster_name_a)
+        )
         self.do_click(self.page_nav["next-btn"])
 
         log.info("Uncheck the on the nat-t checkbox ")
         self.do_click(self.page_nav["nat-t-checkbox"])
 
-        log.info("Increasing the gateway count to 3 by clicking on the gateway button twice")
+        log.info(
+            "Increasing the gateway count to 3 by clicking on the gateway button twice"
+        )
         self.do_click(self.page_nav["gateway-count-btn"])
         self.do_click(self.page_nav["gateway-count-btn"])
 
