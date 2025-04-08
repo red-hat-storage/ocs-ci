@@ -380,6 +380,7 @@ class TestPvPool:
             "Pv pool backingstore didnt goto Rejected phase after noobaa-core pod restarts"
         )
 
+    @tier2
     @ignore_leftovers
     @polarion_id("OCS-6552")
     def test_pv_pool_with_nfs(
