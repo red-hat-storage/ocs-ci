@@ -25,7 +25,7 @@ setup(
         "paramiko==3.5.0",
         "pyyaml>=4.2b1",
         "jinja2==3.1.6",
-        "openshift==0.11.2",
+        "openshift==0.13.2",
         "boto3==1.24.96",
         "munch==2.5.0",
         "pytest-progress==1.2.5",
@@ -101,6 +101,7 @@ setup(
         "pytest-jira==0.3.21",
         "certbot==3.0.0",
         "certbot-dns-route53==3.0.0",
+        "openshift-python-wrapper==11.0.45",
     ],
     entry_points={
         "console_scripts": [
