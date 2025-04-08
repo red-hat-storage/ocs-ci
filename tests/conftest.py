@@ -9233,7 +9233,6 @@ def pytest_sessionfinish(session, exitstatus):
         log.exception("During finishing the Cluster load an exception was hit!")
 
 
-<<<<<<< HEAD
 @pytest.fixture()
 def run_fio_till_cluster_full(
     request, teardown_project_factory, pvc_factory, pod_factory
