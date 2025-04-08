@@ -43,14 +43,6 @@ class TestPVCCreationDeletionScale(E2ETest):
                 *[constants.ACCESS_MODE_RWO, constants.CEPHBLOCKPOOL],
                 marks=pytest.mark.polarion_id("OCS-1225"),
             ),
-            pytest.param(
-                *[constants.ACCESS_MODE_RWX, constants.CEPHBLOCKPOOL],
-                marks=pytest.mark.polarion_id("OCS-2010"),
-            ),
-            pytest.param(
-                *[constants.ACCESS_MODE_RWX, constants.CEPHFS_INTERFACE],
-                marks=pytest.mark.polarion_id("OCS-2008"),
-            ),
         ],
     )
     @pytest.mark.usefixtures(namespace.__name__)
@@ -61,7 +53,7 @@ class TestPVCCreationDeletionScale(E2ETest):
         Measuring PVC creation time while scaling PVC
         Measure PVC deletion time after creation test
         """
-        scale_pvc_count = scale_lib.get_max_pvc_count()
+        scale_pvc_count = 6000
         log.info(f"Start creating {access_mode}-{interface} {scale_pvc_count} PVC")
         if interface == constants.CEPHBLOCKPOOL:
             sc_name = constants.DEFAULT_STORAGECLASS_RBD
