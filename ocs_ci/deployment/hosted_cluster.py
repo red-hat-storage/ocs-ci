@@ -197,11 +197,12 @@ class HostedClients(HyperShiftBase):
         # If hostNetwork is true, then providerAPIServerServiceType is set to NodePort automatically
 
         sc = storage_cluster.get_storage_cluster()
-        if sc.data["spec"].get("hostNetwork"):
+        sc_spec = sc.get()["items"][0]["spec"]
+        if sc_spec.get("hostNetwork"):
             logger.info(
                 "Storage Cluster resource of hub cluster has hostNetwork set to true"
             )
-            if sc.data["spec"].get("providerAPIServerServiceType") == "NodePort":
+            if sc_spec.get("providerAPIServerServiceType") == "NodePort":
                 logger.info(
                     "Storage Cluster resource of hub cluster has providerAPIServerServiceType set to NodePort"
                 )
