@@ -13,7 +13,10 @@ from subprocess import TimeoutExpired
 from ocs_ci.framework import config
 from ocs_ci.helpers import dr_helpers, helpers
 from ocs_ci.helpers.cnv_helpers import create_vm_secret, cal_md5sum_vm
-from ocs_ci.helpers.dr_helpers import generate_kubeobject_capture_interval
+from ocs_ci.helpers.dr_helpers import (
+    generate_kubeobject_capture_interval,
+    get_cluster_set_name,
+)
 from ocs_ci.helpers.helpers import (
     create_project,
     create_unique_resource_name,
@@ -154,6 +157,7 @@ class BusyBox(DRWorkload):
             placement_yaml_data["spec"]["predicates"][0]["requiredClusterSelector"][
                 "labelSelector"
             ]["matchExpressions"][0]["values"][0] = self.preferred_primary_cluster
+            placement_yaml_data["spec"]["clusterSets"][0] = get_cluster_set_name()[0]
             self.sub_placement_name = placement_yaml_data["metadata"]["name"]
             templating.dump_data_to_temp_yaml(
                 placement_yaml_data, self.placement_yaml_file
@@ -522,6 +526,8 @@ class BusyBox_AppSet(DRWorkload):
                 app_set_yaml_data["spec"]["predicates"][0]["requiredClusterSelector"][
                     "labelSelector"
                 ]["matchExpressions"][0]["values"][0] = self.preferred_primary_cluster
+                app_set_yaml_data["spec"]["clusterSets"][0] = get_cluster_set_name()[0]
+
             elif app_set_yaml_data["kind"] == constants.APPLICATION_SET:
                 if self.appset_model == "pull":
                     # load appset_yaml_file, add "annotations" key and add values to it
