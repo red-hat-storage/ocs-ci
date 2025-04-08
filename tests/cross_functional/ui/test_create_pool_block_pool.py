@@ -202,18 +202,25 @@ class TestPoolUserInterface(ManageTest):
     @jira("DFBUGS-2059")
     @tier1
     @skipif_ocs_version("<4.19")
+    @pytest.mark.parametrize(
+        argnames=["pool_type"],
+        argvalues=[
+            pytest.param("cephblockpool", marks=pytest.mark.polarion_id("OCS-6562")),
+        ],
+    )
     def test_pool_target_ratio(
         self,
         replica,
         compression,
         namespace,
         storage,
+        pool_type,
         setup_ui,
     ):
         """
         Test target size ratio of pools created in UI
         """
-        logger.info(f"Checking target size ratio of {self.pool_name}")
+        logger.info(f"Checking target size ratio of {pool_type} {self.pool_name}")
         pool_ratio = get_ceph_pool_property(self.pool_name, "target_size_ratio")
         assert 0 < float(
             pool_ratio
