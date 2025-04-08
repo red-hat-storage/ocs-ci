@@ -1746,7 +1746,8 @@ validation_4_9 = {
 validation_4_10 = {
     "system-capacity": ("//div[contains(text(),'System Capacity')]", By.XPATH),
     "ocs-storagecluster-storagesystem": (
-        "//a[.='ocs-storagecluster-storagesystem']",
+        "//a[.='ocs-storagecluster-storagesystem'] | "
+        "//a[contains(@href, 'odf/system')]",
         By.XPATH,
     ),
     "ocs-external-storagecluster-storagesystem": (
