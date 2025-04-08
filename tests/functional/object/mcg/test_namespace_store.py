@@ -28,11 +28,11 @@ class TestNamespaceStore:
     def test_namespacestore_with_rgw(
         self,
         mcg_obj,
-        awscli_pod,
-        test_directory_setup,
         rgw_bucket_factory,
         teardown_factory,
         bucket_factory,
+        test_directory_setup,
+        awscli_pod,
     ):
         """
         Test coverage for the scenarios mentioned in the
