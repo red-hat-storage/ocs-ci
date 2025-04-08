@@ -7,6 +7,7 @@ from ocs_ci.framework.pytest_customization.marks import magenta_squad, workloads
 from ocs_ci.framework.testlib import E2ETest
 from ocs_ci.helpers.cnv_helpers import cal_md5sum_vm, run_dd_io, clone_or_snapshot_vm
 from ocs_ci.ocs import constants
+from ocs_ci.ocs.node import unschedule_nodes, drain_nodes, schedule_nodes
 from ocs_ci.utility.retry import retry
 from ocs_ci.ocs.node import get_nodes, wait_for_nodes_status
 from ocs_ci.ocs.exceptions import (
@@ -110,6 +111,14 @@ class TestVmShutdownStart(E2ETest):
             for vm_obj in all_vms:
                 if vm_obj.printableStatus() != constants.CNV_VM_STOPPED:
                     vm_obj.stop(wait=True)
+            worker_node_names = [node.name for node in worker_nodes]
+
+            # unschedule nodes
+            unschedule_nodes(worker_node_names)
+
+            # drain nodes
+            drain_nodes(worker_node_names, disable_eviction=True)
+
         else:
             # Keep vms in different states (power on, paused, stoped)
             vm_for_stop.stop()
@@ -139,6 +148,9 @@ class TestVmShutdownStart(E2ETest):
             delay=15,
         )(wait_for_nodes_status(timeout=1800))
         logger.info("All nodes are now in READY state")
+
+        # Schedule node
+        schedule_nodes(worker_node_names)
 
         logger.info("Waiting for pods to come in running state.")
         wait_for_pods_to_be_running(timeout=500)
