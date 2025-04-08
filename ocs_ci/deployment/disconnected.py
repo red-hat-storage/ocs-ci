@@ -216,7 +216,7 @@ def prune_and_mirror_index_image(
     return cs_file
 
 
-@retry((CommandFailed,), tries=3, delay=10, backoff=2)
+@retry((CommandFailed, NotFoundError), tries=3, delay=10, backoff=2)
 def mirror_index_image_via_oc_mirror(index_image, packages, icsp=None):
     """
     Mirror all images required for ODF deployment and testing to mirror
