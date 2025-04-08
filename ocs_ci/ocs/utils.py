@@ -2127,7 +2127,16 @@ def get_expected_nb_db_psql_version():
         )
 
     try:
-        psql_image = nb_cr_obj.data["spec"]["dbImage"]
+        odf_full_version = version.get_semantic_running_odf_version()
+        # we need to support the version for Konflux builds as well
+        version_for_konflux_noobaa_db_pg_cluster = "4.19.0-15"
+        semantic_version_for_konflux_noobaa_db_pg_cluster = (
+            version.get_semantic_version(version_for_konflux_noobaa_db_pg_cluster)
+        )
+        if odf_full_version >= semantic_version_for_konflux_noobaa_db_pg_cluster:
+            psql_image = nb_cr_obj.data["spec"]["dbSpec"]["image"]
+        else:
+            psql_image = nb_cr_obj.data["spec"]["dbImage"]
         re_match = re.search(r"postgresql-(\d+(\.\d+)*)", psql_image)
         return re_match.group(1)
     except Exception as e:
