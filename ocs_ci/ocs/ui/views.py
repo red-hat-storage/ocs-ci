@@ -736,7 +736,7 @@ page_nav = {
     "choose_all_projects": ("//span[text()='All Projects']", By.XPATH),
     # show-default-projects works both for OCP 4.14 and 4.15
     "show-default-projects": (
-        ".pf-c-switch__toggle, .pf-v5-c-switch__toggle",
+        ".pf-c-switch__toggle, .pf-v5-c-switch__toggle, .pf-v6-c-switch__toggle",
         By.CSS_SELECTOR,
     ),
 }
@@ -1690,7 +1690,7 @@ validation_4_9 = {
     ),
     # show-default-projects works both on OCP 4.14 and 4.15
     "show-default-projects": (
-        ".pf-c-switch__toggle, .pf-v5-c-switch__toggle",
+        ".pf-c-switch__toggle, .pf-v5-c-switch__toggle, .pf-v6-c-switch__toggle",
         By.CSS_SELECTOR,
     ),
     "ocs-storagecluster-storgesystem": (
