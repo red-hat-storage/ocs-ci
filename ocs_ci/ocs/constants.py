@@ -253,6 +253,7 @@ ENCRYPTIONKEYROTATIONCRONJOB = "encryptionkeyrotationcronjobs.csiaddons.openshif
 ENCRYPTIONKEYROTATIONJOB = "encryptionkeyrotationjobs.csiaddons.openshift.io"
 DEFAULT_CEPH_DEVICECLASS = "defaultCephDeviceClass"
 CRD_KIND = "CustomResourceDefinition"
+CLUSTERMANAGEMENTADDON = "ClusterManagementAddOn"
 
 # Provisioners
 AWS_EFS_PROVISIONER = "openshift.org/aws-efs"
@@ -1286,6 +1287,9 @@ MULTICLUSTER_ENGINE = "multiclusterengine"
 BACKUP_SCHEDULE_YAML = os.path.join(TEMPLATE_MULTICLUSTER_DIR, "backupschedule.yaml")
 KLUSTERLET_CONFIG_YAML = os.path.join(
     TEMPLATE_MULTICLUSTER_DIR, "klusterlet_config.yaml"
+)
+KLUSTERLET_CONFIG_MCE_IMPORT_YAML = os.path.join(
+    TEMPLATE_MULTICLUSTER_DIR, "klusterlet_config_mce_import.yaml"
 )
 MDR_BACKUP_SCHEDULE_RESOURCE = "schedule-acm"
 ACM_POLICY_COMPLIANT = "Compliant"
@@ -2895,6 +2899,9 @@ ACM_CLUSTERSET_LABEL = "cluster.open-cluster-management.io/clusterset"
 ACM_ADDONS_NAMESPACE = "open-cluster-management-agent-addon"
 ACM_HUB_OPERATOR_NAME_WITH_NS = f"{ACM_HUB_OPERATOR_NAME}.{ACM_HUB_NAMESPACE}"
 ACM_MANAGEDCLUSTER_ADDONS = "managedclusteraddons.addon.open-cluster-management.io"
+ACM_ADDON_DEPLOYMENT_CONFIG_YAML = os.path.join(
+    TEMPLATE_DIR, "acm-deployment", "addon_deployment_config.yaml"
+)
 
 # GitOps
 GITOPS_NAMESPACE = "openshift-gitops"
