@@ -12,6 +12,7 @@ from ocs_ci.framework.pytest_customization.marks import (
     runs_on_provider,
     mcg,
     fips_required,
+    ignore_leftovers,
 )
 
 from ocs_ci.ocs.bucket_utils import (
@@ -379,6 +380,7 @@ class TestPvPool:
             "Pv pool backingstore didnt goto Rejected phase after noobaa-core pod restarts"
         )
 
+    @ignore_leftovers
     @polarion_id("OCS-6552")
     def test_pv_pool_with_nfs(
         self, setup_nfs, bucket_factory, awscli_pod, test_directory_setup, mcg_obj
