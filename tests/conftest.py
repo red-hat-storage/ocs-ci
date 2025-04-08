@@ -6818,7 +6818,6 @@ def dr_workload(request):
         appset_model=None,
         pvc_interface=constants.CEPHBLOCKPOOL,
         switch_ctx=None,
-        replace_cluster=False
     ):
         """
         Args:
@@ -6887,7 +6886,7 @@ def dr_workload(request):
             ocsci_config.MULTICLUSTER["multicluster_mode"] == constants.RDR_MODE
             and pvc_interface == constants.CEPHBLOCKPOOL
         ):
-            dr_helpers.wait_for_mirroring_status_ok(replaying_images=total_pvc_count, replace_cluster=replace_cluster)
+            dr_helpers.wait_for_mirroring_status_ok(replaying_images=total_pvc_count)
         return instances
 
     def teardown():

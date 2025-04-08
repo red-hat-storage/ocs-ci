@@ -335,7 +335,7 @@ def check_mirroring_status_ok(replaying_images=None):
     return True
 
 
-def wait_for_mirroring_status_ok(replaying_images=None, replace_cluster=False, timeout=300):
+def wait_for_mirroring_status_ok(replaying_images=None, timeout=300):
     """
     Wait for mirroring status to reach health OK and expected number of replaying
     images for each of the ODF cluster
@@ -352,7 +352,12 @@ def wait_for_mirroring_status_ok(replaying_images=None, replace_cluster=False, t
 
     """
     restore_index = config.cur_index
-    for cluster in get_non_acm_cluster_config():
+    non_acm_cluster_config = get_non_acm_cluster_config()
+
+    # Deleting the recovery cluster info from cluster config
+    len(non_acm_cluster_config) > 2 and non_acm_cluster_config.pop()
+
+    for cluster in non_acm_cluster_config:
         config.switch_ctx(cluster.MULTICLUSTER["multicluster_index"])
         logger.info(
             f"Validating mirroring status on cluster {cluster.ENV_DATA['cluster_name']}"
@@ -370,8 +375,6 @@ def wait_for_mirroring_status_ok(replaying_images=None, replace_cluster=False, t
             )
             logger.error(error_msg)
             raise TimeoutExpiredError(error_msg)
-        if replace_cluster:
-            break
 
     config.switch_ctx(restore_index)
     return True
@@ -1473,7 +1476,7 @@ def add_label_to_appsub(workloads, label="test", value="test1"):
     config.switch_ctx(old_ctx)
 
 
-def disable_dr_from_app(secondary_cluster_name):
+def disable_dr_from_app(secondary_cluster_name, rdr=False):
     """
     Function to disable DR from app
 
@@ -1500,17 +1503,20 @@ def disable_dr_from_app(secondary_cluster_name):
 
     time.sleep(60)
 
-    # Delete all drpc
-    run_cmd("oc delete drpc --all -A")
-    sample = TimeoutSampler(
-        timeout=300,
-        sleep=5,
-        func=run_cmd_verify_cli_output,
-        cmd="oc get drpc -A",
-        expected_output_lst="No resources found",
-    )
-    if not sample.wait_for_func_status(result=False):
-        raise Exception("All drpcs are not deleted")
+    if rdr:
+        disable_dr_rdr(discovered_apps=False)
+    else:
+         # Delete all drpc
+         run_cmd("oc delete drpc --all -A")
+         sample = TimeoutSampler(
+             timeout=300,
+             sleep=5,
+             func=run_cmd_verify_cli_output,
+             cmd="oc get drpc -A",
+             expected_output_lst="No resources found",
+         )
+         if not sample.wait_for_func_status(result=False):
+             raise Exception("All drpcs are not deleted")
 
     time.sleep(10)
 
@@ -1522,7 +1528,6 @@ def disable_dr_from_app(secondary_cluster_name):
             params = f"""[{{"op": "remove", "path": "{constants.EXPERIMENTAL_ANNOTATION_PATH}"}}]"""
             cmd = f"oc patch {constants.PLACEMENT} {name} -n {namespace} -p '{params}' --type=json"
             run_cmd(cmd)
-
     config.switch_ctx(old_ctx)
 
 
@@ -1563,13 +1568,26 @@ def replace_cluster(workload, primary_cluster_name, secondary_cluster_name, rdr=
     run_cmd(cmd=f"oc delete drcluster {primary_cluster_name} --wait=false")
 
     # Disable DR on hub for each app
-    disable_dr_from_app(secondary_cluster_name)
+    disable_dr_from_app(secondary_cluster_name, rdr=True)
     logger.info("DR configuration is successfully disabled on each app")
 
     # Remove DR configuration from hub and surviving cluster
     logger.info("Running Remove DR configuration script..")
     run_cmd(cmd=f"chmod +x {constants.REMOVE_DR_EACH_MANAGED_CLUSTER}")
     run_cmd(cmd=f"sh {constants.REMOVE_DR_EACH_MANAGED_CLUSTER}")
+
+    time.sleep(60)
+
+    config.switch_to_cluster_by_name(secondary_cluster_name)
+    cbp_obj = ocp.OCP(
+        kind=constants.CEPHBLOCKPOOL,
+        resource_name=constants.DEFAULT_CEPHBLOCKPOOL,
+        namespace=config.ENV_DATA["cluster_namespace"],
+    )
+    mirroring_status = cbp_obj.get().get("status").get("mirroringStatus")
+    raise Exception("Mirroring is not disabled completely") if mirroring_status else None
+
+    logger.info(f"Mirroring status: {mirroring_status}")
 
     sample = TimeoutSampler(
         timeout=300,
@@ -1718,15 +1736,15 @@ def disable_dr_rdr(discovered_apps=False):
     if discovered_apps:
         run_cmd(f"oc delete drpc --all -n {constants.DR_OPS_NAMESAPCE}")
         run_cmd(f"oc delete placement --all -n {constants.DR_OPS_NAMESAPCE}")
-    sample = TimeoutSampler(
-        timeout=300,
-        sleep=5,
-        func=verify_drpc_placement_deletion,
-        cmd=f"oc get placement -n '{constants.DR_OPS_NAMESAPCE}'",
-        expected_output_lst="No resources found",
-    )
-    if not sample.wait_for_func_status(result=True):
-        raise Exception("All placements are not deleted")
+        sample = TimeoutSampler(
+            timeout=300,
+            sleep=5,
+            func=verify_drpc_placement_deletion,
+            cmd=f"oc get placement -n '{constants.DR_OPS_NAMESAPCE}'",
+            expected_output_lst="No resources found",
+        )
+        if not sample.wait_for_func_status(result=True):
+            raise Exception("All placements are not deleted")
 
     # Edit drpc to add annotation
     drpc_obj = ocp.OCP(kind=constants.DRPC)
