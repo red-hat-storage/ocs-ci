@@ -291,18 +291,18 @@ def test_provider_metrics_available(threading_lock):
 @tier1
 @bugzilla("2297285")
 @skipif_external_mode
-@pytest.mark.polarion_id("OCS-XXX")
-def test_monitoring_ipv6(threading_lock):
+@pytest.mark.polarion_id("OCS-6796")
+def test_monitoring_ip_connectivity(threading_lock):
     """
     Procedure:
-    1. Retrieves the IPv6 addresses of rook-ceph-exporter pods.
+    1. Retrieves the IPv4/6 addresses of rook-ceph-exporter pods.
     2. Logs into the prometheus-k8s pod in the openshift-monitoring namespace.
     3. Checks connectivity using curl to fetch metrics from each exporter's /metrics endpoint.
     4. Asserts that the expected Ceph metric is present in the response.
 
     """
     exporter_pods = pod.get_pods_having_label(constants.EXPORTER_APP_LABEL)
-    ipv6_addresses = [pod_obj["status"]["podIP"] for pod_obj in exporter_pods]
+    ip_addresses = [pod_obj["status"]["podIP"] for pod_obj in exporter_pods]
     pod_obj_list = pod.get_all_pods(
         namespace=defaults.OCS_MONITORING_NAMESPACE, selector_label=["prometheus"]
     )
@@ -314,11 +314,11 @@ def test_monitoring_ipv6(threading_lock):
     assert (
         prometheus_pod_obj is not None
     ), "Prometheus pod not found in the monitoring namespace"
-    for ipv6_address in ipv6_addresses:
+    for ip_address in ip_addresses:
         formatted_ip = (
-            f"[{ipv6_address}]"
-            if ipaddress.ip_address(ipv6_address).version == 6
-            else ipv6_address
+            f"[{ip_address}]"
+            if ipaddress.ip_address(ip_address).version == 6
+            else ip_address
         )
         cmd = (
             f"oc rsh -n {defaults.OCS_MONITORING_NAMESPACE} {prometheus_pod_obj.name} "
@@ -327,4 +327,4 @@ def test_monitoring_ipv6(threading_lock):
         out = run_cmd(cmd=cmd)
         assert (
             "ceph_AsyncMessenger_Worker_msgr_connection" in out
-        ), f"Expected Ceph metric not found in output for IP {ipv6_address}"
+        ), f"Expected Ceph metric not found in output for IP {ip_address}"
