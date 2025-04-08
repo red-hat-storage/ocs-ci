@@ -1,6 +1,6 @@
 import logging
 
-from ocs_ci.framework.testlib import ManageTest, tier2, bugzilla, green_squad
+from ocs_ci.framework.testlib import ManageTest, tier1, green_squad, polarion_id
 from ocs_ci.helpers import helpers
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.node import get_worker_nodes
@@ -9,9 +9,9 @@ from ocs_ci.ocs.node import get_worker_nodes
 logger = logging.getLogger(__name__)
 
 
-@tier2
-@bugzilla("2212310")
+@tier1
 @green_squad
+@polarion_id("OCS-6797")
 class TestCephfsFsyncConsistency(ManageTest):
     """
     Ensuring File Completeness Post-fsync with Shared CephFS Volume
