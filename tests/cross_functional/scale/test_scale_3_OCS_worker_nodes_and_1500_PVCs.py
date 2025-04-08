@@ -30,7 +30,7 @@ def fioscale(request):
     FIO Scale fixture to create expected number of POD+PVC
     """
 
-    scale_pvc = 1500
+    scale_pvc = 6000
     pvc_per_pod_count = 20
 
     # Scale FIO pods in the cluster
@@ -59,18 +59,14 @@ def fioscale(request):
 
 @orange_squad
 @scale
-@ignore_leftovers
-@skipif_external_mode
-@ipi_deployment_required
 class TestScaleRespinCephPods(E2ETest):
     """
     Scale the OCS cluster to reach 1500 PVC+POD
     """
 
-    def deprecated_test_pv_scale_out_create_pvcs_and_respin_ceph_pods(
+    def test_pv_scale_out_create_pvcs(
         self,
         fioscale,
-        resource_to_delete,
     ):
         """
         Test case to scale PVC+POD with multi projects and reach expected PVC count
@@ -84,14 +80,6 @@ class TestScaleRespinCephPods(E2ETest):
             pvc_scale_list = file_data.get("PVC_SCALE_LIST")
         else:
             raise FileNotFoundError
-
-        disruption = disruption_helpers.Disruptions()
-        disruption.set_resource(resource=resource_to_delete)
-        no_of_resource = disruption.resource_count
-        for i in range(0, no_of_resource):
-            disruption.delete_resource(resource_id=i)
-
-        utils.ceph_health_check()
 
         # Validate all PVCs from namespace are in Bound state
         assert scale_lib.validate_all_pvcs_and_check_state(
