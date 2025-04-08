@@ -949,6 +949,7 @@ def run_must_gather(
     output_file=None,
     skip_after_max_fail=False,
     timeout=defaults.MUST_GATHER_TIMEOUT,
+    mg_options=None,
 ):
     """
     Runs the must-gather tool against the cluster
@@ -964,6 +965,7 @@ def run_must_gather(
         skip_after_max_fail (bool): When max number failed attempts to collect MG reached, will skip
             MG collection.
         timeout (int): Max timeout to wait for MG to complete before aborting the MG execution.
+        mg_options (str): Options of must gather command For example "--host_network=True"
 
     Returns:
         mg_output (str): must-gather cli output
@@ -989,6 +991,8 @@ def run_must_gather(
     log.info(f"Must gather image: {image} will be used.")
     create_directory_path(log_dir_path)
     cmd = f"adm must-gather --image={image} --dest-dir={log_dir_path}"
+    if mg_options:
+        cmd += f" {mg_options}"
     if command:
         cmd += f" -- {command}"
 
@@ -1206,6 +1210,7 @@ def _collect_ocs_logs(
     mcg=False,
     status_failure=True,
     ocs_flags=None,
+    mg_options=None,
     silent=False,
     output_file=None,
     skip_after_max_fail=False,
@@ -1261,7 +1266,6 @@ def _collect_ocs_logs(
             ocs_must_gather_image_and_tag = mirror_image(
                 ocs_must_gather_image_and_tag, cluster_config
             )
-
         mg_output = run_must_gather(
             ocs_log_dir_path,
             ocs_must_gather_image_and_tag,
@@ -1271,6 +1275,7 @@ def _collect_ocs_logs(
             output_file=output_file,
             skip_after_max_fail=skip_after_max_fail,
             timeout=timeout,
+            mg_options=mg_options,
         )
         mg_collected_types.add("ocs")
         if (
@@ -1383,6 +1388,7 @@ def collect_ocs_logs(
     mcg=False,
     status_failure=True,
     ocs_flags=None,
+    mg_options=None,
     silent=False,
     output_file=None,
     skip_after_max_fail=False,
@@ -1400,6 +1406,7 @@ def collect_ocs_logs(
         status_failure (bool): Whether the collection is after success or failure,
             allows better naming for folders under logs directory
         ocs_flags (str): flags to ocs must gather command for example ["-- /usr/bin/gather -cs"]
+        mg_options (str): Options of must gather command For example "--host_network=True"
         silent (bool): True if silent mode
         output_file (bool): True if direct whole output to file instead of printing it out to log (apply
             only if silent is True).
@@ -1423,6 +1430,7 @@ def collect_ocs_logs(
                         mcg=False,
                         status_failure=status_failure,
                         ocs_flags=ocs_flags,
+                        mg_options=mg_options,
                         silent=silent,
                         output_file=output_file,
                         skip_after_max_fail=skip_after_max_fail,
@@ -1440,6 +1448,7 @@ def collect_ocs_logs(
                         mcg=False,
                         status_failure=status_failure,
                         ocs_flags=ocs_flags,
+                        mg_options=mg_options,
                         silent=silent,
                         output_file=output_file,
                         skip_after_max_fail=skip_after_max_fail,
@@ -1457,6 +1466,7 @@ def collect_ocs_logs(
                         mcg=mcg,
                         status_failure=status_failure,
                         ocs_flags=ocs_flags,
+                        mg_options=mg_options,
                         silent=silent,
                         output_file=output_file,
                         skip_after_max_fail=skip_after_max_fail,
