@@ -295,7 +295,7 @@ class FioPodScale(object):
         elif is_managed_service_cluster():
             expected_worker_count = 3
         else:
-            expected_worker_count = get_expected_worker_count(scale_count)
+            expected_worker_count = 3
 
         if check_and_add_enough_worker(expected_worker_count):
             if (
@@ -727,7 +727,7 @@ def get_rate_based_on_cls_iops(custom_iops_dict=None, osd_size=2048):
     return rate_param
 
 
-def get_expected_worker_count(scale_count=1500):
+def get_expected_worker_count(scale_count=6000):
     """
     Function to get expected worker count based on platform to scale pods in cluster
 
