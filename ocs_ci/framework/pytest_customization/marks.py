@@ -596,6 +596,11 @@ rdr_ui = pytest.mark.skipif(
     reason="RDR UI failover or relocate config needed",
 )
 
+dr_hub_recovery = pytest.mark.skipif(
+    config.nclusters != 4,
+    reason="DR hub recovery requires 4th OCP cluster to be available for Passive hub",
+)
+
 # Filter warnings
 filter_insecure_request_warning = pytest.mark.filterwarnings(
     "ignore::urllib3.exceptions.InsecureRequestWarning"
