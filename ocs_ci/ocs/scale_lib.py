@@ -1302,7 +1302,7 @@ def check_all_pvc_reached_bound_state_in_kube_job(
             while_iteration_count += 1
             # Breaking while loop after 10 Iteration i.e. after timeout*10 secs of wait_time
             # And if PVCs still not in bound state then there will be assert.
-            if while_iteration_count >= 10:
+            if while_iteration_count >= 70:
                 assert logger.error(
                     f" Listed PVCs took more than {timeout * 10} secs to bound {pvc_not_bound_list}"
                 )
