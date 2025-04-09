@@ -6,6 +6,7 @@ import botocore.exceptions as boto3exception
 import json
 import uuid
 
+from ocs_ci.ocs import constants
 from ocs_ci.ocs.cluster import CephCluster
 from ocs_ci.ocs.exceptions import (
     NoBucketPolicyResponse,
@@ -1293,6 +1294,8 @@ class TestS3BucketPolicy(MCGTest):
         ), f"Some bucket_policies are not created : {missing_policies}"
 
 
+@mcg
+@red_squad
 @polarion_id("OCS-6540")
 class TestNoobaaUpgradeWithBucketPolicy:
     """
@@ -1313,8 +1316,8 @@ class TestNoobaaUpgradeWithBucketPolicy:
 
         """
         # Create a bucket and create obc object
-        obc_name = bucket_factory_session(amount=1, interface="OC")[0].name
-        obc_obj = OBC(obc_name)
+        obc = bucket_factory_session(amount=1, interface="CLI")[0]
+        obc_obj = OBC(obc.name)
 
         # Generate bucket policy
         bucket_policy_generated = gen_bucket_policy(
@@ -1327,7 +1330,8 @@ class TestNoobaaUpgradeWithBucketPolicy:
         logger.info(
             "Caching the bucket and bucket policy info for post upgrade verification"
         )
-        request.config.cache.set("bucket_policy_bucket", obc_name)
+
+        request.config.cache.set("bucket_policy_bucket", obc.name)
         request.config.cache.set("bucket_policy", bucket_policy)
 
     @post_upgrade
@@ -1339,6 +1343,7 @@ class TestNoobaaUpgradeWithBucketPolicy:
         logger.info("Extracting the bucket and bucket policy info from the cache")
         obc_name = request.config.cache.get("bucket_policy_bucket", None)
         bucket_policy = request.config.cache.get("bucket_policy", None)
+
         assert (
             obc_name and bucket_policy
         ), "Seem like either pre-upgrade test for this failed or unable to cache the bucket/bucket policy info"
@@ -1347,8 +1352,8 @@ class TestNoobaaUpgradeWithBucketPolicy:
         logger.info("Verifying noobaa health")
         CephCluster().noobaa_health_check()
 
-        # Check backingstore health
-        verify_backing_store()
+        # Check backing-store health
+        verify_backing_store(constants.DEFAULT_NOOBAA_BACKINGSTORE)
 
         logger.info(f"Creating policy by admin on bucket: {obc_name}")
         put_policy = put_bucket_policy(mcg_obj_session, obc_name, bucket_policy)
