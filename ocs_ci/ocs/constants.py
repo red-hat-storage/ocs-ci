@@ -216,7 +216,9 @@ VOLUME_REPLICATION_GROUP = "VolumeReplicationGroup"
 RECLAIMSPACECRONJOB = "reclaimspacecronjob"
 LVMCLUSTER = "odf-lvmcluster"
 LVMSCLUSTER = "lvmscluster"
+# Deprecated in favour of StorageClaim starting from 4.16
 STORAGECLASSCLAIM = "StorageClassClaim"
+# Deprecated and data moved to StorageClient starting from 4.19
 STORAGECLAIM = "StorageClaim"
 STORAGECONSUMER = "StorageConsumer"
 MACHINEHEALTHCHECK = "machinehealthcheck"
@@ -253,6 +255,12 @@ ENCRYPTIONKEYROTATIONCRONJOB = "encryptionkeyrotationcronjobs.csiaddons.openshif
 ENCRYPTIONKEYROTATIONJOB = "encryptionkeyrotationjobs.csiaddons.openshift.io"
 DEFAULT_CEPH_DEVICECLASS = "defaultCephDeviceClass"
 CRD_KIND = "CustomResourceDefinition"
+# ClientProfileSpec defines the desired state of Ceph CSI
+# configuration for volumes and snapshots configured to use
+# this profile
+CLIENT_PROFILE = "ClientProfile"
+OCS_OPERATOR_CONFIG_MAP = "ocs-operator-config"
+SERVICE_TYPE_NODEPORT = "NodePort"
 
 # Provisioners
 AWS_EFS_PROVISIONER = "openshift.org/aws-efs"
@@ -349,6 +357,9 @@ PROVIDER_MODE_STORAGE_CLASS_CLAIM_CEPHFS = os.path.join(
 PROVIDER_MODE_STORAGE_CLASS_CLAIM_RBD = os.path.join(
     PROVIDER_MODE_OCS_DEPLOYMENT_PATH, "storage_class_claim_rbd.yaml"
 )
+CLIENT_PROFILE_PATH = os.path.join(
+    PROVIDER_MODE_OCS_DEPLOYMENT_PATH, "client_profile.yaml"
+)
 
 MACHINE_CONFIG_YAML = os.path.join(
     PROVIDER_MODE_OCS_DEPLOYMENT_PATH,
@@ -356,6 +367,9 @@ MACHINE_CONFIG_YAML = os.path.join(
 )
 OCS_STORAGE_CLUSTER_YAML = os.path.join(
     PROVIDER_MODE_OCS_DEPLOYMENT_PATH, "ocs_storagecluster.yaml"
+)
+OCS_STORAGE_CLUSTER_CONVERGED_YAML = os.path.join(
+    PROVIDER_MODE_OCS_DEPLOYMENT_PATH, "ocs_storagecluster_converged.yaml"
 )
 OCS_STORAGE_CLUSTER_UPDATED_YAML = os.path.join(
     PROVIDER_MODE_OCS_DEPLOYMENT_PATH, "ocs_storagecluster_updated.yaml"
@@ -375,6 +389,10 @@ STORAGE_CLIENT_SUBSCRIPTION_YAML = os.path.join(
 NATIVE_STORAGE_CLIENT_YAML = os.path.join(
     PROVIDER_CLIENT_DEPLOYMENT_DIR, "native_storage_client.yaml"
 )
+STORAGE_CONSUMER_YAML = os.path.join(
+    PROVIDER_MODE_OCS_DEPLOYMENT_PATH, "storage_consumer.yaml"
+)
+
 
 PROVIDER_CLUSTER_RESOURCE_KINDS = [
     "cephblockpoolradosnamespaces",
@@ -512,7 +530,6 @@ DEFAULT_VOLUMESNAPSHOTCLASS_RBD_MS_PC = f"{DEFAULT_CLUSTERNAME}-ceph-rbd"
 
 # hyperconverged defaults
 HYPERCONVERGED_NAMESPACE = "kubevirt-hyperconverged"
-# MCE_NAMESPACE_YAML = os.path.join(TEMPLATE_DEPLOYMENT_DIR_MCE, "mce_namespace.yaml")
 TEMPLATE_DEPLOYMENT_DIR_HYPERCONVERGED = os.path.join(
     TEMPLATE_DIR, "hyperconverged-deployment"
 )

@@ -948,6 +948,31 @@ def ocs_install_verification(
             owner_references[0].get("name") == csi_owner_name
         ), f"Owner reference of {constants.DAEMONSET} {plugin_name} is not {csi_owner_name} {csi_owner_kind}"
     log.info("Verified the ownerReferences CSI plugin daemonsets")
+    log.info("Verifying the providerAPIServerServiceType setting in StorageCluster")
+    sc_obj = get_storage_cluster()
+    if sc_obj.get().get("items")[0].get("spec").get("hostNetwork"):
+        assert (
+            sc_obj.get().get("items")[0].get("spec").get("providerAPIServerServiceType")
+            == constants.SERVICE_TYPE_NODEPORT
+        ), f"Provider API server service type is not {constants.SERVICE_TYPE_NODEPORT}"
+    log.info("Verified the providerAPIServerServiceType setting in StorageCluster")
+    log.info("Verifying the csi driver ownership")
+    csi_driver_list = [constants.RBD_PROVISIONER, constants.CEPHFS_PROVISIONER]
+    if odf_running_version >= version.VERSION_4_19 or hci_cluster:
+        csi_driver_obj = OCP(kind=constants.DRIVER, namespace=namespace)
+        for driver in csi_driver_list:
+            csi_driver = csi_driver_obj.get(resource_name=driver)
+            owner_references = csi_driver["metadata"].get("ownerReferences")
+            assert (
+                len(owner_references) == 1
+            ), f"Found more than 1 or none owner reference for {driver} driver"
+            assert (
+                owner_references[0].get("kind") == constants.CONFIGMAP
+            ), f"Owner reference of {driver} driver is not of kind ConfigMap"
+            assert (
+                owner_references[0].get("name") == constants.CLIENT_OPERATOR_CONFIGMAP
+            ), f"Owner reference of {driver} driver is not {constants.CLIENT_OPERATOR_CONFIGMAP}"
+    log.info("Verified the ownerReferences for CSI drivers")
 
 
 def mcg_only_install_verification(ocs_registry_image=None):
@@ -2353,9 +2378,9 @@ def verify_consumer_resources():
     ocs_version = version.get_semantic_ocs_version_from_config()
 
     # Verify the default Storageclassclaims
-    if ocs_version >= version.VERSION_4_11:
+    if version.VERSION_4_16 <= ocs_version < version.VERSION_4_19:
         storage_class_claim = OCP(
-            kind=constants.STORAGECLASSCLAIM,
+            kind=constants.STORAGECLAIM,
             namespace=config.ENV_DATA["cluster_namespace"],
         )
         for sc_claim in [
@@ -2435,7 +2460,7 @@ def verify_managed_secrets():
 def verify_provider_storagecluster(sc_data):
     """
     Verify that storagecluster of the provider passes the following checks:
-    1. allowRemoteStorageConsumers: true
+    1. allowRemoteStorageConsumers: true (for ODF versions lesser than 4.19)
     2. hostNetwork: true
     3. matchExpressions:
     key: node-role.kubernetes.io/worker
@@ -2450,10 +2475,12 @@ def verify_provider_storagecluster(sc_data):
     Args:
         sc_data (dict): storagecluster data dictionary
     """
-    log.info(
-        f"allowRemoteStorageConsumers: {sc_data['spec']['allowRemoteStorageConsumers']}"
-    )
-    assert sc_data["spec"]["allowRemoteStorageConsumers"]
+    if version.get_semantic_ocs_version_from_config() < version.VERSION_4_19:
+        log.info(
+            f"allowRemoteStorageConsumers: {sc_data['spec']['allowRemoteStorageConsumers']}"
+        )
+        assert sc_data["spec"]["allowRemoteStorageConsumers"]
+
     log.info(f"hostNetwork: {sc_data['spec']['hostNetwork']}")
     assert sc_data["spec"]["hostNetwork"]
     expressions = sc_data["spec"]["labelSelector"]["matchExpressions"]

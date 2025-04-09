@@ -11,6 +11,7 @@ from ocs_ci.framework import config
 from ocs_ci.ocs import constants, ocp
 from ocs_ci.ocs.resources.catalog_source import CatalogSource
 from ocs_ci.ocs.utils import enable_console_plugin
+from ocs_ci.ocs.version import if_version
 from ocs_ci.utility import templating, version
 from ocs_ci.utility.retry import retry
 from ocs_ci.helpers.managed_services import (
@@ -297,6 +298,7 @@ class StorageClient:
             )
             self.ocp_obj.exec_oc_cmd(f"apply -f {storage_classclaim_data_yaml.name}")
 
+    @if_version("<4.19")
     @retry(AssertionError, 20, 10, 1)
     def verify_storage_claim_status(
         self,
@@ -329,6 +331,7 @@ class StorageClient:
                     ), "storageclaim is not in expected status"
         log.info(sc_claim)
 
+    @if_version("<4.19")
     @retry(AssertionError, 20, 10, 1)
     def verify_storagerequest_exists(
         self, storageclient_name=None, namespace=config.ENV_DATA["cluster_namespace"]
@@ -375,8 +378,8 @@ class StorageClient:
             expected_storageclient_status (str): expected storageclient phase; default value is 'Connected'
 
         Returns:
-            storagerequest_phase (bool): returns true if the
-                    storagerequest_phase == expected_storageclient_status
+            storageclient_phase (bool): returns true if the
+                    storageclient_phase == expected_storageclient_status
 
         """
         if not namespace:

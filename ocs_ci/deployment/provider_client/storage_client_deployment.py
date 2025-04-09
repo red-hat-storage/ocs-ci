@@ -8,6 +8,11 @@ import time
 
 from ocs_ci.framework import config
 from ocs_ci.ocs import constants, ocp, defaults
+from ocs_ci.ocs.constants import (
+    OCS_STORAGE_CLUSTER_CONVERGED_YAML,
+    OCS_STORAGE_CLUSTER_YAML,
+    OCS_STORAGE_CLUSTER_UPDATED_YAML,
+)
 from ocs_ci.ocs.rados_utils import (
     verify_cephblockpool_status,
     check_phase_of_rados_namespace,
@@ -175,10 +180,7 @@ class ODFAndNativeStorageClientDeploymentOnProvider(object):
             timeout=600,
         )
 
-        if (
-            self.ocs_version < version.VERSION_4_16
-            and self.ocs_version >= version.VERSION_4_14
-        ):
+        if self.ocs_version in [version.VERSION_4_14, version.VERSION_4_15]:
             # Disable ROOK_CSI_ENABLE_CEPHFS and ROOK_CSI_ENABLE_RBD
             disable_CEPHFS_RBD_CSI = '{"data":{"ROOK_CSI_ENABLE_CEPHFS":"false", "ROOK_CSI_ENABLE_RBD":"false"}}'
             assert self.config_map_obj.patch(
@@ -210,58 +212,45 @@ class ODFAndNativeStorageClientDeploymentOnProvider(object):
             resource_name=constants.DEFAULT_STORAGE_CLUSTER
         )
         if not is_storagecluster:
-            if (
-                self.ocs_version < version.VERSION_4_16
-                and self.ocs_version >= version.VERSION_4_14
-            ):
-                storage_cluster_data = templating.load_yaml(
-                    constants.OCS_STORAGE_CLUSTER_YAML
-                )
-                storage_cluster_data = add_encryption_details_to_cluster_data(
-                    storage_cluster_data
-                )
-                storage_cluster_data = add_in_transit_encryption_to_cluster_data(
-                    storage_cluster_data
-                )
-                storage_cluster_data["spec"]["storageDeviceSets"][0][
-                    "replica"
-                ] = no_of_worker_nodes
 
-                if self.platform in constants.HCI_PROVIDER_CLIENT_PLATFORMS:
-                    storage_cluster_data["spec"]["storageDeviceSets"][0][
-                        "count"
-                    ] = number_of_disks_available
-
-                templating.dump_data_to_temp_yaml(
-                    storage_cluster_data, constants.OCS_STORAGE_CLUSTER_YAML
-                )
-                self.ocp_obj.exec_oc_cmd(
-                    f"apply -f {constants.OCS_STORAGE_CLUSTER_YAML}"
-                )
+            # define storage cluster path to cr, based on ocs version
+            if self.ocs_version in [version.VERSION_4_14, version.VERSION_4_15]:
+                storage_cluster_path = OCS_STORAGE_CLUSTER_YAML
+            elif self.ocs_version in [
+                version.VERSION_4_16,
+                version.VERSION_4_17,
+                version.VERSION_4_18,
+            ]:
+                storage_cluster_path = OCS_STORAGE_CLUSTER_UPDATED_YAML
             else:
-                storage_cluster_data = templating.load_yaml(
-                    constants.OCS_STORAGE_CLUSTER_UPDATED_YAML
-                )
-                storage_cluster_data = add_encryption_details_to_cluster_data(
-                    storage_cluster_data
-                )
-                storage_cluster_data = add_in_transit_encryption_to_cluster_data(
-                    storage_cluster_data
-                )
-                storage_cluster_data["spec"]["storageDeviceSets"][0][
-                    "replica"
-                ] = no_of_worker_nodes
+                storage_cluster_path = OCS_STORAGE_CLUSTER_CONVERGED_YAML
+            storage_cluster_data = templating.load_yaml(storage_cluster_path)
 
-                if self.platform in constants.HCI_PROVIDER_CLIENT_PLATFORMS:
-                    storage_cluster_data["spec"]["storageDeviceSets"][0][
-                        "count"
-                    ] = number_of_disks_available
-                templating.dump_data_to_temp_yaml(
-                    storage_cluster_data, constants.OCS_STORAGE_CLUSTER_UPDATED_YAML
-                )
-                self.ocp_obj.exec_oc_cmd(
-                    f"apply -f {constants.OCS_STORAGE_CLUSTER_UPDATED_YAML}"
-                )
+            # configure storage cluster data based on platform and configuration
+            storage_cluster_data = add_encryption_details_to_cluster_data(
+                storage_cluster_data
+            )
+            storage_cluster_data = add_in_transit_encryption_to_cluster_data(
+                storage_cluster_data
+            )
+            storage_cluster_data["spec"]["storageDeviceSets"][0][
+                "replica"
+            ] = no_of_worker_nodes
+
+            if self.platform in constants.HCI_PROVIDER_CLIENT_PLATFORMS:
+                storage_cluster_data["spec"]["storageDeviceSets"][0][
+                    "count"
+                ] = number_of_disks_available
+
+            # configure dynamic namespace
+            storage_cluster_data["metadata"]["namespace"] = config.ENV_DATA[
+                "cluster_namespace"
+            ]
+
+            templating.dump_data_to_temp_yaml(
+                storage_cluster_data, storage_cluster_path
+            )
+            self.ocp_obj.exec_oc_cmd(f"apply -f {storage_cluster_path}")
 
         # Creating toolbox pod
         setup_ceph_toolbox()
@@ -290,7 +279,7 @@ class ODFAndNativeStorageClientDeploymentOnProvider(object):
                 check_phase_of_rados_namespace()
             ), "The radosnamespace is not in Ready phase"
 
-            # Validate storageclassrequests created
+            # Validate storageclasses created
             storage_class_classes = get_all_storageclass_names()
             for storage_class in self.storage_class_claims:
                 assert (

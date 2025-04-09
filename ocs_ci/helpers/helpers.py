@@ -29,6 +29,7 @@ from ocs_ci.helpers.proxy import (
     get_cluster_proxies,
     update_container_with_proxy_env,
 )
+from ocs_ci.ocs.resources.ocsconfigmaps import get_ocs_storage_consumer_configmap_obj
 from ocs_ci.ocs.utils import (
     get_non_acm_cluster_config,
     get_pod_name_by_pattern,
@@ -5877,6 +5878,9 @@ def find_cephblockpoolradosnamespace(storageclient_uid=None):
     Find the cephblockpoolradosnamespace related to a storageclient. This should run on provider cluster in a
         provider mode setup.
 
+    ! Important. from 4.19 onwards, the StorageRequest is deprecated.
+    ! rns will be fetched from configmap of storageConsumer
+
     Args:
         storageclient_id(string): The uid of the storageclient for which the cephblockpoolradosnamespace to be fetched
 
@@ -5909,21 +5913,28 @@ def find_cephblockpoolradosnamespace(storageclient_uid=None):
     )
 
     cephbpradosns = ""
-    storage_request_obj = ocp.OCP(
-        kind="StorageRequest", namespace=config.ENV_DATA["cluster_namespace"]
-    )
-    for storage_request_dict in storage_request_obj.get()["items"]:
-        if (
-            storageconsumer
-            in storage_request_dict["metadata"]["ownerReferences"][0].values()
-        ):
-            for ceph_resources in storage_request_dict["status"]["cephResources"]:
-                if "CephBlockPoolRadosNamespace" in ceph_resources.values():
-                    cephbpradosns = ceph_resources["name"]
-                    break
-        if cephbpradosns:
-            break
 
+    # from ODF 4.19 and onwards, StorageRequest does not exist on new clusters, upgraded clusters have it,
+    # but StorageRequest is not reconciled. StorageConsumer exists in storage hub cluster and in consumer clusters
+    # to make this function generic need to switch context between clusters
+    if version.get_semantic_ocs_version_from_config() < version.VERSION_4_19:
+        storage_request_obj = ocp.OCP(
+            kind="StorageRequest", namespace=config.ENV_DATA["cluster_namespace"]
+        )
+        for storage_request_dict in storage_request_obj.get()["items"]:
+            if (
+                storageconsumer
+                in storage_request_dict["metadata"]["ownerReferences"][0].values()
+            ):
+                for ceph_resources in storage_request_dict["status"]["cephResources"]:
+                    if "CephBlockPoolRadosNamespace" in ceph_resources.values():
+                        cephbpradosns = ceph_resources["name"]
+                        break
+            if cephbpradosns:
+                break
+    else:
+        storage_consumer = get_ocs_storage_consumer_configmap_obj(storageconsumer)
+        cephbpradosns = storage_consumer.get_rbd_rados_ns()
     return cephbpradosns
 
 
@@ -5931,6 +5942,9 @@ def find_cephfilesystemsubvolumegroup(storageclient_uid=None):
     """
     Find the cephfilesystemsubvolumegroup related to a storageclient. This should run on provider cluster in a
         provider mode setup.
+
+    ! Important. from 4.19 onwards, the StorageRequest is deprecated.
+    ! cephfilesystemsubvolumegroup will be fetched from configmap of storageConsumer
 
     Args:
         storageclient_id(string): The uid of the storageclient for which the cephfilesystemsubvolumegroup to be fetched
@@ -5964,19 +5978,26 @@ def find_cephfilesystemsubvolumegroup(storageclient_uid=None):
     )
 
     cephbfssubvolumegroup = ""
-    storage_request_obj = ocp.OCP(
-        kind="StorageRequest", namespace=config.ENV_DATA["cluster_namespace"]
-    )
-    for storage_request_dict in storage_request_obj.get()["items"]:
-        if (
-            storageconsumer
-            in storage_request_dict["metadata"]["ownerReferences"][0].values()
-        ):
-            for ceph_resources in storage_request_dict["status"]["cephResources"]:
-                if "CephFilesystemSubVolumeGroup" in ceph_resources.values():
-                    cephbfssubvolumegroup = ceph_resources["name"]
-                    break
-        if cephbfssubvolumegroup:
-            break
+    # from ODF 4.19 and onwards, StorageRequest does not exist on new clusters, upgraded clsuters have it,
+    # but StorageRequest is not reconciled. StorageConsumer exists in storage hub cluster and in consumer clusters
+    # to make this function generic need to switch context between clusters
+    if version.get_semantic_ocs_version_from_config() < version.VERSION_4_19:
+        storage_request_obj = ocp.OCP(
+            kind="StorageRequest", namespace=config.ENV_DATA["cluster_namespace"]
+        )
+        for storage_request_dict in storage_request_obj.get()["items"]:
+            if (
+                storageconsumer
+                in storage_request_dict["metadata"]["ownerReferences"][0].values()
+            ):
+                for ceph_resources in storage_request_dict["status"]["cephResources"]:
+                    if "CephFilesystemSubVolumeGroup" in ceph_resources.values():
+                        cephbfssubvolumegroup = ceph_resources["name"]
+                        break
+            if cephbfssubvolumegroup:
+                break
+    else:
+        storage_consumer = get_ocs_storage_consumer_configmap_obj(storageconsumer)
+        cephbfssubvolumegroup = storage_consumer.get_cephfs_subvolumegroup()
 
     return cephbfssubvolumegroup
