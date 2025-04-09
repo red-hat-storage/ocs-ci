@@ -1300,7 +1300,9 @@ class TestS3BucketPolicy(MCGTest):
 class TestNoobaaUpgradeWithBucketPolicy:
     """
     Test noobaa status post upgrade when there is bucket
-    with some bucket policy
+    with some bucket policy.
+
+    Bug: https://bugzilla.redhat.com/show_bug.cgi?id=2302507
 
     """
 
