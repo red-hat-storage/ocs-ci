@@ -1375,17 +1375,22 @@ def verify_max_openshift_version():
     )
 
 
-def verify_backing_store():
+def verify_backing_store(backingstore_name=None):
     """
     Verify backingstore
     """
-    log.info("Verifying backingstore")
+    backingstore_name = backingstore_name or ""
+    log.info(f"Verifying backingstore {backingstore_name}")
+
     backingstore_obj = OCP(
         kind="backingstore", namespace=config.ENV_DATA["cluster_namespace"]
     )
     # backingstore creation will take time, so keeping timeout as 600
     assert backingstore_obj.wait_for_resource(
-        condition=constants.STATUS_READY, column="PHASE", timeout=600
+        condition=constants.STATUS_READY,
+        resource_name=backingstore_name,
+        column="PHASE",
+        timeout=600,
     )
 
 
