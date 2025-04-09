@@ -1237,6 +1237,12 @@ class HostedODF(HypershiftHostedOCP):
         if "latest" in hosted_odf_version:
             hosted_odf_version = hosted_odf_version.split("-")[-1]
 
+        if "konflux" in hosted_odf_version and "-" in hosted_odf_version:
+            version_semantic = version.get_semantic_version(
+                hosted_odf_version.split("-")[0]
+            )
+            hosted_odf_version = f"{version_semantic.major}.{version_semantic.minor}"
+
         subscription_data["spec"]["channel"] = f"stable-{str(hosted_odf_version)}"
 
         subscription_file = tempfile.NamedTemporaryFile(
