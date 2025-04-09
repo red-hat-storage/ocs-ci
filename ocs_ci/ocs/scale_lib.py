@@ -140,8 +140,8 @@ class FioPodScale(object):
                 no_of_pvc=int(pvc_count / 2),
                 access_mode=constants.ACCESS_MODE_RWO,
                 sc_name=rbd_sc_obj,
-                pvc_size=pvc_size,
-                max_pvc_size=max_pvc_size,
+                pvc_size=1,
+                max_pvc_size=2,
             )
         )
         cephfs_pvc_dict_list.extend(
