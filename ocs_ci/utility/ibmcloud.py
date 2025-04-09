@@ -1313,12 +1313,13 @@ class IBMCloudObjectStorage:
             endpoint_url=self.cos_endpoint,
         )
 
-    def get_bucket_objects(self, bucket_name):
+    def get_bucket_objects(self, bucket_name, prefix=None):
         """
         Fetches the objects in a bucket
 
         Args:
             bucket_name (str): Name of the bucket
+            prefix (str): Prefix for the objects to fetch
 
         Returns:
             list: List of objects in a bucket
@@ -1327,9 +1328,17 @@ class IBMCloudObjectStorage:
         bucket_objects = []
         logger.info(f"Retrieving bucket contents from {bucket_name}")
         try:
-            objects = self.cos_client.list_objects(Bucket=bucket_name)
-            for obj in objects.get("Contents", []):
-                bucket_objects.append(obj["Key"])
+            bucket_objects_info = []
+            paginator = self.cos_client.get_paginator("list_objects_v2")
+            operation_parameters = {"Bucket": bucket_name}
+            if prefix:
+                operation_parameters["Prefix"] = prefix
+            page_iterator = paginator.paginate(**operation_parameters)
+            for page in page_iterator:
+                if "Contents" in page:
+                    bucket_objects_info.extend(page["Contents"])
+            for object_info in bucket_objects_info:
+                bucket_objects.append(object_info["Key"])
         except ClientError as ce:
             logger.error(f"CLIENT ERROR: {ce}")
         except Exception as e:
