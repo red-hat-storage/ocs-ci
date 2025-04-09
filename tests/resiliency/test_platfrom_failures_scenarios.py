@@ -15,6 +15,7 @@ log = logging.getLogger(__name__)
     [
         "PLATFORM_INSTANCE_FAILURES",
         "PLATFORM_NETWORK_FAILURES",
+        "PLATFORM_NETWORK_FAULTS",
     ],
 )
 class TestPlatformFailureScenarios:
@@ -28,8 +29,8 @@ class TestPlatformFailureScenarios:
             list: List of workload objects
         """
         project = project_factory()
-        size = 5
-        fio_args = {"rw": "randwrite", "bs": "128k", "runtime": 300}
+        size = 10
+        fio_args = {"rw": "randwrite", "bs": "256k", "runtime": 7200}
         interfaces = [constants.CEPHFILESYSTEM, constants.CEPHBLOCKPOOL]
 
         workloads = []
@@ -39,14 +40,14 @@ class TestPlatformFailureScenarios:
             else:
                 access_modes = [
                     f"{constants.ACCESS_MODE_RWO}-Block",
-                    f"{constants.ACCESS_MODE_RWO}-Block",
+                    f"{constants.ACCESS_MODE_RWX}-Block",
                 ]
             pvcs = multi_pvc_factory(
                 interface=interface,
                 project=project,
                 access_modes=access_modes,
                 size=size,
-                num_of_pvc=2,
+                num_of_pvc=4,
             )
             for pvc in pvcs:
                 workload = resiliency_workload("FIO", pvc, fio_args=fio_args)
