@@ -309,7 +309,9 @@ class Deployment(object):
 
             logger.info("Creating ManagedClusterSetBinding")
             cluster_set = get_cluster_set_name()
-            managed_clusters = ocp.OCP(kind=constants.ACM_MANAGEDCLUSTER).get().get("items", [])
+            managed_clusters = (
+                ocp.OCP(kind=constants.ACM_MANAGEDCLUSTER).get().get("items", [])
+            )
             managedclustersetbinding_obj = templating.load_yaml(
                 constants.GITOPS_MANAGEDCLUSTER_SETBINDING_YAML
             )
