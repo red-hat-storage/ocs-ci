@@ -195,7 +195,6 @@ class MultiClusterConfig:
 
     def _single_cluster_init_cluster_configs(self):
         self.clusters.insert(0, Config())
-        self._refresh_ctx()
 
     def init_cluster_configs(self):
         if self.nclusters > 1:
@@ -204,29 +203,16 @@ class MultiClusterConfig:
             for i in range(self.nclusters):
                 self.clusters.insert(i, Config())
                 self.clusters[i].MULTICLUSTER["multicluster_index"] = i
-            # TODO: Delete _refresh_ctx after confirming we don't need it
-            self._refresh_ctx()
             self.single_cluster_default = False
 
-    # TODO we can delete function after _refresh_ctx is not needed
     def update(self, user_dict):
         self.cluster_ctx.update(user_dict)
-        self._refresh_ctx()
 
-    # TODO we can delete function after _refresh_ctx is not needed
     def reset(self):
         self.cluster_ctx.reset()
-        self._refresh_ctx()
 
     def reset_ctx(self):
         self.cur_index = 0
-        # TODO: Delete _refresh_ctx after confirming we don't need it
-        self._refresh_ctx()
-
-    def _refresh_ctx(self):
-        # TODO: We need to get rid of KUBECONFIG from ENV
-        if self.RUN.get("kubeconfig"):
-            os.environ["KUBECONFIG"] = self.RUN.get("kubeconfig")
 
     def switch_ctx(self, index=0):
         self.cur_index = index
@@ -234,8 +220,6 @@ class MultiClusterConfig:
             thread_id = get_ident()
             logger.info(f"Thread ID: {thread_id} is using config index: {index}")
             config.thread_local_data.config_index = index
-        # TODO: We need to get rid of KUBECONFIG from ENV
-        self._refresh_ctx()
         # Log the switch after changing the current index
         logger.info(f"Switched to cluster: {self.current_cluster_name()}")
 
@@ -547,7 +531,6 @@ class MultiClusterConfig:
         """
         self.clusters.insert(index, new_config)
         self.nclusters += 1
-        self._refresh_ctx()
 
     def remove_cluster(self, index):
         """
@@ -558,7 +541,6 @@ class MultiClusterConfig:
         """
         self.clusters.pop(index)
         self.nclusters -= 1
-        self._refresh_ctx()
 
     def remove_cluster_by_name(self, cluster_name):
         """

@@ -259,9 +259,6 @@ def main():
     # make sure that bin dir is in PATH (for oc cli tool)
     utils.add_path_to_env_path(os.path.expanduser(framework.config.RUN["bin_dir"]))
 
-    # set cluster path (for KUBECONFIG required by oc cli tool)
-    from ocs_ci.ocs.openshift_ops import OCP
-
     OCP.set_kubeconfig(
         os.path.join(args.cluster_path, config.RUN["kubeconfig_location"])
     )
