@@ -20,7 +20,8 @@ log = logging.getLogger(__name__)
 @tier2
 @brown_squad
 @skipif_external_mode
-@skipif_ocs_version("<4.15 or >=4.18")
+@skipif_ocs_version("<4.15")
+@skipif_ocs_version(">=4.18")
 @jira("DFBUGS-1284")
 @pytest.mark.polarion_id("OCS-6240")
 class TestMgrRookModule(ManageTest):
