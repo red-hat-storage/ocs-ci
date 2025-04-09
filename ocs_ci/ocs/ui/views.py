@@ -1372,7 +1372,8 @@ storageclass = {
         By.CSS_SELECTOR,
     ),
     "delete_inside_storageclass": (
-        'button[data-test-action="Delete StorageClass"]',
+        'button[data-test-action="Delete StorageClass"], '
+        'li[data-test-action="Delete StorageClass"] button',
         By.CSS_SELECTOR,
     ),
     "confirm_delete_inside_storageclass": ("//button[text()='Delete']", By.XPATH),
@@ -1441,7 +1442,9 @@ storageclass = {
     "select-sc": ("//a[normalize-space()='{}']", By.XPATH),
     "sc-actions": ("button[aria-label='Actions']", By.CSS_SELECTOR),
     "delete-storage-class": (
-        "button[data-test-action='Delete StorageClass']",
+        "button[data-test-action='Delete StorageClass'], "
+        ""
+        "li[data-test-action='Delete StorageClass'] button",
         By.CSS_SELECTOR,
     ),
     "approve-storage-class-deletion": ("#confirm-action", By.CSS_SELECTOR),
