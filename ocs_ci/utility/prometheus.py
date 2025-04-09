@@ -376,13 +376,13 @@ class PrometheusAPI(object):
         """
         Login into OCP, refresh endpoint and token.
         """
+        kubeconfig = config.RUN["kubeconfig"]
         ocp = OCP(
             kind=constants.ROUTE,
             namespace=defaults.OCS_MONITORING_NAMESPACE,
             threading_lock=self._threading_lock,
-            cluster_kubeconfig=os.getenv("KUBECONFIG"),
+            cluster_kubeconfig=kubeconfig,
         )
-        kubeconfig = os.getenv("KUBECONFIG")
         kube_data = ""
         with open(kubeconfig, "r") as kube_file:
             kube_data = kube_file.readlines()

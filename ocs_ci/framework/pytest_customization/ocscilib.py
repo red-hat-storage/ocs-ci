@@ -658,7 +658,6 @@ def process_cluster_cli_params(config):
     custom_kubeconfig_location = get_cli_param(config, "kubeconfig")
     ocsci_config.RUN["custom_kubeconfig_location"] = custom_kubeconfig_location
     if custom_kubeconfig_location:
-        os.environ["KUBECONFIG"] = custom_kubeconfig_location
         ocsci_config.RUN["kubeconfig"] = custom_kubeconfig_location
 
 
