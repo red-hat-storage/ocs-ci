@@ -45,6 +45,8 @@ run it belongs here.
 * `cluster_dir_full_path` - cluster dir full path on NFS share starting with `/mnt/`
 * `run_id` - Timestamp ID that is used for log directory naming
 * `kubeconfig_location` - Filepath (under the cluster path) where the kubeconfig is located
+* `kubeadmin_password` - kubeadmin password used as alternative way to login to the OCP cluster if kubeconfig is not available
+* `ocp_url` - OCP Cluster URL (api or console) used to login to OCP cluster if kubeconfig is not available
 * `cli_params` - Dict that holds onto all CLI parameters
 * `client_version` - OCP client version
 * `bin_dir` - Directory where binaries are downloaded to
