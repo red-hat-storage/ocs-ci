@@ -519,7 +519,9 @@ def run_cmd_interactive(
         InteractivePromptException: in case something goes wrong
 
     """
-    child = pexpect.spawn(cmd)
+    env = os.environ.copy()
+    env["KUBECONFIG"] = config.RUN.get("kubeconfig")
+    child = pexpect.spawn(cmd, env=env)
     for prompt, answer in prompts_answers.items():
         if child.expect(prompt, timeout=timeout):
             if raise_exception:
@@ -643,6 +645,10 @@ def exec_cmd(
         stderr     (str): The standard error (None if not captured).
 
     """
+    env = kwargs.pop("env", os.environ.copy())
+    env["kubeconfig"] = config.RUN.get("kubeconfig")
+    if cluster_config:
+        env["kubeconfig"] = cluster_config.RUN.get("kubeconfig")
     masked_cmd = mask_secrets(cmd, secrets)
     log.info(f"Executing command: {masked_cmd}")
     if isinstance(cmd, str) and not kwargs.get("shell"):
@@ -689,6 +695,7 @@ def exec_cmd(
             stderr=subprocess.PIPE,
             stdin=subprocess.PIPE,
             timeout=timeout,
+            env=env,
             **kwargs,
         )
     finally:
@@ -1624,12 +1631,15 @@ def run_async(command):
         ret, out, err = proc.async_communicate()
     """
     log.info(f"Executing command: {command}")
+    env = os.environ.copy()
+    env["KUBECONFIG"] = config.RUN.get("kubeconfig")
     popen_obj = subprocess.Popen(
         command,
         stdin=subprocess.PIPE,
         stdout=subprocess.PIPE,
         shell=True,
         encoding="utf-8",
+        env=env,
     )
 
     def async_communicate():
@@ -2298,7 +2308,8 @@ def get_running_acm_version():
         string: ACM version
 
     """
-    occmd = "oc get mch multiclusterhub -n open-cluster-management -o json"
+    kubeconfig = config.RUN.get("kubeconfig")
+    occmd = f"oc get --kubeconfig {kubeconfig} mch multiclusterhub -n open-cluster-management -o json"
     jq_cmd = "jq -r .status.currentVersion"
     json_out = subprocess.Popen(shlex.split(occmd), stdout=subprocess.PIPE)
     acm_version = subprocess.Popen(

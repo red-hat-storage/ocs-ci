@@ -95,7 +95,9 @@ def run_command(cmd, timeout=600, out_format="string", **kwargs):
 
     logger.info(f"Going to format output as {out_format}")
     logger.info(f"Going to run {cmd} with timeout of {timeout}")
-    cp = subprocess.run(command, timeout=timeout, **kwargs)
+    env = kwargs.pop("env", os.environ.copy())
+    env["KUBECONFIG"] = config.RUN.get("kubeconfig")
+    cp = subprocess.run(command, timeout=timeout, env=env, **kwargs)
     output = cp.stdout.decode()
     err = cp.stderr.decode()
     # exit code is not zero

@@ -638,8 +638,9 @@ def insert_delay(mon_dep):
 
     """
     logger.info(f"Updating initialDelaySeconds on deployment: {mon_dep}")
+    kubeconfig = config.RUN.get("kubeconfig")
     cmd = (
-        f"oc get deployment {mon_dep} -o yaml | "
+        f"oc get --kubeconfig {kubeconfig} deployment {mon_dep} -o yaml | "
         f'sed "s/initialDelaySeconds: 10/initialDelaySeconds: 10000/g" | oc replace -f - '
     )
     logger.info(f"Executing {cmd}")
