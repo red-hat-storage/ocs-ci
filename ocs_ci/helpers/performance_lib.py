@@ -132,15 +132,7 @@ def run_oc_command(cmd, namespace=None):
     if namespace is None:
         namespace = config.ENV_DATA["cluster_namespace"]
 
-    cluster_dir_kubeconfig = os.path.join(
-        config.ENV_DATA["cluster_path"], config.RUN.get("kubeconfig_location")
-    )
-    if os.getenv("KUBECONFIG"):
-        kubeconfig = os.getenv("KUBECONFIG")
-    elif os.path.exists(cluster_dir_kubeconfig):
-        kubeconfig = cluster_dir_kubeconfig
-    else:
-        kubeconfig = None
+    kubeconfig = config.RUN["kubeconfig"]
 
     command = f"oc --kubeconfig {kubeconfig} -n {namespace} {cmd}"
     return run_command(command, out_format="list")

@@ -143,7 +143,6 @@ class OCP(object):
         if not os.path.isfile(kubeconfig_path):
             log.warning("The kubeconfig file %s doesn't exist!", kubeconfig_path)
             return False
-        os.environ["KUBECONFIG"] = kubeconfig_path
         if not which("oc"):
             get_openshift_client()
         try:

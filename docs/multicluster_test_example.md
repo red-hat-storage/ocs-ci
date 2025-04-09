@@ -33,7 +33,7 @@ def test_multicluster_dahorak():
         # run oc command against the selected cluster
         log.info(exec_cmd("oc version").stdout)
         # print kubeconfig path of the selected cluster
-        log.info(os.environ["KUBECONFIG"])
+        log.info(config.RUN.get("kubeconfig"))
 
     # access configuration of particular cluster without switching context to it
     log.info(f"Cluster name of first cluster: {config.clusters[0].ENV_DATA['cluster_name']}")
