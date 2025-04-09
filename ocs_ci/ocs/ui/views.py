@@ -1338,7 +1338,10 @@ block_pool = {
         'button[data-test-action="Edit BlockPool"], button[id="Edit Resource"]',
         By.CSS_SELECTOR,
     ),
-    "confirm_delete_inside_pool": ("//button[text()='Delete']", By.XPATH),
+    "confirm_delete_inside_pool": (
+        "//button[text()='Delete'] | //button[@id='confirm-action']",
+        By.XPATH,
+    ),
     "replica_dropdown_edit": ('button[data-test="replica-dropdown"]', By.CSS_SELECTOR),
     "compression_checkbox_edit": (
         'input[data-test="compression-checkbox"]',
@@ -1376,7 +1379,10 @@ storageclass = {
         'li[data-test-action="Delete StorageClass"] button',
         By.CSS_SELECTOR,
     ),
-    "confirm_delete_inside_storageclass": ("//button[text()='Delete']", By.XPATH),
+    "confirm_delete_inside_storageclass": (
+        "//button[text()='Delete'] | //button[@id='confirm-action']",
+        By.XPATH,
+    ),
     "create-sc": (
         "#yaml-create",
         By.CSS_SELECTOR,
