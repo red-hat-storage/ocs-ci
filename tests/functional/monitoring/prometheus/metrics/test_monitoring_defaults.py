@@ -289,7 +289,6 @@ def test_provider_metrics_available(threading_lock):
 
 @blue_squad
 @tier1
-@bugzilla("2297285")
 @skipif_external_mode
 @pytest.mark.polarion_id("OCS-6796")
 def test_monitoring_ip_connectivity(threading_lock):
