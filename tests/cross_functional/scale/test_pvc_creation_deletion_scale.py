@@ -40,7 +40,7 @@ class TestPVCCreationDeletionScale(E2ETest):
         argnames=["access_mode", "interface"],
         argvalues=[
             pytest.param(
-                *[constants.ACCESS_MODE_RWO, constants.CEPHBLOCKPOOL],
+                *[constants.ACCESS_MODE_RWX, constants.CEPHFS_INTERFACE],
                 marks=pytest.mark.polarion_id("OCS-1225"),
             ),
         ],
