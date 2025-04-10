@@ -94,7 +94,7 @@ class FioPodScale(object):
         obj_name="obj1",
         start_io=True,
         io_runtime=None,
-        pvc_size=None,
+        pvc_size=2,
         max_pvc_size=105,
     ):
         """
@@ -1165,7 +1165,7 @@ def construct_pvc_creation_yaml_bulk_for_kube_job(
 
     # Construct PVC.yaml for the no_of_required_pvc count
     # append all the pvc.yaml dict to pvc_dict_list and return the list
-    if max_pvc_size <= 9:
+    if max_pvc_size < 1:
         raise ValueError(
             f"The max pvc size is {max_pvc_size}, and it should be greater than 9"
         )
