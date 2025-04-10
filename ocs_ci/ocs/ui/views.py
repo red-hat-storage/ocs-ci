@@ -161,6 +161,7 @@ deployment_4_7 = {
 deployment_4_9 = {
     "drop_down_projects": (
         'button[class="pf-v5-c-menu-toggle co-namespace-dropdown__menu-toggle"], '
+        'button[class="pf-v6-c-menu-toggle co-namespace-dropdown__menu-toggle"], '
         'button[class="pf-c-menu-toggle co-namespace-dropdown__menu-toggle"]',
         By.CSS_SELECTOR,
     ),
@@ -226,7 +227,8 @@ deployment_4_12 = {
 
 deployment_4_15 = {
     "drop_down_projects": (
-        'button[class="pf-v5-c-menu-toggle co-namespace-dropdown__menu-toggle"]',
+        'button[class="pf-v5-c-menu-toggle co-namespace-dropdown__menu-toggle"], '
+        'button[class="pf-v6-c-menu-toggle co-namespace-dropdown__menu-toggle"]',
         By.CSS_SELECTOR,
     ),
     "drop_down_performance": (
@@ -730,7 +732,8 @@ page_nav = {
     ),
     "odf_tab": ("OpenShift Data Foundation", By.LINK_TEXT),
     "drop_down_projects": (
-        'button[class="pf-v5-c-menu-toggle co-namespace-dropdown__menu-toggle"]',
+        'button[class="pf-v5-c-menu-toggle co-namespace-dropdown__menu-toggle"], '
+        'button[class="pf-v6-c-menu-toggle co-namespace-dropdown__menu-toggle"]',
         By.CSS_SELECTOR,
     ),
     "choose_all_projects": ("//span[text()='All Projects']", By.XPATH),
