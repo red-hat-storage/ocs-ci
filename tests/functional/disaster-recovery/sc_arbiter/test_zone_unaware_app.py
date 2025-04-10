@@ -9,7 +9,12 @@ from ocs_ci.framework.pytest_customization.marks import (
     turquoise_squad,
 )
 from ocs_ci.helpers.sanity_helpers import Sanity
-from ocs_ci.ocs.node import taint_nodes, get_nodes, get_worker_nodes
+from ocs_ci.ocs.node import (
+    taint_nodes,
+    get_worker_nodes,
+    get_node_objs,
+    get_all_nodes,
+)
 from ocs_ci.helpers.helpers import (
     create_network_fence,
     get_rbd_daemonset_csi_addons_node_object,
@@ -58,16 +63,11 @@ class TestZoneUnawareApps:
 
             # check if all the nodes are Running
             log.info("Checking if all the nodes are READY")
-            master_nodes = get_nodes(node_type=constants.MASTER_MACHINE)
-            worker_nodes = get_nodes(node_type=constants.WORKER_MACHINE)
-            nodes_not_ready = list()
-            nodes_not_ready.extend(
-                [node for node in worker_nodes if node.status() != "Ready"]
-            )
-            nodes_not_ready.extend(
-                [node for node in master_nodes if node.status() != "Ready"]
-            )
-
+            nodes_not_ready = [
+                node_obj
+                for node_obj in get_node_objs(get_all_nodes())
+                if node_obj.status() != constants.STATUS_READY
+            ]
             if len(nodes_not_ready) != 0:
                 try:
                     nodes.start_nodes(nodes=nodes_not_ready)
