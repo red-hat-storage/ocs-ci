@@ -150,11 +150,11 @@ class ExpirationRule(LifecycleRule):
 
     def __init__(
         self,
-        days,
+        days=None,
         filter=LifecycleFilter(),
         use_date=False,
         is_enabled=True,
-        expire_solo_delete_markers=False,
+        expired_object_delete_marker=False,
     ):
         """
         Constructor method for the class
@@ -164,7 +164,7 @@ class ExpirationRule(LifecycleRule):
             filter (LifecycleFilter): Optional object filter
             use_date (bool): Whether to set a a date instead of the number of days
             is_enabled (bool): Whether the rule is enabled or not
-            expire_solo_delete_markers (bool): Only relevant for versioned buckets.
+            expired_object_delete_marker (bool): Only relevant for versioned buckets.
                                                If set to True, a delete marker of an object
                                                will expire if no other versions of the object
                                                exist. This also means that an expired object
@@ -179,24 +179,29 @@ class ExpirationRule(LifecycleRule):
         super().__init__(filter=filter, is_enabled=is_enabled)
         self.days = days
         self.use_date = use_date
-        self.expire_solo_delete_markers = expire_solo_delete_markers
+        self.expired_object_delete_marker = expired_object_delete_marker
 
     def as_dict(self):
         rule_dict = super().as_dict()
-        if self.use_date:
-            expiration_time_key = "Date"
-            expiration_time_value = (
-                datetime.datetime.now() + datetime.timedelta(days=self.days)
-            ).strftime("%Y-%m-%d")
-        else:
-            expiration_time_key = "Days"
-            expiration_time_value = self.days
 
-        rule_dict["Expiration"] = {expiration_time_key: expiration_time_value}
-        if self.expire_solo_delete_markers:
-            rule_dict["Expiration"][
-                "ExpiredObjectDeleteMarker"
-            ] = self.expire_solo_delete_markers
+        d = {}
+
+        if self.days:
+            key = "Date" if self.use_date else "Days"
+            value = (
+                (datetime.datetime.now() + datetime.timedelta(days=self.days)).strftime(
+                    "%Y-%m-%d"
+                )
+                if self.use_date
+                else self.days
+            )
+            d[key] = value
+
+        # Add delete marker expiration (even if time-based expiration exists — for negative testing)
+        if self.expired_object_delete_marker:
+            d["ExpiredObjectDeleteMarker"] = True
+
+        rule_dict["Expiration"] = d
         return rule_dict
 
 
