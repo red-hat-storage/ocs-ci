@@ -1338,7 +1338,10 @@ block_pool = {
         'button[data-test-action="Edit BlockPool"], button[id="Edit Resource"]',
         By.CSS_SELECTOR,
     ),
-    "confirm_delete_inside_pool": ("//button[text()='Delete']", By.XPATH),
+    "confirm_delete_inside_pool": (
+        "//button[text()='Delete'] | //button[@id='confirm-action']",
+        By.XPATH,
+    ),
     "replica_dropdown_edit": ('button[data-test="replica-dropdown"]', By.CSS_SELECTOR),
     "compression_checkbox_edit": (
         'input[data-test="compression-checkbox"]',
@@ -1372,10 +1375,14 @@ storageclass = {
         By.CSS_SELECTOR,
     ),
     "delete_inside_storageclass": (
-        'button[data-test-action="Delete StorageClass"]',
+        'button[data-test-action="Delete StorageClass"], '
+        'li[data-test-action="Delete StorageClass"] button',
         By.CSS_SELECTOR,
     ),
-    "confirm_delete_inside_storageclass": ("//button[text()='Delete']", By.XPATH),
+    "confirm_delete_inside_storageclass": (
+        "//button[text()='Delete'] | //button[@id='confirm-action']",
+        By.XPATH,
+    ),
     "create-sc": (
         "#yaml-create",
         By.CSS_SELECTOR,
@@ -1441,7 +1448,9 @@ storageclass = {
     "select-sc": ("//a[normalize-space()='{}']", By.XPATH),
     "sc-actions": ("button[aria-label='Actions']", By.CSS_SELECTOR),
     "delete-storage-class": (
-        "button[data-test-action='Delete StorageClass']",
+        "button[data-test-action='Delete StorageClass'], "
+        ""
+        "li[data-test-action='Delete StorageClass'] button",
         By.CSS_SELECTOR,
     ),
     "approve-storage-class-deletion": ("#confirm-action", By.CSS_SELECTOR),
@@ -1746,7 +1755,8 @@ validation_4_9 = {
 validation_4_10 = {
     "system-capacity": ("//div[contains(text(),'System Capacity')]", By.XPATH),
     "ocs-storagecluster-storagesystem": (
-        "//a[.='ocs-storagecluster-storagesystem']",
+        "//a[.='ocs-storagecluster-storagesystem'] | "
+        "//a[contains(@href, 'odf/system')]",
         By.XPATH,
     ),
     "ocs-external-storagecluster-storagesystem": (
