@@ -212,7 +212,6 @@ from ocs_ci.utility.decorators import switch_to_default_cluster_index_at_last
 from ocs_ci.helpers.keyrotation_helper import PVKeyrotation
 from ocs_ci.ocs.resources.storage_cluster import set_in_transit_encryption
 from ocs_ci.helpers.e2e_helpers import verify_osd_used_capacity_greater_than_expected
-from ocp_resources.resource import get_client
 
 
 log = logging.getLogger(__name__)
@@ -9486,6 +9485,7 @@ def setup_nfs(request, setup_rbac):
 
         request.addfinalizer(teardown)
 
+
 @pytest.fixture(scope="session")
 def admin_client():
     """
@@ -9495,4 +9495,6 @@ def admin_client():
         ocsci_config.ENV_DATA["cluster_path"],
         ocsci_config.RUN.get("kubeconfig_location"),
     )
+    from ocp_resources.resource import get_client
+
     return get_client(config_file=kubeconfig_path)
