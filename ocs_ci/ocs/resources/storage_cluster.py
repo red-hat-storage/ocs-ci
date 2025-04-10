@@ -1438,6 +1438,17 @@ def verify_mcg_only_pods():
         constants.ODF_OPERATOR_CONTROL_MANAGER_LABEL: 1,
         constants.OPERATOR_LABEL: 1,
     }
+    odf_running_version = get_ocs_version_from_csv(only_major_minor=True)
+    if odf_running_version >= version.VERSION_4_19:
+        del resources_dict[constants.CSI_ADDONS_CONTROLLER_MANAGER_LABEL]
+        del resources_dict[constants.NOOBAA_DB_LABEL_47_AND_ABOVE]
+        del resources_dict[constants.OPERATOR_LABEL]
+        resources_dict.update(
+            {
+                constants.NOOBAA_DB_LABEL_419_AND_ABOVE: 2,
+                constants.NOOBAA_CNPG_POD_LABEL: 1,
+            }
+        )
     if config.ENV_DATA.get("noobaa_external_pgsql"):
         del resources_dict[constants.NOOBAA_DB_LABEL_47_AND_ABOVE]
     if config.ENV_DATA["platform"].lower() == constants.VSPHERE_PLATFORM:
