@@ -89,6 +89,7 @@ class BackingStore:
             except Exception as e:
                 raise e
             pv_name = backingstore_pvc["spec"]["volumeName"]
+            sc_name = backingstore_pvc["spec"]["storageClassName"]
 
         def _oc_deletion_flow():
             try:
@@ -240,8 +241,11 @@ class BackingStore:
             return len(pvcs["items"]) == 0 and len(pods) == 0
 
         if self.type == "pv":
-            log.info(f"Waiting for backingstore {self.name} resources to be deleted")
-            _wait_for_pv_backingstore_resource_deleted()
+            if sc_name != constants.NFS_SC_NAME:
+                log.info(
+                    f"Waiting for backingstore {self.name} resources to be deleted"
+                )
+                _wait_for_pv_backingstore_resource_deleted()
 
 
 def backingstore_factory(request, cld_mgr, mcg_obj, cloud_uls_factory):

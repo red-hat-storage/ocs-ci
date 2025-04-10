@@ -3272,3 +3272,19 @@ DEVICECLASS_CEPHBLOCKPOOL_YAML = os.path.join(
 DEVICECLASS_STORAGECLASS_YAML = os.path.join(
     MULTIPLE_DEVICECLASSES_DIR, "deviceclass-storageclass.yaml"
 )
+
+
+# NFS
+NFS_NAMESPACE_NAME = "nfs-storage"
+NFS_TEMPLATE_DIR = os.path.join(TEMPLATE_DIR, "nfs")
+NFS_SA_YAML_DIR = os.path.join(NFS_TEMPLATE_DIR, "nfs_sa.yaml")
+NFS_CLUSTER_ROLE_YAML_DIR = os.path.join(NFS_TEMPLATE_DIR, "cluster-role.yaml")
+NFS_CLUSTER_ROLE_BINDING_YAML_DIR = os.path.join(
+    NFS_TEMPLATE_DIR, "cluster-role-binding.yaml"
+)
+NFS_ROLE_YAML_DIR = os.path.join(NFS_TEMPLATE_DIR, "role.yaml")
+NFS_ROLE_BINDING_YAML_DIR = os.path.join(NFS_TEMPLATE_DIR, "role-binding.yaml")
+NFS_DEPLOYMENT_YAML_DIR = os.path.join(NFS_TEMPLATE_DIR, "deployment.yaml")
+NFS_SC_YAML_DIR = os.path.join(NFS_TEMPLATE_DIR, "storageclass.yaml")
+NFS_SCC_NAME = "nfs-client-provisioner"
+NFS_SC_NAME = "nfs-client"
