@@ -139,7 +139,12 @@ class BucketsTab(ObjectStorage, ConfirmDialog):
         self.do_send_keys(self.bucket_tab["folder_name_input"], folder_name)
         self.do_click(self.bucket_tab["submit_button_folder"])
 
-        folder_path = generate_folder_with_files(num_files=400)
+        # Get folder path and file generator
+        folder_path, file_generator = generate_folder_with_files(num_files=400)
+
+        # Create all files by consuming the generator
+        files = list(file_generator)  # This creates all files
+        logger.info(f"Created {len(files)} files in folder")
 
         logger.info("=== DEBUG: STARTING FILE UPLOAD ===")
 
@@ -175,6 +180,12 @@ class BucketsTab(ObjectStorage, ConfirmDialog):
 
             logger.info(f"Sending folder path: {folder_path}")
             file_input.send_keys(folder_path)
+
+            # Allow plenty of time for all files to be uploaded
+            logger.info("Waiting 45 seconds for files to be fully uploaded...")
+            time.sleep(45)
+            logger.info("File upload wait completed")
+
             return folder_name
 
         except NoSuchElementException as e:

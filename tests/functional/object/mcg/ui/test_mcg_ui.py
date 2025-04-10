@@ -24,6 +24,7 @@ from ocs_ci.framework.testlib import (
     tier2,
     skipif_ui_not_support,
     ui,
+    post_upgrade,
 )
 from ocs_ci.ocs.exceptions import IncorrectUiOptionRequested
 from ocs_ci.ocs.ocp import OCP, get_all_resource_names_of_a_kind
@@ -420,6 +421,7 @@ class TestObcUserInterface(object):
 @black_squad
 @tier1
 class TestBucketCreate:
+    @post_upgrade
     @pytest.mark.polarion_id("OCS-6334")
     def test_bucket_create(self, setup_ui_class_factory):
         """
@@ -442,6 +444,7 @@ class TestBucketCreate:
             bucket_ui.create_folder_in_bucket()
         ), "Failed to create and upload folder in bucket"
 
+    @post_upgrade
     @pytest.mark.polarion_id("OCS-6397")
     def test_empty_bucket_delete(self, setup_ui_class_factory):
         """
