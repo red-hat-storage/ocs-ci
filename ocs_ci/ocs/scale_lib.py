@@ -696,7 +696,7 @@ def get_rate_based_on_cls_iops(custom_iops_dict=None, osd_size=2048):
     return rate_param
 
 
-def get_expected_worker_count(scale_count=6000):
+def get_expected_worker_count(scale_count=750):
     """
     Function to get expected worker count based on platform to scale pods in cluster
 

@@ -30,8 +30,8 @@ def fioscale(request):
     FIO Scale fixture to create expected number of POD+PVC
     """
 
-    scale_pvc = 6000
-    pvc_per_pod_count = 100
+    scale_pvc = 750
+    pvc_per_pod_count = 20
 
     # Scale FIO pods in the cluster
     fioscale = FioPodScale(
