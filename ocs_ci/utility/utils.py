@@ -3519,6 +3519,7 @@ def get_ocs_version_from_image(image):
             .lstrip("stable-")
             .lstrip("rc-")
             .lstrip("upgrade-")
+            .lstrip("latest-konflux")
         )
         version = Version.coerce(version)
         return "{major}.{minor}".format(major=version.major, minor=version.minor)
