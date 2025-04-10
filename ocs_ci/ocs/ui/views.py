@@ -587,8 +587,8 @@ pvc = {
         By.XPATH,
     ),
     "access_mode_button": (
-        "button[class='pf-v5-c-menu-toggle'], button[class='pf-v6-c-menu-toggle']",
-        By.CSS_SELECTOR,
+        "//button//*[contains(text(), 'RWO')]",
+        By.XPATH,
     ),
     "access_rwx": ("//li//button//*[contains(text(), 'RWX')]", By.XPATH),
 }
