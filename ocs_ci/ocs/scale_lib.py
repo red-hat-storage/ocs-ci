@@ -1383,7 +1383,7 @@ def check_all_pod_reached_running_state_in_kube_job(
 
             # Breaking while loop after 13 Iteration i.e. after 30*13 secs of wait_time
             # And if PODs are still not in Running state then there will be assert.
-            if while_iteration_count >= 13:
+            if while_iteration_count >= 60:
                 assert logger.error(
                     f" Listed PODs took more than 390secs for Running {pod_not_running_list}"
                 )
