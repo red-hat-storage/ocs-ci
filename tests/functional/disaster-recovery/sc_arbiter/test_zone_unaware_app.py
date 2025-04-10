@@ -1,6 +1,7 @@
 import logging
 import pytest
 import time
+import random
 
 from ocs_ci.framework.pytest_customization.marks import (
     stretchcluster_required,
@@ -124,16 +125,12 @@ class TestZoneUnawareApps:
     @pytest.mark.parametrize(
         argnames="fencing",
         argvalues=[
-            pytest.param(
-                True,
-            ),
-            # pytest.param(
-            #     False,
-            # ),
+            pytest.param(True, marks=[pytest.mark.polarion_id("OCS-6798")]),
+            pytest.param(False, marks=[pytest.mark.polarion_id("OCS-6799")]),
         ],
         ids=[
             "With-Fencing",
-            # "Without-Fencing",
+            "Without-Fencing",
         ],
     )
     def test_zone_shutdowns(
@@ -146,6 +143,13 @@ class TestZoneUnawareApps:
         nodes,
         fencing,
     ):
+        """
+        This tests the zone unware app pod failover when there is
+        zone shutdown under the following scenarios:
+            1. When network fencing is done
+            2. When network fencing is not done
+
+        """
 
         sc_obj = StretchCluster()
 
@@ -159,149 +163,145 @@ class TestZoneUnawareApps:
             zone_aware=False
         )
 
-        # Fetch all the worker node names
+        # Fetch all the worker node names and zone to
+        # shutdown randomly
         worker_nodes = get_worker_nodes()
+        zone = random.choice(constants.DATA_ZONE_LABELS)
 
-        for zone in constants.DATA_ZONE_LABELS:
+        # Make sure logwriter workload pods are running
+        check_for_logwriter_workload_pods(sc_obj, nodes=nodes)
+        log.info("Both logwriter CephFS and RBD workloads are in healthy state")
 
-            # Make sure logwriter workload pods are running
-            check_for_logwriter_workload_pods(sc_obj, nodes=nodes)
-            log.info("Both logwriter CephFS and RBD workloads are in healthy state")
+        # Fetch logfile details to verify data integrity post recovery
+        sc_obj.get_logfile_map(label=constants.LOGWRITER_CEPHFS_LABEL)
+        sc_obj.get_logfile_map(label=constants.LOGWRITER_RBD_LABEL)
+        log.info(
+            "Fetched the logfile details for data integrity verification post recovery"
+        )
 
-            # Fetch logfile details to verify data integrity post recovery
-            sc_obj.get_logfile_map(label=constants.LOGWRITER_CEPHFS_LABEL)
-            sc_obj.get_logfile_map(label=constants.LOGWRITER_RBD_LABEL)
+        # Shutdown the nodes
+        nodes_to_shutdown = sc_obj.get_nodes_in_zone(zone)
+        nodes.stop_nodes(nodes=nodes_to_shutdown)
+        wait_for_nodes_status(
+            node_names=[node.name for node in nodes_to_shutdown],
+            status=constants.NODE_NOT_READY,
+            timeout=300,
+        )
+        log.info(f"Nodes of zone {zone} are shutdown successfully")
+
+        if fencing:
+
+            # If fencing is True, then we need to fence the nodes after shutdown
             log.info(
-                "Fetched the logfile details for data integrity verification post recovery"
+                "Since fencing is enabled, we need to fence the nodes after zone shutdown"
+            )
+            for node in nodes_to_shutdown:
+
+                # Ignore the master nodes
+                if node.name not in worker_nodes:
+                    continue
+
+                # Fetch the cidrs for creating network fence
+                cidrs = retry(CommandFailed, tries=5)(
+                    get_rbd_daemonset_csi_addons_node_object
+                )(node.name)["status"]["networkFenceClientStatus"][0]["ClientDetails"][
+                    0
+                ][
+                    "cidrs"
+                ]
+
+                # Create the network fence
+                retry(CommandFailed, tries=5)(create_network_fence)(
+                    node.name, cidr=cidrs[0]
+                )
+
+            # Taint the nodes that are shutdown
+            taint_nodes(
+                nodes=[node.name for node in nodes_to_shutdown],
+                taint_label=constants.NODE_OUT_OF_SERVICE_TAINT,
             )
 
-            # Shutdown the nodes
-            nodes_to_shutdown = sc_obj.get_nodes_in_zone(zone)
-            nodes.stop_nodes(nodes=nodes_to_shutdown)
-            wait_for_nodes_status(
-                node_names=[node.name for node in nodes_to_shutdown],
-                status=constants.NODE_NOT_READY,
-                timeout=300,
+        # Wait for the buffer time of pod relocation
+        log.info("Wait until the pod relocation buffer time of 10 minutes")
+        time.sleep(600)
+
+        # Check if all the pods are running
+        log.info(
+            "Checking if all the logwriter/logreader pods are relocated and successfully running"
+        )
+        sc_obj.get_logwriter_reader_pods(label=constants.LOGWRITER_CEPHFS_LABEL)
+        sc_obj.get_logwriter_reader_pods(
+            label=constants.LOGREADER_CEPHFS_LABEL,
+            statuses=[constants.STATUS_RUNNING, constants.STATUS_COMPLETED],
+        )
+        try:
+            retry(UnexpectedBehaviour, tries=1)(sc_obj.get_logwriter_reader_pods)(
+                label=constants.LOGWRITER_RBD_LABEL, exp_num_replicas=2
             )
-            log.info(f"Nodes of zone {zone} are shutdown successfully")
-
-            if fencing:
-
-                # If fencing is True, then we need to fence the nodes after shutdown
+        except UnexpectedBehaviour:
+            if not fencing:
                 log.info(
-                    "Since fencing is enabled, we need to fence the nodes after zone shutdown"
+                    "It is expected for RBD workload with RWO to stuck in terminating state"
                 )
-                for node in nodes_to_shutdown:
-
-                    # Ignore the master nodes
-                    if node.name not in worker_nodes:
-                        continue
-
-                    # Fetch the cidrs for creating network fence
-                    cidrs = retry(CommandFailed, tries=5)(
-                        get_rbd_daemonset_csi_addons_node_object
-                    )(node.name)["status"]["networkFenceClientStatus"][0][
-                        "ClientDetails"
-                    ][
-                        0
-                    ][
-                        "cidrs"
-                    ]
-
-                    # Create the network fence
-                    retry(CommandFailed, tries=5)(create_network_fence)(
-                        node.name, cidr=cidrs[0]
+                log.info("Trying the workaround now...")
+                pods_terminating = [
+                    Pod(**pod_info)
+                    for pod_info in get_pods_having_label(
+                        label=constants.LOGWRITER_RBD_LABEL,
+                        namespace=constants.STRETCH_CLUSTER_NAMESPACE,
                     )
-
-                # Taint the nodes that are shutdown
-                taint_nodes(
-                    nodes=[node.name for node in nodes_to_shutdown],
-                    taint_label=constants.NODE_OUT_OF_SERVICE_TAINT,
-                )
-
-            # Wait for the buffer time of pod relocation
-            log.info("Wait until the pod relocation buffer time of 10 minutes")
-            time.sleep(600)
-
-            # Check if all the pods are running
-            log.info(
-                "Checking if all the logwriter/logreader pods are relocated and successfully running"
-            )
-            sc_obj.get_logwriter_reader_pods(label=constants.LOGWRITER_CEPHFS_LABEL)
-            sc_obj.get_logwriter_reader_pods(
-                label=constants.LOGREADER_CEPHFS_LABEL,
-                statuses=[constants.STATUS_RUNNING, constants.STATUS_COMPLETED],
-            )
-            try:
-                retry(UnexpectedBehaviour, tries=1)(sc_obj.get_logwriter_reader_pods)(
+                ]
+                log.info(pods_terminating)
+                for pod in pods_terminating:
+                    log.info(f"Force deleting the pod {pod.name}")
+                    pod.delete(force=True)
+                sc_obj.get_logwriter_reader_pods(
                     label=constants.LOGWRITER_RBD_LABEL, exp_num_replicas=2
                 )
-            except UnexpectedBehaviour:
-                if not fencing:
-                    log.info(
-                        "It is expected for RBD workload with RWO to stuck in terminating state"
-                    )
-                    log.info("Trying the workaround now...")
-                    pods_terminating = [
-                        Pod(**pod_info)
-                        for pod_info in get_pods_having_label(
-                            label=constants.LOGWRITER_RBD_LABEL,
-                            namespace=constants.STRETCH_CLUSTER_NAMESPACE,
-                        )
-                    ]
-                    log.info(pods_terminating)
-                    for pod in pods_terminating:
-                        log.info(f"Force deleting the pod {pod.name}")
-                        pod.delete(force=True)
-                    sc_obj.get_logwriter_reader_pods(
-                        label=constants.LOGWRITER_RBD_LABEL, exp_num_replicas=2
-                    )
-                else:
-                    log.error(
-                        "Looks like pods are not running or not relocated even after fencing.. please check"
-                    )
-                    raise
-
-            if fencing:
-
-                # If fencing is True, then unfence the nodes once the pods are relocated
-                log.info(
-                    "If fencing was done, then we need to unfence the nodes once the pods are relocated and running"
+            else:
+                log.error(
+                    "Looks like pods are not running or not relocated even after fencing.. please check"
                 )
-                for node in nodes_to_shutdown:
-                    if node.name not in worker_nodes:
-                        continue
-                    unfence_node(node.name, delete=True)
-
-                # Remove the taints from the nodes that were shutdown
-                taint_nodes(
-                    nodes=[node.name for node in nodes_to_shutdown],
-                    taint_label=f"{constants.NODE_OUT_OF_SERVICE_TAINT}-",
-                )
-                log.info(
-                    "Successfully removed taints from the nodes that were shutdown"
-                )
-
-            # Start the nodes that were shutdown
-            log.info(f"Starting the {zone} nodes")
-            try:
-                nodes.start_nodes(nodes=nodes_to_shutdown)
-            except Exception:
-                log.error("Something went wrong while starting the nodes!")
                 raise
 
-            # Validate all nodes are in READY state and up
-            retry(
-                (
-                    CommandFailed,
-                    TimeoutError,
-                    AssertionError,
-                    ResourceWrongStatusException,
-                ),
-                tries=10,
-                delay=15,
-            )(wait_for_nodes_status(timeout=1800))
-            log.info(f"Nodes of zone {zone} are started successfully")
+        if fencing:
+
+            # If fencing is True, then unfence the nodes once the pods are relocated
+            log.info(
+                "If fencing was done, then we need to unfence the nodes once the pods are relocated and running"
+            )
+            for node in nodes_to_shutdown:
+                if node.name not in worker_nodes:
+                    continue
+                unfence_node(node.name, delete=True)
+
+            # Remove the taints from the nodes that were shutdown
+            taint_nodes(
+                nodes=[node.name for node in nodes_to_shutdown],
+                taint_label=f"{constants.NODE_OUT_OF_SERVICE_TAINT}-",
+            )
+            log.info("Successfully removed taints from the nodes that were shutdown")
+
+        # Start the nodes that were shutdown
+        log.info(f"Starting the {zone} nodes")
+        try:
+            nodes.start_nodes(nodes=nodes_to_shutdown)
+        except Exception:
+            log.error("Something went wrong while starting the nodes!")
+            raise
+
+        # Validate all nodes are in READY state and up
+        retry(
+            (
+                CommandFailed,
+                TimeoutError,
+                AssertionError,
+                ResourceWrongStatusException,
+            ),
+            tries=10,
+            delay=15,
+        )(wait_for_nodes_status(timeout=1800))
+        log.info(f"Nodes of zone {zone} are started successfully")
 
         # Make sure all the logwriter pods are running
         check_for_logwriter_workload_pods(sc_obj, nodes=nodes)
