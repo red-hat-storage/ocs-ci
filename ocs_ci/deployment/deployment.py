@@ -112,6 +112,7 @@ from ocs_ci.ocs.resources.storage_cluster import (
 )
 from ocs_ci.ocs.uninstall import uninstall_ocs
 from ocs_ci.ocs.utils import (
+    get_non_acm_and_non_recovery_cluster_config,
     get_non_acm_cluster_config,
     get_primary_cluster_config,
     setup_ceph_toolbox,
@@ -2867,7 +2868,7 @@ class RBDDRDeployOps(object):
                     f"{cluster.ENV_DATA['cluster_name']}"
                 )
 
-        for cluster in get_non_acm_cluster_config():
+        for cluster in get_non_acm_and_non_recovery_cluster_config():
             config.switch_ctx(cluster.MULTICLUSTER["multicluster_index"])
             _get_mirror_pod_count()
             self.validate_csi_sidecar()
