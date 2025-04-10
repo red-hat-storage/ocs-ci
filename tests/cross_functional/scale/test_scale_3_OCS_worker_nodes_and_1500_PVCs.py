@@ -50,11 +50,6 @@ def fioscale(request):
         scale_data_file=SCALE_DATA_FILE,
     )
 
-    def teardown():
-        fioscale.cleanup()
-
-    request.addfinalizer(teardown)
-    return fioscale
 
 
 @orange_squad
