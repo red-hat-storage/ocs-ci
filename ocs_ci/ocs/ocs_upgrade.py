@@ -143,7 +143,12 @@ def verify_image_versions(old_images, upgrade_version, version_before_upgrade):
     total_nodes = len(get_all_nodes())
     verify_pods_upgraded(old_images, selector=constants.OCS_OPERATOR_LABEL)
     verify_pods_upgraded(old_images, selector=constants.OPERATOR_LABEL)
-    default_noobaa_pods = 3
+    # Default noobaa pods
+    # noobaa-db-pg-cluster-1
+    # noobaa-db-pg-cluster-2
+    # noobaa-core-0
+    # noobaa-operator
+    default_noobaa_pods = 4
     noobaa_pods = default_noobaa_pods
     noobaa_pod_obj = get_noobaa_pods()
     if (
