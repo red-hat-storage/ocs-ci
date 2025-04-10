@@ -21,7 +21,6 @@ from ocs_ci.deployment.helpers.external_cluster_helpers import (
 )
 from ocs_ci.deployment.helpers.odf_deployment_helpers import (
     get_required_csvs,
-    set_ceph_config,
 )
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.cluster import CephCluster, CephHealthMonitor
@@ -655,7 +654,6 @@ def run_ocs_upgrade(
 
     """
     namespace = config.ENV_DATA["cluster_namespace"]
-    platform = config.ENV_DATA["platform"]
     ceph_cluster = CephCluster()
     original_ocs_version = config.ENV_DATA.get("ocs_version")
     upgrade_in_current_source = config.UPGRADE.get("upgrade_in_current_source", False)
@@ -915,28 +913,6 @@ def run_ocs_upgrade(
             f"--from-file=external_cluster_details={external_cluster_details.name}"
         )
         exec_cmd(cmd)
-
-    if (
-        platform == constants.VSPHERE_PLATFORM
-        and upgrade_version_semantic >= version.VERSION_4_19
-    ):
-        # using try/except to not fail deployments since these values are good to have
-        # for vsphere platform
-        try:
-            set_ceph_config(
-                entity="global",
-                config_name="bluestore_slow_ops_warn_threshold",
-                value="7",
-            )
-            set_ceph_config(
-                entity="global",
-                config_name="bluestore_slow_ops_warn_lifetime",
-                value="10",
-            )
-        except Exception as ex:
-            logger.error(
-                f"Failed to set values for bluestore_slow_ops. Exception is: {ex}"
-            )
 
     if config.ENV_DATA.get("mcg_only_deployment"):
         mcg_only_install_verification(ocs_registry_image=upgrade_ocs.ocs_registry_image)
