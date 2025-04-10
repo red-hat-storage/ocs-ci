@@ -55,8 +55,11 @@ class PvcUI(PageNavigator):
         logger.info("Select Access Mode")
         if ocs_version >= version.VERSION_4_16:
             if access_mode == "ReadWriteMany":
-                self.do_click(self.pvc_loc["access_mode_button"])
-                self.do_click(self.pvc_loc["access_rwx"])
+                self.do_click(
+                    self.pvc_loc["access_mode_button"], enable_screenshot=True
+                )
+                logger.info("Access mode button clicked. Choosing RWX")
+                self.do_click(self.pvc_loc["access_rwx"], enable_screenshot=True)
         else:
             self.do_click(self.pvc_loc[access_mode])
 

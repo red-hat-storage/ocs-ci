@@ -161,6 +161,7 @@ deployment_4_7 = {
 deployment_4_9 = {
     "drop_down_projects": (
         'button[class="pf-v5-c-menu-toggle co-namespace-dropdown__menu-toggle"], '
+        'button[class="pf-v6-c-menu-toggle co-namespace-dropdown__menu-toggle"], '
         'button[class="pf-c-menu-toggle co-namespace-dropdown__menu-toggle"]',
         By.CSS_SELECTOR,
     ),
@@ -226,7 +227,8 @@ deployment_4_12 = {
 
 deployment_4_15 = {
     "drop_down_projects": (
-        'button[class="pf-v5-c-menu-toggle co-namespace-dropdown__menu-toggle"]',
+        'button[class="pf-v5-c-menu-toggle co-namespace-dropdown__menu-toggle"], '
+        'button[class="pf-v6-c-menu-toggle co-namespace-dropdown__menu-toggle"]',
         By.CSS_SELECTOR,
     ),
     "drop_down_performance": (
@@ -286,7 +288,8 @@ deployment_4_17 = {
 generic_locators = {
     "project_selector": (
         "//span[@class='pf-c-menu-toggle__text' and contains(text(), 'Project:')] | "
-        "//span[@class='pf-v5-c-menu-toggle__text' and contains(text(), 'Project:')]",
+        "//span[@class='pf-v5-c-menu-toggle__text' and contains(text(), 'Project:')] |"
+        "//span[@class='pf-v6-c-menu-toggle__text' and contains(text(), 'Project:')]",
         By.XPATH,
     ),
     "select_openshift-storage_project": (
@@ -388,7 +391,8 @@ generic_locators = {
         By.XPATH,
     ),
     "show_default_projects_toggle": (
-        "input[class='pf-c-switch__input'], input[class='pf-v5-c-switch__input']",
+        "input[class='pf-c-switch__input'], input[class='pf-v5-c-switch__input'], "
+        "input[class='pf-v6-c-switch__input']",
         By.CSS_SELECTOR,
     ),
     "developer_selected": ("//h2[.='Developer']", By.XPATH),
@@ -582,7 +586,10 @@ pvc = {
         "//dd[contains(text(),'{}') and @data-test-id='pvc-capacity']",
         By.XPATH,
     ),
-    "access_mode_button": ("button[class='pf-v5-c-menu-toggle']", By.CSS_SELECTOR),
+    "access_mode_button": (
+        "//button//*[contains(text(), 'RWO')]",
+        By.XPATH,
+    ),
     "access_rwx": ("//li//button//*[contains(text(), 'RWX')]", By.XPATH),
 }
 
@@ -725,13 +732,14 @@ page_nav = {
     ),
     "odf_tab": ("OpenShift Data Foundation", By.LINK_TEXT),
     "drop_down_projects": (
-        'button[class="pf-v5-c-menu-toggle co-namespace-dropdown__menu-toggle"]',
+        'button[class="pf-v5-c-menu-toggle co-namespace-dropdown__menu-toggle"], '
+        'button[class="pf-v6-c-menu-toggle co-namespace-dropdown__menu-toggle"]',
         By.CSS_SELECTOR,
     ),
     "choose_all_projects": ("//span[text()='All Projects']", By.XPATH),
     # show-default-projects works both for OCP 4.14 and 4.15
     "show-default-projects": (
-        ".pf-c-switch__toggle, .pf-v5-c-switch__toggle",
+        ".pf-c-switch__toggle, .pf-v5-c-switch__toggle, .pf-v6-c-switch__toggle",
         By.CSS_SELECTOR,
     ),
 }
@@ -1685,7 +1693,7 @@ validation_4_9 = {
     ),
     # show-default-projects works both on OCP 4.14 and 4.15
     "show-default-projects": (
-        ".pf-c-switch__toggle, .pf-v5-c-switch__toggle",
+        ".pf-c-switch__toggle, .pf-v5-c-switch__toggle, .pf-v6-c-switch__toggle",
         By.CSS_SELECTOR,
     ),
     "ocs-storagecluster-storgesystem": (
