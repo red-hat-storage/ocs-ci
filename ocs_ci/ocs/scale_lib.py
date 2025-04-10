@@ -94,7 +94,7 @@ class FioPodScale(object):
         obj_name="obj1",
         start_io=True,
         io_runtime=None,
-        pvc_size=1,
+        pvc_size=pvc_size,
         max_pvc_size=105,
     ):
         """
