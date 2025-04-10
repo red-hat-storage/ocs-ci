@@ -923,7 +923,12 @@ class TestS3BucketPolicy(MCGTest):
 
         # Verify put Object is allowed.
         logger.info(f"Put Object to the bucket: {obc_obj.bucket_name} ")
-        assert s3_put_object(
+
+        retry_s3_put_object = retry(boto3exception.ClientError, tries=4, delay=10)(
+            s3_put_object
+        )
+
+        assert retry_s3_put_object(
             mcg_obj,
             obc_obj.bucket_name,
             object_key,
