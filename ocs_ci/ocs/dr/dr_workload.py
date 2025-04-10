@@ -437,7 +437,17 @@ class BusyBox(DRWorkload):
             templating.dump_data_to_temp_yaml(
                 kustomization_yaml_data, kustomization_yaml_file
             )
-
+        if self.is_placement:
+            clusterset_name = get_cluster_set_name()[0]
+            managed_clusterset_binding_yaml_data = templating.load_yaml(
+                self.managed_clusterset_binding_file
+            )
+            managed_clusterset_binding_yaml_data["metadata"]["name"] = clusterset_name
+            managed_clusterset_binding_yaml_data["spec"]["clusterSet"] = clusterset_name
+            templating.dump_data_to_temp_yaml(
+                managed_clusterset_binding_yaml_data,
+                self.managed_clusterset_binding_file,
+            )
         try:
             config.switch_ctx(switch_ctx) if switch_ctx else config.switch_acm_ctx()
             run_cmd(
