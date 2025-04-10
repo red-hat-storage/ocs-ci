@@ -244,7 +244,7 @@ class FioPodScale(object):
         pvc_per_pod_count=20,
         start_io=True,
         io_runtime=None,
-        pvc_size=None,
+        pvc_size=1,
         max_pvc_size=105,
         obj_name_prefix="obj",
     ):
@@ -296,37 +296,6 @@ class FioPodScale(object):
             expected_worker_count = 3
         else:
             expected_worker_count = 3
-
-        if check_and_add_enough_worker(expected_worker_count):
-            if (
-                (
-                    config.ENV_DATA["deployment_type"] == "ipi"
-                    and config.ENV_DATA["platform"].lower() == "aws"
-                )
-                or (
-                    config.ENV_DATA["deployment_type"] == "ipi"
-                    and config.ENV_DATA["platform"].lower() == "azure"
-                )
-                or (
-                    config.ENV_DATA["deployment_type"] == "ipi"
-                    and config.ENV_DATA["platform"].lower() == "rhv"
-                )
-                or (
-                    config.ENV_DATA["deployment_type"] == "ipi"
-                    and config.ENV_DATA["platform"].lower()
-                    == constants.VSPHERE_PLATFORM
-                )
-                or (
-                    config.ENV_DATA["deployment_type"] == "ipi"
-                    and config.ENV_DATA["platform"].lower()
-                    == constants.IBMCLOUD_PLATFORM
-                )
-            ):
-                for obj in machine.get_machineset_objs():
-                    if "app" in obj.name:
-                        self.ms_name.append(obj.name)
-            else:
-                self.ms_name = []
 
         # Create namespace
         self.create_and_set_namespace()
