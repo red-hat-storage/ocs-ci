@@ -537,7 +537,10 @@ class MultiClusterConfig:
         If there are no client contexts available then use simple nullcontext to not break
         functionality and still execute the code on current cluster.
         """
-        indexes = config.get_consumer_indexes_list()
+        try:
+            indexes = config.get_consumer_indexes_list()
+        except ClusterNotFoundException:
+            indexes = None
         if indexes:
             return [self.RunWithConfigContext(index) for index in indexes]
         else:
