@@ -95,7 +95,9 @@ def run_command(cmd, timeout=600, out_format="string", **kwargs):
 
     logger.info(f"Going to format output as {out_format}")
     logger.info(f"Going to run {cmd} with timeout of {timeout}")
-    cp = subprocess.run(command, timeout=timeout, **kwargs)
+    env = kwargs.pop("env", os.environ.copy())
+    env["KUBECONFIG"] = config.RUN.get("kubeconfig")
+    cp = subprocess.run(command, timeout=timeout, env=env, **kwargs)
     output = cp.stdout.decode()
     err = cp.stderr.decode()
     # exit code is not zero
@@ -130,15 +132,7 @@ def run_oc_command(cmd, namespace=None):
     if namespace is None:
         namespace = config.ENV_DATA["cluster_namespace"]
 
-    cluster_dir_kubeconfig = os.path.join(
-        config.ENV_DATA["cluster_path"], config.RUN.get("kubeconfig_location")
-    )
-    if os.getenv("KUBECONFIG"):
-        kubeconfig = os.getenv("KUBECONFIG")
-    elif os.path.exists(cluster_dir_kubeconfig):
-        kubeconfig = cluster_dir_kubeconfig
-    else:
-        kubeconfig = None
+    kubeconfig = config.RUN["kubeconfig"]
 
     command = f"oc --kubeconfig {kubeconfig} -n {namespace} {cmd}"
     return run_command(command, out_format="list")

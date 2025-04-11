@@ -9,6 +9,7 @@ from ocs_ci.framework.pytest_customization.marks import (
     skipif_lvm_not_installed,
     aqua_squad,
 )
+from ocs_ci.framework import config, config_safe_thread_pool_task
 from ocs_ci.framework.testlib import skipif_ocs_version, ManageTest, acceptance
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.cluster import LVM
@@ -100,6 +101,8 @@ class TestLvmMultiSnapshot(ManageTest):
         for exec_num in range(0, self.pvc_num):
             futures.append(
                 executor.submit(
+                    config_safe_thread_pool_task,
+                    config.default_cluster_index,
                     pvc_factory,
                     project=proj_obj,
                     interface=None,
