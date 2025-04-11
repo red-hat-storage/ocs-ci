@@ -173,12 +173,13 @@ class ODFAndNativeStorageClientDeploymentOnProvider(object):
         self.odf_subscription_on_provider()
 
         # Check for rook ceph pods
-        assert self.pod_obj.wait_for_resource(
-            condition="Running",
-            selector="app=rook-ceph-operator",
-            resource_count=1,
-            timeout=600,
-        )
+        if self.ocs_version < version.VERSION_4_19:
+            assert self.pod_obj.wait_for_resource(
+                condition="Running",
+                selector="app=rook-ceph-operator",
+                resource_count=1,
+                timeout=600,
+            )
 
         if self.ocs_version in [version.VERSION_4_14, version.VERSION_4_15]:
             # Disable ROOK_CSI_ENABLE_CEPHFS and ROOK_CSI_ENABLE_RBD
