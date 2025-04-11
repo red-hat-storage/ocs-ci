@@ -1833,6 +1833,24 @@ def s3_head_object(s3_obj, bucketname, object_key, if_match=None):
         return s3_obj.s3_client.head_object(Bucket=bucketname, Key=object_key)
 
 
+def s3_head_bucket(s3_obj, bucketname):
+    """
+    Boto3 client based head_bucket operation to verify
+    if bucket exists or if there is permission to access
+    the bucket
+
+    Args:
+        s3_obj (MCG/OBC): MCG/OBC object
+        bucketname (str): Name of the bucket
+
+    Returns:
+        dict: head bucket response
+
+    """
+
+    return s3_obj.s3_client.head_bucket(Bucket=bucketname)
+
+
 def s3_list_objects_v1(
     s3_obj, bucketname, prefix="", delimiter="", max_keys=1000, marker=""
 ):
