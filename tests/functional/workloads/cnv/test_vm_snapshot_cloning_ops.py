@@ -87,26 +87,26 @@ class TestVmSnapshotClone(E2ETest):
                     "OCS-6299"
                 ),  # Polarion ID for no PVC expansion
             ),
-            # pytest.param(
-            #     True,
-            #     False,
-            #     marks=[
-            #         pytest.mark.polarion_id(
-            #             "OCS-6305"
-            #         ),  # Polarion ID for expansion before snapshot
-            #         pytest.mark.jira("CNV-55558", run=False),
-            #     ],
-            # ),
-            # pytest.param(
-            #     False,
-            #     True,
-            #     marks=[
-            #         pytest.mark.polarion_id(
-            #             "OCS-6305"
-            #         ),  # Polarion ID for expansion after restore
-            #         pytest.mark.jira("CNV-55558", run=False),
-            #     ],
-            # ),
+            pytest.param(
+                True,
+                False,
+                marks=[
+                    pytest.mark.polarion_id(
+                        "OCS-6305"
+                    ),  # Polarion ID for expansion before snapshot
+                    pytest.mark.jira("CNV-55558", run=False),
+                ],
+            ),
+            pytest.param(
+                False,
+                True,
+                marks=[
+                    pytest.mark.polarion_id(
+                        "OCS-6305"
+                    ),  # Polarion ID for expansion after restore
+                    pytest.mark.jira("CNV-55558", run=False),
+                ],
+            ),
         ],
     )
     def test_vm_snapshot_ops(
