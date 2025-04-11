@@ -2379,13 +2379,11 @@ class Deployment(object):
         pw = pw.decode().replace("quay.io", "quay.io:443").encode()
         quay_token = base64.b64encode(pw).decode()
 
-        # We are removing KUBECONFIG from env vars because of multicluster executions where
-        # user should propagate kubeconfig via --kubeconfig i cmd diectly.
-        # If not, it automatically propagates to the oc command if you use exec_cmd or run_cmd
-        # functions. It also propagate ENV variable KUBECONFIG, but only
-        # to specific command execution via env variable passed to subprocess.
-        # In both cases it reads kubeconfig from config of currentl config from context, or
-        # thread config specific cluster config. For more details see PR: #11122
+        # We are removing dependency on process KUBECONFIG env var because of multicluster executions, where
+        # user should always propagate kubeconfig via --kubeconfig in the cmd directly.
+        # If not, it automatically propagates to the oc command, if user uses exec_cmd or run_cmd
+        # functions. It also propagate ENV variable KUBECONFIG, but only to specific command execution
+        # via env variable passed to subprocess functions. For more details see PR: #11122
         logger.info("Setting env vars")
         env_vars = {
             "QUAY_TOKEN": quay_token,
