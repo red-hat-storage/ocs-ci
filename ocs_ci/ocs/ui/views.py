@@ -357,6 +357,7 @@ generic_locators = {
     ),
     "searchbar-dropdown": (
         "//div[@class='pf-c-toolbar__item']//span[@class='pf-c-dropdown__toggle-text'] | "
+        "//div[@class='pf-v6-c-toolbar__item']//span[@class='pf-v5-c-dropdown__toggle-text'] | "
         "//div[@class='pf-v5-c-toolbar__item']//span[@class='pf-v5-c-dropdown__toggle-text']",
         By.XPATH,
     ),
