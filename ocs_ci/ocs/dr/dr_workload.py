@@ -1153,17 +1153,19 @@ class BusyboxDiscoveredApps(DRWorkload):
         self.workload_path = self.target_clone_dir + "/" + self.workload_dir
         run_cmd(f"oc create -k {self.workload_path} -n {self.workload_namespace} ")
         self.check_pod_pvc_status(skip_replication_resources=True)
-        if not recipe:
-            config.switch_acm_ctx()
-            self.create_placement()
-        else:
+        config.switch_acm_ctx()
+        self.create_placement()
+        if recipe:
             log.info("Creating workload with recipe")
+            config.switch_to_cluster_by_name(self.preferred_primary_cluster)
             self.create_secret()
             for cluster in get_non_acm_cluster_config():
                 config.switch_ctx(cluster.MULTICLUSTER["multicluster_index"])
                 self.create_recipe_with_checkhooks()
-        config.switch_acm_ctx()
-        self.create_drpc_for_apps_with_recipe()
+            config.switch_acm_ctx()
+            self.create_drpc_for_apps_with_recipe()
+        else:
+            self.create_drpc()
         self.verify_workload_deployment()
 
     def _deploy_prereqs(self):
@@ -1216,17 +1218,14 @@ class BusyboxDiscoveredApps(DRWorkload):
         recipe_yaml_data = templating.load_yaml(self.recipe_yaml_file)
         recipe_yaml_data["metadata"]["name"] = self.workload_namespace
         if "spec" in recipe_yaml_data:
-            if (
-                "groups" in recipe_yaml_data["spec"]
-                and len(recipe_yaml_data["spec"]["groups"]) > 4
-            ):
+            if "groups" in recipe_yaml_data["spec"]:
                 recipe_yaml_data["spec"]["groups"][0][
                     "backupRef"
                 ] = self.workload_namespace
-                recipe_yaml_data["spec"]["groups"][2]["includedNamespaces"] = [
+                recipe_yaml_data["spec"]["groups"][0]["includedNamespaces"] = [
                     self.workload_namespace
                 ]
-                recipe_yaml_data["spec"]["groups"][4]["name"] = self.workload_namespace
+                recipe_yaml_data["spec"]["groups"][0]["name"] = self.workload_namespace
 
             if "workflows" in recipe_yaml_data["spec"]:
                 recipe_yaml_data["spec"]["workflows"][0]["sequence"][1][
@@ -1357,9 +1356,9 @@ class BusyboxDiscoveredApps(DRWorkload):
         drpc_yaml_data["spec"]["kubeObjectProtection"][
             "captureInterval"
         ] = self.kubeobject_capture_interval
-        drpc_yaml_data["spec"]["kubeObjectProtection"]["recipeRef"]["name"] = (
-            self.workload_name + "-recipe-1"
-        )
+        drpc_yaml_data["spec"]["kubeObjectProtection"]["recipeRef"][
+            "name"
+        ] = self.workload_namespace
         drpc_yaml_data["spec"]["kubeObjectProtection"]["recipeRef"][
             "namespace"
         ] = self.workload_namespace
@@ -1383,7 +1382,7 @@ class BusyboxDiscoveredApps(DRWorkload):
             skip_replication_resources=skip_replication_resources,
         )
 
-    def create_namespace(self):
+    def create_namespace(self, recipe=None):
         """
         Create Namespace for Workload's to run
         """
