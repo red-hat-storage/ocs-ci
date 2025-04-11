@@ -2357,7 +2357,10 @@ def delete_deployment_pods(pod_obj):
     if pod_data_list:
         for pod_data in pod_data_list:
             if pod_obj.get_labels().get("name") == pod_data.get("metadata").get("name"):
-                deploy_ocp_obj.delete(resource_name=pod_data.get_labels().get("name"))
+                deploy_ocp_obj.delete(resource_name=pod_obj.get_labels().get("name"))
+                deploy_ocp_obj.wait_for_delete(
+                    resource_name=pod_obj.get_labels().get("name")
+                )
 
 
 def wait_for_new_osd_pods_to_come_up(number_of_osd_pods_before):
