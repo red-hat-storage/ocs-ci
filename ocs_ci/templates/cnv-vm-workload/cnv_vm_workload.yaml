@@ -14,3 +14,9 @@ cnv_vm_configs:
   - volume_interface: DVT
     access_mode: ReadWriteMany
     sc_compression: aggressive
+  - volume_interface: DV
+    access_mode: ReadWriteMany
+    sc_compression: default
+  - volume_interface: DV
+    access_mode: ReadWriteMany
+    sc_compression: aggressive
