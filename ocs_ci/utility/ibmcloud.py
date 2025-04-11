@@ -1346,7 +1346,7 @@ class IBMCloudObjectStorage:
         logger.info(f"bucket objects: {bucket_objects}")
         return bucket_objects
 
-    def delete_objects(self, bucket_name):
+    def delete_objects(self, bucket_name, bucket_region):
         """
         Delete objects in a bucket
 
@@ -1354,22 +1354,31 @@ class IBMCloudObjectStorage:
             bucket_name (str): Name of the bucket
 
         """
-        objects = self.get_bucket_objects(bucket_name)
+        objects = self.get_bucket_objects(bucket_name, bucket_region)
         if objects:
             try:
-                # Form the delete request
-                delete_request = {"Objects": [{"Key": obj} for obj in objects]}
-                response = self.cos_client.delete_objects(
-                    Bucket=bucket_name, Delete=delete_request
+                cos_client = ibm_boto3.client(
+                    "s3",
+                    ibm_api_key_id=self.cos_api_key_id,
+                    ibm_service_instance_id=self.cos_instance_crn,
+                    config=IBMBotocoreConfig(signature_version="oauth"),
+                    endpoint_url=constants.IBM_COS_GEO_ENDPOINT_TEMPLATE.format(
+                        bucket_region
+                    ),
                 )
-                logger.info(f"Deleted items for {bucket_name}")
-                logger.debug(json.dumps(response.get("Deleted"), indent=4))
+                for obj in objects:
+                    delete_request = {"Objects": [{"Key": obj}]}
+                    response = cos_client.delete_objects(
+                        Bucket=bucket_name, Delete=delete_request
+                    )
+                    logger.info(f"Deleted items for {bucket_name}")
+                    logger.debug(json.dumps(response.get("Deleted"), indent=4))
             except ClientError as ce:
                 logger.error(f"CLIENT ERROR: {ce}")
             except Exception as e:
                 logger.error(f"Unable to delete objects: {e}")
 
-    def delete_bucket(self, bucket_name):
+    def delete_bucket(self, bucket_name, bucket_region):
         """
         Delete the bucket
 
@@ -1377,15 +1386,27 @@ class IBMCloudObjectStorage:
             bucket_name (str): Name of the bucket
 
         """
-        logger.info(f"Deleting bucket: {bucket_name}")
+        logger.info(f"Deleting bucket: {bucket_name} in region{bucket_region}")
         try:
-            self.delete_objects(bucket_name=bucket_name)
-            self.cos_client.delete_bucket(Bucket=bucket_name)
+            cos_client = ibm_boto3.client(
+                "s3",
+                ibm_api_key_id=self.cos_api_key_id,
+                ibm_service_instance_id=self.cos_instance_crn,
+                config=IBMBotocoreConfig(signature_version="oauth"),
+                endpoint_url=constants.IBM_COS_GEO_ENDPOINT_TEMPLATE.format(
+                    bucket_region
+                ),
+            )
+            self.delete_objects(bucket_name=bucket_name, bucket_region=bucket_region)
+            cos_client.delete_bucket(Bucket=bucket_name)
             logger.info(f"Bucket: {bucket_name} deleted!")
+            return True
         except ClientError as ce:
             logger.error(f"CLIENT ERROR: {ce}")
+            return False
         except Exception as e:
             logger.error(f"Unable to delete bucket: {e}")
+            return False
 
     def get_buckets(self):
         """
@@ -1406,6 +1427,22 @@ class IBMCloudObjectStorage:
         except Exception as e:
             logger.error(f"Unable to retrieve list buckets: {e}")
         return bucket_list
+
+    def get_buckets_data(self):
+        """
+        Fetches the buckets
+        """
+        buckets_data = []
+        logger.info("Retrieving list of buckets data")
+        try:
+            buckets = self.cos_client.list_buckets()
+            for bucket in buckets["Buckets"]:
+                buckets_data.append(bucket)
+        except ClientError as ce:
+            logger.error(f"CLIENT ERROR: {ce}")
+        except Exception as e:
+            logger.error(f"Unable to retrieve list buckets: {e}")
+        return buckets_data
 
 
 def get_bucket_regions_map():
