@@ -646,22 +646,16 @@ def exec_cmd(
 
     """
     _env = kwargs.pop("env", os.environ.copy())
-    _env["KUBECONFIG"] = config.RUN.get("kubeconfig")
+    kubeconfig_path = config.RUN.get("kubeconfig")
+    if kubeconfig_path:
+        _env["KUBECONFIG"] = kubeconfig_path
     if cluster_config:
-        _env["KUBECONFIG"] = cluster_config.RUN.get("kubeconfig")
+        kubeconfig_path = cluster_config.RUN.get("kubeconfig")
+        if kubeconfig_path:
+            _env["KUBECONFIG"] = cluster_config.RUN.get("kubeconfig")
     if isinstance(cmd, str) and not kwargs.get("shell"):
         cmd = shlex.split(cmd)
-    if config.RUN.get("custom_kubeconfig_location") and cmd[0] == "oc":
-        if "--kubeconfig" in cmd:
-            kube_index = cmd.index("--kubeconfig")
-            cmd.pop(kube_index + 1)
-            cmd.pop(kube_index)
-        cmd = list_insert_at_position(cmd, 1, ["--kubeconfig"])
-        cmd = list_insert_at_position(
-            cmd, 2, [config.RUN["custom_kubeconfig_location"]]
-        )
-    if cluster_config and cmd[0] == "oc" and "--kubeconfig" not in cmd:
-        kubepath = cluster_config.RUN["kubeconfig"]
+    if kubeconfig_path and cmd[0] == "oc" and "--kubeconfig" not in cmd:
         kube_index = 1
         # check if we have an oc plugin in the command
         plugin_list = "oc plugin list"
@@ -683,9 +677,9 @@ def exec_cmd(
                 kube_index = 2
                 log.info(f"Found oc plugin {subcmd}")
         cmd = list_insert_at_position(cmd, kube_index, ["--kubeconfig"])
-        cmd = list_insert_at_position(cmd, kube_index + 1, [kubepath])
+        cmd = list_insert_at_position(cmd, kube_index + 1, [kubeconfig_path])
     try:
-        masked_cmd = mask_secrets(cmd, secrets)
+        masked_cmd = shlex.join(mask_secrets(cmd, secrets))
         log.info(f"Executing command: {masked_cmd}")
         if threading_lock and cmd[0] == "oc":
             threading_lock.acquire(timeout=lock_timeout)
