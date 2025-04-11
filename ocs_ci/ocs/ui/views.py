@@ -1710,7 +1710,7 @@ validation_4_9 = {
     ),
     "block-and-file-health-message": ("div[class='text-muted']", By.CSS_SELECTOR),
     "storage-system-status-card-hyperlink": (
-        "//div[@class='odf-status-popup__row']//a[contains(text(),'ocs-storagecluster-storagesystem')]",
+        "//div[@class='odf-status-popup__row']//a[contains(text(),'ocs-storagecluster')]",
         By.XPATH,
     ),
     "storage-system-external-status-card-hyperlink": (
