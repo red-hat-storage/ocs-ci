@@ -1168,7 +1168,6 @@ class BusyboxDiscoveredApps(DRWorkload):
             self.create_drpc_for_apps_with_recipe()
         else:
             self.create_drpc()
-        self.verify_workload_deployment()
 
 
     def _deploy_prereqs(self):
@@ -1208,17 +1207,14 @@ class BusyboxDiscoveredApps(DRWorkload):
         recipe_yaml_data = templating.load_yaml(self.recipe_yaml_file)
         recipe_yaml_data["metadata"]["name"] = self.workload_namespace
         if "spec" in recipe_yaml_data:
-            if (
-                "groups" in recipe_yaml_data["spec"]
-                and len(recipe_yaml_data["spec"]["groups"]) > 4
-            ):
+            if "groups" in recipe_yaml_data["spec"]:
                 recipe_yaml_data["spec"]["groups"][0][
                     "backupRef"
                 ] = self.workload_namespace
-                recipe_yaml_data["spec"]["groups"][2]["includedNamespaces"] = [
+                recipe_yaml_data["spec"]["groups"][0]["includedNamespaces"] = [
                     self.workload_namespace
                 ]
-                recipe_yaml_data["spec"]["groups"][4]["name"] = self.workload_namespace
+                recipe_yaml_data["spec"]["groups"][0]["name"] = self.workload_namespace
 
             if "workflows" in recipe_yaml_data["spec"]:
                 recipe_yaml_data["spec"]["workflows"][0]["sequence"][1][
@@ -1397,7 +1393,7 @@ class BusyboxDiscoveredApps(DRWorkload):
             skip_replication_resources=skip_replication_resources,
         )
 
-    def create_namespace(self):
+    def create_namespace(self, recipe=None):
         """
         Create Namespace for Workload's to run
         """
