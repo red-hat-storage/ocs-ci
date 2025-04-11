@@ -587,19 +587,14 @@ def process_cluster_cli_params(config):
 
     # Importing here cause once the function is invoked we have already config
     # loaded, so this is OK to import once you sure that config is loaded.
+    kubeconfig_location = ocsci_config.RUN["kubeconfig_location"]
+    custom_kubeconfig_location = get_cli_param(config, "kubeconfig")
+    ocsci_config.RUN["custom_kubeconfig_location"] = custom_kubeconfig_location
+    if custom_kubeconfig_location:
+        kubeconfig_location = custom_kubeconfig_location
     from ocs_ci.ocs.openshift_ops import OCP
 
-    OCP.set_kubeconfig(
-        os.path.join(cluster_path, ocsci_config.RUN["kubeconfig_location"])
-    )
-    ocsci_config.RUN.update(
-        {
-            "kubeconfig": os.path.join(
-                cluster_path, ocsci_config.RUN["kubeconfig_location"]
-            )
-        }
-    )
-
+    OCP.set_kubeconfig(os.path.join(cluster_path, kubeconfig_location))
     cluster_name = get_cli_param(config, f"cluster_name{suffix}")
     ocsci_config.RUN["cli_params"]["teardown"] = get_cli_param(
         config, "teardown", default=False
@@ -718,10 +713,6 @@ def process_cluster_cli_params(config):
     ocsci_config.RUN["disable_environment_checker"] = disable_environment_checker
     resource_checker = get_cli_param(config, "resource_checker")
     ocsci_config.RUN["resource_checker"] = resource_checker
-    custom_kubeconfig_location = get_cli_param(config, "kubeconfig")
-    ocsci_config.RUN["custom_kubeconfig_location"] = custom_kubeconfig_location
-    if custom_kubeconfig_location:
-        ocsci_config.RUN["kubeconfig"] = custom_kubeconfig_location
     acm_version = get_cli_param(config, "--acm-version")
     if acm_version:
         ocsci_config.ENV_DATA["acm_version"] = acm_version
