@@ -645,12 +645,10 @@ def exec_cmd(
         stderr     (str): The standard error (None if not captured).
 
     """
-    env = kwargs.pop("env", os.environ.copy())
-    env["kubeconfig"] = config.RUN.get("kubeconfig")
+    _env = kwargs.pop("env", os.environ.copy())
+    _env["KUBECONFIG"] = config.RUN.get("kubeconfig")
     if cluster_config:
-        env["kubeconfig"] = cluster_config.RUN.get("kubeconfig")
-    masked_cmd = mask_secrets(cmd, secrets)
-    log.info(f"Executing command: {masked_cmd}")
+        _env["KUBECONFIG"] = cluster_config.RUN.get("kubeconfig")
     if isinstance(cmd, str) and not kwargs.get("shell"):
         cmd = shlex.split(cmd)
     if config.RUN.get("custom_kubeconfig_location") and cmd[0] == "oc":
@@ -687,6 +685,8 @@ def exec_cmd(
         cmd = list_insert_at_position(cmd, kube_index, ["--kubeconfig"])
         cmd = list_insert_at_position(cmd, kube_index + 1, [kubepath])
     try:
+        masked_cmd = mask_secrets(cmd, secrets)
+        log.info(f"Executing command: {masked_cmd}")
         if threading_lock and cmd[0] == "oc":
             threading_lock.acquire(timeout=lock_timeout)
         completed_process = subprocess.run(
@@ -695,7 +695,7 @@ def exec_cmd(
             stderr=subprocess.PIPE,
             stdin=subprocess.PIPE,
             timeout=timeout,
-            env=env,
+            env=_env,
             **kwargs,
         )
     finally:
