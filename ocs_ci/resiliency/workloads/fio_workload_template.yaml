@@ -26,7 +26,7 @@ spec:
             - "--numjobs={{ numjobs | default(8) }}"
             - "--runtime={{ runtime | default(60) }}"
             - "--direct={{ direct | default(1) }}"
-            - "--status-interval=20"
+            - "--status-interval=60"
             - "--group_reporting"
             - "--time_based"
             - "--ioengine=libaio"
