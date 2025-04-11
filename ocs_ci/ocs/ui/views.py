@@ -1783,8 +1783,14 @@ validation_4_10 = {
 }
 
 validation_4_11 = {
-    "overview_odf_4_10": ("//a[@data-test-id='horizontal-link-Overview']", By.XPATH),
-    "odf-overview": ("//a[@data-test-id='horizontal-link-Overview']", By.XPATH),
+    "overview_odf_4_10": (
+        "//a[@data-test-id='horizontal-link-Overview'] | //button[@data-test='horizontal-link-Overview']",
+        By.XPATH,
+    ),
+    "odf-overview": (
+        "//a[@data-test-id='horizontal-link-Overview'] | //button[@data-test='horizontal-link-Overview']",
+        By.XPATH,
+    ),
     "object": ("//span[normalize-space()='Object']", By.XPATH),
     "object-odf-4-10": ("//a[normalize-space()='Object']", By.XPATH),
     "blockandfile": ("//span[normalize-space()='Block and File']", By.XPATH),
