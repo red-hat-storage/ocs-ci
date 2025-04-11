@@ -27,7 +27,11 @@ from ocs_ci.resiliency.platform_failures import PlatformFailures
 from ocs_ci.utility.utils import ceph_health_check
 from ocs_ci.utility.utils import remove_ceph_crashes, get_ceph_crashes
 from ocs_ci.ocs.resources import pod
-from ocs_ci.ocs.exceptions import CommandFailed, CephHealthException
+from ocs_ci.ocs.exceptions import (
+    CommandFailed,
+    CephHealthException,
+    NoRunningCephToolBoxException,
+)
 
 log = logging.getLogger(__name__)
 
@@ -294,7 +298,12 @@ class InjectFailures:
         log.info("Performing post-failure injection checks...")
         try:
             ceph_health_check(fix_ceph_health=True)
-        except (CephHealthException, CommandFailed, subprocess.TimeoutExpired) as e:
+        except (
+            CephHealthException,
+            CommandFailed,
+            subprocess.TimeoutExpired,
+            NoRunningCephToolBoxException,
+        ) as e:
             log.error(f"Ceph health check failed after failure injection. : {e}")
 
     def failure_object(self):

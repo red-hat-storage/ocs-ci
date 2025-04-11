@@ -3,7 +3,11 @@ import random
 import logging
 import subprocess
 from ocs_ci.ocs import ocp
-from ocs_ci.ocs.exceptions import CommandFailed, CephHealthException
+from ocs_ci.ocs.exceptions import (
+    CommandFailed,
+    CephHealthException,
+    NoRunningCephToolBoxException,
+)
 from ocs_ci.utility.utils import ceph_health_check
 from ocs_ci.ocs.platform_nodes import PlatformNodesFactory
 
@@ -292,7 +296,12 @@ class NetworkFaults(PlatformNodesFactory):
                 log.info("Ceph cluster recovered after reboot")
             else:
                 log.error("Ceph cluster still unhealthy after node reboot")
-        except (CephHealthException, CommandFailed, subprocess.TimeoutExpired) as e:
+        except (
+            CephHealthException,
+            CommandFailed,
+            subprocess.TimeoutExpired,
+            NoRunningCephToolBoxException,
+        ) as e:
             log.error(f"Final post-reboot health check failed: {e}")
 
     def run(self):
