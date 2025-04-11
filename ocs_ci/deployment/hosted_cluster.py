@@ -197,12 +197,12 @@ class HostedClients(HyperShiftBase):
         # If hostNetwork is true, then providerAPIServerServiceType is set to NodePort automatically
 
         sc = storage_cluster.get_storage_cluster()
-        sc.check_phase(constants.STATUS_READY)
-        if sc.data["spec"].get("hostNetwork"):
+        sc_spec = sc.get()["items"][0]["spec"]
+        if sc_spec.get("hostNetwork"):
             logger.info(
                 "Storage Cluster resource of hub cluster has hostNetwork set to true"
             )
-            if sc.data["spec"].get("providerAPIServerServiceType") == "NodePort":
+            if sc_spec.get("providerAPIServerServiceType") == "NodePort":
                 logger.info(
                     "Storage Cluster resource of hub cluster has providerAPIServerServiceType set to NodePort"
                 )
@@ -1236,6 +1236,12 @@ class HostedODF(HypershiftHostedOCP):
         )
         if "latest" in hosted_odf_version:
             hosted_odf_version = hosted_odf_version.split("-")[-1]
+
+        if "konflux" in hosted_odf_version and "-" in hosted_odf_version:
+            version_semantic = version.get_semantic_version(
+                hosted_odf_version.split("-")[0]
+            )
+            hosted_odf_version = f"{version_semantic.major}.{version_semantic.minor}"
 
         subscription_data["spec"]["channel"] = f"stable-{str(hosted_odf_version)}"
 
