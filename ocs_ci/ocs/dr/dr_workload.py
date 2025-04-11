@@ -13,7 +13,10 @@ from subprocess import TimeoutExpired
 from ocs_ci.framework import config
 from ocs_ci.helpers import dr_helpers, helpers
 from ocs_ci.helpers.cnv_helpers import create_vm_secret, cal_md5sum_vm
-from ocs_ci.helpers.dr_helpers import generate_kubeobject_capture_interval
+from ocs_ci.helpers.dr_helpers import (
+    generate_kubeobject_capture_interval,
+    get_cluster_set_name,
+)
 from ocs_ci.helpers.helpers import (
     create_project,
     create_unique_resource_name,
@@ -109,6 +112,11 @@ class BusyBox(DRWorkload):
             self.workload_pvc_selector = workload_details.get(
                 "dr_workload_app_pvc_selector"
             )
+            self.managed_clusterset_binding_file = os.path.join(
+                self.workload_subscription_dir,
+                self.workload_name,
+                "managedclustersetbinding.yaml",
+            )
         self.channel_yaml_file = os.path.join(
             self.workload_subscription_dir, "channel.yaml"
         )
@@ -150,15 +158,26 @@ class BusyBox(DRWorkload):
         templating.dump_data_to_temp_yaml(drpc_yaml_data, self.drpc_yaml_file)
         if self.is_placement:
             # load placement.yaml
+            clusterset_name = get_cluster_set_name()[0]
             placement_yaml_data = templating.load_yaml(self.placement_yaml_file)
             placement_yaml_data["spec"]["predicates"][0]["requiredClusterSelector"][
                 "labelSelector"
             ]["matchExpressions"][0]["values"][0] = self.preferred_primary_cluster
+            placement_yaml_data["spec"]["clusterSets"][0] = clusterset_name
+
             self.sub_placement_name = placement_yaml_data["metadata"]["name"]
             templating.dump_data_to_temp_yaml(
                 placement_yaml_data, self.placement_yaml_file
             )
-
+            managed_clusterset_binding_yaml_data = templating.load_yaml(
+                self.managed_clusterset_binding_file
+            )
+            managed_clusterset_binding_yaml_data["metadata"]["name"] = clusterset_name
+            managed_clusterset_binding_yaml_data["spec"]["clusterSet"] = clusterset_name
+            templating.dump_data_to_temp_yaml(
+                managed_clusterset_binding_yaml_data,
+                self.managed_clusterset_binding_file,
+            )
             if placement_yaml_data["kind"] == "Placement":
                 drpc_yaml_data = templating.load_yaml(self.drpc_yaml_file_placement)
                 drpc_yaml_data["metadata"]["name"] = f"{self.sub_placement_name}-drpc"
@@ -421,6 +440,21 @@ class BusyBox(DRWorkload):
 
         try:
             config.switch_ctx(switch_ctx) if switch_ctx else config.switch_acm_ctx()
+            if self.is_placement:
+                clusterset_name = get_cluster_set_name()[0]
+                managed_clusterset_binding_yaml_data = templating.load_yaml(
+                    self.managed_clusterset_binding_file
+                )
+                managed_clusterset_binding_yaml_data["metadata"][
+                    "name"
+                ] = clusterset_name
+                managed_clusterset_binding_yaml_data["spec"][
+                    "clusterSet"
+                ] = clusterset_name
+                templating.dump_data_to_temp_yaml(
+                    managed_clusterset_binding_yaml_data,
+                    self.managed_clusterset_binding_file,
+                )
             run_cmd(
                 f"oc delete -k {self.workload_subscription_dir}/{self.workload_name}"
             )
@@ -522,6 +556,8 @@ class BusyBox_AppSet(DRWorkload):
                 app_set_yaml_data["spec"]["predicates"][0]["requiredClusterSelector"][
                     "labelSelector"
                 ]["matchExpressions"][0]["values"][0] = self.preferred_primary_cluster
+                app_set_yaml_data["spec"]["clusterSets"][0] = get_cluster_set_name()[0]
+
             elif app_set_yaml_data["kind"] == constants.APPLICATION_SET:
                 if self.appset_model == "pull":
                     # load appset_yaml_file, add "annotations" key and add values to it
