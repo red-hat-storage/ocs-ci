@@ -52,7 +52,7 @@ def sync_object_directory_with_retry(
 
 
 def upload_objs_to_buckets(
-    mcg_obj, pod_obj, buckets, iteration_no, event=None, multiplier=1
+    mcg_obj, pod_obj, buckets, current_iteration, event=None, multiplier=1
 ):
     """
     This will upload objects present in the stress-cli pod
@@ -62,14 +62,17 @@ def upload_objs_to_buckets(
         mcg_obj (MCG): MCG object
         pod_obj (Pod): Pod object
         buckets (Dict): Map of bucket type and bucket object
-        iteration_no (int): Integer value representing iteration
+        current_iteration (int): Integer value representing iteration
         event (threading.Event()): Event object to signal the execution
             completion
 
     """
 
     src_path = "/complex_directory/"
-    logger.info(f"Uploading objects to all the buckets under prefix {iteration_no}")
+    total_num_buckets = len(buckets.keys())
+    logger.info(
+        f"Uploading objects to all the buckets under prefix {current_iteration}"
+    )
     try:
         with concurrent.futures.ThreadPoolExecutor() as executor:
             futures = list()
@@ -86,7 +89,7 @@ def upload_objs_to_buckets(
                         sync_object_directory_with_retry,
                         pod_obj,
                         src_path,
-                        f"s3://{bucket.name}/{iteration_no}/{i+1}/",
+                        f"s3://{bucket.name}/{current_iteration}/{i+1}/",
                         s3_obj,
                         timeout=20000,
                     )
@@ -100,8 +103,9 @@ def upload_objs_to_buckets(
     finally:
         if event:
             logger.info(
-                f"OBJECT UPLOAD: Total of {multiplier*1000000} objects got uploaded or "
-                f"attempted to uploaded in this iteration {iteration_no+1}"
+                f"OBJECT UPLOAD: Total of {total_num_buckets*multiplier*1000000} objects got uploaded or "
+                f"was getting uploaded to {total_num_buckets} different types of buckets in this "
+                f"iteration {current_iteration}"
             )
             logger.info(
                 "OBJECT UPLOAD: Setting the event to indicate that upload objects "
@@ -111,7 +115,7 @@ def upload_objs_to_buckets(
 
 
 def run_noobaa_metadata_intense_ops(
-    mcg_obj, pod_obj, bucket_factory, bucket, iteration_no, event=None, multiplier=1
+    mcg_obj, pod_obj, bucket_factory, bucket, prev_iteration, event=None, multiplier=1
 ):
     """
     Perfrom metdata intense operations to stress Noobaa
@@ -121,11 +125,12 @@ def run_noobaa_metadata_intense_ops(
         pod_obj (Pod): Noobaa stress CLI pod object
         bucket_factory (fixture): Pytest fixture for creating bucket
         bucket (tuple): Tuple consisting of backend storage type and bucket object
-        iteration_no (int): Iteration number or prefix from where should delete objects
+        prev_iteration (int): Iteration number or prefix from where should delete objects
         event (threading.Event()): Event object to signal the execution
             completion
 
     """
+    current_iteration = prev_iteration + 1
     bucket_type, bucket_obj = bucket
     bucket_name = bucket_obj.name
     base_timeout = 20000
@@ -166,11 +171,12 @@ def run_noobaa_metadata_intense_ops(
             total_buckets_created += len(buckets_created)
             if event.is_set():
                 logger.info(
-                    f"METADATA OP: Total of {total_buckets_created} created in the current iteration {iteration_no+1}"
+                    f"METADATA OP: Total of {total_buckets_created} buckets "
+                    f"created in the current iteration {current_iteration}"
                 )
                 logger.info(
                     f"METADATA OP: Successfully completed bucket creation/deletion operation in the background"
-                    f" for the current iteration {iteration_no+1}"
+                    f" for the current iteration {current_iteration}"
                 )
                 break
 
@@ -189,7 +195,7 @@ def run_noobaa_metadata_intense_ops(
         objs_in_bucket = list_objects_from_bucket(
             pod_obj=pod_obj,
             target=bucket_name,
-            prefix=iteration_no,
+            prefix=prev_iteration,
             s3_obj=s3_obj,
             timeout=timeout,
             recursive=True,
@@ -214,12 +220,12 @@ def run_noobaa_metadata_intense_ops(
                     break
             if event.is_set():
                 logger.info(
-                    f"METADATA OP: Total of {tot_objs_updated} metadata got updated "
-                    f"in the current iteration {iteration_no+1}"
+                    f"METADATA OP: Total of {tot_objs_updated} objects metadata got updated "
+                    f"in the current iteration {current_iteration}"
                 )
                 logger.info(
                     f"METADATA OP: Successfully completed the metadata update operation"
-                    f" in the background for the iteration {iteration_no+1}"
+                    f" in the background for the iteration {current_iteration}"
                 )
                 break
 
@@ -257,11 +263,11 @@ def run_noobaa_metadata_intense_ops(
             if event.is_set():
                 logger.info(
                     f"METADATA OP: Total of {tot_nb_acc} accounts got created/updated/deleted "
-                    f"in the current iteration {iteration_no+1}"
+                    f"in the current iteration {current_iteration}"
                 )
                 logger.info(
                     f"METADATA OP: Successfully completed noobaa account creation/update/deletion operation"
-                    f" in the background for the iteration {iteration_no+1}"
+                    f" in the background for the iteration {current_iteration}"
                 )
                 break
 
@@ -278,18 +284,19 @@ def run_noobaa_metadata_intense_ops(
     executor.shutdown()
 
 
-def delete_objs_from_bucket(pod_obj, bucket, iteration_no, event=None, multiplier=1):
+def delete_objs_from_bucket(pod_obj, bucket, prev_iteration, event=None, multiplier=1):
     """
     Delete all the objects from a bucket
 
     Args:
         pod_obj (Pod): Noobaa stress CLI pod object
         bucket (Tuple): Tuple consisting of backend storage type and bucket object
-        iteration_no (int): Iteration number or prefix from where should delete objects
+        prev_iteration (int): Iteration number or prefix from where should delete objects
         event (threading.Event()): Event object to signal the execution
             completion
 
     """
+    current_iteration = prev_iteration + 1
     bucket_type, bucket_obj = bucket
     bucket_name = bucket_obj.name
     base_timeout = 20000
@@ -302,37 +309,38 @@ def delete_objs_from_bucket(pod_obj, bucket, iteration_no, event=None, multiplie
 
     logger.info(
         f"DELETE OP: Delete objects recursively from the bucket "
-        f"{bucket_name} under prefix {iteration_no}"
+        f"{bucket_name} under prefix {prev_iteration}"
     )
 
     rm_object_recursive(
         pod_obj,
         bucket_name,
         mcg_obj,
-        prefix=iteration_no,
+        prefix=prev_iteration,
         timeout=timeout,
     )
     logger.info(
         f"DELETE OP: Total of {(multiplier-1)*1000000} objects got deleted "
-        f"in the current iteration {iteration_no+1}"
+        f"in the current iteration {current_iteration}"
     )
     logger.info(
         f"DELETE OP: Successfully completed object deletion operation on "
-        f"bucket {bucket_name} under prefix {iteration_no}"
+        f"bucket {bucket_name} under prefix {prev_iteration}"
     )
 
 
-def list_objs_from_bucket(bucket, iteration_no, event=None):
+def list_objs_from_bucket(bucket, prev_iteration, event=None):
     """
     List objects from bucket
 
     Args:
         bucket (Tuple): Tuple consisting of backend storage type and bucket object
-        iteration_no (int): Iteration number or prefix from where should list objects
+        prev_iteration (int): Iteration number or prefix from where should list objects
         event (threading.Event()): Event object to signal the execution
             completion
 
     """
+    current_iteration = prev_iteration + 1
     bucket_type, bucket_obj = bucket
     bucket_name = bucket_obj.name
     if bucket_type.upper() == "RGW":
@@ -342,27 +350,27 @@ def list_objs_from_bucket(bucket, iteration_no, event=None):
 
     logger.info(
         f"LIST OP: Listing objects from the bucket {bucket_name} "
-        f"under prefix {iteration_no}"
+        f"under prefix {prev_iteration}"
     )
     while True:
         s3_list_objects_v2(
-            mcg_obj, bucket_name, prefix=str(iteration_no), delimiter="/"
+            mcg_obj, bucket_name, prefix=str(prev_iteration), delimiter="/"
         )
 
         if event.is_set():
             logger.info(
-                f"LIST OP: Total of {(iteration_no+1)*1000000} got listed "
-                f"in the current iteration {iteration_no+1}"
+                f"LIST OP: Total of {current_iteration*1000000} objects got listed "
+                f"in the current iteration {current_iteration}"
             )
             logger.info(
                 f"LIST OP: Successfully completed object list operation on "
-                f"bucket {bucket_name} under prefix {iteration_no}"
+                f"bucket {bucket_name} under prefix {prev_iteration}"
             )
             break
 
 
 def download_objs_from_bucket(
-    pod_obj, bucket, target_dir, iteration_no, event=None, multiplier=1
+    pod_obj, bucket, target_dir, prev_iteration, event=None, multiplier=1
 ):
     """
     Download objects from a bucket back to local directory
@@ -371,11 +379,12 @@ def download_objs_from_bucket(
         pod_obj (Pod): Noobaa stress CLI pod object
         bucket (Tuple): Tuple consisting of backend storage type and bucket object
         target_dir (str): Target directory to download objects
-        iteration_no (int): Iteration number or prefix from where should download objects
+        prev_iteration (int): Iteration number or prefix from where should download objects
         event (threading.Event()): Event object to signal the execution
             completion
 
     """
+    current_iteration = prev_iteration + 1
     bucket_type, bucket_obj = bucket
     bucket_name = bucket_obj.name
     base_timeout = 20000
@@ -388,18 +397,18 @@ def download_objs_from_bucket(
 
     logger.info(
         f"DOWNLOAD OP: Download objects from the bucket "
-        f"{bucket_name} under prefix {iteration_no}"
+        f"{bucket_name} under prefix {prev_iteration}"
     )
     while True:
         sync_object_directory(
             pod_obj,
-            f"s3://{bucket_name}/{iteration_no}",
+            f"s3://{bucket_name}/{prev_iteration}",
             target_dir,
             mcg_obj,
             timeout=timeout,
         )
         logger.info(
-            f"DOWNLOAD OP: Downloaded objects from {bucket_name}/{iteration_no} to {target_dir}"
+            f"DOWNLOAD OP: Downloaded objects from {bucket_name}/{prev_iteration} to {target_dir}"
         )
         logger.info(
             f"DOWNLOAD OP: Cleaning up the downloaded objects from {target_dir}"
@@ -409,11 +418,11 @@ def download_objs_from_bucket(
         if event.is_set():
             logger.info(
                 f"DOWNLOAD OP: Total of {(multiplier-1)*1000000} objects got "
-                f"downloaded in the current iteration {iteration_no+1}"
+                f"downloaded in the current iteration {current_iteration}"
             )
             logger.info(
                 f"DOWNLOAD OP: Successfully completed object download "
-                f"operation on bucket {bucket_name} under prefix {iteration_no}"
+                f"operation on bucket {bucket_name} under prefix {prev_iteration}"
             )
             break
 
