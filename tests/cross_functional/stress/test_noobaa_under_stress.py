@@ -76,17 +76,17 @@ class TestNoobaaUnderStress:
                 mcg_obj_session,
                 nb_stress_cli_pod_1,
                 self.base_setup_buckets,
-                iteration_no=0,
+                current_iteration=0,
             )
 
             # Iterate and stress the cluster with object upload
             # and other IO operations
             total_iterations = 4
-            for i in range(0, total_iterations):
-                iteration_no = i + 1
-                multiplier = iteration_no + 1
+            for i in range(1, total_iterations + 1):
+                current_iteration = i
+                multiplier = current_iteration + 1
                 logger.info(
-                    f"Performing Iteration {iteration_no} of stressing the cluster"
+                    f"Performing Iteration {current_iteration} of stressing the cluster"
                 )
                 executor = ThreadPoolExecutor(max_workers=5)
                 futures_obj = list()
@@ -105,7 +105,7 @@ class TestNoobaaUnderStress:
                         mcg_obj_session,
                         nb_stress_cli_pod_1,
                         self.base_setup_buckets,
-                        iteration_no=iteration_no,
+                        current_iteration=current_iteration,
                         event=event,
                         multiplier=multiplier,
                     )
@@ -121,7 +121,7 @@ class TestNoobaaUnderStress:
                         nb_stress_cli_pod_2,
                         bucket_factory,
                         bucket,
-                        iteration_no=i,
+                        prev_iteration=current_iteration - 1,
                         event=event,
                         multiplier=multiplier,
                     )
@@ -136,7 +136,7 @@ class TestNoobaaUnderStress:
                         delete_objs_from_bucket,
                         nb_stress_cli_pod_2,
                         bucket,
-                        iteration_no=i,
+                        prev_iteration=current_iteration - 1,
                         event=event,
                         multiplier=multiplier,
                     )
@@ -150,7 +150,7 @@ class TestNoobaaUnderStress:
                     executor.submit(
                         list_objs_from_bucket,
                         bucket,
-                        iteration_no=i,
+                        prev_iteration=current_iteration - 1,
                         event=event,
                     )
                 )
@@ -166,7 +166,7 @@ class TestNoobaaUnderStress:
                         nb_stress_cli_pod_2,
                         bucket,
                         stress_test_directory_setup.result_dir,
-                        iteration_no=i,
+                        prev_iteration=current_iteration - 1,
                         event=event,
                         multiplier=multiplier,
                     )
