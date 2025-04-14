@@ -2514,6 +2514,10 @@ def get_running_state_pods(
     ocp_pod_obj = OCP(kind=constants.POD, namespace=namespace)
     running_pods_object = list()
     for pod in list_of_pods:
+        # ignoring storageclient-737342087af10580-status-reporter pod
+        ignore_pods = (constants.STATUS_REPORTER,)
+        if any(ipod in pod.name for ipod in ignore_pods):
+            continue
         status = ocp_pod_obj.get_resource(pod.name, "STATUS")
         if "Running" in status:
             running_pods_object.append(pod)
