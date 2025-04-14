@@ -261,7 +261,6 @@ CRD_KIND = "CustomResourceDefinition"
 CLIENT_PROFILE = "ClientProfile"
 OCS_OPERATOR_CONFIG_MAP = "ocs-operator-config"
 SERVICE_TYPE_NODEPORT = "NodePort"
-CLUSTERMANAGEMENTADDON = "AddOnDeploymentConfig"
 CLUSTERMANAGEMENTADDON = "ClusterManagementAddOn"
 
 # Provisioners

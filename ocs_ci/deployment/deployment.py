@@ -2522,7 +2522,9 @@ class Deployment(object):
             "managed-serviceaccount",
             "cluster-proxy",
         ]:
-            addon_obj.patch(resource_name=management_addon, params=patch_cmd)
+            addon_obj.patch(
+                resource_name=management_addon, params=patch_cmd, format_type="merge"
+            )
 
         # Verify the presence and Running status of the pods cluster-proxy-proxy-agent, klusterlet-addon-workmgr and
         # managed-serviceaccount-addon-agent
