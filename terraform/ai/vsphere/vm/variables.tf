@@ -57,3 +57,8 @@ variable "nested_hv_enabled" {
 variable "storage_policy_id" {
   type = string
 }
+
+variable "enable_disk_uuid" {
+  type    = bool
+  default = true
+}
