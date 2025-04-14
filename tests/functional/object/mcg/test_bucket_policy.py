@@ -324,7 +324,10 @@ class TestS3BucketPolicy(MCGTest):
         logger.info(
             f"Adding object on bucket: {obc_obj.bucket_name} using user: {obc_obj.obc_account}"
         )
-        assert s3_put_object(
+        retry_s3_put_object = retry(boto3exception.ClientError, tries=4, delay=100)(
+            s3_put_object
+        )
+        assert retry_s3_put_object(
             obc_obj, obc_obj.bucket_name, object_key, data
         ), "Failed: Put Object"
 
@@ -431,7 +434,10 @@ class TestS3BucketPolicy(MCGTest):
 
         # Admin writes an object to bucket
         logger.info(f"Writing object on bucket: {s3_bucket.name} by admin")
-        assert s3_put_object(
+        retry_s3_put_object = retry(boto3exception.ClientError, tries=4, delay=100)(
+            s3_put_object
+        )
+        assert retry_s3_put_object(
             mcg_obj, s3_bucket.name, object_key, data
         ), "Failed: PutObject"
 
@@ -489,14 +495,21 @@ class TestS3BucketPolicy(MCGTest):
         ), "Failed: GetBucketWebsite"
 
         logger.info("Writing index and error data to the bucket")
-        assert s3_put_object(
+        retry_s3_put_object = retry(boto3exception.ClientError, tries=4, delay=100)(
+            s3_put_object
+        )
+        assert retry_s3_put_object(
             s3_obj=obc_obj,
             bucketname=obc_obj.bucket_name,
             object_key="index.html",
             data=index,
             content_type="text/html",
         ), "Failed: PutObject"
-        assert s3_put_object(
+
+        retry_s3_put_object = retry(boto3exception.ClientError, tries=4, delay=100)(
+            s3_put_object
+        )
+        assert retry_s3_put_object(
             s3_obj=obc_obj,
             bucketname=obc_obj.bucket_name,
             object_key="error.html",
@@ -646,7 +659,10 @@ class TestS3BucketPolicy(MCGTest):
 
         # Admin writes an object to bucket
         logger.info(f"Writing an object on bucket: {obc_obj.bucket_name} by Admin")
-        assert s3_put_object(
+        retry_s3_put_object = retry(boto3exception.ClientError, tries=4, delay=100)(
+            s3_put_object
+        )
+        assert retry_s3_put_object(
             mcg_obj, obc_obj.bucket_name, object_key, data
         ), "Failed: PutObject"
 
@@ -788,7 +804,11 @@ class TestS3BucketPolicy(MCGTest):
         logger.info(
             f"Writing object on bucket: {obc_obj.bucket_name} with User: {obc_obj.obc_account}"
         )
-        assert s3_put_object(
+        retry_s3_put_object = retry(boto3exception.ClientError, tries=4, delay=100)(
+            s3_put_object
+        )
+
+        assert retry_s3_put_object(
             obc_obj, obc_obj.bucket_name, object_key, data
         ), "Failed: Put Object"
 
@@ -1085,7 +1105,10 @@ class TestS3BucketPolicy(MCGTest):
         logger.info(
             f"Adding object on the bucket: {obc_obj.bucket_name} using user: {obc_obj.obc_account}"
         )
-        assert s3_put_object(
+        retry_s3_put_object = retry(boto3exception.ClientError, tries=4, delay=100)(
+            s3_put_object
+        )
+        assert retry_s3_put_object(
             obc_obj, obc_obj.bucket_name, object_key, data
         ), "Failed to put Object"
 
@@ -1136,14 +1159,21 @@ class TestS3BucketPolicy(MCGTest):
         ), "Failed: GetBucketWebsite"
 
         logger.info("Writing index and error data to the bucket")
-        assert s3_put_object(
+        retry_s3_put_object = retry(boto3exception.ClientError, tries=4, delay=100)(
+            s3_put_object
+        )
+        assert retry_s3_put_object(
             s3_obj=mcg_obj,
             bucketname=s3_bucket[0].name,
             object_key="index.html",
             data=index,
             content_type="text/html",
         ), "Failed: PutObject"
-        assert s3_put_object(
+
+        retry_s3_put_object = retry(boto3exception.ClientError, tries=4, delay=100)(
+            s3_put_object
+        )
+        assert retry_s3_put_object(
             s3_obj=mcg_obj,
             bucketname=s3_bucket[0].name,
             object_key="error.html",
