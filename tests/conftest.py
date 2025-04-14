@@ -616,7 +616,7 @@ def pytest_runtest_setup(item):
                     ocsci_config.switch_ctx(original_idx)
 
 
-def pytest_fixture_setup(fixturedef, request):
+def pytest_fixture_setup(fixturedef, request, item):
     """
     In case of multicluster scenarios, we want to make sure that before running
     any fixture related to the testcase we need to switch the cluster context
