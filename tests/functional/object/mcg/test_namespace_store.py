@@ -13,7 +13,13 @@ from ocs_ci.ocs.resources.namespacestore import (
     cli_create_namespacestore,
     NamespaceStore,
 )
-from ocs_ci.framework.pytest_customization.marks import polarion_id, mcg, red_squad
+from ocs_ci.framework.pytest_customization.marks import (
+    polarion_id,
+    mcg,
+    red_squad,
+    on_prem_platform_required,
+    tier2,
+)
 from ocs_ci.ocs.ocp import OCP
 from ocs_ci.ocs.resources.ocs import OCS
 
@@ -24,7 +30,9 @@ logger = logging.getLogger(__name__)
 @mcg
 class TestNamespaceStore:
 
+    @tier2
     @polarion_id("OCS-6550")
+    @on_prem_platform_required
     def test_namespacestore_with_rgw(
         self,
         mcg_obj,
