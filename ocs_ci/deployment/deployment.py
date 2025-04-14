@@ -2508,12 +2508,14 @@ class Deployment(object):
         )
 
         # Update the existing ClusterManagementAddOn resources for the add-ons so that the add-ons are installed
-        # in the namespace that is specified in the AddOnDeploymentConfig created
+        # in the namespace that is specified in the AddOnDeploymentConfig
         patch_cmd = (
-            f'{{"spec": {{"installStrategy": {{"placements": ["configs": [{{"group": "addon.open-cluster-management.io"'
-            f', "name": "{addon_deployment_config.name}", "namespace": "{addon_deployment_config.namespace}", '
-            f'"resource": "addondeploymentconfigs"}}]]}}}}}}'
+            f'{{"spec": {{"installStrategy": {{"placements": [{{"name": "global","namespace": '
+            f'"open-cluster-management-global-set","rolloutStrategy": {{"type": "All"}},"configs": [{{"group": '
+            f'"addon.open-cluster-management.io","name": "{addon_deployment_config.name}","namespace": '
+            f'"{addon_deployment_config.namespace}","resource":"addondeploymentconfigs"}}]}}]}}}}}}'
         )
+
         addon_obj = OCP(kind=constants.CLUSTERMANAGEMENTADDON)
         for management_addon in [
             "work-manager",
