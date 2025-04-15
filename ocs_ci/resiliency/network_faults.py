@@ -80,7 +80,7 @@ class NetworkFaults(PlatformNodesFactory):
                         iface.strip() for iface in output.splitlines() if iface.strip()
                     ]
                     interfaces.extend(ifaces)
-                except CommandFailed as e:
+                except (CommandFailed, subprocess.TimeoutExpired) as e:
                     log.error(f"Error retrieving interfaces from node {node.name}: {e}")
                     continue
 
@@ -160,7 +160,7 @@ class NetworkFaults(PlatformNodesFactory):
                     cmd = f"tc qdisc del dev {iface} root"
                     try:
                         self.ocp_obj.exec_oc_debug_cmd(node=node.name, cmd_list=[cmd])
-                    except CommandFailed as e:
+                    except (CommandFailed, subprocess.TimeoutExpired) as e:
                         log.error(
                             f"Failed to remove fault from {node.name}/{iface}: {e}"
                         )
@@ -188,7 +188,7 @@ class NetworkFaults(PlatformNodesFactory):
                 try:
                     self.ocp_obj.exec_oc_debug_cmd(node=node.name, cmd_list=[cmd_del])
                     log.debug(f"Deleted qdisc on {node.name}/{iface}")
-                except CommandFailed as e:
+                except (CommandFailed, subprocess.TimeoutExpired) as e:
                     log.warning(f"Could not delete qdisc on {node.name}/{iface}: {e}")
                     continue
 
@@ -206,7 +206,7 @@ class NetworkFaults(PlatformNodesFactory):
                         log.info(
                             f"Verified: netem successfully removed from {node.name}/{iface}"
                         )
-                except CommandFailed as e:
+                except (CommandFailed, subprocess.TimeoutExpired) as e:
                     log.warning(
                         f"Could not verify qdisc status on {node.name}/{iface}: {e}"
                     )

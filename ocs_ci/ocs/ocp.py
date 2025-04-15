@@ -238,7 +238,9 @@ class OCP(object):
             config.switch_ctx(original_context)
         return out
 
-    def exec_oc_debug_cmd(self, node, cmd_list, timeout=300, namespace=None):
+    def exec_oc_debug_cmd(
+        self, node, cmd_list, timeout=300, namespace=None, use_root=True
+    ):
         """
         Function to execute "oc debug" command on OCP node
 
@@ -258,11 +260,15 @@ class OCP(object):
         create_cmd_list = copy.deepcopy(cmd_list)
         create_cmd_list.append(" ")
         err_msg = "CMD FAILED"
+        if use_root:
+            root_option = " chroot /host /bin/bash -c "
+        else:
+            root_option = " /bin/bash -c "
         cmd = f" || echo '{err_msg}';".join(create_cmd_list)
         namespace = namespace or config.ENV_DATA["cluster_namespace"]
         debug_cmd = (
             f"debug nodes/{node} --to-namespace={namespace} "
-            f' -- chroot /host /bin/bash -c "{cmd}"'
+            f' -- {root_option} "{cmd}"'
         )
         out = str(
             self.exec_oc_cmd(command=debug_cmd, out_yaml_format=False, timeout=timeout)

@@ -17,6 +17,7 @@ cluster and its workloads under real-world conditions.
 
 import logging
 import random
+import subprocess
 
 from ocs_ci.ocs.platform_nodes import PlatformNodesFactory
 from ocs_ci.resiliency.network_faults import NetworkFaults
@@ -148,7 +149,7 @@ class PlatformFailures(PlatformNodesFactory):
                 nf = NetworkFaults(nodes, interface_types=interfaces)
                 nf.run()
                 log.info(f"[{label}] Completed fault simulation.")
-            except (ValueError, CommandFailed) as e:
+            except (ValueError, CommandFailed, subprocess.TimeoutExpired) as e:
                 log.error(f"[{label}] Error during simulation: {e}")
 
         # Helper to get a random subset of any list

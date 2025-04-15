@@ -5014,8 +5014,12 @@ def get_ceph_crashes(toolbox_pod):
         list: List of ceph crash ID's
 
     """
-    ceph_crashes = toolbox_pod.exec_ceph_cmd("ceph crash ls")
-    return [each_crash["crash_id"] for each_crash in ceph_crashes]
+    try:
+        ceph_crashes = toolbox_pod.exec_ceph_cmd("ceph crash ls")
+        return [each_crash["crash_id"] for each_crash in ceph_crashes]
+    except (CommandFailed, subprocess.TimeoutExpired) as ex:
+        log.error(f"Failed to get ceph crash list: {ex}")
+        return []
 
 
 def archive_ceph_crashes(toolbox_pod):
