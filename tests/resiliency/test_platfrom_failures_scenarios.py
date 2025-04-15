@@ -94,3 +94,34 @@ class TestPlatformFailureScenarios:
         resiliency_runner.cleanup()
 
         self._validate_and_cleanup_workloads(workloads)
+
+    def test_platform_failures_with_stress(
+        self,
+        failure_case,
+        platfrom_failure_scenarios,
+        project_factory,
+        multi_pvc_factory,
+        resiliency_workload,
+        run_platform_stress,
+    ):
+        """
+        Parametrized test that validates resiliency of the platform
+        against various failure scenarios while workloads are running.
+
+        Args:
+            failure_case (str): The failure method to inject.
+        """
+        scenario = platfrom_failure_scenarios.get("SCENARIO_NAME")
+        log.info(f"Running Scenario: {scenario}, Failure Case: {failure_case}")
+
+        workloads = self._prepare_pvcs_and_workloads(
+            project_factory, multi_pvc_factory, resiliency_workload
+        )
+
+        run_platform_stress()
+
+        resiliency_runner = Resiliency(scenario, failure_method=failure_case)
+        resiliency_runner.start()
+        resiliency_runner.cleanup()
+
+        self._validate_and_cleanup_workloads(workloads)

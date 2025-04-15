@@ -31,6 +31,7 @@ from ocs_ci.ocs.exceptions import (
     CommandFailed,
     CephHealthException,
     NoRunningCephToolBoxException,
+    TimeoutExpiredError,
 )
 
 log = logging.getLogger(__name__)
@@ -252,7 +253,10 @@ class Resiliency:
                 continue
             self.pre_scenario_check()
             log.info(f"Running failure case: {failure_case}")
-            self.inject_failure(failure_case)
+            try:
+                self.inject_failure(failure_case)
+            except (TimeoutExpiredError, CommandFailed) as e:
+                log.error(f"Failure case execution failed: {e}")
             self.post_scenario_check()
 
     def inject_failure(self, failure):

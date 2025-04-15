@@ -13,27 +13,54 @@ class NodeStats:
     """
 
     @staticmethod
-    def cpu_stats(node_obj):
+    def cpu_stats(node_obj, format="json", interval=1, count=2):
         """
         Get CPU statistics for a given node using `mpstat`.
 
         Args:
             node_obj (OCSNode): Node object to query.
+            format (str): Output format ('json' or 'text').
+            interval (int): Interval between samples in seconds.
+            count (int): Number of samples to collect.
 
         Returns:
-            list: List of CPU stats dictionaries parsed from mpstat JSON output.
+            list or None: List of CPU stats dictionaries (if format is 'json'),
+            or None for unsupported format.
         """
         ocp_obj = ocp.OCP(kind="node")
-        cmd = f"debug nodes/{node_obj.name} -- mpstat 1 2 -o JSON"
+
+        if format == "json":
+            cmd = f"debug nodes/{node_obj.name} -- mpstat {interval} {count} -o JSON"
+        elif format == "text":
+            cmd = f"debug nodes/{node_obj.name} -- mpstat {interval} {count} > /tmp/mpstat.txt"
+            log.warning(
+                "Text format selected. This method currently does not return parsed text output."
+            )
+            return None
+        else:
+            log.error(f"Unsupported format '{format}'. Use 'json' or 'text'.")
+            return None
 
         try:
-            log.info(f"Running mpstat on node: {node_obj.name}")
+            log.info(
+                f"Running mpstat on node '{node_obj.name}' with interval={interval}, count={count}"
+            )
             cmd_output = ocp_obj.exec_oc_cmd(command=cmd, out_yaml_format=False)
-            output = json.loads(cmd_output)
-            return output.get("sysstat", {}).get("hosts", [{}])[0].get("statistics", [])
+            if format == "json":
+                output = json.loads(cmd_output)
+                return (
+                    output.get("sysstat", {})
+                    .get("hosts", [{}])[0]
+                    .get("statistics", [])
+                )
         except CommandFailed as e:
-            log.error(f"Failed to fetch CPU stats for node {node_obj.name}: {e}")
-            return []
+            log.error(f"Failed to fetch CPU stats for node '{node_obj.name}': {e}")
+        except json.JSONDecodeError as e:
+            log.error(
+                f"Failed to parse JSON output from mpstat on node '{node_obj.name}': {e}"
+            )
+
+        return []
 
     @staticmethod
     def memory_usage_percent(node_obj):
