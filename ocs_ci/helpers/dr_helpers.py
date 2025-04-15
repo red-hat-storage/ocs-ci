@@ -1721,7 +1721,9 @@ def replace_cluster(workload, primary_cluster_name, secondary_cluster_name, rdr=
         Exception("Mirroring is not disabled completely") if mirroring_status else None
     )
 
-    logger.info(f"Mirroring status: {mirroring_status}")
+    if mirroring_status:
+        raise Exception("Mirroring is not disabled completely")
+        logger.info(f"Mirroring status: {mirroring_status}")
 
     sample = TimeoutSampler(
         timeout=300,
