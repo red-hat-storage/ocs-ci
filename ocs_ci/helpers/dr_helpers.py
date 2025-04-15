@@ -1717,10 +1717,6 @@ def replace_cluster(workload, primary_cluster_name, secondary_cluster_name, rdr=
         namespace=config.ENV_DATA["cluster_namespace"],
     )
     mirroring_status = cbp_obj.get().get("status").get("mirroringStatus")
-    raise (
-        Exception("Mirroring is not disabled completely") if mirroring_status else None
-    )
-
     if mirroring_status:
         raise Exception("Mirroring is not disabled completely")
         logger.info(f"Mirroring status: {mirroring_status}")

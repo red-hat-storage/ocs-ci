@@ -46,7 +46,7 @@ class TestReplaceCluster:
         """
         drpc_objs = []
 
-        # Deploy Subscription based application
+        # Deploy application
         workloads = dr_workload(num_of_subscription=0, num_of_appset=1)
         self.namespace = workloads[0].workload_namespace
         self.workload_type = workloads[0].workload_type
