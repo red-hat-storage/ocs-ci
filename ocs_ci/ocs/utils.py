@@ -1219,6 +1219,7 @@ def _collect_ocs_logs(
             f"RUNNING IN CTX: {cluster_config.ENV_DATA['cluster_name']} RUNID: = {cluster_config.RUN['run_id']}"
         )
     )
+    # TODO: This logic should be deleted as we not support such path for kubeconfig
     if not (
         cluster_config.RUN.get("kubeconfig", False)
         or os.path.exists(os.path.expanduser("~/.kube/config"))

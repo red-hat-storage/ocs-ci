@@ -49,7 +49,7 @@ def create_htpasswd_secret(htpasswd_path, replace=False):
         replace (bool): If secret already exists then this will replace it
 
     """
-    kubeconfig = os.getenv("KUBECONFIG")
+    kubeconfig = config.RUN["kubeconfig"]
 
     cmd = (
         f"oc create secret generic htpass-secret "
@@ -203,7 +203,8 @@ def get_server_url():
         str: Server URL
 
     """
-    cmd = f"oc whoami --show-server --kubeconfig={os.getenv('KUBECONFIG')}"
+    kubeconfig = config.RUN["kubeconfig"]
+    cmd = f"oc whoami --show-server --kubeconfig={kubeconfig}"
     return exec_cmd(cmd, shell=True).stdout.decode().strip()
 
 
