@@ -204,7 +204,12 @@ class TestDeleteObjects:
 
     @pytest.fixture(scope="session")
     def create_bucket_verify_object_deletion(
-        self, request, bucket_factory_session, mcg_obj_session
+        self,
+        request,
+        reduce_expiration_interval_session,
+        change_lifecycle_schedule_min_session,
+        bucket_factory_session,
+        mcg_obj_session,
     ):
         buckets = list()
         expirations = list()
@@ -214,6 +219,14 @@ class TestDeleteObjects:
             Factory function to create the bucket
 
             """
+
+            # Reduce the expiration interval and lifecycle schedule delay
+            log.info(
+                "Reducing the expiration interval and lifecycle schedule delay to 1 minute"
+            )
+            reduce_expiration_interval_session(interval=1)
+            change_lifecycle_schedule_min_session(interval=1)
+
             expirations.append(exp)
             bucket = bucket_factory_session(amount=1, interface="OC")[0]
             buckets.append(bucket)
@@ -272,13 +285,6 @@ class TestDeleteObjects:
         objects in bucket at scale
 
         """
-
-        # Reduce the expiration interval and lifecycle schedule delay
-        log.info(
-            "Reducing the expiration interval and lifecycle schedule delay to 1 minute"
-        )
-        reduce_expiration_interval(1)
-        change_lifecycle_schedule_min(1)
 
         # Create the bucket
         log.info("Create the bucket")
