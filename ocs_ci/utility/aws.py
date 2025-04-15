@@ -2834,14 +2834,16 @@ def delete_cloudfront_origin_access_identities():
         aws.disable_cloudfront_distribution(dist_id)
         logger.info("Waiting for Distribution to be `Deployed`")
         wait_for_distribution_status_deployed(dist_id)
-        dist_etag = aws.get_cloudfront_distribution(dist_id)
+        logger.info("Retrieving Distribution ETag")
+        dist_etag = aws.get_cloudfront_distribution(dist_id)["ETag"]
         aws.delete_cloudfront_distribution(dist_id, dist_etag)
 
+    logger.info("Retrieving identity ETag")
     identity_etag = aws.get_cloudfront_origin_access_identity(identity_id)["ETag"]
     aws.delete_cloudfront_origin_access_identity(identity_id, identity_etag)
 
 
-@retry(exceptions.DistributionStatusError, tries=20, delay=30, backoff=1)
+@retry(exceptions.DistributionStatusError, tries=20, delay=60, backoff=1)
 def wait_for_distribution_status_deployed(dist_id):
     """
     Wait for the Distribution to reach the `Deployed` status.
