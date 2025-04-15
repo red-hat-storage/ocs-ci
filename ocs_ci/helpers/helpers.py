@@ -1478,7 +1478,7 @@ def create_build_from_docker_image(
     docker_file = f"FROM {base_image}\n " f" RUN {cmd}\n" f"CMD tail -f /dev/null"
 
     command = f"new-build -D $'{docker_file}' --name={image_name}"
-    kubeconfig = os.getenv("KUBECONFIG")
+    kubeconfig = config.RUN.get("kubeconfig")
 
     oc_cmd = f"oc -n {namespace} "
 
