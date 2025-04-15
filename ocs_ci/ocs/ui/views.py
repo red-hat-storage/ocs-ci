@@ -1823,7 +1823,10 @@ validation_4_12 = {
 }
 
 validation_4_13 = {
-    "topology_tab": ("//a[normalize-space()='Topology']", By.XPATH),
+    "topology_tab": (
+        "//a[@data-test-id='horizontal-link-Topology'] | //a[normalize-space()='Topology']",
+        By.XPATH,
+    ),
     # locator presented only if the tab is active
     "odf-overview-tab-active": (
         "//li[@class='co-m-horizontal-nav__menu-item co-m-horizontal-nav-item--active']"
