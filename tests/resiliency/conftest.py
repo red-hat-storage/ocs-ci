@@ -3,6 +3,7 @@ import os
 from ocs_ci.ocs import constants
 from ocs_ci.resiliency.resiliency_helper import ResiliencyConfig
 from ocs_ci.resiliency.resiliency_workload import workload_object
+from ocs_ci.resiliency.platform_stress import PlatformStress
 
 
 @pytest.fixture
@@ -53,3 +54,44 @@ def resiliency_workload(request):
         return workload
 
     return factory
+
+
+@pytest.fixture
+def run_platform_stress(request):
+    """
+    Fixture to run platform stress tests.
+
+    Usage:
+        run_platform_stress("cpu", nodes, process=4, timeout=60)
+    """
+    stress_obj = PlatformStress()
+
+    def _run_stress(stress_type, nodes, **kwargs):
+        """
+        Run the specified stress test on the given nodes.
+
+        Args:
+            stress_type (str): Type of stress test to run (e.g., "cpu", "memory").
+            nodes (list): List of node objects.
+            kwargs: Additional keyword arguments for the stress function.
+
+        Returns:
+            bool: True if the stress test ran successfully, False otherwise.
+        """
+        stress_func = getattr(stress_obj, f"{stress_type}_stress", None)
+        if not callable(stress_func):
+            raise ValueError(f"Unsupported stress type: {stress_type}")
+
+        print(
+            f"Running {stress_type} stress test on nodes: {[n.name for n in nodes]} with args: {kwargs}"
+        )
+        result = stress_func(nodes, **kwargs)
+
+        def finalizer():
+            print(f"Stopping stress test: {stress_type}")
+            stress_obj.stop()
+
+        request.addfinalizer(finalizer)
+        return result
+
+    return _run_stress
