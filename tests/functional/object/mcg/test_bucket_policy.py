@@ -1,4 +1,5 @@
 import logging
+import logging
 import time
 
 import pytest
@@ -324,7 +325,7 @@ class TestS3BucketPolicy(MCGTest):
         logger.info(
             f"Adding object on bucket: {obc_obj.bucket_name} using user: {obc_obj.obc_account}"
         )
-        retry_s3_put_object = retry(boto3exception.ClientError, tries=4, delay=100)(
+        retry_s3_put_object = retry(boto3exception.ClientError, tries=4, delay=15)(
             s3_put_object
         )
         assert retry_s3_put_object(
@@ -434,7 +435,7 @@ class TestS3BucketPolicy(MCGTest):
 
         # Admin writes an object to bucket
         logger.info(f"Writing object on bucket: {s3_bucket.name} by admin")
-        retry_s3_put_object = retry(boto3exception.ClientError, tries=4, delay=100)(
+        retry_s3_put_object = retry(boto3exception.ClientError, tries=4, delay=15)(
             s3_put_object
         )
         assert retry_s3_put_object(
@@ -495,7 +496,7 @@ class TestS3BucketPolicy(MCGTest):
         ), "Failed: GetBucketWebsite"
 
         logger.info("Writing index and error data to the bucket")
-        retry_s3_put_object = retry(boto3exception.ClientError, tries=4, delay=100)(
+        retry_s3_put_object = retry(boto3exception.ClientError, tries=4, delay=15)(
             s3_put_object
         )
         assert retry_s3_put_object(
@@ -506,7 +507,7 @@ class TestS3BucketPolicy(MCGTest):
             content_type="text/html",
         ), "Failed: PutObject"
 
-        retry_s3_put_object = retry(boto3exception.ClientError, tries=4, delay=100)(
+        retry_s3_put_object = retry(boto3exception.ClientError, tries=4, delay=15)(
             s3_put_object
         )
         assert retry_s3_put_object(
@@ -659,7 +660,7 @@ class TestS3BucketPolicy(MCGTest):
 
         # Admin writes an object to bucket
         logger.info(f"Writing an object on bucket: {obc_obj.bucket_name} by Admin")
-        retry_s3_put_object = retry(boto3exception.ClientError, tries=4, delay=100)(
+        retry_s3_put_object = retry(boto3exception.ClientError, tries=4, delay=15)(
             s3_put_object
         )
         assert retry_s3_put_object(
@@ -804,7 +805,7 @@ class TestS3BucketPolicy(MCGTest):
         logger.info(
             f"Writing object on bucket: {obc_obj.bucket_name} with User: {obc_obj.obc_account}"
         )
-        retry_s3_put_object = retry(boto3exception.ClientError, tries=4, delay=100)(
+        retry_s3_put_object = retry(boto3exception.ClientError, tries=4, delay=15)(
             s3_put_object
         )
 
@@ -944,7 +945,7 @@ class TestS3BucketPolicy(MCGTest):
         # Verify put Object is allowed.
         logger.info(f"Put Object to the bucket: {obc_obj.bucket_name} ")
 
-        retry_s3_put_object = retry(boto3exception.ClientError, tries=4, delay=100)(
+        retry_s3_put_object = retry(boto3exception.ClientError, tries=4, delay=15)(
             s3_put_object
         )
 
@@ -1005,7 +1006,7 @@ class TestS3BucketPolicy(MCGTest):
             # Put Object is allowed
             logger.info("Writing index data to the bucket")
 
-            retry_s3_put_object = retry(boto3exception.ClientError, tries=4, delay=100)(
+            retry_s3_put_object = retry(boto3exception.ClientError, tries=4, delay=15)(
                 s3_put_object
             )
             assert retry_s3_put_object(
@@ -1105,7 +1106,7 @@ class TestS3BucketPolicy(MCGTest):
         logger.info(
             f"Adding object on the bucket: {obc_obj.bucket_name} using user: {obc_obj.obc_account}"
         )
-        retry_s3_put_object = retry(boto3exception.ClientError, tries=4, delay=100)(
+        retry_s3_put_object = retry(boto3exception.ClientError, tries=4, delay=15)(
             s3_put_object
         )
         assert retry_s3_put_object(
@@ -1159,7 +1160,7 @@ class TestS3BucketPolicy(MCGTest):
         ), "Failed: GetBucketWebsite"
 
         logger.info("Writing index and error data to the bucket")
-        retry_s3_put_object = retry(boto3exception.ClientError, tries=4, delay=100)(
+        retry_s3_put_object = retry(boto3exception.ClientError, tries=4, delay=15)(
             s3_put_object
         )
         assert retry_s3_put_object(
@@ -1170,7 +1171,7 @@ class TestS3BucketPolicy(MCGTest):
             content_type="text/html",
         ), "Failed: PutObject"
 
-        retry_s3_put_object = retry(boto3exception.ClientError, tries=4, delay=100)(
+        retry_s3_put_object = retry(boto3exception.ClientError, tries=4, delay=15)(
             s3_put_object
         )
         assert retry_s3_put_object(
