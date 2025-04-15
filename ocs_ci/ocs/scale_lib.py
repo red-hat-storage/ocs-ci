@@ -1182,7 +1182,7 @@ def construct_pvc_creation_yaml_bulk_for_kube_job(
         del pvc_data["metadata"]["namespace"]
         pvc_data["spec"]["accessModes"] = [access_mode]
         pvc_data["spec"]["storageClassName"] = sc_name
-        pvc_data["spec"]["resources"]["requests"]["storage"] = size
+        pvc_data["spec"]["resources"]["requests"]["storage"] = "5Gi"
         # Check to identify RBD_RWX PVC and add VolumeMode
         if access_mode == "ReadWriteMany" and "rbd" in sc_name:
             pvc_data["spec"]["volumeMode"] = "Block"
