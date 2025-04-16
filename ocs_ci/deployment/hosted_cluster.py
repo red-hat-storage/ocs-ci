@@ -33,10 +33,12 @@ from ocs_ci.ocs.resources.csv import check_all_csvs_are_succeeded
 from ocs_ci.ocs.resources.ocs import OCS
 from ocs_ci.ocs.resources.pod import (
     wait_for_pods_to_be_in_statuses_concurrently,
+    get_pod_logs,
 )
 from ocs_ci.ocs.resources.storageconsumer import (
     create_storage_consumer_on_default_cluster,
 )
+from ocs_ci.ocs.utils import get_pod_name_by_pattern
 from ocs_ci.ocs.version import if_version
 from ocs_ci.utility import templating, version
 from ocs_ci.utility.deployment import get_ocp_ga_version
@@ -172,8 +174,20 @@ class HostedClients(HyperShiftBase):
                 ):
                     client_installed = hosted_odf.setup_storage_client()
                 else:
+                    start_time = time.time()
                     client_installed = hosted_odf.setup_storage_client_converged(
                         storage_consumer_name=f"consumer-{cluster_name}"
+                    )
+                    time_taken = time.time() - start_time
+                    time_sec = int(time_taken % 60) + 1
+                    provider_server_pod = get_pod_name_by_pattern(
+                        "ocs-provider-server"
+                    )[0]
+                    logs = get_pod_logs(
+                        pod_name=provider_server_pod, since=f"{time_sec}s"
+                    )
+                    logger.info(
+                        f"Logs from provider-server pod:\n******************\n{logs}\n******************\n"
                     )
                 client_setup_res.append(client_installed)
                 if client_installed:

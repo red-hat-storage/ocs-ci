@@ -4,15 +4,15 @@ metadata:
   namespace: openshift-storage
   name: sample-storageconsumer
 spec:
-  # should be not enabled, this setting allows operator to create secret
-  enable: false
   resourceNameMappingConfigMap:
     name: ""
-  storageClasses: []
+#  storageClasses: []
 #  optional value storageQuotaInGiB, storage will be without quota
 #  storageQuotaInGiB: ""
-  volumeGroupSnapshotClasses: []
-  volumeSnapshotClasses: []
+#  volumeGroupSnapshotClasses: []
+#  volumeSnapshotClasses: []
+#  # should be not enabled, this setting allows operator to create secret
+#  enable: false
 # status:
 #   # Below are the Ceph resources for the storage consumer
 #   cephResources:

@@ -388,23 +388,25 @@ class StorageConsumer:
             storage_consumer_data["metadata"]["name"] = self.name
             storage_consumer_data["metadata"]["namespace"] = self.namespace
             if storage_classes:
-                storage_consumer_data["spec"]["storageClasses"] = storage_classes
+                storage_consumer_data["spec"].setdefault(
+                    "storageClasses", storage_classes
+                )
             if volume_snapshot_classes:
-                storage_consumer_data["spec"][
-                    "volumeSnapshotClasses"
-                ] = volume_snapshot_classes
+                storage_consumer_data["spec"].setdefault(
+                    "volumeSnapshotClasses", volume_snapshot_classes
+                )
             if volume_group_snapshot_classes:
-                storage_consumer_data["spec"][
-                    "volumeGroupSnapshotClasses"
-                ] = volume_group_snapshot_classes
+                storage_consumer_data["spec"].setdefault(
+                    "volumeGroupSnapshotClasses", volume_group_snapshot_classes
+                )
             if storage_quota_in_gib:
                 storage_consumer_data["spec"].setdefault(
                     "storageQuotaInGiB", storage_quota_in_gib
                 )
             if resource_name_mapping_config_map_name:
-                storage_consumer_data["spec"]["resourceNameMappingConfigMap"][
-                    "name"
-                ] = resource_name_mapping_config_map_name
+                storage_consumer_data["spec"].setdefault(
+                    "resourceNameMappingConfigMap", {}
+                ).setdefault("name", resource_name_mapping_config_map_name)
 
             storage_consumer_file = tempfile.NamedTemporaryFile(
                 mode="w+", prefix="storage_consumer", delete=False
