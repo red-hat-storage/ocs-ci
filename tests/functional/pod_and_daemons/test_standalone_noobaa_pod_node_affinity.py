@@ -13,7 +13,7 @@ from ocs_ci.ocs.node import (
 )
 from ocs_ci.ocs.resources.pod import (
     get_pod_node,
-    get_pods_having_label,
+    get_noobaa_operator_pod,
 )
 from ocs_ci.helpers.helpers import apply_custom_taint_and_toleration
 from ocs_ci.framework.pytest_customization.marks import brown_squad
@@ -57,12 +57,11 @@ class TestNoobaaPodNodeAffinity:
         taint_nodes(worker_nodes)
         log.info("Applied default taints on all the worker nodes")
         # noobaa_operator_pod_obj = get_pod_obj("noobaa-operator",namespace= "openshift-storage")
-        noobaa_operator_pod_obj = get_pods_having_label(
-            label=constants.NOOBAA_OPERATOR_POD_LABEL
-        )
-        noobaa_running_node = get_pod_node(noobaa_operator_pod_obj[0])
-
-        other_nodes = [node for node in worker_nodes if node != noobaa_running_node]
+        noobaa_operator_pod_obj = get_noobaa_operator_pod()
+        noobaa_running_node = get_pod_node(noobaa_operator_pod_obj)
+        other_nodes = [
+            node for node in worker_nodes if node != noobaa_running_node.name
+        ]
         other_node_name = random.choice(other_nodes)
         apply_custom_taint_and_toleration()
         apply_node_affinity_for_noobaa_pod(other_node_name)

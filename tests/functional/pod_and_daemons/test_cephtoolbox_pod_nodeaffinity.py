@@ -21,8 +21,8 @@ from ocs_ci.ocs.node import (
 )
 from ocs_ci.ocs.resources.pod import (
     wait_for_pods_to_be_running,
-    get_pod_obj,
     get_pod_node,
+    get_noobaa_operator_pod,
 )
 from ocs_ci.helpers.helpers import apply_custom_taint_and_toleration
 
@@ -131,12 +131,11 @@ class TestCephtoolboxPod:
         log.info(f"Current available worker nodes are {worker_nodes}")
         taint_nodes(worker_nodes)
         log.info("Applied default taints on all the worker nodes")
-        noobaa_operator_pod_obj = get_pod_obj(
-            "noobaa-operator", namespace="openshift-storage"
-        )
+        noobaa_operator_pod_obj = get_noobaa_operator_pod()
         noobaa_running_node = get_pod_node(noobaa_operator_pod_obj)
-
-        other_nodes = [node for node in worker_nodes if node != noobaa_running_node]
+        other_nodes = [
+            node for node in worker_nodes if node != noobaa_running_node.name
+        ]
         other_node_name = random.choice(other_nodes)
         apply_custom_taint_and_toleration()
         apply_node_affinity_for_noobaa_pod(other_node_name)

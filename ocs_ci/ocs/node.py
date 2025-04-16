@@ -6,6 +6,7 @@ from prettytable import PrettyTable
 from collections import defaultdict
 from operator import itemgetter
 import random
+import json
 
 from subprocess import TimeoutExpired
 from semantic_version import Version
@@ -3324,11 +3325,7 @@ def apply_node_affinity_for_noobaa_pod(node_name):
             "nodeAffinity": {
                 "requiredDuringSchedulingIgnoredDuringExecution": {
                     "nodeSelectorTerms": [
-                        {
-                            "matchExpressions": [
-                                {"key": f"{node_name}", "operator": "Exists"}
-                            ]
-                        }
+                        {"matchExpressions": [{"key": node_name, "operator": "Exists"}]}
                     ]
                 }
             }
@@ -3341,21 +3338,23 @@ def apply_node_affinity_for_noobaa_pod(node_name):
     #     f'"operator": "In",'
     #     f'"values": ["{node_name}"]}}]}}]}}}}}}}}'
     # )
-    param = f'{{"spec": {{"placement": {nodeaffinity}}}}}'
-    ct_pod = pod.get_ceph_tools_pod(skip_creating_pod=True)
-    ct_pod_name = ct_pod.name
+    param_dict = {"spec": {"placement": nodeaffinity}}
+    # Convert to JSON string
+    param = json.dumps(param_dict)
+    noobaa_operator_pod = pod.get_noobaa_operator_pod()
+    noobaa_operator_pod_name = noobaa_operator_pod.name
     storagecluster_obj.patch(params=param, format_type="merge")
     log.info(
-        f"Successfully applied node affinity for ceph toolbox pod with {node_name}"
+        f"Successfully applied node affinity for noobaa operator pod with {node_name}"
     )
-    ct_pod.ocp.wait_for_delete(ct_pod_name)
+    noobaa_operator_pod.ocp.wait_for_delete(noobaa_operator_pod_name)
     log.info(
-        "Identify on which node the ceph toolbox is running after failover due to node affinity"
+        "Identify on which node the noobaa operator pos is running after failover due to node affinity"
     )
-    ct_new_pod_running_node_name = get_ceph_tools_running_node()
-    if node_name == ct_new_pod_running_node_name:
+    noobaa_running_node = pod.get_pod_node(noobaa_operator_pod)
+    if node_name == noobaa_running_node:
         log.info(
-            f"ceph toolbox pod failovered to the new node {ct_new_pod_running_node_name}"
+            f"noobaa operator pod failovered to the new node {noobaa_running_node}"
             f" given in node affinity successfully "
         )
         return True
