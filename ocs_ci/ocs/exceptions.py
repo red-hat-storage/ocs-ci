@@ -706,3 +706,7 @@ class MultiStorageClusterExternalCephHealth(Exception):
 
 class APIRequestError(Exception):
     pass
+
+
+class DistributionStatusError(Exception):
+    pass
