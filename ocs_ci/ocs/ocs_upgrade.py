@@ -164,6 +164,8 @@ def verify_image_versions(old_images, upgrade_version, version_before_upgrade):
     for pod in noobaa_pod_obj:
         if "pv-backingstore" in pod.name:
             default_noobaa_pods += 1
+        if "noobaa-default-backing-store" in pod.name:
+            default_noobaa_pods += 1
     if upgrade_version >= parse_version("4.7"):
         noobaa = OCP(kind="noobaa", namespace=config.ENV_DATA["cluster_namespace"])
         resource = noobaa.get()["items"][0]
