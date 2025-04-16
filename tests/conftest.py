@@ -570,7 +570,7 @@ def pytest_runtest_setup(item):
                 ocsci_config.switch_ctx(context)
 
 
-def pytest_fixture_setup(fixturedef, request, item):
+def pytest_fixture_setup(fixturedef, request):
     """
     In case of multicluster upgrade scenarios, we want to make sure that before running
     any fixture related to the testcase we need to switch the cluster context
@@ -584,9 +584,9 @@ def pytest_fixture_setup(fixturedef, request, item):
                 if mark.name == "config_index":
                     ocsci_config.switch_ctx(mark.args[0])
     if ocsci_config.multicluster:
-        for mark in item.iter_markers():
+        for mark in request.node.iter_markers():
             if mark.name == "run_on_all_clients":
-                context = item.callspec.params.get("cluster_index")
+                context = request.node.callspec.params.get("cluster_index")
                 ocsci_config.switch_ctx(context)
 
 
