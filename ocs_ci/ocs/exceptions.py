@@ -734,3 +734,7 @@ class ProviderModeNotFoundException(Exception):
 
 class TolerationNotFoundException(Exception):
     pass
+
+
+class DistributionStatusError(Exception):
+    pass
