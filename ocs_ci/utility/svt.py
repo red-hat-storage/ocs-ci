@@ -4,6 +4,7 @@ import shutil
 import shlex
 from subprocess import Popen, PIPE
 
+from ocs_ci.framework import config
 from ocs_ci.utility.utils import run_cmd, clone_repo
 from ocs_ci.ocs import ocp
 
@@ -34,7 +35,7 @@ def svt_create_venv_setup():
 def svt_cluster_loader(
     clusterload_file="/tmp/svt/openshift_scalability/config/master-vert.yaml",
 ):
-    KUBECONFIG = os.getenv("KUBECONFIG")
+    KUBECONFIG = config.RUN["kubeconfig"]
     """
     This function can be used to create an environment on top of an OpenShift installation.
     So, basically you can create any number of projects,

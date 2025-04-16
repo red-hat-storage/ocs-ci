@@ -802,7 +802,7 @@ class AzureAroUtil(AZURE):
         kubeconfig_path = os.path.join(
             config.ENV_DATA["cluster_path"], config.RUN["kubeconfig_location"]
         )
-        os.environ["KUBECONFIG"] = kubeconfig_path
+        config.RUN["kubeconfig"] = kubeconfig_path
 
     def destroy_cluster(self, cluster_name, resource_group):
         """

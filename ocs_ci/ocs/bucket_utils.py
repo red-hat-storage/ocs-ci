@@ -4,7 +4,6 @@ Helper functions file for working with object buckets
 
 import json
 import logging
-import os
 import shlex
 import time
 
@@ -1076,7 +1075,7 @@ def check_pv_backingstore_status(
         bool: True if backing store is in the desired state
 
     """
-    kubeconfig = os.getenv("KUBECONFIG")
+    kubeconfig = config.RUN.get("kubeconfig")
     kubeconfig = f"--kubeconfig {kubeconfig}" if kubeconfig else ""
     namespace = namespace or config.ENV_DATA["cluster_namespace"]
 
@@ -1103,7 +1102,7 @@ def check_pv_backingstore_type(
         backingstore_type: type of the backing store
 
     """
-    kubeconfig = os.getenv("KUBECONFIG")
+    kubeconfig = config.RUN.get("kubeconfig")
     kubeconfig = f"--kubeconfig {kubeconfig}" if kubeconfig else ""
     namespace = namespace or config.ENV_DATA["cluster_namespace"]
 

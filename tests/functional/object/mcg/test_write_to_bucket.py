@@ -7,7 +7,7 @@ from zipfile import ZipFile
 import pytest
 from flaky import flaky
 
-from ocs_ci.framework import config
+from ocs_ci.framework import config, config_safe_thread_pool_task
 from ocs_ci.framework.pytest_customization.marks import (
     vsphere_platform_required,
     skip_inconsistent,
@@ -61,7 +61,13 @@ def pod_io(pods):
     """
     with ThreadPoolExecutor() as p:
         for pod in pods:
-            p.submit(pod.run_io, "fs", "1G")
+            p.submit(
+                config_safe_thread_pool_task,
+                config.default_cluster_index,
+                pod.run_io,
+                "fs",
+                "1G",
+            )
 
 
 @pytest.fixture(scope="function")
@@ -452,11 +458,18 @@ class TestBucketIO(MCGTest):
         full_object_path = f"s3://{bucketname}"
         target_dir = AWSCLI_TEST_OBJ_DIR
         with ThreadPoolExecutor() as p:
-            p.submit(pod_io, setup_rbd_cephfs_pods)
             p.submit(
+                config_safe_thread_pool_task,
+                config.default_cluster_index,
+                pod_io,
+                setup_rbd_cephfs_pods,
+            )
+            p.submit(
+                config_safe_thread_pool_task,
+                config.default_cluster_index,
                 sync_object_directory(
                     awscli_pod_session, target_dir, full_object_path, mcg_obj
-                )
+                ),
             )
 
     @tier2

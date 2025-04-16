@@ -515,7 +515,9 @@ def run_cmd_interactive(
         InteractivePromptException: in case something goes wrong
 
     """
-    child = pexpect.spawn(cmd)
+    env = os.environ.copy()
+    env["KUBECONFIG"] = config.RUN.get("kubeconfig")
+    child = pexpect.spawn(cmd, env=env)
     for prompt, answer in prompts_answers.items():
         if child.expect(prompt, timeout=timeout):
             if raise_exception:
@@ -637,20 +639,17 @@ def exec_cmd(
         stderr     (str): The standard error (None if not captured).
 
     """
-    masked_cmd = mask_secrets(cmd, secrets)
-    log.info(f"Executing command: {masked_cmd}")
+    _env = kwargs.pop("env", os.environ.copy())
+    kubeconfig_path = config.RUN.get("kubeconfig")
+    if kubeconfig_path:
+        _env["KUBECONFIG"] = kubeconfig_path
+    if cluster_config:
+        kubeconfig_path = cluster_config.RUN.get("kubeconfig")
+        if kubeconfig_path:
+            _env["KUBECONFIG"] = cluster_config.RUN.get("kubeconfig")
     if isinstance(cmd, str) and not kwargs.get("shell"):
         cmd = shlex.split(cmd)
-    if config.RUN.get("custom_kubeconfig_location") and cmd[0] == "oc":
-        if "--kubeconfig" in cmd:
-            cmd.pop(2)
-            cmd.pop(1)
-        cmd = list_insert_at_position(cmd, 1, ["--kubeconfig"])
-        cmd = list_insert_at_position(
-            cmd, 2, [config.RUN["custom_kubeconfig_location"]]
-        )
-    if cluster_config and cmd[0] == "oc" and "--kubeconfig" not in cmd:
-        kubepath = cluster_config.RUN["kubeconfig"]
+    if kubeconfig_path and cmd[0] == "oc" and "--kubeconfig" not in cmd:
         kube_index = 1
         # check if we have an oc plugin in the command
         plugin_list = "oc plugin list"
@@ -672,8 +671,10 @@ def exec_cmd(
                 kube_index = 2
                 log.info(f"Found oc plugin {subcmd}")
         cmd = list_insert_at_position(cmd, kube_index, ["--kubeconfig"])
-        cmd = list_insert_at_position(cmd, kube_index + 1, [kubepath])
+        cmd = list_insert_at_position(cmd, kube_index + 1, [kubeconfig_path])
     try:
+        masked_cmd = shlex.join(mask_secrets(cmd, secrets))
+        log.info(f"Executing command: {masked_cmd}")
         if threading_lock and cmd[0] == "oc":
             threading_lock.acquire(timeout=lock_timeout)
         completed_process = subprocess.run(
@@ -682,6 +683,7 @@ def exec_cmd(
             stderr=subprocess.PIPE,
             stdin=subprocess.PIPE,
             timeout=timeout,
+            env=_env,
             **kwargs,
         )
     finally:
@@ -1588,12 +1590,15 @@ def run_async(command):
         ret, out, err = proc.async_communicate()
     """
     log.info(f"Executing command: {command}")
+    env = os.environ.copy()
+    env["KUBECONFIG"] = config.RUN.get("kubeconfig")
     popen_obj = subprocess.Popen(
         command,
         stdin=subprocess.PIPE,
         stdout=subprocess.PIPE,
         shell=True,
         encoding="utf-8",
+        env=env,
     )
 
     def async_communicate():
@@ -2243,7 +2248,8 @@ def get_running_acm_version():
         string: ACM version
 
     """
-    occmd = "oc get mch multiclusterhub -n open-cluster-management -o json"
+    kubeconfig = config.RUN.get("kubeconfig")
+    occmd = f"oc get --kubeconfig {kubeconfig} mch multiclusterhub -n open-cluster-management -o json"
     jq_cmd = "jq -r .status.currentVersion"
     json_out = subprocess.Popen(shlex.split(occmd), stdout=subprocess.PIPE)
     acm_version = subprocess.Popen(

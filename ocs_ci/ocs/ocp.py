@@ -658,7 +658,7 @@ class OCP(object):
             or config.DEPLOYMENT.get("disconnected")
             or config.ENV_DATA.get("private_link")
         ) and config.ENV_DATA.get("client_http_proxy"):
-            kubeconfig = os.getenv("KUBECONFIG")
+            kubeconfig = config.RUN.get("kubeconfig")
             if not kubeconfig or not os.path.exists(kubeconfig):
                 kubeconfig = os.path.join(
                     config.ENV_DATA["cluster_path"],
@@ -674,7 +674,7 @@ class OCP(object):
         Returns:
             str: output of login command
         """
-        kubeconfig = os.getenv("KUBECONFIG")
+        kubeconfig = config.RUN.get("kubeconfig")
         command = "oc login -u system:admin "
         if kubeconfig:
             command += f"--kubeconfig {kubeconfig}"

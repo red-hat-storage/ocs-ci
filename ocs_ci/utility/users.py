@@ -4,6 +4,7 @@ import random
 import string
 from tempfile import NamedTemporaryFile
 
+from ocs_ci.framework import config
 from ocs_ci.ocs import constants, ocp
 from ocs_ci.utility.utils import exec_cmd
 
@@ -38,7 +39,7 @@ def create_htpasswd_secret(htpasswd_path, replace=False):
         replace (bool): If secret already exists then this will replace it
 
     """
-    kubeconfig = os.getenv("KUBECONFIG")
+    kubeconfig = config.RUN["kubeconfig"]
 
     cmd = (
         f"oc create secret generic htpass-secret "
