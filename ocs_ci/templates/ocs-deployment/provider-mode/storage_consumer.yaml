@@ -1,13 +1,16 @@
 apiVersion: ocs.openshift.io/v1alpha1
 kind: StorageConsumer
 metadata:
+  namespace: openshift-storage
   name: sample-storageconsumer
 spec:
-  enable: true
+  # should be not enabled, this setting allows operator to create secret
+  enable: false
   resourceNameMappingConfigMap:
     name: ""
   storageClasses: []
-  storageQuotaInGiB: ""
+#  optional value storageQuotaInGiB, storage will be without quota
+#  storageQuotaInGiB: ""
   volumeGroupSnapshotClasses: []
   volumeSnapshotClasses: []
 # status:
