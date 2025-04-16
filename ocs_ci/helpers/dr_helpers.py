@@ -1711,15 +1711,6 @@ def replace_cluster(workload, primary_cluster_name, secondary_cluster_name, rdr=
     time.sleep(60)
 
     config.switch_to_cluster_by_name(secondary_cluster_name)
-    cbp_obj = ocp.OCP(
-        kind=constants.CEPHBLOCKPOOL,
-        resource_name=constants.DEFAULT_CEPHBLOCKPOOL,
-        namespace=config.ENV_DATA["cluster_namespace"],
-    )
-    mirroring_status = cbp_obj.get().get("status").get("mirroringStatus")
-    if mirroring_status:
-        raise Exception("Mirroring is not disabled completely")
-        logger.info(f"Mirroring status: {mirroring_status}")
 
     sample = TimeoutSampler(
         timeout=300,
@@ -1731,7 +1722,17 @@ def replace_cluster(workload, primary_cluster_name, secondary_cluster_name, rdr=
     if not sample.wait_for_func_status(result=True):
         raise Exception("Namespace openshift-operators is not created")
 
-    # add label to openshift-opeartors namespace
+    cbp_obj = ocp.OCP(
+        kind=constants.CEPHBLOCKPOOL,
+        resource_name=constants.DEFAULT_CEPHBLOCKPOOL,
+        namespace=config.ENV_DATA["cluster_namespace"],
+    )
+    mirroring_status = cbp_obj.get().get("status").get("mirroringStatus")
+    if mirroring_status:
+        raise Exception("Mirroring is not disabled completely")
+        logger.info(f"Mirroring status: {mirroring_status}")
+
+    # add label to openshift-operators namespace
     ocp_obj = ocp.OCP(kind="Namespace")
     label = "openshift.io/cluster-monitoring='true'"
     ocp_obj.add_label(resource_name=constants.OPENSHIFT_OPERATORS, label=label)
