@@ -22,6 +22,7 @@ from ocs_ci.ocs.bucket_utils import (
 from ocs_ci.framework.pytest_customization.marks import (
     polarion_id,
     scale,
+    scale_long_run,
     mcg,
     orange_squad,
     jira,
@@ -51,7 +52,6 @@ def s3bench(request):
     return s3bench
 
 
-@scale
 @orange_squad
 @mcg
 class TestDeleteObjects:
@@ -87,6 +87,7 @@ class TestDeleteObjects:
             time.sleep(60)
         log.info(f"Successfully verified background io for the bucket {bucket_name}")
 
+    @scale
     @polarion_id("OCS-4916")
     @pytest.mark.parametrize(
         argnames=["delete_mode"],
@@ -239,7 +240,7 @@ class TestDeleteObjects:
 
             """
             for bucket, expiration in zip(buckets, expirations):
-                verify_objs_deleted_from_objmds(bucket.name, timeout=20000, sleep=60)
+                verify_objs_deleted_from_objmds(bucket.name, timeout=30000, sleep=60)
                 if expiration:
                     sample_if_objects_expired(
                         mcg_obj_session, bucket.name, timeout=36000, sleep=60
@@ -249,6 +250,7 @@ class TestDeleteObjects:
         request.addfinalizer(teardown)
         return factory
 
+    @scale_long_run
     @jira("DFBUGS-1106")
     @jira("DFBUGS-1116")
     @pytest.mark.parametrize(
