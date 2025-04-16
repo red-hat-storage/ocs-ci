@@ -385,8 +385,7 @@ class AcmAddClusters(AcmPageNavigator):
         recovery cluster while performing cluster replacement,
 
         Args:
-            globalnet (bool): Globalnet is set to True by default for
-            ODF versions greater than or equal to 4.13
+            cluster_set :  Existing cluster set
 
         """
 

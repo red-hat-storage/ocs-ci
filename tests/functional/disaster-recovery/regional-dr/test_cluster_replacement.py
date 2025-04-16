@@ -27,7 +27,7 @@ from ocs_ci.helpers.dr_helpers import (
 logger = logging.getLogger(__name__)
 
 
-@pytest.mark.order("last")
+@pytest.mark.skip(reason="Skipping this test temporarily due to ocs-ci 11875")
 @tier4a
 @rdr
 @turquoise_squad
