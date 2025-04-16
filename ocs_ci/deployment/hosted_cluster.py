@@ -40,6 +40,7 @@ from ocs_ci.ocs.resources.ocs import OCS
 from ocs_ci.ocs.resources.pod import (
     wait_for_pods_to_be_in_statuses_concurrently,
     wait_for_pods_to_be_running,
+    get_pod_logs,
 )
 from ocs_ci.ocs.resources.storageconsumer import (
     create_storage_consumer_on_default_cluster,
@@ -182,8 +183,20 @@ class HostedClients(HyperShiftBase):
                 ):
                     client_installed = hosted_odf.setup_storage_client()
                 else:
+                    start_time = time.time()
                     client_installed = hosted_odf.setup_storage_client_converged(
                         storage_consumer_name=f"consumer-{cluster_name}"
+                    )
+                    time_taken = time.time() - start_time
+                    time_sec = int(time_taken % 60) + 1
+                    provider_server_pod = get_pod_name_by_pattern(
+                        "ocs-provider-server"
+                    )[0]
+                    logs = get_pod_logs(
+                        pod_name=provider_server_pod, since=f"{time_sec}s"
+                    )
+                    logger.info(
+                        f"Logs from provider-server pod:\n******************\n{logs}\n******************\n"
                     )
                 client_setup_res.append(client_installed)
                 if client_installed:
