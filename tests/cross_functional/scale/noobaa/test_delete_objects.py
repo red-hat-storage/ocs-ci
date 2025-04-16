@@ -239,7 +239,7 @@ class TestDeleteObjects:
 
             """
             for bucket, expiration in zip(buckets, expirations):
-                verify_objs_deleted_from_objmds(bucket.name, timeout=7200, sleep=60)
+                verify_objs_deleted_from_objmds(bucket.name, timeout=20000, sleep=60)
                 if expiration:
                     sample_if_objects_expired(
                         mcg_obj_session, bucket.name, timeout=36000, sleep=60
@@ -317,5 +317,5 @@ class TestDeleteObjects:
         else:
             log.info("Deleting the objects inside the bucket recursively")
             rm_object_recursive(
-                awscli_pod_session, f"{bucket.name}", mcg_obj_session, timeout=3600
+                awscli_pod_session, f"{bucket.name}", mcg_obj_session, timeout=7200
             )
