@@ -19,6 +19,7 @@ from ocs_ci.utility import cco, templating, version
 from ocs_ci.utility.aws import (
     AWS as AWSUtil,
     create_and_attach_volume_for_all_workers,
+    delete_cloudfront_origin_access_identities,
     delete_cluster_buckets,
     destroy_volumes,
     delete_sts_iam_roles,
@@ -273,6 +274,7 @@ class AWSIPI(AWSBase):
         delete_cluster_buckets(self.cluster_name)
         if config.DEPLOYMENT.get("sts_enabled"):
             delete_sts_iam_roles()
+            delete_cloudfront_origin_access_identities()
         super(AWSIPI, self).destroy_cluster(log_level)
 
 
