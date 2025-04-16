@@ -16,10 +16,12 @@ from ocs_ci.ocs.resources.pod import (
     get_pods_having_label,
 )
 from ocs_ci.helpers.helpers import apply_custom_taint_and_toleration
+from ocs_ci.framework.pytest_customization.marks import brown_squad
 
 log = logging.getLogger(__name__)
 
 
+@brown_squad
 class TestNoobaaPodNodeAffinity:
     @pytest.fixture(scope="session", autouse=True)
     def teardown(self, request):
