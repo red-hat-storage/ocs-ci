@@ -1269,9 +1269,15 @@ def ensure_nightly_build_availability(build_url):
     base_build_url = build_url.rsplit("/", 1)[0] + "/"
     r = requests.get(base_build_url)
     extracting_condition = b"Extracting" in r.content
+    failed_build = b"FAILED.md" in r.content
     if extracting_condition:
         log.info("Build is extracting now, may take up to a minute.")
-    return r.ok and not extracting_condition
+    if failed_build:
+        r = requests.get(base_build_url + "FAILED.md")
+        log.info(
+            f"Nightly build is not properly generated! Failed with reason: {r.content}"
+        )
+    return r.ok and not extracting_condition and not failed_build
 
 
 def get_openshift_mirror_url(file_name, version):
