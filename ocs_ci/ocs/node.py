@@ -6,6 +6,7 @@ from prettytable import PrettyTable
 from collections import defaultdict
 from operator import itemgetter
 import random
+import json
 
 from subprocess import TimeoutExpired
 from semantic_version import Version
@@ -3275,3 +3276,53 @@ def get_ceph_tools_running_node():
     ct_pod = pod.get_ceph_tools_pod(wait=True, skip_creating_pod=True)
     ct_pod_running_node = ct_pod.data["spec"].get("nodeName")
     return ct_pod_running_node
+
+
+def apply_node_affinity_for_noobaa_pod(node_name):
+    resource_name = constants.DEFAULT_CLUSTERNAME
+    if config.DEPLOYMENT["external_mode"]:
+        resource_name = constants.DEFAULT_CLUSTERNAME_EXTERNAL_MODE
+
+    storagecluster_obj = ocp.OCP(
+        resource_name=resource_name,
+        namespace=config.ENV_DATA["cluster_namespace"],
+        kind=constants.STORAGECLUSTER,
+    )
+    nodeaffinity = {
+        "noobaa-standalone": {
+            "nodeAffinity": {
+                "requiredDuringSchedulingIgnoredDuringExecution": {
+                    "nodeSelectorTerms": [
+                        {"matchExpressions": [{"key": node_name, "operator": "Exists"}]}
+                    ]
+                }
+            }
+        }
+    }
+
+    # (
+    #     f'{{"toolbox": {{"nodeAffinity": {{"requiredDuringSchedulingIgnoredDuringExecution": '
+    #     f'{{"nodeSelectorTerms": [{{"matchExpressions": [{{"key": "kubernetes.io/hostname",'
+    #     f'"operator": "In",'
+    #     f'"values": ["{node_name}"]}}]}}]}}}}}}}}'
+    # )
+    param_dict = {"spec": {"placement": nodeaffinity}}
+    # Convert to JSON string
+    param = json.dumps(param_dict)
+    noobaa_operator_pod = pod.get_noobaa_operator_pod()
+    noobaa_operator_pod_name = noobaa_operator_pod.name
+    storagecluster_obj.patch(params=param, format_type="merge")
+    log.info(
+        f"Successfully applied node affinity for noobaa operator pod with {node_name}"
+    )
+    noobaa_operator_pod.ocp.wait_for_delete(noobaa_operator_pod_name)
+    log.info(
+        "Identify on which node the noobaa operator pos is running after failover due to node affinity"
+    )
+    noobaa_running_node = pod.get_pod_node(noobaa_operator_pod)
+    if node_name == noobaa_running_node:
+        log.info(
+            f"noobaa operator pod failovered to the new node {noobaa_running_node}"
+            f" given in node affinity successfully "
+        )
+        return True
