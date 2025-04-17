@@ -2243,13 +2243,14 @@ def get_ocp_version(seperator=None):
     return char.join([str(version.major), str(version.minor)])
 
 
-def get_running_ocp_version(separator=None):
+def get_running_ocp_version(separator=None, kubeconfig=None):
     """
     Get current running ocp version
 
     Args:
         separator (str): String that would separate major and
             minor version numbers
+        kubeconfig (str): Path to kubeconfig. Optional.
 
     Returns:
         string : If separator is 'None', version string will be returned as is
@@ -2263,7 +2264,10 @@ def get_running_ocp_version(separator=None):
     namespace = config.ENV_DATA["cluster_namespace"]
     try:
         # if the cluster exist, this part will be run
-        results = run_cmd(f"oc get clusterversion -n {namespace} -o yaml")
+        cmd = f"oc get clusterversion -n {namespace} -o yaml"
+        if kubeconfig:
+            cmd = f"{cmd} --kubeconfig {kubeconfig}"
+        results = run_cmd(cmd)
         build = yaml.safe_load(results)["items"][0]["status"]["desired"]["version"]
         return char.join(build.split(".")[0:2])
     except Exception:
