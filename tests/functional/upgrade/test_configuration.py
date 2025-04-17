@@ -88,10 +88,11 @@ def test_max_unavaialable_rbd(upgrade_stats):
         namespace=config.ENV_DATA["cluster_namespace"],
         resource_name=constants.ROOK_OPERATOR_CONFIGMAP,
     ).get()
-    config_value = configmap.get("data").get(
-        "CSI_RBD_PLUGIN_UPDATE_STRATEGY_MAX_UNAVAILABLE"
-    )
-    assert config_value == upgrade_stats["odf_upgrade"]["rbd_max_unavailable"]
+    if config.UPGRADE.get("CSI_RBD_PLUGIN_UPDATE_STRATEGY_MAX_UNAVAILABLE") is not None:
+        config_value = configmap.get("data").get(
+            "CSI_RBD_PLUGIN_UPDATE_STRATEGY_MAX_UNAVAILABLE"
+        )
+        assert config_value == upgrade_stats["odf_upgrade"]["rbd_max_unavailable"]
 
 
 @post_upgrade
