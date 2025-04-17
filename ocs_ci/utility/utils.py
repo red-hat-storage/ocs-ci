@@ -52,7 +52,6 @@ from ocs_ci.ocs.exceptions import (
     TagNotFoundException,
     TimeoutException,
     TimeoutExpiredError,
-    UnavailableBuildException,
     UnexpectedImage,
     UnknownCloneTypeException,
     UnsupportedOSType,
@@ -1323,7 +1322,6 @@ def get_openshift_mirror_url(file_name, version):
 
     Raises:
         UnsupportedOSType: In case the OS type is not supported
-        UnavailableBuildException: In case the build url is not reachable
     """
     target_arch = ""
     rhel_version = ""
@@ -1363,13 +1361,21 @@ def get_openshift_mirror_url(file_name, version):
         os_type=os_type,
     )
     sample = TimeoutSampler(
-        timeout=540,
+        timeout=300,
         sleep=5,
         func=ensure_nightly_build_availability,
         build_url=url,
     )
     if not sample.wait_for_func_status(result=True):
-        raise UnavailableBuildException(f"The build url {url} is not reachable")
+        latest_ga_client_url = (
+            "https://mirror.openshift.com/pub/openshift-v4/x86_64/clients/ocp/"
+            f"stable/openshift-client-{os_type}.tar.gz"
+        )
+        log.error(
+            f"The build url {url} is not reachable, fallback to the latest GA client url: "
+            f"{latest_ga_client_url}"
+        )
+        url = latest_ga_client_url
     return url
 
 
