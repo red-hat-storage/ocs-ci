@@ -9,13 +9,19 @@ from ocs_ci.ocs.constants import (
     RBD_INTERFACE,
 )
 from ocs_ci.framework import config
-from ocs_ci.framework.pytest_customization.marks import tier1, brown_squad, polarion_id
+from ocs_ci.framework.pytest_customization.marks import (
+    tier1,
+    brown_squad,
+    polarion_id,
+    run_on_all_clients,
+)
 
 log = getLogger(__name__)
 
 
 @tier1
 @brown_squad
+@run_on_all_clients
 @polarion_id("OCS-5792")
 class TestEphemeralPod:
     @pytest.mark.parametrize(
