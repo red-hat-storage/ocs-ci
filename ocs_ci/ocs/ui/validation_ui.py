@@ -570,23 +570,31 @@ class ValidationUI(PageNavigator):
 
         """
         if self.ocp_version_semantic >= version.VERSION_4_9:
-            self.navigate_installed_operators_page()
-            logger.info("Search and select storage cluster namespace")
-            self.select_namespace(project_name=config.ENV_DATA["cluster_namespace"])
-            logger.info(
-                "Click on Storage System under Provided APIs on Installed Operators Page"
-            )
-            self.do_click(self.validation_loc["storage-system-on-installed-operators"])
-            logger.info(
-                "Click on 'ocs-storagecluster-storagesystem' on Operator details page"
-            )
-            self.do_click(
-                self.validation_loc["ocs-storagecluster-storgesystem"],
-                enable_screenshot=True,
-            )
-            logger.info("Click on Resources")
-            self.do_click(self.validation_loc["resources-tab"], enable_screenshot=True)
-            logger.info("Checking Storage Cluster status on CLI")
+            # in 4.19 there will be no storage system tab on Installed Operators page
+            if self.ocp_version_semantic < version.VERSION_4_19:
+                self.navigate_installed_operators_page()
+                logger.info("Search and select storage cluster namespace")
+                self.select_namespace(project_name=config.ENV_DATA["cluster_namespace"])
+                logger.info(
+                    "Click on Storage System under Provided APIs on Installed Operators Page"
+                )
+                self.do_click(
+                    self.validation_loc["storage-system-on-installed-operators"]
+                )
+                logger.info(
+                    "Click on 'ocs-storagecluster-storagesystem' on Operator details page"
+                )
+                self.do_click(
+                    self.validation_loc["ocs-storagecluster-storgesystem"],
+                    enable_screenshot=True,
+                )
+                logger.info("Click on Resources")
+                self.do_click(
+                    self.validation_loc["resources-tab"], enable_screenshot=True
+                )
+                logger.info("Checking Storage Cluster status on CLI")
+            else:
+                self.nav_odf_default_page().nav_storage_systems_tab().nav_storagecluster_storagesystem_details()
             storage_cluster_name = config.ENV_DATA["storage_cluster_name"]
             storage_cluster = StorageCluster(
                 resource_name=storage_cluster_name,
