@@ -887,17 +887,18 @@ def get_ceph_tools_pod(
             cluster_kubeconfig=cluster_kubeconfig,
         )
         running_ct_pods = list()
-        for pod in ct_pod_items:
-            pod_status = ocp_pod_obj.get_resource_status(
-                pod.get("metadata").get("name")
-            )
-            logger.info(f"Pod name: {pod.get('metadata').get('name')}")
-            logger.info(f"Pod status: {pod_status}")
-            if pod_status == constants.STATUS_RUNNING:
-                running_ct_pods.append(pod)
+        with config.RunWithProviderConfigContextIfAvailable():
+            for pod in ct_pod_items:
+                pod_status = ocp_pod_obj.get_resource_status(
+                    pod.get("metadata").get("name")
+                )
+                logger.info(f"Pod name: {pod.get('metadata').get('name')}")
+                logger.info(f"Pod status: {pod_status}")
+                if pod_status == constants.STATUS_RUNNING:
+                    running_ct_pods.append(pod)
 
-        if not running_ct_pods:
-            raise NoRunningCephToolBoxException
+            if not running_ct_pods:
+                raise NoRunningCephToolBoxException
         return running_ct_pods
 
     if wait:
