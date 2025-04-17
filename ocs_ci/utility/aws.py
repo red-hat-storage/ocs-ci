@@ -46,6 +46,7 @@ class AWS(object):
     _elb_client = None
     _iam_client = None
     _sts_client = None
+    _cloudfront_client = None
 
     def __init__(self, region_name=None):
         """
@@ -177,6 +178,21 @@ class AWS(object):
                 region_name=self._region_name,
             )
         return self._sts_client
+
+    @property
+    def cloudfront_client(self):
+        """
+        Property for cloudfront client
+
+        Returns:
+            boto3.client: instance of cloudfront
+        """
+        if not self._cloudfront_client:
+            self._cloudfront_client = boto3.client(
+                "cloudfront",
+                region_name=self._region_name,
+            )
+        return self._cloudfront_client
 
     def get_ec2_instance(self, instance_id):
         """
@@ -2206,6 +2222,138 @@ class AWS(object):
         resp = self.sts_client.get_caller_identity()
         return resp["Account"]
 
+    def get_cloudfront_origin_access_identies(self):
+        """
+        Get CloudFront Origin Access Identities
+
+        Returns:
+            list: List of CloudFront Origin Access Identies
+
+        """
+        logger.info("Retrieving CloudFront Origin Access Identities")
+        resp = self.cloudfront_client.list_cloud_front_origin_access_identities()
+        return resp["CloudFrontOriginAccessIdentityList"]["Items"]
+
+    def get_cloudfront_origin_access_identity(self, identity_id):
+        """
+        Get CloudFront Origin Access Identity
+
+        Returns:
+            dict: CloudFront Origin Access Identity Data
+
+        """
+        resp = self.cloudfront_client.get_cloud_front_origin_access_identity(
+            Id=identity_id
+        )
+        return resp
+
+    def delete_cloudfront_origin_access_identity(self, identity_id, etag):
+        """
+        Delete CloudFront Origin Access Identity
+
+        Args:
+            identity_id (str): ID of Origin Access Identity
+            etag (str): ETag header
+
+        """
+        logger.info(f"Deleting CloudFront Origin Access Identity: {identity_id}")
+        try:
+            self.cloudfront_client.delete_cloud_front_origin_access_identity(
+                Id=identity_id, IfMatch=etag
+            )
+            logger.info(f"Deleted CloudFront Origin Access Identity: {identity_id}")
+        except Exception as e:
+            logger.error(f"Error deleting CloudFront Origin Access Identity: {e}")
+
+    def get_cloudfront_distribution(self, dist_id):
+        """
+        Get CloudFront Distribusions.
+
+        Args:
+            dist_id (str): ID of Distribution
+
+        Returns:
+            dict: CloudFront Distribution
+
+        """
+        logger.info(f"Retrieving CloudFront Distribution: {dist_id}")
+        resp = self.cloudfront_client.get_distribution(Id=dist_id)
+        return resp
+
+    def get_cloudfront_distributions(self):
+        """
+        Get CloudFront Distribusions.
+
+        Returns:
+            list: List of CloudFront Distributions
+
+        """
+        logger.info("Retrieving CloudFront Distributions")
+        resp = self.cloudfront_client.list_distributions()
+        return resp["DistributionList"]["Items"]
+
+    def get_cloudfront_distribution_config(self, dist_id):
+        """
+        Get CloudFront Distribution config.
+
+        Args:
+            dist_id (str): ID of Distribution
+            query (str): Query to provide. Optional.
+
+        Returns:
+            dict: Distribution config
+
+        """
+        logger.info(f"Retrieving CloudFront Distribution Config for {dist_id}")
+        resp = self.cloudfront_client.get_distribution_config(Id=dist_id)
+        return resp
+
+    def update_cloudfront_distribution(self, dist_id, etag, dist_config):
+        """
+        Update CloudFront Distribution
+
+        Args:
+            dist_id (str): ID of Distribution
+            etag (str): ETag header
+            dist_config (dict): Distribution config data
+
+        """
+        logger.info(f"Updating CloudFront Distribution Config for {dist_id}")
+        self.cloudfront_client.update_distribution(
+            Id=dist_id, IfMatch=etag, DistributionConfig=dist_config
+        )
+
+    def disable_cloudfront_distribution(self, dist_id):
+        """
+        Disable CloudFront Distribution
+
+        Args:
+            dist_id (str): ID of Distribution
+
+        """
+        logger.info(f"Disabling CloudFront Distribution: {dist_id}")
+        full_config = self.get_cloudfront_distribution_config(dist_id)
+        etag = full_config["ETag"]
+        edited_config = full_config["DistributionConfig"]
+        edited_config["Enabled"] = False
+        self.update_cloudfront_distribution(dist_id, etag, edited_config)
+
+    def delete_cloudfront_distribution(self, dist_id, etag):
+        """
+        Delete CloudFront Distribution
+
+        Args:
+            dist_id (str): ID of Distribution
+            etag (str): ETag header
+
+        """
+        logger.info(f"Deleting CloudFront Distribution: {dist_id}")
+        try:
+            self.cloudfront_client.delete_distribution(Id=dist_id, IfMatch=etag)
+            logger.info(f"Deleted CloudFront Distribution: {dist_id}")
+        except Exception as e:
+            logger.error(f"Error deleting CloudFront Distribution: {e}")
+
 
 def get_instances_ids_and_names(instances):
     """
@@ -2616,3 +2764,61 @@ def delete_sts_iam_roles():
                 role_name, instance_profile["InstanceProfileName"]
             )
         aws.delete_iam_role(role_name)
+
+
+def delete_cloudfront_origin_access_identities():
+    """
+    Delete CloudFront Origin Access Identities for the cluster.
+    """
+    logger.info("Deleting CloudFront Origin Access Identities")
+    cluster_path = config.ENV_DATA["cluster_path"]
+    aws = AWS()
+    infra_id = get_infra_id(cluster_path)
+    identity_id = None
+    dist_id = None
+
+    identities = aws.get_cloudfront_origin_access_identies()
+    for identity in identities:
+        if infra_id in identity["Comment"]:
+            identity_id = identity["Id"]
+            logger.info(f"Found identity: {identity_id}")
+
+    distributions = aws.get_cloudfront_distributions()
+    for dist in distributions:
+        origin_access_identity = dist["Origins"]["Items"][0]["Id"]
+        if infra_id in origin_access_identity:
+            dist_id = dist["Id"]
+            logger.info(f"Found distribution: {dist_id}")
+
+    if dist_id:
+        aws.disable_cloudfront_distribution(dist_id)
+        logger.info("Waiting for Distribution to be `Deployed`")
+        wait_for_distribution_status_deployed(dist_id)
+        logger.info("Retrieving Distribution ETag")
+        dist_etag = aws.get_cloudfront_distribution(dist_id)["ETag"]
+        aws.delete_cloudfront_distribution(dist_id, dist_etag)
+
+    logger.info("Retrieving identity ETag")
+    identity_etag = aws.get_cloudfront_origin_access_identity(identity_id)["ETag"]
+    aws.delete_cloudfront_origin_access_identity(identity_id, identity_etag)
+
+
+@retry(exceptions.DistributionStatusError, tries=20, delay=60, backoff=1)
+def wait_for_distribution_status_deployed(dist_id):
+    """
+    Wait for the Distribution to reach the `Deployed` status.
+
+    Args:
+        dist_id (str): ID of Distribution
+
+    Raises:
+        exceptions.DistributionStatusError: Raised if status is not `Deployed`
+
+    """
+    aws = AWS()
+    dist = aws.get_cloudfront_distribution(dist_id)
+    status = dist["Distribution"]["Status"]
+    if status != "Deployed":
+        raise exceptions.DistributionStatusError(
+            f"Distribution Status is {status}, waiting for `Deployed`"
+        )
