@@ -19,6 +19,7 @@ from ocs_ci.framework.testlib import (
     on_prem_platform_required,
     skipif_ocs_version,
     skipif_disconnected_cluster,
+    skipif_fips_enabled,
     tier1,
     tier2,
     tier4c,
@@ -240,6 +241,7 @@ class TestNamespace(MCGTest):
                 marks=[
                     tier1,
                     pytest.mark.polarion_id("OCS-5442"),
+                    skipif_fips_enabled,
                 ],
             ),
             pytest.param(
