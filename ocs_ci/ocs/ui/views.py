@@ -798,6 +798,10 @@ acm_configuration = {
         "//button[normalize-space()='Manage resource assignments']",
         By.XPATH,
     ),
+    "manage-resource-assignments": (
+        "//a[normalize-space()='Manage resource assignments']",
+        By.XPATH,
+    ),
     "select-all-assignments": ("input[aria-label='Select all']", By.CSS_SELECTOR),
     "click-local-cluster": (
         "//*[@data-ouia-component-type='PF4/TableRow']//td[2]//*[text()='local-cluster']",
@@ -858,6 +862,7 @@ acm_configuration = {
         By.XPATH,
     ),
     "cluster-set-selection": ("//a[normalize-space()='{}']", By.XPATH),
+    "add-cluster": ("//button[normalize-space()='Add clusters']", By.XPATH),
     "cc_create_cluster": ("//button[@id='createCluster']", By.XPATH),
     "cc_create_cluster_index_xpath": (
         "(//button[normalize-space()='Create cluster'])[1]",
