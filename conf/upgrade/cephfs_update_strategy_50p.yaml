@@ -1,7 +1,7 @@
 ---
 # This configuration file is for defining update strategy for CEPHFS CSI Plugin
 # Part of Epic RHSTOR-5280- Reduce the time required to upgrade ODF
-# This is supported from 4.18 and above version .
+# This is supported from 4.18 and above version.
 # Config Specifically for test scenario OCS-6709
 
 REPORTING:
