@@ -99,6 +99,9 @@ setup(
         "urllib3==1.26.18",
         "psycopg2-binary==2.9.9",
         "pytest-jira==0.3.21",
+        # new version of marshmallow 4.0.0 seems to be broken, failing with error:
+        # TypeError: __init__() got an unexpected keyword argument 'default'
+        "marshmallow==3.26.1",
     ],
     entry_points={
         "console_scripts": [
