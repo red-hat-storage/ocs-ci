@@ -479,22 +479,30 @@ def expand_pvc_and_verify(vm_obj, new_size):
         )
     logger.info(f"PVC expansion successful for VM {vm_obj.name}.")
     return True
-def get_vm_distro(vm_obj):
+
+def install_fio_on_vm(vm_obj):
     """
-    Fetch the Virtual Machine's OS distribution running in OpenShift Virtualization (CNV).
+    Detects the OS distribution of a virtual machine running in OpenShift Virtualization (CNV)
+    and installs the 'fio' package using the appropriate package manager.
 
     Args:
-        vm_name (str): Name of the VM.
+        vm_obj (str): Name of the virtual machine object.
 
     Returns:
-        output of command
+        str: Output of the installation command.
+
     """
-    DISTROS = {"fedora": "dnf", "Debian": "apt-get", "RHEL": "yum", "Alpine": "apk"}
+    PACKAGE_MANAGERS_BY_DISTRO = {
+        "fedora": "dnf",
+        "Debian": "apt-get",
+        "RHEL": "yum",
+        "Alpine": "apk",
+    }
 
     # Extract OS from labels if available
     os_distro = vm_obj.vmi_obj.get().get("status").get("guestOSInfo").get("id")
 
-    pkg_mgr = DISTROS[os_distro]
+    pkg_mgr = PACKAGE_MANAGERS_BY_DISTRO[os_distro]
 
     if os_distro == "Debian":
         cmd = f"{pkg_mgr} update"
@@ -526,9 +534,9 @@ def run_fio(
     Execute FIO on a CNV Virtual Machine with data integrity checks.
 
     Args:
+        vm_obj: Name of the virtual machine object
         size (str): Size of the test file (e.g., '1G').
         io_direction (str): Read/write mode ('rw', 'randwrite', 'randread').
-        rw_ratio (int): Read/write mix percentage (default: 75% read, 25% write).
         jobs (int): Number of FIO jobs to run.
         runtime (int): Duration of IO test (seconds).
         depth (int): I/O depth.
@@ -536,15 +544,16 @@ def run_fio(
         bs (str): Block size (default: '4K').
         direct (int): Use direct I/O (1 = Yes, 0 = No).
         verify (bool): Enable data integrity verification.
-        background(bool): Enable Background running.
         verify_method (str): Data integrity check method ('crc32c', 'md5', etc.).
         filename (str): Path of the test file in the VM.
         fio_log_path (str): Path where FIO logs will be stored.
+        fio_service_name(str): name of fio service to be create
 
     Returns:
         str: Output of the FIO execution.
+
     """
-    get_vm_distro(vm_obj)
+    install_fio_on_vm(vm_obj)
 
     # Construct the FIO command
     fio_cmd = (
@@ -568,8 +577,14 @@ def run_fio(
 
 def create_fio_service(vm_obj, fio_cmd, fio_service_name):
     """
-    Create a systemd service for FIO to ensure it runs persistently and
-    resumes after VM reboots.
+    Creates a systemd service on the given VM to run the specified FIO command persistently,
+    ensuring it starts automatically after VM reboots.
+
+    Args:
+        vm_obj (str): Name or reference to the virtual machine object.
+        fio_cmd (str): The FIO command to be executed by the service.
+        fio_service_name (str): Name of the systemd service to be created.
+
     """
     service_content = f"""[Unit]
     Description=Persistent FIO Workload
