@@ -21,7 +21,7 @@ class StorageConsumer:
     Base StorageConsumer class
     """
 
-    def __init__(self, consumer_name, consumer_context):
+    def __init__(self, consumer_name, namespace=None, consumer_context=None):
         """
         Starting from ODF 4.19 (Converged) this CR has optional Spec fields:
         StorageQuotaInGiB               int
@@ -43,10 +43,11 @@ class StorageConsumer:
         """
         self.consumer_context = consumer_context
         self.name = consumer_name
+        self.namespace = namespace or config.ENV_DATA["cluster_namespace"]
         self.ocp = ocp.OCP(
             resource_name=self.name,
             kind=constants.STORAGECONSUMER,
-            namespace=config.cluster_ctx.ENV_DATA["cluster_namespace"],
+            namespace=self.namespace,
         )
         if self.consumer_context:
             self.provider_context = config.cluster_ctx.MULTICLUSTER[
@@ -354,16 +355,17 @@ class StorageConsumer:
                 self.ocp.get(resource_name=self.name)
                 .get("status")
                 .get("onboardingTicketSecret")
+                .get("name")
             )
 
     @if_version(">4.18")
     def create_storage_consumer(
         self,
-        storage_classes,
-        volume_snapshot_classes,
-        volume_group_snapshot_classes,
-        storage_quota_in_gib,
-        resource_name_mapping_config_map_name,
+        storage_classes=None,
+        volume_snapshot_classes=None,
+        volume_group_snapshot_classes=None,
+        storage_quota_in_gib=None,
+        resource_name_mapping_config_map_name=None,
     ):
         """
         Create a storage consumer
@@ -384,24 +386,27 @@ class StorageConsumer:
                 constants.STORAGE_CONSUMER_YAML
             )
             storage_consumer_data["metadata"]["name"] = self.name
+            storage_consumer_data["metadata"]["namespace"] = self.namespace
             if storage_classes:
-                storage_consumer_data["spec"]["storageClasses"] = storage_classes
+                storage_consumer_data["spec"].setdefault(
+                    "storageClasses", storage_classes
+                )
             if volume_snapshot_classes:
-                storage_consumer_data["spec"][
-                    "volumeSnapshotClasses"
-                ] = volume_snapshot_classes
+                storage_consumer_data["spec"].setdefault(
+                    "volumeSnapshotClasses", volume_snapshot_classes
+                )
             if volume_group_snapshot_classes:
-                storage_consumer_data["spec"][
-                    "volumeGroupSnapshotClasses"
-                ] = volume_group_snapshot_classes
+                storage_consumer_data["spec"].setdefault(
+                    "volumeGroupSnapshotClasses", volume_group_snapshot_classes
+                )
             if storage_quota_in_gib:
-                storage_consumer_data["spec"][
-                    "storageQuotaInGiB"
-                ] = storage_quota_in_gib
+                storage_consumer_data["spec"].setdefault(
+                    "storageQuotaInGiB", storage_quota_in_gib
+                )
             if resource_name_mapping_config_map_name:
-                storage_consumer_data["spec"]["resourceNameMappingConfigMap"][
-                    "name"
-                ] = resource_name_mapping_config_map_name
+                storage_consumer_data["spec"].setdefault(
+                    "resourceNameMappingConfigMap", {}
+                ).setdefault("name", resource_name_mapping_config_map_name)
 
             storage_consumer_file = tempfile.NamedTemporaryFile(
                 mode="w+", prefix="storage_consumer", delete=False
@@ -409,3 +414,42 @@ class StorageConsumer:
             dump_data_to_temp_yaml(storage_consumer_data, storage_consumer_file.name)
 
             return self.ocp.create(yaml_file=storage_consumer_file.name)
+
+
+def create_storage_consumer_on_default_cluster(
+    consumer_name,
+    storage_classes=None,
+    volume_snapshot_classes=None,
+    volume_group_snapshot_classes=None,
+    storage_quota_in_gib=None,
+    resource_name_mapping_config_map_name=None,
+):
+    """
+    Create a storage consumer on the storage provider cluster
+
+    Args:
+        consumer_name (str): Name of the storage consumer
+        storage_classes (list): List of storage classes
+        volume_snapshot_classes (list): List of volume snapshot classes
+        volume_group_snapshot_classes (list): List of volume group snapshot classes
+        storage_quota_in_gib (int): Storage quota in GiB
+        resource_name_mapping_config_map_name (str): Resource name mapping config map
+
+    Returns:
+        StorageConsumer: StorageConsumer object
+
+    """
+    consumer_context = config.cluster_ctx.ENV_DATA.get(
+        "default_cluster_context_index", 0
+    )
+    storage_consumer = StorageConsumer(
+        consumer_name, config.ENV_DATA["cluster_namespace"], consumer_context
+    )
+    storage_consumer.create_storage_consumer(
+        volume_snapshot_classes=volume_snapshot_classes,
+        volume_group_snapshot_classes=volume_group_snapshot_classes,
+        storage_classes=storage_classes,
+        storage_quota_in_gib=storage_quota_in_gib,
+        resource_name_mapping_config_map_name=resource_name_mapping_config_map_name,
+    )
+    return storage_consumer
