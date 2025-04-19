@@ -758,3 +758,7 @@ class HostNameNotFoundInOSDStatus(Exception):
 
 class ActiveMdsValueNotMatch(Exception):
     pass
+
+
+class DistributionStatusError(Exception):
+    pass
