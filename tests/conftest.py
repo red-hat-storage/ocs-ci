@@ -1709,21 +1709,22 @@ def deployment_pod_factory(request, pvc_factory, service_account_factory):
             sa_obj = sa_obj or service_account_factory(
                 project=pvc.project, service_account=service_account
             )
-            deploy_pod_obj = helpers.create_pod(
-                interface_type=interface,
-                pvc_name=pvc.name,
-                do_reload=False,
-                namespace=pvc.namespace,
-                sa_name=sa_obj.name,
-                deployment=True,
-                replica_count=replica_count,
-                node_name=node_name,
-                node_selector=node_selector,
-                raw_block_pv=raw_block_pv,
-                pod_dict_path=constants.FEDORA_DEPLOY_YAML,
-            )
-        instances.append(deploy_pod_obj)
-        log.info(deploy_pod_obj.name)
+            for i in range(5):
+                deploy_pod_obj = helpers.create_pod(
+                    interface_type=interface,
+                    pvc_name=pvc.name,
+                    do_reload=False,
+                    namespace=pvc.namespace,
+                    sa_name=sa_obj.name,
+                    deployment=True,
+                    replica_count=replica_count,
+                    node_name=node_name,
+                    node_selector=node_selector,
+                    raw_block_pv=raw_block_pv,
+                    pod_dict_path=constants.FEDORA_DEPLOY_YAML,
+                )
+                instances.append(deploy_pod_obj)
+                log.info(deploy_pod_obj.name)
         if wait:
             helpers.wait_for_resource_state(
                 deploy_pod_obj, constants.STATUS_RUNNING, timeout=180
