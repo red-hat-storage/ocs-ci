@@ -59,6 +59,10 @@ class TestLifecycleConfiguration(MCGTest):
         """
         Reduce the interval in which the lifecycle background worker is running
 
+        Args:
+            add_env_vars_to_noobaa_core_class (function): Factory fixture for adding environment variables
+            to the noobaa-core statefulset
+
         """
         new_interval_in_miliseconds = 60 * 1000
         add_env_vars_to_noobaa_core_class(

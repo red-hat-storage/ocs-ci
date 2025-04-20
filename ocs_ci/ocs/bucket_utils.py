@@ -2441,10 +2441,10 @@ def expire_objects_in_bucket(bucket_name, object_keys=[], prefix=""):
 
 def expire_multipart_upload(upload_id):
     """
-    Expire multipart upload in a bucket by changing their creation date to one year back.
+    Expire a multipart upload by changing its creation date to one year back.
 
     Args:
-        bucket (str): The name of the bucket where the multipart upload parts reside
+        upload_id (str): The ID of the multipart upload to expire (unique across all buckets)
     """
     one_year_ago = time.time() - 60 * 60 * 24 * 365
 
