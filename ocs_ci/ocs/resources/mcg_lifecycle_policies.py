@@ -179,17 +179,6 @@ class ExpirationRule(LifecycleRule):
             filter (LifecycleFilter): Optional object filter
             use_date (bool): Whether to set a a date instead of the number of days
             is_enabled (bool): Whether the rule is enabled or not
-            expired_object_delete_marker (bool): Only relevant for versioned buckets.
-                                               If set to True, a delete marker of an object
-                                               will expire if no other versions of the object
-                                               exist. This also means that an expired object
-                                               without any other versions will be deleted
-                                               along with its delete marker.
-
-        NOTE: - due to https://github.com/aws/aws-cli/issues/8239 setting expire_solo_delete_markers=True
-        while also using a filter that includes a file size criteria will result in an error
-        while attempting to set the lifecycle policy.
-
         """
         super().__init__(filter=filter, is_enabled=is_enabled)
         self.days = days
@@ -216,11 +205,33 @@ class ExpirationRule(LifecycleRule):
             )
             d[key] = value
 
-        # Add delete marker expiration (even if time-based expiration exists — for negative testing)
-        if self.expired_object_delete_marker:
-            d["ExpiredObjectDeleteMarker"] = True
-
         rule_dict["Expiration"] = d
+        return rule_dict
+
+
+class ExpiredObjectDeleteMarkerRule(LifecycleRule):
+    """
+    A class for handling the parsing of an MCG expired object delete marker rule
+
+    Note the separation from ExpirationRule is due to the fact that
+    Expiration.ExpiredObjectDeleteMarker cannot be specified with
+    Days or Date in a Lifecycle Expiration Policy:
+    https://docs.aws.amazon.com/AmazonS3/latest/API/API_LifecycleExpiration.html
+    """
+
+    def __init__(self, filter=LifecycleFilter(), is_enabled=True):
+        """
+        Constructor method for the class
+
+        Args:
+            filter (LifecycleFilter): Optional object filter
+            is_enabled (bool): Whether the rule is enabled or not
+        """
+        super().__init__(filter=filter, is_enabled=is_enabled)
+
+    def as_dict(self):
+        rule_dict = super().as_dict()
+        rule_dict["Expiration"] = {"ExpiredObjectDeleteMarker": True}
         return rule_dict
 
 

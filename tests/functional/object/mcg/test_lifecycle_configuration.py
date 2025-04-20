@@ -7,6 +7,7 @@ import pytest
 
 from ocs_ci.framework.pytest_customization.marks import (
     tier1,
+    tier2,
     red_squad,
     runs_on_provider,
     mcg,
@@ -32,6 +33,7 @@ from ocs_ci.ocs.exceptions import UnexpectedBehaviour
 from ocs_ci.ocs.resources.mcg_lifecycle_policies import (
     AbortIncompleteMultipartUploadRule,
     ExpirationRule,
+    ExpiredObjectDeleteMarkerRule,
     LifecyclePolicy,
     NoncurrentVersionExpirationRule,
 )
@@ -69,7 +71,7 @@ class TestLifecycleConfiguration(MCGTest):
         add_env_vars_to_noobaa_core_class(
             [
                 (constants.LIFECYCLE_INTERVAL_PARAM, new_interval_in_miliseconds),
-                (constants.LIFECYCLE_SCHED_MINUTES, 1),
+                (constants.LIFECYCLE_SCHED_MINUTES, 0),
             ]
         )
 
@@ -291,9 +293,7 @@ class TestLifecycleConfiguration(MCGTest):
         put_bucket_versioning_via_awscli(mcg_obj, awscli_pod, bucket)
 
         # 2. Set lifecycle configuration
-        lifecycle_policy = LifecyclePolicy(
-            ExpirationRule(expired_object_delete_marker=True)
-        )
+        lifecycle_policy = LifecyclePolicy(ExpiredObjectDeleteMarkerRule())
         mcg_obj.s3_client.put_bucket_lifecycle_configuration(
             Bucket=bucket, LifecycleConfiguration=lifecycle_policy.as_dict()
         )
@@ -378,3 +378,190 @@ class TestLifecycleConfiguration(MCGTest):
             versions_listed
         ), "Object still shows when listing the bucket versions"
         logger.info("Object was deleted as expected")
+
+    @tier2
+    def test_lifecycle_rules_combined(
+        self,
+        mcg_obj,
+        bucket_factory,
+        awscli_pod,
+        test_directory_setup,
+    ):
+        """
+        1. Create an MCG bucket with versioning enabled
+        2. Set onto the bucket a lifecycle configuration with:
+        Expiration.Days, Expiration.ExpiredObjectDeleteMarker
+        NoncurrentVersionExpiration.NoncurrentDays,
+        NoncurrentVersionExpiration.NewerNoncurrentVersions,
+        AbortIncompleteMultipartUpload.DaysAfterInitiation
+
+        3. Create a multipart-upload, upload a few parts.
+        4. Expire the multipart-upload and wait for it to expire
+        5. Upload 10 versions of the same object onto the bucket
+        6. Expire the non-current versions by setting back their creation date
+        7. Wait for the any non-current versions after the first 5 to get deleted
+        8. Expire the versioned object and wait for the delete marker to get created
+        9. Delete all the remaining non-delete-marker versions by their VersionId
+        10. Wait for the delete marker to get deleted
+        """
+        max_non_current_versions = 5
+
+        # 1. Create an MCG bucket with versioning enabled
+        bucket = bucket_factory(interface="OC")[0].name
+        put_bucket_versioning_via_awscli(mcg_obj, awscli_pod, bucket)
+
+        # 2. Set lifecycle configuration
+        lifecycle_policy = LifecyclePolicy(
+            ExpirationRule(days=5),
+            ExpiredObjectDeleteMarkerRule(),
+            NoncurrentVersionExpirationRule(
+                non_current_days=1, newer_non_current_versions=max_non_current_versions
+            ),
+            AbortIncompleteMultipartUploadRule(days_after_initiation=7),
+        )
+        mcg_obj.s3_client.put_bucket_lifecycle_configuration(
+            Bucket=bucket, LifecycleConfiguration=lifecycle_policy.as_dict()
+        )
+        logger.info(
+            f"Sleeping for {PROP_SLEEP_TIME} seconds to let the policy propagate"
+        )
+        sleep(PROP_SLEEP_TIME)
+
+        # 3. Create a multipart-upload, upload a few parts.
+        parts_amount = 5
+        origin_dir = test_directory_setup.origin_dir
+        res_dir = test_directory_setup.result_dir
+
+        multipart_upload_obj_key = "multipart_object"
+        upload_id = create_multipart_upload(mcg_obj, bucket, multipart_upload_obj_key)
+        awscli_pod.exec_cmd_on_pod(
+            f'sh -c "dd if=/dev/urandom of={origin_dir}/{multipart_upload_obj_key} bs=1MB count={parts_amount}; '
+            f'split -b 1m  {origin_dir}/{multipart_upload_obj_key} {res_dir}/part"'
+        )
+        parts = awscli_pod.exec_cmd_on_pod(f'sh -c "ls -1 {res_dir}"').split()
+        upload_parts(
+            mcg_obj,
+            awscli_pod,
+            bucket,
+            multipart_upload_obj_key,
+            res_dir,
+            upload_id,
+            parts,
+        )
+
+        # 4. Expire the multipart-upload and wait for it to expire
+        expire_multipart_upload(upload_id)
+        for http_response in TimeoutSampler(
+            timeout=TIMEOUT_THRESHOLD,
+            sleep=TIMEOUT_SLEEP_DURATION,
+            func=list_multipart_upload,
+            s3_obj=mcg_obj,
+            bucketname=bucket,
+        ):
+            if "Uploads" not in http_response or len(http_response["Uploads"]) == 0:
+                logger.info("Multipart upload expired as expected")
+                break
+            logger.warning(f"Upload has not expired yet: \n{http_response}")
+
+        # 5. Upload 10 versions of the same object onto the bucket
+        versions_amount = 10
+        versioned_obj_key = "versioned_object"
+        upload_obj_versions(
+            mcg_obj,
+            awscli_pod,
+            bucket,
+            versioned_obj_key,
+            amount=versions_amount,
+        )
+
+        # 6. Expire the non-current versions by setting back their creation date
+        uploaded_versions = get_obj_versions(
+            mcg_obj, awscli_pod, bucket, versioned_obj_key
+        )
+        version_ids = [version["VersionId"] for version in uploaded_versions]
+        base_time = datetime.now()
+        for i, v_id in enumerate(version_ids):
+            change_versions_creation_date_in_noobaa_db(
+                bucket_name=bucket,
+                object_key=versioned_obj_key,
+                version_ids=[v_id],
+                new_creation_time=(base_time - timedelta(days=1)).timestamp(),
+            )
+
+        # 7. Wait for the any non-current versions after the first 5 to get deleted
+        expected_remaining = set(version_ids[: max_non_current_versions + 1])
+
+        for versions in TimeoutSampler(
+            timeout=TIMEOUT_THRESHOLD,
+            sleep=TIMEOUT_SLEEP_DURATION,
+            func=get_obj_versions,
+            mcg_obj=mcg_obj,
+            awscli_pod=awscli_pod,
+            bucket_name=bucket,
+            obj_key=versioned_obj_key,
+        ):
+            remaining = {v["VersionId"] for v in versions}
+            if remaining == expected_remaining:
+                logger.info("Only the expected versions remained")
+                break
+            else:
+                logger.warning(
+                    (
+                        "Some older versions have not expired yet:\n"
+                        f"Remaining: {remaining}\n"
+                        f"Versions yet to expire: {remaining - expected_remaining}"
+                    )
+                )
+
+        # 8. Expire the versioned object and wait for the delete marker to get created
+        expire_objects_in_bucket(bucket, [versioned_obj_key])
+        for raw_versions in TimeoutSampler(
+            timeout=TIMEOUT_THRESHOLD,
+            sleep=TIMEOUT_SLEEP_DURATION,
+            func=s3_list_object_versions,
+            s3_obj=mcg_obj,
+            bucketname=bucket,
+            prefix=versioned_obj_key,
+        ):
+            delete_markers = raw_versions.get("DeleteMarkers", [])
+            if len(delete_markers) == 1:
+                logger.info("Delete marker created as expected")
+                break
+            else:
+                logger.warning(
+                    (
+                        "Delete marker has not expired yet:\n"
+                        f"Remaining: {delete_markers}\n"
+                    )
+                )
+
+        # 9. Delete all the remaining non-delete-marker versions by their VersionId
+        remaining_version_ids = expected_remaining
+        for v_id in remaining_version_ids:
+            s3_delete_object(
+                s3_obj=mcg_obj,
+                bucketname=bucket,
+                object_key=versioned_obj_key,
+                versionid=v_id,
+            )
+
+        # 10. Wait for the delete marker to get deleted
+        for raw_versions in TimeoutSampler(
+            timeout=TIMEOUT_THRESHOLD,
+            sleep=TIMEOUT_SLEEP_DURATION,
+            func=s3_list_object_versions,
+            s3_obj=mcg_obj,
+            bucketname=bucket,
+            prefix=versioned_obj_key,
+        ):
+            delete_markers = raw_versions.get("DeleteMarkers", [])
+            if len(delete_markers) == 0:
+                logger.info("Delete marker expired as expected")
+                break
+            else:
+                logger.warning(
+                    (
+                        "Delete marker has not expired yet:\n"
+                        f"Remaining: {delete_markers}\n"
+                    )
+                )
