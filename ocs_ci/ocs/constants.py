@@ -337,6 +337,8 @@ HOSTED_CLUSTER_AGENT = "agent"
 NON_HOSTED_CLUSTER = "non_hosted"
 
 # provider mode constants
+CLUSTERS_PATH = os.path.join(os.path.expanduser("~"), "clusters")
+
 PROVIDER_MODE_OCS_DEPLOYMENT_PATH = os.path.join(
     TEMPLATE_DEPLOYMENT_DIR, "provider-mode"
 )

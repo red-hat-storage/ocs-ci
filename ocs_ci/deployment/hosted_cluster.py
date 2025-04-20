@@ -1,9 +1,12 @@
 import base64
+import json
 import logging
 import os
 import tempfile
 import time
+import yaml
 from concurrent.futures import ThreadPoolExecutor
+
 from ocs_ci.deployment.cnv import CNVInstaller
 from ocs_ci.deployment.hyperconverged import HyperConverged
 from ocs_ci.deployment.mce import MCEInstaller
@@ -12,12 +15,15 @@ from ocs_ci.deployment.helpers.hypershift_base import (
     HyperShiftBase,
     get_hosted_cluster_names,
     kubeconfig_exists_decorator,
+    get_current_nodepool_size,
+    get_available_hosted_clusters_to_ocp_ver_dict,
+    create_cluster_dir,
 )
 from ocs_ci.deployment.metallb import MetalLBInstaller
-from ocs_ci.framework import config
+from ocs_ci.framework import config as ocsci_config, Config, config
 from ocs_ci.helpers import helpers
 from ocs_ci.ocs import constants, defaults, ocp
-from ocs_ci.ocs.constants import HCI_PROVIDER_CLIENT_PLATFORMS
+from ocs_ci.ocs.constants import HCI_PROVIDER_CLIENT_PLATFORMS, FUSION_CONF_DIR
 from ocs_ci.ocs.exceptions import (
     ProviderModeNotFoundException,
     CommandFailed,
@@ -38,6 +44,7 @@ from ocs_ci.ocs.utils import get_pod_name_by_pattern
 from ocs_ci.ocs.version import if_version
 from ocs_ci.utility import templating, version
 from ocs_ci.utility.deployment import get_ocp_ga_version
+from ocs_ci.utility.json import SetToListJSONEncoder
 from ocs_ci.utility.managedservice import generate_onboarding_token
 from ocs_ci.utility.retry import retry
 from ocs_ci.utility.utils import (
@@ -45,6 +52,7 @@ from ocs_ci.utility.utils import (
     TimeoutSampler,
 )
 from ocs_ci.ocs.resources.storage_client import StorageClient
+from ocs_ci.utility.version import get_running_odf_version
 
 logger = logging.getLogger(__name__)
 
@@ -382,18 +390,35 @@ class HostedClients(HyperShiftBase):
             )
             return False
 
-    def download_hosted_clusters_kubeconfig_files(self):
+    def download_hosted_clusters_kubeconfig_files(self, cluster_names_paths_dict=None):
         """
-        Get HyperShift hosted cluster kubeconfig for multiple clusters
+        Get HyperShift hosted cluster kubeconfig for multiple clusters.
+        Provided cluster_names_paths_dict will always be a default source of cluster names and paths
+
+        Args:
+            cluster_names_paths_dict (dict): Optional argument. Function will download all kubeconfigs to specified in
+            configuration folders or download specific clusters kubeconfig to specified in arguments folder
+
         Returns:
             list: the list of hosted cluster kubeconfig paths
         """
 
+        if cluster_names_paths_dict is None:
+            cluster_names_paths_dict = dict()
         if not (self.hcp_binary_exists() and self.hypershift_binary_exists()):
             self.update_hcp_binary()
 
-        for name in config.ENV_DATA.get("clusters").keys():
-            path = config.ENV_DATA.get("clusters").get(name).get("hosted_cluster_path")
+        cluster_names = (
+            list(cluster_names_paths_dict.keys())
+            if cluster_names_paths_dict
+            else list(config.ENV_DATA.get("clusters", {}).keys())
+        )
+
+        for name in cluster_names:
+            path = cluster_names_paths_dict.get(name) or config.ENV_DATA.setdefault(
+                "clusters", {}
+            ).setdefault(name, {}).get("hosted_cluster_path")
+
             self.kubeconfig_paths.append(
                 self.download_hosted_cluster_kubeconfig(name, path)
             )
@@ -1544,3 +1569,152 @@ class HostedODF(HypershiftHostedOCP):
                     cluster_kubeconfig=self.cluster_kubeconfig,
                 )
         return False
+
+
+def hypershift_cluster_factory(
+    cluster_names=None,
+    ocp_version=None,
+    odf_version=None,
+    setup_storage_client=None,
+    nodepool_replicas=None,
+    duty="",
+):
+    """
+    Factory function to create or use existing HyperShift clusters.
+
+    Args:
+        cluster_names (list): List of cluster names. Only for duty=="create_hosted_cluster_push_config"
+        ocp_version (str): OCP version. Only for duty=="create_hosted_cluster_push_config"
+        odf_version (str): ODF version. Only for duty=="create_hosted_cluster_push_config"
+        setup_storage_client (bool): Optional. Setup storage client. Only for duty=="create_hosted_cluster_push_config"
+        nodepool_replicas (int): Nodepool replicas; supported values are 2,3.
+        Only for duty=="create_hosted_cluster_push_config"
+        duty (str): Duty to perform; "create_hosted_cluster_push_config" (for creation of hypershift cluster) or
+                    "use_existing_hosted_clusters_force_push_configs" (for pushing config even if config exists) or
+                    "use_existing_hosted_clusters_push_missing_configs" (for adding only missing configs)
+    """
+
+    hosted_clients_obj = HostedClients()
+    logger.info(f"Factory duty is '{duty}'")
+
+    if duty == "create_hosted_cluster_push_config":
+        hosted_cluster_conf_on_provider = {"ENV_DATA": {"clusters": {}}}
+        for cluster_name in cluster_names:
+            # this configuration is necessary to deploy hosted cluster, but not for running tests with multicluster job
+            hosted_cluster_conf_on_provider["ENV_DATA"]["clusters"][cluster_name] = {
+                "hosted_cluster_path": f"~/clusters/{cluster_name}/openshift-cluster-dir",
+                "ocp_version": ocp_version,
+                "cpu_cores_per_hosted_cluster": 8,
+                "memory_per_hosted_cluster": "12Gi",
+                "hosted_odf_registry": "quay.io/rhceph-dev/ocs-registry",
+                "hosted_odf_version": odf_version,
+                "setup_storage_client": setup_storage_client,
+                "nodepool_replicas": nodepool_replicas,
+            }
+
+        logger.info(
+            "Creating a hosted clusters with following deployment config: \n%s",
+            json.dumps(
+                hosted_cluster_conf_on_provider, indent=4, cls=SetToListJSONEncoder
+            ),
+        )
+        ocsci_config.update(hosted_cluster_conf_on_provider)
+
+        deployed_hosted_cluster_objects = hosted_clients_obj.do_deploy(cluster_names)
+        deployed_clusters = [obj.name for obj in deployed_hosted_cluster_objects]
+
+    elif duty in [
+        "use_existing_hosted_clusters_force_push_configs",
+        "use_existing_hosted_clusters_push_missing_configs",
+    ]:
+        cl_name_ver_dict = get_available_hosted_clusters_to_ocp_ver_dict()
+        deployed_clusters = list(cl_name_ver_dict.keys())
+
+        if "use_existing_hosted_clusters_force_push_configs" in duty:
+            existing_clusters = {
+                conf.ENV_DATA.get("cluster_name") for conf in config.clusters
+            }
+            clusters_to_remove = existing_clusters.intersection(deployed_clusters)
+            if clusters_to_remove:
+                for cluster_name in clusters_to_remove:
+                    logger.info(
+                        f"Removing cluster config {cluster_name} from config file, as it is already deployed"
+                    )
+                    config.remove_cluster_by_name(cluster_name)
+
+        if duty == "use_existing_hosted_clusters_push_missing_configs":
+            clusters_in_config = {
+                conf.ENV_DATA.get("cluster_name") for conf in config.clusters
+            }
+            deployed_clusters = [
+                c for c in deployed_clusters if c not in clusters_in_config
+            ]
+
+    else:
+        logger.warning("Factory function was called without deployment duty")
+        deployed_clusters = []
+
+    for cluster_name in deployed_clusters:
+
+        if not nodepool_replicas:
+            nodepool_replicas = get_current_nodepool_size(cluster_name)
+
+        try:
+            nodepool_size = int(nodepool_replicas)
+            if nodepool_size not in [2, 3]:
+                raise ValueError
+        except (TypeError, ValueError):
+            logger.error(
+                "Invalid nodepool size %s for cluster %s",
+                nodepool_replicas,
+                cluster_name,
+            )
+            continue
+
+        # creating this configuration is necessary to run multicluster job. It will have actual specs of cluster.
+        client_conf_default_dir = os.path.join(
+            FUSION_CONF_DIR, f"hypershift_client_bm_{nodepool_replicas}w.yaml"
+        )
+        if not os.path.exists(client_conf_default_dir):
+            raise FileNotFoundError(f"File {client_conf_default_dir} not found")
+        with open(client_conf_default_dir) as file_stream:
+            def_client_config_dict = {
+                k: (v if v is not None else {})
+                for (k, v) in yaml.safe_load(file_stream).items()
+            }
+            def_client_config_dict.get("ENV_DATA").update(
+                {"cluster_name": cluster_name}
+            )
+            running_odf_version = get_running_odf_version()
+            if running_odf_version:
+                env_data = def_client_config_dict.setdefault("ENV_DATA", {})
+                env_data["ocs_version"] = running_odf_version
+
+            # upd cl_name_ver_dict for both deployment and using existing clusters
+            cl_name_ver_dict = get_available_hosted_clusters_to_ocp_ver_dict()
+            running_ocp_version = cl_name_ver_dict[cluster_name]
+            if running_ocp_version:
+                # update config.DEPLOYMENT["installer_version"] with ocp version
+                def_client_config_dict.setdefault("DEPLOYMENT", {})[
+                    "installer_version"
+                ] = running_ocp_version
+
+            cluster_path = create_cluster_dir(cluster_name)
+            kubeconf_path = (
+                hosted_clients_obj.download_hosted_clusters_kubeconfig_files(
+                    {cluster_name: cluster_path}
+                )
+            )
+
+            logger.info(f"Kubeconfig path: {kubeconf_path}")
+            def_client_config_dict.setdefault("RUN", {}).update(
+                {"kubeconfig": kubeconf_path}
+            )
+            cluster_config = Config()
+            cluster_config.update(def_client_config_dict)
+
+            logger.info(
+                "Inserting new hosted cluster config to Multicluster Config "
+                f"\n{json.dumps(vars(cluster_config), indent=4, cls=SetToListJSONEncoder)}"
+            )
+            ocsci_config.insert_cluster_config(ocsci_config.nclusters, cluster_config)
