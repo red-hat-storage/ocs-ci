@@ -654,7 +654,12 @@ def exec_cmd(
             _env["KUBECONFIG"] = cluster_config.RUN.get("kubeconfig")
     if isinstance(cmd, str) and not kwargs.get("shell"):
         cmd = shlex.split(cmd)
-    if kubeconfig_path and cmd[0] == "oc" and "--kubeconfig" not in cmd:
+    if (
+        kubeconfig_path
+        and cmd[0] == "oc"
+        and "--kubeconfig" not in cmd
+        and "mirror" not in cmd
+    ):
         kube_index = 1
         # check if we have an oc plugin in the command
         plugin_list = "oc plugin list"
