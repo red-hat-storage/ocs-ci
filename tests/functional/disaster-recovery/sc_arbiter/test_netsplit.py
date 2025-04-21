@@ -3,6 +3,7 @@ import logging
 import time
 import ocpnetsplit
 
+from ocs_ci.framework import config
 from ocs_ci.framework.pytest_customization.marks import (
     turquoise_squad,
     tier1,
@@ -136,7 +137,7 @@ class TestNetSplit:
             11) Do a complete cluster sanity and make sure there is no issue post recovery
 
         """
-
+        kubeconfig = config.RUN.get("kubeconfig")
         sc_obj = StretchCluster()
 
         # run cephfs workload for both logwriter and logreader
@@ -170,6 +171,7 @@ class TestNetSplit:
             split_name=zones,
             target_dt=target_time,
             target_length=duration,
+            kubeconfig=kubeconfig,
         )
         logger.info(f"Netsplit induced at {start_time} for zones {zones}")
 
