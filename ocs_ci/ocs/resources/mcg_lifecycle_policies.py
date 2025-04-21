@@ -219,19 +219,28 @@ class ExpiredObjectDeleteMarkerRule(LifecycleRule):
     https://docs.aws.amazon.com/AmazonS3/latest/API/API_LifecycleExpiration.html
     """
 
-    def __init__(self, filter=LifecycleFilter(), is_enabled=True):
+    def __init__(
+        self,
+        filter=LifecycleFilter(),
+        is_enabled=True,
+        expire_object_delete_marker=True,
+    ):
         """
         Constructor method for the class
 
         Args:
             filter (LifecycleFilter): Optional object filter
             is_enabled (bool): Whether the rule is enabled or not
+            expire_object_delete_marker (bool): Whether to expire the object delete marker
         """
         super().__init__(filter=filter, is_enabled=is_enabled)
+        self.expire_object_delete_marker = expire_object_delete_marker
 
     def as_dict(self):
         rule_dict = super().as_dict()
-        rule_dict["Expiration"] = {"ExpiredObjectDeleteMarker": True}
+        rule_dict["Expiration"] = {
+            "ExpiredObjectDeleteMarker": self.expire_object_delete_marker
+        }
         return rule_dict
 
 

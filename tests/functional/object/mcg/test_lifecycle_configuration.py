@@ -8,6 +8,8 @@ import pytest
 from ocs_ci.framework.pytest_customization.marks import (
     tier1,
     tier2,
+    tier3,
+    jira,
     red_squad,
     runs_on_provider,
     mcg,
@@ -566,3 +568,62 @@ class TestLifecycleConfiguration(MCGTest):
                         f"Remaining: {delete_markers}\n"
                     )
                 )
+
+    @tier3
+    @jira("DFBUGS-2306")
+    @pytest.mark.parametrize(
+        argnames=["rule_cls", "rule_kwargs_list"],
+        argvalues=[
+            pytest.param(
+                ExpirationRule,
+                [{"days": val} for val in [True, -1, 1.5, "string", None]],
+            ),
+            pytest.param(
+                ExpiredObjectDeleteMarkerRule,
+                [{"expire_object_delete_marker": val} for val in [1, "string", None]],
+            ),
+            pytest.param(
+                NoncurrentVersionExpirationRule,
+                [{"non_current_days": val} for val in [True, -1, 1.5, "string", None]],
+            ),
+            pytest.param(
+                NoncurrentVersionExpirationRule,
+                [
+                    {"newer_non_current_versions": val}
+                    for val in [True, -1, 1.5, "string", None]
+                ],
+            ),
+            pytest.param(
+                AbortIncompleteMultipartUploadRule,
+                [
+                    {"days_after_initiation": val}
+                    for val in [True, -1, 1.5, "string", None]
+                ],
+            ),
+        ],
+        ids=[
+            "Expiration.Days",
+            "Expiration.ExpiredObjectDeleteMarker",
+            "NoncurrentVersionExpiration.NoncurrentDays",
+            "NoncurrentVersionExpiration.NewerNoncurrentVersions",
+            "AbortIncompleteMultipartUploadRule",
+        ],
+    )
+    def test_lifecycle_rules_invalid_values(
+        self, mcg_obj, bucket_factory, awscli_pod, rule_cls, rule_kwargs_list
+    ):
+        """
+        Test various lifecycle rule fields with invalid values.
+        Expect all of them to raise an InvalidArgument error.
+        """
+        bucket = bucket_factory(interface="OC")[0].name
+        put_bucket_versioning_via_awscli(mcg_obj, awscli_pod, bucket)
+
+        for rule_kwargs in rule_kwargs_list:
+            with pytest.raises(Exception, match="Invalid|Malformed|must be set"):
+                lifecycle_policy = LifecyclePolicy(rule_cls(**rule_kwargs))
+                mcg_obj.s3_client.put_bucket_lifecycle_configuration(
+                    Bucket=bucket, LifecycleConfiguration=lifecycle_policy.as_dict()
+                )
+
+        logger.info("Invalid lifecycle configurations were rejected as expected")
