@@ -380,6 +380,7 @@ class TestLifecycleConfiguration(MCGTest):
         logger.info("Object was deleted as expected")
 
     @tier2
+    @pytest.mark.polarion_id("OCS-6804")
     def test_lifecycle_rules_combined(
         self,
         mcg_obj,
