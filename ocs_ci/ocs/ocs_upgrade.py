@@ -926,7 +926,7 @@ def run_ocs_upgrade(
         exec_cmd(cmd)
 
     if (
-        platform == constants.VSPHERE_PLATFORM
+        platform in (constants.VSPHERE_PLATFORM, constants.IBMCLOUD_PLATFORM)
         and upgrade_version_semantic >= version.VERSION_4_19
     ):
         # using try/except to not fail deployments since these values are good to have
