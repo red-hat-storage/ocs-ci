@@ -782,6 +782,12 @@ acm_page_nav = {
     "modal_dialog_close_button": ("//button[@aria-label='Close']", By.XPATH),
     "Policies": ("a[data-test-id='horizontal-link-Policies']", By.CSS_SELECTOR),
 }
+acm_page_nav_419 = {
+    "Infrastructure": (
+        "(//button[text()='Infrastructure']) | (//button[normalize-space()='Infrastructure'])[1]",
+        By.XPATH,
+    ),
+}
 
 acm_configuration = {
     "cluster-sets": ("//a[normalize-space()='Cluster sets']", By.XPATH),
@@ -805,7 +811,7 @@ acm_configuration = {
     ),
     "search-cluster": ("//input[@placeholder='Search']", By.XPATH),
     "select-first-checkbox": ("input[name='checkrow0']", By.CSS_SELECTOR),
-    "clear-search": ("//*[name()='path' and contains(@d,'M242.72 25')]", By.XPATH),
+    "clear-search": ("//input[@placeholder='Search']", By.XPATH),
     "review-btn": (
         ".pf-c-button.pf-m-primary, .pf-v5-c-button.pf-m-primary",
         By.CSS_SELECTOR,
@@ -1210,6 +1216,14 @@ acm_configuration_4_18 = {
         "(//span[@class='mco-status-card__alert-item-header'])[2]",
         By.XPATH,
     ),
+}
+
+acm_configuration_4_19 = {
+    "install-submariner-btn": (
+        "//a[@id='install-submariner']",
+        By.XPATH,
+    ),
+    "nat-t-checkbox": ("//input[@id='natt-enable']", By.XPATH),
 }
 
 add_capacity = {
@@ -2239,6 +2253,8 @@ locators = {
             **acm_configuration_4_14,
             **acm_configuration_4_16,
             **acm_configuration_4_18,
+            **acm_page_nav_419,
+            **acm_configuration_4_19,
         },
         "validation": {
             **validation,
