@@ -3351,7 +3351,10 @@ def apply_node_affinity_for_noobaa_pod(node_name):
     log.info(
         "Identify on which node the noobaa operator pos is running after failover due to node affinity"
     )
-    noobaa_running_node = pod.get_pod_node(noobaa_operator_pod)
+
+    noobaa_running_node = retry(tries=5, delay=20)(
+        pod.get_pod_node(noobaa_operator_pod)
+    )
     if node_name == noobaa_running_node:
         log.info(
             f"noobaa operator pod failovered to the new node {noobaa_running_node}"
