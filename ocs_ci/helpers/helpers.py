@@ -5870,3 +5870,113 @@ def create_rbd_deviceclass_storageclass(
     sc_obj = create_resource(**sc_data)
     sc_obj.reload()
     return sc_obj
+
+
+def find_cephblockpoolradosnamespace(storageclient_uid=None):
+    """
+    Find the cephblockpoolradosnamespace related to a storageclient. This should run on provider cluster in a
+        provider mode setup.
+
+    Args:
+        storageclient_id(string): The uid of the storageclient for which the cephblockpoolradosnamespace to be fetched
+
+    Returns:
+        str: The name of the cephblockpoolradosnamespace, if present
+
+    """
+    if not storageclient_uid:
+        logger.info(
+            "Storageclient uid is not provided. Default to the native client cephblockpoolradosnamespace assuming "
+            "only one storageclient is present."
+        )
+        client_obj = ocp.OCP(
+            kind=constants.STORAGECLIENT, namespace=config.ENV_DATA["cluster_namespace"]
+        )
+        clients_info = client_obj.get().get("items")
+        storageclient_uid = clients_info[0]["metadata"]["uid"]
+        storageclient_name = clients_info[0]["metadata"]["name"]
+
+    storageconsumer_obj = ocp.OCP(
+        kind=constants.STORAGECONSUMER,
+        namespace=config.ENV_DATA["cluster_namespace"],
+    )
+    for storageconsumer_dict in storageconsumer_obj.get()["items"]:
+        if storageconsumer_dict["status"]["client"]["clientId"] == storageclient_uid:
+            storageconsumer = storageconsumer_dict["metadata"]["name"]
+            break
+    logger.info(
+        f"StorageClient is {storageclient_name} with uid {storageclient_uid}. StorageConsumer is {storageconsumer}"
+    )
+
+    cephbpradosns = ""
+    storage_request_obj = ocp.OCP(
+        kind="StorageRequest", namespace=config.ENV_DATA["cluster_namespace"]
+    )
+    for storage_request_dict in storage_request_obj.get()["items"]:
+        if (
+            storageconsumer
+            in storage_request_dict["metadata"]["ownerReferences"][0].values()
+        ):
+            for ceph_resources in storage_request_dict["status"]["cephResources"]:
+                if "CephBlockPoolRadosNamespace" in ceph_resources.values():
+                    cephbpradosns = ceph_resources["name"]
+                    break
+        if cephbpradosns:
+            break
+
+    return cephbpradosns
+
+
+def find_cephfilesystemsubvolumegroup(storageclient_uid=None):
+    """
+    Find the cephfilesystemsubvolumegroup related to a storageclient. This should run on provider cluster in a
+        provider mode setup.
+
+    Args:
+        storageclient_id(string): The uid of the storageclient for which the cephfilesystemsubvolumegroup to be fetched
+
+    Returns:
+        str: The name of the cephfilesystemsubvolumegroup, if present
+
+    """
+    if not storageclient_uid:
+        logger.info(
+            "Storageclient uid is not provided. Default to the native client cephfilesystemsubvolumegroup assuming "
+            "only one storageclient is present."
+        )
+        client_obj = ocp.OCP(
+            kind=constants.STORAGECLIENT, namespace=config.ENV_DATA["cluster_namespace"]
+        )
+        clients_info = client_obj.get().get("items")
+        storageclient_uid = clients_info[0]["metadata"]["uid"]
+        storageclient_name = clients_info[0]["metadata"]["name"]
+
+    storageconsumer_obj = ocp.OCP(
+        kind=constants.STORAGECONSUMER,
+        namespace=config.ENV_DATA["cluster_namespace"],
+    )
+    for storageconsumer_dict in storageconsumer_obj.get()["items"]:
+        if storageconsumer_dict["status"]["client"]["clientId"] == storageclient_uid:
+            storageconsumer = storageconsumer_dict["metadata"]["name"]
+            break
+    logger.info(
+        f"StorageClient is {storageclient_name} with uid {storageclient_uid}. StorageConsumer is {storageconsumer}"
+    )
+
+    cephbfssubvolumegroup = ""
+    storage_request_obj = ocp.OCP(
+        kind="StorageRequest", namespace=config.ENV_DATA["cluster_namespace"]
+    )
+    for storage_request_dict in storage_request_obj.get()["items"]:
+        if (
+            storageconsumer
+            in storage_request_dict["metadata"]["ownerReferences"][0].values()
+        ):
+            for ceph_resources in storage_request_dict["status"]["cephResources"]:
+                if "CephFilesystemSubVolumeGroup" in ceph_resources.values():
+                    cephbfssubvolumegroup = ceph_resources["name"]
+                    break
+        if cephbfssubvolumegroup:
+            break
+
+    return cephbfssubvolumegroup
