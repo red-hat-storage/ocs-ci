@@ -6,7 +6,6 @@ from prettytable import PrettyTable
 from collections import defaultdict
 from operator import itemgetter
 import random
-import json
 
 from subprocess import TimeoutExpired
 from semantic_version import Version
@@ -3310,7 +3309,11 @@ def get_ceph_tools_running_node():
     return ct_pod_running_node
 
 
-def apply_node_affinity_for_noobaa_pod(node_name):
+def apply_node_affinity_for_noobaa_pod():
+    """
+    Apply node affinity for noobaa operator pod.
+
+    """
     resource_name = constants.DEFAULT_CLUSTERNAME
     if config.DEPLOYMENT["external_mode"]:
         resource_name = constants.DEFAULT_CLUSTERNAME_EXTERNAL_MODE
@@ -3320,44 +3323,34 @@ def apply_node_affinity_for_noobaa_pod(node_name):
         namespace=config.ENV_DATA["cluster_namespace"],
         kind=constants.STORAGECLUSTER,
     )
-    nodeaffinity = {
-        "noobaa-standalone": {
-            "nodeAffinity": {
-                "requiredDuringSchedulingIgnoredDuringExecution": {
-                    "nodeSelectorTerms": [
-                        {"matchExpressions": [{"key": node_name, "operator": "Exists"}]}
-                    ]
-                }
-            }
-        }
-    }
 
-    # (
-    #     f'{{"toolbox": {{"nodeAffinity": {{"requiredDuringSchedulingIgnoredDuringExecution": '
-    #     f'{{"nodeSelectorTerms": [{{"matchExpressions": [{{"key": "kubernetes.io/hostname",'
-    #     f'"operator": "In",'
-    #     f'"values": ["{node_name}"]}}]}}]}}}}}}}}'
-    # )
-    param_dict = {"spec": {"placement": nodeaffinity}}
-    # Convert to JSON string
-    param = json.dumps(param_dict)
-    noobaa_operator_pod = pod.get_noobaa_operator_pod()
-    noobaa_operator_pod_name = noobaa_operator_pod.name
-    storagecluster_obj.patch(params=param, format_type="merge")
-    log.info(
-        f"Successfully applied node affinity for noobaa operator pod with {node_name}"
-    )
-    noobaa_operator_pod.ocp.wait_for_delete(noobaa_operator_pod_name)
-    log.info(
-        "Identify on which node the noobaa operator pos is running after failover due to node affinity"
+    nodeaffinity = (
+        '{{"noobaa-standalone": {{"nodeAffinity": {{"requiredDuringSchedulingIgnoredDuringExecution": '
+        '{{"nodeSelectorTerms": [{{"matchExpressions": [{{"key": "kubernetes.io/hostname", '
+        '"operator": "Exists"}}]}}]}}}}, '
+        '"tolerations": [{{"effect": "NoExecute", "key": "node-role.kubernetes.io/infra", "value": "reserved"}}, '
+        '{{"effect": "NoSchedule", "key": "node-role.kubernetes.io/infra", "value": "reserved"}}]}}}}'
     )
 
-    noobaa_running_node = retry(tries=5, delay=20)(
-        pod.get_pod_node(noobaa_operator_pod)
-    )
-    if node_name == noobaa_running_node:
-        log.info(
-            f"noobaa operator pod failovered to the new node {noobaa_running_node}"
-            f" given in node affinity successfully "
-        )
-        return True
+    param = f'{{"spec": {{"placement": {nodeaffinity}}}}}'
+
+    try:
+        storagecluster_obj.patch(params=param, format_type="merge")
+        log.info("Successfully applied node affinity")
+    except Exception as e:
+        log.error(f"Failed to apply patch: {e}")
+        return False
+
+    # check node affinity is added in storagecluster or not.
+    sc_dict = storagecluster_obj.get()
+    try:
+        node_affinity = sc_dict["spec"]["placement"]["noobaa-standalone"]
+        if node_affinity:
+            log.info("nodeAffinity is present in 'noobaa-standalone' placement.")
+            return True
+        else:
+            log.error("nodeAffinity is empty.")
+            return False
+    except KeyError:
+        log.error("'noobaa-standalone' is not present in placement.")
+        return False
