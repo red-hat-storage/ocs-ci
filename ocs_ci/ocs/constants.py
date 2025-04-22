@@ -3112,6 +3112,7 @@ EXPERIMENTAL_ANNOTATION_PATH = (
     "/metadata/annotations/"
     "cluster.open-cluster-management.io~1experimental-scheduling-disable"
 )
+CONFIGMAP_PATH = os.path.join(TEMPLATE_DIR, "ocs-deployment", "configmap.yaml")
 
 # CNV
 VIRTUAL_MACHINE_INSTANCES = "vmi"

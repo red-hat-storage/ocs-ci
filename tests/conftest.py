@@ -1955,6 +1955,15 @@ def cluster(
                     kms.cleanup()
                 except Exception as ex:
                     log.error(f"Failed to cleanup KMS. Exception is: {ex}")
+            if ocsci_config.MULTICLUSTER.get("acm_cluster"):
+                # try:
+                # thanos_bucket_obj = ocp.OCP(namespace=constants.DEFAULT_NAMESPACE, kind=constants.CONFIGMAP,
+                #         resource_name="thanos_bucket")
+                # thanos_bucket_name = thanos_bucket_obj.get()["data"]["bucket_name"]
+                # delete_buckets(
+                #     defaults.BUCKET_PREFIXES_SPECIAL_RULES, ults.DEFAULT_BUCKET_RUNNING_TIME
+                # )
+                pass
             deployer.destroy_cluster(log_cli_level)
 
         request.addfinalizer(cluster_teardown_finalizer)

@@ -6001,3 +6001,31 @@ def find_cephfilesystemsubvolumegroup(storageclient_uid=None):
         cephbfssubvolumegroup = storage_consumer.get_cephfs_subvolumegroup()
 
     return cephbfssubvolumegroup
+
+
+def create_configmap(
+    configmap_name="ocs_ci_cm",
+    configmap_namespace=constants.DEFAULT_NAMESPACE,
+    configmap_data=None,
+):
+    """
+    Function to create configmap
+    Args:
+
+        configmap_data (dict):
+    """
+    # load configmap.yaml
+    if configmap_data is None:
+        configmap_data = {}
+    configmap_yaml_data = templating.load_yaml(constants.CONFIGMAP_PATH)
+    configmap_yaml_data["metadata"]["name"] = configmap_name
+    configmap_yaml_data["metadata"]["namespace"] = configmap_namespace
+    configmap_yaml_data["data"] = configmap_data
+    configmap_data_yaml = tempfile.NamedTemporaryFile(
+        mode="w+", prefix="configmap", delete=False
+    )
+    templating.dump_data_to_temp_yaml(
+        configmap_yaml_data,
+        configmap_data_yaml.name,
+    )
+    exec_cmd(f"oc create -f {configmap_data_yaml.name}")
