@@ -44,6 +44,7 @@ from ocs_ci.helpers.helpers import (
     run_cmd_verify_cli_output,
     find_cephblockpoolradosnamespace,
     find_cephfilesystemsubvolumegroup,
+    create_unique_resource_name,
 )
 
 logger = logging.getLogger(__name__)
