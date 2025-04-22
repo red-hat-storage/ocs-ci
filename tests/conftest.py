@@ -7279,6 +7279,18 @@ def discovered_apps_dr_workload(request):
                     workload_placement_name=workload_details[
                         "dr_workload_app_placement_name"
                     ],
+                    discovered_apps_pvc_selector_key=workload_details[
+                        "dr_workload_app_pvc_selector_key"
+                    ],
+                    discovered_apps_pvc_selector_value=workload_details[
+                        "dr_workload_app_pvc_selector_value"
+                    ],
+                    discovered_apps_pod_selector_key=workload_details[
+                        "dr_workload_app_pod_selector_key"
+                    ],
+                    discovered_apps_pod_selector_value=workload_details[
+                        "dr_workload_app_pod_selector_value"
+                    ],
                     discovered_apps_recipe_name_key=workload_details[
                         "dr_workload_app_recipe_name_key"
                     ],
@@ -7290,6 +7302,9 @@ def discovered_apps_dr_workload(request):
                     ],
                     discovered_apps_recipe_namespace_value=workload_details[
                         "dr_workload_app_recipe_namespace_value"
+                    ],
+                    discovered_apps_name_selector_value=workload_details[
+                        "dr_workload_app_recipe_name_selector_value"
                     ],
                 )
             instances.append(workload)

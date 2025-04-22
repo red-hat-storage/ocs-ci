@@ -1204,6 +1204,7 @@ class BusyboxDiscoveredApps(DRWorkload):
         Create recipe with checkhooks for discovered apps
 
         """
+
         recipe_yaml_data = templating.load_yaml(self.recipe_yaml_file)
         recipe_yaml_data["metadata"]["name"] = self.workload_namespace
         if "spec" in recipe_yaml_data:
@@ -1215,6 +1216,9 @@ class BusyboxDiscoveredApps(DRWorkload):
                     self.workload_namespace
                 ]
                 recipe_yaml_data["spec"]["groups"][0]["name"] = self.workload_namespace
+                recipe_yaml_data["spec"]["groups"][0]["labelSelector"][
+                    "matchExpressions"
+                ][0]["values"] = [self.discovered_apps_pod_selector_value]
 
             if "workflows" in recipe_yaml_data["spec"]:
                 recipe_yaml_data["spec"]["workflows"][0]["sequence"][1][
@@ -1228,11 +1232,18 @@ class BusyboxDiscoveredApps(DRWorkload):
                 recipe_yaml_data["spec"]["hooks"][0][
                     "namespace"
                 ] = self.workload_namespace
+                recipe_yaml_data["spec"]["hooks"][0][
+                    "nameSelector"
+                ] = self.discovered_apps_name_selector_value
 
             if "volumes" in recipe_yaml_data["spec"]:
                 recipe_yaml_data["spec"]["volumes"]["includedNamespaces"] = [
                     self.workload_namespace
                 ]
+                recipe_yaml_data["spec"]["volumes"]["labelSelector"][
+                    "matchExpressions"
+                ][0]["values"] = [self.discovered_apps_pvc_selector_value]
+
         recipe_yaml = tempfile.NamedTemporaryFile(
             mode="w+", prefix="recipe", delete=False
         )
