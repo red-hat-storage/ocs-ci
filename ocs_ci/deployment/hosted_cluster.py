@@ -32,7 +32,9 @@ from ocs_ci.ocs.resources.csv import check_all_csvs_are_succeeded
 from ocs_ci.ocs.resources.ocs import OCS
 from ocs_ci.ocs.resources.pod import (
     wait_for_pods_to_be_in_statuses_concurrently,
+    wait_for_pods_to_be_running,
 )
+from ocs_ci.ocs.utils import get_pod_name_by_pattern
 from ocs_ci.ocs.version import if_version
 from ocs_ci.utility import templating, version
 from ocs_ci.utility.deployment import get_ocp_ga_version
@@ -150,7 +152,7 @@ class HostedClients(HyperShiftBase):
                     hosted_odf.create_catalog_source()
                 odf_installed.append(hosted_odf.odf_client_installed())
 
-        # stage 6 setup storage client on all hosted clusters
+        # stage 6 setup storage client on all hosted clusters and enable UI console plugin
         client_setup_res = []
         hosted_odf_clusters_installed = []
         for cluster_name in cluster_names:
@@ -163,6 +165,10 @@ class HostedClients(HyperShiftBase):
                 client_setup_res.append(client_installed)
                 if client_installed:
                     hosted_odf_clusters_installed.append(hosted_odf)
+                    logger.info("enable client console plugin")
+                    if not hosted_odf.enable_client_console_plugin():
+                        # we may want to skip UI tests for this client in the future, setting config value to skip UI
+                        logger.error("Client console plugin enable failed")
             else:
                 logger.info(
                     f"Storage client installation not requested for cluster '{cluster_name}', "
@@ -1491,3 +1497,50 @@ class HostedODF(HypershiftHostedOCP):
             cluster_kubeconfig=self.cluster_kubeconfig,
         )
         return sample.wait_for_func_value(value=True)
+
+    @kubeconfig_exists_decorator
+    def enable_client_console_plugin(self):
+        """
+        Enable the ODF client console plugin by patching the console operator
+
+        Returns:
+            bool: True if the patch is applied successfully, False otherwise
+        """
+        try:
+            self.exec_oc_cmd(
+                "patch console.operator cluster --type json "
+                '-p \'[{"op": "add", "path": "/spec/plugins", "value": ["odf-client-console"]}]\'',
+                timeout=30,
+            )
+            # console pod exist from the start, but we want ensure no crash happened
+            self.wait_console_plugin_pod_running()
+
+            return True
+        except CommandFailed as e:
+            logger.error(f"Failed to enable client console plugin: {e}")
+            return False
+
+    @kubeconfig_exists_decorator
+    def wait_console_plugin_pod_running(self):
+        """
+        Check if the ODF client console plugin pod is running
+
+        Returns:
+            bool: True if the console plugin pod is running, False otherwise
+        """
+        for sample in TimeoutSampler(
+            timeout=300,
+            sleep=10,
+            func=get_pod_name_by_pattern,
+            pattern="ocs-client-operator-console",
+            namespace=self.namespace_client,
+            cluster_kubeconfig=self.cluster_kubeconfig,
+        ):
+            if sample:
+                return wait_for_pods_to_be_running(
+                    pod_names=sample,
+                    timeout=300,
+                    sleep=10,
+                    cluster_kubeconfig=self.cluster_kubeconfig,
+                )
+        return False
