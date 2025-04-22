@@ -2123,6 +2123,7 @@ def query_nb_db_psql_version():
     return re.search(r"PostgreSQL (\S+)", raw_output).group(1)
 
 
+@retry(UnexpectedBehaviour, tries=30, delay=10, backoff=1)
 def get_expected_nb_db_psql_version():
     """
         Get the expected NooBaa DB version from the NooBaa CR
