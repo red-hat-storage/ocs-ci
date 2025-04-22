@@ -2090,7 +2090,7 @@ def get_cluster_set_name():
         if i["metadata"]["name"] != constants.ACM_LOCAL_CLUSTER:
             cluster_set.append(i["metadata"]["labels"][constants.ACM_CLUSTERSET_LABEL])
     if all(x == cluster_set[0] for x in cluster_set):
-        logger.info(f"Found the uniq clusterset {cluster_set[0]}")
+        logger.info(f"Found the unique clusterset {cluster_set[0]}")
     else:
         raise UnexpectedDeploymentConfiguration(
             "There are more then one clusterset added to multiple managedcluters"
