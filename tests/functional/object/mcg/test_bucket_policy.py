@@ -400,7 +400,7 @@ class TestS3BucketPolicy(MCGTest):
         email = user_name + "@mail.com"
 
         # Creating a s3 bucket
-        s3_bucket = bucket_factory(amount=1, interface="S3")[0]
+        s3_bucket = bucket_factory(amount=1, interface="OC")[0]
 
         # Creating a random user account
         if version.get_semantic_ocs_version_from_config() < version.VERSION_4_12:
@@ -1091,7 +1091,7 @@ class TestS3BucketPolicy(MCGTest):
         Tests public bucket website access
         """
         # Creating a S3 bucket to host website
-        s3_bucket = bucket_factory(amount=1, interface="S3")
+        s3_bucket = bucket_factory(amount=1, interface="OC")
 
         # Creating random S3 users
         users = []
