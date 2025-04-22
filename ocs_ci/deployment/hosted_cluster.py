@@ -792,7 +792,7 @@ def get_onboarding_token_from_secret(secret_name):
         resource_name=secret_name,
     )
     secret_obj = ocp_obj.get(retry=6, wait=10, silent=True)
-    return secret_obj.get("data").get("onboarding-token")
+    return secret_obj.get("data", {}).get("onboarding-token")
 
 
 class HostedODF(HypershiftHostedOCP):
@@ -975,6 +975,10 @@ class HostedODF(HypershiftHostedOCP):
 
         log_step("Getting onboarding key from secret")
         onboarding_key = get_onboarding_token_from_secret(secret_name)
+        if not onboarding_key:
+            logger.error(f"Onboarding key not found in secret {secret_name}")
+            return False
+
         onboarding_key_decrypted = base64.b64decode(onboarding_key).decode("utf-8")
 
         log_step("Creating storage client")
