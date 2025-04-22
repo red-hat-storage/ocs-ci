@@ -14,9 +14,14 @@ from botocore.handlers import disable_signing
 
 from ocs_ci.framework import config
 from ocs_ci.ocs import constants
-from ocs_ci.ocs.exceptions import TimeoutExpiredError, UnexpectedBehaviour
+from ocs_ci.ocs.exceptions import (
+    CommandFailed,
+    TimeoutExpiredError,
+    UnexpectedBehaviour,
+)
 from ocs_ci.ocs.ocp import OCP
 from ocs_ci.utility import templating
+from ocs_ci.utility.retry import retry
 from ocs_ci.utility.ssl_certs import get_root_ca_cert
 from ocs_ci.utility.utils import (
     TimeoutSampler,
@@ -2473,7 +2478,15 @@ def get_nb_bucket_stores(mcg_obj, bucket_name):
     else:
         tiers = [d["tier"] for d in bucket_data["tiering"]["tiers"]]
         for tier in tiers:
-            tier_data = mcg_obj.send_rpc_query("tier_api", "read_tier", {"name": tier})
+
+            # Retry to get the tier data as it might not be available immediately
+            retry_send_rpc_query = retry(CommandFailed, tries=5, delay=5, backoff=1)(
+                mcg_obj.send_rpc_query
+            )
+            tier_data = retry_send_rpc_query(
+                "tier_api", "read_tier", {"name": tier}
+            ).json()
+
             stores.update(tier_data["reply"]["attached_pools"])
 
     return list(stores)
