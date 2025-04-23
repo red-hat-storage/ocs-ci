@@ -27,7 +27,7 @@ class TestEphemeralPod:
     @pytest.mark.parametrize(
         argnames=["interface"], argvalues=[[CEPHFS_INTERFACE], [RBD_INTERFACE]]
     )
-    def test_ephemeral_pod_creation(self, interface) -> None:
+    def test_ephemeral_pod_creation(self, interface, cluster_index) -> None:
         pod_name = None
         storage_type = interface
         ephemeral_pod = EphemeralPodFactory.create_ephemeral_pod(pod_name, storage_type)
