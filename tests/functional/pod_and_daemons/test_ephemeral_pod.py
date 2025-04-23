@@ -21,7 +21,6 @@ log = getLogger(__name__)
 
 @tier1
 @brown_squad
-@run_on_all_clients
 @polarion_id("OCS-5792")
 class TestEphemeralPod:
     @pytest.mark.parametrize(
