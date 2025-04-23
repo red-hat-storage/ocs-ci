@@ -396,8 +396,9 @@ class HostedClients(HyperShiftBase):
         Provided cluster_names_paths_dict will always be a default source of cluster names and paths
 
         Args:
-            cluster_names_paths_dict (dict): Optional argument. Function will download all kubeconfigs to specified in
-            configuration folders or download specific clusters kubeconfig to specified in arguments folder
+            cluster_names_paths_dict (dict): Optional argument. The function will download all kubeconfigs
+            to the folders specified in the configuration, or download a specific cluster's kubeconfig
+            to the folder provided as an argument.
 
         Returns:
             list: the list of hosted cluster kubeconfig paths
