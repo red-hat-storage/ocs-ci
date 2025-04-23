@@ -395,7 +395,9 @@ hci_provider_and_client_required = pytest.mark.skipif(
 )
 run_on_all_clients = pytest.mark.run_on_all_clients
 try:
-    client_indexes = [pytest.param(idx) for idx in config.get_consumer_indexes_list()]
+    client_indexes = [
+        pytest.param(*[idx]) for idx in config.get_consumer_indexes_list()
+    ]
     run_on_all_clients = pytest.mark.parametrize(
         argnames=["cluster_index"], argvalues=client_indexes
     )
