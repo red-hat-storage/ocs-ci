@@ -31,7 +31,9 @@ from ocs_ci.ocs.exceptions import (
     CommandFailed,
     CephHealthException,
     NoRunningCephToolBoxException,
+    TimeoutExpiredError,
 )
+from ocs_ci.ocs.resources.pod import delete_pod_by_phase
 
 log = logging.getLogger(__name__)
 
@@ -241,8 +243,22 @@ class Resiliency:
             log.error(f"Ceph crash logs found: {ceph_crashes}")
             raise Exception("Ceph crash logs found after scenario execution.")
         log.info("Checking Ceph health...")
-        if not ceph_health_check(fix_ceph_health=True):
+        if not ceph_health_check(fix_ceph_health=True, tries=25):
             log.error("Ceph health check failed after scenario execution.")
+
+        log.info("Ceph health check passed after scenario execution.")
+
+        # Removing Failed and Succeeded pods
+        # When we run node debug pods are created in the namespace
+        # and they are not deleted automatically.
+        delete_pod_by_phase(
+            "succeeded",
+            namespace=constants.OPENSHIFT_STORAGE_NAMESPACE,
+        )
+        delete_pod_by_phase(
+            "failed",
+            namespace=constants.OPENSHIFT_STORAGE_NAMESPACE,
+        )
 
     def start(self):
         """Start running all failure scenarios under this configuration."""
@@ -252,7 +268,10 @@ class Resiliency:
                 continue
             self.pre_scenario_check()
             log.info(f"Running failure case: {failure_case}")
-            self.inject_failure(failure_case)
+            try:
+                self.inject_failure(failure_case)
+            except (TimeoutExpiredError, CommandFailed, CephHealthException) as e:
+                log.error(f"Failure case execution failed: {e}")
             self.post_scenario_check()
 
     def inject_failure(self, failure):

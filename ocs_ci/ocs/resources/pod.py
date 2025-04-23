@@ -4119,3 +4119,45 @@ def get_pods_pvcs(pod_objs, namespace=None):
     namespace = namespace or config.ENV_DATA["cluster_namespace"]
     pvc_names = [get_pvc_name(p) for p in pod_objs]
     return get_pvc_objs(pvc_names, namespace)
+
+
+def delete_pod_by_phase(
+    pod_phase,
+    namespace=config.ENV_DATA["cluster_namespace"],
+):
+    """
+    Delete the pods in a specific phase
+    Args:
+        pod_status (str): The pod status to delete
+        namespace (str): Name of cluster namespace(default: config.ENV_DATA["cluster_namespace"])
+    Returns:
+        bool: True, if the pods deleted successfully. False, otherwise
+    """
+    logger.info(f"Delete all the pods in the status '{pod_phase}'")
+    if pod_phase.lower() == "succeeded":
+        phase = "Succeeded"
+    elif pod_phase.lower() == "failed":
+        phase = "Failed"
+    elif pod_phase.lower() == "Pending":
+        phase = "Pending"
+    elif pod_phase.lower() == "running":
+        phase = "Running"
+    else:
+        raise ValueError(
+            f"Invalid pod status '{pod_phase}'. "
+            f"Valid options are 'succeeded' or 'failed'"
+        )
+
+    cmd = f"oc delete pod --field-selector=status.phase={phase} -n {namespace}"
+    logger.info(cmd)
+    try:
+        run_cmd(cmd=cmd)
+    except CommandFailed as ex:
+        logger.warning(
+            f"Failed to delete the pods in the status '{pod_phase}' due to the error: {ex}"
+        )
+        return False
+
+    logger.info(f"All '{pod_phase}' pods deleted successfully.")
+
+    return True
