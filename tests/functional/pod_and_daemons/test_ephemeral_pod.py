@@ -21,12 +21,12 @@ log = getLogger(__name__)
 
 @tier1
 @brown_squad
-@run_on_all_clients
 @polarion_id("OCS-5792")
 class TestEphemeralPod:
     @pytest.mark.parametrize(
         argnames=["interface"], argvalues=[[CEPHFS_INTERFACE], [RBD_INTERFACE]]
     )
+    @run_on_all_clients
     def test_ephemeral_pod_creation(self, interface, cluster_index) -> None:
         pod_name = None
         storage_type = interface
