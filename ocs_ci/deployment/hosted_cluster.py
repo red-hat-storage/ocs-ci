@@ -1601,8 +1601,9 @@ def hypershift_cluster_factory(
         hosted_cluster_conf_on_provider = {"ENV_DATA": {"clusters": {}}}
         for cluster_name in cluster_names:
             # this configuration is necessary to deploy hosted cluster, but not for running tests with multicluster job
+            cluster_path = create_cluster_dir(cluster_name)
             hosted_cluster_conf_on_provider["ENV_DATA"]["clusters"][cluster_name] = {
-                "hosted_cluster_path": f"~/clusters/{cluster_name}/openshift-cluster-dir",
+                "hosted_cluster_path": cluster_path,
                 "ocp_version": ocp_version,
                 "cpu_cores_per_hosted_cluster": 8,
                 "memory_per_hosted_cluster": "12Gi",

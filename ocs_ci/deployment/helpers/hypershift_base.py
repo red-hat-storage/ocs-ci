@@ -794,8 +794,12 @@ def create_cluster_dir(cluster_name):
     Returns:
         str: Path to the kubeconfig directory
     """
-    from ocs_ci.ocs.constants import CLUSTERS_PATH
 
-    path = os.path.join(CLUSTERS_PATH, cluster_name, "openshift-cluster-dir")
+    path = os.path.join(
+        config.ENV_DATA["cluster_path"],
+        "clusters",
+        cluster_name,
+        "openshift-cluster-dir",
+    )
     os.makedirs(path, exist_ok=True)
     return path
