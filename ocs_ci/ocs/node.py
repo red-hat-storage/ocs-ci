@@ -336,7 +336,7 @@ def get_node_ips(node_type="worker"):
     ocp = OCP(kind=constants.NODE)
     if node_type == "worker":
         nodes = ocp.get(selector=constants.WORKER_LABEL).get("items")
-    if node_type == "master:":
+    if node_type == "master":
         nodes = ocp.get(selector=constants.MASTER_LABEL).get("items")
 
     if config.ENV_DATA["platform"].lower() == constants.AWS_PLATFORM:

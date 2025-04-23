@@ -949,6 +949,7 @@ def run_must_gather(
     output_file=None,
     skip_after_max_fail=False,
     timeout=defaults.MUST_GATHER_TIMEOUT,
+    mg_options=None,
 ):
     """
     Runs the must-gather tool against the cluster
@@ -964,6 +965,7 @@ def run_must_gather(
         skip_after_max_fail (bool): When max number failed attempts to collect MG reached, will skip
             MG collection.
         timeout (int): Max timeout to wait for MG to complete before aborting the MG execution.
+        mg_options (str): Options of must gather command For example "--host_network=True"
 
     Returns:
         mg_output (str): must-gather cli output
@@ -989,6 +991,8 @@ def run_must_gather(
     log.info(f"Must gather image: {image} will be used.")
     create_directory_path(log_dir_path)
     cmd = f"adm must-gather --image={image} --dest-dir={log_dir_path}"
+    if mg_options:
+        cmd += f" {mg_options}"
     if command:
         cmd += f" -- {command}"
 
@@ -1206,6 +1210,7 @@ def _collect_ocs_logs(
     mcg=False,
     status_failure=True,
     ocs_flags=None,
+    mg_options=None,
     silent=False,
     output_file=None,
     skip_after_max_fail=False,
@@ -1221,6 +1226,7 @@ def _collect_ocs_logs(
             f"RUNNING IN CTX: {cluster_config.ENV_DATA['cluster_name']} RUNID: = {cluster_config.RUN['run_id']}"
         )
     )
+    # TODO: This logic should be deleted as we not support such path for kubeconfig
     if not (
         cluster_config.RUN.get("kubeconfig", False)
         or os.path.exists(os.path.expanduser("~/.kube/config"))
@@ -1261,7 +1267,6 @@ def _collect_ocs_logs(
             ocs_must_gather_image_and_tag = mirror_image(
                 ocs_must_gather_image_and_tag, cluster_config
             )
-
         mg_output = run_must_gather(
             ocs_log_dir_path,
             ocs_must_gather_image_and_tag,
@@ -1271,6 +1276,7 @@ def _collect_ocs_logs(
             output_file=output_file,
             skip_after_max_fail=skip_after_max_fail,
             timeout=timeout,
+            mg_options=mg_options,
         )
         mg_collected_types.add("ocs")
         if (
@@ -1383,6 +1389,7 @@ def collect_ocs_logs(
     mcg=False,
     status_failure=True,
     ocs_flags=None,
+    mg_options=None,
     silent=False,
     output_file=None,
     skip_after_max_fail=False,
@@ -1400,6 +1407,7 @@ def collect_ocs_logs(
         status_failure (bool): Whether the collection is after success or failure,
             allows better naming for folders under logs directory
         ocs_flags (str): flags to ocs must gather command for example ["-- /usr/bin/gather -cs"]
+        mg_options (str): Options of must gather command For example "--host_network=True"
         silent (bool): True if silent mode
         output_file (bool): True if direct whole output to file instead of printing it out to log (apply
             only if silent is True).
@@ -1423,6 +1431,7 @@ def collect_ocs_logs(
                         mcg=False,
                         status_failure=status_failure,
                         ocs_flags=ocs_flags,
+                        mg_options=mg_options,
                         silent=silent,
                         output_file=output_file,
                         skip_after_max_fail=skip_after_max_fail,
@@ -1440,6 +1449,7 @@ def collect_ocs_logs(
                         mcg=False,
                         status_failure=status_failure,
                         ocs_flags=ocs_flags,
+                        mg_options=mg_options,
                         silent=silent,
                         output_file=output_file,
                         skip_after_max_fail=skip_after_max_fail,
@@ -1457,6 +1467,7 @@ def collect_ocs_logs(
                         mcg=mcg,
                         status_failure=status_failure,
                         ocs_flags=ocs_flags,
+                        mg_options=mg_options,
                         silent=silent,
                         output_file=output_file,
                         skip_after_max_fail=skip_after_max_fail,
@@ -1689,6 +1700,24 @@ def get_non_acm_cluster_config():
     return non_acm_list
 
 
+def get_non_acm_and_non_recovery_cluster_config():
+    """
+    Get a list of non-acm and non-recovery cluster config objects
+
+    Returns:
+        list: of cluster config objects
+
+    """
+    non_acm_and_non_recovery_list = []
+    for i in range(len(ocsci_config.clusters)):
+        if i in get_all_acm_and_recovery_indexes():
+            continue
+        else:
+            non_acm_and_non_recovery_list.append(ocsci_config.clusters[i])
+
+    return non_acm_and_non_recovery_list
+
+
 def get_non_acm_cluster_indexes():
     """
     Get config index of all non-acm clusters
@@ -1705,7 +1734,7 @@ def get_non_acm_cluster_indexes():
 
 def get_all_acm_indexes():
     """
-    Get indexes fro all ACM clusters
+    Get indexes from all ACM clusters
     This is more relevant in case of MDR scenario
 
     Returns:
@@ -1745,6 +1774,23 @@ def is_recovery_cluster(cluster):
 
     """
     return cluster.MULTICLUSTER.get("recovery_cluster")
+
+
+def get_all_acm_and_recovery_indexes():
+    """
+    Get indexes from all ACM  and Recovery clusters
+
+    Returns:
+        list: List of all ACM and Recovery cluster indexes
+
+    """
+    acm_recovery_indexes = []
+    for cluster in ocsci_config.clusters:
+        if cluster.MULTICLUSTER["acm_cluster"] or cluster.MULTICLUSTER.get(
+            "recovery_cluster"
+        ):
+            acm_recovery_indexes.append(cluster.MULTICLUSTER["multicluster_index"])
+    return acm_recovery_indexes
 
 
 def enable_mco_console_plugin():
@@ -2100,7 +2146,16 @@ def get_expected_nb_db_psql_version():
         )
 
     try:
-        psql_image = nb_cr_obj.data["spec"]["dbImage"]
+        odf_full_version = version.get_semantic_running_odf_version()
+        # we need to support the version for Konflux builds as well
+        version_for_konflux_noobaa_db_pg_cluster = "4.19.0-15"
+        semantic_version_for_konflux_noobaa_db_pg_cluster = (
+            version.get_semantic_version(version_for_konflux_noobaa_db_pg_cluster)
+        )
+        if odf_full_version >= semantic_version_for_konflux_noobaa_db_pg_cluster:
+            psql_image = nb_cr_obj.data["spec"]["dbSpec"]["image"]
+        else:
+            psql_image = nb_cr_obj.data["spec"]["dbImage"]
         re_match = re.search(r"postgresql-(\d+(\.\d+)*)", psql_image)
         return re_match.group(1)
     except Exception as e:

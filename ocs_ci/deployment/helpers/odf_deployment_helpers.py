@@ -57,3 +57,32 @@ def set_ceph_config(entity, config_name, value):
     cmd = f"ceph config set {entity} {config_name} {value}"
     toolbox = get_ceph_tools_pod()
     toolbox.exec_ceph_cmd(cmd)
+
+
+def is_storage_system_needed():
+    """
+    Checks whether creation of storage system is needed or not
+
+    Returns:
+        bool: True if storage system is need, otherwise False
+
+    """
+    storage_system_needed = True
+    odf_full_version = version.get_semantic_running_odf_version()
+    # Build 4.19.0-59 is stable build where we can create storage system ( normal flow )
+    version_for_storage_system = "4.19.0-59"
+    semantic_version_for_storage_system = version.get_semantic_version(
+        version_for_storage_system
+    )
+
+    # we need to support the version for Konflux builds as well
+    version_for_konflux_noobaa_db_pg_cluster = "4.19.0-15"
+    semantic_version_for_konflux_noobaa_db_pg_cluster = version.get_semantic_version(
+        version_for_konflux_noobaa_db_pg_cluster
+    )
+
+    if odf_full_version == semantic_version_for_storage_system:
+        logger.debug("Storage system is needed")
+    elif odf_full_version >= semantic_version_for_konflux_noobaa_db_pg_cluster:
+        storage_system_needed = False
+    return storage_system_needed

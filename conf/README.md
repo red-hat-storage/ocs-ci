@@ -45,6 +45,8 @@ run it belongs here.
 * `cluster_dir_full_path` - cluster dir full path on NFS share starting with `/mnt/`
 * `run_id` - Timestamp ID that is used for log directory naming
 * `kubeconfig_location` - Filepath (under the cluster path) where the kubeconfig is located
+* `kubeadmin_password` - kubeadmin password used as alternative way to login to the OCP cluster if kubeconfig is not available
+* `ocp_url` - OCP Cluster URL (api or console) used to login to OCP cluster if kubeconfig is not available
 * `cli_params` - Dict that holds onto all CLI parameters
 * `client_version` - OCP client version
 * `bin_dir` - Directory where binaries are downloaded to
@@ -197,6 +199,7 @@ Reporting related config. (Do not store secret data in the repository!).
   exporting env variable: export SAVE_MEM_REPORT=true
 * `max_mg_fail_attempts` - Maximum attempts to run MG commands to prevent
   spending time on MG which is timeouting.
+* `rp_additional_info` - any additional information placed to Report Portal launch description
 
 #### ENV_DATA
 
@@ -371,6 +374,7 @@ higher priority).
 * `workaround_mark_disks_as_ssd` - WORKAROUND: mark disks as SSD (not rotational - `0` in `/sys/block/*d*/queue/rotational`)
 * `node_labels` - Comma-separated labels to be applied to the nodes in the cluster, e.g. 'cluster.ocs.openshift.io/openshift-storage="",node-role.kubernetes.io/infra=""', default - empty string
 * `use_config_file` - If set to true the external-cluster-details-exporter python script will use a config file to setup the external cluster.
+* `configure_acm_to_import_mce` - If set to true while installing ACM, the configuration to discover and import MCE clusters will be done
 
 #### UPGRADE
 

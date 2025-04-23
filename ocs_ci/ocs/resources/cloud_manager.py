@@ -40,7 +40,15 @@ class CloudManager(ABC):
 
     """
 
-    def __init__(self):
+    def __init__(self, obc_obj=None):
+        """
+        Constructor for the CloudManager class
+
+        Args:
+            obc_obj (OBC): For RGW, we can pass the OBC object
+                           of RGW bucket
+
+        """
         cloud_map = {
             "AWS_STS": AwsSTSClient,
             "AWS": S3Client,
@@ -91,7 +99,14 @@ class CloudManager(ABC):
 
         try:
             rgw_conn = RGW()
-            endpoint, access_key, secret_key = rgw_conn.get_credentials()
+            if obc_obj:
+                endpoint, access_key, secret_key = (
+                    obc_obj.s3_external_endpoint,
+                    obc_obj.access_key_id,
+                    obc_obj.access_key,
+                )
+            else:
+                endpoint, access_key, secret_key = rgw_conn.get_credentials()
             cred_dict["RGW"] = {
                 "SECRET_PREFIX": "RGW",
                 "DATA_PREFIX": "AWS",

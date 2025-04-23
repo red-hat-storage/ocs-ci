@@ -93,6 +93,7 @@ jira = pytest.mark.jira
 acm_import = pytest.mark.acm_import
 rdr = pytest.mark.rdr
 mdr = pytest.mark.mdr
+resiliency = pytest.mark.resiliency
 
 tier_marks = [
     tier1,
@@ -111,6 +112,7 @@ tier_marks = [
     scale_long_run,
     scale_changed_layout,
     workloads,
+    resiliency,
 ]
 
 # upgrade related markers
@@ -214,6 +216,11 @@ skipif_aws_creds_are_missing = pytest.mark.skipif(
 skipif_mcg_only = pytest.mark.skipif(
     config.ENV_DATA["mcg_only_deployment"],
     reason="This test cannot run on MCG-Only deployments",
+)
+
+skipif_fips_enabled = pytest.mark.skipif(
+    config.ENV_DATA.get("fips") == "true",
+    reason="This test cannot run on FIPS enabled cluster",
 )
 
 fips_required = pytest.mark.skipif(
@@ -603,6 +610,11 @@ rdr_ui = pytest.mark.skipif(
     not config.RUN.get("rdr_failover_via_ui")
     or not config.RUN.get("rdr_relocate_via_ui"),
     reason="RDR UI failover or relocate config needed",
+)
+
+dr_hub_recovery = pytest.mark.skipif(
+    config.nclusters != 4,
+    reason="DR hub recovery requires 4th OCP cluster to be available for Passive hub",
 )
 
 # Filter warnings

@@ -17,6 +17,7 @@ from ocs_ci.deployment.helpers.external_cluster_helpers import (
     ExternalCluster,
     get_external_cluster_client,
 )
+from ocs_ci.deployment.helpers.odf_deployment_helpers import is_storage_system_needed
 from ocs_ci.helpers.managed_services import (
     verify_provider_topology,
     get_ocs_osd_deployer_version,
@@ -68,6 +69,7 @@ from ocs_ci.utility.version import (
     get_semantic_version,
     VERSION_4_11,
     get_semantic_ocp_running_version,
+    get_semantic_running_odf_version,
 )
 from ocs_ci.helpers.helpers import (
     get_secret_names,
@@ -172,13 +174,14 @@ def ocs_install_verification(
         version_before_upgrade (float): Set to OCS version before upgrade
 
     """
-    from ocs_ci.ocs.node import get_nodes
+    from ocs_ci.ocs.node import get_nodes, get_all_nodes
     from ocs_ci.ocs.resources.pvc import get_deviceset_pvcs
     from ocs_ci.ocs.resources.pod import get_ceph_tools_pod, get_all_pods
     from ocs_ci.ocs.cluster import validate_cluster_on_pvc
     from ocs_ci.ocs.resources.fips import check_fips_enabled
 
     number_of_worker_nodes = len(get_nodes())
+    total_nodes = len(get_all_nodes())
     namespace = config.ENV_DATA["cluster_namespace"]
     log.info("Verifying OCS installation")
     if config.ENV_DATA.get("disable_components"):
@@ -257,6 +260,30 @@ def ocs_install_verification(
         constants.NOOBAA_ENDPOINT_POD_LABEL: min_eps,
     }
 
+    # From 4.19.0-69, we have noobaa-db-pg-cluster-1 and noobaa-db-pg-cluster-2 pods
+    # 4.19.0-59 is the stable build which contains ONLY noobaa-db-pg-0 pod
+    odf_full_version = get_semantic_running_odf_version()
+    version_without_noobaa_db_pg_cluster = "4.19.0-59"
+    semantic_version_for_without_noobaa_db_pg_cluster = version.get_semantic_version(
+        version_without_noobaa_db_pg_cluster
+    )
+
+    # we need to support the version for Konflux builds as well
+    version_for_konflux_noobaa_db_pg_cluster = "4.19.0-15"
+    semantic_version_for_konflux_noobaa_db_pg_cluster = version.get_semantic_version(
+        version_for_konflux_noobaa_db_pg_cluster
+    )
+
+    if odf_full_version == semantic_version_for_without_noobaa_db_pg_cluster:
+        log.info(f"Noobaa DB label {nb_db_label}")
+    elif odf_full_version >= semantic_version_for_konflux_noobaa_db_pg_cluster:
+        del resources_dict[nb_db_label]
+        resources_dict.update(
+            {
+                constants.NOOBAA_DB_LABEL_419_AND_ABOVE: 2,
+            }
+        )
+
     odf_running_version = get_ocs_version_from_csv(only_major_minor=True)
     if odf_running_version >= version.VERSION_4_19:
         resources_dict.update(
@@ -301,6 +328,21 @@ def ocs_install_verification(
                 constants.EXPORTER_APP_LABEL: exporter_pod_count,
             }
         )
+        if odf_full_version == semantic_version_for_without_noobaa_db_pg_cluster:
+            log.debug(f"Resource dictionary {resources_dict}")
+        elif odf_full_version >= semantic_version_for_konflux_noobaa_db_pg_cluster:
+            del resources_dict[constants.CSI_CEPHFSPLUGIN_PROVISIONER_LABEL]
+            del resources_dict[constants.CSI_RBDPLUGIN_PROVISIONER_LABEL]
+            del resources_dict[constants.CSI_CEPHFSPLUGIN_LABEL]
+            del resources_dict[constants.CSI_RBDPLUGIN_LABEL]
+            resources_dict.update(
+                {
+                    constants.CSI_CEPHFSPLUGIN_PROVISIONER_LABEL_419: 2,
+                    constants.CSI_RBDPLUGIN_PROVISIONER_LABEL_419: 2,
+                    constants.CSI_CEPHFSPLUGIN_LABEL_419: total_nodes,
+                    constants.CSI_RBDPLUGIN_LABEL_419: total_nodes,
+                }
+            )
 
     if config.DEPLOYMENT.get("arbiter_deployment"):
         resources_dict.update(
@@ -491,6 +533,7 @@ def ocs_install_verification(
             sc_cephfs = storage_class.get(
                 resource_name=constants.DEFAULT_STORAGECLASS_CEPHFS
             )
+
     if not disable_blockpools and not provider_cluster:
         if consumer_cluster or client_cluster:
             assert (
@@ -528,14 +571,19 @@ def ocs_install_verification(
                     == rbd_provisioner_secret
                 )
             else:
-                assert (
-                    sc_rbd["parameters"]["csi.storage.k8s.io/node-stage-secret-name"]
-                    == constants.RBD_NODE_SECRET
-                )
-                assert (
-                    sc_rbd["parameters"]["csi.storage.k8s.io/provisioner-secret-name"]
-                    == constants.RBD_PROVISIONER_SECRET
-                )
+                if odf_running_version <= version.VERSION_4_18:
+                    assert (
+                        sc_rbd["parameters"][
+                            "csi.storage.k8s.io/node-stage-secret-name"
+                        ]
+                        == constants.RBD_NODE_SECRET
+                    )
+                    assert (
+                        sc_rbd["parameters"][
+                            "csi.storage.k8s.io/provisioner-secret-name"
+                        ]
+                        == constants.RBD_PROVISIONER_SECRET
+                    )
 
     if not disable_cephfs and not provider_cluster:
         if consumer_cluster or client_cluster:
@@ -568,16 +616,19 @@ def ocs_install_verification(
                     == cephfs_provisioner_secret
                 )
             else:
-                assert (
-                    sc_cephfs["parameters"]["csi.storage.k8s.io/node-stage-secret-name"]
-                    == constants.CEPHFS_NODE_SECRET
-                )
-                assert (
-                    sc_cephfs["parameters"][
-                        "csi.storage.k8s.io/provisioner-secret-name"
-                    ]
-                    == constants.CEPHFS_PROVISIONER_SECRET
-                )
+                if odf_running_version <= version.VERSION_4_18:
+                    assert (
+                        sc_cephfs["parameters"][
+                            "csi.storage.k8s.io/node-stage-secret-name"
+                        ]
+                        == constants.CEPHFS_NODE_SECRET
+                    )
+                    assert (
+                        sc_cephfs["parameters"][
+                            "csi.storage.k8s.io/provisioner-secret-name"
+                        ]
+                        == constants.CEPHFS_PROVISIONER_SECRET
+                    )
 
     log.info("Verified node and provisioner secret names in storage class.")
 
@@ -743,7 +794,11 @@ def ocs_install_verification(
     # Progressing': 'True' state.
 
     if not (fusion_aas or client_cluster):
-        verify_storage_system()
+        if (
+            odf_full_version == semantic_version_for_without_noobaa_db_pg_cluster
+            or odf_running_version < version.VERSION_4_19
+        ):
+            verify_storage_system()
 
     if config.ENV_DATA.get("fips"):
         # In case that fips is enabled when deploying,
@@ -837,18 +892,10 @@ def ocs_install_verification(
         if hci_cluster
         else constants.ROOK_CEPH_OPERATOR
     )
-
-    if ocs_version >= version.VERSION_4_17 and hci_cluster:
-        provisioner_deployment_and_owner_names = {
-            f"{constants.CEPHFS_PROVISIONER}-ctrlplugin": constants.CEPHFS_PROVISIONER,
-            f"{constants.RBD_PROVISIONER}-ctrlplugin": constants.RBD_PROVISIONER,
-        }
-        nodeplugin_daemonset_and_owner_names = {
-            f"{constants.CEPHFS_PROVISIONER}-nodeplugin": constants.CEPHFS_PROVISIONER,
-            f"{constants.RBD_PROVISIONER}-nodeplugin": constants.RBD_PROVISIONER,
-        }
-        csi_owner_kind = constants.DRIVER
-    else:
+    if (
+        odf_full_version == semantic_version_for_without_noobaa_db_pg_cluster
+        or odf_running_version < version.VERSION_4_19
+    ):
         provisioner_deployment_and_owner_names = {
             "csi-cephfsplugin-provisioner": csi_owner_name,
             "csi-rbdplugin-provisioner": csi_owner_name,
@@ -858,6 +905,18 @@ def ocs_install_verification(
             "csi-rbdplugin": csi_owner_name,
         }
         csi_owner_kind = constants.CONFIGMAP if hci_cluster else constants.DEPLOYMENT
+    elif (
+        odf_full_version >= semantic_version_for_konflux_noobaa_db_pg_cluster
+    ) or hci_cluster:
+        provisioner_deployment_and_owner_names = {
+            f"{constants.CEPHFS_PROVISIONER}-ctrlplugin": constants.CEPHFS_PROVISIONER,
+            f"{constants.RBD_PROVISIONER}-ctrlplugin": constants.RBD_PROVISIONER,
+        }
+        nodeplugin_daemonset_and_owner_names = {
+            f"{constants.CEPHFS_PROVISIONER}-nodeplugin": constants.CEPHFS_PROVISIONER,
+            f"{constants.RBD_PROVISIONER}-nodeplugin": constants.RBD_PROVISIONER,
+        }
+        csi_owner_kind = constants.DRIVER
     deployment_kind = OCP(kind=constants.DEPLOYMENT, namespace=namespace)
     daemonset_kind = OCP(kind=constants.DAEMONSET, namespace=namespace)
     for (
@@ -889,6 +948,31 @@ def ocs_install_verification(
             owner_references[0].get("name") == csi_owner_name
         ), f"Owner reference of {constants.DAEMONSET} {plugin_name} is not {csi_owner_name} {csi_owner_kind}"
     log.info("Verified the ownerReferences CSI plugin daemonsets")
+    log.info("Verifying the providerAPIServerServiceType setting in StorageCluster")
+    sc_obj = get_storage_cluster()
+    if sc_obj.get().get("items")[0].get("spec").get("hostNetwork"):
+        assert (
+            sc_obj.get().get("items")[0].get("spec").get("providerAPIServerServiceType")
+            == constants.SERVICE_TYPE_NODEPORT
+        ), f"Provider API server service type is not {constants.SERVICE_TYPE_NODEPORT}"
+    log.info("Verified the providerAPIServerServiceType setting in StorageCluster")
+    log.info("Verifying the csi driver ownership")
+    csi_driver_list = [constants.RBD_PROVISIONER, constants.CEPHFS_PROVISIONER]
+    if odf_running_version >= version.VERSION_4_19 or hci_cluster:
+        csi_driver_obj = OCP(kind=constants.DRIVER, namespace=namespace)
+        for driver in csi_driver_list:
+            csi_driver = csi_driver_obj.get(resource_name=driver)
+            owner_references = csi_driver["metadata"].get("ownerReferences")
+            assert (
+                len(owner_references) == 1
+            ), f"Found more than 1 or none owner reference for {driver} driver"
+            assert (
+                owner_references[0].get("kind") == constants.CONFIGMAP
+            ), f"Owner reference of {driver} driver is not of kind ConfigMap"
+            assert (
+                owner_references[0].get("name") == constants.CLIENT_OPERATOR_CONFIGMAP
+            ), f"Owner reference of {driver} driver is not {constants.CLIENT_OPERATOR_CONFIGMAP}"
+    log.info("Verified the ownerReferences for CSI drivers")
 
 
 def mcg_only_install_verification(ocs_registry_image=None):
@@ -902,7 +986,8 @@ def mcg_only_install_verification(ocs_registry_image=None):
     """
     log.info("Verifying MCG Only installation")
     basic_verification(ocs_registry_image)
-    verify_storage_system()
+    if is_storage_system_needed():
+        verify_storage_system()
     verify_backing_store()
     verify_mcg_only_pods()
 
@@ -1315,17 +1400,22 @@ def verify_max_openshift_version():
     )
 
 
-def verify_backing_store():
+def verify_backing_store(backingstore_name=None):
     """
     Verify backingstore
     """
-    log.info("Verifying backingstore")
+    backingstore_name = backingstore_name or ""
+    log.info(f"Verifying backingstore {backingstore_name}")
+
     backingstore_obj = OCP(
         kind="backingstore", namespace=config.ENV_DATA["cluster_namespace"]
     )
     # backingstore creation will take time, so keeping timeout as 600
     assert backingstore_obj.wait_for_resource(
-        condition=constants.STATUS_READY, column="PHASE", timeout=600
+        condition=constants.STATUS_READY,
+        resource_name=backingstore_name,
+        column="PHASE",
+        timeout=600,
     )
 
 
@@ -1348,6 +1438,17 @@ def verify_mcg_only_pods():
         constants.ODF_OPERATOR_CONTROL_MANAGER_LABEL: 1,
         constants.OPERATOR_LABEL: 1,
     }
+    odf_running_version = get_ocs_version_from_csv(only_major_minor=True)
+    if odf_running_version >= version.VERSION_4_19:
+        del resources_dict[constants.CSI_ADDONS_CONTROLLER_MANAGER_LABEL]
+        del resources_dict[constants.NOOBAA_DB_LABEL_47_AND_ABOVE]
+        del resources_dict[constants.OPERATOR_LABEL]
+        resources_dict.update(
+            {
+                constants.NOOBAA_DB_LABEL_419_AND_ABOVE: 2,
+                constants.NOOBAA_CNPG_POD_LABEL: 1,
+            }
+        )
     if config.ENV_DATA.get("noobaa_external_pgsql"):
         del resources_dict[constants.NOOBAA_DB_LABEL_47_AND_ABOVE]
     if config.ENV_DATA["platform"].lower() == constants.VSPHERE_PLATFORM:
@@ -2288,9 +2389,9 @@ def verify_consumer_resources():
     ocs_version = version.get_semantic_ocs_version_from_config()
 
     # Verify the default Storageclassclaims
-    if ocs_version >= version.VERSION_4_11:
+    if version.VERSION_4_16 <= ocs_version < version.VERSION_4_19:
         storage_class_claim = OCP(
-            kind=constants.STORAGECLASSCLAIM,
+            kind=constants.STORAGECLAIM,
             namespace=config.ENV_DATA["cluster_namespace"],
         )
         for sc_claim in [
@@ -2370,7 +2471,7 @@ def verify_managed_secrets():
 def verify_provider_storagecluster(sc_data):
     """
     Verify that storagecluster of the provider passes the following checks:
-    1. allowRemoteStorageConsumers: true
+    1. allowRemoteStorageConsumers: true (for ODF versions lesser than 4.19)
     2. hostNetwork: true
     3. matchExpressions:
     key: node-role.kubernetes.io/worker
@@ -2385,10 +2486,12 @@ def verify_provider_storagecluster(sc_data):
     Args:
         sc_data (dict): storagecluster data dictionary
     """
-    log.info(
-        f"allowRemoteStorageConsumers: {sc_data['spec']['allowRemoteStorageConsumers']}"
-    )
-    assert sc_data["spec"]["allowRemoteStorageConsumers"]
+    if version.get_semantic_ocs_version_from_config() < version.VERSION_4_19:
+        log.info(
+            f"allowRemoteStorageConsumers: {sc_data['spec']['allowRemoteStorageConsumers']}"
+        )
+        assert sc_data["spec"]["allowRemoteStorageConsumers"]
+
     log.info(f"hostNetwork: {sc_data['spec']['hostNetwork']}")
     assert sc_data["spec"]["hostNetwork"]
     expressions = sc_data["spec"]["labelSelector"]["matchExpressions"]

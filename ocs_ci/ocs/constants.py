@@ -92,6 +92,7 @@ MANIFESTS_DIR = "manifests"
 PROVIDER_CLIENT_DEPLOYMENT_DIR = os.path.join(
     TEMPLATE_DIR, "provider-client-deployment"
 )
+RESILIENCY_DIR = os.path.join(TOP_DIR, "ocs_ci", "resiliency")
 
 # OCP Deployment constants
 CHRONY_TEMPLATE = os.path.join(
@@ -215,7 +216,9 @@ VOLUME_REPLICATION_GROUP = "VolumeReplicationGroup"
 RECLAIMSPACECRONJOB = "reclaimspacecronjob"
 LVMCLUSTER = "odf-lvmcluster"
 LVMSCLUSTER = "lvmscluster"
+# Deprecated in favour of StorageClaim starting from 4.16
 STORAGECLASSCLAIM = "StorageClassClaim"
+# Deprecated and data moved to StorageClient starting from 4.19
 STORAGECLAIM = "StorageClaim"
 STORAGECONSUMER = "StorageConsumer"
 MACHINEHEALTHCHECK = "machinehealthcheck"
@@ -252,6 +255,13 @@ ENCRYPTIONKEYROTATIONCRONJOB = "encryptionkeyrotationcronjobs.csiaddons.openshif
 ENCRYPTIONKEYROTATIONJOB = "encryptionkeyrotationjobs.csiaddons.openshift.io"
 DEFAULT_CEPH_DEVICECLASS = "defaultCephDeviceClass"
 CRD_KIND = "CustomResourceDefinition"
+# ClientProfileSpec defines the desired state of Ceph CSI
+# configuration for volumes and snapshots configured to use
+# this profile
+CLIENT_PROFILE = "ClientProfile"
+OCS_OPERATOR_CONFIG_MAP = "ocs-operator-config"
+SERVICE_TYPE_NODEPORT = "NodePort"
+CLUSTERMANAGEMENTADDON = "ClusterManagementAddOn"
 
 # Provisioners
 AWS_EFS_PROVISIONER = "openshift.org/aws-efs"
@@ -348,6 +358,9 @@ PROVIDER_MODE_STORAGE_CLASS_CLAIM_CEPHFS = os.path.join(
 PROVIDER_MODE_STORAGE_CLASS_CLAIM_RBD = os.path.join(
     PROVIDER_MODE_OCS_DEPLOYMENT_PATH, "storage_class_claim_rbd.yaml"
 )
+CLIENT_PROFILE_PATH = os.path.join(
+    PROVIDER_MODE_OCS_DEPLOYMENT_PATH, "client_profile.yaml"
+)
 
 MACHINE_CONFIG_YAML = os.path.join(
     PROVIDER_MODE_OCS_DEPLOYMENT_PATH,
@@ -355,6 +368,9 @@ MACHINE_CONFIG_YAML = os.path.join(
 )
 OCS_STORAGE_CLUSTER_YAML = os.path.join(
     PROVIDER_MODE_OCS_DEPLOYMENT_PATH, "ocs_storagecluster.yaml"
+)
+OCS_STORAGE_CLUSTER_CONVERGED_YAML = os.path.join(
+    PROVIDER_MODE_OCS_DEPLOYMENT_PATH, "ocs_storagecluster_converged.yaml"
 )
 OCS_STORAGE_CLUSTER_UPDATED_YAML = os.path.join(
     PROVIDER_MODE_OCS_DEPLOYMENT_PATH, "ocs_storagecluster_updated.yaml"
@@ -374,6 +390,10 @@ STORAGE_CLIENT_SUBSCRIPTION_YAML = os.path.join(
 NATIVE_STORAGE_CLIENT_YAML = os.path.join(
     PROVIDER_CLIENT_DEPLOYMENT_DIR, "native_storage_client.yaml"
 )
+STORAGE_CONSUMER_YAML = os.path.join(
+    PROVIDER_MODE_OCS_DEPLOYMENT_PATH, "storage_consumer.yaml"
+)
+
 
 PROVIDER_CLUSTER_RESOURCE_KINDS = [
     "cephblockpoolradosnamespaces",
@@ -511,7 +531,6 @@ DEFAULT_VOLUMESNAPSHOTCLASS_RBD_MS_PC = f"{DEFAULT_CLUSTERNAME}-ceph-rbd"
 
 # hyperconverged defaults
 HYPERCONVERGED_NAMESPACE = "kubevirt-hyperconverged"
-# MCE_NAMESPACE_YAML = os.path.join(TEMPLATE_DEPLOYMENT_DIR_MCE, "mce_namespace.yaml")
 TEMPLATE_DEPLOYMENT_DIR_HYPERCONVERGED = os.path.join(
     TEMPLATE_DIR, "hyperconverged-deployment"
 )
@@ -618,6 +637,14 @@ CSI_CEPHFSPLUGIN_PROVISIONER_LABEL = "app=csi-cephfsplugin-provisioner"
 CSI_RBDPLUGIN_PROVISIONER_LABEL = "app=csi-rbdplugin-provisioner"
 CSI_CEPHFSPLUGIN_LABEL = "app=csi-cephfsplugin"
 CSI_RBDPLUGIN_LABEL = "app=csi-rbdplugin"
+CSI_CEPHFSPLUGIN_PROVISIONER_LABEL_419 = (
+    "app=openshift-storage.cephfs.csi.ceph.com-ctrlplugin"
+)
+CSI_RBDPLUGIN_PROVISIONER_LABEL_419 = (
+    "app=openshift-storage.rbd.csi.ceph.com-ctrlplugin"
+)
+CSI_CEPHFSPLUGIN_LABEL_419 = "app=openshift-storage.cephfs.csi.ceph.com-nodeplugin"
+CSI_RBDPLUGIN_LABEL_419 = "app=openshift-storage.rbd.csi.ceph.com-nodeplugin"
 OCS_OPERATOR_LABEL = "name=ocs-operator"
 ODF_OPERATOR_CONTROL_MANAGER_LABEL = "app.kubernetes.io/name=odf-operator"
 ROOK_CEPH_DRAIN_CANARY = "rook-ceph-drain-canary"
@@ -628,6 +655,7 @@ NOOBAA_CORE_POD_LABEL = "noobaa-core=noobaa"
 NOOBAA_OPERATOR_POD_LABEL = "noobaa-operator=deployment"
 NOOBAA_DB_LABEL_46_AND_UNDER = "noobaa-db=noobaa"
 NOOBAA_DB_LABEL_47_AND_ABOVE = "noobaa-db=postgres"
+NOOBAA_DB_LABEL_419_AND_ABOVE = "cnpg.io/cluster=noobaa-db-pg-cluster"
 NOOBAA_ENDPOINT_POD_LABEL = "noobaa-s3=noobaa"
 NOOBAA_DEFAULT_BACKINGSTORE_LABEL = "pool=noobaa-default-backing-store"
 NOOBAA_CNPG_POD_LABEL = "app.kubernetes.io/name=cloudnative-pg"
@@ -679,6 +707,9 @@ NOOBAA_CORE_POD = "noobaa-core-0"
 # Noobaa db secret
 NOOBAA_DB_SECRET = "noobaa-db"
 NOOBAA_S3_SERVING_CERT = "noobaa-s3-serving-cert"
+
+# NooBaa DB CNPG
+NB_DB_PRIMARY_POD_LABEL = "cnpg.io/instanceRole=primary"
 
 # Auth Yaml
 OCSCI_DATA_BUCKET = "ocs-ci-data"
@@ -1274,6 +1305,9 @@ BACKUP_SCHEDULE_YAML = os.path.join(TEMPLATE_MULTICLUSTER_DIR, "backupschedule.y
 KLUSTERLET_CONFIG_YAML = os.path.join(
     TEMPLATE_MULTICLUSTER_DIR, "klusterlet_config.yaml"
 )
+KLUSTERLET_CONFIG_MCE_IMPORT_YAML = os.path.join(
+    TEMPLATE_MULTICLUSTER_DIR, "klusterlet_config_mce_import.yaml"
+)
 MDR_BACKUP_SCHEDULE_RESOURCE = "schedule-acm"
 ACM_POLICY_COMPLIANT = "Compliant"
 ACM_POLICY_NONCOMPLIANT = "NonCompliant"
@@ -1863,6 +1897,7 @@ OSD_PDB = "rook-ceph-osd"
 MON_PDB = "rook-ceph-mon-pdb"
 MGR_PDB = "rook-ceph-mgr-pdb"
 RGW_PDB = "rook-ceph-rgw-ocs-storagecluster-cephobjectstore"
+NOOBAA_DB_PG_PDB = "noobaa-db-pg-cluster-primary"
 PDB_COUNT = 3
 PDB_COUNT_2_MGR = 4
 PDB_COUNT_ARBITER = 4
@@ -1881,6 +1916,10 @@ RBD_PROVISIONER_SECRET = "rook-csi-rbd-provisioner"
 RBD_NODE_SECRET = "rook-csi-rbd-node"
 CEPHFS_PROVISIONER_SECRET = "rook-csi-cephfs-provisioner"
 CEPHFS_NODE_SECRET = "rook-csi-cephfs-node"
+RBD_PROVISIONER_SECRET_419 = "rbd-provisioner"
+RBD_NODE_SECRET_419 = "rbd-node"
+CEPHFS_PROVISIONER_SECRET_419 = "cephfs-provisioner"
+CEPHFS_NODE_SECRET_419 = "cephfs-node"
 FUSION_AGENT_CONFIG_SECRET = "managed-fusion-agent-config"
 # OSU = ObjectStoreUser, shortened for compliance with flake8+black because of line length issues
 OSU_SECRET_BASE = "rook-ceph-object-user-ocs-{}storagecluster-cephobjectstore-{}-{}"
@@ -2877,6 +2916,9 @@ ACM_CLUSTERSET_LABEL = "cluster.open-cluster-management.io/clusterset"
 ACM_ADDONS_NAMESPACE = "open-cluster-management-agent-addon"
 ACM_HUB_OPERATOR_NAME_WITH_NS = f"{ACM_HUB_OPERATOR_NAME}.{ACM_HUB_NAMESPACE}"
 ACM_MANAGEDCLUSTER_ADDONS = "managedclusteraddons.addon.open-cluster-management.io"
+ACM_ADDON_DEPLOYMENT_CONFIG_YAML = os.path.join(
+    TEMPLATE_DIR, "acm-deployment", "addon_deployment_config.yaml"
+)
 
 # GitOps
 GITOPS_NAMESPACE = "openshift-gitops"
@@ -3237,3 +3279,19 @@ DEVICECLASS_CEPHBLOCKPOOL_YAML = os.path.join(
 DEVICECLASS_STORAGECLASS_YAML = os.path.join(
     MULTIPLE_DEVICECLASSES_DIR, "deviceclass-storageclass.yaml"
 )
+
+
+# NFS
+NFS_NAMESPACE_NAME = "nfs-storage"
+NFS_TEMPLATE_DIR = os.path.join(TEMPLATE_DIR, "nfs")
+NFS_SA_YAML_DIR = os.path.join(NFS_TEMPLATE_DIR, "nfs_sa.yaml")
+NFS_CLUSTER_ROLE_YAML_DIR = os.path.join(NFS_TEMPLATE_DIR, "cluster-role.yaml")
+NFS_CLUSTER_ROLE_BINDING_YAML_DIR = os.path.join(
+    NFS_TEMPLATE_DIR, "cluster-role-binding.yaml"
+)
+NFS_ROLE_YAML_DIR = os.path.join(NFS_TEMPLATE_DIR, "role.yaml")
+NFS_ROLE_BINDING_YAML_DIR = os.path.join(NFS_TEMPLATE_DIR, "role-binding.yaml")
+NFS_DEPLOYMENT_YAML_DIR = os.path.join(NFS_TEMPLATE_DIR, "deployment.yaml")
+NFS_SC_YAML_DIR = os.path.join(NFS_TEMPLATE_DIR, "storageclass.yaml")
+NFS_SCC_NAME = "nfs-client-provisioner"
+NFS_SC_NAME = "nfs-client"
