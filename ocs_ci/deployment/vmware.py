@@ -1148,9 +1148,13 @@ class VSPHEREUPI(VSPHEREBASE):
                 # wait for all nodes to generate CSR
                 # From OCP version 4.4 and above, we have to approve CSR manually
                 # for all the nodes
-                ocp_version = get_ocp_version()
-                if Version.coerce(ocp_version) >= Version.coerce("4.4"):
-                    wait_for_all_nodes_csr_and_approve(timeout=1500, sleep=10)
+                num_nodes = (
+                    config.ENV_DATA["worker_replicas"]
+                    + config.ENV_DATA["master_replicas"]
+                    + config.ENV_DATA.get("infra_replicas", 0)
+                )
+                csr_timeout = 2400 if num_nodes >= 6 else 1500
+                wait_for_all_nodes_csr_and_approve(timeout=csr_timeout, sleep=10)
 
                 # wait for image registry to show-up
                 co = "image-registry"
