@@ -59,7 +59,7 @@ def config_index(request):
 @ignore_leftovers
 @ocp_upgrade
 @purple_squad
-@multicluster_roles(["mdr-all-ocp"])
+@multicluster_roles(["mdr-all-ocp", "rdr-all-ocp"])
 class TestUpgradeOCP(ManageTest):
     """
     1. check cluster health
