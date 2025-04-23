@@ -225,7 +225,9 @@ class BucketNotificationsManager:
         conn_file_name = ""
 
         kafka_conn_config = {
-            "metadata.broker.list": constants.KAFKA_ENDPOINT,
+            "kafka_options_object": {
+                "metadata.broker.list": constants.KAFKA_ENDPOINT,
+            },
             "notification_protocol": "kafka",
             "topic": topic,
             "name": conn_name,

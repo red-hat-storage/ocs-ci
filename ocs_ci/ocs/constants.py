@@ -216,7 +216,9 @@ VOLUME_REPLICATION_GROUP = "VolumeReplicationGroup"
 RECLAIMSPACECRONJOB = "reclaimspacecronjob"
 LVMCLUSTER = "odf-lvmcluster"
 LVMSCLUSTER = "lvmscluster"
+# Deprecated in favour of StorageClaim starting from 4.16
 STORAGECLASSCLAIM = "StorageClassClaim"
+# Deprecated and data moved to StorageClient starting from 4.19
 STORAGECLAIM = "StorageClaim"
 STORAGECONSUMER = "StorageConsumer"
 MACHINEHEALTHCHECK = "machinehealthcheck"
@@ -253,6 +255,13 @@ ENCRYPTIONKEYROTATIONCRONJOB = "encryptionkeyrotationcronjobs.csiaddons.openshif
 ENCRYPTIONKEYROTATIONJOB = "encryptionkeyrotationjobs.csiaddons.openshift.io"
 DEFAULT_CEPH_DEVICECLASS = "defaultCephDeviceClass"
 CRD_KIND = "CustomResourceDefinition"
+# ClientProfileSpec defines the desired state of Ceph CSI
+# configuration for volumes and snapshots configured to use
+# this profile
+CLIENT_PROFILE = "ClientProfile"
+OCS_OPERATOR_CONFIG_MAP = "ocs-operator-config"
+SERVICE_TYPE_NODEPORT = "NodePort"
+CLUSTERMANAGEMENTADDON = "ClusterManagementAddOn"
 
 # Provisioners
 AWS_EFS_PROVISIONER = "openshift.org/aws-efs"
@@ -349,6 +358,9 @@ PROVIDER_MODE_STORAGE_CLASS_CLAIM_CEPHFS = os.path.join(
 PROVIDER_MODE_STORAGE_CLASS_CLAIM_RBD = os.path.join(
     PROVIDER_MODE_OCS_DEPLOYMENT_PATH, "storage_class_claim_rbd.yaml"
 )
+CLIENT_PROFILE_PATH = os.path.join(
+    PROVIDER_MODE_OCS_DEPLOYMENT_PATH, "client_profile.yaml"
+)
 
 MACHINE_CONFIG_YAML = os.path.join(
     PROVIDER_MODE_OCS_DEPLOYMENT_PATH,
@@ -356,6 +368,9 @@ MACHINE_CONFIG_YAML = os.path.join(
 )
 OCS_STORAGE_CLUSTER_YAML = os.path.join(
     PROVIDER_MODE_OCS_DEPLOYMENT_PATH, "ocs_storagecluster.yaml"
+)
+OCS_STORAGE_CLUSTER_CONVERGED_YAML = os.path.join(
+    PROVIDER_MODE_OCS_DEPLOYMENT_PATH, "ocs_storagecluster_converged.yaml"
 )
 OCS_STORAGE_CLUSTER_UPDATED_YAML = os.path.join(
     PROVIDER_MODE_OCS_DEPLOYMENT_PATH, "ocs_storagecluster_updated.yaml"
@@ -375,6 +390,10 @@ STORAGE_CLIENT_SUBSCRIPTION_YAML = os.path.join(
 NATIVE_STORAGE_CLIENT_YAML = os.path.join(
     PROVIDER_CLIENT_DEPLOYMENT_DIR, "native_storage_client.yaml"
 )
+STORAGE_CONSUMER_YAML = os.path.join(
+    PROVIDER_MODE_OCS_DEPLOYMENT_PATH, "storage_consumer.yaml"
+)
+
 
 PROVIDER_CLUSTER_RESOURCE_KINDS = [
     "cephblockpoolradosnamespaces",
@@ -512,7 +531,6 @@ DEFAULT_VOLUMESNAPSHOTCLASS_RBD_MS_PC = f"{DEFAULT_CLUSTERNAME}-ceph-rbd"
 
 # hyperconverged defaults
 HYPERCONVERGED_NAMESPACE = "kubevirt-hyperconverged"
-# MCE_NAMESPACE_YAML = os.path.join(TEMPLATE_DEPLOYMENT_DIR_MCE, "mce_namespace.yaml")
 TEMPLATE_DEPLOYMENT_DIR_HYPERCONVERGED = os.path.join(
     TEMPLATE_DIR, "hyperconverged-deployment"
 )
@@ -1286,6 +1304,9 @@ MULTICLUSTER_ENGINE = "multiclusterengine"
 BACKUP_SCHEDULE_YAML = os.path.join(TEMPLATE_MULTICLUSTER_DIR, "backupschedule.yaml")
 KLUSTERLET_CONFIG_YAML = os.path.join(
     TEMPLATE_MULTICLUSTER_DIR, "klusterlet_config.yaml"
+)
+KLUSTERLET_CONFIG_MCE_IMPORT_YAML = os.path.join(
+    TEMPLATE_MULTICLUSTER_DIR, "klusterlet_config_mce_import.yaml"
 )
 MDR_BACKUP_SCHEDULE_RESOURCE = "schedule-acm"
 ACM_POLICY_COMPLIANT = "Compliant"
@@ -2895,6 +2916,9 @@ ACM_CLUSTERSET_LABEL = "cluster.open-cluster-management.io/clusterset"
 ACM_ADDONS_NAMESPACE = "open-cluster-management-agent-addon"
 ACM_HUB_OPERATOR_NAME_WITH_NS = f"{ACM_HUB_OPERATOR_NAME}.{ACM_HUB_NAMESPACE}"
 ACM_MANAGEDCLUSTER_ADDONS = "managedclusteraddons.addon.open-cluster-management.io"
+ACM_ADDON_DEPLOYMENT_CONFIG_YAML = os.path.join(
+    TEMPLATE_DIR, "acm-deployment", "addon_deployment_config.yaml"
+)
 
 # GitOps
 GITOPS_NAMESPACE = "openshift-gitops"
@@ -3255,3 +3279,19 @@ DEVICECLASS_CEPHBLOCKPOOL_YAML = os.path.join(
 DEVICECLASS_STORAGECLASS_YAML = os.path.join(
     MULTIPLE_DEVICECLASSES_DIR, "deviceclass-storageclass.yaml"
 )
+
+
+# NFS
+NFS_NAMESPACE_NAME = "nfs-storage"
+NFS_TEMPLATE_DIR = os.path.join(TEMPLATE_DIR, "nfs")
+NFS_SA_YAML_DIR = os.path.join(NFS_TEMPLATE_DIR, "nfs_sa.yaml")
+NFS_CLUSTER_ROLE_YAML_DIR = os.path.join(NFS_TEMPLATE_DIR, "cluster-role.yaml")
+NFS_CLUSTER_ROLE_BINDING_YAML_DIR = os.path.join(
+    NFS_TEMPLATE_DIR, "cluster-role-binding.yaml"
+)
+NFS_ROLE_YAML_DIR = os.path.join(NFS_TEMPLATE_DIR, "role.yaml")
+NFS_ROLE_BINDING_YAML_DIR = os.path.join(NFS_TEMPLATE_DIR, "role-binding.yaml")
+NFS_DEPLOYMENT_YAML_DIR = os.path.join(NFS_TEMPLATE_DIR, "deployment.yaml")
+NFS_SC_YAML_DIR = os.path.join(NFS_TEMPLATE_DIR, "storageclass.yaml")
+NFS_SCC_NAME = "nfs-client-provisioner"
+NFS_SC_NAME = "nfs-client"

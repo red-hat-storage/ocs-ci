@@ -52,7 +52,6 @@ from ocs_ci.ocs.exceptions import (
     TagNotFoundException,
     TimeoutException,
     TimeoutExpiredError,
-    UnavailableBuildException,
     UnexpectedImage,
     UnknownCloneTypeException,
     UnsupportedOSType,
@@ -519,7 +518,9 @@ def run_cmd_interactive(
         InteractivePromptException: in case something goes wrong
 
     """
-    child = pexpect.spawn(cmd)
+    env = os.environ.copy()
+    env["KUBECONFIG"] = config.RUN.get("kubeconfig")
+    child = pexpect.spawn(cmd, env=env)
     for prompt, answer in prompts_answers.items():
         if child.expect(prompt, timeout=timeout):
             if raise_exception:
@@ -643,20 +644,22 @@ def exec_cmd(
         stderr     (str): The standard error (None if not captured).
 
     """
-    masked_cmd = mask_secrets(cmd, secrets)
-    log.info(f"Executing command: {masked_cmd}")
+    _env = kwargs.pop("env", os.environ.copy())
+    kubeconfig_path = config.RUN.get("kubeconfig")
+    if kubeconfig_path:
+        _env["KUBECONFIG"] = kubeconfig_path
+    if cluster_config:
+        kubeconfig_path = cluster_config.RUN.get("kubeconfig")
+        if kubeconfig_path:
+            _env["KUBECONFIG"] = cluster_config.RUN.get("kubeconfig")
     if isinstance(cmd, str) and not kwargs.get("shell"):
         cmd = shlex.split(cmd)
-    if config.RUN.get("custom_kubeconfig_location") and cmd[0] == "oc":
-        if "--kubeconfig" in cmd:
-            cmd.pop(2)
-            cmd.pop(1)
-        cmd = list_insert_at_position(cmd, 1, ["--kubeconfig"])
-        cmd = list_insert_at_position(
-            cmd, 2, [config.RUN["custom_kubeconfig_location"]]
-        )
-    if cluster_config and cmd[0] == "oc" and "--kubeconfig" not in cmd:
-        kubepath = cluster_config.RUN["kubeconfig"]
+    if (
+        kubeconfig_path
+        and cmd[0] == "oc"
+        and "--kubeconfig" not in cmd
+        and "mirror" not in cmd
+    ):
         kube_index = 1
         # check if we have an oc plugin in the command
         plugin_list = "oc plugin list"
@@ -678,8 +681,10 @@ def exec_cmd(
                 kube_index = 2
                 log.info(f"Found oc plugin {subcmd}")
         cmd = list_insert_at_position(cmd, kube_index, ["--kubeconfig"])
-        cmd = list_insert_at_position(cmd, kube_index + 1, [kubepath])
+        cmd = list_insert_at_position(cmd, kube_index + 1, [kubeconfig_path])
     try:
+        masked_cmd = shlex.join(mask_secrets(cmd, secrets))
+        log.info(f"Executing command: {masked_cmd}")
         if threading_lock and cmd[0] == "oc":
             threading_lock.acquire(timeout=lock_timeout)
         completed_process = subprocess.run(
@@ -688,6 +693,7 @@ def exec_cmd(
             stderr=subprocess.PIPE,
             stdin=subprocess.PIPE,
             timeout=timeout,
+            env=_env,
             **kwargs,
         )
     finally:
@@ -1303,9 +1309,15 @@ def ensure_nightly_build_availability(build_url):
     base_build_url = build_url.rsplit("/", 1)[0] + "/"
     r = requests.get(base_build_url)
     extracting_condition = b"Extracting" in r.content
+    failed_build = b"FAILED.md" in r.content
     if extracting_condition:
         log.info("Build is extracting now, may take up to a minute.")
-    return r.ok and not extracting_condition
+    if failed_build:
+        r = requests.get(base_build_url + "FAILED.md")
+        log.info(
+            f"Nightly build is not properly generated! Failed with reason: {r.content}"
+        )
+    return r.ok and not extracting_condition and not failed_build
 
 
 def get_openshift_mirror_url(file_name, version):
@@ -1321,7 +1333,6 @@ def get_openshift_mirror_url(file_name, version):
 
     Raises:
         UnsupportedOSType: In case the OS type is not supported
-        UnavailableBuildException: In case the build url is not reachable
     """
     target_arch = ""
     rhel_version = ""
@@ -1361,13 +1372,21 @@ def get_openshift_mirror_url(file_name, version):
         os_type=os_type,
     )
     sample = TimeoutSampler(
-        timeout=540,
+        timeout=300,
         sleep=5,
         func=ensure_nightly_build_availability,
         build_url=url,
     )
     if not sample.wait_for_func_status(result=True):
-        raise UnavailableBuildException(f"The build url {url} is not reachable")
+        latest_ga_client_url = (
+            "https://mirror.openshift.com/pub/openshift-v4/x86_64/clients/ocp/"
+            f"stable/openshift-client-{os_type}.tar.gz"
+        )
+        log.error(
+            f"The build url {url} is not reachable, fallback to the latest GA client url: "
+            f"{latest_ga_client_url}"
+        )
+        url = latest_ga_client_url
     return url
 
 
@@ -1623,12 +1642,15 @@ def run_async(command):
         ret, out, err = proc.async_communicate()
     """
     log.info(f"Executing command: {command}")
+    env = os.environ.copy()
+    env["KUBECONFIG"] = config.RUN.get("kubeconfig")
     popen_obj = subprocess.Popen(
         command,
         stdin=subprocess.PIPE,
         stdout=subprocess.PIPE,
         shell=True,
         encoding="utf-8",
+        env=env,
     )
 
     def async_communicate():
@@ -2297,7 +2319,8 @@ def get_running_acm_version():
         string: ACM version
 
     """
-    occmd = "oc get mch multiclusterhub -n open-cluster-management -o json"
+    kubeconfig = config.RUN.get("kubeconfig")
+    occmd = f"oc get --kubeconfig {kubeconfig} mch multiclusterhub -n open-cluster-management -o json"
     jq_cmd = "jq -r .status.currentVersion"
     json_out = subprocess.Popen(shlex.split(occmd), stdout=subprocess.PIPE)
     acm_version = subprocess.Popen(
@@ -2856,16 +2879,17 @@ def clone_repo(
         run_cmd(f"git checkout {to_checkout}", cwd=location)
 
 
-def get_latest_ds_olm_tag(upgrade=False, latest_tag=None):
+def get_latest_ds_olm_tag(upgrade=False, latest_tag=None, stable_upgrade_version=False):
     """
     This function returns latest tag of OCS downstream registry or one before
     latest if upgrade parameter is True
 
     Args:
-        upgrade (str): If True then it returns one version of the build before
+        upgrade (bool): If True then it returns one version of the build before
             the latest.
         latest_tag (str): Tag of the latest build. If not specified
             config.DEPLOYMENT['default_latest_tag'] or 'latest' will be used.
+        stable_upgrade_version (bool): If True then it returns stable upgrade version.
 
     Returns:
         str: latest tag for downstream image from quay registry
@@ -2875,6 +2899,8 @@ def get_latest_ds_olm_tag(upgrade=False, latest_tag=None):
 
     """
     latest_tag = latest_tag or config.DEPLOYMENT.get("default_latest_tag", "latest")
+    if stable_upgrade_version:
+        latest_tag = config.UPGRADE.get("default_latest_stable_upgrade_tag", latest_tag)
     tags = get_ocs_olm_operator_tags()
     latest_image = None
     ocs_version = config.ENV_DATA["ocs_version"]
@@ -3516,6 +3542,8 @@ def get_ocs_version_from_image(image):
             .lstrip("stable-")
             .lstrip("rc-")
             .lstrip("upgrade-")
+            .lstrip("latest-konflux")
+            .lstrip("konflux-upgrade-")
         )
         version = Version.coerce(version)
         return "{major}.{minor}".format(major=version.major, minor=version.minor)
@@ -4997,8 +5025,12 @@ def get_ceph_crashes(toolbox_pod):
         list: List of ceph crash ID's
 
     """
-    ceph_crashes = toolbox_pod.exec_ceph_cmd("ceph crash ls")
-    return [each_crash["crash_id"] for each_crash in ceph_crashes]
+    try:
+        ceph_crashes = toolbox_pod.exec_ceph_cmd("ceph crash ls")
+        return [each_crash["crash_id"] for each_crash in ceph_crashes]
+    except (CommandFailed, subprocess.TimeoutExpired) as ex:
+        log.error(f"Failed to get ceph crash list: {ex}")
+        return []
 
 
 def archive_ceph_crashes(toolbox_pod):

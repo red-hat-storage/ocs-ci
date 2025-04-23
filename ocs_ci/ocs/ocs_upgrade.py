@@ -143,7 +143,12 @@ def verify_image_versions(old_images, upgrade_version, version_before_upgrade):
     total_nodes = len(get_all_nodes())
     verify_pods_upgraded(old_images, selector=constants.OCS_OPERATOR_LABEL)
     verify_pods_upgraded(old_images, selector=constants.OPERATOR_LABEL)
-    default_noobaa_pods = 3
+    # Default noobaa pods
+    # noobaa-db-pg-cluster-1
+    # noobaa-db-pg-cluster-2
+    # noobaa-core-0
+    # noobaa-operator
+    default_noobaa_pods = 4
     noobaa_pods = default_noobaa_pods
     noobaa_pod_obj = get_noobaa_pods()
     if (
@@ -151,11 +156,15 @@ def verify_image_versions(old_images, upgrade_version, version_before_upgrade):
         and config.ENV_DATA["platform"].lower() == constants.VSPHERE_PLATFORM
     ):
         default_noobaa_pods = 4
+        if upgrade_version >= parse_version("4.19"):
+            default_noobaa_pods = 5
     if upgrade_version >= parse_version("4.19"):
         log.info("Increased default noobaa pod count by 1 due to cnpg pod")
         default_noobaa_pods += 1
     for pod in noobaa_pod_obj:
         if "pv-backingstore" in pod.name:
+            default_noobaa_pods += 1
+        if "noobaa-default-backing-store" in pod.name:
             default_noobaa_pods += 1
     if upgrade_version >= parse_version("4.7"):
         noobaa = OCP(kind="noobaa", namespace=config.ENV_DATA["cluster_namespace"])
@@ -917,7 +926,7 @@ def run_ocs_upgrade(
         exec_cmd(cmd)
 
     if (
-        platform == constants.VSPHERE_PLATFORM
+        platform in (constants.VSPHERE_PLATFORM, constants.IBMCLOUD_PLATFORM)
         and upgrade_version_semantic >= version.VERSION_4_19
     ):
         # using try/except to not fail deployments since these values are good to have

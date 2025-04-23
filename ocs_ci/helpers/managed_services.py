@@ -9,6 +9,7 @@ from ocs_ci.helpers.helpers import create_ocs_object_from_kind_and_name, create_
 from ocs_ci.ocs.exceptions import ClusterNotFoundException
 from ocs_ci.ocs.resources import csv
 from ocs_ci.ocs.resources.ocs import OCS
+from ocs_ci.ocs.version import if_version
 from ocs_ci.utility.decorators import switch_to_orig_index_at_last
 from ocs_ci.utility.managedservice import get_storage_provider_endpoint
 from ocs_ci.utility.version import (
@@ -281,7 +282,10 @@ def verify_storageclient(
     assert storageclient["status"]["phase"] == "Connected"
     log.info(f"Storageclient {storageclient_name} is Connected.")
 
-    if verify_sc:
+    if (
+        verify_sc
+        and version.get_semantic_ocs_version_from_config() < version.VERSION_4_19
+    ):
         # Verify storageclassclaims and the presence of storageclasses
         verify_storageclient_storageclass_claims(storageclient_name)
         log.info(
@@ -289,6 +293,7 @@ def verify_storageclient(
         )
 
 
+@if_version("<4.19")
 def get_storageclassclaims_of_storageclient(storageclient_name):
     """
     Get all storageclassclaims associated with a storageclient
@@ -310,6 +315,7 @@ def get_storageclassclaims_of_storageclient(storageclient_name):
     return sc_claim
 
 
+@if_version("<4.19")
 def get_all_storageclassclaims(namespace=None):
     """
     Get all storageclassclaims/storageclaims
@@ -322,16 +328,13 @@ def get_all_storageclassclaims(namespace=None):
     if not namespace:
         namespace = config.ENV_DATA["cluster_namespace"]
 
-    ocs_version = version.get_semantic_ocs_version_from_config()
-    if ocs_version >= version.VERSION_4_16:
-        sc_claim_obj = OCP(kind=constants.STORAGECLAIM, namespace=namespace)
-    else:
-        sc_claim_obj = OCP(kind=constants.STORAGECLASSCLAIM, namespace=namespace)
+    sc_claim_obj = OCP(kind=constants.STORAGECLAIM, namespace=namespace)
     sc_claims_data = sc_claim_obj.get(retry=6, wait=30)["items"]
     log.info(f"storage claims: {sc_claims_data}")
     return [OCS(**claim_data) for claim_data in sc_claims_data]
 
 
+@if_version("<4.19")
 def verify_storageclient_storageclass_claims(storageclient):
     """
     Verify the status of storageclassclaims and the presence of the storageclass associated with the storageclient
@@ -750,7 +753,7 @@ def verify_faas_provider_storagecluster(sc_data):
     """
     Verify provider storagecluster
 
-    1. allowRemoteStorageConsumers: true
+    1. allowRemoteStorageConsumers: true (for ODF versions lesser than 4.19)
     2. hostNetwork: true
     3. matchExpressions:
         key: node-role.kubernetes.io/worker
@@ -768,10 +771,12 @@ def verify_faas_provider_storagecluster(sc_data):
         sc_data (dict): storagecluster data dictionary
 
     """
-    log.info(
-        f"allowRemoteStorageConsumers: {sc_data['spec']['allowRemoteStorageConsumers']}"
-    )
-    assert sc_data["spec"]["allowRemoteStorageConsumers"]
+    if version.get_semantic_ocs_version_from_config() < version.VERSION_4_19:
+        log.info(
+            f"allowRemoteStorageConsumers: {sc_data['spec']['allowRemoteStorageConsumers']}"
+        )
+        assert sc_data["spec"]["allowRemoteStorageConsumers"]
+
     log.info(f"hostNetwork: {sc_data['spec']['hostNetwork']}")
     assert sc_data["spec"]["hostNetwork"]
     expressions = sc_data["spec"]["labelSelector"]["matchExpressions"]

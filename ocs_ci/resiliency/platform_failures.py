@@ -17,9 +17,13 @@ cluster and its workloads under real-world conditions.
 
 import logging
 import random
+import subprocess
 
 from ocs_ci.ocs.platform_nodes import PlatformNodesFactory
+from ocs_ci.resiliency.network_faults import NetworkFaults
 from ocs_ci.ocs.node import get_nodes
+from ocs_ci.ocs import constants
+from ocs_ci.ocs.exceptions import CommandFailed
 
 log = logging.getLogger(__name__)
 
@@ -34,6 +38,7 @@ class PlatformFailures(PlatformNodesFactory):
         "PLATFORM_ZONE_FAILURES": "_run_platform_zone_failure",
         "PLATFORM_NETWORK_FAILURES": "_run_platform_network_failure",
         "PLATFORM_DISK_FAILURES": "_run_platform_disk_failure",
+        "PLATFORM_NETWORK_FAULTS": "_run_simulate_network_faults",
     }
 
     def __init__(self, failure_data):
@@ -110,3 +115,55 @@ class PlatformFailures(PlatformNodesFactory):
             raise NotImplementedError(
                 f"Failure method for '{failure_case}' is not implemented."
             )
+
+    def _run_simulate_network_faults(self):
+        """
+        Simulates network faults across four main scenarios:
+        1. All nodes with all interfaces
+        2. Random subset of nodes with all interfaces
+        """
+        if not self.nodes:
+            log.warning("No base node list provided for network fault simulation.")
+            return
+
+        log.info("Running Failure Case: PLATFORM_NETWORK_FAULTS")
+
+        # Collect all nodes (worker + master)
+        all_nodes = []
+        for node_type in [constants.WORKER_MACHINE, constants.MASTER_MACHINE]:
+            all_nodes.extend(get_nodes(node_type))
+
+        if not all_nodes:
+            log.warning("No nodes found for network fault simulation.")
+            return
+
+        all_interfaces = ["default", "ovn"]
+
+        # Helper to run a fault injection and handle logging
+        def run_fault_simulation(nodes, interfaces, label):
+            node_names = ", ".join(n.name for n in nodes)
+            log.info(
+                f"[{label}] Simulating faults on nodes: [{node_names}] with interfaces: {interfaces}"
+            )
+            try:
+                nf = NetworkFaults(nodes, interface_types=interfaces)
+                nf.run()
+                log.info(f"[{label}] Completed fault simulation.")
+            except (ValueError, CommandFailed, subprocess.TimeoutExpired) as e:
+                log.error(f"[{label}] Error during simulation: {e}")
+
+        # Helper to get a random subset of any list
+        def random_subset(items, min_items=1):
+            if len(items) <= 2:
+                return items
+            count = random.randint(min_items, max(min_items, len(items) // 2))
+            return random.sample(items, count)
+
+        # Scenario 1: All nodes with all interfaces
+        run_fault_simulation(all_nodes, all_interfaces, "All nodes with all interfaces")
+
+        # Scenario 2: Random nodes with all interfaces
+        rand_nodes = random_subset(all_nodes)
+        run_fault_simulation(
+            rand_nodes, all_interfaces, "Random nodes with all interfaces"
+        )

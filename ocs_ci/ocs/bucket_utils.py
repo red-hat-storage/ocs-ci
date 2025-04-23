@@ -13,6 +13,7 @@ from uuid import uuid4
 
 import boto3
 from botocore.handlers import disable_signing
+import botocore.exceptions as boto3exception
 
 from ocs_ci.framework import config
 from ocs_ci.ocs import constants
@@ -1083,7 +1084,7 @@ def check_pv_backingstore_status(
         bool: True if backing store is in the desired state
 
     """
-    kubeconfig = os.getenv("KUBECONFIG")
+    kubeconfig = config.RUN.get("kubeconfig")
     kubeconfig = f"--kubeconfig {kubeconfig}" if kubeconfig else ""
     namespace = namespace or config.ENV_DATA["cluster_namespace"]
 
@@ -1110,7 +1111,7 @@ def check_pv_backingstore_type(
         backingstore_type: type of the backing store
 
     """
-    kubeconfig = os.getenv("KUBECONFIG")
+    kubeconfig = config.RUN.get("kubeconfig")
     kubeconfig = f"--kubeconfig {kubeconfig}" if kubeconfig else ""
     namespace = namespace or config.ENV_DATA["cluster_namespace"]
 
@@ -1303,6 +1304,7 @@ def delete_bucket_policy(s3_obj, bucketname):
     return s3_obj.s3_client.delete_bucket_policy(Bucket=bucketname)
 
 
+@retry(boto3exception.ClientError, tries=4, delay=15)
 def s3_put_object(
     s3_obj, bucketname, object_key, data, content_type="", content_encoding=""
 ):
@@ -1831,6 +1833,24 @@ def s3_head_object(s3_obj, bucketname, object_key, if_match=None):
         )
     else:
         return s3_obj.s3_client.head_object(Bucket=bucketname, Key=object_key)
+
+
+def s3_head_bucket(s3_obj, bucketname):
+    """
+    Boto3 client based head_bucket operation to verify
+    if bucket exists or if there is permission to access
+    the bucket
+
+    Args:
+        s3_obj (MCG/OBC): MCG/OBC object
+        bucketname (str): Name of the bucket
+
+    Returns:
+        dict: head bucket response
+
+    """
+
+    return s3_obj.s3_client.head_bucket(Bucket=bucketname)
 
 
 def s3_list_objects_v1(
@@ -2493,7 +2513,6 @@ def get_nb_bucket_stores(mcg_obj, bucket_name):
     else:
         tiers = [d["tier"] for d in bucket_data["tiering"]["tiers"]]
         for tier in tiers:
-
             # Retry to get the tier data as it might not be available immediately
             retry_send_rpc_query = retry(CommandFailed, tries=5, delay=5, backoff=1)(
                 mcg_obj.send_rpc_query
@@ -3177,7 +3196,6 @@ def verify_objs_deleted_from_objmds(bucket_name, timeout=600, sleep=30):
     """
 
     def _check_objs_deletion():
-
         bucket_id = exec_nb_db_query(
             f"select data->>'_id' as ID from buckets where data->>'name'='{bucket_name}'"
         )[0].strip()

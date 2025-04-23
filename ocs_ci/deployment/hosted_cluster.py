@@ -26,12 +26,16 @@ from ocs_ci.ocs.exceptions import (
     UnexpectedDeploymentConfiguration,
 )
 from ocs_ci.ocs.ocp import OCP
+from ocs_ci.ocs.resources import storage_cluster
 from ocs_ci.ocs.resources.catalog_source import CatalogSource
 from ocs_ci.ocs.resources.csv import check_all_csvs_are_succeeded
 from ocs_ci.ocs.resources.ocs import OCS
 from ocs_ci.ocs.resources.pod import (
     wait_for_pods_to_be_in_statuses_concurrently,
+    wait_for_pods_to_be_running,
 )
+from ocs_ci.ocs.utils import get_pod_name_by_pattern
+from ocs_ci.ocs.version import if_version
 from ocs_ci.utility import templating, version
 from ocs_ci.utility.deployment import get_ocp_ga_version
 from ocs_ci.utility.managedservice import generate_onboarding_token
@@ -40,7 +44,6 @@ from ocs_ci.utility.utils import (
     exec_cmd,
     TimeoutSampler,
 )
-from ocs_ci.utility.version import get_semantic_version
 from ocs_ci.ocs.resources.storage_client import StorageClient
 
 logger = logging.getLogger(__name__)
@@ -117,6 +120,8 @@ class HostedClients(HyperShiftBase):
                 namespace_to_create_storage_client=f"clusters-{cluster_name}"
             )
 
+        self.check_odf_prerequisites()
+
         # stage 4 deploy ODF on all hosted clusters if not already deployed
         for cluster_name in cluster_names:
 
@@ -147,7 +152,7 @@ class HostedClients(HyperShiftBase):
                     hosted_odf.create_catalog_source()
                 odf_installed.append(hosted_odf.odf_client_installed())
 
-        # stage 6 setup storage client on all hosted clusters
+        # stage 6 setup storage client on all hosted clusters and enable UI console plugin
         client_setup_res = []
         hosted_odf_clusters_installed = []
         for cluster_name in cluster_names:
@@ -160,6 +165,10 @@ class HostedClients(HyperShiftBase):
                 client_setup_res.append(client_installed)
                 if client_installed:
                     hosted_odf_clusters_installed.append(hosted_odf)
+                    logger.info("enable client console plugin")
+                    if not hosted_odf.enable_client_console_plugin():
+                        # we may want to skip UI tests for this client in the future, setting config value to skip UI
+                        logger.error("Client console plugin enable failed")
             else:
                 logger.info(
                     f"Storage client installation not requested for cluster '{cluster_name}', "
@@ -185,6 +194,33 @@ class HostedClients(HyperShiftBase):
         ), "Storage client was not set up on all hosted ODF clusters"
 
         return hosted_odf_clusters_installed
+
+    def check_odf_prerequisites(self):
+        """
+        Check prerequisites for ODF installation and Client cluster connection
+        """
+        # Storage Cluster resource of hub cluster should have hostNetwork set to true
+        # If hostNetwork is true, then providerAPIServerServiceType is set to NodePort automatically
+
+        sc = storage_cluster.get_storage_cluster()
+        sc_spec = sc.get()["items"][0]["spec"]
+        if sc_spec.get("hostNetwork"):
+            logger.info(
+                "Storage Cluster resource of hub cluster has hostNetwork set to true"
+            )
+            if sc_spec.get("providerAPIServerServiceType") == "NodePort":
+                logger.info(
+                    "Storage Cluster resource of hub cluster has providerAPIServerServiceType set to NodePort"
+                )
+                return
+            else:
+                raise AssertionError(
+                    "Storage Cluster resource of hub cluster has providerAPIServerServiceType not set to NodePort"
+                )
+        else:
+            raise AssertionError(
+                "Storage Cluster resource of hub cluster has hostNetwork not set to true"
+            )
 
     def config_has_hosted_odf_image(self, cluster_name):
         """
@@ -791,17 +827,19 @@ class HostedODF(HypershiftHostedOCP):
             return False
 
         # starting from ODF 4.16 on StorageClient creation Storage Claims created automatically
+        # StorageClassClaims are deprecated from ODF 4.16 in favor of StorageClaims
+        # StorageClaims are deprecated from ODF 4.19 and data from CR available in StorageClient
+        if version.get_semantic_ocs_version_from_config() < version.VERSION_4_19:
+            if not self.wait_storage_claim_cephfs():
+                logger.error("Storage class claim cephfs does not exist")
+                return False
+
+            logger.info("Verify Storage Class rbd exists")
+            if not self.wait_storage_claim_rbd():
+                logger.error("Storage class claim rbd does not exist")
+                return False
 
         logger.info("Verify Storage Class cephfs exists")
-        if not self.wait_storage_claim_cephfs():
-            logger.error("Storage class claim cephfs does not exist")
-            return False
-
-        logger.info("Verify Storage Class rbd exists")
-        if not self.wait_storage_claim_rbd():
-            logger.error("Storage class claim rbd does not exist")
-            return False
-
         cephfs_storage_class_name = f"{self.storage_client_name}-cephfs"
         if not self.storage_class_exists(cephfs_storage_class_name):
             logger.error(f"cephfs storage class does not exist on cluster {self.name}")
@@ -1205,6 +1243,12 @@ class HostedODF(HypershiftHostedOCP):
         if "latest" in hosted_odf_version:
             hosted_odf_version = hosted_odf_version.split("-")[-1]
 
+        if "konflux" in hosted_odf_version and "-" in hosted_odf_version:
+            version_semantic = version.get_semantic_version(
+                hosted_odf_version.split("-")[0]
+            )
+            hosted_odf_version = f"{version_semantic.major}.{version_semantic.minor}"
+
         subscription_data["spec"]["channel"] = f"stable-{str(hosted_odf_version)}"
 
         subscription_file = tempfile.NamedTemporaryFile(
@@ -1230,6 +1274,7 @@ class HostedODF(HypershiftHostedOCP):
         logger.info(f"Provider address: {storage_provider_endpoint}")
         return storage_provider_endpoint
 
+    @if_version("<4.19")
     def wait_storage_claim_cephfs(self):
         """
         Wait for storage class claim for CephFS to be created
@@ -1246,6 +1291,7 @@ class HostedODF(HypershiftHostedOCP):
                 return True
         return False
 
+    @if_version("<4.19")
     @kubeconfig_exists_decorator
     def storage_claim_exists_cephfs(self):
         """
@@ -1261,13 +1307,6 @@ class HostedODF(HypershiftHostedOCP):
         if "latest" in hosted_odf_version:
             hosted_odf_version = hosted_odf_version.split("-")[-1]
 
-        if get_semantic_version(hosted_odf_version, True) < version.VERSION_4_16:
-            ocp = OCP(
-                kind=constants.STORAGECLASSCLAIM,
-                namespace=self.namespace_client,
-                cluster_kubeconfig=self.cluster_kubeconfig,
-            )
-        else:
             ocp = OCP(
                 kind=constants.STORAGECLAIM,
                 namespace=config.ENV_DATA["cluster_namespace"],
@@ -1285,6 +1324,7 @@ class HostedODF(HypershiftHostedOCP):
             should_exist=True,
         )
 
+    @if_version("<4.19")
     @kubeconfig_exists_decorator
     def create_storage_claim_cephfs(self):
         """
@@ -1317,6 +1357,7 @@ class HostedODF(HypershiftHostedOCP):
 
         return self.storage_claim_exists_cephfs()
 
+    @if_version("<4.19")
     def wait_storage_claim_rbd(self):
         """
         Wait for storage class claim for RBD to be created
@@ -1333,6 +1374,7 @@ class HostedODF(HypershiftHostedOCP):
                 return True
         return False
 
+    @if_version("<4.19")
     @kubeconfig_exists_decorator
     def storage_claim_exists_rbd(self):
         """
@@ -1348,30 +1390,24 @@ class HostedODF(HypershiftHostedOCP):
         if "latest" in hosted_odf_version:
             hosted_odf_version = hosted_odf_version.split("-")[-1]
 
-        if get_semantic_version(hosted_odf_version, True) < version.VERSION_4_16:
-            ocp = OCP(
-                kind=constants.STORAGECLASSCLAIM,
-                namespace=self.namespace_client,
-                cluster_kubeconfig=self.cluster_kubeconfig,
-            )
-        else:
-            ocp = OCP(
-                kind=constants.STORAGECLAIM,
-                namespace=config.ENV_DATA["cluster_namespace"],
-                cluster_kubeconfig=self.cluster_kubeconfig,
-            )
+        ocp_obj = OCP(
+            kind=constants.STORAGECLAIM,
+            namespace=config.ENV_DATA["cluster_namespace"],
+            cluster_kubeconfig=self.cluster_kubeconfig,
+        )
 
         if hasattr(self, "storage_client_name"):
             storage_claim_name = self.storage_client_name + "-ceph-rbd"
         else:
             storage_claim_name = "storage-client-ceph-rbd"
 
-        return ocp.check_resource_existence(
+        return ocp_obj.check_resource_existence(
             timeout=self.timeout_check_resources_exist_sec,
             resource_name=storage_claim_name,
             should_exist=True,
         )
 
+    @if_version("<4.19")
     @kubeconfig_exists_decorator
     def create_storage_claim_rbd(self):
         """
@@ -1461,3 +1497,50 @@ class HostedODF(HypershiftHostedOCP):
             cluster_kubeconfig=self.cluster_kubeconfig,
         )
         return sample.wait_for_func_value(value=True)
+
+    @kubeconfig_exists_decorator
+    def enable_client_console_plugin(self):
+        """
+        Enable the ODF client console plugin by patching the console operator
+
+        Returns:
+            bool: True if the patch is applied successfully, False otherwise
+        """
+        try:
+            self.exec_oc_cmd(
+                "patch console.operator cluster --type json "
+                '-p \'[{"op": "add", "path": "/spec/plugins", "value": ["odf-client-console"]}]\'',
+                timeout=30,
+            )
+            # console pod exist from the start, but we want ensure no crash happened
+            self.wait_console_plugin_pod_running()
+
+            return True
+        except CommandFailed as e:
+            logger.error(f"Failed to enable client console plugin: {e}")
+            return False
+
+    @kubeconfig_exists_decorator
+    def wait_console_plugin_pod_running(self):
+        """
+        Check if the ODF client console plugin pod is running
+
+        Returns:
+            bool: True if the console plugin pod is running, False otherwise
+        """
+        for sample in TimeoutSampler(
+            timeout=300,
+            sleep=10,
+            func=get_pod_name_by_pattern,
+            pattern="ocs-client-operator-console",
+            namespace=self.namespace_client,
+            cluster_kubeconfig=self.cluster_kubeconfig,
+        ):
+            if sample:
+                return wait_for_pods_to_be_running(
+                    pod_names=sample,
+                    timeout=300,
+                    sleep=10,
+                    cluster_kubeconfig=self.cluster_kubeconfig,
+                )
+        return False

@@ -935,7 +935,7 @@ class MCG:
 
         """
 
-        kubeconfig = os.getenv("KUBECONFIG")
+        kubeconfig = config.RUN.get("kubeconfig")
         if kubeconfig:
             kubeconfig = f"--kubeconfig {kubeconfig} "
 

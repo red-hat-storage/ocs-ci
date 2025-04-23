@@ -2357,7 +2357,10 @@ def delete_deployment_pods(pod_obj):
     if pod_data_list:
         for pod_data in pod_data_list:
             if pod_obj.get_labels().get("name") == pod_data.get("metadata").get("name"):
-                deploy_ocp_obj.delete(resource_name=pod_data.get_labels().get("name"))
+                deploy_ocp_obj.delete(resource_name=pod_obj.get_labels().get("name"))
+                deploy_ocp_obj.wait_for_delete(
+                    resource_name=pod_obj.get_labels().get("name")
+                )
 
 
 def wait_for_new_osd_pods_to_come_up(number_of_osd_pods_before):
@@ -2511,6 +2514,10 @@ def get_running_state_pods(
     ocp_pod_obj = OCP(kind=constants.POD, namespace=namespace)
     running_pods_object = list()
     for pod in list_of_pods:
+        # ignoring storageclient-737342087af10580-status-reporter pod
+        ignore_pods = (constants.STATUS_REPORTER,)
+        if any(ipod in pod.name for ipod in ignore_pods):
+            continue
         status = ocp_pod_obj.get_resource(pod.name, "STATUS")
         if "Running" in status:
             running_pods_object.append(pod)
@@ -4112,3 +4119,45 @@ def get_pods_pvcs(pod_objs, namespace=None):
     namespace = namespace or config.ENV_DATA["cluster_namespace"]
     pvc_names = [get_pvc_name(p) for p in pod_objs]
     return get_pvc_objs(pvc_names, namespace)
+
+
+def delete_pod_by_phase(
+    pod_phase,
+    namespace=config.ENV_DATA["cluster_namespace"],
+):
+    """
+    Delete the pods in a specific phase
+    Args:
+        pod_status (str): The pod status to delete
+        namespace (str): Name of cluster namespace(default: config.ENV_DATA["cluster_namespace"])
+    Returns:
+        bool: True, if the pods deleted successfully. False, otherwise
+    """
+    logger.info(f"Delete all the pods in the status '{pod_phase}'")
+    if pod_phase.lower() == "succeeded":
+        phase = "Succeeded"
+    elif pod_phase.lower() == "failed":
+        phase = "Failed"
+    elif pod_phase.lower() == "Pending":
+        phase = "Pending"
+    elif pod_phase.lower() == "running":
+        phase = "Running"
+    else:
+        raise ValueError(
+            f"Invalid pod status '{pod_phase}'. "
+            f"Valid options are 'succeeded' or 'failed'"
+        )
+
+    cmd = f"oc delete pod --field-selector=status.phase={phase} -n {namespace}"
+    logger.info(cmd)
+    try:
+        run_cmd(cmd=cmd)
+    except CommandFailed as ex:
+        logger.warning(
+            f"Failed to delete the pods in the status '{pod_phase}' due to the error: {ex}"
+        )
+        return False
+
+    logger.info(f"All '{pod_phase}' pods deleted successfully.")
+
+    return True

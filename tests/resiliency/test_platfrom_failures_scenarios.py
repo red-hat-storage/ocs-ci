@@ -10,13 +10,6 @@ log = logging.getLogger(__name__)
 
 @green_squad
 @resiliency
-@pytest.mark.parametrize(
-    "failure_case",
-    [
-        "PLATFORM_INSTANCE_FAILURES",
-        "PLATFORM_NETWORK_FAILURES",
-    ],
-)
 class TestPlatformFailureScenarios:
     def _prepare_pvcs_and_workloads(
         self, project_factory, multi_pvc_factory, resiliency_workload
@@ -28,8 +21,8 @@ class TestPlatformFailureScenarios:
             list: List of workload objects
         """
         project = project_factory()
-        size = 5
-        fio_args = {"rw": "randwrite", "bs": "128k", "runtime": 300}
+        size = 10
+        fio_args = {"rw": "randwrite", "bs": "256k", "runtime": 7200}
         interfaces = [constants.CEPHFILESYSTEM, constants.CEPHBLOCKPOOL]
 
         workloads = []
@@ -39,14 +32,14 @@ class TestPlatformFailureScenarios:
             else:
                 access_modes = [
                     f"{constants.ACCESS_MODE_RWO}-Block",
-                    f"{constants.ACCESS_MODE_RWO}-Block",
+                    f"{constants.ACCESS_MODE_RWX}-Block",
                 ]
             pvcs = multi_pvc_factory(
                 interface=interface,
                 project=project,
                 access_modes=access_modes,
                 size=size,
-                num_of_pvc=2,
+                num_of_pvc=4,
             )
             for pvc in pvcs:
                 workload = resiliency_workload("FIO", pvc, fio_args=fio_args)
@@ -66,6 +59,14 @@ class TestPlatformFailureScenarios:
 
         log.info("All workloads passed after failure injection.")
 
+    @pytest.mark.parametrize(
+        "failure_case",
+        [
+            "PLATFORM_INSTANCE_FAILURES",
+            "PLATFORM_NETWORK_FAILURES",
+            "PLATFORM_NETWORK_FAULTS",
+        ],
+    )
     def test_platform_failure_scenarios(
         self,
         failure_case,
@@ -87,6 +88,42 @@ class TestPlatformFailureScenarios:
         workloads = self._prepare_pvcs_and_workloads(
             project_factory, multi_pvc_factory, resiliency_workload
         )
+
+        resiliency_runner = Resiliency(scenario, failure_method=failure_case)
+        resiliency_runner.start()
+        resiliency_runner.cleanup()
+
+        self._validate_and_cleanup_workloads(workloads)
+
+    @pytest.mark.parametrize(
+        "failure_case",
+        [
+            "PLATFORM_INSTANCE_FAILURES",
+            "PLATFORM_NETWORK_FAILURES",
+        ],
+    )
+    def test_platform_failures_with_stress(
+        self,
+        failure_case,
+        platfrom_failure_scenarios,
+        project_factory,
+        multi_pvc_factory,
+        resiliency_workload,
+        run_platform_stress,
+    ):
+        """
+        Validates platform resiliency under stress conditions
+        like high CPU, memory, I/O, and network load.
+        Ensures workloads continue running during failure scenarios.
+        """
+        scenario = platfrom_failure_scenarios.get("SCENARIO_NAME")
+        log.info(f"Running Scenario: {scenario}, Failure Case: {failure_case}")
+
+        workloads = self._prepare_pvcs_and_workloads(
+            project_factory, multi_pvc_factory, resiliency_workload
+        )
+
+        run_platform_stress()
 
         resiliency_runner = Resiliency(scenario, failure_method=failure_case)
         resiliency_runner.start()

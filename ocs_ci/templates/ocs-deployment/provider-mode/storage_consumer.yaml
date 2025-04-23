@@ -1,0 +1,44 @@
+apiVersion: ocs.openshift.io/v1alpha1
+kind: StorageConsumer
+metadata:
+  name: sample-storageconsumer
+spec:
+  enable: true
+  resourceNameMappingConfigMap:
+    name: ""
+  storageClasses: []
+  storageQuotaInGiB: ""
+  volumeGroupSnapshotClasses: []
+  volumeSnapshotClasses: []
+# status:
+#   # Below are the Ceph resources for the storage consumer
+#   cephResources:
+#     - cephClients:
+#         client1: "cephclient1"
+#       kind: cephfs
+#       name: ceph-resource-1
+#       status: created
+#
+#   # Below are the details for the storage client
+#   client:
+#     clientId: "1234-5678"
+#     clusterId: "cluster-01"
+#     clusterName: "openshift-cluster-1"
+#     name: "storageclient-1"
+#     operatorVersion: "v1.0.0"
+#     platformVersion: "v2.1.0"
+#     storageQuotaUtilizationRatio: 0.75
+#
+#   # Last heartbeat received from the storage consumer
+#   lastHeartbeat: "2025-03-27T12:00:00Z"
+#
+#   # Onboarding ticket secret information
+#   onboardingTicketSecret:
+#     name: ticket-secret
+#
+#   # Resource name mapping config map details
+#   resourceNameMappingConfigMap:
+#     name: resource-mapping-config
+#
+#   # Current state of the StorageConsumer
+#   state: Active

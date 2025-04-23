@@ -88,7 +88,4 @@ def cluster_pause():
     args = parser.parse_args()
     cluster_path = os.path.expanduser(args.cluster_path)
     config.ENV_DATA["cluster_path"] = cluster_path
-    os.environ["KUBECONFIG"] = os.path.join(
-        cluster_path, config.RUN["kubeconfig_location"]
-    )
     cycle_nodes(cluster_path, args.action)
