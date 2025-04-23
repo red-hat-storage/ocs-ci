@@ -21,7 +21,6 @@ log = getLogger(__name__)
 
 @tier2
 @brown_squad
-@run_on_all_clients
 @polarion_id("OCS-5792")
 class TestEphemeralPod:
     # This a workaround for any cluster other than multiclent provider mode
