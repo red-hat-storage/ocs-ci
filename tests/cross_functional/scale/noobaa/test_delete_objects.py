@@ -278,8 +278,6 @@ class TestDeleteObjects:
         mcg_obj_session,
         awscli_pod_session,
         test_directory_setup,
-        reduce_expiration_interval,
-        change_lifecycle_schedule_min,
         expiration,
     ):
         """
