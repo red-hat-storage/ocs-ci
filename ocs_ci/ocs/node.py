@@ -6,6 +6,7 @@ from prettytable import PrettyTable
 from collections import defaultdict
 from operator import itemgetter
 import random
+import json
 
 from subprocess import TimeoutExpired
 from semantic_version import Version
@@ -3324,18 +3325,39 @@ def apply_node_affinity_for_noobaa_pod():
         kind=constants.STORAGECLUSTER,
     )
 
-    nodeaffinity = (
-        '{{"noobaa-standalone": {{"nodeAffinity": {{"requiredDuringSchedulingIgnoredDuringExecution": '
-        '{{"nodeSelectorTerms": [{{"matchExpressions": [{{"key": "kubernetes.io/hostname", '
-        '"operator": "Exists"}}]}}]}}}}, '
-        '"tolerations": [{{"effect": "NoExecute", "key": "node-role.kubernetes.io/infra", "value": "reserved"}}, '
-        '{{"effect": "NoSchedule", "key": "node-role.kubernetes.io/infra", "value": "reserved"}}]}}}}'
-    )
+    nodeaffinity = {
+        "noobaa-standalone": {
+            "nodeAffinity": {
+                "requiredDuringSchedulingIgnoredDuringExecution": {
+                    "nodeSelectorTerms": [
+                        {
+                            "matchExpressions": [
+                                {"key": "kubernetes.io/hostname", "operator": "Exists"}
+                            ]
+                        }
+                    ]
+                }
+            },
+            "tolerations": [
+                {
+                    "effect": "NoExecute",
+                    "key": "node-role.kubernetes.io/infra",
+                    "value": "reserved",
+                },
+                {
+                    "effect": "NoSchedule",
+                    "key": "node-role.kubernetes.io/infra",
+                    "value": "reserved",
+                },
+            ],
+        }
+    }
 
-    param = f'{{"spec": {{"placement": {nodeaffinity}}}}}'
+    param = {"spec": {"placement": nodeaffinity}}
 
+    param_str = json.dumps(param)
     try:
-        storagecluster_obj.patch(params=param, format_type="merge")
+        storagecluster_obj.patch(params=param_str, format_type="merge")
         log.info("Successfully applied node affinity")
     except Exception as e:
         log.error(f"Failed to apply patch: {e}")
