@@ -42,5 +42,10 @@ class TestNoobaaPodNodeAffinity:
         request.addfinalizer(finalizer)
 
     def test_tolerations_on_standalone_noobaa(self):
+        """
+        This test verifies whether standalone noobaa toleration is
+        gets added in storagecluster or not.
+        https://bugzilla.redhat.com/show_bug.cgi?id=2260550#c21
+        """
 
-        assert apply_node_affinity_for_noobaa_pod(), "Failed to apply node affinity."
+        assert apply_node_affinity_for_noobaa_pod(), "Failed to apply toleration."
