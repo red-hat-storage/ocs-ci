@@ -2379,23 +2379,19 @@ class Deployment(object):
         pw = pw.decode().replace("quay.io", "quay.io:443").encode()
         quay_token = base64.b64encode(pw).decode()
 
-        # We are removing dependency on process KUBECONFIG env var because of multicluster executions, where
-        # user should always propagate kubeconfig via --kubeconfig in the cmd directly.
-        # If not, it automatically propagates to the oc command, if user uses exec_cmd or run_cmd
-        # functions. It also propagate ENV variable KUBECONFIG, but only to specific command execution
-        # via env variable passed to subprocess functions. For more details see PR: #11122
         logger.info("Setting env vars")
-        env_vars = {
-            "QUAY_TOKEN": quay_token,
-            "COMPOSITE_BUNDLE": "true",
-            "CUSTOM_REGISTRY_REPO": "quay.io:443/acm-d",
-            "DOWNSTREAM": "true",
-            "DEBUG": "true",
-        }
-        for key, value in env_vars.items():
-            if value:
-                os.environ[key] = value
-
+        kubeconfig_location = os.path.join(self.cluster_path, "auth", "kubeconfig")
+        env_vars = os.environ.copy()
+        env_vars.update(
+            {
+                "QUAY_TOKEN": quay_token,
+                "COMPOSITE_BUNDLE": "true",
+                "CUSTOM_REGISTRY_REPO": "quay.io:443/acm-d",
+                "DOWNSTREAM": "true",
+                "DEBUG": "true",
+                "KUBECONFIG": kubeconfig_location,
+            }
+        )
         logger.info("Writing pull-secret")
         _templating = templating.Templating(
             os.path.join(constants.TEMPLATE_DIR, "acm-deployment")
@@ -2433,6 +2429,7 @@ class Deployment(object):
             stdout=PIPE,
             stderr=PIPE,
             encoding="utf-8",
+            env=env_vars,
         )
         stdout, stderr = proc.communicate()
         logger.info(stdout)
