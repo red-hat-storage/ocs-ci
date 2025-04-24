@@ -8047,6 +8047,7 @@ def setup_logwriter_workload(request, teardown_factory):
         Args:
             pvc (PVC): PVC object
             logwriter_path (str): String representing logwriter yaml path
+            zone_aware (boolean): True if workloads are zone aware else False
 
         Returns:
             OCS object: Lgwriter deployment object
@@ -8258,7 +8259,13 @@ def setup_logwriter_rbd_workload(
     """
 
     def factory(zone_aware=True):
+        """
+        Factory function to setup the logwriter rbd workloads
 
+        Args:
+            zone_aware (boolean): True if the workloads are zone aware False otherwise
+
+        """
         logwriter_sts_path = constants.LOGWRITER_STS_PATH
         sts_data = templating.load_yaml(logwriter_sts_path)
         sts_data["metadata"]["namespace"] = setup_stretch_cluster_project.namespace

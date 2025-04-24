@@ -1,6 +1,5 @@
 import logging
 import pytest
-import time
 import random
 
 from ocs_ci.framework.pytest_customization.marks import (
@@ -47,6 +46,8 @@ log = logging.getLogger(__name__)
 @stretchcluster_required
 @turquoise_squad
 class TestZoneUnawareApps:
+
+    nodes_to_shutdown = []
 
     @pytest.fixture()
     def init_sanity(self, request, nodes):
@@ -107,18 +108,25 @@ class TestZoneUnawareApps:
         request.addfinalizer(finalizer)
 
     @pytest.fixture(autouse=True)
-    def unfence_teardown(self, request):
+    def remove_taint_unfence_teardown(self, request):
         """
-        In case of failure in between test run unfence the networkfence
-        and delete the NetworkFence objects
+        In case of failure in between test run, unfence the networkfence,
+        delete the NetworkFence objects and remove the taints
 
         """
 
         def teardown():
-            all_worker_nodes = get_worker_nodes()
-            for node_name in all_worker_nodes:
+
+            fenced_nodes = [node.name for node in self.nodes_to_shutdown]
+            taint_nodes(
+                nodes=fenced_nodes,
+                taint_label=f"{constants.NODE_OUT_OF_SERVICE_TAINT}-",
+            )
+            log.info("Successfully removed taints from the nodes that were shutdown")
+
+            for node_name in fenced_nodes:
                 unfence_node(node_name, delete=True)
-            logger.info("cleaned up all network fence objects if any")
+            logger.info("Cleaned up all network fence objects if any")
 
         request.addfinalizer(teardown)
 
@@ -180,10 +188,10 @@ class TestZoneUnawareApps:
         )
 
         # Shutdown the nodes
-        nodes_to_shutdown = sc_obj.get_nodes_in_zone(zone)
-        nodes.stop_nodes(nodes=nodes_to_shutdown)
+        self.nodes_to_shutdown = sc_obj.get_nodes_in_zone(zone)
+        nodes.stop_nodes(nodes=self.nodes_to_shutdown)
         wait_for_nodes_status(
-            node_names=[node.name for node in nodes_to_shutdown],
+            node_names=[node.name for node in self.nodes_to_shutdown],
             status=constants.NODE_NOT_READY,
             timeout=300,
         )
@@ -195,7 +203,7 @@ class TestZoneUnawareApps:
             log.info(
                 "Since fencing is enabled, we need to fence the nodes after zone shutdown"
             )
-            for node in nodes_to_shutdown:
+            for node in self.nodes_to_shutdown:
 
                 # Ignore the master nodes
                 if node.name not in worker_nodes:
@@ -217,13 +225,9 @@ class TestZoneUnawareApps:
 
             # Taint the nodes that are shutdown
             taint_nodes(
-                nodes=[node.name for node in nodes_to_shutdown],
+                nodes=[node.name for node in self.nodes_to_shutdown],
                 taint_label=constants.NODE_OUT_OF_SERVICE_TAINT,
             )
-
-        # Wait for the buffer time of pod relocation
-        log.info("Wait until the pod relocation buffer time of 10 minutes")
-        time.sleep(600)
 
         # Check if all the pods are running
         log.info(
@@ -270,14 +274,14 @@ class TestZoneUnawareApps:
             log.info(
                 "If fencing was done, then we need to unfence the nodes once the pods are relocated and running"
             )
-            for node in nodes_to_shutdown:
+            for node in self.nodes_to_shutdown:
                 if node.name not in worker_nodes:
                     continue
                 unfence_node(node.name, delete=True)
 
             # Remove the taints from the nodes that were shutdown
             taint_nodes(
-                nodes=[node.name for node in nodes_to_shutdown],
+                nodes=[node.name for node in self.nodes_to_shutdown],
                 taint_label=f"{constants.NODE_OUT_OF_SERVICE_TAINT}-",
             )
             log.info("Successfully removed taints from the nodes that were shutdown")
@@ -285,7 +289,7 @@ class TestZoneUnawareApps:
         # Start the nodes that were shutdown
         log.info(f"Starting the {zone} nodes")
         try:
-            nodes.start_nodes(nodes=nodes_to_shutdown)
+            nodes.start_nodes(nodes=self.nodes_to_shutdown)
         except Exception:
             log.error("Something went wrong while starting the nodes!")
             raise
