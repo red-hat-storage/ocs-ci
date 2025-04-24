@@ -44,7 +44,7 @@ class ValidationUI(PageNavigator):
         self.navigate_cluster_overview_page()
         self.do_click(self.validation_loc["object_service_tab"], enable_screenshot=True)
         platform = config.ENV_DATA.get("platform").lower()
-        if platform in constants.ON_PREMtest_odf_storagesystems_ui_PLATFORMS:
+        if platform in constants.ON_PREM_PLATFORMS:
             logger.info("Click on Object Service button")
             self.do_click(
                 self.validation_loc["object_service_button"], enable_screenshot=True
