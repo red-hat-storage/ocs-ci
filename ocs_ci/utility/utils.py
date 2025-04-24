@@ -672,7 +672,10 @@ def exec_cmd(
         cmd = list_insert_at_position(cmd, kube_index, ["--kubeconfig"])
         cmd = list_insert_at_position(cmd, kube_index + 1, [kubeconfig_path])
     try:
-        masked_cmd = shlex.join(mask_secrets(cmd, secrets))
+        if kwargs.get("shell"):
+            masked_cmd = mask_secrets(cmd, secrets)
+        else:
+            masked_cmd = shlex.join(mask_secrets(cmd, secrets))
         log.info(f"Executing command: {masked_cmd}")
         if threading_lock and cmd[0] == "oc":
             threading_lock.acquire(timeout=lock_timeout)
