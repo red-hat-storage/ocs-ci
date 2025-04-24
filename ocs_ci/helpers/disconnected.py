@@ -2,6 +2,7 @@ import logging
 import os
 
 from ocs_ci.framework import config
+from ocs_ci.utility.retry import retry
 from ocs_ci.helpers.github import get_asset_from_github
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.exceptions import (
@@ -36,6 +37,7 @@ def get_opm_tool():
     logger.info(f"opm tool is available: {opm_version.stdout.decode('utf-8')}")
 
 
+@retry((CommandFailed,), tries=3, delay=10, backoff=2)
 def get_oc_mirror_tool():
     """
     Download and install oc mirror tool.
