@@ -599,13 +599,7 @@ def pytest_fixture_setup(fixturedef, request):
                 if request.node.callspec.params.get("cluster_index"):
                     context = request.node.callspec.params.get("cluster_index")
                     log.info(f"Switching the fixture context to index: {context}")
-                    original_idx = ocsci_config.cur_index
                     ocsci_config.switch_ctx(context)
-                    yield
-                    log.info(
-                        f"Switching the fixture context back to index: {original_idx}"
-                    )
-                    ocsci_config.switch_ctx(original_idx)
 
 
 @pytest.fixture()
