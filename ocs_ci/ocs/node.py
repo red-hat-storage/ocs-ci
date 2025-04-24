@@ -2148,9 +2148,9 @@ def get_node_zone_dict():
 
 
 @retry(ValueError, tries=5, delay=10)
-def get_node_rack_or_zone(failure_domain, node_obj):
+def base_get_node_rack_or_zone(failure_domain, node_obj):
     """
-    Get the worker node rack or zone name based on the failure domain value
+    Get the worker node rack or zone name based on the failure domain value.
 
     Args:
         failure_domain (str): The failure domain
@@ -2159,6 +2159,8 @@ def get_node_rack_or_zone(failure_domain, node_obj):
     Returns:
         str: The worker node rack/zone name
 
+    Raises:
+        ValueError: If the zone/rack is not found after retries.
     """
     node_obj.reload()
     node_rack_or_zone = (
@@ -2167,7 +2169,29 @@ def get_node_rack_or_zone(failure_domain, node_obj):
     if node_rack_or_zone:
         return node_rack_or_zone
     else:
-        raise ValueError
+        raise ValueError(f"{failure_domain} was not found for the node {node_obj.name}")
+
+
+@retry(ValueError, tries=5, delay=10)
+def get_node_rack_or_zone(failure_domain, node_obj, raise_value_error=True):
+    """
+    Wrapper for base_get_node_rack_or_zone that allows optional suppression of ValueError.
+
+    Args:
+        failure_domain (str): The failure domain
+        node_obj (ocs_ci.ocs.resources.ocs.OCS): The node object
+        raise_value_error (bool): Whether to raise ValueError or return None on failure
+    Returns:
+        str or None: Rack/zone name or None if not found and raise_value_error is False
+
+    """
+    try:
+        return base_get_node_rack_or_zone(failure_domain, node_obj)
+    except ValueError as ex:
+        if raise_value_error:
+            raise ex
+        else:
+            return None
 
 
 def get_node_rack_or_zone_dict(failure_domain):
