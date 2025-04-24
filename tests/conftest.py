@@ -602,9 +602,7 @@ def pytest_runtest_setup(item):
                 log.info(f"Switching the test context to index: {mark.args[0]}")
                 ocsci_config.switch_ctx(mark.args[0])
     if ocsci_config.multicluster:
-        log.warning(item.callspec.params)
         for mark in item.iter_markers():
-            log.warning(mark)
             if mark.name == "parametrize":
                 if item.callspec.params.get("cluster_index"):
                     context = item.callspec.params.get("cluster_index")
