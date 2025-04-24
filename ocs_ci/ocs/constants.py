@@ -2566,9 +2566,9 @@ LOGWRITER_STS_PATH = os.path.join(LOGWRITER_DIR, "logwriter.rbd.yaml")
 
 # Network Fence CRDs
 NETWORK_FENCE_CLASS_CRD = os.path.join(
-    TEMPLATE_DIR, "network", "network-fence-class.yaml"
+    TEMPLATE_CSI_ADDONS_DIR, "network-fence-class.yaml"
 )
-NETWORK_FENCE_CRD = os.path.join(TEMPLATE_DIR, "network", "network-fence.yaml")
+NETWORK_FENCE_CRD = os.path.join(TEMPLATE_CSI_ADDONS_DIR, "network-fence-rbd.yaml")
 
 # MCG namespace constants
 MCG_NS_AWS_ENDPOINT = "https://s3.amazonaws.com"

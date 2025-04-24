@@ -8166,6 +8166,7 @@ def setup_logwriter_workload(request, teardown_factory):
         Args:
             pvc (PVC): PVC object
             logwriter_path (str): String representing logwriter yaml path
+            zone_aware (bool): True if workloads are zone aware else False
 
         Returns:
             OCS object: Lgwriter deployment object
@@ -8224,8 +8225,9 @@ def setup_logreader_workload(request, teardown_factory):
             pvc (PVC): PVC object
             logreader_path (str): String representing logreader yaml path
             duration (int): Time in minutes, representing read duration
+            zone_aware (bool): True if the workloads are zone aware False otherwise
 
-        Retuns:
+        Returns:
             OCS object: Logreader job object
 
         """
@@ -8375,7 +8377,13 @@ def setup_logwriter_rbd_workload(
     """
 
     def factory(zone_aware=True):
+        """
+        Factory function to setup the logwriter rbd workloads
 
+        Args:
+            zone_aware (bool): True if the workloads are zone aware False otherwise
+
+        """
         logwriter_sts_path = constants.LOGWRITER_STS_PATH
         sts_data = templating.load_yaml(logwriter_sts_path)
         sts_data["metadata"]["namespace"] = setup_stretch_cluster_project.namespace
@@ -9749,8 +9757,8 @@ def setup_network_fence_class(request):
         )
         created_by_fixture = False
         if not network_fence_class.get(dont_raise=True):
-            create_network_fence_class()
             created_by_fixture = True
+            create_network_fence_class()
         else:
             log.info(
                 f"NetworkFenceClass {network_fence_class.resource_name} already exists!"

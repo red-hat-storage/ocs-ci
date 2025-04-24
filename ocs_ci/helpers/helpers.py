@@ -6034,7 +6034,7 @@ def get_rbd_daemonset_csi_addons_node_object(node):
     namespace = config.ENV_DATA["cluster_namespace"]
     csi_addons_node = OCP(kind=constants.CSI_ADDONS_NODE_KIND, namespace=namespace)
     csi_addons_node_data = csi_addons_node.get(
-        resource_name=f"{node}-{namespace}-daemonset-csi-rbdplugin"
+        resource_name=f"{node}-{namespace}-daemonset-openshift-storage.rbd.csi.ceph.com-nodeplugin"
     )
     return csi_addons_node_data
 
@@ -6119,13 +6119,13 @@ def unfence_node(node_name, delete=False):
     if network_fence_obj.get(resource_name=node_name, dont_raise=True):
         network_fence_obj.patch(
             resource_name=node_name,
-            params='{"spec":{"fenceState":"Unfenced"}}',
+            params=f'{{"spec":{{"fenceState": "{constants.ACTION_UNFENCE}" }}}}',
             format_type="merge",
         )
         assert (
             network_fence_obj.get(resource_name=node_name)["spec"]["fenceState"]
-            != "Fenced"
-        ), f"{node_name} doesnt seem to be unfenced"
+            != constants.ACTION_FENCE
+        ), f"{node_name} is expected to be unfenced but still its fenced"
         logger.info(f"Unfenced node {node_name} successfully!")
 
         if delete:
