@@ -1955,7 +1955,6 @@ def cluster(
                     kms.cleanup()
                 except Exception as ex:
                     log.error(f"Failed to cleanup KMS. Exception is: {ex}")
-
             deployer.destroy_cluster(log_cli_level)
 
         request.addfinalizer(cluster_teardown_finalizer)
