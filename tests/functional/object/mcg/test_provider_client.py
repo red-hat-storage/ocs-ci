@@ -63,7 +63,11 @@ def test_verify_backingstore_uses_rgw(mcg_obj_session):
 @run_on_all_clients
 @pytest.mark.polarion_id("OCS-5214")
 def test_write_file_to_bucket_on_client(
-    bucket_factory, mcg_obj, awscli_pod_client_session, return_to_original_context
+    bucket_factory,
+    mcg_obj,
+    awscli_pod_client_session,
+    return_to_original_context,
+    cluster_index,
 ):
     """
     Test object IO using the S3 SDK on bucket created on provider and used on client.

@@ -393,6 +393,8 @@ hci_provider_and_client_required = pytest.mark.skipif(
     ),
     reason="Test runs ONLY on Fusion HCI provider and client clusters",
 )
+# when run_on_all_clients marker is used, there needs to be added cluster_index
+# parameter to the test to prevent any issues with the test parametrization
 run_on_all_clients = pytest.mark.run_on_all_clients
 try:
     client_indexes = [
