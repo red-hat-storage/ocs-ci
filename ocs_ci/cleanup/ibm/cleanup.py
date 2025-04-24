@@ -94,7 +94,7 @@ def delete_buckets(hours):
             if bucket_time["Name"] == bucket_name:
                 buckets_combine[bucket_name] = [
                     bucket_region,
-                    buckets_time[0]["CreationDate"],
+                    bucket_time["CreationDate"],
                 ]
     buckets_delete = buckets_to_delete(buckets_combine, hours)
     for bucket_name, bucket_region in buckets_delete.items():
