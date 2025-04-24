@@ -557,6 +557,8 @@ def pytest_runtest_setup(item):
     before any fixture runs
 
     """
+    log.warning("runtest")
+    log.warning(ocsci_config.multicluster)
     if ocsci_config.multicluster and ocsci_config.UPGRADE.get("upgrade", False):
         for mark in item.iter_markers():
             if mark.name == "config_index":
@@ -564,6 +566,7 @@ def pytest_runtest_setup(item):
                 ocsci_config.switch_ctx(mark.args[0])
     if ocsci_config.multicluster:
         for mark in item.iter_markers():
+            log.warning(mark)
             if mark.name == "run_on_all_clients":
                 context = item.callspec.params.get("cluster_index")
                 log.info(f"Switching the test context to index: {context}")
@@ -578,6 +581,7 @@ def pytest_fixture_setup(fixturedef, request):
     """
     # If this is the first fixture getting loaded then its the right time
     # to switch context
+    log.warning("fixture")
     if ocsci_config.multicluster and ocsci_config.UPGRADE.get("upgrade", ""):
         if request.fixturenames.index(fixturedef.argname) == 0:
             for mark in request.node.iter_markers():
@@ -585,6 +589,7 @@ def pytest_fixture_setup(fixturedef, request):
                     ocsci_config.switch_ctx(mark.args[0])
     if ocsci_config.multicluster:
         for mark in request.node.iter_markers():
+            log.warning(mark)
             if mark.name == "run_on_all_clients":
                 context = request.node.callspec.params.get("cluster_index")
                 ocsci_config.switch_ctx(context)
