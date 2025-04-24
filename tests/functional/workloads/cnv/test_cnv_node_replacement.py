@@ -51,10 +51,6 @@ class TestCnvNodeReplace(E2ETest):
         self,
         setup_cnv,
         setup,
-        clone_vm_workload,
-        snapshot_factory,
-        snapshot_restore_factory,
-        cnv_workload,
     ):
         """
         Node Replacement proactive
@@ -70,42 +66,25 @@ class TestCnvNodeReplace(E2ETest):
         # Choose VMs randomaly
         vm_for_clone, vm_for_stop, vm_for_snap = random.sample(all_vms, 3)
 
-        # Create VM using cloned pvc of source VM PVC
-        vm_for_clone.stop()
-        clone_obj = clone_vm_workload(
-            vm_obj=vm_for_clone,
-            volume_interface=vm_for_clone.volume_interface,
-            namespace=vm_for_clone.namespace,
+        # Uncomment code ones 11088 merged.
+        """
+        # Create Clone of VM
+        cloned_vm = clone_or_snapshot_vm(
+            "clone",
+            vm_for_clone,
+            admin_client=admin_client,
+            all_vms=all_vms,
+            file_path=file_paths[0],
         )
-        all_vms.append(clone_obj)
-        csum = cal_md5sum_vm(vm_obj=clone_obj, file_path=file_paths[0])
-        source_csums[clone_obj.name] = csum
-
+        csum = cal_md5sum_vm(vm_obj=cloned_vm, file_path=file_paths[0])
+        source_csums[cloned_vm.name] = csum
         # Create a snapshot
-        # Taking Snapshot of PVC
-        pvc_obj = vm_for_snap.get_vm_pvc_obj()
-        snap_obj = snapshot_factory(pvc_obj)
-
-        # Restore the snapshot
-        res_snap_obj = snapshot_restore_factory(
-            snapshot_obj=snap_obj,
-            storageclass=vm_for_snap.sc_name,
-            volume_mode=snap_obj.parent_volume_mode,
-            access_mode=vm_for_snap.pvc_access_mode,
-            status=constants.STATUS_BOUND,
-            timeout=300,
+        vm_for_snap = clone_or_snapshot_vm(
+            "snapshot", vm_for_snap, admin_client=admin_client, file_path=file_paths[0]
         )
-
-        # Create new VM using the restored PVC
-        res_vm_obj = cnv_workload(
-            source_url=constants.CNV_FEDORA_SOURCE,
-            storageclass=vm_for_snap.sc_name,
-            existing_pvc_obj=res_snap_obj,
-            namespace=vm_obj.namespace,
-        )
-        all_vms.append(res_vm_obj)
-        csum = cal_md5sum_vm(vm_obj=res_vm_obj, file_path=file_paths[0])
-        source_csums[res_vm_obj.name] = csum
+        csum = cal_md5sum_vm(vm_obj=vm_for_snap, file_path=file_paths[0])
+        source_csums[vm_for_snap.name] = csum
+        """
 
         # Keep vms in different states (power on, paused, stoped)
         vm_for_stop.stop()
