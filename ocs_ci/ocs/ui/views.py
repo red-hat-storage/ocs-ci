@@ -811,7 +811,7 @@ acm_configuration = {
     ),
     "search-cluster": ("//input[@placeholder='Search']", By.XPATH),
     "select-first-checkbox": ("input[name='checkrow0']", By.CSS_SELECTOR),
-    "clear-search": ("//input[@placeholder='Search']", By.XPATH),
+    "clear-search": ("//*[name()='path' and contains(@d,'M242.72 25')]", By.XPATH),
     "review-btn": (
         ".pf-c-button.pf-m-primary, .pf-v5-c-button.pf-m-primary",
         By.CSS_SELECTOR,
@@ -1219,6 +1219,7 @@ acm_configuration_4_18 = {
 }
 
 acm_configuration_4_19 = {
+    "clear-search": ("//button[@aria-label='Reset']", By.XPATH),
     "install-submariner-btn": (
         "//a[@id='install-submariner']",
         By.XPATH,
