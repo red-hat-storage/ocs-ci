@@ -94,7 +94,11 @@ def mirror_images_from_mapping_file(
                 if ignore_image and ignore_image in line:
                     continue
                 # apply any matching policy to all lines from mapping file
-                for policy in icsp["spec"]["repositoryDigestMirrors"]:
+                if icsp:
+                    mirrors = icsp["spec"]["repositoryDigestMirrors"]
+                if idms:
+                    mirrors = idms["spec"]["imageDigestMirrors"]
+                for policy in mirrors:
                     # we use only first defined mirror for particular source,
                     # because we don't use any ICSP with more mirrors for one
                     # source and it will make the logic very complex and
@@ -336,10 +340,21 @@ def mirror_index_image_via_oc_mirror(index_image, packages, icsp=None, idms=None
     cmd = (
         f"oc mirror --config {imageset_config_file} "
         f"docker://{config.DEPLOYMENT['mirror_registry']} "
-        # "--dest-skip-tls --ignore-history"
+        " --dest-skip-tls --ignore-history"
     )
-    if icsp or idms:
-        cmd += " --continue-on-error --skip-missing --v2"
+    if icsp:
+        cmd += " --continue-on-error --skip-missing"
+    if idms:
+        # updating the config file to work with oc-mirror v2
+        with open(imageset_config_file, "w") as f:
+            lines = f.readlines()
+            lines[0] = "apiVersion: mirror.openshift.io/v2alpha1"
+            f.writelines(lines)
+        cmd = (
+            f"oc mirror --config {imageset_config_file} "
+            f"docker://{config.DEPLOYMENT['mirror_registry']} "
+            "--workspace file:///tmp/mirroring --v2"
+        )
     try:
         exec_cmd(cmd, timeout=18000)
     except CommandFailed:
@@ -350,25 +365,33 @@ def mirror_index_image_via_oc_mirror(index_image, packages, icsp=None, idms=None
         if not icsp or not idms:
             raise
 
-    # look for manifests directory with Image mapping, CatalogSource and ICSP/IDMS
-    # manifests
-    mirroring_manifests_dir = glob.glob("oc-mirror-workspace/results-*")
-    if not mirroring_manifests_dir:
-        raise NotFoundError(
-            "Manifests directory created by 'oc mirror ...' command not found."
-        )
-    mirroring_manifests_dir.sort(reverse=True)
-    mirroring_manifests_dir = mirroring_manifests_dir[0]
-    logger.debug(f"Mirrored manifests directory: {mirroring_manifests_dir}")
+    if icsp:
+        # look for manifests directory with Image mapping, CatalogSource and ICSP
+        # manifests
+        mirroring_manifests_dir = glob.glob("oc-mirror-workspace/results-*")
+        if not mirroring_manifests_dir:
+            raise NotFoundError(
+                "Manifests directory created by 'oc mirror ...' command not found."
+            )
+        mirroring_manifests_dir.sort(reverse=True)
+        mirroring_manifests_dir = mirroring_manifests_dir[0]
+        logger.debug(f"Mirrored manifests directory: {mirroring_manifests_dir}")
 
-    if icsp or idms:
         # update mapping.txt file with urls updated based on provided
         # imageContentSourcePolicy/imageDigestMirrorSet
         mapping_file = os.path.join(
             f"{mirroring_manifests_dir}",
             "mapping.txt",
         )
-        mirror_images_from_mapping_file(mapping_file, idms=idms)
+
+    if idms:
+        cmd += "--dry-run"
+        # running the command again with --dry-run to get mapping file
+        # so that we can pass it and get the failed mirrors
+        exec_cmd(cmd, timeout=18000)
+        mapping_file = "/tmp/mirroring/dry-run/mapping.txt"
+
+    mirror_images_from_mapping_file(mapping_file, idms=idms)
 
     # # create ImageContentSourcePolicy
     # icsp_file = os.path.join(
