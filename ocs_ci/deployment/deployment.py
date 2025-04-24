@@ -178,7 +178,6 @@ from ocs_ci.helpers.helpers import (
     get_default_storage_class,
     update_volsync_channel,
     create_unique_resource_name,
-    create_configmap,
 )
 from ocs_ci.ocs.ui.helpers_ui import ui_deployment_conditions
 from ocs_ci.utility.utils import get_az_count
@@ -3923,10 +3922,6 @@ class RDRMultiClusterDROperatorsDeploy(MultiClusterDROperatorsDeploy):
             "Creating thanos.yaml needed for ACM observability after passing required params"
         )
         exec_cmd(f"oc create -f {thanos_data_yaml.name}")
-        create_configmap(
-            configmap_name="thanos_bucket",
-            configmap_data={"bucket_name": thanos_bucket_name},
-        )
 
         self.check_observability_status()
 
