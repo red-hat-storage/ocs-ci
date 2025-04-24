@@ -1313,7 +1313,7 @@ class IBMCloudObjectStorage:
             endpoint_url=self.cos_endpoint,
         )
 
-    def get_bucket_objects(self, bucket_name, prefix=None):
+    def get_bucket_objects(self, bucket_name, bucket_region, prefix=None):
         """
         Fetches the objects in a bucket
 
@@ -1325,11 +1325,21 @@ class IBMCloudObjectStorage:
             list: List of objects in a bucket
 
         """
+
         bucket_objects = []
         logger.info(f"Retrieving bucket contents from {bucket_name}")
         try:
             bucket_objects_info = []
-            paginator = self.cos_client.get_paginator("list_objects_v2")
+            cos_client = ibm_boto3.client(
+                "s3",
+                ibm_api_key_id=self.cos_api_key_id,
+                ibm_service_instance_id=self.cos_instance_crn,
+                config=IBMBotocoreConfig(signature_version="oauth"),
+                endpoint_url=constants.IBM_COS_GEO_ENDPOINT_TEMPLATE.format(
+                    bucket_region
+                ),
+            )
+            paginator = cos_client.get_paginator("list_objects_v2")
             operation_parameters = {"Bucket": bucket_name}
             if prefix:
                 operation_parameters["Prefix"] = prefix
