@@ -49,7 +49,7 @@ def ibm_cleanup():
     args = parser.parse_args()
     ibmcloud_conf = args.ocsci_conf
 
-    # load vsphere_conf data to config
+    # load IBM config data to config
     ibmcloud_config_data = yaml.safe_load(ibmcloud_conf)
     framework.config.update(ibmcloud_config_data)
     ibmcloud_conf.close()
@@ -75,6 +75,7 @@ def delete_buckets(hours):
 
     Raises:
         Exception: If one or more buckets fail to be deleted, an exception is raised listing their names.
+
     """
     status = []
     api_key = config.AUTH["ibmcloud"]["api_key"]
@@ -101,7 +102,7 @@ def delete_buckets(hours):
         if res is False:
             status.append(bucket_name)
     if len(status) > 0:
-        raise Exception(f"Failed to delelte buckets {status}")
+        raise Exception(f"Failed to delete buckets {status}")
 
 
 def buckets_to_delete(buckets, hours):
@@ -121,6 +122,7 @@ def buckets_to_delete(buckets, hours):
 
     Returns:
         dict: A dictionary of bucket names mapped to their region, representing buckets to be deleted.
+
     """
     buckets_delete = {}
     current_date = datetime.now(timezone.utc)
