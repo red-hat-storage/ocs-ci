@@ -556,6 +556,7 @@ def prepare_disconnected_ocs_deployment(upgrade=False):
         return mirrored_index_image
 
 
+@retry((CommandFailed,), tries=3, delay=10, backoff=2)
 def mirror_ocp_release_images(ocp_image_path, ocp_version):
     """
     Mirror OCP release images to mirror registry.
