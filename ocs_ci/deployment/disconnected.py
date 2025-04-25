@@ -346,9 +346,12 @@ def mirror_index_image_via_oc_mirror(index_image, packages, icsp=None, idms=None
         cmd += " --continue-on-error --skip-missing"
     if idms:
         # updating the config file to work with oc-mirror v2
-        with open(imageset_config_file, "r+") as f:
+        with open(imageset_config_file, "r") as f:
             lines = f.readlines()
-            lines[0] = "apiVersion: mirror.openshift.io/v2alpha1"
+            lines[0] = "apiVersion: mirror.openshift.io/v2alpha1\n"
+            lines.index("storageConfig:\n")
+            lines = lines[:14]
+        with open(imageset_config_file, "w") as f:
             f.writelines(lines)
         cmd = (
             f"oc mirror --config {imageset_config_file} "
