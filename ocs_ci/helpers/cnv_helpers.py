@@ -641,6 +641,7 @@ def clone_or_snapshot_vm(action, vm, admin_client=None, file_path=None, all_vms=
             namespace=vm.namespace,
             source_name=vm.name,
             target_name=target_name,
+            client=admin_client,
         ) as vmc:
             vmc.wait_for_status(status=VirtualMachineClone.Status.SUCCEEDED)
         cloned_vm = virtual_machine.VirtualMachine(
