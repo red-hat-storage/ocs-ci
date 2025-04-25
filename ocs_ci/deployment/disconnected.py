@@ -392,7 +392,7 @@ def mirror_index_image_via_oc_mirror(index_image, packages, icsp=None, idms=None
         # running the command again with --dry-run to get mapping file
         # so that we can pass it and get the failed mirrors
         exec_cmd(cmd, timeout=18000)
-        mapping_file = "/tmp/mirroring/dry-run/mapping.txt"
+        mapping_file = "/tmp/mirroring/working-dir/dry-run/mapping.txt"
 
     mirror_images_from_mapping_file(mapping_file, idms=idms)
 
