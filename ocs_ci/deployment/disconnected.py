@@ -356,7 +356,7 @@ def mirror_index_image_via_oc_mirror(index_image, packages, icsp=None, idms=None
         cmd = (
             f"oc mirror --config {imageset_config_file} "
             f"docker://{config.DEPLOYMENT['mirror_registry']} "
-            "--workspace file:///tmp/mirroring --v2"
+            "--workspace file://oc-mirror-workspace/results-files --v2"
         )
     try:
         exec_cmd(cmd, timeout=18000)
@@ -368,18 +368,18 @@ def mirror_index_image_via_oc_mirror(index_image, packages, icsp=None, idms=None
         if not icsp or not idms:
             raise
 
-    if icsp:
-        # look for manifests directory with Image mapping, CatalogSource and ICSP
-        # manifests
-        mirroring_manifests_dir = glob.glob("oc-mirror-workspace/results-*")
-        if not mirroring_manifests_dir:
-            raise NotFoundError(
-                "Manifests directory created by 'oc mirror ...' command not found."
-            )
-        mirroring_manifests_dir.sort(reverse=True)
-        mirroring_manifests_dir = mirroring_manifests_dir[0]
-        logger.debug(f"Mirrored manifests directory: {mirroring_manifests_dir}")
+    # look for manifests directory with Image mapping, CatalogSource and ICSP
+    # manifests
+    mirroring_manifests_dir = glob.glob("oc-mirror-workspace/results-*")
+    if not mirroring_manifests_dir:
+        raise NotFoundError(
+            "Manifests directory created by 'oc mirror ...' command not found."
+        )
+    mirroring_manifests_dir.sort(reverse=True)
+    mirroring_manifests_dir = mirroring_manifests_dir[0]
+    logger.debug(f"Mirrored manifests directory: {mirroring_manifests_dir}")
 
+    if icsp:
         # update mapping.txt file with urls updated based on provided
         # imageContentSourcePolicy/imageDigestMirrorSet
         mapping_file = os.path.join(
@@ -392,7 +392,10 @@ def mirror_index_image_via_oc_mirror(index_image, packages, icsp=None, idms=None
         # running the command again with --dry-run to get mapping file
         # so that we can pass it and get the failed mirrors
         exec_cmd(cmd, timeout=18000)
-        mapping_file = "/tmp/mirroring/working-dir/dry-run/mapping.txt"
+        mapping_file = os.path.join(
+            f"{mirroring_manifests_dir}",
+            "working-dir/dry-run/mapping.txt",
+        )
 
     mirror_images_from_mapping_file(mapping_file, idms=idms)
 
