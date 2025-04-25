@@ -482,6 +482,8 @@ def expand_pvc_and_verify(vm_obj, new_size):
         )
     logger.info(f"PVC expansion successful for VM {vm_obj.name}.")
     return True
+
+
 def clone_or_snapshot_vm(action, vm, admin_client=None, file_path=None, all_vms=None):
     """
     Perform VM cloning or snapshot creation/restoration.
@@ -500,6 +502,7 @@ def clone_or_snapshot_vm(action, vm, admin_client=None, file_path=None, all_vms=
             namespace=vm.namespace,
             source_name=vm.name,
             target_name=target_name,
+            client=admin_client,
         ) as vmc:
             vmc.wait_for_status(status=VirtualMachineClone.Status.SUCCEEDED)
         cloned_vm = virtual_machine.VirtualMachine(
