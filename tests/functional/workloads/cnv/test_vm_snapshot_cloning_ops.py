@@ -8,7 +8,6 @@ from ocs_ci.helpers.cnv_helpers import cal_md5sum_vm, run_dd_io, expand_pvc_and_
 from ocs_ci.helpers.helpers import create_unique_resource_name
 from ocp_resources.virtual_machine_restore import VirtualMachineRestore
 from ocp_resources.virtual_machine_snapshot import VirtualMachineSnapshot
-from ocs_ci.ocs import constants
 from ocp_resources.virtual_machine_clone import VirtualMachineClone
 from ocs_ci.ocs.cnv.virtual_machine import VirtualMachine
 
@@ -212,9 +211,9 @@ class TestVmSnapshotClone(E2ETest):
                     failed_vms.append(cloned_vm.name)
                     continue
             run_dd_io(vm_obj=cloned_vm, file_path=file_paths[1])
+            cloned_vm.delete()
         if failed_vms:
             assert False, f"Test case failed for VMs: {', '.join(failed_vms)}"
-        cloned_vm.delete()
 
     @workloads
     @pytest.mark.parametrize(
