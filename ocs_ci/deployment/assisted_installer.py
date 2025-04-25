@@ -8,6 +8,7 @@ import json
 import logging
 import os
 
+from ocs_ci.framework import config
 from ocs_ci.ocs.exceptions import (
     ClusterNotFoundException,
     HostValidationFailed,
@@ -454,6 +455,7 @@ class AssistedInstallerCluster(object):
         path = os.path.join(auth_path, "kubeconfig")
         with open(path, "w") as fd:
             fd.write(self.api.get_cluster_kubeconfig(self.id))
+        config.RUN["kubeconfig"] = path
         logger.info("Created kubeconfig file")
 
     def create_kubeadmin_password_file(self):
