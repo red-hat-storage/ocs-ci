@@ -210,6 +210,7 @@ from ocs_ci.helpers.keyrotation_helper import PVKeyrotation
 from ocs_ci.ocs.resources.storage_cluster import set_in_transit_encryption
 from ocs_ci.helpers.e2e_helpers import verify_osd_used_capacity_greater_than_expected
 
+
 log = logging.getLogger(__name__)
 
 
@@ -7321,12 +7322,10 @@ def cnv_workload_factory(request):
 
 
 @pytest.fixture()
-def multi_cnv_workload(
-    pv_encryption_kms_setup_factory, storageclass_factory, cnv_workload
-):
+def multi_cnv_workload(request, storageclass_factory, cnv_workload):
     """
     Fixture to create virtual machines (VMs) with specific configurations.
-
+    The `pv_encryption_kms_setup_factory` fixture is only initialized if `encrypted=True`.
     This fixture sets up multiple VMs with varying storage configurations as specified
     in the `cnv_vm_workload.yaml`. Each VM configuration includes the volume interface type,
     access mode, and the storage class to be used.
@@ -7338,7 +7337,7 @@ def multi_cnv_workload(
 
     """
 
-    def factory(namespace=None):
+    def factory(namespace=None, encrypted=False):
         """
         Args:
             namespace (str, optional): The namespace to create the vm on.
@@ -7358,16 +7357,26 @@ def multi_cnv_workload(
             namespace if namespace else create_unique_resource_name("vm", "namespace")
         )
 
-        # Setup csi-kms-connection-details configmap
-        log.info("Setting up csi-kms-connection-details configmap")
-        kms = pv_encryption_kms_setup_factory(kv_version="v2")
-        log.info("csi-kms-connection-details setup successful")
+        kms = None
+        if encrypted:
+            # Setup csi-kms-connection-details configmap
+            log.info("Setting up csi-kms-connection-details configmap")
+            pv_encryption_kms_setup_factory = request.getfixturevalue(
+                "pv_encryption_kms_setup_factory"
+            )
+            kms = pv_encryption_kms_setup_factory(kv_version="v2")
+            log.info("csi-kms-connection-details setup successful")
+
+        try:
+            kms_id = kms.kmsid
+        except (NameError, AttributeError):
+            kms_id = None
 
         # Create an encryption enabled storageclass for RBD
         sc_obj_def_compr = storageclass_factory(
             interface=constants.CEPHBLOCKPOOL,
-            encrypted=True,
-            encryption_kms_id=kms.kmsid,
+            encrypted=encrypted,
+            encryption_kms_id=kms_id,
             new_rbd_pool=True,
             mapOptions="krbd:rxbounce",
             mounter="rbd",
@@ -7375,23 +7384,23 @@ def multi_cnv_workload(
 
         sc_obj_aggressive = storageclass_factory(
             interface=constants.CEPHBLOCKPOOL,
-            encrypted=True,
-            encryption_kms_id=kms.kmsid,
+            encrypted=encrypted,
+            encryption_kms_id=kms_id,
             compression="aggressive",
             new_rbd_pool=True,
             mapOptions="krbd:rxbounce",
             mounter="rbd",
         )
-
         storage_classes = [sc_obj_def_compr, sc_obj_aggressive]
 
-        # Create ceph-csi-kms-token in the tenant namespace
-        kms.vault_path_token = kms.generate_vault_token()
-        kms.create_vault_csi_kms_token(namespace=namespace)
+        if encrypted:
+            # Create ceph-csi-kms-token in the tenant namespace
+            kms.vault_path_token = kms.generate_vault_token()
+            kms.create_vault_csi_kms_token(namespace=namespace)
 
-        for sc_obj in storage_classes:
-            pvk_obj = PVKeyrotation(sc_obj)
-            pvk_obj.annotate_storageclass_key_rotation(schedule="*/3 * * * *")
+            for sc_obj in storage_classes:
+                pvk_obj = PVKeyrotation(sc_obj)
+                pvk_obj.annotate_storageclass_key_rotation(schedule="*/3 * * * *")
 
         # Load VM configs from cnv_vm_workload yaml
         vm_configs = templating.load_yaml(constants.CNV_VM_WORKLOADS)
@@ -9500,3 +9509,17 @@ def setup_nfs(request, setup_rbac):
                 nfs_sc_obj.delete()
 
         request.addfinalizer(teardown)
+
+
+@pytest.fixture(scope="session")
+def admin_client():
+    """
+    Get DynamicClient
+    """
+    kubeconfig_path = os.path.join(
+        ocsci_config.ENV_DATA["cluster_path"],
+        ocsci_config.RUN.get("kubeconfig_location"),
+    )
+    from ocp_resources.resource import get_client
+
+    return get_client(config_file=kubeconfig_path)
