@@ -100,31 +100,10 @@ class TestVmSnapshotClone(E2ETest):
         failed_vms = []
         for vm_obj in vm_list:
             # Expand PVC if `pvc_expand_before_clone` is True
-            pvc_obj = vm_obj.get_vm_pvc_obj()
             if pvc_expand_before_clone:
                 new_size = 50
                 try:
-                    pvc_obj.resize_pvc(new_size=new_size, verify=True)
-                    pvc_obj = vm_obj.get_vm_pvc_obj()
-
-                    # Get rootdisk name
-                    disk = (
-                        vm_obj.vmi_obj.get()
-                        .get("status")
-                        .get("volumeStatus")[1]["target"]
-                    )
-                    devicename = f"/dev/{disk}"
-
-                    result = vm_obj.run_ssh_cmd(
-                        command=f"lsblk -d -n -o SIZE {devicename}"
-                    ).strip()
-                    if result == f"{new_size}G":
-                        log.info("expanded PVC size is showing on vm")
-                    else:
-                        raise ValueError(
-                            "Expanded PVC size before clone is not showing on VM. "
-                            "Please verify the disk rescan and filesystem resize."
-                        )
+                    expand_pvc_and_verify(vm_obj, new_size)
                 except ValueError as e:
                     log.error(
                         f"Error for VM {vm_obj}: {e}. Continuing with the next VM."
@@ -183,27 +162,7 @@ class TestVmSnapshotClone(E2ETest):
                             .get("persistentVolumeClaim")
                             .get("claimName")
                         )
-                    clone_pvc_obj = cloned_vm.get_vm_pvc_obj()
-                    clone_pvc_obj.resize_pvc(new_size=new_size, verify=True)
-
-                    # Get rootdisk name
-                    disk = (
-                        cloned_vm.vmi_obj.get()
-                        .get("status")
-                        .get("volumeStatus")[1]["target"]
-                    )
-                    devicename = f"/dev/{disk}"
-
-                    result = cloned_vm.run_ssh_cmd(
-                        command=f"lsblk -d -n -o SIZE {devicename}"
-                    ).strip()
-                    if result == f"{new_size}G":
-                        log.info("expanded PVC size is showing on vm")
-                    else:
-                        raise ValueError(
-                            "Expanded PVC size after clone is not showing on VM. "
-                            "Please verify the disk rescan and filesystem resize."
-                        )
+                    expand_pvc_and_verify(vm_obj, new_size)
                 except ValueError as e:
                     log.error(
                         f"Error for VM {cloned_vm}: {e}. Continuing with the next VM."
