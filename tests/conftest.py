@@ -590,10 +590,22 @@ def pytest_fixture_setup(fixturedef, request):
             for mark in request.node.iter_markers():
                 if mark.name == "config_index":
                     ocsci_config.switch_ctx(mark.args[0])
+    _switch_context_helper(request)
+
+
+def _switch_context_helper(request):
+    """
+    Helper function to switch context of the cluster
+
+    Args:
+        request: pytest request object
+    """
     if ocsci_config.multicluster:
         for mark in request.node.iter_markers():
             if mark.name == "parametrize":
-                if request.node.callspec.params.get("cluster_index"):
+                if hasattr(
+                    request.node, "callspec"
+                ) and request.node.callspec.params.get("cluster_index"):
                     context = request.node.callspec.params.get("cluster_index")
                     log.info(f"Switching the fixture context to index: {context}")
                     ocsci_config.switch_ctx(context)
@@ -606,9 +618,13 @@ def pytest_fixture_post_finalizer(fixturedef, request):
     """
     if ocsci_config.multicluster:
         for mark in request.node.iter_markers():
+            # if we have multiple parametrize markers, we need to reset only one time, hence breaking from first match
             if mark.name == "parametrize":
-                if request.node.callspec.params.get("cluster_index"):
+                if hasattr(
+                    request.node, "callspec"
+                ) and request.node.callspec.params.get("cluster_index"):
                     ocsci_config.reset_ctx()
+                    break
 
 
 @pytest.fixture()
@@ -1147,6 +1163,8 @@ def project_factory_fixture(request):
         return proj_obj
 
     def finalizer():
+        _switch_context_helper(request)
+
         delete_projects(instances)
 
     request.addfinalizer(finalizer)
@@ -1335,6 +1353,8 @@ def pvc_factory_fixture(request, project_factory):
         """
         Delete the PVC
         """
+        _switch_context_helper(request)
+
         pv_objs = []
 
         # Get PV form PVC instances and delete PVCs
@@ -1486,6 +1506,8 @@ def pod_factory_fixture(request, pvc_factory):
         """
         Delete the Pod or the DeploymentConfig
         """
+        _switch_context_helper(request)
+
         for instance in instances:
             instance.delete()
             instance.ocp.wait_for_delete(instance.name)
@@ -8895,25 +8917,12 @@ def create_config_of_existing_hosted_clusters():
     Get the list of available hosted clusters. Push config to Multicluster Config for configs that do not exist only.
     """
 
-    def factory(
-        cluster_names, ocp_version, odf_version, setup_storage_client, nodepool_replicas
-    ):
+    def factory():
         """
         Wrapper to call hypershift_cluster_factory with a predefined duty.
 
-        Args:
-            cluster_names (list): List of cluster names
-            ocp_version (str): OCP version
-            odf_version (str): ODF version
-            setup_storage_client (bool): Setup storage client
-            nodepool_replicas (int): Nodepool replicas; supported values are 2,3
         """
         hypershift_cluster_factory(
-            cluster_names=cluster_names,
-            ocp_version=ocp_version,
-            odf_version=odf_version,
-            setup_storage_client=setup_storage_client,
-            nodepool_replicas=nodepool_replicas,
             duty="use_existing_hosted_clusters_push_missing_configs",
         )
 
@@ -8927,25 +8936,12 @@ def refresh_hosted_config():
     replacing already existing if found.
     """
 
-    def factory(
-        cluster_names, ocp_version, odf_version, setup_storage_client, nodepool_replicas
-    ):
+    def factory():
         """
         Wrapper to call hypershift_cluster_factory with a predefined duty.
 
-        Args:
-            cluster_names (list): List of cluster names
-            ocp_version (str): OCP version
-            odf_version (str): ODF version
-            setup_storage_client (bool): Setup storage client
-            nodepool_replicas (int): Nodepool replicas; supported values are 2,3
         """
         hypershift_cluster_factory(
-            cluster_names=cluster_names,
-            ocp_version=ocp_version,
-            odf_version=odf_version,
-            setup_storage_client=setup_storage_client,
-            nodepool_replicas=nodepool_replicas,
             duty="use_existing_hosted_clusters_force_push_configs",
         )
 
@@ -9532,3 +9528,16 @@ def setup_nfs(request, setup_rbac):
                 nfs_sc_obj.delete()
 
         request.addfinalizer(teardown)
+
+
+@pytest.fixture
+def cluster_index():
+    """
+    This is a workaround fixture for running with mark run_on_all_clients.
+    When run_on_all_clients marker is used, there needs to be added cluster_index
+    parameter to the test to prevent any issues with the test parametrization.
+    Having this dummy fixture prevents failure when we assign cluster_index via marker.
+
+    Returns: 0 , this value is overwritten by the pytest.mark.parametrize
+    """
+    return 0

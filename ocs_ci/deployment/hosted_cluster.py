@@ -1824,13 +1824,33 @@ def hypershift_cluster_factory(
                 ] = running_ocp_version
 
             cluster_path = create_cluster_dir(cluster_name)
-            kubeconf_path = (
+            logger.info("Cluster path: %s", cluster_path)
+            def_client_config_dict["ENV_DATA"]["cluster_path"] = cluster_path
+
+            kubeconf_paths = (
                 hosted_clients_obj.download_hosted_clusters_kubeconfig_files(
                     {cluster_name: cluster_path}
                 )
             )
+            if not len(kubeconf_paths):
+                from ocs_ci.framework.exceptions import ClusterKubeconfigNotFoundError
 
-            logger.info(f"Kubeconfig path: {kubeconf_path}")
+                ClusterKubeconfigNotFoundError(
+                    f"Failed to download kubeconfig for cluster {cluster_name}"
+                )
+            else:
+                kubeconf_path = [
+                    path for path in kubeconf_paths if cluster_name in path
+                ][0]
+            logger.debug(f"Kubeconfig path: {kubeconf_path}")
+
+            logger.debug(
+                "Setting default context to config. Every config should have same default context"
+            )
+            def_client_config_dict["ENV_DATA"].setdefault(
+                "default_cluster_context_index", 0
+            )
+
             def_client_config_dict.setdefault("RUN", {}).update(
                 {"kubeconfig": kubeconf_path}
             )
