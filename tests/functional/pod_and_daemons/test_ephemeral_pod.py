@@ -9,7 +9,12 @@ from ocs_ci.ocs.constants import (
     RBD_INTERFACE,
 )
 from ocs_ci.framework import config
-from ocs_ci.framework.pytest_customization.marks import tier1, brown_squad, polarion_id
+from ocs_ci.framework.pytest_customization.marks import (
+    tier1,
+    brown_squad,
+    polarion_id,
+    run_on_all_clients,
+)
 
 log = getLogger(__name__)
 
@@ -21,7 +26,8 @@ class TestEphemeralPod:
     @pytest.mark.parametrize(
         argnames=["interface"], argvalues=[[CEPHFS_INTERFACE], [RBD_INTERFACE]]
     )
-    def test_ephemeral_pod_creation(self, interface) -> None:
+    @run_on_all_clients
+    def test_ephemeral_pod_creation(self, interface, cluster_index) -> None:
         pod_name = None
         storage_type = interface
         ephemeral_pod = EphemeralPodFactory.create_ephemeral_pod(pod_name, storage_type)

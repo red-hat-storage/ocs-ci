@@ -13,6 +13,7 @@ import pandas as pd
 import pytest
 from junitparser import JUnitXml
 import ocs_ci.utility.memory
+from ocs_ci.deployment.helpers.hypershift_base import create_cluster_dir
 from ocs_ci.framework import config as ocsci_config
 from ocs_ci.framework.logger_factory import set_log_record_factory
 from ocs_ci.framework.exceptions import (
@@ -535,14 +536,27 @@ def process_cluster_cli_params(config):
         ClusterNameLengthError: If a cluster name is too short or too long
     """
     suffix = ocsci_config.cur_index + 1 if ocsci_config.multicluster else ""
+    if (
+        ocsci_config.multicluster
+        and ocsci_config.ENV_DATA["cluster_type"] == "provider"
+    ):
+        suffix = ""
     cluster_path = get_cli_param(config, f"cluster_path{suffix}")
+
+    if not cluster_path and ocsci_config.multicluster:
+        if ocsci_config.ENV_DATA["cluster_type"] in ["consumer", "hci_client"]:
+            cluster_name = ocsci_config.ENV_DATA["cluster_name"]
+            cluster_path = ocsci_config.ENV_DATA["cluster_path"] or create_cluster_dir(
+                cluster_name
+            )
+
     if not cluster_path:
         raise ClusterPathNotProvidedError()
     cluster_path = os.path.expanduser(cluster_path)
     if not os.path.exists(cluster_path):
         os.makedirs(cluster_path)
 
-    # create kubeconfig if doesn't exists and OCP url and kubeadmin password is provided
+    # create kubeconfig if doesn't exist and OCP url and kubeadmin password is provided
     kubeconfig_path = os.path.join(
         cluster_path, ocsci_config.RUN["kubeconfig_location"]
     )
@@ -596,6 +610,12 @@ def process_cluster_cli_params(config):
 
     OCP.set_kubeconfig(os.path.join(cluster_path, kubeconfig_location))
     cluster_name = get_cli_param(config, f"cluster_name{suffix}")
+
+    if not cluster_name:
+        cluster_name = ocsci_config.ENV_DATA.get("cluster_name")
+        if not cluster_name:
+            raise ClusterNameNotProvidedError()
+
     ocsci_config.RUN["cli_params"]["teardown"] = get_cli_param(
         config, "teardown", default=False
     )
