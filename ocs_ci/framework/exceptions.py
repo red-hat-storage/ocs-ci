@@ -38,3 +38,7 @@ class InvalidDeploymentType(Exception):
 
 class ClusterNotAccessibleError(Exception):
     pass
+
+
+class ClusterKubeconfigNotFoundError(Exception):
+    pass
