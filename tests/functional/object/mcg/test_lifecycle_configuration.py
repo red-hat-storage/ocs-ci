@@ -1,6 +1,8 @@
 from datetime import datetime, timedelta
 import json
 import logging
+import os
+import tempfile
 from time import sleep
 
 import pytest
@@ -16,10 +18,13 @@ from ocs_ci.framework.pytest_customization.marks import (
     skipif_noobaa_external_pgsql,
 )
 from ocs_ci.framework.testlib import MCGTest
+from ocs_ci.helpers.helpers import (
+    craft_s3_command,
+)
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.bucket_utils import (
     change_versions_creation_date_in_noobaa_db,
-    change_versions_creation_date_in_noobaa_db,
+    craft_s3cmd_command,
     create_multipart_upload,
     expire_multipart_upload_in_noobaa_db,
     get_obj_versions,
@@ -570,6 +575,7 @@ class TestLifecycleConfiguration(MCGTest):
                 )
 
     @tier3
+    @pytest.mark.polarion_id("OCS-")  # TODO
     @jira("DFBUGS-2306")
     @pytest.mark.parametrize(
         argnames=["rule_cls", "rule_kwargs_list"],
@@ -614,7 +620,7 @@ class TestLifecycleConfiguration(MCGTest):
     ):
         """
         Test various lifecycle rule fields with invalid values.
-        Expect all of them to raise an InvalidArgument error.
+        Expect all of them to raise a meaningful error.
         """
         bucket = bucket_factory(interface="OC")[0].name
         put_bucket_versioning_via_awscli(mcg_obj, awscli_pod, bucket)
@@ -627,3 +633,144 @@ class TestLifecycleConfiguration(MCGTest):
                 )
 
         logger.info("Invalid lifecycle configurations were rejected as expected")
+
+    @tier3
+    @pytest.mark.polarion_id("OCS-")  # TODO
+    def test_lifecycle_config_ops_s3_clients_compatibility(
+        self, mcg_obj, bucket_factory, awscli_pod
+    ):
+        """
+        Verify compatibility of lifecycle configuration operations (PUT, GET, DELETE)
+        across boto3, AWS CLI, and s3cmd for an MCG bucket.
+
+        1. Create an MCG bucket with versioning enabled
+        2. boto3 operations:
+            2.1 boto3 Put
+            2.2 boto3 Get
+            2.3 boto3 Delete
+        3. AWSCLI operations:
+            3.1 AWSCLI Put
+            3.2 AWSCLI Get
+            3.3 AWSCLI Delete
+        4. s3cmd operations:
+            4.1 s3cmd Put
+            4.2 s3cmd Get
+            4.3 s3cmd Delete
+        """
+        # 1. Create an MCG bucket with versioning enabled
+        bucket = bucket_factory(interface="OC")[0].name
+        put_bucket_versioning_via_awscli(mcg_obj, awscli_pod, bucket)
+
+        lifecycle_policy = LifecyclePolicy(
+            ExpirationRule(days=5),
+            ExpiredObjectDeleteMarkerRule(),
+            NoncurrentVersionExpirationRule(
+                non_current_days=1,
+            ),
+            AbortIncompleteMultipartUploadRule(days_after_initiation=7),
+        )
+        lifecycle_policy_dict = lifecycle_policy.as_dict()
+
+        # 2. boto3 operations
+        # 2.1 boto3 Put
+        mcg_obj.s3_client.put_bucket_lifecycle_configuration(
+            Bucket=bucket, LifecycleConfiguration=lifecycle_policy_dict
+        )
+        # 2.2 boto3 Get
+        assert (
+            mcg_obj.s3_client.get_bucket_lifecycle_configuration(Bucket=bucket)["Rules"]
+            == lifecycle_policy_dict["Rules"]
+        ), "Boto3: Lifecycle configuration mismatch"
+        # 2.3 boto3 Delete
+        mcg_obj.s3_client.delete_bucket_lifecycle(Bucket=bucket)
+        assert "Rules" not in mcg_obj.s3_client.get_bucket_lifecycle_configuration(
+            Bucket=bucket
+        ), "Boto3: Lifecycle configuration not deleted"
+
+        # 3. AWSCLI operations
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            json_path = os.path.join(tmp_dir, "lifecycle_config.json")
+            with open(json_path, "w") as f:
+                f.write(json.dumps(lifecycle_policy_dict))
+
+            target_path_json = f"/tmp/{os.path.basename(json_path)}"
+            awscli_pod.copy_to_pod_rsync(src_path=f"{tmp_dir}/", target_path="/tmp")
+
+        # 3.1 AWSCLI Put
+        awscli_pod.exec_cmd_on_pod(
+            craft_s3_command(
+                (
+                    "put-bucket-lifecycle-configuration "
+                    f"--bucket {bucket} "
+                    f"--lifecycle-configuration file://{target_path_json}"
+                ),
+                mcg_obj=mcg_obj,
+                api=True,
+            )
+        )
+        # 3.2 AWSCLI Get
+        get_lifecycle_policy_resp = awscli_pod.exec_cmd_on_pod(
+            craft_s3_command(
+                f"get-bucket-lifecycle-configuration --bucket {bucket}",
+                mcg_obj=mcg_obj,
+                api=True,
+            ),
+            out_yaml_format=False,
+        )
+        assert (
+            json.loads(get_lifecycle_policy_resp)["Rules"]
+            == lifecycle_policy_dict["Rules"]
+        ), "AWS CLI: Lifecycle configuration mismatch"
+        # 3.3 AWSCLI Delete
+        awscli_pod.exec_cmd_on_pod(
+            craft_s3_command(
+                f"delete-bucket-lifecycle --bucket {bucket}",
+                mcg_obj=mcg_obj,
+                api=True,
+            )
+        )
+        assert "Rules" not in mcg_obj.s3_client.get_bucket_lifecycle_configuration(
+            Bucket=bucket
+        ), "AWS CLI: Lifecycle configuration not deleted"
+
+        # s3cmd operations
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            xml_path = os.path.join(tmp_dir, "lifecycle_config.xml")
+            with open(xml_path, "w") as f:
+                # s3cmd only uses the XML format for lifecycle configuration
+                lifecycle_policy_xml = lifecycle_policy.as_xml()
+                f.write(lifecycle_policy_xml)
+
+            target_path_xml = f"/tmp/{os.path.basename(xml_path)}"
+            awscli_pod.copy_to_pod_rsync(src_path=f"{tmp_dir}/", target_path="/tmp")
+
+        # 4.1 s3cmd Put
+        awscli_pod.exec_cmd_on_pod(
+            craft_s3cmd_command(
+                f"setlifecycle {target_path_xml} s3://{bucket}", mcg_obj=mcg_obj
+            )
+        )
+        # 4.2 s3cmd Get
+        get_lifecycle_policy_resp = awscli_pod.exec_cmd_on_pod(
+            craft_s3cmd_command(f"getlifecycle s3://{bucket}", mcg_obj=mcg_obj),
+            out_yaml_format=False,
+        )
+        # Check if the lifecycle policy contains the expected keys
+        # exact comparison is problematic due to the difference in XML formatting
+        expected_rule_keys = [
+            "Expiration",
+            "ExpiredObjectDeleteMarker",
+            "NoncurrentDays",
+            "AbortIncompleteMultipartUpload",
+        ]
+        assert all(
+            key in get_lifecycle_policy_resp for key in expected_rule_keys
+        ), "s3cmd: Lifecycle configuration mismatch"
+
+        # 4.3 s3cmd Delete
+        awscli_pod.exec_cmd_on_pod(
+            craft_s3cmd_command(f"dellifecycle s3://{bucket}", mcg_obj=mcg_obj)
+        )
+        assert "Rules" not in mcg_obj.s3_client.get_bucket_lifecycle_configuration(
+            Bucket=bucket
+        ), "s3cmd: Lifecycle configuration not deleted"

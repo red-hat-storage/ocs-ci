@@ -1,6 +1,8 @@
 from abc import ABC
 import datetime
 import uuid
+import xml.etree.ElementTree as ET
+import xml.dom.minidom
 
 
 class LifecyclePolicy:
@@ -35,6 +37,45 @@ class LifecyclePolicy:
         as_dict() implementation.
         """
         return {"Rules": [rule.as_dict() for rule in self.rules]}
+
+    def as_xml(self):
+        """
+        Convert the lifecycle policy to XML format
+
+        Returns:
+            str: XML string representation of the lifecycle policy
+        """
+
+        def create_element(parent, key, value):
+            if isinstance(value, dict):
+                elem = ET.SubElement(parent, key)
+                for k, v in value.items():
+                    create_element(elem, k, v)
+            elif isinstance(value, list):
+                for item in value:
+                    item_elem = ET.SubElement(parent, key)
+                    if isinstance(item, dict):
+                        for k, v in item.items():
+                            create_element(item_elem, k, v)
+            else:
+                elem = ET.SubElement(parent, key)
+                if value is not None:
+                    elem.text = (
+                        str(value).lower() if isinstance(value, bool) else str(value)
+                    )
+
+        root = ET.Element("LifecycleConfiguration")
+        for rule in self.rules:
+            rule_el = ET.SubElement(root, "Rule")
+            for key, value in rule.as_dict().items():
+                create_element(rule_el, key, value)
+
+        # Prettify
+        raw_xml_string = ET.tostring(root, encoding="unicode")
+        parsed = xml.dom.minidom.parseString(raw_xml_string)
+        xml_string = parsed.toprettyxml(indent="  ")
+
+        return xml_string
 
     def __str__(self):
         return self.as_dict().__str__()
