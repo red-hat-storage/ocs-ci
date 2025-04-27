@@ -2,6 +2,7 @@ import base64
 import copy
 import logging
 import os
+
 import pandas as pd
 import random
 import time
@@ -24,7 +25,10 @@ from collections import namedtuple
 from ocs_ci.deployment.cnv import CNVInstaller
 from ocs_ci.deployment import factory as dep_factory
 from ocs_ci.deployment.helpers.hypershift_base import HyperShiftBase
-from ocs_ci.deployment.hosted_cluster import hypershift_cluster_factory
+from ocs_ci.deployment.hosted_cluster import (
+    hypershift_cluster_factory,
+    skip_if_not_hcp_provider,
+)
 from ocs_ci.framework import config as ocsci_config, config
 import ocs_ci.framework.pytest_customization.marks
 from ocs_ci.framework.pytest_customization.marks import (
@@ -578,7 +582,7 @@ def pytest_runtest_setup(item):
                     ocsci_config.switch_ctx(original_idx)
 
 
-def pytest_fixture_setup(fixturedef, request, item):
+def pytest_fixture_setup(fixturedef, request):
     """
     In case of multicluster scenarios, we want to make sure that before running
     any fixture related to the testcase we need to switch the cluster context
@@ -591,10 +595,25 @@ def pytest_fixture_setup(fixturedef, request, item):
             for mark in request.node.iter_markers():
                 if mark.name == "config_index":
                     ocsci_config.switch_ctx(mark.args[0])
+    _switch_context_helper(request)
+
+
+def _switch_context_helper(request):
+    """
+    Helper function to switch context of the cluster
+
+    Args:
+        request: pytest request object
+    """
+
     if ocsci_config.multicluster:
         for mark in request.node.iter_markers():
             if mark.name == "parametrize":
-                if request.node.callspec.params.get("cluster_index"):
+                if hasattr(
+                    request.node, "callspec"
+                ) and request.node.callspec.params.get("cluster_index"):
+                    print("request.node.callspec.params.get(cluster_index)")
+
                     context = request.node.callspec.params.get("cluster_index")
                     log.info(f"Switching the fixture context to index: {context}")
                     ocsci_config.switch_ctx(context)
@@ -607,9 +626,13 @@ def pytest_fixture_post_finalizer(fixturedef, request):
     """
     if ocsci_config.multicluster:
         for mark in request.node.iter_markers():
+            # if we have multiple parametrize markers, we need to reset only one time, hence breaking from first match
             if mark.name == "parametrize":
-                if request.node.callspec.params.get("cluster_index"):
+                if hasattr(
+                    request.node, "callspec"
+                ) and request.node.callspec.params.get("cluster_index"):
                     ocsci_config.reset_ctx()
+                    break
 
 
 @pytest.fixture()
@@ -1148,6 +1171,8 @@ def project_factory_fixture(request):
         return proj_obj
 
     def finalizer():
+        _switch_context_helper(request)
+
         delete_projects(instances)
 
     request.addfinalizer(finalizer)
@@ -1336,6 +1361,8 @@ def pvc_factory_fixture(request, project_factory):
         """
         Delete the PVC
         """
+        _switch_context_helper(request)
+
         pv_objs = []
 
         # Get PV form PVC instances and delete PVCs
@@ -1487,6 +1514,8 @@ def pod_factory_fixture(request, pvc_factory):
         """
         Delete the Pod or the DeploymentConfig
         """
+        _switch_context_helper(request)
+
         for instance in instances:
             instance.delete()
             instance.ocp.wait_for_delete(instance.name)
@@ -8914,6 +8943,7 @@ def scale_noobaa_db_pod_pv_size(request):
 
 
 @pytest.fixture()
+@skip_if_not_hcp_provider
 def create_hypershift_clusters_push_config():
     """
     Create hosted HyperShift clusters using the hypershift_cluster_factory function.
@@ -8945,30 +8975,18 @@ def create_hypershift_clusters_push_config():
 
 
 @pytest.fixture()
+@skip_if_not_hcp_provider
 def create_config_of_existing_hosted_clusters():
     """
     Get the list of available hosted clusters. Push config to Multicluster Config for configs that do not exist only.
     """
 
-    def factory(
-        cluster_names, ocp_version, odf_version, setup_storage_client, nodepool_replicas
-    ):
+    def factory():
         """
         Wrapper to call hypershift_cluster_factory with a predefined duty.
 
-        Args:
-            cluster_names (list): List of cluster names
-            ocp_version (str): OCP version
-            odf_version (str): ODF version
-            setup_storage_client (bool): Setup storage client
-            nodepool_replicas (int): Nodepool replicas; supported values are 2,3
         """
         hypershift_cluster_factory(
-            cluster_names=cluster_names,
-            ocp_version=ocp_version,
-            odf_version=odf_version,
-            setup_storage_client=setup_storage_client,
-            nodepool_replicas=nodepool_replicas,
             duty="use_existing_hosted_clusters_push_missing_configs",
         )
 
@@ -8976,31 +8994,19 @@ def create_config_of_existing_hosted_clusters():
 
 
 @pytest.fixture()
+@skip_if_not_hcp_provider
 def refresh_hosted_config():
     """
     Get the list of available hosted clusters. Push new config to Multicluster Config,
     replacing already existing if found.
     """
 
-    def factory(
-        cluster_names, ocp_version, odf_version, setup_storage_client, nodepool_replicas
-    ):
+    def factory():
         """
         Wrapper to call hypershift_cluster_factory with a predefined duty.
 
-        Args:
-            cluster_names (list): List of cluster names
-            ocp_version (str): OCP version
-            odf_version (str): ODF version
-            setup_storage_client (bool): Setup storage client
-            nodepool_replicas (int): Nodepool replicas; supported values are 2,3
         """
         hypershift_cluster_factory(
-            cluster_names=cluster_names,
-            ocp_version=ocp_version,
-            odf_version=odf_version,
-            setup_storage_client=setup_storage_client,
-            nodepool_replicas=nodepool_replicas,
             duty="use_existing_hosted_clusters_force_push_configs",
         )
 
@@ -9008,6 +9014,7 @@ def refresh_hosted_config():
 
 
 @pytest.fixture()
+@skip_if_not_hcp_provider
 def destroy_hosted_cluster():
     """
     Destroy hosted HyperShift clusters using the hosted_cluster_remove_factory function.
@@ -9023,6 +9030,7 @@ def destroy_hosted_cluster():
 
 
 @pytest.fixture()
+@skip_if_not_hcp_provider
 def hosted_cluster_remove_config():
     """
     Remove hosted HyperShift clusters from Multicluster Config using the hosted_cluster_remove_factory function.
@@ -9601,3 +9609,16 @@ def admin_client():
     from ocp_resources.resource import get_client
 
     return get_client(config_file=kubeconfig_path)
+
+
+@pytest.fixture
+def cluster_index():
+    """
+    This is a workaround fixture for running with mark run_on_all_clients.
+    When run_on_all_clients marker is used, there needs to be added cluster_index
+    parameter to the test to prevent any issues with the test parametrization.
+    Having this dummy fixture prevents failure when we assign cluster_index via marker.
+
+    Returns: 1 , this value is overwritten by the pytest.mark.parametrize
+    """
+    return 1
