@@ -3,7 +3,6 @@ This module contains functionality required for CNV installation.
 """
 
 import io
-import json
 import os
 import logging
 import tempfile
@@ -822,29 +821,24 @@ class CNVInstaller(object):
         This method checks if the cnv operator is upgradable or not
 
         Return:
-            upgradeable_present(list): Returns a list of dicts.
+            cnv_upgradeable (bool)): Returns True if Upgradable else False
         """
-        logger.info("Check cnv is installed")
-        assert self.cnv_hyperconverged_installed(), "cnv operator is not installed"
-
-        logger.info("Check cnv is READY")
-        assert self.post_install_verification(
+        if self.cnv_hyperconverged_installed() and self.post_install_verification(
             raise_exception=False
-        ), "CNV operator is not ready"
-
-        cmd = (
-            f"oc get hyperconverged {constants.KUBEVIRT_HYPERCONVERGED} -n openshift-cnv -o json | "
-            "jq '.status.conditions'"
-        )
-        cmd_res = exec_cmd(cmd, shell=True)
-        if cmd_res.returncode != 0:
-            logger.error(f"Failed to disable multicluster engine\n{cmd_res.stderr}")
-            return
-        output = cmd_res.stdout.decode("utf-8")
-        logger.info(f"The output is: {output}")
-        data = json.loads(output)
-        upgradeable_present = any(item.get("type") == "Upgradeable" for item in data)
-        return upgradeable_present
+        ):
+            kubevirt_hyperconverged = OCP(
+                kind=constants.HYPERCONVERGED,
+                namespace=self.namespace,
+                resource_name=constants.KUBEVIRT_HYPERCONVERGED,
+            )
+            hyperconverged_conditions = kubevirt_hyperconverged.get()["status"][
+                "conditions"
+            ]
+            for condition in hyperconverged_conditions:
+                if condition["type"] == "Upgradeable":
+                    cnv_upgradable = True if condition["status"] == "True" else False
+                    break
+        return cnv_upgradable
 
     def upgrade_cnv(self):
         """
