@@ -116,7 +116,9 @@ class TestNeutralHubFailureAndRecovery:
         active_hub_cluster_node_objs = get_node_objs()
 
         drpc_cmd = run_cmd("oc get drpc -o wide -A")
-        logger.info("DRPC output from current active hub cluster before site-failure")
+        logger.info(
+            "DRPC output from current active hub cluster before shutting it down"
+        )
         logger.info(drpc_cmd)
 
         # Shutdown active hub cluster nodes
