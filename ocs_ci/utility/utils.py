@@ -5476,7 +5476,7 @@ def generate_folder_with_files(
     os.makedirs(folder_path, exist_ok=True)
 
     from concurrent.futures import ThreadPoolExecutor
-    from queue import Queue
+    from queue import Queue, Empty
     import threading
 
     # Use a queue to maintain order and provide a generator-like interface
@@ -5520,7 +5520,7 @@ def generate_folder_with_files(
                 filepath = file_queue.get(timeout=0.1)
                 files_received += 1
                 yield filepath
-            except Exception:
+            except Empty:
                 # Check if all futures are done
                 if all(future.done() for future in futures):
                     break

@@ -2572,7 +2572,7 @@ def wait_for_bucket_count_stability(
     """
     previous_counts = []
     for attempt in range(max_retries):
-        cli_buckets = list(mcg_obj.cli_list_all_buckets())
+        cli_buckets = mcg_obj.cli_list_all_buckets()
         current_count = len(cli_buckets)
 
         logger.info(
