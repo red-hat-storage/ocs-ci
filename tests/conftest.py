@@ -2859,6 +2859,9 @@ def scale_cli_fixture(request, scope_name):
     helpers.wait_for_resource_state(
         scalecli_pod_obj, constants.STATUS_RUNNING, timeout=600
     )
+    scalecli_pod_obj.exec_cmd_on_pod(
+        f"cp {constants.SERVICE_CA_CRT_AWSCLI_PATH} {constants.AWSCLI_CA_BUNDLE_PATH}"
+    )
 
     def scalecli_pod_cleanup():
         scalecli_pod_obj.delete()
