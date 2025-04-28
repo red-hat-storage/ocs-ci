@@ -26,6 +26,7 @@ from ocs_ci.helpers.managed_services import (
 from ocs_ci.ocs import constants, defaults, ocp, managedservice
 from ocs_ci.ocs.exceptions import (
     CommandFailed,
+    InvalidPodPresent,
     ResourceNotFoundError,
     UnsupportedFeatureError,
     PVNotSufficientException,
@@ -3323,3 +3324,45 @@ def get_deviceset_sc_name_per_deviceclass():
     """
     device_sets = get_all_device_sets()
     return {get_deviceset_sc_name(d): get_deviceclass_name(d) for d in device_sets}
+
+
+def check_unnecessary_pods_present():
+    """
+    Based on configuration, check that pods that are not necessary are not
+    present.
+    """
+    no_noobaa = config.COMPONENTS["disable_noobaa"]
+    no_ceph = (
+        config.DEPLOYMENT["external_mode"] or config.ENV_DATA["mcg_only_deployment"]
+    )
+    pod_names = [
+        pod.name for pod in get_all_pods(namespace=config.ENV_DATA["cluster_namespace"])
+    ]
+    log.info(f"Checking if only required operator pods are available in : {pod_names}")
+    if no_noobaa:
+        for invalid_pod_name in [
+            constants.NOOBAA_OPERATOR_DEPLOYMENT,
+            constants.NOOBAA_ENDPOINT_DEPLOYMENT,
+            constants.NOOBAA_DB_STATEFULSET,
+            constants.NOOBAA_CORE_STATEFULSET,
+        ]:
+            invalid_pods_found = [
+                pod_name
+                for pod_name in pod_names
+                if pod_name.startswith(invalid_pod_name)
+            ]
+            if invalid_pods_found:
+                raise InvalidPodPresent(
+                    f"Pods {invalid_pods_found} should not be present because NooBaa is not available"
+                )
+    if no_ceph:
+        for invalid_pod_name in [constants.ROOK_CEPH_OPERATOR]:
+            invalid_pods_found = [
+                pod_name
+                for pod_name in pod_names
+                if pod_name.startswith(invalid_pod_name)
+            ]
+            if invalid_pods_found:
+                raise InvalidPodPresent(
+                    f"Pods {invalid_pods_found} should not be present because Ceph is not available"
+                )
