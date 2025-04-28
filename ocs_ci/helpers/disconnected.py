@@ -44,7 +44,7 @@ def get_oc_mirror_tool():
 
     """
     try:
-        oc_mirror_version = exec_cmd("oc mirror version")
+        oc_mirror_version = exec_cmd("oc mirror version --v2")
     except (CommandFailed, FileNotFoundError):
         logger.info("oc-mirror tool is not available, installing it")
         prepare_bin_dir()
@@ -62,7 +62,7 @@ def get_oc_mirror_tool():
             os.path.join(oc_mirror_dir, "bin/oc-mirror"),
             os.path.join(bin_dir, "oc-mirror"),
         )
-        oc_mirror_version = exec_cmd("oc mirror version")
+        oc_mirror_version = exec_cmd("oc mirror version --v2")
     logger.info(
         f"oc-mirror tool is available: {oc_mirror_version.stdout.decode('utf-8')}"
     )

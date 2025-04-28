@@ -396,6 +396,14 @@ def mirror_index_image_via_oc_mirror(index_image, packages, icsp=None, idms=None
             f"{mirroring_manifests_dir}",
             "working-dir/dry-run/mapping.txt",
         )
+        with open(mapping_file, "r") as file:
+            lines = file.readlines()
+
+        # Remove 'docker://' from each line
+        updated_lines = [line.replace("docker://", "") for line in lines]
+
+        with open(mapping_file, "w") as file:
+            file.writelines(updated_lines)
 
     mirror_images_from_mapping_file(mapping_file, idms=idms)
 
