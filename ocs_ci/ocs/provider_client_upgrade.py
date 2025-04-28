@@ -80,6 +80,11 @@ class ProviderUpgrade(OCSUpgrade):
         self.upgrade_version = self.get_upgrade_version()
 
     def run_upgrade(self):
+        """
+        This method is for running the upgrade of ocs, metallb, acm and cnv opertaors
+
+        To Do: upgrade of mce, lso
+        """
         assert self.get_parsed_versions()[1] >= self.get_parsed_versions()[0], (
             f"Version you would like to upgrade to: {self.upgrade_version} "
             f"is not higher or equal to the version you currently running: "
@@ -101,7 +106,7 @@ class ProviderUpgrade(OCSUpgrade):
 
         for sample in TimeoutSampler(
             timeout=725,
-            sleep=5,
+            sleep=20,
             func=self.check_if_upgrade_completed,
             channel=self.channel,
             csv_name_pre_upgrade=self.csv_name_pre_upgrade,
@@ -217,6 +222,9 @@ class ProviderClusterOperatorUpgrade(ProviderUpgrade):
     """
 
     def run_provider_upgrade(self):
+        """
+        This method is for running the upgrade of ocs, metallb, acm and cnv opertaors
+        """
         try:
             log.info("Starting the operator upgrade process...")
             operator_upgrade = OperatorUpgrade()
