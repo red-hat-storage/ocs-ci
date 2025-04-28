@@ -1503,6 +1503,27 @@ def get_ceph_pool_property(pool_name, prop):
         return None
 
 
+def get_ceph_config_dump_property(prop):
+    """
+    The function runs ceph config dump command
+    and returns the value of the property
+
+    Args:
+        prop (str): The property to get from ceph config dump
+    Returns:
+        (str) property value or None if there is no such property
+    """
+    ceph_cmd = "ceph config dump -f json"
+    ct_pod = pod.get_ceph_tools_pod()
+    dump_out = ct_pod.exec_ceph_cmd(ceph_cmd)
+    config_dump = json.loads(dump_out)
+    for each in config_dump:
+        if each["name"].lower() == prop:
+            return each["value"]
+    logger.info(f"{prop} not found in ceph config dump")
+    return None
+
+
 def check_pool_compression_replica_ceph_level(pool_name, compression, replica):
     """
     Validate compression and replica values in ceph level
