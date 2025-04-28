@@ -177,7 +177,6 @@ from ocs_ci.helpers.helpers import (
     set_configmap_log_level_rook_ceph_operator,
     get_default_storage_class,
     update_volsync_channel,
-    create_unique_resource_name,
 )
 from ocs_ci.ocs.ui.helpers_ui import ui_deployment_conditions
 from ocs_ci.utility.utils import get_az_count
@@ -3897,8 +3896,8 @@ class RDRMultiClusterDROperatorsDeploy(MultiClusterDROperatorsDeploy):
         acm_indexes = get_all_acm_indexes()
         self.meta_obj.get_meta_access_secret_keys()
         thanos_secret_data = templating.load_yaml(constants.THANOS_PATH)
-        thanos_bucket_name = create_unique_resource_name(
-            resource_description="dr-thanos", resource_type="bucket"
+        thanos_bucket_name = (
+            f"dr-thanos-bucket-{config.clusters[0].ENV_DATA['cluster_name']}"
         )
         self.create_s3_bucket(
             self.meta_obj.access_key,
