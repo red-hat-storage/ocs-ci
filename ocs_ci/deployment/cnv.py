@@ -801,13 +801,6 @@ class CNVInstaller(object):
         logger.info("Removing the openshift virtualization CRDs")
         self.remove_crds()
 
-    def cnv_patch_subscription(self, patch):
-        patch_cmd = (
-            f"oc -n {self.namespace} patch sub {constants.KUBEVIRT_HYPERCONVERGED} "
-            f"-p {patch} --type merge"
-        )
-        run_cmd(patch_cmd)
-
     def get_running_cnv_version(self):
         """
         Get the currently deployed cnv version
@@ -816,17 +809,20 @@ class CNVInstaller(object):
             string: cnv version
 
         """
-        hyperconverged_subs = OCP(
+        hyperconverged_subs_obj = OCP(
             kind=constants.SUBSCRIPTION_WITH_ACM,
             namespace=self.namespace,
             resource_name=constants.KUBEVIRT_HYPERCONVERGED,
         )
-        cnv_version = hyperconverged_subs.get()["status"]["installedCSV"]
+        cnv_version = hyperconverged_subs_obj.get()["status"]["installedCSV"]
         return cnv_version
 
     def check_cnv_is_upgradable(self):
         """
         This method checks if the cnv operator is upgradable or not
+
+        Return:
+            upgradeable_present(list): Returns a list of dicts.
         """
         logger.info("Check cnv is installed")
         assert self.cnv_hyperconverged_installed(), "cnv operator is not installed"
@@ -859,6 +855,11 @@ class CNVInstaller(object):
             logger.info("CNV is not upgradable")
             return
 
+        hyperconverged_subs_obj = OCP(
+            kind=constants.SUBSCRIPTION_WITH_ACM,
+            namespace=self.namespace,
+            resource_name=constants.KUBEVIRT_HYPERCONVERGED,
+        )
         logger.info("Currently installed cnv version")
         logger.info(
             f" currently installed cnv version: {parse_version(self.get_running_cnv_version())}"
@@ -872,16 +873,19 @@ class CNVInstaller(object):
         if not config.DEPLOYMENT.get("cnv_latest_stable"):
             # Create CNV catalog source
             self.create_cnv_catalog_source()
+            # Update CNV subscription
+            patch = f'\'{{"spec": {{"channel": "nightly-{self.upgrade_version}"}}}}\''
+            hyperconverged_subs_obj.patch(params=patch, format_type="merge")
 
-        # Update CNV subscription
-        patch = f'\'{{"spec": {{"channel": "nightly-{self.upgrade_version}"}}}}\''
-        self.cnv_patch_subscription(patch)
         patch = '\'{"spec": {"installPlanApproval": "Automatic"}}\''
-        self.cnv_patch_subscription(patch)
+        hyperconverged_subs_obj.patch(params=patch, format_type="merge")
         wait_for_install_plan_and_approve(self.namespace)
 
         # Post CNV upgrade checks
-        self.post_install_verification()
+        if self.post_install_verification():
+            # setting upgrade approval to manual
+            patch = '\'{"spec": {"installPlanApproval": "Manual"}}\''
+            hyperconverged_subs_obj.patch(params=patch, format_type="merge")
         # Enable software emulation
         self.enable_software_emulation()
         # Download and extract the virtctl binary to bin_dir
