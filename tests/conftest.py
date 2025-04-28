@@ -7766,6 +7766,15 @@ def change_the_noobaa_log_level(request):
     return factory
 
 
+@pytest.fixture(scope="session")
+def add_env_vars_to_noobaa_core_session(request, mcg_obj_session):
+    """
+    Session scoped fixture for adding env vars to the noobaa core sts
+
+    """
+    return add_env_vars_to_noobaa_core_fixture(request, mcg_obj_session)
+
+
 @pytest.fixture(scope="class")
 def add_env_vars_to_noobaa_core_class(request, mcg_obj_session):
     """
@@ -8257,8 +8266,25 @@ def setup_logwriter_rbd_workload(
     return logwriter_sts
 
 
+@pytest.fixture(scope="session")
+def reduce_expiration_interval_session(add_env_vars_to_noobaa_core_session):
+    """
+    Session scoped fixture to reduce the object expiration interval check
+
+    """
+    return reduce_expiration_interval_factory(add_env_vars_to_noobaa_core_session)
+
+
 @pytest.fixture()
 def reduce_expiration_interval(add_env_vars_to_noobaa_core_class):
+    """
+    Function scoped fixture to reduce the object expiration interval check
+
+    """
+    return reduce_expiration_interval_factory(add_env_vars_to_noobaa_core_class)
+
+
+def reduce_expiration_interval_factory(add_env_vars_to_noobaa_core_class):
     """
     Reduce the interval in which the lifecycle
     background worker is running
@@ -8279,8 +8305,25 @@ def reduce_expiration_interval(add_env_vars_to_noobaa_core_class):
     return factory
 
 
+@pytest.fixture(scope="session")
+def change_lifecycle_schedule_min_session(add_env_vars_to_noobaa_core_session):
+    """
+    Session scoped fixture to change the lifecycle schedule minute
+
+    """
+    return change_lifecycle_schedule_min_factory(add_env_vars_to_noobaa_core_session)
+
+
 @pytest.fixture()
 def change_lifecycle_schedule_min(add_env_vars_to_noobaa_core_class):
+    """
+    Function scoped fixture to change the lifecycle schedule minute
+
+    """
+    return change_lifecycle_schedule_min_factory(add_env_vars_to_noobaa_core_class)
+
+
+def change_lifecycle_schedule_min_factory(add_env_vars_to_noobaa_core_class):
     """
     Change the lifecycle schedule minute. i.e, that is delay between
     the each run when lifecycle expiration is identfied.
