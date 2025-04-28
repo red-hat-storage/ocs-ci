@@ -434,7 +434,7 @@ def prepare_disconnected_ocs_deployment(upgrade=False):
 
         mirrored_index_image = mirror_index_image_via_oc_mirror(
             index_image,
-            constants.DISCON_CL_REQUIRED_PACKAGES_PER_ODF_VERSION[ocs_version],
+            constants.DISCON_CL_REQUIRED_PACKAGES_PER_ODF_VERSION[f"{ocs_version}"],
             icsp,
         )
     logger.debug(f"mirrored_index_image: {mirrored_index_image}")
