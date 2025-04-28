@@ -1,7 +1,5 @@
 import json
 import logging
-import subprocess
-import shlex
 import tempfile
 import time
 
@@ -103,6 +101,8 @@ class MetalLBInstaller:
         """
         Create catalog source for MetalLB
 
+        Arg:
+            metallb_version (str): MetalLB version
         Returns:
             bool: True if catalog source is created, False otherwise, error if not get Ready state
         """
@@ -707,6 +707,12 @@ class MetalLBInstaller:
         return self.icsp_brew_registry_exists()
 
     def metallb_patch_subscription(self, patch):
+        """
+        Update the subscription with patch information
+
+        Args:
+            patch (dict): patch information
+        """
         patch_cmd = (
             f"oc -n {self.namespace_lb} patch sub {constants.METALLB} "
             f"-p {patch} --type merge"
@@ -721,14 +727,13 @@ class MetalLBInstaller:
             string: metalLB version
 
         """
-        occmd = f"oc get sub {constants.METALLB} -n {self.namespace_lb} -o json"
-        jq_cmd = "jq -r .status.currentCSV"
-        json_out = subprocess.Popen(shlex.split(occmd), stdout=subprocess.PIPE)
-        metallb_version = subprocess.Popen(
-            shlex.split(jq_cmd), stdin=json_out.stdout, stdout=subprocess.PIPE
+        metallb_subs = OCP(
+            kind=constants.SUBSCRIPTION_WITH_ACM,
+            namespace=self.namespace_lb,
+            resource_name=constants.METALLB,
         )
-        json_out.stdout.close()
-        return metallb_version.communicate()[0].decode()
+        metallb_version = metallb_subs.get()["status"]["installedCSV"]
+        return metallb_version
 
     def upgrade_metallb(self):
         """

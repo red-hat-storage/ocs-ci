@@ -10,8 +10,6 @@ import tempfile
 import platform
 import requests
 import zipfile
-import shlex
-import subprocess
 import tarfile
 
 from ocs_ci.framework import config
@@ -818,16 +816,13 @@ class CNVInstaller(object):
             string: cnv version
 
         """
-        occmd = (
-            f"oc get sub {constants.KUBEVIRT_HYPERCONVERGED} -n openshift-cnv -o json"
+        hyperconverged_subs = OCP(
+            kind=constants.SUBSCRIPTION_WITH_ACM,
+            namespace=self.namespace,
+            resource_name=constants.KUBEVIRT_HYPERCONVERGED,
         )
-        jq_cmd = "jq -r .status.currentCSV"
-        json_out = subprocess.Popen(shlex.split(occmd), stdout=subprocess.PIPE)
-        cnv_version = subprocess.Popen(
-            shlex.split(jq_cmd), stdin=json_out.stdout, stdout=subprocess.PIPE
-        )
-        json_out.stdout.close()
-        return cnv_version.communicate()[0].decode()
+        cnv_version = hyperconverged_subs.get()["status"]["installedCSV"]
+        return cnv_version
 
     def check_cnv_is_upgradable(self):
         """
@@ -865,13 +860,13 @@ class CNVInstaller(object):
             return
 
         logger.info("Currently installed cnv version")
-        print(
+        logger.info(
             f" currently installed cnv version: {parse_version(self.get_running_cnv_version())}"
         )
         self.upgrade_version = config.UPGRADE.get("upgrade_cnv_version")
         if not self.upgrade_version:
             self.upgrade_version = get_running_ocp_version()
-        print(f"Upgarde cnv version: {parse_version(self.upgrade_version)}")
+        logger.info(f"Upgarde cnv to: {parse_version(self.upgrade_version)}")
 
         # we create catsrc with nightly builds only if config.DEPLOYMENT does not have cnv_latest_stable
         if not config.DEPLOYMENT.get("cnv_latest_stable"):
