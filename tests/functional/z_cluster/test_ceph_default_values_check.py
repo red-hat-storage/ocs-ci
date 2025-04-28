@@ -16,7 +16,11 @@ from ocs_ci.framework.testlib import (
     runs_on_provider,
 )
 from ocs_ci.ocs.resources import pod
-from ocs_ci.ocs.cluster import get_pg_balancer_status, get_mon_config_value
+from ocs_ci.ocs.cluster import (
+    get_pg_balancer_status,
+    get_mon_config_value,
+    is_lower_requirements,
+)
 from ocs_ci.framework import config
 from ocs_ci.ocs.ocp import OCP
 from ocs_ci.ocs import constants
@@ -140,6 +144,7 @@ class TestCephDefaultValuesCheck(ManageTest):
     @post_ocs_upgrade
     @skipif_external_mode
     @skipif_mcg_only
+    @runs_on_provider
     @pytest.mark.polarion_id("OCS-2554")
     def test_check_mds_cache_memory_limit(self):
         """
@@ -172,8 +177,13 @@ class TestCephDefaultValuesCheck(ManageTest):
                     delay=10,
                     backoff=1,
                 )(get_mds_cache_memory_limit)()
+            else:
+                raise ex
 
-        expected_mds_value = 3221225472
+        if is_lower_requirements():
+            expected_mds_value = 1073741824
+        else:
+            expected_mds_value = 3221225472
         expected_mds_value_in_GB = int(expected_mds_value / 1073741274)
         assert mds_cache_memory_limit == expected_mds_value, (
             f"mds_cache_memory_limit is not set with a value of {expected_mds_value_in_GB}GB. "
