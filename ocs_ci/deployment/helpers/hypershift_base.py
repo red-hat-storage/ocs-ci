@@ -75,11 +75,11 @@ def kubeconfig_exists_decorator(func):
     """
     Decorator to check if the kubeconfig exists before executing the decorated method
 
-    param:
-        func: func to decorate; should be used only for methods of class having 'cluster_kubeconfig' attribute !
+    Args:
+        func: Function to decorate. Should be used only for methods of a class having a 'cluster_kubeconfig' attribute.
 
     Returns:
-        wrapper
+        wrapper: The decorated function.
     """
 
     def wrapper(self, *args, **kwargs):
