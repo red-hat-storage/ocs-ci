@@ -2353,6 +2353,7 @@ DISCON_CL_REQUIRED_PACKAGES_PER_ODF_VERSION["4.19"] = [
     "odf-csi-addons-operator",
     "odf-multicluster-orchestrator",
     "odf-operator",
+    "odf-dependencies",
     # "odf-prometheus-operator",
 ]
 
