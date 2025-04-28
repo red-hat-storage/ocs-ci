@@ -29,10 +29,10 @@ from ocs_ci.utility.utils import (
     get_ocp_version,
     TimeoutSampler,
     wait_for_machineconfigpool_status,
-    run_cmd,
     get_running_ocp_version,
 )
 from pkg_resources import parse_version
+from ocs_ci.helpers import helpers
 
 logger = logging.getLogger(__name__)
 
@@ -713,11 +713,12 @@ class MetalLBInstaller:
         Args:
             patch (dict): patch information
         """
-        patch_cmd = (
-            f"oc -n {self.namespace_lb} patch sub {constants.METALLB} "
-            f"-p {patch} --type merge"
+        metallb_subs_obj = OCP(
+            kind=constants.SUBSCRIPTION_WITH_ACM,
+            namespace=self.namespace_lb,
+            resource_name=constants.METALLB,
         )
-        run_cmd(patch_cmd)
+        metallb_subs_obj.patch(params=patch, format_type="merge")
 
     def get_running_metallb_version(self):
         """
@@ -727,12 +728,12 @@ class MetalLBInstaller:
             string: metalLB version
 
         """
-        metallb_subs = OCP(
+        metallb_subs_obj = OCP(
             kind=constants.SUBSCRIPTION_WITH_ACM,
             namespace=self.namespace_lb,
             resource_name=constants.METALLB,
         )
-        metallb_version = metallb_subs.get()["status"]["installedCSV"]
+        metallb_version = metallb_subs_obj.get()["status"]["installedCSV"]
         return metallb_version
 
     def upgrade_metallb(self):
@@ -774,7 +775,8 @@ class MetalLBInstaller:
                 catalog_source_data, metallb_catalog_file.name
             )
 
-            exec_cmd(f"oc apply -f {metallb_catalog_file.name}", timeout=2400)
+            metallb_data = templating.load_yaml(metallb_catalog_file)
+            helpers.create_resource(**metallb_data)
 
             # wait for catalog source is ready
             metallb_catalog_source = CatalogSource(
