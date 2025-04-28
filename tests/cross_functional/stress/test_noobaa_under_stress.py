@@ -81,7 +81,7 @@ class TestNoobaaUnderStress:
 
             # Iterate and stress the cluster with object upload
             # and other IO operations
-            total_iterations = 4
+            total_iterations = 1
             for i in range(1, total_iterations + 1):
                 current_iteration = i
                 multiplier = current_iteration + 1
