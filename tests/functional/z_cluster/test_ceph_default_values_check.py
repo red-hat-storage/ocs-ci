@@ -181,9 +181,9 @@ class TestCephDefaultValuesCheck(ManageTest):
                 raise ex
 
         if is_lower_requirements():
-            expected_mds_value = 1073741824
+            expected_mds_value = constants.LOWER_REQ_MDS_CACHE_MEMORY
         else:
-            expected_mds_value = 3221225472
+            expected_mds_value = constants.MDS_CACHE_MEMORY
         expected_mds_value_in_GB = int(expected_mds_value / 1073741274)
         assert mds_cache_memory_limit == expected_mds_value, (
             f"mds_cache_memory_limit is not set with a value of {expected_mds_value_in_GB}GB. "

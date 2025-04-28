@@ -3968,6 +3968,7 @@ def is_lower_requirements():
 
     Returns:
         bool: True if lower requirements are satisfied, otherwise False.
+
     """
     # Worker instance types considered as lower requirements
     lower_requirements_worker_types = {"m4.4xlarge", "bx2-8x32"}
@@ -3984,7 +3985,7 @@ def is_lower_requirements():
     try:
         machines_data = machine_obj.get()
         machines = machines_data.get("items", [])
-    except Exception as ex:
+    except CommandFailed as ex:
         logger.warning(f"Could not fetch Machines (falling back to config only): {ex}")
         machines = []
 
