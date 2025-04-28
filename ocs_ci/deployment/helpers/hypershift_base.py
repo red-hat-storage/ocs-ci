@@ -74,7 +74,8 @@ def get_available_hosted_clusters_to_ocp_ver_dict():
 def kubeconfig_exists_decorator(func):
     """
     Decorator to check if the kubeconfig exists before executing the decorated method
-    :param func: func to decorate; should be used only for methods of class having 'cluster_kubeconfig' attribute !
+    param:
+        func: func to decorate; should be used only for methods of class having 'cluster_kubeconfig' attribute !
     Returns:
         wrapper
     """
