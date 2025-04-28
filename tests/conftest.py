@@ -561,13 +561,26 @@ def pytest_runtest_setup(item):
     if ocsci_config.multicluster and ocsci_config.UPGRADE.get("upgrade", False):
         for mark in item.iter_markers():
             if mark.name == "config_index":
-                log.info("Switching the test context to index: {mark.args[0]}")
+                log.info(f"Switching the test context to index: {mark.args[0]}")
                 ocsci_config.switch_ctx(mark.args[0])
+    if ocsci_config.multicluster:
+        for mark in item.iter_markers():
+            if mark.name == "parametrize":
+                if item.callspec.params.get("cluster_index"):
+                    context = item.callspec.params.get("cluster_index")
+                    log.info(f"Switching the test context to index: {context}")
+                    original_idx = ocsci_config.cur_index
+                    ocsci_config.switch_ctx(context)
+                    yield
+                    log.info(
+                        f"Switching the test context back to index: {original_idx}"
+                    )
+                    ocsci_config.switch_ctx(original_idx)
 
 
 def pytest_fixture_setup(fixturedef, request):
     """
-    In case of multicluster upgrade scenarios, we want to make sure that before running
+    In case of multicluster scenarios, we want to make sure that before running
     any fixture related to the testcase we need to switch the cluster context
 
     """
@@ -578,6 +591,25 @@ def pytest_fixture_setup(fixturedef, request):
             for mark in request.node.iter_markers():
                 if mark.name == "config_index":
                     ocsci_config.switch_ctx(mark.args[0])
+    if ocsci_config.multicluster:
+        for mark in request.node.iter_markers():
+            if mark.name == "parametrize":
+                if request.node.callspec.params.get("cluster_index"):
+                    context = request.node.callspec.params.get("cluster_index")
+                    log.info(f"Switching the fixture context to index: {context}")
+                    ocsci_config.switch_ctx(context)
+
+
+def pytest_fixture_post_finalizer(fixturedef, request):
+    """
+    In case of multicluster scenarios, we want to make sure that context is restored
+    after fixture is finished.
+    """
+    if ocsci_config.multicluster:
+        for mark in request.node.iter_markers():
+            if mark.name == "parametrize":
+                if request.node.callspec.params.get("cluster_index"):
+                    ocsci_config.reset_ctx()
 
 
 @pytest.fixture()
