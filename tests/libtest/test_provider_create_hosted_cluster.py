@@ -418,7 +418,7 @@ class TestProviderHosted(object):
         from ocs_ci.deployment.cnv import CNVInstaller
 
         cnv_installer_obj = CNVInstaller()
-        cnv_installer_obj.upgrade_cnv()
+        assert cnv_installer_obj.upgrade_cnv(), "CNV operator upgrade not successful"
 
     @runs_on_provider
     def test_metallb_upgrade(self):
@@ -429,4 +429,6 @@ class TestProviderHosted(object):
         from ocs_ci.deployment.metallb import MetalLBInstaller
 
         metallb_installer_obj = MetalLBInstaller()
-        metallb_installer_obj.upgrade_metallb()
+        assert (
+            metallb_installer_obj.upgrade_metallb()
+        ), "Metallb operator upgrade not successful"
