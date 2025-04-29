@@ -9,17 +9,19 @@ from ocs_ci.framework.testlib import (
     skipif_managed_service,
     skipif_hci_provider_and_client,
 )
+from ocs_ci.ocs import constants
 from ocs_ci.ocs.resources.pod import (
     get_all_pods,
     check_toleration_on_pods,
     wait_for_pods_to_be_running,
+    check_duplicate_tolerations_on_pods,
 )
 from ocs_ci.ocs.node import (
     get_ocs_nodes,
     taint_nodes,
     untaint_nodes,
 )
-
+from ocs_ci.utility.prometheus import PrometheusAPI
 
 logger = logging.getLogger(__name__)
 
@@ -47,7 +49,7 @@ class TestTaintAndTolerations(E2ETest):
 
         request.addfinalizer(finalizer)
 
-    def test_toleration(self):
+    def test_toleration(self, threading_lock):
         """
         1. Check if nodes are tainted
         2. Taint ocs nodes if not tainted
@@ -63,6 +65,17 @@ class TestTaintAndTolerations(E2ETest):
 
         # Check tolerations on pods under openshift-storage
         check_toleration_on_pods()
+
+        # Check duplicate toleration on pods and PrometheusDuplicateTimestamps alert(DFBUGS-1654)
+        check_duplicate_tolerations_on_pods()
+        prometheus = PrometheusAPI(threading_lock=threading_lock)
+        alerts_response = prometheus.get(
+            "alerts", payload={"silenced": False, "inhibited": False}
+        )
+        alerts = alerts_response.json()["data"]["alerts"]
+        assert constants.ALERT_PROMETHEUSDUPLICATETIMESTAMPS not in [
+            alert["labels"]["alertname"] for alert in alerts
+        ]
 
         # Respin all pods and check it if is still running
         pod_list = get_all_pods(namespace=config.ENV_DATA["cluster_namespace"])

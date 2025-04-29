@@ -16,6 +16,7 @@ import calendar
 from threading import Thread
 import base64
 from semantic_version import Version
+from collections import Counter
 
 from ocs_ci.ocs.ocp import get_images, OCP, verify_images_upgraded
 from ocs_ci.helpers import helpers
@@ -34,6 +35,7 @@ from ocs_ci.ocs.exceptions import (
     TimeoutException,
     NoRunningCephToolBoxException,
     TolerationNotFoundException,
+    DuplicateTolerationException,
 )
 
 from ocs_ci.ocs.utils import setup_ceph_toolbox, get_pod_name_by_pattern
@@ -2798,6 +2800,41 @@ def check_toleration_on_subscriptions(toleration_key=constants.TOLERATION_KEY):
         )
         raise TolerationNotFoundException(
             f"The following subscriptions do not have toleration {toleration_key}: {', '.join(subs_missing_toleration)}"
+        )
+
+
+def check_duplicate_tolerations_on_pods():
+    """
+    Function to check for duplicate tolerations on pods.
+
+    Raises:
+        DuplicateTolerationException: Raised when duplicate tolerations are found on any pod.
+    """
+    pod_objs = get_all_pods(
+        namespace=config.ENV_DATA["cluster_namespace"],
+        selector=[constants.ROOK_CEPH_OSD_PREPARE],
+        exclude_selector=True,
+    )
+
+    pods_with_duplicates = []
+    for pod_obj in pod_objs:
+        resource_name = pod_obj.name
+        tolerations = pod_obj.get().get("spec", {}).get("tolerations", [])
+        toleration_tuples = [tuple(sorted(tol.items())) for tol in tolerations]
+        counts = Counter(toleration_tuples)
+
+        duplicates = [tol for tol, count in counts.items() if count > 1]
+        if duplicates:
+            logger.warning(
+                f"The pod {resource_name} has duplicate tolerations: "
+                f"{[dict(tol) for tol in duplicates]}"
+            )
+            pods_with_duplicates.append(resource_name)
+
+    if pods_with_duplicates:
+        raise DuplicateTolerationException(
+            f"The following pods have duplicate tolerations: "
+            f"{', '.join(pods_with_duplicates)}"
         )
 
 
