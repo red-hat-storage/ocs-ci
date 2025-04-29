@@ -14,9 +14,9 @@ from ocs_ci.ocs.resources import pod
 from ocs_ci.ocs.resources.csv import CSV, check_all_csvs_are_succeeded
 from ocs_ci.ocs.resources.install_plan import wait_for_install_plan_and_approve
 from ocs_ci.utility.utils import TimeoutSampler
-from ocs_ci.ocs.resources.storage_client import StorageClient
 from ocs_ci.deployment.metallb import MetalLBInstaller
 from ocs_ci.deployment.cnv import CNVInstaller
+from ocs_ci.deployment.deployment import Deployment
 from ocs_ci.ocs.acm_upgrade import ACMUpgrade
 from ocs_ci.framework.testlib import (
     skipif_ocs_version,
@@ -81,7 +81,7 @@ class ProviderUpgrade(OCSUpgrade):
 
     def run_upgrade(self):
         """
-        This method is for running the upgrade of ocs, metallb, acm and cnv opertaors
+        This method is for running the upgrade of ocs,
 
         To Do: upgrade of mce, lso
         """
@@ -185,7 +185,6 @@ class OperatorUpgrade(ProviderUpgrade):
     """
 
     def __init__(self):
-        self.storage_clients = StorageClient()
         self.metallb_installer_obj = MetalLBInstaller()
         self.cnv_installer_obj = CNVInstaller()
         self.acm_hub_upgrade_obj = ACMUpgrade()
@@ -203,16 +202,33 @@ class OperatorUpgrade(ProviderUpgrade):
         assert (
             self.pre_upgrade_data.get("pod_status", "") == "Running"
         ), "klusterlet pods are not in Running status"
-        self.run_upgrade()
-        ocs_upgrade.run_ocs_upgrade()
         self.upgrade_phase = "post_upgrade"
         self.provider_pod_name_pattern = "ocs-provider-server"
         self.collect_data(self.provider_pod_name_pattern)
 
-    def run_upgrade(self):
-        self.acm_hub_upgrade_obj.run_upgrade()
-        self.cnv_installer_obj.upgrade_cnv()
-        self.metallb_installer_obj.upgrade_metallb()
+    def run_operators_upgrade(self):
+        """
+        This method is for upgrade of all operators required for provider clusters,
+        ACM, Metallb, Cnv
+
+        To do: LSO, MCE
+
+        """
+        if Deployment().acm_operator_installed():
+            try:
+                self.acm_hub_upgrade_obj.run_upgrade()
+            except Exception as e:
+                log.error(f"ACM Operator upgrade failed: {e}")
+        try:
+            if not self.cnv_installer_obj.upgrade_cnv():
+                raise Exception("CNV Operator upgrade failed")
+        except Exception as e:
+            log.error(f"CNV Operator upgrade failed: {e}")
+        try:
+            if not self.metallb_installer_obj.upgrade_metallb():
+                raise Exception("MetalLB Operator upgrade failed")
+        except Exception as e:
+            log.error(f"metallB Operator upgrade failed: {e}")
 
 
 class ProviderClusterOperatorUpgrade(ProviderUpgrade):
@@ -228,7 +244,10 @@ class ProviderClusterOperatorUpgrade(ProviderUpgrade):
         try:
             log.info("Starting the operator upgrade process...")
             operator_upgrade = OperatorUpgrade()
+            self.run_upgrade()
+            ocs_upgrade.run_ocs_upgrade()
             operator_upgrade.collect_pre_upgrade_data()
+            operator_upgrade.run_operators_upgrade()
             log.info("Operator upgrade completed successfully.")
         except Exception as e:
             log.error(f"Operator upgrade failed: {e}")

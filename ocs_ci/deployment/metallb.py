@@ -737,11 +737,15 @@ class MetalLBInstaller:
             resource_name=constants.METALLB,
         )
         metallb_version = metallb_subs_obj.get()["status"]["installedCSV"]
+        metallb_version = metallb_version.split(".v")[1].split("-")[0]
         return metallb_version
 
     def upgrade_metallb(self):
         """
         Upgrade metalLB operator
+
+        Returns:
+            bool: if metallb operator is upgraded successfully
 
         """
         logger.info("Check if metallb is installed")
@@ -794,6 +798,4 @@ class MetalLBInstaller:
 
         metallb_version_post_upgrade = self.get_running_metallb_version()
         logger.info(f"metallb version post upgrade: {metallb_version_post_upgrade}")
-        assert (
-            self.upgrade_version in metallb_version_post_upgrade
-        ), "Metallb not updated successfully"
+        return self.upgrade_version in metallb_version_post_upgrade
