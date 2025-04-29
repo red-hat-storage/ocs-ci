@@ -1,11 +1,15 @@
 import logging
+import time
+
 import pytest
 
-
+from ocs_ci.framework import config
 from ocs_ci.framework.pytest_customization.marks import polarion_id
 from ocs_ci.framework.testlib import ManageTest, tier4b
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.cluster import change_ceph_full_ratio
+from ocs_ci.ocs.ocp import OCP
+from ocs_ci.ocs.resources.pod import verify_data_integrity
 from ocs_ci.utility.utils import TimeoutSampler
 
 logger = logging.getLogger(__name__)
@@ -38,6 +42,13 @@ class TestRecoverPvcExpandFailure(ManageTest):
 
         def finalizer():
             change_ceph_full_ratio(85)
+            dep_ocp = OCP(
+                kind=constants.DEPLOYMENT,
+                namespace=config.ENV_DATA["cluster_namespace"],
+            )
+            dep_ocp.exec_oc_cmd(
+                "scale deployment odf-operator-controller-manager --replicas=0"
+            )
 
         request.addfinalizer(finalizer)
 
@@ -50,6 +61,16 @@ class TestRecoverPvcExpandFailure(ManageTest):
         Test case to verify recovery from PVC expansion failure
 
         """
+        # Create files on the pods and get md5sum
+        for pod_obj in self.pods:
+            pod_obj.run_io(
+                size="4G",
+                io_direction="write",
+                runtime=60,
+                fio_filename=pod_obj.name,
+            )
+            pod_obj.orig_md5_sum = pod_obj.cal_md5sum(pod_obj, pod_obj.name)
+
         target_percentage = 85
         logger.info(
             f"Fill up the cluster to {target_percentage}% of it's storage capacity"
@@ -82,6 +103,93 @@ class TestRecoverPvcExpandFailure(ManageTest):
         for pvc_obj in self.pvcs:
             for pvc_data in TimeoutSampler(240, 2, pvc_obj.get):
                 capacity = pvc_data.get("status").get("capacity").get("storage")
+                if capacity == f"{pvc_size_expanded}Gi":
+                    break
+                logger.info(
+                    f"Capacity of PVC {pvc_obj.name} is not {pvc_size_expanded}Gi as "
+                    f"expected, but {capacity}. Retrying."
+                )
+            logger.info(
+                f"Verified that the capacity of PVC {pvc_obj.name} is changed to "
+                f"{pvc_size_expanded}Gi. The capacity has not changed to reduced size {pvc_size_reduced}."
+                f"Make sure there is no data corruption by checking md5sum"
+            )
+
+        # Verify md5sum
+        for pod_obj in self.pods:
+            verify_data_integrity(
+                pod_obj=pod_obj,
+                file_name=pod_obj.name,
+                original_md5sum=pod_obj.orig_md5_sum,
+            )
+
+    @tier4b
+    @polarion_id("")
+    def test_recover_from_pending_pvc_expansion(self):
+        """
+        Test case to verify recovery from pending PVC expansion
+
+        """
+        # Create files on the pods and get md5sum
+        for pod_obj in self.pods:
+            pod_obj.run_io(
+                size="4G",
+                io_direction="write",
+                runtime=60,
+                fio_filename=f"{pod_obj.name}",
+            )
+            pod_obj.orig_md5_sum = pod_obj.cal_md5sum(pod_obj, pod_obj.name)
+
+        # Scale down rbd and cephfs provisioner pod. To do this scale down operator deployments first
+        logger.info(
+            "Scale down operator deployments to avoid reconciling ctrlplugin deployments after scaled down"
+        )
+        dep_ocp = OCP(
+            kind=constants.DEPLOYMENT, namespace=config.ENV_DATA["cluster_namespace"]
+        )
+        deployments = [
+            "odf-operator-controller-manager",
+            constants.OCS_CLIENT_OPERATOR_CONTROLLER_MANAGER_PREFIX,
+            "ceph-csi-controller-manager",
+            f"{config.ENV_DATA['cluster_namespace']}.cephfs.csi.ceph.com-ctrlplugin",
+            f"{config.ENV_DATA['cluster_namespace']}.rbd.csi.ceph.com-ctrlplugin",
+        ]
+        for dep in deployments:
+            logger.info(f"Scaling deployment {dep} to replica 0")
+            dep_ocp.exec_oc_cmd(f"scale deployment {dep} --replicas=0")
+            time.sleep(10)
+
+        pvc_size_expanded = 20
+        pvc_size_reduced = 10
+
+        logger.info(f"Expanding PVCs to {pvc_size_expanded} GiB")
+        for pvc_obj in self.pvcs:
+            logger.info(
+                f"Expanding size of PVC {pvc_obj.name} to {pvc_size_expanded}Gi"
+            )
+            assert not pvc_obj.resize_pvc(
+                pvc_size_expanded, True, timeout=60
+            ), f"Unexpected: Expansion of PVC '{pvc_obj.name}' completed"
+            logger.info(pvc_obj.describe())
+        logger.info(f"All PVCs failed to expanded to the size {pvc_size_expanded}Gi")
+
+        for pvc_obj in self.pvcs:
+            logger.info(
+                f"Reducing the size of expansion failed PVC {pvc_obj.name} to {pvc_size_reduced}Gi"
+            )
+            assert pvc_obj.resize_pvc(
+                pvc_size_reduced, False
+            ), f"Failed to reduce the size of the PVC '{pvc_obj.name}'"
+
+        # Scale back the odf-operator-controller-manager. This will scale up all other deployments that was scaled down
+        dep_ocp.exec_oc_cmd(
+            "scale deployment odf-operator-controller-manager --replicas=0"
+        )
+
+        # Now PVCs are expected to expand to the reduced size
+        for pvc_obj in self.pvcs:
+            for pvc_data in TimeoutSampler(240, 2, pvc_obj.get):
+                capacity = pvc_data.get("status").get("capacity").get("storage")
                 if capacity == f"{pvc_size_reduced}Gi":
                     break
                 logger.info(
@@ -91,4 +199,12 @@ class TestRecoverPvcExpandFailure(ManageTest):
             logger.info(
                 f"Verified that the capacity of PVC {pvc_obj.name} is changed to "
                 f"{pvc_size_reduced}Gi."
+            )
+
+        # Verify md5sum
+        for pod_obj in self.pods:
+            verify_data_integrity(
+                pod_obj=pod_obj,
+                file_name=pod_obj.name,
+                original_md5sum=pod_obj.orig_md5_sum,
             )
