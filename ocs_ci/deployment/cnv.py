@@ -845,6 +845,9 @@ class CNVInstaller(object):
         """
         Upgrade cnv operator
 
+        Returns:
+        bool: if cnv operator is upgraded successfully
+
         """
         if not self.check_cnv_is_upgradable():
             logger.info("CNV is not upgradable")
@@ -872,16 +875,18 @@ class CNVInstaller(object):
             patch = f'{{"spec": {{"channel": "nightly-{self.upgrade_version}"}}}}'
             hyperconverged_subs_obj.patch(params=patch, format_type="merge")
 
-        patch = '{"spec": {"installPlanApproval": "Automatic"}}'
-        hyperconverged_subs_obj.patch(params=patch, format_type="merge")
-        wait_for_install_plan_and_approve(self.namespace)
+        if hyperconverged_subs_obj.get()["spec"]["installPlanApproval"] != "Automatic":
+            patch = '{"spec": {"installPlanApproval": "Automatic"}}'
+            hyperconverged_subs_obj.patch(params=patch, format_type="merge")
+            wait_for_install_plan_and_approve(self.namespace)
 
         # Post CNV upgrade checks
         if self.post_install_verification():
             # setting upgrade approval to manual
-            patch = '{"spec": {"installPlanApproval": "Automatic"}}'
+            patch = '{"spec": {"installPlanApproval": "Manual"}}'
             hyperconverged_subs_obj.patch(params=patch, format_type="merge")
         # Enable software emulation
         self.enable_software_emulation()
         # Download and extract the virtctl binary to bin_dir
         self.download_and_extract_virtctl_binary()
+        return self.upgrade_version in self.get_running_cnv_version()
