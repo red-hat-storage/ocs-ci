@@ -3956,3 +3956,62 @@ def get_mds_counts():
         1 for mds in ceph_mdsmap if mds["state"] == "standby-replay"
     )
     return active_pod_count, standby_replay_count
+
+
+def is_lower_requirements():
+    """
+    Determine if the cluster meets lower hardware requirements.
+
+    The conditions are:
+    1. allow_lower_instance_requirements is set to True in the config.
+    2. Any worker instance type is 'm4.4xlarge' or 'bx2-8x32'.
+
+    Returns:
+        bool: True if lower requirements are satisfied, otherwise False.
+
+    """
+    # Worker instance types considered as lower requirements
+    lower_requirements_worker_types = {"m4.4xlarge", "bx2-8x32"}
+
+    # Check if allow_lower_instance_requirements is explicitly set
+    if config.DEPLOYMENT.get("allow_lower_instance_requirements", False):
+        logger.info(
+            "Lower requirements are allowed by configuration (allow_lower_instance_requirements=True)."
+        )
+        return True
+
+    # Check if the Machine resources exist
+    machine_obj = OCP(kind="Machine", namespace="openshift-machine-api")
+    try:
+        machines_data = machine_obj.get()
+        machines = machines_data.get("items", [])
+    except CommandFailed as ex:
+        logger.warning(f"Could not fetch Machines (falling back to config only): {ex}")
+        machines = []
+
+    if not machines:
+        logger.info(
+            "No Machine resources found. Assuming standard (non-lower) requirements."
+        )
+        return False
+
+    # Check worker instance types
+    for machine in machines:
+        role = machine["metadata"]["labels"].get(
+            "machine.openshift.io/cluster-api-machine-role"
+        )
+        if role == "worker":
+            instance_type = machine["metadata"]["labels"].get(
+                "machine.openshift.io/instance-type"
+            )
+            if instance_type in lower_requirements_worker_types:
+                logger.info(
+                    f"Detected lower requirement worker instance type: {instance_type} "
+                    f"(machine: {machine['metadata']['name']})."
+                )
+                return True
+
+    logger.info(
+        "Cluster worker machines use standard or larger instance types. No lower requirements detected."
+    )
+    return False
