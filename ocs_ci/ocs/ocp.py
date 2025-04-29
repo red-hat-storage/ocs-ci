@@ -238,6 +238,7 @@ class OCP(object):
             config.switch_ctx(original_context)
         return out
 
+    @retry(CommandFailed, tries=3, delay=30, backoff=1)
     def exec_oc_debug_cmd(
         self, node, cmd_list, timeout=300, namespace=None, use_root=True
     ):
