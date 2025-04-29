@@ -21,7 +21,6 @@ log = logging.getLogger(__name__)
 @tier2
 @skipif_external_mode
 @pytest.mark.polarion_id("OCS-2481")
-@pytest.mark.bugzilla("1859033")
 class TestDeleteRookCephMonPod(ManageTest):
     """
     Tries to delete rook-ceph-operator pod.

@@ -25,6 +25,7 @@ from ocs_ci.ocs.exceptions import CommandFailed, RhcosImageNotFound, TimeoutExpi
 from ocs_ci.ocs.node import get_nodes
 from ocs_ci.ocs.openshift_ops import OCP
 from ocs_ci.utility import ibmcloud_bm
+from ocs_ci.utility.baremetal import update_uefi_boot_order
 from ocs_ci.utility.bootstrap import gather_bootstrap
 from ocs_ci.utility.connection import Connection
 from ocs_ci.utility.csr import wait_for_all_nodes_csr_and_approve, approve_pending_csr
@@ -1023,12 +1024,13 @@ class BAREMETALAI(BAREMETALBASE):
             )
 
             # upload ipxe config to httpd server (helper_node)
+            discovery_ipxe_file_dest = (
+                f"{self.bm_config['bm_httpd_document_root']}/ipxe/"
+                f"{self.bm_config['env_name']}/discovery.ipxe"
+            )
             self.helper_node_handler.upload_file(
                 ipxe_config_file,
-                (
-                    f"{self.bm_config['bm_httpd_document_root']}/ipxe/"
-                    f"{self.bm_config['env_name']}/discovery.ipxe"
-                ),
+                discovery_ipxe_file_dest,
             )
             ipxe_file_url = (
                 f"http://{self.bm_config['bm_httpd_provision_server']}/ipxe/"
@@ -1082,6 +1084,11 @@ class BAREMETALAI(BAREMETALBASE):
                     pxelinux_cfg_file,
                     f"{self.bm_config['bm_tftp_base_dir']}/pxelinux.cfg/{dest_cfg_file_name}",
                 )
+            # rename the discovery.ipxe file to continue boot from disk on UEFI boot mode systems
+            cmd = f"mv {discovery_ipxe_file_dest} {discovery_ipxe_file_dest}.backup"
+            assert (
+                self.helper_node_handler.exec_cmd(cmd=cmd)[0] == 0
+            ), "Failed to rename discovery.ipxe file"
 
             # update discovered hosts (configure hostname and role)
             self.ai_cluster.update_hosts_config(
@@ -1090,6 +1097,17 @@ class BAREMETALAI(BAREMETALBASE):
 
             # install the OCP cluster
             self.ai_cluster.install_cluster()
+
+            # workaround for UEFI boot order issue (make sure that PXE boot is on first place)
+            for machine in master_nodes + worker_nodes:
+                if self.srv_details[machine].get("fix_uefi_boot_order_first_option"):
+                    update_uefi_boot_order(
+                        first_option_string=self.srv_details[machine].get(
+                            "fix_uefi_boot_order_first_option"
+                        ),
+                        ocp_node=machine,
+                        ignore_error=True,
+                    )
 
         def create_dns_records(self):
             """
@@ -1163,6 +1181,21 @@ class BAREMETALAI(BAREMETALBASE):
                 machine (str): Machine Name
 
             """
+            # workaround for UEFI boot order issue (make sure that PXE boot is on first place)
+            if self.srv_details[machine].get("fix_uefi_boot_order_first_option"):
+                update_uefi_boot_order(
+                    first_option_string=self.srv_details[machine].get(
+                        "fix_uefi_boot_order_first_option"
+                    ),
+                    host={
+                        "host": self.srv_details[machine]["public_ip"],
+                        "user": "core",
+                        "private_key": os.path.expanduser(
+                            config.DEPLOYMENT["ssh_key_private"]
+                        ),
+                    },
+                    ignore_error=True,
+                )
             if self.srv_details[machine].get("mgmt_provider", "ipmitool") == "ipmitool":
                 secrets = [
                     self.srv_details[machine]["mgmt_username"],

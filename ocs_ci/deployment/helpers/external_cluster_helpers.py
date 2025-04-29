@@ -137,10 +137,17 @@ class ExternalCluster(object):
             params = f"{params} --run-as-user {ceph_user}"
 
         if config.EXTERNAL_MODE.get("use_rbd_namespace"):
-            rbd_namespace = config.EXTERNAL_MODE.get(
-                "rbd_namespace"
-            ) or self.create_rbd_namespace(rbd=rbd_name)
+            rbd_namespace = config.EXTERNAL_MODE.get("rbd_namespace")
+            if not rbd_namespace:
+                rbd_namespace = self.create_rbd_namespace(rbd=rbd_name)
+                config.EXTERNAL_MODE["rbd_namespace"] = rbd_namespace
+
             params = f"{params} --rados-namespace {rbd_namespace}"
+            if "restricted-auth-permission" not in params:
+                params += " --restricted-auth-permission true"
+                config.ENV_DATA["restricted-auth-permission"] = True
+            if "cluster-name" not in params:
+                params += f" --k8s-cluster-name {cluster_name}"
 
         out = self.run_exporter_script(params=params)
 
@@ -159,7 +166,11 @@ class ExternalCluster(object):
             str: absolute path to exporter script
 
         """
-        script_path = generate_exporter_script()
+        ocs_version = version.get_semantic_ocs_version_from_config()
+        use_configmap = True
+        if ocs_version <= version.VERSION_4_18:
+            use_configmap = False
+        script_path = generate_exporter_script(use_configmap=use_configmap)
         upload_file(
             self.host, script_path, script_path, self.user, self.password, self.ssh_key
         )

@@ -8,9 +8,8 @@ import logging
 import pytest
 
 from ocs_ci.framework import config
-from ocs_ci.framework.pytest_customization.marks import blue_squad
+from ocs_ci.framework.pytest_customization.marks import blue_squad, jira
 from ocs_ci.framework.testlib import (
-    bugzilla,
     tier3,
     skipif_managed_service,
     skipif_external_mode,
@@ -22,6 +21,7 @@ from ocs_ci.utility.prometheus import PrometheusAPI, check_query_range_result_en
 logger = logging.getLogger(__name__)
 
 
+@jira("DFBUGS-308")
 @blue_squad
 @tier3
 @pytest.mark.polarion_id("OCS-1306")
@@ -169,7 +169,6 @@ def test_monitoring_shows_osd_down(measure_stop_ceph_osd, threading_lock):
 
 @blue_squad
 @tier3
-@bugzilla("2203795")
 @pytest.mark.polarion_id("OCS-2734")
 @skipif_managed_service
 def test_ceph_metrics_presence_when_osd_down(measure_stop_ceph_osd, threading_lock):

@@ -11,7 +11,6 @@ from ocs_ci.ocs.constants import (
 from ocs_ci.framework import config
 from ocs_ci.framework.pytest_customization.marks import (
     tier1,
-    bugzilla,
     polarion_id,
     brown_squad,
 )
@@ -25,7 +24,6 @@ LIVENESS_CONTAINER = "liveness-prometheus"
 
 @brown_squad
 @tier1
-@bugzilla("2142901")
 @polarion_id("OCS-4847")
 def test_no_liveness_container():
     """

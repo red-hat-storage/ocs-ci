@@ -24,6 +24,10 @@ from ocs_ci.framework import config
 logger = logging.getLogger(__name__)
 
 
+cluster_load_thread = None
+cluster_load_error = None
+
+
 def wrap_msg(msg):
     """
     Wrap a log message with '=' marks.
@@ -470,3 +474,19 @@ class ClusterLoad:
         logger.info(wrap_msg("Resuming the cluster load"))
         while len(self.dc_objs) < self.target_pods_number:
             self.increase_load(rate=self.rate, wait=False)
+
+
+def finish_cluster_load():
+    """
+    Stop the thread that executed by watch_load()
+    """
+    global cluster_load_thread
+    global cluster_load_error
+    logger.info("Finishing cluster load!")
+    config.RUN["load_status"] = "finished"
+    if cluster_load_thread:
+        logger.info("Waiting for 60 seconds to get cluster load thread finished!")
+        cluster_load_thread.join(timeout=60)
+    logger.info("Cluster load thread finished!")
+    if cluster_load_error:
+        raise cluster_load_error

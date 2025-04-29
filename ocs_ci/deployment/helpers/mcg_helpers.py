@@ -67,8 +67,10 @@ def check_if_mcg_root_secret_public():
         resource_name=constants.NOOBAA_CORE_STATEFULSET,
     ).get()
 
-    nb_endpoint_env = noobaa_endpoint_dep["spec"]["template"]["spec"]["containers"]
-    nb_core_env = noobaa_core_sts["spec"]["template"]["spec"]["containers"]
+    nb_endpoint_env = noobaa_endpoint_dep["spec"]["template"]["spec"]["containers"][0][
+        "env"
+    ]
+    nb_core_env = noobaa_core_sts["spec"]["template"]["spec"]["containers"][0]["env"]
 
     def _check_env_vars(env_vars):
         """
@@ -76,9 +78,72 @@ def check_if_mcg_root_secret_public():
         if the root secret is public
 
         """
+
         for env in env_vars:
             if env["name"] == "NOOBAA_ROOT_SECRET" and "value" in env.keys():
                 return True
         return False
 
     return _check_env_vars(nb_core_env) or _check_env_vars(nb_endpoint_env)
+
+
+def check_if_mcg_secrets_in_env():
+    """
+    Verify if mcg secrets are used in noobaa app environment variable except for the POSTGRES/POSTGRESQL
+
+    Returns:
+        True if secrets are used in env variable else False
+
+    """
+
+    noobaa_endpoint_env = ocp.OCP(
+        kind=constants.DEPLOYMENT,
+        namespace=config.ENV_DATA["cluster_namespace"],
+        resource_name=constants.NOOBAA_ENDPOINT_DEPLOYMENT,
+    ).get()["spec"]["template"]["spec"]["containers"][0]["env"]
+
+    noobaa_operator_env = ocp.OCP(
+        kind=constants.DEPLOYMENT,
+        namespace=config.ENV_DATA["cluster_namespace"],
+        resource_name=constants.NOOBAA_OPERATOR_DEPLOYMENT,
+    ).get()["spec"]["template"]["spec"]["containers"][0]["env"]
+
+    noobaa_core_env = ocp.OCP(
+        kind=constants.STATEFULSET,
+        namespace=config.ENV_DATA["cluster_namespace"],
+        resource_name=constants.NOOBAA_CORE_STATEFULSET,
+    ).get()["spec"]["template"]["spec"]["containers"][0]["env"]
+
+    noobaa_db_env = ocp.OCP(
+        kind=constants.STATEFULSET,
+        namespace=config.ENV_DATA["cluster_namespace"],
+        resource_name=constants.NOOBAA_DB_STATEFULSET,
+    ).get()["spec"]["template"]["spec"]["containers"][0]["env"]
+
+    def _check_env_vars(env_vars):
+        """
+        This will check if any secrets except POSTGRES present
+        in the given env vars
+
+        Args:
+            env_vars(List): List of env vars ofn particular deployment or sts
+
+        """
+
+        for env in env_vars:
+            if (
+                env["name"].split("_")[0] != "POSTGRES"
+                and env["name"].split("_")[0] != "POSTGRESQL"
+            ) and ("valueFrom" in env and "secretKeyRef" in env["valueFrom"]):
+                logger.info(
+                    f"Non-psql secrets are referenced in the noobaa app env variable under {env}"
+                )
+                return True
+        return False
+
+    return (
+        _check_env_vars(noobaa_endpoint_env)
+        or _check_env_vars(noobaa_operator_env)
+        or _check_env_vars(noobaa_db_env)
+        or _check_env_vars(noobaa_core_env)
+    )

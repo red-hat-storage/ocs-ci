@@ -20,6 +20,7 @@ import math
 
 from datetime import datetime
 from semantic_version import Version
+
 from ocs_ci.ocs.utils import thread_init_class
 
 import ocs_ci.ocs.resources.pod as pod
@@ -34,6 +35,7 @@ from ocs_ci.ocs.exceptions import (
     TimeoutExpiredError,
     ResourceWrongStatusException,
     CephHealthException,
+    ActiveMdsValueNotMatch,
 )
 from ocs_ci.ocs.resources import ocs, storage_cluster
 import ocs_ci.ocs.constants as constant
@@ -49,10 +51,11 @@ from ocs_ci.utility.utils import (
     get_trim_mean,
     ceph_health_check,
 )
+from ocs_ci.utility.version import get_semantic_running_odf_version
 from ocs_ci.ocs.node import get_node_ip_addresses, wait_for_nodes_status
 from ocs_ci.ocs.utils import get_pod_name_by_pattern
 from ocs_ci.framework import config
-from ocs_ci.ocs import ocp, constants, exceptions
+from ocs_ci.ocs import ocp, constants, exceptions, defaults
 from ocs_ci.ocs.exceptions import PoolNotFound
 from ocs_ci.ocs.resources.pvc import get_all_pvc_objs
 from ocs_ci.ocs.ocp import OCP, wait_for_cluster_connectivity
@@ -64,7 +67,6 @@ from ocs_ci.ocs.resources.pod import (
     get_mds_pods,
     wait_for_pods_to_be_in_statuses,
 )
-from ocs_ci.utility.decorators import switch_to_orig_index_at_last
 
 logger = logging.getLogger(__name__)
 
@@ -215,6 +217,7 @@ class CephCluster(object):
         self._ceph_pods = pod.get_all_pods(self._namespace)
         # TODO: Workaround for BZ1748325:
         mons = pod.get_mon_pods(self.mon_selector, self.namespace)
+        self.mons = []
         for mon in mons:
             if mon.ocp.get_resource_status(mon.name) == constant.STATUS_RUNNING:
                 self.mons.append(mon)
@@ -303,10 +306,10 @@ class CephCluster(object):
         # TODO: add an attribute in CephHealthException, called "reason"
         # which should tell because of which exact cluster entity health
         # is not ok ?
+        self.scan_cluster()
+
         expected_mon_count = self.mon_count
         expected_mds_count = self.mds_count
-
-        self.scan_cluster()
 
         if config.ENV_DATA[
             "platform"
@@ -1280,7 +1283,7 @@ def count_cluster_osd():
     return osd_count
 
 
-@retry(PDBNotCreatedException, tries=9, backoff=2)
+@retry((PDBNotCreatedException, AssertionError), tries=9, backoff=2)
 def validate_pdb_creation():
     """
     Validate creation of PDBs for MON, MDS and OSD pods.
@@ -1293,17 +1296,26 @@ def validate_pdb_creation():
         kind="PodDisruptionBudget", namespace=config.ENV_DATA["cluster_namespace"]
     )
     item_list = pdb_obj.get().get("items")
-    pdb_count = constants.PDB_COUNT
-    pdb_required = [constants.MDS_PDB, constants.MON_PDB, constants.OSD_PDB]
+    odf_version = get_semantic_running_odf_version()
 
-    if version.get_semantic_ocs_version_from_config() >= version.VERSION_4_15:
-        pdb_count = constants.PDB_COUNT_2_MGR
-        pdb_required = [
-            constants.MDS_PDB,
-            constants.MON_PDB,
-            constants.OSD_PDB,
-            constants.MGR_PDB,
-        ]
+    pdb_count = constants.PDB_COUNT_2_MGR
+    pdb_required = [
+        constants.MDS_PDB,
+        constants.MON_PDB,
+        constants.OSD_PDB,
+        constants.MGR_PDB,
+    ]
+
+    # 4.19.0-59 is the stable build which doesn't contain the updated PDB count for Noobaa DB
+    version_without_noobaa_db_pg_pdb = "4.19.0-59"
+    semantic_version_for_without_noobaa_db_pg_pdb = version.get_semantic_version(
+        version_without_noobaa_db_pg_pdb
+    )
+    # we need to support the version for Konflux builds as well
+    version_for_konflux_noobaa_db_pg_pdb = "4.19.0-15"
+    semantic_version_for_konflux_noobaa_db_pg_pdb = version.get_semantic_version(
+        version_for_konflux_noobaa_db_pg_pdb
+    )
 
     if config.DEPLOYMENT.get("arbiter_deployment"):
         pdb_count = constants.PDB_COUNT_ARBITER
@@ -1316,6 +1328,12 @@ def validate_pdb_creation():
         if config.ENV_DATA["platform"].lower() == constants.VSPHERE_PLATFORM:
             pdb_count = constants.PDB_COUNT_ARBITER_VSPHERE
             pdb_required.append(constants.RGW_PDB)
+
+    if odf_version == semantic_version_for_without_noobaa_db_pg_pdb:
+        logger.info(f"Required PDB count is {pdb_count}")
+    elif odf_version >= semantic_version_for_konflux_noobaa_db_pg_pdb:
+        pdb_count += 1
+        pdb_required.append(constants.NOOBAA_DB_PG_PDB)
 
     if len(item_list) != pdb_count:
         raise PDBNotCreatedException(
@@ -2246,7 +2264,7 @@ def is_flexible_scaling_enabled():
 
 
 def check_ceph_health_after_add_capacity(
-    ceph_health_tries=80, ceph_rebalance_timeout=1800
+    ceph_health_tries=80, ceph_rebalance_timeout=2400
 ):
     """
     Check Ceph health after adding capacity to the cluster
@@ -3408,7 +3426,6 @@ def client_cluster_health_check():
     logger.info("The client cluster health check passed successfully")
 
 
-@switch_to_orig_index_at_last
 def client_clusters_health_check():
     """
     Check the client clusters health using the function 'client_cluster_health_check'.
@@ -3420,10 +3437,9 @@ def client_clusters_health_check():
         CephHealthException: In case there are extra Ceph pods on the cluster
 
     """
-    client_indices = config.get_consumer_indexes_list()
-    for client_i in client_indices:
-        config.switch_ctx(client_i)
-        client_cluster_health_check()
+    for client_context in config.get_client_contexts_if_available():
+        with client_context:
+            client_cluster_health_check()
 
     logger.info("The client clusters health check passed successfully")
 
@@ -3823,3 +3839,120 @@ def get_age_of_cluster_in_days():
     seconds_per_day = 24 * 60 * 60
     time_diff_in_days = time_difference_in_sec / seconds_per_day
     return math.ceil(time_diff_in_days)
+
+
+def get_active_mds_count_cephfilesystem():
+    """
+    Get the active mds pod count from cephfilesystem yaml.
+
+    Returns:
+         mds_active_count (int): Active mds pod count.
+
+    """
+    cephfs = ocp.OCP(
+        kind=constants.CEPHFILESYSTEM,
+        namespace=config.ENV_DATA["cluster_namespace"],
+    )
+    fs_data = cephfs.get(defaults.CEPHFILESYSTEM_NAME)
+    mds_active_count = fs_data.get("spec").get("metadataServer").get("activeCount")
+    return mds_active_count
+
+
+def adjust_active_mds_count_storagecluster(target_count):
+    """
+    Adjust the activeMetadataServers count in the Storage cluster to the target_count.
+    The function increases or decreases the count to match the target value sequentially.
+
+    Args:
+        target_count (int): The desired count for activeMetadataServers.
+
+    Raises:
+        ActiveMdsValueNotMatch: if activeMetadataServers count does not match.
+
+    """
+    # Retrieve the current activeMetadataServers count
+    current_count_cephfilesystem = get_active_mds_count_cephfilesystem()
+    sc = storage_cluster.get_storage_cluster(
+        namespace=config.ENV_DATA["cluster_namespace"]
+    )
+    resource_name = sc.get()["items"][0]["metadata"]["name"]
+
+    step = 1 if current_count_cephfilesystem < target_count else -1
+    for _ in range(current_count_cephfilesystem, target_count + step, step):
+        if current_count_cephfilesystem == target_count:
+            logger.info("The current count is equal to the target count.")
+        else:
+            # Determine the new count by incrementing or decrementing
+            current_count_cephfilesystem = current_count_cephfilesystem + step
+            param = (
+                f'{{"spec": {{"managedResources": {{"cephFilesystems": '
+                f'{{"activeMetadataServers": {current_count_cephfilesystem}}}}}}}}}'
+            )
+            sc.patch(resource_name=resource_name, params=param, format_type="merge")
+
+    # Retrieve the updated count
+    current_params = sc.get(resource_name=resource_name)
+    current_count_cephfilesystem = current_params["spec"]["managedResources"][
+        "cephFilesystems"
+    ]["activeMetadataServers"]
+    if current_count_cephfilesystem != target_count:
+        raise ActiveMdsValueNotMatch(
+            f"Failed to update activeMetadataServers to {target_count}"
+        )
+
+    logger.info(
+        "Wait until the active mds pod count from cephfilesystem matches the target count"
+    )
+    try:
+        TimeoutSampler(
+            timeout=300,
+            sleep=10,
+            func=get_active_mds_count_cephfilesystem,
+        ).wait_for_func_value(target_count)
+        logger.info(f"Target activeMetadataServers count {target_count} reached.")
+    except TimeoutExpiredError:
+        raise ActiveMdsValueNotMatch(
+            f"Failed to change the active count to {target_count} within timeout."
+        )
+
+
+def get_active_mds_pod_objs():
+    """
+    Gets active mds pods objs.
+
+    Returns:
+        active_mds_pods (list): Active mds pod objs.
+
+    """
+    ct_pod = pod.get_ceph_tools_pod()
+    ceph_mdsmap = ct_pod.exec_ceph_cmd("ceph fs status")
+    # Extract the mdsmap list from the data
+    mdsmap = ceph_mdsmap["mdsmap"]
+
+    # Filter and get the names of active MDS pods
+    ceph_daemon_name = [mds["name"] for mds in mdsmap if mds["state"] == "active"]
+    mds_pods = get_mds_pods()
+    active_mds_pods = [
+        mdspod
+        for mdspod in mds_pods
+        if any(daemon_name in mdspod.name for daemon_name in ceph_daemon_name)
+    ]
+    return active_mds_pods
+
+
+def get_mds_counts():
+    """
+    Fetch active and standby-replay MDS counts.
+
+    Returns:
+        tuple: A tuple containing two integers:
+            - active_pod_count (int): The number of active MDS pods.
+            - standby_replay_count (int): The number of standby-replay MDS pods.
+    """
+    ct_pod = pod.get_ceph_tools_pod()
+    ceph_mdsmap = ct_pod.exec_ceph_cmd("ceph fs status")["mdsmap"]
+    active_pod_count = sum(1 for mds in ceph_mdsmap if mds["state"] == "active")
+    standby_replay_count = sum(
+        1 for mds in ceph_mdsmap if mds["state"] == "standby-replay"
+    )
+    return active_pod_count, standby_replay_count

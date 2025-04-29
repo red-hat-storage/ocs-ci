@@ -1,6 +1,5 @@
 import base64
 import logging
-import os
 import requests
 import tempfile
 import time
@@ -24,7 +23,7 @@ def set_pagerduty_integration_secret(integration_key):
 
     """
     logger.info("Setting up PagerDuty integration")
-    kubeconfig = os.getenv("KUBECONFIG")
+    kubeconfig = config.RUN["kubeconfig"]
     ns_name = config.ENV_DATA["service_namespace"]
     cmd = (
         f"oc create secret generic {managedservice.get_pagerduty_secret_name()} "
@@ -57,7 +56,7 @@ def set_pagerduty_faas_secret(integration_key):
 
     """
     logger.info("Setting up PagerDuty")
-    kubeconfig = os.getenv("KUBECONFIG")
+    kubeconfig = config.RUN["kubeconfig"]
     ns_name = config.ENV_DATA["service_namespace"]
     pd_configuration = (
         f"    sopEndpoint: <pager duty service endpoint>\n"

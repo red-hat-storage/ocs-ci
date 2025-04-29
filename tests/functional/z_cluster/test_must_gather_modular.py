@@ -1,7 +1,7 @@
 import logging
 import pytest
 
-from ocs_ci.framework.pytest_customization.marks import brown_squad, bugzilla
+from ocs_ci.framework.pytest_customization.marks import brown_squad
 from ocs_ci.framework.testlib import (
     ManageTest,
     tier2,
@@ -16,7 +16,6 @@ logger = logging.getLogger(__name__)
 
 
 @brown_squad
-@bugzilla("2162812")
 class TestMustGather(ManageTest):
     @tier2
     @pytest.mark.parametrize(

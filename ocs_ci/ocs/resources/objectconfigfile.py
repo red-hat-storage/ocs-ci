@@ -21,6 +21,7 @@ import os
 import time
 import yaml
 
+from ocs_ci.framework import config
 from ocs_ci.utility.utils import run_cmd
 from ocs_ci.ocs.exceptions import CommandFailed, NotFoundError
 
@@ -102,7 +103,7 @@ class ObjectConfFile:
         oc_cmd = [
             "oc",
             "--kubeconfig",
-            os.getenv("KUBECONFIG"),
+            config.RUN["kubeconfig"],
             command,
             "-f",
             os.path.join(self._tmp_path, self.yaml_file.name),

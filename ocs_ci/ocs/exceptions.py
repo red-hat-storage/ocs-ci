@@ -14,6 +14,14 @@ class CephHealthException(Exception):
     pass
 
 
+class CephHealthRecoveredException(Exception):
+    pass
+
+
+class CephHealthNotRecoveredException(Exception):
+    pass
+
+
 class NoobaaHealthException(Exception):
     pass
 
@@ -679,6 +687,14 @@ class HyperConvergedHealthException(Exception):
     pass
 
 
+class HyperConvergedNotDeployedException(Exception):
+    pass
+
+
+class MultiClusterEngineNotDeployedException(Exception):
+    pass
+
+
 class OpenShiftAPIResponseException(Exception):
     def __init__(self, response):
         self.response = response
@@ -733,4 +749,16 @@ class TolerationNotFoundException(Exception):
 
 
 class VMIndexNotFoundException(Exception):
+    pass
+
+
+class HostNameNotFoundInOSDStatus(Exception):
+    pass
+
+
+class ActiveMdsValueNotMatch(Exception):
+    pass
+
+
+class DistributionStatusError(Exception):
     pass

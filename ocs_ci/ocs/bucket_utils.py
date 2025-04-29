@@ -8,16 +8,23 @@ import os
 import shlex
 import time
 
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from uuid import uuid4
 
 import boto3
 from botocore.handlers import disable_signing
+import botocore.exceptions as boto3exception
 
 from ocs_ci.framework import config
 from ocs_ci.ocs import constants
-from ocs_ci.ocs.exceptions import TimeoutExpiredError, UnexpectedBehaviour
+from ocs_ci.ocs.exceptions import (
+    CommandFailed,
+    TimeoutExpiredError,
+    UnexpectedBehaviour,
+)
 from ocs_ci.ocs.ocp import OCP
 from ocs_ci.utility import templating
+from ocs_ci.utility.retry import retry
 from ocs_ci.utility.ssl_certs import get_root_ca_cert
 from ocs_ci.utility.utils import (
     TimeoutSampler,
@@ -579,7 +586,7 @@ def download_objects_using_s3cmd(
     ), "Failed to download objects"
 
 
-def rm_object_recursive(podobj, target, mcg_obj, option=""):
+def rm_object_recursive(podobj, target, mcg_obj, option="", timeout=600):
     """
     Remove bucket objects with --recursive option
 
@@ -601,6 +608,7 @@ def rm_object_recursive(podobj, target, mcg_obj, option=""):
             mcg_obj.access_key,
             mcg_obj.s3_internal_endpoint,
         ],
+        timeout=timeout,
     )
 
 
@@ -937,7 +945,7 @@ def oc_create_rgw_backingstore(cld_mgr, backingstore_name, uls_name, region):
         "type": "s3-compatible",
         "s3Compatible": {
             "targetBucket": uls_name,
-            "endpoint": cld_mgr.rgw_client.endpoint,
+            "endpoint": cld_mgr.rgw_client.s3_internal_endpoint,
             "signatureVersion": "v2",
             "secret": {
                 "name": cld_mgr.rgw_client.secret.name,
@@ -961,7 +969,7 @@ def cli_create_rgw_backingstore(mcg_obj, cld_mgr, backingstore_name, uls_name, r
     """
     mcg_obj.exec_mcg_cmd(
         f"backingstore create s3-compatible {backingstore_name} "
-        f"--endpoint {cld_mgr.rgw_client.endpoint} "
+        f"--endpoint {cld_mgr.rgw_client.s3_internal_endpoint} "
         f"--access-key {cld_mgr.rgw_client.access_key} "
         f"--secret-key {cld_mgr.rgw_client.secret_key} "
         f"--target-bucket {uls_name}",
@@ -1076,7 +1084,7 @@ def check_pv_backingstore_status(
         bool: True if backing store is in the desired state
 
     """
-    kubeconfig = os.getenv("KUBECONFIG")
+    kubeconfig = config.RUN.get("kubeconfig")
     kubeconfig = f"--kubeconfig {kubeconfig}" if kubeconfig else ""
     namespace = namespace or config.ENV_DATA["cluster_namespace"]
 
@@ -1103,7 +1111,7 @@ def check_pv_backingstore_type(
         backingstore_type: type of the backing store
 
     """
-    kubeconfig = os.getenv("KUBECONFIG")
+    kubeconfig = config.RUN.get("kubeconfig")
     kubeconfig = f"--kubeconfig {kubeconfig}" if kubeconfig else ""
     namespace = namespace or config.ENV_DATA["cluster_namespace"]
 
@@ -1296,6 +1304,7 @@ def delete_bucket_policy(s3_obj, bucketname):
     return s3_obj.s3_client.delete_bucket_policy(Bucket=bucketname)
 
 
+@retry(boto3exception.ClientError, tries=4, delay=15)
 def s3_put_object(
     s3_obj, bucketname, object_key, data, content_type="", content_encoding=""
 ):
@@ -1824,6 +1833,24 @@ def s3_head_object(s3_obj, bucketname, object_key, if_match=None):
         )
     else:
         return s3_obj.s3_client.head_object(Bucket=bucketname, Key=object_key)
+
+
+def s3_head_bucket(s3_obj, bucketname):
+    """
+    Boto3 client based head_bucket operation to verify
+    if bucket exists or if there is permission to access
+    the bucket
+
+    Args:
+        s3_obj (MCG/OBC): MCG/OBC object
+        bucketname (str): Name of the bucket
+
+    Returns:
+        dict: head bucket response
+
+    """
+
+    return s3_obj.s3_client.head_bucket(Bucket=bucketname)
 
 
 def s3_list_objects_v1(
@@ -2400,6 +2427,9 @@ def check_if_objects_expired(mcg_obj, bucket_name, prefix=""):
     response = s3_list_objects_v2(
         mcg_obj, bucketname=bucket_name, prefix=prefix, delimiter="/"
     )
+    logger.info(
+        f'Current objects count for bucket {bucket_name}: {response["KeyCount"]}'
+    )
     if response["KeyCount"] != 0:
         return False
     return True
@@ -2486,7 +2516,14 @@ def get_nb_bucket_stores(mcg_obj, bucket_name):
     else:
         tiers = [d["tier"] for d in bucket_data["tiering"]["tiers"]]
         for tier in tiers:
-            tier_data = mcg_obj.send_rpc_query("tier_api", "read_tier", {"name": tier})
+            # Retry to get the tier data as it might not be available immediately
+            retry_send_rpc_query = retry(CommandFailed, tries=5, delay=5, backoff=1)(
+                mcg_obj.send_rpc_query
+            )
+            tier_data = retry_send_rpc_query(
+                "tier_api", "read_tier", {"name": tier}
+            ).json()
+
             stores.update(tier_data["reply"]["attached_pools"])
 
     return list(stores)
@@ -2688,7 +2725,7 @@ def delete_object_tags(
     """
     logger.info(f"Deleting tags of objects in bucket {bucket}")
     for object_key in object_keys:
-        object_key = f"prefix/{object_key}" if prefix else object_key
+        object_key = f"{prefix}/{object_key}" if prefix else object_key
         io_pod.exec_cmd_on_pod(
             craft_s3_command(
                 f"delete-object-tagging --bucket {bucket} --key {object_key}",
@@ -2953,52 +2990,30 @@ def upload_obj_versions(mcg_obj, awscli_pod, bucket_name, obj_key, amount=1, siz
         mcg_obj (MCG): MCG object
         awscli_pod (Pod): Pod object where AWS CLI is installed
         bucket_name (str): Name of the bucket
-        obj_key (str): Object key
+        obj_key (str): S3 path to the object in the bucket
         amount (int): Number of versions to create
         size (str): Size of the object. I.E 1M
 
-    Returns:
-        list: List of ETag values of versions in latest to oldest order
     """
-    file_dir = os.path.join("/tmp", str(uuid4()))
-    awscli_pod.exec_cmd_on_pod(f"mkdir {file_dir}")
+    prefix = os.path.dirname(obj_key)  # Might be empty
+    file_dir = os.path.join("/tmp", bucket_name, prefix, str(uuid4()))
+    awscli_pod.exec_cmd_on_pod(f"mkdir -p {file_dir}")
 
-    etags = []
+    logger.info(f"Uploading {amount} versions to {bucket_name}")
 
     for i in range(amount):
-        file_path = os.path.join(file_dir, f"{obj_key}_{i}")
+        obj_name_without_prefix = os.path.basename(obj_key)
+        file_path = os.path.join(file_dir, f"{obj_name_without_prefix}_{i}")
         awscli_pod.exec_cmd_on_pod(
             command=f"dd if=/dev/urandom of={file_path} bs={size} count=1"
         )
-        # Use debug and redirect it to stdout to get
-        # the uploaded object's ETag in the response
-        resp = awscli_pod.exec_cmd_on_pod(
+        awscli_pod.exec_cmd_on_pod(
             command=craft_s3_command(
-                f"cp {file_path} s3://{bucket_name}/{obj_key} --debug 2>&1",
+                f"cp {file_path} s3://{bucket_name}/{obj_key}",
                 mcg_obj=mcg_obj,
             ),
             out_yaml_format=False,
         )
-
-        # Parse the ETag from the response
-        # Filter the line containing the JSON
-        line = next(filter(lambda line: "ETag" in line, resp.splitlines()))
-        json_start = line.index("{")
-        json_str = line[json_start:]
-
-        # Fix quotes to read as dict
-        json_str = json_str.replace("'", '"')
-        json_str = json_str.replace('""', '"')
-
-        # Convert to dict and extract the ETag
-        new_etag = json.loads(json_str).get("ETag")
-
-        # Later versions should precede the older ones
-        # this achieves the expected order of versions
-        # we'd get from list-object-versions
-        etags.insert(0, new_etag)
-
-    return etags
 
 
 def get_obj_versions(mcg_obj, awscli_pod, bucket_name, obj_key):
@@ -3009,7 +3024,7 @@ def get_obj_versions(mcg_obj, awscli_pod, bucket_name, obj_key):
         mcg_obj (MCG): MCG object
         awscli_pod (Pod): Pod object where AWS CLI is installed
         bucket_name (str): Name of the bucket
-        obj_key (str): Object key
+        obj_key (str): S3 path to the object in the bucket
 
     Returns:
         list: List of dictionaries containing the versions data
@@ -3032,3 +3047,181 @@ def get_obj_versions(mcg_obj, awscli_pod, bucket_name, obj_key):
             d["ETag"] = d["ETag"].strip('"')
 
     return versions_dicts
+
+
+def compare_object_versions(mcg_obj, awscli_pod, first_bucket, second_bucket, obj_key):
+    """
+    Compare the versions of an object in two different buckets
+
+    Args:
+        mcg_obj (MCG): MCG object
+        awscli_pod (Pod): Pod object where AWS CLI is installed
+        first_bucket (str): Name of the first bucket
+        second_bucket (str): Name of the second bucket
+        obj_key (str): S3 path to the object in the bucket
+
+    Returns:
+        bool: True if the versions match, False otherwise
+    """
+    logger.info(
+        f"Comparing the versions of {obj_key} in {first_bucket} and {second_bucket}"
+    )
+
+    source_versions = get_obj_versions(mcg_obj, awscli_pod, first_bucket, obj_key)
+    source_etags = [v["ETag"] for v in source_versions]
+    target_versions = get_obj_versions(mcg_obj, awscli_pod, second_bucket, obj_key)
+    target_etags = [v["ETag"] for v in target_versions]
+    if source_etags != target_etags:
+        logger.warning(
+            (
+                f"The versions of {obj_key} in {first_bucket} and {second_bucket} do not match:"
+                f"{source_etags} != {target_etags}"
+            )
+        )
+        return False
+    logger.info(
+        f"The versions of {obj_key} in {first_bucket} and {second_bucket} match"
+    )
+    return True
+
+
+def wait_for_object_versions_match(
+    mcg_obj, awscli_pod, first_bucket, second_bucket, obj_key, timeout=600
+):
+    """
+    Verify that the versions of an object in two different buckets match within a timeout
+
+    Args:
+        mcg_obj (MCG): MCG object
+        awscli_pod (Pod): Pod object where AWS CLI is installed
+        first_bucket (str): Name of the first bucket
+        second_bucket (str): Name of the second bucket
+        obj_key (str): Full S3 path to the object
+        timeout (int): The maximum time in seconds to wait for the versions to match
+
+    Raises:
+        TimeoutExpiredError: If the versions do not match within the timeout
+    """
+    try:
+        for versions_are_same in TimeoutSampler(
+            timeout=timeout,
+            sleep=30,
+            func=compare_object_versions,
+            mcg_obj=mcg_obj,
+            awscli_pod=awscli_pod,
+            first_bucket=first_bucket,
+            second_bucket=second_bucket,
+            obj_key=obj_key,
+        ):
+            if versions_are_same:
+                break
+    except TimeoutExpiredError as e:
+        err_msg = (
+            f"The versions of {obj_key} in {first_bucket} and {second_bucket} "
+            f"did not match within {timeout} seconds"
+        )
+        logger.error(err_msg)
+        raise TimeoutExpiredError(f"{str(e)}\n\n{err_msg}")
+
+
+def gen_empty_file_and_upload(
+    mcg_obj,
+    aws_pod,
+    dir,
+    amount,
+    bucket,
+    pattern="File",
+    prefix=None,
+    threads=1,
+    timeout=600,
+):
+    """
+    Generate empty files with unique identifiers
+
+    Args:
+        mcg_obj (MCG): MCG object
+        aws_pod (Pod): Pod object for aws-cli pod
+        dir (str): directory where the files need to generated
+        amount (int): number of files to be generated
+        bucket (str): Name of the bucket
+        pattern (str): pattern to use as prefix for the filename
+        prefix (str): prefix directory under which files needs to be
+                      uploaded.
+        threads (int): Number of threads to use for generate and upload
+                       process. Allows multithreading hence faster uploads.
+        timeout (int): Timeout to wait for the command completion
+
+    """
+
+    def _run_file_creation_and_upload(index, begin=1, end=amount):
+        aws_pod.exec_sh_cmd_on_pod(
+            command=f"mkdir -p {dir}/{index} && for i in $(seq {begin} {end});do touch {dir}/{index}/{pattern}-$i;done",
+            timeout=timeout,
+        )
+        logger.info(f"Uploading batch of {end-begin} objects to the bucket {bucket}")
+        sync_object_directory(
+            aws_pod,
+            f"{dir}/{index}",
+            f"s3://{bucket}/{prefix}" if prefix else f"s3://{bucket}",
+            mcg_obj,
+            timeout=timeout,
+        )
+
+    with ThreadPoolExecutor(max_workers=threads) as executor:
+        begin = 0
+        futures = []
+        for i in range(threads):
+            futures.append(
+                executor.submit(
+                    _run_file_creation_and_upload,
+                    index=i,
+                    begin=begin + 1,
+                    end=begin + (amount // threads),
+                )
+            )
+            begin = begin + (amount // threads)
+        logger.info("Waiting for the upload objects to complete")
+        for f_obj in as_completed(futures):
+            f_obj.result()
+
+    logger.info(f"Generated {amount} empty files successfully")
+
+
+def verify_objs_deleted_from_objmds(bucket_name, timeout=600, sleep=30):
+    """
+    Verify that all the objects are marked deletion time by checking
+    the objmds table in nbcore db.
+
+    Args:
+        bucket_name (str): Name of the bucket
+        timeout (int): Timeout until all the objects are expired
+
+    """
+
+    def _check_objs_deletion():
+        bucket_id = exec_nb_db_query(
+            f"select data->>'_id' as ID from buckets where data->>'name'='{bucket_name}'"
+        )[0].strip()
+
+        objs_count = exec_nb_db_query(
+            f"select count(*) from objectmds where data->>'bucket'='{bucket_id}'"
+        )[0].strip()
+        objs_deleted_count = exec_nb_db_query(
+            f"select count(*) from objectmds where data->>'bucket'='{bucket_id}' AND data ? 'deleted'"
+        )[0].strip()
+
+        logger.info(f"Objects count: {objs_count}")
+        logger.info(f"Objects deleted count: {objs_deleted_count}")
+
+        return int(objs_count) == int(objs_deleted_count)
+
+    sampler = TimeoutSampler(
+        timeout=timeout,
+        sleep=sleep,
+        func=_check_objs_deletion,
+    )
+
+    assert sampler.wait_for_func_status(
+        result=True
+    ), "Not all the objects are marked deleted"
+    logger.info("All the objects are marked expired")

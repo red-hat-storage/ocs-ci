@@ -13,7 +13,6 @@ from ocs_ci.framework.testlib import (
     tier1,
     polarion_id,
     skipif_ocp_version,
-    bugzilla,
 )
 from ocs_ci.ocs.resources import pod
 from ocs_ci.helpers import helpers
@@ -27,7 +26,6 @@ log = logging.getLogger(__name__)
 @skipif_ocs_version("<4.6")
 @skipif_ocp_version("<4.6")
 @polarion_id("OCS-2410")
-@bugzilla("2249601")
 class TestSnapshotRestoreWithDifferentAccessMode(ManageTest):
     """
     Tests to verify PVC snapshot restore with access mode different than

@@ -5,7 +5,6 @@ import pytest
 
 from ocs_ci.framework import config
 from ocs_ci.framework.pytest_customization.marks import (
-    bugzilla,
     on_prem_platform_required,
     red_squad,
     skipif_external_mode,
@@ -36,7 +35,6 @@ class TestRGWRoutes:
     """
 
     @skipif_external_mode
-    @bugzilla("2139037")
     @tier1
     @pytest.mark.parametrize(
         argnames="route_data",

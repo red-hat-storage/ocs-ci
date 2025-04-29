@@ -10,6 +10,7 @@ from ocs_ci.framework.pytest_customization.marks import (
     polarion_id,
     stretchcluster_required,
     turquoise_squad,
+    tier2,
 )
 from ocs_ci.helpers.cnv_helpers import cal_md5sum_vm
 from ocs_ci.helpers.helpers import modify_deployment_replica_count
@@ -147,7 +148,7 @@ def setup_cnv_workload(request, cnv_workload_class, setup_cnv):
     logger.info("Setting up CNV workload and creating some data")
     vm_obj = cnv_workload_class(
         volume_interface=constants.VM_VOLUME_PVC, namespace=CNV_WORKLOAD_NAMESPACE
-    )[0]
+    )
     vm_obj.run_ssh_cmd(command="dd if=/dev/zero of=/file_1.txt bs=1024 count=102400")
     md5sum_before = cal_md5sum_vm(vm_obj, file_path="/file_1.txt")
 
@@ -181,6 +182,7 @@ def setup_cnv_workload(request, cnv_workload_class, setup_cnv):
     request.addfinalizer(finalizer)
 
 
+@tier2
 @turquoise_squad
 @stretchcluster_required
 @pytest.mark.usefixtures("setup_cnv_workload")

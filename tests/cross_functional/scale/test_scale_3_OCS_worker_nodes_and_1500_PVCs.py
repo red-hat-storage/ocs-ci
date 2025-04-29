@@ -15,7 +15,6 @@ from ocs_ci.framework.pytest_customization.marks import (
     skipif_external_mode,
     ipi_deployment_required,
     skipif_vsphere_ipi,
-    bugzilla,
 )
 
 log = logging.getLogger(__name__)
@@ -108,7 +107,6 @@ class TestScaleRespinCephPods(E2ETest):
 @orange_squad
 @scale
 @ignore_leftovers
-@bugzilla("2092737")
 @skipif_external_mode
 @ipi_deployment_required
 @pytest.mark.parametrize(

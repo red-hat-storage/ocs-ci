@@ -4,7 +4,7 @@ import threading
 import pytest
 from ocs_ci.ocs import constants
 from ocs_ci.framework.pytest_customization.marks import brown_squad
-from ocs_ci.framework.testlib import E2ETest, bugzilla, tier2, skipif_external_mode
+from ocs_ci.framework.testlib import E2ETest, tier2, skipif_external_mode
 from ocs_ci.ocs.resources import pod
 from ocs_ci.ocs.resources.pod import get_mon_pods
 from ocs_ci.ocs.exceptions import TimeoutExpiredError
@@ -16,7 +16,6 @@ log = logging.getLogger(__name__)
 @brown_squad
 @tier2
 @skipif_external_mode
-@bugzilla("1941939")
 @pytest.mark.polarion_id("OCS-2526")
 class TestMonLogTrimming(E2ETest):
     """

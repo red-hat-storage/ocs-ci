@@ -35,7 +35,6 @@ log = logging.getLogger(__name__)
 @skipif_hci_provider_and_client
 @skipif_ocs_version("<4.11")
 @pytest.mark.polarion_id("OCS-4471")
-@pytest.mark.bugzilla("2101798")
 class TestCephPgLogDupsTrimming(ManageTest):
     @pytest.fixture(autouse=True)
     def teardown(self, request):

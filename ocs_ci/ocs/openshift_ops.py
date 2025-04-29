@@ -5,6 +5,7 @@ from shutil import which
 from kubernetes import config
 from openshift.dynamic import DynamicClient, exceptions
 
+from ocs_ci.framework import config as ocsci_config
 from ocs_ci.ocs.exceptions import CommandFailed
 from ocs_ci.utility.utils import get_openshift_client, run_cmd
 import ocs_ci.ocs.defaults as default
@@ -139,13 +140,14 @@ class OCP(object):
             boolean: True if successfully connected to cluster, False otherwise
         """
         # Test cluster access
+        if not which("oc"):
+            get_openshift_client()
         log.info("Testing access to cluster with %s", kubeconfig_path)
         if not os.path.isfile(kubeconfig_path):
             log.warning("The kubeconfig file %s doesn't exist!", kubeconfig_path)
             return False
-        os.environ["KUBECONFIG"] = kubeconfig_path
-        if not which("oc"):
-            get_openshift_client()
+        else:
+            ocsci_config.RUN["kubeconfig"] = kubeconfig_path
         try:
             run_cmd("oc cluster-info")
         except CommandFailed as ex:

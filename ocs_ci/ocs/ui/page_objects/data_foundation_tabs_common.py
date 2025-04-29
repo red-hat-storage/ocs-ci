@@ -119,6 +119,8 @@ class CreateResourceForm(PageNavigator):
         self.do_click(self.validation_loc["input_value_validator_icon"])
         rules_elements = self.get_elements(input_loc)
         rules_texts_statuses = [rule.text for rule in rules_elements if rule.text != ""]
+        # skip parent element
+        rules_texts_statuses = rules_texts_statuses[1:]
         rules_texts = [rule.split("\n: ")[0] for rule in rules_texts_statuses]
         if sorted(rules_texts) != sorted(self.rules.keys()):
             self._report_failed(
@@ -239,8 +241,8 @@ class CreateResourceForm(PageNavigator):
                 time.sleep(time_sleep)
                 if len(_rules_elements) > 0:
                     break
-            else:
-                logger.error("no rules found after 3 attempts")
+            # skip parent element
+            _rules_elements = _rules_elements[1:]
             return [rule.text for rule in _rules_elements if rule_exp in rule.text]
 
         rule_actual = get_rule_actual()

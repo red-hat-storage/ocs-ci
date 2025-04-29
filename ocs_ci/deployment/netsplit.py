@@ -6,6 +6,7 @@ import logging
 import ocpnetsplit.main
 
 from ocs_ci.deployment.zones import are_zone_labels_present
+from ocs_ci.framework import config
 from ocs_ci.ocs import exceptions
 from ocs_ci.ocs.ocp import OCP
 
@@ -46,6 +47,7 @@ def get_netsplit_mc(
         ValueError: in case given zone configuration doesn't make any sense
     """
     logger.info("going to deploy ocpnetsplit scripts")
+    kubeconfig = config.RUN.get("kubeconfig")
     # checking assumptions: each node has a zone label
     if not are_zone_labels_present():
         msg = "to use network_split_setup, all nodes needs a zone label"
@@ -93,7 +95,9 @@ def get_netsplit_mc(
             logger.error(msg)
             raise exceptions.UnexpectedDeploymentConfiguration(msg)
     # generate zone config (list of node ip addressess for each zone)
-    zone_config = ocpnetsplit.main.get_zone_config(zone_a, zone_b, zone_c, x_addr_list)
+    zone_config = ocpnetsplit.main.get_zone_config(
+        zone_a, zone_b, zone_c, x_addr_list, kubeconfig
+    )
     zone_env = zone_config.get_env_file()
     # get machinecofnig for network split firewall scripts
     mc = ocpnetsplit.main.get_networksplit_mc_spec(

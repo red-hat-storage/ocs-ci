@@ -223,7 +223,6 @@ class AcmAddClusters(AcmPageNavigator):
         self.do_click(
             self.page_nav["click-manage-resource-assignments"], enable_screenshot=True
         )
-
         log.info(f"Search and select cluster '{cluster_name_a}'")
         self.do_send_keys(self.page_nav["search-cluster"], text=cluster_name_a)
         self.do_click(self.page_nav["select-first-checkbox"], enable_screenshot=True)
@@ -460,7 +459,7 @@ def login_to_acm():
     else:
         page_title = ACM_PAGE_TITLE
     validate_page_title(title=page_title)
-
+    log.info("Successfully logged into RHACM console")
     return driver
 
 

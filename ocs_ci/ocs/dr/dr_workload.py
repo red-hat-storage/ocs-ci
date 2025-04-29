@@ -72,6 +72,7 @@ class BusyBox(DRWorkload):
 
         self.workload_type = kwargs.get("workload_type", constants.SUBSCRIPTION)
         self.workload_namespace = kwargs.get("workload_namespace", None)
+        self.pvc_interface = kwargs.get("pvc_interface", None)
         self.app_name = kwargs.get("app_name", None)
         self.workload_pod_count = kwargs.get("workload_pod_count")
         self.workload_pvc_count = kwargs.get("workload_pvc_count")
@@ -428,7 +429,7 @@ class BusyBox(DRWorkload):
                 config.switch_ctx(cluster.MULTICLUSTER["multicluster_index"])
                 dr_helpers.wait_for_all_resources_deletion(
                     namespace=self.workload_namespace,
-                    check_replication_resources_state=False,
+                    workload_cleanup=True,
                 )
 
             log.info("Verify backend images or subvolumes are deleted")
@@ -466,6 +467,7 @@ class BusyBox_AppSet(DRWorkload):
 
         self.workload_type = kwargs.get("workload_type", constants.APPLICATION_SET)
         self.workload_namespace = kwargs.get("workload_namespace", None)
+        self.pvc_interface = kwargs.get("pvc_interface", None)
         self.workload_pod_count = kwargs.get("workload_pod_count")
         self.workload_pvc_count = kwargs.get("workload_pvc_count")
         self.dr_policy_name = kwargs.get(
@@ -681,7 +683,7 @@ class BusyBox_AppSet(DRWorkload):
                 config.switch_ctx(cluster.MULTICLUSTER["multicluster_index"])
                 dr_helpers.wait_for_all_resources_deletion(
                     namespace=self.workload_namespace,
-                    check_replication_resources_state=False,
+                    workload_cleanup=True,
                 )
 
             log.info("Verify backend images or subvolumes are deleted")
@@ -986,7 +988,7 @@ class CnvWorkload(DRWorkload):
                 secret_obj.delete()
                 dr_helpers.wait_for_all_resources_deletion(
                     namespace=self.workload_namespace,
-                    check_replication_resources_state=False,
+                    workload_cleanup=True,
                 )
                 log.info(f"Verify VM: {self.vm_name} is deletion")
                 vm_obj = ocp.OCP(
@@ -1161,6 +1163,7 @@ class BusyboxDiscoveredApps(DRWorkload):
             self.workload_pod_count,
             self.workload_namespace,
             discovered_apps=True,
+            vrg_name=self.discovered_apps_placement_name,
         )
 
     def create_placement(self):
@@ -1290,8 +1293,9 @@ class BusyboxDiscoveredApps(DRWorkload):
             )
             dr_helpers.wait_for_all_resources_deletion(
                 namespace=self.workload_namespace,
-                check_replication_resources_state=False,
                 discovered_apps=True,
+                workload_cleanup=True,
+                vrg_name=self.discovered_apps_placement_name,
             )
             run_cmd(f"oc delete project {self.workload_namespace}")
 
@@ -1603,7 +1607,7 @@ class CnvWorkloadDiscoveredApps(DRWorkload):
             )
             dr_helpers.wait_for_all_resources_deletion(
                 namespace=self.workload_namespace,
-                check_replication_resources_state=False,
                 discovered_apps=True,
+                workload_cleanup=True,
             )
             run_cmd(f"oc delete project {self.workload_namespace}")

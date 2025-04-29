@@ -11,7 +11,7 @@ spec:
   agentLabels:
     'agentclusterinstalls.extensions.hive.openshift.io/location': localagents
   pullSecretRef:
-    name: pull-secret-agents
+    name: pull-secret
   sshAuthorizedKey: ssh-public-key-value
   nmStateConfigLabelSelector:
       matchLabels:

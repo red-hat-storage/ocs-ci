@@ -3,14 +3,22 @@ Helper functions specific to DR User Interface
 """
 
 import logging
+import time
 
-from selenium.common.exceptions import NoSuchElementException
+from selenium.common.exceptions import (
+    NoSuchElementException,
+    StaleElementReferenceException,
+)
+
 from ocs_ci.framework import config
 from ocs_ci.ocs import constants
-from ocs_ci.ocs.exceptions import ResourceWrongStatusException
-from ocs_ci.ocs.ui.views import locators
+from ocs_ci.ocs.exceptions import ResourceWrongStatusException, TimeoutException
+from ocs_ci.ocs.ui.base_ui import (
+    wait_for_element_to_be_clickable,
+    wait_for_element_to_be_visible,
+)
+from ocs_ci.ocs.ui.views import locators_for_current_ocp_version
 from ocs_ci.ocs.ui.helpers_ui import format_locator
-from ocs_ci.utility.utils import get_ocp_version
 from ocs_ci.ocs.utils import get_non_acm_cluster_config
 
 log = logging.getLogger(__name__)
@@ -61,8 +69,7 @@ def check_cluster_status_on_acm_console(
                             Default is set to ready
 
     """
-    ocp_version = get_ocp_version()
-    acm_loc = locators[ocp_version]["acm_page"]
+    acm_loc = locators_for_current_ocp_version()["acm_page"]
     acm_obj.navigate_clusters_page()
     if down_cluster_name:
         log.info(
@@ -157,8 +164,7 @@ def verify_drpolicy_ui(acm_obj, scheduling_interval):
         scheduling_interval (int): Scheduling interval in the DRPolicy to be verified on ACM UI
 
     """
-    ocp_version = get_ocp_version()
-    acm_loc = locators[ocp_version]["acm_page"]
+    acm_loc = locators_for_current_ocp_version()["acm_page"]
     acm_obj.navigate_data_services()
     log.info("Click on 'Policies' tab under Disaster recovery")
     acm_obj.do_click(
@@ -200,6 +206,7 @@ def failover_relocate_ui(
     timeout=120,
     move_workloads_to_same_cluster=False,
     workload_type=constants.SUBSCRIPTION,
+    do_not_trigger=False,
 ):
     """
     Function to perform Failover/Relocate operations via ACM UI
@@ -215,13 +222,15 @@ def failover_relocate_ui(
         timeout (int): timeout to wait for certain elements to be found on the ACM UI
         move_workloads_to_same_cluster (bool): Bool condition to test negative failover/relocate scenarios to move
                                             running workloads to same cluster
+        workload_type (str): Type of workload, appset or subscription
+        do_not_trigger (bool): If in case you do not want to click on the Initiate button
+                            so as not to initiate the operation, set it to True. It's False by default.
     Returns:
             bool: True if the action is triggered, raises Exception if any of the mandatory argument is not provided
 
     """
     if workload_to_move and policy_name and failover_or_preferred_cluster:
-        ocp_version = get_ocp_version()
-        acm_loc = locators[ocp_version]["acm_page"]
+        acm_loc = locators_for_current_ocp_version()["acm_page"]
         verify_drpolicy_ui(acm_obj, scheduling_interval=scheduling_interval)
         acm_obj.navigate_applications_page()
         clear_filter = acm_obj.wait_until_expected_text_is_found(
@@ -234,30 +243,68 @@ def failover_relocate_ui(
             acm_obj.do_click(acm_loc["clear-filter"])
         if workload_type == constants.SUBSCRIPTION:
             log.info(f"Apply filter for workload type {constants.SUBSCRIPTION}")
-            acm_obj.do_click(acm_loc["apply-filter"])
+            acm_obj.do_click(acm_loc["apply-filter"], enable_screenshot=True)
             acm_obj.do_click(acm_loc["sub-checkbox"], enable_screenshot=True)
         elif workload_type == constants.APPLICATION_SET:
             log.info(f"Apply filter for workload type {constants.APPLICATION_SET}")
-            acm_obj.do_click(acm_loc["apply-filter"])
+            acm_obj.do_click(acm_loc["apply-filter"], enable_screenshot=True)
             acm_obj.do_click(acm_loc["appset-checkbox"], enable_screenshot=True)
         log.info("Click on search bar")
         acm_obj.do_click(acm_loc["search-bar"])
         log.info("Clear existing text from search bar if any")
         acm_obj.do_clear(acm_loc["search-bar"])
-        log.info("Enter the workload to be searched")
+        log.info(f"Enter the workload to be searched {workload_to_move}")
         acm_obj.do_send_keys(acm_loc["search-bar"], text=workload_to_move)
-        log.info("Click on kebab menu option")
-        acm_obj.do_click(acm_loc["kebab-action"], enable_screenshot=True)
         if action == constants.ACTION_FAILOVER:
             log.info("Selecting action as Failover from ACM UI")
-            acm_obj.do_click(
-                acm_loc["failover-app"], enable_screenshot=True, timeout=timeout
-            )
+            for _ in range(10):
+                try:
+                    log.info("Click on kebab menu option")
+                    kebab_action = wait_for_element_to_be_clickable(
+                        acm_loc["kebab-action"]
+                    )
+                    acm_obj.driver.execute_script("arguments[0].click();", kebab_action)
+                    kebab_state = kebab_action.get_attribute("aria-expanded")
+                    log.info(f"Kebab state: {kebab_state}")
+                    if not kebab_state:
+                        acm_obj.driver.execute_script(
+                            "arguments[0].click();", kebab_action
+                        )
+                        log.info("Kebab menu options are open")
+                    failover_app = wait_for_element_to_be_visible(
+                        acm_loc["failover-app"]
+                    )
+                    acm_obj.driver.execute_script("arguments[0].click();", failover_app)
+                    break
+                except (TimeoutException, StaleElementReferenceException):
+                    log.warning("Failover option not found, retrying...")
+                    time.sleep(1)
+            log.info("Failover option is selected")
         else:
             log.info("Selecting action as Relocate from ACM UI")
-            acm_obj.do_click(
-                acm_loc["relocate-app"], enable_screenshot=True, timeout=timeout
-            )
+            for _ in range(10):
+                try:
+                    log.info("Click on kebab menu option")
+                    kebab_action = wait_for_element_to_be_clickable(
+                        acm_loc["kebab-action"]
+                    )
+                    acm_obj.driver.execute_script("arguments[0].click();", kebab_action)
+                    kebab_state = kebab_action.get_attribute("aria-expanded")
+                    log.info(f"Kebab state: {kebab_state}")
+                    if not kebab_state:
+                        acm_obj.driver.execute_script(
+                            "arguments[0].click();", kebab_action
+                        )
+                        log.info("Kebab menu options are open")
+                    relocate_app = wait_for_element_to_be_visible(
+                        acm_loc["relocate-app"]
+                    )
+                    acm_obj.driver.execute_script("arguments[0].click();", relocate_app)
+                    break
+                except (TimeoutException, StaleElementReferenceException):
+                    log.warning("Relocate option not found, retrying...")
+                    time.sleep(1)
+            log.info("Relocate option is selected")
         if workload_type == constants.SUBSCRIPTION:
             log.info("Click on policy dropdown")
             acm_obj.do_click(acm_loc["policy-dropdown"], enable_screenshot=True)
@@ -302,6 +349,7 @@ def failover_relocate_ui(
                     locator=acm_loc["operation-readiness"],
                     expected_text=constants.STATUS_READY,
                 ), "Failover Operation readiness check failed"
+                log.info("Failover readiness is Ready as expected")
         else:
             if move_workloads_to_same_cluster:
                 assert not acm_obj.wait_until_expected_text_is_found(
@@ -315,6 +363,7 @@ def failover_relocate_ui(
                     locator=acm_loc["operation-readiness"],
                     expected_text=constants.STATUS_READY,
                 ), "Relocate Operation readiness check failed"
+                log.info("Relocate readiness is Ready as expected")
         initiate_btn = acm_obj.find_an_element_by_xpath(
             "//button[@id='modal-intiate-action']"
         )
@@ -332,34 +381,39 @@ def failover_relocate_ui(
                 )
                 acm_obj.take_screenshot()
                 return True
-        if workload_type == constants.SUBSCRIPTION:
-            log.info("Click on subscription dropdown")
-            acm_obj.do_click(acm_loc["subscription-dropdown"], enable_screenshot=True)
-            # DRPC name is by default selected, hence no code is needed
+            # DRPC name is by default selected, hence no code is needed for subscription dropdown
         if aria_disabled == "true":
             log.error("Initiate button in not enabled to failover/relocate")
             return False
         else:
-            log.info("Click on Initiate button to failover/relocate")
-            acm_obj.do_click(
-                acm_loc["initiate-action"], enable_screenshot=True, avoid_stale=True
-            )
-            if action == constants.ACTION_FAILOVER:
-                log.info("Failover trigerred from ACM UI")
+            if do_not_trigger:
+                log.info(
+                    "Failover/Relocate operation will not be triggered as intended"
+                )
             else:
-                log.info("Relocate trigerred from ACM UI")
-        acm_obj.take_screenshot()
-        acm_obj.page_has_loaded()
-        if workload_type == constants.SUBSCRIPTION:
-            log.info("Close the action modal")
-            acm_obj.do_click(
-                acm_loc["close-action-modal"], enable_screenshot=True, avoid_stale=True
-            )
-            log.info(
-                f"Action modal successfully closed for {constants.SUBSCRIPTION} type workload"
-            )
-            # It automatically closes for Appset based workload
-        return True
+                log.info("Click on Initiate button to failover/relocate")
+                acm_obj.do_click(
+                    acm_loc["initiate-action"], enable_screenshot=True, avoid_stale=True
+                )
+                if action == constants.ACTION_FAILOVER:
+                    log.info("Failover trigerred from ACM UI")
+                else:
+                    log.info("Relocate trigerred from ACM UI")
+        if not do_not_trigger:
+            acm_obj.take_screenshot()
+            acm_obj.page_has_loaded()
+            if workload_type == constants.SUBSCRIPTION:
+                log.info("Close the action modal")
+                acm_obj.do_click(
+                    acm_loc["close-action-modal"],
+                    enable_screenshot=True,
+                    avoid_stale=True,
+                )
+                log.info(
+                    f"Action modal successfully closed for {constants.SUBSCRIPTION} type workload"
+                )
+                # It automatically closes for Appset based workload
+            return True
     else:
         log.error(
             "Incorrect or missing params to perform Failover/Relocate operation from ACM UI"
@@ -380,8 +434,7 @@ def verify_failover_relocate_status_ui(
         timeout (int): timeout to wait for certain elements to be found on the ACM UI
 
     """
-    ocp_version = get_ocp_version()
-    acm_loc = locators[ocp_version]["acm_page"]
+    acm_loc = locators_for_current_ocp_version()["acm_page"]
     data_policy_hyperlink = acm_obj.wait_until_expected_text_is_found(
         locator=acm_loc["data-policy-hyperlink"],
         expected_text="1 policy",
@@ -439,8 +492,7 @@ def check_cluster_operator_status(acm_obj, timeout=30):
         bool: False if expected text Degraded is found, True otherwise
 
     """
-    ocp_version = get_ocp_version()
-    acm_loc = locators[ocp_version]["acm_page"]
+    acm_loc = locators_for_current_ocp_version()["acm_page"]
     log.info("Check the Cluster operator status")
     cluster_operator_status = acm_obj.wait_until_expected_text_is_found(
         locator=acm_loc["cluster-operator-status"],
@@ -509,8 +561,7 @@ def application_count_on_ui(acm_obj):
         enrolled in disaster recovery on DR dashboard
 
     """
-    ocp_version = get_ocp_version()
-    acm_loc = locators[ocp_version]["acm_page"]
+    acm_loc = locators_for_current_ocp_version()["acm_page"]
     log.info("Fetch the ACM managed applications count on ACM UI")
     managed_app_text = acm_obj.get_element_text(acm_loc["managed_app_count"])
     log.info(f"Text on managed app count is '{managed_app_text}'")
@@ -543,8 +594,7 @@ def health_and_peer_connection_check_on_ui(
 
     """
 
-    ocp_version = get_ocp_version()
-    acm_loc = locators[ocp_version]["acm_page"]
+    acm_loc = locators_for_current_ocp_version()["acm_page"]
     for cluster in [cluster1, cluster2]:
         log.info(f"Select managed cluster {cluster} from cluster dropdown")
         acm_obj.do_click(acm_loc["cluster-dropdown"], enable_screenshot=True)
@@ -596,8 +646,7 @@ def protected_volume_count_per_cluster(acm_obj, cluster_name):
         DR protected total volume count on the selected cluster
 
     """
-    ocp_version = get_ocp_version()
-    acm_loc = locators[ocp_version]["acm_page"]
+    acm_loc = locators_for_current_ocp_version()["acm_page"]
     log.info(f"Select managed cluster {cluster_name} from cluster dropdown")
     acm_obj.do_click(acm_loc["cluster-dropdown"], enable_screenshot=True)
     acm_obj.do_click(format_locator(acm_loc["cluster"], cluster_name))
@@ -624,8 +673,7 @@ def check_apps_running_on_selected_cluster(
         True if all the apps are found on selected managed cluster, False if any of the apps are missing
 
     """
-    ocp_version = get_ocp_version()
-    acm_loc = locators[ocp_version]["acm_page"]
+    acm_loc = locators_for_current_ocp_version()["acm_page"]
     log.info(f"Select managed cluster {cluster_name} from cluster dropdown")
     acm_obj.do_click(acm_loc["cluster-dropdown"], enable_screenshot=True)
     acm_obj.do_click(format_locator(acm_loc["cluster"], cluster_name))
@@ -659,8 +707,7 @@ def verify_application_present_in_ui(acm_obj, workloads_to_check=[], timeout=60)
 
     """
     if workloads_to_check:
-        ocp_version = get_ocp_version()
-        acm_loc = locators[ocp_version]["acm_page"]
+        acm_loc = locators_for_current_ocp_version()["acm_page"]
         acm_obj.navigate_applications_page()
         for app in workloads_to_check:
             log.info("Click on search bar")
@@ -701,8 +748,7 @@ def delete_application_ui(acm_obj, workloads_to_delete=[], timeout=70):
     if verify_application_present_in_ui(
         acm_obj, workloads_to_check=workloads_to_delete, timeout=timeout
     ):
-        ocp_version = get_ocp_version()
-        acm_loc = locators[ocp_version]["acm_page"]
+        acm_loc = locators_for_current_ocp_version()["acm_page"]
         acm_obj.navigate_applications_page()
         for app in workloads_to_delete:
             log.info("Click on search bar")

@@ -175,6 +175,8 @@ class IBMCloudIPI(CloudDeploymentBase):
                     f"Switching region to {other_region} due to lack of load balancers"
                 )
                 ibmcloud.set_region(other_region)
+            else:
+                ibmcloud.login()
         if config.ENV_DATA.get("custom_vpc"):
             self.prepare_custom_vpc_and_network()
         self.ocp_deployment = self.OCPDeployment()
@@ -230,6 +232,7 @@ class IBMCloudIPI(CloudDeploymentBase):
             self.delete_volumes(resource_group)
             self.delete_leftover_resources(resource_group)
             self.delete_resource_group(resource_group)
+            ibmcloud.delete_dns_records(self.cluster_name)
         except Exception as ex:
             logger.error(f"During IBM Cloud cleanup some exception occurred {ex}")
             raise
@@ -313,7 +316,12 @@ class IBMCloudIPI(CloudDeploymentBase):
             cmd = (
                 f"ibmcloud is vols --resource-group-name {resource_group} --output json"
             )
-            proc = exec_cmd(cmd)
+            try:
+                proc = exec_cmd(cmd)
+            except CommandFailed as ex:
+                if "No resource group found" in str(ex):
+                    logger.info(f"No resource group: {resource_group} found!")
+                    return []
 
             volume_data = json.loads(proc.stdout)
             return [volume["id"] for volume in volume_data]

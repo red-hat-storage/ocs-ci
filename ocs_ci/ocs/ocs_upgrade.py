@@ -19,7 +19,10 @@ from ocs_ci.deployment.helpers.external_cluster_helpers import (
     ExternalCluster,
     get_external_cluster_client,
 )
-from ocs_ci.deployment.helpers.odf_deployment_helpers import get_required_csvs
+from ocs_ci.deployment.helpers.odf_deployment_helpers import (
+    get_required_csvs,
+    set_ceph_config,
+)
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.cluster import CephCluster, CephHealthMonitor
 from ocs_ci.ocs.defaults import (
@@ -29,7 +32,7 @@ from ocs_ci.ocs.defaults import (
     OCS_OPERATOR_NAME,
 )
 from ocs_ci.ocs.ocp import get_images, OCP
-from ocs_ci.ocs.node import get_nodes
+from ocs_ci.ocs.node import get_nodes, get_all_nodes
 from ocs_ci.ocs.resources.catalog_source import CatalogSource, disable_specific_source
 from ocs_ci.ocs.resources.daemonset import DaemonSet
 from ocs_ci.ocs.resources.csv import (
@@ -137,9 +140,15 @@ def verify_image_versions(old_images, upgrade_version, version_before_upgrade):
 
     """
     number_of_worker_nodes = len(get_nodes())
+    total_nodes = len(get_all_nodes())
     verify_pods_upgraded(old_images, selector=constants.OCS_OPERATOR_LABEL)
     verify_pods_upgraded(old_images, selector=constants.OPERATOR_LABEL)
-    default_noobaa_pods = 3
+    # Default noobaa pods
+    # noobaa-db-pg-cluster-1
+    # noobaa-db-pg-cluster-2
+    # noobaa-core-0
+    # noobaa-operator
+    default_noobaa_pods = 4
     noobaa_pods = default_noobaa_pods
     noobaa_pod_obj = get_noobaa_pods()
     if (
@@ -147,8 +156,15 @@ def verify_image_versions(old_images, upgrade_version, version_before_upgrade):
         and config.ENV_DATA["platform"].lower() == constants.VSPHERE_PLATFORM
     ):
         default_noobaa_pods = 4
+        if upgrade_version >= parse_version("4.19"):
+            default_noobaa_pods = 5
+    if upgrade_version >= parse_version("4.19"):
+        log.info("Increased default noobaa pod count by 1 due to cnpg pod")
+        default_noobaa_pods += 1
     for pod in noobaa_pod_obj:
         if "pv-backingstore" in pod.name:
+            default_noobaa_pods += 1
+        if "noobaa-default-backing-store" in pod.name:
             default_noobaa_pods += 1
     if upgrade_version >= parse_version("4.7"):
         noobaa = OCP(kind="noobaa", namespace=config.ENV_DATA["cluster_namespace"])
@@ -187,21 +203,58 @@ def verify_image_versions(old_images, upgrade_version, version_before_upgrade):
         else:
             raise
     if not config.ENV_DATA.get("mcg_only_deployment"):
+        odf_full_version = version.get_semantic_running_odf_version()
+        version_without_noobaa_db_pg_cluster = "4.19.0-59"
+        semantic_version_for_without_noobaa_db_pg_cluster = (
+            version.get_semantic_version(version_without_noobaa_db_pg_cluster)
+        )
+
+        # we need to support the version for Konflux builds as well
+        version_for_konflux_noobaa_db_pg_cluster = "4.19.0-15"
+        semantic_version_for_konflux_noobaa_db_pg_cluster = (
+            version.get_semantic_version(version_for_konflux_noobaa_db_pg_cluster)
+        )
+        # cephfs and rbdplugin label and count
+        csi_cephfsplugin_label = constants.CSI_CEPHFSPLUGIN_LABEL
+        csi_rbdplugin_label = constants.CSI_RBDPLUGIN_LABEL
+        csi_cephfsplugin_provisioner_label = (
+            constants.CSI_CEPHFSPLUGIN_PROVISIONER_LABEL
+        )
+        csi_rbdplugin_provisioner_label = constants.CSI_RBDPLUGIN_PROVISIONER_LABEL
+        count_csi_cephfsplugin_label = count_csi_rbdplugin_label = (
+            number_of_worker_nodes
+        )
+
+        if odf_full_version == semantic_version_for_without_noobaa_db_pg_cluster:
+            log.info(
+                f"Label for cephfsplugin and rbdplugin are {csi_cephfsplugin_label} and {csi_rbdplugin_label}"
+            )
+        elif odf_full_version >= semantic_version_for_konflux_noobaa_db_pg_cluster:
+            csi_cephfsplugin_label = constants.CSI_CEPHFSPLUGIN_LABEL_419
+            csi_rbdplugin_label = constants.CSI_RBDPLUGIN_LABEL_419
+            csi_cephfsplugin_provisioner_label = (
+                constants.CSI_CEPHFSPLUGIN_PROVISIONER_LABEL_419
+            )
+            csi_rbdplugin_provisioner_label = (
+                constants.CSI_RBDPLUGIN_PROVISIONER_LABEL_419
+            )
+            count_csi_cephfsplugin_label = count_csi_rbdplugin_label = total_nodes
+
         verify_pods_upgraded(
             old_images,
-            selector=constants.CSI_CEPHFSPLUGIN_LABEL,
-            count=number_of_worker_nodes,
+            selector=csi_cephfsplugin_label,
+            count=count_csi_cephfsplugin_label,
         )
         verify_pods_upgraded(
-            old_images, selector=constants.CSI_CEPHFSPLUGIN_PROVISIONER_LABEL, count=2
+            old_images, selector=csi_cephfsplugin_provisioner_label, count=2
         )
         verify_pods_upgraded(
             old_images,
-            selector=constants.CSI_RBDPLUGIN_LABEL,
-            count=number_of_worker_nodes,
+            selector=csi_rbdplugin_label,
+            count=count_csi_rbdplugin_label,
         )
         verify_pods_upgraded(
-            old_images, selector=constants.CSI_RBDPLUGIN_PROVISIONER_LABEL, count=2
+            old_images, selector=csi_rbdplugin_provisioner_label, count=2
         )
     if not (
         config.DEPLOYMENT.get("external_mode")
@@ -611,6 +664,7 @@ def run_ocs_upgrade(
 
     """
     namespace = config.ENV_DATA["cluster_namespace"]
+    platform = config.ENV_DATA["platform"]
     ceph_cluster = CephCluster()
     original_ocs_version = config.ENV_DATA.get("ocs_version")
     upgrade_in_current_source = config.UPGRADE.get("upgrade_in_current_source", False)
@@ -685,11 +739,11 @@ def run_ocs_upgrade(
         upgrade_ocs.set_upgrade_images()
         live_deployment = config.DEPLOYMENT["live_deployment"]
         disable_addon = config.DEPLOYMENT.get("ibmcloud_disable_addon")
-        if (
+        managed_ibmcloud_platform = (
             config.ENV_DATA["platform"] == constants.IBMCLOUD_PLATFORM
-            and live_deployment
-            and not disable_addon
-        ):
+            and config.ENV_DATA["deployment_type"] == "managed"
+        )
+        if managed_ibmcloud_platform and live_deployment and not disable_addon:
             clustername = config.ENV_DATA.get("cluster_name")
             cmd = f"ibmcloud ks cluster addon disable openshift-data-foundation --cluster {clustername} -f"
             run_ibmcloud_cmd(cmd)
@@ -717,10 +771,6 @@ def run_ocs_upgrade(
             if ui_upgrade_supported:
                 ocs_odf_upgrade_ui()
             else:
-                managed_ibmcloud_platform = (
-                    config.ENV_DATA["platform"] == constants.IBMCLOUD_PLATFORM
-                    and config.ENV_DATA["deployment_type"] == "managed"
-                )
                 if managed_ibmcloud_platform and not upgrade_in_current_source:
                     create_ocs_secret(config.ENV_DATA["cluster_namespace"])
                 if upgrade_version != "4.9":
@@ -801,6 +851,19 @@ def run_ocs_upgrade(
                     break
             except TimeoutException:
                 raise TimeoutException("No new CSV found after upgrade!")
+        if config.UPGRADE.get(
+            "csi_rbd_plugin_update_strategy_max_unavailable_upgrade_middle"
+        ) or config.UPGRADE.get(
+            "csi_cephfs_plugin_update_strategy_max_unavailable_upgrade_middle"
+        ):
+            set_update_strategy(
+                config.UPGRADE.get(
+                    "csi_rbd_plugin_update_strategy_max_unavailable_upgrade_middle"
+                ),
+                config.UPGRADE.get(
+                    "csi_cephfs_plugin_update_strategy_max_unavailable_upgrade_middle"
+                ),
+            )
         stop_time = time.time()
         time_taken = stop_time - start_time
         log.info(f"Upgrade took {time_taken} seconds to complete")
@@ -833,12 +896,12 @@ def run_ocs_upgrade(
         upgrade_ocs.version_before_upgrade,
     )
 
-    verify_nb_db_psql_version()
+    verify_nb_db_psql_version(check_image_name_version=False)
 
+    upgrade_version_semantic = version.get_semantic_version(upgrade_version, True)
     # update external secrets
     if config.DEPLOYMENT["external_mode"]:
-        upgrade_version = version.get_semantic_version(upgrade_version, True)
-        if upgrade_version >= version.VERSION_4_10:
+        if upgrade_version_semantic >= version.VERSION_4_10:
             external_cluster.update_permission_caps()
         else:
             external_cluster.update_permission_caps(EXTERNAL_CLUSTER_USER)
@@ -861,6 +924,28 @@ def run_ocs_upgrade(
             f"--from-file=external_cluster_details={external_cluster_details.name}"
         )
         exec_cmd(cmd)
+
+    if (
+        platform in (constants.VSPHERE_PLATFORM, constants.IBMCLOUD_PLATFORM)
+        and upgrade_version_semantic >= version.VERSION_4_19
+    ):
+        # using try/except to not fail deployments since these values are good to have
+        # for vsphere platform
+        try:
+            set_ceph_config(
+                entity="global",
+                config_name="bluestore_slow_ops_warn_threshold",
+                value="7",
+            )
+            set_ceph_config(
+                entity="global",
+                config_name="bluestore_slow_ops_warn_lifetime",
+                value="10",
+            )
+        except Exception as ex:
+            logger.error(
+                f"Failed to set values for bluestore_slow_ops. Exception is: {ex}"
+            )
 
     if config.ENV_DATA.get("mcg_only_deployment"):
         mcg_only_install_verification(ocs_registry_image=upgrade_ocs.ocs_registry_image)
@@ -956,10 +1041,10 @@ def set_update_strategy(rbd_max_unavailable=None, cephfs_max_unavailable=None):
             to be updated in rook-ceph-operator-config configmap.
 
     """
-    rbd_max = rbd_max_unavailable or config.ENV_DATA.get(
+    rbd_max = rbd_max_unavailable or config.UPGRADE.get(
         "csi_rbd_plugin_update_strategy_max_unavailable"
     )
-    cephfs_max = cephfs_max_unavailable or config.ENV_DATA.get(
+    cephfs_max = cephfs_max_unavailable or config.UPGRADE.get(
         "csi_cephfs_plugin_update_strategy_max_unavailable"
     )
     if rbd_max:

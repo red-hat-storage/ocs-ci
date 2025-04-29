@@ -40,7 +40,15 @@ class CloudManager(ABC):
 
     """
 
-    def __init__(self):
+    def __init__(self, obc_obj=None):
+        """
+        Constructor for the CloudManager class
+
+        Args:
+            obc_obj (OBC): For RGW, we can pass the OBC object
+                           of RGW bucket
+
+        """
         cloud_map = {
             "AWS_STS": AwsSTSClient,
             "AWS": S3Client,
@@ -91,11 +99,19 @@ class CloudManager(ABC):
 
         try:
             rgw_conn = RGW()
-            endpoint, access_key, secret_key = rgw_conn.get_credentials()
+            if obc_obj:
+                endpoint, access_key, secret_key = (
+                    obc_obj.s3_external_endpoint,
+                    obc_obj.access_key_id,
+                    obc_obj.access_key,
+                )
+            else:
+                endpoint, access_key, secret_key = rgw_conn.get_credentials()
             cred_dict["RGW"] = {
                 "SECRET_PREFIX": "RGW",
                 "DATA_PREFIX": "AWS",
                 "ENDPOINT": endpoint,
+                "S3_INTERNAL_ENDPOINT": rgw_conn.s3_internal_endpoint,
                 "RGW_ACCESS_KEY_ID": access_key,
                 "RGW_SECRET_ACCESS_KEY": secret_key,
             }
@@ -219,6 +235,7 @@ class S3Client(CloudClient):
         key_id = auth_dict.get(f"{self.secret_prefix}_ACCESS_KEY_ID")
         access_key = auth_dict.get(f"{self.secret_prefix}_SECRET_ACCESS_KEY")
         self.endpoint = auth_dict.get("ENDPOINT") or endpoint
+        self.s3_internal_endpoint = auth_dict.get("S3_INTERNAL_ENDPOINT") or None
         self.region = auth_dict.get("REGION")
         self.access_key = key_id
         self.secret_key = access_key

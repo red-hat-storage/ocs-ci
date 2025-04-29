@@ -14,6 +14,7 @@ from ocs_ci.ocs.machine import get_machine_objs
 
 from ocs_ci.framework import config
 from ocs_ci.ocs.exceptions import (
+    HostNameNotFoundInOSDStatus,
     TimeoutExpiredError,
     NotAllNodesCreated,
     CommandFailed,
@@ -24,6 +25,7 @@ from ocs_ci.ocs.machinepool import MachinePools
 from ocs_ci.ocs.ocp import OCP
 from ocs_ci.ocs.resources.ocs import OCS
 from ocs_ci.ocs import constants, exceptions, ocp, defaults
+from ocs_ci.ocs.resources.pvc import get_pvc_size
 from ocs_ci.utility import version
 from ocs_ci.utility.retry import retry
 from ocs_ci.utility.utils import TimeoutSampler, convert_device_size, get_az_count
@@ -32,10 +34,10 @@ from ocs_ci.ocs.resources import pod
 from ocs_ci.utility.utils import set_selinux_permissions, get_ocp_version
 from ocs_ci.ocs.resources.pv import (
     get_pv_objs_in_sc,
-    verify_new_pvs_available_in_sc,
-    delete_released_pvs_in_sc,
     get_pv_size,
     get_node_pv_objs,
+    wait_for_pvs_in_lvs_to_reach_status,
+    delete_released_pvs_in_sc,
 )
 from ocs_ci.utility.version import get_semantic_version
 from ocs_ci.utility.rosa import (
@@ -334,7 +336,7 @@ def get_node_ips(node_type="worker"):
     ocp = OCP(kind=constants.NODE)
     if node_type == "worker":
         nodes = ocp.get(selector=constants.WORKER_LABEL).get("items")
-    if node_type == "master:":
+    if node_type == "master":
         nodes = ocp.get(selector=constants.MASTER_LABEL).get("items")
 
     if config.ENV_DATA["platform"].lower() == constants.AWS_PLATFORM:
@@ -1209,12 +1211,19 @@ def delete_and_create_osd_node_vsphere_upi_lso(osd_node_name, use_existing_node=
         str: The new node name
 
     """
-    sc_name = constants.LOCAL_BLOCK_RESOURCE
-    old_pv_objs = get_pv_objs_in_sc(sc_name)
+    from ocs_ci.ocs.platform_nodes import PlatformNodesFactory
+    from ocs_ci.ocs.resources.storage_cluster import get_deviceset_sc_name_per_count
+
+    plt = PlatformNodesFactory()
+    node_util = plt.get_nodes_platform()
 
     osd_node = get_node_objs(node_names=[osd_node_name])[0]
     osd_ids = get_node_osd_ids(osd_node_name)
     assert osd_ids, f"The node {osd_node_name} does not have osd pods"
+    node_osd_pods = pod.get_osd_pods_having_ids(osd_ids)
+    old_pvc_objs = pod.get_pods_pvcs(node_osd_pods)
+    old_pvc_sizes = [get_pvc_size(pvc) for pvc in old_pvc_objs]
+    log.info(f"old pvc sizes = {old_pvc_sizes}")
 
     ocs_version = config.ENV_DATA["ocs_version"]
     assert not (
@@ -1224,11 +1233,9 @@ def delete_and_create_osd_node_vsphere_upi_lso(osd_node_name, use_existing_node=
         f"The ocs-osd-removal job works with multiple ids only from ocs version 4.7"
     )
 
-    osd_id = osd_ids[0]
     log.info(f"osd ids to remove = {osd_ids}")
     # Save the node hostname before deleting the node
     osd_node_hostname_label = get_node_hostname_label(osd_node)
-
     log.info("Scale down node deployments...")
     scale_down_deployments(osd_node_name)
     log.info("Scale down deployments finished successfully")
@@ -1239,12 +1246,9 @@ def delete_and_create_osd_node_vsphere_upi_lso(osd_node_name, use_existing_node=
     assert new_node_name, "Failed to create a new node"
     log.info(f"New node created successfully. Node name: {new_node_name}")
 
-    num_of_new_pvs = len(osd_ids)
-    log.info(f"Number of the expected new pvs = {num_of_new_pvs}")
     # If we use LSO, we need to create and attach a new disk manually
-    new_node = get_node_objs(node_names=[new_node_name])[0]
-    for i in range(num_of_new_pvs):
-        add_disk_to_node(new_node)
+    new_node = get_node_objs([new_node_name])[0]
+    node_util.create_and_attach_volumes(new_node, volume_sizes=old_pvc_sizes, ssd=True)
 
     new_node_hostname_label = get_node_hostname_label(new_node)
     log.info(
@@ -1256,30 +1260,29 @@ def delete_and_create_osd_node_vsphere_upi_lso(osd_node_name, use_existing_node=
     )
     assert res, "Failed to add the new node to LVD and LVS"
 
-    log.info("Verify new pvs are available...")
-    is_new_pvs_available = verify_new_pvs_available_in_sc(
-        old_pv_objs, sc_name, num_of_new_pvs=num_of_new_pvs
-    )
-    assert is_new_pvs_available, "New pvs are not available"
-    log.info("Finished verifying that the new pv is available")
-
     osd_removal_job = pod.run_osd_removal_job(osd_ids)
     assert osd_removal_job, "ocs-osd-removal failed to create"
-    is_completed = (pod.verify_osd_removal_job_completed_successfully(osd_id),)
-    assert is_completed, "ocs-osd-removal-job is not in status 'completed'"
+    for osd_id in osd_ids:
+        is_completed = pod.verify_osd_removal_job_completed_successfully(osd_id)
+        assert is_completed, "ocs-osd-removal-job is not in status 'completed'"
     log.info("ocs-osd-removal-job completed successfully")
 
-    expected_num_of_deleted_pvs = [0, num_of_new_pvs]
-    num_of_deleted_pvs = delete_released_pvs_in_sc(sc_name)
-    assert num_of_deleted_pvs in expected_num_of_deleted_pvs, (
-        f"num of deleted PVs is {num_of_deleted_pvs} "
-        f"instead of the expected values {expected_num_of_deleted_pvs}"
+    deviceset_sc_name_per_count = get_deviceset_sc_name_per_count()
+    log.info("Verify that the new PVs have been created...")
+    for sc_name, pv_count in deviceset_sc_name_per_count.items():
+        wait_for_pvs_in_lvs_to_reach_status(
+            sc_name, pv_count, constants.STATUS_BOUND, timeout=420
+        )
+    log.info(
+        "Finished verifying that the new PVs have been created."
+        "Delete the PVs that are in a Released state..."
     )
-    log.info(f"num of deleted PVs is {num_of_deleted_pvs}")
-    log.info("Successfully deleted old pvs")
+    for sc_name in deviceset_sc_name_per_count.keys():
+        delete_released_pvs_in_sc(sc_name)
 
-    is_deleted = pod.delete_osd_removal_job(osd_id)
-    assert is_deleted, "Failed to delete ocs-osd-removal-job"
+    for osd_id in osd_ids:
+        is_deleted = pod.delete_osd_removal_job(osd_id)
+        assert is_deleted, "Failed to delete ocs-osd-removal-job"
     log.info("ocs-osd-removal-job deleted successfully")
 
     return new_node_name
@@ -1402,7 +1405,7 @@ def node_replacement_verification_steps_user_side(
 
     # It can take some time until all the ocs pods are up and running
     # after the process of node replacement
-    if not pod.wait_for_pods_to_be_running():
+    if not pod.check_pods_after_node_replacement():
         log.warning("Not all the pods in running state")
         return False
 
@@ -1470,17 +1473,14 @@ def node_replacement_verification_steps_ceph_side(
     if not pod.check_pods_after_node_replacement():
         return False
 
-    ct_pod = pod.get_ceph_tools_pod()
-    ceph_osd_status = ct_pod.exec_ceph_cmd(ceph_cmd="ceph osd status")
-    log.info(f"Ceph osd status: {ceph_osd_status}")
+    node_names_from_ceph_osd_status = get_node_names_from_osd_status()
     osd_node_names = get_osd_running_nodes()
     log.info(f"osd node names: {osd_node_names}")
 
     if new_osd_node_name:
         log.info(f"New osd node name is: {new_osd_node_name}")
-        node_names = [osd["host name"] for osd in ceph_osd_status["OSDs"]]
-        log.info(f"Node names from ceph osd status: {node_names}")
-        if new_osd_node_name not in node_names:
+        log.info(f"Node names from ceph osd status: {node_names_from_ceph_osd_status}")
+        if new_osd_node_name not in node_names_from_ceph_osd_status:
             log.warning("new osd node name not found in 'ceph osd status' output")
             return False
         if new_osd_node_name not in osd_node_names:
@@ -1492,14 +1492,14 @@ def node_replacement_verification_steps_ceph_side(
         )
 
     if (
-        old_node_name in ceph_osd_status
+        old_node_name in node_names_from_ceph_osd_status
         and config.ENV_DATA["platform"].lower() != constants.VSPHERE_PLATFORM
     ):
         log.warning("old node name found in 'ceph osd status' output")
         return False
 
     if (
-        old_node_name in osd_node_names
+        old_node_name in node_names_from_ceph_osd_status
         and config.ENV_DATA["platform"].lower() != constants.VSPHERE_PLATFORM
     ):
         log.warning("the old hostname found in osd node names")
@@ -1512,6 +1512,34 @@ def node_replacement_verification_steps_ceph_side(
 
     log.info("Verification steps from the ceph side finish successfully")
     return True
+
+
+@retry(
+    HostNameNotFoundInOSDStatus,
+    tries=60,
+    delay=10,
+    backoff=1,
+)
+def get_node_names_from_osd_status():
+    """
+    Fetch the Host/Node names from ceph osd status
+
+    Returns:
+        list: List of host names from ceph osd status
+
+    """
+    host_names = []
+    ct_pod = pod.get_ceph_tools_pod()
+    ceph_osd_status = ct_pod.exec_ceph_cmd(ceph_cmd="ceph osd status")
+    log.info(f"Ceph osd status: {ceph_osd_status}")
+    for osd in ceph_osd_status["OSDs"]:
+        if (osd["host name"]) == "":
+            raise HostNameNotFoundInOSDStatus(
+                "Hostnames are not reflected in ceph osd status"
+            )
+        else:
+            host_names.append(osd["host name"])
+    return host_names
 
 
 def is_node_labeled(node_name, label=constants.OPERATOR_NODE_LABEL):
@@ -1551,53 +1579,72 @@ def taint_nodes(nodes, taint_label=None):
             log.info(f"{node} was not tainted - {e}")
 
 
-def check_taint_on_nodes(taint=None):
+def has_taint(node_obj, taint):
     """
-    Function to check for particular taint on nodes
+    Check if a specific node has a given taint.
 
     Args:
-        taint (str): The taint to check on nodes
+        node_obj (ocs_ci.ocs.resources.ocs.OCS): The node object
+        taint (str): The taint key to check.
 
-    Return:
-        bool: True if taint is present on node. False otherwise
+    Returns:
+        bool: True if the node has the taint, False otherwise.
+
+    """
+    taints = node_obj.get().get("spec", {}).get("taints", [])
+    return any(t.get("key") in taint for t in taints)
+
+
+def check_taint_on_nodes(taint=None):
+    """
+    Check if any node in the cluster has a specific taint.
+
+    Args:
+        taint (str): The taint key to check on nodes.
+
+    Returns:
+        bool: True if the taint is present on any node, False otherwise.
 
     """
     taint = taint if taint else constants.OPERATOR_NODE_TAINT
     nodes = get_nodes()
-    flag = -1
+
     for node_obj in nodes:
-        if node_obj.get().get("spec").get("taints"):
-            if taint in node_obj.get().get("spec").get("taints")[0].get("key"):
-                log.info(f"Node {node_obj.name} has taint {taint}")
-                flag = 1
-        else:
-            flag = 0
-        return bool(flag)
+        if has_taint(node_obj, taint):
+            log.info(f"Node {node_obj.name} has taint {taint}")
+            return True
+
+    return False
 
 
 def untaint_nodes(taint_label=None, nodes_to_untaint=None):
     """
-    Function to remove taints from nodes
+    Function to remove taints from specific nodes.
 
     Args:
-        taint_label (str): taint to use
-        nodes_to_untaint (list): list of node objs to untaint
+        taint_label (str): The taint key to remove.
+        nodes_to_untaint (list): List of node objects to untaint.
 
-    Return:
-        bool: True if untainted, false otherwise
+    Returns:
+        bool: True if untainted successfully, False otherwise.
 
     """
-    if check_taint_on_nodes():
-        ocp = OCP()
-        ocs_nodes = get_ocs_nodes()
-        nodes_to_untaint = nodes_to_untaint if nodes_to_untaint else ocs_nodes
-        taint = taint_label if taint_label else constants.OPERATOR_NODE_TAINT
-        for node in nodes_to_untaint:
+    ocp = OCP()
+    ocs_nodes = get_ocs_nodes()
+    nodes_to_untaint = nodes_to_untaint if nodes_to_untaint else ocs_nodes
+    taint = taint_label if taint_label else constants.OPERATOR_NODE_TAINT
+
+    result = False
+    for node in nodes_to_untaint:
+        if has_taint(node, taint):
             taint_cmd = f"adm taint nodes {node.name} {taint}-"
             ocp.exec_oc_cmd(command=taint_cmd)
-            log.info(f"Untainted {node.name}")
-        return True
-    return False
+            log.info(f"Successfully untainted {node.name}")
+            result = True
+        else:
+            log.info(f"Node {node.name} does not have the taint {taint}")
+
+    return result
 
 
 def get_node_pods(node_name, pods_to_search=None, raise_pod_not_found_error=False):
@@ -1728,16 +1775,23 @@ def replace_old_node_in_lvd_and_lvs(old_node_name, new_node_name):
         namespace=defaults.LOCAL_STORAGE_NAMESPACE,
     )
 
-    ocp_lvs_obj = OCP(
-        kind=constants.LOCAL_VOLUME_SET,
-        namespace=defaults.LOCAL_STORAGE_NAMESPACE,
-        resource_name=constants.LOCAL_BLOCK_RESOURCE,
+    lvs_obj = OCP(
+        kind=constants.LOCAL_VOLUME_SET, namespace=defaults.LOCAL_STORAGE_NAMESPACE
     )
+    lvs_items = lvs_obj.data["items"]
+    lvs_names = [lvs_data["metadata"]["name"] for lvs_data in lvs_items]
 
-    lvd_result = ocp_lvd_obj.patch(params=params, format_type="json")
-    lvs_result = ocp_lvs_obj.patch(params=params, format_type="json")
+    patch_results = []
+    for lvs_name in lvs_names:
+        ocp_lvs_obj = OCP(
+            kind=constants.LOCAL_VOLUME_SET,
+            namespace=defaults.LOCAL_STORAGE_NAMESPACE,
+            resource_name=lvs_name,
+        )
+        patch_results.append(ocp_lvd_obj.patch(params=params, format_type="json"))
+        patch_results.append(ocp_lvs_obj.patch(params=params, format_type="json"))
 
-    return lvd_result and lvs_result
+    return all(patch_results)
 
 
 def get_node_hostname_label(node_obj):

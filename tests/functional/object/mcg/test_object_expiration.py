@@ -8,7 +8,6 @@ import pytest
 from ocs_ci.framework.pytest_customization.marks import (
     tier1,
     tier2,
-    bugzilla,
     red_squad,
     runs_on_provider,
     mcg,
@@ -441,8 +440,6 @@ class TestObjectExpiration(MCGTest):
         ), "Objects were expired when they shouldn't have been!"
 
     @skipif_ocs_version("<4.10")
-    @bugzilla("2034661")
-    @bugzilla("2029298")
     @pytest.mark.polarion_id("OCS-3929")
     @tier1
     def test_object_expiration_in_minutes(self, mcg_obj, bucket_factory):

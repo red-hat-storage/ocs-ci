@@ -1,4 +1,5 @@
 import logging
+import gc
 
 import pytest
 
@@ -374,7 +375,6 @@ class TestReplication(MCGTest):
                 marks=[
                     tier2,
                     pytest.mark.polarion_id("OCS-2680"),
-                    pytest.mark.bugzilla("2168788"),
                 ],
             ),
             pytest.param(
@@ -407,7 +407,6 @@ class TestReplication(MCGTest):
                 None,
                 marks=[
                     tier2,
-                    pytest.mark.bugzilla("2168788"),
                 ],
             ),
         ],
@@ -492,11 +491,14 @@ class TestReplication(MCGTest):
 
             def check_nb_endpoint_logs():
                 for pod in get_noobaa_endpoint_pods():
+                    pod_logs = get_pod_logs(pod.name)
                     if (
                         "The AWS access key Id you provided does not exist in our records"
-                        in get_pod_logs(pod.name)
+                        in pod_logs
                     ):
                         return True
+                    del pod_logs
+                    gc.collect()
                 return False
 
             sample = TimeoutSampler(timeout=360, sleep=10, func=check_nb_endpoint_logs)
@@ -521,12 +523,13 @@ class TestReplication(MCGTest):
 
             # check in noobaa core logs
             def check_noobaa_core_logs():
-                if "find_rules_updated_longest_time_ago:  []" in get_pod_logs(
-                    get_noobaa_core_pod().name
-                ):
-                    return True
-                else:
-                    return False
+                found = False
+                pod_logs = get_pod_logs(get_noobaa_core_pod().name)
+                if "find_rules_updated_longest_time_ago:  []" in pod_logs:
+                    found = True
+                del pod_logs
+                gc.collect()
+                return found
 
             logger.info(
                 f"Checking the noobaa core logs to see if the replication has "

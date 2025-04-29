@@ -29,6 +29,7 @@ from ocs_ci.ocs.exceptions import (
     VolumePathNotFoundException,
     UnsupportedOSType,
     UnavailableResourceException,
+    CommandFailed,
 )
 from ocs_ci.framework import config, merge_dict
 from ocs_ci.ocs.machinepool import (
@@ -180,6 +181,16 @@ class NodesBase(object):
     def attach_volume(self, volume, node):
         raise NotImplementedError("Attach volume functionality is not implemented")
 
+    def create_and_attach_volume(self, node, size, ssd=False):
+        raise NotImplementedError(
+            "Create and attach volume functionality is not implemented"
+        )
+
+    def create_and_attach_volumes(self, node, volume_sizes, ssd=False):
+        raise NotImplementedError(
+            "Create and attach volumes functionality is not implemented"
+        )
+
     def wait_for_volume_attach(self, volume):
         raise NotImplementedError(
             "Wait for volume attach functionality is not implemented"
@@ -248,6 +259,11 @@ class NodesBase(object):
     def wait_for_nodes_to_stop_or_terminate(self, nodes):
         raise NotImplementedError(
             "wait for nodes to stop or terminate functionality is not implemented"
+        )
+
+    def disable_nodes_network_temporarily(self, nodes, duration=20):
+        raise NotImplementedError(
+            "disable enable node network temporarily functionality is not implemented"
         )
 
 
@@ -475,6 +491,19 @@ class VMWareNodes(NodesBase):
         vm = self.get_vms([node])[0]
         self.vsphere.add_disk(vm=vm, size=size, ssd=ssd)
 
+    def create_and_attach_volumes(self, node, volume_sizes, ssd=False):
+        """
+        Create new volumes and attach them to the given VM
+
+        Args:
+            node (OCS): The OCS object representing the node
+            volume_sizes (list): List of the volume sizes in GB to create and attach to the node
+            ssd (bool): if True, mark disk as SSD
+
+        """
+        vm = self.get_vms([node])[0]
+        self.vsphere.add_disks(vm=vm, disk_sizes=volume_sizes, ssd=ssd)
+
     def attach_volume(self, node, volume):
         raise NotImplementedError(
             "Attach volume functionality is not implemented for VMWare"
@@ -573,6 +602,33 @@ class VMWareNodes(NodesBase):
                 datastore_name=self.datastore,
                 datacenter_name=self.datacenter,
             )
+
+    def disable_nodes_network_temporarily(self, nodes, duration=20):
+        """
+        Temporarily disables and re-enables the network interface of a given node.
+
+        Args:
+            node (OCS): The OCS object representing the node.
+            duration (int): Time in seconds to keep the interface disabled. Default is 10.
+        """
+        vms = self.get_vms(nodes)
+        for vm in vms:
+            ip = vm.summary.guest.ipAddress
+
+            if not ip:
+                logger.warning(f"Could not retrieve IP address for node {vm.name}")
+                return
+
+            logger.info(f"Disabling network interface for node: {vm.name} (IP: {ip})")
+            self.vsphere.change_vm_network_state(ip, self.datacenter, connect=False)
+
+            logger.debug(
+                f"Sleeping for {duration} seconds with network disabled on {vm.name}"
+            )
+            time.sleep(duration)
+
+            logger.info(f"Enabling network interface for node: {vm.name} (IP: {ip})")
+            self.vsphere.change_vm_network_state(ip, self.datacenter, connect=True)
 
 
 class AWSNodes(NodesBase):
@@ -3220,9 +3276,28 @@ class IBMCloudBMNodes(NodesBase):
         self.ibmcloud_bm.stop_machines(machines)
         if wait:
             node_names = [n.name for n in nodes]
-            wait_for_nodes_status(
-                node_names, constants.NODE_NOT_READY, timeout=180, sleep=5
-            )
+            try:
+                wait_for_nodes_status(
+                    node_names, constants.NODE_NOT_READY, timeout=180, sleep=5
+                )
+            except CommandFailed as err:
+                # Consider the situation where the cluster is not accessible after nodes are down,
+                # example: when all the nodes are off
+                if "Unable to connect to the server" in str(err):
+                    logger.info(
+                        f"Unable to connect to the server to check the nodes NotReady status. "
+                        f"Trying alternate method to verify nodes {node_names} has stopped"
+                    )
+                    machines_not_off = (
+                        self.ibmcloud_bm.get_machines_that_are_not_off_from_sensor_data(
+                            machines
+                        )
+                    )
+                    assert not (
+                        machines_not_off
+                    ), f"Nodes corresponding to the machines {machines_not_off} are not off."
+                else:
+                    raise
 
     def start_nodes(self, nodes, wait=True):
         """

@@ -8,6 +8,7 @@ from ocs_ci.framework.pytest_customization.marks import (
     red_squad,
     runs_on_provider,
     mcg,
+    jira,
 )
 from ocs_ci.ocs.bucket_utils import random_object_round_trip_verification
 from ocs_ci.ocs.exceptions import CommandFailed
@@ -26,6 +27,7 @@ logger = logging.getLogger(__name__)
 @skipif_mcg_only
 @skipif_ocs_version("<4.10")
 @pytest.mark.usefixtures(revert_noobaa_endpoint_scc_class.__name__)
+@jira("DFBUGS-153")
 class TestNSFSObjectIntegrity(MCGTest):
     """
     Test the integrity of IO operations on NSFS buckets

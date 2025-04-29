@@ -90,7 +90,8 @@ class OCP(object):
         if (
             (not cluster_kubeconfig)
             and config.multicluster
-            and config.ENV_DATA.get("odf_provider_mode_deployment", False)
+            and "hci_" in config.ENV_DATA["platform"]
+            and len(config.get_provider_cluster_indexes()) == 1
             and kind.lower() in constants.PROVIDER_CLUSTER_RESOURCE_KINDS
         ):
             provider_cluster_index = config.get_provider_index()
@@ -151,6 +152,7 @@ class OCP(object):
         silent=False,
         cluster_config=None,
         skip_tls_verify=False,
+        output_file=None,
         **kwargs,
     ):
         """
@@ -171,6 +173,8 @@ class OCP(object):
             cluster_config (MultiClusterConfig): cluster_config will be used only in the context of multiclsuter
                 executions
             skip_tls_verify (bool): Adding '--insecure-skip-tls-verify' to oc command
+            output_file (str): path where to write output of stdout and stderr from command - apply only when
+                silent mode is True
 
         Returns:
             dict: Dictionary represents a returned yaml file.
@@ -217,6 +221,7 @@ class OCP(object):
             threading_lock=self.threading_lock,
             silent=silent,
             cluster_config=cluster_config,
+            output_file=output_file,
             **kwargs,
         )
 
@@ -233,7 +238,10 @@ class OCP(object):
             config.switch_ctx(original_context)
         return out
 
-    def exec_oc_debug_cmd(self, node, cmd_list, timeout=300, namespace=None):
+    @retry(CommandFailed, tries=3, delay=30, backoff=1)
+    def exec_oc_debug_cmd(
+        self, node, cmd_list, timeout=300, namespace=None, use_root=True
+    ):
         """
         Function to execute "oc debug" command on OCP node
 
@@ -253,11 +261,15 @@ class OCP(object):
         create_cmd_list = copy.deepcopy(cmd_list)
         create_cmd_list.append(" ")
         err_msg = "CMD FAILED"
+        if use_root:
+            root_option = " chroot /host /bin/bash -c "
+        else:
+            root_option = " /bin/bash -c "
         cmd = f" || echo '{err_msg}';".join(create_cmd_list)
         namespace = namespace or config.ENV_DATA["cluster_namespace"]
         debug_cmd = (
             f"debug nodes/{node} --to-namespace={namespace} "
-            f' -- chroot /host /bin/bash -c "{cmd}"'
+            f' -- {root_option} "{cmd}"'
         )
         out = str(
             self.exec_oc_cmd(command=debug_cmd, out_yaml_format=False, timeout=timeout)
@@ -658,7 +670,7 @@ class OCP(object):
             or config.DEPLOYMENT.get("disconnected")
             or config.ENV_DATA.get("private_link")
         ) and config.ENV_DATA.get("client_http_proxy"):
-            kubeconfig = os.getenv("KUBECONFIG")
+            kubeconfig = config.RUN.get("kubeconfig")
             if not kubeconfig or not os.path.exists(kubeconfig):
                 kubeconfig = os.path.join(
                     config.ENV_DATA["cluster_path"],
@@ -674,7 +686,7 @@ class OCP(object):
         Returns:
             str: output of login command
         """
-        kubeconfig = os.getenv("KUBECONFIG")
+        kubeconfig = config.RUN.get("kubeconfig")
         command = "oc login -u system:admin "
         if kubeconfig:
             command += f"--kubeconfig {kubeconfig}"

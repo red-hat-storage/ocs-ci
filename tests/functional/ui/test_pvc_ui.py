@@ -12,8 +12,7 @@ from ocs_ci.ocs.resources.pvc import get_all_pvc_objs, get_pvc_objs
 from ocs_ci.ocs import constants
 from ocs_ci.helpers import helpers
 from ocs_ci.helpers.helpers import wait_for_resource_state, create_unique_resource_name
-from ocs_ci.utility.utils import get_ocp_version
-from ocs_ci.ocs.ui.views import locators
+from ocs_ci.ocs.ui.views import locators_for_current_ocp_version
 from ocs_ci.ocs.resources.pod import get_fio_rw_iops
 from ocs_ci.framework import config
 
@@ -175,8 +174,7 @@ class TestPvcUserInterface(object):
             pvc_size
         ), f"New size of the PVC cannot be less than existing size: new size is {new_size})"
 
-        ocp_version = get_ocp_version()
-        self.pvc_loc = locators[ocp_version]["pvc"]
+        self.pvc_loc = locators_for_current_ocp_version()["pvc"]
 
         # Verifying PVC expansion
         logger.info("Verifying PVC resize")

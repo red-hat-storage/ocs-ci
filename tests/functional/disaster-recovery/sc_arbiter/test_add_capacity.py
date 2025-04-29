@@ -5,7 +5,10 @@ from datetime import datetime, timezone
 from ocs_ci.framework.pytest_customization.marks import (
     turquoise_squad,
     stretchcluster_required,
+    tier1,
+    jira,
 )
+from ocs_ci.helpers.cnv_helpers import cal_md5sum_vm
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.resources import storage_cluster
 from ocs_ci.ocs.resources.pod import (
@@ -18,7 +21,9 @@ from ocs_ci.ocs.resources.stretchcluster import StretchCluster
 logger = logging.getLogger(__name__)
 
 
+@tier1
 @turquoise_squad
+@jira("DFBUGS-1273")
 @stretchcluster_required
 class TestAddCapacityStretchCluster:
     """
@@ -74,7 +79,6 @@ class TestAddCapacityStretchCluster:
                 3,
                 marks=[
                     pytest.mark.polarion_id("OCS-5474"),
-                    pytest.mark.bugzilla("2143858"),
                 ],
             ),
         ],
@@ -85,6 +89,8 @@ class TestAddCapacityStretchCluster:
         setup_logwriter_rbd_workload_factory,
         logreader_workload_factory,
         iterations,
+        setup_cnv,
+        cnv_workload,
     ):
         """
         Test cluster exapnsion and health when add capacity is performed
@@ -107,6 +113,13 @@ class TestAddCapacityStretchCluster:
         )
         logger.info("All the workloads pods are successfully up and running")
 
+        # setup vm and write some data to the VM instance
+        vm_obj = cnv_workload(volume_interface=constants.VM_VOLUME_PVC)
+        vm_obj.run_ssh_cmd(
+            command="dd if=/dev/zero of=/file_1.txt bs=1024 count=102400"
+        )
+        md5sum_before = cal_md5sum_vm(vm_obj, file_path="/file_1.txt")
+
         start_time = datetime.now(timezone.utc)
 
         sc_obj.get_logfile_map(label=constants.LOGWRITER_CEPHFS_LABEL)
@@ -122,6 +135,29 @@ class TestAddCapacityStretchCluster:
         end_time = datetime.now(timezone.utc)
         sc_obj.post_failure_checks(start_time, end_time, wait_for_read_completion=False)
         logger.info("Successfully verified with post failure checks for the workloads")
+
+        # check vm data written after the failure for integrity
+        md5sum_after = cal_md5sum_vm(vm_obj, file_path="/file_1.txt")
+        assert (
+            md5sum_before == md5sum_after
+        ), "Data integrity of the file inside VM is not maintained during the add capacity"
+        logger.info(
+            "Data integrity of the file inside VM is maintained during the add capacity"
+        )
+
+        # check if new data can be created
+        vm_obj.run_ssh_cmd(
+            command="dd if=/dev/zero of=/file_2.txt bs=1024 count=103600"
+        )
+        logger.info("Successfully created new data inside VM")
+
+        # check if the data can be copied back to local machine
+        vm_obj.scp_from_vm(local_path="/tmp", vm_src_path="/file_1.txt")
+        logger.info("VM data is successfully copied back to local machine")
+
+        # stop the VM
+        vm_obj.stop()
+        logger.info("Stoped the VM successfully")
 
         sc_obj.cephfs_logreader_job.delete()
         logger.info(sc_obj.cephfs_logreader_pods)

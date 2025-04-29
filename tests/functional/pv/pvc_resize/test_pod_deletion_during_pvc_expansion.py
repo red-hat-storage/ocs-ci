@@ -13,7 +13,6 @@ from ocs_ci.framework.testlib import (
     skipif_ocs_version,
     ManageTest,
     tier4c,
-    bugzilla,
     polarion_id,
 )
 
@@ -22,7 +21,6 @@ log = logging.getLogger(__name__)
 
 @green_squad
 @tier4c
-@bugzilla("2164617")
 @polarion_id("OCS-4877")
 @skipif_ocs_version("<4.13")
 class TestPodRespinDuringPvcExpansion(ManageTest):
@@ -31,7 +29,7 @@ class TestPodRespinDuringPvcExpansion(ManageTest):
 
     """
 
-    def test_pod_respin_during_pvc_expansion(self, dc_pod_factory):
+    def test_pod_respin_during_pvc_expansion(self, deployment_pod_factory):
         """
         Verify PVC expansion during rbd-app pod respins
 
@@ -45,7 +43,7 @@ class TestPodRespinDuringPvcExpansion(ManageTest):
         * The expansion should be successful, and the app should be running
 
         """
-        rbd_pod = dc_pod_factory(size=10)
+        rbd_pod = deployment_pod_factory(size=10)
         rbd_pvc = rbd_pod.pvc
 
         pvc_size_new = 20

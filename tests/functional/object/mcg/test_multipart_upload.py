@@ -17,7 +17,6 @@ from ocs_ci.ocs.bucket_utils import (
 from ocs_ci.framework.pytest_customization.marks import (
     skipif_managed_service,
     tier3,
-    bugzilla,
     skipif_ocs_version,
     red_squad,
     runs_on_provider,
@@ -119,7 +118,6 @@ class TestS3MultipartUpload(MCGTest):
     @tier3
     @pytest.mark.polarion_id("OCS-2775")
     @skipif_ocs_version("<4.10")
-    @bugzilla("2040682")
     def test_multipart_with_no_body(self, mcg_obj, bucket_factory):
         """
         Test Multipart upload with no body while uploading the part

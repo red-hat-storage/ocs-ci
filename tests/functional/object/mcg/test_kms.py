@@ -12,6 +12,7 @@ from ocs_ci.framework.pytest_customization.marks import (
 from ocs_ci.framework.testlib import MCGTest
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.resources import pod
+from ocs_ci.utility.utils import TimeoutSampler
 
 
 logger = logging.getLogger(__name__)
@@ -35,23 +36,43 @@ class TestNoobaaKMS(MCGTest):
 
         logger.info("Getting the noobaa-operator pod and it's relevant metadata")
 
-        operator_pod = pod.get_pods_having_label(
-            label=constants.NOOBAA_OPERATOR_POD_LABEL,
-            namespace=config.ENV_DATA["cluster_namespace"],
-        )[0]
-        operator_pod_name = operator_pod["metadata"]["name"]
-        restart_count = operator_pod["status"]["containerStatuses"][0]["restartCount"]
+        def _check_noobaa_operator_logs(target_log, retry=False):
+            operator_pod = pod.get_pods_having_label(
+                label=constants.NOOBAA_OPERATOR_POD_LABEL,
+                namespace=config.ENV_DATA["cluster_namespace"],
+            )[0]
+            operator_pod_name = operator_pod["metadata"]["name"]
+            logs = pod.get_pod_logs(pod_name=operator_pod_name)
+            return target_log in logs
 
         logger.info("Looking for evidence of KMS integration in the logs of the pod")
+        target_log_found = _check_noobaa_operator_logs(
+            "setKMSConditionType " + config.ENV_DATA["KMS_PROVIDER"]
+        )
 
-        target_log = "setKMSConditionType " + config.ENV_DATA["KMS_PROVIDER"]
-        operator_logs = pod.get_pod_logs(pod_name=operator_pod_name)
-        target_log_found = target_log in operator_logs
+        if not target_log_found:
+            logger.info(
+                "Restarting the noobaa-operator pod to re-trigger the log message"
+            )
+            pod.get_pods_having_label(
+                label=constants.NOOBAA_OPERATOR_POD_LABEL,
+                namespace=config.ENV_DATA["cluster_namespace"],
+            )[0].delete(wait=True)
 
-        if not target_log_found and restart_count > 0:
-            logger.info("Checking the logs before the last pod restart")
-            operator_logs = pod.get_pod_logs(pod_name=operator_pod_name, previous=True)
-            target_log_found = target_log in operator_logs
+            try:
+                for sample in TimeoutSampler(
+                    timeout=300,
+                    sleep=15,
+                    func=_check_noobaa_operator_logs,
+                    target_log="setKMSConditionType " + config.ENV_DATA["KMS_PROVIDER"],
+                ):
+                    if sample:
+                        target_log_found = True
+                        break
+            except TimeoutError:
+                logger.error(
+                    "Failed to find the target log message after restarting the noobaa-operator pod"
+                )
 
         assert (
             target_log_found

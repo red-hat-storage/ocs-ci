@@ -15,7 +15,6 @@ from ocs_ci.ocs.ui.validation_ui import ValidationUI
 from ocs_ci.framework.testlib import (
     ManageTest,
     ui,
-    bugzilla,
     polarion_id,
     tier2,
     tier1,
@@ -53,7 +52,6 @@ class TestOBCUi(ManageTest):
     @tier2
     @runs_on_provider
     @skipif_ibm_cloud_managed
-    @bugzilla("2031705")
     @polarion_id("OCS-4620")
     def test_project_admin_obcs_access(self, user_factory, login_factory):
         """
@@ -61,6 +59,10 @@ class TestOBCUi(ManageTest):
 
         """
         user = user_factory()
+        logger.info(
+            f"user created: {user[0]} password: {user[1]}, wait additional 10 sec to get user active"
+        )
+        time.sleep(10)
         login_factory(user[0], user[1])
         obc_ui_obj = ObjectBucketClaimsTab()
         assert obc_ui_obj.check_obc_option(
@@ -78,7 +80,6 @@ class TestUnprivilegedUserODFAccess(E2ETest):
     @tier1
     @runs_on_provider
     @skipif_ibm_cloud_managed
-    @bugzilla("2103975")
     @polarion_id("OCS-4667")
     def test_unprivileged_user_odf_access(self, user_factory, login_factory):
         # create a user without any role
