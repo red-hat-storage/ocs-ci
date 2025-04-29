@@ -103,8 +103,10 @@ class MetalLBInstaller:
 
         Arg:
             metallb_version (str): MetalLB version
+
         Returns:
             bool: True if catalog source is created, False otherwise, error if not get Ready state
+
         """
         logger.info("Creating catalog source for MetalLB")
         # replace latest version with specific version
@@ -712,6 +714,7 @@ class MetalLBInstaller:
 
         Args:
             patch (dict): patch information
+
         """
         metallb_subs_obj = OCP(
             kind=constants.SUBSCRIPTION_WITH_ACM,

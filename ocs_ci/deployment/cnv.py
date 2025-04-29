@@ -822,6 +822,7 @@ class CNVInstaller(object):
 
         Return:
             cnv_upgradeable (bool)): Returns True if Upgradable else False
+
         """
         if self.cnv_hyperconverged_installed() and self.post_install_verification(
             raise_exception=False
@@ -854,7 +855,6 @@ class CNVInstaller(object):
             namespace=self.namespace,
             resource_name=constants.KUBEVIRT_HYPERCONVERGED,
         )
-        logger.info("Currently installed cnv version")
         logger.info(
             f" currently installed cnv version: {parse_version(self.get_running_cnv_version())}"
         )
