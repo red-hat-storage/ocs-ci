@@ -5,7 +5,7 @@ import pytest
 
 from ocs_ci.framework import config
 from ocs_ci.framework.pytest_customization.marks import polarion_id
-from ocs_ci.framework.testlib import ManageTest, tier4b
+from ocs_ci.framework.testlib import ManageTest, tier4b, green_squad
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.cluster import change_ceph_full_ratio
 from ocs_ci.ocs.ocp import OCP
@@ -53,6 +53,7 @@ class TestRecoverPvcExpandFailure(ManageTest):
         request.addfinalizer(finalizer)
 
     @tier4b
+    @green_squad
     @polarion_id("")
     def test_recover_from_pvc_expansion_failure(
         self, benchmark_workload_storageutilization
@@ -124,6 +125,7 @@ class TestRecoverPvcExpandFailure(ManageTest):
             )
 
     @tier4b
+    @green_squad
     @polarion_id("")
     def test_recover_from_pending_pvc_expansion(self):
         """
