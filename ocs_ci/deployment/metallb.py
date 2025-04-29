@@ -19,20 +19,20 @@ from ocs_ci.ocs.constants import (
 from ocs_ci.ocs.exceptions import CommandFailed
 from ocs_ci.ocs.ocp import OCP
 from ocs_ci.utility.retry import retry
-from ocs_ci.ocs.resources.catalog_source import CatalogSource
+from ocs_ci.ocs.resources.catalog_source import CatalogSource, disable_specific_source
 from ocs_ci.ocs.resources.csv import check_all_csvs_are_succeeded
 from ocs_ci.ocs.resources.pod import wait_for_pods_to_be_running
 from ocs_ci.ocs.utils import get_pod_name_by_pattern
 from ocs_ci.utility import templating
 from ocs_ci.utility.utils import (
     exec_cmd,
+    run_cmd,
     get_ocp_version,
     TimeoutSampler,
     wait_for_machineconfigpool_status,
     get_running_ocp_version,
 )
 from pkg_resources import parse_version
-from ocs_ci.helpers import helpers
 
 logger = logging.getLogger(__name__)
 
@@ -767,7 +767,9 @@ class MetalLBInstaller:
         catalog_source_data = templating.load_yaml(QE_APP_REGISTRY_SOURCE)
         # create catsrc
         if self.catalog_source_created():
-            logger.info(f"Catalog Source {self.catalog_source_name} already exists")
+            logger.info(
+                f"Catalog Source {constants.QE_APP_REGISTRY_CATALOG_SOURCE_NAME} already exists"
+            )
             # Upgrade image details in the catalogsource
             image_placeholder = catalog_source_data.get("spec").get("image")
             catalog_source_data.get("spec").update(
@@ -781,14 +783,12 @@ class MetalLBInstaller:
             templating.dump_data_to_temp_yaml(
                 catalog_source_data, metallb_catalog_file.name
             )
-
-            metallb_data = templating.load_yaml(metallb_catalog_file.name)
-            logger.info(f"metallb data : {metallb_data}")
-            helpers.create_resource(**metallb_data)
+            disable_specific_source(constants.QE_APP_REGISTRY_CATALOG_SOURCE_NAME)
+            run_cmd(f"oc apply -f {metallb_catalog_file.name}", timeout=2400)
 
             # wait for catalog source is ready
             metallb_catalog_source = CatalogSource(
-                resource_name=self.catalog_source_name,
+                resource_name=constants.QE_APP_REGISTRY_CATALOG_SOURCE_NAME,
                 namespace=MARKETPLACE_NAMESPACE,
             )
 
