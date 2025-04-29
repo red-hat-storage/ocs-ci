@@ -808,12 +808,12 @@ class CNVInstaller(object):
             string: cnv version
 
         """
-        hyperconverged_subs_obj = OCP(
-            kind=constants.SUBSCRIPTION_WITH_ACM,
+        hyperconverged_obj = OCP(
+            kind=constants.HYPERCONVERGED,
             namespace=self.namespace,
             resource_name=constants.KUBEVIRT_HYPERCONVERGED,
         )
-        cnv_version = hyperconverged_subs_obj.get()["status"]["installedCSV"]
+        cnv_version = hyperconverged_obj.get()["status"]["versions"][0]["version"]
         return cnv_version
 
     def check_cnv_is_upgradable(self):
