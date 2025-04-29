@@ -493,7 +493,9 @@ class OCSUpgrade(object):
             subscription_name = constants.ODF_SUBSCRIPTION
         else:
             subscription_name = constants.OCS_SUBSCRIPTION
-        provider_cluster = config.ENV_DATA["cluster_type"].lower() == "provider"
+        provider_cluster = (
+            config.ENV_DATA["cluster_type"].lower() == constants.HCI_PROVIDER
+        )
         if config.multicluster:
             kind_name = "subscription.operators.coreos.com"
         elif provider_cluster:

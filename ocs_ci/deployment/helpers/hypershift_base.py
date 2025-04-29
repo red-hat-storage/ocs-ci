@@ -80,6 +80,7 @@ def kubeconfig_exists_decorator(func):
 
     Returns:
         wrapper: The decorated function.
+
     """
 
     def wrapper(self, *args, **kwargs):
