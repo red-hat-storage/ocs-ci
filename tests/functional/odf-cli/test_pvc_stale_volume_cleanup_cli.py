@@ -56,9 +56,9 @@ class TestSubvolumesCommand(ManageTest):
 
         output = self.odf_cli_runner.run_command("subvolume ls")
         later_subvolume_list = self.parse_subvolume_ls_output(output)
-        old = set(inital_subvolume_list)
-        new = set(later_subvolume_list)
-        new_pvc = list(new.difference(old))[0]
+        new_pvc_list = list(set(later_subvolume_list) - set(inital_subvolume_list))
+        assert new_pvc_list, "No New PVC found in the cluster."
+        new_pvc = new_pvc_list[0]
         logger.info(f"{new_pvc=}")
 
         # Deleteting PVC and SC

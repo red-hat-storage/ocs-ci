@@ -10,7 +10,6 @@ from ocs_ci.framework.pytest_customization.marks import (
     skipif_managed_service,
     skipif_hci_provider_and_client,
     skipif_gcp_platform,
-    bugzilla,
     brown_squad,
 )
 from ocs_ci.framework.testlib import ignore_leftovers, ManageTest, tier4b
@@ -32,7 +31,6 @@ logger = logging.getLogger(__name__)
 @skipif_managed_service
 @skipif_hci_provider_and_client
 @ignore_leftovers
-@bugzilla("2029690")
 class TestWorkerNodesFailure(ManageTest):
     """
     Test all worker nodes simultaneous abrupt network failure for ~300 seconds
@@ -42,7 +40,7 @@ class TestWorkerNodesFailure(ManageTest):
     short_nw_fail_time = 300  # Duration in seconds for short network failure
 
     @pytest.fixture()
-    def setup(self, request, interface, multi_pvc_factory, dc_pod_factory):
+    def setup(self, request, interface, multi_pvc_factory, deployment_pod_factory):
         """
         Create PVCs and DeploymentConfig based app pods for the test
 
@@ -89,7 +87,7 @@ class TestWorkerNodesFailure(ManageTest):
             logger.info("Creating app pods")
             for _ in range(num_pods):
                 pods.append(
-                    dc_pod_factory(
+                    deployment_pod_factory(
                         interface=interface,
                         pvc=pvc_obj,
                         raw_block_pv=pvc_obj.get_pvc_vol_mode == "Block",

@@ -6,7 +6,6 @@ import pytest
 
 from ocs_ci.framework import config
 from ocs_ci.framework.pytest_customization.marks import (
-    bugzilla,
     skipif_external_mode,
     ignore_resource_not_found_error_label,
     tier1,
@@ -91,7 +90,6 @@ def preconditions_rbd_pool_created_associated_to_sc(
 @ignore_resource_not_found_error_label
 class TestDeleteRbdPool(ManageTest):
     @tier1
-    @bugzilla("2228555")
     @skipif_external_mode
     @pytest.mark.parametrize(
         argnames=["replica", "compression", "volume_binding_mode", "pvc_status"],

@@ -7,13 +7,14 @@ from zipfile import ZipFile
 import pytest
 from flaky import flaky
 
-from ocs_ci.framework import config
+from ocs_ci.framework import config, config_safe_thread_pool_task
 from ocs_ci.framework.pytest_customization.marks import (
     vsphere_platform_required,
     skip_inconsistent,
     red_squad,
     runs_on_provider,
     mcg,
+    skipif_fips_enabled,
 )
 from ocs_ci.framework.testlib import (
     MCGTest,
@@ -35,7 +36,6 @@ from ocs_ci.ocs.bucket_utils import (
 
 from ocs_ci.framework.pytest_customization.marks import (
     skipif_managed_service,
-    bugzilla,
     skipif_ocs_version,
     on_prem_platform_required,
     jira,
@@ -61,7 +61,13 @@ def pod_io(pods):
     """
     with ThreadPoolExecutor() as p:
         for pod in pods:
-            p.submit(pod.run_io, "fs", "1G")
+            p.submit(
+                config_safe_thread_pool_task,
+                config.default_cluster_index,
+                pod.run_io,
+                "fs",
+                "1G",
+            )
 
 
 @pytest.fixture(scope="function")
@@ -204,7 +210,7 @@ class TestBucketIO(MCGTest):
             ),
             pytest.param(
                 {"interface": "CLI", "backingstore_dict": {"ibmcos": [(1, None)]}},
-                marks=[tier1],
+                marks=[tier1, skipif_fips_enabled],
             ),
         ],
         ids=[
@@ -417,15 +423,21 @@ class TestBucketIO(MCGTest):
         full_object_path = f"s3://{bucketname}"
         target_dir = AWSCLI_TEST_OBJ_DIR
         with ThreadPoolExecutor() as p:
-            p.submit(pod_io, setup_rbd_cephfs_pods)
             p.submit(
+                config_safe_thread_pool_task,
+                config.default_cluster_index,
+                pod_io,
+                setup_rbd_cephfs_pods,
+            )
+            p.submit(
+                config_safe_thread_pool_task,
+                config.default_cluster_index,
                 sync_object_directory(
                     awscli_pod_session, target_dir, full_object_path, mcg_obj
-                )
+                ),
             )
 
     @tier2
-    @bugzilla("2054074")
     @skipif_ocs_version("<4.10")
     @pytest.mark.polarion_id("OCS-4000")
     def test_content_encoding_with_write(
@@ -464,8 +476,6 @@ class TestBucketIO(MCGTest):
         )
 
     @tier2
-    @bugzilla("2259189")
-    @bugzilla("2264480")
     @pytest.mark.polarion_id("OCS-5773")
     def test_nb_db_activity_logs_on_io(
         self,

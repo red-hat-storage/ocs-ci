@@ -4,7 +4,7 @@ from selenium.common.exceptions import (
 from ocs_ci.framework import config
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.ocp import get_ocp_url
-from ocs_ci.ocs.ui.base_ui import BaseUI, logger
+from ocs_ci.ocs.ui.base_ui import BaseUI, logger, wait_for_element_to_be_clickable
 from ocs_ci.ocs.ui.views import ODF_OPERATOR, OCS_OPERATOR
 from ocs_ci.utility import version
 
@@ -119,6 +119,18 @@ class PageNavigator(BaseUI):
 
         self.choose_expanded_mode(mode=True, locator=self.page_nav["Storage"])
         self.do_click(locator=self.page_nav["object_storage_page"], timeout=90)
+        self.page_has_loaded(retries=15)
+        from ocs_ci.ocs.ui.page_objects.object_storage import ObjectStorage
+
+        return ObjectStorage()
+
+    def nav_buckets_page(self):
+        """
+        Navigate to Buckets page
+
+        """
+        self.choose_expanded_mode(mode=True, locator=self.page_nav["Storage"])
+        self.do_click(locator=self.page_nav["buckets_tab"], timeout=90)
         self.page_has_loaded(retries=15)
         from ocs_ci.ocs.ui.page_objects.object_storage import ObjectStorage
 
@@ -441,8 +453,12 @@ class PageNavigator(BaseUI):
         """
         logger.info("Select the OCP administrator user role from the dropdown")
         if self.get_elements(self.generic_locators["developer_selected"]):
-            self.do_click(self.validation_loc["developer_dropdown"])
-            self.do_click(self.validation_loc["select_administrator"], timeout=5)
+            logger.info("Changing role from Developer to Administrator")
+            self.do_click(self.validation_loc["developer_dropdown"], timeout=5)
+            admin_el = wait_for_element_to_be_clickable(
+                self.validation_loc["select_administrator"]
+            )
+            admin_el.click()
             logger.info("Administrator user is selected")
         elif self.get_elements(self.generic_locators["administrator_selected"]):
             logger.info("Administrator user was already selected")

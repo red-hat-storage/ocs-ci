@@ -3,7 +3,6 @@ import time
 
 from ocs_ci.framework.logger_helper import log_step
 from ocs_ci.framework.pytest_customization.marks import (
-    bugzilla,
     on_prem_platform_required,
     black_squad,
     runs_on_provider,
@@ -22,6 +21,7 @@ from ocs_ci.framework.testlib import (
     skipif_ocs_version,
     skipif_disconnected_cluster,
     tier1,
+    tier2,
     skipif_ui_not_support,
     ui,
 )
@@ -349,7 +349,6 @@ class TestObcUserInterface(object):
     @ui
     @tier1
     @runs_on_provider
-    @bugzilla("2097772")
     def test_obc_creation_and_deletion(
         self,
         setup_ui_class_factory,
@@ -417,10 +416,11 @@ class TestObcUserInterface(object):
         assert test_obc.check_resource_existence(should_exist=False)
 
 
+@ui
 @black_squad
 @tier1
-@pytest.mark.polarion_id("OCS-6334")
 class TestBucketCreate:
+    @pytest.mark.polarion_id("OCS-6334")
     def test_bucket_create(self, setup_ui_class_factory):
         """
         Test bucket creation functionality in UI.
@@ -441,3 +441,213 @@ class TestBucketCreate:
         assert (
             bucket_ui.create_folder_in_bucket()
         ), "Failed to create and upload folder in bucket"
+
+    @pytest.mark.polarion_id("OCS-6397")
+    def test_empty_bucket_delete(self, setup_ui_class_factory):
+        """
+        Test bucket deletion functionality in UI.
+
+        Steps:
+        1. Navigate to the Object Storage Buckets page
+        2. Create a new bucket with a simple name for deletion testing
+        3. Delete the bucket using the three_dots menu option
+        4. Verify the bucket was deleted successfully
+
+        """
+        setup_ui_class_factory()
+        bucket_ui = BucketsTab()
+
+        logger.info("Creating a new bucket with a simple name for deletion testing")
+        bucket_ui.nav_object_storage_page()
+
+        bucket_name = "s3"
+        bucket_ui.create_bucket_ui(bucket_name)
+        time.sleep(10)
+
+        bucket_ui.nav_object_storage_page()
+        bucket_ui.nav_buckets_page()
+
+        buckets = bucket_ui.get_buckets_list()
+        logger.info(f"Found {len(buckets)} buckets")
+
+        bucket_to_delete = None
+        for bucket in buckets:
+            if bucket.startswith("test-bucket-s3-"):
+                bucket_to_delete = bucket
+                break
+
+        assert bucket_to_delete is not None, "Could not find the test bucket to delete"
+        logger.info(f"Selected bucket for deletion: {bucket_to_delete}")
+
+        bucket_ui.delete_bucket_ui(
+            delete_via="three_dots", expect_fail=False, resource_name=bucket_to_delete
+        )
+
+        bucket_ui.nav_object_storage_page()
+        bucket_ui.nav_buckets_page()
+
+        updated_buckets = bucket_ui.get_buckets_list()
+        assert (
+            bucket_to_delete not in updated_buckets
+        ), f"Bucket {bucket_to_delete} was not deleted successfully"
+        logger.info(f"Successfully deleted bucket: {bucket_to_delete}")
+
+    @pytest.mark.polarion_id("OCS-6398")
+    def test_bucket_list_comparison(self, setup_ui_class_factory, mcg_obj):
+        """
+        Test that the bucket list from UI matches the bucket list from CLI.
+
+        Args:
+            setup_ui_class_factory (any): UI setup fixture.
+            mcg_obj (any): MCG CLI client fixture assumed to have a method list_buckets() returning list.
+
+        Returns:
+            None
+
+        Raises:
+            AssertionError: If UI bucket count doesn't match CLI bucket count.
+        """
+        setup_ui_class_factory()
+        bucket_ui = BucketsTab()
+        bucket_ui.nav_object_storage_page()
+        bucket_ui.nav_buckets_page()
+
+        # Get CLI bucket list for comparison
+        cli_buckets = list(mcg_obj.cli_list_all_buckets())
+        logger.info(f"CLI bucket count: {len(cli_buckets)}")
+
+        all_ui_buckets = []
+
+        first_page_buckets = bucket_ui.get_buckets_list()
+        all_ui_buckets.extend(first_page_buckets)
+        logger.info(f"First page bucket count: {len(first_page_buckets)}")
+
+        if bucket_ui.has_pagination_controls() and len(first_page_buckets) == 100:
+            logger.info("Pagination detected, collecting buckets from additional pages")
+
+            while bucket_ui.navigate_to_next_page():
+                next_page_buckets = bucket_ui.get_buckets_list()
+                logger.info(f"Additional page bucket count: {len(next_page_buckets)}")
+                all_ui_buckets.extend(next_page_buckets)
+
+                if len(all_ui_buckets) >= len(cli_buckets):
+                    break
+
+        logger.info(f"Total UI bucket count across all pages: {len(all_ui_buckets)}")
+        logger.info(f"CLI bucket count: {len(cli_buckets)}")
+
+        ui_bucket_set = set(all_ui_buckets)
+        cli_bucket_set = set(cli_buckets)
+
+        missing_in_ui = cli_bucket_set - ui_bucket_set
+        if missing_in_ui:
+            logger.warning(f"Buckets in CLI but missing in UI: {missing_in_ui}")
+
+        missing_in_cli = ui_bucket_set - cli_bucket_set
+        if missing_in_cli:
+            logger.warning(f"Buckets in UI but missing in CLI: {missing_in_cli}")
+
+        assert (
+            len(all_ui_buckets) >= 2
+        ), "Expected at least 2 buckets (OBC and S3) but found less"
+
+        assert len(all_ui_buckets) == len(
+            cli_buckets
+        ), f"UI bucket count ({len(all_ui_buckets)}) does not match CLI bucket count ({len(cli_buckets)})"
+
+    @ui
+    @tier2
+    @black_squad
+    @pytest.mark.polarion_id("OCS-6399")
+    def test_bucket_pagination(self, setup_ui_class_factory, mcg_obj):
+        """
+        Test bucket pagination functionality in UI.
+
+        Steps:
+        1. Navigate to the Object Storage Buckets page
+        2. Check initial bucket count via CLI
+        3. Create additional buckets if needed to exceed 100 total buckets
+        4. Verify pagination controls appear with >100 buckets
+        5. Collect buckets listed on first page (should be 100)
+        6. Navigate to next page using pagination controls
+        7. Collect buckets on second page and verify they differ from first page
+        8. Navigate back to previous page using pagination controls
+        9. Verify the returned page matches the original first page
+        """
+        setup_ui_class_factory()
+        bucket_ui = BucketsTab()
+        bucket_ui.nav_object_storage_page()
+        bucket_ui.nav_buckets_page()
+
+        cli_buckets = list(mcg_obj.cli_list_all_buckets())
+        initial_bucket_count = len(cli_buckets)
+        logger.info(f"Initial bucket count (from CLI): {initial_bucket_count}")
+
+        ui_buckets = bucket_ui.get_buckets_list()
+        ui_bucket_count = len(ui_buckets)
+        logger.info(f"UI bucket count (current page): {ui_bucket_count}")
+
+        # Determine if we need to create more buckets
+        buckets_needed = max(0, 101 - initial_bucket_count)
+        if buckets_needed > 0:
+            logger.info(
+                f"Creating {buckets_needed} additional buckets to test pagination"
+            )
+
+            s3_buckets_to_create = buckets_needed // 2
+            obc_buckets_to_create = buckets_needed - s3_buckets_to_create
+
+            bucket_ui.create_multiple_buckets_ui(
+                s3_buckets=s3_buckets_to_create, obc_buckets=obc_buckets_to_create
+            )
+
+            bucket_ui.nav_object_storage_page()
+            bucket_ui.nav_buckets_page()
+
+            cli_buckets = list(mcg_obj.cli_list_all_buckets())
+            new_bucket_count = len(cli_buckets)
+            logger.info(f"New bucket count (from CLI): {new_bucket_count}")
+
+            assert (
+                new_bucket_count >= 101
+            ), f"Failed to create enough buckets for pagination. Current count: {new_bucket_count}"
+
+        assert (
+            bucket_ui.has_pagination_controls()
+        ), "Pagination controls not found despite having >100 buckets"
+        logger.info("Pagination controls are present")
+
+        first_page_buckets = bucket_ui.get_buckets_list()
+        assert (
+            len(first_page_buckets) == 100
+        ), f"Expected 100 buckets on first page but found {len(first_page_buckets)}"
+        logger.info(f"First page has {len(first_page_buckets)} buckets")
+
+        assert bucket_ui.navigate_to_next_page(), "Failed to navigate to next page"
+        logger.info("Successfully navigated to the second page")
+
+        second_page_buckets = bucket_ui.get_buckets_list()
+        logger.info(f"Second page has {len(second_page_buckets)} buckets")
+
+        assert (
+            len(second_page_buckets) > 0
+        ), "Second page should have at least one bucket"
+
+        first_page_bucket_ids = set(first_page_buckets)
+        second_page_bucket_ids = set(second_page_buckets)
+        assert not first_page_bucket_ids.intersection(
+            second_page_bucket_ids
+        ), "Found duplicate buckets between pages"
+
+        assert (
+            bucket_ui.navigate_to_previous_page()
+        ), "Failed to navigate back to previous page"
+        logger.info("Successfully navigated back to the first page")
+
+        returned_first_page_buckets = bucket_ui.get_buckets_list()
+        returned_page_bucket_ids = set(returned_first_page_buckets)
+        assert (
+            returned_page_bucket_ids == first_page_bucket_ids
+        ), "Returned to first page but buckets don't match"
+
+        logger.info("Pagination test completed successfully")

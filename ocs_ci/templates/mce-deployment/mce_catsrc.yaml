@@ -1,0 +1,9 @@
+apiVersion: operators.coreos.com/v1alpha1
+kind: CatalogSource
+metadata:
+  name: mce-catalogsource
+  namespace: openshift-marketplace
+spec:
+  # latest version of the catalog image for OCP 4.18
+  image: quay.io:443/acm-d/mce-custom-registry:2.8-latest
+  sourceType: grpc

@@ -174,7 +174,6 @@ class Pod(OCS):
             command (str): The command to execute on the given pod
             out_yaml_format (bool): whether to return yaml loaded python
                 object OR to return raw output
-
             secrets (list): A list of secrets to be masked with asterisks
                 This kwarg is popped in order to not interfere with
                 subprocess.run(``**kwargs``)
@@ -187,7 +186,7 @@ class Pod(OCS):
             Munch Obj: This object represents a returned yaml file
         """
         if container_name:
-            cmd = f"exec {self.name} -c {container_name} {command}"
+            cmd = f"exec {self.name} -c {container_name} -- {command}"
         else:
             cmd = f"rsh {self.name} "
             cmd += command
@@ -1971,22 +1970,33 @@ def verify_node_name(pod_obj, node_name):
 
 def get_pvc_name(pod_obj):
     """
-    Function to get pvc_name from pod_obj
+    Get the PVC name from a pod object.
+
+    This function retrieves the PVC name from a given pod object by checking all volumes
+    attached to the pod. It will return the first PVC found or raise an exception if no
+    PVC is attached.
 
     Args:
-        pod_obj (str): The pod object
+        pod_obj (Pod): The pod object to get the PVC name.
 
     Returns:
-        str: The pvc name of a given pod_obj,
+        str: The PVC name attached to the pod.
 
     Raises:
-        UnavailableResourceException: If no pvc attached
+        UnavailableResourceException: If no PVC is attached to the pod.
 
     """
-    pvc = pod_obj.get().get("spec").get("volumes")[0].get("persistentVolumeClaim")
-    if not pvc:
-        raise UnavailableResourceException
-    return pvc.get("claimName")
+    # Get all volumes attached to the pod
+    volumes = pod_obj.get().get("spec", {}).get("volumes", [])
+
+    # Iterate through volumes to find the first PVC
+    for volume in volumes:
+        pvc = volume.get("persistentVolumeClaim")
+        if pvc:
+            return pvc.get("claimName")
+
+    # Raise an exception if no PVC is found
+    raise UnavailableResourceException("No PVC attached to the given pod.")
 
 
 def get_used_space_on_mount_point(pod_obj):
@@ -2334,6 +2344,25 @@ def delete_deploymentconfig_pods(pod_obj):
                 )
 
 
+def delete_deployment_pods(pod_obj):
+    """
+    Delete a Deployment and all the pods that are controlled by it
+
+    Args:
+         pod_obj (Pod): Pod object
+
+    """
+    deploy_ocp_obj = ocp.OCP(kind=constants.DEPLOYMENT, namespace=pod_obj.namespace)
+    pod_data_list = deploy_ocp_obj.get().get("items")
+    if pod_data_list:
+        for pod_data in pod_data_list:
+            if pod_obj.get_labels().get("name") == pod_data.get("metadata").get("name"):
+                deploy_ocp_obj.delete(resource_name=pod_obj.get_labels().get("name"))
+                deploy_ocp_obj.wait_for_delete(
+                    resource_name=pod_obj.get_labels().get("name")
+                )
+
+
 def wait_for_new_osd_pods_to_come_up(number_of_osd_pods_before):
     status_options = ["Init:1/4", "Init:2/4", "Init:3/4", "PodInitializing", "Running"]
     try:
@@ -2432,15 +2461,11 @@ def check_pods_in_running_state(
     for p in list_of_pods:
         # we don't want to compare osd-prepare and canary pods as they get created freshly when an osd need to be added.
         if (
-            "rook-ceph-osd-prepare" not in p.name
-            and "rook-ceph-drain-canary" not in p.name
-        ):
-            status = ocp_pod_obj.get_resource(p.name, "STATUS")
-        if (
             ("rook-ceph-osd-prepare" not in p.name)
             and ("rook-ceph-drain-canary" not in p.name)
             and ("debug" not in p.name)
             and (constants.REPORT_STATUS_TO_PROVIDER_POD not in p.name)
+            and ("status-reporter" not in p.name)
         ):
             status = ocp_pod_obj.get_resource(p.name, "STATUS")
             if skip_for_status:
@@ -2489,6 +2514,10 @@ def get_running_state_pods(
     ocp_pod_obj = OCP(kind=constants.POD, namespace=namespace)
     running_pods_object = list()
     for pod in list_of_pods:
+        # ignoring storageclient-737342087af10580-status-reporter pod
+        ignore_pods = (constants.STATUS_REPORTER,)
+        if any(ipod in pod.name for ipod in ignore_pods):
+            continue
         status = ocp_pod_obj.get_resource(pod.name, "STATUS")
         if "Running" in status:
             running_pods_object.append(pod)
@@ -2900,9 +2929,17 @@ def delete_osd_removal_job(osd_id=None):
     else:
         job_name = f"ocs-osd-removal-{osd_id}"
 
-    osd_removal_job = get_job_obj(
-        job_name, namespace=config.ENV_DATA["cluster_namespace"]
-    )
+    try:
+        osd_removal_job = get_job_obj(
+            job_name, namespace=config.ENV_DATA["cluster_namespace"]
+        )
+    except CommandFailed as ex:
+        if "NotFound" in str(ex):
+            logger.info(f"Didn't find the job {job_name}")
+            return True
+        else:
+            raise ex
+
     osd_removal_job.delete()
     try:
         osd_removal_job.ocp.wait_for_delete(resource_name=job_name)
@@ -4042,3 +4079,85 @@ def wait_for_ceph_cmd_execute_successfully(
         f"The ceph command failed to execute successfully after {num_of_retries} retries"
     )
     return False
+
+
+def get_lvs_osd_pods(lvs_name):
+    """
+    Get the LocalVolumeSet osd pods
+
+    Args:
+        lvs_name (str): The LocalVolumeSet name
+
+    Returns:
+        list: List of the osd pods
+
+    """
+    from ocs_ci.ocs.resources.pvc import get_all_pvcs_in_storageclass
+
+    pvcs = get_all_pvcs_in_storageclass(lvs_name)
+    pvc_names = [pvc.name for pvc in pvcs]
+    osd_pods = get_osd_pods()
+    lvs_pods = [p for p in osd_pods if get_pvc_name(p) in pvc_names]
+
+    return lvs_pods
+
+
+def get_pods_pvcs(pod_objs, namespace=None):
+    """
+    Get the PVC objects of the given pod objects
+
+    Args:
+        pod_objs (list): List of the pod objects
+        namespace (str): Name of namespace
+
+    Returns:
+        list: The PVC objects
+
+    """
+    from ocs_ci.ocs.resources.pvc import get_pvc_objs
+
+    namespace = namespace or config.ENV_DATA["cluster_namespace"]
+    pvc_names = [get_pvc_name(p) for p in pod_objs]
+    return get_pvc_objs(pvc_names, namespace)
+
+
+def delete_pod_by_phase(
+    pod_phase,
+    namespace=config.ENV_DATA["cluster_namespace"],
+):
+    """
+    Delete the pods in a specific phase
+    Args:
+        pod_status (str): The pod status to delete
+        namespace (str): Name of cluster namespace(default: config.ENV_DATA["cluster_namespace"])
+    Returns:
+        bool: True, if the pods deleted successfully. False, otherwise
+    """
+    logger.info(f"Delete all the pods in the status '{pod_phase}'")
+    if pod_phase.lower() == "succeeded":
+        phase = "Succeeded"
+    elif pod_phase.lower() == "failed":
+        phase = "Failed"
+    elif pod_phase.lower() == "Pending":
+        phase = "Pending"
+    elif pod_phase.lower() == "running":
+        phase = "Running"
+    else:
+        raise ValueError(
+            f"Invalid pod status '{pod_phase}'. "
+            f"Valid options are 'succeeded' or 'failed'"
+        )
+
+    cmd = f"oc delete pod --field-selector=status.phase={phase} -n {namespace}"
+    logger.info(cmd)
+    try:
+        run_cmd(cmd=cmd)
+    except CommandFailed as ex:
+        logger.warning(
+            f"Failed to delete the pods in the status '{pod_phase}' due to the error: {ex}"
+        )
+        return False
+
+    logger.info(f"All '{pod_phase}' pods deleted successfully.")
+
+    return True

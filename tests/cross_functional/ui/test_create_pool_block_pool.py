@@ -6,8 +6,9 @@ from ocs_ci.framework.pytest_customization.marks import (
     tier1,
     skipif_ui_not_support,
     skipif_hci_provider_or_client,
+    skipif_external_mode,
     green_squad,
-    bugzilla,
+    jira,
 )
 from ocs_ci.framework.testlib import skipif_ocs_version, ManageTest, ui
 from ocs_ci.ocs.exceptions import (
@@ -35,6 +36,7 @@ need_to_delete = []
 
 
 @skipif_ui_not_support("block_pool")
+@skipif_external_mode
 @pytest.mark.parametrize(
     argnames=["replica", "compression"],
     argvalues=[
@@ -46,6 +48,7 @@ need_to_delete = []
     ],
 )
 @skipif_hci_provider_or_client
+@jira("DFBUGS-2139")
 class TestPoolUserInterface(ManageTest):
     """
     Test Pool User Interface
@@ -84,7 +87,6 @@ class TestPoolUserInterface(ManageTest):
 
     @ui
     @tier1
-    @bugzilla("2253013")
     @skipif_ocs_version("<4.16")
     @green_squad
     def test_create_delete_pool(

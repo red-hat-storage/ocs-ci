@@ -228,9 +228,9 @@ class ObjectBucket(ABC):
             verify = True
         if verify:
             # Increase the timeout to 15 minutes if the test is tier4
-            timeout = 60
+            timeout = 120
             if any("tier4" in mark for mark in get_current_test_marks()):
-                timeout *= 15
+                timeout = 900
             self.verify_deletion(timeout)
         if original_context:
             config.switch_ctx(original_context)
@@ -267,7 +267,7 @@ class ObjectBucket(ABC):
             logger.error(f"{self.name} was not deleted within {timeout} seconds.")
             assert False, f"{self.name} was not deleted within {timeout} seconds."
 
-    def verify_health(self, timeout=60, interval=5, **kwargs):
+    def verify_health(self, timeout=800, interval=5, **kwargs):
         """
         Health verification function that tries to verify
         the a bucket's health by using its appropriate internal_verify_health

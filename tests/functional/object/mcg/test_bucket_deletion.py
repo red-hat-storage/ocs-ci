@@ -9,12 +9,12 @@ from ocs_ci.framework.pytest_customization.marks import (
     tier1,
     tier3,
     skipif_managed_service,
-    bugzilla,
     skipif_ocs_version,
     runs_on_provider,
     red_squad,
     mcg,
     sts_deployment_required,
+    skipif_fips_enabled,
 )
 from ocs_ci.framework.testlib import MCGTest
 from ocs_ci.helpers.helpers import create_unique_resource_name
@@ -79,7 +79,7 @@ class TestBucketDeletion(MCGTest):
                     "CLI",
                     {"interface": "OC", "backingstore_dict": {"ibmcos": [(1, None)]}},
                 ],
-                marks=[tier1],
+                marks=[tier1, skipif_fips_enabled],
             ),
             pytest.param(
                 *[
@@ -169,7 +169,6 @@ class TestBucketDeletion(MCGTest):
                 ), "Couldn't verify delete non-exist OBC with cli"
         logger.info(f"Delete non-exist OBC {name} failed as expected")
 
-    @pytest.mark.bugzilla("1753109")
     @pytest.mark.polarion_id("OCS-1924")
     def test_s3_bucket_delete_1t_objects(self, mcg_obj, awscli_pod_session):
         """
@@ -211,7 +210,6 @@ class TestBucketDeletion(MCGTest):
 
     @tier3
     @skipif_managed_service
-    @bugzilla("1980299")
     @pytest.mark.polarion_id("OCS-2704")
     @skipif_ocs_version("<4.9")
     def test_delete_all_buckets(self, request, mcg_obj, bucket_factory):

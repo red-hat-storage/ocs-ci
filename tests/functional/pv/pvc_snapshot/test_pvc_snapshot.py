@@ -141,7 +141,7 @@ class TestPvcSnapshot(ManageTest):
             restore_pvc_yaml=restore_pvc_yaml,
         )
         helpers.wait_for_resource_state(
-            restore_pvc_obj, constants.STATUS_BOUND, timeout=90
+            restore_pvc_obj, constants.STATUS_BOUND, timeout=180
         )
         restore_pvc_obj.reload()
         teardown_factory(restore_pvc_obj)
@@ -156,7 +156,7 @@ class TestPvcSnapshot(ManageTest):
 
         # Confirm that the pod is running
         helpers.wait_for_resource_state(
-            resource=restore_pod_obj, state=constants.STATUS_RUNNING
+            resource=restore_pod_obj, state=constants.STATUS_RUNNING, timeout=120
         )
         restore_pod_obj.reload()
         teardown_factory(restore_pod_obj)

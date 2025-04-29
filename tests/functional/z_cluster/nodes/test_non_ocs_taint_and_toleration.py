@@ -40,7 +40,6 @@ from ocs_ci.ocs.node import (
 from ocs_ci.utility.retry import retry
 from ocs_ci.ocs.resources import storage_cluster
 from ocs_ci.framework.pytest_customization.marks import (
-    bugzilla,
     brown_squad,
 )
 from ocs_ci.helpers.sanity_helpers import Sanity
@@ -58,7 +57,6 @@ logger = logging.getLogger(__name__)
 @skipif_tainted_nodes
 @skipif_managed_service
 @skipif_hci_provider_and_client
-@bugzilla("1992472")
 class TestNonOCSTaintAndTolerations(E2ETest):
     """
     Test to test non ocs taints on ocs nodes
@@ -247,12 +245,12 @@ class TestNonOCSTaintAndTolerations(E2ETest):
         # Validate all nodes and services are in READY state and up
         retry(
             (CommandFailed, TimeoutError, AssertionError, ResourceWrongStatusException),
-            tries=60,
+            tries=28,
             delay=15,
         )(ocp.wait_for_cluster_connectivity(tries=400))
         retry(
             (CommandFailed, TimeoutError, AssertionError, ResourceWrongStatusException),
-            tries=60,
+            tries=28,
             delay=15,
         )(wait_for_nodes_status(timeout=1800))
 

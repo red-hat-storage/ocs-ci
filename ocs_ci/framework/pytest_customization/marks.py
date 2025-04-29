@@ -8,6 +8,7 @@ import os
 import pytest
 from funcy import compose
 
+from ocs_ci.ocs.exceptions import ClusterNotFoundException
 from ocs_ci.framework import config
 from ocs_ci.ocs.constants import (
     ORDER_BEFORE_OCS_UPGRADE,
@@ -71,7 +72,6 @@ team_marks = [manage, ecosystem, e2e]
 # components  and other markers
 ocp = pytest.mark.ocp
 rook = pytest.mark.rook
-ui = pytest.mark.ui
 mcg = pytest.mark.mcg
 rgw = pytest.mark.rgw
 csi = pytest.mark.csi
@@ -89,11 +89,11 @@ scale_long_run = pytest.mark.scale_long_run
 scale_changed_layout = pytest.mark.scale_changed_layout
 deployment = pytest.mark.deployment
 polarion_id = pytest.mark.polarion_id
-bugzilla = pytest.mark.bugzilla
 jira = pytest.mark.jira
 acm_import = pytest.mark.acm_import
 rdr = pytest.mark.rdr
 mdr = pytest.mark.mdr
+resiliency = pytest.mark.resiliency
 
 tier_marks = [
     tier1,
@@ -112,6 +112,7 @@ tier_marks = [
     scale_long_run,
     scale_changed_layout,
     workloads,
+    resiliency,
 ]
 
 # upgrade related markers
@@ -215,6 +216,11 @@ skipif_aws_creds_are_missing = pytest.mark.skipif(
 skipif_mcg_only = pytest.mark.skipif(
     config.ENV_DATA["mcg_only_deployment"],
     reason="This test cannot run on MCG-Only deployments",
+)
+
+skipif_fips_enabled = pytest.mark.skipif(
+    config.ENV_DATA.get("fips") == "true",
+    reason="This test cannot run on FIPS enabled cluster",
 )
 
 fips_required = pytest.mark.skipif(
@@ -387,6 +393,18 @@ hci_provider_and_client_required = pytest.mark.skipif(
     ),
     reason="Test runs ONLY on Fusion HCI provider and client clusters",
 )
+# when run_on_all_clients marker is used, there needs to be added cluster_index
+# parameter to the test to prevent any issues with the test parametrization
+run_on_all_clients = pytest.mark.run_on_all_clients
+try:
+    client_indexes = [
+        pytest.param(*[idx]) for idx in config.get_consumer_indexes_list()
+    ]
+    run_on_all_clients = pytest.mark.parametrize(
+        argnames=["cluster_index"], argvalues=client_indexes, indirect=True
+    )
+except ClusterNotFoundException:
+    pass
 kms_config_required = pytest.mark.skipif(
     (
         config.ENV_DATA["KMS_PROVIDER"].lower() != HPCS_KMS_PROVIDER
@@ -590,12 +608,15 @@ metrics_for_external_mode_required = pytest.mark.skipif(
     reason="Metrics is not enabled for external mode OCS <4.6",
 )
 
-rdr_ui_failover_config_required = pytest.mark.skipif(
-    not config.RUN.get("rdr_failover_via_ui"), reason="RDR UI failover config needed"
+rdr_ui = pytest.mark.skipif(
+    not config.RUN.get("rdr_failover_via_ui")
+    or not config.RUN.get("rdr_relocate_via_ui"),
+    reason="RDR UI failover or relocate config needed",
 )
 
-rdr_ui_relocate_config_required = pytest.mark.skipif(
-    not config.RUN.get("rdr_relocate_via_ui"), reason="RDR UI relocate config needed"
+dr_hub_recovery = pytest.mark.skipif(
+    config.nclusters != 4,
+    reason="DR hub recovery requires 4th OCP cluster to be available for Passive hub",
 )
 
 # Filter warnings
@@ -666,6 +687,9 @@ yellow_squad = pytest.mark.yellow_squad
 # Ignore test during squad decorator check in pytest collection
 ignore_owner = pytest.mark.ignore_owner
 
+# Marks to identify tests that only serve as utility for ocs-ci
+ocs_ci_utility = pytest.mark.ocs_ci_utility
+
 # Marks to identify the cluster type in which the test case should run
 runs_on_provider = pytest.mark.runs_on_provider
 
@@ -726,3 +750,5 @@ vault_kms_deployment_required = pytest.mark.skipif(
     not in [VAULT_KMS_PROVIDER, HPCS_KMS_PROVIDER],
     reason="This test requires both Vault or HPCS KMS deployment to be enabled and a valid KMS provider.",
 )
+
+ui = compose(skipif_ibm_cloud_managed, pytest.mark.ui)

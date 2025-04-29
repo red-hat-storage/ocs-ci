@@ -6,8 +6,7 @@ from time import sleep
 from ocs_ci.framework import config
 from ocs_ci.framework.pytest_customization.marks import (
     rdr,
-    rdr_ui_failover_config_required,
-    rdr_ui_relocate_config_required,
+    rdr_ui,
     turquoise_squad,
 )
 from ocs_ci.framework.testlib import tier3, skipif_ocs_version
@@ -27,6 +26,7 @@ logger = logging.getLogger(__name__)
 @tier3
 @turquoise_squad
 @skipif_ocs_version("<4.13")
+@rdr_ui
 class TestNegativeFailoverRelocate:
     """
     Test Failover/Relocate action to same cluster where workloads are already  running
@@ -34,7 +34,6 @@ class TestNegativeFailoverRelocate:
 
     """
 
-    @rdr_ui_failover_config_required
     @pytest.mark.polarion_id("OCS-4746")
     def test_failover_to_same_cluster(
         self,
@@ -82,7 +81,6 @@ class TestNegativeFailoverRelocate:
             assert result, "Failover negative scenario test via ACM UI failed"
             logger.info("Failover negative scenario test via ACM UI passed")
 
-    @rdr_ui_relocate_config_required
     @pytest.mark.polarion_id("OCS-4747")
     def test_relocate_to_same_cluster(self, setup_acm_ui, dr_workload):
         """

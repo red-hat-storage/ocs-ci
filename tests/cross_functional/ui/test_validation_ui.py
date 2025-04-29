@@ -1,5 +1,4 @@
 import logging
-import pytest
 import re
 
 from ocs_ci.ocs.resources.pod import get_pod_logs
@@ -10,7 +9,6 @@ from ocs_ci.framework.testlib import (
     skipif_ocs_version,
     polarion_id,
     ui,
-    bugzilla,
 )
 from ocs_ci.framework.pytest_customization.marks import (
     black_squad,
@@ -55,7 +53,6 @@ class TestUserInterfaceValidation(object):
     @ui
     @runs_on_provider
     @tier1
-    @bugzilla("2155743")
     @polarion_id("OCS-2575")
     @skipif_ui_not_support("validation")
     def test_dashboard_validation_ui(self, setup_ui_class_factory):
@@ -116,7 +113,6 @@ class TestUserInterfaceValidation(object):
     @skipif_ocs_version("<4.9")
     @skipif_external_mode
     @skipif_mcg_only
-    @pytest.mark.bugzilla("2096414")
     @polarion_id("OCS-4685")
     @skipif_hci_provider_or_client
     def test_odf_cephblockpool_compression_status(self, setup_ui_class_factory):
@@ -154,7 +150,6 @@ class TestUserInterfaceValidation(object):
     @ui
     @tier1
     @runs_on_provider
-    @pytest.mark.bugzilla("1994584")
     def test_ocs_operator_is_not_present(self, setup_ui_class_factory):
         """
         Validate odf operator is present in the installed operator tab in ui.

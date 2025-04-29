@@ -11,6 +11,7 @@ from ocs_ci.helpers.cnv_helpers import (
     create_vm_secret,
     create_dv,
     clone_dv,
+    verifyvolume,
 )
 
 from ocs_ci.helpers.helpers import (
@@ -352,14 +353,14 @@ class VirtualMachine(Virtctl):
             resource_name=self._vm_name, condition=status, timeout=timeout
         )
 
-    def start(self, timeout=600, wait=True):
+    def start(self, wait_timeout=600, wait=True, verify_ssh=True):
         """
         Start the VirtualMachine.
 
         Args:
             timeout (int): Timeout value in seconds.
-            wait (bool): True to wait for the VirtualMachine to reach the "Running" status.
-
+            wait_timeout (bool): True to wait for the VirtualMachine to reach the "Running" status.
+            verify_ssh (bool): True to wait for the VirtualMachine for ssh success
         """
         if (
             self.printableStatus() == constants.CNV_VM_STOPPED
@@ -378,8 +379,11 @@ class VirtualMachine(Virtctl):
         logger.info(f"Successfully started VM: {self._vm_name}")
 
         if wait:
-            self.wait_for_vm_status(status=constants.VM_RUNNING, timeout=timeout)
+            self.wait_for_vm_status(status=constants.VM_RUNNING, timeout=wait_timeout)
             logger.info(f"VM:{self._vm_name} reached Running state")
+
+        if verify_ssh:
+            self.wait_for_ssh_connectivity(timeout=1200)
 
     def check_if_vmi_does_not_exist(self):
         """
@@ -432,11 +436,12 @@ class VirtualMachine(Virtctl):
             self.wait_for_vm_status(status=constants.CNV_VM_STOPPED)
             logger.info(f"VM: {self._vm_name} reached Stopped state")
 
-    def restart(self, wait=True):
+    def restart(self, wait=True, verify=True):
         """
         Restart the VirtualMachine.
 
         Args:
+            verify(bool): True to wait for VM ssh up after restart
             wait (bool): True to wait for the VirtualMachine to reach the "Running" status.
 
         """
@@ -448,8 +453,11 @@ class VirtualMachine(Virtctl):
             logger.info(
                 f"VM: {self._vm_name} reached Running state state after restart operation"
             )
+        if verify:
+            self.verify_vm(verify_ssh=True)
+            logger.info(f"VM: {self._vm_name} ssh working successfully!")
 
-    def addvolme(self, volume_name, persist=True, serial=None):
+    def addvolume(self, volume_name, persist=True, serial=None, verify=True):
         """
         Add a volume to a VM
 
@@ -457,6 +465,7 @@ class VirtualMachine(Virtctl):
             volume_name (str): Name of the volume/PVC to add.
             persist (bool): True to persist the volume.
             serial (str): Serial number for the volume.
+            verify (bool): If true, checks volume_name present in vm yaml.
 
         Returns:
              str: stdout of command
@@ -469,13 +478,23 @@ class VirtualMachine(Virtctl):
             persist=persist,
             serial=serial,
         )
-        logger.info(f"Successfully HotPlugged disk {volume_name} to {self._vm_name}")
+        if verify:
+            sample = TimeoutSampler(
+                timeout=600,
+                sleep=15,
+                func=verifyvolume,
+                vm_name=self._vm_name,
+                volume_name=volume_name,
+                namespace=self.namespace,
+            )
+            sample.wait_for_func_value(value=True)
 
-    def removevolume(self, volume_name):
+    def removevolume(self, volume_name, verify=True):
         """
         Remove a volume from a VM
 
         Args:
+            verify: If true, checks volume_name not present in vm yaml
             volume_name (str): Name of the volume to remove.
 
         Returns:
@@ -484,9 +503,16 @@ class VirtualMachine(Virtctl):
         """
         logger.info(f"Removing {volume_name} from {self._vm_name}")
         self.remove_volume(vm_name=self._vm_name, volume_name=volume_name)
-        logger.info(
-            f"Successfully HotUnplugged disk {volume_name} from {self._vm_name}"
-        )
+        if verify:
+            sample = TimeoutSampler(
+                timeout=600,
+                sleep=15,
+                func=verifyvolume,
+                vm_name=self._vm_name,
+                volume_name=volume_name,
+                namespace=self.namespace,
+            )
+            sample.wait_for_func_value(value=False)
 
     def scp_to_vm(
         self,
@@ -608,11 +634,12 @@ class VirtualMachine(Virtctl):
             self.wait_for_vm_status(status=constants.VM_PAUSED)
             logger.info(f"VM: {self._vm_name} reached Paused state")
 
-    def unpause(self, wait=True):
+    def unpause(self, wait=True, verify_ssh=True):
         """
         Unpause the VirtualMachine.
 
         Args:
+            verify_ssh: verify_ssh (bool): True to wait for the VirtualMachine for ssh success
             wait (bool): True to wait for the VirtualMachine to reach the "Running" status.
 
         """
@@ -621,6 +648,8 @@ class VirtualMachine(Virtctl):
         if wait:
             self.wait_for_vm_status(status=constants.VM_RUNNING)
             logger.info(f"VM: {self._vm_name} reached Running state")
+        if verify_ssh:
+            self.wait_for_ssh_connectivity(timeout=1200)
 
     def ready(self):
         """
@@ -671,6 +700,15 @@ class VirtualMachine(Virtctl):
                 )
         if self.ns_obj:
             self.ns_obj.delete_project(project_name=self.namespace)
+
+    def get_vmi_instance(self):
+        """
+        Get the vmi instance of VM
+
+        Returns:
+            VMI object: returns VMI instance of VM
+        """
+        return self.vmi_obj
 
 
 class VMCloner(VirtualMachine):

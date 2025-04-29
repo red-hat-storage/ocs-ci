@@ -47,16 +47,19 @@ class MustGather(object):
             raise ValueError("log type arg must be a string")
         self.type_log = type_log
 
-    def collect_must_gather(self, ocs_flags=None):
+    def collect_must_gather(self, ocs_flags=None, mg_options=None):
         """
         Collect ocs_must_gather and copy the logs to a temporary folder.
 
         Args:
-            ocs_flags (str): flags to must gather command for example ["-- /usr/bin/gather -cs"]
+            ocs_flags (str): ocs flags to must gather command for example ["-- /usr/bin/gather -cs"]
+            mg_options (str): Options of must gather command For example "--host_network=True"
 
         """
         temp_folder = tempfile.mkdtemp()
-        collect_ocs_logs(dir_name=temp_folder, ocp=False, ocs_flags=ocs_flags)
+        collect_ocs_logs(
+            dir_name=temp_folder, ocp=False, ocs_flags=ocs_flags, mg_options=mg_options
+        )
         self.root = temp_folder + "_ocs_logs"
 
     def search_file_path(self):

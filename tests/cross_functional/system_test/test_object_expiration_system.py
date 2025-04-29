@@ -6,11 +6,11 @@ import pytest
 
 from ocs_ci.helpers.e2e_helpers import create_muliple_types_provider_obcs
 from botocore.exceptions import ClientError
+
 from ocs_ci.utility.retry import retry
 from ocs_ci.helpers.sanity_helpers import Sanity
 from ocs_ci.ocs import constants
 from ocs_ci.framework.pytest_customization.marks import (
-    bugzilla,
     system_test,
     magenta_squad,
 )
@@ -38,7 +38,7 @@ from ocs_ci.utility.utils import TimeoutSampler
 logger = logging.getLogger(__name__)
 
 
-class TestObjectExpiration:
+class TestObjectExpirationSystemTest:
     @pytest.fixture(autouse=True)
     def init_sanity(self):
         """
@@ -54,7 +54,6 @@ class TestObjectExpiration:
         return response["KeyCount"] == 0
 
     @system_test
-    @bugzilla("2039309")
     @skipif_ocs_version("<4.11")
     @pytest.mark.polarion_id("OCS-4852")
     @magenta_squad
@@ -68,7 +67,7 @@ class TestObjectExpiration:
         reduce_expiration_interval(interval=2)
 
         # Creating S3 bucket
-        bucket = bucket_factory()[0].name
+        bucket = retry(ClientError, tries=3, delay=10)(bucket_factory)()[0].name
         object_key = "ObjKey-" + str(uuid.uuid4().hex)
         obj_data = "Random data" + str(uuid.uuid4().hex)
         expiration_days = 1
@@ -182,6 +181,7 @@ class TestObjectExpiration:
         bucket_factory,
         noobaa_db_backup_and_recovery,
         node_drain_teardown,
+        node_restart_teardown,
     ):
         """
         Test object expiration feature when there are some sort of disruption to the noobaa

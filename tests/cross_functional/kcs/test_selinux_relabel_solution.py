@@ -22,7 +22,6 @@ from ocs_ci.utility.utils import run_cmd
 from ocs_ci.utility.templating import dump_data_to_temp_yaml
 from ocs_ci.framework.pytest_customization.marks import (
     tier1,
-    bugzilla,
     polarion_id,
     magenta_squad,
 )
@@ -33,7 +32,7 @@ log = logging.getLogger(__name__)
 @magenta_squad
 @tier1
 class TestSelinuxrelabel(E2ETest):
-    def create_deploymentconfig_pod(self, **kwargs):
+    def create_deployment_pod(self, **kwargs):
         """
         Create deployment pod.
 
@@ -47,8 +46,8 @@ class TestSelinuxrelabel(E2ETest):
                 pvc_name=self.pvc_obj.name,
                 namespace=config.ENV_DATA["cluster_namespace"],
                 sa_name=self.service_account_obj.name,
-                dc_deployment=True,
-                pod_dict_path=constants.PERF_DC_YAML,
+                deployment=True,
+                pod_dict_path=constants.PERF_DEPLOY_YAML,
                 **kwargs,
             )
         except Exception as e:
@@ -223,9 +222,8 @@ class TestSelinuxrelabel(E2ETest):
         """
         Cleanup the test environment
         """
-        res_pod.delete_deploymentconfig_pods(self.pod_obj)
+        res_pod.delete_deployment_pods(self.pod_obj)
 
-    @bugzilla("1988284")
     @polarion_id("OCS-5132")
     @pytest.mark.parametrize("copies", [5])
     def deprecated_test_selinux_relabel_for_existing_pvc(
@@ -263,7 +261,7 @@ class TestSelinuxrelabel(E2ETest):
         )
 
         # Create deployment pod
-        self.pod_obj = self.create_deploymentconfig_pod(
+        self.pod_obj = self.create_deployment_pod(
             command=["/opt/multiple_files.sh"],
             command_args=[f"{copies}", "/mnt"],
         )

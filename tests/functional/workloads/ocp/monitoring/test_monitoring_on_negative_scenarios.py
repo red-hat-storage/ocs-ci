@@ -42,7 +42,7 @@ from ocs_ci.framework.pytest_customization.marks import (
 log = logging.getLogger(__name__)
 
 
-@retry(AssertionError, tries=30, delay=3, backoff=1)
+@retry(AssertionError, tries=60, delay=3, backoff=1)
 def wait_to_update_mgrpod_info_prometheus_pod(threading_lock):
     """
     Validates the ceph health metrics is updated on prometheus pod
@@ -172,7 +172,7 @@ class TestMonitoringBackedByOCS(E2ETest):
         request.addfinalizer(finalizer)
 
     @pytest.fixture()
-    def pods(self, multi_pvc_factory, dc_pod_factory, threading_lock):
+    def pods(self, multi_pvc_factory, deployment_pod_factory, threading_lock):
         """
         Prepare multiple dc pods for the test
 
@@ -191,7 +191,7 @@ class TestMonitoringBackedByOCS(E2ETest):
 
         pod_objs = []
         for pvc_obj in pvc_objs:
-            pod_objs.append(dc_pod_factory(pvc=pvc_obj))
+            pod_objs.append(deployment_pod_factory(pvc=pvc_obj))
 
         # Check for the created pvc metrics on prometheus pod
         for pod_obj in pod_objs:

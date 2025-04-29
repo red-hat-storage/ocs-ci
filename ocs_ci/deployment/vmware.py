@@ -165,7 +165,7 @@ class VSPHEREBASE(Deployment):
         # Add disks to all worker nodes
         for vm in vms:
             if "compute" in vm.name:
-                self.vsphere.add_disks(
+                self.vsphere.add_disks_with_same_size(
                     config.ENV_DATA.get("extra_disks", 1), vm, size, disk_type, ssd
                 )
 
@@ -1078,7 +1078,7 @@ class VSPHEREUPI(VSPHEREBASE):
                     pool=config.ENV_DATA["cluster_name"],
                 )
 
-                vsphere.add_disks(
+                vsphere.add_disks_with_same_size(
                     config.DEPLOYMENT["lvmo_disks"],
                     vm,
                     config.DEPLOYMENT["lvmo_disks_size"],
@@ -1148,9 +1148,13 @@ class VSPHEREUPI(VSPHEREBASE):
                 # wait for all nodes to generate CSR
                 # From OCP version 4.4 and above, we have to approve CSR manually
                 # for all the nodes
-                ocp_version = get_ocp_version()
-                if Version.coerce(ocp_version) >= Version.coerce("4.4"):
-                    wait_for_all_nodes_csr_and_approve(timeout=1500, sleep=10)
+                num_nodes = (
+                    config.ENV_DATA["worker_replicas"]
+                    + config.ENV_DATA["master_replicas"]
+                    + config.ENV_DATA.get("infra_replicas", 0)
+                )
+                csr_timeout = 2400 if num_nodes >= 6 else 1500
+                wait_for_all_nodes_csr_and_approve(timeout=csr_timeout, sleep=10)
 
                 # wait for image registry to show-up
                 co = "image-registry"
@@ -1626,6 +1630,21 @@ class VSPHEREIPI(VSPHEREBASE):
             template_folder = get_infra_id(self.cluster_path)
         else:
             logger.warning("metadata.json file doesn't exist.")
+        vsphere = VSPHERE(
+            config.ENV_DATA["vsphere_server"],
+            config.ENV_DATA["vsphere_user"],
+            config.ENV_DATA["vsphere_password"],
+        )
+        all_vms = vsphere.get_vms_by_string(config.ENV_DATA["cluster_name"])
+        vsphere.stop_vms(all_vms)
+
+        for vm in all_vms:
+            try:
+                vsphere.remove_disks_with_main_disk(vm)
+            except Exception as e:
+                logger.error(
+                    f"Removing disks for {vm.name} in destroy fail with the error {e}"
+                )
 
         try:
             run_cmd(

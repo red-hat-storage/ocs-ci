@@ -2,9 +2,10 @@
 """
 Module for version related util functions.
 """
-
+import logging
 import re
 from semantic_version import Version
+import yaml
 
 from ocs_ci.framework import config
 from ocs_ci.ocs import defaults
@@ -13,6 +14,8 @@ from ocs_ci.ocs.exceptions import (
     UnsupportedPlatformVersionError,
 )
 from ocs_ci.ocs import constants
+
+log = logging.getLogger(__name__)
 
 
 def get_semantic_version(
@@ -64,6 +67,7 @@ VERSION_4_15 = get_semantic_version("4.15", True)
 VERSION_4_16 = get_semantic_version("4.16", True)
 VERSION_4_17 = get_semantic_version("4.17", True)
 VERSION_4_18 = get_semantic_version("4.18", True)
+VERSION_4_19 = get_semantic_version("4.19", True)
 
 
 def get_semantic_ocs_version_from_config(cluster_config=None):
@@ -297,18 +301,26 @@ def get_volsync_operator_version(namespace=constants.SUBMARINER_OPERATOR_NAMESPA
             return csv["spec"]["version"]
 
 
-def get_ocp_versions_rosa():
+def get_ocp_versions_rosa(yaml_format=False):
     """
     Get the list of available versions for ROSA.
+
+    Args:
+        yaml_format (bool): Use yaml output from rosa command and parse it as yaml.
 
     Returns:
         str: a list of available versions for ROSA in string format
     """
     from ocs_ci.utility.utils import exec_cmd
 
-    cmd = "rosa list versions"
-    output = exec_cmd(cmd, timeout=1800)
-    return output.stdout.decode()
+    yaml_arg = "-o yaml" if yaml_format else ""
+
+    cmd = f"rosa list versions {yaml_arg}"
+    output = exec_cmd(cmd, timeout=1800).stdout.decode()
+    if yaml_format:
+        return yaml.safe_load(output)
+    else:
+        return output
 
 
 def ocp_version_available_on_rosa(version):
@@ -402,3 +414,36 @@ def drop_z_version(version_str):
     """
     version = Version.coerce(version_str)
     return f"{version.major}.{version.minor}"
+
+
+def get_running_odf_version():
+    """
+    Get current running ODF version
+
+    Returns:
+        string: ODF version
+
+    """
+    # Importing here to avoid circular imports
+    from ocs_ci.ocs.resources import csv
+
+    namespace = config.ENV_DATA["cluster_namespace"]
+    odf_csv = csv.get_csvs_start_with_prefix(
+        csv_prefix=defaults.ODF_OPERATOR_NAME, namespace=namespace
+    )
+    odf_full_version = odf_csv[0]["metadata"]["labels"]["full_version"]
+    log.info(f"ODF full version is {odf_full_version}")
+    return odf_full_version
+
+
+def get_semantic_running_odf_version():
+    """
+    Get current running ODF semantic version
+
+    Returns:
+        semantic_version.base.Version: Object of semantic ODF running version.
+
+    """
+    odf_full_version = get_running_odf_version()
+    odf_version = get_semantic_version(version=odf_full_version)
+    return odf_version

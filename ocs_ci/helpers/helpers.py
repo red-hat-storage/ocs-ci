@@ -29,6 +29,7 @@ from ocs_ci.helpers.proxy import (
     get_cluster_proxies,
     update_container_with_proxy_env,
 )
+from ocs_ci.ocs.resources.ocsconfigmaps import get_ocs_storage_consumer_configmap_obj
 from ocs_ci.ocs.utils import (
     get_non_acm_cluster_config,
     get_pod_name_by_pattern,
@@ -248,7 +249,6 @@ def create_pod(
     pod_dict_path=None,
     sa_name=None,
     security_context=None,
-    dc_deployment=False,
     raw_block_pv=False,
     raw_block_device=constants.RAW_BLOCK_DEVICE,
     replica_count=1,
@@ -257,7 +257,6 @@ def create_pod(
     command=None,
     command_args=None,
     ports=None,
-    deploy_pod_status=constants.STATUS_COMPLETED,
     subpath=None,
     deployment=False,
     scc=None,
@@ -277,7 +276,6 @@ def create_pod(
         pod_dict_path (str): YAML path for the pod
         sa_name (str): Serviceaccount name
         security_context (dict): Set security context on container in the form of dictionary
-        dc_deployment (bool): True if creating pod as deploymentconfig
         raw_block_pv (bool): True for creating raw block pv based pod, False otherwise
         raw_block_device (str): raw block device for the pod
         replica_count (int): Replica count for deployment config
@@ -288,8 +286,6 @@ def create_pod(
         command_args (list): The arguments to be sent to the command running
             on the pod
         ports (dict): Service ports
-        deploy_pod_status (str): Expected status of deploy pod. Applicable
-            only if dc_deployment is True
         subpath (str): Value of subPath parameter in pod yaml
         deployment (bool): True for Deployment creation, False otherwise
         scc (dict): Set security context on pod like fsGroup, runAsUer, runAsGroup
@@ -312,19 +308,20 @@ def create_pod(
     else:
         pod_dict = pod_dict_path if pod_dict_path else constants.CSI_CEPHFS_POD_YAML
         interface = constants.CEPHFS_INTERFACE
-    if dc_deployment or deployment:
+    if deployment:
         pod_dict = pod_dict_path if pod_dict_path else constants.FEDORA_DC_YAML
     pod_data = templating.load_yaml(pod_dict)
     if not pod_name:
         pod_name = create_unique_resource_name(f"test-{interface}", "pod")
     pod_data["metadata"]["name"] = pod_name
     pod_data["metadata"]["namespace"] = namespace
-    if dc_deployment or deployment:
+    if deployment:
         pod_data["metadata"]["labels"]["app"] = pod_name
         pod_data["spec"]["template"]["metadata"]["labels"]["name"] = pod_name
+        pod_data["spec"]["selector"]["matchLabels"]["name"] = pod_name
         pod_data["spec"]["replicas"] = replica_count
     if pvc_name:
-        if dc_deployment or deployment:
+        if deployment:
             pod_data["spec"]["template"]["spec"]["volumes"][0]["persistentVolumeClaim"][
                 "claimName"
             ] = pvc_name
@@ -341,7 +338,7 @@ def create_pod(
                     "readOnly"
                 ] = pvc_read_only_mode
     if ports:
-        if dc_deployment:
+        if deployment:
             pod_data["spec"]["template"]["spec"]["containers"][0]["ports"] = ports
         else:
             pod_data["spec"]["containers"][0]["ports"][0] = ports
@@ -351,6 +348,7 @@ def create_pod(
             constants.FEDORA_DC_YAML,
             constants.FIO_DC_YAML,
             constants.FIO_DEPLOYMENT_YAML,
+            constants.FEDORA_DEPLOY_YAML,
         ]:
             temp_dict = [
                 {
@@ -362,7 +360,10 @@ def create_pod(
                     .get("name"),
                 }
             ]
-            if pod_dict_path == constants.FEDORA_DC_YAML:
+            if (
+                pod_dict_path == constants.FEDORA_DC_YAML
+                or constants.FEDORA_DEPLOY_YAML
+            ):
                 del pod_data["spec"]["template"]["spec"]["containers"][0][
                     "volumeMounts"
                 ]
@@ -394,44 +395,44 @@ def create_pod(
                 pod_data.get("spec").get("volumes")[0].get("name")
             )
     if security_context:
-        if dc_deployment or deployment:
+        if deployment:
             pod_data["spec"]["template"]["spec"]["containers"][0][
                 "securityContext"
             ] = security_context
         else:
             pod_data["spec"]["containers"][0]["securityContext"] = security_context
     if command:
-        if dc_deployment or deployment:
+        if deployment:
             pod_data["spec"]["template"]["spec"]["containers"][0]["command"] = command
         else:
             pod_data["spec"]["containers"][0]["command"] = command
     if command_args:
-        if dc_deployment or deployment:
+        if deployment:
             pod_data["spec"]["template"]["spec"]["containers"][0]["args"] = command_args
         else:
             pod_data["spec"]["containers"][0]["args"] = command_args
     if scc:
-        if dc_deployment:
+        if deployment:
             pod_data["spec"]["template"]["securityContext"] = scc
         else:
             pod_data["spec"]["securityContext"] = scc
     if node_name:
-        if dc_deployment or deployment:
+        if deployment:
             pod_data["spec"]["template"]["spec"]["nodeName"] = node_name
         else:
             pod_data["spec"]["nodeName"] = node_name
 
     if node_selector:
-        if dc_deployment or deployment:
+        if deployment:
             pod_data["spec"]["template"]["spec"]["nodeSelector"] = node_selector
         else:
             pod_data["spec"]["nodeSelector"] = node_selector
 
-    if sa_name and (dc_deployment or deployment):
+    if sa_name and deployment:
         pod_data["spec"]["template"]["spec"]["serviceAccountName"] = sa_name
 
     if volumemounts:
-        if dc_deployment:
+        if deployment:
             pod_data["spec"]["template"]["spec"]["containers"][0][
                 "volumeMounts"
             ] = volumemounts
@@ -439,7 +440,7 @@ def create_pod(
             pod_data["spec"]["containers"][0]["volumeMounts"] = volumemounts
 
     if subpath:
-        if dc_deployment or deployment:
+        if deployment:
             pod_data["spec"]["template"]["spec"]["containers"][0]["volumeMounts"][0][
                 "subPath"
             ] = subpath
@@ -455,23 +456,7 @@ def create_pod(
     # configure http[s]_proxy env variable, if required
     update_container_with_proxy_env(pod_data)
 
-    if dc_deployment:
-        dc_obj = create_resource(**pod_data)
-        logger.info(dc_obj.name)
-        assert (ocp.OCP(kind="pod", namespace=namespace)).wait_for_resource(
-            condition=deploy_pod_status,
-            resource_name=pod_name + "-1-deploy",
-            resource_count=0,
-            timeout=360,
-            sleep=3,
-        )
-        dpod_list = pod.get_all_pods(namespace=namespace)
-        for dpod in dpod_list:
-            labels = dpod.get().get("metadata").get("labels")
-            if not any("deployer-pod-for" in label for label in labels):
-                if pod_name in dpod.name:
-                    return dpod
-    elif deployment:
+    if deployment:
         deployment_obj = create_resource(**pod_data)
         logger.info(deployment_obj.name)
         deployment_name = deployment_obj.name
@@ -574,31 +559,51 @@ def default_ceph_block_pool():
 
 
 def create_ceph_block_pool(
-    pool_name=None, replica=3, compression=None, failure_domain=None, verify=True
+    pool_name=None,
+    replica=3,
+    compression=None,
+    failure_domain=None,
+    verify=True,
+    namespace=None,
+    device_class=None,
+    yaml_file=None,
 ):
     """
-    Create a Ceph block pool
-    ** This method should not be used anymore **
-    ** This method is for internal testing only **
+    Create a Ceph block pool with optional parameters.
 
     Args:
-        pool_name (str): The pool name to create
-        failure_domain (str): Failure domain name
-        verify (bool): True to verify the pool exists after creation,
-                       False otherwise
-        replica (int): The replica size for a pool
-        compression (str): Compression type for a pool
+        pool_name (str): The pool name to create (optional).
+        replica (int): The replica size for the pool.
+        compression (str): Compression type for the pool (optional).
+        failure_domain (str): Failure domain name (optional).
+        verify (bool): True to verify the pool exists after creation, False otherwise.
+        namespace (str): The pool namespace (optional).
+        device_class (str): The device class name (optional).
+        yaml_file (str): The name of the YAML file for the Ceph block pool (optional).
 
     Returns:
-        OCS: An OCS instance for the Ceph block pool
+        OCS: The OCS instance for the Ceph block pool.
+
     """
-    cbp_data = templating.load_yaml(constants.CEPHBLOCKPOOL_YAML)
+    # Load the YAML template
+    if yaml_file:
+        cbp_data = templating.load_yaml(yaml_file)
+    elif device_class:
+        # Use the appropriate yaml for the device class CephBlockPool
+        cbp_data = templating.load_yaml(constants.DEVICECLASS_CEPHBLOCKPOOL_YAML)
+        cbp_data["spec"]["deviceClass"] = device_class
+    else:
+        # Use the appropriate yaml for the CephBlockPool
+        cbp_data = templating.load_yaml(constants.CEPHBLOCKPOOL_YAML)
+
     cbp_data["metadata"]["name"] = (
         pool_name if pool_name else create_unique_resource_name("test", "cbp")
     )
-    cbp_data["metadata"]["namespace"] = config.ENV_DATA["cluster_namespace"]
-    cbp_data["spec"]["replicated"]["size"] = replica
+    cbp_data["metadata"]["namespace"] = (
+        namespace or config.ENV_DATA["cluster_namespace"]
+    )
 
+    cbp_data["spec"]["replicated"]["size"] = replica
     cbp_data["spec"]["failureDomain"] = failure_domain or get_failure_domin()
 
     if compression:
@@ -612,6 +617,7 @@ def create_ceph_block_pool(
         assert verify_block_pool_exists(
             cbp_obj.name
         ), f"Block pool {cbp_obj.name} does not exist"
+
     return cbp_obj
 
 
@@ -664,6 +670,7 @@ def default_storage_class(
         OCS: Existing StorageClass Instance
     """
     external = config.DEPLOYMENT["external_mode"]
+    rbd_namespace = config.EXTERNAL_MODE.get("rbd_namespace")
     custom_storage_class = config.ENV_DATA.get("custom_default_storageclass_names")
     if custom_storage_class:
         from ocs_ci.ocs.resources.storage_cluster import (
@@ -681,7 +688,9 @@ def default_storage_class(
                     f"StorageCluster spec doesn't have the custom name for '{constants.CEPHBLOCKPOOL}' storageclass"
                 )
         else:
-            if external:
+            if rbd_namespace:
+                resource_name = f"{constants.DEFAULT_EXTERNAL_MODE_STORAGECLASS_RBD_NAMESPACE_PREFIX}-{rbd_namespace}"
+            elif external:
                 resource_name = constants.DEFAULT_EXTERNAL_MODE_STORAGECLASS_RBD
             elif config.ENV_DATA["platform"].lower() in constants.HCI_PC_OR_MS_PLATFORM:
                 storage_class = OCP(kind="storageclass")
@@ -1469,7 +1478,7 @@ def create_build_from_docker_image(
     docker_file = f"FROM {base_image}\n " f" RUN {cmd}\n" f"CMD tail -f /dev/null"
 
     command = f"new-build -D $'{docker_file}' --name={image_name}"
-    kubeconfig = os.getenv("KUBECONFIG")
+    kubeconfig = config.RUN.get("kubeconfig")
 
     oc_cmd = f"oc -n {namespace} "
 
@@ -2461,7 +2470,7 @@ def create_pods_parallel(
     pod_dict_path=None,
     sa_name=None,
     raw_block_pv=False,
-    dc_deployment=False,
+    deployment=False,
     node_selector=None,
 ):
     """
@@ -2474,7 +2483,8 @@ def create_pods_parallel(
         pod_dict_path (str): pod_dict_path for yaml
         sa_name (str): sa_name for providing permission
         raw_block_pv (bool): Either RAW block or not
-        dc_deployment (bool): Either DC deployment or not
+        deployment (bool): True for Deployment creation,
+                False otherwise
         node_selector (dict): dict of key-value pair to be used for nodeSelector field
             eg: {'nodetype': 'app-pod'}
 
@@ -2502,7 +2512,7 @@ def create_pods_parallel(
                                 raw_block_pv=raw_block_pv,
                                 pod_dict_path=pod_dict_path,
                                 sa_name=sa_name,
-                                dc_deployment=dc_deployment,
+                                deployment=deployment,
                                 node_selector=node_selector,
                             )
                         )
@@ -2517,7 +2527,7 @@ def create_pods_parallel(
                             raw_block_pv=raw_block_pv,
                             pod_dict_path=pod_dict_path,
                             sa_name=sa_name,
-                            dc_deployment=dc_deployment,
+                            deployment=deployment,
                             node_selector=node_selector,
                         )
                     )
@@ -5744,3 +5754,250 @@ def verify_reclaimspacecronjob_suspend_state_for_pvc(pvc_obj):
 
     logger.info(f"ReclaimSpace operation is enabled for PVC '{pvc_obj.name}'")
     return False
+
+
+def create_lvs_resource(
+    name, storageclass, worker_nodes=None, min_size=None, max_size=None
+):
+    """
+    Create the LocalVolumeSet resource.
+
+    Args:
+        name (str): The name of the LocalVolumeSet CR
+        storageclass (str): storageClassName value to be used in
+            LocalVolumeSet CR based on LOCAL_VOLUME_YAML
+        worker_nodes (list): The worker node names to be used in the LocalVolumeSet resource
+        min_size (str): The min size to be used in the LocalVolumeSet resource
+        max_size (str): The max size to be used in the LocalVolumeSet resource
+
+    Returns:
+        OCS: The OCS instance for the LocalVolumeSet resource
+
+    """
+    worker_nodes = worker_nodes or node.get_worker_nodes()
+
+    # Pull local volume set yaml data
+    logger.info("Pulling LocalVolumeSet CR data from yaml")
+    lvs_data = templating.load_yaml(constants.LOCAL_VOLUME_SET_YAML)
+
+    # Since we don't have datastore with SSD on our current VMware machines, localvolumeset doesn't detect
+    # NonRotational disk. As a workaround we are setting Rotational to device MechanicalProperties to detect
+    # HDD disk
+    if config.ENV_DATA.get(
+        "local_storage_allow_rotational_disks"
+    ) or config.ENV_DATA.get("odf_provider_mode_deployment"):
+        logger.info(
+            "Adding Rotational for deviceMechanicalProperties spec"
+            " to detect HDD disk"
+        )
+        lvs_data["spec"]["deviceInclusionSpec"]["deviceMechanicalProperties"].append(
+            "Rotational"
+        )
+
+    lvs_data["metadata"]["name"] = name
+
+    if min_size:
+        lvs_data["spec"]["deviceInclusionSpec"]["minSize"] = min_size
+    if max_size:
+        lvs_data["spec"]["deviceInclusionSpec"]["maxSize"] = max_size
+    # Update local volume set data with Worker node Names
+    logger.info(
+        "Updating LocalVolumeSet CR data with worker nodes Name: %s", worker_nodes
+    )
+    lvs_data["spec"]["nodeSelector"]["nodeSelectorTerms"][0]["matchExpressions"][0][
+        "values"
+    ] = worker_nodes
+
+    # Set storage class
+    logger.info(
+        "Updating LocalVolumeSet CR data with LSO storageclass: %s", storageclass
+    )
+    lvs_data["spec"]["storageClassName"] = storageclass
+
+    # set volumeMode to Filesystem for MCG only deployment
+    if config.ENV_DATA["mcg_only_deployment"]:
+        lvs_data["spec"]["volumeMode"] = constants.VOLUME_MODE_FILESYSTEM
+
+    lvs_obj = create_resource(**lvs_data)
+    lvs_obj.reload()
+    return lvs_obj
+
+
+def create_rbd_deviceclass_storageclass(
+    pool_name,
+    sc_name=None,
+    cluster_id="openshift-storage",
+    reclaim_policy="Delete",
+    volume_binding_mode="WaitForFirstConsumer",
+    image_features=None,
+    encrypted="false",
+    allow_volume_expansion=True,
+):
+    """
+    Create an RBD StorageClass resource for device class from provided parameters.
+
+    Args:
+        pool_name (str): Name of the pool.
+        sc_name (str): Name of the StorageClass. If not provided, it will set a random name.
+        cluster_id (str): Cluster ID.
+        reclaim_policy (str): Reclaim policy (e.g., "Delete" or "Retain").
+        volume_binding_mode (str): Volume binding mode (e.g., "Immediate", "WaitForFirstConsumer").
+        image_features (str): Image features for the pool.
+        encrypted (str): Encryption flag ("true" or "false").
+        allow_volume_expansion (bool): Allow volume expansion (True/False).
+
+    Returns:
+        OCS: The OCS instance for the StorageClass resource
+
+    """
+    suffix = "".join(random.choices("0123456789", k=5))
+    sc_name = sc_name or f"ssd{suffix}"
+    image_features = (
+        image_features or "layering,deep-flatten,exclusive-lock,object-map,fast-diff"
+    )
+
+    sc_data = templating.load_yaml(constants.DEVICECLASS_STORAGECLASS_YAML)
+
+    # Update the YAML with the provided parameters
+    sc_data["metadata"]["name"] = sc_name
+    sc_data["parameters"]["pool"] = pool_name
+    sc_data["allowVolumeExpansion"] = allow_volume_expansion
+    sc_data["reclaimPolicy"] = reclaim_policy
+    sc_data["volumeBindingMode"] = volume_binding_mode
+    sc_data["parameters"]["imageFeatures"] = image_features
+    sc_data["parameters"]["clusterID"] = cluster_id
+    sc_data["parameters"]["encrypted"] = encrypted
+
+    sc_obj = create_resource(**sc_data)
+    sc_obj.reload()
+    return sc_obj
+
+
+def find_cephblockpoolradosnamespace(storageclient_uid=None):
+    """
+    Find the cephblockpoolradosnamespace related to a storageclient. This should run on provider cluster in a
+        provider mode setup.
+
+    ! Important. from 4.19 onwards, the StorageRequest is deprecated.
+    ! rns will be fetched from configmap of storageConsumer
+
+    Args:
+        storageclient_id(string): The uid of the storageclient for which the cephblockpoolradosnamespace to be fetched
+
+    Returns:
+        str: The name of the cephblockpoolradosnamespace, if present
+
+    """
+    if not storageclient_uid:
+        logger.info(
+            "Storageclient uid is not provided. Default to the native client cephblockpoolradosnamespace assuming "
+            "only one storageclient is present."
+        )
+        client_obj = ocp.OCP(
+            kind=constants.STORAGECLIENT, namespace=config.ENV_DATA["cluster_namespace"]
+        )
+        clients_info = client_obj.get().get("items")
+        storageclient_uid = clients_info[0]["metadata"]["uid"]
+        storageclient_name = clients_info[0]["metadata"]["name"]
+
+    storageconsumer_obj = ocp.OCP(
+        kind=constants.STORAGECONSUMER,
+        namespace=config.ENV_DATA["cluster_namespace"],
+    )
+    for storageconsumer_dict in storageconsumer_obj.get()["items"]:
+        if storageconsumer_dict["status"]["client"]["clientId"] == storageclient_uid:
+            storageconsumer = storageconsumer_dict["metadata"]["name"]
+            break
+    logger.info(
+        f"StorageClient is {storageclient_name} with uid {storageclient_uid}. StorageConsumer is {storageconsumer}"
+    )
+
+    cephbpradosns = ""
+
+    # from ODF 4.19 and onwards, StorageRequest does not exist on new clusters, upgraded clusters have it,
+    # but StorageRequest is not reconciled. StorageConsumer exists in storage hub cluster and in consumer clusters
+    # to make this function generic need to switch context between clusters
+    if version.get_semantic_ocs_version_from_config() < version.VERSION_4_19:
+        storage_request_obj = ocp.OCP(
+            kind="StorageRequest", namespace=config.ENV_DATA["cluster_namespace"]
+        )
+        for storage_request_dict in storage_request_obj.get()["items"]:
+            if (
+                storageconsumer
+                in storage_request_dict["metadata"]["ownerReferences"][0].values()
+            ):
+                for ceph_resources in storage_request_dict["status"]["cephResources"]:
+                    if "CephBlockPoolRadosNamespace" in ceph_resources.values():
+                        cephbpradosns = ceph_resources["name"]
+                        break
+            if cephbpradosns:
+                break
+    else:
+        storage_consumer = get_ocs_storage_consumer_configmap_obj(storageconsumer)
+        cephbpradosns = storage_consumer.get_rbd_rados_ns()
+    return cephbpradosns
+
+
+def find_cephfilesystemsubvolumegroup(storageclient_uid=None):
+    """
+    Find the cephfilesystemsubvolumegroup related to a storageclient. This should run on provider cluster in a
+        provider mode setup.
+
+    ! Important. from 4.19 onwards, the StorageRequest is deprecated.
+    ! cephfilesystemsubvolumegroup will be fetched from configmap of storageConsumer
+
+    Args:
+        storageclient_id(string): The uid of the storageclient for which the cephfilesystemsubvolumegroup to be fetched
+
+    Returns:
+        str: The name of the cephfilesystemsubvolumegroup, if present
+
+    """
+    if not storageclient_uid:
+        logger.info(
+            "Storageclient uid is not provided. Default to the native client cephfilesystemsubvolumegroup assuming "
+            "only one storageclient is present."
+        )
+        client_obj = ocp.OCP(
+            kind=constants.STORAGECLIENT, namespace=config.ENV_DATA["cluster_namespace"]
+        )
+        clients_info = client_obj.get().get("items")
+        storageclient_uid = clients_info[0]["metadata"]["uid"]
+        storageclient_name = clients_info[0]["metadata"]["name"]
+
+    storageconsumer_obj = ocp.OCP(
+        kind=constants.STORAGECONSUMER,
+        namespace=config.ENV_DATA["cluster_namespace"],
+    )
+    for storageconsumer_dict in storageconsumer_obj.get()["items"]:
+        if storageconsumer_dict["status"]["client"]["clientId"] == storageclient_uid:
+            storageconsumer = storageconsumer_dict["metadata"]["name"]
+            break
+    logger.info(
+        f"StorageClient is {storageclient_name} with uid {storageclient_uid}. StorageConsumer is {storageconsumer}"
+    )
+
+    cephbfssubvolumegroup = ""
+    # from ODF 4.19 and onwards, StorageRequest does not exist on new clusters, upgraded clsuters have it,
+    # but StorageRequest is not reconciled. StorageConsumer exists in storage hub cluster and in consumer clusters
+    # to make this function generic need to switch context between clusters
+    if version.get_semantic_ocs_version_from_config() < version.VERSION_4_19:
+        storage_request_obj = ocp.OCP(
+            kind="StorageRequest", namespace=config.ENV_DATA["cluster_namespace"]
+        )
+        for storage_request_dict in storage_request_obj.get()["items"]:
+            if (
+                storageconsumer
+                in storage_request_dict["metadata"]["ownerReferences"][0].values()
+            ):
+                for ceph_resources in storage_request_dict["status"]["cephResources"]:
+                    if "CephFilesystemSubVolumeGroup" in ceph_resources.values():
+                        cephbfssubvolumegroup = ceph_resources["name"]
+                        break
+            if cephbfssubvolumegroup:
+                break
+    else:
+        storage_consumer = get_ocs_storage_consumer_configmap_obj(storageconsumer)
+        cephbfssubvolumegroup = storage_consumer.get_cephfs_subvolumegroup()
+
+    return cephbfssubvolumegroup

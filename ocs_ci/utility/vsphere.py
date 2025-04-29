@@ -5,6 +5,7 @@ This module contains the vSphere related methods
 import logging
 import os
 import ssl
+import time
 
 import atexit
 
@@ -22,6 +23,7 @@ from ocs_ci.ocs.constants import (
     VM_DISK_TYPE,
     VM_DISK_MODE,
     VM_POWERED_OFF,
+    VM_POWERED_ON,
     DISK_MODE,
     COMPATABILITY_MODE,
     DISK_PATH_PREFIX,
@@ -332,9 +334,13 @@ class VSPHERE(object):
                     raise VMMaxDisksReachedException
         return unit_number
 
-    def add_disk(self, vm, size, disk_type="thin", ssd=False):
+    def _configure_disk_for_vm(self, vm, size, disk_type="thin", ssd=False):
         """
-        Attaches disk to VM
+        Configures and attaches a new virtual disk to a VM.
+
+        This method handles the internal process of selecting the appropriate
+        SCSI controller, determining the unit number, and attaching the disk to
+        the VM. It does not manage the VM's power state.
 
         Args:
             vm (vim.VirtualMachine): VM instance
@@ -343,8 +349,6 @@ class VSPHERE(object):
             ssd (bool): if True, mark disk as SSD
 
         """
-        if ssd:
-            self.stop_vms(vms=[vm])
         logger.info(f"Adding disk to {vm.config.name}")
         spec = vim.vm.ConfigSpec()
         controller = self.get_controller_for_adding_disk(vm)
@@ -374,23 +378,61 @@ class VSPHERE(object):
         WaitForTask(vm.ReconfigVM_Task(spec=spec))
         logger.info(f"{size}GB disk added successfully to {vm.config.name}")
 
-        if ssd:
-            self.start_vms(vms=[vm])
-
-    def add_disks(self, num_disks, vm, size, disk_type="thin", ssd=False):
+    def add_disk(self, vm, size, disk_type="thin", ssd=False):
         """
-        Adds multiple disks to the VM
+        Attaches disk to VM
 
         Args:
-            num_disks: number of disks to add
             vm (vim.VirtualMachine): VM instance
             size (int) : size of disk in GB
             disk_type (str) : disk type
             ssd (bool): if True, mark disk as SSD
 
         """
-        for _ in range(int(num_disks)):
-            self.add_disk(vm, size, disk_type, ssd)
+        if ssd:
+            self.stop_vms(vms=[vm])
+
+        self._configure_disk_for_vm(vm, size, disk_type, ssd)
+
+        if ssd:
+            self.start_vms(vms=[vm])
+
+    def add_disks_with_same_size(
+        self, num_disks, vm, size, disk_type="thin", ssd=False
+    ):
+        """
+        Adds multiple disks to the VM with the same size
+
+        Args:
+            num_disks (int): number of disks to add
+            vm (vim.VirtualMachine): VM instance
+            size (int) : size of disk in GB
+            disk_type (str) : disk type
+            ssd (bool): if True, mark disk as SSD
+
+        """
+        disk_sizes = [size] * num_disks
+        self.add_disks(vm, disk_sizes, disk_type, ssd)
+
+    def add_disks(self, vm, disk_sizes, disk_type="thin", ssd=False):
+        """
+        Adds multiple disks to the VM
+
+        Args:
+            vm (vim.VirtualMachine): VM instance
+            disk_sizes (list) : List of the disk sizes in GB
+            disk_type (str) : disk type
+            ssd (bool): if True, mark disk as SSD
+
+        """
+        if ssd:
+            self.stop_vms(vms=[vm])
+
+        for size in disk_sizes:
+            self._configure_disk_for_vm(vm, size, disk_type, ssd)
+
+        if ssd:
+            self.start_vms(vms=[vm])
 
     def add_rdm_disk(self, vm, device_name, disk_mode=None, compatibility_mode=None):
         """
@@ -507,7 +549,7 @@ class VSPHERE(object):
         """
         return [vm.summary.guest.ipAddress for vm in vms]
 
-    def stop_vms(self, vms, force=True, wait=True):
+    def stop_vms(self, vms, force=True, wait=True, timeout=600):
         """
         Stop VMs
 
@@ -516,11 +558,16 @@ class VSPHERE(object):
             force (bool): True for VM ungraceful power off, False for
                 graceful VM shutdown
             wait (bool): Wait for the VMs to stop
+            timeout (int): Timeout in seconds
 
         """
         if force:
             logger.info(f"Powering off VMs: {[vm.name for vm in vms]}")
-            tasks = [vm.PowerOff() for vm in vms]
+            tasks = [
+                vm.PowerOff()
+                for vm in vms
+                if self.get_vm_power_status(vm) == VM_POWERED_ON
+            ]
             WaitForTasks(tasks, self._si)
 
         else:
@@ -528,13 +575,15 @@ class VSPHERE(object):
 
             # Can't use WaitForTasks as it requires VMWare tools installed
             # on the guests to check for Shutdown task completion
-            _ = [vm.ShutdownGuest() for vm in vms]
+            for vm in vms:
+                vm.ShutdownGuest()
+                time.sleep(10)
 
             def get_vms_power_status(vms):
                 return [self.get_vm_power_status(vm) for vm in vms]
 
             if wait:
-                for statuses in TimeoutSampler(600, 5, get_vms_power_status, vms):
+                for statuses in TimeoutSampler(timeout, 5, get_vms_power_status, vms):
                     logger.info(
                         f"Waiting for VMs {[vm.name for vm in vms]} to power off. "
                         f"Current VMs statuses: {statuses}"
@@ -665,7 +714,7 @@ class VSPHERE(object):
         tasks = [vm.PowerOn() for vm in to_poweron_vms]
         WaitForTasks(tasks, self._si)
 
-    def destroy_vms(self, vms):
+    def destroy_vms(self, vms, remove_disks=False):
         """
         Destroys the VM's
 
@@ -674,6 +723,14 @@ class VSPHERE(object):
 
         """
         self.poweroff_vms(vms)
+        if remove_disks:
+            for vm in vms:
+                try:
+                    self.remove_disks_with_main_disk(vm)
+                except Exception as e:
+                    logger.error(
+                        f"Failed to remove disks for VM {vm.name} with error {e}"
+                    )
         logger.info(f"Destroying VM's: {[vm.name for vm in vms]}")
         tasks = [vm.Destroy_Task() for vm in vms]
         WaitForTasks(tasks, self._si)
@@ -817,6 +874,36 @@ class VSPHERE(object):
             device.unitNumber
             for device in vm.config.hardware.device
             if hasattr(device.backing, "fileName") and device.unitNumber != 0
+        ]
+
+    def remove_disks_with_main_disk(self, vm):
+        """
+        Removes all disks for a VM
+
+        Args:
+            vm (vim.VirtualMachine): VM instance
+
+        """
+        extra_disk_unit_numbers = self.get_used_unit_number_with_all_unit_number(vm)
+        if extra_disk_unit_numbers:
+            for each_disk_unit_number in extra_disk_unit_numbers:
+                self.remove_disk(vm=vm, identifier=each_disk_unit_number)
+
+    def get_used_unit_number_with_all_unit_number(self, vm):
+        """
+        Gets the used unit numbers including main disk for a VM
+
+        Args:
+            vm (vim.VirtualMachine): VM instance
+
+        Returns:
+            list: list of unit numbers
+
+        """
+        return [
+            device.unitNumber
+            for device in vm.config.hardware.device
+            if hasattr(device.backing, "fileName")
         ]
 
     def check_folder_exists(self, name, cluster, dc):
@@ -1801,3 +1888,61 @@ class VSPHERE(object):
                     f"Task for configuring network for {vm.name} did not complete successfully."
                 )
             logger.info(f"Network adapter added to {vm.name} successfully.")
+
+    def get_vms_by_string(self, str_to_match):
+        """
+        Gets the VM's with search string
+
+        Args:
+            str_to_match (str): String to match VM's
+
+        Returns:
+            list: VM instance
+
+        """
+
+        content = self.get_content
+        container = content.rootFolder
+        view_type = [vim.VirtualMachine]
+        recursive = True
+
+        container_view = content.viewManager.CreateContainerView(
+            container, view_type, recursive
+        )
+        vms = [vm for vm in container_view.view if str_to_match in vm.name]
+        container_view.Destroy()
+        return vms
+
+    def wait_for_vm_status(self, vm, desired_status, timeout=300, interval=10):
+        """
+        Wait for the VM to reach the desired status.
+
+        :param vm: The virtual machine object
+        :param desired_status: The desired status (e.g., 'poweredOn', 'poweredOff')
+        :param timeout: Maximum time (in seconds) to wait for the VM to reach the desired status
+        :param interval: Time (in seconds) between each status check
+        :return: True if the VM reaches the desired status, False otherwise
+        """
+        import time
+
+        start_time = time.time()
+
+        while time.time() - start_time < timeout:
+            current_status = vm.runtime.powerState
+
+            # Check if the VM has reached the desired status
+            if current_status == desired_status:
+                logger.info(
+                    f"VM {vm.name} has reached the desired status: {desired_status}"
+                )
+                return True
+
+            logger.info(
+                f"Current status of VM {vm.name} is {current_status}, waiting for {desired_status}..."
+            )
+            time.sleep(interval)
+
+        logger.info(
+            f"VM {vm.name} did not reach the desired status {desired_status} within the timeout period."
+        )
+        return False

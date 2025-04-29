@@ -39,7 +39,6 @@ log = logging.getLogger(__name__)
 @tier4b
 @ignore_leftovers
 @pytest.mark.polarion_id("OCS-2374")
-@pytest.mark.bugzilla("1852983")
 @on_prem_platform_required
 @skipif_external_mode
 @skipif_vsphere_ipi

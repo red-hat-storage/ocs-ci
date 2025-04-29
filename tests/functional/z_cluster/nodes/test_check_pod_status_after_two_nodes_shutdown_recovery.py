@@ -45,7 +45,6 @@ class TestOCSWorkerNodeShutdown(ManageTest):
     @skipif_managed_service
     @skipif_hci_provider_and_client
     @skipif_external_mode
-    @pytest.mark.bugzilla("2232106")
     def test_check_pod_status_after_two_nodes_shutdown_recovery(
         self, nodes, node_restart_teardown
     ):
@@ -80,8 +79,9 @@ class TestOCSWorkerNodeShutdown(ManageTest):
         # Validate all nodes are in READY state and up
         retry(
             (CommandFailed, TimeoutError, AssertionError, ResourceWrongStatusException),
-            tries=30,
-            delay=15,
+            tries=20,
+            delay=10,
+            backoff=1.5,
         )(wait_for_nodes_status(timeout=1800))
 
         # Check the node are Ready state and check cluster is health ok

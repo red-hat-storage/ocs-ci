@@ -28,7 +28,11 @@ from ocs_ci.deployment.helpers.mcg_helpers import (
     mcg_only_post_deployment_checks,
 )
 from ocs_ci.ocs.resources.storage_cluster import verify_storage_cluster_extended
-from ocs_ci.deployment.helpers.odf_deployment_helpers import get_required_csvs
+from ocs_ci.deployment.helpers.odf_deployment_helpers import (
+    get_required_csvs,
+    set_ceph_config,
+    is_storage_system_needed,
+)
 from ocs_ci.deployment.acm import Submariner
 from ocs_ci.deployment.ingress_node_firewall import restrict_ssh_access_to_nodes
 from ocs_ci.deployment.helpers.lso_helpers import (
@@ -69,6 +73,7 @@ from ocs_ci.ocs.exceptions import (
 )
 from ocs_ci.deployment.cert_manager import deploy_cert_manager
 from ocs_ci.deployment.zones import create_dummy_zone_labels
+from ocs_ci.deployment.mce import MCEInstaller
 from ocs_ci.deployment.netsplit import get_netsplit_mc
 from ocs_ci.ocs.monitoring import (
     create_configmap_cluster_monitoring_pod,
@@ -94,6 +99,12 @@ from ocs_ci.ocs.resources.pod import (
     validate_pods_are_respinned_and_running_state,
     get_pods_having_label,
     get_pod_count,
+    wait_for_ceph_cmd_execute_successfully,
+    get_operator_pods,
+    delete_pods,
+    wait_for_pods_by_label_count,
+    wait_for_pods_to_be_running,
+    wait_for_pods_to_be_in_statuses,
 )
 from ocs_ci.ocs.resources.storage_cluster import (
     ocs_install_verification,
@@ -104,12 +115,14 @@ from ocs_ci.ocs.resources.storage_cluster import (
 )
 from ocs_ci.ocs.uninstall import uninstall_ocs
 from ocs_ci.ocs.utils import (
+    get_non_acm_and_non_recovery_cluster_config,
     get_non_acm_cluster_config,
     get_primary_cluster_config,
     setup_ceph_toolbox,
     collect_ocs_logs,
     enable_console_plugin,
     get_all_acm_indexes,
+    get_all_acm_and_recovery_indexes,
     get_active_acm_index,
     enable_mco_console_plugin,
     label_pod_security_admission,
@@ -455,6 +468,18 @@ class Deployment(object):
         else:
             logger.warning("OCS deployment will be skipped")
 
+    def do_deploy_mce(self):
+        """
+        Deploy Multicluster Engine
+        Shall run on OCP deployment phase
+
+        """
+        if config.ENV_DATA["skip_ocs_deployment"]:
+
+            if config.ENV_DATA.get("deploy_mce"):
+                mce_installer = MCEInstaller()
+                mce_installer.deploy_mce()
+
     def do_deploy_oadp(self):
         """
         Deploy OADP Operator
@@ -553,47 +578,6 @@ class Deployment(object):
             csv = CSV(resource_name=csv_name, namespace=cert_manager_namespace)
             csv.wait_for_phase("Succeeded", timeout=300)
 
-    def do_deploy_fusion(self):
-        """
-        Install IBM Fusion operator
-        """
-        if config.DEPLOYMENT.get("fusion_deployment"):
-            # create catalog source
-            create_fusion_catalog_source()
-
-            # create namespace and operator group
-            logger.info("Creating namespace for IBM Fusion.")
-            run_cmd(f"oc create -f {constants.FUSION_NS_YAML}")
-
-            # deploy fusion
-            from ocs_ci.deployment.fusion import deploy_fusion
-
-            deploy_fusion()
-
-            # wait for subscription and csv to found
-            fusion_operator = defaults.FUSION_OPERATOR_NAME
-            fusion_namespace = defaults.FUSION_NAMESPACE
-            self.wait_for_subscription(fusion_operator, fusion_namespace)
-            self.wait_for_csv(fusion_operator, fusion_namespace)
-            logger.info(f"Sleeping for 30 seconds after {fusion_operator} created")
-            time.sleep(30)
-
-            # wait for package manifest to found and csv in Succeeded state
-            package_manifest = PackageManifest(resource_name=fusion_operator)
-            package_manifest.wait_for_resource(timeout=120)
-            csv_name = package_manifest.get_current_csv()
-            csv = CSV(resource_name=csv_name, namespace=fusion_namespace)
-            csv.wait_for_phase("Succeeded", timeout=300)
-
-    def do_deploy_fdf(self):
-        """
-        Install IBM Fusion Data Foundation
-        """
-        if config.DEPLOYMENT.get("fdf_deployment"):
-            from ocs_ci.deployment.fusion_data_foundation import deploy_fdf
-
-            deploy_fdf()
-
     def do_deploy_odf_provider_mode(self):
         """
         Deploy ODF in provider mode and setup native client
@@ -623,7 +607,28 @@ class Deployment(object):
             config.DEPLOYMENT.get("cnv_deployment")
             and config.ENV_DATA["skip_ocs_deployment"]
         ):
-            CNVInstaller().deploy_cnv()
+            if config.ENV_DATA.get("skip_cnv_check_if_present"):
+                check_cnv_deployed = False
+                check_cnv_ready = False
+            else:
+                check_cnv_deployed = True
+                check_cnv_ready = True
+            CNVInstaller().deploy_cnv(check_cnv_deployed, check_cnv_ready)
+
+    def do_deploy_hyperconverged(self):
+        """
+        Deploy HyperConverged Operator and resources that works instead of CNV operator.
+        Should run on OCP deployment phase
+        """
+        if config.ENV_DATA["skip_ocs_deployment"]:
+
+            if config.ENV_DATA.get(
+                "deploy_hyperconverged"
+            ) and not config.DEPLOYMENT.get("cnv_deployment"):
+                from ocs_ci.deployment.hyperconverged import HyperConverged
+
+                hyperconverged = HyperConverged()
+                hyperconverged.deploy_hyperconverged()
 
     def do_deploy_metallb(self):
         """
@@ -718,10 +723,10 @@ class Deployment(object):
         self.do_deploy_oadp()
         self.do_deploy_ocs()
         self.do_deploy_rdr()
-        self.do_deploy_fusion()
-        self.do_deploy_fdf()
         self.do_deploy_odf_provider_mode()
+        self.do_deploy_mce()
         self.do_deploy_cnv()
+        self.do_deploy_hyperconverged()
         self.do_deploy_metallb()
         self.do_deploy_hosted_clusters()
 
@@ -773,7 +778,8 @@ class Deployment(object):
         verify_all_nodes_created()
         set_selinux_permissions()
         set_registry_to_managed_state()
-        add_stage_cert()
+        if config.ENV_DATA.get("platform") != constants.ROSA_HCP_PLATFORM:
+            add_stage_cert()
         if config.ENV_DATA.get("huge_pages"):
             enable_huge_pages()
         if config.DEPLOYMENT.get("dummy_zone_node_labels"):
@@ -916,7 +922,8 @@ class Deployment(object):
         live_deployment = config.DEPLOYMENT.get("live_deployment")
         platform = config.ENV_DATA["platform"]
         aws_sts_deployment = (
-            config.DEPLOYMENT.get("sts_enabled") and platform == constants.AWS_PLATFORM
+            config.DEPLOYMENT.get("sts_enabled")
+            and platform in constants.AWS_STS_PLATFORMS
         )
         azure_sts_deployment = (
             config.DEPLOYMENT.get("sts_enabled")
@@ -1099,7 +1106,8 @@ class Deployment(object):
         local_storage = config.DEPLOYMENT.get("local_storage")
         platform = config.ENV_DATA.get("platform").lower()
         aws_sts_deployment = (
-            config.DEPLOYMENT.get("sts_enabled") and platform == constants.AWS_PLATFORM
+            config.DEPLOYMENT.get("sts_enabled")
+            and platform in constants.AWS_STS_PLATFORMS
         )
 
         if ui_deployment and ui_deployment_conditions():
@@ -1180,7 +1188,9 @@ class Deployment(object):
                 for node in worker_nodes:
                     for interface in interfaces:
                         ip_link_cmd = f"ip link set promisc on {interface}"
-                        node_obj.exec_oc_debug_cmd(node=node, cmd_list=[ip_link_cmd])
+                        node_obj.exec_oc_debug_cmd(
+                            node=node, cmd_list=[ip_link_cmd], namespace="default"
+                        )
 
             if create_public_net:
                 nad_to_load = constants.MULTUS_PUBLIC_NET_YAML
@@ -1328,13 +1338,16 @@ class Deployment(object):
                     replace_to=config.DEPLOYMENT["csv_change_to"],
                 )
 
-        # change namespace of storage system if needed
-        storage_system_data = templating.load_yaml(constants.STORAGE_SYSTEM_ODF_YAML)
-        storage_system_data["metadata"]["namespace"] = self.namespace
-        storage_system_data["spec"]["namespace"] = self.namespace
+        if is_storage_system_needed():
+            logger.info("Creating StorageSystem")
+            # change namespace of storage system if needed
+            storage_system_data = templating.load_yaml(
+                constants.STORAGE_SYSTEM_ODF_YAML
+            )
+            storage_system_data["metadata"]["namespace"] = self.namespace
+            storage_system_data["spec"]["namespace"] = self.namespace
 
-        # create storage system
-        if ocs_version >= version.VERSION_4_9:
+            # create storage system
             templating.dump_data_to_temp_yaml(
                 storage_system_data, constants.STORAGE_SYSTEM_ODF_YAML
             )
@@ -1559,6 +1572,7 @@ class Deployment(object):
         # rules to be enabled on underlaying platform).
         if config.DEPLOYMENT.get("host_network"):
             cluster_data["spec"]["hostNetwork"] = True
+            logger.info("Host network is enabled")
 
         cluster_data["spec"]["storageDeviceSets"] = [deviceset_data]
 
@@ -1990,6 +2004,11 @@ class Deployment(object):
         logger.info("Checking ceph health for external cluster")
         if not config.DEPLOYMENT.get("multi_storagecluster"):
             try:
+                res = wait_for_ceph_cmd_execute_successfully(timeout=120, sleep=10)
+                if not res:
+                    logger.info("Trying to restart the rook-ceph-operator pod...")
+                    operator_pods = get_operator_pods()
+                    delete_pods(operator_pods)
                 ceph_health_check(
                     tries=30,
                     delay=10,
@@ -2174,6 +2193,31 @@ class Deployment(object):
         # validate PDB creation of MON, MDS, OSD pods
         if not config.DEPLOYMENT["external_mode"]:
             validate_pdb_creation()
+
+        # Increase bluestore_slow_ops_warn_threshold and bluestore_slow_ops_warn_lifetime
+        # till https://issues.redhat.com/browse/DFBUGS-1913 is resolved
+
+        if (
+            self.platform == constants.VSPHERE_PLATFORM
+            and version.get_semantic_ocs_version_from_config() >= version.VERSION_4_19
+        ):
+            # using try/except to not fail deployments since these values are good to have
+            # for vsphere platform
+            try:
+                set_ceph_config(
+                    entity="global",
+                    config_name="bluestore_slow_ops_warn_threshold",
+                    value="7",
+                )
+                set_ceph_config(
+                    entity="global",
+                    config_name="bluestore_slow_ops_warn_lifetime",
+                    value="10",
+                )
+            except Exception as ex:
+                logger.error(
+                    f"Failed to set values for bluestore_slow_ops. Exception is: {ex}"
+                )
 
         # Verify health of ceph cluster
         logger.info("Done creating rook resources, waiting for HEALTH_OK")
@@ -2414,6 +2458,121 @@ class Deployment(object):
         else:
             self.deploy_acm_hub_released()
             self.deploy_multicluster_hub()
+        if config.ENV_DATA.get("configure_acm_to_import_mce"):
+            self.configure_acm_to_import_mce_clusters()
+
+    def configure_acm_to_import_mce_clusters(self):
+        """
+        Configure ACM to import MCE operator cluster and hosted clusters
+        """
+
+        # Before starting the configuration, verify the presence of the pods cluster-proxy-proxy-agent,
+        # klusterlet-addon-workmgr and managed-serviceaccount-addon-agent in the default addons namespace
+        for pod_label in [
+            "open-cluster-management.io/addon=cluster-proxy",
+            "component=work-manager",
+            "addon-agent=managed-serviceaccount",
+        ]:
+            if not wait_for_pods_by_label_count(
+                label=pod_label,
+                expected_count=1,
+                namespace=constants.ACM_ADDONS_NAMESPACE,
+                timeout=300,
+                sleep=10,
+            ):
+                raise ResourceNotFoundError(
+                    f"Pod with label {pod_label} not found in the namespace {constants.ACM_ADDONS_NAMESPACE}"
+                )
+
+        # Verify the status of existing pods in the default addons namespace
+        all_pods = get_all_pods(namespace=constants.ACM_ADDONS_NAMESPACE)
+        if not wait_for_pods_to_be_in_statuses(
+            expected_statuses=[constants.STATUS_RUNNING, constants.STATUS_COMPLETED],
+            pod_names=[pod_obj.name for pod_obj in all_pods],
+            namespace=constants.ACM_ADDONS_NAMESPACE,
+            timeout=300,
+            sleep=10,
+        ):
+            raise ResourceWrongStatusException(
+                f"Some pods in the namespace {constants.ACM_ADDONS_NAMESPACE} are not in expected status."
+            )
+
+        # Create AddOnDeploymentConfig to install add-ons in a different multicluster engine operator namespace so that
+        # the multicluster engine operator can self-manage with the local-cluster add-ons while
+        # ACM manages multicluster engine operator at the same time
+        logger.info(
+            "Configuring Red Hat Advanced Cluster Management to import multicluster engine operator clusters"
+        )
+        addon_deployment_config = helpers.create_resource(
+            **templating.load_yaml(constants.ACM_ADDON_DEPLOYMENT_CONFIG_YAML)
+        )
+
+        # Update the existing ClusterManagementAddOn resources for the add-ons so that the add-ons are installed
+        # in the namespace that is specified in the AddOnDeploymentConfig
+        patch_cmd = (
+            f'{{"spec": {{"installStrategy": {{"placements": [{{"name": "global","namespace": '
+            f'"open-cluster-management-global-set","rolloutStrategy": {{"type": "All"}},"configs": [{{"group": '
+            f'"addon.open-cluster-management.io","name": "{addon_deployment_config.name}","namespace": '
+            f'"{addon_deployment_config.namespace}","resource":"addondeploymentconfigs"}}]}}]}}}}}}'
+        )
+
+        addon_obj = OCP(kind=constants.CLUSTERMANAGEMENTADDON)
+        for management_addon in [
+            "work-manager",
+            "managed-serviceaccount",
+            "cluster-proxy",
+        ]:
+            addon_obj.patch(
+                resource_name=management_addon, params=patch_cmd, format_type="merge"
+            )
+
+        # Verify the presence and Running status of the pods cluster-proxy-proxy-agent, klusterlet-addon-workmgr and
+        # managed-serviceaccount-addon-agent
+        for pod_label in [
+            "open-cluster-management.io/addon=cluster-proxy",
+            "component=work-manager",
+            "addon-agent=managed-serviceaccount",
+        ]:
+            wait_for_pods_by_label_count(
+                label=pod_label,
+                expected_count=1,
+                namespace=addon_deployment_config.data["spec"]["agentInstallNamespace"],
+                timeout=900,
+                sleep=20,
+            )
+        wait_for_pods_to_be_running(
+            namespace=addon_deployment_config.data["spec"]["agentInstallNamespace"],
+            timeout=900,
+            sleep=20,
+        )
+
+        # Create a KlusterletConfig resource that is used by ManagedCluster resources to import multicluster engine
+        # operator clusters so that the klusterlet is installed with a different name to avoid the conflict
+        klusterlet_config = helpers.create_resource(
+            **templating.load_yaml(constants.KLUSTERLET_CONFIG_MCE_IMPORT_YAML)
+        )
+
+        logger.info(
+            "Configured Red Hat ACM to import multicluster engine operator clusters"
+        )
+
+        # Configuration for backup and restore. Add backup label to the default and new addondeploymentconfig,
+        # clustermanagementaddon and KlusterletConfig
+        logger.info(
+            "Add label for backup in addondeploymentconfigs, clustermanagementaddons and klusterletconfig"
+        )
+        backup_label = "cluster.open-cluster-management.io/backup=true"
+        addon_deployment_config.add_label(label=backup_label)
+        addon_deployment_config.ocp.add_label(
+            resource_name="hypershift-addon-deploy-config", label=backup_label
+        )
+        for management_addon in [
+            "work-manager",
+            "managed-serviceaccount",
+            "cluster-proxy",
+        ]:
+            addon_obj.add_label(resource_name=management_addon, label=backup_label)
+        klusterlet_config.add_label(label=backup_label)
 
     def deploy_acm_hub_unreleased(self):
         """
@@ -2431,21 +2590,19 @@ class Deployment(object):
         pw = pw.decode().replace("quay.io", "quay.io:443").encode()
         quay_token = base64.b64encode(pw).decode()
 
-        kubeconfig_location = os.path.join(self.cluster_path, "auth", "kubeconfig")
-
         logger.info("Setting env vars")
-        env_vars = {
-            "QUAY_TOKEN": quay_token,
-            "COMPOSITE_BUNDLE": "true",
-            "CUSTOM_REGISTRY_REPO": "quay.io:443/acm-d",
-            "DOWNSTREAM": "true",
-            "DEBUG": "true",
-            "KUBECONFIG": kubeconfig_location,
-        }
-        for key, value in env_vars.items():
-            if value:
-                os.environ[key] = value
-
+        kubeconfig_location = os.path.join(self.cluster_path, "auth", "kubeconfig")
+        env_vars = os.environ.copy()
+        env_vars.update(
+            {
+                "QUAY_TOKEN": quay_token,
+                "COMPOSITE_BUNDLE": "true",
+                "CUSTOM_REGISTRY_REPO": "quay.io:443/acm-d",
+                "DOWNSTREAM": "true",
+                "DEBUG": "true",
+                "KUBECONFIG": kubeconfig_location,
+            }
+        )
         logger.info("Writing pull-secret")
         _templating = templating.Templating(
             os.path.join(constants.TEMPLATE_DIR, "acm-deployment")
@@ -2483,6 +2640,7 @@ class Deployment(object):
             stdout=PIPE,
             stderr=PIPE,
             encoding="utf-8",
+            env=env_vars,
         )
         stdout, stderr = proc.communicate()
         logger.info(stdout)
@@ -2741,45 +2899,6 @@ def create_catalog_source(image=None, ignore_upgrade=False):
     catalog_source.wait_for_state("READY")
 
 
-def create_fusion_catalog_source():
-    """
-    Create catalog source for fusion operator
-    """
-    logger.info("Adding CatalogSource for IBM Fusion")
-    fusion_pre_ga = config.DEPLOYMENT.get("fusion_pre_ga", False)
-
-    if fusion_pre_ga:
-        render_data = {
-            "sds_version": config.DEPLOYMENT.get("fusion_pre_ga_sds_version"),
-            "image_tag": config.DEPLOYMENT.get("fusion_pre_ga_image"),
-        }
-        catalog_source_name = constants.ISF_CATALOG_SOURCE_NAME
-        _templating = templating.Templating(base_path=constants.FDF_TEMPLATE_DIR)
-        template = _templating.render_template(
-            constants.ISF_OPERATOR_SOFTWARE_CATALOG_SOURCE_YAML, render_data
-        )
-        fusion_catalog_source_data = yaml.load(template, Loader=yaml.Loader)
-    else:
-        catalog_source_name = constants.IBM_OPERATOR_CATALOG_SOURCE_NAME
-        fusion_catalog_source_data = templating.load_yaml(
-            constants.FUSION_CATALOG_SOURCE_YAML
-        )
-    fusion_catalog_source_manifest = tempfile.NamedTemporaryFile(
-        mode="w+", prefix="fusion_catalog_source_manifest", delete=False
-    )
-    templating.dump_data_to_temp_yaml(
-        fusion_catalog_source_data, fusion_catalog_source_manifest.name
-    )
-    run_cmd(f"oc apply -f {fusion_catalog_source_manifest.name}")
-    ibm_catalog_source = CatalogSource(
-        resource_name=catalog_source_name,
-        namespace=constants.MARKETPLACE_NAMESPACE,
-    )
-
-    # Wait for catalog source is ready
-    ibm_catalog_source.wait_for_state("READY")
-
-
 @retry(CommandFailed, tries=8, delay=3)
 def setup_persistent_monitoring():
     """
@@ -2840,19 +2959,19 @@ class RBDDRDeployOps(object):
             f" -o=jsonpath='{st_string}'"
         )
         out_list = run_cmd_multicluster(
-            query_mirroring, skip_index=get_all_acm_indexes()
+            query_mirroring, skip_index=get_all_acm_and_recovery_indexes()
         )
         index = 0
         for out in out_list:
             if not out:
                 continue
-            logger.info(out.stdout)
+            logger.info(out.stdout.decode())
             if out.stdout.decode() != "true":
                 logger.error(
                     f"On cluster {config.clusters[index].ENV_DATA['cluster_name']}"
                 )
                 raise ResourceWrongStatusException(
-                    "CephBlockPool", expected="true", got=out
+                    "CephBlockPool", expected="true", got=out.stdout.decode()
                 )
             index = +1
 
@@ -2866,7 +2985,7 @@ class RBDDRDeployOps(object):
                     f"{cluster.ENV_DATA['cluster_name']}"
                 )
 
-        for cluster in get_non_acm_cluster_config():
+        for cluster in get_non_acm_and_non_recovery_cluster_config():
             config.switch_ctx(cluster.MULTICLUSTER["multicluster_index"])
             _get_mirror_pod_count()
             self.validate_csi_sidecar()
@@ -3479,14 +3598,20 @@ class MultiClusterDROperatorsDeploy(object):
         except CommandFailed:
             raise ResourceNotFoundError("Secret Not found")
 
+    @retry(
+        exception_to_check=ResourceWrongStatusException,  # or a specific one
+        tries=8,
+        delay=15,
+        backoff=2,
+    )
     def validate_policy_compliance_status(
         self, resource_name, resource_namespace, compliance_state
     ):
         """
         Validate policy status for given resource
 
-        Raises:
-            ResourceWrongStatusException: Raised when resource state does not match
+        Returns: True if compliance check passes else raises ResourceWrongStatusException when resource state
+        does not match
 
         """
 
@@ -3498,6 +3623,7 @@ class MultiClusterDROperatorsDeploy(object):
         compliance_status = compliance_output.get()
         if compliance_status["status"]["compliant"] == compliance_state:
             logger.info("Compliance status Matches ")
+            return True
         else:
             raise ResourceWrongStatusException("Compliance status does not match")
 

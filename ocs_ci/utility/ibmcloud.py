@@ -1242,6 +1242,50 @@ def find_free_network_subnets(subnet_cidr, network_prefix=27):
             return possible_subnets
 
 
+def delete_dns_records(cluster_name):
+    """
+    Delete DNS records leftover from cluster destroy.
+
+    Args:
+        cluster_name (str): Name of the cluster, used to filter DNS records
+
+    """
+    dns_domain_id = config.ENV_DATA["base_domain_id"]
+    cis_instance_name = config.ENV_DATA["cis_instance_name"]
+    ids_to_delete = []
+    page = 1
+
+    logger.info(f"Setting cis instance to {cis_instance_name}")
+    run_ibmcloud_cmd(f"ibmcloud cis instance-set {cis_instance_name}")
+
+    while True:
+        out = run_ibmcloud_cmd(
+            f"ibmcloud cis dns-records {dns_domain_id} --per-page 1000 --page {page} --output json"
+        )
+        records = json.loads(out)
+        if not records:
+            logger.info("Reached end of pagination")
+            break
+
+        filter_string = f".{cluster_name}."
+        logger.info(f"Searching for records with string: {filter_string}")
+        for record in records:
+            if filter_string in record["name"]:
+                logger.info(f"Found {record['name']}, marking for deletion")
+                ids_to_delete.append(record["id"])
+        page += 1
+
+    logger.info(f"Records to delete: {ids_to_delete}")
+    for record_id in ids_to_delete:
+        logger.info(f"Deleting DNS record: {record_id}")
+        try:
+            run_ibmcloud_cmd(
+                f"ibmcloud cis dns-record-delete {dns_domain_id} {record_id}"
+            )
+        except CommandFailed:
+            logger.exception("Failed to delete CIS leftovers")
+
+
 class IBMCloudObjectStorage:
     """
     IBM Cloud Object Storage (COS) class
@@ -1269,12 +1313,13 @@ class IBMCloudObjectStorage:
             endpoint_url=self.cos_endpoint,
         )
 
-    def get_bucket_objects(self, bucket_name):
+    def get_bucket_objects(self, bucket_name, prefix=None):
         """
         Fetches the objects in a bucket
 
         Args:
             bucket_name (str): Name of the bucket
+            prefix (str): Prefix for the objects to fetch
 
         Returns:
             list: List of objects in a bucket
@@ -1283,9 +1328,17 @@ class IBMCloudObjectStorage:
         bucket_objects = []
         logger.info(f"Retrieving bucket contents from {bucket_name}")
         try:
-            objects = self.cos_client.list_objects(Bucket=bucket_name)
-            for obj in objects.get("Contents", []):
-                bucket_objects.append(obj["Key"])
+            bucket_objects_info = []
+            paginator = self.cos_client.get_paginator("list_objects_v2")
+            operation_parameters = {"Bucket": bucket_name}
+            if prefix:
+                operation_parameters["Prefix"] = prefix
+            page_iterator = paginator.paginate(**operation_parameters)
+            for page in page_iterator:
+                if "Contents" in page:
+                    bucket_objects_info.extend(page["Contents"])
+            for object_info in bucket_objects_info:
+                bucket_objects.append(object_info["Key"])
         except ClientError as ce:
             logger.error(f"CLIENT ERROR: {ce}")
         except Exception as e:
@@ -1353,3 +1406,59 @@ class IBMCloudObjectStorage:
         except Exception as e:
             logger.error(f"Unable to retrieve list buckets: {e}")
         return bucket_list
+
+
+def get_bucket_regions_map():
+    """
+    Fetches the buckets and their regions
+
+    Returns:
+        dict: Dictionary with bucket name as Key and region as value
+
+    """
+    bucket_region_map = {}
+    api_key = config.AUTH["ibmcloud"]["api_key"]
+    service_instance_id = config.AUTH["ibmcloud"]["cos_instance_crn"]
+    endpoint_url = constants.IBM_COS_GEO_ENDPOINT_TEMPLATE.format("us-east")
+    cos_client = IBMCloudObjectStorage(
+        api_key=api_key,
+        service_instance_id=service_instance_id,
+        endpoint_url=endpoint_url,
+    )
+
+    # Fetch the buckets. It will list from all the regions
+    buckets = cos_client.get_buckets()
+    for region in constants.IBM_REGIONS:
+        if not buckets:
+            break
+        logger.info(f"Initializing COS client for region {region}")
+        endpoint_url = constants.IBM_COS_GEO_ENDPOINT_TEMPLATE.format(region)
+        cos_client_region = ibm_boto3.client(
+            "s3",
+            ibm_api_key_id=api_key,
+            ibm_service_instance_id=service_instance_id,
+            config=IBMBotocoreConfig(signature_version="oauth"),
+            endpoint_url=endpoint_url,
+        )
+        processed_buckets = []
+        for each_bucket in buckets:
+            logger.debug(f"Fetching bucket location for {each_bucket}")
+            try:
+                bucket_location = cos_client_region.get_bucket_location(
+                    Bucket=each_bucket
+                )
+                bucket_region = bucket_location.get("LocationConstraint").split(
+                    "-standard"
+                )[0]
+                bucket_region_map[each_bucket] = bucket_region
+                processed_buckets.append(each_bucket)
+            except Exception as e:
+                logger.warning(
+                    f"[Expected] Failed to get region for {each_bucket} in {region}: {e}"
+                )
+
+        # remove processed buckets from buckets list
+        for bucket_name in processed_buckets:
+            buckets.remove(bucket_name)
+
+    return bucket_region_map

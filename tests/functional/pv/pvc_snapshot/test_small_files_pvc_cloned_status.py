@@ -10,7 +10,6 @@ from ocs_ci.framework.testlib import (
     E2ETest,
     tier2,
     polarion_id,
-    bugzilla,
 )
 
 log = logging.getLogger(__name__)
@@ -88,7 +87,6 @@ class TestPvcClonedStatusOfSmallSizeFiles(E2ETest):
             timeout=1080,
         )
 
-    @bugzilla("2039265")
     def test_pvc_status_after_clone(
         self, pvc, pod, copy_files, create_snapshot, snapshot_restore, pod_factory
     ):

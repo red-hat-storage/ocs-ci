@@ -35,7 +35,7 @@ class TestPvcEvictCephClients:
             pytest.param(
                 "same",
                 marks=[
-                    pytest.mark.bugzilla("1901499"),
+                    pytest.mark.skip(reason="This test is invalid"),
                     pytest.mark.polarion_id("OCS-3985"),
                 ],
             ),

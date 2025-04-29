@@ -17,8 +17,6 @@ log = logging.getLogger(__name__)
 @blue_squad
 @tier4c
 @pytest.mark.polarion_id("OCS-2323")
-@pytest.mark.bugzilla("1953615")
-@pytest.mark.bugzilla("2218190")
 @skipif_managed_service
 def test_rgw_unavailable(measure_stop_rgw, threading_lock):
     """

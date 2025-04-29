@@ -5,6 +5,7 @@ from ocs_ci.framework import config
 from ocs_ci.framework.pytest_customization.marks import (
     tier1,
     red_squad,
+    run_on_all_clients,
     runs_on_provider,
     mcg,
     provider_client_ms_platform_required,
@@ -58,11 +59,15 @@ def test_verify_backingstore_uses_rgw(mcg_obj_session):
 @mcg
 @red_squad
 @tier1
-@runs_on_provider
 @provider_client_ms_platform_required
+@run_on_all_clients
 @pytest.mark.polarion_id("OCS-5214")
 def test_write_file_to_bucket_on_client(
-    bucket_factory, mcg_obj, awscli_pod_client_session, return_to_original_context
+    bucket_factory,
+    mcg_obj,
+    awscli_pod_client_session,
+    return_to_original_context,
+    cluster_index,
 ):
     """
     Test object IO using the S3 SDK on bucket created on provider and used on client.
@@ -70,11 +75,10 @@ def test_write_file_to_bucket_on_client(
     awscli_pod, client_cluster = awscli_pod_client_session
     # Retrieve a list of all objects on the test-objects bucket and
     # downloads them to the pod
-    bucketname = bucket_factory(1, interface="OC")[0].name
+    with config.RunWithProviderConfigContextIfAvailable():
+        bucketname = bucket_factory(1, interface="OC")[0].name
     full_object_path = f"s3://{bucketname}"
 
-    config.switch_ctx(client_cluster)
-    log.info(f"Switched to client cluster with index {client_cluster}")
     downloaded_files = awscli_pod.exec_cmd_on_pod(
         f"ls -A1 {constants.AWSCLI_TEST_OBJ_DIR}"
     ).split(" ")

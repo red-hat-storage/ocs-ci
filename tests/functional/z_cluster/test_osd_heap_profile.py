@@ -8,7 +8,6 @@ from ocs_ci.framework.testlib import (
     ManageTest,
     tier2,
     skipif_ocs_version,
-    bugzilla,
     skipif_external_mode,
     runs_on_provider,
 )
@@ -22,7 +21,6 @@ log = logging.getLogger(__name__)
 @runs_on_provider
 @brown_squad
 @tier2
-@bugzilla("1938049")
 @skipif_ocs_version("<4.6")
 @pytest.mark.polarion_id("OCS-2512")
 @skipif_external_mode

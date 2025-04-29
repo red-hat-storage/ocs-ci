@@ -1,7 +1,7 @@
 apiVersion: ocs.openshift.io/v1alpha1
 kind: StorageClient
 metadata:
-  name: storage-client
+  name: ocs-storagecluster
 spec:
   storageProviderEndpoint: {}
   onboardingTicket: {}

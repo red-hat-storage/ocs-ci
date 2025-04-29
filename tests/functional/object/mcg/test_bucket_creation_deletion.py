@@ -60,7 +60,6 @@ class TestBucketCreationAndDeletion(MCGTest):
                 marks=[
                     tier1,
                     pytest.mark.polarion_id("OCS-4930"),
-                    pytest.mark.bugzilla("2179271"),
                 ],
             ),
             pytest.param(

@@ -9,7 +9,6 @@ from ocs_ci.framework.testlib import (
     tier4b,
     ignore_leftovers,
     ManageTest,
-    bugzilla,
     provider_client_platform_required,
     polarion_id,
 )
@@ -189,7 +188,6 @@ class TestNodesRestartHCI(ManageTest):
         self.sanity_helpers.create_resources_on_clients()
 
     @tier4b
-    @bugzilla("1754287")
     @pytest.mark.polarion_id("OCS-2015")
     @pytest.mark.parametrize(
         argnames=["cluster_type", "node_type"],

@@ -66,7 +66,7 @@ class NMStateInstaller(object):
             constants.NMSTATE_SUBSCRIPTION_YAML
         )
         subscription_yaml = OCS(**subscription_yaml_file)
-        subscription_yaml.create()
+        subscription_yaml.create(do_reload=False)
         logger.info("NMState Subscription created successfully")
 
     def verify_nmstate_csv_status(self):

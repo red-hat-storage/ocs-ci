@@ -45,6 +45,8 @@ run it belongs here.
 * `cluster_dir_full_path` - cluster dir full path on NFS share starting with `/mnt/`
 * `run_id` - Timestamp ID that is used for log directory naming
 * `kubeconfig_location` - Filepath (under the cluster path) where the kubeconfig is located
+* `kubeadmin_password` - kubeadmin password used as alternative way to login to the OCP cluster if kubeconfig is not available
+* `ocp_url` - OCP Cluster URL (api or console) used to login to OCP cluster if kubeconfig is not available
 * `cli_params` - Dict that holds onto all CLI parameters
 * `client_version` - OCP client version
 * `bin_dir` - Directory where binaries are downloaded to
@@ -105,7 +107,9 @@ anywhere else.
 * `mirror_registry` - Hostname of the mirror registry
 * `mirror_registry_user` - Username for disconnected cluster mirror registry
 * `mirror_registry_password` - Password for disconnected cluster mirror registry
-* `opm_index_prune_binary_image` - Required only for IBM Power Systems and IBM Z images: Operator Registry base image with the tag that matches the target OpenShift Container Platform cluster major and minor version.
+* `opm_index_prune_binary_image` - Required only for IBM Power Systems and IBM Z images: Operator Registry base image with the tag that matches the target OpenShift Container Platform cluster major and minor
+* `deploy_mce`- Boolean, Deploy mce if True
+version.
   (for example: `registry.redhat.io/openshift4/ose-operator-registry:v4.9`)
   [doc](https://access.redhat.com/documentation/en-us/openshift_container_platform/4.9/html/operators/administrator-tasks#olm-pruning-index-image_olm-managing-custom-catalogs)
 * `min_noobaa_endpoints` - Sets minimum noobaa endpoints (Workaround for https://github.com/red-hat-storage/ocs-ci/issues/2861)
@@ -159,6 +163,16 @@ anywhere else.
 * `force_download_rosa_cli` - Download the ROSA CLI even if one already exists in the bin_dir
 * `force_download_ocm_cli` - Download the OCM CLI even if one already exists in the bin_dir
 * `ipv6` - ipv6 single stack deployment of OCP and ODF.
+* `fusion_deployment` - Enable Fusion deployment.
+* `fusion_channel` - Channel to deploy Fusion operator with.
+* `fusion_pre_release` - Deploy pre-release version of Fusion.
+* `fusion_pre_release_sds_version` - SDS version, used to build path to Fusion pre-release image.
+* `fusion_pre_release_image` - Pre-release image version of Fusion to deploy.
+* `fdf_deployment` - Enable Fusion Data Foundation deployment.
+* `fdf_pre_release`: Deploy pre-release version of FDF.
+* `fdf_image_tag`: FDF image tag, used to retrieve fdf_pre_release_image_digest.
+* `fdf_pre_release_registry`: Registry where the pre-release image of FDF is hosted.
+* `fdf_pre_release_image_digest`: sha256 of the pre-release image of FDF to deploy.
 
 #### REPORTING
 
@@ -185,6 +199,7 @@ Reporting related config. (Do not store secret data in the repository!).
   exporting env variable: export SAVE_MEM_REPORT=true
 * `max_mg_fail_attempts` - Maximum attempts to run MG commands to prevent
   spending time on MG which is timeouting.
+* `rp_additional_info` - any additional information placed to Report Portal launch description
 
 #### ENV_DATA
 
@@ -322,9 +337,13 @@ higher priority).
             * `node_network_configuration_policy_ip` - The ip address of NodeNetworkConfigurationPolicy CR
             * `node_network_configuration_policy_prefix_length` - The subnetmask of NodeNetworkConfigurationPolicy CR
             * `node_network_configuration_policy_destination_route` - The destination route of NodeNetworkConfigurationPolicy CR
+            * `fix_uefi_boot_order_first_option` - string identifying the PXE boot option which should be set to first place, if defined
+                (this is a workaround for UEFI boot order getting changed on some servers during the OCP deployment)
 * `hcp_version` - version of HCP client to be deployed on machine running the tests
 * `metallb_version` - MetalLB operator version to install
-* `install_hypershift_upstream` - Install hypershift from upstream or not (Default: false). Necessary for unreleased OCP/CNV versions
+* `deploy_acm_hub_cluster` - Deploy ACM hub cluster or not (Default: false)
+* `cnv_deployment` - Deploy CNV or not (Default: false) necessary for Converged clusters with hosted clients
+* `deploy_hyperconverged` - Deploy hyperconverged operator or not (Default: false).  Necessary for Converged clusters with hosted clients with unreleased OCP version
 * `clusters` - section for hosted clusters
     * `<cluster name>` - name of the cluster
       * `hosted_cluster_path` - path to the cluster directory to store auth_path, credentials files or cluster related files
@@ -335,6 +354,7 @@ higher priority).
       * `hosted_odf_registry` - registry for hosted ODF (default: quay.io/rhceph-dev/ocs-registry)
       * `hosted_odf_version` - version of ODF to be deployed on hosted clusters
       * `cp_availability_policy` - "HighlyAvailable" or "SingleReplica"; if not provided the default value is "SingleReplica"
+      * `storage_quota` - storage quota for the hosted cluster
 * `wait_timeout_for_healthy_osd_in_minutes` - timeout waiting for healthy OSDs before continuing upgrade (see https://bugzilla.redhat.com/show_bug.cgi?id=2276694 for more details)
 * `osd_maintenance_timeout` - is a duration in minutes that determines how long an entire failureDomain like region/zone/host will be held in noout
 * `odf_provider_mode_deployment` - True if you would like to enable provider mode deployment.
@@ -354,6 +374,7 @@ higher priority).
 * `workaround_mark_disks_as_ssd` - WORKAROUND: mark disks as SSD (not rotational - `0` in `/sys/block/*d*/queue/rotational`)
 * `node_labels` - Comma-separated labels to be applied to the nodes in the cluster, e.g. 'cluster.ocs.openshift.io/openshift-storage="",node-role.kubernetes.io/infra=""', default - empty string
 * `use_config_file` - If set to true the external-cluster-details-exporter python script will use a config file to setup the external cluster.
+* `configure_acm_to_import_mce` - If set to true while installing ACM, the configuration to discover and import MCE clusters will be done
 
 #### UPGRADE
 

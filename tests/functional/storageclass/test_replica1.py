@@ -5,7 +5,6 @@ from ocs_ci.framework import config
 from ocs_ci.framework.pytest_customization.marks import (
     brown_squad,
     polarion_id,
-    bugzilla,
     tier1,
     skipif_external_mode,
 )
@@ -70,7 +69,6 @@ def create_pod_on_failure_domain(project_factory, pod_factory, failure_domain: s
 
 @polarion_id("OCS-5720")
 @brown_squad
-@bugzilla("2274175")
 @tier1
 @skipif_external_mode
 class TestReplicaOne:

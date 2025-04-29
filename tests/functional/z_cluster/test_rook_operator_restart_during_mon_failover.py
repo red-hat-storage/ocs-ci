@@ -13,7 +13,6 @@ from ocs_ci.framework.pytest_customization.marks import brown_squad
 from ocs_ci.framework.testlib import (
     ManageTest,
     tier4b,
-    bugzilla,
     skipif_ocs_version,
     skipif_external_mode,
     ignore_leftovers,
@@ -27,7 +26,6 @@ log = logging.getLogger(__name__)
 @tier4b
 @skipif_external_mode
 @skipif_ocs_version("<4.6")
-@bugzilla("1959983")
 @ignore_leftovers
 @pytest.mark.polarion_id("OCS-2572")
 @runs_on_provider

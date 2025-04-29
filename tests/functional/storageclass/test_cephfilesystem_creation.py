@@ -7,10 +7,7 @@ from ocs_ci.helpers.helpers import (
 from ocs_ci.ocs.exceptions import CommandFailed
 import ocs_ci.ocs.resources.pod as pod
 from ocs_ci.framework.testlib import ManageTest
-from ocs_ci.framework.pytest_customization.marks import (
-    tier2,
-    green_squad,
-)
+from ocs_ci.framework.pytest_customization.marks import green_squad
 
 logger = logging.getLogger(__name__)
 
@@ -21,7 +18,6 @@ class TestCephFileSystemCreation(ManageTest):
     Also checking if the same filesystem can't be created twice.
     """
 
-    @tier2
     @green_squad
     @pytest.mark.polarion_id("OCS-5793")
     def test_Cephfilesystem_creation(self):

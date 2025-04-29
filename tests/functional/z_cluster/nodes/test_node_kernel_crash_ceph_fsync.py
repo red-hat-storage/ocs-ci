@@ -5,7 +5,7 @@ import pytest
 from time import sleep
 from ocs_ci.ocs import constants, node
 from ocs_ci.framework.pytest_customization.marks import brown_squad
-from ocs_ci.framework.testlib import E2ETest, tier1, bugzilla
+from ocs_ci.framework.testlib import E2ETest, tier1
 from ocs_ci.ocs.exceptions import ResourceWrongStatusException
 from ocs_ci.ocs.node import get_worker_nodes
 from concurrent.futures import ThreadPoolExecutor
@@ -16,7 +16,6 @@ log = logging.getLogger(__name__)
 
 @brown_squad
 @tier1
-@bugzilla("2075068")
 class TestKernelCrash(E2ETest):
     """
     Tests to verify kernel crash
@@ -64,7 +63,7 @@ class TestKernelCrash(E2ETest):
         ],
     )
     def test_node_kernel_crash_ceph_fsync(
-        self, pvc_factory, teardown_factory, dc_pod_factory, interface_type
+        self, pvc_factory, teardown_factory, deployment_pod_factory, interface_type
     ):
         """
         1. Create 1GiB PVC
@@ -85,7 +84,7 @@ class TestKernelCrash(E2ETest):
         selected_node = random.choice(worker_nodes_list)
         log.info(f"Creating a pod on node: {selected_node} with pvc {pvc_obj.name}")
 
-        pod_obj = dc_pod_factory(
+        pod_obj = deployment_pod_factory(
             interface=interface_type,
             pvc=pvc_obj,
         )

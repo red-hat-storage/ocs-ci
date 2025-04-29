@@ -44,7 +44,8 @@ Preparation of test execution command
 On your machine, go to ocs-ci directory and activate it’s virtual env.
 Check that ``oc`` tool is available (if not, update ``PATH`` environment
 variable or you can create symlink for it in ``bin`` directory where you have
-ocs-ci installed). You don’t need to set ``KUBECONFIG`` environment variable.
+ocs-ci installed). You should not set ``KUBECONFIG`` environment variable as we
+rely on value from config.
 
 Tests are executed via ``run-ci`` command (a wrapper of `pytest cli tool`_).
 But since ocs-ci was not used to deploy the cluster (and issues like `#2347`_),

@@ -30,3 +30,11 @@ class ClusterNameLengthError(Exception):
 class ClusterNameNotProvidedError(Exception):
     def __str__(self):
         return "Please provide a valid --cluster-name."
+
+
+class InvalidDeploymentType(Exception):
+    pass
+
+
+class ClusterNotAccessibleError(Exception):
+    pass

@@ -1,55 +1,14 @@
 # Usage
 
+Usage of `run-ci` command and other tools provided by ocs-ci repository.
+
+# Usage for run-ci tool
+
 For full usage run: `run-ci --help`
 
-# usage for getting various ocs image versions
-
-for full help run: `report-version --help`
-
-Run `report-version --cluster-path /my-cluster/path --log-level INFO` to
-get information on various image version deployed by ocs-ci
-
-# usage for cleanup
-
-## AWS
-  This should be used only when your cluster-dir is accidentally deleted
-  `ci-cleanup [-h] --cluster CLUSTER`
-  CLUSTER points to cluster tag eg: mycluster-ocs-ci-jlgzn , without additional
-   -master or -worker. This can be found by logging into AWS, Selecting the VM
-   and clicking on Tags.
-
-## vSphere
-  This should be used only when your cluster-dir is accidentally deleted
-  ```bash
-  vsphere-cleanup [-h] --cluster-name CLUSTER_NAME --ocsci-conf VSPHERE_CONF
-  ```
-  e.g:
-
-  `vsphere-cleanup --cluster-name mycluster-oct12
-                   --ocsci-conf ~/vSphere-DC-CP_VC1.yaml`
-
-# usage to shutdown AWS nodes when nodes are not in use
-  Following cli can be used when you want to shutdown the cluster
-  `ci-pause --cluster-path /home-dir/cluster-path --action [stop|start]`
-  action can be start or stop that performs the required action on all the nodes
-  in the cluster
-
-# Usage for ocs-build tool
-
-Use `ocs-build --help` for printing the options.
-This tool returns latest OCS build tag which is available and by default will
-be used (output example: 4.7.0-353.ci).
-
-If --image parameter is provided, the whole image will be returned (output example:
-quay.io/rhceph-dev/ocs-registry:4.7.0-353.ci)
-
-You can also ask for build of specific OCS version using `--ocs-version 4.8`
-argument to get tag for 4.8 version (if no version provided, the OCS-CI default
-will be used).
-
-The quay access_token is required to be set in data/auth.yaml file.
-
 ## Required configuration
+
+For other prerequisites and setup instructions, see [Getting Started](./getting_started.md) doc.
 
 * **AWS credentials** - if you have AWS already configured by `aws configure`,
     see:
@@ -82,7 +41,9 @@ to the pytest.
 
 ### Subcommand:
 * `multicluster <int>` - to be used if multiple clusters needs to be handled by ocs-ci, this subcommand is useful in the
-   DR scenario where multiple cluster contexts needs to be handled by the framework. For more information on the usage check examples section and `run-ci multicluster --help`.
+   DR scenario where multiple cluster contexts needs to be handled by the framework.
+   For more information on the usage check examples section and `run-ci multicluster --help` and
+   [Multi-cluster test example](./multicluster_test_example.md) doc.
 
 
 ### Additional arguments:
@@ -317,3 +278,101 @@ run-ci -m deployment \
     --cluster-path /home/my_user/my-ocs-dir tests/ \
     --teardown
  ```
+
+# usage for getting various ocs image versions
+
+for full help run: `report-version --help`
+
+Run `report-version --cluster-path /my-cluster/path --log-level INFO` to
+get information on various image version deployed by ocs-ci
+
+# usage for cleanup
+
+## AWS
+  This should be used only when your cluster-dir is accidentally deleted
+  `ci-cleanup [-h] --cluster CLUSTER`
+  CLUSTER points to cluster tag eg: mycluster-ocs-ci-jlgzn , without additional
+   -master or -worker. This can be found by logging into AWS, Selecting the VM
+   and clicking on Tags.
+
+## vSphere
+  This should be used only when your cluster-dir is accidentally deleted
+  ```bash
+  vsphere-cleanup [-h] --cluster-name CLUSTER_NAME --ocsci-conf VSPHERE_CONF
+  ```
+  e.g:
+
+  `vsphere-cleanup --cluster-name mycluster-oct12
+                   --ocsci-conf ~/vSphere-DC-CP_VC1.yaml`
+
+# usage to shutdown AWS nodes when nodes are not in use
+  Following cli can be used when you want to shutdown the cluster
+  `ci-pause --cluster-path /home-dir/cluster-path --action [stop|start]`
+  action can be start or stop that performs the required action on all the nodes
+  in the cluster
+
+# Usage for ocs-build tool
+
+Use `ocs-build --help` for printing the options.
+This tool returns latest OCS build tag which is available and by default will
+be used (output example: 4.7.0-353.ci).
+
+If --image parameter is provided, the whole image will be returned (output example:
+quay.io/rhceph-dev/ocs-registry:4.7.0-353.ci)
+
+You can also ask for build of specific OCS version using `--ocs-version 4.8`
+argument to get tag for 4.8 version (if no version provided, the OCS-CI default
+will be used).
+
+The quay access_token is required to be set in data/auth.yaml file.
+
+# Usage for rosa-ocp-version tool
+
+For full usage run: `rosa-ocp-version --help`:
+```bash
+$ rosa-ocp-version -h
+usage: rosa-ocp-version [-h] [--debug] [--get-available-versions] [--check-available-version OCP_VERSION] --ocsci-conf OCSCI_CONF
+
+Get information about available OCP versions from ROSA
+
+options:
+  -h, --help            show this help message and exit
+  --debug, -d           Print logging messages (mainly useful for debugging).
+  --get-available-versions, -a
+                        Get all available OCP versions from ROSA
+  --check-available-version OCP_VERSION, -c OCP_VERSION
+                        Check if provided OCP version is available in ROSA, if available, returns latest z-stream version
+  --ocsci-conf OCSCI_CONF
+                        OCM Credentials configuration file in yaml format. Example file: --- AUTH: openshiftdedicated: token: '<TOKEN>'
+```
+
+## Get list of all available OCP versions in ROSA
+
+```bash
+$ rosa-ocp-version --ocsci-conf path/to/credentials-file.yaml --get-available-versions
+4.17.14
+4.17.12
+4.17.11
+4.17.10
+4.17.9
+4.17.8
+4.17.7
+4.17.6
+4.17.5
+4.17.4
+...
+```
+
+## check if provided OCP version is available in ROSA
+
+```bash
+$ rosa-ocp-version --ocsci-conf path/to/credentials-file.yaml --check-available-version 4.17
+4.17.14
+$ echo $?
+0
+
+$ rosa-ocp-version --ocsci-conf path/to/credentials-file.yaml --check-available-version 4.18
+Version 4.18 not available in ROSA.
+$ echo $?
+255
+```

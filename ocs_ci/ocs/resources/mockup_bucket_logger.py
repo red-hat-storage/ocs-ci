@@ -101,7 +101,7 @@ class MockupBucketLogger:
 
         self._upload_mockup_logs(bucket_name, [obj_name], "PUT")
 
-    def delete_objs_and_log(self, bucket_name, objs):
+    def delete_objs_and_log(self, bucket_name, objs, prefix=""):
         """
         Delete list of objects from the MCG bucket and write
         matching mockup logs
@@ -114,15 +114,16 @@ class MockupBucketLogger:
         logger.info(f"Deleting the {objs} from the bucket")
         obj_list = list_objects_from_bucket(
             self.awscli_pod,
-            f"s3://{bucket_name}",
+            f"s3://{bucket_name}/{prefix}/" if prefix else f"s3://{bucket_name}",
             s3_obj=self.mcg_obj,
         )
         if set(objs).issubset(set(obj_list)):
-            for i in range(len(objs)):
-                s3cmd = craft_s3_command(
-                    f"rm s3://{bucket_name}/{objs[i]}", self.mcg_obj
+            if prefix:
+                objs = [f"{prefix}/{obj}" for obj in objs]
+            for obj in objs:
+                self.awscli_pod.exec_cmd_on_pod(
+                    craft_s3_command(f"rm s3://{bucket_name}/{obj}", self.mcg_obj)
                 )
-                self.awscli_pod.exec_cmd_on_pod(s3cmd)
             self._upload_mockup_logs(bucket_name, objs, "DELETE")
 
     def delete_all_objects_and_log(self, bucket_name):

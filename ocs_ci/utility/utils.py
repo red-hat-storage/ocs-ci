@@ -43,6 +43,8 @@ from ocs_ci.framework import GlobalVariables as GV
 from ocs_ci.ocs import constants, defaults
 from ocs_ci.ocs.exceptions import (
     CephHealthException,
+    CephHealthRecoveredException,
+    CephHealthNotRecoveredException,
     ClientDownloadError,
     CommandFailed,
     ConfigurationError,
@@ -50,7 +52,6 @@ from ocs_ci.ocs.exceptions import (
     TagNotFoundException,
     TimeoutException,
     TimeoutExpiredError,
-    UnavailableBuildException,
     UnexpectedImage,
     UnknownCloneTypeException,
     UnsupportedOSType,
@@ -517,7 +518,9 @@ def run_cmd_interactive(
         InteractivePromptException: in case something goes wrong
 
     """
-    child = pexpect.spawn(cmd)
+    env = os.environ.copy()
+    env["KUBECONFIG"] = config.RUN.get("kubeconfig")
+    child = pexpect.spawn(cmd, env=env)
     for prompt, answer in prompts_answers.items():
         if child.expect(prompt, timeout=timeout):
             if raise_exception:
@@ -641,20 +644,22 @@ def exec_cmd(
         stderr     (str): The standard error (None if not captured).
 
     """
-    masked_cmd = mask_secrets(cmd, secrets)
-    log.info(f"Executing command: {masked_cmd}")
+    _env = kwargs.pop("env", os.environ.copy())
+    kubeconfig_path = config.RUN.get("kubeconfig")
+    if kubeconfig_path:
+        _env["KUBECONFIG"] = kubeconfig_path
+    if cluster_config:
+        kubeconfig_path = cluster_config.RUN.get("kubeconfig")
+        if kubeconfig_path:
+            _env["KUBECONFIG"] = cluster_config.RUN.get("kubeconfig")
     if isinstance(cmd, str) and not kwargs.get("shell"):
         cmd = shlex.split(cmd)
-    if config.RUN.get("custom_kubeconfig_location") and cmd[0] == "oc":
-        if "--kubeconfig" in cmd:
-            cmd.pop(2)
-            cmd.pop(1)
-        cmd = list_insert_at_position(cmd, 1, ["--kubeconfig"])
-        cmd = list_insert_at_position(
-            cmd, 2, [config.RUN["custom_kubeconfig_location"]]
-        )
-    if cluster_config and cmd[0] == "oc" and "--kubeconfig" not in cmd:
-        kubepath = cluster_config.RUN["kubeconfig"]
+    if (
+        kubeconfig_path
+        and cmd[0] == "oc"
+        and "--kubeconfig" not in cmd
+        and "mirror" not in cmd
+    ):
         kube_index = 1
         # check if we have an oc plugin in the command
         plugin_list = "oc plugin list"
@@ -676,8 +681,13 @@ def exec_cmd(
                 kube_index = 2
                 log.info(f"Found oc plugin {subcmd}")
         cmd = list_insert_at_position(cmd, kube_index, ["--kubeconfig"])
-        cmd = list_insert_at_position(cmd, kube_index + 1, [kubepath])
+        cmd = list_insert_at_position(cmd, kube_index + 1, [kubeconfig_path])
     try:
+        if kwargs.get("shell"):
+            masked_cmd = mask_secrets(cmd, secrets)
+        else:
+            masked_cmd = shlex.join(mask_secrets(cmd, secrets))
+        log.info(f"Executing command: {masked_cmd}")
         if threading_lock and cmd[0] == "oc":
             threading_lock.acquire(timeout=lock_timeout)
         completed_process = subprocess.run(
@@ -686,6 +696,7 @@ def exec_cmd(
             stderr=subprocess.PIPE,
             stdin=subprocess.PIPE,
             timeout=timeout,
+            env=_env,
             **kwargs,
         )
     finally:
@@ -749,7 +760,7 @@ def bin_xml_escape(arg):
     # Char ::= #x9 | #xA | #xD | [#x20-#xD7FF] | [#xE000-#xFFFD] | [#x10000-#x10FFFF]
     # For an unknown(?) reason, we disallow #x7F (DEL) as well.
     illegal_xml_re = (
-        "[^\u0009\u000A\u000D\u0020-\u007E\u0080-\uD7FF\uE000-\uFFFD\u10000-\u10FFFF]"
+        "[^\u0009\u000a\u000d\u0020-\u007e\u0080-\ud7ff\ue000-\ufffd\u10000-\u10ffFF]"
     )
     return re.sub(illegal_xml_re, repl, str(arg))
 
@@ -855,6 +866,7 @@ def get_openshift_installer(
     else:
         installer_filename = "openshift-install"
     installer_binary_path = os.path.join(bin_dir, installer_filename)
+    config.ENV_DATA["installer_path"] = installer_binary_path
     client_binary_path = os.path.join(bin_dir, "oc")
     client_exist = os.path.isfile(client_binary_path)
     custom_ocp_image = config.DEPLOYMENT.get("custom_ocp_image")
@@ -910,7 +922,6 @@ def get_openshift_installer(
         os.chdir(previous_dir)
 
     installer_version = run_cmd(f"{installer_binary_path} version")
-    config.ENV_DATA["installer_path"] = installer_binary_path
     log.info(f"OpenShift Installer version: {installer_version}")
     return installer_binary_path
 
@@ -1301,9 +1312,15 @@ def ensure_nightly_build_availability(build_url):
     base_build_url = build_url.rsplit("/", 1)[0] + "/"
     r = requests.get(base_build_url)
     extracting_condition = b"Extracting" in r.content
+    failed_build = b"FAILED.md" in r.content
     if extracting_condition:
         log.info("Build is extracting now, may take up to a minute.")
-    return r.ok and not extracting_condition
+    if failed_build:
+        r = requests.get(base_build_url + "FAILED.md")
+        log.info(
+            f"Nightly build is not properly generated! Failed with reason: {r.content}"
+        )
+    return r.ok and not extracting_condition and not failed_build
 
 
 def get_openshift_mirror_url(file_name, version):
@@ -1319,7 +1336,6 @@ def get_openshift_mirror_url(file_name, version):
 
     Raises:
         UnsupportedOSType: In case the OS type is not supported
-        UnavailableBuildException: In case the build url is not reachable
     """
     target_arch = ""
     rhel_version = ""
@@ -1359,13 +1375,21 @@ def get_openshift_mirror_url(file_name, version):
         os_type=os_type,
     )
     sample = TimeoutSampler(
-        timeout=540,
+        timeout=300,
         sleep=5,
         func=ensure_nightly_build_availability,
         build_url=url,
     )
     if not sample.wait_for_func_status(result=True):
-        raise UnavailableBuildException(f"The build url {url} is not reachable")
+        latest_ga_client_url = (
+            "https://mirror.openshift.com/pub/openshift-v4/x86_64/clients/ocp/"
+            f"stable/openshift-client-{os_type}.tar.gz"
+        )
+        log.error(
+            f"The build url {url} is not reachable, fallback to the latest GA client url: "
+            f"{latest_ga_client_url}"
+        )
+        url = latest_ga_client_url
     return url
 
 
@@ -1621,12 +1645,15 @@ def run_async(command):
         ret, out, err = proc.async_communicate()
     """
     log.info(f"Executing command: {command}")
+    env = os.environ.copy()
+    env["KUBECONFIG"] = config.RUN.get("kubeconfig")
     popen_obj = subprocess.Popen(
         command,
         stdin=subprocess.PIPE,
         stdout=subprocess.PIPE,
         shell=True,
         encoding="utf-8",
+        env=env,
     )
 
     def async_communicate():
@@ -2230,13 +2257,14 @@ def get_ocp_version(seperator=None):
     return char.join([str(version.major), str(version.minor)])
 
 
-def get_running_ocp_version(separator=None):
+def get_running_ocp_version(separator=None, kubeconfig=None):
     """
     Get current running ocp version
 
     Args:
         separator (str): String that would separate major and
             minor version numbers
+        kubeconfig (str): Path to kubeconfig. Optional.
 
     Returns:
         string : If separator is 'None', version string will be returned as is
@@ -2250,7 +2278,10 @@ def get_running_ocp_version(separator=None):
     namespace = config.ENV_DATA["cluster_namespace"]
     try:
         # if the cluster exist, this part will be run
-        results = run_cmd(f"oc get clusterversion -n {namespace} -o yaml")
+        cmd = f"oc get clusterversion -n {namespace} -o yaml"
+        if kubeconfig:
+            cmd = f"{cmd} --kubeconfig {kubeconfig}"
+        results = run_cmd(cmd)
         build = yaml.safe_load(results)["items"][0]["status"]["desired"]["version"]
         return char.join(build.split(".")[0:2])
     except Exception:
@@ -2291,7 +2322,8 @@ def get_running_acm_version():
         string: ACM version
 
     """
-    occmd = "oc get mch multiclusterhub -n open-cluster-management -o json"
+    kubeconfig = config.RUN.get("kubeconfig")
+    occmd = f"oc get --kubeconfig {kubeconfig} mch multiclusterhub -n open-cluster-management -o json"
     jq_cmd = "jq -r .status.currentVersion"
     json_out = subprocess.Popen(shlex.split(occmd), stdout=subprocess.PIPE)
     acm_version = subprocess.Popen(
@@ -2514,13 +2546,87 @@ def wait_for_ceph_health_not_ok(timeout=300, sleep=10):
     sampler.wait_for_func_status(True)
 
 
-def ceph_health_check(namespace=None, tries=20, delay=30):
+def ceph_health_resolve_crash():
+    """
+    Fix ceph health issue with daemon crash
+    """
+    log.warning("Trying to fix the issue with crash by archiving crashes")
+    from ocs_ci.ocs.resources.pod import get_ceph_tools_pod
+
+    ct_pod = get_ceph_tools_pod()
+    ceph_crash_info_display(ct_pod)
+    archive_ceph_crashes(ct_pod)
+
+
+def ceph_health_recover(health_status, namespace=None):
+    """
+    Function which tries to recover ceph health to be HEALTH OK
+
+    Args:
+        health_status (str): Ceph health status
+        namespace (str): Namespace of OCS
+
+    Raises:
+        CephHealthNotRecoveredException: When Ceph health was not recovered
+        CephHealthRecoveredException: When Ceph health was recovered
+
+    """
+    ceph_health_fixes = [
+        {
+            "pattern": r"daemons have recently crashed",
+            "func": ceph_health_resolve_crash,
+            "func_args": [],
+            "func_kwargs": {},
+            "ceph_health_tries": 5,
+            "ceph_health_delay": 30,
+        },
+        {
+            "pattern": r"1 mgr modules have recently crashed",
+            "func": ceph_health_resolve_crash,
+            "func_args": [],
+            "func_kwargs": {},
+            "ceph_health_tries": 5,
+            "ceph_health_delay": 30,
+        },
+        # TODO: Add more patterns and fix functions
+    ]
+    for fix_dict in ceph_health_fixes:
+        pattern = fix_dict["pattern"]
+        if re.search(pattern, health_status):
+            log.info(
+                "Trying to fix Ceph Health because we found in Health status the matching pattern"
+                f": '{pattern}'!"
+            )
+            fix_dict["func"](
+                *fix_dict.get("func_args", []), **fix_dict.get("func_kwargs", {})
+            )
+            try:
+                ceph_health_check(
+                    namespace,
+                    tries=fix_dict.get("ceph_health_tries", 5),
+                    delay=fix_dict.get("ceph_health_delay", 30),
+                )
+            except Exception as ex:
+                raise CephHealthNotRecoveredException(
+                    f"Attempt to try to recover the Ceph Health failed! Exception: {ex}"
+                )
+            raise CephHealthRecoveredException(
+                "Ceph health was not OK and got forcibly recovered to not block other tests"
+                f" after the issue: {pattern} !"
+                " This might be because of product bug, so please do not ignore this error and"
+                " analyze why this has happened!"
+            )
+
+
+def ceph_health_check(namespace=None, tries=20, delay=30, fix_ceph_health=False):
     """
     Args:
         namespace (str): Namespace of OCS
             (default: config.ENV_DATA['cluster_namespace'])
         tries (int): Number of retries
         delay (int): Delay in seconds between retries
+        fix_ceph_health (bool): If True, it will try to fix the health to be OK
+            even if it will recover, we will get an exception CephHealthRecoveredException
 
     Returns:
         bool: ceph_health_check_base return value with default retries of 20,
@@ -2539,21 +2645,24 @@ def ceph_health_check(namespace=None, tries=20, delay=30):
         tries=tries,
         delay=delay,
         backoff=1,
-    )(ceph_health_check_base)(namespace)
+    )(ceph_health_check_base)(namespace, fix_ceph_health)
 
 
-def ceph_health_check_base(namespace=None):
+def ceph_health_check_base(namespace=None, fix_ceph_health=False):
     """
     Exec `ceph health` cmd on tools pod to determine health of cluster.
 
     Args:
         namespace (str): Namespace of OCS
             (default: config.ENV_DATA['cluster_namespace'])
+        fix_ceph_health (bool): If True, it will try to fix the health to be OK
+            even if it will recover, we will get an exception CephHealthRecoveredException
 
     Raises:
         CephHealthException: If the ceph health returned is not HEALTH_OK
         CommandFailed: If the command to retrieve the tools pod name or the
             command to get ceph health returns a non-zero exit code
+
     Returns:
         boolean: True if HEALTH_OK
 
@@ -2565,6 +2674,8 @@ def ceph_health_check_base(namespace=None):
         log.info("Ceph cluster health is HEALTH_OK.")
         return True
     else:
+        if fix_ceph_health:
+            ceph_health_recover(health, namespace)
         raise CephHealthException(f"Ceph cluster health is not OK. Health: {health}")
 
 
@@ -2771,16 +2882,17 @@ def clone_repo(
         run_cmd(f"git checkout {to_checkout}", cwd=location)
 
 
-def get_latest_ds_olm_tag(upgrade=False, latest_tag=None):
+def get_latest_ds_olm_tag(upgrade=False, latest_tag=None, stable_upgrade_version=False):
     """
     This function returns latest tag of OCS downstream registry or one before
     latest if upgrade parameter is True
 
     Args:
-        upgrade (str): If True then it returns one version of the build before
+        upgrade (bool): If True then it returns one version of the build before
             the latest.
         latest_tag (str): Tag of the latest build. If not specified
             config.DEPLOYMENT['default_latest_tag'] or 'latest' will be used.
+        stable_upgrade_version (bool): If True then it returns stable upgrade version.
 
     Returns:
         str: latest tag for downstream image from quay registry
@@ -2790,6 +2902,8 @@ def get_latest_ds_olm_tag(upgrade=False, latest_tag=None):
 
     """
     latest_tag = latest_tag or config.DEPLOYMENT.get("default_latest_tag", "latest")
+    if stable_upgrade_version:
+        latest_tag = config.UPGRADE.get("default_latest_stable_upgrade_tag", latest_tag)
     tags = get_ocs_olm_operator_tags()
     latest_image = None
     ocs_version = config.ENV_DATA["ocs_version"]
@@ -3391,9 +3505,8 @@ def skipif_ui_not_support(ui_test):
         'True' if test needs to be skipped else 'False'
 
     """
-    from ocs_ci.ocs.ui.views import locators
+    from ocs_ci.ocs.ui.views import locators_for_current_ocp_version
 
-    ocp_version = get_running_ocp_version()
     if (
         (
             # Skip for IMB Cloud managed AKA ROKS
@@ -3405,7 +3518,7 @@ def skipif_ui_not_support(ui_test):
     ):
         return True
     try:
-        locators[ocp_version][ui_test]
+        locators_for_current_ocp_version()[ui_test]
     except KeyError:
         return True
     return False
@@ -3432,6 +3545,8 @@ def get_ocs_version_from_image(image):
             .lstrip("stable-")
             .lstrip("rc-")
             .lstrip("upgrade-")
+            .lstrip("latest-konflux")
+            .lstrip("konflux-upgrade-")
         )
         version = Version.coerce(version)
         return "{major}.{minor}".format(major=version.major, minor=version.minor)
@@ -4913,8 +5028,12 @@ def get_ceph_crashes(toolbox_pod):
         list: List of ceph crash ID's
 
     """
-    ceph_crashes = toolbox_pod.exec_ceph_cmd("ceph crash ls")
-    return [each_crash["crash_id"] for each_crash in ceph_crashes]
+    try:
+        ceph_crashes = toolbox_pod.exec_ceph_cmd("ceph crash ls")
+        return [each_crash["crash_id"] for each_crash in ceph_crashes]
+    except (CommandFailed, subprocess.TimeoutExpired) as ex:
+        log.error(f"Failed to get ceph crash list: {ex}")
+        return []
 
 
 def archive_ceph_crashes(toolbox_pod):
@@ -5030,6 +5149,35 @@ def is_cluster_y_version_upgraded():
     return is_upgraded
 
 
+def get_primary_nb_db_pod(namespace=config.ENV_DATA["cluster_namespace"]):
+    """
+    Get the NooBaa DB pod that has been assigned the
+    primary role by the CNPG operator.
+
+    Returns:
+        Pod: The NooBaa DB pod object
+
+    Raises:
+        ResourceNotFoundError: If no NooBaa DB pod is found
+    """
+    # importing here to avoid circular imports
+    from ocs_ci.ocs.resources import pod
+
+    try:
+        nb_db_pod = pod.Pod(
+            **pod.get_pods_having_label(
+                label=constants.NB_DB_PRIMARY_POD_LABEL,
+                namespace=namespace,
+            )[0]
+        )
+    except IndexError:
+        raise ResourceNotFoundError(
+            f"The NooBaa DB pod with label {constants.NB_DB_PRIMARY_POD_LABEL} "
+            f"was not found in namespace {namespace}"
+        )
+    return nb_db_pod
+
+
 def exec_nb_db_query(query):
     """
     Send a psql query to the Noobaa DB
@@ -5047,22 +5195,7 @@ def exec_nb_db_query(query):
         ResourceNotFoundError: If no NooBaa DB pod is found
 
     """
-    # importing here to avoid circular imports
-    from ocs_ci.ocs.resources import pod
-
-    try:
-        nb_db_pod = pod.Pod(
-            **pod.get_pods_having_label(
-                label=constants.NOOBAA_DB_LABEL_47_AND_ABOVE,
-                namespace=config.ENV_DATA["cluster_namespace"],
-            )[0]
-        )
-    except IndexError:
-        raise ResourceNotFoundError(
-            f"The NooBaa DB pod with label {constants.NOOBAA_DB_LABEL_47_AND_ABOVE} "
-            f"was not found in namespace {config.ENV_DATA['cluster_namespace']}"
-        )
-
+    nb_db_pod = get_primary_nb_db_pod()
     response = nb_db_pod.exec_cmd_on_pod(
         command=f'psql -U postgres -d nbcore -c "{query}"',
         out_yaml_format=False,
@@ -5316,3 +5449,82 @@ def create_config_ini_file(params):
     log.info(f"config.ini file for cluster is located at {config_ini_file.name}")
 
     return config_ini_file.name
+
+
+def generate_folder_with_files(num_files: int = 300) -> str:
+    """
+    Generates a random folder with specified number of random text files inside it in /tmp folder.
+
+    Args:
+        num_files (int): Number of files to generate. Defaults to 300.
+
+    Returns:
+        str: Full path to the generated folder.
+
+    Raises:
+        OSError: If folder creation or file write fails.
+        RuntimeError: If file count validation fails.
+    """
+
+    def _generate_files():
+        for _ in range(num_files):
+            filename = (
+                "".join(random.choices(string.ascii_lowercase + string.digits, k=8))
+                + ".txt"
+            )
+            filepath = os.path.join(folder_path, filename)
+
+            content = "".join(
+                random.choices(string.ascii_letters + string.digits + " \n", k=100)
+            )
+
+            with open(filepath, "w") as f:
+                f.write(content)
+                f.flush()
+                os.fsync(f.fileno())  # Ensure data is written to disk
+
+            yield filepath
+
+    # Create folder
+    folder_name = "".join(random.choices(string.ascii_lowercase + string.digits, k=8))
+    folder_path = os.path.join("/tmp", folder_name)
+    os.makedirs(folder_path, exist_ok=True)
+
+    # Generate files using generator
+    created_files = set(_generate_files())
+
+    # Validate file count
+    actual_files = set(os.path.join(folder_path, f) for f in os.listdir(folder_path))
+    if len(actual_files) != num_files or actual_files != created_files:
+        raise RuntimeError(
+            f"File count validation failed. Expected {num_files}, got {len(actual_files)}"
+        )
+
+    return folder_path
+
+
+def wait_custom_resource_defenition_available(crd_name, timeout=600):
+    """
+    Wait for the custom resource definition to be available
+
+    Args:
+        crd_name (str): Name of the custom resource definition
+        timeout (int): Time in seconds to wait for the CRD to be available
+    Returns:
+        bool: True if CRD is available, False otherwise
+
+    """
+    from ocs_ci.ocs.ocp import OCP
+
+    wait = 10
+    retry_num = timeout // wait
+    crd_obj = OCP(kind=constants.CRD_KIND)
+    return bool(
+        crd_obj.get(
+            resource_name=crd_name,
+            out_yaml_format=False,
+            retry=retry_num,
+            wait=wait,
+            dont_raise=True,
+        )
+    )

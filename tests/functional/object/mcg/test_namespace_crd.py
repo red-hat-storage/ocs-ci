@@ -14,16 +14,15 @@ from botocore import UNSIGNED
 from botocore.config import Config
 import botocore.exceptions as boto3exception
 
-from ocs_ci.framework.pytest_customization import marks
 from ocs_ci.framework.testlib import (
     MCGTest,
     on_prem_platform_required,
     skipif_ocs_version,
     skipif_disconnected_cluster,
+    skipif_fips_enabled,
     tier1,
     tier2,
     tier4c,
-    bugzilla,
 )
 from ocs_ci.ocs.bucket_utils import (
     sync_object_directory,
@@ -143,7 +142,92 @@ class TestNamespace(MCGTest):
                 marks=[
                     tier1,
                     on_prem_platform_required,
-                    pytest.mark.polarion_id("OCS-2407"),
+                    pytest.mark.polarion_id("OCS-6339"),
+                ],
+            ),
+            pytest.param(
+                {
+                    "interface": "CLI",
+                    "namespace_policy_dict": {
+                        "type": "Single",
+                        "namespacestore_dict": {"aws": [(1, None)]},
+                    },
+                },
+                marks=[
+                    tier1,
+                    pytest.mark.polarion_id("OCS-6353"),
+                ],
+            ),
+            pytest.param(
+                {
+                    "interface": "CLI",
+                    "namespace_policy_dict": {
+                        "type": "Single",
+                        "namespacestore_dict": {"azure": [(1, None)]},
+                    },
+                },
+                marks=[
+                    tier1,
+                    pytest.mark.polarion_id("OCS-6354"),
+                ],
+            ),
+            pytest.param(
+                {
+                    "interface": "CLI",
+                    "namespace_policy_dict": {
+                        "type": "Single",
+                        "namespacestore_dict": {"ibmcos": [(1, None)]},
+                    },
+                },
+                marks=[
+                    tier1,
+                    pytest.mark.polarion_id("OCS-6355"),
+                ],
+            ),
+            pytest.param(
+                {
+                    "interface": "CLI",
+                    "namespace_policy_dict": {
+                        "type": "Single",
+                        "namespacestore_dict": {"gcp": [(1, None)]},
+                    },
+                },
+                marks=[
+                    tier1,
+                    pytest.mark.polarion_id("OCS-6356"),
+                ],
+            ),
+            pytest.param(
+                {
+                    "interface": "CLI",
+                    "namespace_policy_dict": {
+                        "type": "Cache",
+                        "ttl": 300000,
+                        "namespacestore_dict": {
+                            "rgw": [(1, None)],
+                        },
+                    },
+                },
+                marks=[
+                    tier1,
+                    on_prem_platform_required,
+                    pytest.mark.polarion_id("OCS-6338"),
+                ],
+            ),
+            pytest.param(
+                {
+                    "interface": "CLI",
+                    "namespace_policy_dict": {
+                        "type": "Multi",
+                        "namespacestore_dict": {
+                            "rgw": [(2, None)],
+                        },
+                    },
+                },
+                marks=[
+                    tier1,
+                    on_prem_platform_required,
+                    pytest.mark.polarion_id("OCS-6351"),
                 ],
             ),
             pytest.param(
@@ -157,6 +241,7 @@ class TestNamespace(MCGTest):
                 marks=[
                     tier1,
                     pytest.mark.polarion_id("OCS-5442"),
+                    skipif_fips_enabled,
                 ],
             ),
             pytest.param(
@@ -218,6 +303,12 @@ class TestNamespace(MCGTest):
             "Azure-OC-Single",
             "RGW-OC-Single",
             "RGW-CLI-Single",
+            "AWS-CLI-Single",
+            "AZURE-CLI-Single",
+            "IBM-CLI-Single",
+            "GCP-CLI-Single",
+            "RGW-CLI-Cache",
+            "RGW-CLI-Multi",
             "IBM-OC-Single",
             "AWS+Azure-OC-Multi",
             "AWS+AWS-OC-Multi",
@@ -230,7 +321,7 @@ class TestNamespace(MCGTest):
         Test namespace bucket creation using the MCG CRDs.
         """
 
-        # Create the namespace bucket on top of the namespace resource
+        # Create the namespace bucket on top of the namespace resource.
         bucket_factory(
             amount=1,
             interface=bucketclass_dict["interface"],
@@ -980,7 +1071,7 @@ class TestNamespace(MCGTest):
         argvalues=[
             pytest.param(
                 *["noobaa-db"],
-                marks=[pytest.mark.polarion_id("OCS-2291"), bugzilla("2165907")],
+                marks=[pytest.mark.polarion_id("OCS-2291")],
             ),
             pytest.param(*["noobaa-core"], marks=pytest.mark.polarion_id("OCS-2319")),
             pytest.param(
@@ -1196,7 +1287,6 @@ class TestNamespace(MCGTest):
 
     @pytest.mark.polarion_id("OCS-2504")
     @tier2
-    @marks.bugzilla("1927367")
     def test_ns_bucket_unsigned_access(
         self, mcg_obj, bucket_factory, namespace_store_factory
     ):

@@ -8,7 +8,7 @@ from concurrent.futures import ThreadPoolExecutor
 from uuid import uuid4
 
 from ocs_ci.ocs import constants
-from ocs_ci.ocs.exceptions import UnavailableResourceException
+from ocs_ci.ocs.exceptions import UnavailableResourceException, TimeoutExpiredError
 from ocs_ci.ocs.ocp import OCP
 from ocs_ci.ocs.resources.ocs import OCS
 from ocs_ci.ocs.resources import pod
@@ -691,7 +691,77 @@ def get_pvc_size(pvc_obj, convert_size=1024):
         int: PVC size
 
     """
+    valid_units = ("Ti", "Gi", "Mi", "Ki", "Bi")
     unformatted_size = (
         pvc_obj.data.get("spec").get("resources").get("requests").get("storage")
     )
+    # If requested size is missing or does not contain a valid unit, fallback to actual storage size
+    if (
+        not unformatted_size
+        or not isinstance(unformatted_size, str)
+        or not any(unformatted_size.endswith(unit) for unit in valid_units)
+    ):
+        log.warning(
+            f"The requested storage '{unformatted_size}' is missing a unit (Ti, Gi, Mi, Ki, Bi). "
+            "Getting the PVC size from the actual storage value."
+        )
+        unformatted_size = (
+            pvc_obj.data.get("status", {}).get("capacity", {}).get("storage")
+        )
+
+    if not unformatted_size:
+        raise ValueError("PVC size could not be determined from spec or status.")
+
     return convert_device_size(unformatted_size, "GB", convert_size)
+
+
+def wait_for_pvcs_in_lvs_to_reach_status(
+    lvs_name, pvc_count, expected_status, timeout=180, sleep=10
+):
+    """
+    Wait for the Persistent Volume Claims (PVCs) associated with a specific LocalVolumeSet (LVS)
+    to reach the expected status within a given timeout.
+
+    Args:
+        lvs_name (str): The LocalVolumeSet name whose PVCs are being monitored.
+        pvc_count (int): The number of PVCs expected to reach the desired status.
+        expected_status (str): The expected status of the PVCs (e.g., "Bound", "Available").
+        timeout (int): Maximum time to wait for the PVCs to reach the expected status, in seconds.
+        sleep (int): Interval between successive checks, in seconds.
+
+    Returns:
+        bool: True, if the PVCs reach the expected status within the specified timeout. False, otherwise.
+
+    """
+    log.info(
+        f"Waiting for the PVCs in the LocalVolumeSet {lvs_name} to reach the "
+        f"expected status {expected_status}"
+    )
+    try:
+        for lvs_pvcs in TimeoutSampler(
+            func=get_all_pvcs_in_storageclass,
+            storage_class=lvs_name,
+            timeout=timeout,
+            sleep=sleep,
+        ):
+            current_pvc_count = len(lvs_pvcs)
+            if current_pvc_count != pvc_count:
+                log.warning(
+                    f"The current PVC count {current_pvc_count} is not equal to the "
+                    f"expected PVC count {pvc_count}"
+                )
+                continue
+            pvc_statuses = [pvc.status for pvc in lvs_pvcs]
+            log.info(f"PVCs statuses = {pvc_statuses}")
+            if all([status == expected_status for status in pvc_statuses]):
+                log.info(
+                    f"All the PVCs in the LocalVolumeSet {lvs_name} reached the "
+                    f"expected status {expected_status}"
+                )
+                return True
+    except TimeoutExpiredError:
+        log.warning(
+            f"The PVCs in the LocalVolumeSet {lvs_name} failed to reach the "
+            f"expected status {expected_status} after {timeout} seconds"
+        )
+        return False
