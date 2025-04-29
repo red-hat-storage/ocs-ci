@@ -2645,7 +2645,7 @@ def get_another_osd_node_in_same_rack_or_zone(
     return osd_node_in_same_rack_or_zone
 
 
-def get_nodes_racks_or_zones(failure_domain, node_names):
+def get_nodes_racks_or_zones(failure_domain, node_names, raise_value_error=True):
     """
     Get the nodes racks or zones
 
@@ -2657,10 +2657,15 @@ def get_nodes_racks_or_zones(failure_domain, node_names):
 
     """
     node_objects = get_node_objs(node_names)
-    return [get_node_rack_or_zone(failure_domain, n) for n in node_objects]
+    return [
+        get_node_rack_or_zone(failure_domain, n, raise_value_error)
+        for n in node_objects
+    ]
 
 
-def wait_for_nodes_racks_or_zones(failure_domain, node_names, timeout=120):
+def wait_for_nodes_racks_or_zones(
+    failure_domain, node_names, timeout=120, raise_value_error=True
+):
     """
     Wait for the nodes racks or zones to appear
 
@@ -2679,6 +2684,7 @@ def wait_for_nodes_racks_or_zones(failure_domain, node_names, timeout=120):
         func=get_nodes_racks_or_zones,
         failure_domain=failure_domain,
         node_names=node_names,
+        raise_value_error=raise_value_error,
     ):
         log.info(f"The nodes {node_names} racks or zones are: {nodes_racks_or_zones}")
         if all(nodes_racks_or_zones):
