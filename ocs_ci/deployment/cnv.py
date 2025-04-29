@@ -855,6 +855,7 @@ class CNVInstaller(object):
             namespace=self.namespace,
             resource_name=constants.KUBEVIRT_HYPERCONVERGED,
         )
+
         logger.info(
             f" currently installed cnv version: {parse_version(self.get_running_cnv_version())}"
         )
@@ -871,14 +872,14 @@ class CNVInstaller(object):
             patch = f'{{"spec": {{"channel": "nightly-{self.upgrade_version}"}}}}'
             hyperconverged_subs_obj.patch(params=patch, format_type="merge")
 
-        patch = '\'{"spec": {"installPlanApproval": "Automatic"}}\''
+        patch = '{"spec": {"installPlanApproval": "Automatic"}}'
         hyperconverged_subs_obj.patch(params=patch, format_type="merge")
         wait_for_install_plan_and_approve(self.namespace)
 
         # Post CNV upgrade checks
         if self.post_install_verification():
             # setting upgrade approval to manual
-            patch = '\'{"spec": {"installPlanApproval": "Manual"}}\''
+            patch = '{"spec": {"installPlanApproval": "Automatic"}}'
             hyperconverged_subs_obj.patch(params=patch, format_type="merge")
         # Enable software emulation
         self.enable_software_emulation()
