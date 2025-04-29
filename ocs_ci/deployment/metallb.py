@@ -783,6 +783,7 @@ class MetalLBInstaller:
             )
 
             metallb_data = templating.load_yaml(metallb_catalog_file)
+            logger.info(f"metallb data : {metallb_data}")
             helpers.create_resource(**metallb_data)
 
             # wait for catalog source is ready
