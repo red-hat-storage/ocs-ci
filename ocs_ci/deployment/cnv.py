@@ -855,6 +855,7 @@ class CNVInstaller(object):
             namespace=self.namespace,
             resource_name=constants.KUBEVIRT_HYPERCONVERGED,
         )
+        print(f"cnv version: {self.get_running_cnv_version()} ")
         logger.info(
             f" currently installed cnv version: {parse_version(self.get_running_cnv_version())}"
         )
