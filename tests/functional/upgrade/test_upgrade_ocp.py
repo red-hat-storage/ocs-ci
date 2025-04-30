@@ -47,6 +47,7 @@ from ocs_ci.framework.pytest_customization.marks import (
     purple_squad,
     multicluster_roles,
 )
+from ocs_ci.ocs.node import gracefully_reboot_nodes
 
 logger = logging.getLogger(__name__)
 
@@ -136,6 +137,10 @@ class TestUpgradeOCP(ManageTest):
             ocp_upgrade_version = config.UPGRADE.get("ocp_upgrade_version")
             logger.info(f"OCP upgrade version: {ocp_upgrade_version}")
 
+            provider_cluster = (
+                config.ENV_DATA.get("cluster_type").lower() == constants.HCI_PROVIDER
+            )
+
             rosa_platform = (
                 config.ENV_DATA["platform"].lower() in constants.ROSA_PLATFORMS
             )
@@ -198,7 +203,10 @@ class TestUpgradeOCP(ManageTest):
 
                 # pause a MachineHealthCheck resource
                 # no machinehealthcheck on ROSA
-                if get_semantic_ocp_running_version() > VERSION_4_8:
+                if (
+                    get_semantic_ocp_running_version() > VERSION_4_8
+                    and not provider_cluster
+                ):
                     pause_machinehealthcheck()
 
                 logger.info(f"full upgrade path: {image_path}:{target_image}")
@@ -240,8 +248,15 @@ class TestUpgradeOCP(ManageTest):
                 check_cluster_operator_versions(target_image, operator_upgrade_timeout)
 
             # resume a MachineHealthCheck resource
-            if get_semantic_ocp_running_version() > VERSION_4_8 and not rosa_platform:
+            if (
+                get_semantic_ocp_running_version() > VERSION_4_8
+                and not rosa_platform
+                and not provider_cluster
+            ):
                 resume_machinehealthcheck()
+
+            if provider_cluster:
+                gracefully_reboot_nodes(disable_eviction=True)
 
             # post upgrade validation: check cluster operator status
             operator_ready_timeout = 2700 if not rosa_platform else 5400
