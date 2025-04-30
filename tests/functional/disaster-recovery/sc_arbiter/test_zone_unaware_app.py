@@ -13,6 +13,7 @@ from ocs_ci.ocs.node import (
     get_worker_nodes,
     get_node_objs,
     get_all_nodes,
+    untaint_nodes,
 )
 from ocs_ci.helpers.helpers import (
     create_network_fence,
@@ -116,16 +117,18 @@ class TestZoneUnawareApps:
         """
 
         def teardown():
+            """
+            Teardown function to remove the taints and unfence nodes
 
-            fenced_nodes = [node.name for node in self.nodes_to_shutdown]
-            taint_nodes(
-                nodes=fenced_nodes,
-                taint_label=f"{constants.NODE_OUT_OF_SERVICE_TAINT}-",
+            """
+            untaint_nodes(
+                taint_label=constants.NODE_OUT_OF_SERVICE_TAINT,
+                nodes_to_untaint=self.nodes_to_shutdown,
             )
             log.info("Successfully removed taints from the nodes that were shutdown")
 
-            for node_name in fenced_nodes:
-                unfence_node(node_name, delete=True)
+            for node_obj in self.nodes_to_shutdown:
+                unfence_node(node_obj.name, delete=True)
             logger.info("Cleaned up all network fence objects if any")
 
         request.addfinalizer(teardown)
@@ -280,9 +283,9 @@ class TestZoneUnawareApps:
                 unfence_node(node.name, delete=True)
 
             # Remove the taints from the nodes that were shutdown
-            taint_nodes(
-                nodes=[node.name for node in self.nodes_to_shutdown],
-                taint_label=f"{constants.NODE_OUT_OF_SERVICE_TAINT}-",
+            untaint_nodes(
+                taint_label=constants.NODE_OUT_OF_SERVICE_TAINT,
+                nodes_to_untaint=self.nodes_to_shutdown,
             )
             log.info("Successfully removed taints from the nodes that were shutdown")
 
