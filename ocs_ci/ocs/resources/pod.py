@@ -4199,3 +4199,25 @@ def delete_pod_by_phase(
     logger.info(f"All '{pod_phase}' pods deleted successfully.")
 
     return True
+
+
+def get_machine_config_controller_pod(
+    label=constants.MACINE_CONFIG_CONTROLLER_LABEL,
+    namespace=constants.OPENSHIFT_MACHINE_CONFIG_OPERATOR_NAMESPACE,
+):
+    """
+    Fetches info about rgw pods in the cluster
+
+    Args:
+        label (str): label associated with omachine_config_operator_pod pod
+            (default: constants.MACINE_CONFIG_CONTROLLER_LABEL)
+        namespace (str): Namespace in which ceph cluster lives
+            (default: constants.OPENSHIFT_MACHINE_CONFIG_OPERATOR_NAMESPACE)
+
+    Returns:
+        Pod object: machine_config_operator_pod pod object
+    """
+    namespace = namespace or config.ENV_DATA["cluster_namespace"]
+    machine_config_operator = get_pods_having_label(label, namespace)
+    machine_config_operator_pod = Pod(**machine_config_operator[0])
+    return machine_config_operator_pod
