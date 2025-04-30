@@ -197,7 +197,6 @@ from ocs_ci.helpers.helpers import (
     setup_pod_directories,
     get_current_test_name,
     modify_deployment_replica_count,
-    modify_statefulset_replica_count,
     create_resource,
     create_network_fence_class,
     wait_for_resource_state,
@@ -9314,9 +9313,9 @@ def scale_noobaa_db_pv(request):
         constants.OCS_OPERATOR_LABEL,
         constants.OPERATOR_LABEL,
         constants.NOOBAA_OPERATOR_POD_LABEL,
-        constants.NOOBAA_DB_LABEL_47_AND_ABOVE,
+        constants.NOOBAA_DB_LABEL_419_AND_ABOVE,
     ]
-    nb_pvc = get_all_pvc_objs(selector=constants.NOOBAA_DB_LABEL_47_AND_ABOVE)[0]
+    nb_pvcs = get_all_pvc_objs(selector=constants.NOOBAA_DB_LABEL_419_AND_ABOVE)
 
     def factory(pv_size="50"):
         """
@@ -9330,18 +9329,9 @@ def scale_noobaa_db_pv(request):
             modify_deployment_replica_count(deployment_name=operator, replica_count=0)
         log.info(f"Scaled down operators: {operators}")
 
-        modify_statefulset_replica_count(
-            statefulset_name=constants.NOOBAA_DB_STATEFULSET, replica_count=0
-        )
-        log.info("Scaled down noobaa db sts")
-
-        nb_pvc.resize_pvc(new_size=pv_size)
-        log.info(f"{nb_pvc.name} is resized to {pv_size}")
-
-        modify_statefulset_replica_count(
-            statefulset_name=constants.NOOBAA_DB_STATEFULSET, replica_count=1
-        )
-        log.info("Scaled up noobaa db sts")
+        for nb_pvc in nb_pvcs:
+            nb_pvc.resize_pvc(new_size=pv_size)
+            log.info(f"{nb_pvc.name} is resized to {pv_size}")
 
         for operator in operators:
             modify_deployment_replica_count(deployment_name=operator, replica_count=1)
@@ -9362,11 +9352,6 @@ def scale_noobaa_db_pv(request):
 
     def finalizer():
         pods = []
-
-        modify_statefulset_replica_count(
-            statefulset_name=constants.NOOBAA_DB_STATEFULSET, replica_count=1
-        )
-        log.info("Scaled up noobaa db sts")
 
         for operator in operators:
             modify_deployment_replica_count(deployment_name=operator, replica_count=1)
