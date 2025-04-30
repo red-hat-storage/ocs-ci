@@ -6109,7 +6109,7 @@ def unfence_node(node_name, delete=False):
         assert (
             network_fence_obj.get(resource_name=node_name)["spec"]["fenceState"]
             != "Fenced"
-        ), f"{node_name} doesnt seem to be unfenced"
+        ), f"{node_name} is expected to be unfenced but still its fenced"
         logger.info(f"Unfenced node {node_name} successfully!")
 
         if delete:

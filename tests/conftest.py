@@ -8165,7 +8165,7 @@ def setup_logwriter_workload(request, teardown_factory):
         Args:
             pvc (PVC): PVC object
             logwriter_path (str): String representing logwriter yaml path
-            zone_aware (boolean): True if workloads are zone aware else False
+            zone_aware (bool): True if workloads are zone aware else False
 
         Returns:
             OCS object: Lgwriter deployment object
@@ -8224,8 +8224,9 @@ def setup_logreader_workload(request, teardown_factory):
             pvc (PVC): PVC object
             logreader_path (str): String representing logreader yaml path
             duration (int): Time in minutes, representing read duration
+            zone_aware (bool): True if the workloads are zone aware False otherwise
 
-        Retuns:
+        Returns:
             OCS object: Logreader job object
 
         """
@@ -8379,7 +8380,7 @@ def setup_logwriter_rbd_workload(
         Factory function to setup the logwriter rbd workloads
 
         Args:
-            zone_aware (boolean): True if the workloads are zone aware False otherwise
+            zone_aware (bool): True if the workloads are zone aware False otherwise
 
         """
         logwriter_sts_path = constants.LOGWRITER_STS_PATH
