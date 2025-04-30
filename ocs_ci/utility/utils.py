@@ -4374,6 +4374,9 @@ def wait_for_machineconfigpool_status(node_type, timeout=1900, skip_tls_verify=F
         skip_tls_verify (bool): True if allow skipping TLS verification
 
     """
+    from ocs_ci.ocs.resources import pod
+
+    searchstring = "error when evicting pods"
     log.info("Sleeping for 60 sec to start update machineconfigpool status")
     time.sleep(60)
     # importing here to avoid dependencies
@@ -4390,6 +4393,17 @@ def wait_for_machineconfigpool_status(node_type, timeout=1900, skip_tls_verify=F
             resource_name=role,
             skip_tls_verify=skip_tls_verify,
         )
+        status = ocp_obj.get()["status"]
+        if status == constants.NODE_READY_SCHEDULING_DISABLED:
+            machine_config_controller_logs = pod.get_pod_logs(
+                pod_name=pod.get_machine_config_controller_pod().name,
+                container="machine-config-controller",
+                namespace=constants.OPENSHIFT_MACHINE_CONFIG_OPERATOR_NAMESPACE,
+            )
+            for line in machine_config_controller_logs:
+                if searchstring in line:
+                    log.info(line)
+
         machine_count = ocp_obj.get()["status"]["machineCount"]
 
         assert ocp_obj.wait_for_resource(
