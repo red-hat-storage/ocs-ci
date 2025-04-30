@@ -36,6 +36,7 @@ from ocs_ci.ocs.ocp import get_images, OCP
 from ocs_ci.ocs.resources import csv, deployment
 from ocs_ci.ocs.resources.ocs import get_ocs_csv
 from ocs_ci.ocs.resources.pod import (
+    get_all_pods,
     get_pods_having_label,
     get_osd_pods,
     get_mon_pods,

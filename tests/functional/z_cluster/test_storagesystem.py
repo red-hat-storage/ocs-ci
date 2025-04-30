@@ -1,8 +1,8 @@
 import logging
-import time
 
 import pytest
 from ocs_ci.ocs import constants, ocp
+from ocs_ci.ocs.exceptions import CommandFailed
 from ocs_ci.framework import config
 from ocs_ci.framework.testlib import (
     brown_squad,
@@ -36,7 +36,7 @@ class TestStorageSystem(ManageTest):
     )
     try:
         storage_system_data = storage_system.get()
-    except CommandFailed as ex:
+    except CommandFailed:
         pass
     else:
         assert False, "Storage System found but it should not be present"
@@ -50,6 +50,6 @@ class TestStorageSystem(ManageTest):
         [
             reference
             for reference in owner_references
-            if refence["kind"] == "StorageSystem"
+            if reference["kind"] == "StorageSystem"
         ]
     )
