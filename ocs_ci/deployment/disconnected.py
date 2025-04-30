@@ -405,37 +405,37 @@ def mirror_index_image_via_oc_mirror(index_image, packages, icsp=None, idms=None
         with open(mapping_file, "w") as file:
             file.writelines(updated_lines)
 
-    mirror_images_from_mapping_file(mapping_file, idms=idms)
+        mirror_images_from_mapping_file(mapping_file, idms=idms)
 
-    # # create ImageContentSourcePolicy
-    # icsp_file = os.path.join(
-    #     f"{mirroring_manifests_dir}",
-    #     "imageContentSourcePolicy.yaml",
-    # )
+        # # create ImageContentSourcePolicy
+        # icsp_file = os.path.join(
+        #     f"{mirroring_manifests_dir}",
+        #     "imageContentSourcePolicy.yaml",
+        # )
 
-    # create ImageDigestMirrorSet
-    idms_file = os.path.join(
-        f"{mirroring_manifests_dir}",
-        "working-dir/cluster-resources/idms-oc-mirror.yaml",
-    )
+        # create ImageDigestMirrorSet
+        idms_file = os.path.join(
+            f"{mirroring_manifests_dir}",
+            "working-dir/cluster-resources/idms-oc-mirror.yaml",
+        )
 
-    # # make icsp name unique - append run_id
-    # with open(icsp_file) as f:
-    #     icsp_content = yaml.safe_load(f)
-    # icsp_content["metadata"]["name"] = f"odf-{config.RUN['run_id']}"
-    # with open(icsp_file, "w") as f:
-    #     yaml.dump(icsp_content, f)
-    # exec_cmd(f"oc apply -f {icsp_file}")
-    # wait_for_machineconfigpool_status("all")
+        # # make icsp name unique - append run_id
+        # with open(icsp_file) as f:
+        #     icsp_content = yaml.safe_load(f)
+        # icsp_content["metadata"]["name"] = f"odf-{config.RUN['run_id']}"
+        # with open(icsp_file, "w") as f:
+        #     yaml.dump(icsp_content, f)
+        # exec_cmd(f"oc apply -f {icsp_file}")
+        # wait_for_machineconfigpool_status("all")
 
-    # make idms name unique - append run_id
-    with open(idms_file) as f:
-        idms_content = yaml.safe_load(f)
-    idms_content["metadata"]["name"] = f"odf-{config.RUN['run_id']}"
-    with open(idms_file, "w") as f:
-        yaml.dump(idms_content, f)
-    exec_cmd(f"oc apply -f {idms_file}")
-    wait_for_machineconfigpool_status("all")
+        # make idms name unique - append run_id
+        with open(idms_file) as f:
+            idms_content = yaml.safe_load(f)
+        idms_content["metadata"]["name"] = f"odf-{config.RUN['run_id']}"
+        with open(idms_file, "w") as f:
+            yaml.dump(idms_content, f)
+        exec_cmd(f"oc apply -f {idms_file}")
+        wait_for_machineconfigpool_status("all")
 
     # get mirrored index image url from prepared catalogSource file
     if idms:
