@@ -73,15 +73,14 @@ class GCPIPI(GCPBase):
     A class to handle GCP IPI specific deployment
     """
 
-    # storage class for StorageCluster CRD on Google Cloud platform
-    # uses a custom storageclass, which is created prior creating
-    # StorageCluster CR during OCS installation
-    CUSTOM_STORAGE_CLASS_PATH = os.path.join(
-        TEMPLATE_DEPLOYMENT_DIR, "storageclass.gcp.yaml"
-    )
-
     OCPDeployment = IPIOCPDeployment
 
     def __init__(self):
         self.name = self.__class__.__name__
         super(GCPIPI, self).__init__()
+        # storage class for StorageCluster CRD on Google Cloud platform
+        # uses a custom storageclass, which is created prior creating
+        # StorageCluster CR during OCS installation
+        self.custom_storage_class_path = os.path.join(
+            TEMPLATE_DEPLOYMENT_DIR, "storageclass.gcp.yaml"
+        )
