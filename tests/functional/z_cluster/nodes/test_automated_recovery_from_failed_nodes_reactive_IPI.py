@@ -325,7 +325,7 @@ class TestAutomatedRecoveryFromStoppedNodes(ManageTest):
             self.extra_node = True
             log.info("Get another OSD node in the same rack or zone...")
             self.osd_worker_node = get_another_osd_node_in_same_rack_or_zone(
-                failure_domain, new_ocs_node
+                failure_domain, new_ocs_node, raise_value_error=False
             )
             assert (
                 self.osd_worker_node
