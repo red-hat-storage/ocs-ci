@@ -9,7 +9,7 @@ import pytest
 from ocs_ci.framework.pytest_customization.marks import (
     turquoise_squad,
     dr_hub_recovery,
-    tier4b,
+    tier2,
 )
 from ocs_ci.framework import config
 from ocs_ci.helpers import dr_helpers
@@ -44,7 +44,7 @@ from ocs_ci.utility.utils import TimeoutSampler, run_cmd
 logger = logging.getLogger(__name__)
 
 
-@tier4b
+@tier2
 @turquoise_squad
 @dr_hub_recovery
 @pytest.mark.order("last")
