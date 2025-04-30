@@ -106,15 +106,18 @@ class TestVmShutdownStart(E2ETest):
         worker_nodes = get_nodes(node_type="worker")
         master_nodes = get_nodes(node_type="master")
 
+        worker_node_names = [node.name for node in worker_nodes]
+        master_nodes_names = [node.name for node in master_nodes]
+
         if not force:
             logger.info("Stopping all the vms before graceful shutdown")
             for vm_obj in all_vms:
                 if vm_obj.printableStatus() != constants.CNV_VM_STOPPED:
                     vm_obj.stop(wait=True)
-            worker_node_names = [node.name for node in worker_nodes]
 
             # unschedule nodes
             unschedule_nodes(worker_node_names)
+            unschedule_nodes(master_nodes_names)
 
             # drain nodes
             drain_nodes(worker_node_names, disable_eviction=True)
