@@ -4,12 +4,15 @@ import pytest
 from ocs_ci.framework.pytest_customization.marks import magenta_squad, workloads
 from ocs_ci.framework.testlib import E2ETest
 
-from ocs_ci.helpers.cnv_helpers import cal_md5sum_vm, run_dd_io, expand_pvc_and_verify
+from ocs_ci.helpers.cnv_helpers import (
+    cal_md5sum_vm,
+    run_dd_io,
+    expand_pvc_and_verify,
+    clone_or_snapshot_vm,
+)
 from ocs_ci.helpers.helpers import create_unique_resource_name
 from ocp_resources.virtual_machine_restore import VirtualMachineRestore
 from ocp_resources.virtual_machine_snapshot import VirtualMachineSnapshot
-from ocp_resources.virtual_machine_clone import VirtualMachineClone
-from ocs_ci.ocs.cnv.virtual_machine import VirtualMachine
 
 
 log = logging.getLogger(__name__)
@@ -65,6 +68,7 @@ class TestVmSnapshotClone(E2ETest):
         pvc_expand_before_clone,
         pvc_expand_after_clone,
         multi_cnv_workload,
+        admin_client,
     ):
         """
         This test performs the VM cloning and IOs created using different
@@ -118,20 +122,14 @@ class TestVmSnapshotClone(E2ETest):
             log.info(f"Source checksum for {vm_obj.name}: {source_csum}")
             log.info(f"Cloning VM {vm_obj.name}...")
 
-            target_name = f"clone-{vm_obj.name}"
-            with VirtualMachineClone(
-                name="clone-vm-test",
-                namespace=vm_obj.namespace,
-                source_name=vm_obj.name,
-                target_name=target_name,
-            ) as vmc:
-                vmc.wait_for_status(status=VirtualMachineClone.Status.SUCCEEDED)
-            cloned_vm = VirtualMachine(vm_name=target_name, namespace=vm_obj.namespace)
-            cloned_vm.start(wait=True)
-            cloned_vm.wait_for_ssh_connectivity()
-            log.info(
-                f"Clone created successfully for VM {vm_obj.name}: " f"{cloned_vm.name}"
+            cloned_vm = clone_or_snapshot_vm(
+                "clone",
+                vm_obj,
+                admin_client=admin_client,
+                all_vms=vm_list,
+                file_path=file_paths[0],
             )
+
             new_csum = cal_md5sum_vm(vm_obj=cloned_vm, file_path=file_paths[0])
             assert source_csum == new_csum, (
                 f"Failed: MD5 comparison between source {vm_obj.name} "
