@@ -2606,7 +2606,8 @@ def get_other_worker_nodes_in_same_rack_or_zone(
     other_wnodes_in_same_rack_or_zone = [
         wnode
         for wnode in other_wnodes
-        if get_node_rack_or_zone(failure_domain, wnode) == node_rack_or_zone
+        if get_node_rack_or_zone(failure_domain, wnode, raise_value_error)
+        == node_rack_or_zone
     ]
 
     wnode_names = [n.name for n in other_wnodes_in_same_rack_or_zone]
