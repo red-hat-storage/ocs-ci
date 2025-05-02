@@ -5,7 +5,7 @@ import pytest
 
 from ocs_ci.framework import config
 from ocs_ci.framework.pytest_customization.marks import polarion_id
-from ocs_ci.framework.testlib import ManageTest, tier4b, green_squad
+from ocs_ci.framework.testlib import ManageTest, tier4b, green_squad, ignore_leftovers
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.cluster import change_ceph_full_ratio
 from ocs_ci.ocs.ocp import OCP
@@ -65,6 +65,7 @@ class TestRecoverPvcExpandFailure(ManageTest):
         # Create files on the pods and get md5sum
         for pod_obj in self.pods:
             pod_obj.run_io(
+                storage_type="fs",
                 size="4G",
                 io_direction="write",
                 runtime=60,
@@ -125,6 +126,7 @@ class TestRecoverPvcExpandFailure(ManageTest):
             )
 
     @tier4b
+    @ignore_leftovers
     @green_squad
     @polarion_id("")
     def test_recover_from_pending_pvc_expansion(self):
@@ -135,6 +137,7 @@ class TestRecoverPvcExpandFailure(ManageTest):
         # Create files on the pods and get md5sum
         for pod_obj in self.pods:
             pod_obj.run_io(
+                storage_type="fs",
                 size="4G",
                 io_direction="write",
                 runtime=60,
