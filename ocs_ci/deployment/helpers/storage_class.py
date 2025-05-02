@@ -34,10 +34,10 @@ def get_storageclass() -> str:
         "customized_deployment_storage_class"
     )
 
-    storage_class = DEFAULT_STORAGE_CLASS_MAP.get(platform)
-
     if customized_deployment_storage_class:
         storage_class = customized_deployment_storage_class
+    else:
+        storage_class = DEFAULT_STORAGE_CLASS_MAP[platform]
 
     logger.info(f"Using storage class: {storage_class}")
     return storage_class

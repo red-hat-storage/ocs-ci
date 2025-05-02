@@ -118,11 +118,10 @@ class VSPHEREBASE(Deployment):
         self.cluster_launcer_repo_path = os.path.join(
             constants.EXTERNAL_DIR, "v4-scaleup"
         )
-        if version.get_semantic_ocp_version_from_config() >= version.VERSION_4_13:
-            if config.ENV_DATA.get("use_custom_sc_in_deployment"):
-                self.custom_storage_class_path = os.path.join(
-                    constants.TEMPLATE_DEPLOYMENT_DIR, "storageclass_thin-csi-odf.yaml"
-                )
+        if config.ENV_DATA.get("use_custom_sc_in_deployment"):
+            self.custom_storage_class_path = os.path.join(
+                constants.TEMPLATE_DEPLOYMENT_DIR, "storageclass_thin-csi-odf.yaml"
+            )
         os.environ["TF_LOG"] = config.ENV_DATA.get("TF_LOG_LEVEL", "TRACE")
         os.environ["TF_LOG_PATH"] = os.path.join(
             config.ENV_DATA.get("cluster_path"), config.ENV_DATA.get("TF_LOG_FILE")
