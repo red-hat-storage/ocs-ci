@@ -4397,7 +4397,7 @@ def wait_for_machineconfigpool_status(node_type, timeout=1900, skip_tls_verify=F
             column="READYMACHINECOUNT",
             timeout=timeout,
             sleep=5,
-        ), clean_up_pods_for_provider(node_type)
+        )
 
 
 def configure_chrony_and_wait_for_machineconfig_status(
