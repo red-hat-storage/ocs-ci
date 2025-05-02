@@ -385,8 +385,10 @@ def pytest_generate_tests(metafunc):
         if roles:
             upgrade_parametrizer.config_init()
             params = upgrade_parametrizer.generate_pytest_parameters(metafunc, roles)
+            log.debug(f"upgrade params = {params}")
             for marker in metafunc.definition.iter_markers():
                 if marker.name in upgrade_parametrizer.MULTICLUSTER_UPGRADE_MARKERS:
+                    log.debug(f"Parametrizing the test: {metafunc.function.__name__}")
                     metafunc.parametrize("zone_rank, role_rank, config_index", params)
 
 
@@ -506,11 +508,21 @@ def pytest_collection_modifyitems(session, config, items):
                 )
                 and ocsci_config.multicluster
             ):
-                if getattr(item, "callspec", ""):
-                    zone_rank = item.callspec.params["zone_rank"]
-                    role_rank = item.callspec.params["role_rank"]
-                else:
+                callspec = getattr(item, "callspec", None)
+                if not callspec:
                     continue
+
+                params = callspec.params
+                if not params or not all(
+                    k in params for k in ("zone_rank", "role_rank")
+                ):
+                    continue
+
+                log.debug(f"Getting the params in the test {item.name}")
+                log.debug(f"{params['zone_rank']}, {params['role_rank']}")
+                zone_rank = params["zone_rank"]
+                role_rank = params["role_rank"]
+
                 markers_update = []
                 item_markers = copy.copy(item.own_markers)
                 if not item_markers:
@@ -541,8 +553,8 @@ def pytest_collection_modifyitems(session, config, items):
                         item.add_marker(pytest.mark.order(param))
                     else:
                         item.add_marker(mark(param))
-                log.info(f"TEST={item.name}")
-                log.info(
+                log.debug(f"TEST={item.name}")
+                log.debug(
                     f"MARKERS = {[(i.name, i.args, i.kwargs) for i in item.iter_markers()]}"
                 )
     # Update PREUPGRADE_CONFIG for each of the Config class
@@ -564,6 +576,18 @@ def pytest_collection_finish(session):
 
     """
     ocsci_config.RUN["number_of_tests"] = len(session.items)
+
+
+def pytest_runtest_protocol(item, nextitem):
+    """
+    Experimental:- earliest per-test hook that runs before any fixtures are initialized
+
+    """
+    if ocsci_config.multicluster and ocsci_config.UPGRADE.get("upgrade", False):
+        for mark in item.iter_markers():
+            if mark.name == "config_index":
+                log.info(f"Switching the test context to index: {mark.args[0]}")
+                ocsci_config.switch_ctx(mark.args[0])
 
 
 def pytest_runtest_setup(item):
