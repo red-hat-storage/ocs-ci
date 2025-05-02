@@ -5680,6 +5680,6 @@ def clean_up_pods_for_provider(
                 namespace=constants.OPENSHIFT_MACHINE_CONFIG_OPERATOR_NAMESPACE,
             )
             log.info(f"machine config logs ---- {machine_config_controller_logs}")
-            for line in machine_config_controller_logs:
+            for line in machine_config_controller_logs.split("\n"):
                 if searchstring in line:
                     log.info(f"the logs: {line}")
