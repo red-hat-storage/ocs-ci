@@ -3,7 +3,6 @@ All multicluster specific utility functions and classes can be here
 
 """
 
-from abc import ABC, abstractmethod
 import logging
 
 from ocs_ci.framework import config as ocsci_config
@@ -13,12 +12,12 @@ from ocs_ci.ocs.utils import (
     get_active_acm_index,
     get_all_acm_indexes,
 )
-from ocs_ci.ocs.constants import MDR_ROLES, RDR_ROLES
+from ocs_ci.ocs.constants import MDR_ROLES, RDR_ROLES, ACM_RANK, MANAGED_CLUSTER_RANK
 
 log = logging.getLogger(__name__)
 
 
-class MultiClusterUpgradeParametrize(ABC):
+class MultiClusterUpgradeParametrize(object):
     """
     This base class abstracts upgrade parametrization for multicluster scenarios: MDR, RDR and Managed service
 
@@ -87,14 +86,21 @@ class MultiClusterUpgradeParametrize(ABC):
                 # Only option left is secondary odf
                 self.roles_to_config_index_map["SecondaryODF"] = cluster_index
 
-    @abstractmethod
     def generate_role_ranks(self):
         """
-        Based on the multicluster scenario, child class should generate the corresponding
-        role ranks. Roles are specific to multicluster scenarios
+        Based on current roles for MDR/RDR : ActiveACM:1, PassiveACM:1, PrimaryODF:2, SecondaryODF: 2
+        In case of RDR few runs might consider only one ACM where as in MDR we might have 2 ACMs.
+        We will be adjusting the roles for RDR dynamically in the child class based on what type of run (
+        1 ACM OR 2 ACMs)the user triggers
 
         """
-        pass
+        # For now we will stick to this convention
+        self.role_ranks = {
+            "ActiveACM": ACM_RANK,
+            "PassiveACM": ACM_RANK,
+            "PrimaryODF": MANAGED_CLUSTER_RANK,
+            "SecondaryODF": MANAGED_CLUSTER_RANK,
+        }
 
     def get_zone_info(self):
         """
@@ -217,19 +223,6 @@ class MDRClusterUpgradeParametrize(MultiClusterUpgradeParametrize):
     def config_init(self):
         super().config_init()
 
-    def generate_role_ranks(self):
-        """
-        Based on current roles for MDR : ActiveACM:1, PassiveACM:1, PrimaryODF:2, SecondaryODF: 2
-
-        """
-        # For now we will stick to this convention
-        self.role_ranks = {
-            "ActiveACM": 1,
-            "PassiveACM": 1,
-            "PrimaryODF": 2,
-            "SecondaryODF": 2,
-        }
-
 
 class RDRClusterUpgradeParametrize(MultiClusterUpgradeParametrize):
     """
@@ -241,20 +234,14 @@ class RDRClusterUpgradeParametrize(MultiClusterUpgradeParametrize):
         self.dr_type = "rdr"
         super().__init__()
         self.all_roles = RDR_ROLES
+        # If the current run includes PassiveACM then we need to add
+        # it to the list as by default RDR Roles list will not have PassiveACM
+        for cluster in get_all_acm_indexes():
+            if cluster != get_active_acm_index():
+                self.all_roles.append("PassiveACM")
 
     def config_init(self):
         super().config_init()
-
-    def generate_role_ranks(self):
-        """
-        Based on the current roles for RDR : ActiveACM:1, PrimaryODF:2, SecondaryODF: 2
-
-        """
-        self.role_ranks = {
-            "ActiveACM": 1,
-            "PrimaryODF": 2,
-            "SecondaryODF": 2,
-        }
 
 
 multicluster_upgrade_parametrizer = {
