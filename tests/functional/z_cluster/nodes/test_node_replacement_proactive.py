@@ -349,11 +349,6 @@ class TestNodeReplacementTwice(ManageTest):
       2. ceph side host still on the old rack
     """
 
-    @pytest.fixture(autouse=True)
-    def teardown(self, request):
-        log.info("Clear crash warnings and osd removal leftovers")
-        clear_crash_warning_and_osd_removal_leftovers()
-
     @skipif_ibm_cloud_managed
     def test_nodereplacement_twice(self):
         for i in range(2):
