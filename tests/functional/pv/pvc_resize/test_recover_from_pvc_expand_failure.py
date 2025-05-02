@@ -8,6 +8,7 @@ from ocs_ci.framework.pytest_customization.marks import polarion_id
 from ocs_ci.framework.testlib import ManageTest, tier4b, green_squad, ignore_leftovers
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.cluster import change_ceph_full_ratio
+from ocs_ci.ocs.exceptions import TimeoutExpiredError
 from ocs_ci.ocs.ocp import OCP
 from ocs_ci.ocs.resources.pod import verify_data_integrity, cal_md5sum
 from ocs_ci.utility.utils import TimeoutSampler
@@ -172,11 +173,16 @@ class TestRecoverPvcExpandFailure(ManageTest):
             logger.info(
                 f"Expanding size of PVC {pvc_obj.name} to {pvc_size_expanded}Gi"
             )
-            assert not pvc_obj.resize_pvc(
-                pvc_size_expanded, True, timeout=60
-            ), f"Unexpected: Expansion of PVC '{pvc_obj.name}' completed"
-            logger.info(pvc_obj.describe())
-        logger.info(f"All PVCs failed to expanded to the size {pvc_size_expanded}Gi")
+            try:
+                assert not pvc_obj.resize_pvc(
+                    pvc_size_expanded, True, timeout=60
+                ), f"Unexpected: Expansion of PVC '{pvc_obj.name}' completed"
+                logger.info(pvc_obj.describe())
+            except TimeoutExpiredError:
+                logger.info(
+                    f"Expected: Expansion of PVC {pvc_obj.name} did not complete"
+                )
+        logger.info(f"Expected: PVCs did not expand to the size {pvc_size_expanded}Gi")
 
         for pvc_obj in self.pvcs:
             logger.info(
