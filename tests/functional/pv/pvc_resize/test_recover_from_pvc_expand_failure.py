@@ -9,7 +9,7 @@ from ocs_ci.framework.testlib import ManageTest, tier4b, green_squad, ignore_lef
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.cluster import change_ceph_full_ratio
 from ocs_ci.ocs.ocp import OCP
-from ocs_ci.ocs.resources.pod import verify_data_integrity
+from ocs_ci.ocs.resources.pod import verify_data_integrity, cal_md5sum
 from ocs_ci.utility.utils import TimeoutSampler
 
 logger = logging.getLogger(__name__)
@@ -71,7 +71,7 @@ class TestRecoverPvcExpandFailure(ManageTest):
                 runtime=60,
                 fio_filename=pod_obj.name,
             )
-            pod_obj.orig_md5_sum = pod_obj.cal_md5sum(pod_obj, pod_obj.name)
+            pod_obj.orig_md5_sum = cal_md5sum(pod_obj=pod_obj, file_name=pod_obj.name)
 
         target_percentage = 85
         logger.info(
@@ -143,7 +143,7 @@ class TestRecoverPvcExpandFailure(ManageTest):
                 runtime=60,
                 fio_filename=f"{pod_obj.name}",
             )
-            pod_obj.orig_md5_sum = pod_obj.cal_md5sum(pod_obj, pod_obj.name)
+            pod_obj.orig_md5_sum = cal_md5sum(pod_obj=pod_obj, file_name=pod_obj.name)
 
         # Scale down rbd and cephfs provisioner pod. To do this scale down operator deployments first
         logger.info(
