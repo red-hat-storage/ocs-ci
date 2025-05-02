@@ -5667,6 +5667,8 @@ def clean_up_pods_for_provider(
         etcd-0
     """
     from ocs_ci.ocs.node import get_nodes
+    from ocs_ci.ocs.ocp import OCP
+
     from ocs_ci.ocs.resources import pod
 
     searchstring = "error when evicting pods"
@@ -5679,7 +5681,11 @@ def clean_up_pods_for_provider(
                 container="machine-config-controller",
                 namespace=constants.OPENSHIFT_MACHINE_CONFIG_OPERATOR_NAMESPACE,
             )
-            log.info(f"machine config logs ---- {machine_config_controller_logs}")
             for line in machine_config_controller_logs.split("\n"):
                 if searchstring in line:
                     log.info(f"the logs: {line}")
+                    pod = line.split('pods/"')[1].split('"')[0]
+                    ns = line.split('-n "')[1].split('"')[0]
+                    pod_obj = OCP(kind=constants.POD, namespace=ns, resource_name=pod)
+                    cmd = f"delete pod {pod} -n {ns} --force"
+                    pod_obj.exec_oc_cmd(command=cmd)
