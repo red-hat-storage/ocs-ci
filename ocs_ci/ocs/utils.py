@@ -2147,13 +2147,8 @@ def get_expected_nb_db_psql_version():
         )
 
     try:
-        odf_full_version = version.get_semantic_running_odf_version()
-        # we need to support the version for Konflux builds as well
-        version_for_konflux_noobaa_db_pg_cluster = "4.19.0-15"
-        semantic_version_for_konflux_noobaa_db_pg_cluster = (
-            version.get_semantic_version(version_for_konflux_noobaa_db_pg_cluster)
-        )
-        if odf_full_version >= semantic_version_for_konflux_noobaa_db_pg_cluster:
+        odf_running_version = version.get_ocs_version_from_csv(only_major_minor=True)
+        if odf_running_version >= version.VERSION_4_19:
             psql_image = nb_cr_obj.data["spec"]["dbSpec"]["image"]
         else:
             psql_image = nb_cr_obj.data["spec"]["dbImage"]
