@@ -18,6 +18,10 @@ from ocs_ci.helpers.helpers import (
 )
 from ocs_ci.framework import config
 from ocs_ci.utility.retry import retry
+from ocp_resources.virtual_machine_clone import VirtualMachineClone
+from ocs_ci.ocs.cnv import virtual_machine
+from ocp_resources.virtual_machine_restore import VirtualMachineRestore
+from ocp_resources.virtual_machine_snapshot import VirtualMachineSnapshot
 
 logger = logging.getLogger(__name__)
 
