@@ -3425,6 +3425,8 @@ MACHINE_POOL_ACTIONS = [CREATE, EDIT, DELETE]
 # MDR multicluster roles
 MDR_ROLES = ["ActiveACM", "PassiveACM", "PrimaryODF", "SecondaryODF"]
 RDR_ROLES = ["ActiveACM", "PrimaryODF", "SecondaryODF"]
+ACM_RANK = 1
+MANAGED_CLUSTER_RANK = 2
 
 ENCRYPTION_DASHBOARD_CONTEXT_MAP = {
     "Cluster-wide encryption": "cluster_wide_encryption",
