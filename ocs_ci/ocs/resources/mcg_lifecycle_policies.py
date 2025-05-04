@@ -27,6 +27,13 @@ class LifecyclePolicy:
                 raise TypeError(f"Rule {rule} is not of type LifecycleRule")
 
     def as_dict(self):
+        """
+        Returns the lifecycle policy as a dictionary that matches
+        the expected S3 lifecycle policy JSON format.
+
+        Note that the objects in self.rules are expected to have their own
+        as_dict() implementation.
+        """
         return {"Rules": [rule.as_dict() for rule in self.rules]}
 
     def __str__(self):
@@ -62,6 +69,10 @@ class LifecycleFilter:
         self.maxBytes = maxBytes
 
     def as_dict(self):
+        """
+        Returns the rule as a dictionary that matches
+        the expected S3 lifecycle policy JSON format
+        """
         list_of_tag_dicts = []
 
         # Initially add any criteria under the "And" key
@@ -123,6 +134,10 @@ class LifecycleRule(ABC):
         self._id = f"rule-{uuid.uuid4().hex[:8]}"
 
     def as_dict(self):
+        """
+        Returns the rule as a dictionary that matches
+        the expected S3 lifecycle policy JSON format
+        """
         rule_dict = {
             "Filter": self.filter.as_dict(),
             "ID": self._id,
@@ -182,6 +197,10 @@ class ExpirationRule(LifecycleRule):
         self.expired_object_delete_marker = expired_object_delete_marker
 
     def as_dict(self):
+        """
+        Returns the rule as a dictionary that matches
+        the expected S3 lifecycle policy JSON format
+        """
         rule_dict = super().as_dict()
 
         d = {}
@@ -222,11 +241,16 @@ class AbortIncompleteMultipartUploadRule(LifecycleRule):
         Args:
             days_after_initiation (int): Number of days after which the multipart upload will be aborted
             filter (LifecycleFilter): Optional object filter
+            is_enabled (bool): Whether the rule is enabled or not
         """
         super().__init__(filter=filter, is_enabled=is_enabled)
         self.days_after_initiation = days_after_initiation
 
     def as_dict(self):
+        """
+        Returns the rule as a dictionary that matches
+        the expected S3 lifecycle policy JSON format
+        """
         rule_dict = super().as_dict()
         rule_dict["AbortIncompleteMultipartUpload"] = {
             "DaysAfterInitiation": self.days_after_initiation
@@ -264,6 +288,10 @@ class NoncurrentVersionExpirationRule(LifecycleRule):
             )
 
     def as_dict(self):
+        """
+        Returns the rule as a dictionary that matches
+        the expected S3 lifecycle policy JSON format
+        """
         rule_dict = super().as_dict()
 
         d = {}

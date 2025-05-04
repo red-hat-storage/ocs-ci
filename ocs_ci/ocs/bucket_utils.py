@@ -2439,7 +2439,7 @@ def expire_objects_in_bucket(bucket_name, object_keys=[], prefix=""):
     )
 
 
-def expire_multipart_upload(upload_id):
+def expire_multipart_upload_in_noobaa_db(upload_id):
     """
     Expire a multipart upload by changing its creation date to one year back.
 

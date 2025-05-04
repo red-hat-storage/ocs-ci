@@ -17,7 +17,7 @@ from ocs_ci.ocs import constants
 from ocs_ci.ocs.bucket_utils import (
     change_versions_creation_date_in_noobaa_db,
     create_multipart_upload,
-    expire_multipart_upload,
+    expire_multipart_upload_in_noobaa_db,
     get_obj_versions,
     list_multipart_upload,
     list_objects_from_bucket,
@@ -126,7 +126,7 @@ class TestLifecycleConfiguration(MCGTest):
         )
 
         # 5. Manually expire the parts and the multipart-upload
-        expire_multipart_upload(upload_id)
+        expire_multipart_upload_in_noobaa_db(upload_id)
 
         # 6. Wait for the parts and multipart-upload to expire
         for http_response in TimeoutSampler(
