@@ -647,7 +647,6 @@ def _switch_context_helper(request):
                 if hasattr(
                     request.node, "callspec"
                 ) and request.node.callspec.params.get("cluster_index"):
-                    print("request.node.callspec.params.get(cluster_index)")
 
                     context = request.node.callspec.params.get("cluster_index")
                     log.info(f"Switching the fixture context to index: {context}")
