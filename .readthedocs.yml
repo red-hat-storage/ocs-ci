@@ -13,6 +13,10 @@ build:
   apt_packages:
     - libcurl4-openssl-dev
     - libssl-dev
+  jobs:
+    pre_build:
+      # Force specific versions before the build begins
+      - pip install pip==23.3.1 setuptools==68.2.2
 
 # Python requirements
 python:
