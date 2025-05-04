@@ -14,9 +14,13 @@ build:
     - libcurl4-openssl-dev
     - libssl-dev
   jobs:
-    pre_build:
-      # Force specific versions before the build begins
-      - pip install pip==23.3.1 setuptools==68.2.2
+    post_create_environment:
+      # Explicitly disable pip version checking to avoid warnings
+      - pip config set global.disable-pip-version-check true
+    post_install:
+      # After everything is installed, check what versions we're actually using
+      - pip freeze > pip_freeze_output.txt
+      - cat pip_freeze_output.txt
 
 # Python requirements
 python:
