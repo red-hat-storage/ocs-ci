@@ -19,13 +19,6 @@ build:
     - libcurl4-openssl-dev
     - libssl-dev
 
-  jobs:
-    pre_create_environment:
-      - pip install -U pip
-      - pip install setuptools==68.2.2
-      - pip install pip==23.3.1
-      - pip install pytest-jira==0.3.21
-
 # Build documentation in the docs/ directory with Sphinx
 sphinx:
    configuration: docs/conf.py
