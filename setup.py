@@ -15,6 +15,8 @@ setup(
     author_email="ocs-ci@redhat.com",
     license="MIT",
     python_requires=">=3.9.18",
+    setup_requires=["pbr"],
+    pbr=False,
     install_requires=[
         "apache-libcloud==3.1.0",
         "docopt==0.6.2",
