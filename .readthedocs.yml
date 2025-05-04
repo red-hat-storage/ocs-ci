@@ -1,34 +1,25 @@
 ---
-# .readthedocs.yaml
-# Read the Docs configuration file
-# See https://docs.readthedocs.io/en/stable/config-file/v2.html for details
-
-# Required
 version: 2
 
-# Set the version of Python and other tools you might need
+# Set the OS and Python version
 build:
   os: ubuntu-22.04
   tools:
-    python: "3.9"
-    # You can also specify other tool versions:
-    # nodejs: "19"
-    # rust: "1.64"
-    # golang: "1.19"
+    python: "3.9"  # Match your setup.py requirement: ">=3.9.18"
   apt_packages:
     - libcurl4-openssl-dev
     - libssl-dev
 
-# Build documentation in the docs/ directory with Sphinx
+# Build documentation with Sphinx
 sphinx:
-   configuration: docs/conf.py
-
-# Optionally declare the Python requirements required to build your docs
-python:
-   install:
-   - requirements: requirements-docs.txt
+  configuration: docs/conf.py
 
 # Environment variables
 env:
   PIP_DISABLE_PIP_VERSION_CHECK: "1"
   READTHEDOCS_PIP_DISABLE_PIP_UPGRADE: "1"
+
+# Python configuration
+python:
+  install:
+    - requirements: requirements-docs.txt
