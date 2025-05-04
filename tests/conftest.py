@@ -612,7 +612,6 @@ def _switch_context_helper(request):
                 if hasattr(
                     request.node, "callspec"
                 ) and request.node.callspec.params.get("cluster_index"):
-                    print("request.node.callspec.params.get(cluster_index)")
 
                     context = request.node.callspec.params.get("cluster_index")
                     log.info(f"Switching the fixture context to index: {context}")
@@ -1956,12 +1955,29 @@ def health_checker(request, tier_marks_name, upgrade_marks_name):
             log.info("Checking for Ceph Health OK ")
             external_multi_storagecluster_status = False
             try:
-                status = ceph_health_check(
-                    namespace=ocsci_config.ENV_DATA["cluster_namespace"],
-                    tries=10,
-                    delay=15,
-                    fix_ceph_health=True,
+                managed_or_hcp_platform = (
+                    ocsci_config.multicluster
+                    and ocsci_config.ENV_DATA.get("platform", "").lower()
+                    in constants.HCI_PC_OR_MS_PLATFORM
+                    and ocsci_config.ENV_DATA.get("cluster_type", "").lower()
+                    in [constants.MS_CONSUMER_TYPE, constants.HCI_CLIENT]
                 )
+
+                if managed_or_hcp_platform:
+                    with ocsci_config.RunWithProviderConfigContextIfAvailable():
+                        status = ceph_health_check(
+                            namespace=ocsci_config.ENV_DATA["cluster_namespace"],
+                            tries=10,
+                            delay=15,
+                            fix_ceph_health=True,
+                        )
+                else:
+                    status = ceph_health_check(
+                        namespace=ocsci_config.ENV_DATA["cluster_namespace"],
+                        tries=10,
+                        delay=15,
+                        fix_ceph_health=True,
+                    )
                 if not ocsci_config.DEPLOYMENT.get("multi_storagecluster"):
                     if status:
                         log.info("Ceph health check passed at setup")
@@ -9615,10 +9631,10 @@ def admin_client():
 def cluster_index():
     """
     This is a workaround fixture for running with mark run_on_all_clients.
-    When run_on_all_clients marker is used, there needs to be added cluster_index
+    When run_on_all_clients<any> marker is used, there needs to be added cluster_index
     parameter to the test to prevent any issues with the test parametrization.
     Having this dummy fixture prevents failure when we assign cluster_index via marker.
 
-    Returns: 1 , this value is overwritten by the pytest.mark.parametrize
+    Returns: 1 , this value is overwritten by the pytest.mark.parametrize in def setup_multicluster_marker
     """
     return 1

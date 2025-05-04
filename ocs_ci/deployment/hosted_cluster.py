@@ -64,7 +64,7 @@ logger = logging.getLogger(__name__)
 
 def skip_if_not_hcp_provider(func):
     """
-    Decorator to skip the test if deployment is not Hosted Control Plane provider
+    Decorator to skip the function execution if deployment is not Hosted Control Plane provider
 
     Returns:
         function: wrapped function
@@ -1740,7 +1740,7 @@ def hypershift_cluster_factory(
     hosted_clients_obj = HostedClients()
     logger.info(f"hypershift_cluster_factory duty is '{duty}'")
 
-    # this section 1. is to gather and remove if configurations and execute deployment due to the duty
+    # this section 1. is to gather and remove configurations and execute deployment due to the duty
     if duty == "create_hosted_cluster_push_config":
         hosted_cluster_conf_on_provider = {"ENV_DATA": {"clusters": {}}}
         for cluster_name in cluster_names:
