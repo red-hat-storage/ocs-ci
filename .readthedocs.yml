@@ -18,6 +18,9 @@ build:
   apt_packages:
     - libcurl4-openssl-dev
     - libssl-dev
+  jobs:
+    pre_install:
+      - pip install setuptools==68.2.2
 
 # Build documentation in the docs/ directory with Sphinx
 sphinx:
