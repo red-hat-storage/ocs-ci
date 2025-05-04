@@ -170,6 +170,16 @@ class PackageManifest(OCP):
             config.ENV_DATA["platform"] == constants.IBMCLOUD_PLATFORM
             and config.ENV_DATA["deployment_type"] == "managed"
         )
+        managed_or_hcp_platform = (
+            config.multicluster
+            and config.ENV_DATA.get("platform", "").lower()
+            in constants.HCI_PC_OR_MS_PLATFORM
+            and config.ENV_DATA.get("cluster_type", "").lower()
+            in [constants.MS_CONSUMER_TYPE, constants.HCI_CLIENT]
+        )
+        if managed_or_hcp_platform:
+            csv_pattern = constants.OCS_CLIENT_OPERATOR
+
         if self.subscription_plan_approval == "Manual" or managed_ibmcloud:
             try:
                 return self.get_installed_csv_from_install_plans(
@@ -186,6 +196,7 @@ class PackageManifest(OCP):
                     "No CSV found from any installPlan, continue to get the CSV"
                     " name from the packageManifest"
                 )
+
         for _channel in channels:
             if _channel["name"] == channel:
                 return _channel["currentCSV"]

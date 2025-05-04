@@ -2194,10 +2194,28 @@ def get_csi_versions():
     # importing here to avoid circular imports
     from ocs_ci.ocs.ocp import OCP
 
-    for provisioner in [
-        constants.CSI_CEPHFSPLUGIN_PROVISIONER_LABEL,
-        constants.CSI_RBDPLUGIN_PROVISIONER_LABEL,
-    ]:
+    hci_platform_conf = (
+        config.ENV_DATA["platform"].lower() in constants.HCI_PROVIDER_CLIENT_PLATFORMS
+    )
+    # csi provisioner pods were renamed starting from 4.18 for Provider mode and 4.19 for every mode (Converged mode)
+    if (
+        version_module.get_semantic_ocs_version_from_config()
+        >= version_module.VERSION_4_18
+        and hci_platform_conf
+        or version_module.get_semantic_ocs_version_from_config()
+        >= version_module.VERSION_4_19
+    ):
+        provisioner_list = [
+            constants.CSI_CEPHFSPLUGIN_PROVISIONER_LABEL_419,
+            constants.CSI_RBDPLUGIN_PROVISIONER_LABEL_419,
+        ]
+    else:
+        provisioner_list = [
+            constants.CSI_CEPHFSPLUGIN_PROVISIONER_LABEL,
+            constants.CSI_RBDPLUGIN_PROVISIONER_LABEL,
+        ]
+
+    for provisioner in provisioner_list:
         ocp_pod_obj = OCP(
             kind=constants.POD,
             namespace=config.ENV_DATA["cluster_namespace"],
