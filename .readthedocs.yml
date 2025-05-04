@@ -18,6 +18,9 @@ build:
   apt_packages:
     - libcurl4-openssl-dev
     - libssl-dev
+  environment:
+    PIP_DISABLE_PIP_VERSION_CHECK: "1"
+    READTHEDOCS_PIP_DISABLE_PIP_UPGRADE: "1"
 
 # Build documentation in the docs/ directory with Sphinx
 sphinx:
