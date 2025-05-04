@@ -98,7 +98,7 @@ setup(
         "urllib3==1.26.19",
         "psycopg2-binary==2.9.9",
         "azure-keyvault-secrets==4.8.0",
-        "pytest-jira==0.3.21",
+        "pytest-jira==0.3.22",
         "certbot==3.0.0",
         "certbot-dns-route53==3.0.0",
         "openshift-python-wrapper==11.0.45",
