@@ -480,7 +480,20 @@ def gather_version_info_for_report(config):
 
         # add ceph version
         if not ocsci_config.ENV_DATA["mcg_only_deployment"]:
-            ceph_version = get_ceph_version()
+
+            managed_or_hcp_platform = (
+                ocsci_config.multicluster
+                and ocsci_config.ENV_DATA.get("platform", "").lower()
+                in constants.HCI_PC_OR_MS_PLATFORM
+                and ocsci_config.ENV_DATA.get("cluster_type", "").lower()
+                in [constants.MS_CONSUMER_TYPE, constants.HCI_CLIENT]
+            )
+            # provide ceph details of ceph cluster for client clusters. client clusters do not have ceph pods
+            if managed_or_hcp_platform:
+                with ocsci_config.RunWithProviderConfigContextIfAvailable():
+                    ceph_version = get_ceph_version()
+            else:
+                ceph_version = get_ceph_version()
             config._metadata["Ceph Version"] = ceph_version
 
             # add csi versions
