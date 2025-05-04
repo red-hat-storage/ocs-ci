@@ -221,8 +221,21 @@ def get_version_info(namespace=None):
 
     operator_selector = get_selector_for_ocs_operator()
     subscription_plan_approval = config.DEPLOYMENT.get("subscription_plan_approval")
+
+    managed_or_hcp_platform = (
+        config.multicluster
+        and config.ENV_DATA.get("platform", "").lower()
+        in constants.HCI_PC_OR_MS_PLATFORM
+        and config.ENV_DATA.get("cluster_type", "").lower()
+        in [constants.MS_CONSUMER_TYPE, constants.HCI_CLIENT]
+    )
+    if managed_or_hcp_platform:
+        ocs_operator_name = constants.OCS_CLIENT_OPERATOR
+    else:
+        ocs_operator_name = defaults.OCS_OPERATOR_NAME
+
     package_manifest = PackageManifest(
-        resource_name=defaults.OCS_OPERATOR_NAME,
+        resource_name=ocs_operator_name,
         selector=operator_selector,
         subscription_plan_approval=subscription_plan_approval,
     )

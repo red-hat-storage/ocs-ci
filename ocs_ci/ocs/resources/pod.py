@@ -899,12 +899,12 @@ def get_ceph_tools_pod(
                 )
                 ct_pod_items = ocp_pod_obj.data["items"]
 
-            if not ct_pod_items:
-                raise CephToolBoxNotFoundException
+        if not ct_pod_items:
+            raise CephToolBoxNotFoundException
 
-            if not get_running_pods:
-                # Return the ceph tool pod objects even if they are not running
-                return ct_pod_items
+        if not get_running_pods:
+            # Return the ceph tool pod objects even if they are not running
+            return ct_pod_items
 
             # In the case of node failure, the CT pod will be recreated with the old
             # one in status Terminated. Therefore, need to filter out the Terminated pod
