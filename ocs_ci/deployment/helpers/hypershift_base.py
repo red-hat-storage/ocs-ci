@@ -38,7 +38,6 @@ Main tasks include:
 
 
 logger = logging.getLogger(__name__)
-BaseOCPDeployment(skip_download_installer=True).test_cluster()
 
 
 @retry((CommandFailed, TimeoutError), tries=3, delay=5, backoff=1)
@@ -373,6 +372,8 @@ class HyperShiftBase:
 
     def __init__(self):
         super().__init__()
+        BaseOCPDeployment(skip_download_installer=True).test_cluster()
+
         bin_dir_rel_path = os.path.expanduser(config.RUN["bin_dir"])
         self.bin_dir = os.path.abspath(bin_dir_rel_path)
         self.hcp_binary_path = os.path.join(self.bin_dir, "hcp")
