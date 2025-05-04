@@ -23,14 +23,12 @@ build:
 sphinx:
    configuration: docs/conf.py
 
-# If using Sphinx, optionally build your docs in additional formats such as PDF
-# formats: all
-
-env:
-  PIP_DISABLE_PIP_VERSION_CHECK: "1"
-  READTHEDOCS_PIP_DISABLE_PIP_UPGRADE: "1"
-
 # Optionally declare the Python requirements required to build your docs
 python:
    install:
    - requirements: requirements-docs.txt
+
+# Environment variables
+env:
+  PIP_DISABLE_PIP_VERSION_CHECK: "1"
+  READTHEDOCS_PIP_DISABLE_PIP_UPGRADE: "1"
