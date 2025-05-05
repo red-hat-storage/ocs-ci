@@ -1,7 +1,6 @@
 import logging
 import time
 import pytest
-import re
 
 from ocs_ci.ocs.constants import MANAGED_SERVICE_PLATFORMS
 from ocs_ci.ocs.resources.storage_cluster import verify_storage_cluster
@@ -85,50 +84,35 @@ class TestRookCephLogRotate(ManageTest):
 
     def verify_new_log_created(self, pod_type):
         """
-        Verify new log created on /var/log/ceph
+        Verify if log rotation has occurred.
 
         Args:
             pod_type (str): The type of pod [osd/mon/mgr/rgw/mds]
 
         Returns:
-            bool: True if a new log created, otherwise False
-
+            bool: True if inode changed (rotation happened), else False
         """
         pod_obj = self.get_pod_obj_based_on_id(pod_type)
-        output_cmd = pod_obj.exec_cmd_on_pod(command="ls -lh /var/log/ceph")
         expected_string = (
             self.podtype_id[pod_type][2]
             if pod_type == "rgw"
             else f"{self.podtype_id[pod_type][2]}{self.podtype_id[pod_type][1]}"
         )
-        cnt_logs = len(re.findall(expected_string, output_cmd))
-        if cnt_logs != int(self.podtype_id[pod_type][3]) + 1:
-            log.info(output_cmd)
-            log.error(
-                f"pod_type:{pod_type} cnt_logs_before_fill_log:"
-                f"{self.podtype_id[pod_type][3]} cnt_logs_after_fill_log:{cnt_logs}"
-            )
-            # Write additional data in chunks if verification failed
-            log.info(
-                f"Writing additional 560MB data to {expected_string}.log in chunks"
-            )
-            chunk_size = 50  # 50MB chunks
-            total_size = 560
 
-            for offset in range(0, total_size, chunk_size):
-                current_chunk = min(chunk_size, total_size - offset)
-                log_file = f"/var/log/ceph/{expected_string}.log"
-                cmd = (
-                    f"dd if=/dev/urandom of={log_file} bs=1M "
-                    f"count={current_chunk} seek={offset} conv=notrunc"
-                )
-                pod_obj.exec_cmd_on_pod(
-                    command=cmd,
-                    out_yaml_format=False,
-                    container_name="log-collector",
-                )
+        try:
+            cmd_output = pod_obj.exec_cmd_on_pod(
+                command=f"stat -c %i /var/log/ceph/{expected_string}.log",
+                out_yaml_format=False,
+                container_name="log-collector",
+            ).strip()
+            inode_now = int(cmd_output)
+        except (ValueError, TypeError) as e:
+            log.error(f"Failed to get inode for {pod_type}: {e}")
+            log.error(f"Command output: {cmd_output}")
             return False
-        return True
+
+        # stored at index 3 during setup
+        return inode_now != self.podtype_id[pod_type][3]
 
     def test_rook_ceph_log_rotate(self):
         """
@@ -179,15 +163,28 @@ class TestRookCephLogRotate(ManageTest):
 
         for pod_type in self.podtype_id:
             pod_obj = self.get_pod_obj_based_on_id(pod_type)
-            output_cmd = pod_obj.exec_cmd_on_pod(command="ls -l /var/log/ceph")
             expected_string = (
                 self.podtype_id[pod_type][2]
                 if pod_type == "rgw"
                 else f"{self.podtype_id[pod_type][2]}{self.podtype_id[pod_type][1]}"
             )
-            self.podtype_id[pod_type].append(
-                len(re.findall(expected_string, output_cmd))
-            )
+
+            # Get the initial inode of the active log file
+            try:
+                cmd_output = pod_obj.exec_cmd_on_pod(
+                    command=f"stat -c %i /var/log/ceph/{expected_string}.log",
+                    out_yaml_format=False,
+                    container_name="log-collector",
+                ).strip()
+                initial_inode = int(cmd_output)
+            except (ValueError, TypeError) as e:
+                log.error(f"Failed to get initial inode for {pod_type}: {e}")
+                log.error(f"Command output: {cmd_output}")
+                initial_inode = -1  # Use sentinel value to indicate error
+
+            # Store the initial inode
+            self.podtype_id[pod_type].append(initial_inode)
+
         storagecluster_obj = OCP(
             resource_name=constants.DEFAULT_CLUSTERNAME,
             namespace=config.ENV_DATA["cluster_namespace"],
