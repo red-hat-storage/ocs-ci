@@ -5704,4 +5704,3 @@ def clean_up_pods_for_provider(
                     pod_obj = OCP(kind=constants.POD, namespace=ns, resource_name=pod)
                     cmd = f"delete pod {pod} -n {ns} --force"
                     pod_obj.exec_oc_cmd(command=cmd)
-                    continue
