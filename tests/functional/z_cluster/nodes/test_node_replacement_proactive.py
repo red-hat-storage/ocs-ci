@@ -349,7 +349,6 @@ class TestNodeReplacementTwice(ManageTest):
       2. ceph side host still on the old rack
     """
 
-    @skipif_ibm_cloud_managed
     def test_nodereplacement_twice(self):
         for i in range(2):
             # Get random node name for replacement
