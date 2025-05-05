@@ -84,13 +84,13 @@ class TestRookCephLogRotate(ManageTest):
 
     def verify_new_log_created(self, pod_type):
         """
-        Rotation succeeded when the inode of <daemon>.log changes.
+        Verify if log rotation has occurred.
 
         Args:
             pod_type (str): The type of pod [osd/mon/mgr/rgw/mds]
 
         Returns:
-            bool: True if log rotation occurred (inode changed), otherwise False
+            bool: True if inode changed (rotation happened), else False
         """
         pod_obj = self.get_pod_obj_based_on_id(pod_type)
         expected_string = (
@@ -98,13 +98,19 @@ class TestRookCephLogRotate(ManageTest):
             if pod_type == "rgw"
             else f"{self.podtype_id[pod_type][2]}{self.podtype_id[pod_type][1]}"
         )
-        inode_now = int(
-            pod_obj.exec_cmd_on_pod(
+
+        try:
+            cmd_output = pod_obj.exec_cmd_on_pod(
                 command=f"stat -c %i /var/log/ceph/{expected_string}.log",
                 out_yaml_format=False,
                 container_name="log-collector",
             ).strip()
-        )
+            inode_now = int(cmd_output)
+        except (ValueError, TypeError) as e:
+            log.error(f"Failed to get inode for {pod_type}: {e}")
+            log.error(f"Command output: {cmd_output}")
+            return False
+
         # stored at index 3 during setup
         return inode_now != self.podtype_id[pod_type][3]
 
@@ -162,15 +168,22 @@ class TestRookCephLogRotate(ManageTest):
                 if pod_type == "rgw"
                 else f"{self.podtype_id[pod_type][2]}{self.podtype_id[pod_type][1]}"
             )
-            # new check: remember the inode of the *active* log file
-            inode = int(
-                pod_obj.exec_cmd_on_pod(
+
+            # Get the initial inode of the active log file
+            try:
+                cmd_output = pod_obj.exec_cmd_on_pod(
                     command=f"stat -c %i /var/log/ceph/{expected_string}.log",
                     out_yaml_format=False,
                     container_name="log-collector",
                 ).strip()
-            )
-            self.podtype_id[pod_type].append(inode)
+                initial_inode = int(cmd_output)
+            except (ValueError, TypeError) as e:
+                log.error(f"Failed to get initial inode for {pod_type}: {e}")
+                log.error(f"Command output: {cmd_output}")
+                initial_inode = -1  # Use sentinel value to indicate error
+
+            # Store the initial inode
+            self.podtype_id[pod_type].append(initial_inode)
 
         storagecluster_obj = OCP(
             resource_name=constants.DEFAULT_CLUSTERNAME,
