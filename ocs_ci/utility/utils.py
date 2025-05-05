@@ -4401,7 +4401,7 @@ def wait_for_machineconfigpool_status(
                 timeout=timeout,
                 sleep=5,
             ):
-                clean_up_pods_for_provider(node_type="master")
+                clean_up_pods_for_provider(node_type=role)
                 time.sleep(5)
         else:
             assert ocp_obj.wait_for_resource(
@@ -5680,6 +5680,7 @@ def clean_up_pods_for_provider(
 
     Args:
         node_type (str): type of nodes for which the pods to be cleaned up
+
     """
     from ocs_ci.ocs.node import get_nodes
     from ocs_ci.ocs.ocp import OCP
