@@ -51,7 +51,6 @@ from ocs_ci.utility.utils import (
     get_trim_mean,
     ceph_health_check,
 )
-from ocs_ci.utility.version import get_semantic_running_odf_version
 from ocs_ci.ocs.node import get_node_ip_addresses, wait_for_nodes_status
 from ocs_ci.ocs.utils import get_pod_name_by_pattern
 from ocs_ci.framework import config
@@ -1296,7 +1295,6 @@ def validate_pdb_creation():
         kind="PodDisruptionBudget", namespace=config.ENV_DATA["cluster_namespace"]
     )
     item_list = pdb_obj.get().get("items")
-    odf_version = get_semantic_running_odf_version()
 
     pdb_count = constants.PDB_COUNT_2_MGR
     pdb_required = [
@@ -1307,15 +1305,7 @@ def validate_pdb_creation():
     ]
 
     # 4.19.0-59 is the stable build which doesn't contain the updated PDB count for Noobaa DB
-    version_without_noobaa_db_pg_pdb = "4.19.0-59"
-    semantic_version_for_without_noobaa_db_pg_pdb = version.get_semantic_version(
-        version_without_noobaa_db_pg_pdb
-    )
-    # we need to support the version for Konflux builds as well
-    version_for_konflux_noobaa_db_pg_pdb = "4.19.0-15"
-    semantic_version_for_konflux_noobaa_db_pg_pdb = version.get_semantic_version(
-        version_for_konflux_noobaa_db_pg_pdb
-    )
+    odf_running_version = version.get_ocs_version_from_csv(only_major_minor=True)
 
     if config.DEPLOYMENT.get("arbiter_deployment"):
         pdb_count = constants.PDB_COUNT_ARBITER
@@ -1329,11 +1319,11 @@ def validate_pdb_creation():
             pdb_count = constants.PDB_COUNT_ARBITER_VSPHERE
             pdb_required.append(constants.RGW_PDB)
 
-    if odf_version == semantic_version_for_without_noobaa_db_pg_pdb:
-        logger.info(f"Required PDB count is {pdb_count}")
-    elif odf_version >= semantic_version_for_konflux_noobaa_db_pg_pdb:
+    if odf_running_version >= version.VERSION_4_19:
         pdb_count += 1
         pdb_required.append(constants.NOOBAA_DB_PG_PDB)
+    else:
+        logger.info(f"Required PDB count is {pdb_count}")
 
     if len(item_list) != pdb_count:
         raise PDBNotCreatedException(
