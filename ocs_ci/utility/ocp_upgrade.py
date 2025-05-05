@@ -29,6 +29,7 @@ def resume_machinehealthcheck(wait_for_mcp_complete=False, force_delete_pods=Fal
     Arg:
         wait_for_mcp_complete(bool): If True run wait_for_machineconfigpool_status()
         force_delete_pods (bool): if True delete pods stuck at terminating forcefully
+
     """
     ocp = OCP(
         kind=constants.MACHINEHEALTHCHECK,
