@@ -184,7 +184,7 @@ def verify_image_versions(old_images, upgrade_version, version_before_upgrade):
             old_images,
             selector=constants.NOOBAA_APP_LABEL,
             count=noobaa_pods,
-            timeout=1020,
+            timeout=1620,
             ignore_psql_12_verification=ignore_psql_12_verification,
         )
     except TimeoutException as ex:
