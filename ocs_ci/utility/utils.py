@@ -4362,7 +4362,9 @@ def get_system_architecture():
     return node.ocp.exec_oc_debug_cmd(node.data["metadata"]["name"], ["uname -m"])
 
 
-def wait_for_machineconfigpool_status(node_type, timeout=1900, skip_tls_verify=False):
+def wait_for_machineconfigpool_status(
+    node_type, timeout=1900, skip_tls_verify=False, force_delete_pods=False
+):
     """
     Check for Machineconfigpool status
 
@@ -4372,6 +4374,7 @@ def wait_for_machineconfigpool_status(node_type, timeout=1900, skip_tls_verify=F
             e.g: worker, master and all if we want to check for all nodes
         timeout (int): Time in seconds to wait
         skip_tls_verify (bool): True if allow skipping TLS verification
+        force_delete_pods (bool): if True delete pods stuck at terminating forcefully
 
     """
     log.info("Sleeping for 60 sec to start update machineconfigpool status")
@@ -4391,13 +4394,22 @@ def wait_for_machineconfigpool_status(node_type, timeout=1900, skip_tls_verify=F
             skip_tls_verify=skip_tls_verify,
         )
         machine_count = ocp_obj.get()["status"]["machineCount"]
-
-        assert ocp_obj.wait_for_resource(
-            condition=str(machine_count),
-            column="READYMACHINECOUNT",
-            timeout=timeout,
-            sleep=5,
-        )
+        if force_delete_pods:
+            while not ocp_obj.wait_for_resource(
+                condition=str(machine_count),
+                column="READYMACHINECOUNT",
+                timeout=timeout,
+                sleep=5,
+            ):
+                clean_up_pods_for_provider(node_type="master")
+                time.sleep(5)
+        else:
+            assert ocp_obj.wait_for_resource(
+                condition=str(machine_count),
+                column="READYMACHINECOUNT",
+                timeout=timeout,
+                sleep=5,
+            )
 
 
 def configure_chrony_and_wait_for_machineconfig_status(
@@ -5665,6 +5677,9 @@ def clean_up_pods_for_provider(
         openshift-apiserver
         kube-apiserver
         etcd-0
+
+    Args:
+        node_type (str): type of nodes for which the pods to be cleaned up
     """
     from ocs_ci.ocs.node import get_nodes
     from ocs_ci.ocs.ocp import OCP
