@@ -493,7 +493,7 @@ class OCSUpgrade(object):
             subscription_name = constants.ODF_SUBSCRIPTION
         else:
             subscription_name = constants.OCS_SUBSCRIPTION
-            kind_name = "subscription.operators.coreos.com"
+        kind_name = "subscription.operators.coreos.com"
         subscription = OCP(
             resource_name=subscription_name,
             kind=kind_name,

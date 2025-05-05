@@ -4395,14 +4395,16 @@ def wait_for_machineconfigpool_status(
         )
         machine_count = ocp_obj.get()["status"]["machineCount"]
         if force_delete_pods:
-            while not ocp_obj.wait_for_resource(
-                condition=str(machine_count),
-                column="READYMACHINECOUNT",
-                timeout=timeout,
-                sleep=5,
-            ):
+            try:
+                assert ocp_obj.wait_for_resource(
+                    condition=str(machine_count),
+                    column="READYMACHINECOUNT",
+                    timeout=timeout,
+                    sleep=5,
+                )
+            except AssertionError:
                 clean_up_pods_for_provider(node_type=role)
-                time.sleep(5)
+
         else:
             assert ocp_obj.wait_for_resource(
                 condition=str(machine_count),
