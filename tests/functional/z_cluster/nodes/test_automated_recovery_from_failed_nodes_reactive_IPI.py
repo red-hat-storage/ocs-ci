@@ -317,14 +317,15 @@ class TestAutomatedRecoveryFromStoppedNodes(ManageTest):
             new_ocs_node_names = add_new_node_and_label_it(self.machineset_name)
             failure_domain = get_failure_domain()
             log.info("Wait for the nodes racks or zones to appear...")
-            wait_for_nodes_racks_or_zones(failure_domain, new_ocs_node_names)
-
+            wait_for_nodes_racks_or_zones(
+                failure_domain, new_ocs_node_names, raise_value_error=False
+            )
             new_ocs_node = get_node_objs(new_ocs_node_names)[0]
             log.info(f"Successfully created a new OCS node '{new_ocs_node.name}'")
             self.extra_node = True
             log.info("Get another OSD node in the same rack or zone...")
             self.osd_worker_node = get_another_osd_node_in_same_rack_or_zone(
-                failure_domain, new_ocs_node
+                failure_domain, new_ocs_node, raise_value_error=False
             )
             assert (
                 self.osd_worker_node
