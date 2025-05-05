@@ -101,7 +101,7 @@ setup(
         "pytest-jira==0.3.22",
         "certbot==3.0.0",
         "certbot-dns-route53==3.0.0",
-        "openshift-python-wrapper==11.0.45",
+        "openshift-python-wrapper==11.0.52",
         # new version of marshmallow 4.0.0 seems to be broken, failing with error:
         # TypeError: __init__() got an unexpected keyword argument 'default'
         "marshmallow==3.26.1",
