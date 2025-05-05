@@ -1791,9 +1791,18 @@ def get_cephfsplugin_provisioner_pods(
         list : csi-cephfsplugin-provisioner Pod objects
     """
     namespace = namespace or config.ENV_DATA["cluster_namespace"]
-    pods = get_pods_having_label(cephfsplugin_provisioner_label, namespace)
-    fs_plugin_pods = [Pod(**pod) for pod in pods]
-    return fs_plugin_pods
+
+    # New label in ODF 4.19+ (rook‑ceph 1.14)
+    labels = [
+        constants.CSI_CEPHFSPLUGIN_PROVISIONER_LABEL_419,
+        cephfsplugin_provisioner_label,
+    ]
+    for lbl in labels:
+        pods = get_pods_having_label(lbl, namespace)
+        if pods:
+            fs_plugin_pods = [Pod(**pod) for pod in pods]
+            return fs_plugin_pods
+    return []
 
 
 def get_rbdfsplugin_provisioner_pods(
@@ -1814,9 +1823,18 @@ def get_rbdfsplugin_provisioner_pods(
         list : csi-rbdplugin-provisioner Pod objects
     """
     namespace = namespace or config.ENV_DATA["cluster_namespace"]
-    pods = get_pods_having_label(rbdplugin_provisioner_label, namespace)
-    ebd_plugin_pods = [Pod(**pod) for pod in pods]
-    return ebd_plugin_pods
+
+    # New label in ODF 4.19+ (rook‑ceph 1.14)
+    labels = [
+        constants.CSI_RBDPLUGIN_PROVISIONER_LABEL_419,
+        rbdplugin_provisioner_label,
+    ]
+    for lbl in labels:
+        pods = get_pods_having_label(lbl, namespace)
+        if pods:
+            ebd_plugin_pods = [Pod(**pod) for pod in pods]
+            return ebd_plugin_pods
+    return []
 
 
 def get_pod_obj(name, namespace=None):
@@ -2028,14 +2046,28 @@ def get_plugin_pods(interface, namespace=None):
     Returns:
         list : csi-cephfsplugin pod objects or csi-rbdplugin pod objects
     """
-    if interface == constants.CEPHFILESYSTEM:
-        plugin_label = constants.CSI_CEPHFSPLUGIN_LABEL
-    if interface == constants.CEPHBLOCKPOOL:
-        plugin_label = constants.CSI_RBDPLUGIN_LABEL
     namespace = namespace or config.ENV_DATA["cluster_namespace"]
-    plugins_info = get_pods_having_label(plugin_label, namespace)
-    plugin_pods = [Pod(**plugin) for plugin in plugins_info]
-    return plugin_pods
+
+    if interface == constants.CEPHFILESYSTEM:
+        # New label in ODF 4.19+ (rook‑ceph 1.14)
+        labels = [
+            constants.CSI_CEPHFSPLUGIN_LABEL_419,
+            constants.CSI_CEPHFSPLUGIN_LABEL,  # legacy
+        ]
+    elif interface == constants.CEPHBLOCKPOOL:
+        # New label in ODF 4.19+ (rook‑ceph 1.14)
+        labels = [
+            constants.CSI_RBDPLUGIN_LABEL_419,
+            constants.CSI_RBDPLUGIN_LABEL,  # legacy
+        ]
+
+    for label in labels:
+        plugins = get_pods_having_label(label, namespace)
+        if plugins:
+            plugin_pods = [Pod(**plugin) for plugin in plugins]
+            return plugin_pods
+
+    return []
 
 
 def get_plugin_provisioner_leader(interface, namespace=None, leader_type="provisioner"):
