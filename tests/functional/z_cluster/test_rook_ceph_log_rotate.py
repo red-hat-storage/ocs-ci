@@ -1,7 +1,6 @@
 import logging
 import time
 import pytest
-import re
 
 from ocs_ci.ocs.constants import MANAGED_SERVICE_PLATFORMS
 from ocs_ci.ocs.resources.storage_cluster import verify_storage_cluster
@@ -85,36 +84,29 @@ class TestRookCephLogRotate(ManageTest):
 
     def verify_new_log_created(self, pod_type):
         """
-        Verify new log created on /var/log/ceph
+        Rotation succeeded when the inode of <daemon>.log changes.
 
         Args:
             pod_type (str): The type of pod [osd/mon/mgr/rgw/mds]
 
         Returns:
-            bool: True if a new log created, otherwise False
-
+            bool: True if log rotation occurred (inode changed), otherwise False
         """
         pod_obj = self.get_pod_obj_based_on_id(pod_type)
-        output_cmd = pod_obj.exec_cmd_on_pod(command="ls -lh /var/log/ceph")
         expected_string = (
             self.podtype_id[pod_type][2]
             if pod_type == "rgw"
             else f"{self.podtype_id[pod_type][2]}{self.podtype_id[pod_type][1]}"
         )
-        cnt_logs = len(re.findall(expected_string, output_cmd))
-        if cnt_logs != int(self.podtype_id[pod_type][3]) + 1:
-            log.info(output_cmd)
-            log.error(
-                f"pod_type:{pod_type} cnt_logs_before_fill_log:"
-                f"{self.podtype_id[pod_type][3]} cnt_logs_after_fill_log:{cnt_logs}"
-            )
+        inode_now = int(
             pod_obj.exec_cmd_on_pod(
-                command=f"dd if=/dev/urandom of=/var/log/ceph/{expected_string}.log bs=1M count=560",
+                command=f"stat -c %i /var/log/ceph/{expected_string}.log",
                 out_yaml_format=False,
                 container_name="log-collector",
-            )
-            return False
-        return True
+            ).strip()
+        )
+        # stored at index 3 during setup
+        return inode_now != self.podtype_id[pod_type][3]
 
     def test_rook_ceph_log_rotate(self):
         """
@@ -165,15 +157,21 @@ class TestRookCephLogRotate(ManageTest):
 
         for pod_type in self.podtype_id:
             pod_obj = self.get_pod_obj_based_on_id(pod_type)
-            output_cmd = pod_obj.exec_cmd_on_pod(command="ls -l /var/log/ceph")
             expected_string = (
                 self.podtype_id[pod_type][2]
                 if pod_type == "rgw"
                 else f"{self.podtype_id[pod_type][2]}{self.podtype_id[pod_type][1]}"
             )
-            self.podtype_id[pod_type].append(
-                len(re.findall(expected_string, output_cmd))
+            # new check: remember the inode of the *active* log file
+            inode = int(
+                pod_obj.exec_cmd_on_pod(
+                    command=f"stat -c %i /var/log/ceph/{expected_string}.log",
+                    out_yaml_format=False,
+                    container_name="log-collector",
+                ).strip()
             )
+            self.podtype_id[pod_type].append(inode)
+
         storagecluster_obj = OCP(
             resource_name=constants.DEFAULT_CLUSTERNAME,
             namespace=config.ENV_DATA["cluster_namespace"],
