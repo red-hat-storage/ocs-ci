@@ -2492,11 +2492,11 @@ def wait_for_ceph_health_not_ok(timeout=300, sleep=10):
     sampler.wait_for_func_status(True)
 
 
-def ceph_health_resolve_daemon_crash():
+def ceph_health_resolve_crash():
     """
     Fix ceph health issue with daemon crash
     """
-    log.warning("Trying to fix the issue with daemon crash by archiving crashes")
+    log.warning("Trying to fix the issue with crash by archiving crashes")
     from ocs_ci.ocs.resources.pod import get_ceph_tools_pod
 
     ct_pod = get_ceph_tools_pod()
@@ -2539,7 +2539,15 @@ def ceph_health_recover(health_status, namespace=None):
     ceph_health_fixes = [
         {
             "pattern": r"daemons have recently crashed",
-            "func": ceph_health_resolve_daemon_crash,
+            "func": ceph_health_resolve_crash,
+            "func_args": [],
+            "func_kwargs": {},
+            "ceph_health_tries": 5,
+            "ceph_health_delay": 30,
+        },
+        {
+            "pattern": r"1 mgr modules have recently crashed",
+            "func": ceph_health_resolve_crash,
             "func_args": [],
             "func_kwargs": {},
             "ceph_health_tries": 5,
