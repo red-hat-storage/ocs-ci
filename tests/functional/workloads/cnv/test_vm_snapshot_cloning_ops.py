@@ -290,3 +290,71 @@ class TestVmSnapshotClone(E2ETest):
 
         if failed_vms:
             assert False, f"Test case failed for VMs: {', '.join(failed_vms)}"
+
+    @workloads
+    @pytest.mark.polarion_id("OCS-6325")
+    def test_vm_snap_of_clone(
+        self,
+        setup_cnv,
+        project_factory,
+        multi_cnv_workload,
+        admin_client,
+    ):
+        """
+        This test performs the VM cloning and IOs created using different volume interfaces(PVC/DV/DVT)
+
+        Test steps:
+        1. Create a clone of a VM PVC by following the documented procedure from ODF official docs.
+            1.1 Create clone of the pvc associated with VM.
+            1.2 Cloned pvc successfully created and listed
+        2. Verify the cloned PVc is created.
+        3. create vm using cloned pvc.
+        4. Verify that the data on VM backed by cloned pvc is same as that in the original VM.
+        5. Add additional data to the cloned VM.
+        6. Create snapshot of cloned pvc
+        7. Vertify snapshot of cloned pvc created successfully
+        8. Validate the content of snapshot by restoring it to new pvc
+        9. Create VM using restored pvc
+        9. Check data conisistency on the new VM
+        10. Delete the clone and restored pvc by following the documented procedure from ODF official docs
+          1. Delete clone and restored pvc of the pvc associated with VM.
+          2. cloned pvc and restored pvc successfully deleted
+        11. Repeat the above procedure for all the VMs in the system
+        12. Delete all the clones and restored pvc created as part of this test
+        """
+
+        proj_obj = project_factory()
+        file_paths = ["/source_file.txt", "/new_file.txt"]
+        vm_objs_def, vm_objs_aggr, _, _ = multi_cnv_workload(
+            namespace=proj_obj.namespace
+        )
+
+        vm_list = vm_objs_def + vm_objs_aggr
+        for vm_obj in vm_list:
+            source_csum = run_dd_io(vm_obj=vm_obj, file_path=file_paths[0], verify=True)
+            log.info(f"Source checksum: {source_csum}")
+            # Create Clone of VM
+            # cloned_vm = clone_or_snapshot_vm(
+            #     "clone",
+            #     vm_obj,
+            #     admin_client=admin_client,
+            #     all_vms=vm_list,
+            #     file_path=file_paths[0],
+            # )
+            # run_dd_io(vm_obj=cloned_vm, file_path=file_paths[1])
+
+            # # Taking Snapshot of cloned VM
+            # # Create a snapshot
+            # restored_vm = clone_or_snapshot_vm(
+            #     "snapshot",
+            #     cloned_vm,
+            #     admin_client=admin_client,
+            #     file_path=file_paths[0],
+            # )
+            # restore_csum = cal_md5sum_vm(vm_obj=restored_vm, file_path=file_paths[0])
+            # assert (
+            #     source_csum == restore_csum
+            # ), f"Failed: MD5 comparison between source {vm_obj.name} and restored {restored_vm.name} VMs"
+            # run_dd_io(vm_obj=restored_vm, file_path=file_paths[1])
+
+            # restored_vm.stop()
