@@ -5672,17 +5672,17 @@ def clean_up_pods_for_provider(
     node_type,
 ):
     """
-    This function is used to manually cleanup pods in hcpclusters namespace when ocp upgrade is performed
-    The pods gets stuck at cleanup in the hcp clusters namespace are:
-        openshift-oauth-apiserver
-        oauth-openshift
-        openshift-apiserver
-        kube-apiserver
-        etcd-0
+    Manually clean up pods in the hcpclusters namespace during OCP upgrade.
+
+    The following pods may get stuck during cleanup in the hcpclusters namespace:
+    - openshift-oauth-apiserver
+    - oauth-openshift
+    - openshift-apiserver
+    - kube-apiserver
+    - etcd-0
 
     Args:
-        node_type (str): type of nodes for which the pods to be cleaned up
-
+        node_type (str): Type of nodes for which the pods should be cleaned up.
     """
     from ocs_ci.ocs.node import get_nodes
     from ocs_ci.ocs.ocp import OCP
