@@ -2450,7 +2450,7 @@ def ceph_health_recover(health_status, namespace=None):
             "ceph_health_delay": 30,
         },
         {
-            "pattern": r"1 mgr modules have recently crashed",
+            "pattern": r"modules have recently crashed",
             "func": ceph_health_resolve_crash,
             "func_args": [],
             "func_kwargs": {},
