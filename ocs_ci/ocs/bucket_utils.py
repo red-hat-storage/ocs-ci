@@ -2579,17 +2579,19 @@ def wait_for_bucket_count_stability(
             f"Bucket count from CLI (attempt {attempt+1}/{max_retries}): {current_count}"
         )
 
-        if expected_count and current_count >= expected_count:
-            return current_count, True
-
         previous_counts.append(current_count)
 
+        is_stable = False
         if len(previous_counts) >= stability_count:
-            if len(set(previous_counts[-stability_count:])) == 1:
-                logger.info(
-                    f"Bucket count stabilized at {current_count} for {stability_count} consecutive checks"
-                )
-                return current_count, current_count >= (expected_count or 0)
+            is_stable = len(set(previous_counts[-stability_count:])) == 1
+
+        meets_expected = expected_count is None or current_count >= expected_count
+
+        if is_stable and meets_expected:
+            logger.info(
+                f"Bucket count stabilized at {current_count} for {stability_count} consecutive checks"
+            )
+            return current_count, True
 
         time.sleep(retry_interval)
 
