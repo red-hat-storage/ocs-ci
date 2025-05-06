@@ -2179,6 +2179,11 @@ def wait_for_storage_pods(timeout=200):
     ]
 
     for pod_obj in all_pod_obj:
+        # Check if pod is already in Succeeded state
+        if pod_obj.status() == constants.STATUS_COMPLETED:
+            continue
+
+        # For remaining pods, set expected state based on patterns
         state = constants.STATUS_RUNNING
         if any(i in pod_obj.name for i in ["-1-deploy", "osd-prepare"]):
             state = constants.STATUS_COMPLETED
