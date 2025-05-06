@@ -190,7 +190,7 @@ def process_ocsci_conf(arguments):
     if args.flexy_env_file:
         framework.config.ENV_DATA["flexy_env_file"] = args.flexy_env_file
 
-    framework.config.RUN["run_id"] = int(time.time())
+    framework.config.RUN["run_id"] = int(time.time() * 1000)
     bin_dir = framework.config.RUN.get("bin_dir")
     if bin_dir:
         framework.config.RUN["bin_dir"] = os.path.abspath(
