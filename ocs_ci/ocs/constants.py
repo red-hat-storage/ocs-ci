@@ -709,6 +709,10 @@ NOOBAA_S3_SERVING_CERT = "noobaa-s3-serving-cert"
 
 # NooBaa DB CNPG
 NB_DB_PRIMARY_POD_LABEL = "cnpg.io/instanceRole=primary"
+CNPG_CLUSTER_KIND = "cluster"
+NB_DB_CNPG_CLUSTER_NAME = "noobaa-db-pg-cluster"
+NB_DB_CNPG_HEALTHY_STATUS = "Cluster in healthy state"
+NB_DB_CNPG_APP_SECRET = "noobaa-db-pg-cluster-app"
 
 # Auth Yaml
 OCSCI_DATA_BUCKET = "ocs-ci-data"
