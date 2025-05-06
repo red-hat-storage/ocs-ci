@@ -4399,10 +4399,10 @@ def wait_for_machineconfigpool_status(
                 assert ocp_obj.wait_for_resource(
                     condition=str(machine_count),
                     column="READYMACHINECOUNT",
-                    timeout=300,
+                    timeout=180,
                     sleep=15,
                 )
-            except AssertionError:
+            except (AssertionError, TimeoutExpiredError):
                 clean_up_pods_for_provider(node_type=role)
 
         else:
