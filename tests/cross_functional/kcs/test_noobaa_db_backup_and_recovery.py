@@ -90,7 +90,7 @@ class TestNoobaaBackupAndRecovery(E2ETest):
         warps3.create_resource_warp(replicas=4, multi_client=True)
 
         def teardown():
-            warps3.cleanup()
+            warps3.cleanup(multi_client=True)
 
         request.addfinalizer(teardown)
         return warps3

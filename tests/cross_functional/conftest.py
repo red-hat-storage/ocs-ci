@@ -2,6 +2,7 @@ import os
 import logging
 import boto3
 import pytest
+from base64 import b64decode
 
 from concurrent.futures import ThreadPoolExecutor
 from threading import Event
@@ -37,10 +38,6 @@ from ocs_ci.ocs.constants import DEFAULT_NOOBAA_BUCKETCLASS, DEFAULT_NOOBAA_BACK
 from ocs_ci.ocs.resources import pod, pvc
 from ocs_ci.ocs.resources.objectbucket import OBC
 from ocs_ci.ocs.resources.ocs import OCS
-from ocs_ci.ocs.resources.pod import (
-    Pod,
-    get_pods_having_label,
-)
 from ocs_ci.ocs.resources.deployment import Deployment
 from ocs_ci.ocs.resources.pod import get_noobaa_pods, get_pod_logs
 from ocs_ci.ocs.resources.pvc import get_pvc_objs
@@ -53,7 +50,7 @@ from ocs_ci.helpers.helpers import (
 )
 from ocs_ci.ocs.ocp import OCP
 from ocs_ci.utility.kms import is_kms_enabled
-from ocs_ci.utility.utils import clone_notify
+from ocs_ci.utility.utils import clone_notify, get_primary_nb_db_pod
 
 
 logger = logging.getLogger(__name__)
@@ -148,7 +145,6 @@ def noobaa_db_backup_and_recovery_locally(
         secrets = [
             "noobaa-admin",
             "noobaa-operator",
-            "noobaa-db",
             "noobaa-server",
             "noobaa-endpoints",
         ]
@@ -170,20 +166,21 @@ def noobaa_db_backup_and_recovery_locally(
         logger.info("Backed up secrets as secret objects!")
 
         # Backup the PostgreSQL database and save it to a local folder
-        noobaa_db_pod = Pod(
-            **get_pods_having_label(
-                label=constants.NOOBAA_DB_LABEL_47_AND_ABOVE,
-                namespace=config.ENV_DATA["cluster_namespace"],
-            )[0]
-        )
+        noobaa_db_pod = get_primary_nb_db_pod()
         noobaa_db_pod.exec_cmd_on_pod(
-            command="pg_dump nbcore -f /tmp/test.db -F custom"
+            command="pg_dump nbcore -F custom -f /dev/shm/test.db",
         )
         OCP(namespace=config.ENV_DATA["cluster_namespace"]).exec_oc_cmd(
-            command=f"cp --retries=-1 {noobaa_db_pod.name}:/tmp/test.db ./mcg.bck",
+            command=f"cp --retries=-1 {noobaa_db_pod.name}:/dev/shm/test.db ./mcg.bck",
             out_yaml_format=False,
         )
         logger.info("Backed up PostgreSQL and stored it in local folder!")
+
+        # Backup the noobaa-db-pg-cluster resource
+        cnpg_cluster_yaml = OCP(
+            kind=constants.CNPG_CLUSTER_KIND,
+            namespace=config.ENV_DATA["cluster_namespace"],
+        ).get(resource_name=constants.NB_DB_CNPG_CLUSTER_NAME)
 
         # For testing, write new data to show a little data loss between backup and restore
         testloss_bucket = bucket_factory()[0]
@@ -215,17 +212,64 @@ def noobaa_db_backup_and_recovery_locally(
         )
 
         # Login to the NooBaa DB pod and cleanup potential database clients to nbcore
+        nb_db_pg_cluster_app_secret = OCP(
+            kind=constants.SECRET,
+            resource_name=constants.NB_DB_CNPG_APP_SECRET,
+        )
+        pg_password = b64decode(
+            nb_db_pg_cluster_app_secret.get()["data"]["password"]
+        ).decode("utf-8")
         query = "SELECT pg_terminate_backend (pid) FROM pg_stat_activity WHERE datname = 'nbcore';"
-        noobaa_db_pod.exec_cmd_on_pod(
-            command=f'psql -h 127.0.0.1 -p 5432 -U postgres -c "{query}"'
-        )
-        logger.info("Cleaned up potential database clients to nbcore!")
+        try:
+            noobaa_db_pod.exec_cmd_on_pod(
+                command=(
+                    f'bash -c "PGPASSWORD={pg_password} psql -h 127.0.0.1 -p 5432 '
+                    f'-U noobaa -d nbcore -c \\"{query}\\""'
+                )
+            )
+        except CommandFailed as ex:
+            if "terminating connection due to administrator command" not in str(ex):
+                raise ex
+            logger.info("Cleaned up potential database clients to nbcore!")
 
-        # Restore DB from a local folder
-        OCP(namespace=config.ENV_DATA["cluster_namespace"]).exec_oc_cmd(
-            command=f"cp ./mcg.bck {noobaa_db_pod.name}:/tmp/test.db"
+        # Delete the existing cnpg cluster
+        OCP(kind=constants.CNPG_CLUSTER_KIND).delete(
+            resource_name=constants.NB_DB_CNPG_CLUSTER_NAME
         )
-        noobaa_db_pod.exec_cmd_on_pod(command="pg_restore -d nbcore /tmp/test.db -c")
+
+        # Ensure the the cnpg cluster yaml uses the correct bootstrap object
+        cnpg_cluster_yaml["bootstrap"] = {
+            "initdb": {
+                "database": "nbcore",
+                "encoding": "UTF8",
+                "localeCType": "C",
+                "localeCollate": "C",
+                "owner": "noobaa",
+            }
+        }
+        cnpg_cluster_obj = OCS(**cnpg_cluster_yaml)
+        cnpg_cluster_obj.create()
+
+        # Wait for the cluster status to be in a healthy state
+        OCP(kind=constants.CNPG_CLUSTER_KIND).wait_for_resource(
+            condition=constants.NB_DB_CNPG_HEALTHY_STATUS,
+            resource_name=constants.NB_DB_CNPG_CLUSTER_NAME,
+            timeout=600,
+            sleep=5,
+        )
+
+        # Restore DB from a local folder to the primary instance
+        noobaa_db_pod = get_primary_nb_db_pod()
+        OCP(namespace=config.ENV_DATA["cluster_namespace"]).exec_oc_cmd(
+            command=f"cp --retries=-1 ./mcg.bck {noobaa_db_pod.name}:/dev/shm/test.db",
+            out_yaml_format=False,
+        )
+        cmd = (
+            "pg_restore --no-owner -n public "
+            "--role=noobaa -d nbcodre "
+            " --verbose < /dev/shm/test.db"
+        )
+        noobaa_db_pod.exec_cmd_on_pod(command=cmd)
         logger.info("Restored DB from the local folder!")
 
         # Delete secrets and restore them from a local folder.
@@ -288,11 +332,12 @@ def noobaa_db_backup_and_recovery_locally(
             logger.info("Removed the local copy of mcg.bck")
 
         # create the secrets if they're deleted
-        for secret in secrets_obj:
-            if secret.is_deleted:
-                secret.create()
-            else:
-                logger.info(f"{secret.name} is not deleted!")
+        if secrets_obj:
+            for secret in secrets_obj:
+                if secret.is_deleted:
+                    secret.create()
+                else:
+                    logger.info(f"{secret.name} is not deleted!")
 
         # restore MCG reconcilation if not restored already
         if (
