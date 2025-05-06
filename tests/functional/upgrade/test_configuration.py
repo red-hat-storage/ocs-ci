@@ -88,7 +88,7 @@ def test_max_unavaialable_rbd(upgrade_stats):
         namespace=config.ENV_DATA["cluster_namespace"],
         resource_name=constants.ROOK_OPERATOR_CONFIGMAP,
     ).get()
-    if config.UPGRADE.get("CSI_RBD_PLUGIN_UPDATE_STRATEGY_MAX_UNAVAILABLE") is not None:
+    if config.UPGRADE.get("csi_rbd_plugin_update_strategy_max_unavailable") is not None:
         config_value = configmap.get("data").get(
             "CSI_RBD_PLUGIN_UPDATE_STRATEGY_MAX_UNAVAILABLE"
         )
@@ -110,7 +110,7 @@ def test_max_unavaialable_cephfs(upgrade_stats):
         resource_name=constants.ROOK_OPERATOR_CONFIGMAP,
     ).get()
     if (
-        config.UPGRADE.get("CSI_CEPHFS_PLUGIN_UPDATE_STRATEGY_MAX_UNAVAILABLE")
+        config.UPGRADE.get("csi_cephfs_plugin_update_strategy_max_unavailable")
         is not None
     ):
         config_value = configmap.get("data").get(
