@@ -454,7 +454,7 @@ def mirror_index_image_via_oc_mirror(index_image, packages, icsp=None, idms=None
         )
     if not cs_file:
         raise NotFoundError(
-            "CatalogSource file not found in the '{mirroring_manifests_dir}'."
+            f"CatalogSource file not found in the '{mirroring_manifests_dir}'."
         )
 
     with open(cs_file[0]) as f:
