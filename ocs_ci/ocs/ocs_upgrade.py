@@ -157,14 +157,13 @@ def verify_image_versions(old_images, upgrade_version, version_before_upgrade):
     ):
         default_noobaa_pods = 4
         if upgrade_version >= parse_version("4.19"):
+            # noobaa-default-backing-store-noobaa-pod
             default_noobaa_pods = 5
     if upgrade_version >= parse_version("4.19"):
         log.info("Increased default noobaa pod count by 1 due to cnpg pod")
         default_noobaa_pods += 1
     for pod in noobaa_pod_obj:
         if "pv-backingstore" in pod.name:
-            default_noobaa_pods += 1
-        if "noobaa-default-backing-store" in pod.name:
             default_noobaa_pods += 1
     if upgrade_version >= parse_version("4.7"):
         noobaa = OCP(kind="noobaa", namespace=config.ENV_DATA["cluster_namespace"])
