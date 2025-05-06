@@ -3306,3 +3306,7 @@ NFS_DEPLOYMENT_YAML_DIR = os.path.join(NFS_TEMPLATE_DIR, "deployment.yaml")
 NFS_SC_YAML_DIR = os.path.join(NFS_TEMPLATE_DIR, "storageclass.yaml")
 NFS_SCC_NAME = "nfs-client-provisioner"
 NFS_SC_NAME = "nfs-client"
+
+# The expected mds cache memory values
+MDS_CACHE_MEMORY = 3221225472
+LOWER_REQ_MDS_CACHE_MEMORY = 1073741824

@@ -68,21 +68,9 @@ def is_storage_system_needed():
 
     """
     storage_system_needed = True
-    odf_full_version = version.get_semantic_running_odf_version()
-    # Build 4.19.0-59 is stable build where we can create storage system ( normal flow )
-    version_for_storage_system = "4.19.0-59"
-    semantic_version_for_storage_system = version.get_semantic_version(
-        version_for_storage_system
-    )
-
-    # we need to support the version for Konflux builds as well
-    version_for_konflux_noobaa_db_pg_cluster = "4.19.0-15"
-    semantic_version_for_konflux_noobaa_db_pg_cluster = version.get_semantic_version(
-        version_for_konflux_noobaa_db_pg_cluster
-    )
-
-    if odf_full_version == semantic_version_for_storage_system:
-        logger.debug("Storage system is needed")
-    elif odf_full_version >= semantic_version_for_konflux_noobaa_db_pg_cluster:
+    odf_running_version = version.get_ocs_version_from_csv(only_major_minor=True)
+    if odf_running_version >= version.VERSION_4_19:
         storage_system_needed = False
+    else:
+        logger.debug("Storage system is needed")
     return storage_system_needed
