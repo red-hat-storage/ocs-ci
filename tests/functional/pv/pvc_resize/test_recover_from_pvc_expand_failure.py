@@ -48,7 +48,7 @@ class TestRecoverPvcExpandFailure(ManageTest):
                 namespace=config.ENV_DATA["cluster_namespace"],
             )
             dep_ocp.exec_oc_cmd(
-                "scale deployment odf-operator-controller-manager --replicas=0"
+                "scale deployment ceph-csi-controller-manager --replicas=1"
             )
 
         request.addfinalizer(finalizer)
@@ -154,8 +154,6 @@ class TestRecoverPvcExpandFailure(ManageTest):
             kind=constants.DEPLOYMENT, namespace=config.ENV_DATA["cluster_namespace"]
         )
         deployments = [
-            "odf-operator-controller-manager",
-            constants.OCS_CLIENT_OPERATOR_CONTROLLER_MANAGER_PREFIX,
             "ceph-csi-controller-manager",
             f"{config.ENV_DATA['cluster_namespace']}.cephfs.csi.ceph.com-ctrlplugin",
             f"{config.ENV_DATA['cluster_namespace']}.rbd.csi.ceph.com-ctrlplugin",
