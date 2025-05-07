@@ -5581,8 +5581,6 @@ def clean_up_pods_for_provider(
                 container="machine-config-controller",
                 namespace=constants.OPENSHIFT_MACHINE_CONFIG_OPERATOR_NAMESPACE,
             )
-            lines = logs.split("\n")
-            log.info(f"log lines are:  {lines}")
             for line in logs.split("\n"):
                 if searchstring in line:
                     try:
@@ -5596,7 +5594,7 @@ def clean_up_pods_for_provider(
                     except Exception as e:
                         print(f"Error: {e}")
 
-            break  # refresh nodes after handling one
+            # break  # refresh nodes after handling one
 
         else:
             break  # exit if no node was in the disabled state
