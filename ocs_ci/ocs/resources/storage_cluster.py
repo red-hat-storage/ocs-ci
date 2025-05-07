@@ -174,14 +174,13 @@ def ocs_install_verification(
         version_before_upgrade (float): Set to OCS version before upgrade
 
     """
-    from ocs_ci.ocs.node import get_nodes, get_all_nodes
+    from ocs_ci.ocs.node import get_nodes
     from ocs_ci.ocs.resources.pvc import get_deviceset_pvcs
     from ocs_ci.ocs.resources.pod import get_ceph_tools_pod, get_all_pods
     from ocs_ci.ocs.cluster import validate_cluster_on_pvc
     from ocs_ci.ocs.resources.fips import check_fips_enabled
 
     number_of_worker_nodes = len(get_nodes())
-    total_nodes = len(get_all_nodes())
     namespace = config.ENV_DATA["cluster_namespace"]
     log.info("Verifying OCS installation")
     if config.ENV_DATA.get("disable_components"):
@@ -321,8 +320,8 @@ def ocs_install_verification(
                 {
                     constants.CSI_CEPHFSPLUGIN_PROVISIONER_LABEL_419: 2,
                     constants.CSI_RBDPLUGIN_PROVISIONER_LABEL_419: 2,
-                    constants.CSI_CEPHFSPLUGIN_LABEL_419: total_nodes,
-                    constants.CSI_RBDPLUGIN_LABEL_419: total_nodes,
+                    constants.CSI_CEPHFSPLUGIN_LABEL_419: number_of_worker_nodes,
+                    constants.CSI_RBDPLUGIN_LABEL_419: number_of_worker_nodes,
                 }
             )
 
