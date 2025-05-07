@@ -4399,7 +4399,7 @@ def wait_for_machineconfigpool_status(
                 assert ocp_obj.wait_for_resource(
                     condition=str(machine_count),
                     column="READYMACHINECOUNT",
-                    timeout=180,
+                    timeout=60,
                     sleep=15,
                 )
             except (AssertionError, TimeoutExpiredError):
@@ -5705,18 +5705,20 @@ def clean_up_pods_for_provider(
                 container="machine-config-controller",
                 namespace=constants.OPENSHIFT_MACHINE_CONFIG_OPERATOR_NAMESPACE,
             )
-
+            lines = logs.split("\n")
+            log.info(f"log lines are:  {lines}")
             for line in logs.split("\n"):
                 if searchstring in line:
-                    log.info(f"pod evicting error log:  {line}")
-                    match = re.search(r'pods/"([^"]+)" -n "([^"]+)"', line)
-                    if match:
-                        pod_name, ns = match.groups()
-                        log.info(f"Deleting pod {pod_name} in namespace {ns}")
+                    try:
+                        pod_name = line.split('pods/"')[1].split('"')[0]
+                        ns = line.split('-n "')[1].split('"')[0]
+                        print(f"Deleting pod: {pod_name} from namespace: {ns}")
                         pod_obj = OCP(
                             kind=constants.POD, namespace=ns, resource_name=pod_name
                         )
                         pod_obj.exec_oc_cmd(f"delete pod {pod_name} -n {ns} --force")
+                    except Exception as e:
+                        print(f"Error: {e}")
 
             break  # refresh nodes after handling one
 
