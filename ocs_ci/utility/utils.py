@@ -5713,7 +5713,6 @@ def clean_up_pods_for_provider(
                         kind=constants.POD, namespace=ns, resource_name=pod_name
                     )
                     pod_obj.exec_oc_cmd(f"delete pod {pod_name} -n {ns} --force")
-                    break  # done with this node
 
             break  # refresh nodes after handling one
 
