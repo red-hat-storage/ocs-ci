@@ -44,7 +44,7 @@ class TestStorageSystem(ManageTest):
     storage_cluster = ocp.OCP(
         kind=constants.STORAGECLUSTER, namespace=config.ENV_DATA["cluster_namespace"]
     )
-    storage_cluster_data = storage_system.get()
+    storage_cluster_data = storage_cluster.get()
     owner_references = storage_cluster_data.get("metadata").get("ownerReferences", {})
     assert not any(
         [
