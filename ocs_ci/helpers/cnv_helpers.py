@@ -480,6 +480,7 @@ def expand_pvc_and_verify(vm_obj, new_size):
     logger.info(f"PVC expansion successful for VM {vm_obj.name}.")
     return True
 
+
 def install_fio_on_vm(vm_obj):
     """
     Detects the OS distribution of a virtual machine running in OpenShift Virtualization (CNV)
@@ -548,9 +549,6 @@ def run_fio(
         filename (str): Path of the test file in the VM.
         fio_log_path (str): Path where FIO logs will be stored.
         fio_service_name(str): name of fio service to be create
-
-    Returns:
-        str: Output of the FIO execution.
 
     """
     install_fio_on_vm(vm_obj)
