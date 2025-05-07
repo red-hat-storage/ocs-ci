@@ -357,6 +357,7 @@ generic_locators = {
     ),
     "searchbar-dropdown": (
         "//div[@class='pf-c-toolbar__item']//span[@class='pf-c-dropdown__toggle-text'] | "
+        "//div[@class='pf-v6-c-toolbar__item']//span[@class='pf-v6-c-dropdown__toggle-text'] | "
         "//div[@class='pf-v5-c-toolbar__item']//span[@class='pf-v5-c-dropdown__toggle-text']",
         By.XPATH,
     ),
@@ -1725,7 +1726,7 @@ validation_4_9 = {
     ),
     "block-and-file-health-message": ("div[class='text-muted']", By.CSS_SELECTOR),
     "storage-system-status-card-hyperlink": (
-        "//div[@class='odf-status-popup__row']//a[contains(text(),'ocs-storagecluster-storagesystem')]",
+        "//div[@class='odf-status-popup__row']//a[contains(text(),'ocs-storagecluster')]",
         By.XPATH,
     ),
     "storage-system-external-status-card-hyperlink": (
@@ -1798,8 +1799,14 @@ validation_4_10 = {
 }
 
 validation_4_11 = {
-    "overview_odf_4_10": ("//a[@data-test-id='horizontal-link-Overview']", By.XPATH),
-    "odf-overview": ("//a[@data-test-id='horizontal-link-Overview']", By.XPATH),
+    "overview_odf_4_10": (
+        "//a[@data-test-id='horizontal-link-Overview'] | //button[@data-test='horizontal-link-Overview']",
+        By.XPATH,
+    ),
+    "odf-overview": (
+        "//a[@data-test-id='horizontal-link-Overview'] | //button[@data-test='horizontal-link-Overview']",
+        By.XPATH,
+    ),
     "object": ("//span[normalize-space()='Object']", By.XPATH),
     "object-odf-4-10": ("//a[normalize-space()='Object']", By.XPATH),
     "blockandfile": ("//span[normalize-space()='Block and File']", By.XPATH),
@@ -1831,7 +1838,10 @@ validation_4_12 = {
 }
 
 validation_4_13 = {
-    "topology_tab": ("//a[normalize-space()='Topology']", By.XPATH),
+    "topology_tab": (
+        "//a[@data-test-id='horizontal-link-Topology'] | //a[normalize-space()='Topology']",
+        By.XPATH,
+    ),
     # locator presented only if the tab is active
     "odf-overview-tab-active": (
         "//li[@class='co-m-horizontal-nav__menu-item co-m-horizontal-nav-item--active']"
