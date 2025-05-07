@@ -8,6 +8,7 @@ import json
 import logging
 import os
 import re
+
 import requests
 import time
 import ibm_boto3
@@ -1345,8 +1346,9 @@ class IBMCloudObjectStorage:
                 operation_parameters["Prefix"] = prefix
             page_iterator = paginator.paginate(**operation_parameters)
             for page in page_iterator:
-                if "Contents" in page:
-                    bucket_objects_info.extend(page["Contents"])
+                yield page.get("Contents", [])
+                # if len(bucket_objects_info) > 1000:
+                #      return []
             for object_info in bucket_objects_info:
                 bucket_objects.append(object_info["Key"])
         except ClientError as ce:
@@ -1364,29 +1366,36 @@ class IBMCloudObjectStorage:
             bucket_name (str): Name of the bucket
 
         """
-        objects = self.get_bucket_objects(bucket_name, bucket_region)
-        if objects:
+        cos_client = ibm_boto3.client(
+            "s3",
+            ibm_api_key_id=self.cos_api_key_id,
+            ibm_service_instance_id=self.cos_instance_crn,
+            config=IBMBotocoreConfig(signature_version="oauth"),
+            endpoint_url=constants.IBM_COS_GEO_ENDPOINT_TEMPLATE.format(bucket_region),
+        )
+        from datetime import datetime
+
+        for objects in self.get_bucket_objects(bucket_name, bucket_region):
+            start_time = datetime.now()
+            print("Start Time:", start_time)
             try:
-                cos_client = ibm_boto3.client(
-                    "s3",
-                    ibm_api_key_id=self.cos_api_key_id,
-                    ibm_service_instance_id=self.cos_instance_crn,
-                    config=IBMBotocoreConfig(signature_version="oauth"),
-                    endpoint_url=constants.IBM_COS_GEO_ENDPOINT_TEMPLATE.format(
-                        bucket_region
-                    ),
-                )
+                print(f"Deleted all objects {objects} in {bucket_name}")
                 for obj in objects:
-                    delete_request = {"Objects": [{"Key": obj}]}
+                    print(f"Deleted object {obj.get('Key')} in {bucket_name}")
+                    delete_request = {"Objects": [{"Key": obj.get("Key")}]}
                     response = cos_client.delete_objects(
                         Bucket=bucket_name, Delete=delete_request
                     )
-                    logger.info(f"Deleted items for {bucket_name}")
-                    logger.debug(json.dumps(response.get("Deleted"), indent=4))
+                    print(json.dumps(response.get("Deleted"), indent=4))
             except ClientError as ce:
                 logger.error(f"CLIENT ERROR: {ce}")
             except Exception as e:
                 logger.error(f"Unable to delete objects: {e}")
+            end_time = datetime.now()
+            print("End Time:", end_time)
+            # Line 4: Calculate the difference
+            time_diff = end_time - start_time
+            print("Difference:", time_diff)
 
     def delete_bucket(self, bucket_name, bucket_region):
         """
@@ -1396,7 +1405,7 @@ class IBMCloudObjectStorage:
             bucket_name (str): Name of the bucket
 
         """
-        logger.info(f"Deleting bucket: {bucket_name} in region{bucket_region}")
+        print(f"Deleting bucket: {bucket_name} in region{bucket_region}")
         try:
             cos_client = ibm_boto3.client(
                 "s3",
@@ -1407,6 +1416,7 @@ class IBMCloudObjectStorage:
                     bucket_region
                 ),
             )
+            logger.info(f"Bucket: {bucket_name} deleting state!")
             self.delete_objects(bucket_name=bucket_name, bucket_region=bucket_region)
             cos_client.delete_bucket(Bucket=bucket_name)
             logger.info(f"Bucket: {bucket_name} deleted!")
