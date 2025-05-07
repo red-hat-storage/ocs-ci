@@ -5690,20 +5690,49 @@ def clean_up_pods_for_provider(
     from ocs_ci.ocs.resources import pod
 
     searchstring = "error when evicting pods"
-    nodes = get_nodes(node_type=node_type)
-    for node in nodes:
-        if node.status() == constants.NODE_READY_SCHEDULING_DISABLED:
+    # nodes = get_nodes(node_type=node_type)
+    # for node in nodes:
+    #     if node.status() == constants.NODE_READY_SCHEDULING_DISABLED:
+    #         log.info(f"node is in {constants.NODE_READY_SCHEDULING_DISABLED} status")
+    #         machine_config_controller_logs = pod.get_pod_logs(
+    #             pod_name=pod.get_machine_config_controller_pod().name,
+    #             container="machine-config-controller",
+    #             namespace=constants.OPENSHIFT_MACHINE_CONFIG_OPERATOR_NAMESPACE,
+    #         )
+    #         for line in machine_config_controller_logs.split("\n"):
+    #             if searchstring in line:
+    #                 log.info(f"the logs: {line}")
+    #                 pod = line.split('pods/"')[1].split('"')[0]
+    #                 ns = line.split('-n "')[1].split('"')[0]
+    #                 pod_obj = OCP(kind=constants.POD, namespace=ns, resource_name=pod)
+    #                 cmd = f"delete pod {pod} -n {ns} --force"
+    #                 pod_obj.exec_oc_cmd(command=cmd)
+    while True:
+        nodes = get_nodes()
+        for node in nodes:
+            if node.status() != constants.NODE_READY_SCHEDULING_DISABLED:
+                continue
+
             log.info(f"node is in {constants.NODE_READY_SCHEDULING_DISABLED} status")
-            machine_config_controller_logs = pod.get_pod_logs(
+
+            logs = pod.get_pod_logs(
                 pod_name=pod.get_machine_config_controller_pod().name,
                 container="machine-config-controller",
                 namespace=constants.OPENSHIFT_MACHINE_CONFIG_OPERATOR_NAMESPACE,
             )
-            for line in machine_config_controller_logs.split("\n"):
+
+            for line in logs.split("\n"):
                 if searchstring in line:
-                    log.info(f"the logs: {line}")
-                    pod = line.split('pods/"')[1].split('"')[0]
+                    log.info(f"log line: {line}")
+                    pod_name = line.split('pods/"')[1].split('"')[0]
                     ns = line.split('-n "')[1].split('"')[0]
-                    pod_obj = OCP(kind=constants.POD, namespace=ns, resource_name=pod)
-                    cmd = f"delete pod {pod} -n {ns} --force"
-                    pod_obj.exec_oc_cmd(command=cmd)
+                    pod_obj = OCP(
+                        kind=constants.POD, namespace=ns, resource_name=pod_name
+                    )
+                    pod_obj.exec_oc_cmd(f"delete pod {pod_name} -n {ns} --force")
+                    break  # done with this node
+
+            break  # refresh nodes after handling one
+
+        else:
+            break  # exit if no node was in the disabled state
