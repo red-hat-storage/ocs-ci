@@ -95,7 +95,7 @@ class TestPvcExpansionWhenFull(ManageTest):
             "Run IO on PVCs to utilize 96% of available storage. Check PersistentVolumeUsageCritical alert."
         )
         self._run_io_and_check_alerts(
-            fill_up_near_full_mb + fill_up_critical_full_mb,
+            fill_up_critical_full_mb,
             prometheus_api,
             alert_type="PersistentVolumeUsageCritical",
             alert_msg="is critically full. Data deletion or PVC expansion is required.",
@@ -103,10 +103,7 @@ class TestPvcExpansionWhenFull(ManageTest):
         )
 
         log_step("Run IO on all to utilize 100% of PVCs storage capacity.")
-        self.fill_up_pvcs(
-            fill_up_near_full_mb + fill_up_critical_full_mb + fill_up_full_mb,
-            pvc_full_error_expected=True,
-        )
+        self.fill_up_pvcs(fill_up_full_mb, pvc_full_error_expected=True)
 
         log_step("Run IO on PVCs to utilise 100% of PVCs storage capacity.")
         self._verify_used_space_on_pods("100%")
@@ -295,7 +292,7 @@ class TestPvcExpansionWhenFull(ManageTest):
                 io_direction="write",
                 runtime=30,
                 rate="100M",
-                fio_filename=f"{pod_obj.name}_f1",
+                end_fsync=1,
             )
         for pod_obj in self.pods:
             try:
