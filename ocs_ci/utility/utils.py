@@ -5696,7 +5696,7 @@ def clean_up_pods_for_provider(
             if node.status() != constants.NODE_READY_SCHEDULING_DISABLED:
                 continue
 
-            log.info(f"node is in {constants.NODE_READY_SCHEDULING_DISABLED} status")
+            log.info(f"{node} is in {constants.NODE_READY_SCHEDULING_DISABLED} status")
 
             logs = pod.get_pod_logs(
                 pod_name=pod.get_machine_config_controller_pod().name,
