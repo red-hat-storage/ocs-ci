@@ -1347,6 +1347,8 @@ class IBMCloudObjectStorage:
             for page in page_iterator:
                 if "Contents" in page:
                     bucket_objects_info.extend(page["Contents"])
+                if len(bucket_objects_info) > 1000:
+                    return []
             for object_info in bucket_objects_info:
                 bucket_objects.append(object_info["Key"])
         except ClientError as ce:
@@ -1376,13 +1378,14 @@ class IBMCloudObjectStorage:
                         bucket_region
                     ),
                 )
+                print(f"Deleted all objects {objects} in {bucket_name}")
                 for obj in objects:
+                    print(f"Deleted object {obj} in {bucket_name}")
                     delete_request = {"Objects": [{"Key": obj}]}
                     response = cos_client.delete_objects(
                         Bucket=bucket_name, Delete=delete_request
                     )
-                    logger.info(f"Deleted items for {bucket_name}")
-                    logger.debug(json.dumps(response.get("Deleted"), indent=4))
+                    print(json.dumps(response.get("Deleted"), indent=4))
             except ClientError as ce:
                 logger.error(f"CLIENT ERROR: {ce}")
             except Exception as e:
@@ -1396,7 +1399,7 @@ class IBMCloudObjectStorage:
             bucket_name (str): Name of the bucket
 
         """
-        logger.info(f"Deleting bucket: {bucket_name} in region{bucket_region}")
+        print(f"Deleting bucket: {bucket_name} in region{bucket_region}")
         try:
             cos_client = ibm_boto3.client(
                 "s3",
@@ -1407,6 +1410,7 @@ class IBMCloudObjectStorage:
                     bucket_region
                 ),
             )
+            logger.info(f"Bucket: {bucket_name} deleting state!")
             self.delete_objects(bucket_name=bucket_name, bucket_region=bucket_region)
             cos_client.delete_bucket(Bucket=bucket_name)
             logger.info(f"Bucket: {bucket_name} deleted!")
