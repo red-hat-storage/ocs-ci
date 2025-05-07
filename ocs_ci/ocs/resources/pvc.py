@@ -178,7 +178,7 @@ class PVC(OCS):
         """
         return self.backed_pv_obj.get()["spec"]["csi"]["volumeHandle"]
 
-    def resize_pvc(self, new_size, verify=False, timeout=None):
+    def resize_pvc(self, new_size, verify=False, timeout=240):
         """
         Modify the capacity of PVC
 
