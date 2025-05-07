@@ -66,7 +66,7 @@ class TestObjectVersioning:
     ):
         """
         This test will check if there is more than one current version of the objects when multiple
-        s3 put/delete operations are performed parallely.
+        s3 put/delete operations are performed in parallel.
         First test with the object versioning enabled on bucket and later without versioning
         enabled.
         """
@@ -103,17 +103,24 @@ class TestObjectVersioning:
 
         # perform PUT and DELETE parallely on loop
         config_index = config.default_cluster_index
-        for i in range(0, 5):
-            ConfigSafeThread(
+        threads = []
+
+        for _ in range(0, 5):
+            delete_thread = ConfigSafeThread(
                 config_index=config_index,
                 target=s3_delete_object,
                 args=(s3_obj, bucket_name, filename),
-            ).start()
-            ConfigSafeThread(
+            )
+            delete_thread.start()
+            threads.append(delete_thread)
+
+            put_thread = ConfigSafeThread(
                 config_index=config_index,
                 target=s3_put_object,
                 args=(s3_obj, bucket_name, filename, filename),
-            ).start()
+            )
+            put_thread.start()
+            threads.append(put_thread)
 
         # head object
         try:
@@ -126,7 +133,7 @@ class TestObjectVersioning:
         except Exception as err:
             logger.info(f"[Head object failed]: {err}")
 
-        # Run query on nooba-db to see if there is more than
+        # Run query on noobaa-db to see if there is more than
         # one current version of the object
         query_out = exec_nb_db_query(query)
         logger.info(f"DB query output: {query_out}")
@@ -134,6 +141,10 @@ class TestObjectVersioning:
             len(query_out) == 0
         ), "[Test failed] There are more than one versions considered to be latest version !!"
         logger.info("Test succeeded!!")
+
+        # Wait for all threads to finish before proceeding to teardown
+        for thread in threads:
+            thread.join()
 
 
 @mcg
