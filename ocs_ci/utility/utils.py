@@ -5696,7 +5696,9 @@ def clean_up_pods_for_provider(
             if node.status() != constants.NODE_READY_SCHEDULING_DISABLED:
                 continue
 
-            log.info(f"{node} is in {constants.NODE_READY_SCHEDULING_DISABLED} status")
+            log.info(
+                f"{node.name} is in {constants.NODE_READY_SCHEDULING_DISABLED} status"
+            )
 
             logs = pod.get_pod_logs(
                 pod_name=pod.get_machine_config_controller_pod().name,
@@ -5706,13 +5708,15 @@ def clean_up_pods_for_provider(
 
             for line in logs.split("\n"):
                 if searchstring in line:
-                    log.info(f"log line: {line}")
-                    pod_name = line.split('pods/"')[1].split('"')[0]
-                    ns = line.split('-n "')[1].split('"')[0]
-                    pod_obj = OCP(
-                        kind=constants.POD, namespace=ns, resource_name=pod_name
-                    )
-                    pod_obj.exec_oc_cmd(f"delete pod {pod_name} -n {ns} --force")
+                    log.info(f"pod evicting error log:  {line}")
+                    match = re.search(r'pods/"([^"]+)" -n "([^"]+)"', line)
+                    if match:
+                        pod_name, ns = match.groups()
+                        log.info(f"Deleting pod {pod_name} in namespace {ns}")
+                        pod_obj = OCP(
+                            kind=constants.POD, namespace=ns, resource_name=pod_name
+                        )
+                        pod_obj.exec_oc_cmd(f"delete pod {pod_name} -n {ns} --force")
 
             break  # refresh nodes after handling one
 
