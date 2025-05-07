@@ -2624,6 +2624,16 @@ def ceph_health_recover(health_status, namespace=None):
                 "Trying to fix Ceph Health because we found in Health status the matching pattern"
                 f": '{pattern}'!"
             )
+            # Avoid circular dependencies, importing here
+            from ocs_ci.ocs.utils import collect_ocs_logs
+
+            # Collecting logs here before trying to fix issue
+            timestamp = int(time.time())
+            collect_ocs_logs(
+                f"ceph_health_recover_{timestamp}",
+                ocp=False,
+                timeout=defaults.MUST_GATHER_TIMEOUT,
+            )
             fix_dict["func"](
                 *fix_dict.get("func_args", []), **fix_dict.get("func_kwargs", {})
             )
