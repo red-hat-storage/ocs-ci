@@ -11,6 +11,7 @@ from ocs_ci.framework.pytest_customization.marks import (
     mcg,
     sts_deployment_required,
     skipif_noobaa_external_pgsql,
+    jira,
 )
 from ocs_ci.ocs.exceptions import CommandFailed
 from ocs_ci.framework.testlib import MCGTest
@@ -359,6 +360,7 @@ class TestReplication(MCGTest):
             mcg_obj_session, first_bucket_name, second_bucket_name, timeout=self.TIMEOUT
         ), f"Objects in the buckets {first_bucket_name} and {second_bucket_name} are not same"
 
+    @jira("DFBUGS-2353")
     @skipif_noobaa_external_pgsql
     @pytest.mark.parametrize(
         argnames=["source_bucketclass", "target_bucketclass"],
@@ -460,7 +462,7 @@ class TestReplication(MCGTest):
 
         replication_id = exec_nb_db_query(
             f"SELECT data ->> 'replication_policy_id' FROM buckets WHERE data ->> 'name'='{source_bucket_name}';"
-        )[2]
+        )[0].strip()
 
         # write random objects to the bucket
         write_random_test_objects_to_bucket(
@@ -500,7 +502,7 @@ class TestReplication(MCGTest):
             # check in db that the replication config was deleted
             replication_conf_count = exec_nb_db_query(
                 f"SELECT COUNT (*) FROM replicationconfigs WHERE _id='{replication_id}'"
-            )[2]
+            )[0].strip()
 
             assert (
                 int(replication_conf_count) == 0
