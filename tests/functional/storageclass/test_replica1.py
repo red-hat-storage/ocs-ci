@@ -24,6 +24,9 @@ from ocs_ci.ocs.constants import (
     VOLUME_MODE_BLOCK,
     CSI_RBD_RAW_BLOCK_POD_YAML,
     DEFALUT_DEVICE_CLASS,
+    VSPHERE_PLATFORM,
+    RACK_LABEL,
+    ZONE_LABEL,
 )
 from ocs_ci.helpers.helpers import create_pvc
 from ocs_ci.utility.utils import validate_dict_values, compare_dictionaries
@@ -39,32 +42,111 @@ from ocs_ci.ocs.replica_one import (
     get_all_osd_names_by_device_class,
     get_failure_domains,
 )
+from ocs_ci.ocs.node import get_worker_nodes
 
 
 log = getLogger(__name__)
 
 
-def create_pod_on_failure_domain(project_factory, pod_factory, failure_domain: str):
+def _get_node_selector_for_failure_domain(
+    failure_domain: str,
+) -> tuple[dict[str, str] | None, dict | None]:
     """
-    Creates a pod on the specified failure domain.
+    Return either
+
+    * a **hard** node‐selector — when at least one *worker* carries the
+      requested domain label, or
+    * a **preferred (soft) node‑affinity** — as a last‑chance
+      fallback when no worker has the label, or
+    * (None, None) if absolutely nothing can be used.
 
     Args:
-        failure_domain (str): Failure domain to create the pod on.
+        failure_domain (str): The failure domain value to match.
 
     Returns:
-        Pod: Pod object
+        tuple: (node_selector, preferred_affinity)
+            node_selector (dict[str, str] | None): Hard selector if possible.
+            preferred_affinity (dict | None): Soft affinity if possible.
     """
-    proj_obj = project_factory()
-    proj = proj_obj.namespace
+    if config.ENV_DATA["platform"].lower() == VSPHERE_PLATFORM:
+        label_key = RACK_LABEL
+    else:
+        label_key = ZONE_LABEL
+
+    workers = get_worker_nodes()
+    workers_with_label = [
+        n for n in workers if label_key in n.data["metadata"]["labels"]
+    ]
+    workers_in_domain = [
+        n
+        for n in workers_with_label
+        if n.data["metadata"]["labels"][label_key] == failure_domain
+    ]
+
+    if workers_in_domain:
+        log.info(
+            f"Found worker(s) with {label_key}={failure_domain}, using hard node selector."
+        )
+        return {label_key: failure_domain}, None  # hard selector
+
+    if workers_with_label:  # label exists but not the value
+        log.info(
+            f"No worker with {label_key}={failure_domain}, but label exists. Using soft affinity."
+        )
+        soft_affinity = {
+            "nodeAffinity": {
+                "preferredDuringSchedulingIgnoredDuringExecution": [
+                    {
+                        "weight": 100,
+                        "preference": {
+                            "matchExpressions": [
+                                {
+                                    "key": label_key,
+                                    "operator": "In",
+                                    "values": [failure_domain],
+                                }
+                            ]
+                        },
+                    }
+                ]
+            }
+        }
+        return None, soft_affinity
+
+    log.warning(
+        f"No workers expose label {label_key} for failure-domain {failure_domain}."
+    )
+    return None, None
+
+
+def create_pod_on_failure_domain(project_factory, pod_factory, failure_domain: str):
+    ns = project_factory().namespace
     pvc = create_pvc(
-        namespace=proj,
+        namespace=ns,
         sc_name=REPLICA1_STORAGECLASS,
         size="80G",
         access_mode=ACCESS_MODE_RWO,
     )
 
-    node = {"topology.kubernetes.io/zone": failure_domain}
-    return pod_factory(pvc=pvc, node_selector=node)
+    node_selector, preferred_affinity = _get_node_selector_for_failure_domain(
+        failure_domain
+    )
+
+    if node_selector:
+        log.info(f"Creating pod with node selector: {node_selector}")
+        return pod_factory(pvc=pvc, node_selector=node_selector)
+
+    if preferred_affinity:
+        log.info(
+            f"Creating pod with preferred node affinity for domain: {failure_domain}"
+        )
+        return pod_factory(pvc=pvc, raw_payload_override=preferred_affinity)
+
+    log.warning(
+        "No nodes expose label for failure‑domain %s – creating unconstrained pod.",
+        failure_domain,
+    )
+    return pod_factory(pvc=pvc)
 
 
 @polarion_id("OCS-5720")
