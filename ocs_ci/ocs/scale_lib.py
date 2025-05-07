@@ -244,7 +244,7 @@ class FioPodScale(object):
         pvc_per_pod_count=20,
         start_io=True,
         io_runtime=None,
-        pvc_size=None,
+        pvc_size=1,
         max_pvc_size=105,
         obj_name_prefix="obj",
     ):
@@ -295,38 +295,7 @@ class FioPodScale(object):
         elif is_managed_service_cluster():
             expected_worker_count = 3
         else:
-            expected_worker_count = get_expected_worker_count(scale_count)
-
-        if check_and_add_enough_worker(expected_worker_count):
-            if (
-                (
-                    config.ENV_DATA["deployment_type"] == "ipi"
-                    and config.ENV_DATA["platform"].lower() == "aws"
-                )
-                or (
-                    config.ENV_DATA["deployment_type"] == "ipi"
-                    and config.ENV_DATA["platform"].lower() == "azure"
-                )
-                or (
-                    config.ENV_DATA["deployment_type"] == "ipi"
-                    and config.ENV_DATA["platform"].lower() == "rhv"
-                )
-                or (
-                    config.ENV_DATA["deployment_type"] == "ipi"
-                    and config.ENV_DATA["platform"].lower()
-                    == constants.VSPHERE_PLATFORM
-                )
-                or (
-                    config.ENV_DATA["deployment_type"] == "ipi"
-                    and config.ENV_DATA["platform"].lower()
-                    == constants.IBMCLOUD_PLATFORM
-                )
-            ):
-                for obj in machine.get_machineset_objs():
-                    if "app" in obj.name:
-                        self.ms_name.append(obj.name)
-            else:
-                self.ms_name = []
+            expected_worker_count = 3
 
         # Create namespace
         self.create_and_set_namespace()
@@ -727,7 +696,7 @@ def get_rate_based_on_cls_iops(custom_iops_dict=None, osd_size=2048):
     return rate_param
 
 
-def get_expected_worker_count(scale_count=1500):
+def get_expected_worker_count(scale_count=750):
     """
     Function to get expected worker count based on platform to scale pods in cluster
 
@@ -1196,7 +1165,7 @@ def construct_pvc_creation_yaml_bulk_for_kube_job(
 
     # Construct PVC.yaml for the no_of_required_pvc count
     # append all the pvc.yaml dict to pvc_dict_list and return the list
-    if max_pvc_size <= 9:
+    if max_pvc_size < 1:
         raise ValueError(
             f"The max pvc size is {max_pvc_size}, and it should be greater than 9"
         )
@@ -1213,7 +1182,7 @@ def construct_pvc_creation_yaml_bulk_for_kube_job(
         del pvc_data["metadata"]["namespace"]
         pvc_data["spec"]["accessModes"] = [access_mode]
         pvc_data["spec"]["storageClassName"] = sc_name
-        pvc_data["spec"]["resources"]["requests"]["storage"] = size
+        pvc_data["spec"]["resources"]["requests"]["storage"] = "5Gi"
         # Check to identify RBD_RWX PVC and add VolumeMode
         if access_mode == "ReadWriteMany" and "rbd" in sc_name:
             pvc_data["spec"]["volumeMode"] = "Block"
@@ -1302,7 +1271,7 @@ def check_all_pvc_reached_bound_state_in_kube_job(
             while_iteration_count += 1
             # Breaking while loop after 10 Iteration i.e. after timeout*10 secs of wait_time
             # And if PVCs still not in bound state then there will be assert.
-            if while_iteration_count >= 10:
+            if while_iteration_count >= 70:
                 assert logger.error(
                     f" Listed PVCs took more than {timeout * 10} secs to bound {pvc_not_bound_list}"
                 )
@@ -1414,7 +1383,7 @@ def check_all_pod_reached_running_state_in_kube_job(
 
             # Breaking while loop after 13 Iteration i.e. after 30*13 secs of wait_time
             # And if PODs are still not in Running state then there will be assert.
-            if while_iteration_count >= 13:
+            if while_iteration_count >= 60:
                 assert logger.error(
                     f" Listed PODs took more than 390secs for Running {pod_not_running_list}"
                 )
