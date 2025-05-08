@@ -2472,7 +2472,7 @@ def expire_multipart_upload_in_noobaa_db(upload_id):
         "UPDATE objectmultiparts "
         "SET data = jsonb_set(data, '{create_time}', "
         f"to_jsonb(to_timestamp({one_year_ago}))) "
-        f"WHERE obj = '{upload_id}';"
+        f"WHERE data->>'obj' = '{upload_id}';"
     )
     exec_nb_db_query(psql_query)
 
