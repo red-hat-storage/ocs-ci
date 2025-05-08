@@ -945,6 +945,16 @@ def ceph_pool_factory_fixture(request, replica=3, compression=None):
 
         for instance in instances:
             try:
+                radosns_obj = ocp.OCP(
+                    kind=constants.CEPHBLOCKPOOLRADOSNS, namespace=instance.namespace
+                )
+                radosnamespaces = [
+                    OCS(**radosns)
+                    for radosns in radosns_obj.get()
+                    if radosns["spec"]["blockPoolName"] == instance.name
+                ]
+                for radosnamespace in radosnamespaces:
+                    radosnamespace.delete()
                 instance.delete()
             except CommandFailed as ex:
                 if "NotFound" in str(ex) and skip_resource_not_found_error:
