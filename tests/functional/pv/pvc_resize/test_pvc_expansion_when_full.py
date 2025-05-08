@@ -292,6 +292,7 @@ class TestPvcExpansionWhenFull(ManageTest):
                 io_direction="write",
                 runtime=30,
                 rate="100M",
+                fio_filename=f"file_{fill_up_mb}mb",
                 end_fsync=1,
             )
         for pod_obj in self.pods:
