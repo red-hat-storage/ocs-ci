@@ -1829,6 +1829,13 @@ def do_discovered_apps_cleanup(
     config.switch_acm_ctx()
     drpc_obj = DRPC(namespace=constants.DR_OPS_NAMESAPCE, resource_name=drpc_name)
     drpc_obj.wait_for_progression_status(status=constants.STATUS_WAITFORUSERTOCLEANUP)
+    time.sleep(90)
+    assert drpc_obj.get_progression_status(
+        status_to_check=constants.STATUS_WAITFORUSERTOCLEANUP
+    )
+    logger.info(
+        f"Progression status after 90 seconds is {constants.STATUS_WAITFORUSERTOCLEANUP}"
+    )
     config.switch_to_cluster_by_name(old_primary)
     workload_path = constants.DR_WORKLOAD_REPO_BASE_DIR + "/" + workload_dir
     run_cmd(
