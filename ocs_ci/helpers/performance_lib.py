@@ -685,7 +685,7 @@ def get_pvc_provision_times(interface, pvc_name, start_time, time_type="all", op
                                     extruct_timestamp_from_log(line)
                                 )
                         if (
-                            re.search(f'deleted succeeded.*PV="{re.escape(pv_name)}"', line))
+                            re.search(f'deleted succeeded.*PV="{re.escape(pv_name)}"', line)
                             and (
                                 version.get_semantic_ocs_version_from_config()
                                 <= version.VERSION_4_13
@@ -693,7 +693,7 @@ def get_pvc_provision_times(interface, pvc_name, start_time, time_type="all", op
                         ) or re.search(
                             f'delete "{pv_name}": persistentvolume deleted succeeded',
                             line,
-                        ):
+                        )):
                             if results[name]["delete"]["end"] is None:
                                 results[name]["delete"]["end"] = (
                                     extruct_timestamp_from_log(line)
