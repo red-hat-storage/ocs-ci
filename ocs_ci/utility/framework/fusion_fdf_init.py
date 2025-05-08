@@ -201,7 +201,7 @@ def generate_run_id() -> int:
 
     """
     logger.debug("Generating run_id from timestamp")
-    run_id = int(time.time())
+    run_id = int(time.time() * 1000)
     config.RUN["run_id"] = run_id
     return run_id
 

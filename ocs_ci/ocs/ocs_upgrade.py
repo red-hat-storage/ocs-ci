@@ -32,7 +32,7 @@ from ocs_ci.ocs.defaults import (
     OCS_OPERATOR_NAME,
 )
 from ocs_ci.ocs.ocp import get_images, OCP
-from ocs_ci.ocs.node import get_nodes, get_all_nodes
+from ocs_ci.ocs.node import get_nodes
 from ocs_ci.ocs.resources.catalog_source import CatalogSource, disable_specific_source
 from ocs_ci.ocs.resources.daemonset import DaemonSet
 from ocs_ci.ocs.resources.csv import (
@@ -140,7 +140,6 @@ def verify_image_versions(old_images, upgrade_version, version_before_upgrade):
 
     """
     number_of_worker_nodes = len(get_nodes())
-    total_nodes = len(get_all_nodes())
     verify_pods_upgraded(old_images, selector=constants.OCS_OPERATOR_LABEL)
     verify_pods_upgraded(old_images, selector=constants.OPERATOR_LABEL)
     # Default noobaa pods
@@ -222,7 +221,9 @@ def verify_image_versions(old_images, upgrade_version, version_before_upgrade):
             csi_rbdplugin_provisioner_label = (
                 constants.CSI_RBDPLUGIN_PROVISIONER_LABEL_419
             )
-            count_csi_cephfsplugin_label = count_csi_rbdplugin_label = total_nodes
+            count_csi_cephfsplugin_label = count_csi_rbdplugin_label = (
+                number_of_worker_nodes
+            )
         else:
             log.info(
                 f"Label for cephfsplugin and rbdplugin are {csi_cephfsplugin_label} and {csi_rbdplugin_label}"
