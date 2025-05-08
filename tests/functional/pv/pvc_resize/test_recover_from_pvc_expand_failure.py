@@ -71,6 +71,7 @@ class TestRecoverPvcExpandFailure(ManageTest):
                 io_direction="write",
                 runtime=60,
                 fio_filename=pod_obj.name,
+                end_fsync=1,
             )
 
         target_percentage = 85
@@ -146,6 +147,7 @@ class TestRecoverPvcExpandFailure(ManageTest):
                 io_direction="write",
                 runtime=60,
                 fio_filename=f"{pod_obj.name}",
+                end_fsync=1,
             )
 
         # Scale down rbd and cephfs provisioner pod. To do this scale down operator deployments first
