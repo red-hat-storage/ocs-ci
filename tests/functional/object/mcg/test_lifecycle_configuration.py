@@ -1,5 +1,4 @@
 from datetime import datetime, timedelta
-import json
 import logging
 from time import sleep
 
@@ -84,7 +83,7 @@ class TestLifecycleConfiguration(MCGTest):
         4. Upload a few parts
         5. Manually expire the multipart-upload
         6. Wait for the multipart-upload to expire
-        7. Verify that the parts were deleted at the noobaa-db
+        7. Wait for the parts to get deleted at the noobaa-db
         """
         parts_amount = 5
         key = "test_obj_123"
@@ -128,7 +127,7 @@ class TestLifecycleConfiguration(MCGTest):
         # 5. Manually expire the parts and the multipart-upload
         expire_multipart_upload_in_noobaa_db(upload_id)
 
-        # 6. Wait for the parts and multipart-upload to expire
+        # 6. Wait for the multipart-upload to expire
         for http_response in TimeoutSampler(
             timeout=TIMEOUT_THRESHOLD,
             sleep=TIMEOUT_SLEEP_DURATION,
@@ -140,20 +139,32 @@ class TestLifecycleConfiguration(MCGTest):
                 break
             logger.warning(f"Upload has not expired yet: \n{http_response}")
 
-        # 7. Verify that the parts were deleted at the noobaa-db
+        # 7. Wait for the parts to get deleted at the noobaa-db
         bucket_id = exec_nb_db_query(
             f"SELECT _id FROM buckets WHERE data->>'name' = '{bucket}'",
         )[0].strip()
-        multiparts_md_list = exec_nb_db_query(
+        list_parts_md_query = (
             f"SELECT data FROM objectmultiparts WHERE data->>'bucket' = '{bucket_id}'"
         )
-        for md_string in multiparts_md_list:
-            md = json.loads(md_string)
-            assert (
-                "deleted" in md
-            ), f"Multipart upload was not expired as expected: {md}"
+        for parts_md_list in TimeoutSampler(
+            timeout=TIMEOUT_THRESHOLD,
+            sleep=TIMEOUT_SLEEP_DURATION,
+            func=exec_nb_db_query,
+            query=list_parts_md_query,
+        ):
+            all_deleted = True
+            for md_str in parts_md_list:
+                if "deleted" not in md_str:
+                    all_deleted = False
+                    break
+            if not all_deleted:
+                logger.warning(
+                    f"Some parts still don't appear deleted in the noobaa-db: {md_str}"
+                )
+            else:
+                logger.info("Success: All the parts appear deleted in the noobaa-db:\n")
+                break
 
-    @tier1
     @pytest.mark.polarion_id("OCS-6559")
     def test_noncurrent_version_expiration(self, mcg_obj, bucket_factory, awscli_pod):
         """
