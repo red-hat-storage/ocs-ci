@@ -1834,7 +1834,7 @@ def do_discovered_apps_cleanup(
         status_to_check=constants.STATUS_WAITFORUSERTOCLEANUP
     )
     logger.info(
-        f"Progression status after 90 seconds is {constants.STATUS_WAITFORUSERTOCLEANUP}"
+        f'Progression status after 90 seconds is {drpc_obj.get()["status"]["progression"]}'
     )
     config.switch_to_cluster_by_name(old_primary)
     workload_path = constants.DR_WORKLOAD_REPO_BASE_DIR + "/" + workload_dir
