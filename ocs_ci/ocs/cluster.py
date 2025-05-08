@@ -662,24 +662,27 @@ class CephCluster(object):
         # module does not exist, return 0 as number of replica.
         return 0
 
-    def get_ceph_capacity(self):
+    def get_ceph_capacity(self, replica_divide=True):
         """
         The function gets the total mount of storage capacity of the ocs cluster.
-        the calculation is <total bytes> / <replica number>
+        the calculation is <total bytes> / <replica number> depends if replia_divide is true
         it will not take into account the current used capacity.
-
+        Args:
+            replica_divide (bool): if true it will divide the capacity in to replica else return the capacity as it.
         Returns:
             int : Total storage capacity in GiB (GiB is for development environment)
 
         """
-        replica = int(self.get_ceph_default_replica())
-        logger.info(f"Number of replica : {replica}")
         ceph_pod = pod.get_ceph_tools_pod()
         ceph_status = ceph_pod.exec_ceph_cmd(ceph_cmd="ceph df")
-        usable_capacity = (
-            int(ceph_status["stats"]["total_bytes"]) / replica / constant.GB
-        )
-
+        if replica_divide:
+            replica = int(self.get_ceph_default_replica())
+            logger.info(f"Number of replica : {replica}")
+            usable_capacity = (
+                int(ceph_status["stats"]["total_bytes"]) / replica / constant.GB
+            )
+        else:
+            usable_capacity = int(ceph_status["stats"]["total_bytes"]) / constant.GB
         return usable_capacity
 
     def get_ceph_free_capacity(self):
