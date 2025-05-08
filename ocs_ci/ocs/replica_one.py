@@ -2,6 +2,7 @@ from logging import getLogger
 from time import sleep
 
 from ocs_ci.framework import config
+from ocs_ci.ocs.resources.ocs import OCS
 from ocs_ci.ocs.resources.pod import (
     delete_osd_removal_job,
     get_pods_having_label,
@@ -197,18 +198,23 @@ def purge_replica1_osd():
 
 def delete_replica1_cephblockpools_cr(cbp_object: OCP):
     """
-    Deletes CR of cephblockpools associated with replica1
+    Delete only the CephBlockPool CRs that belong to the
+    replica‑1 (non‑resilient) feature.
 
     Args:
-        cbp_object (ocp.OCP): OCP object with kind=CEPHBLOCKPOOL
-
+        cbp_object (OCP): OCP(kind="CephBlockPool") wrapper
     """
-    for i in range(0, len((cbp_object.data["items"]))):
-        cbp_cr_name = cbp_object.data["items"][i]["spec"]["deviceClass"]
-        log.info(f"cbp_cr_name: {cbp_cr_name}")
-        if cbp_cr_name in get_failure_domains():
-            log.info(f"Deleting {DEFAULT_CEPHBLOCKPOOL}-{cbp_cr_name}")
-            cbp_object.delete(resource_name=(f"{DEFAULT_CEPHBLOCKPOOL}-{cbp_cr_name}"))
+    for pool in cbp_object.get()["items"]:
+        spec = pool["spec"]
+        # replica‑1 pools have both deviceClass and size == 1
+        if spec.get("deviceClass") and spec.get("replicated", {}).get("size") == 1:
+            name = pool["metadata"]["name"]
+            log.info(
+                "Deleting replica‑1 CephBlockPool %s (deviceClass=%s)",
+                name,
+                spec["deviceClass"],
+            )
+            OCS(**pool).delete(force=True)
 
 
 def modify_replica1_osd_count(new_osd_count):
