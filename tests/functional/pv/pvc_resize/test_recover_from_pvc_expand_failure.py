@@ -63,7 +63,7 @@ class TestRecoverPvcExpandFailure(ManageTest):
         Test case to verify recovery from PVC expansion failure
 
         """
-        # Create files on the pods and get md5sum
+        # Create files on the pods
         for pod_obj in self.pods:
             pod_obj.run_io(
                 storage_type="fs",
@@ -72,7 +72,6 @@ class TestRecoverPvcExpandFailure(ManageTest):
                 runtime=60,
                 fio_filename=pod_obj.name,
             )
-            pod_obj.orig_md5_sum = cal_md5sum(pod_obj=pod_obj, file_name=pod_obj.name)
 
         target_percentage = 85
         logger.info(
@@ -82,6 +81,10 @@ class TestRecoverPvcExpandFailure(ManageTest):
 
         pvc_size_expanded = 20
         pvc_size_reduced = 10
+
+        # Find initial md5sum of file from pods
+        for pod_obj in self.pods:
+            pod_obj.orig_md5_sum = cal_md5sum(pod_obj=pod_obj, file_name=pod_obj.name)
 
         logger.info(f"Expanding PVCs to {pvc_size_expanded} GiB")
         for pvc_obj in self.pvcs:
@@ -135,7 +138,7 @@ class TestRecoverPvcExpandFailure(ManageTest):
         Test case to verify recovery from pending PVC expansion
 
         """
-        # Create files on the pods and get md5sum
+        # Create files on the pods
         for pod_obj in self.pods:
             pod_obj.run_io(
                 storage_type="fs",
@@ -144,7 +147,6 @@ class TestRecoverPvcExpandFailure(ManageTest):
                 runtime=60,
                 fio_filename=f"{pod_obj.name}",
             )
-            pod_obj.orig_md5_sum = cal_md5sum(pod_obj=pod_obj, file_name=pod_obj.name)
 
         # Scale down rbd and cephfs provisioner pod. To do this scale down operator deployments first
         logger.info(
@@ -165,6 +167,10 @@ class TestRecoverPvcExpandFailure(ManageTest):
 
         pvc_size_expanded = 20
         pvc_size_reduced = 10
+
+        # Find initial md5sum of file from pods
+        for pod_obj in self.pods:
+            pod_obj.orig_md5_sum = cal_md5sum(pod_obj=pod_obj, file_name=pod_obj.name)
 
         logger.info(f"Expanding PVCs to {pvc_size_expanded} GiB")
         for pvc_obj in self.pvcs:
