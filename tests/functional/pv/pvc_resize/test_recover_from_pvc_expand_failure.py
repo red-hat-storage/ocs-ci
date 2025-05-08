@@ -190,10 +190,8 @@ class TestRecoverPvcExpandFailure(ManageTest):
                 pvc_size_reduced, False
             ), f"Failed to reduce the size of the PVC '{pvc_obj.name}'"
 
-        # Scale back the odf-operator-controller-manager. This will scale up all other deployments that was scaled down
-        dep_ocp.exec_oc_cmd(
-            "scale deployment odf-operator-controller-manager --replicas=0"
-        )
+        # Scale back the ceph-csi-controller-manager. This will scale up all other deployments that was scaled down
+        dep_ocp.exec_oc_cmd("scale deployment ceph-csi-controller-manager --replicas=1")
 
         # Now PVCs are expected to expand to the reduced size
         for pvc_obj in self.pvcs:
