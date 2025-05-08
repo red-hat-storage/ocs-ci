@@ -85,7 +85,7 @@ class TestRecoverPvcExpandFailure(ManageTest):
 
         # Find initial md5sum of file from pods
         # Add some wait time for proper sync of data before getting md5sum. This is to avoid false failure
-        time.sleep(25)
+        time.sleep(60)
         for pod_obj in self.pods:
             pod_obj.orig_md5_sum = cal_md5sum(pod_obj=pod_obj, file_name=pod_obj.name)
 
@@ -174,7 +174,7 @@ class TestRecoverPvcExpandFailure(ManageTest):
 
         # Find initial md5sum of file from pods
         # Add some wait time for proper sync of data before getting md5sum. This is to avoid false failure
-        time.sleep(25)
+        time.sleep(60)
         for pod_obj in self.pods:
             pod_obj.orig_md5_sum = cal_md5sum(pod_obj=pod_obj, file_name=pod_obj.name)
 
