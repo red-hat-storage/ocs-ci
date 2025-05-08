@@ -693,7 +693,7 @@ def get_pvc_provision_times(interface, pvc_name, start_time, time_type="all", op
                         ) or re.search(
                             f'delete "{pv_name}": persistentvolume deleted succeeded',
                             line,
-                        )):
+                        ):
                             if results[name]["delete"]["end"] is None:
                                 results[name]["delete"]["end"] = (
                                     extruct_timestamp_from_log(line)
