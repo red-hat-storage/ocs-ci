@@ -1,5 +1,6 @@
 import pytest
 from logging import getLogger
+from typing import Dict, Tuple, Optional
 
 from ocs_ci.framework import config
 from ocs_ci.framework.pytest_customization.marks import (
@@ -51,7 +52,7 @@ log = getLogger(__name__)
 
 def _get_node_selector_for_failure_domain(
     failure_domain: str,
-) -> tuple[dict[str, str] | None, dict | None]:
+) -> Tuple[Optional[Dict[str, str]], Optional[dict]]:
     """
     Return either
 
