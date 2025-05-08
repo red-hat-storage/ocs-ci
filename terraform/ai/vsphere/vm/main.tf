@@ -18,7 +18,7 @@ resource "vsphere_virtual_machine" "vm" {
 
   disk {
     label            = "disk0"
-    size             = 120
+    size             = var.system_disk_size
     thin_provisioned = true
     storage_policy_id           = var.storage_policy_id
   }
@@ -29,7 +29,7 @@ resource "vsphere_virtual_machine" "vm" {
     content {
       label            = "disk${disk.value}"
       unit_number      = disk.value
-      size             = 256
+      size             = var.data_disks_size
       thin_provisioned = true
       storage_policy_id           = var.storage_policy_id
     }

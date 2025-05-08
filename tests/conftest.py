@@ -17,7 +17,6 @@ from functools import partial
 from copy import deepcopy
 
 import boto3
-import yaml
 from botocore.exceptions import ClientError
 import pytest
 from collections import namedtuple
@@ -25,8 +24,8 @@ from collections import namedtuple
 from ocs_ci.deployment.cnv import CNVInstaller
 from ocs_ci.deployment import factory as dep_factory
 from ocs_ci.deployment.helpers.hypershift_base import HyperShiftBase
-from ocs_ci.deployment.hosted_cluster import HostedClients
-from ocs_ci.framework import config as ocsci_config, Config, config
+from ocs_ci.deployment.hosted_cluster import hypershift_cluster_factory
+from ocs_ci.framework import config as ocsci_config, config
 import ocs_ci.framework.pytest_customization.marks
 from ocs_ci.framework.pytest_customization.marks import (
     deployment,
@@ -48,7 +47,6 @@ from ocs_ci.ocs.bucket_utils import (
     craft_s3_command,
     put_bucket_policy,
 )
-from ocs_ci.ocs.constants import FUSION_CONF_DIR
 from ocs_ci.ocs.cnv.virtual_machine import VirtualMachine, VMCloner
 from ocs_ci.ocs.dr.dr_workload import (
     BusyBox,
@@ -72,6 +70,7 @@ from ocs_ci.ocs.exceptions import (
     ResourceNotDeleted,
     MissingDecoratorError,
     MissingRequiredConfigKeyError,
+    UnsupportedWorkloadError,
 )
 from ocs_ci.ocs.mcg_workload import mcg_job_factory as mcg_job_factory_implementation
 from ocs_ci.ocs.node import get_node_objs, schedule_nodes
@@ -147,7 +146,6 @@ from ocs_ci.utility.environment_check import (
     get_status_before_execution,
     get_status_after_execution,
 )
-from ocs_ci.utility.json import SetToListJSONEncoder
 from ocs_ci.utility.resource_check import (
     create_resource_dct,
     get_environment_status_after_execution,
@@ -212,6 +210,7 @@ from ocs_ci.utility.decorators import switch_to_default_cluster_index_at_last
 from ocs_ci.helpers.keyrotation_helper import PVKeyrotation
 from ocs_ci.ocs.resources.storage_cluster import set_in_transit_encryption
 from ocs_ci.helpers.e2e_helpers import verify_osd_used_capacity_greater_than_expected
+
 
 log = logging.getLogger(__name__)
 
@@ -563,13 +562,26 @@ def pytest_runtest_setup(item):
     if ocsci_config.multicluster and ocsci_config.UPGRADE.get("upgrade", False):
         for mark in item.iter_markers():
             if mark.name == "config_index":
-                log.info("Switching the test context to index: {mark.args[0]}")
+                log.info(f"Switching the test context to index: {mark.args[0]}")
                 ocsci_config.switch_ctx(mark.args[0])
+    if ocsci_config.multicluster:
+        for mark in item.iter_markers():
+            if mark.name == "parametrize":
+                if item.callspec.params.get("cluster_index"):
+                    context = item.callspec.params.get("cluster_index")
+                    log.info(f"Switching the test context to index: {context}")
+                    original_idx = ocsci_config.cur_index
+                    ocsci_config.switch_ctx(context)
+                    yield
+                    log.info(
+                        f"Switching the test context back to index: {original_idx}"
+                    )
+                    ocsci_config.switch_ctx(original_idx)
 
 
 def pytest_fixture_setup(fixturedef, request):
     """
-    In case of multicluster upgrade scenarios, we want to make sure that before running
+    In case of multicluster scenarios, we want to make sure that before running
     any fixture related to the testcase we need to switch the cluster context
 
     """
@@ -580,6 +592,25 @@ def pytest_fixture_setup(fixturedef, request):
             for mark in request.node.iter_markers():
                 if mark.name == "config_index":
                     ocsci_config.switch_ctx(mark.args[0])
+    if ocsci_config.multicluster:
+        for mark in request.node.iter_markers():
+            if mark.name == "parametrize":
+                if request.node.callspec.params.get("cluster_index"):
+                    context = request.node.callspec.params.get("cluster_index")
+                    log.info(f"Switching the fixture context to index: {context}")
+                    ocsci_config.switch_ctx(context)
+
+
+def pytest_fixture_post_finalizer(fixturedef, request):
+    """
+    In case of multicluster scenarios, we want to make sure that context is restored
+    after fixture is finished.
+    """
+    if ocsci_config.multicluster:
+        for mark in request.node.iter_markers():
+            if mark.name == "parametrize":
+                if request.node.callspec.params.get("cluster_index"):
+                    ocsci_config.reset_ctx()
 
 
 @pytest.fixture()
@@ -2860,6 +2891,9 @@ def scale_cli_fixture(request, scope_name):
     )
     helpers.wait_for_resource_state(
         scalecli_pod_obj, constants.STATUS_RUNNING, timeout=600
+    )
+    scalecli_pod_obj.exec_cmd_on_pod(
+        f"cp {constants.SERVICE_CA_CRT_AWSCLI_PATH} {constants.AWSCLI_CA_BUNDLE_PATH}"
     )
 
     def scalecli_pod_cleanup():
@@ -7121,13 +7155,16 @@ def discovered_apps_dr_workload(request):
     """
     instances = []
 
-    def factory(kubeobject=1, recipe=0, pvc_interface=constants.CEPHBLOCKPOOL):
+    def factory(
+        kubeobject=1, recipe=0, pvc_interface=constants.CEPHBLOCKPOOL, multi_ns=False
+    ):
         """
         Args:
             kubeobject (int): Number if Discovered Apps workload with kube object protection to be created
             recipe (int): Number if Discovered Apps workload with recipe protection to be created
             pvc_interface (str): 'CephBlockPool' or 'CephFileSystem'.
                 This decides whether a RBD based or CephFS based resource is created. RBD is default.
+            multi_ns (bool): True for Multi Namespace
 
         Raises:
             ResourceNotDeleted: In case workload resources not deleted properly
@@ -7138,16 +7175,25 @@ def discovered_apps_dr_workload(request):
         """
         total_pvc_count = 0
         workload_key = "dr_workload_discovered_apps_rbd"
+        multi_ns_list = []
         # TODO: When cephfs is ready
+        if multi_ns and kubeobject <= 1:
+            raise UnsupportedWorkloadError("kubeobject count should be more then 2")
         if pvc_interface == constants.CEPHFILESYSTEM:
             workload_key = "dr_workload_discovered_apps_cephfs"
+        workload_details_list = ocsci_config.ENV_DATA[workload_key]
+
         for index in range(kubeobject):
-            workload_details = ocsci_config.ENV_DATA[workload_key][index]
+            workload_details = workload_details_list[index]
             workload = BusyboxDiscoveredApps(
                 workload_dir=workload_details["workload_dir"],
                 workload_pod_count=workload_details["pod_count"],
                 workload_pvc_count=workload_details["pvc_count"],
-                workload_namespace=workload_details["workload_namespace"],
+                workload_namespace=(
+                    workload_details["workload_namespace"] + "-multi-ns"
+                    if multi_ns
+                    else workload_details["workload_namespace"]
+                ),
                 discovered_apps_pvc_selector_key=workload_details[
                     "dr_workload_app_pvc_selector_key"
                 ],
@@ -7163,17 +7209,53 @@ def discovered_apps_dr_workload(request):
                 workload_placement_name=workload_details[
                     "dr_workload_app_placement_name"
                 ],
+                discovered_apps_multi_ns=multi_ns,
             )
+            if multi_ns:
+                multi_ns_list.append(workload.workload_namespace)
             instances.append(workload)
             total_pvc_count += workload_details["pvc_count"]
             workload.deploy_workload()
-
+        if multi_ns:
+            if pvc_interface == constants.CEPHBLOCKPOOL:
+                pvc_type = constants.RBD_INTERFACE
+            elif pvc_interface == constants.CEPHFILESYSTEM:
+                pvc_type = constants.CEPHFS_INTERFACE
+            drpc_name = f"busybox-multi-ns-{pvc_type}-" + "-".join(
+                map(str, range(1, kubeobject + 1))
+            )
+            placement_name = drpc_name + "-placement-1"
+            for index in range(kubeobject):
+                instances[index].discovered_apps_placement_name = drpc_name
+            instances[0].create_placement(placement_name=placement_name)
+            instances[0].create_dprc(
+                drpc_name=drpc_name,
+                placement_name=placement_name,
+                protected_namespaces=multi_ns_list,
+                pvc_selector_key=workload_details_list[0][
+                    "multi_ns_dr_workload_app_pvc_selector_key"
+                ],
+                pvc_selector_value=workload_details_list[0][
+                    "multi_ns_dr_workload_app_pvc_selector_value"
+                ],
+            )
+            for index in range(kubeobject):
+                instances[index].verify_workload_deployment(vrg_name=drpc_name)
         return instances
 
     def teardown():
-        for instance in instances:
+        for index, instance in enumerate(instances):
             try:
-                instance.delete_workload()
+                log.info(instance.__dict__)
+                drpc_name = None
+                if instance.discovered_apps_multi_ns:
+                    is_last = index == len(instances) - 1
+                    drpc_name = instance.discovered_apps_placement_name
+                else:
+                    is_last = False
+                instance.delete_workload(
+                    skip_vrg_check=not is_last, drpc_name=drpc_name
+                )
             except ResourceNotDeleted:
                 raise ResourceNotDeleted("Workload deletion was unsuccessful")
 
@@ -7324,12 +7406,10 @@ def cnv_workload_factory(request):
 
 
 @pytest.fixture()
-def multi_cnv_workload(
-    pv_encryption_kms_setup_factory, storageclass_factory, cnv_workload
-):
+def multi_cnv_workload(request, storageclass_factory, cnv_workload):
     """
     Fixture to create virtual machines (VMs) with specific configurations.
-
+    The `pv_encryption_kms_setup_factory` fixture is only initialized if `encrypted=True`.
     This fixture sets up multiple VMs with varying storage configurations as specified
     in the `cnv_vm_workload.yaml`. Each VM configuration includes the volume interface type,
     access mode, and the storage class to be used.
@@ -7341,7 +7421,7 @@ def multi_cnv_workload(
 
     """
 
-    def factory(namespace=None):
+    def factory(namespace=None, encrypted=False):
         """
         Args:
             namespace (str, optional): The namespace to create the vm on.
@@ -7361,16 +7441,26 @@ def multi_cnv_workload(
             namespace if namespace else create_unique_resource_name("vm", "namespace")
         )
 
-        # Setup csi-kms-connection-details configmap
-        log.info("Setting up csi-kms-connection-details configmap")
-        kms = pv_encryption_kms_setup_factory(kv_version="v2")
-        log.info("csi-kms-connection-details setup successful")
+        kms = None
+        if encrypted:
+            # Setup csi-kms-connection-details configmap
+            log.info("Setting up csi-kms-connection-details configmap")
+            pv_encryption_kms_setup_factory = request.getfixturevalue(
+                "pv_encryption_kms_setup_factory"
+            )
+            kms = pv_encryption_kms_setup_factory(kv_version="v2")
+            log.info("csi-kms-connection-details setup successful")
+
+        try:
+            kms_id = kms.kmsid
+        except (NameError, AttributeError):
+            kms_id = None
 
         # Create an encryption enabled storageclass for RBD
         sc_obj_def_compr = storageclass_factory(
             interface=constants.CEPHBLOCKPOOL,
-            encrypted=True,
-            encryption_kms_id=kms.kmsid,
+            encrypted=encrypted,
+            encryption_kms_id=kms_id,
             new_rbd_pool=True,
             mapOptions="krbd:rxbounce",
             mounter="rbd",
@@ -7378,23 +7468,23 @@ def multi_cnv_workload(
 
         sc_obj_aggressive = storageclass_factory(
             interface=constants.CEPHBLOCKPOOL,
-            encrypted=True,
-            encryption_kms_id=kms.kmsid,
+            encrypted=encrypted,
+            encryption_kms_id=kms_id,
             compression="aggressive",
             new_rbd_pool=True,
             mapOptions="krbd:rxbounce",
             mounter="rbd",
         )
-
         storage_classes = [sc_obj_def_compr, sc_obj_aggressive]
 
-        # Create ceph-csi-kms-token in the tenant namespace
-        kms.vault_path_token = kms.generate_vault_token()
-        kms.create_vault_csi_kms_token(namespace=namespace)
+        if encrypted:
+            # Create ceph-csi-kms-token in the tenant namespace
+            kms.vault_path_token = kms.generate_vault_token()
+            kms.create_vault_csi_kms_token(namespace=namespace)
 
-        for sc_obj in storage_classes:
-            pvk_obj = PVKeyrotation(sc_obj)
-            pvk_obj.annotate_storageclass_key_rotation(schedule="*/3 * * * *")
+            for sc_obj in storage_classes:
+                pvk_obj = PVKeyrotation(sc_obj)
+                pvk_obj.annotate_storageclass_key_rotation(schedule="*/3 * * * *")
 
         # Load VM configs from cnv_vm_workload yaml
         vm_configs = templating.load_yaml(constants.CNV_VM_WORKLOADS)
@@ -7723,6 +7813,15 @@ def change_the_noobaa_log_level(request):
 
     request.addfinalizer(finalizer)
     return factory
+
+
+@pytest.fixture(scope="session")
+def add_env_vars_to_noobaa_core_session(request, mcg_obj_session):
+    """
+    Session scoped fixture for adding env vars to the noobaa core sts
+
+    """
+    return add_env_vars_to_noobaa_core_fixture(request, mcg_obj_session)
 
 
 @pytest.fixture(scope="class")
@@ -8216,8 +8315,25 @@ def setup_logwriter_rbd_workload(
     return logwriter_sts
 
 
+@pytest.fixture(scope="session")
+def reduce_expiration_interval_session(add_env_vars_to_noobaa_core_session):
+    """
+    Session scoped fixture to reduce the object expiration interval check
+
+    """
+    return reduce_expiration_interval_factory(add_env_vars_to_noobaa_core_session)
+
+
 @pytest.fixture()
 def reduce_expiration_interval(add_env_vars_to_noobaa_core_class):
+    """
+    Function scoped fixture to reduce the object expiration interval check
+
+    """
+    return reduce_expiration_interval_factory(add_env_vars_to_noobaa_core_class)
+
+
+def reduce_expiration_interval_factory(add_env_vars_to_noobaa_core_class):
     """
     Reduce the interval in which the lifecycle
     background worker is running
@@ -8238,8 +8354,25 @@ def reduce_expiration_interval(add_env_vars_to_noobaa_core_class):
     return factory
 
 
+@pytest.fixture(scope="session")
+def change_lifecycle_schedule_min_session(add_env_vars_to_noobaa_core_session):
+    """
+    Session scoped fixture to change the lifecycle schedule minute
+
+    """
+    return change_lifecycle_schedule_min_factory(add_env_vars_to_noobaa_core_session)
+
+
 @pytest.fixture()
 def change_lifecycle_schedule_min(add_env_vars_to_noobaa_core_class):
+    """
+    Function scoped fixture to change the lifecycle schedule minute
+
+    """
+    return change_lifecycle_schedule_min_factory(add_env_vars_to_noobaa_core_class)
+
+
+def change_lifecycle_schedule_min_factory(add_env_vars_to_noobaa_core_class):
     """
     Change the lifecycle schedule minute. i.e, that is delay between
     the each run when lifecycle expiration is identfied.
@@ -8830,35 +8963,16 @@ def scale_noobaa_db_pod_pv_size(request):
 
 
 @pytest.fixture()
-def create_hypershift_clusters():
+def create_hypershift_clusters_push_config():
     """
-    Create hosted hyperhift clusters.
-
-    Here we create cluster deployment configuration that was set in the Test. With this configuration we
-    create a hosted cluster. After successful creation of the hosted cluster, we update the Multicluster Config,
-    adding the new cluster configuration to the list of the clusters. Now we can operate with new and old clusters
-    switching the context of Multicluster Config
-
-    Following arguments are necessary to build the hosted cluster configuration:
-    ENV_DATA:
-        clusters:
-            <cluster_name>:
-                hosted_cluster_path: <path>
-                ocp_version: <version>
-                cpu_cores_per_hosted_cluster: <cores>
-                memory_per_hosted_cluster: <memory>
-                hosted_odf_registry: <registry>
-                hosted_odf_version: <version>
-                setup_storage_client: <bool>
-                nodepool_replicas: <replicas>
-
+    Create hosted HyperShift clusters using the hypershift_cluster_factory function.
     """
 
     def factory(
         cluster_names, ocp_version, odf_version, setup_storage_client, nodepool_replicas
     ):
         """
-        Factory function implementing the fixture
+        Wrapper to call hypershift_cluster_factory with a predefined duty.
 
         Args:
             cluster_names (list): List of cluster names
@@ -8866,91 +8980,130 @@ def create_hypershift_clusters():
             odf_version (str): ODF version
             setup_storage_client (bool): Setup storage client
             nodepool_replicas (int): Nodepool replicas; supported values are 2,3
-
         """
-        hosted_cluster_conf_on_provider = {"ENV_DATA": {"clusters": {}}}
-
-        for cluster_name in cluster_names:
-            hosted_cluster_conf_on_provider["ENV_DATA"]["clusters"][cluster_name] = {
-                "hosted_cluster_path": f"~/clusters/{cluster_name}/openshift-cluster-dir",
-                "ocp_version": ocp_version,
-                "cpu_cores_per_hosted_cluster": 8,
-                "memory_per_hosted_cluster": "12Gi",
-                "hosted_odf_registry": "quay.io/rhceph-dev/ocs-registry",
-                "hosted_odf_version": odf_version,
-                "setup_storage_client": setup_storage_client,
-                "nodepool_replicas": nodepool_replicas,
-            }
-
-        log.info(
-            "Creating a hosted clusters with following deployment config: \n%s",
-            json.dumps(
-                hosted_cluster_conf_on_provider, indent=4, cls=SetToListJSONEncoder
-            ),
+        hypershift_cluster_factory(
+            cluster_names=cluster_names,
+            ocp_version=ocp_version,
+            odf_version=odf_version,
+            setup_storage_client=setup_storage_client,
+            nodepool_replicas=nodepool_replicas,
+            duty="create_hosted_cluster_push_config",
         )
-        ocsci_config.update(hosted_cluster_conf_on_provider)
 
-        # During the initial deployment phase, we always deploy Hosting and specific Hosted clusters.
-        # To distinguish between clusters intended for deployment on deployment CI stage and those intended for
-        # deployment on the Test stage, we pass the names of the clusters to be deployed to the
-        # HostedClients().do_deploy() method.
-        hosted_clients_obj = HostedClients()
-        deployed_hosted_cluster_objects = hosted_clients_obj.do_deploy(cluster_names)
-        deployed_clusters = [obj.name for obj in deployed_hosted_cluster_objects]
+    return factory
 
-        for cluster_name in deployed_clusters:
 
-            client_conf_default_dir = os.path.join(
-                FUSION_CONF_DIR, f"hypershift_client_bm_{nodepool_replicas}w.yaml"
-            )
-            if not os.path.exists(client_conf_default_dir):
-                raise FileNotFoundError(f"File {client_conf_default_dir} not found")
-            with open(client_conf_default_dir) as file_stream:
-                def_client_config_dict = {
-                    k: (v if v is not None else {})
-                    for (k, v) in yaml.safe_load(file_stream).items()
-                }
-                def_client_config_dict.get("ENV_DATA").update(
-                    {"cluster_name": cluster_name}
-                )
-                kubeconfig_path = hosted_clients_obj.get_kubeconfig_path(cluster_name)
-                log.info(f"Kubeconfig path: {kubeconfig_path}")
-                def_client_config_dict.setdefault("RUN", {}).update(
-                    {"kubeconfig": kubeconfig_path}
-                )
-                cluster_config = Config()
-                cluster_config.update(def_client_config_dict)
+@pytest.fixture()
+def create_config_of_existing_hosted_clusters():
+    """
+    Get the list of available hosted clusters. Push config to Multicluster Config for configs that do not exist only.
+    """
 
-                log.debug(
-                    "Inserting new hosted cluster config to Multicluster Config "
-                    f"\n{json.dumps(vars(cluster_config), indent=4, cls=SetToListJSONEncoder)}"
-                )
-                ocsci_config.insert_cluster_config(
-                    ocsci_config.nclusters, cluster_config
-                )
+    def factory(
+        cluster_names, ocp_version, odf_version, setup_storage_client, nodepool_replicas
+    ):
+        """
+        Wrapper to call hypershift_cluster_factory with a predefined duty.
+
+        Args:
+            cluster_names (list): List of cluster names
+            ocp_version (str): OCP version
+            odf_version (str): ODF version
+            setup_storage_client (bool): Setup storage client
+            nodepool_replicas (int): Nodepool replicas; supported values are 2,3
+        """
+        hypershift_cluster_factory(
+            cluster_names=cluster_names,
+            ocp_version=ocp_version,
+            odf_version=odf_version,
+            setup_storage_client=setup_storage_client,
+            nodepool_replicas=nodepool_replicas,
+            duty="use_existing_hosted_clusters_push_missing_configs",
+        )
+
+    return factory
+
+
+@pytest.fixture()
+def refresh_hosted_config():
+    """
+    Get the list of available hosted clusters. Push new config to Multicluster Config,
+    replacing already existing if found.
+    """
+
+    def factory(
+        cluster_names, ocp_version, odf_version, setup_storage_client, nodepool_replicas
+    ):
+        """
+        Wrapper to call hypershift_cluster_factory with a predefined duty.
+
+        Args:
+            cluster_names (list): List of cluster names
+            ocp_version (str): OCP version
+            odf_version (str): ODF version
+            setup_storage_client (bool): Setup storage client
+            nodepool_replicas (int): Nodepool replicas; supported values are 2,3
+        """
+        hypershift_cluster_factory(
+            cluster_names=cluster_names,
+            ocp_version=ocp_version,
+            odf_version=odf_version,
+            setup_storage_client=setup_storage_client,
+            nodepool_replicas=nodepool_replicas,
+            duty="use_existing_hosted_clusters_force_push_configs",
+        )
 
     return factory
 
 
 @pytest.fixture()
 def destroy_hosted_cluster():
+    """
+    Destroy hosted HyperShift clusters using the hosted_cluster_remove_factory function.
+
+    Returns:
+        function: A factory function that takes a cluster name and destroys the cluster.
+    """
+
     def factory(cluster_name):
-        ocsci_config.switch_to_provider()
-        log.info("Destroying hosted cluster. OCS related leftovers are expected")
-        hypershift_base_obj = HyperShiftBase()
-
-        if not hypershift_base_obj.hcp_binary_exists():
-            hypershift_base_obj.update_hcp_binary()
-
-        destroy_res = HyperShiftBase().destroy_kubevirt_cluster(cluster_name)
-
-        if destroy_res:
-            log.info("Removing cluster from Multicluster Config")
-            ocsci_config.remove_cluster_by_name(cluster_name)
-
-        return destroy_res
+        hosted_cluster_remove_factory(cluster_name, duty="destroy_cluster")
 
     return factory
+
+
+@pytest.fixture()
+def hosted_cluster_remove_config():
+    """
+    Remove hosted HyperShift clusters from Multicluster Config using the hosted_cluster_remove_factory function.
+    This fixture is good for removing unhealthy clusters.
+
+    Returns:
+        function: A factory function that takes a cluster name and removes the cluster from the config.
+    """
+
+    def factory(cluster_name):
+        hosted_cluster_remove_factory(cluster_name, duty="remove_from_config_only")
+
+    return factory
+
+
+def hosted_cluster_remove_factory(cluster_name, duty=""):
+
+    ocsci_config.switch_to_provider()
+    destroy_res = None
+
+    if duty == "destroy_cluster":
+        log.info("Destroying hosted cluster. OCS related leftovers are expected")
+        hypershift_base_obj = HyperShiftBase()
+        if not hypershift_base_obj.hcp_binary_exists():
+            hypershift_base_obj.update_hcp_binary()
+        destroy_res = HyperShiftBase().destroy_kubevirt_cluster(cluster_name)
+
+    if destroy_res or duty == "remove_from_config_only":
+        log.info("Removing cluster from Multicluster Config")
+        ocsci_config.remove_cluster_by_name(cluster_name)
+
+    return destroy_res
 
 
 @pytest.fixture(scope="session")
@@ -9483,3 +9636,17 @@ def setup_nfs(request, setup_rbac):
                 nfs_sc_obj.delete()
 
         request.addfinalizer(teardown)
+
+
+@pytest.fixture(scope="session")
+def admin_client():
+    """
+    Get DynamicClient
+    """
+    kubeconfig_path = os.path.join(
+        ocsci_config.ENV_DATA["cluster_path"],
+        ocsci_config.RUN.get("kubeconfig_location"),
+    )
+    from ocp_resources.resource import get_client
+
+    return get_client(config_file=kubeconfig_path)

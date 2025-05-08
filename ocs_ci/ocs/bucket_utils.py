@@ -2348,6 +2348,35 @@ def upload_bulk_buckets(s3_obj, buckets, amount=1, object_key="obj-key-0", prefi
             )
 
 
+def change_versions_creation_date_in_noobaa_db(
+    bucket_name, object_key, version_ids, new_creation_time
+):
+    """
+    Change the creation date of versions at the noobaa-db.
+
+    Args:
+        bucket_name (str): The name of the bucket where the versions reside
+        object_key (str): The object key to change its version creation date
+        version_ids (list): A list of version IDs to change their creation date
+        new_creation_time (float): The new creation time in unix timestamp in seconds
+    """
+    # The version ID is at the form nbver-123 while in the DB it is 123
+    version_ids = [version_id.split("-")[1] for version_id in version_ids]
+
+    psql_query = (
+        "UPDATE objectmds "
+        "SET data = jsonb_set(data, '{create_time}', "
+        f"to_jsonb(to_timestamp({new_creation_time}))) "
+        "WHERE data->>'bucket' IN ( "
+        "SELECT _id "
+        "FROM buckets "
+        f"WHERE data->>'name' = '{bucket_name}')"
+        f" AND data->>'key' = '{object_key}'"
+        f" AND data->>'version_seq' = ANY(ARRAY{version_ids});"
+    )
+    exec_nb_db_query(psql_query)
+
+
 def change_objects_creation_date_in_noobaa_db(
     bucket_name, object_keys=[], new_creation_time=0
 ):
@@ -2358,7 +2387,7 @@ def change_objects_creation_date_in_noobaa_db(
         bucket_name (str): The name of the bucket where the objects reside
         object_keys (list, optional): A list of object keys to change their creation date
             Note: If object_keys is empty, all objects in the bucket will be changed.
-        new_creation_time (int): The new creation time in unix timestamp in seconds
+        new_creation_time (float): The new creation time in unix timestamp in seconds
 
     Example usage:
         # Change the creation date of objects obj1 and obj2 in bucket my-bucket to one minute back
@@ -2410,6 +2439,32 @@ def expire_objects_in_bucket(bucket_name, object_keys=[], prefix=""):
     )
 
 
+def expire_multipart_upload_in_noobaa_db(upload_id):
+    """
+    Expire a multipart upload by changing its creation date to one year back.
+
+    Args:
+        upload_id (str): The ID of the multipart upload to expire (unique across all buckets)
+    """
+    one_year_ago = time.time() - 60 * 60 * 24 * 365
+
+    # In the DB the creation time is the same as the ID
+    # and that ID's first 8 characters are the initial timestamp
+    # in hex
+
+    # first two characters of the hex are 0x
+    new_upload_started = hex(int(one_year_ago))[2:] + upload_id[8:]
+
+    psql_query = (
+        "UPDATE objectmds "
+        "SET data = jsonb_set(data, '{upload_started}', "
+        f"'\\\"{new_upload_started}\\\"') "
+        f"WHERE _id = '{upload_id}'"
+    )
+    psql_query += ";"
+    exec_nb_db_query(psql_query)
+
+
 def check_if_objects_expired(mcg_obj, bucket_name, prefix=""):
     """
     Checks if objects in the bucket is expired
@@ -2426,6 +2481,9 @@ def check_if_objects_expired(mcg_obj, bucket_name, prefix=""):
 
     response = s3_list_objects_v2(
         mcg_obj, bucketname=bucket_name, prefix=prefix, delimiter="/"
+    )
+    logger.info(
+        f'Current objects count for bucket {bucket_name}: {response["KeyCount"]}'
     )
     if response["KeyCount"] != 0:
         return False
@@ -3155,7 +3213,7 @@ def gen_empty_file_and_upload(
             command=f"mkdir -p {dir}/{index} && for i in $(seq {begin} {end});do touch {dir}/{index}/{pattern}-$i;done",
             timeout=timeout,
         )
-        logger.info(f"Uploading batch of {end-begin} objects to the bucket {bucket}")
+        logger.info(f"Uploading batch of {end - begin} objects to the bucket {bucket}")
         sync_object_directory(
             aws_pod,
             f"{dir}/{index}",

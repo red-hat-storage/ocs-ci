@@ -38,7 +38,7 @@ class TestCorsConfig:
         "Link",
     ]
 
-    def generate_random_domain_address(self, num_of_addresses=1):
+    def generate_random_domain_addresses(self, num_of_addresses=1):
         """
         Generates Random domain addresses
         Args:
@@ -70,7 +70,7 @@ class TestCorsConfig:
             allowed_headers = ["*"]
             allowed_methods = choices(self.allowed_methods_list, k=method_num)
             expose_headers = choices(self.expose_headers_list, k=exp_header)
-            allowed_origins = self.generate_random_domain_address(origin_num)
+            allowed_origins = self.generate_random_domain_addresses(origin_num)
             max_age = randint(30, 300)
             conf = {
                 "AllowedHeaders": allowed_headers,
@@ -161,7 +161,7 @@ class TestCorsConfig:
             method (String): HTTP method name
             **kwargs (Dict): extra header info
         Returns:
-            Response code
+            Response code (int)
         """
         extra_header = ""
         for key, value in kwargs.items():
@@ -362,7 +362,7 @@ class TestCorsConfig:
         sample.wait_for_func_value(self.POSITIVE_RESPONSE)
 
         # 8: Access bucket using non-supported origin
-        incorrect_origin = self.generate_random_domain_address()[0]
+        incorrect_origin = self.generate_random_domain_addresses()[0]
         http_method = choice(cors_config["CORSRules"][0]["AllowedMethods"])
         extra_header = {"Content-Type": "application/json"}
         sample = TimeoutSampler(
@@ -453,7 +453,7 @@ class TestCorsConfig:
         sample.wait_for_func_value(self.POSITIVE_RESPONSE)
 
         # 3: Modify the existing CORS config and add different and multiple origins in it
-        extra_origin = self.generate_random_domain_address()[0]
+        extra_origin = self.generate_random_domain_addresses()[0]
         cors_config["CORSRules"][0]["AllowedOrigins"].append(extra_origin)
         self.apply_cors_on_bucket(
             cors_config, awscli_pod_session, bucket_name, mcg_obj_session
@@ -480,7 +480,7 @@ class TestCorsConfig:
         )
 
         # 6: Perform GET request from any origin
-        random_origin = self.generate_random_domain_address()[0]
+        random_origin = self.generate_random_domain_addresses()[0]
         http_method = choice(cors_config["CORSRules"][0]["AllowedMethods"])
         sample = TimeoutSampler(
             timeout=120,
@@ -512,7 +512,7 @@ class TestCorsConfig:
         )
         sample.wait_for_func_value(self.POSITIVE_RESPONSE)
         # 9: Perform GET request from non origin address
-        invalid_origin = self.generate_random_domain_address()[0]
+        invalid_origin = self.generate_random_domain_addresses()[0]
         http_method = choice(cors_config["CORSRules"][0]["AllowedMethods"])
         sample = TimeoutSampler(
             timeout=120,
@@ -627,7 +627,7 @@ class TestCorsConfig:
         # 8: Perform any request mentioned in allowed HTTP method from any supported origin mentioned on CORS
         for i in range(3):
             method = choice(self.allowed_methods_list)
-            origin = self.generate_random_domain_address()[0]
+            origin = self.generate_random_domain_addresses()[0]
             sample = TimeoutSampler(
                 timeout=120,
                 sleep=10,
@@ -645,8 +645,11 @@ class TestCorsConfig:
     ):
         """
         Test MaxAgeSeconds and AllowCredentials element from CORS operation on bucket
+            On "AllowCredentials" element part, user is not allowed to set it to false
+            and this parameter is invisible from user
+
             step #1: Create bucket and apply basic CORS config with MaxAgeSeconds element in it
-            step #2: Modify MaxAgeSeconds parameter by adding 30 secs in it
+            step #2: Modify MaxAgeSeconds parameter by adding 30 secs in it and validate the same
             step #3: Apply basic CORS config on bucket by adding "AllowCredentials" parameter to "False" value
         """
         # 1: Create bucket and apply basic CORS config with MaxAgeSeconds element in it
@@ -669,13 +672,12 @@ class TestCorsConfig:
             response=True,
         )
         logger.info(get_bucket_cors_op)
-        # Work on below code
         get_bucket_cors_dict = json.loads(get_bucket_cors_op)
         assert (
             cors_config == get_bucket_cors_dict
         ), "There is mismatch in uploaded CORS config and received CORS config"
 
-        # 3 : Apply basic CORS config on bucket by adding "AllowCredentials" parameter to "False" value
+        # 3: Apply basic CORS config on bucket by adding "AllowCredentials" parameter to "False" value
         cors_config = self.create_custom_cors_config(no_of_config=1, method_num=1)
         cors_config["CORSRules"][0]["AllowCredentials"] = "False"
         try:
@@ -690,9 +692,11 @@ class TestCorsConfig:
                 resp is None
             ), "CORS is adding (non-supported) AllowCredentials element in it"
         except Exception as e:
-            err = 'Unknown parameter in CORSConfiguration.CORSRules[0]: "AllowCredentials"'
-            if err in str(e):
+            expected_err = 'Unknown parameter in CORSConfiguration.CORSRules[0]: "AllowCredentials"'
+            if expected_err in str(e):
                 logger.warning("Expected error")
-                logger.warning(e)
+                logger.info(
+                    f"CORS config with AllowCredentials rule was rejected as expected: {e}"
+                )
             else:
                 raise

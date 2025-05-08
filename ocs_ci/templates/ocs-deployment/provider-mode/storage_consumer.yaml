@@ -1,15 +1,18 @@
 apiVersion: ocs.openshift.io/v1alpha1
 kind: StorageConsumer
 metadata:
+  namespace: openshift-storage
   name: sample-storageconsumer
 spec:
-  enable: true
   resourceNameMappingConfigMap:
     name: ""
-  storageClasses: []
-  storageQuotaInGiB: ""
-  volumeGroupSnapshotClasses: []
-  volumeSnapshotClasses: []
+#  storageClasses: []
+#  optional value storageQuotaInGiB, storage will be without quota
+#  storageQuotaInGiB: ""
+#  volumeGroupSnapshotClasses: []
+#  volumeSnapshotClasses: []
+#  # should be not enabled, this setting allows operator to create secret
+#  enable: false
 # status:
 #   # Below are the Ceph resources for the storage consumer
 #   cephResources:

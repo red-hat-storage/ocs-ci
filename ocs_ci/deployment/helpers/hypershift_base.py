@@ -50,6 +50,27 @@ def get_hosted_cluster_names():
     return exec_cmd(cmd, shell=True).stdout.decode("utf-8").strip().split()
 
 
+def get_available_hosted_clusters_to_ocp_ver_dict():
+    """
+    Get available HyperShift hosted clusters with their versions
+
+    Returns:
+        dict: hosted clusters available with their versions. Example: {'cl-418-x': '4.18.7', 'cl-418-c': '4.19.0'}
+    """
+    logger.info("Getting HyperShift hosted clusters available")
+    cmd = (
+        "oc get hostedclusters -n clusters -o json | "
+        "jq -r '.items[] | "
+        'select(.metadata.annotations["hypershift.openshift.io/HasBeenAvailable"] == "true") | '
+        '"\\(.metadata.name)|\\(.status.version.history[0].version)"\''
+    )
+    out = exec_cmd(cmd, shell=True).stdout.decode("utf-8").strip()
+    if not out:
+        return {}
+    result = dict(line.split("|") for line in out.splitlines())
+    return result
+
+
 def kubeconfig_exists_decorator(func):
     """
     Decorator to check if the kubeconfig exists before executing the decorated method
@@ -170,6 +191,19 @@ def get_hosted_cluster_type(cluster_name=None):
         kind=constants.HOSTED_CLUSTERS, namespace="clusters", resource_name=cluster_name
     )
     return ocp_hosted_cluster_obj.get()["spec"]["platform"]["type"].lower()
+
+
+def get_current_nodepool_size(name):
+    """
+    Get existing nodepool of HyperShift hosted cluster
+    Args:
+        name (str): name of the cluster
+    Returns:
+         str: number of nodes in the nodepool
+    """
+    logger.info(f"Getting existing nodepool of HyperShift hosted cluster {name}")
+    cmd = f"oc get --namespace clusters nodepools | awk '$1==\"{name}\" {{print $4}}'"
+    return exec_cmd(cmd, shell=True).stdout.decode("utf-8").strip()
 
 
 class HyperShiftBase:
@@ -490,20 +524,6 @@ class HyperShiftBase:
         )
         return validation_passed
 
-    def get_current_nodepool_size(self, name):
-        """
-        Get existing nodepool of HyperShift hosted cluster
-        Args:
-            name (str): name of the cluster
-        Returns:
-             int: number of nodes in the nodepool
-        """
-        logger.info(f"Getting existing nodepool of HyperShift hosted cluster {name}")
-        cmd = (
-            f"oc get --namespace clusters nodepools | awk '$1==\"{name}\" {{print $4}}'"
-        )
-        return exec_cmd(cmd, shell=True).stdout.decode("utf-8").strip()
-
     def worker_nodes_deployed(self, name: str):
         """
         Check if worker nodes are deployed for HyperShift hosted cluster
@@ -513,9 +533,7 @@ class HyperShiftBase:
              bool: True if worker nodes are deployed, False otherwise
         """
         logger.info(f"Checking if worker nodes are deployed for cluster {name}")
-        return self.get_current_nodepool_size(name) == self.get_desired_nodepool_size(
-            name
-        )
+        return get_current_nodepool_size(name) == self.get_desired_nodepool_size(name)
 
     def get_desired_nodepool_size(self, name: str):
         """
@@ -764,3 +782,24 @@ class HyperShiftBase:
             return False
         logger.info(cmd_res.stdout.decode("utf-8").splitlines())
         return True
+
+
+def create_cluster_dir(cluster_name):
+    """
+    Create the kubeconfig directory for the cluster
+
+    Args:
+        cluster_name (str): Name of the cluster
+
+    Returns:
+        str: Path to the kubeconfig directory
+    """
+
+    path = os.path.join(
+        config.ENV_DATA["cluster_path"],
+        "clusters",
+        cluster_name,
+        "openshift-cluster-dir",
+    )
+    os.makedirs(path, exist_ok=True)
+    return path

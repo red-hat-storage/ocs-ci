@@ -683,7 +683,10 @@ def exec_cmd(
         cmd = list_insert_at_position(cmd, kube_index, ["--kubeconfig"])
         cmd = list_insert_at_position(cmd, kube_index + 1, [kubeconfig_path])
     try:
-        masked_cmd = shlex.join(mask_secrets(cmd, secrets))
+        if kwargs.get("shell"):
+            masked_cmd = mask_secrets(cmd, secrets)
+        else:
+            masked_cmd = shlex.join(mask_secrets(cmd, secrets))
         log.info(f"Executing command: {masked_cmd}")
         if threading_lock and cmd[0] == "oc":
             threading_lock.acquire(timeout=lock_timeout)
@@ -2555,6 +2558,25 @@ def ceph_health_resolve_crash():
     archive_ceph_crashes(ct_pod)
 
 
+def ceph_health_resolve_mon_slow_ops(health_status):
+    """
+    Fix ceph health issue with mon slow ops
+    """
+    log.warning("Trying to fix the issue with mon slow ops by restarting mon pod")
+    mon_pattern = r"mon\.([a-z]) has slow ops"
+    match = re.search(mon_pattern, health_status)
+    mon_id = None
+    if match:
+        mon_id = match.group(1)
+        log.warning(f"Problematic MON ID with slow ops: {mon_id} will be restarted")
+    if mon_id:
+        from ocs_ci.ocs import ocp
+
+        ocp.OCP().exec_oc_cmd(
+            f"oc delete pod -n {config.ENV_DATA['cluster_namespace']} -l ceph_daemon_id={mon_id}"
+        )
+
+
 def ceph_health_recover(health_status, namespace=None):
     """
     Function which tries to recover ceph health to be HEALTH OK
@@ -2578,11 +2600,19 @@ def ceph_health_recover(health_status, namespace=None):
             "ceph_health_delay": 30,
         },
         {
-            "pattern": r"1 mgr modules have recently crashed",
+            "pattern": r"modules have recently crashed",
             "func": ceph_health_resolve_crash,
             "func_args": [],
             "func_kwargs": {},
             "ceph_health_tries": 5,
+            "ceph_health_delay": 30,
+        },
+        {
+            "pattern": r"slow ops, oldest one blocked for \d+ sec, mon\.([a-z]) has slow ops",
+            "func": ceph_health_resolve_mon_slow_ops,
+            "func_args": [health_status],
+            "func_kwargs": {},
+            "ceph_health_tries": 6,
             "ceph_health_delay": 30,
         },
         # TODO: Add more patterns and fix functions

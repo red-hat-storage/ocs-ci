@@ -782,6 +782,12 @@ acm_page_nav = {
     "modal_dialog_close_button": ("//button[@aria-label='Close']", By.XPATH),
     "Policies": ("a[data-test-id='horizontal-link-Policies']", By.CSS_SELECTOR),
 }
+acm_page_nav_419 = {
+    "Infrastructure": (
+        "(//button[text()='Infrastructure']) | (//button[normalize-space()='Infrastructure'])[1]",
+        By.XPATH,
+    ),
+}
 
 acm_configuration = {
     "cluster-sets": ("//a[normalize-space()='Cluster sets']", By.XPATH),
@@ -1210,6 +1216,15 @@ acm_configuration_4_18 = {
         "(//span[@class='mco-status-card__alert-item-header'])[2]",
         By.XPATH,
     ),
+}
+
+acm_configuration_4_19 = {
+    "clear-search": ("//button[@aria-label='Reset']", By.XPATH),
+    "install-submariner-btn": (
+        "//a[@id='install-submariner']",
+        By.XPATH,
+    ),
+    "nat-t-checkbox": ("//input[@id='natt-enable']", By.XPATH),
 }
 
 add_capacity = {
@@ -2239,6 +2254,8 @@ locators = {
             **acm_configuration_4_14,
             **acm_configuration_4_16,
             **acm_configuration_4_18,
+            **acm_page_nav_419,
+            **acm_configuration_4_19,
         },
         "validation": {
             **validation,

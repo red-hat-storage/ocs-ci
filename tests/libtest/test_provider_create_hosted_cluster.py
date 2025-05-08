@@ -169,7 +169,7 @@ class TestProviderHosted(object):
     @runs_on_provider
     @hci_provider_required
     def test_create_hosted_cluster_with_fixture(
-        self, create_hypershift_clusters, destroy_hosted_cluster
+        self, create_hypershift_clusters_push_config, destroy_hosted_cluster
     ):
         """
         Test create hosted cluster with fixture
@@ -182,7 +182,7 @@ class TestProviderHosted(object):
         ocp_version = get_latest_release_version()
         nodepool_replicas = 2
 
-        create_hypershift_clusters(
+        create_hypershift_clusters_push_config(
             cluster_names=[cluster_name],
             ocp_version=ocp_version,
             odf_version=odf_version,
@@ -202,7 +202,7 @@ class TestProviderHosted(object):
     @runs_on_provider
     @hci_provider_required
     def test_create_destroy_hosted_cluster_with_fixture(
-        self, create_hypershift_clusters, destroy_hosted_cluster
+        self, create_hypershift_clusters_push_config, destroy_hosted_cluster
     ):
         """
         Test create hosted cluster with fixture and destroy cluster abruptly
@@ -217,7 +217,7 @@ class TestProviderHosted(object):
         ocp_version = get_latest_release_version()
         nodepool_replicas = 2
 
-        create_hypershift_clusters(
+        create_hypershift_clusters_push_config(
             cluster_names=[cluster_name],
             ocp_version=ocp_version,
             odf_version=odf_version,

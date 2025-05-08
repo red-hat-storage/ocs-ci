@@ -1,9 +1,12 @@
 import base64
+import json
 import logging
 import os
 import tempfile
 import time
+import yaml
 from concurrent.futures import ThreadPoolExecutor
+
 from ocs_ci.deployment.cnv import CNVInstaller
 from ocs_ci.deployment.hyperconverged import HyperConverged
 from ocs_ci.deployment.mce import MCEInstaller
@@ -12,12 +15,16 @@ from ocs_ci.deployment.helpers.hypershift_base import (
     HyperShiftBase,
     get_hosted_cluster_names,
     kubeconfig_exists_decorator,
+    get_current_nodepool_size,
+    get_available_hosted_clusters_to_ocp_ver_dict,
+    create_cluster_dir,
 )
 from ocs_ci.deployment.metallb import MetalLBInstaller
-from ocs_ci.framework import config
+from ocs_ci.framework.logger_helper import log_step
+from ocs_ci.framework import config as ocsci_config, Config, config
 from ocs_ci.helpers import helpers
 from ocs_ci.ocs import constants, defaults, ocp
-from ocs_ci.ocs.constants import HCI_PROVIDER_CLIENT_PLATFORMS
+from ocs_ci.ocs.constants import HCI_PROVIDER_CLIENT_PLATFORMS, FUSION_CONF_DIR
 from ocs_ci.ocs.exceptions import (
     ProviderModeNotFoundException,
     CommandFailed,
@@ -33,11 +40,16 @@ from ocs_ci.ocs.resources.ocs import OCS
 from ocs_ci.ocs.resources.pod import (
     wait_for_pods_to_be_in_statuses_concurrently,
     wait_for_pods_to_be_running,
+    get_pod_logs,
+)
+from ocs_ci.ocs.resources.storageconsumer import (
+    create_storage_consumer_on_default_cluster,
 )
 from ocs_ci.ocs.utils import get_pod_name_by_pattern
 from ocs_ci.ocs.version import if_version
 from ocs_ci.utility import templating, version
 from ocs_ci.utility.deployment import get_ocp_ga_version
+from ocs_ci.utility.json import SetToListJSONEncoder
 from ocs_ci.utility.managedservice import generate_onboarding_token
 from ocs_ci.utility.retry import retry
 from ocs_ci.utility.utils import (
@@ -45,6 +57,7 @@ from ocs_ci.utility.utils import (
     TimeoutSampler,
 )
 from ocs_ci.ocs.resources.storage_client import StorageClient
+from ocs_ci.utility.version import get_running_odf_version
 
 logger = logging.getLogger(__name__)
 
@@ -99,15 +112,15 @@ class HostedClients(HyperShiftBase):
             cluster_names = self.deploy_hosted_ocp_clusters(cluster_names)
 
         # stage 2 verify OCP clusters are ready
-        logger.info(
+        log_step(
             "Ensure clusters were deployed successfully, wait for them to be ready"
         )
-        verification_passed = self.verify_hosted_ocp_clusters_from_provider()
-        if not verification_passed:
+        hosted_ocp_verification_passed = self.verify_hosted_ocp_clusters_from_provider()
+        if not hosted_ocp_verification_passed:
             logger.error("\n\n*** Some of the clusters are not ready ***\n")
 
         # stage 3 download all available kubeconfig files
-        logger.info("Download kubeconfig for all clusters")
+        log_step("Download kubeconfig for all clusters")
         kubeconfig_paths = self.download_hosted_clusters_kubeconfig_files()
 
         # Need to create networkpolicy as mentioned in bug 2281536,
@@ -123,6 +136,7 @@ class HostedClients(HyperShiftBase):
         self.check_odf_prerequisites()
 
         # stage 4 deploy ODF on all hosted clusters if not already deployed
+        log_step("Deploy ODF client on hosted OCP clusters")
         for cluster_name in cluster_names:
 
             if not self.config_has_hosted_odf_image(cluster_name):
@@ -137,6 +151,7 @@ class HostedClients(HyperShiftBase):
 
         # stage 5 verify ODF client is installed on all hosted clusters
         odf_installed = []
+        log_step("Verify ODF client is installed on all hosted OCP clusters")
         for cluster_name in cluster_names:
             if self.config_has_hosted_odf_image(cluster_name):
                 logger.info(
@@ -152,7 +167,8 @@ class HostedClients(HyperShiftBase):
                     hosted_odf.create_catalog_source()
                 odf_installed.append(hosted_odf.odf_client_installed())
 
-        # stage 6 setup storage client on all hosted clusters and enable UI console plugin
+        # stage 6 setup storage client on all requested hosted clusters
+        log_step("Setup storage client on hosted OCP clusters")
         client_setup_res = []
         hosted_odf_clusters_installed = []
         for cluster_name in cluster_names:
@@ -161,7 +177,27 @@ class HostedClients(HyperShiftBase):
                     f"Setting up Storage client on hosted OCP cluster '{cluster_name}'"
                 )
                 hosted_odf = HostedODF(cluster_name)
-                client_installed = hosted_odf.setup_storage_client()
+                if (
+                    version.get_semantic_ocs_version_from_config()
+                    < version.VERSION_4_19
+                ):
+                    client_installed = hosted_odf.setup_storage_client()
+                else:
+                    start_time = time.time()
+                    client_installed = hosted_odf.setup_storage_client_converged(
+                        storage_consumer_name=f"consumer-{cluster_name}"
+                    )
+                    time_taken = time.time() - start_time
+                    time_sec = int(time_taken % 60) + 1
+                    provider_server_pod = get_pod_name_by_pattern(
+                        "ocs-provider-server"
+                    )[0]
+                    logs = get_pod_logs(
+                        pod_name=provider_server_pod, since=f"{time_sec}s"
+                    )
+                    logger.info(
+                        f"Logs from provider-server pod:\n******************\n{logs}\n******************\n"
+                    )
                 client_setup_res.append(client_installed)
                 if client_installed:
                     hosted_odf_clusters_installed.append(hosted_odf)
@@ -185,15 +221,71 @@ class HostedClients(HyperShiftBase):
             )
         )
 
-        assert verification_passed, "Some of the hosted OCP clusters are not ready"
+        log_step("Verify storage is available on all hosted ODF clusters")
+        hosted_odf_storage_verified = []
+        hosted_odf_storage_verified.extend(
+            self.verify_client_cluster_storage(name)
+            for name in cluster_names
+            if self.storage_installation_requested(name)
+        )
+
+        assert (
+            hosted_ocp_verification_passed
+        ), "Some of the hosted OCP clusters are not ready"
         assert all(
             odf_installed
         ), "ODF client was not deployed on all hosted OCP clusters"
         assert all(
             client_setup_res
         ), "Storage client was not set up on all hosted ODF clusters"
-
+        assert all(
+            hosted_odf_storage_verified
+        ), "Storage is not available on all hosted ODF clusters"
         return hosted_odf_clusters_installed
+
+    def verify_client_cluster_storage(self, cluster_name):
+        """
+        Verify storage connectivity for a single cluster by checking storage class existence
+
+        Args:
+            cluster_name (str): Name of the cluster to verify
+
+        Returns:
+            bool: True if storage classes exist and are properly configured, False otherwise
+        """
+        hosted_odf = HostedODF(cluster_name)
+        # starting from ODF 4.16 on StorageClient creation Storage Claims created automatically
+        # StorageClassClaims are deprecated from ODF 4.16 in favor of StorageClaims
+        # StorageClaims are deprecated from ODF 4.19 and data from CR available in StorageClient
+        if version.get_semantic_ocs_version_from_config() < version.VERSION_4_19:
+            has_cephfs_claim = hosted_odf.wait_storage_claim_cephfs()
+            has_rbd_claim = hosted_odf.wait_storage_claim_rbd()
+            if not has_cephfs_claim:
+                logger.error(
+                    f"Storage class claim cephfs does not exist for cluster {cluster_name}"
+                )
+                return False
+            if not has_rbd_claim:
+                logger.error(
+                    f"Storage class claim rbd does not exist for cluster {cluster_name}"
+                )
+                return False
+
+        logger.info(f"Verify Storage Classes exist for cluster {cluster_name}")
+        cephfs_storage_class_name = f"{hosted_odf.storage_client_name}-cephfs"
+        rbd_storage_class_name = f"{hosted_odf.storage_client_name}-ceph-rbd"
+
+        if not hosted_odf.storage_class_exists(cephfs_storage_class_name):
+            logger.error(
+                f"CephFS storage class does not exist for cluster {cluster_name}"
+            )
+            return False
+
+        if not hosted_odf.storage_class_exists(rbd_storage_class_name):
+            logger.error(f"RBD storage class does not exist for cluster {cluster_name}")
+            return False
+
+        return True
 
     def check_odf_prerequisites(self):
         """
@@ -382,18 +474,36 @@ class HostedClients(HyperShiftBase):
             )
             return False
 
-    def download_hosted_clusters_kubeconfig_files(self):
+    def download_hosted_clusters_kubeconfig_files(self, cluster_names_paths_dict=None):
         """
-        Get HyperShift hosted cluster kubeconfig for multiple clusters
+        Get HyperShift hosted cluster kubeconfig for multiple clusters.
+        Provided cluster_names_paths_dict will always be a default source of cluster names and paths
+
+        Args:
+            cluster_names_paths_dict (dict): Optional argument. The function will download all kubeconfigs
+            to the folders specified in the configuration, or download a specific cluster's kubeconfig
+            to the folder provided as an argument.
+
         Returns:
             list: the list of hosted cluster kubeconfig paths
         """
 
+        if cluster_names_paths_dict is None:
+            cluster_names_paths_dict = dict()
         if not (self.hcp_binary_exists() and self.hypershift_binary_exists()):
             self.update_hcp_binary()
 
-        for name in config.ENV_DATA.get("clusters").keys():
-            path = config.ENV_DATA.get("clusters").get(name).get("hosted_cluster_path")
+        cluster_names = (
+            list(cluster_names_paths_dict.keys())
+            if cluster_names_paths_dict
+            else list(config.ENV_DATA.get("clusters", {}).keys())
+        )
+
+        for name in cluster_names:
+            path = cluster_names_paths_dict.get(name) or config.ENV_DATA.setdefault(
+                "clusters", {}
+            ).setdefault(name, {}).get("hosted_cluster_path")
+
             self.kubeconfig_paths.append(
                 self.download_hosted_cluster_kubeconfig(name, path)
             )
@@ -666,6 +776,25 @@ def create_host_inventory():
     logger.info("Created InfraEnv.")
 
 
+def get_onboarding_token_from_secret(secret_name):
+    """
+    Get onboarding token from the secret
+
+    Args:
+        secret_name (str): Name of the secret
+
+    Returns:
+        str: Onboarding token
+    """
+    ocp_obj = OCP(
+        kind="secret",
+        namespace=config.ENV_DATA["cluster_namespace"],
+        resource_name=secret_name,
+    )
+    secret_obj = ocp_obj.get(retry=6, wait=10, silent=True)
+    return secret_obj.get("data", {}).get("onboarding-token")
+
+
 class HostedODF(HypershiftHostedOCP):
     def __init__(self, name: str):
         HyperShiftBase.__init__(self)
@@ -816,6 +945,7 @@ class HostedODF(HypershiftHostedOCP):
         logger.info("Creating storage client")
 
         try:
+            # create_storage_client func will generate onboarding token for versions bellow 4.19
             storage_client_created = self.create_storage_client()
         except TimeoutExpiredError as e:
             logger.error(f"Error during storage client creation: {e}")
@@ -826,31 +956,40 @@ class HostedODF(HypershiftHostedOCP):
             logger.error("storage client is not ready; abort further steps")
             return False
 
-        # starting from ODF 4.16 on StorageClient creation Storage Claims created automatically
-        # StorageClassClaims are deprecated from ODF 4.16 in favor of StorageClaims
-        # StorageClaims are deprecated from ODF 4.19 and data from CR available in StorageClient
-        if version.get_semantic_ocs_version_from_config() < version.VERSION_4_19:
-            if not self.wait_storage_claim_cephfs():
-                logger.error("Storage class claim cephfs does not exist")
-                return False
-
-            logger.info("Verify Storage Class rbd exists")
-            if not self.wait_storage_claim_rbd():
-                logger.error("Storage class claim rbd does not exist")
-                return False
-
-        logger.info("Verify Storage Class cephfs exists")
-        cephfs_storage_class_name = f"{self.storage_client_name}-cephfs"
-        if not self.storage_class_exists(cephfs_storage_class_name):
-            logger.error(f"cephfs storage class does not exist on cluster {self.name}")
-            return False
-
-        rbd_storage_class_name = f"{self.storage_client_name}-ceph-rbd"
-        if not self.storage_class_exists(rbd_storage_class_name):
-            logger.error(f"rbd storage class does not exist on cluster {self.name}")
-            return False
-
         return True
+
+    @if_version(">4.18")
+    def setup_storage_client_converged(self, storage_consumer_name):
+        """
+        Setup storage client for converged cluster
+
+        Returns:
+            bool: True if storage client is setup, False otherwise
+        """
+
+        log_step("Creating storage consumer")
+        storage_consumer_obj = create_storage_consumer_on_default_cluster(
+            storage_consumer_name
+        )
+        secret_name = storage_consumer_obj.get_onboarding_ticket_secret()
+
+        log_step("Getting onboarding key from secret")
+        onboarding_key = get_onboarding_token_from_secret(secret_name)
+        if not onboarding_key:
+            logger.error(f"Onboarding key not found in secret {secret_name}")
+            return False
+
+        onboarding_key_decrypted = base64.b64decode(onboarding_key).decode("utf-8")
+
+        log_step("Creating storage client")
+        try:
+            storage_client_created = self.create_storage_client(
+                onboarding_key_decrypted
+            )
+        except TimeoutExpiredError as e:
+            logger.error(f"Error during storage client creation: {e}")
+            storage_client_created = False
+        return storage_client_created
 
     @kubeconfig_exists_decorator
     def odf_client_installed(self):
@@ -922,9 +1061,14 @@ class HostedODF(HypershiftHostedOCP):
         )
 
     @kubeconfig_exists_decorator
-    def create_storage_client(self):
+    def create_storage_client(self, onboarding_key_decrypted=None):
         """
         Create storage client
+
+        Args:
+            onboarding_key_decrypted (str): Onboarding key for the storage client.
+            After version 4.18 onboarding key is generated and stored in secret.
+            Get secret name from configmap created with storageconsumer
 
         Returns:
             bool: True if storage client is created, False otherwise
@@ -950,12 +1094,15 @@ class HostedODF(HypershiftHostedOCP):
                 "storageProviderEndpoint"
             ] = self.get_provider_address()
 
-            onboarding_key = self.get_onboarding_key()
+            nonlocal onboarding_key_decrypted
 
-            if not len(onboarding_key):
+            if not onboarding_key_decrypted:
+                onboarding_key_decrypted = self.get_onboarding_key()
+
+            if not len(onboarding_key_decrypted):
                 return False
 
-            storage_client_data["spec"]["onboardingTicket"] = onboarding_key
+            storage_client_data["spec"]["onboardingTicket"] = onboarding_key_decrypted
 
             self.storage_client_name = storage_client_data["metadata"]["name"]
 
@@ -1003,6 +1150,7 @@ class HostedODF(HypershiftHostedOCP):
         )
         return self.exec_oc_cmd(cmd, shell=True).stdout.decode("utf-8").strip()
 
+    @if_version("<4.19")
     def get_onboarding_key(self):
         """
         Get onboarding key using the private key from the secret
@@ -1544,3 +1692,153 @@ class HostedODF(HypershiftHostedOCP):
                     cluster_kubeconfig=self.cluster_kubeconfig,
                 )
         return False
+
+
+def hypershift_cluster_factory(
+    cluster_names=None,
+    ocp_version=None,
+    odf_version=None,
+    setup_storage_client=None,
+    nodepool_replicas=None,
+    duty="",
+):
+    """
+    Factory function to create or use existing HyperShift clusters.
+
+    Args:
+        cluster_names (list): List of cluster names. Only for duty=="create_hosted_cluster_push_config"
+        ocp_version (str): OCP version. Only for duty=="create_hosted_cluster_push_config"
+        odf_version (str): ODF version. Only for duty=="create_hosted_cluster_push_config"
+        setup_storage_client (bool): Optional. Setup storage client. Only for duty=="create_hosted_cluster_push_config"
+        nodepool_replicas (int): Nodepool replicas; supported values are 2,3.
+        Only for duty=="create_hosted_cluster_push_config"
+        duty (str): Duty to perform; "create_hosted_cluster_push_config" (for creation of hypershift cluster) or
+                    "use_existing_hosted_clusters_force_push_configs" (for pushing config even if config exists) or
+                    "use_existing_hosted_clusters_push_missing_configs" (for adding only missing configs)
+    """
+
+    hosted_clients_obj = HostedClients()
+    logger.info(f"Factory duty is '{duty}'")
+
+    if duty == "create_hosted_cluster_push_config":
+        hosted_cluster_conf_on_provider = {"ENV_DATA": {"clusters": {}}}
+        for cluster_name in cluster_names:
+            # this configuration is necessary to deploy hosted cluster, but not for running tests with multicluster job
+            cluster_path = create_cluster_dir(cluster_name)
+            hosted_cluster_conf_on_provider["ENV_DATA"]["clusters"][cluster_name] = {
+                "hosted_cluster_path": cluster_path,
+                "ocp_version": ocp_version,
+                "cpu_cores_per_hosted_cluster": 8,
+                "memory_per_hosted_cluster": "12Gi",
+                "hosted_odf_registry": "quay.io/rhceph-dev/ocs-registry",
+                "hosted_odf_version": odf_version,
+                "setup_storage_client": setup_storage_client,
+                "nodepool_replicas": nodepool_replicas,
+            }
+
+        logger.info(
+            "Creating a hosted clusters with following deployment config: \n%s",
+            json.dumps(
+                hosted_cluster_conf_on_provider, indent=4, cls=SetToListJSONEncoder
+            ),
+        )
+        ocsci_config.update(hosted_cluster_conf_on_provider)
+
+        deployed_hosted_cluster_objects = hosted_clients_obj.do_deploy(cluster_names)
+        deployed_clusters = [obj.name for obj in deployed_hosted_cluster_objects]
+
+    elif duty in [
+        "use_existing_hosted_clusters_force_push_configs",
+        "use_existing_hosted_clusters_push_missing_configs",
+    ]:
+        cl_name_ver_dict = get_available_hosted_clusters_to_ocp_ver_dict()
+        deployed_clusters = list(cl_name_ver_dict.keys())
+
+        if "use_existing_hosted_clusters_force_push_configs" in duty:
+            existing_clusters = {
+                conf.ENV_DATA.get("cluster_name") for conf in config.clusters
+            }
+            clusters_to_remove = existing_clusters.intersection(deployed_clusters)
+            if clusters_to_remove:
+                for cluster_name in clusters_to_remove:
+                    logger.info(
+                        f"Removing cluster config {cluster_name} from config file, as it is already deployed"
+                    )
+                    config.remove_cluster_by_name(cluster_name)
+
+        if duty == "use_existing_hosted_clusters_push_missing_configs":
+            clusters_in_config = {
+                conf.ENV_DATA.get("cluster_name") for conf in config.clusters
+            }
+            deployed_clusters = [
+                c for c in deployed_clusters if c not in clusters_in_config
+            ]
+
+    else:
+        logger.warning("Factory function was called without deployment duty")
+        deployed_clusters = []
+
+    for cluster_name in deployed_clusters:
+
+        if not nodepool_replicas:
+            nodepool_replicas = get_current_nodepool_size(cluster_name)
+
+        try:
+            nodepool_size = int(nodepool_replicas)
+            if nodepool_size not in [2, 3]:
+                raise ValueError
+        except (TypeError, ValueError):
+            logger.error(
+                "Invalid nodepool size %s for cluster %s",
+                nodepool_replicas,
+                cluster_name,
+            )
+            continue
+
+        # creating this configuration is necessary to run multicluster job. It will have actual specs of cluster.
+        client_conf_default_dir = os.path.join(
+            FUSION_CONF_DIR, f"hypershift_client_bm_{nodepool_replicas}w.yaml"
+        )
+        if not os.path.exists(client_conf_default_dir):
+            raise FileNotFoundError(f"File {client_conf_default_dir} not found")
+        with open(client_conf_default_dir) as file_stream:
+            def_client_config_dict = {
+                k: (v if v is not None else {})
+                for (k, v) in yaml.safe_load(file_stream).items()
+            }
+            def_client_config_dict.get("ENV_DATA").update(
+                {"cluster_name": cluster_name}
+            )
+            running_odf_version = get_running_odf_version()
+            if running_odf_version:
+                env_data = def_client_config_dict.setdefault("ENV_DATA", {})
+                env_data["ocs_version"] = running_odf_version
+
+            # upd cl_name_ver_dict for both deployment and using existing clusters
+            cl_name_ver_dict = get_available_hosted_clusters_to_ocp_ver_dict()
+            running_ocp_version = cl_name_ver_dict[cluster_name]
+            if running_ocp_version:
+                # update config.DEPLOYMENT["installer_version"] with ocp version
+                def_client_config_dict.setdefault("DEPLOYMENT", {})[
+                    "installer_version"
+                ] = running_ocp_version
+
+            cluster_path = create_cluster_dir(cluster_name)
+            kubeconf_path = (
+                hosted_clients_obj.download_hosted_clusters_kubeconfig_files(
+                    {cluster_name: cluster_path}
+                )
+            )
+
+            logger.info(f"Kubeconfig path: {kubeconf_path}")
+            def_client_config_dict.setdefault("RUN", {}).update(
+                {"kubeconfig": kubeconf_path}
+            )
+            cluster_config = Config()
+            cluster_config.update(def_client_config_dict)
+
+            logger.info(
+                "Inserting new hosted cluster config to Multicluster Config "
+                f"\n{json.dumps(vars(cluster_config), indent=4, cls=SetToListJSONEncoder)}"
+            )
+            ocsci_config.insert_cluster_config(ocsci_config.nclusters, cluster_config)

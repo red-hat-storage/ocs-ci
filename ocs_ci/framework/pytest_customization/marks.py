@@ -8,6 +8,7 @@ import os
 import pytest
 from funcy import compose
 
+from ocs_ci.ocs.exceptions import ClusterNotFoundException
 from ocs_ci.framework import config
 from ocs_ci.ocs.constants import (
     ORDER_BEFORE_OCS_UPGRADE,
@@ -392,6 +393,18 @@ hci_provider_and_client_required = pytest.mark.skipif(
     ),
     reason="Test runs ONLY on Fusion HCI provider and client clusters",
 )
+# when run_on_all_clients marker is used, there needs to be added cluster_index
+# parameter to the test to prevent any issues with the test parametrization
+run_on_all_clients = pytest.mark.run_on_all_clients
+try:
+    client_indexes = [
+        pytest.param(*[idx]) for idx in config.get_consumer_indexes_list()
+    ]
+    run_on_all_clients = pytest.mark.parametrize(
+        argnames=["cluster_index"], argvalues=client_indexes, indirect=True
+    )
+except ClusterNotFoundException:
+    pass
 kms_config_required = pytest.mark.skipif(
     (
         config.ENV_DATA["KMS_PROVIDER"].lower() != HPCS_KMS_PROVIDER
@@ -595,11 +608,12 @@ metrics_for_external_mode_required = pytest.mark.skipif(
     reason="Metrics is not enabled for external mode OCS <4.6",
 )
 
-rdr_ui = pytest.mark.skipif(
+rdr_ui_skipif = pytest.mark.skipif(
     not config.RUN.get("rdr_failover_via_ui")
     or not config.RUN.get("rdr_relocate_via_ui"),
     reason="RDR UI failover or relocate config needed",
 )
+rdr_ui = compose(rdr_ui_skipif, pytest.mark.rdr_ui)
 
 dr_hub_recovery = pytest.mark.skipif(
     config.nclusters != 4,

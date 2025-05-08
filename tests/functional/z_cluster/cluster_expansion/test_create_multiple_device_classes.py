@@ -7,6 +7,8 @@ from ocs_ci.framework.testlib import (
     tier1,
     brown_squad,
     skipif_no_lso,
+    skipif_bm,
+    skipif_hci_provider_or_client,
 )
 from ocs_ci.helpers.sanity_helpers import Sanity
 from ocs_ci.ocs import constants
@@ -34,6 +36,8 @@ log = logging.getLogger(__name__)
 @tier1
 @ignore_leftovers
 @skipif_no_lso
+@skipif_bm
+@skipif_hci_provider_or_client
 class TestMultipleDeviceClasses(ManageTest):
     """
     Automate the multiple device classes tests
