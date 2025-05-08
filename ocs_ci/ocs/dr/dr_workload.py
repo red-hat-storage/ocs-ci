@@ -1169,7 +1169,6 @@ class BusyboxDiscoveredApps(DRWorkload):
         else:
             self.create_drpc()
 
-
     def _deploy_prereqs(self):
         """
         Perform prerequisites
@@ -1288,7 +1287,6 @@ class BusyboxDiscoveredApps(DRWorkload):
         Create DRPC for discovered Apps
 
         Args:
-
             drpc_name (str): Name for drpc
             placement_name (str): Name for placement
             protected_namespaces (list): List of namespaces to protect
