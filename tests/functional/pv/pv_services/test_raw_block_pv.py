@@ -24,7 +24,6 @@ from ocs_ci.utility.utils import convert_device_size
 log = logging.getLogger(__name__)
 
 
-@provider_mode
 @green_squad
 @tier1
 @acceptance
@@ -32,7 +31,8 @@ log = logging.getLogger(__name__)
     argnames=["reclaim_policy"],
     argvalues=[
         pytest.param(
-            constants.RECLAIM_POLICY_DELETE, marks=pytest.mark.polarion_id("OCS-751")
+            constants.RECLAIM_POLICY_DELETE,
+            marks=[pytest.mark.polarion_id("OCS-751"), provider_mode],
         ),
         pytest.param(
             constants.RECLAIM_POLICY_RETAIN,
@@ -132,7 +132,7 @@ class TestRawBlockPV(ManageTest):
                 p.submit(
                     pod.run_io,
                     storage_type=storage_type,
-                    size=f"{random.randint(10,200)}M",
+                    size=f"{random.randint(10, 200)}M",
                     invalidate=0,
                     direct=1,
                 )
@@ -141,7 +141,7 @@ class TestRawBlockPV(ManageTest):
                 p.submit(
                     pod.run_io,
                     storage_type=storage_type,
-                    size=f"{random.randint(1,5)}G",
+                    size=f"{random.randint(1, 5)}G",
                     invalidate=0,
                     direct=1,
                 )
@@ -150,7 +150,7 @@ class TestRawBlockPV(ManageTest):
                 p.submit(
                     pod.run_io,
                     storage_type=storage_type,
-                    size=f"{random.randint(10,15)}G",
+                    size=f"{random.randint(10, 15)}G",
                     invalidate=0,
                     direct=1,
                 )
