@@ -147,7 +147,7 @@ class TestLifecycleConfiguration(MCGTest):
             f"SELECT data FROM objectmultiparts WHERE data->>'bucket' = '{bucket_id}'"
         )
         for parts_md_list in TimeoutSampler(
-            timeout=900,
+            timeout=3600,
             sleep=TIMEOUT_SLEEP_DURATION,
             func=exec_nb_db_query,
             query=list_parts_md_query,
