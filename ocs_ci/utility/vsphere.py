@@ -1867,3 +1867,19 @@ class VSPHERE(object):
         vms = [vm for vm in container_view.view if str_to_match in vm.name]
         container_view.Destroy()
         return vms
+
+    def get_uuid_for_vm(self, ip, dc, vm_search=True):
+        """
+        Gets the ID(UID) for the VM
+
+        Args:
+            ip (str): IP address
+            dc (str): Datacenter name
+            vm_search (bool): Search for VMs if True, Hosts if False
+
+        Returns:
+            str: UUID of VM
+
+        """
+        vm = self.get_vm_by_ip(ip, dc, vm_search)
+        return vm.config.uuid
