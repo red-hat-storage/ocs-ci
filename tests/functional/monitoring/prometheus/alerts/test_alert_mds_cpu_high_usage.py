@@ -18,7 +18,7 @@ log = logging.getLogger(__name__)
 
 
 @pytest.fixture(scope="function")
-def run_file_creator_io_with_cephfs(dc_pod_factory):
+def run_file_creator_io_with_cephfs(deployment_pod_factory):
     """
     This function facilitates
     1. Create PVC with Cephfs, access mode RWX
@@ -36,7 +36,7 @@ def run_file_creator_io_with_cephfs(dc_pod_factory):
     for dc_pod in range(10):
         log.info(f"Creating {interface} based PVC")
         log.info("Creating fedora dc pod")
-        pod_obj = dc_pod_factory(
+        pod_obj = deployment_pod_factory(
             size="15", access_mode=access_mode, interface=interface
         )
         log.info("Copying file_creator_io.py to fedora pod ")

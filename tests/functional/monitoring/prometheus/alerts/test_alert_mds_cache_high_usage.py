@@ -36,7 +36,7 @@ state = constants.STATUS_RUNNING
 
 
 @pytest.fixture(scope="function")
-def run_metadata_io_with_cephfs(dc_pod_factory):
+def run_metadata_io_with_cephfs(deployment_pod_factory):
     """
     This function facilitates
     1. Create PVC with Cephfs, access mode RWX
@@ -58,7 +58,7 @@ def run_metadata_io_with_cephfs(dc_pod_factory):
             target_node.append(node)
     for dc_pod in range(3):
         log.info("Create fedora dc pod")
-        pod_obj = dc_pod_factory(
+        pod_obj = deployment_pod_factory(
             size="30",
             access_mode=access_mode,
             interface=interface,
