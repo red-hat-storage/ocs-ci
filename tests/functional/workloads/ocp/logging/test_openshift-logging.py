@@ -25,6 +25,8 @@ from ocs_ci.utility import deployment_openshift_logging as ocp_logging_obj
 from ocs_ci.framework.pytest_customization.marks import (
     skipif_managed_service,
     skipif_ms_provider_and_consumer,
+    skipif_ocs_version,
+    skipif_ocp_version,
 )
 
 logger = logging.getLogger(__name__)
@@ -39,6 +41,8 @@ def setup_fixture(install_logging):
     logger.info("Testcases execution post deployment of openshift-logging")
 
 
+@skipif_ocs_version(">=4.19")
+@skipif_ocp_version(">=4.19")
 @magenta_squad
 @pytest.mark.usefixtures(setup_fixture.__name__)
 @ignore_leftovers
