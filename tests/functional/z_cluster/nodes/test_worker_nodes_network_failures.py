@@ -48,7 +48,7 @@ class TestWorkerNodesFailure(ManageTest):
             interface(str): The type of the interface
                 (e.g. CephBlockPool, CephFileSystem)
             multi_pvc_factory: A fixture create a set of new PVCs
-            dc_pod_factory: A fixture to create dc pod
+            deployment_pod_factory: A fixture to create dc pod
 
         Returns:
             list: dc pod objs

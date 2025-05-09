@@ -27,7 +27,7 @@ class TestIOMultiplePods(ManageTest):
     pvc_size = 5
 
     @pytest.fixture()
-    def pods(self, interface, multi_pvc_factory, pod_factory, dc_pod_factory):
+    def pods(self, interface, multi_pvc_factory, pod_factory, deployment_pod_factory):
         """
         Prepare multiple pods for the test
 
@@ -41,7 +41,7 @@ class TestIOMultiplePods(ManageTest):
 
         pod_objs = list()
         for pvc_obj in pvc_objs[: len(pvc_objs) // 2]:
-            pod_objs.append(dc_pod_factory(interface=interface, pvc=pvc_obj))
+            pod_objs.append(deployment_pod_factory(interface=interface, pvc=pvc_obj))
 
         for pvc_obj in pvc_objs[len(pvc_objs) // 2 :]:
             pod_objs.append(pod_factory(interface=interface, pvc=pvc_obj))

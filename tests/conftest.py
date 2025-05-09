@@ -6601,7 +6601,7 @@ def create_pvcs_and_pods(multi_pvc_factory, pod_factory, service_account_factory
                 pods_for_rwx if pvc_obj.access_mode == constants.ACCESS_MODE_RWX else 1
             )
             for _ in range(num_pods):
-                # pod_obj will be a Pod instance if deployment_config=False,
+                # pod_obj will be a Pod instance if deployment=False,
                 # otherwise an OCP instance of kind DC
                 pod_obj = pod_factory(
                     interface=interface,
