@@ -21,9 +21,6 @@ class RHVBASE(OnPremDeploymentBase):
     RHV deployment base class, with code common to both IPI and UPI.
     """
 
-    # default storage class for StorageCluster CRD on RHV platform
-    DEFAULT_STORAGECLASS = "ovirt-csi-sc"
-
     def __init__(self):
         super(RHVBASE, self).__init__()
         if config.ENV_DATA.get("default_cluster_name"):
