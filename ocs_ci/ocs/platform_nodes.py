@@ -1928,19 +1928,15 @@ class VSPHEREUPINode(VMWareNodes):
 
             # If CSR exists for new node, create dictionary with the csr info
             # e.g: {'compute-1': ['csr-64vkw']}
-            try:
+            ignore_existing_csr = None
+            if new_node in existing_csr_data:
+                nodes_approve_csr_num -= 1
+                ignore_existing_csr = {new_node: existing_csr_data[new_node]}
 
-                ignore_existing_csr = None
-                if new_node in existing_csr_data:
-                    nodes_approve_csr_num -= 1
-                    ignore_existing_csr = {new_node: existing_csr_data[new_node]}
-
-                wait_for_all_nodes_csr_and_approve(
-                    expected_node_num=nodes_approve_csr_num,
-                    ignore_existing_csr=ignore_existing_csr,
-                )
-            except TimeoutExpiredError as e:
-                logger.info(f"Exception: {e}")
+            wait_for_all_nodes_csr_and_approve(
+                expected_node_num=nodes_approve_csr_num,
+                ignore_existing_csr=ignore_existing_csr,
+            )
 
     def add_nodes_with_terraform(self):
         """
@@ -2059,9 +2055,14 @@ class VSPHEREUPINode(VMWareNodes):
 
     def get_missing_node_name(self, prefix="compute-"):
         """
+        Get the missing node name
 
-        :param prefix:
-        :return:
+        Args:
+            prefix (str): Prefix for the node name
+
+        Returns:
+            str: Node name
+
         """
         compute_vms = self.vsphere.get_compute_vms_in_pool(
             self.cluster_name, self.datacenter, self.cluster
@@ -2713,6 +2714,18 @@ class VMWareLSONodes(VMWareNodes):
         vmware_upi_obj = VMWareUPINodes()
         vmware_upi_obj.terminate_nodes(nodes=nodes)
 
+    def get_uuid(self, node_obj):
+        """
+        Args:
+            node_obj (obj) : The OCS objects of the nodes
+
+        Returns:
+            str: UUID of VM
+
+        """
+        vm = super().get_vms([node_obj])
+        return vm[0].config.uuid
+
 
 class RHVNodes(NodesBase):
     """
@@ -3179,9 +3192,17 @@ class VMWareUPINodes(VMWareNodes):
             node_conf={}, node_type=node_type, compute_count=0
         )
         logger.info(f"Modifying terraform state file of the removed VMs {vm_names}")
-        for vm_name in vm_names:
-            node_cls_obj.change_terraform_statefile_after_remove_vm(vm_name)
-            node_cls_obj.change_terraform_tfvars_after_remove_vm()
+        if (
+            cluster.is_lso_cluster()
+            and config.ENV_DATA["platform"] == constants.VSPHERE_PLATFORM
+        ):
+            logger.info(
+                "skip modifying terraform files for vSphere LSO platform due to adding nodes without terraform"
+            )
+        else:
+            for vm_name in vm_names:
+                node_cls_obj.change_terraform_statefile_after_remove_vm(vm_name)
+                node_cls_obj.change_terraform_tfvars_after_remove_vm()
 
 
 class GCPNodes(NodesBase):

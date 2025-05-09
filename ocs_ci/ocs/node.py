@@ -1,6 +1,8 @@
 import copy
 import logging
+import os
 import re
+import shutil
 import time
 from prettytable import PrettyTable
 from collections import defaultdict
@@ -30,9 +32,13 @@ from ocs_ci.ocs.resources.pvc import get_pvc_size
 from ocs_ci.utility import version
 from ocs_ci.utility.retry import retry
 from ocs_ci.utility.utils import TimeoutSampler, convert_device_size, get_az_count
-from ocs_ci.ocs import machine
+from ocs_ci.ocs import machine, cluster
 from ocs_ci.ocs.resources import pod
-from ocs_ci.utility.utils import set_selinux_permissions, get_ocp_version
+from ocs_ci.utility.utils import (
+    get_ocp_version,
+    replace_content_in_file,
+    set_selinux_permissions,
+)
 from ocs_ci.ocs.resources.pv import (
     get_pv_objs_in_sc,
     get_pv_size,
@@ -1164,6 +1170,13 @@ def delete_and_create_osd_node_vsphere_upi(osd_node_name, use_existing_node=Fals
     osd_node = get_node_objs(node_names=[osd_node_name])[0]
     remove_nodes([osd_node])
 
+    if (
+        cluster.is_lso_cluster()
+        and config.ENV_DATA["platform"] == constants.VSPHERE_PLATFORM
+    ):
+        old_uuid = node_util.get_uuid(osd_node)
+        log.info(f"UUID for the terminating VM is {old_uuid}")
+
     log.info(f"Waiting for node {osd_node_name} to be deleted")
     osd_node.ocp.wait_for_delete(
         osd_node_name, timeout=600
@@ -1181,6 +1194,29 @@ def delete_and_create_osd_node_vsphere_upi(osd_node_name, use_existing_node=Fals
         log.info("Preparing to create a new node...")
         new_node_names = add_new_node_and_label_upi(node_type, 1)
         new_node_name = new_node_names[0]
+
+        if (
+            cluster.is_lso_cluster()
+            and config.ENV_DATA["platform"] == constants.VSPHERE_PLATFORM
+        ):
+            new_osd_node = get_node_objs(node_names=[new_node_name])[0]
+            new_uuid = node_util.get_uuid(new_osd_node)
+            log.info(f"UUID for the new VM is {new_uuid}")
+            # replace old uuid with new uuid in terraform state file
+            terraform_tfstate_file = os.path.join(
+                config.ENV_DATA["cluster_path"], "terraform_data", "terraform.tfstate"
+            )
+            epoch_time = int(time.time())
+            terraform_tfstate_file_backup = f"{terraform_tfstate_file}_{epoch_time}"
+            log.info(
+                f"Backing up {terraform_tfstate_file} to {terraform_tfstate_file_backup} before updating UUID"
+            )
+            shutil.copy(terraform_tfstate_file, terraform_tfstate_file_backup)
+            log.info(
+                f"Replacing {old_uuid} with {new_uuid} in {terraform_tfstate_file}"
+            )
+            replace_content_in_file(terraform_tfstate_file, old_uuid, new_uuid)
+
     else:
         node_not_in_ocs = get_worker_nodes_not_in_ocs()[0]
         log.info(
