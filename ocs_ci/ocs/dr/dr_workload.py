@@ -1168,6 +1168,7 @@ class BusyboxDiscoveredApps(DRWorkload):
             self.create_drpc_for_apps_with_recipe()
         else:
             self.create_drpc()
+        self.verify_workload_deployment()
 
     def _deploy_prereqs(self):
         """
