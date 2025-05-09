@@ -133,7 +133,7 @@ class IBMDeployment(Deployment):
         for pv in pvs["items"]:
             pv_name = pv["metadata"]["name"]
             if pv_name.startswith("ocs-storagecluster-ceph"):
-                ocp.OCP().exec_oc_cmd(f"oc delete pv {pv_name}")
+                ocp.OCP().exec_oc_cmd(f"delete pv {pv_name}")
 
         # Section 3.1 Step 9
         # Note that the below process differs from the documentation slightly.
