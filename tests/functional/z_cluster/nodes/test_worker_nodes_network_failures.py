@@ -42,13 +42,13 @@ class TestWorkerNodesFailure(ManageTest):
     @pytest.fixture()
     def setup(self, request, interface, multi_pvc_factory, deployment_pod_factory):
         """
-        Create PVCs and DeploymentConfig based app pods for the test
+        Create PVCs and Deployment based app pods for the test
 
         Args:
             interface(str): The type of the interface
                 (e.g. CephBlockPool, CephFileSystem)
             multi_pvc_factory: A fixture create a set of new PVCs
-            deployment_pod_factory: A fixture to create dc pod
+            deployment_pod_factory: A fixture to create deployments
 
         Returns:
             list: dc pod objs
