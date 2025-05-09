@@ -1989,6 +1989,18 @@ def cluster(
                     kms.cleanup()
                 except Exception as ex:
                     log.error(f"Failed to cleanup KMS. Exception is: {ex}")
+            if ocsci_config.MULTICLUSTER.get("acm_cluster"):
+                try:
+                    from ocs_ci.utility.aws import AWS
+
+                    thanos_bucket_name = (
+                        f"dr-thanos-bucket-{config.ENV_DATA['cluster_name']}"
+                    )
+                    AWS().delete_bucket(thanos_bucket_name)
+                except Exception as ex:
+                    log.error(
+                        f"Either failed to delete bucket or bucket doesn't exist {ex}"
+                    )
             deployer.destroy_cluster(log_cli_level)
 
         request.addfinalizer(cluster_teardown_finalizer)
@@ -8198,7 +8210,6 @@ def setup_logwriter_cephfs_workload_class(
     logwriter_workload_class,
     logreader_workload_class,
 ):
-
     return setup_logwriter_cephfs_workload(
         request,
         setup_stretch_cluster_project,
@@ -8218,7 +8229,6 @@ def setup_logwriter_cephfs_workload_factory(
     logwriter_workload_factory,
     logreader_workload_factory,
 ):
-
     return setup_logwriter_cephfs_workload(
         request,
         setup_stretch_cluster_project,
@@ -9088,7 +9098,6 @@ def hosted_cluster_remove_config():
 
 
 def hosted_cluster_remove_factory(cluster_name, duty=""):
-
     ocsci_config.switch_to_provider()
     destroy_res = None
 
@@ -9316,7 +9325,6 @@ def role_rank():
 
 @pytest.fixture()
 def nb_assign_user_role_fixture(request, mcg_obj_session):
-
     email = None
 
     def factory(user_email, role_name, principal="*"):
@@ -9492,7 +9500,6 @@ def run_fio_till_cluster_full(
 
 @pytest.fixture()
 def nfs_project(project_factory):
-
     # Create NFS namespace and label with cluster-monitoring=true
     project_factory(project_name=constants.NFS_NAMESPACE_NAME)
     label = "openshift.io/cluster-monitoring=true"
