@@ -95,7 +95,7 @@ class TestPvcExpansionWhenFull(ManageTest):
             "Run IO on PVCs to utilize 96% of available storage. Check PersistentVolumeUsageCritical alert."
         )
         self._run_io_and_check_alerts(
-            fill_up_near_full_mb + fill_up_critical_full_mb,
+            fill_up_critical_full_mb,
             prometheus_api,
             alert_type="PersistentVolumeUsageCritical",
             alert_msg="is critically full. Data deletion or PVC expansion is required.",
@@ -103,12 +103,9 @@ class TestPvcExpansionWhenFull(ManageTest):
         )
 
         log_step("Run IO on all to utilize 100% of PVCs storage capacity.")
-        self.fill_up_pvcs(
-            fill_up_near_full_mb + fill_up_critical_full_mb + fill_up_full_mb,
-            pvc_full_error_expected=True,
-        )
+        self.fill_up_pvcs(fill_up_full_mb, pvc_full_error_expected=True)
 
-        log_step("Run IO on PVCs to utilise 100% of PVCs storage capacity.")
+        log_step("Verify used space on pods is 100%.")
         self._verify_used_space_on_pods("100%")
 
         log_step("Expanding PVCs.")
@@ -123,12 +120,7 @@ class TestPvcExpansionWhenFull(ManageTest):
         self.verify_no_pvc_alerts(prometheus_api, round(timeout_alerts / 2))
 
         log_step("Run IO after PVC expansion.")
-        self.fill_up_pvcs(
-            fill_up_near_full_mb
-            + fill_up_critical_full_mb
-            + fill_up_full_mb
-            + (pvc_fill_up_after_resize * 1024)
-        )
+        self.fill_up_pvcs(pvc_fill_up_after_resize * 1024)
 
         log_step("Verify no PVC full alerts after PVC expansion and additional IO.")
         self.verify_no_pvc_alerts(prometheus_api, round(timeout_alerts / 2))
@@ -282,7 +274,7 @@ class TestPvcExpansionWhenFull(ManageTest):
 
     def fill_up_pvcs(self, fill_up_mb, pvc_full_error_expected=False):
         """
-        Run IO on pods to utilize the PVCs until near_full threshold
+        Run IO on pods to utilize the PVCs
 
         Args:
             fill_up_mb (int): The amount of data to write to the PVCs
@@ -295,7 +287,8 @@ class TestPvcExpansionWhenFull(ManageTest):
                 io_direction="write",
                 runtime=30,
                 rate="100M",
-                fio_filename=f"{pod_obj.name}_f1",
+                fio_filename=f"file_{fill_up_mb}mb",
+                end_fsync=1,
             )
         for pod_obj in self.pods:
             try:
