@@ -809,7 +809,32 @@ def get_all_pods(
     return pod_objs
 
 
-def get_ceph_tools_pod(
+def get_ceph_tools_pod(*args, **kwargs):
+    """
+    Wrapper for get_ceph_tools_pod that switches context using
+    config.RunWithProviderConfigContextIfAvailable() if specific conditions are met.
+
+    Args:
+        *args: Positional arguments for get_ceph_tools_pod.
+        **kwargs: Keyword arguments for get_ceph_tools_pod.
+
+    Returns:
+        Pod object: The Ceph tools pod object.
+    """
+    if (
+        config.multicluster
+        and config.ENV_DATA.get("platform", "").lower()
+        in constants.HCI_PC_OR_MS_PLATFORM
+        and config.ENV_DATA.get("cluster_type", "").lower()
+        in [constants.MS_CONSUMER_TYPE, constants.HCI_CLIENT]
+    ):
+        with config.RunWithProviderConfigContextIfAvailable():
+            kwargs["namespace"] = config.ENV_DATA["cluster_namespace"]
+            return _get_ceph_tools_pod(*args, **kwargs)
+    return _get_ceph_tools_pod(*args, **kwargs)
+
+
+def _get_ceph_tools_pod(
     skip_creating_pod=False, wait=False, namespace=None, get_running_pods=True
 ):
     """
@@ -832,31 +857,10 @@ def get_ceph_tools_pod(
     """
     from ocs_ci.ocs.managedservice import patch_consumer_toolbox
 
-    if (
-        config.multicluster
-        and config.ENV_DATA.get("platform", "").lower()
-        in constants.HCI_PC_OR_MS_PLATFORM
-        and config.ENV_DATA.get("cluster_type", "").lower()
-        in [constants.MS_CONSUMER_TYPE, constants.HCI_CLIENT]
-    ):
-        provider_kubeconfig = os.path.join(
-            config.clusters[config.get_provider_index()].ENV_DATA["cluster_path"],
-            config.clusters[config.get_provider_index()].RUN.get("kubeconfig_location"),
-        )
-        cluster_kubeconfig = provider_kubeconfig
-    else:
-        cluster_kubeconfig = config.ENV_DATA.get("provider_kubeconfig", "")
-
-    if cluster_kubeconfig:
-        namespace = config.ENV_DATA["cluster_namespace"]
-    else:
-        namespace = namespace or config.ENV_DATA["cluster_namespace"]
-
     ocp_pod_obj = OCP(
         kind=constants.POD,
         namespace=namespace,
         selector=constants.TOOL_APP_LABEL,
-        cluster_kubeconfig=cluster_kubeconfig,
     )
     ct_pod_items = ocp_pod_obj.data["items"]
     if not (ct_pod_items or skip_creating_pod):
@@ -876,7 +880,6 @@ def get_ceph_tools_pod(
             kind=constants.POD,
             namespace=namespace,
             selector=constants.TOOL_APP_LABEL,
-            cluster_kubeconfig=cluster_kubeconfig,
         )
         ct_pod_items = ocp_pod_obj.data["items"]
         logger.info(
@@ -906,7 +909,6 @@ def get_ceph_tools_pod(
         ocp_pod_obj = OCP(
             kind=constants.POD,
             namespace=namespace,
-            cluster_kubeconfig=cluster_kubeconfig,
         )
         running_ct_pods = list()
         for pod in ct_pod_items:
@@ -930,7 +932,6 @@ def get_ceph_tools_pod(
         running_ct_pods = _get_tools_pod_objs()
 
     ceph_pod = Pod(**running_ct_pods[0])
-    ceph_pod.ocp.cluster_kubeconfig = cluster_kubeconfig
 
     if (
         config.ENV_DATA.get("platform", "").lower() == constants.ROSA_PLATFORM
