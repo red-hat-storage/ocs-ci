@@ -9,15 +9,25 @@ from ocs_ci.ocs.node import (
 from ocs_ci.ocs.resources.pod import (
     wait_for_pods_to_be_running,
 )
-from ocs_ci.framework.pytest_customization.marks import brown_squad
+from ocs_ci.framework.pytest_customization.marks import (
+    brown_squad,
+    tier1,
+    mcg_only_required,
+)
 
 log = logging.getLogger(__name__)
 
 
+@tier1
+@mcg_only_required
 @brown_squad
 class TestNoobaaPodNodeAffinity:
     @pytest.fixture(scope="session", autouse=True)
     def teardown(self, request):
+        """
+        This teardown will bring storage cluster with default values.
+        """
+
         def finalizer():
             """
             Finalizer will take care of below activities:
@@ -25,14 +35,12 @@ class TestNoobaaPodNodeAffinity:
 
             """
             resource_name = constants.DEFAULT_CLUSTERNAME
-            if config.DEPLOYMENT["external_mode"]:
-                resource_name = constants.DEFAULT_CLUSTERNAME_EXTERNAL_MODE
             storagecluster_obj = ocp.OCP(
                 resource_name=resource_name,
                 namespace=config.ENV_DATA["cluster_namespace"],
                 kind=constants.STORAGECLUSTER,
             )
-            params = '[{"op": "remove", "path": "/spec/placement/noobaa-standalone"},]'
+            params = '[{"op": "remove", "path": "/spec/placement/noobaa-standalone"}]'
             storagecluster_obj.patch(params=params, format_type="json")
             log.info("Patched storage cluster  back to the default")
             assert (
