@@ -632,10 +632,20 @@ RGW_APP_LABEL = "app=rook-ceph-rgw"
 EXPORTER_APP_LABEL = "app=rook-ceph-exporter"
 OPERATOR_LABEL = "app=rook-ceph-operator"
 ODF_CONSOLE = "app=odf-console"
-CSI_CEPHFSPLUGIN_PROVISIONER_LABEL = "app=csi-cephfsplugin-provisioner"
-CSI_RBDPLUGIN_PROVISIONER_LABEL = "app=csi-rbdplugin-provisioner"
-CSI_CEPHFSPLUGIN_LABEL = "app=csi-cephfsplugin"
-CSI_RBDPLUGIN_LABEL = "app=csi-rbdplugin"
+# fmt: off
+CSI_CEPHFSPLUGIN_PROVISIONER_LABEL = (
+    "app in (openshift-storage.cephfs.csi.ceph.com-ctrlplugin,csi-cephfsplugin-provisioner)"
+)
+# fmt: on
+CSI_RBDPLUGIN_PROVISIONER_LABEL = (
+    "app in (openshift-storage.rbd.csi.ceph.com-ctrlplugin,csi-rbdplugin-provisioner)"
+)
+CSI_CEPHFSPLUGIN_LABEL = (
+    "app in (openshift-storage.cephfs.csi.ceph.com-nodeplugin,csi-cephfsplugin)"
+)
+CSI_RBDPLUGIN_LABEL = (
+    "app in (openshift-storage.rbd.csi.ceph.com-nodeplugin,csi-rbdplugin)"
+)
 CSI_CEPHFSPLUGIN_PROVISIONER_LABEL_419 = (
     "app=openshift-storage.cephfs.csi.ceph.com-ctrlplugin"
 )
