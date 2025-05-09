@@ -46,6 +46,9 @@ from ocs_ci.framework import config, merge_dict
 from ocs_ci.framework.logger_helper import log_step
 from ocs_ci.helpers.dr_helpers import (
     configure_drcluster_for_fencing,
+    create_service_exporter,
+    validate_storage_cluster_peer_state,
+    verify_volsync,
 )
 from ocs_ci.ocs import constants, ocp, defaults, registry
 from ocs_ci.ocs.cluster import (
@@ -1691,6 +1694,20 @@ class Deployment(object):
             merge_dict(
                 cluster_data, {"metadata": {"annotations": rdr_bluestore_annotation}}
             )
+        if (
+            version.get_semantic_ocs_version_from_config() >= version.VERSION_4_19
+            and config.MULTICLUSTER.get("multicluster_mode") == "regional-dr"
+        ):
+            api_server_exported_address_annotation = {
+                "ocs.openshift.io/api-server-exported-address": (
+                    f'{config.ENV_DATA["cluster_name"]}.'
+                    f"ocs-provider-server.openshift-storage.svc.clusterset.local:50051"
+                )
+            }
+            merge_dict(
+                cluster_data,
+                {"metadata": {"annotations": api_server_exported_address_annotation}},
+            )
         if config.ENV_DATA.get("noobaa_external_pgsql"):
             log_step(
                 "Creating external pgsql DB for NooBaa and correct StorageCluster data"
@@ -2953,25 +2970,39 @@ class RBDDRDeployOps(object):
 
     @retry(ResourceWrongStatusException, tries=10, delay=5)
     def configure_rbd(self):
-        st_string = '{.items[?(@.metadata.ownerReferences[*].kind=="StorageCluster")].spec.mirroring.enabled}'
-        query_mirroring = (
-            f"oc get CephBlockPool -n {config.ENV_DATA['cluster_namespace']}"
-            f" -o=jsonpath='{st_string}'"
-        )
+        odf_running_version = version.get_semantic_ocs_version_from_config()
+        if odf_running_version >= version.VERSION_4_19:
+            cmd = (
+                f"oc get cephblockpoolradosnamespaces -n {config.ENV_DATA['cluster_namespace']}"
+                " -o=jsonpath='{.items[*].status.phase}'"
+            )
+            resource_name = constants.CEPHBLOCKPOOLRADOSNS
+            expected_state = constants.STATUS_READY
+        else:
+            st_string = '{.items[?(@.metadata.ownerReferences[*].kind=="StorageCluster")].spec.mirroring.enabled}'
+            cmd = (
+                f"oc get CephBlockPool -n {config.ENV_DATA['cluster_namespace']}"
+                f" -o=jsonpath='{st_string}'"
+            )
+            resource_name = constants.CEPHBLOCKPOOL
+            expected_state = "true"
+
         out_list = run_cmd_multicluster(
-            query_mirroring, skip_index=get_all_acm_and_recovery_indexes()
+            cmd, skip_index=get_all_acm_and_recovery_indexes()
         )
         index = 0
         for out in out_list:
             if not out:
                 continue
             logger.info(out.stdout.decode())
-            if out.stdout.decode() != "true":
+            if out.stdout.decode() != expected_state:
                 logger.error(
                     f"On cluster {config.clusters[index].ENV_DATA['cluster_name']}"
                 )
                 raise ResourceWrongStatusException(
-                    "CephBlockPool", expected="true", got=out.stdout.decode()
+                    resource_or_name=resource_name,
+                    expected=expected_state,
+                    got=out.stdout.decode(),
                 )
             index = +1
 
@@ -3798,14 +3829,23 @@ class RDRMultiClusterDROperatorsDeploy(MultiClusterDROperatorsDeploy):
             # Enable MCO console plugin
             enable_mco_console_plugin()
         config.switch_acm_ctx()
+        odf_running_version = version.get_semantic_ocs_version_from_config()
+        if odf_running_version >= version.VERSION_4_19:
+            # create service exporter
+            create_service_exporter()
+
         # RBD specific dr deployment
         if self.rbd:
             rbddops = RBDDRDeployOps()
             self.configure_mirror_peer()
             rbddops.deploy()
         self.enable_acm_observability()
+
         self.deploy_dr_policy()
-        update_volsync_channel()
+        if odf_running_version >= version.VERSION_4_19:
+            # validate storage cluster peer state
+            validate_storage_cluster_peer_state()
+            verify_volsync()
 
         # Enable cluster backup on both ACMs
         for i in acm_indexes:
