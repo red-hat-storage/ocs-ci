@@ -28,27 +28,57 @@ class TestFailoverAndRelocateWithDiscoveredApps:
     """
 
     @pytest.mark.parametrize(
-        argnames=["primary_cluster_down", "pvc_interface"],
+        argnames=["primary_cluster_down", "pvc_interface", "kubeobject", "recipe"],
         argvalues=[
             pytest.param(
                 False,
                 constants.CEPHBLOCKPOOL,
+                0,
+                1,
+                id="primary_up-rbd",
+            ),
+            pytest.param(
+                False,
+                constants.CEPHBLOCKPOOL,
+                1,
+                0,
                 id="primary_up-rbd",
             ),
             pytest.param(
                 True,
                 constants.CEPHBLOCKPOOL,
+                1,
+                0,
+                id="primary_down-rbd",
+            ),
+            pytest.param(
+                True,
+                constants.CEPHBLOCKPOOL,
+                0,
+                1,
                 id="primary_down-rbd",
             ),
             pytest.param(
                 False,
                 constants.CEPHFILESYSTEM,
+                1,
+                0,
                 marks=[skipif_ocs_version("<4.19")],
                 id="primary_up-cephfs",
             ),
             pytest.param(
                 True,
                 constants.CEPHFILESYSTEM,
+                1,
+                0,
+                marks=[skipif_ocs_version("<4.19")],
+                id="primary_down-cephfs",
+            ),
+            pytest.param(
+                True,
+                constants.CEPHFILESYSTEM,
+                0,
+                1,
                 marks=[skipif_ocs_version("<4.19")],
                 id="primary_down-cephfs",
             ),
@@ -60,6 +90,8 @@ class TestFailoverAndRelocateWithDiscoveredApps:
         primary_cluster_down,
         pvc_interface,
         nodes_multicluster,
+        kubeobject,
+        recipe,
     ):
         """
         Tests to verify application failover and Relocate with Discovered Apps
@@ -68,8 +100,9 @@ class TestFailoverAndRelocateWithDiscoveredApps:
             2) Relocate back to primary
 
         """
-
-        rdr_workload = discovered_apps_dr_workload(pvc_interface=pvc_interface)[0]
+        rdr_workload = discovered_apps_dr_workload(
+            pvc_interface=pvc_interface, kubeobject=kubeobject, recipe=recipe
+        )[0]
 
         primary_cluster_name_before_failover = (
             dr_helpers.get_current_primary_cluster_name(

@@ -1,0 +1,60 @@
+apiVersion: ramendr.openshift.io/v1alpha1
+kind: Recipe
+metadata:
+  name: PLACEHOLDER
+spec:
+  appType: busybox
+  groups:
+  - backupRef: PLACEHOLDER
+    excludedResourceTypes:
+    - events
+    - event.events.k8s.io
+    - persistentvolumes
+    - replicaset
+    - persistentvolumeclaims
+    - pods
+    includedNamespaces:
+    - PLACEHOLDER
+    labelSelector:
+      matchExpressions:
+      - key: workloadpattern
+        operator: In
+        values:
+        - PLACEHOLDER
+    name: PLACEHOLDER
+    type: resource
+  workflows:
+  - failOn: any-error
+    name: backup
+    sequence:
+    - hook: deployment-check/stateReady
+    - group: PLACEHOLDER
+  - failOn: any-error
+    name: restore
+    sequence:
+    - group: PLACEHOLDER
+    - hook: deployment-check/stateReady
+  hooks:
+  - name: deployment-check
+    type: check
+    namespace: PLACEHOLDER
+    selectResource: deployment
+    nameSelector: PLACEHOLDER
+    timeout: 800
+    onError: fail
+    chks:
+    - name: stateReady
+      timeout: 900
+      onError: fail
+      condition: "{$.spec.replicas} == {$.status.readyReplicas}"
+  volumes:
+    includedNamespaces:
+    - PLACEHOLDER
+    name: mypvc
+    type: volume
+    labelSelector:
+      matchExpressions:
+      - key: appname
+        operator: In
+        values:
+        - PLACEHOLDER
