@@ -143,6 +143,9 @@ dr_cluster_operator_upgrade = compose(
 # acm operator
 acm_upgrade = compose(order_acm_upgrade, pytest.mark.acm_upgrade)
 ocs_upgrade = compose(order_ocs_upgrade, pytest.mark.ocs_upgrade)
+# provider operator upgrade
+provider_operator_upgrade = compose(order_ocs_upgrade, pytest.mark.ocs_upgrade)
+
 # pre_*_upgrade markers
 pre_upgrade = compose(order_pre_upgrade, pytest.mark.pre_upgrade)
 pre_ocp_upgrade = compose(
