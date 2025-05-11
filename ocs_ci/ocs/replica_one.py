@@ -202,7 +202,7 @@ def delete_replica1_cephblockpools_cr(cbp_object: OCP):
     replica‑1 (non‑resilient) feature.
 
     Args:
-        cbp_object (OCP): OCP(kind="CephBlockPool") wrapper
+        cbp_object (ocs_ci.ocs.ocp.OCP): OCP(kind="CephBlockPool") wrapper
     """
     for pool in cbp_object.get()["items"]:
         spec = pool["spec"]

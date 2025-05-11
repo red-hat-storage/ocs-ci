@@ -44,7 +44,7 @@ from ocs_ci.ocs.replica_one import (
     get_all_osd_names_by_device_class,
     get_failure_domains,
 )
-from ocs_ci.ocs.node import get_worker_nodes
+from ocs_ci.ocs.node import get_worker_nodes, get_node_objs
 
 
 log = getLogger(__name__)
@@ -75,7 +75,9 @@ def _get_node_selector_for_failure_domain(
     else:
         label_key = ZONE_LABEL
 
-    workers = get_worker_nodes()
+    worker_names = get_worker_nodes()
+    workers = get_node_objs(worker_names)
+
     workers_with_label = [
         n for n in workers if label_key in n.data["metadata"]["labels"]
     ]
