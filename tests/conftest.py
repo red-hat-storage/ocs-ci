@@ -9344,7 +9344,7 @@ def create_config_of_existing_hosted_clusters():
 
         """
         hypershift_cluster_factory(
-            duty="use_existing_hosted_clusters_push_missing_configs",
+            duty=constants.DUTY_USE_EXISTING_HOSTED_CLUSTERS_PUSH_MISSING_CONFIG,
         )
 
     return factory
@@ -9364,7 +9364,7 @@ def refresh_hosted_config():
 
         """
         hypershift_cluster_factory(
-            duty="use_existing_hosted_clusters_force_push_configs",
+            duty=constants.DUTY_USE_EXISTING_HOSTED_CLUSTERS_PUSH_MISSING_CONFIG,
         )
 
     return factory
