@@ -39,6 +39,7 @@ from ocs_ci.ocs.constants import (
     AZURE_KV_PROVIDER_NAME,
     ROSA_HCP_PLATFORM,
     VAULT_KMS_PROVIDER,
+    DUTY_USE_EXISTING_HOSTED_CLUSTERS_PUSH_MISSING_CONFIG,
 )
 from ocs_ci.utility import version
 from ocs_ci.utility.aws import update_config_from_s3
@@ -412,7 +413,7 @@ def setup_multicluster_marker(marker_base, push_missing_configs=False):
         if push_missing_configs:
 
             hypershift_cluster_factory(
-                duty="use_existing_hosted_clusters_push_missing_configs",
+                duty=DUTY_USE_EXISTING_HOSTED_CLUSTERS_PUSH_MISSING_CONFIG,
             )
         client_indexes = [
             pytest.param(*[idx]) for idx in config.get_consumer_indexes_list()
