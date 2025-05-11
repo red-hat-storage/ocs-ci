@@ -27,6 +27,7 @@ from ocs_ci.ocs.bucket_utils import (
     craft_s3cmd_command,
     create_multipart_upload,
     expire_multipart_upload_in_noobaa_db,
+    expire_objects_in_bucket,
     get_obj_versions,
     list_multipart_upload,
     list_objects_from_bucket,
@@ -105,16 +106,6 @@ class TestLifecycleConfiguration(MCGTest):
         bucket = bucket_factory(interface="OC")[0].name
 
         # 2. Set lifecycle configuration
-        lifecycle_policy = LifecyclePolicy(
-            AbortIncompleteMultipartUploadRule(days_after_initiation=1)
-        )
-        mcg_obj.s3_client.put_bucket_lifecycle_configuration(
-            Bucket=bucket, LifecycleConfiguration=lifecycle_policy.as_dict()
-        )
-        logger.info(
-            f"Sleeping for {PROP_SLEEP_TIME} seconds to let the policy propagate"
-        )
-        sleep(PROP_SLEEP_TIME)
         lifecycle_policy = LifecyclePolicy(
             AbortIncompleteMultipartUploadRule(days_after_initiation=1)
         )
@@ -458,7 +449,7 @@ class TestLifecycleConfiguration(MCGTest):
         )
 
         # 4. Expire the multipart-upload and wait for it to expire
-        expire_multipart_upload(upload_id)
+        expire_multipart_upload_in_noobaa_db(upload_id)  # Changed function call
         for http_response in TimeoutSampler(
             timeout=TIMEOUT_THRESHOLD,
             sleep=TIMEOUT_SLEEP_DURATION,
@@ -488,7 +479,7 @@ class TestLifecycleConfiguration(MCGTest):
         )
         version_ids = [version["VersionId"] for version in uploaded_versions]
         base_time = datetime.now()
-        for i, v_id in enumerate(version_ids):
+        for _, v_id in enumerate(version_ids):
             change_versions_creation_date_in_noobaa_db(
                 bucket_name=bucket,
                 object_key=versioned_obj_key,
@@ -575,7 +566,6 @@ class TestLifecycleConfiguration(MCGTest):
                 )
 
     @tier3
-    @pytest.mark.polarion_id("OCS-")  # TODO
     @jira("DFBUGS-2306")
     @pytest.mark.parametrize(
         argnames=["rule_cls", "rule_kwargs_list"],
@@ -583,14 +573,17 @@ class TestLifecycleConfiguration(MCGTest):
             pytest.param(
                 ExpirationRule,
                 [{"days": val} for val in [True, -1, 1.5, "string", None]],
+                marks=[pytest.mark.polarion_id("OCS-6835")],
             ),
             pytest.param(
                 ExpiredObjectDeleteMarkerRule,
                 [{"expire_object_delete_marker": val} for val in [1, "string", None]],
+                marks=[pytest.mark.polarion_id("OCS-6836")],
             ),
             pytest.param(
                 NoncurrentVersionExpirationRule,
                 [{"non_current_days": val} for val in [True, -1, 1.5, "string", None]],
+                marks=[pytest.mark.polarion_id("OCS-6837")],
             ),
             pytest.param(
                 NoncurrentVersionExpirationRule,
@@ -598,6 +591,7 @@ class TestLifecycleConfiguration(MCGTest):
                     {"newer_non_current_versions": val}
                     for val in [True, -1, 1.5, "string", None]
                 ],
+                marks=[pytest.mark.polarion_id("OCS-6838")],
             ),
             pytest.param(
                 AbortIncompleteMultipartUploadRule,
@@ -605,6 +599,7 @@ class TestLifecycleConfiguration(MCGTest):
                     {"days_after_initiation": val}
                     for val in [True, -1, 1.5, "string", None]
                 ],
+                marks=[pytest.mark.polarion_id("OCS-6839")],
             ),
         ],
         ids=[
@@ -635,7 +630,7 @@ class TestLifecycleConfiguration(MCGTest):
         logger.info("Invalid lifecycle configurations were rejected as expected")
 
     @tier3
-    @pytest.mark.polarion_id("OCS-")  # TODO
+    @pytest.mark.polarion_id("OCS-6840")
     def test_lifecycle_config_ops_s3_clients_compatibility(
         self, mcg_obj, bucket_factory, awscli_pod
     ):

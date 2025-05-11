@@ -210,7 +210,6 @@ class ExpirationRule(LifecycleRule):
         filter=LifecycleFilter(),
         use_date=False,
         is_enabled=True,
-        expired_object_delete_marker=False,
     ):
         """
         Constructor method for the class
@@ -224,7 +223,6 @@ class ExpirationRule(LifecycleRule):
         super().__init__(filter=filter, is_enabled=is_enabled)
         self.days = days
         self.use_date = use_date
-        self.expired_object_delete_marker = expired_object_delete_marker
 
     def as_dict(self):
         """
@@ -353,77 +351,6 @@ class NoncurrentVersionExpirationRule(LifecycleRule):
         Returns the rule as a dictionary that matches
         the expected S3 lifecycle policy JSON format
         """
-        rule_dict = super().as_dict()
-
-        d = {}
-        if self.non_current_days is not None:
-            d["NoncurrentDays"] = self.non_current_days
-        if self.newer_non_current_versions is not None:
-            d["NewerNoncurrentVersions"] = self.newer_non_current_versions
-        rule_dict["NoncurrentVersionExpiration"] = d
-
-        return rule_dict
-
-
-class AbortIncompleteMultipartUploadRule(LifecycleRule):
-    """
-    A class for handling the parsing of an MCG object expiration rule
-    """
-
-    def __init__(
-        self,
-        days_after_initiation,
-        filter=LifecycleFilter(),
-        is_enabled=True,
-    ):
-        """
-        Constructor method for the class
-
-        Args:
-            days_after_initiation (int): Number of days after which the multipart upload will be aborted
-            filter (LifecycleFilter): Optional object filter
-        """
-        super().__init__(filter=filter, is_enabled=is_enabled)
-        self.days_after_initiation = days_after_initiation
-
-    def as_dict(self):
-        rule_dict = super().as_dict()
-        rule_dict["AbortIncompleteMultipartUpload"] = {
-            "DaysAfterInitiation": self.days_after_initiation
-        }
-        return rule_dict
-
-
-class NoncurrentVersionExpirationRule(LifecycleRule):
-    """
-    A class for handling the parsing of an MCG non-current version expiration rule
-    """
-
-    def __init__(
-        self,
-        non_current_days=None,
-        newer_non_current_versions=None,
-        filter=LifecycleFilter(),
-        is_enabled=True,
-    ):
-        """
-        Constructor method for the class
-
-        Args:
-            non_current_days (int): Number of days after which the non-current version will expire
-            newer_non_current_versions (int): Number of newer non-current versions to retain
-            filter (LifecycleFilter): Optional object filter
-            is_enabled (bool): Whether the rule is enabled or not
-        """
-        super().__init__(filter=filter, is_enabled=is_enabled)
-        self.non_current_days = non_current_days
-        self.newer_non_current_versions = newer_non_current_versions
-        if not self.non_current_days and not self.newer_non_current_versions:
-            raise ValueError(
-                "Either non_current_days or newer_non_current_versions must be set"
-            )
-
-    def as_dict(self):
         rule_dict = super().as_dict()
 
         d = {}
