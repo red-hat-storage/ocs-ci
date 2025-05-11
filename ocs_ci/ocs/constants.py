@@ -634,17 +634,17 @@ OPERATOR_LABEL = "app=rook-ceph-operator"
 ODF_CONSOLE = "app=odf-console"
 # fmt: off
 CSI_CEPHFSPLUGIN_PROVISIONER_LABEL = (
-    "app in (openshift-storage.cephfs.csi.ceph.com-ctrlplugin,csi-cephfsplugin-provisioner)"
+    "'app in (openshift-storage.cephfs.csi.ceph.com-ctrlplugin,csi-cephfsplugin-provisioner)'"
 )
 # fmt: on
 CSI_RBDPLUGIN_PROVISIONER_LABEL = (
-    "app in (openshift-storage.rbd.csi.ceph.com-ctrlplugin,csi-rbdplugin-provisioner)"
+    "'app in (openshift-storage.rbd.csi.ceph.com-ctrlplugin,csi-rbdplugin-provisioner)'"
 )
 CSI_CEPHFSPLUGIN_LABEL = (
-    "app in (openshift-storage.cephfs.csi.ceph.com-nodeplugin,csi-cephfsplugin)"
+    "'app in (openshift-storage.cephfs.csi.ceph.com-nodeplugin,csi-cephfsplugin)'"
 )
 CSI_RBDPLUGIN_LABEL = (
-    "app in (openshift-storage.rbd.csi.ceph.com-nodeplugin,csi-rbdplugin)"
+    "'app in (openshift-storage.rbd.csi.ceph.com-nodeplugin,csi-rbdplugin)'"
 )
 CSI_CEPHFSPLUGIN_PROVISIONER_LABEL_419 = (
     "app=openshift-storage.cephfs.csi.ceph.com-ctrlplugin"
