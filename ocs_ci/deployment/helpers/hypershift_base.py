@@ -11,7 +11,6 @@ from ocs_ci.deployment.ocp import download_pull_secret
 from ocs_ci.framework import config
 from ocs_ci.ocs import constants
 from ocs_ci.ocs import defaults
-from ocs_ci.ocs.constants import CLUSTERS_NAMESPACE
 from ocs_ci.ocs.exceptions import CommandFailed, TimeoutExpiredError
 from ocs_ci.ocs.ocp import OCP
 from ocs_ci.ocs.resources.pod import wait_for_pods_to_be_in_statuses_concurrently
@@ -47,6 +46,7 @@ def get_hosted_cluster_names():
 
     Returns:
         list: the list of hosted cluster names
+
     """
 
     logger.info("Getting HyperShift hosted cluster names")
@@ -72,6 +72,7 @@ def get_available_hosted_clusters_to_ocp_ver_dict():
 
     Returns:
         dict: hosted clusters available with their versions. Example: {'cl-418-x': '4.18.7', 'cl-418-c': '4.19.0'}
+
     """
 
     logger.info("Getting HyperShift hosted clusters available")
@@ -108,7 +109,6 @@ def kubeconfig_exists_decorator(func):
 
     Returns:
         wrapper: The decorated function.
-
     """
 
     def wrapper(self, *args, **kwargs):
@@ -131,6 +131,7 @@ def get_random_hosted_cluster_name():
 
     Returns:
         str: random cluster name
+
     """
 
     # getting the cluster name from the env data, for instance "ibm_cloud_baremetal3; mandatory conf field"
@@ -159,6 +160,7 @@ def get_binary_hcp_version():
 
     Returns:
         str: hcp version output
+
     """
 
     try:
@@ -206,7 +208,9 @@ def is_hosted_cluster(cluster_name=None):
 
     cluster_name = cluster_name or config.ENV_DATA["cluster_name"]
     config.switch_to_provider()
-    ocp_obj = OCP(kind=constants.HOSTED_CLUSTERS, namespace=CLUSTERS_NAMESPACE)
+    ocp_obj = OCP(
+        kind=constants.HOSTED_CLUSTERS, namespace=constants.CLUSTERS_NAMESPACE
+    )
     return ocp_obj.is_exist(resource_name=cluster_name)
 
 
@@ -221,12 +225,13 @@ def get_hosted_cluster_type(cluster_name=None):
     Returns:
         str: The hosted cluster type in lowercase
 
+
     """
     cluster_name = cluster_name or config.ENV_DATA["cluster_name"]
     config.switch_to_provider()
     ocp_hosted_cluster_obj = OCP(
         kind=constants.HOSTED_CLUSTERS,
-        namespace=CLUSTERS_NAMESPACE,
+        namespace=constants.CLUSTERS_NAMESPACE,
         resource_name=cluster_name,
     )
     return ocp_hosted_cluster_obj.get()["spec"]["platform"]["type"].lower()
@@ -242,10 +247,11 @@ def get_current_nodepool_size(name):
 
     Returns:
          str: number of nodes in the nodepool
+
     """
 
     logger.info(f"Getting existing nodepool of HyperShift hosted cluster {name}")
-    cmd = f"get --namespace {CLUSTERS_NAMESPACE} nodepools | awk '$1==\"{name}\" {{print $4}}'"
+    cmd = f"get --namespace {constants.CLUSTERS_NAMESPACE} nodepools | awk '$1==\"{name}\" {{print $4}}'"
     with config.RunWithProviderConfigContextIfAvailable():
         out = OCP().exec_oc_cmd(
             command=cmd,
@@ -267,12 +273,13 @@ def get_desired_nodepool_size(name: str):
 
     Returns:
         int: number of nodes in the nodepool
+
     """
 
     logger.info(f"Getting desired nodepool of HyperShift hosted cluster {name}")
     with config.RunWithProviderConfigContextIfAvailable():
         out = OCP().exec_oc_cmd(
-            command=f"get --namespace {CLUSTERS_NAMESPACE} nodepools | awk '$1==\"{name}\" {{print $3}}'",
+            command=f"get --namespace {constants.CLUSTERS_NAMESPACE} nodepools | awk '$1==\"{name}\" {{print $3}}'",
             cluster_config=config,
             shell=True,
             out_yaml_format=False,
@@ -293,6 +300,7 @@ def worker_nodes_deployed(name: str):
 
     Returns:
          bool: True if worker nodes are deployed, False otherwise
+
     """
 
     logger.info(f"Checking if worker nodes are deployed for cluster {name}")
@@ -309,6 +317,7 @@ def wait_for_worker_nodes_to_be_ready(name: str, timeout=2400):
 
     Returns:
         bool: True if worker nodes are ready, False otherwise
+
     """
 
     logger.info(
@@ -334,10 +343,11 @@ def get_hosted_cluster_kubeconfig_name(name: str):
 
     Returns:
         str: hosted cluster kubeconfig name
+
     """
 
     logger.info(f"Getting kubeconfig for HyperShift hosted cluster {name}")
-    cmd = f"get --namespace {CLUSTERS_NAMESPACE} hostedclusters | awk '$1==\"{name}\" {{print $3}}'"
+    cmd = f"get --namespace {constants.CLUSTERS_NAMESPACE} hostedclusters | awk '$1==\"{name}\" {{print $3}}'"
 
     with config.RunWithProviderConfigContextIfAvailable():
         out = OCP().exec_oc_cmd(
@@ -390,6 +400,7 @@ class HyperShiftBase:
 
         Returns:
             bool: True if hcp binary exists, False otherwise
+
         """
 
         return os.path.isfile(self.hcp_binary_path)
@@ -400,6 +411,7 @@ class HyperShiftBase:
 
         Returns:
             bool: True if hypershift binary exists, False otherwise
+
         """
 
         return os.path.isfile(self.hypershift_binary_path)
@@ -657,6 +669,7 @@ class HyperShiftBase:
 
         Returns:
             bool: True if hosted OCP cluster is verified, False otherwise
+
         """
 
         timeout_pods_wait_min = 40
@@ -714,11 +727,14 @@ class HyperShiftBase:
     def wait_hosted_cluster_completed(self, name: str, timeout=3600):
         """
         Wait for HyperShift hosted cluster creation to complete
+
         Args:
             name: name of the cluster
             timeout: timeout in seconds
+
         Returns:
              bool: True if cluster creation completed, False otherwise
+
         """
         logger.info(f"Verifying HyperShift hosted cluster {name} creation is Completed")
         for sample in TimeoutSampler(
@@ -740,6 +756,7 @@ class HyperShiftBase:
 
         Returns:
             str: path to the downloaded kubeconfig, None if failed
+
         """
 
         path_abs = os.path.expanduser(hosted_cluster_path)
@@ -793,9 +810,10 @@ class HyperShiftBase:
 
         Returns:
             str: progress status; 'Completed' is expected in most cases
+
         """
 
-        cmd = f"oc get --namespace {CLUSTERS_NAMESPACE} hostedclusters | awk '$1==\"{name}\" {{print $4}}'"
+        cmd = f"oc get --namespace {constants.CLUSTERS_NAMESPACE} hostedclusters | awk '$1==\"{name}\" {{print $4}}'"
         return exec_cmd(cmd, shell=True).stdout.decode("utf-8").strip()
 
     def save_mirrors_list_to_file(self):
@@ -857,6 +875,7 @@ class HyperShiftBase:
 
         Returns:
             str: hypershift operator version
+
         """
 
         cmd = "oc get csv -n openshift-cnv -o jsonpath='{.items[0].spec.version}'"
@@ -874,6 +893,7 @@ class HyperShiftBase:
 
         Returns:
             str: multicluster engine version
+
         """
 
         cmd = "oc get mce multiclusterengine -o jsonpath='{.status.currentVersion}'"
@@ -891,6 +911,7 @@ class HyperShiftBase:
 
         Returns:
             bool: True if hypershift is installed, False otherwise
+
         """
 
         cmd = "oc get deployments -n hypershift | awk 'NR>1 {print \"true\"; exit}' "
@@ -907,6 +928,7 @@ class HyperShiftBase:
 
         Returns:
             bool: True if hypershift is installed, False otherwise
+
         """
 
         logger.info("Installing hypershift upstream on the cluster")
@@ -936,11 +958,12 @@ def create_cluster_dir(cluster_name):
 
     Returns:
         str: Path to the kubeconfig directory
+
     """
 
     path = os.path.join(
         config.ENV_DATA["cluster_path"],
-        CLUSTERS_NAMESPACE,
+        constants.CLUSTERS_NAMESPACE,
         cluster_name,
         "openshift-cluster-dir",
     )

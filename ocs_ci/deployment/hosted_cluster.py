@@ -2024,7 +2024,7 @@ def hypershift_cluster_factory(
     logger.info(f"hypershift_cluster_factory duty is '{duty}'")
 
     # this section 1. is to gather and remove configurations and execute deployment due to the duty
-    if duty == "create_hosted_cluster_push_config":
+    if duty == constants.DUTY_CREATE_HOSTED_CLUSTER_PUSH_CONFIG:
         hosted_cluster_conf_on_provider = {"ENV_DATA": {"clusters": {}}}
         for cluster_name in cluster_names:
             # this configuration is necessary to deploy hosted cluster, but not for running tests with multicluster job
@@ -2052,8 +2052,8 @@ def hypershift_cluster_factory(
         deployed_clusters = [obj.name for obj in deployed_hosted_cluster_objects]
 
     elif duty in [
-        "use_existing_hosted_clusters_force_push_configs",
-        "use_existing_hosted_clusters_push_missing_configs",
+        constants.DUTY_USE_EXISTING_HOSTED_CLUSTERS_FORCE_PUSH_CONFIG,
+        constants.DUTY_USE_EXISTING_HOSTED_CLUSTERS_PUSH_MISSING_CONFIG,
     ]:
         cl_name_ver_dict = get_available_hosted_clusters_to_ocp_ver_dict()
         if not cl_name_ver_dict:
@@ -2063,7 +2063,7 @@ def hypershift_cluster_factory(
             return
         deployed_clusters = list(cl_name_ver_dict.keys())
 
-        if "use_existing_hosted_clusters_force_push_configs" in duty:
+        if constants.DUTY_USE_EXISTING_HOSTED_CLUSTERS_PUSH_MISSING_CONFIG in duty:
             existing_clusters = {
                 conf.ENV_DATA.get("cluster_name") for conf in config.clusters
             }
@@ -2079,7 +2079,7 @@ def hypershift_cluster_factory(
             deployed_clusters = {
                 conf.ENV_DATA.get("cluster_name") for conf in config.clusters
             }
-        if duty == "use_existing_hosted_clusters_push_missing_configs":
+        if duty == constants.DUTY_USE_EXISTING_HOSTED_CLUSTERS_PUSH_MISSING_CONFIG:
             clusters_in_config = {
                 conf.ENV_DATA.get("cluster_name") for conf in config.clusters
             }
@@ -2162,8 +2162,12 @@ def hypershift_cluster_factory(
             logger.debug(
                 "Setting default context to config. Every config should have same default context"
             )
+            # sync our configurations with the one in MultiClusterConfig to have the same default context index
+            # we set provider's index to every client config
+
+            default_index = config.get_provider_index()
             def_client_config_dict["ENV_DATA"].setdefault(
-                "default_cluster_context_index", 0
+                "default_cluster_context_index", default_index
             )
 
             def_client_config_dict.setdefault("RUN", {}).update(
