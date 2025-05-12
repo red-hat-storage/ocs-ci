@@ -15,7 +15,6 @@ logger = logging.getLogger(__name__)
 
 
 @brown_squad
-@pytest.mark.polarion_id("")
 class TestStorageSystem(ManageTest):
     """
     Verify the ceph full thresholds storagecluster parameters move to cephcluster
@@ -23,6 +22,7 @@ class TestStorageSystem(ManageTest):
     """
 
     @tier1
+    @pytest.mark.polarion_id("OCS-6842")
     def test_storagesystem_not_present(self):
         """
         1. Storage System is not present
@@ -35,7 +35,7 @@ class TestStorageSystem(ManageTest):
         kind=constants.STORAGESYSTEM, namespace=config.ENV_DATA["cluster_namespace"]
     )
     try:
-        storage_system_data = storage_system.get()
+        storage_system.get()
     except CommandFailed:
         pass
     else:
