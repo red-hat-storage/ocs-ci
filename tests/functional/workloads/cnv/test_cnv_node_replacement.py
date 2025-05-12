@@ -66,7 +66,7 @@ class TestCnvNodeReplace(E2ETest):
         # Choose VMs randomaly
         vm_for_clone, vm_for_stop, vm_for_snap = random.sample(all_vms, 3)
 
-        # Uncomment code ones 11088 merged.
+        # Uncomment code ones 11199 merged.
         """
         # Create Clone of VM
         cloned_vm = clone_or_snapshot_vm(
