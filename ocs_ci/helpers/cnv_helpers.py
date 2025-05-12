@@ -18,7 +18,6 @@ from ocs_ci.helpers.helpers import (
 )
 from ocs_ci.framework import config
 from ocs_ci.utility.retry import retry
-from ocs_ci.ocs.cnv import virtual_machine
 
 
 logger = logging.getLogger(__name__)
