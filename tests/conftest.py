@@ -70,6 +70,7 @@ from ocs_ci.ocs.exceptions import (
     ResourceNotDeleted,
     MissingDecoratorError,
     MissingRequiredConfigKeyError,
+    UnsupportedWorkloadError,
 )
 from ocs_ci.ocs.mcg_workload import mcg_job_factory as mcg_job_factory_implementation
 from ocs_ci.ocs.node import get_node_objs, schedule_nodes
@@ -944,7 +945,17 @@ def ceph_pool_factory_fixture(request, replica=3, compression=None):
 
         for instance in instances:
             try:
-                instance.delete()
+                instance.delete(wait=False)
+                radosns_obj = ocp.OCP(
+                    kind=constants.CEPHBLOCKPOOLRADOSNS, namespace=instance.namespace
+                )
+                radosnamespaces = [
+                    OCS(**radosns)
+                    for radosns in radosns_obj.get()["items"]
+                    if radosns["spec"]["blockPoolName"] == instance.name
+                ]
+                for radosnamespace in radosnamespaces:
+                    radosnamespace.delete()
             except CommandFailed as ex:
                 if "NotFound" in str(ex) and skip_resource_not_found_error:
                     log.info(
@@ -1988,6 +1999,18 @@ def cluster(
                     kms.cleanup()
                 except Exception as ex:
                     log.error(f"Failed to cleanup KMS. Exception is: {ex}")
+            if ocsci_config.MULTICLUSTER.get("acm_cluster"):
+                try:
+                    from ocs_ci.utility.aws import AWS
+
+                    thanos_bucket_name = (
+                        f"dr-thanos-bucket-{config.ENV_DATA['cluster_name']}"
+                    )
+                    AWS().delete_bucket(thanos_bucket_name)
+                except Exception as ex:
+                    log.error(
+                        f"Either failed to delete bucket or bucket doesn't exist {ex}"
+                    )
             deployer.destroy_cluster(log_cli_level)
 
         request.addfinalizer(cluster_teardown_finalizer)
@@ -6615,7 +6638,7 @@ def create_pvcs_and_pods(multi_pvc_factory, pod_factory, service_account_factory
                 pods_for_rwx if pvc_obj.access_mode == constants.ACCESS_MODE_RWX else 1
             )
             for _ in range(num_pods):
-                # pod_obj will be a Pod instance if deployment_config=False,
+                # pod_obj will be a Pod instance if deployment=False,
                 # otherwise an OCP instance of kind DC
                 pod_obj = pod_factory(
                     interface=interface,
@@ -7154,13 +7177,16 @@ def discovered_apps_dr_workload(request):
     """
     instances = []
 
-    def factory(kubeobject=1, recipe=0, pvc_interface=constants.CEPHBLOCKPOOL):
+    def factory(
+        kubeobject=1, recipe=0, pvc_interface=constants.CEPHBLOCKPOOL, multi_ns=False
+    ):
         """
         Args:
             kubeobject (int): Number if Discovered Apps workload with kube object protection to be created
             recipe (int): Number if Discovered Apps workload with recipe protection to be created
             pvc_interface (str): 'CephBlockPool' or 'CephFileSystem'.
                 This decides whether a RBD based or CephFS based resource is created. RBD is default.
+            multi_ns (bool): True for Multi Namespace
 
         Raises:
             ResourceNotDeleted: In case workload resources not deleted properly
@@ -7171,16 +7197,25 @@ def discovered_apps_dr_workload(request):
         """
         total_pvc_count = 0
         workload_key = "dr_workload_discovered_apps_rbd"
+        multi_ns_list = []
         # TODO: When cephfs is ready
+        if multi_ns and kubeobject <= 1:
+            raise UnsupportedWorkloadError("kubeobject count should be more then 2")
         if pvc_interface == constants.CEPHFILESYSTEM:
             workload_key = "dr_workload_discovered_apps_cephfs"
+        workload_details_list = ocsci_config.ENV_DATA[workload_key]
+
         for index in range(kubeobject):
-            workload_details = ocsci_config.ENV_DATA[workload_key][index]
+            workload_details = workload_details_list[index]
             workload = BusyboxDiscoveredApps(
                 workload_dir=workload_details["workload_dir"],
                 workload_pod_count=workload_details["pod_count"],
                 workload_pvc_count=workload_details["pvc_count"],
-                workload_namespace=workload_details["workload_namespace"],
+                workload_namespace=(
+                    workload_details["workload_namespace"] + "-multi-ns"
+                    if multi_ns
+                    else workload_details["workload_namespace"]
+                ),
                 discovered_apps_pvc_selector_key=workload_details[
                     "dr_workload_app_pvc_selector_key"
                 ],
@@ -7196,17 +7231,53 @@ def discovered_apps_dr_workload(request):
                 workload_placement_name=workload_details[
                     "dr_workload_app_placement_name"
                 ],
+                discovered_apps_multi_ns=multi_ns,
             )
+            if multi_ns:
+                multi_ns_list.append(workload.workload_namespace)
             instances.append(workload)
             total_pvc_count += workload_details["pvc_count"]
             workload.deploy_workload()
-
+        if multi_ns:
+            if pvc_interface == constants.CEPHBLOCKPOOL:
+                pvc_type = constants.RBD_INTERFACE
+            elif pvc_interface == constants.CEPHFILESYSTEM:
+                pvc_type = constants.CEPHFS_INTERFACE
+            drpc_name = f"busybox-multi-ns-{pvc_type}-" + "-".join(
+                map(str, range(1, kubeobject + 1))
+            )
+            placement_name = drpc_name + "-placement-1"
+            for index in range(kubeobject):
+                instances[index].discovered_apps_placement_name = drpc_name
+            instances[0].create_placement(placement_name=placement_name)
+            instances[0].create_dprc(
+                drpc_name=drpc_name,
+                placement_name=placement_name,
+                protected_namespaces=multi_ns_list,
+                pvc_selector_key=workload_details_list[0][
+                    "multi_ns_dr_workload_app_pvc_selector_key"
+                ],
+                pvc_selector_value=workload_details_list[0][
+                    "multi_ns_dr_workload_app_pvc_selector_value"
+                ],
+            )
+            for index in range(kubeobject):
+                instances[index].verify_workload_deployment(vrg_name=drpc_name)
         return instances
 
     def teardown():
-        for instance in instances:
+        for index, instance in enumerate(instances):
             try:
-                instance.delete_workload()
+                log.info(instance.__dict__)
+                drpc_name = None
+                if instance.discovered_apps_multi_ns:
+                    is_last = index == len(instances) - 1
+                    drpc_name = instance.discovered_apps_placement_name
+                else:
+                    is_last = False
+                instance.delete_workload(
+                    skip_vrg_check=not is_last, drpc_name=drpc_name
+                )
             except ResourceNotDeleted:
                 raise ResourceNotDeleted("Workload deletion was unsuccessful")
 
@@ -7766,6 +7837,15 @@ def change_the_noobaa_log_level(request):
     return factory
 
 
+@pytest.fixture(scope="session")
+def add_env_vars_to_noobaa_core_session(request, mcg_obj_session):
+    """
+    Session scoped fixture for adding env vars to the noobaa core sts
+
+    """
+    return add_env_vars_to_noobaa_core_fixture(request, mcg_obj_session)
+
+
 @pytest.fixture(scope="class")
 def add_env_vars_to_noobaa_core_class(request, mcg_obj_session):
     """
@@ -8140,7 +8220,6 @@ def setup_logwriter_cephfs_workload_class(
     logwriter_workload_class,
     logreader_workload_class,
 ):
-
     return setup_logwriter_cephfs_workload(
         request,
         setup_stretch_cluster_project,
@@ -8160,7 +8239,6 @@ def setup_logwriter_cephfs_workload_factory(
     logwriter_workload_factory,
     logreader_workload_factory,
 ):
-
     return setup_logwriter_cephfs_workload(
         request,
         setup_stretch_cluster_project,
@@ -8257,8 +8335,25 @@ def setup_logwriter_rbd_workload(
     return logwriter_sts
 
 
+@pytest.fixture(scope="session")
+def reduce_expiration_interval_session(add_env_vars_to_noobaa_core_session):
+    """
+    Session scoped fixture to reduce the object expiration interval check
+
+    """
+    return reduce_expiration_interval_factory(add_env_vars_to_noobaa_core_session)
+
+
 @pytest.fixture()
 def reduce_expiration_interval(add_env_vars_to_noobaa_core_class):
+    """
+    Function scoped fixture to reduce the object expiration interval check
+
+    """
+    return reduce_expiration_interval_factory(add_env_vars_to_noobaa_core_class)
+
+
+def reduce_expiration_interval_factory(add_env_vars_to_noobaa_core_class):
     """
     Reduce the interval in which the lifecycle
     background worker is running
@@ -8279,8 +8374,25 @@ def reduce_expiration_interval(add_env_vars_to_noobaa_core_class):
     return factory
 
 
+@pytest.fixture(scope="session")
+def change_lifecycle_schedule_min_session(add_env_vars_to_noobaa_core_session):
+    """
+    Session scoped fixture to change the lifecycle schedule minute
+
+    """
+    return change_lifecycle_schedule_min_factory(add_env_vars_to_noobaa_core_session)
+
+
 @pytest.fixture()
 def change_lifecycle_schedule_min(add_env_vars_to_noobaa_core_class):
+    """
+    Function scoped fixture to change the lifecycle schedule minute
+
+    """
+    return change_lifecycle_schedule_min_factory(add_env_vars_to_noobaa_core_class)
+
+
+def change_lifecycle_schedule_min_factory(add_env_vars_to_noobaa_core_class):
     """
     Change the lifecycle schedule minute. i.e, that is delay between
     the each run when lifecycle expiration is identfied.
@@ -8996,7 +9108,6 @@ def hosted_cluster_remove_config():
 
 
 def hosted_cluster_remove_factory(cluster_name, duty=""):
-
     ocsci_config.switch_to_provider()
     destroy_res = None
 
@@ -9224,7 +9335,6 @@ def role_rank():
 
 @pytest.fixture()
 def nb_assign_user_role_fixture(request, mcg_obj_session):
-
     email = None
 
     def factory(user_email, role_name, principal="*"):
@@ -9400,7 +9510,6 @@ def run_fio_till_cluster_full(
 
 @pytest.fixture()
 def nfs_project(project_factory):
-
     # Create NFS namespace and label with cluster-monitoring=true
     project_factory(project_name=constants.NFS_NAMESPACE_NAME)
     label = "openshift.io/cluster-monitoring=true"

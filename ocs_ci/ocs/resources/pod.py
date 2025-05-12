@@ -722,6 +722,28 @@ class Pod(OCS):
                 current_log_file_size = file_details[4]
         return gz_logs_num, current_log_file_size
 
+    def get_container_data(self, container_name):
+        """
+        Get the container data for a requested container.
+
+        Args:
+            container_name (str): The name of the container to look for
+
+        Returns:
+            list: The container data
+
+        """
+        pod_containers = self.pod_data.get("spec").get("containers")
+        matched_containers = [
+            c for c in pod_containers if c.get("name") == container_name
+        ]
+
+        if not matched_containers:
+            logger.info(f"NO container found in the pod name: {container_name} ")
+            return []
+
+        return matched_containers
+
 
 # Helper functions for Pods
 

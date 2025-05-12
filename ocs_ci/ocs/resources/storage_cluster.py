@@ -25,6 +25,7 @@ from ocs_ci.helpers.managed_services import (
 )
 from ocs_ci.ocs import constants, defaults, ocp, managedservice
 from ocs_ci.ocs.exceptions import (
+    CephHealthRecoveredException,
     CommandFailed,
     InvalidPodPresent,
     ResourceNotFoundError,
@@ -71,7 +72,6 @@ from ocs_ci.utility.version import (
     get_semantic_version,
     VERSION_4_11,
     get_semantic_ocp_running_version,
-    get_semantic_running_odf_version,
 )
 from ocs_ci.helpers.helpers import (
     get_secret_names,
@@ -176,14 +176,13 @@ def ocs_install_verification(
         version_before_upgrade (float): Set to OCS version before upgrade
 
     """
-    from ocs_ci.ocs.node import get_nodes, get_all_nodes
+    from ocs_ci.ocs.node import get_nodes
     from ocs_ci.ocs.resources.pvc import get_deviceset_pvcs
     from ocs_ci.ocs.resources.pod import get_ceph_tools_pod, get_all_pods
     from ocs_ci.ocs.cluster import validate_cluster_on_pvc
     from ocs_ci.ocs.resources.fips import check_fips_enabled
 
     number_of_worker_nodes = len(get_nodes())
-    total_nodes = len(get_all_nodes())
     namespace = config.ENV_DATA["cluster_namespace"]
     log.info("Verifying OCS installation")
     if config.ENV_DATA.get("disable_components"):
@@ -264,30 +263,14 @@ def ocs_install_verification(
 
     # From 4.19.0-69, we have noobaa-db-pg-cluster-1 and noobaa-db-pg-cluster-2 pods
     # 4.19.0-59 is the stable build which contains ONLY noobaa-db-pg-0 pod
-    odf_full_version = get_semantic_running_odf_version()
-    version_without_noobaa_db_pg_cluster = "4.19.0-59"
-    semantic_version_for_without_noobaa_db_pg_cluster = version.get_semantic_version(
-        version_without_noobaa_db_pg_cluster
-    )
-
-    # we need to support the version for Konflux builds as well
-    version_for_konflux_noobaa_db_pg_cluster = "4.19.0-15"
-    semantic_version_for_konflux_noobaa_db_pg_cluster = version.get_semantic_version(
-        version_for_konflux_noobaa_db_pg_cluster
-    )
-
-    if odf_full_version == semantic_version_for_without_noobaa_db_pg_cluster:
-        log.info(f"Noobaa DB label {nb_db_label}")
-    elif odf_full_version >= semantic_version_for_konflux_noobaa_db_pg_cluster:
+    odf_running_version = get_ocs_version_from_csv(only_major_minor=True)
+    if odf_running_version >= version.VERSION_4_19:
         del resources_dict[nb_db_label]
         resources_dict.update(
             {
                 constants.NOOBAA_DB_LABEL_419_AND_ABOVE: 2,
             }
         )
-
-    odf_running_version = get_ocs_version_from_csv(only_major_minor=True)
-    if odf_running_version >= version.VERSION_4_19:
         resources_dict.update(
             {
                 constants.NOOBAA_CNPG_POD_LABEL: 1,
@@ -330,9 +313,7 @@ def ocs_install_verification(
                 constants.EXPORTER_APP_LABEL: exporter_pod_count,
             }
         )
-        if odf_full_version == semantic_version_for_without_noobaa_db_pg_cluster:
-            log.debug(f"Resource dictionary {resources_dict}")
-        elif odf_full_version >= semantic_version_for_konflux_noobaa_db_pg_cluster:
+        if odf_running_version >= version.VERSION_4_19:
             del resources_dict[constants.CSI_CEPHFSPLUGIN_PROVISIONER_LABEL]
             del resources_dict[constants.CSI_RBDPLUGIN_PROVISIONER_LABEL]
             del resources_dict[constants.CSI_CEPHFSPLUGIN_LABEL]
@@ -341,8 +322,8 @@ def ocs_install_verification(
                 {
                     constants.CSI_CEPHFSPLUGIN_PROVISIONER_LABEL_419: 2,
                     constants.CSI_RBDPLUGIN_PROVISIONER_LABEL_419: 2,
-                    constants.CSI_CEPHFSPLUGIN_LABEL_419: total_nodes,
-                    constants.CSI_RBDPLUGIN_LABEL_419: total_nodes,
+                    constants.CSI_CEPHFSPLUGIN_LABEL_419: number_of_worker_nodes,
+                    constants.CSI_RBDPLUGIN_LABEL_419: number_of_worker_nodes,
                 }
             )
 
@@ -786,20 +767,29 @@ def ocs_install_verification(
         # https://bugzilla.redhat.com/show_bug.cgi?id=1817727
         health_check_tries = 180
 
+    rdr_run = config.MULTICLUSTER.get("multicluster_mode") == "regional-dr"
+
     # TODO: Enable the check when a solution is identified for tools pod on FaaS consumer
     if not (fusion_aas_consumer or hci_cluster):
         # Temporarily disable health check for hci until we have enough healthy clusters
-        assert utils.ceph_health_check(
-            namespace, health_check_tries, health_check_delay
-        )
+        try:
+            assert utils.ceph_health_check(
+                namespace,
+                health_check_tries,
+                health_check_delay,
+                fix_ceph_health=rdr_run,
+            )
+        except CephHealthRecoveredException as ex:
+            if rdr_run and "slow ops" in str(ex):
+                # Related issue: https://github.com/red-hat-storage/ocs-ci/issues/11244
+                log.warning("For RDR run we ignore slow ops error as it was recovered!")
+            else:
+                raise
     # Let's wait for storage system after ceph health is OK to prevent fails on
     # Progressing': 'True' state.
 
     if not (fusion_aas or client_cluster):
-        if (
-            odf_full_version == semantic_version_for_without_noobaa_db_pg_cluster
-            or odf_running_version < version.VERSION_4_19
-        ):
+        if odf_running_version < version.VERSION_4_19:
             verify_storage_system()
 
     if config.ENV_DATA.get("fips"):
@@ -894,22 +884,7 @@ def ocs_install_verification(
         if hci_cluster
         else constants.ROOK_CEPH_OPERATOR
     )
-    if (
-        odf_full_version == semantic_version_for_without_noobaa_db_pg_cluster
-        or odf_running_version < version.VERSION_4_19
-    ):
-        provisioner_deployment_and_owner_names = {
-            "csi-cephfsplugin-provisioner": csi_owner_name,
-            "csi-rbdplugin-provisioner": csi_owner_name,
-        }
-        nodeplugin_daemonset_and_owner_names = {
-            "csi-cephfsplugin": csi_owner_name,
-            "csi-rbdplugin": csi_owner_name,
-        }
-        csi_owner_kind = constants.CONFIGMAP if hci_cluster else constants.DEPLOYMENT
-    elif (
-        odf_full_version >= semantic_version_for_konflux_noobaa_db_pg_cluster
-    ) or hci_cluster:
+    if odf_running_version >= version.VERSION_4_19 or hci_cluster:
         provisioner_deployment_and_owner_names = {
             f"{constants.CEPHFS_PROVISIONER}-ctrlplugin": constants.CEPHFS_PROVISIONER,
             f"{constants.RBD_PROVISIONER}-ctrlplugin": constants.RBD_PROVISIONER,
@@ -919,6 +894,17 @@ def ocs_install_verification(
             f"{constants.RBD_PROVISIONER}-nodeplugin": constants.RBD_PROVISIONER,
         }
         csi_owner_kind = constants.DRIVER
+    else:
+        provisioner_deployment_and_owner_names = {
+            "csi-cephfsplugin-provisioner": csi_owner_name,
+            "csi-rbdplugin-provisioner": csi_owner_name,
+        }
+        nodeplugin_daemonset_and_owner_names = {
+            "csi-cephfsplugin": csi_owner_name,
+            "csi-rbdplugin": csi_owner_name,
+        }
+        csi_owner_kind = constants.CONFIGMAP if hci_cluster else constants.DEPLOYMENT
+
     deployment_kind = OCP(kind=constants.DEPLOYMENT, namespace=namespace)
     daemonset_kind = OCP(kind=constants.DAEMONSET, namespace=namespace)
     for (

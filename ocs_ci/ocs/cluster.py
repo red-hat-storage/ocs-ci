@@ -51,7 +51,6 @@ from ocs_ci.utility.utils import (
     get_trim_mean,
     ceph_health_check,
 )
-from ocs_ci.utility.version import get_semantic_running_odf_version
 from ocs_ci.ocs.node import get_node_ip_addresses, wait_for_nodes_status
 from ocs_ci.ocs.utils import get_pod_name_by_pattern
 from ocs_ci.framework import config
@@ -1296,7 +1295,6 @@ def validate_pdb_creation():
         kind="PodDisruptionBudget", namespace=config.ENV_DATA["cluster_namespace"]
     )
     item_list = pdb_obj.get().get("items")
-    odf_version = get_semantic_running_odf_version()
 
     pdb_count = constants.PDB_COUNT_2_MGR
     pdb_required = [
@@ -1307,15 +1305,7 @@ def validate_pdb_creation():
     ]
 
     # 4.19.0-59 is the stable build which doesn't contain the updated PDB count for Noobaa DB
-    version_without_noobaa_db_pg_pdb = "4.19.0-59"
-    semantic_version_for_without_noobaa_db_pg_pdb = version.get_semantic_version(
-        version_without_noobaa_db_pg_pdb
-    )
-    # we need to support the version for Konflux builds as well
-    version_for_konflux_noobaa_db_pg_pdb = "4.19.0-15"
-    semantic_version_for_konflux_noobaa_db_pg_pdb = version.get_semantic_version(
-        version_for_konflux_noobaa_db_pg_pdb
-    )
+    odf_running_version = version.get_ocs_version_from_csv(only_major_minor=True)
 
     if config.DEPLOYMENT.get("arbiter_deployment"):
         pdb_count = constants.PDB_COUNT_ARBITER
@@ -1329,11 +1319,11 @@ def validate_pdb_creation():
             pdb_count = constants.PDB_COUNT_ARBITER_VSPHERE
             pdb_required.append(constants.RGW_PDB)
 
-    if odf_version == semantic_version_for_without_noobaa_db_pg_pdb:
-        logger.info(f"Required PDB count is {pdb_count}")
-    elif odf_version >= semantic_version_for_konflux_noobaa_db_pg_pdb:
+    if odf_running_version >= version.VERSION_4_19:
         pdb_count += 1
         pdb_required.append(constants.NOOBAA_DB_PG_PDB)
+    else:
+        logger.info(f"Required PDB count is {pdb_count}")
 
     if len(item_list) != pdb_count:
         raise PDBNotCreatedException(
@@ -3956,3 +3946,62 @@ def get_mds_counts():
         1 for mds in ceph_mdsmap if mds["state"] == "standby-replay"
     )
     return active_pod_count, standby_replay_count
+
+
+def is_lower_requirements():
+    """
+    Determine if the cluster meets lower hardware requirements.
+
+    The conditions are:
+    1. allow_lower_instance_requirements is set to True in the config.
+    2. Any worker instance type is 'm4.4xlarge' or 'bx2-8x32'.
+
+    Returns:
+        bool: True if lower requirements are satisfied, otherwise False.
+
+    """
+    # Worker instance types considered as lower requirements
+    lower_requirements_worker_types = {"m4.4xlarge", "bx2-8x32"}
+
+    # Check if allow_lower_instance_requirements is explicitly set
+    if config.DEPLOYMENT.get("allow_lower_instance_requirements", False):
+        logger.info(
+            "Lower requirements are allowed by configuration (allow_lower_instance_requirements=True)."
+        )
+        return True
+
+    # Check if the Machine resources exist
+    machine_obj = OCP(kind="Machine", namespace="openshift-machine-api")
+    try:
+        machines_data = machine_obj.get()
+        machines = machines_data.get("items", [])
+    except CommandFailed as ex:
+        logger.warning(f"Could not fetch Machines (falling back to config only): {ex}")
+        machines = []
+
+    if not machines:
+        logger.info(
+            "No Machine resources found. Assuming standard (non-lower) requirements."
+        )
+        return False
+
+    # Check worker instance types
+    for machine in machines:
+        role = machine["metadata"]["labels"].get(
+            "machine.openshift.io/cluster-api-machine-role"
+        )
+        if role == "worker":
+            instance_type = machine["metadata"]["labels"].get(
+                "machine.openshift.io/instance-type"
+            )
+            if instance_type in lower_requirements_worker_types:
+                logger.info(
+                    f"Detected lower requirement worker instance type: {instance_type} "
+                    f"(machine: {machine['metadata']['name']})."
+                )
+                return True
+
+    logger.info(
+        "Cluster worker machines use standard or larger instance types. No lower requirements detected."
+    )
+    return False

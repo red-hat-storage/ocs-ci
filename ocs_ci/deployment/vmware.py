@@ -1153,7 +1153,11 @@ class VSPHEREUPI(VSPHEREBASE):
                     + config.ENV_DATA["master_replicas"]
                     + config.ENV_DATA.get("infra_replicas", 0)
                 )
-                csr_timeout = 2400 if num_nodes >= 6 else 1500
+                # multus deployment need more time to generate CSRs
+                is_multus_enabled = config.ENV_DATA.get("is_multus_enabled")
+                csr_timeout = (
+                    4800 if is_multus_enabled else (2400 if num_nodes >= 6 else 1500)
+                )
                 wait_for_all_nodes_csr_and_approve(timeout=csr_timeout, sleep=10)
 
                 # wait for image registry to show-up
