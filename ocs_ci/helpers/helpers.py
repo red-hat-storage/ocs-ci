@@ -6001,3 +6001,55 @@ def find_cephfilesystemsubvolumegroup(storageclient_uid=None):
         cephbfssubvolumegroup = storage_consumer.get_cephfs_subvolumegroup()
 
     return cephbfssubvolumegroup
+
+
+def create_auto_scaling(
+    name=None,
+    namespace=None,
+    sc_name=None,
+    device_class=None,
+    capacity_limit="4Ti",
+    scaling_threshold=70,
+    max_osd_size="8Ti",
+    timeout=1800,
+):
+    """
+    Create a StorageAutoScaler custom resource in OpenShift.
+
+    Args:
+        name (str): Name of the StorageAutoScaler resource.
+        namespace (str): Namespace where the resource is created.
+        sc_name (str): Name of the StorageCluster to attach to.
+        device_class (str): Device class for OSDs.
+        capacity_limit (str): Maximum total capacity before scaling stops.
+        scaling_threshold (int): Percent usage to trigger auto-scaling.
+        max_osd_size (str): Size of each OSD added during scaling.
+        timeout (int): Timeout in seconds for a scaling operation.
+    """
+    from ocs_ci.ocs.resources.storage_cluster import (
+        get_storage_cluster,
+        get_default_deviceclass,
+    )
+
+    namespace = namespace or config.ENV_DATA["cluster_namespace"]
+    sc_name = sc_name or get_storage_cluster(namespace)
+    device_class = device_class or get_default_deviceclass()
+    name = name or f"{sc_name}-{device_class}"
+
+    resource_dict = {
+        "apiVersion": "ocs.openshift.io/v1",
+        "kind": "StorageAutoScaler",
+        "metadata": {"name": name, "namespace": namespace},
+        "spec": {
+            "storageCluster": {"name": sc_name},
+            "deviceClass": device_class,
+            "storageCapacityLimit": capacity_limit,
+            "storageScalingThresholdPercent": scaling_threshold,
+            "maxOsdSize": max_osd_size,
+            "timeoutSeconds": timeout,
+        },
+    }
+
+    auto_scaler_obj = create_resource(**resource_dict)
+    auto_scaler_obj.reload()
+    return auto_scaler_obj

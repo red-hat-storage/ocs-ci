@@ -473,3 +473,35 @@ def check_storage_size_is_reflected_in_ui():
         f"The total UI size {total_size_gb}Gi is not in the "
         f"expected total size range {expected_total_size_range_gb}Gi"
     )
+
+
+def wait_for_auto_scaler_status(
+    expected_status, resource_name=None, timeout=600, sleep=10
+):
+    """
+    Wait for the StorageAutoScaler resource to reach the desired status (PHASE column).
+
+    Args:
+        expected_status (str): The expected status value in the "PHASE" column
+            (e.g., 'NotStarted', 'InProgress', 'Succeeded', 'Failed').
+        resource_name (str, optional): Name of the StorageAutoScaler resource.
+            If not provided, the function will detect the first available one in the namespace.
+        timeout (int): Maximum time in seconds to wait for the desired status. Default is 600 seconds.
+        sleep (int): Interval in seconds between status checks. Default is 10 seconds.
+
+    Raises:
+        TimeoutExpiredError: If the expected status is not reached within the timeout duration.
+    """
+    namespace = config.ENV_DATA["cluster_namespace"]
+    storage_auto_scaler = OCP(kind="StorageAutoScaler", namespace=namespace)
+
+    if not resource_name:
+        resource_name = storage_auto_scaler.get()[0]["metadata"]["name"]
+
+    storage_auto_scaler.wait_for_resource(
+        condition=expected_status,
+        resource_name=resource_name,
+        column="PHASE",
+        timeout=timeout,
+        sleep=sleep,
+    )
