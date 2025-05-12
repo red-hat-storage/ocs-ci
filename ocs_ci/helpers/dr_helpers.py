@@ -51,7 +51,10 @@ logger = logging.getLogger(__name__)
 
 
 def get_current_primary_cluster_name(
-    namespace, workload_type=constants.SUBSCRIPTION, discovered_apps=False
+    namespace,
+    workload_type=constants.SUBSCRIPTION,
+    discovered_apps=False,
+    resource_name=None,
 ):
     """
     Get current primary cluster name based on workload namespace
@@ -60,6 +63,7 @@ def get_current_primary_cluster_name(
         namespace (str): Name of the namespace
         workload_type (str): Type of workload, i.e., Subscription or ApplicationSet
         discovered_apps (bool): If true then deployed workload is discovered_apps
+        resource_name (str): DRPC NAME Only Used for discovered apps
 
     Returns:
         str: Current primary cluster name
@@ -69,8 +73,12 @@ def get_current_primary_cluster_name(
     if workload_type == constants.APPLICATION_SET:
         namespace = constants.GITOPS_CLUSTER_NAMESPACE
     if discovered_apps:
+        if not resource_name:
+            raise ValueError("Resource name is expected")
         namespace = constants.DR_OPS_NAMESAPCE
-    drpc_data = DRPC(namespace=namespace).get()
+        drpc_data = DRPC(namespace=namespace, resource_name=resource_name).get()
+    else:
+        drpc_data = DRPC(namespace=namespace).get()
     if drpc_data.get("spec").get("action") == constants.ACTION_FAILOVER:
         cluster_name = drpc_data["spec"]["failoverCluster"]
     else:
@@ -80,7 +88,10 @@ def get_current_primary_cluster_name(
 
 
 def get_current_secondary_cluster_name(
-    namespace, workload_type=constants.SUBSCRIPTION, discovered_apps=False
+    namespace,
+    workload_type=constants.SUBSCRIPTION,
+    discovered_apps=False,
+    resource_name=None,
 ):
     """
     Get current secondary cluster name based on workload namespace
@@ -89,6 +100,8 @@ def get_current_secondary_cluster_name(
         namespace (str): Name of the namespace
         workload_type (str): Type of workload, i.e., Subscription or ApplicationSet
         discovered_apps (bool): If true then deployed workload is discovered_apps
+        resource_name (str): DRPC NAME Only Used for discovered apps
+
 
     Returns:
         str: Current secondary cluster name
@@ -99,8 +112,17 @@ def get_current_secondary_cluster_name(
         namespace = constants.GITOPS_CLUSTER_NAMESPACE
     if discovered_apps:
         namespace = constants.DR_OPS_NAMESAPCE
-    primary_cluster_name = get_current_primary_cluster_name(namespace)
-    drpolicy_data = DRPC(namespace=namespace).drpolicy_obj.get()
+        primary_cluster_name = get_current_primary_cluster_name(
+            namespace=namespace,
+            resource_name=resource_name,
+            discovered_apps=discovered_apps,
+        )
+        drpolicy_data = DRPC(
+            namespace=namespace, resource_name=resource_name
+        ).drpolicy_obj.get()
+    else:
+        primary_cluster_name = get_current_primary_cluster_name(namespace)
+        drpolicy_data = DRPC(namespace=namespace).drpolicy_obj.get()
     config.switch_ctx(restore_index)
     for cluster_name in drpolicy_data["spec"]["drClusters"]:
         if not cluster_name == primary_cluster_name:
@@ -142,7 +164,10 @@ def set_current_secondary_cluster_context(
 
 
 def get_scheduling_interval(
-    namespace, workload_type=constants.SUBSCRIPTION, discovered_apps=False
+    namespace,
+    workload_type=constants.SUBSCRIPTION,
+    discovered_apps=False,
+    resource_name=None,
 ):
     """
     Get scheduling interval for the workload in the given namespace
@@ -160,8 +185,14 @@ def get_scheduling_interval(
     if workload_type == constants.APPLICATION_SET:
         namespace = constants.GITOPS_CLUSTER_NAMESPACE
     if discovered_apps:
+        if not resource_name:
+            raise ValueError("Resource name is expected")
         namespace = constants.DR_OPS_NAMESAPCE
-    drpolicy_obj = DRPC(namespace=namespace).drpolicy_obj
+        drpolicy_obj = DRPC(
+            namespace=namespace, resource_name=resource_name
+        ).drpolicy_obj
+    else:
+        drpolicy_obj = DRPC(namespace=namespace).drpolicy_obj
     interval_value = int(drpolicy_obj.get()["spec"]["schedulingInterval"][:-1])
     config.switch_ctx(restore_index)
     return interval_value
@@ -232,6 +263,7 @@ def relocate(
     discovered_apps=False,
     old_primary=None,
     workload_instance=None,
+    multi_ns=False,
 ):
     """
     Initiates Relocate action to the specified cluster
@@ -245,6 +277,7 @@ def relocate(
         discovered_apps (bool): If true then deployed workload is discovered_apps
         old_primary (str): Name of cluster where workload were running
         workload_instance (object): Discovered App instance to get namespace and dir location
+        multi_ns (bool): Multi Namespace
 
 
     """
@@ -282,15 +315,21 @@ def relocate(
         relocate_condition = constants.STATUS_RELOCATING
     drpc_obj.wait_for_phase(relocate_condition)
 
-    if discovered_apps and workload_instance:
+    if multi_ns:
         logger.info("Doing Cleanup Operations")
-        do_discovered_apps_cleanup(
-            drpc_name=workload_placement_name,
-            old_primary=old_primary,
-            workload_namespace=workload_instance.workload_namespace,
-            workload_dir=workload_instance.workload_dir,
-            vrg_name=workload_instance.discovered_apps_placement_name,
+        do_discovered_apps_cleanup_multi_ns(
+            old_primary=old_primary, workload_instance=workload_instance
         )
+    else:
+        if discovered_apps and workload_instance:
+            logger.info("Doing Cleanup Operations")
+            do_discovered_apps_cleanup(
+                drpc_name=workload_placement_name,
+                old_primary=old_primary,
+                workload_namespace=workload_instance.workload_namespace,
+                workload_dir=workload_instance.workload_dir,
+                vrg_name=workload_instance.discovered_apps_placement_name,
+            )
     config.switch_ctx(restore_index)
 
 
@@ -613,7 +652,12 @@ def check_vrg_state(state, namespace, resource_name=None):
 
 
 def wait_for_replication_resources_creation(
-    vr_count, namespace, timeout, discovered_apps=False, vrg_name=None
+    vr_count,
+    namespace,
+    timeout,
+    discovered_apps=False,
+    vrg_name=None,
+    skip_vrg_check=False,
 ):
     """
     Wait for replication resources to be created
@@ -625,6 +669,7 @@ def wait_for_replication_resources_creation(
             or reach expected state
         discovered_apps (bool): If true then deployed workload is discovered_apps
         vrg_name (str): Name of VRG
+        skip_vrg_check (bool): If true vrg check will be skipped
 
     Raises:
         TimeoutExpiredError: In case replication resources not created
@@ -672,24 +717,22 @@ def wait_for_replication_resources_creation(
                 error_msg = "One or more VR haven't reached expected state primary within the time limit."
                 logger.error(error_msg)
                 raise TimeoutExpiredError(error_msg)
-
-    logger.info("Waiting for VRG to reach primary state")
-    sample = TimeoutSampler(
-        timeout=timeout,
-        sleep=5,
-        func=check_vrg_state,
-        state="primary",
-        namespace=vrg_namespace,
-        resource_name=vrg_name,
-    )
-    if not sample.wait_for_func_status(result=True):
-        error_msg = "VRG hasn't reached expected state primary within the time limit."
-        logger.error(error_msg)
-        raise TimeoutExpiredError(error_msg)
+    if not skip_vrg_check:
+        wait_for_vrg_state(
+            vrg_state="primary",
+            vrg_namespace=vrg_namespace,
+            resource_name=vrg_name,
+            timeout=timeout,
+        )
 
 
 def wait_for_replication_resources_deletion(
-    namespace, timeout, check_state=True, discovered_apps=False, vrg_name=None
+    namespace,
+    timeout,
+    check_state=True,
+    discovered_apps=False,
+    vrg_name=None,
+    skip_vrg_check=False,
 ):
     """
     Wait for replication resources to be deleted
@@ -701,6 +744,7 @@ def wait_for_replication_resources_deletion(
         check_state (bool): True for checking resources state before deletion, False otherwise
         discovered_apps (bool): If true then deployed workload is discovered_apps
         vrg_name (str): Name of VRG
+        skip_vrg_check (bool): If true vrg check will be skipped
 
     Raises:
         TimeoutExpiredError: In case replication resources not deleted
@@ -730,25 +774,19 @@ def wait_for_replication_resources_deletion(
                 logger.error(error_msg)
                 raise TimeoutExpiredError(error_msg)
 
-        logger.info("Waiting for VRG to reach secondary state")
-        sample = TimeoutSampler(
-            timeout=timeout,
-            sleep=5,
-            func=check_vrg_state,
-            state="secondary",
-            namespace=vrg_namespace,
-            resource_name=vrg_name,
-        )
-        if not sample.wait_for_func_status(result=True):
-            error_msg = (
-                "VRG hasn't reached expected state secondary within the time limit."
+        if not skip_vrg_check:
+            wait_for_vrg_state(
+                vrg_state="secondary",
+                vrg_namespace=vrg_namespace,
+                resource_name=vrg_name,
+                timeout=timeout,
             )
-            logger.info(error_msg)
-            raise TimeoutExpiredError(error_msg)
 
     ocs_version = version.get_semantic_ocs_version_from_config()
-    if not check_state or (
-        ocs_version <= version.VERSION_4_17 and "cephfs" not in namespace
+    if (
+        not check_state
+        or (ocs_version <= version.VERSION_4_17 and "cephfs" not in namespace)
+        and not skip_vrg_check
     ):
         logger.info("Waiting for VRG to be deleted")
         sample = TimeoutSampler(
@@ -763,7 +801,7 @@ def wait_for_replication_resources_deletion(
             logger.info(error_msg)
             raise TimeoutExpiredError(error_msg)
 
-    if config.MULTICLUSTER["multicluster_mode"] != "metro-dr":
+    if config.MULTICLUSTER["multicluster_mode"] != "metro-dr" and not skip_vrg_check:
         logger.info(f"Waiting for all {resource_kind} to be deleted")
         sample = TimeoutSampler(
             timeout=timeout,
@@ -782,6 +820,7 @@ def wait_for_all_resources_creation(
     skip_replication_resources=False,
     discovered_apps=False,
     vrg_name=None,
+    skip_vrg_check=False,
 ):
     """
     Wait for workload and replication resources to be created
@@ -794,6 +833,8 @@ def wait_for_all_resources_creation(
         skip_replication_resources (bool): if true vr status wont't be check
         discovered_apps (bool): If true then deployed workload is discovered_apps
         vrg_name (str): Name of VRG
+        skip_vrg_check (bool): If true vrg check will be skipped
+
 
 
     """
@@ -815,7 +856,7 @@ def wait_for_all_resources_creation(
     )
     if not skip_replication_resources:
         wait_for_replication_resources_creation(
-            pvc_count, namespace, timeout, discovered_apps, vrg_name
+            pvc_count, namespace, timeout, discovered_apps, vrg_name, skip_vrg_check
         )
 
 
@@ -825,6 +866,7 @@ def wait_for_all_resources_deletion(
     discovered_apps=False,
     workload_cleanup=False,
     vrg_name=None,
+    skip_vrg_check=False,
 ):
     """
     Wait for workload and replication resources to be deleted
@@ -838,6 +880,8 @@ def wait_for_all_resources_deletion(
             - PVC and PV deletion will always be checked
             - Replication resources state check will be skipped.
         vrg_name (str): Name of VRG
+        skip_vrg_check (bool): If true vrg check will be skipped
+
 
     """
     logger.info("Waiting for all pods to be deleted")
@@ -850,7 +894,7 @@ def wait_for_all_resources_deletion(
 
     check_state = not workload_cleanup
     wait_for_replication_resources_deletion(
-        namespace, timeout, check_state, discovered_apps, vrg_name
+        namespace, timeout, check_state, discovered_apps, vrg_name, skip_vrg_check
     )
 
     if workload_cleanup or not (
@@ -1785,11 +1829,67 @@ def do_discovered_apps_cleanup(
     config.switch_acm_ctx()
     drpc_obj = DRPC(namespace=constants.DR_OPS_NAMESAPCE, resource_name=drpc_name)
     drpc_obj.wait_for_progression_status(status=constants.STATUS_WAITFORUSERTOCLEANUP)
+    time.sleep(90)
+    assert drpc_obj.get_progression_status(
+        status_to_check=constants.STATUS_WAITFORUSERTOCLEANUP
+    )
+    logger.info(
+        f'Progression status after 90 seconds is {drpc_obj.get()["status"]["progression"]}'
+    )
     config.switch_to_cluster_by_name(old_primary)
     workload_path = constants.DR_WORKLOAD_REPO_BASE_DIR + "/" + workload_dir
-    run_cmd(f"oc delete -k {workload_path} -n {workload_namespace} --wait=false")
+    run_cmd(
+        f"oc delete -k {workload_path} -n {workload_namespace} --wait=false --force "
+    )
     wait_for_all_resources_deletion(
         namespace=workload_namespace, discovered_apps=True, vrg_name=vrg_name
+    )
+    config.switch_acm_ctx()
+    drpc_obj.wait_for_progression_status(status=constants.STATUS_COMPLETED)
+    config.switch_ctx(restore_index)
+
+
+def do_discovered_apps_cleanup_multi_ns(
+    old_primary, workload_instance, vrg_state="secondary"
+):
+    """
+    Function to clean up Resources
+
+    Args:
+        old_primary (str): Name of old primary where cleanup will happen
+        workload_instance (list): Workload instance
+
+    """
+    restore_index = config.cur_index
+    config.switch_acm_ctx()
+
+    drpc_obj = DRPC(
+        namespace=constants.DR_OPS_NAMESAPCE,
+        resource_name=workload_instance[0].discovered_apps_placement_name,
+    )
+    drpc_obj.wait_for_progression_status(status=constants.STATUS_WAITFORUSERTOCLEANUP)
+    config.switch_to_cluster_by_name(old_primary)
+    vrg_name = workload_instance[0].discovered_apps_placement_name
+    for workload_instance_index in workload_instance:
+        workload_dir = workload_instance_index.workload_dir
+        workload_namespace = workload_instance_index.workload_namespace
+        workload_path = constants.DR_WORKLOAD_REPO_BASE_DIR + "/" + workload_dir
+        run_cmd(
+            f"oc delete -k {workload_path} -n {workload_namespace} --wait=false --force "
+        )
+    for workload_instance_index in workload_instance:
+        workload_namespace = workload_instance_index.workload_namespace
+        wait_for_all_resources_deletion(
+            namespace=workload_namespace,
+            discovered_apps=True,
+            vrg_name=vrg_name,
+            skip_vrg_check=True,
+        )
+
+    wait_for_vrg_state(
+        vrg_state=vrg_state,
+        vrg_namespace=constants.DR_OPS_NAMESAPCE,
+        resource_name=vrg_name,
     )
     config.switch_acm_ctx()
     drpc_obj.wait_for_progression_status(status=constants.STATUS_COMPLETED)
@@ -1973,3 +2073,34 @@ def configure_rdr_hub_recovery():
     )
     logger.info("All pre-reqs verified for performing hub recovery")
     return True
+
+
+def wait_for_vrg_state(
+    vrg_state, vrg_namespace, resource_name, timeout=900, sleep_timeout=5
+):
+    """
+    Wait for VRG state
+
+    Args:
+        vrg_state (str): VRG expected state
+        vrg_namespace (str): VRG resource namespace
+        resource_name (str): VRG resource name
+        timeout (int): Timeout for wait
+        sleep_timeout (int) Sleep between timeouts
+
+    """
+    logger.info(f"Waiting for VRG to reach {vrg_state} state")
+    sample = TimeoutSampler(
+        timeout=timeout,
+        sleep=sleep_timeout,
+        func=check_vrg_state,
+        state=vrg_state,
+        namespace=vrg_namespace,
+        resource_name=resource_name,
+    )
+    if not sample.wait_for_func_status(result=True):
+        error_msg = (
+            f"VRG hasn't reached expected state {vrg_state} within the time limit."
+        )
+        logger.info(error_msg)
+        raise TimeoutExpiredError(error_msg)

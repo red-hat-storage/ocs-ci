@@ -1120,6 +1120,7 @@ class BusyboxDiscoveredApps(DRWorkload):
         self.discovered_apps_pod_selector_value = kwargs.get(
             "discovered_apps_pod_selector_value"
         )
+        self.discovered_apps_multi_ns = kwargs.get("discovered_apps_multi_ns")
 
     def deploy_workload(self):
         """
@@ -1136,9 +1137,10 @@ class BusyboxDiscoveredApps(DRWorkload):
         run_cmd(f"oc create -k {self.workload_path} -n {self.workload_namespace} ")
         self.check_pod_pvc_status(skip_replication_resources=True)
         config.switch_acm_ctx()
-        self.create_placement()
-        self.create_dprc()
-        self.verify_workload_deployment()
+        if not self.discovered_apps_multi_ns:
+            self.create_placement()
+            self.create_dprc()
+            self.verify_workload_deployment()
 
     def _deploy_prereqs(self):
         """
@@ -1152,9 +1154,12 @@ class BusyboxDiscoveredApps(DRWorkload):
             branch=self.workload_repo_branch,
         )
 
-    def verify_workload_deployment(self):
+    def verify_workload_deployment(self, vrg_name=None):
         """
         Verify busybox workload Discovered App
+
+        Args:
+            vrg_name (str): Name of vrg
 
         """
         config.switch_to_cluster_by_name(self.preferred_primary_cluster)
@@ -1163,18 +1168,21 @@ class BusyboxDiscoveredApps(DRWorkload):
             self.workload_pod_count,
             self.workload_namespace,
             discovered_apps=True,
-            vrg_name=self.discovered_apps_placement_name,
+            vrg_name=vrg_name or self.discovered_apps_placement_name,
         )
 
-    def create_placement(self):
+    def create_placement(self, placement_name=None):
         """
         Create placement CR for discovered Apps
+
+        Args:
+            placement_name (str): Name for placement
 
         """
 
         placement_yaml_data = templating.load_yaml(self.placement_yaml_file)
         placement_yaml_data["metadata"]["name"] = (
-            self.discovered_apps_placement_name + "-placement-1"
+            placement_name or self.discovered_apps_placement_name + "-placement-1"
         )
         placement_yaml_data["metadata"].setdefault("annotations", {})
         placement_yaml_data["metadata"]["annotations"][
@@ -1188,9 +1196,23 @@ class BusyboxDiscoveredApps(DRWorkload):
         log.info(f"Creating Placement for workload {self.workload_name}")
         run_cmd(f"oc create -f {placement_yaml.name}")
 
-    def create_dprc(self):
+    def create_dprc(
+        self,
+        drpc_name=None,
+        placement_name=None,
+        protected_namespaces=None,
+        pvc_selector_key=None,
+        pvc_selector_value=None,
+    ):
         """
         Create DRPC for discovered Apps
+
+        Args:
+            drpc_name (str): Name for drpc
+            placement_name (str): Name for placement
+            protected_namespaces (list): List of namespaces to protect
+            pvc_selector_key (str): Key for pvc selector
+            pvc_selector_value (str): Value for pvc selector
 
         """
         drpc_yaml_data = templating.load_yaml(self.drpc_yaml_file)
@@ -1202,12 +1224,14 @@ class BusyboxDiscoveredApps(DRWorkload):
         del drpc_yaml_data["spec"]["pvcSelector"]["matchLabels"]
 
         log.info(self.discovered_apps_pvc_selector_key)
-        drpc_yaml_data["metadata"]["name"] = self.discovered_apps_placement_name
+        drpc_yaml_data["metadata"]["name"] = (
+            drpc_name or self.discovered_apps_placement_name
+        )
         drpc_yaml_data["metadata"]["namespace"] = constants.DR_OPS_NAMESAPCE
         drpc_yaml_data["spec"]["preferredCluster"] = self.preferred_primary_cluster
         drpc_yaml_data["spec"]["drPolicyRef"]["name"] = self.dr_policy_name
         drpc_yaml_data["spec"]["placementRef"]["name"] = (
-            self.discovered_apps_placement_name + "-placement-1"
+            placement_name or self.discovered_apps_placement_name + "-placement-1"
         )
         drpc_yaml_data["spec"]["placementRef"]["namespace"] = constants.DR_OPS_NAMESAPCE
         drcp_data_yaml = tempfile.NamedTemporaryFile(
@@ -1215,14 +1239,17 @@ class BusyboxDiscoveredApps(DRWorkload):
         )
         templating.dump_data_to_temp_yaml(drpc_yaml_data, drcp_data_yaml.name)
         log.info(drcp_data_yaml.name)
-        drpc_yaml_data["spec"]["pvcSelector"]["matchExpressions"][0][
-            "key"
-        ] = self.discovered_apps_pvc_selector_key
+        drpc_yaml_data["spec"]["pvcSelector"]["matchExpressions"][0]["key"] = (
+            pvc_selector_key or self.discovered_apps_pvc_selector_key
+        )
         drpc_yaml_data["spec"]["pvcSelector"]["matchExpressions"][0]["operator"] = "In"
-        drpc_yaml_data["spec"]["pvcSelector"]["matchExpressions"][0]["values"][
-            0
-        ] = self.discovered_apps_pvc_selector_value
-        drpc_yaml_data["spec"]["protectedNamespaces"][0] = self.workload_namespace
+        drpc_yaml_data["spec"]["pvcSelector"]["matchExpressions"][0]["values"][0] = (
+            pvc_selector_value or self.discovered_apps_pvc_selector_value
+        )
+        if protected_namespaces:
+            drpc_yaml_data["spec"]["protectedNamespaces"] = protected_namespaces
+        else:
+            drpc_yaml_data["spec"]["protectedNamespaces"][0] = self.workload_namespace
         drpc_yaml_data["spec"]["kubeObjectProtection"][
             "captureInterval"
         ] = self.kubeobject_capture_interval
@@ -1265,7 +1292,7 @@ class BusyboxDiscoveredApps(DRWorkload):
 
         run_cmd(f"oc create namespace {self.workload_namespace}")
 
-    def delete_workload(self):
+    def delete_workload(self, drpc_name=None, skip_vrg_check=False):
         """
         Delete Discovered Apps
 
@@ -1273,15 +1300,21 @@ class BusyboxDiscoveredApps(DRWorkload):
         current_test = (
             os.environ.get("PYTEST_CURRENT_TEST").split("::")[-1].split(" ")[0]
         )
+        ignore_not_found_param = ""
+        if self.discovered_apps_multi_ns:
+            ignore_not_found_param = "--ignore-not-found=true"
+
         if "test_disable_dr" not in current_test:
             log.info("Deleting DRPC")
             config.switch_acm_ctx()
             run_cmd(
-                f"oc delete drpc -n {constants.DR_OPS_NAMESAPCE} {self.discovered_apps_placement_name}"
+                f"oc delete drpc -n {constants.DR_OPS_NAMESAPCE} {drpc_name or self.discovered_apps_placement_name} "
+                f"{ignore_not_found_param}"
             )
             log.info("Deleting Placement")
             run_cmd(
-                f"oc delete placement -n {constants.DR_OPS_NAMESAPCE} {self.discovered_apps_placement_name}-placement-1"
+                f"oc delete placement -n {constants.DR_OPS_NAMESAPCE} "
+                f"{self.discovered_apps_placement_name}-placement-1 {ignore_not_found_param}"
             )
 
         for cluster in get_non_acm_cluster_config():
@@ -1296,6 +1329,7 @@ class BusyboxDiscoveredApps(DRWorkload):
                 discovered_apps=True,
                 workload_cleanup=True,
                 vrg_name=self.discovered_apps_placement_name,
+                skip_vrg_check=skip_vrg_check,
             )
             run_cmd(f"oc delete project {self.workload_namespace}")
 

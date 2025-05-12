@@ -44,14 +44,18 @@ class TestCNVFailoverAndRelocateWithDiscoveredApps:
 
         primary_cluster_name_before_failover = (
             dr_helpers.get_current_primary_cluster_name(
-                cnv_workloads[0].workload_namespace, discovered_apps=True
+                cnv_workloads[0].workload_namespace,
+                discovered_apps=True,
+                resource_name=cnv_workloads[0].discovered_apps_placement_name,
             )
         )
         config.switch_to_cluster_by_name(primary_cluster_name_before_failover)
         # Download and extract the virtctl binary to bin_dir. Skips if already present.
         CNVInstaller().download_and_extract_virtctl_binary()
         secondary_cluster_name = dr_helpers.get_current_secondary_cluster_name(
-            cnv_workloads[0].workload_namespace, discovered_apps=True
+            cnv_workloads[0].workload_namespace,
+            discovered_apps=True,
+            resource_name=cnv_workloads[0].discovered_apps_placement_name,
         )
 
         # Creating a file (file1) on VM and calculating its MD5sum
@@ -71,7 +75,9 @@ class TestCNVFailoverAndRelocateWithDiscoveredApps:
             )
 
         scheduling_interval = dr_helpers.get_scheduling_interval(
-            cnv_workloads[0].workload_namespace, discovered_apps=True
+            cnv_workloads[0].workload_namespace,
+            discovered_apps=True,
+            resource_name=cnv_workloads[0].discovered_apps_placement_name,
         )
         wait_time = 2 * scheduling_interval  # Time in minutes
         logger.info(f"Waiting for {wait_time} minutes to run IOs")
@@ -132,16 +138,22 @@ class TestCNVFailoverAndRelocateWithDiscoveredApps:
         # Doing Relocate
         primary_cluster_name_after_failover = (
             dr_helpers.get_current_primary_cluster_name(
-                cnv_workloads[0].workload_namespace, discovered_apps=True
+                cnv_workloads[0].workload_namespace,
+                discovered_apps=True,
+                resource_name=cnv_workloads[0].discovered_apps_placement_name,
             )
         )
         config.switch_to_cluster_by_name(primary_cluster_name_before_failover)
         secondary_cluster_name = dr_helpers.get_current_secondary_cluster_name(
-            cnv_workloads[0].workload_namespace, discovered_apps=True
+            cnv_workloads[0].workload_namespace,
+            discovered_apps=True,
+            resource_name=cnv_workloads[0].discovered_apps_placement_name,
         )
 
         scheduling_interval = dr_helpers.get_scheduling_interval(
-            cnv_workloads[0].workload_namespace, discovered_apps=True
+            cnv_workloads[0].workload_namespace,
+            discovered_apps=True,
+            resource_name=cnv_workloads[0].discovered_apps_placement_name,
         )
         logger.info("Running Relocate Steps")
         wait_time = 2 * scheduling_interval  # Time in minutes

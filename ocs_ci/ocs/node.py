@@ -2204,9 +2204,9 @@ def get_node_zone_dict():
 
 
 @retry(ValueError, tries=5, delay=10)
-def get_node_rack_or_zone(failure_domain, node_obj):
+def base_get_node_rack_or_zone(failure_domain, node_obj):
     """
-    Get the worker node rack or zone name based on the failure domain value
+    Get the worker node rack or zone name based on the failure domain value.
 
     Args:
         failure_domain (str): The failure domain
@@ -2215,6 +2215,8 @@ def get_node_rack_or_zone(failure_domain, node_obj):
     Returns:
         str: The worker node rack/zone name
 
+    Raises:
+        ValueError: If the zone/rack is not found after retries.
     """
     node_obj.reload()
     node_rack_or_zone = (
@@ -2223,7 +2225,28 @@ def get_node_rack_or_zone(failure_domain, node_obj):
     if node_rack_or_zone:
         return node_rack_or_zone
     else:
-        raise ValueError
+        raise ValueError(f"{failure_domain} was not found for the node {node_obj.name}")
+
+
+def get_node_rack_or_zone(failure_domain, node_obj, raise_value_error=True):
+    """
+    Wrapper for base_get_node_rack_or_zone that allows optional suppression of ValueError.
+
+    Args:
+        failure_domain (str): The failure domain
+        node_obj (ocs_ci.ocs.resources.ocs.OCS): The node object
+        raise_value_error (bool): Whether to raise ValueError or return None on failure
+    Returns:
+        str or None: Rack/zone name or None if not found and raise_value_error is False
+
+    """
+    try:
+        return base_get_node_rack_or_zone(failure_domain, node_obj)
+    except ValueError as ex:
+        if raise_value_error:
+            raise ex
+        else:
+            return None
 
 
 def get_node_rack_or_zone_dict(failure_domain):
@@ -2616,7 +2639,7 @@ def wait_for_all_osd_ids_come_up_on_nodes(
 
 
 def get_other_worker_nodes_in_same_rack_or_zone(
-    failure_domain, node_obj, node_names_to_search=None
+    failure_domain, node_obj, node_names_to_search=None, raise_value_error=True
 ):
     """
     Get other worker nodes in the same rack or zone of a given node.
@@ -2632,7 +2655,9 @@ def get_other_worker_nodes_in_same_rack_or_zone(
         list: The list of the other worker nodes in the same rack or zone of the given node.
 
     """
-    node_rack_or_zone = get_node_rack_or_zone(failure_domain, node_obj)
+    node_rack_or_zone = get_node_rack_or_zone(
+        failure_domain, node_obj, raise_value_error
+    )
     log.info(f"The node {node_obj.name} rack or zone is {node_rack_or_zone}")
     wnode_names = node_names_to_search or get_worker_nodes()
     other_wnode_names = [name for name in wnode_names if name != node_obj.name]
@@ -2641,7 +2666,8 @@ def get_other_worker_nodes_in_same_rack_or_zone(
     other_wnodes_in_same_rack_or_zone = [
         wnode
         for wnode in other_wnodes
-        if get_node_rack_or_zone(failure_domain, wnode) == node_rack_or_zone
+        if get_node_rack_or_zone(failure_domain, wnode, raise_value_error)
+        == node_rack_or_zone
     ]
 
     wnode_names = [n.name for n in other_wnodes_in_same_rack_or_zone]
@@ -2650,7 +2676,7 @@ def get_other_worker_nodes_in_same_rack_or_zone(
 
 
 def get_another_osd_node_in_same_rack_or_zone(
-    failure_domain, node_obj, node_names_to_search=None
+    failure_domain, node_obj, node_names_to_search=None, raise_value_error=True
 ):
     """
     Get another osd node in the same rack or zone of a given node.
@@ -2669,7 +2695,7 @@ def get_another_osd_node_in_same_rack_or_zone(
     """
     osd_node_names = get_osd_running_nodes()
     other_wnodes_in_same_rack_or_zone = get_other_worker_nodes_in_same_rack_or_zone(
-        failure_domain, node_obj, node_names_to_search
+        failure_domain, node_obj, node_names_to_search, raise_value_error
     )
 
     osd_node_in_same_rack_or_zone = None
@@ -2681,7 +2707,7 @@ def get_another_osd_node_in_same_rack_or_zone(
     return osd_node_in_same_rack_or_zone
 
 
-def get_nodes_racks_or_zones(failure_domain, node_names):
+def get_nodes_racks_or_zones(failure_domain, node_names, raise_value_error=True):
     """
     Get the nodes racks or zones
 
@@ -2693,10 +2719,15 @@ def get_nodes_racks_or_zones(failure_domain, node_names):
 
     """
     node_objects = get_node_objs(node_names)
-    return [get_node_rack_or_zone(failure_domain, n) for n in node_objects]
+    return [
+        get_node_rack_or_zone(failure_domain, n, raise_value_error)
+        for n in node_objects
+    ]
 
 
-def wait_for_nodes_racks_or_zones(failure_domain, node_names, timeout=120):
+def wait_for_nodes_racks_or_zones(
+    failure_domain, node_names, timeout=120, raise_value_error=True
+):
     """
     Wait for the nodes racks or zones to appear
 
@@ -2715,6 +2746,7 @@ def wait_for_nodes_racks_or_zones(failure_domain, node_names, timeout=120):
         func=get_nodes_racks_or_zones,
         failure_domain=failure_domain,
         node_names=node_names,
+        raise_value_error=raise_value_error,
     ):
         log.info(f"The nodes {node_names} racks or zones are: {nodes_racks_or_zones}")
         if all(nodes_racks_or_zones):

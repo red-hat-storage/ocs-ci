@@ -73,18 +73,24 @@ class TestFailoverAndRelocateWithDiscoveredApps:
 
         primary_cluster_name_before_failover = (
             dr_helpers.get_current_primary_cluster_name(
-                rdr_workload.workload_namespace, discovered_apps=True
+                rdr_workload.workload_namespace,
+                discovered_apps=True,
+                resource_name=rdr_workload.discovered_apps_placement_name,
             )
         )
         config.switch_to_cluster_by_name(primary_cluster_name_before_failover)
         primary_cluster_name_before_failover_index = config.cur_index
         primary_cluster_name_before_failover_nodes = get_node_objs()
         secondary_cluster_name = dr_helpers.get_current_secondary_cluster_name(
-            rdr_workload.workload_namespace, discovered_apps=True
+            rdr_workload.workload_namespace,
+            discovered_apps=True,
+            resource_name=rdr_workload.discovered_apps_placement_name,
         )
 
         scheduling_interval = dr_helpers.get_scheduling_interval(
-            rdr_workload.workload_namespace, discovered_apps=True
+            rdr_workload.workload_namespace,
+            discovered_apps=True,
+            resource_name=rdr_workload.discovered_apps_placement_name,
         )
         drpc_obj = DRPC(namespace=constants.DR_OPS_NAMESAPCE)
         wait_time = 2 * scheduling_interval  # Time in minutes
@@ -175,16 +181,22 @@ class TestFailoverAndRelocateWithDiscoveredApps:
         # Doing Relocate
         primary_cluster_name_after_failover = (
             dr_helpers.get_current_primary_cluster_name(
-                rdr_workload.workload_namespace, discovered_apps=True
+                rdr_workload.workload_namespace,
+                discovered_apps=True,
+                resource_name=rdr_workload.discovered_apps_placement_name,
             )
         )
         config.switch_to_cluster_by_name(primary_cluster_name_before_failover)
         secondary_cluster_name = dr_helpers.get_current_secondary_cluster_name(
-            rdr_workload.workload_namespace, discovered_apps=True
+            rdr_workload.workload_namespace,
+            discovered_apps=True,
+            resource_name=rdr_workload.discovered_apps_placement_name,
         )
 
         scheduling_interval = dr_helpers.get_scheduling_interval(
-            rdr_workload.workload_namespace, discovered_apps=True
+            rdr_workload.workload_namespace,
+            discovered_apps=True,
+            resource_name=rdr_workload.discovered_apps_placement_name,
         )
 
         logger.info("Running Relocate Steps")
