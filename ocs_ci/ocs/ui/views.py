@@ -682,6 +682,18 @@ pvc_4_14 = {
     ),
 }
 
+pvc_4_19 = {
+    "pvc_create_button": ('a[data-test="item-create"]', By.CSS_SELECTOR),
+    "expected-capacity": (
+        "//dd[@data-test='pvc-requested-capacity']//div[text()='{}']",
+        By.XPATH,
+    ),
+    "new-capacity": (
+        "//dd[@data-test-id='pvc-capacity']//div[text()='{}']",
+        By.XPATH,
+    ),
+}
+
 storage_clients = {
     "generate_client_onboarding_ticket": (
         "//button[normalize-space()='Generate client onboarding token']",
@@ -2244,6 +2256,7 @@ locators = {
             **pvc_4_9,
             **pvc_4_12,
             **pvc_4_14,
+            **pvc_4_19,
         },
         "acm_page": {
             **acm_page_nav,
