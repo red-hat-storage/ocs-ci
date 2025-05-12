@@ -13,7 +13,10 @@ from ocs_ci.framework.testlib import performance, performance_b
 from ocs_ci.helpers import helpers, performance_lib
 from ocs_ci.utility.utils import convert_device_size
 from ocs_ci.ocs.perfresult import ResultsAnalyse
-from ocs_ci.helpers.helpers import get_full_test_logs_path
+from ocs_ci.helpers.helpers import (
+    get_full_test_logs_path,
+    set_configmap_log_level_csi_sidecar,
+)
 from ocs_ci.ocs.perftests import PASTest
 from ocs_ci.ocs.resources import pvc, ocs
 from ocs_ci.ocs.exceptions import PVCNotCreated, PodNotCreated
@@ -118,6 +121,10 @@ class TestPVCClonePerformance(PASTest):
         # Collecting environment information
         self.get_env_info()
 
+        #Set CSI side car log level
+
+        set_configmap_log_level_csi_sidecar(value=5)
+
         self.number_of_clones = 11
         if self.dev_mode:
             self.number_of_clones = 3
@@ -130,6 +137,9 @@ class TestPVCClonePerformance(PASTest):
         """
         logger.info("Starting the test environment cleanup")
         # Delete the test project (namespace)
+
+        helpers.set_configmap_log_level_csi_sidecar(value=1)
+
         self.delete_test_project()
 
         super(TestPVCClonePerformance, self).teardown()
