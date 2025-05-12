@@ -2530,7 +2530,9 @@ def delete_all_noobaa_buckets(mcg_obj, request):
     for bucket in buckets["Buckets"]:
         logger.info(f"Deleting {bucket} and its objects")
         s3_bucket = mcg_obj.s3_resource.Bucket(bucket["Name"])
-        s3_bucket.objects.all().delete()
+        delete_all_objects_in_batches(
+            s3_resource=mcg_obj.s3_resource, bucket_name=s3_bucket
+        )
         s3_bucket.delete()
 
     def finalizer():
@@ -3280,3 +3282,46 @@ def verify_objs_deleted_from_objmds(bucket_name, timeout=600, sleep=30):
         result=True
     ), "Not all the objects are marked deleted"
     logger.info("All the objects are marked expired")
+
+
+def delete_all_objects_in_batches(
+    s3_resource,
+    bucket_name,
+    prefix="",
+    batch_size=1000,
+):
+    """
+    Delete all objects from an S3 bucket in batches.
+
+    Args:
+        s3_resource (boto3.resource): The boto3 S3 resource.
+        bucket_name (str): The name of the S3 bucket.
+        prefix (str, optional): Prefix to filter objects by. Defaults to "" (all objects).
+        batch_size (int, optional): Number of keys to delete per batch (max 1000). Defaults to 1000.
+    """
+    bucket = s3_resource.Bucket(bucket_name)
+    logger.info(
+        f"Starting batch deletion in bucket '{bucket_name}' with prefix '{prefix}'"
+    )
+
+    objects_to_delete = []
+    total_deleted = 0
+
+    for obj in bucket.objects.filter(Prefix=prefix):
+        objects_to_delete.append({"Key": obj.key})
+        if len(objects_to_delete) >= batch_size:
+            response = bucket.delete_objects(Delete={"Objects": objects_to_delete})
+            deleted = len(response.get("Deleted", []))
+            total_deleted += deleted
+            logger.info(f"Deleted batch of {deleted} objects")
+            objects_to_delete.clear()
+
+    if objects_to_delete:
+        response = bucket.delete_objects(Delete={"Objects": objects_to_delete})
+        deleted = len(response.get("Deleted", []))
+        total_deleted += deleted
+        logger.info(f"Deleted final batch of {deleted} objects")
+
+    logger.info(
+        f"Finished deleting {total_deleted} objects from bucket '{bucket_name}'"
+    )
