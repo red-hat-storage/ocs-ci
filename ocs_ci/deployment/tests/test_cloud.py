@@ -17,9 +17,6 @@ class TestCloudDeployment(CloudDeploymentBase):
     will fail (which is expected for such base class).
     """
 
-    # avoid raising NotImplementedError so that testing base class is possible
-    DEFAULT_STORAGECLASS = "cloudstorage"
-
 
 def test_clouddeploymentbase_init(clusterdir):
     """

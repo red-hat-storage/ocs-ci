@@ -89,8 +89,6 @@ class IBMCloud(CloudDeploymentBase):
     Deployment class for IBM Cloud
     """
 
-    DEFAULT_STORAGECLASS = "ibmc-vpc-block-10iops-tier"
-
     OCPDeployment = IBMCloudOCPDeployment
 
     def __init__(self):
@@ -139,7 +137,6 @@ class IBMCloudIPI(CloudDeploymentBase):
     A class to handle IBM Cloud IPI specific deployment
     """
 
-    DEFAULT_STORAGECLASS = "ibmc-vpc-block-10iops-tier"
     OCPDeployment = IPIOCPDeployment
 
     def __init__(self):
@@ -207,7 +204,7 @@ class IBMCloudIPI(CloudDeploymentBase):
         if resource_group:
             try:
                 self.delete_bucket()
-                scale_down_pods_and_remove_pvcs(self.DEFAULT_STORAGECLASS)
+                scale_down_pods_and_remove_pvcs(self.storage_class)
             except Exception as err:
                 logger.warning(
                     f"Failed to scale down mon/osd pods or failed to remove PVC's. Error: {err}"
