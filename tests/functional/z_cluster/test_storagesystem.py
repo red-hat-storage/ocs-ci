@@ -29,27 +29,29 @@ class TestStorageSystem(ManageTest):
         2. Storage Cluster owner reference doesn't contain storage system
 
         """
-
-    log_step("Storage System is not present")
-    storage_system = ocp.OCP(
-        kind=constants.STORAGESYSTEM, namespace=config.ENV_DATA["cluster_namespace"]
-    )
-    try:
-        storage_system.get()
-    except CommandFailed:
-        pass
-    else:
-        assert False, "Storage System found but it should not be present"
-    log_step("Storage Cluster owner reference doesn't contain storage system")
-    storage_cluster = ocp.OCP(
-        kind=constants.STORAGECLUSTER, namespace=config.ENV_DATA["cluster_namespace"]
-    )
-    storage_cluster_data = storage_cluster.get()
-    owner_references = storage_cluster_data.get("metadata").get("ownerReferences", {})
-    assert not any(
-        [
-            reference
-            for reference in owner_references
-            if reference["kind"] == "StorageSystem"
-        ]
-    )
+        log_step("Storage System is not present")
+        storage_system = ocp.OCP(
+            kind=constants.STORAGESYSTEM, namespace=config.ENV_DATA["cluster_namespace"]
+        )
+        try:
+            storage_system.get()
+        except CommandFailed:
+            pass
+        else:
+            assert False, "Storage System found but it should not be present"
+        log_step("Storage Cluster owner reference doesn't contain storage system")
+        storage_cluster = ocp.OCP(
+            kind=constants.STORAGECLUSTER,
+            namespace=config.ENV_DATA["cluster_namespace"],
+        )
+        storage_cluster_data = storage_cluster.get()
+        owner_references = storage_cluster_data.get("metadata").get(
+            "ownerReferences", {}
+        )
+        assert not any(
+            [
+                reference
+                for reference in owner_references
+                if reference["kind"] == "StorageSystem"
+            ]
+        )
