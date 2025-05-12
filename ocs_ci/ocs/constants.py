@@ -109,6 +109,7 @@ AI_NETWORK_CONFIG_TEMPLATE = os.path.join(
     "ocp-deployment", "ai-host-network-config.yaml.j2"
 )
 MULTIPLE_DEVICECLASSES_DIR = os.path.join(TEMPLATE_DIR, "multiple-deviceclasses")
+AUTO_SCALING_DIR = os.path.join(TEMPLATE_DIR, "storage-auto-scaling")
 
 # Statuses
 STATUS_READY = "Ready"
@@ -145,6 +146,11 @@ HEALTHY_OBC = STATUS_BOUND
 HEALTHY_OBC_CLI_PHASE = "Phase:Bound"
 HEALTHY_OB_CLI_MODE = "Mode:OPTIMAL"
 HEALTHY_PV_BS = ["OPTIMAL", "LOW_CAPACITY"]
+
+# Storage-Auto-Scaler statuses
+NOT_STARTED = "NotStarted"
+IN_PROGRES = "InProgress"
+SUCCEEDED = "Succeeded"
 
 # noobaa-core config.js parameters
 CONFIG_JS_PREFIX = "CONFIG_JS_"
@@ -262,6 +268,7 @@ CLIENT_PROFILE = "ClientProfile"
 OCS_OPERATOR_CONFIG_MAP = "ocs-operator-config"
 SERVICE_TYPE_NODEPORT = "NodePort"
 CLUSTERMANAGEMENTADDON = "ClusterManagementAddOn"
+STORAGE_AUTO_SCALER = "StorageAutoScaler"
 
 # Provisioners
 AWS_EFS_PROVISIONER = "openshift.org/aws-efs"
@@ -3310,3 +3317,6 @@ NFS_SC_NAME = "nfs-client"
 # The expected mds cache memory values
 MDS_CACHE_MEMORY = 3221225472
 LOWER_REQ_MDS_CACHE_MEMORY = 1073741824
+
+# Auto-scaling Yaml files
+AUTO_SCALING_YAML = os.path.join(AUTO_SCALING_DIR, "storage-autoscaler.yaml")
