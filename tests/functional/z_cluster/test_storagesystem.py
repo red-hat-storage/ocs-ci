@@ -2,7 +2,6 @@ import logging
 
 import pytest
 from ocs_ci.ocs import constants, ocp
-from ocs_ci.ocs.exceptions import CommandFailed
 from ocs_ci.framework import config
 from ocs_ci.framework.testlib import (
     brown_squad,
@@ -33,12 +32,8 @@ class TestStorageSystem(ManageTest):
         storage_system = ocp.OCP(
             kind=constants.STORAGESYSTEM, namespace=config.ENV_DATA["cluster_namespace"]
         )
-        try:
-            storage_system.get()
-        except CommandFailed:
-            pass
-        else:
-            assert False, "Storage System found but it should not be present"
+        storage_system_data = storage_system.get()
+        assert not storage_system_data.get("items")
         log_step("Storage Cluster owner reference doesn't contain storage system")
         storage_cluster = ocp.OCP(
             kind=constants.STORAGECLUSTER,
