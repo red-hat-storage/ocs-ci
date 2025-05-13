@@ -3314,18 +3314,18 @@ def apply_node_affinity_for_noobaa_pod():
     """
     Apply node affinity for noobaa operator pod.
 
+    Returns:
+        bool: True if node affinity applied successfully
+
     """
     resource_name = constants.DEFAULT_CLUSTERNAME
-    if config.DEPLOYMENT["external_mode"]:
-        resource_name = constants.DEFAULT_CLUSTERNAME_EXTERNAL_MODE
-
     storagecluster_obj = ocp.OCP(
         resource_name=resource_name,
         namespace=config.ENV_DATA["cluster_namespace"],
         kind=constants.STORAGECLUSTER,
     )
 
-    nodeaffinity = {
+    nodeaffinity_toleration = {
         "noobaa-standalone": {
             "nodeAffinity": {
                 "requiredDuringSchedulingIgnoredDuringExecution": {
@@ -3353,7 +3353,7 @@ def apply_node_affinity_for_noobaa_pod():
         }
     }
 
-    param = {"spec": {"placement": nodeaffinity}}
+    param = {"spec": {"placement": nodeaffinity_toleration}}
 
     param_str = json.dumps(param)
     try:
@@ -3365,14 +3365,13 @@ def apply_node_affinity_for_noobaa_pod():
 
     # check node affinity is added in storagecluster or not.
     sc_dict = storagecluster_obj.get()
-    try:
-        node_affinity = sc_dict["spec"]["placement"]["noobaa-standalone"]
-        if node_affinity:
-            log.info("nodeAffinity is present in 'noobaa-standalone' placement.")
-            return True
-        else:
-            log.error("nodeAffinity is empty.")
-            return False
-    except KeyError:
-        log.error("'noobaa-standalone' is not present in placement.")
+
+    node_affinity = (
+        sc_dict.get("spec", {}).get("placement", {}).get("noobaa-standalone")
+    )
+    if node_affinity:
+        log.info("nodeAffinity is present in 'noobaa-standalone' placement.")
+        return True
+    else:
+        log.error("'noobaa-standalone' placement is missing or empty.")
         return False
