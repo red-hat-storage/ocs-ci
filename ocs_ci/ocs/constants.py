@@ -713,7 +713,7 @@ NOOBAA_CORE_STATEFULSET = "noobaa-core"
 NOOBAA_CORE_POD = "noobaa-core-0"
 
 # Noobaa db secret
-NOOBAA_DB_SECRET = "noobaa-db"
+NOOBAA_DB_SECRET = "noobaa-db-pg-cluster-app"
 NOOBAA_S3_SERVING_CERT = "noobaa-s3-serving-cert"
 
 # NooBaa DB CNPG

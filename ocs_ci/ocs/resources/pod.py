@@ -41,6 +41,7 @@ from ocs_ci.ocs.resources.ocs import OCS
 from ocs_ci.ocs.resources.job import get_job_obj, get_jobs_with_prefix
 from ocs_ci.utility import templating
 from ocs_ci.utility.utils import (
+    get_primary_nb_db_pod,
     run_cmd,
     check_timeout_reached,
     TimeoutSampler,
@@ -1057,12 +1058,7 @@ def get_noobaa_db_pod():
         Pod object: Noobaa db pod object
 
     """
-    nb_db = get_pods_having_label(
-        label=constants.NOOBAA_DB_LABEL_47_AND_ABOVE,
-        namespace=config.ENV_DATA["cluster_namespace"],
-    )
-    nb_db_pod = Pod(**nb_db[0])
-    return nb_db_pod
+    return get_primary_nb_db_pod()
 
 
 def get_noobaa_core_pod():
