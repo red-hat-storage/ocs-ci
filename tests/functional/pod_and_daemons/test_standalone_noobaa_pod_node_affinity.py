@@ -22,7 +22,7 @@ log = logging.getLogger(__name__)
 @mcg_only_required
 @brown_squad
 class TestNoobaaPodNodeAffinity:
-    @pytest.fixture(scope="session", autouse=True)
+    @pytest.fixture(scope="class", autouse=True)
     def teardown(self, request):
         """
         This teardown will bring storage cluster with default values.
