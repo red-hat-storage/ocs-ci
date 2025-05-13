@@ -662,12 +662,28 @@ def get_pvc_provision_times(interface, pvc_name, start_time, time_type="all", op
                     name = pvc_name[i].name
                     pv_name = pvc_name[i].backed_pv
                     if op in ["all", "create"]:
-                        if re.search(f"provision.*{name}.*started", line):
+                        if (
+                            re.search(f"provision.*{name}.*started", line)
+                            and (
+                                version.get_semantic_ocs_version_from_config()
+                                <= version.VERSION_4_16
+                            )
+                        ) or re.search(
+                            f'Started.*PVC="[^"]*/{re.escape(name)}"', line
+                        ):
                             if results[name]["create"]["start"] is None:
                                 results[name]["create"]["start"] = (
                                     extruct_timestamp_from_log(line)
                                 )
-                        if re.search(f"provision.*{name}.*succeeded", line):
+                        if (
+                            re.search(f"provision.*{name}.*succeeded", line)
+                            and (
+                                version.get_semantic_ocs_version_from_config()
+                                <= version.VERSION_4_16
+                            )
+                        ) or re.search(
+                            f'Succeeded.*{re.escape(name)}', line, re.IGNORECASE
+                        ):
                             if results[name]["create"]["end"] is None:
                                 results[name]["create"]["end"] = (
                                     extruct_timestamp_from_log(line)
@@ -678,7 +694,15 @@ def get_pvc_provision_times(interface, pvc_name, start_time, time_type="all", op
                                     )
                                 )
                     if op in ["all", "delete"]:
-                        if re.search(f'delete "{pv_name}": started', line):
+                        if (
+                            re.search(f'delete "{pv_name}": started', line)
+                            and (
+                                version.get_semantic_ocs_version_from_config()
+                                <= version.VERSION_4_16
+                            )
+                        ) or re.search(
+                            f'"shouldDelete is true".*PV="{re.escape(pv_name)}"', line
+                        ):
                             if results[name]["delete"]["start"] is None:
                                 results[name]["delete"]["start"] = (
                                     extruct_timestamp_from_log(line)
@@ -690,8 +714,7 @@ def get_pvc_provision_times(interface, pvc_name, start_time, time_type="all", op
                                 <= version.VERSION_4_13
                             )
                         ) or re.search(
-                            f'delete "{pv_name}": persistentvolume deleted succeeded',
-                            line,
+                            f'deleted succeeded.*PV="{re.escape(pv_name)}"', line
                         ):
                             if results[name]["delete"]["end"] is None:
                                 results[name]["delete"]["end"] = (
