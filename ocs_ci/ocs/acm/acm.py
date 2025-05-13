@@ -380,6 +380,58 @@ class AcmAddClusters(AcmPageNavigator):
         self.take_screenshot()
         log.info("Submariner is healthy, check passed")
 
+    def install_submariner_cli(self, globalnet=True):
+        """
+        Installs the Submariner Via CLI on the ACM Hub cluster and expects 2 OCP clusters to be already imported
+        on the Hub Cluster to create a link between them
+
+        Args:
+            globalnet (bool): Globalnet is set to True by default for ODF versions greater than or equal to 4.13
+
+        """
+        submariner_broker_yaml = templating.load_yaml(constants.SUBMARINER_BROKER_YAML)
+        all_documents = []
+
+        for cluster in get_non_acm_cluster_config():
+            submariner_addon_yaml = templating.load_yaml(
+                constants.SUBMARINER_ADDON_YAML
+            )
+            submariner_config_yaml = templating.load_yaml(
+                constants.SUBMARINER_CONFIG_YAML
+            )
+
+            config.switch_ctx(cluster.MULTICLUSTER["multicluster_index"])
+
+            submariner_addon_yaml["metadata"]["namespace"] = cluster.ENV_DATA[
+                "cluster_name"
+            ]
+            submariner_config_yaml["metadata"]["namespace"] = cluster.ENV_DATA[
+                "cluster_name"
+            ]
+
+            all_documents.append(submariner_addon_yaml)
+            all_documents.append(submariner_config_yaml)
+
+        if not globalnet:
+            submariner_broker_yaml["spec"]["globalnetEnabled"] = "false"
+
+        all_documents.append(submariner_broker_yaml)
+
+        # Create the temp file
+        submariner_data_file = tempfile.NamedTemporaryFile(
+            mode="w+", prefix="submariner_install_data", delete=False
+        )
+
+        # Dump all docs at once to preserve them
+        templating.dump_data_to_temp_yaml(all_documents, submariner_data_file.name)
+
+        log.info(f"YAML written to: {submariner_data_file.name}")
+
+        old_ctx = config.cur_index
+        config.switch_acm_ctx()
+        run_cmd(cmd=f"oc create -f {submariner_data_file.name}")
+        config.switch_ctx(old_ctx)
+
 
 def copy_kubeconfig(file=None, return_str=False):
     """
