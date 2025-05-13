@@ -28,13 +28,15 @@ class TestStorageSystem(ManageTest):
         2. Storage Cluster owner reference doesn't contain storage system
 
         """
-        log_step("Storage System is not present")
+        log_step("Verify that Storage System is not present")
         storage_system = ocp.OCP(
             kind=constants.STORAGESYSTEM, namespace=config.ENV_DATA["cluster_namespace"]
         )
         storage_system_data = storage_system.get()
         assert not storage_system_data.get("items")
-        log_step("Storage Cluster owner reference doesn't contain storage system")
+        log_step(
+            "Verify that Storage Cluster owner reference doesn't contain storage system"
+        )
         storage_cluster = ocp.OCP(
             kind=constants.STORAGECLUSTER,
             namespace=config.ENV_DATA["cluster_namespace"],

@@ -3326,6 +3326,7 @@ def check_unnecessary_pods_present():
         pod.name for pod in get_all_pods(namespace=config.ENV_DATA["cluster_namespace"])
     ]
     log.info(f"Checking if only required operator pods are available in : {pod_names}")
+    invalid_pods_found = []
     if no_noobaa:
         for invalid_pod_name in [
             constants.NOOBAA_OPERATOR_DEPLOYMENT,
@@ -3333,23 +3334,27 @@ def check_unnecessary_pods_present():
             constants.NOOBAA_DB_STATEFULSET,
             constants.NOOBAA_CORE_STATEFULSET,
         ]:
-            invalid_pods_found = [
-                pod_name
-                for pod_name in pod_names
-                if pod_name.startswith(invalid_pod_name)
-            ]
-            if invalid_pods_found:
-                raise InvalidPodPresent(
-                    f"Pods {invalid_pods_found} should not be present because NooBaa is not available"
-                )
+            invalid_pods_found.extend(
+                [
+                    pod_name
+                    for pod_name in pod_names
+                    if pod_name.startswith(invalid_pod_name)
+                ]
+            )
+        if invalid_pods_found:
+            raise InvalidPodPresent(
+                f"Pods {invalid_pods_found} should not be present because NooBaa is not available"
+            )
     if no_ceph:
         for invalid_pod_name in [constants.ROOK_CEPH_OPERATOR]:
-            invalid_pods_found = [
-                pod_name
-                for pod_name in pod_names
-                if pod_name.startswith(invalid_pod_name)
-            ]
-            if invalid_pods_found:
-                raise InvalidPodPresent(
-                    f"Pods {invalid_pods_found} should not be present because Ceph is not available"
-                )
+            invalid_pods_found.extend(
+                [
+                    pod_name
+                    for pod_name in pod_names
+                    if pod_name.startswith(invalid_pod_name)
+                ]
+            )
+        if invalid_pods_found:
+            raise InvalidPodPresent(
+                f"Pods {invalid_pods_found} should not be present because Ceph is not available"
+            )
