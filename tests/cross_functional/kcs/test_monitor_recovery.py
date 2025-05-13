@@ -353,7 +353,6 @@ class MonitorRecovery(object):
         elif pod_type == "mon":
             pod_objs = get_mon_pods()
         else:
-            logger.error(f"Invalid pod type: {pod_type}. Use 'osd' or 'mon' ")
             raise ValueError(f"Invalid pod type: {pod_type}. Use 'osd' or 'mon' ")
         for pod_obj in pod_objs:
             logger.info(f"Copying tar binary to pod: {pod_obj.name}")
