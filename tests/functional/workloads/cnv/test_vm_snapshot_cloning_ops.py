@@ -10,9 +10,6 @@ from ocs_ci.helpers.cnv_helpers import (
     expand_pvc_and_verify,
     clone_or_snapshot_vm,
 )
-from ocs_ci.helpers.helpers import create_unique_resource_name
-from ocp_resources.virtual_machine_restore import VirtualMachineRestore
-from ocp_resources.virtual_machine_snapshot import VirtualMachineSnapshot
 
 
 log = logging.getLogger(__name__)
@@ -255,41 +252,13 @@ class TestVmSnapshotClone(E2ETest):
             # Writing IO on source VM
             source_csum = run_dd_io(vm_obj=vm_obj, file_path=file_paths[0], verify=True)
 
-            snapshot_name = f"snapshot-{vm_obj.name}"
-            # Explicitly create the VirtualMachineSnapshot instance
-            with VirtualMachineSnapshot(
-                name=snapshot_name,
-                namespace=vm_obj.namespace,
-                vm_name=vm_obj.name,
-                client=admin_client,
-                teardown=False,
-            ) as vm_snapshot:
-                vm_snapshot.wait_snapshot_done()
-
-            # Write file after snapshot
-            run_dd_io(vm_obj=vm_obj, file_path=file_paths[1])
-
-            # Stopping VM before restoring
-            vm_obj.stop()
-
-            # Explicitly create the VirtualMachineRestore instance
-            restore_snapshot_name = create_unique_resource_name(
-                vm_snapshot.name, "restore"
+            restored_vm = clone_or_snapshot_vm(
+                "snapshot",
+                vm_obj,
+                admin_client=admin_client,
+                all_vms=vm_list,
+                file_path=file_paths[0],
             )
-            try:
-                with VirtualMachineRestore(
-                    name=restore_snapshot_name,
-                    namespace=vm_obj.namespace,
-                    vm_name=vm_obj.name,
-                    snapshot_name=vm_snapshot.name,
-                    client=admin_client,
-                    teardown=False,
-                ) as vm_restore:
-                    vm_restore.wait_restore_done()  # Wait for restore completion
-                    vm_obj.start()
-                    vm_obj.wait_for_ssh_connectivity(timeout=1200)
-            finally:
-                vm_snapshot.delete()
 
             # Verify file written after snapshot is not present.
             command = f"test -f {file_paths[1]} && echo 'File exists' || echo 'File not found'"
@@ -344,7 +313,7 @@ class TestVmSnapshotClone(E2ETest):
             res_csum = cal_md5sum_vm(vm_obj=vm_obj, file_path=file_paths[0])
             assert (
                 source_csum == res_csum
-            ), f"Failed: MD5 comparison between source {vm_obj.name} and restored {vm_restore.name} VMs"
+            ), f"Failed: MD5 comparison between source {vm_obj.name} and restored {restored_vm.name} VMs"
 
             # Write new file to VM
             run_dd_io(vm_obj=vm_obj, file_path=file_paths[1], verify=True)
