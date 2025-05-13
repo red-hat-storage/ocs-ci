@@ -70,7 +70,7 @@ def craft_s3_command(cmd, mcg_obj=None, api=False, signed_request_creds=None):
             f"AWS_SECRET_ACCESS_KEY={mcg_obj.access_key} "
             f"{region}"
             f"aws s3{api} "
-            f"--endpoint={mcg_obj.s3_internal_endpoint} "
+            f"--endpoint={mcg_obj.s3_endpoint} "
             f"{no_ssl} "
         )
         string_wrapper = '"'
@@ -353,7 +353,7 @@ def list_objects_from_bucket(
         retrieve_cmd += " --recursive"
 
     if s3_obj:
-        secrets = [s3_obj.access_key_id, s3_obj.access_key, s3_obj.s3_internal_endpoint]
+        secrets = [s3_obj.access_key_id, s3_obj.access_key, s3_obj.s3_endpoint]
     elif signed_request_creds:
         secrets = [
             signed_request_creds.get("access_key_id"),
@@ -416,7 +416,7 @@ def copy_objects(
     else:
         retrieve_cmd = f"cp {src_obj} {target} {no_ssl}"
     if s3_obj:
-        secrets = [s3_obj.access_key_id, s3_obj.access_key, s3_obj.s3_internal_endpoint]
+        secrets = [s3_obj.access_key_id, s3_obj.access_key, s3_obj.s3_endpoint]
     elif signed_request_creds:
         secrets = [
             signed_request_creds.get("access_key_id"),
@@ -481,7 +481,7 @@ def upload_objects_with_javasdk(javas3_pod, s3_obj, bucket_name, is_multipart=Fa
 
     access_key = s3_obj.access_key_id
     secret_key = s3_obj.access_key
-    endpoint = s3_obj.s3_internal_endpoint
+    endpoint = s3_obj.s3_endpoint
 
     # compile the src code
     javas3_pod.exec_cmd_on_pod(command="mvn clean compile", out_yaml_format=False)
@@ -519,7 +519,7 @@ def sync_object_directory(
     logger.info(f"Syncing all objects and directories from {src} to {target}")
     retrieve_cmd = f"sync {src} {target}"
     if s3_obj:
-        secrets = [s3_obj.access_key_id, s3_obj.access_key, s3_obj.s3_internal_endpoint]
+        secrets = [s3_obj.access_key_id, s3_obj.access_key, s3_obj.s3_endpoint]
     elif signed_request_creds:
         secrets = [
             signed_request_creds.get("access_key_id"),
@@ -567,7 +567,7 @@ def download_objects_using_s3cmd(
     else:
         retrieve_cmd = f"get {src} {target}"
     if s3_obj:
-        secrets = [s3_obj.access_key_id, s3_obj.access_key, s3_obj.s3_internal_endpoint]
+        secrets = [s3_obj.access_key_id, s3_obj.access_key, s3_obj.s3_endpoint]
     elif signed_request_creds:
         secrets = [
             signed_request_creds.get("access_key_id"),
@@ -606,7 +606,7 @@ def rm_object_recursive(podobj, target, mcg_obj, option="", timeout=600):
         secrets=[
             mcg_obj.access_key_id,
             mcg_obj.access_key,
-            mcg_obj.s3_internal_endpoint,
+            mcg_obj.s3_endpoint,
         ],
         timeout=timeout,
     )
@@ -654,7 +654,7 @@ def write_individual_s3_objects(
             secrets=[
                 mcg_obj.access_key_id,
                 mcg_obj.access_key,
-                mcg_obj.s3_internal_endpoint,
+                mcg_obj.s3_endpoint,
             ],
         )
 
@@ -679,7 +679,7 @@ def upload_parts(
 
     """
     parts = []
-    secrets = [mcg_obj.access_key_id, mcg_obj.access_key, mcg_obj.s3_internal_endpoint]
+    secrets = [mcg_obj.access_key_id, mcg_obj.access_key, mcg_obj.s3_endpoint]
     for count, part in enumerate(uploaded_parts, 1):
         upload_cmd = (
             f"upload-part --bucket {bucketname} --key {object_key}"
@@ -945,7 +945,7 @@ def oc_create_rgw_backingstore(cld_mgr, backingstore_name, uls_name, region):
         "type": "s3-compatible",
         "s3Compatible": {
             "targetBucket": uls_name,
-            "endpoint": cld_mgr.rgw_client.s3_internal_endpoint,
+            "endpoint": cld_mgr.rgw_client.s3_endpoint,
             "signatureVersion": "v2",
             "secret": {
                 "name": cld_mgr.rgw_client.secret.name,
@@ -969,7 +969,7 @@ def cli_create_rgw_backingstore(mcg_obj, cld_mgr, backingstore_name, uls_name, r
     """
     mcg_obj.exec_mcg_cmd(
         f"backingstore create s3-compatible {backingstore_name} "
-        f"--endpoint {cld_mgr.rgw_client.s3_internal_endpoint} "
+        f"--endpoint {cld_mgr.rgw_client.s3_endpoint} "
         f"--access-key {cld_mgr.rgw_client.access_key} "
         f"--secret-key {cld_mgr.rgw_client.secret_key} "
         f"--target-bucket {uls_name}",
@@ -1517,7 +1517,7 @@ def del_objects(uploaded_objects_paths, awscli_pod, mcg_obj):
             secrets=[
                 mcg_obj.access_key_id,
                 mcg_obj.access_key,
-                mcg_obj.s3_internal_endpoint,
+                mcg_obj.s3_endpoint,
             ],
         )
 
