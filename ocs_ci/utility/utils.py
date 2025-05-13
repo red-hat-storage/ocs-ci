@@ -2573,7 +2573,7 @@ def ceph_health_resolve_mon_slow_ops(health_status):
         from ocs_ci.ocs import ocp
 
         ocp.OCP().exec_oc_cmd(
-            f"oc delete pod -n {config.ENV_DATA['cluster_namespace']} -l ceph_daemon_id={mon_id}"
+            f"delete pod -n {config.ENV_DATA['cluster_namespace']} -l ceph_daemon_id={mon_id}"
         )
 
 
