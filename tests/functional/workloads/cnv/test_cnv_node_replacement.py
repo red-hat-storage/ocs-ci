@@ -4,7 +4,13 @@ import random
 
 from ocs_ci.framework import config
 from ocs_ci.framework.testlib import E2ETest
-from ocs_ci.framework.pytest_customization.marks import workloads, magenta_squad
+from ocs_ci.framework.pytest_customization.marks import (
+    workloads,
+    magenta_squad,
+    ignore_leftovers,
+    skipif_external_mode,
+    skipif_bm,
+)
 from ocs_ci.helpers.cnv_helpers import cal_md5sum_vm, run_dd_io
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.cluster import CephCluster
@@ -23,6 +29,9 @@ logger = logging.getLogger(__name__)
 
 @magenta_squad
 @workloads
+@ignore_leftovers
+@skipif_bm
+@skipif_external_mode
 class TestCnvNodeReplace(E2ETest):
     """
     Node replacement proactive
@@ -94,7 +103,6 @@ class TestCnvNodeReplace(E2ETest):
         osd_node_name = select_osd_node_name()
         delete_and_create_osd_node(osd_node_name)
 
-        # Verify everything running fine
         logger.info("Verifying All resources are Running and matches expected result")
         self.sanity_helpers = Sanity()
         self.sanity_helpers.health_check(tries=120)
