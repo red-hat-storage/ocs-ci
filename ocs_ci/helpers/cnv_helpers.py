@@ -612,7 +612,7 @@ def create_fio_service(vm_obj, fio_cmd, fio_service_name):
     logger.info("FIO service setup complete.")
 
 
-def check_fio_status(vm_obj, fio_service_name):
+def check_fio_status(vm_obj, fio_service_name="fio_test"):
     """
     Check if FIO is running after restart.
     """
