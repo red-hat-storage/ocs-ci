@@ -679,7 +679,7 @@ def get_pvc_provision_times(interface, pvc_name, start_time, time_type="all", op
                                     )
                                 )
                     if op in ["all", "delete"]:
-                        if re.search(f'shouldDelete is true.*PV="{re.escape(pv_name)}"', line):
+                        if re.search(f'"shouldDelete is true".*PV="{re.escape(pv_name)}"', line):
                             logger.info(f"del true")
                             if results[name]["delete"]["start"] is None:
                                 results[name]["delete"]["start"] = (
@@ -692,8 +692,7 @@ def get_pvc_provision_times(interface, pvc_name, start_time, time_type="all", op
                                 <= version.VERSION_4_13
                             )
                         ) or re.search(
-                            f'delete "{pv_name}": persistentvolume deleted succeeded',
-                            line,
+                            f'deleted succeeded.*PV="{re.escape(pv_name)}"', line
                         ):
                             logger.info(f"dell true")
                             if results[name]["delete"]["end"] is None:
