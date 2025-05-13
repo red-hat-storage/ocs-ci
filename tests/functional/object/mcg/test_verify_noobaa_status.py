@@ -10,10 +10,10 @@ from ocs_ci.framework.pytest_customization.marks import (
     mcg,
     skipif_noobaa_external_pgsql,
 )
-from ocs_ci.ocs import constants
 from ocs_ci.ocs.resources.pod import get_pod_logs
 from ocs_ci.framework.testlib import polarion_id
 from ocs_ci.framework.pytest_customization.marks import skipif_managed_service
+from ocs_ci.utility.utils import get_primary_nb_db_pod
 
 log = logging.getLogger(__name__)
 
@@ -61,7 +61,8 @@ def test_verify_noobaa_db_service(mcg_obj_session):
 
     # verify noobaa db logs
     pattern = "Not found: Service noobaa-db"
-    noobaa_db_log = get_pod_logs(pod_name=constants.NB_DB_NAME_47_AND_ABOVE)
+    primary_nb_db_pod = get_primary_nb_db_pod()
+    noobaa_db_log = get_pod_logs(pod_name=primary_nb_db_pod.name)
     assert (
         re.search(pattern=pattern, string=noobaa_db_log) is None
     ), f"Error: {pattern} msg found in the noobaa db logs."
