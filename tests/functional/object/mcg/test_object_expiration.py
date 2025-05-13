@@ -451,20 +451,11 @@ class TestObjectExpiration(MCGTest):
         bucket = bucket_factory()[0].name
         object_key = "ObjKey-" + str(uuid.uuid4().hex)
         obj_data = "Random data" + str(uuid.uuid4().hex)
-        expire_rule = {
-            "Rules": [
-                {
-                    "Expiration": {"Days": 1, "ExpiredObjectDeleteMarker": False},
-                    "Filter": {"Prefix": ""},
-                    "ID": "data-expire",
-                    "Status": "Enabled",
-                }
-            ]
-        }
 
         logger.info(f"Setting object expiration on bucket: {bucket}")
+        lifecycle_policy = LifecyclePolicy(ExpirationRule(days=1))
         mcg_obj.s3_client.put_bucket_lifecycle_configuration(
-            Bucket=bucket, LifecycleConfiguration=expire_rule
+            Bucket=bucket, LifecycleConfiguration=lifecycle_policy.as_dict()
         )
         logger.info(
             f"Sleeping for {PROP_SLEEP_TIME} seconds to let the policy propagate"
