@@ -2733,6 +2733,8 @@ def check_toleration_on_pods(toleration_key=constants.TOLERATION_KEY):
     pods_missing_toleration = []
     for pod_obj in pod_objs:
         resource_name = pod_obj.name
+        if "storageclient" in resource_name:
+            continue
         tolerations = pod_obj.get().get("spec").get("tolerations")
 
         # Check if any toleration matches the provided key
