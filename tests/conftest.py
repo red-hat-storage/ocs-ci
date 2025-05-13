@@ -7205,39 +7205,43 @@ def discovered_apps_dr_workload(request):
             workload_key = "dr_workload_discovered_apps_cephfs"
         workload_details_list = ocsci_config.ENV_DATA[workload_key]
 
-        for index in range(kubeobject):
-            workload_details = workload_details_list[index]
-            workload = BusyboxDiscoveredApps(
-                workload_dir=workload_details["workload_dir"],
-                workload_pod_count=workload_details["pod_count"],
-                workload_pvc_count=workload_details["pvc_count"],
-                workload_namespace=(
-                    workload_details["workload_namespace"] + "-multi-ns"
-                    if multi_ns
-                    else workload_details["workload_namespace"]
-                ),
-                discovered_apps_pvc_selector_key=workload_details[
-                    "dr_workload_app_pvc_selector_key"
-                ],
-                discovered_apps_pvc_selector_value=workload_details[
-                    "dr_workload_app_pvc_selector_value"
-                ],
-                discovered_apps_pod_selector_key=workload_details[
-                    "dr_workload_app_pod_selector_key"
-                ],
-                discovered_apps_pod_selector_value=workload_details[
-                    "dr_workload_app_pod_selector_value"
-                ],
-                workload_placement_name=workload_details[
-                    "dr_workload_app_placement_name"
-                ],
-                discovered_apps_multi_ns=multi_ns,
-            )
-            if multi_ns:
-                multi_ns_list.append(workload.workload_namespace)
+        if bool(kubeobject):
+            for index in range(kubeobject):
+                workload_details = workload_details_list[index]
+                workload = BusyboxDiscoveredApps(
+                    workload_dir=workload_details["workload_dir"],
+                    workload_pod_count=workload_details["pod_count"],
+                    workload_pvc_count=workload_details["pvc_count"],
+                    workload_namespace=(
+                        workload_details["workload_namespace"] + "-multi-ns"
+                        if multi_ns
+                        else workload_details["workload_namespace"]
+                    ),
+                    discovered_apps_pvc_selector_key=workload_details[
+                        "dr_workload_app_pvc_selector_key"
+                    ],
+                    discovered_apps_pvc_selector_value=workload_details[
+                        "dr_workload_app_pvc_selector_value"
+                    ],
+                    discovered_apps_pod_selector_key=workload_details[
+                        "dr_workload_app_pod_selector_key"
+                    ],
+                    discovered_apps_pod_selector_value=workload_details[
+                        "dr_workload_app_pod_selector_value"
+                    ],
+                    workload_placement_name=workload_details[
+                        "dr_workload_app_placement_name"
+                    ],
+                    discovered_apps_multi_ns=multi_ns,
+                )
+
+                if multi_ns:
+                    multi_ns_list.append(workload.workload_namespace)
+
             instances.append(workload)
             total_pvc_count += workload_details["pvc_count"]
-            workload.deploy_workload()
+            workload.deploy_workload(recipe=False)
+
         if multi_ns:
             if pvc_interface == constants.CEPHBLOCKPOOL:
                 pvc_type = constants.RBD_INTERFACE
@@ -7263,6 +7267,49 @@ def discovered_apps_dr_workload(request):
             )
             for index in range(kubeobject):
                 instances[index].verify_workload_deployment(vrg_name=drpc_name)
+
+        if bool(recipe):
+            for index in range(recipe):
+                workload_details = ocsci_config.ENV_DATA[workload_key][index]
+                workload = BusyboxDiscoveredApps(
+                    workload_dir=workload_details["workload_dir"],
+                    workload_pod_count=workload_details["pod_count"],
+                    workload_pvc_count=workload_details["pvc_count"],
+                    workload_namespace=workload_details["workload_namespace"],
+                    workload_placement_name=workload_details[
+                        "dr_workload_app_placement_name"
+                    ],
+                    discovered_apps_pvc_selector_key=workload_details[
+                        "dr_workload_app_pvc_selector_key"
+                    ],
+                    discovered_apps_pvc_selector_value=workload_details[
+                        "dr_workload_app_pvc_selector_value"
+                    ],
+                    discovered_apps_pod_selector_key=workload_details[
+                        "dr_workload_app_pod_selector_key"
+                    ],
+                    discovered_apps_pod_selector_value=workload_details[
+                        "dr_workload_app_pod_selector_value"
+                    ],
+                    discovered_apps_recipe_name_key=workload_details[
+                        "dr_workload_app_recipe_name_key"
+                    ],
+                    discovered_apps_recipe_name_value=workload_details[
+                        "dr_workload_app_recipe_name_value"
+                    ],
+                    discovered_apps_recipe_namespace_key=workload_details[
+                        "dr_workload_app_recipe_namespace_key"
+                    ],
+                    discovered_apps_recipe_namespace_value=workload_details[
+                        "dr_workload_app_recipe_namespace_value"
+                    ],
+                    discovered_apps_name_selector_value=workload_details[
+                        "dr_workload_app_recipe_name_selector_value"
+                    ],
+                )
+            instances.append(workload)
+            total_pvc_count += workload_details["pvc_count"]
+            workload.deploy_workload(recipe=True)
         return instances
 
     def teardown():
