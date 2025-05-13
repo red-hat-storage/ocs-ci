@@ -2945,7 +2945,15 @@ ACM_MANAGEDCLUSTER_ADDONS = "managedclusteraddons.addon.open-cluster-management.
 ACM_ADDON_DEPLOYMENT_CONFIG_YAML = os.path.join(
     TEMPLATE_DIR, "acm-deployment", "addon_deployment_config.yaml"
 )
-
+SUBMARINER_ADDON_YAML = os.path.join(
+    TEMPLATE_DIR, "acm-deployment", "submariner_addon.yaml"
+)
+SUBMARINER_CONFIG_YAML = os.path.join(
+    TEMPLATE_DIR, "acm-deployment", "submariner_config.yaml"
+)
+SUBMARINER_BROKER_YAML = os.path.join(
+    TEMPLATE_DIR, "acm-deployment", "submariner_broker.yaml"
+)
 # GitOps
 GITOPS_NAMESPACE = "openshift-gitops"
 GITOPS_OPERATOR_NAME = "openshift-gitops-operator"
