@@ -43,7 +43,6 @@ from ocs_ci.ocs.resources.pod import (
     get_noobaa_pods,
     get_pod_logs,
     get_pods_having_label,
-    wait_for_pods_by_label_count,
 )
 from ocs_ci.ocs.resources.pvc import get_pvc_objs
 from ocs_ci.ocs.exceptions import CommandFailed
@@ -249,16 +248,14 @@ def noobaa_db_backup_and_recovery_locally(
         cnpg_cluster_obj.create()
 
         # Wait for the cluster status to be in a healthy state
-        wait_for_pods_by_label_count(
-            label=constants.NOOBAA_DB_LABEL_419_AND_ABOVE,
-            expected_count=original_db_replica_count,
-            timeout=600,
-            sleep=5,
+        selector = (
+            f"{constants.NOOBAA_DB_LABEL_419_AND_ABOVE},"
+            f"{constants.CNPG_POD_ROLE_INSTANCE_LABEL}"
         )
-        OCP(kind=constants.CNPG_CLUSTER_KIND).wait_for_resource(
-            condition=constants.NB_DB_CNPG_HEALTHY_STATUS,
-            resource_name=constants.NB_DB_CNPG_CLUSTER_NAME,
-            resource_count=1,
+        OCP(kind=constants.POD).wait_for_resource(
+            condition=constants.STATUS_RUNNING,
+            selector=selector,
+            resource_count=original_db_replica_count,
             timeout=600,
             sleep=5,
         )
