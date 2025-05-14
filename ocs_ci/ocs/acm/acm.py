@@ -409,7 +409,7 @@ class AcmAddClusters(AcmPageNavigator):
             if i["metadata"]["name"] != constants.ACM_LOCAL_CLUSTER:
                 run_cmd(
                     cmd=f"oc label {constants.ACM_MANAGEDCLUSTER} "
-                    f"cluster.open-cluster-management.io/clusterset: {cluster_set_name}"
+                    f"cluster.open-cluster-management.io/clusterset={cluster_set_name} --overwrite"
                 )
 
         config.switch_ctx(old_ctx)
