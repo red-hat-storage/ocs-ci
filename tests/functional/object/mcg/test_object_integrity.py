@@ -15,6 +15,7 @@ from ocs_ci.framework.pytest_customization.marks import (
     skipif_disconnected_cluster,
     red_squad,
     runs_on_provider,
+    skipif_fips_enabled,
     mcg,
 )
 
@@ -61,7 +62,7 @@ class TestObjectIntegrity(MCGTest):
             ),
             pytest.param(
                 {"interface": "OC", "backingstore_dict": {"ibmcos": [(1, None)]}},
-                marks=[tier1, skipif_disconnected_cluster],
+                marks=[tier1, skipif_disconnected_cluster, skipif_fips_enabled],
             ),
             pytest.param(
                 {"interface": "CLI", "backingstore_dict": {"ibmcos": [(1, None)]}},
