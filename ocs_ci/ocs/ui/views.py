@@ -2216,7 +2216,7 @@ bucket_tab = {
         By.XPATH,
     ),
     "bucket_action_button": (
-        "tbody tr:nth-child(1) td:last-child button:first-child, button[data-test=kebab-button]",
+        "button[data-test=kebab-button]",
         By.CSS_SELECTOR,
     ),
     "bucket_delete_option": (
