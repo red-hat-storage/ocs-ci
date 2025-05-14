@@ -10,6 +10,7 @@ from ocs_ci.framework.pytest_customization.marks import (
     red_squad,
     runs_on_provider,
     mcg,
+    skipif_fips_enabled,
 )
 
 logger = logging.getLogger(__name__)
@@ -34,8 +35,14 @@ class TestMultiCloud(MCGTest):
             pytest.param(("oc", {"azure": [(1, None)]})),
             pytest.param(("cli", {"gcp": [(1, None)]})),
             pytest.param(("oc", {"gcp": [(1, None)]})),
-            pytest.param(("cli", {"ibmcos": [(1, None)]})),
-            pytest.param(("oc", {"ibmcos": [(1, None)]})),
+            pytest.param(
+                ("cli", {"ibmcos": [(1, None)]}),
+                marks=[skipif_fips_enabled],
+            ),
+            pytest.param(
+                ("oc", {"ibmcos": [(1, None)]}),
+                marks=[skipif_fips_enabled],
+            ),
         ],
         # A test ID list for describing the parametrized tests
         # <CLOUD_PROVIDER>-<METHOD>-<AMOUNT-OF-BACKINGSTORES>

@@ -192,6 +192,11 @@ skipif_mcg_only = pytest.mark.skipif(
     reason="This test cannot run on MCG-Only deployments",
 )
 
+skipif_fips_enabled = pytest.mark.skipif(
+    config.ENV_DATA.get("fips") == "true",
+    reason="This test cannot run on FIPS enabled cluster",
+)
+
 fips_required = pytest.mark.skipif(
     config.ENV_DATA.get("fips") != "true",
     reason="Test runs only on FIPS enabled cluster",
