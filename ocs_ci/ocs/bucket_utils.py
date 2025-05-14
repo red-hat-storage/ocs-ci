@@ -23,6 +23,7 @@ from ocs_ci.ocs.exceptions import (
     UnexpectedBehaviour,
 )
 from ocs_ci.ocs.ocp import OCP
+from ocs_ci.ocs.resources.s3_batch_deleter import S3BatchDeleter
 from ocs_ci.utility import templating
 from ocs_ci.utility.retry import retry
 from ocs_ci.utility.ssl_certs import get_root_ca_cert
@@ -3287,41 +3288,27 @@ def verify_objs_deleted_from_objmds(bucket_name, timeout=600, sleep=30):
 def delete_all_objects_in_batches(
     s3_resource,
     bucket_name,
-    prefix="",
-    batch_size=1000,
+    parallelize=False,
 ):
     """
     Delete all objects from an S3 bucket in batches.
 
+    Note that use_parallel should only be used buckets with hundreds of thousands
+    of objects. For smaller buckets, it is recommended to use the simpler sequential
+    deletion method to avoid overwhelming the S3 API and the system's resources.
+
     Args:
-        s3_resource (boto3.resource): The boto3 S3 resource.
-        bucket_name (str): The name of the S3 bucket.
-        prefix (str, optional): Prefix to filter objects by. Defaults to "" (all objects).
-        batch_size (int, optional): Number of keys to delete per batch (max 1000). Defaults to 1000.
+        s3_resource (S3.Resource): Boto3 S3 resource object
+        bucket_name (str): Name of the S3 bucket
+        parallelize (bool): If True, delete objects in parallel using threads
     """
-    bucket = s3_resource.Bucket(bucket_name)
-    logger.info(
-        f"Starting batch deletion in bucket '{bucket_name}' with prefix '{prefix}'"
+    batch_deleter = S3BatchDeleter(
+        s3_resource=s3_resource,
+        bucket_name=bucket_name,
     )
 
-    objects_to_delete = []
-    total_deleted = 0
-
-    for obj in bucket.objects.filter(Prefix=prefix):
-        objects_to_delete.append({"Key": obj.key})
-        if len(objects_to_delete) >= batch_size:
-            response = bucket.delete_objects(Delete={"Objects": objects_to_delete})
-            deleted = len(response.get("Deleted", []))
-            total_deleted += deleted
-            logger.info(f"Deleted batch of {deleted} objects")
-            objects_to_delete.clear()
-
-    if objects_to_delete:
-        response = bucket.delete_objects(Delete={"Objects": objects_to_delete})
-        deleted = len(response.get("Deleted", []))
-        total_deleted += deleted
-        logger.info(f"Deleted final batch of {deleted} objects")
-
-    logger.info(
-        f"Finished deleting {total_deleted} objects from bucket '{bucket_name}'"
-    )
+    # Delete objects in parallel or sequentially based on the use_parallel flag
+    if parallelize:
+        batch_deleter.delete_in_parallel()
+    else:
+        batch_deleter.delete_sequentially()
