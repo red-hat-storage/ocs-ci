@@ -67,6 +67,14 @@ class TestFailoverAndRelocateWithDiscoveredApps:
                 id="primary_up-cephfs",
             ),
             pytest.param(
+                False,
+                constants.CEPHFILESYSTEM,
+                0,
+                1,
+                marks=[skipif_ocs_version("<4.19")],
+                id="primary_up-cephfs",
+            ),
+            pytest.param(
                 True,
                 constants.CEPHFILESYSTEM,
                 1,
