@@ -248,6 +248,7 @@ def measure_pvc_creation_time(interface, pvc_name, start_time):
     # time), the earliest start time and the latest end time are taken
     for sublog in logs:
         for line in sublog:
+            logger.info(f"lynn{line}")
             if (
                 st is None
                 and "provision" in line
