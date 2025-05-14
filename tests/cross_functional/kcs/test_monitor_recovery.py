@@ -44,7 +44,7 @@ from ocs_ci.ocs.resources import pod
 from ocs_ci.ocs import ocp, constants, defaults, bucket_utils
 from ocs_ci.helpers.helpers import wait_for_resource_state, get_secret_names
 from ocs_ci.utility.retry import retry
-from ocs_ci.utility.utils import exec_cmd
+from ocs_ci.utility.utils import exec_cmd, run_cmd
 
 logger = logging.getLogger(__name__)
 
@@ -360,7 +360,7 @@ class MonitorRecovery(object):
                 f"cat /usr/bin/tar | oc exec -i {pod_obj.name} -n {constants.OPENSHIFT_STORAGE_NAMESPACE} -- bash -c "
                 f"'cat > /usr/bin/tar'"
             )
-            self._exec_oc_cmd(cmd)
+            run_cmd(cmd)
             logger.info(
                 f"Setting execute permissions on /usr/bin/tar in pod: {pod_obj.name}"
             )
