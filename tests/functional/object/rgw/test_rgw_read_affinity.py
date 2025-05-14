@@ -7,6 +7,7 @@ from ocs_ci.framework.pytest_customization.marks import (
     tier1,
     rgw,
     skipif_no_lso,
+    post_upgrade,
 )
 from ocs_ci.ocs.resources.pod import get_rgw_pods
 from ocs_ci.ocs.ocp import OCP
@@ -71,6 +72,7 @@ class TestRGWReadAffinityMode:
             return None
 
     @tier1
+    @post_upgrade
     def test_rgw_read_affinity_mode(self):
         """
         Test default ReadAffinity mode of RGW in an ODF cluster
