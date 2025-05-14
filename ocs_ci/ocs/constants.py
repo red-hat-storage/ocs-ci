@@ -2992,6 +2992,7 @@ SUBMARINER_CONFIG_YAML = os.path.join(
 SUBMARINER_BROKER_YAML = os.path.join(
     TEMPLATE_DIR, "acm-deployment", "submariner_broker.yaml"
 )
+CLUSTERSET_YAML = os.path.join(TEMPLATE_DIR, "acm-deployment", "clusterset.yaml")
 # GitOps
 GITOPS_NAMESPACE = "openshift-gitops"
 GITOPS_OPERATOR_NAME = "openshift-gitops-operator"

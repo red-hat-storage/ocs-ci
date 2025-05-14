@@ -391,6 +391,28 @@ class AcmAddClusters(AcmPageNavigator):
         """
         submariner_broker_yaml = templating.load_yaml(constants.SUBMARINER_BROKER_YAML)
         all_documents = []
+        log.info("Creating ManagedClusterSet")
+        cluster_set_name = create_unique_resource_name("submariner", "clusterset")
+        log.info(f"Clusterset created with name: {cluster_set_name}")
+        cluster_set_yaml = templating.load_yaml(constants.CLUSTERSET_YAML)
+        cluster_set_yaml["metadata"]["name"] = cluster_set_name
+        clusterset_file = tempfile.NamedTemporaryFile(
+            mode="w+", prefix="clusterset", delete=False
+        )
+        templating.dump_data_to_temp_yaml(cluster_set_yaml, clusterset_file.name)
+        old_ctx = config.cur_index
+        config.switch_acm_ctx()
+        run_cmd(cmd=f"oc create -f {clusterset_file.name}")
+        managed_clusters = OCP(kind=constants.ACM_MANAGEDCLUSTER).get().get("items", [])
+        # ignore local-cluster here
+        for i in managed_clusters:
+            if i["metadata"]["name"] != constants.ACM_LOCAL_CLUSTER:
+                run_cmd(
+                    cmd=f"oc label {constants.ACM_MANAGEDCLUSTER} "
+                    f"cluster.open-cluster-management.io/clusterset: {cluster_set_name}"
+                )
+
+        config.switch_ctx(old_ctx)
 
         for cluster in get_non_acm_cluster_config():
             submariner_addon_yaml = templating.load_yaml(
@@ -411,10 +433,9 @@ class AcmAddClusters(AcmPageNavigator):
 
             all_documents.append(submariner_addon_yaml)
             all_documents.append(submariner_config_yaml)
-
         if not globalnet:
             submariner_broker_yaml["spec"]["globalnetEnabled"] = "false"
-
+        submariner_broker_yaml["metadata"]["namespace"] = cluster_set_name
         all_documents.append(submariner_broker_yaml)
 
         # Create the temp file
