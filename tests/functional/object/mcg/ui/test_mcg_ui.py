@@ -9,7 +9,6 @@ from ocs_ci.framework.pytest_customization.marks import (
     mcg,
     skipif_ibm_cloud_managed,
     provider_mode,
-    jira,
 )
 from ocs_ci.ocs import constants
 from ocs_ci.helpers.helpers import create_unique_resource_name
@@ -340,7 +339,6 @@ class TestObcUserInterface(object):
                 resource_name=obc_name
             )
 
-    @jira("DFBUGS-1147")
     @pytest.mark.parametrize(
         argnames=["storageclass", "bucketclass", "delete_via", "verify_ob_removal"],
         argvalues=generate_test_params(),
