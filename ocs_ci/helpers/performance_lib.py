@@ -659,6 +659,7 @@ def get_pvc_provision_times(interface, pvc_name, start_time, time_type="all", op
         for sublog in prov_logs:
             for line in sublog:
                 logger.info(f"sublogg : {line}")
+                logger.info(f"opp{op}")
                 for i in range(0, len(pvc_name)):
                     name = pvc_name[i].name
                     pv_name = pvc_name[i].backed_pv

@@ -52,6 +52,7 @@ class TestPVCCreationDeletionPerformance(PASTest):
         super(TestPVCCreationDeletionPerformance, self).setup()
         self.benchmark_name = "PVC_Creation-Deletion"
         self.create_test_project()
+        set_configmap_log_level_csi_sidecar(value=5)
 
     def teardown(self):
         """
@@ -61,6 +62,7 @@ class TestPVCCreationDeletionPerformance(PASTest):
         log.info("Starting the test environment celanup")
         # Delete the test project (namespace)
         self.delete_test_project()
+        set_configmap_log_level_csi_sidecar(value=1)
         super(TestPVCCreationDeletionPerformance, self).teardown()
 
     def create_fio_pod_yaml(self, pvc_size=1):
