@@ -394,7 +394,7 @@ class TestLifecycleConfiguration(MCGTest):
         NoncurrentVersionExpiration.NewerNoncurrentVersions,
         AbortIncompleteMultipartUpload.DaysAfterInitiation
 
-        3. Create a multipart-upload, upload a few parts.
+        3. Create a multipart-upload and upload parts to it
         4. Expire the multipart-upload and wait for it to expire
         5. Upload 10 versions of the same object onto the bucket
         6. Expire the non-current versions by setting back their creation date
@@ -426,7 +426,7 @@ class TestLifecycleConfiguration(MCGTest):
         )
         sleep(PROP_SLEEP_TIME)
 
-        # 3. Create a multipart-upload, upload a few parts.
+        # 3. Create a multipart-upload and upload parts to it
         parts_amount = 5
         origin_dir = test_directory_setup.origin_dir
         res_dir = test_directory_setup.result_dir
