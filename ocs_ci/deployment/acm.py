@@ -120,31 +120,31 @@ class Submariner(object):
             config.switch_ctx(old_ctx)
 
         global_net = get_primary_cluster_config().ENV_DATA.get("enable_globalnet", True)
-        # if (
-        #     get_primary_cluster_config().ENV_DATA.get("platform")
-        #     == constants.IBMCLOUD_PLATFORM
-        #     and get_primary_cluster_config().ENV_DATA.get("deployment_type")
-        #     == constants.IPI_DEPL_TYPE
-        # ):
-        #     logger.info("Logging into IBMCLOUD CLI")
-        #     login()
-        #
-        #     for cluster in get_non_acm_cluster_config():
-        #         config.switch_ctx(cluster.MULTICLUSTER["multicluster_index"])
-        #
-        #         set_region()
-        #         set_resource_group_name()
-        #         floating_ips_dict = assign_floating_ips_to_workers()
-        #         for node in get_worker_nodes():
-        #             cmd = (
-        #                 f"oc annotate node {node} "
-        #                 f"gateway.submariner.io/public-ip=ipv4:{floating_ips_dict.get(node)} --overwrite"
-        #             )
-        #             run_cmd(cmd=cmd, secrets=[floating_ips_dict.get(node)])
-        #
-        #     acm_obj.install_submariner_cli(globalnet=global_net)
-        # else:
-        #     acm_obj.install_submariner_ui(globalnet=global_net)
+        if (
+            get_primary_cluster_config().ENV_DATA.get("platform")
+            == constants.IBMCLOUD_PLATFORM
+            and get_primary_cluster_config().ENV_DATA.get("deployment_type")
+            == constants.IPI_DEPL_TYPE
+        ):
+            logger.info("Logging into IBMCLOUD CLI")
+            login()
+
+            for cluster in get_non_acm_cluster_config():
+                config.switch_ctx(cluster.MULTICLUSTER["multicluster_index"])
+
+                set_region()
+                set_resource_group_name()
+                floating_ips_dict = assign_floating_ips_to_workers()
+                for node in get_worker_nodes():
+                    cmd = (
+                        f"oc annotate node {node} "
+                        f"gateway.submariner.io/public-ip=ipv4:{floating_ips_dict.get(node)} --overwrite"
+                    )
+                    run_cmd(cmd=cmd, secrets=[floating_ips_dict.get(node)])
+
+            acm_obj.install_submariner_cli(globalnet=global_net)
+        else:
+            acm_obj.install_submariner_ui(globalnet=global_net)
 
         acm_obj.submariner_validation_ui()
 

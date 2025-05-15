@@ -392,6 +392,7 @@ class AcmAddClusters(AcmPageNavigator):
         submariner_broker_yaml = templating.load_yaml(constants.SUBMARINER_BROKER_YAML)
         all_documents = []
         log.info("Creating ManagedClusterSet")
+        global cluster_set_name
         cluster_set_name = create_unique_resource_name("submariner", "clusterset")
         log.info(f"Clusterset created with name: {cluster_set_name}")
         cluster_set_yaml = templating.load_yaml(constants.CLUSTERSET_YAML)
