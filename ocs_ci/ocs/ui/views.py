@@ -319,7 +319,7 @@ generic_locators = {
         By.XPATH,
     ),
     "resource_link": (
-        "//td[@id='name']//a[contains(text(),'{}')] | "
+        "//a[@data-test='resource-link-{}'] | "
         "//td[@data-label='Name']//a[contains(text(),'{}')]",
         By.XPATH,
     ),
@@ -2216,7 +2216,7 @@ bucket_tab = {
         By.XPATH,
     ),
     "bucket_action_button": (
-        "button[data-test=kebab-button]",
+        "tbody li:nth-child(2) button:nth-child(1) span:nth-child(1) span:nth-child(1)",
         By.CSS_SELECTOR,
     ),
     "bucket_delete_option": (
