@@ -250,12 +250,11 @@ def measure_pvc_creation_time(interface, pvc_name, start_time):
         for line in sublog:
             if (
                 st is None
-                and "provision" in line
+                and "Started" in line
                 and pvc_name in line
-                and "started" in line
             ):
                 st = string_to_time(line.split(" ")[1])
-            elif "provision" in line and pvc_name in line and "succeeded" in line:
+            elif pvc_name in line and "Succeeded" in line:
                 et = string_to_time(line.split(" ")[1])
     del logs
     if st is None:
