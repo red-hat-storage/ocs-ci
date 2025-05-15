@@ -50,6 +50,7 @@ TEMPLATE_SECURITY_DIR = os.path.join(TEMPLATE_DIR, "security")
 TEMPLATE_APP_POD_DIR = os.path.join(TEMPLATE_DIR, "app-pods")
 TEMPLATE_WORKLOAD_DIR = os.path.join(TEMPLATE_DIR, "workloads")
 TEMPLATE_FIO_DIR = os.path.join(TEMPLATE_WORKLOAD_DIR, "fio")
+TEMPLATE_FIOOPERATOR_DIR = os.path.join(TEMPLATE_FIO_DIR, "fiooperator")
 TEMPLATE_SMALLFILE_DIR = os.path.join(TEMPLATE_WORKLOAD_DIR, "smallfile")
 TEMPLATE_PGSQL_DIR = os.path.join(TEMPLATE_WORKLOAD_DIR, "pgsql")
 TEMPLATE_JENKINS_DIR = os.path.join(TEMPLATE_WORKLOAD_DIR, "jenkins")
@@ -3804,3 +3805,4 @@ MON_STATUS_DOWN = "down"
 
 # ODF 4.21 health overview resources
 BLACKBOX_POD_LABEL = "app.kubernetes.io/name=odf-blackbox-exporter"
+WORKLOAD_TARGETS_MARKER = "workload_targets"
