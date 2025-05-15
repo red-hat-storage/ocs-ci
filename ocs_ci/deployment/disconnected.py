@@ -14,7 +14,9 @@ from ocs_ci.helpers.disconnected import get_oc_mirror_tool, get_opm_tool
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.exceptions import CommandFailed, NotFoundError
 from ocs_ci.ocs.resources.catalog_source import CatalogSource, disable_default_sources
-from ocs_ci.utility.deployment import get_and_apply_icsp_from_catalog
+from ocs_ci.utility.deployment import (
+    get_and_apply_idms_from_catalog,
+)  # , get_and_apply_icsp_from_catalog
 from ocs_ci.utility import templating
 from ocs_ci.utility.retry import retry
 from ocs_ci.utility.utils import (
@@ -67,7 +69,9 @@ def get_csv_from_image(bundle_image):
         raise
 
 
-def mirror_images_from_mapping_file(mapping_file, icsp=None, ignore_image=None):
+def mirror_images_from_mapping_file(
+    mapping_file, icsp=None, idms=None, ignore_image=None
+):
     """
     Mirror images based on mapping.txt file.
 
@@ -90,9 +94,35 @@ def mirror_images_from_mapping_file(mapping_file, icsp=None, ignore_image=None):
                 if ignore_image and ignore_image in line:
                     continue
                 # apply any matching policy to all lines from mapping file
-                for policy in icsp["spec"]["repositoryDigestMirrors"]:
+                if icsp:
+                    mirrors = icsp["spec"]["repositoryDigestMirrors"]
+                if idms:
+                    mirrors = idms["spec"]["imageDigestMirrors"]
+                for policy in mirrors:
                     # we use only first defined mirror for particular source,
                     # because we don't use any ICSP with more mirrors for one
+                    # source and it will make the logic very complex and
+                    # confusing
+                    line = line.replace(policy["source"], policy["mirrors"][0])
+                mapping_file_content.append(line)
+        # write mapping file to disk
+        mapping_file = "_updated".join(os.path.splitext(mapping_file))
+        with open(mapping_file, "w") as f:
+            f.writelines(mapping_file_content)
+
+    if idms:
+        # update mapping.txt file with urls updated based on provided
+        # ImageDigestMirrorSet
+        with open(mapping_file) as mf:
+            mapping_file_content = []
+            for line in mf:
+                # exclude ignore_image
+                if ignore_image and ignore_image in line:
+                    continue
+                # apply any matching policy to all lines from mapping file
+                for policy in idms["spec"]["imageDigestMirrors"]:
+                    # we use only first defined mirror for particular source,
+                    # because we don't use any IDMS with more mirrors for one
                     # source and it will make the logic very complex and
                     # confusing
                     line = line.replace(policy["source"], policy["mirrors"][0])
@@ -117,7 +147,11 @@ def mirror_images_from_mapping_file(mapping_file, icsp=None, ignore_image=None):
 
 
 def prune_and_mirror_index_image(
-    index_image, mirrored_index_image, packages, icsp=None
+    index_image,
+    mirrored_index_image,
+    packages,
+    icsp=None,
+    idms=None,
 ):
     """
     Prune given index image and push it to mirror registry, mirror all related
@@ -132,6 +166,9 @@ def prune_and_mirror_index_image(
             mirror registry
         packages (list): list of packages to keep
         icsp (dict): ImageContentSourcePolicy used for mirroring (workaround for
+            stage images, which are pointing to different registry than they
+            really are)
+        idms (dict): ImageDigestMirrorSet used for mirroring (workaround for
             stage images, which are pointing to different registry than they
             really are)
 
@@ -196,18 +233,43 @@ def prune_and_mirror_index_image(
         )
         mirror_images_from_mapping_file(mapping_file, icsp, mirrored_index_image)
 
-    # create ImageContentSourcePolicy
-    icsp_file = os.path.join(
-        f"{mirroring_manifests_dir}",
-        "imageContentSourcePolicy.yaml",
-    )
+    # # create ImageContentSourcePolicy
+    # icsp_file = os.path.join(
+    #     f"{mirroring_manifests_dir}",
+    #     "imageContentSourcePolicy.yaml",
+    # )
     # make icsp name unique - append run_id
-    with open(icsp_file) as f:
-        icsp_content = yaml.safe_load(f)
-    icsp_content["metadata"]["name"] += f"-{config.RUN['run_id']}"
-    with open(icsp_file, "w") as f:
-        yaml.dump(icsp_content, f)
-    exec_cmd(f"oc apply -f {icsp_file}")
+    # with open(icsp_file) as f:
+    #     icsp_content = yaml.safe_load(f)
+    # icsp_content["metadata"]["name"] += f"-{config.RUN['run_id']}"
+    # with open(icsp_file, "w") as f:
+    #     yaml.dump(icsp_content, f)
+    # exec_cmd(f"oc apply -f {icsp_file}")
+    # wait_for_machineconfigpool_status("all")
+
+    if idms:
+        # update mapping.txt file with urls updated based on provided
+        # imageDigestMirrorSet
+        mapping_file = os.path.join(
+            f"{mirroring_manifests_dir}",
+            "mapping.txt",
+        )
+        mirror_images_from_mapping_file(
+            mapping_file, ignore_image=mirrored_index_image, idms=idms
+        )
+
+    # create imageDigestMirrorSet
+    idms_file = os.path.join(
+        f"{mirroring_manifests_dir}",
+        "imageDigestMirrorSet.yaml",
+    )
+    # make idms name unique - append run_id
+    with open(idms_file) as f:
+        idms_content = yaml.safe_load(f)
+    idms_content["metadata"]["name"] += f"-{config.RUN['run_id']}"
+    with open(idms_file, "w") as f:
+        yaml.dump(idms_content, f)
+    exec_cmd(f"oc apply -f {idms_file}")
     wait_for_machineconfigpool_status("all")
 
     cs_file = os.path.join(
@@ -217,17 +279,20 @@ def prune_and_mirror_index_image(
     return cs_file
 
 
-@retry((CommandFailed, NotFoundError), tries=3, delay=10, backoff=2)
-def mirror_index_image_via_oc_mirror(index_image, packages, icsp=None):
+def mirror_index_image_via_oc_mirror(index_image, packages, icsp=None, idms=None):
     """
     Mirror all images required for ODF deployment and testing to mirror
-    registry via `oc-mirror` tool and create relevant imageContentSourcePolicy.
+    registry via `oc-mirror` tool and create relevant
+    imageContentSourcePolicy/imageDigestMirrorSet.
     https://github.com/openshift/oc-mirror
 
     Args:
         index_image (str): index image which will be pruned and mirrored
         packages (list): list of packages to keep
         icsp (dict): ImageContentSourcePolicy used for mirroring (workaround for
+            stage images, which are pointing to different registry than they
+            really are)
+        idms (dict): ImageDigestMirrorSet used for mirroring (workaround for
             stage images, which are pointing to different registry than they
             really are)
 
@@ -275,18 +340,32 @@ def mirror_index_image_via_oc_mirror(index_image, packages, icsp=None):
     cmd = (
         f"oc mirror --config {imageset_config_file} "
         f"docker://{config.DEPLOYMENT['mirror_registry']} "
-        "--dest-skip-tls --ignore-history"
+        " --dest-skip-tls --ignore-history"
     )
     if icsp:
         cmd += " --continue-on-error --skip-missing"
+    if idms:
+        # updating the config file to work with oc-mirror v2
+        with open(imageset_config_file, "r") as f:
+            lines = f.readlines()
+            lines[0] = "apiVersion: mirror.openshift.io/v2alpha1\n"
+            lines.index("storageConfig:\n")
+            lines = lines[:14]
+        with open(imageset_config_file, "w") as f:
+            f.writelines(lines)
+        cmd = (
+            f"oc mirror --config {imageset_config_file} "
+            f"docker://{config.DEPLOYMENT['mirror_registry']} "
+            "--workspace file://oc-mirror-workspace/results-files --v2"
+        )
     try:
         exec_cmd(cmd, timeout=18000)
     except CommandFailed:
-        # if icsp is configured, the oc mirror command might fail (return non 0 rc),
+        # if icsp/idms is configured, the oc mirror command might fail (return non 0 rc),
         # even though we use --continue-on-error and --skip-missing arguments
         # (not sure if it is because of a bug in oc mirror plugin or because of some other issue),
-        # but we want to continue to try to mirror the images manually with applied the icsp rules
-        if not icsp:
+        # but we want to continue to try to mirror the images manually with applied the icsp/idms rules
+        if not icsp or not idms:
             raise
 
     # look for manifests directory with Image mapping, CatalogSource and ICSP
@@ -302,37 +381,80 @@ def mirror_index_image_via_oc_mirror(index_image, packages, icsp=None):
 
     if icsp:
         # update mapping.txt file with urls updated based on provided
-        # imageContentSourcePolicy
+        # imageContentSourcePolicy/imageDigestMirrorSet
         mapping_file = os.path.join(
             f"{mirroring_manifests_dir}",
             "mapping.txt",
         )
-        mirror_images_from_mapping_file(mapping_file, icsp)
 
-    # create ImageContentSourcePolicy
-    icsp_file = os.path.join(
-        f"{mirroring_manifests_dir}",
-        "imageContentSourcePolicy.yaml",
-    )
-    # make icsp name unique - append run_id
-    with open(icsp_file) as f:
-        icsp_content = yaml.safe_load(f)
-    icsp_content["metadata"]["name"] = f"odf-{config.RUN['run_id']}"
-    with open(icsp_file, "w") as f:
-        yaml.dump(icsp_content, f)
-    exec_cmd(f"oc apply -f {icsp_file}")
-    wait_for_machineconfigpool_status("all")
+    if idms:
+        cmd += " --dry-run"
+        # running the command again with --dry-run to get mapping file
+        # so that we can pass it and get the failed mirrors
+        exec_cmd(cmd, timeout=18000)
+        mapping_file = os.path.join(
+            f"{mirroring_manifests_dir}",
+            "working-dir/dry-run/mapping.txt",
+        )
+        with open(mapping_file, "r") as file:
+            lines = file.readlines()
+
+        # Remove 'docker://' from each line
+        updated_lines = [line.replace("docker://", "") for line in lines]
+
+        with open(mapping_file, "w") as file:
+            file.writelines(updated_lines)
+
+        mirror_images_from_mapping_file(mapping_file, idms=idms)
+
+        # # create ImageContentSourcePolicy
+        # icsp_file = os.path.join(
+        #     f"{mirroring_manifests_dir}",
+        #     "imageContentSourcePolicy.yaml",
+        # )
+
+        # create ImageDigestMirrorSet
+        idms_file = os.path.join(
+            f"{mirroring_manifests_dir}",
+            "working-dir/cluster-resources/idms-oc-mirror.yaml",
+        )
+
+        # # make icsp name unique - append run_id
+        # with open(icsp_file) as f:
+        #     icsp_content = yaml.safe_load(f)
+        # icsp_content["metadata"]["name"] = f"odf-{config.RUN['run_id']}"
+        # with open(icsp_file, "w") as f:
+        #     yaml.dump(icsp_content, f)
+        # exec_cmd(f"oc apply -f {icsp_file}")
+        # wait_for_machineconfigpool_status("all")
+
+        # make idms name unique - append run_id
+        with open(idms_file) as f:
+            idms_content = yaml.safe_load(f)
+        idms_content["metadata"]["name"] = f"odf-{config.RUN['run_id']}"
+        with open(idms_file, "w") as f:
+            yaml.dump(idms_content, f)
+        exec_cmd(f"oc apply -f {idms_file}")
+        wait_for_machineconfigpool_status("all")
 
     # get mirrored index image url from prepared catalogSource file
-    cs_file = glob.glob(
-        os.path.join(
-            f"{mirroring_manifests_dir}",
-            "catalogSource-*.yaml",
+    if idms:
+        cs_file = glob.glob(
+            os.path.join(
+                f"{mirroring_manifests_dir}",
+                "working-dir/cluster-resources/cs*.yaml",
+            )
         )
-    )
+    else:
+        cs_file = glob.glob(
+            os.path.join(
+                f"{mirroring_manifests_dir}",
+                "cs-*.yaml",
+            )
+        )
     if not cs_file:
         raise NotFoundError(
-            "CatalogSource file not found in the '{mirroring_manifests_dir}'."
+            f"CatalogSource file not found in the '{mirroring_manifests_dir}'."
         )
 
     with open(cs_file[0]) as f:
@@ -426,16 +548,19 @@ def prepare_disconnected_ocs_deployment(upgrade=False):
         # try to use it also there.
         # https://cloud.redhat.com/blog/how-oc-mirror-will-help-you-reduce-container-management-complexity
 
-        icsp_file = get_and_apply_icsp_from_catalog(image=index_image, apply=False)
-        icsp = {}
-        if icsp_file:
-            with open(icsp_file) as f:
-                icsp = yaml.safe_load(f)
+        # icsp_file = get_and_apply_icsp_from_catalog(image=index_image, apply=False)
+        idms_file = get_and_apply_idms_from_catalog(image=index_image, apply=False)
+        # icsp = {}
+        idms = {}
+        if idms_file:  # icsp_file:
+            with open(idms_file) as f:
+                idms = yaml.safe_load(f)
 
         mirrored_index_image = mirror_index_image_via_oc_mirror(
             index_image,
             constants.DISCON_CL_REQUIRED_PACKAGES_PER_ODF_VERSION[f"{ocs_version}"],
-            icsp,
+            idms=idms,
+            # icsp,
         )
     logger.debug(f"mirrored_index_image: {mirrored_index_image}")
 
@@ -477,6 +602,7 @@ def prepare_disconnected_ocs_deployment(upgrade=False):
         return mirrored_index_image
 
 
+@retry((CommandFailed,), tries=3, delay=10, backoff=2)
 def mirror_ocp_release_images(ocp_image_path, ocp_version):
     """
     Mirror OCP release images to mirror registry.
@@ -490,7 +616,7 @@ def mirror_ocp_release_images(ocp_image_path, ocp_version):
             - mirrored image path,
             - tag or checksum
             - imageContentSources (for install-config.yaml)
-            - ImageContentSourcePolicy (for running cluster)
+            - ImageDigestMirrorSet (for running cluster)
     """
     dest_image_repo = (
         f"{config.DEPLOYMENT['mirror_registry']}/"
@@ -513,10 +639,13 @@ def mirror_ocp_release_images(ocp_image_path, ocp_version):
         f"--max-per-registry=2 --from={ocp_image} "
         f"--to={dest_image_repo} "
         f"--to-release-image={dest_ocp_image} "
+        f"--print-mirror-instructions=idms "
         # following two arguments leads to failure of this command, we have to
         # investigate it more to see, if they are required or not
         # f"--release-image-signature-to-dir {config.ENV_DATA['cluster_path']} "
         # "--apply-release-image-signature"
+        # f"--print-mirror-instructions=idms", this parameter is added to print
+        # instructions of ImageDigestMirrorSet for using images from mirror registries
     )
     result = exec_cmd(cmd, timeout=7200)
     # parse imageContentSources and ImageContentSourcePolicy from oc adm release mirror command output
@@ -527,14 +656,16 @@ def mirror_ocp_release_images(ocp_image_path, ocp_version):
         )
         + 2
     )
-    icsp_index = (
+    # icsp_index = (
+    idms_index = (
         stdout_lines.index(
-            "To use the new mirrored repository for upgrades, use the following to create an ImageContentSourcePolicy:"
+            "To use the new mirrored repository for upgrades, use the following to create an ImageDigestMirrorSet:"
         )
         + 2
     )
     ics = "\n".join(stdout_lines[ics_index : stdout_lines.index("", ics_index)])
-    icsp = "\n".join(stdout_lines[icsp_index:])
+    # icsp = "\n".join(stdout_lines[icsp_index:])
+    idms = "\n".join(stdout_lines[idms_index:])
 
     # parse haproxy-router image from the oc adm release mirror command output
     haproxy_router_line = [
@@ -548,5 +679,6 @@ def mirror_ocp_release_images(ocp_image_path, ocp_version):
         f"{config.DEPLOYMENT['mirror_registry']}/{constants.OCP_RELEASE_IMAGE_MIRROR_PATH}",
         ocp_version,
         ics,
-        icsp,
+        idms,
+        # icsp,
     )
