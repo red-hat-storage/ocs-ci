@@ -406,9 +406,10 @@ class AcmAddClusters(AcmPageNavigator):
         managed_clusters = OCP(kind=constants.ACM_MANAGEDCLUSTER).get().get("items", [])
         # ignore local-cluster here
         for i in managed_clusters:
-            if i["metadata"]["name"] != constants.ACM_LOCAL_CLUSTER:
+            managed_cluster_name = i["metadata"]["name"]
+            if managed_cluster_name != constants.ACM_LOCAL_CLUSTER:
                 run_cmd(
-                    cmd=f"oc label {constants.ACM_MANAGEDCLUSTER} "
+                    cmd=f"oc label {constants.ACM_MANAGEDCLUSTER} {managed_cluster_name}"
                     f"cluster.open-cluster-management.io/clusterset={cluster_set_name} --overwrite"
                 )
 
