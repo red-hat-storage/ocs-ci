@@ -2,7 +2,6 @@ import os
 import logging
 import boto3
 import pytest
-from base64 import b64decode
 
 from concurrent.futures import ThreadPoolExecutor
 from threading import Event
@@ -54,7 +53,7 @@ from ocs_ci.helpers.helpers import (
 )
 from ocs_ci.ocs.ocp import OCP
 from ocs_ci.utility.kms import is_kms_enabled
-from ocs_ci.utility.utils import clone_notify, get_primary_nb_db_pod
+from ocs_ci.utility.utils import clone_notify, exec_nb_db_query, get_primary_nb_db_pod
 
 
 logger = logging.getLogger(__name__)
@@ -209,22 +208,9 @@ def noobaa_db_backup_and_recovery_locally(
         )
 
         # Login to the NooBaa DB pod and cleanup potential database clients to nbcore
-        nb_db_pg_cluster_app_secret = OCP(
-            kind=constants.SECRET,
-            resource_name=constants.NB_DB_CNPG_APP_SECRET,
-        )
-        pg_password = b64decode(
-            nb_db_pg_cluster_app_secret.get()["data"]["password"]
-        ).decode("utf-8")
         query = "SELECT pg_terminate_backend (pid) FROM pg_stat_activity WHERE datname = 'nbcore';"
         try:
-            noobaa_db_pod.exec_cmd_on_pod(
-                command=(
-                    f'bash -c "PGPASSWORD={pg_password} psql -h 127.0.0.1 -p 5432 '
-                    f'-U noobaa -d nbcore -c \\"{query}\\""'
-                ),
-                secrets=[pg_password],
-            )
+            exec_nb_db_query(query)
         except CommandFailed as ex:
             if "terminating connection due to administrator command" not in str(ex):
                 raise ex
