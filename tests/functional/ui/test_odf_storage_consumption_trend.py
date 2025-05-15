@@ -2,6 +2,7 @@ import logging
 import math
 
 from ocs_ci.framework import config
+from ocs_ci.framework.pytest_customization.marks import skipif_ibm_cloud_managed
 from ocs_ci.framework.testlib import (
     ManageTest,
     tier2,
@@ -42,6 +43,7 @@ POD_OBJ = OCP(kind=constants.POD, namespace=config.ENV_DATA["cluster_namespace"]
 @skipif_ocp_version("<4.17")
 @skipif_ocs_version("<4.17")
 @skipif_mcg_only
+@skipif_ibm_cloud_managed
 @skipif_external_mode
 class TestConsumptionTrendUI(ManageTest):
     """
