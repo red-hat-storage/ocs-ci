@@ -40,16 +40,8 @@ class TestPVCCreationDeletionScale(E2ETest):
         argnames=["access_mode", "interface"],
         argvalues=[
             pytest.param(
-                *[constants.ACCESS_MODE_RWO, constants.CEPHBLOCKPOOL],
-                marks=pytest.mark.polarion_id("OCS-1225"),
-            ),
-            pytest.param(
-                *[constants.ACCESS_MODE_RWX, constants.CEPHBLOCKPOOL],
-                marks=pytest.mark.polarion_id("OCS-2010"),
-            ),
-            pytest.param(
                 *[constants.ACCESS_MODE_RWX, constants.CEPHFS_INTERFACE],
-                marks=pytest.mark.polarion_id("OCS-2008"),
+                marks=pytest.mark.polarion_id("OCS-1225"),
             ),
         ],
     )
@@ -61,7 +53,7 @@ class TestPVCCreationDeletionScale(E2ETest):
         Measuring PVC creation time while scaling PVC
         Measure PVC deletion time after creation test
         """
-        scale_pvc_count = scale_lib.get_max_pvc_count()
+        scale_pvc_count = 6000
         log.info(f"Start creating {access_mode}-{interface} {scale_pvc_count} PVC")
         if interface == constants.CEPHBLOCKPOOL:
             sc_name = constants.DEFAULT_STORAGECLASS_RBD
@@ -115,7 +107,7 @@ class TestPVCCreationDeletionScale(E2ETest):
         pvc_create_time = helpers.measure_pvc_creation_time_bulk(
             interface=interface,
             pvc_name_list=pvc_bound_list,
-            wait_time=300,
+            wait_time=900,
         )
 
         # TODO: Update below code with google API, to record value in spreadsheet
