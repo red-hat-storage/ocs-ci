@@ -807,6 +807,10 @@ CSI_LVM_PVC_RESTORE_YAML = os.path.join(TEMPLATE_CSI_LVM_DIR, "restore-pvc.yaml"
 
 CSI_CEPHFS_SNAPSHOT_YAML = os.path.join(TEMPLATE_CSI_FS_DIR, "snapshot.yaml")
 
+CSI_CEPHFS_VOLUMEGROUPSNAPSHOT_YAML = os.path.join(
+    TEMPLATE_CSI_FS_DIR, "volumegroupsnapshot.yaml"
+)
+
 CSI_LVM_SNAPSHOT_YAML = os.path.join(TEMPLATE_CSI_LVM_DIR, "volume-snapshot.yaml")
 
 CSI_LVMS_SNAPSHOT_YAML = os.path.join(TEMPLATE_CSI_LVM_DIR, "volume-snapshot-lvms.yaml")
@@ -820,6 +824,10 @@ CSI_RBD_PVC_RESTORE_YAML = os.path.join(TEMPLATE_CSI_RBD_DIR, "pvc-restore.yaml"
 CSI_RBD_SNAPSHOT_YAML = os.path.join(TEMPLATE_CSI_RBD_DIR, "snapshot.yaml")
 
 CSI_RBD_SNAPSHOTCLASS_YAML = os.path.join(TEMPLATE_CSI_RBD_DIR, "snapshotclass.yaml")
+
+CSI_RBD_VOLUMEGROUPSNAPSHOT_YAML = os.path.join(
+    TEMPLATE_CSI_RBD_DIR, "volumegroupsnapshot.yaml"
+)
 
 CONFIGURE_PVC_ON_MONITORING_POD = os.path.join(
     TEMPLATE_CONFIGURE_PVC_MONITORING_POD, "configuring_pvc.yaml"
