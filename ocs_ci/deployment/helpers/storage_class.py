@@ -17,6 +17,9 @@ DEFAULT_STORAGE_CLASS_MAP = {
     constants.GCP_PLATFORM: None,
     constants.ROSA_HCP_PLATFORM: None,
     constants.RHV_PLATFORM: "ovirt-csi-sc",
+    constants.HCI_BAREMETAL: None,
+    constants.BAREMETAL_PLATFORM: None,
+    constants.FUSIONAAS_PLATFORM: None,
 }
 
 
@@ -37,7 +40,7 @@ def get_storageclass() -> str:
     if customized_deployment_storage_class:
         storage_class = customized_deployment_storage_class
     else:
-        storage_class = DEFAULT_STORAGE_CLASS_MAP[platform]
+        storage_class = DEFAULT_STORAGE_CLASS_MAP.get(platform)
 
     logger.info(f"Using storage class: {storage_class}")
     return storage_class
