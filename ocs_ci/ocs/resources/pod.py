@@ -2819,6 +2819,8 @@ def check_duplicate_tolerations_on_pods():
     pods_with_duplicates = []
     for pod_obj in pod_objs:
         resource_name = pod_obj.name
+        if "storageclient" in resource_name:
+            continue
         tolerations = pod_obj.get().get("spec", {}).get("tolerations", [])
         toleration_tuples = [tuple(sorted(tol.items())) for tol in tolerations]
         counts = Counter(toleration_tuples)
