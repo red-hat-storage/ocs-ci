@@ -10,6 +10,7 @@ from ocs_ci.helpers.cnv_helpers import (
     expand_pvc_and_verify,
     clone_or_snapshot_vm,
 )
+from ocs_ci.helpers.performance_lib import run_oc_command
 
 
 log = logging.getLogger(__name__)
@@ -132,31 +133,34 @@ class TestVmSnapshotClone(E2ETest):
                 f"Failed: MD5 comparison between source {vm_obj.name} "
                 f"and cloned {cloned_vm.name} VMs"
             )
+
+            volumes = (
+                cloned_vm.get()
+                .get("spec", {})
+                .get("template", {})
+                .get("spec", {})
+                .get("volumes", [])
+            )
+
+            if not volumes:
+                raise ValueError(f"No volumes found in cloned VM {cloned_vm.name}")
+
+            volume = volumes[0]
+
+            if "dataVolume" in volume:
+                cloned_vm.pvc_name = volume["dataVolume"]["name"]
+            elif "persistentVolumeClaim" in volume:
+                cloned_vm.pvc_name = volume["persistentVolumeClaim"]["claimName"]
+            else:
+                raise ValueError(
+                    f"Neither dataVolume nor persistentVolumeClaim found in cloned VM {cloned_vm.name}"
+                )
+
             # Expand PVC if `pvc_expand_after_restore` is True
             if pvc_expand_after_clone:
                 new_size = 50
                 try:
                     # Update  self.pvc_name from vm yaml same as 11071 PR
-                    if cloned_vm.volume_interface == "DVT":
-                        cloned_vm.pvc_name = (
-                            cloned_vm.get()
-                            .get("spec")
-                            .get("template")
-                            .get("spec")
-                            .get("volumes")[0]
-                            .get("dataVolume")
-                            .get("name")
-                        )
-                    else:
-                        cloned_vm.pvc_name = (
-                            cloned_vm.get()
-                            .get("spec")
-                            .get("template")
-                            .get("spec")
-                            .get("volumes")[0]
-                            .get("persistentVolumeClaim")
-                            .get("claimName")
-                        )
                     expand_pvc_and_verify(vm_obj, new_size)
                 except ValueError as e:
                     log.error(
@@ -165,7 +169,13 @@ class TestVmSnapshotClone(E2ETest):
                     failed_vms.append(cloned_vm.name)
                     continue
             run_dd_io(vm_obj=cloned_vm, file_path=file_paths[1])
+            log.info(f"Data written to {file_paths[1]} on cloned VM {cloned_vm.name}")
             cloned_vm.delete()
+            run_oc_command(
+                cmd=f"delete pvc {cloned_vm.pvc_name}", namespace=cloned_vm.namespace
+            )
+            log.info(f"Cloned VM PVC {cloned_vm.pvc_name} deleted")
+
         if failed_vms:
             assert False, f"Test case failed for VMs: {', '.join(failed_vms)}"
 
