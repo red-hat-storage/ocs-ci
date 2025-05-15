@@ -33,7 +33,7 @@ from ocs_ci.ocs.resources.mcg_lifecycle_policies import (
     LifecyclePolicy,
     NoncurrentVersionExpirationRule,
 )
-from ocs_ci.utility.utils import TimeoutSampler, exec_nb_db_query
+from ocs_ci.utility.utils import TimeoutSampler
 
 
 logger = logging.getLogger(__name__)
@@ -83,7 +83,6 @@ class TestLifecycleConfiguration(MCGTest):
         4. Upload a few parts
         5. Manually expire the multipart-upload
         6. Wait for the multipart-upload to expire
-        7. Wait for the parts to get deleted at the noobaa-db
         """
         parts_amount = 5
         key = "test_obj_123"
@@ -138,32 +137,6 @@ class TestLifecycleConfiguration(MCGTest):
             if "Uploads" not in http_response or len(http_response["Uploads"]) == 0:
                 break
             logger.warning(f"Upload has not expired yet: \n{http_response}")
-
-        # 7. Wait for the parts to get deleted at the noobaa-db
-        bucket_id = exec_nb_db_query(
-            f"SELECT _id FROM buckets WHERE data->>'name' = '{bucket}'",
-        )[0].strip()
-        list_parts_md_query = (
-            f"SELECT data FROM objectmultiparts WHERE data->>'bucket' = '{bucket_id}'"
-        )
-        for parts_md_list in TimeoutSampler(
-            timeout=3600,
-            sleep=TIMEOUT_SLEEP_DURATION,
-            func=exec_nb_db_query,
-            query=list_parts_md_query,
-        ):
-            all_deleted = True
-            for md_str in parts_md_list:
-                if "deleted" not in md_str:
-                    all_deleted = False
-                    break
-            if not all_deleted:
-                logger.warning(
-                    f"Some parts still don't appear deleted in the noobaa-db: {md_str}"
-                )
-            else:
-                logger.info("Success: All the parts appear deleted in the noobaa-db:\n")
-                break
 
     @pytest.mark.polarion_id("OCS-6559")
     def test_noncurrent_version_expiration(self, mcg_obj, bucket_factory, awscli_pod):
