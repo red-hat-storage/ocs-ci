@@ -222,7 +222,8 @@ def noobaa_db_backup_and_recovery_locally(
                 command=(
                     f'bash -c "PGPASSWORD={pg_password} psql -h 127.0.0.1 -p 5432 '
                     f'-U noobaa -d nbcore -c \\"{query}\\""'
-                )
+                ),
+                secrets=[pg_password],
             )
         except CommandFailed as ex:
             if "terminating connection due to administrator command" not in str(ex):
