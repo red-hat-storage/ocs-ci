@@ -136,7 +136,10 @@ class Submariner(object):
                 set_resource_group_name()
                 floating_ips_dict = assign_floating_ips_to_workers()
                 for node in get_worker_nodes():
-                    cmd = f"oc annotate node {node} gateway.submariner.io/public-ip=ipv4:{floating_ips_dict.get(node)}"
+                    cmd = (
+                        f"oc annotate node {node} "
+                        f"gateway.submariner.io/public-ip=ipv4:{floating_ips_dict.get(node)} --overwrite"
+                    )
                     run_cmd(cmd=cmd, secrets=[floating_ips_dict.get(node)])
 
             acm_obj.install_submariner_cli(globalnet=global_net)
