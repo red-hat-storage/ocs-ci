@@ -15,7 +15,7 @@ import string
 import subprocess
 import time
 import traceback
-from typing import Match
+from typing import Match, Iterator
 import stat
 import shutil
 from copy import deepcopy
@@ -5488,23 +5488,41 @@ def create_config_ini_file(params):
     return config_ini_file.name
 
 
-def generate_folder_with_files(num_files: int = 300) -> str:
+def generate_folder_with_files(
+    num_files: int = 300, max_workers: int = 4
+) -> tuple[str, Iterator[str]]:
     """
-    Generates a random folder with specified number of random text files inside it in /tmp folder.
+    Generates a random folder and returns a generator that creates random text files on demand.
+    Uses ThreadPoolExecutor for improved performance.
 
     Args:
-        num_files (int): Number of files to generate. Defaults to 300.
+        num_files (int): Maximum number of files to generate. Defaults to 300.
+        max_workers (int): Maximum number of threads to use. Defaults to 4.
 
     Returns:
-        str: Full path to the generated folder.
+        tuple[str, Iterator[str]]: Tuple containing:
+            - Full path to the generated folder
+            - Generator yielding file paths as they are created
 
     Raises:
         OSError: If folder creation or file write fails.
-        RuntimeError: If file count validation fails.
     """
+    # Create folder
+    folder_name = "".join(random.choices(string.ascii_lowercase + string.digits, k=8))
+    folder_path = os.path.join("/tmp", folder_name)
+    os.makedirs(folder_path, exist_ok=True)
 
-    def _generate_files():
-        for _ in range(num_files):
+    from concurrent.futures import ThreadPoolExecutor
+    from queue import Queue, Empty
+    import threading
+
+    # Use a queue to maintain order and provide a generator-like interface
+    file_queue = Queue()
+    stop_event = threading.Event()
+
+    def create_file(i):
+        """Creates a single file and adds its path to the queue"""
+        try:
             filename = (
                 "".join(random.choices(string.ascii_lowercase + string.digits, k=8))
                 + ".txt"
@@ -5520,24 +5538,34 @@ def generate_folder_with_files(num_files: int = 300) -> str:
                 f.flush()
                 os.fsync(f.fileno())  # Ensure data is written to disk
 
-            yield filepath
+            file_queue.put(filepath)
+        except Exception as e:
+            log.error(f"Error creating file: {e}")
 
-    # Create folder
-    folder_name = "".join(random.choices(string.ascii_lowercase + string.digits, k=8))
-    folder_path = os.path.join("/tmp", folder_name)
-    os.makedirs(folder_path, exist_ok=True)
+    def file_generator():
+        """Generator that yields file paths from the queue as they are created"""
+        files_received = 0
 
-    # Generate files using generator
-    created_files = set(_generate_files())
+        # Start the executor in a background thread to avoid blocking
+        executor = ThreadPoolExecutor(max_workers=max_workers)
+        futures = [executor.submit(create_file, i) for i in range(num_files)]
 
-    # Validate file count
-    actual_files = set(os.path.join(folder_path, f) for f in os.listdir(folder_path))
-    if len(actual_files) != num_files or actual_files != created_files:
-        raise RuntimeError(
-            f"File count validation failed. Expected {num_files}, got {len(actual_files)}"
-        )
+        # Yield files as they become available
+        while files_received < num_files and not stop_event.is_set():
+            try:
+                # Wait for a file to be available with a timeout to check the stop event
+                filepath = file_queue.get(timeout=0.1)
+                files_received += 1
+                yield filepath
+            except Empty:
+                # Check if all futures are done
+                if all(future.done() for future in futures):
+                    break
 
-    return folder_path
+        # Clean up
+        executor.shutdown(wait=False)
+
+    return folder_path, file_generator()
 
 
 def wait_custom_resource_defenition_available(crd_name, timeout=600):

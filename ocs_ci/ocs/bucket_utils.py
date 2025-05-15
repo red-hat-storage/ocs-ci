@@ -2612,6 +2612,50 @@ def get_object_count_in_bucket(io_pod, bucket_name, prefix="", s3_obj=None):
     return len(output.splitlines())
 
 
+def wait_for_bucket_count_stability(
+    mcg_obj, expected_count=None, max_retries=10, retry_interval=5, stability_count=3
+):
+    """
+    Poll CLI until bucket count is stable or expected count is reached.
+
+    Args:
+        mcg_obj: MCG object instance with cli_list_all_buckets method
+        expected_count (int, optional): Expected number of buckets
+        max_retries (int): Maximum number of retry attempts
+        retry_interval (int): Seconds between retries
+        stability_count (int): Number of consecutive identical counts to consider stable
+
+    Returns:
+        tuple: (final_count, is_expected_reached)
+    """
+    previous_counts = []
+    for attempt in range(max_retries):
+        cli_buckets = mcg_obj.cli_list_all_buckets()
+        current_count = len(cli_buckets)
+
+        logger.info(
+            f"Bucket count from CLI (attempt {attempt+1}/{max_retries}): {current_count}"
+        )
+
+        previous_counts.append(current_count)
+
+        is_stable = False
+        if len(previous_counts) >= stability_count:
+            is_stable = len(set(previous_counts[-stability_count:])) == 1
+
+        meets_expected = expected_count is None or current_count >= expected_count
+
+        if is_stable and meets_expected:
+            logger.info(
+                f"Bucket count stabilized at {current_count} for {stability_count} consecutive checks"
+            )
+            return current_count, True
+
+        time.sleep(retry_interval)
+
+    return previous_counts[-1] if previous_counts else 0, False
+
+
 def wait_for_object_count_in_bucket(
     io_pod,
     expected_count,
