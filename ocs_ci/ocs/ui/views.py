@@ -2216,11 +2216,11 @@ bucket_tab = {
         By.XPATH,
     ),
     "bucket_action_button": (
-        "tbody li:nth-child(2) button:nth-child(1) span:nth-child(1) span:nth-child(1)",
+        "tbody tr:nth-child(1) td:last-child button:first-child",
         By.CSS_SELECTOR,
     ),
     "bucket_delete_option": (
-        "button#Delete",
+        "tbody li:nth-child(2) button:nth-child(1) span:nth-child(1) span:nth-child(1)",
         By.CSS_SELECTOR,
     ),
     "bucket_confirm_button": (
