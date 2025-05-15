@@ -436,7 +436,7 @@ class AcmAddClusters(AcmPageNavigator):
             all_documents.append(submariner_config_yaml)
         if not globalnet:
             submariner_broker_yaml["spec"]["globalnetEnabled"] = "false"
-        submariner_broker_yaml["metadata"]["namespace"] = cluster_set_name+"-broker"
+        submariner_broker_yaml["metadata"]["namespace"] = cluster_set_name + "-broker"
         all_documents.append(submariner_broker_yaml)
 
         # Create the temp file
