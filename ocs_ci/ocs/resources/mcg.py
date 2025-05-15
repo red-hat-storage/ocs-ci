@@ -1021,7 +1021,14 @@ class MCG:
             timeout=timeout,
             sleep=10,
         )
-        timeout = int(timeout - (time.time() - starttime))
+
+        # The timeout is reduced by the time already spent waiting for the pods
+        # time spent might get longer than the timeout due to overheads,
+        # so we set a minimum timeout of 60 seconds
+        time_spent = time.time() - starttime
+        time_remaining = timeout - time_spent
+        timeout = max(int(time_remaining), 60)
+
         try:
             for mcg_status_ready in TimeoutSampler(
                 timeout=timeout, sleep=30, func=MCG._status
