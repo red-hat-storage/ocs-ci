@@ -796,6 +796,7 @@ acm_page_nav = {
     "Policies": ("a[data-test-id='horizontal-link-Policies']", By.CSS_SELECTOR),
 }
 acm_page_nav_419 = {
+    "Clusters_page": ("(//a[normalize-space()='Clusters'])[1]", By.XPATH),
     "Infrastructure": (
         "//button[normalize-space()='Infrastructure' and @class='pf-v6-c-nav__link']",
         By.XPATH,
