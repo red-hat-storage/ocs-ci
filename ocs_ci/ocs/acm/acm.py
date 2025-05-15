@@ -452,7 +452,6 @@ class AcmAddClusters(AcmPageNavigator):
         old_ctx = config.cur_index
         config.switch_acm_ctx()
         run_cmd(cmd=f"oc create -f {submariner_data_file.name}")
-        config.switch_ctx(old_ctx)
 
 
 def copy_kubeconfig(file=None, return_str=False):
