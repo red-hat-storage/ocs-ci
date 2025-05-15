@@ -224,6 +224,11 @@ from ocs_ci.ocs.resources.storage_cluster import set_in_transit_encryption
 from ocs_ci.helpers.e2e_helpers import verify_osd_used_capacity_greater_than_expected
 from ocs_ci.helpers.cnv_helpers import run_fio
 from ocs_ci.helpers.performance_lib import run_oc_command
+from ocs_ci.utility.workload_utils import (
+    deploy_fio_workload,
+    get_workload_params,
+    get_workload_targets,
+)
 
 log = logging.getLogger(__name__)
 
@@ -366,6 +371,14 @@ def export_squad_marker_to_csv(items, filename=None):
     log.info("%s tests require action across %s files", num_tests, num_files)
 
 
+@pytest.fixture
+def run_workload(request):
+    target_indexes = get_workload_targets(
+        request.node.get_closest_marker(constants.WORKLOAD_TARGETS_MARKER)
+    )
+    deploy_fio_workload(getattr(request, "param", {}), target_indexes)
+
+
 def pytest_generate_tests(metafunc):
     """
     This hook handles pytest dynamic pytest parametrization of tests related to
@@ -388,6 +401,8 @@ def pytest_generate_tests(metafunc):
             for marker in metafunc.definition.iter_markers():
                 if marker.name in upgrade_parametrizer.MULTICLUSTER_UPGRADE_MARKERS:
                     metafunc.parametrize("zone_rank, role_rank, config_index", params)
+    if "run_workload" in metafunc.fixturenames:
+        metafunc.parametrize("run_workload", get_workload_params(), indirect=True)
 
 
 def pytest_collection_modifyitems(session, config, items):
