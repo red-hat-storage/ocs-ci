@@ -255,3 +255,86 @@ class TestVmSnapshotClone(E2ETest):
 
         if failed_vms:
             assert False, f"Test case failed for VMs: {', '.join(failed_vms)}"
+
+    @workloads
+    @pytest.mark.polarion_id("OCS-6321")
+    def test_vm_snapshot_pvc_clone(
+        self,
+        setup_cnv,
+        project_factory,
+        multi_cnv_workload,
+        clone_vm_workload,
+        admin_client,
+    ):
+        """
+        Validates that cloning a restored snapshot VM results
+        with data integrity maintained.
+
+        Test steps:
+        1. Deploy multiple VMs with associated PVCs.
+        2. Write and verify initial data on each VM.
+        3. Create and wait for VM snapshots to complete.
+        4. Add additional data to the VM after snapshot.
+        5. Stop and restore each VM from its snapshot.
+        6. Clone the restored VM and verify the data integrity.
+        7. Write additional data to the cloned VM.
+        """
+        proj_obj = project_factory()
+        file_paths = ["/file.txt", "/new_file.txt"]
+        vm_objs_def, vm_objs_aggr, _, _ = multi_cnv_workload(
+            namespace=proj_obj.namespace
+        )
+        vm_list = vm_objs_def + vm_objs_aggr
+        log.info(f"Total VMs to process: {len(vm_list)}")
+        for index, original_vm in enumerate(vm_list):
+            log.info(f"\n---- Processing VM {index + 1}: {original_vm.name} ----")
+            source_csum = run_dd_io(
+                vm_obj=original_vm, file_path=file_paths[0], verify=True
+            )
+
+            snapshot_name = f"snapshot-{original_vm.name}"
+            with VirtualMachineSnapshot(
+                name=snapshot_name,
+                namespace=original_vm.namespace,
+                vm_name=original_vm.name,
+                client=admin_client,
+                teardown=False,
+            ) as vm_snapshot:
+                vm_snapshot.wait_snapshot_done()
+
+            run_dd_io(vm_obj=original_vm, file_path=file_paths[1])
+
+            original_vm.stop()
+
+            restore_snapshot_name = create_unique_resource_name(
+                vm_snapshot.name, "restore"
+            )
+            # Restores the snapshot into same VM and deletes the snapshot
+            try:
+                with VirtualMachineRestore(
+                    name=restore_snapshot_name,
+                    namespace=original_vm.namespace,
+                    vm_name=original_vm.name,
+                    snapshot_name=vm_snapshot.name,
+                    client=admin_client,
+                    teardown=False,
+                ) as vm_restore:
+                    vm_restore.wait_restore_done()
+                    original_vm.start()
+                    original_vm.wait_for_ssh_connectivity(timeout=1200)
+            finally:
+                vm_snapshot.delete()
+
+            # Clone the restored VM
+            cloned_vm = clone_vm_workload(original_vm, namespace=original_vm.namespace)
+
+            # Validate data integrity in the cloned VM
+            res_csum = cal_md5sum_vm(vm_obj=cloned_vm, file_path=file_paths[0])
+            assert source_csum == res_csum, (
+                f"Failed: MD5 comparison between source {original_vm.name} and cloned "
+                f"{cloned_vm.name} VMs"
+            )
+            log.info(f"Data verified on cloned VM: {cloned_vm.name}")
+
+            # Writing new data on cloned VM
+            run_dd_io(vm_obj=cloned_vm, file_path=file_paths[1])
