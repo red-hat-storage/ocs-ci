@@ -26,7 +26,6 @@ from ocs_ci.helpers.helpers import (
 log = logging.getLogger(__name__)
 
 
-@provider_mode
 @green_squad
 @tier1
 @pytest.mark.parametrize(
@@ -34,7 +33,7 @@ log = logging.getLogger(__name__)
     argvalues=[
         pytest.param(
             *[constants.CEPHBLOCKPOOL, RECLAIM_POLICY_DELETE],
-            marks=pytest.mark.polarion_id("OCS-939"),
+            marks=[pytest.mark.polarion_id("OCS-939"), provider_mode],
         ),
         pytest.param(
             *[constants.CEPHBLOCKPOOL, RECLAIM_POLICY_RETAIN],
@@ -46,7 +45,7 @@ log = logging.getLogger(__name__)
         ),
         pytest.param(
             *[constants.CEPHFILESYSTEM, RECLAIM_POLICY_DELETE],
-            marks=pytest.mark.polarion_id("OCS-963"),
+            marks=[pytest.mark.polarion_id("OCS-963"), provider_mode],
         ),
         pytest.param(
             *[constants.CEPHFILESYSTEM, RECLAIM_POLICY_RETAIN],
