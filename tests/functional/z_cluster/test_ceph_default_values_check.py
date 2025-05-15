@@ -118,7 +118,23 @@ class TestCephDefaultValuesCheck(ManageTest):
             resource_name=constants.ROOK_CONFIG_OVERRIDE_CONFIGMAP,
         )
         config_data = cm_obj.get()["data"]["config"]
+        # Remove log_file from config_data
+        # Remove mirror sections from config_data, as it not constant for all type of clusters
         config_data = config_data.split("\n")
+        config_data = [line for line in config_data if not line.startswith("log_file")]
+        config_data = [
+            line
+            for line in config_data
+            if not any(
+                mirror_section in line
+                for mirror_section in [
+                    "[client.rbd-mirror",
+                    "debug_ms",
+                    "debug_rbd",
+                    "debug_rbd_mirror",
+                ]
+            )
+        ]
         log.info(
             "Validating that the Ceph values, configured by ceph-config-override "
             "confiMap, match the ones stored in ocs-ci"
@@ -129,12 +145,29 @@ class TestCephDefaultValuesCheck(ManageTest):
             stored_values = constants.ROOK_CEPH_CONFIG_VALUES_412.split("\n")
         elif ocs_version == version.VERSION_4_14 or ocs_version == version.VERSION_4_15:
             stored_values = constants.ROOK_CEPH_CONFIG_VALUES_414.split("\n")
-        elif ocs_version >= version.VERSION_4_16:
+        elif ocs_version in [
+            version.VERSION_4_16,
+            version.VERSION_4_17,
+            version.VERSION_4_18,
+        ]:
             stored_values = constants.ROOK_CEPH_CONFIG_VALUES_416.split("\n")
+        elif ocs_version == version.VERSION_4_19:
+            stored_values = constants.ROOK_CEPH_CONFIG_VALUES_419.split("\n")
         else:
             stored_values = constants.ROOK_CEPH_CONFIG_VALUES.split("\n")
+        stored_values = [
+            line for line in stored_values if not line.startswith("log_file")
+        ]
         log.info(f"OCS version is {ocs_version}")
         log.info(f"Stored values are {stored_values}")
+        # After all other filtering, normalize empty lines by replacing all empty lines with a fixed count
+        num_empty_lines = 0  # Replace with 0 to remove all empty lines or any other number to keep a fixed count
+        config_data = [line for line in config_data if line != ""] + [
+            ""
+        ] * num_empty_lines
+        stored_values = [line for line in stored_values if line != ""] + [
+            ""
+        ] * num_empty_lines
         assert collections.Counter(config_data) == collections.Counter(stored_values), (
             f"The Ceph config, set by {constants.ROOK_CONFIG_OVERRIDE_CONFIGMAP} "
             f"is different than the expected. Please inform OCS-QE about this discrepancy. "
