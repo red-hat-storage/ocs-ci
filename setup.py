@@ -62,6 +62,7 @@ setup(
         "msrestazure==0.6.3",
         "python-novaclient==17.1.0",
         "python-cinderclient==7.1.0",
+        "oslo.utils==8.2.0",  # Dependency of python-novaclient and python-cinderclient
         "keystoneauth1==4.2.0",
         "range-key-dict==1.1.0",
         "GitPython==3.1.41",
