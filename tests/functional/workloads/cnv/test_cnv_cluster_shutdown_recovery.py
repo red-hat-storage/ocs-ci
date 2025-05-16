@@ -17,6 +17,7 @@ from ocs_ci.ocs.exceptions import (
 from ocs_ci.helpers.sanity_helpers import Sanity
 from ocs_ci.deployment.cnv import CNVInstaller
 from ocs_ci.ocs.resources.pod import wait_for_pods_to_be_running
+from ocs_ci.helpers.performance_lib import run_oc_command
 
 logger = logging.getLogger(__name__)
 
@@ -111,6 +112,9 @@ class TestVmShutdownStart(E2ETest):
 
         if not force:
             logger.info("Stopping all the vms before graceful shutdown")
+            run_oc_command(
+                cmd="annotate cluster noobaa-db-pg-cluster --overwrite cnpg.io/hibernation=on"
+            )
             for vm_obj in all_vms:
                 if vm_obj.printableStatus() != constants.CNV_VM_STOPPED:
                     vm_obj.stop(wait=True)
@@ -151,6 +155,10 @@ class TestVmShutdownStart(E2ETest):
             delay=15,
         )(wait_for_nodes_status(timeout=1800))
         logger.info("All nodes are now in READY state")
+        if not force:
+            run_oc_command(
+                "annotate cluster noobaa-db-pg-cluster --overwrite cnpg.io/hibernation=off"
+            )
 
         # Schedule node
         schedule_nodes(worker_node_names)
