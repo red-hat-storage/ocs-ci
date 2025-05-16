@@ -15,7 +15,10 @@ from ocs_ci.helpers.helpers import (
     storagecluster_independent_check,
 )
 from ocs_ci.ocs import constants
-from ocs_ci.ocs.bucket_utils import retrieve_verification_mode
+from ocs_ci.ocs.bucket_utils import (
+    delete_all_objects_in_batches,
+    retrieve_verification_mode,
+)
 from ocs_ci.ocs.exceptions import (
     CommandFailed,
     NotFoundError,
@@ -485,7 +488,9 @@ class MCGS3Bucket(ObjectBucket):
                 ).object_versions.all():
                     obj_version.delete()
             else:
-                self.s3resource.Bucket(self.name).objects.all().delete()
+                delete_all_objects_in_batches(
+                    s3_resource=self.s3resource, bucket_name=self.name
+                )
             if any("scale" in mark for mark in get_current_test_marks()):
                 sleep(1800)
             self.s3resource.Bucket(self.name).delete()

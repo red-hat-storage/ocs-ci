@@ -11,6 +11,7 @@ from botocore.exceptions import ClientError
 from ocs_ci.framework import config
 
 
+from ocs_ci.ocs.bucket_utils import delete_all_objects_in_batches
 from ocs_ci.ocs.constants import (
     CLEANUP_YAML,
     TEMPLATE_CLEANUP_DIR,
@@ -330,7 +331,9 @@ def delete_buckets(bucket_prefix, hours):
         try:
             bucket = boto3.resource("s3").Bucket(bucket_name)
             try:
-                bucket.objects.all().delete()
+                delete_all_objects_in_batches(
+                    s3_resource=boto3.resource("s3"), bucket_name=bucket_name
+                )
                 bucket.object_versions.all().delete()
             except Exception as e:
                 logger.error(f"failed to list object in bucket {bucket_name} err:{e}")
