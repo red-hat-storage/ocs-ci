@@ -82,6 +82,9 @@ class BenchmarkOperator(object):
         """
         log.info("Initialize the benchmark-operator object")
         self.args = kwargs
+        self.kubeconfig = os.path.join(
+            self.cluster_path, config.RUN.get("kubeconfig_location")
+        )
         self.repo = self.args.get("repo", BMO_REPO)
         self.branch = self.args.get("branch", "master")
         # the namespace is a constant for the benchmark-operator
@@ -151,6 +154,15 @@ class BenchmarkOperator(object):
         """
         log.info("Deploy the benchmark-operator project")
         try:
+            a = cmd(b)
+        except Exception as ex:
+            print(f"First attempt failed with error: {ex}")
+            try:
+                a = cmd(b)  # Retry once
+            except Exception as ex2:
+                print(f"Second attempt also failed with error: {ex2}")
+                a = None  # Or handle the failure accordingly
+        try:
             bo_image = "quay.io/ocsci/benchmark-operator:testing"
             if config.DEPLOYMENT.get("disconnected"):
                 bo_image = mirror_image(bo_image)
@@ -161,7 +173,17 @@ class BenchmarkOperator(object):
                 cwd=self.dir,
             )
         except Exception as ex:
-            log.error(f"Failed to deploy benchmark operator : {ex}")
+            print(f"First attempt failed with error: {ex}")
+            OCP.set_kubeconfig(self.kubeconfig)
+            try:
+                run(
+                    f"make deploy IMG={bo_image}",
+                    shell=True,
+                    check=True,
+                    cwd=self.dir,
+                )
+            except Exception as ex2:
+                log.error(f"Failed to deploy benchmark operator : {ex2}")
 
         log.info("Wait for the benchmark-operator deployment be available")
         try:

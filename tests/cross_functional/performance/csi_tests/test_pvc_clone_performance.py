@@ -13,7 +13,10 @@ from ocs_ci.framework.testlib import performance, performance_b
 from ocs_ci.helpers import helpers, performance_lib
 from ocs_ci.utility.utils import convert_device_size
 from ocs_ci.ocs.perfresult import ResultsAnalyse
-from ocs_ci.helpers.helpers import get_full_test_logs_path
+from ocs_ci.helpers.helpers import (
+    get_full_test_logs_path,
+    set_configmap_log_level_csi_sidecar,
+)
 from ocs_ci.ocs.perftests import PASTest
 from ocs_ci.ocs.resources import pvc, ocs
 from ocs_ci.ocs.exceptions import PVCNotCreated, PodNotCreated
@@ -118,6 +121,10 @@ class TestPVCClonePerformance(PASTest):
         # Collecting environment information
         self.get_env_info()
 
+        #Set CSI side car log level
+
+        set_configmap_log_level_csi_sidecar(value=5)
+
         self.number_of_clones = 11
         if self.dev_mode:
             self.number_of_clones = 3
@@ -129,60 +136,20 @@ class TestPVCClonePerformance(PASTest):
         Cleanup the test environment
         """
         logger.info("Starting the test environment cleanup")
-        try:
-            logger.info(f"Deleting the test StorageClass : {self.sc_obj.name}")
-            self.sc_obj.delete()
-            logger.info("Wait until the SC is deleted.")
-            self.sc_obj.ocp.wait_for_delete(resource_name=self.sc_obj.name)
-        except Exception as ex:
-            logger.warning(f"Can not delete the test sc : {ex}")
         # Delete the test project (namespace)
-        self.delete_test_project()
 
-        logger.info(f"Try to delete the Storage pool {self.pool_name}")
-        try:
-            self.delete_ceph_pool(self.pool_name)
-        except Exception:
-            pass
-        finally:
-            # Verify deletion by checking the backend CEPH pools using the toolbox
-            if self.interface == constants.CEPHBLOCKPOOL:
-                results = self.ceph_cluster.toolbox.exec_cmd_on_pod("ceph osd pool ls")
-                logger.debug(f"Existing pools are : {results}")
-                if self.pool_name in results.split():
-                    logger.warning(
-                        "The pool did not deleted by CSI, forcing delete it manually"
-                    )
-                    self.ceph_cluster.toolbox.exec_cmd_on_pod(
-                        f"ceph osd pool delete {self.pool_name} {self.pool_name} "
-                        "--yes-i-really-really-mean-it"
-                    )
-                else:
-                    logger.info(f"The pool {self.pool_name} was deleted successfully")
+        helpers.set_configmap_log_level_csi_sidecar(value=1)
+
+        self.delete_test_project()
 
         super(TestPVCClonePerformance, self).teardown()
 
-    def create_new_pool_and_sc(self, secret_factory):
-        self.pool_name = (
-            f"pas-test-pool-{Interfaces_info[self.interface]['name'].lower()}"
-        )
-        secret = secret_factory(interface=self.interface)
-        self.create_new_pool(self.pool_name)
-        # Creating new StorageClass (pool) for the test.
-        self.sc_obj = helpers.create_storage_class(
-            interface_type=self.interface,
-            interface_name=self.pool_name,
-            secret_name=secret.name,
-            sc_name=self.pool_name,
-            fs_name=self.pool_name,
-        )
-        logger.info(f"The new SC is : {self.sc_obj.name}")
 
     def create_pvc_and_wait_for_bound(self):
         logger.info("Creating PVC to be cloned")
         try:
             self.pvc_obj = helpers.create_pvc(
-                sc_name=self.sc_obj.name,
+                sc_name=Interfaces_info[self.interface]["sc"],
                 pvc_name="pvc-pas-test",
                 size=f"{self.pvc_size}Gi",
                 namespace=self.namespace,
@@ -343,17 +310,16 @@ class TestPVCClonePerformance(PASTest):
         test_start_time = self.get_time()
 
         # Create new pool and sc only for RBD, for CepgFS use thr default
+        self.sc_obj = ocs.OCS(
+            kind="StorageCluster",
+            metadata={
+                "namespace": self.namespace,
+                "name": Interfaces_info[self.interface]["sc"],
+            },
+        )
         if self.interface == constants.CEPHBLOCKPOOL:
-            # Creating new pool to run the test on it
-            self.create_new_pool_and_sc(secret_factory)
+            self.pool_name = "ocs-storagecluster-cephblockpool"
         else:
-            self.sc_obj = ocs.OCS(
-                kind="StorageCluster",
-                metadata={
-                    "namespace": self.namespace,
-                    "name": Interfaces_info[self.interface]["sc"],
-                },
-            )
             self.pool_name = "ocs-storagecluster-cephfilesystem"
         # Create a PVC
         self.create_pvc_and_wait_for_bound()
@@ -464,17 +430,16 @@ class TestPVCClonePerformance(PASTest):
         test_start_time = self.get_time()
 
         # Create new pool and sc only for RBD, for CepgFS use thr default
+        self.sc_obj = ocs.OCS(
+            kind="StorageCluster",
+            metadata={
+                "namespace": self.namespace,
+                "name": Interfaces_info[self.interface]["sc"],
+            },
+        )
         if self.interface == constants.CEPHBLOCKPOOL:
-            # Creating new pool to run the test on it
-            self.create_new_pool_and_sc(secret_factory)
+            self.pool_name = "ocs-storagecluster-cephblockpool"
         else:
-            self.sc_obj = ocs.OCS(
-                kind="StorageCluster",
-                metadata={
-                    "namespace": self.namespace,
-                    "name": Interfaces_info[self.interface]["sc"],
-                },
-            )
             self.pool_name = "ocs-storagecluster-cephfilesystem"
         # Create a PVC
         self.create_pvc_and_wait_for_bound()
