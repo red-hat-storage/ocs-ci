@@ -369,6 +369,13 @@ def pytest_addoption(parser):
         dest="kubeconfig",
         help=("Kubeconfig location which will be loaded as environmental variable"),
     )
+    parser.addoption(
+        "--skip-rpm-go-version-collection",
+        dest="skip_rpm_go_version_collection",
+        action="store_true",
+        default=False,
+        help=("Skips the RPM and go version collection for every pod for session"),
+    )
 
 
 def pytest_configure(config):
@@ -719,6 +726,10 @@ def process_cluster_cli_params(config):
     upgrade_acm_version = get_cli_param(config, "--upgrade-acm-version")
     if upgrade_acm_version:
         ocsci_config.UPGRADE["upgrade_acm_version"] = upgrade_acm_version
+    skip_rpm_go_version_collection = get_cli_param(
+        config, "skip_rpm_go_version_collection"
+    )
+    ocsci_config.RUN["skip_rpm_go_version_collection"] = skip_rpm_go_version_collection
 
 
 def pytest_collection_modifyitems(session, config, items):
