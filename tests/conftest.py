@@ -1805,6 +1805,18 @@ def cluster(
                     kms.cleanup()
                 except Exception as ex:
                     log.error(f"Failed to cleanup KMS. Exception is: {ex}")
+            if ocsci_config.MULTICLUSTER.get("acm_cluster"):
+                try:
+                    from ocs_ci.utility.aws import AWS
+
+                    thanos_bucket_name = (
+                        f"dr-thanos-bucket-{config.ENV_DATA['cluster_name']}"
+                    )
+                    AWS().delete_bucket(thanos_bucket_name)
+                except Exception as ex:
+                    log.error(
+                        f"Either failed to delete bucket or bucket doesn't exist {ex}"
+                    )
             deployer.destroy_cluster(log_cli_level)
 
         request.addfinalizer(cluster_teardown_finalizer)
