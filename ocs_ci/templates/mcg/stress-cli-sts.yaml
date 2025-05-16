@@ -1,3 +1,8 @@
+
+# This stateful-set uses the quay.io/ocsci/nb-stress-cli:latest image
+# to create a IO pod which has aws cli tool pre-installed and also
+# has about a million objects with deep directory structure. This can be
+# used in stress testing for IO purposes
 apiVersion: apps/v1
 kind: StatefulSet
 metadata:

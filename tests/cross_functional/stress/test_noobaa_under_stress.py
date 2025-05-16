@@ -24,7 +24,7 @@ class TestNoobaaUnderStress:
 
     def test_noobaa_under_stress(
         self,
-        setup_stress_testing_bucket,
+        setup_stress_testing_buckets,
         nb_stress_cli_pods,
         mcg_obj_session,
         rgw_obj_session,
@@ -69,7 +69,7 @@ class TestNoobaaUnderStress:
 
         try:
             # Fetch buckets created for stress testing
-            self.base_setup_buckets = setup_stress_testing_bucket()
+            self.base_setup_buckets = setup_stress_testing_buckets()
 
             # Upload objects to the buckets created concurrently
             upload_objs_to_buckets(

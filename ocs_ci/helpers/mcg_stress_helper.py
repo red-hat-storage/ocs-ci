@@ -31,7 +31,21 @@ from ocs_ci.ocs.exceptions import (
 from ocs_ci.ocs.resources.pod import pod_resource_utilization_raw_output_from_adm_top
 from ocs_ci.utility.prometheus import PrometheusAPI
 
+
 logger = logging.getLogger(__name__)
+
+
+def get_mcg_obj(bucket):
+    """
+    Get MCG object based on the bucket type
+
+    """
+    bucket_type, bucket_obj = bucket
+
+    if bucket_type.upper() == "RGW":
+        return OBC(bucket_obj.name)
+    else:
+        return MCG()
 
 
 @retry(CommandFailed, tries=3, delay=60, backoff=1)
@@ -42,6 +56,16 @@ def sync_object_directory_with_retry(
     s3_obj=None,
     timeout=None,
 ):
+    """
+    Wrapper function that will retry sync_object_directory
+    Args:
+        pod_obj (Pod): Pod object representing stress-cli pod
+        src (str): Source directory
+        target (str): fully qualified target bucket path
+        s3_obj (MCG): MCG object
+        timeout (int): Timeout for s3 sync command
+
+    """
     sync_object_directory(
         podobj=pod_obj,
         src=src,
@@ -70,6 +94,7 @@ def upload_objs_to_buckets(
 
     src_path = "/complex_directory/"
     total_num_buckets = len(buckets.keys())
+    base_timeout = 20000
     logger.info(
         f"Uploading objects to all the buckets under prefix {current_iteration}"
     )
@@ -77,21 +102,21 @@ def upload_objs_to_buckets(
         with concurrent.futures.ThreadPoolExecutor() as executor:
             futures = list()
             for type, bucket in buckets.items():
-                if type == "rgw":
+                if type == constants.RGW_PLATFORM:
                     s3_obj = OBC(bucket.name)
                 else:
                     s3_obj = mcg_obj
                 logger.info(
                     f"OBJECT UPLOAD: Uploading objects to the bucket {bucket.name}"
                 )
-                for i in range(multiplier):
+                for index in range(multiplier):
                     future = executor.submit(
                         sync_object_directory_with_retry,
                         pod_obj,
                         src_path,
-                        f"s3://{bucket.name}/{current_iteration}/{i+1}/",
+                        f"s3://{bucket.name}/{current_iteration}/{index+1}/",
                         s3_obj,
-                        timeout=20000,
+                        timeout=base_timeout * multiplier,
                     )
                     futures.append(future)
 
@@ -147,7 +172,7 @@ def run_noobaa_metadata_intense_ops(
         total_buckets_created = 0
         while True:
             buckets_created = list()
-            for i in range(0, 10):
+            for index in range(0, 10):
                 # create 100K buckets
                 bucket = bucket_factory()[0]
                 logger.info(f"METADATA OP: Created bucket {bucket.name}")
@@ -237,11 +262,11 @@ def run_noobaa_metadata_intense_ops(
         tot_nb_acc = 0
         while True:
             nb_accounts_created = list()
-            for i in range(0, 10):
+            for index in range(0, 10):
                 nb_account = NoobaaAccount(
                     mcg_obj,
-                    name=f"nb-acc-{uuid4().hex}-{i}",
-                    email=f"nb-acc-{uuid4().hex}-{i}@email",
+                    name=f"nb-acc-{uuid4().hex}-{index}",
+                    email=f"nb-acc-{uuid4().hex}-{index}@email",
                 )
                 nb_accounts_created.append(nb_account)
                 logger.info(
@@ -302,10 +327,7 @@ def delete_objs_from_bucket(pod_obj, bucket, prev_iteration, event=None, multipl
     base_timeout = 20000
     timeout = base_timeout * multiplier
 
-    if bucket_type.upper() == "RGW":
-        mcg_obj = OBC(bucket_name)
-    else:
-        mcg_obj = MCG()
+    mcg_obj = get_mcg_obj(bucket)
 
     logger.info(
         f"DELETE OP: Delete objects recursively from the bucket "
@@ -343,10 +365,7 @@ def list_objs_from_bucket(bucket, prev_iteration, event=None):
     current_iteration = prev_iteration + 1
     bucket_type, bucket_obj = bucket
     bucket_name = bucket_obj.name
-    if bucket_type.upper() == "RGW":
-        mcg_obj = OBC(bucket_name)
-    else:
-        mcg_obj = MCG()
+    mcg_obj = get_mcg_obj(bucket)
 
     logger.info(
         f"LIST OP: Listing objects from the bucket {bucket_name} "
@@ -390,10 +409,7 @@ def download_objs_from_bucket(
     base_timeout = 20000
     timeout = base_timeout * multiplier
 
-    if bucket_type.upper() == "RGW":
-        mcg_obj = OBC(bucket_name)
-    else:
-        mcg_obj = MCG()
+    mcg_obj = get_mcg_obj(bucket)
 
     logger.info(
         f"DOWNLOAD OP: Download objects from the bucket "
@@ -438,10 +454,7 @@ def delete_objects_in_batches(bucket, batch_size):
     """
     bucket_type, bucket_obj = bucket
     bucket_name = bucket_obj.name
-    if bucket_type.upper() == "RGW":
-        mcg_obj = OBC(bucket_name)
-    else:
-        mcg_obj = MCG()
+    mcg_obj = get_mcg_obj(bucket)
 
     logger.info(f"Deleting objects in bucket {bucket_name} in batches of {batch_size}")
     total_objs_deleted = 0
