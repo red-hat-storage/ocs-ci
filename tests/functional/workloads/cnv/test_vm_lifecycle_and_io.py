@@ -3,7 +3,7 @@ import pytest
 
 from ocs_ci.framework.pytest_customization.marks import magenta_squad, workloads
 from ocs_ci.framework.testlib import E2ETest
-from ocs_ci.ocs import constants
+from ocs_ci.helpers.cnv_helpers import check_fio_status
 
 log = logging.getLogger(__name__)
 
@@ -16,7 +16,7 @@ class TestVmOperations(E2ETest):
     Tests for VM operations
     """
 
-    def test_vm_lifecycle_and_io(self, cnv_workload, setup_cnv):
+    def test_vm_lifecycle_and_io(self, setup_cnv, project_factory, multi_cnv_workload):
         """
         This test performs the VM lifecycle operations and IO
 
@@ -33,17 +33,21 @@ class TestVmOperations(E2ETest):
         6) Delete the VM (as part of factory teardown)
 
         """
-        volume_interface = [
-            constants.VM_VOLUME_PVC,
-            constants.VM_VOLUME_DV,
-            constants.VM_VOLUME_DVT,
-        ]
-        for vl_if in volume_interface:
-            vm_obj = cnv_workload(
-                volume_interface=vl_if, source_url=constants.CNV_FEDORA_SOURCE
-            )
-            vm_obj.run_ssh_cmd(
-                command="dd if=/dev/zero of=/dd_file.txt bs=1024 count=102400"
-            )
-            vm_obj.scp_from_vm(local_path="/tmp", vm_src_path="/dd_file.txt")
+
+        # Create a project
+        proj_obj = project_factory()
+
+        (
+            self.vm_objs_def,
+            self.vm_objs_aggr,
+            self.sc_obj_def_compr,
+            self.sc_obj_aggressive,
+        ) = multi_cnv_workload(namespace=proj_obj.namespace)
+        all_vm_list = self.vm_objs_def + self.vm_objs_aggr
+        log.info("All vms created successfully")
+
+        for vm_obj in all_vm_list:
+            vm_obj.restart()
+            if check_fio_status(vm_obj):
+                log.info("FIO started after restarting VM")
             vm_obj.stop()
