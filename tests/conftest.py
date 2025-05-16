@@ -9756,8 +9756,8 @@ def setup_network_fence_class(request):
         )
         created_by_fixture = False
         if not network_fence_class.get(dont_raise=True):
-            create_network_fence_class()
             created_by_fixture = True
+            create_network_fence_class()
         else:
             log.info(
                 f"NetworkFenceClass {network_fence_class.resource_name} already exists!"

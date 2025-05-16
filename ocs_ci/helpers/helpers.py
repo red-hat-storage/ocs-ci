@@ -6018,7 +6018,7 @@ def get_rbd_daemonset_csi_addons_node_object(node):
     namespace = config.ENV_DATA["cluster_namespace"]
     csi_addons_node = OCP(kind=constants.CSI_ADDONS_NODE_KIND, namespace=namespace)
     csi_addons_node_data = csi_addons_node.get(
-        resource_name=f"{node}-{namespace}-daemonset-csi-rbdplugin"
+        resource_name=f"{node}-{namespace}-daemonset-openshift-storage.rbd.csi.ceph.com-nodeplugin"
     )
     return csi_addons_node_data
 
