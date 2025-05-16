@@ -946,7 +946,7 @@ class HostedODF(HypershiftHostedOCP):
             str: status of the storage client
         """
         cmd = (
-            f"get {constants.STORAGECLIENTS} storage-client -n {self.namespace_client} | "
+            f"get {constants.STORAGECLIENTS} {constants.DEFAULT_CLUSTERNAME} -n {self.namespace_client} | "
             "awk '/storage-client/{{print $2}}'"
         )
         return self.exec_oc_cmd(cmd, shell=True).stdout.decode("utf-8").strip()
