@@ -1863,7 +1863,7 @@ def validate_noobaa_db_backup_recovery_locally_system(
 
 
 @pytest.fixture(scope="session")
-def setup_stress_testing_bucket(bucket_factory_session, rgw_bucket_factory_session):
+def setup_stress_testing_buckets(bucket_factory_session, rgw_bucket_factory_session):
     """
     This session scoped fixture is for setting up the buckets for the stress testing
     in MCG. This creates buckets of type AWS, AZURE, PV-POOL, RGW.
@@ -1871,7 +1871,13 @@ def setup_stress_testing_bucket(bucket_factory_session, rgw_bucket_factory_sessi
     """
 
     def factory():
+        """
+        Factory function for creating the buckets
 
+        Returns:
+            Dict: { underlying_storage_type : obc object for the bucket created}
+
+        """
         # These are the bucket configs needed for
         # creating buckets. They support buckets on
         # AWS, AZURE, PV-POOL and RGW
