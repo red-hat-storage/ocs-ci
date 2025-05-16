@@ -427,11 +427,11 @@ class Deployment(object):
                                 timeout=2000, ocs_registry_image=ocs_registry_image
                             )
                     config.reset_ctx()
+                if config.REPORTING["collect_logs_on_success_run"]:
+                    collect_ocs_logs("deployment", ocp=False, status_failure=False)
             else:
                 logger.warning("OCS deployment will be skipped")
         except Exception as e:
-            if config.REPORTING["collect_logs_on_success_run"]:
-                collect_ocs_logs("deployment", ocp=False, status_failure=False)
             logger.error(e)
             if config.REPORTING["gather_on_deploy_failure"]:
                 # Let's do the collections separately to guard against one
