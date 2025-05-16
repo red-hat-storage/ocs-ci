@@ -248,11 +248,7 @@ def measure_pvc_creation_time(interface, pvc_name, start_time):
     # time), the earliest start time and the latest end time are taken
     for sublog in logs:
         for line in sublog:
-            if (
-                st is None
-                and "Started" in line
-                and pvc_name in line
-            ):
+            if st is None and "Started" in line and pvc_name in line:
                 st = string_to_time(line.split(" ")[1])
             elif pvc_name in line and "Succeeded" in line:
                 et = string_to_time(line.split(" ")[1])
@@ -667,9 +663,7 @@ def get_pvc_provision_times(interface, pvc_name, start_time, time_type="all", op
                                 version.get_semantic_ocs_version_from_config()
                                 <= version.VERSION_4_16
                             )
-                        ) or re.search(
-                            f'Started.*PVC="[^"]*/{re.escape(name)}"', line
-                        ):
+                        ) or re.search(f'Started.*PVC="[^"]*/{re.escape(name)}"', line):
                             if results[name]["create"]["start"] is None:
                                 results[name]["create"]["start"] = (
                                     extruct_timestamp_from_log(line)
@@ -681,7 +675,7 @@ def get_pvc_provision_times(interface, pvc_name, start_time, time_type="all", op
                                 <= version.VERSION_4_16
                             )
                         ) or re.search(
-                            f'Succeeded.*{re.escape(name)}', line, re.IGNORECASE
+                            f"Succeeded.*{re.escape(name)}", line, re.IGNORECASE
                         ):
                             if results[name]["create"]["end"] is None:
                                 results[name]["create"]["end"] = (

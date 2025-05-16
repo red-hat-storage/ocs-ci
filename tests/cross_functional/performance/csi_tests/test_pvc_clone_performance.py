@@ -121,7 +121,7 @@ class TestPVCClonePerformance(PASTest):
         # Collecting environment information
         self.get_env_info()
 
-        #Set CSI side car log level
+        # Set CSI side car log level
         set_configmap_log_level_csi_sidecar(value=5)
 
         self.number_of_clones = 11
