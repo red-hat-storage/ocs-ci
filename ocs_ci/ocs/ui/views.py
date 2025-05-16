@@ -319,7 +319,7 @@ generic_locators = {
         By.XPATH,
     ),
     "resource_link": (
-        "//td[@id='name']//a[contains(text(),'{}')] | "
+        "//a[@data-test='resource-link-{}'] | "
         "//td[@data-label='Name']//a[contains(text(),'{}')]",
         By.XPATH,
     ),
@@ -357,7 +357,8 @@ generic_locators = {
     ),
     "searchbar-dropdown": (
         "//div[@class='pf-c-toolbar__item']//span[@class='pf-c-dropdown__toggle-text'] | "
-        "//div[@class='pf-v5-c-toolbar__item']//span[@class='pf-v5-c-dropdown__toggle-text']",
+        "//div[@class='pf-v5-c-toolbar__item']//span[@class='pf-v5-c-dropdown__toggle-text'] | "
+        "//div[@class='pf-v6-c-input-group co-filter-group']//button/span",
         By.XPATH,
     ),
     "searchbar_drop_down": ("//button[@data-test-id='dropdown-button']", By.XPATH),
