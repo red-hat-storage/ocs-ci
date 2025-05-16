@@ -211,7 +211,12 @@ from ocs_ci.utility.decorators import switch_to_default_cluster_index_at_last
 from ocs_ci.helpers.keyrotation_helper import PVKeyrotation
 from ocs_ci.ocs.resources.storage_cluster import set_in_transit_encryption
 from ocs_ci.helpers.e2e_helpers import verify_osd_used_capacity_greater_than_expected
+<<<<<<< HEAD
 from ocs_ci.helpers.cnv_helpers import run_fio
+=======
+from ocs_ci.helpers.performance_lib import run_oc_command
+
+>>>>>>> c3b8a8625 (Added fixtures)
 
 log = logging.getLogger(__name__)
 
@@ -9780,3 +9785,140 @@ def setup_network_fence_class(request):
                 )
 
         request.addfinalizer(finalizer)
+
+
+@pytest.fixture
+def vm_clone_fixture(request):
+    """
+    Fixture to clone a VM and ensure cleanup after test.
+    Returns a factory method to perform the clone operation.
+    """
+    cloned_vms = []
+
+    def factory(vm, admin_client):
+        """
+        Clone the given VM using VirtualMachineClone.
+
+        Args:
+            vm: The source VM object to be cloned.
+            admin_client: The admin client instance to perform the operation.
+
+        Returns:
+            The cloned VM object.
+        """
+        from ocs_ci.ocs.cnv import virtual_machine
+        from ocp_resources.virtual_machine_clone import VirtualMachineClone
+
+        target_name = f"clone-{vm.name}"
+        with VirtualMachineClone(
+            name="clone-vm-test",
+            namespace=vm.namespace,
+            source_name=vm.name,
+            target_name=target_name,
+            client=admin_client,
+        ) as vmc:
+            vmc.wait_for_status(status=VirtualMachineClone.Status.SUCCEEDED)
+
+        cloned_vm = virtual_machine.VirtualMachine(
+            vm_name=target_name, namespace=vm.namespace
+        )
+        cloned_vm.start(wait=True)
+        cloned_vms.append(cloned_vm)
+        return cloned_vm
+
+    def teardown():
+        """
+        Cleans up cloned VM workloads.
+        """
+        for cloned_vm in cloned_vms:
+            cloned_vm.delete()
+            volumes = (
+                cloned_vm.get()
+                .get("spec", {})
+                .get("template", {})
+                .get("spec", {})
+                .get("volumes", [])
+            )
+            if not volumes:
+                raise ValueError(f"No volumes found in cloned VM {cloned_vm.name}")
+
+            volume = volumes[0]
+
+            if "dataVolume" in volume:
+                cloned_vm.pvc_name = volume["dataVolume"]["name"]
+            elif "persistentVolumeClaim" in volume:
+                cloned_vm.pvc_name = volume["persistentVolumeClaim"]["claimName"]
+            else:
+                raise ValueError(
+                    f"Neither dataVolume nor persistentVolumeClaim found in cloned VM {cloned_vm.name}"
+                )
+            run_oc_command(
+                cmd=f"delete pvc {cloned_vm.pvc_name}", namespace=cloned_vm.namespace
+            )
+            log.info(f"Cloned VM PVC {cloned_vm.pvc_name} deleted")
+
+    request.addfinalizer(teardown)
+    return factory
+
+
+@pytest.fixture()
+def vm_snapshot_restore_fixture(request):
+    """
+    Fixture factory for snapshot & restore of a VM.
+    Returns a factory method to perform snapshot and restore operations.
+    """
+    snapshots = []
+
+    def factory(vm, admin_client):
+        """
+        Take snapshot and restore the VM.
+
+        Args:
+            vm: The VM object to snapshot and restore.
+            admin_client: The admin client instance.
+
+        Returns:
+            The restored VM object.
+        """
+        from ocp_resources.virtual_machine_snapshot import VirtualMachineSnapshot
+        from ocp_resources.virtual_machine_restore import VirtualMachineRestore
+        from ocs_ci.utility.utils import create_unique_resource_name
+
+        snapshot_name = f"snapshot-{vm.name}"
+        vm_snapshot = VirtualMachineSnapshot(
+            name=snapshot_name,
+            namespace=vm.namespace,
+            vm_name=vm.name,
+            client=admin_client,
+            teardown=False,
+        )
+        vm_snapshot.create()
+        vm_snapshot.wait_snapshot_done()
+        snapshots.append(vm_snapshot)
+
+        vm.stop()
+
+        restore_snapshot_name = create_unique_resource_name(snapshot_name, "restore")
+        with VirtualMachineRestore(
+            name=restore_snapshot_name,
+            namespace=vm.namespace,
+            vm_name=vm.name,
+            snapshot_name=snapshot_name,
+            client=admin_client,
+            teardown=False,
+        ) as vm_restore:
+            vm_restore.wait_restore_done()
+
+        vm.start()
+        vm.wait_for_ssh_connectivity(timeout=1200)
+        return vm
+
+    def teardown():
+        """
+        Cleans up VM snapshots.
+        """
+        for snap in snapshots:
+            snap.delete(wait=True)
+
+    request.addfinalizer(teardown)
+    return factory

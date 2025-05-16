@@ -8,9 +8,7 @@ from ocs_ci.helpers.cnv_helpers import (
     cal_md5sum_vm,
     run_dd_io,
     expand_pvc_and_verify,
-    clone_or_snapshot_vm,
 )
-from ocs_ci.helpers.performance_lib import run_oc_command
 
 
 log = logging.getLogger(__name__)
@@ -67,6 +65,7 @@ class TestVmSnapshotClone(E2ETest):
         pvc_expand_after_clone,
         multi_cnv_workload,
         admin_client,
+        vm_clone_fixture,
     ):
         """
         This test performs the VM cloning and IOs created using different
@@ -118,15 +117,9 @@ class TestVmSnapshotClone(E2ETest):
             )
             source_csum = run_dd_io(vm_obj=vm_obj, file_path=file_paths[0], verify=True)
             log.info(f"Source checksum for {vm_obj.name}: {source_csum}")
-            log.info(f"Cloning VM {vm_obj.name}...")
 
-            cloned_vm = clone_or_snapshot_vm(
-                "clone",
-                vm_obj,
-                admin_client=admin_client,
-                all_vms=vm_list,
-                file_path=file_paths[0],
-            )
+            log.info(f"Cloning VM {vm_obj.name}...")
+            cloned_vm = vm_clone_fixture(vm_obj, admin_client)
 
             new_csum = cal_md5sum_vm(vm_obj=cloned_vm, file_path=file_paths[0])
             assert source_csum == new_csum, (
@@ -134,33 +127,11 @@ class TestVmSnapshotClone(E2ETest):
                 f"and cloned {cloned_vm.name} VMs"
             )
 
-            volumes = (
-                cloned_vm.get()
-                .get("spec", {})
-                .get("template", {})
-                .get("spec", {})
-                .get("volumes", [])
-            )
-
-            if not volumes:
-                raise ValueError(f"No volumes found in cloned VM {cloned_vm.name}")
-
-            volume = volumes[0]
-
-            if "dataVolume" in volume:
-                cloned_vm.pvc_name = volume["dataVolume"]["name"]
-            elif "persistentVolumeClaim" in volume:
-                cloned_vm.pvc_name = volume["persistentVolumeClaim"]["claimName"]
-            else:
-                raise ValueError(
-                    f"Neither dataVolume nor persistentVolumeClaim found in cloned VM {cloned_vm.name}"
-                )
-
             # Expand PVC if `pvc_expand_after_restore` is True
             if pvc_expand_after_clone:
                 new_size = 50
                 try:
-                    # Update  self.pvc_name from vm yaml same as 11071 PR
+                    # Update self.pvc_name from vm yaml same as 11071 PR
                     expand_pvc_and_verify(vm_obj, new_size)
                 except ValueError as e:
                     log.error(
@@ -170,12 +141,6 @@ class TestVmSnapshotClone(E2ETest):
                     continue
             run_dd_io(vm_obj=cloned_vm, file_path=file_paths[1])
             log.info(f"Data written to {file_paths[1]} on cloned VM {cloned_vm.name}")
-            cloned_vm.delete()
-            run_oc_command(
-                cmd=f"delete pvc {cloned_vm.pvc_name}", namespace=cloned_vm.namespace
-            )
-            log.info(f"Cloned VM PVC {cloned_vm.pvc_name} deleted")
-
         if failed_vms:
             assert False, f"Test case failed for VMs: {', '.join(failed_vms)}"
 
@@ -220,6 +185,7 @@ class TestVmSnapshotClone(E2ETest):
         pvc_expand_after_restore,
         multi_cnv_workload,
         admin_client,
+        vm_snapshot_restore_fixture,
     ):
         """
         This test performs the VM PVC snapshot operations
@@ -262,13 +228,7 @@ class TestVmSnapshotClone(E2ETest):
             # Writing IO on source VM
             source_csum = run_dd_io(vm_obj=vm_obj, file_path=file_paths[0], verify=True)
 
-            restored_vm = clone_or_snapshot_vm(
-                "snapshot",
-                vm_obj,
-                admin_client=admin_client,
-                all_vms=vm_list,
-                file_path=file_paths[0],
-            )
+            restored_vm = vm_snapshot_restore_fixture(vm_obj, admin_client)
 
             # Verify file written after snapshot is not present.
             command = f"test -f {file_paths[1]} && echo 'File exists' || echo 'File not found'"
