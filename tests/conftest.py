@@ -1805,6 +1805,18 @@ def cluster(
                     kms.cleanup()
                 except Exception as ex:
                     log.error(f"Failed to cleanup KMS. Exception is: {ex}")
+            if ocsci_config.MULTICLUSTER.get("acm_cluster"):
+                try:
+                    from ocs_ci.utility.aws import AWS
+
+                    thanos_bucket_name = (
+                        f"dr-thanos-bucket-{ocsci_config.ENV_DATA['cluster_name']}"
+                    )
+                    AWS().delete_bucket(thanos_bucket_name)
+                except Exception as ex:
+                    log.error(
+                        f"Either failed to delete bucket or bucket doesn't exist {ex}"
+                    )
             deployer.destroy_cluster(log_cli_level)
 
         request.addfinalizer(cluster_teardown_finalizer)
@@ -6759,9 +6771,11 @@ def cnv_dr_workload(request):
                     workload_pvc_selector=workload_details[
                         "dr_workload_app_pvc_selector"
                     ],
-                    appset_model=workload_details["appset_model"]
-                    if workload_type == constants.APPLICATION_SET
-                    else None,
+                    appset_model=(
+                        workload_details["appset_model"]
+                        if workload_type == constants.APPLICATION_SET
+                        else None
+                    ),
                 )
                 instances.append(workload)
                 total_pvc_count += workload_details["pvc_count"]
@@ -7579,7 +7593,6 @@ def override_default_backingstore_fixture(
 
 @pytest.fixture(scope="session")
 def scale_noobaa_resources_session(request):
-
     """
     Session scoped fixture to scale noobaa resources
 
@@ -7597,7 +7610,6 @@ def scale_noobaa_resources_fixture(request):
 
 
 def scale_noobaa_resources(request):
-
     """
     Scale the noobaa pod resources and scale endpoint count
 
