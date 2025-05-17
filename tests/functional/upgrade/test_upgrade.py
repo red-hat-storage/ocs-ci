@@ -95,7 +95,7 @@ def config_index(request):
 @purple_squad
 @ocs_upgrade
 @polarion_id(get_polarion_id(upgrade=True))
-@multicluster_roles(["mdr-all-odf"])
+@multicluster_roles(["mdr-all-odf", "rdr-all-odf"])
 def test_upgrade(zone_rank, role_rank, config_index, upgrade_stats=None):
     """
     Tests upgrade procedure of OCS cluster
@@ -116,7 +116,7 @@ def test_upgrade(zone_rank, role_rank, config_index, upgrade_stats=None):
 
 @purple_squad
 @mco_upgrade
-@multicluster_roles(["mdr-all-acm"])
+@multicluster_roles(["mdr-all-acm", "rdr-all-acm"])
 def test_mco_upgrade(zone_rank, role_rank, config_index):
     """
     Test upgrade procedure for multicluster orchestrator operator
@@ -128,7 +128,7 @@ def test_mco_upgrade(zone_rank, role_rank, config_index):
 
 @purple_squad
 @dr_hub_upgrade
-@multicluster_roles(["mdr-all-acm"])
+@multicluster_roles(["mdr-all-acm", "rdr-all-acm"])
 def test_dr_hub_upgrade(zone_rank, role_rank, config_index):
     """
     Test upgrade procedure for DR hub operator
@@ -144,7 +144,7 @@ def test_dr_hub_upgrade(zone_rank, role_rank, config_index):
 
 @purple_squad
 @dr_cluster_operator_upgrade
-@multicluster_roles(["mdr-all-odf"])
+@multicluster_roles(["mdr-all-odf", "rdr-all-odf"])
 def test_dr_cluster_upgrade(zone_rank, role_rank, config_index):
     """
     Test upgrade procedure for DR cluster operator
@@ -160,7 +160,7 @@ def test_dr_cluster_upgrade(zone_rank, role_rank, config_index):
 
 @purple_squad
 @acm_upgrade
-@multicluster_roles(["mdr-all-acm"])
+@multicluster_roles(["mdr-all-acm", "rdr-all-acm"])
 def test_acm_upgrade(zone_rank, role_rank, config_index):
     """
     Test upgrade procedure for ACM operator
