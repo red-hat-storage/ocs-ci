@@ -211,12 +211,9 @@ from ocs_ci.utility.decorators import switch_to_default_cluster_index_at_last
 from ocs_ci.helpers.keyrotation_helper import PVKeyrotation
 from ocs_ci.ocs.resources.storage_cluster import set_in_transit_encryption
 from ocs_ci.helpers.e2e_helpers import verify_osd_used_capacity_greater_than_expected
-<<<<<<< HEAD
 from ocs_ci.helpers.cnv_helpers import run_fio
-=======
 from ocs_ci.helpers.performance_lib import run_oc_command
 
->>>>>>> c3b8a8625 (Added fixtures)
 
 log = logging.getLogger(__name__)
 
