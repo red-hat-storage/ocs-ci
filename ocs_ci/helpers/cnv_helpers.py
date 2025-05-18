@@ -623,6 +623,8 @@ def check_fio_status(vm_obj, fio_service_name="fio_test"):
     """
     output = vm_obj.run_ssh_cmd(f"systemctl status {fio_service_name}")
     return "running" in output
+
+
 def clone_or_snapshot_vm(action, vm, admin_client=None, file_path=None, all_vms=None):
     """
     Perform VM cloning or snapshot creation/restoration.
