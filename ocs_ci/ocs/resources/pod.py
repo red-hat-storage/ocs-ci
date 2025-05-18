@@ -818,16 +818,21 @@ def get_ceph_tools_pod(
         and config.ENV_DATA.get("cluster_type", "").lower()
         in [constants.MS_CONSUMER_TYPE, constants.HCI_CLIENT]
     ):
+        provider_cluster_index = config.get_provider_index()
         provider_kubeconfig = os.path.join(
-            config.clusters[config.get_provider_index()].ENV_DATA["cluster_path"],
-            config.clusters[config.get_provider_index()].RUN.get("kubeconfig_location"),
+            config.clusters[provider_cluster_index].ENV_DATA["cluster_path"],
+            config.clusters[provider_cluster_index].RUN.get("kubeconfig_location"),
         )
         cluster_kubeconfig = provider_kubeconfig
+        cluster_namespace = config.clusters[provider_cluster_index].ENV_DATA[
+            "cluster_namespace"
+        ]
     else:
         cluster_kubeconfig = config.ENV_DATA.get("provider_kubeconfig", "")
+        cluster_namespace = ""
 
     if cluster_kubeconfig:
-        namespace = config.ENV_DATA["cluster_namespace"]
+        namespace = cluster_namespace or config.ENV_DATA["cluster_namespace"]
     else:
         namespace = namespace or config.ENV_DATA["cluster_namespace"]
 
