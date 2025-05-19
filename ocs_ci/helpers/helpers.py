@@ -1765,11 +1765,11 @@ def measure_pv_deletion_time_bulk(
         no_data_list = list()
         for pv in pv_name_list:
             # check if PV data present in CSI logs
-            start = [i for i in logs if re.search(f'delete "{pv}": started', i)]
+            start = [i for i in logs if re.search(f'"shouldDelete is true".*PV="{re.escape(pv)}"', i)]
             end = [
                 i
                 for i in logs
-                if re.search(f'delete "{pv}": {delete_suffix_to_search}', i)
+                if re.search(f'deleted succeeded.*PV="{re.escape(pv)}"', i)
             ]
             if not start or not end:
                 no_data_list.append(pv)
@@ -1796,7 +1796,7 @@ def measure_pv_deletion_time_bulk(
     this_year = str(datetime.datetime.now().year)
     for pv_name in pv_name_list:
         # Extract the deletion start time for the PV
-        start = [i for i in logs if re.search(f'delete "{pv_name}": started', i)]
+        start = [i for i in logs if re.search(f'"shouldDelete is true".*PV="{re.escape(pv_name)}"', i)]
         mon_day = " ".join(start[0].split(" ")[0:2])
         start_tm = f"{this_year} {mon_day}"
         start_time = datetime.datetime.strptime(start_tm, DATE_TIME_FORMAT)
@@ -1804,7 +1804,7 @@ def measure_pv_deletion_time_bulk(
         end = [
             i
             for i in logs
-            if re.search(f'delete "{pv_name}": {delete_suffix_to_search}', i)
+            if re.search(f'deleted succeeded.*PV="{re.escape(pv_name)}"', i)
         ]
         mon_day = " ".join(end[0].split(" ")[0:2])
         end_tm = f"{this_year} {mon_day}"
