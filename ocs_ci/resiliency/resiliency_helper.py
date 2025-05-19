@@ -24,6 +24,7 @@ import logging
 import subprocess
 from ocs_ci.ocs import constants
 from ocs_ci.resiliency.platform_failures import PlatformFailures
+from ocs_ci.resiliency.application_failure import ApplicationFailures
 from ocs_ci.utility.utils import ceph_health_check
 from ocs_ci.utility.utils import remove_ceph_crashes, get_ceph_crashes
 from ocs_ci.ocs.resources import pod
@@ -294,6 +295,7 @@ class InjectFailures:
 
     SCENARIO_CLASSES = {
         PlatformFailures.SCENARIO_NAME: PlatformFailures,
+        ApplicationFailures.SCENARIO_NAME: ApplicationFailures,
     }
 
     def __init__(self, scenario, failure_case):
