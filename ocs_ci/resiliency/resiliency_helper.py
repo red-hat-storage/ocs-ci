@@ -24,9 +24,10 @@ import logging
 import subprocess
 from ocs_ci.ocs import constants
 from ocs_ci.resiliency.platform_failures import PlatformFailures
+from ocs_ci.resiliency.storagecluster_component_failure import (
+    StorageClusterComponentFailures,
+)
 from ocs_ci.utility.utils import ceph_health_check
-from ocs_ci.utility.utils import remove_ceph_crashes, get_ceph_crashes
-from ocs_ci.ocs.resources import pod
 from ocs_ci.ocs.exceptions import (
     CommandFailed,
     CephHealthException,
@@ -34,6 +35,7 @@ from ocs_ci.ocs.exceptions import (
     TimeoutExpiredError,
 )
 from ocs_ci.ocs.resources.pod import delete_pod_by_phase
+from ocs_ci.resiliency.resiliency_tools import CephStatusTool
 
 log = logging.getLogger(__name__)
 
@@ -222,26 +224,24 @@ class Resiliency:
         """
         self.scenario_name = scenario
         self.failure_method = failure_method
+        self.cephtool = CephStatusTool()
         self.resiliency_failures = ResiliencyFailures(scenario, self.failure_method)
 
     def pre_scenario_check(self):
         """Perform health checks and gather logs before scenario execution."""
-        log.info("Checking Ceph health...")
-        ceph_health_check(fix_ceph_health=True)
+        self.cephtool.wait_till_ceph_status_became_healthy()
         log.info("Removing any existing Ceph crash logs...")
-        toolbox = pod.get_ceph_tools_pod()
-        remove_ceph_crashes(toolbox)
-        log.info("Running must-gather logs...")
+        self.cephtool.archive_ceph_crashes()
 
     def post_scenario_check(self):
         """Perform health checks and gather logs after scenario execution."""
 
         log.info("Removing any existing Ceph crash logs...")
-        toolbox = pod.get_ceph_tools_pod()
-        ceph_crashes = get_ceph_crashes(toolbox)
+        ceph_crashes = self.cephtool.check_ceph_crashes()
         if ceph_crashes:
             log.error(f"Ceph crash logs found: {ceph_crashes}")
             raise Exception("Ceph crash logs found after scenario execution.")
+
         log.info("Checking Ceph health...")
         if not ceph_health_check(fix_ceph_health=True, tries=25):
             log.error("Ceph health check failed after scenario execution.")
@@ -294,6 +294,7 @@ class InjectFailures:
 
     SCENARIO_CLASSES = {
         PlatformFailures.SCENARIO_NAME: PlatformFailures,
+        StorageClusterComponentFailures.SCENARIO_NAME: StorageClusterComponentFailures,
     }
 
     def __init__(self, scenario, failure_case):
