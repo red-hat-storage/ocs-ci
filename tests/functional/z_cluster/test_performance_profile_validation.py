@@ -214,7 +214,7 @@ class TestProfileDefaultValuesCheck(ManageTest):
                 )
 
             log.info("Reverting profile changes")
-            if exist_performance_profile == None:
+            if exist_performance_profile is None:
                 log.info(
                     "Existing performance profile is None, Hence skipping reverting profile change"
                 )
