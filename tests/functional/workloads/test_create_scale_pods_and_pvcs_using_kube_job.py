@@ -178,7 +178,8 @@ class TestCreateScalePodsAndPvcsUsingKubeJobWithMSConsumers(ManageTest):
 
     @tier1
     def test_create_scale_pods_and_pvcs_with_ms_consumers(
-        self, create_scale_pods_and_pvcs_using_kube_job_on_ms_consumers
+        self,
+        create_scale_pods_and_pvcs_using_kube_job_on_ms_consumers,
     ):
         """
         Test create scale pods and PVCs using a kube job with MS consumers
