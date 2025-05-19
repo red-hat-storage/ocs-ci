@@ -1549,9 +1549,9 @@ def get_provision_time(interface, pvc_name, status="start"):
 
     """
     # Define the status that need to retrieve
-    operation = "started"
+    operation = "Started"
     if status.lower() == "end":
-        operation = "succeeded"
+        operation = "Succeeded"
 
     this_year = str(datetime.datetime.now().year)
     # Get the correct provisioner pod based on the interface
@@ -1563,7 +1563,7 @@ def get_provision_time(interface, pvc_name, status="start"):
     logs = logs.split("\n")
     # Extract the time for the one PVC provisioning
     if isinstance(pvc_name, str):
-        stat = [i for i in logs if re.search(f"provision.*{pvc_name}.*{operation}", i)]
+        stat = [i for i in logs if re.search(f'Started.*PVC="[^"]*/{re.escape(pvc_name)}"', i)]
         logger.info(f"linee{i}")
         mon_day = " ".join(stat[0].split(" ")[0:2])
         stat = f"{this_year} {mon_day}"
@@ -1572,7 +1572,8 @@ def get_provision_time(interface, pvc_name, status="start"):
         all_stats = []
         for i in range(0, len(pvc_name)):
             name = pvc_name[i].name
-            stat = [i for i in logs if re.search(f"provision.*{name}.*{operation}", i)]
+            logger.info(f"nameee{name}")
+            stat = [logger.info(f"ii{i}") or i for i in logs if re.search(f'Started.*PVC="[^"]*/{re.escape(name)}"', i)]
             logger.info(f"lnee{i}")
             mon_day = " ".join(stat[0].split(" ")[0:2])
             stat = f"{this_year} {mon_day}"
