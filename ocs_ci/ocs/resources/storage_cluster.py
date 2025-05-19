@@ -1107,7 +1107,7 @@ def verify_storage_cluster():
         )
         if config.ENV_DATA.get("platform") == constants.FUSIONAAS_PLATFORM:
             timeout = 1000
-        elif storage_cluster.data["spec"].get(
+        elif "status" in storage_cluster.data and storage_cluster.data["spec"].get(
             "resourceProfile"
         ) != storage_cluster.data["status"].get("lastAppliedResourceProfile"):
             timeout = 1800
