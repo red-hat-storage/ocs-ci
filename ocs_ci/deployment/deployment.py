@@ -48,6 +48,9 @@ from ocs_ci.framework.logger_helper import log_step
 from ocs_ci.helpers.dr_helpers import (
     configure_drcluster_for_fencing,
     get_cluster_set_name,
+    create_service_exporter,
+    validate_storage_cluster_peer_state,
+    verify_volsync,
 )
 from ocs_ci.ocs import constants, ocp, defaults, registry
 from ocs_ci.ocs.cluster import (
