@@ -5,6 +5,11 @@ from ocs_ci.ocs import constants, utils
 from ocs_ci.utility import templating
 
 
+def workload_registry_init():
+    # Register all the supported workloads here
+    WorkloadFactory.register("fio", FIOOperatorWorkload)
+
+
 def get_workload_params():
     """
     Use this function in the context of fiooperator workload
@@ -90,9 +95,90 @@ def get_workload_targets(workload_target_markers):
     return get_workload_target_indexes(workload_target_markers)
 
 
-def deploy_fio_workload(fio_workload_params):
+def deploy_workload_operator(workload_params, target_indexes):
     """
     Deploy fiooperator on the targeted clusters
 
+    Args:
+        workload_params (dict): A dictionary with fio and fiooperator parameters
+        target_indexes (list): of integer indexes of clusters on which we need to run the workload
+
+    sample fio_workload_param might look like
+
+    WORKLOAD:
+      - name: "fio-block" # This name will be used in the CR
+        type: "fio"       # type is used to accomodate different workloads in the future
+        fioArgs:
+          size: "1G"
+          io_depth: 4
+          filename: 'testfile'
+          readwrite: 'read'
+          bs: "4k"
+          runtime: "60s"
+        storage_class: "RBD"
+        fiooperator:
+          autoscale: False
+
+      - name: "fio-cephfs"
+        type: "fio"
+        fioArgs:
+          size: "1G"
+          io_depth: 4
+          filename: 'testfile'
+          readwrite: 'read'
+          bs: "4k"
+          runtime: "60s"
+        storage_class: "CEPHFS"
+        fiooperator:
+          autoscale: False
+
+    in its yaml form.
     """
-    pass
+    workload_registry_init()
+
+
+class BaseWorkload(object):
+    def add_job(self, job_config: dict):
+        self.jobs.append(job_config)
+
+    def run_all(self):
+        raise NotImplementedError
+
+
+class FIOOperatorWorkload(BaseWorkload):
+    def __init__(self):
+        self.jobs = []
+
+    def add_job(self, job_config):
+        return super().add_job(job_config)
+
+    def run_all(self):
+        for job in self.jobs:
+            self.run_job(job)
+
+    def run_job(self):
+        # take care of creating individual CRs
+        pass
+
+
+class WorkloadFactory:
+    _instances = {}
+    _registry = {}
+
+    @classmethod
+    def register(cls, wtype, handler_cls):
+        cls._registry[wtype] = handler_cls
+
+    @classmethod
+    def get_handler(cls, workload_type):
+        if workload_type not in cls._registry:
+            raise ValueError(
+                f"No handler registered for workload type '{workload_type}'"
+            )
+        if workload_type not in cls._instances:
+            cls._instances[workload_type] = cls._registry[workload_type]()
+        return cls._instances[workload_type]
+
+    @classmethod
+    def all_instances(cls):
+        return cls._instances.values()
