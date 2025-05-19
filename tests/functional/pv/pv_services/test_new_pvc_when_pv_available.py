@@ -44,7 +44,7 @@ class TestNewPvcWhenPvAvailable(ManageTest):
         for pvc_obj in self.pvcs:
             pv_obj = pvc_obj.backed_pv_obj()
             old_pv_names.append(pv_obj.name)
-            # Remove claimRef, so that the PV will become Available
+            # Remove claimRef, so that the PV will become available
             logger.info(f"Dropping claimRef from PV {pv_obj.name}")
             patch_result = pv_obj.ocp.patch(
                 resource_name=pv_obj.name,
@@ -60,15 +60,30 @@ class TestNewPvcWhenPvAvailable(ManageTest):
             num_of_cephfs_pvc=1,
         )
 
-        old_pv_new_pvc = {}
+        new_pvc_old_pv = {}
         for pvc_obj_new in self.new_pvcs:
             if pvc_obj_new.backed_pv in old_pv_names:
                 logger.error(
                     f"Old available PV {pvc_obj_new.backed_pv} is used for the new PVC {pvc_obj_new.name} "
                     f"which is not expected."
                 )
-                old_pv_new_pvc[pvc_obj_new] = pvc_obj_new.backed_pv
+                pvc_storage_request = (
+                    pvc_obj_new.data.get("spec")
+                    .get("resources")
+                    .get("requests")
+                    .get("storage")
+                )
+                pvc_storage_capacity = (
+                    pvc_obj_new.data.get("status").get("capacity").get("storage")
+                )
+                if pvc_storage_request != pvc_storage_capacity:
+                    logger.error(
+                        f"The requested storage {pvc_storage_request} and capacity {pvc_storage_capacity} of the "
+                        f"PVC {pvc_obj_new.name} are not matching"
+                    )
+                new_pvc_old_pv[pvc_obj_new.name] = pvc_obj_new.backed_pv
 
-        assert (
-            not old_pv_new_pvc
-        ), f"This is the dict of new PVC name and old PV name: {old_pv_new_pvc}"
+        assert not new_pvc_old_pv, (
+            f"This is the mapping of new PVC name and old PV name. The new PVC re-used an available PV instead of "
+            f"provisioning a new PV:\n {new_pvc_old_pv}"
+        )
