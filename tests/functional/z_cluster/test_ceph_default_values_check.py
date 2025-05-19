@@ -117,6 +117,8 @@ class TestCephDefaultValuesCheck(ManageTest):
             resource_name=constants.ROOK_CONFIG_OVERRIDE_CONFIGMAP,
         )
         config_data = cm_obj.get()["data"]["config"]
+        # Remove log_file from config_data
+        # Remove mirror sections from config_data, as it not constant for all type of clusters
         config_data = config_data.split("\n")
         config_data = [line for line in config_data if not line.startswith("log_file")]
         config_data = [
@@ -154,19 +156,6 @@ class TestCephDefaultValuesCheck(ManageTest):
             stored_values = constants.ROOK_CEPH_CONFIG_VALUES.split("\n")
         stored_values = [
             line for line in stored_values if not line.startswith("log_file")
-        ]
-        stored_values = [
-            line
-            for line in stored_values
-            if not any(
-                mirror_section in line
-                for mirror_section in [
-                    "[client.rbd-mirror",
-                    "debug_ms",
-                    "debug_rbd",
-                    "debug_rbd_mirror",
-                ]
-            )
         ]
         log.info(f"OCS version is {ocs_version}")
         log.info(f"Stored values are {stored_values}")
