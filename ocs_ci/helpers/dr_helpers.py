@@ -16,6 +16,7 @@ from ocs_ci.ocs.exceptions import (
     TimeoutExpiredError,
     UnexpectedBehaviour,
     NotFoundError,
+    UnexpectedDeploymentConfiguration,
 )
 from ocs_ci.ocs.resources.drpc import DRPC
 from ocs_ci.ocs.resources.pod import get_all_pods, get_ceph_tools_pod
@@ -2073,6 +2074,29 @@ def configure_rdr_hub_recovery():
     )
     logger.info("All pre-reqs verified for performing hub recovery")
     return True
+
+
+def get_cluster_set_name():
+    """
+    Get Cluster set name from managedcluster
+
+    Returns:
+        list: List of uniq cluster set name
+    """
+    cluster_set = []
+    managed_clusters = ocp.OCP(kind=constants.ACM_MANAGEDCLUSTER).get().get("items", [])
+    # ignore local-cluster here
+    for i in managed_clusters:
+        if i["metadata"]["name"] != constants.ACM_LOCAL_CLUSTER:
+            cluster_set.append(i["metadata"]["labels"][constants.ACM_CLUSTERSET_LABEL])
+    if all(x == cluster_set[0] for x in cluster_set):
+        logger.info(f"Found the unique clusterset {cluster_set[0]}")
+    else:
+        raise UnexpectedDeploymentConfiguration(
+            "There are more then one clusterset added to multiple managedcluters"
+        )
+
+    return cluster_set
 
 
 def wait_for_vrg_state(
