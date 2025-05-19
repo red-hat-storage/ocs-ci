@@ -249,7 +249,7 @@ from ocs_ci.utility.iscsi_config import iscsi_teardown
 DEPLOYERS = {}
 =======
 from ocs_ci.utility.workload_utils import (
-    deploy_fio_workload,
+    deploy_workload_operator,
     get_workload_params,
     get_workload_targets,
 )
@@ -398,12 +398,12 @@ def export_squad_marker_to_csv(items, filename=None):
     log.info("%s tests require action across %s files", num_tests, num_files)
 
 
-@pytest.fixture
+@pytest.fixture()
 def run_workload(request):
     target_indexes = get_workload_targets(
         request.node.get_closest_marker(constants.WORKLOAD_TARGETS_MARKER)
     )
-    deploy_fio_workload(getattr(request, "param", {}), target_indexes)
+    deploy_workload_operator(getattr(request, "param", {}), target_indexes)
 
 
 def pytest_generate_tests(metafunc):
