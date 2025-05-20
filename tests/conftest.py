@@ -225,7 +225,7 @@ from ocs_ci.helpers.e2e_helpers import verify_osd_used_capacity_greater_than_exp
 from ocs_ci.helpers.cnv_helpers import run_fio
 from ocs_ci.helpers.performance_lib import run_oc_command
 from ocs_ci.utility.workload_utils import (
-    deploy_workload_operator,
+    deploy_and_run_workload,
     get_workload_params,
     get_workload_targets,
 )
@@ -376,7 +376,7 @@ def run_workload(request):
     target_indexes = get_workload_targets(
         request.node.get_closest_marker(constants.WORKLOAD_TARGETS_MARKER)
     )
-    deploy_workload_operator(getattr(request, "param", {}), target_indexes)
+    deploy_and_run_workload(getattr(request, "param", {}), target_indexes)
 
 
 def pytest_generate_tests(metafunc):
