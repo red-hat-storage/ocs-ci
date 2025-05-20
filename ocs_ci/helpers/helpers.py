@@ -6001,3 +6001,19 @@ def find_cephfilesystemsubvolumegroup(storageclient_uid=None):
         cephbfssubvolumegroup = storage_consumer.get_cephfs_subvolumegroup()
 
     return cephbfssubvolumegroup
+
+
+def set_configmap_log_level_csi_sidecar(value):
+    """
+    Set CSI_SIDECAR log level on configmap of rook-ceph-operator
+    Args:
+        value (int): type of log
+    """
+    configmap_obj = OCP(
+        kind=constants.CONFIGMAP,
+        namespace=config.ENV_DATA["cluster_namespace"],
+        resource_name=constants.ROOK_OPERATOR_CONFIGMAP,
+    )
+    logger.info(f"Setting CSI_SIDECAR log level to: {value}")
+    params = f'{{"data": {{"CSI_SIDECAR_LOG_LEVEL": "{value}"}}}}'
+    configmap_obj.patch(params=params, format_type="merge")
