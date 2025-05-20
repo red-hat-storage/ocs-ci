@@ -1,8 +1,12 @@
 import os
+import logging
 
 from ocs_ci.framework import config
 from ocs_ci.ocs import constants, utils
 from ocs_ci.utility import templating
+from ocs_ci.helpers import helpers
+
+log = logging.getLogger(__name__)
 
 
 def workload_registry_init():
@@ -95,7 +99,7 @@ def get_workload_targets(workload_target_markers):
     return get_workload_target_indexes(workload_target_markers)
 
 
-def deploy_workload_operator(workload_params, target_indexes):
+def deploy_and_run_workload(workload_params, target_indexes):
     """
     Deploy fiooperator on the targeted clusters
 
@@ -135,6 +139,11 @@ def deploy_workload_operator(workload_params, target_indexes):
     in its yaml form.
     """
     workload_registry_init()
+    for workload in workload_params.get("WORKLOADS"):
+        handler = WorkloadFactory.get_handler(workload.get("type"))
+        handler.add_job(workload)
+    for handler in WorkloadFactory.all_instances():
+        handler.run_all(target_indexes)
 
 
 class BaseWorkload(object):
@@ -152,13 +161,53 @@ class FIOOperatorWorkload(BaseWorkload):
     def add_job(self, job_config):
         return super().add_job(job_config)
 
-    def run_all(self):
-        for job in self.jobs:
-            self.run_job(job)
+    def run_all(self, target_clusters):
+        for cluster in target_clusters:
+            config.switch_ctx(cluster)
+            self.deploy_workload(cluster)
+            for job in self.jobs:
+                self.run_job(job)
 
-    def run_job(self):
+    def deploy_workload(self, cluster_index):
+        # Deploy the operator here
+        self._deploy_fio_operator_workload(cluster_index)
+
+    def _deploy_fio_operator_workload(self, cluster_index):
+        # Deploy fio operator workload on the indexed cluster
+        # create sa resource
+        op_sa_data = templating.load_yaml(
+            os.path.join(constants.TEMPLATE_FIOOPERATOR_DIR, "fiooperator-sa.yaml")
+        )
+        log.info("Creating sa resource for the fiooperator")
+        helpers.create_resource(**op_sa_data)
+        # create role,rolebinding and rbac
+        role_data = templating.load_yaml(
+            os.path.join(constants.TEMPLATE_FIOOPERATOR_DIR, "fiooperator-role.yaml")
+        )
+        log.info("Creating role")
+        helpers.create_resource(**role_data)
+        role_binding_data = templating.load_yaml(
+            os.path.join(
+                constants.TEMPLATE_FIOOPERATOR_DIR, "fiooperator-rolebinding.yaml"
+            )
+        )
+        log.info("Creating rolebinding")
+        helpers.create_resource(**role_binding_data)
+
+        # Deploy the operator
+        fiooperator_data = templating.load_yaml(
+            os.path.join(
+                constants.TEMPLATE_FIOOPERATOR_DIR, "fiooperator-deployment.yaml"
+            )
+        )
+        log.info("Deploying fiooperator")
+        helpers.create_resource(**fiooperator_data)
+        # TODO: Validate the operator status
+
+    def run_job(self, job):
         # take care of creating individual CRs
-        pass
+        log.info(f"Running fio job: {job.get('name')}")
+        # TODO: Merge fio dictionary with CR and create resource
 
 
 class WorkloadFactory:
