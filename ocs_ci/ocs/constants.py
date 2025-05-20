@@ -3397,3 +3397,8 @@ LOWER_REQ_MDS_CACHE_MEMORY = 1073741824
 AUTO_SCALING_YAML = os.path.join(AUTO_SCALING_DIR, "storage-autoscaler.yaml")
 # StorageAutoScaler Values
 PROMETHEUS_RECONCILE_TIMEOUT = 660
+
+# ODF recovery profiles
+LOW_RECOVERY_OPS = "low_recovery_ops"
+BALANCED = "balanced"
+HIGH_RECOVERY_OPS = "high_recovery_ops"
