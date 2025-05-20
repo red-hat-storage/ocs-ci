@@ -21,6 +21,7 @@ from ocs_ci.ocs.cluster import (
 from ocs_ci.utility.retry import retry
 from ocs_ci.ocs.exceptions import CommandFailed
 from ocs_ci.utility.decorators import switch_to_orig_index_at_last
+from ocs_ci.ocs.resources.storage_cluster import get_ceph_interface_per_storageclasses
 
 logger = logging.getLogger(__name__)
 
@@ -72,6 +73,7 @@ class Sanity:
         rgw_bucket_factory,
         run_io=True,
         bucket_creation_timeout=180,
+        use_all_ceph_storageclasses=False,
     ):
         """
         Sanity validation: Create resources - pods, OBCs (RGW and MCG), PVCs (FS and RBD) and run IO
@@ -83,16 +85,36 @@ class Sanity:
             rgw_bucket_factory (function): A call to rgw_bucket_factory function
             run_io (bool): True for run IO, False otherwise
             bucket_creation_timeout (int): Time to wait for the bucket object creation.
+            use_all_ceph_storageclasses (bool): If True, use all the ceph rbd and ceph fs storage classes
+                for creating resources. If False, it will use the default rbd and ceph fs storage classes
+                for creating resources.
 
         """
         logger.info(
             "Creating resources and running IO as a sanity functional validation"
         )
 
-        for interface in [constants.CEPHBLOCKPOOL, constants.CEPHFILESYSTEM]:
-            pvc_obj = pvc_factory(interface)
-            self.pvc_objs.append(pvc_obj)
-            self.pod_objs.append(pod_factory(pvc=pvc_obj, interface=interface))
+        interfaces = [constants.CEPHBLOCKPOOL, constants.CEPHFILESYSTEM]
+
+        if use_all_ceph_storageclasses:
+            ceph_interface_per_storageclasses = get_ceph_interface_per_storageclasses()
+            for interface in interfaces:
+                storageclasses = ceph_interface_per_storageclasses[interface]
+                for sc in storageclasses:
+                    volume_binding_mode = sc.data.get("volumeBindingMode")
+                    if volume_binding_mode == constants.IMMEDIATE_VOLUMEBINDINGMODE:
+                        status = constants.STATUS_BOUND
+                    else:
+                        status = None
+                    pvc_obj = pvc_factory(interface, storageclass=sc, status=status)
+                    self.pvc_objs.append(pvc_obj)
+                    self.pod_objs.append(pod_factory(pvc=pvc_obj, interface=interface))
+        else:
+            for interface in interfaces:
+                pvc_obj = pvc_factory(interface)
+                self.pvc_objs.append(pvc_obj)
+                self.pod_objs.append(pod_factory(pvc=pvc_obj, interface=interface))
+
         if run_io:
             for pod in self.pod_objs:
                 pod.run_io("fs", "1G", runtime=30)

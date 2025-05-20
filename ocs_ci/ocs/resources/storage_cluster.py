@@ -34,7 +34,7 @@ from ocs_ci.ocs.exceptions import (
 )
 from ocs_ci.ocs.ocp import get_images, OCP
 from ocs_ci.ocs.resources import csv, deployment
-from ocs_ci.ocs.resources.ocs import get_ocs_csv
+from ocs_ci.ocs.resources.ocs import get_ocs_csv, OCS
 from ocs_ci.ocs.resources.pod import (
     get_pods_having_label,
     get_osd_pods,
@@ -3309,3 +3309,34 @@ def get_deviceset_sc_name_per_deviceclass():
     """
     device_sets = get_all_device_sets()
     return {get_deviceset_sc_name(d): get_deviceclass_name(d) for d in device_sets}
+
+
+def get_ceph_interface_per_storageclasses():
+    """
+    Identify and group StorageClasses based on the Ceph interface they use.
+
+    This function inspects all StorageClasses in the cluster and categorizes them
+    according to the underlying Ceph interface they provision storage with.
+
+    Returns:
+        dict: A dictionary mapping Ceph interface constants to lists of StorageClass objects.
+    """
+    storageclasses_data = get_all_storageclass()
+    ceph_interface_per_storageclasses = {
+        constants.CEPHBLOCKPOOL: [],
+        constants.CEPHFILESYSTEM: [],
+        constants.CEPHOBJECTSTORE: [],
+    }
+
+    for sc_data in storageclasses_data:
+        provisioner = sc_data.get("provisioner", "")
+        sc_obj = OCS(**sc_data)
+
+        if "rbd.csi.ceph.com" in provisioner:
+            ceph_interface_per_storageclasses[constants.CEPHBLOCKPOOL].append(sc_obj)
+        elif "cephfs.csi.ceph.com" in provisioner:
+            ceph_interface_per_storageclasses[constants.CEPHFILESYSTEM].append(sc_obj)
+        elif "noobaa.io/obc" in provisioner or "rook.io/bucket" in provisioner:
+            ceph_interface_per_storageclasses[constants.CEPHOBJECTSTORE].append(sc_obj)
+
+    return ceph_interface_per_storageclasses

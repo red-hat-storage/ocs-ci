@@ -3875,64 +3875,55 @@ def wait_for_pods_deletion(
     sampler.wait_for_func_status(True)
 
 
-def calculate_md5sum_of_pod_files(pods_for_integrity_check, pod_file_name):
+def calculate_md5sum_of_pod_files(pods, filename):
     """
     Calculate the md5sum of the pod files, and save it in the pod objects
 
     Args:
-        pods_for_integrity_check (list): The list of the pod objects to calculate the md5sum
-        pod_file_name (str): The pod file name to save the md5sum
+        pods (list): The list of the pod objects to calculate the md5sum
+        filename (str): The pod file name to save the md5sum
 
     """
-    # Wait for IO to finish
-    logger.info("Wait for IO to finish on pods")
-    for pod_obj in pods_for_integrity_check:
+    for pod_obj in pods:
+        logger.info(f"Waiting for IO to finish on pod {pod_obj.name}")
         pod_obj.get_fio_results()
         logger.info(f"IO finished on pod {pod_obj.name}")
-        # Calculate md5sum
-        pod_file_name = (
-            pod_file_name
-            if (pod_obj.pvc.volume_mode == constants.VOLUME_MODE_FILESYSTEM)
-            else pod_obj.get_storage_path(storage_type="block")
-        )
+        volume_mode = pod_obj.pvc.volume_mode
+
+        if volume_mode == constants.VOLUME_MODE_BLOCK:
+            file_path = get_device_path(pod_obj)
+        else:
+            file_path = get_file_path(pod_obj, filename)
+
         logger.info(
-            f"Calculate the md5sum of the file {pod_file_name} in the pod {pod_obj.name}"
+            f"Calculate the md5sum of the file {file_path} in the pod {pod_obj.name}"
         )
-        pod_obj.pvc.md5sum = cal_md5sum(
-            pod_obj,
-            pod_file_name,
-            pod_obj.pvc.volume_mode == constants.VOLUME_MODE_BLOCK,
-        )
+        md5sum = cal_md5sum(pod_obj, file_path)
+        pod_obj.md5sum = md5sum
 
 
-def verify_md5sum_on_pod_files(pods_for_integrity_check, pod_file_name):
+def verify_md5sum_on_pod_files(pods, filename):
     """
     Verify the md5sum of the pod files
 
     Args:
-        pods_for_integrity_check (list): The list of the pod objects to verify the md5sum
-        pod_file_name (str): The pod file name to verify its md5sum
-
-    Raises:
-        AssertionError: If file doesn't exist or md5sum mismatch
+        pods (list): The list of the pod objects to verify the md5sum
+        filename (str): The pod file name to verify its md5sum
 
     """
-    for pod_obj in pods_for_integrity_check:
-        pod_file_name = (
-            pod_obj.get_storage_path(storage_type="block")
-            if (pod_obj.pvc.volume_mode == constants.VOLUME_MODE_BLOCK)
-            else pod_file_name
-        )
-        verify_data_integrity(
-            pod_obj,
-            pod_file_name,
-            pod_obj.pvc.md5sum,
-            pod_obj.pvc.volume_mode == constants.VOLUME_MODE_BLOCK,
-        )
-        logger.info(
-            f"Verified: md5sum of {pod_file_name} on pod {pod_obj.name} "
-            f"matches with the original md5sum"
-        )
+    for pod_obj in pods:
+        volume_mode = pod_obj.pvc.volume_mode
+        if volume_mode == constants.VOLUME_MODE_BLOCK:
+            file_path = get_device_path(pod_obj)
+        else:
+            file_path = get_file_path(pod_obj, filename)
+
+        logger.info(f"Verifying md5sum of the file {file_path} in pod {pod_obj.name}")
+        new_md5sum = cal_md5sum(pod_obj, file_path)
+        assert (
+            pod_obj.md5sum == new_md5sum
+        ), f"MD5 mismatch on pod {pod_obj.name}: expected {pod_obj.md5sum}, got {new_md5sum}"
+
     logger.info("Data integrity check passed on all pods")
 
 
