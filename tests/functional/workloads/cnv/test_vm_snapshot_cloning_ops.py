@@ -268,7 +268,7 @@ class TestVmSnapshotClone(E2ETest):
     ):
         """
         Validates that cloning a restored snapshot VM results
-        with data integrity maintained.
+        with data integrity maintained
 
         Test steps:
         1. Deploy multiple VMs with associated PVCs.
