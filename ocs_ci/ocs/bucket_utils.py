@@ -33,7 +33,7 @@ from ocs_ci.utility.utils import (
     exec_nb_db_query,
     exec_cmd,
 )
-from ocs_ci.helpers.helpers import create_resource
+from ocs_ci.helpers.helpers import create_resource, remove_port_from_url
 from ocs_ci.utility import version
 
 logger = logging.getLogger(__name__)
@@ -166,32 +166,34 @@ def craft_s3cmd_command(cmd, mcg_obj=None, signed_request_creds=None):
 
     """
     no_ssl = "--no-ssl"
+
     if mcg_obj:
-        if mcg_obj.region:
-            region = f"--region={mcg_obj.region} "
-        else:
-            region = ""
+        signed_request_creds = {
+            "access_key_id": mcg_obj.access_key_id,
+            "access_key": mcg_obj.access_key,
+            "endpoint": mcg_obj.s3_endpoint,
+            "region": mcg_obj.region,
+        }
+
+    if signed_request_creds:
+        access_key_id = signed_request_creds.get("access_key_id")
+        access_key = signed_request_creds.get("access_key")
+        endpoint = signed_request_creds.get("endpoint")
+        region = signed_request_creds.get("region")
+
+        # s3cmd doesn't support port suffix under host
+        endpoint = remove_port_from_url(endpoint)
+
         base_command = (
-            f"s3cmd --access_key={mcg_obj.access_key_id} "
-            f"--secret_key={mcg_obj.access_key} "
-            f"{region}"
-            f"--host={mcg_obj.s3_external_endpoint} "
-            f"--host-bucket={mcg_obj.s3_external_endpoint} "
+            "s3cmd "
+            f"--access_key={access_key_id} "
+            f"--secret_key={access_key} "
+            f"--host={endpoint} "
+            f"--host-bucket={endpoint} "
             f"{no_ssl} "
         )
-    elif signed_request_creds:
-        if signed_request_creds.get("region"):
-            region = f'--region={signed_request_creds.get("region")} '
-        else:
-            region = ""
-        base_command = (
-            f's3cmd --access_key={signed_request_creds.get("access_key_id")} '
-            f'--secret_key={signed_request_creds.get("access_key")} '
-            f"{region}"
-            f'--host={signed_request_creds.get("endpoint")} '
-            f'--host-bucket={signed_request_creds.get("endpoint")} '
-            f"{no_ssl} "
-        )
+        base_command += f"--region={region} " if region else ""
+
     else:
         base_command = f"s3cmd {no_ssl}"
 
