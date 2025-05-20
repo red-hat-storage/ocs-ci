@@ -44,8 +44,9 @@ class TestNewPvcWhenPvAvailable(ManageTest):
         for pvc_obj in self.pvcs:
             pv_obj = pvc_obj.backed_pv_obj()
             old_pv_names.append(pv_obj.name)
+
             # Change the persistentVolumeReclaimPolicy of the PV to Retain
-            reclaim_policy_change = "Retain"
+            reclaim_policy_change = constants.RECLAIM_POLICY_RETAIN
             patch_param = (
                 f'{{"spec":{{"persistentVolumeReclaimPolicy":'
                 f'"{reclaim_policy_change}"}}}}'
@@ -56,6 +57,7 @@ class TestNewPvcWhenPvAvailable(ManageTest):
             logger.info(
                 f"Changed persistentVolumeReclaimPolicy of pv {pv_obj.name} to {reclaim_policy_change}"
             )
+
             # Remove claimRef, so that the PV will become available
             logger.info(f"Dropping claimRef from PV {pv_obj.name}")
             patch_result = pv_obj.ocp.patch(
