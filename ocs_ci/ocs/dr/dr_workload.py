@@ -1209,7 +1209,7 @@ class BusyboxDiscoveredApps(DRWorkload):
             config.switch_acm_ctx()
             self.create_drpc_for_apps_with_recipe()
         else:
-            self.create_dprc()
+            self.create_drpc()
         self.verify_workload_deployment()
 
     def _deploy_prereqs(self):
@@ -1609,7 +1609,7 @@ class CnvWorkloadDiscoveredApps(DRWorkload):
         self.check_pod_pvc_status(skip_replication_resources=True)
         config.switch_acm_ctx()
         self.create_placement()
-        self.create_dprc()
+        self.create_drpc()
         self.verify_workload_deployment()
         self.vm_obj = VirtualMachine(
             vm_name=self.vm_name, namespace=self.workload_namespace
@@ -1699,7 +1699,7 @@ class CnvWorkloadDiscoveredApps(DRWorkload):
         log.info(f"Creating Placement for workload {self.workload_name}")
         run_cmd(f"oc create -f {placement_yaml.name}")
 
-    def create_dprc(self):
+    def create_drpc(self):
         """
         Create DRPC for discovered Apps
 
