@@ -14,7 +14,7 @@ from ocs_ci.framework.pytest_customization.marks import grey_squad
 from ocs_ci.framework.testlib import performance, performance_a
 from ocs_ci.ocs.perftests import PASTest
 from ocs_ci.helpers import helpers, performance_lib
-form ocs_ci.helpers.performance_lib import set_configmap_log_level_csi_sidecar
+from ocs_ci.helpers.performance_lib import set_configmap_log_level_csi_sidecar
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.perfresult import ResultsAnalyse
 from ocs_ci.utility import templating
