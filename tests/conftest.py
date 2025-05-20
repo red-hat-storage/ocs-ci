@@ -210,7 +210,7 @@ from ocs_ci.utility.decorators import switch_to_default_cluster_index_at_last
 from ocs_ci.helpers.keyrotation_helper import PVKeyrotation
 from ocs_ci.ocs.resources.storage_cluster import set_in_transit_encryption
 from ocs_ci.helpers.e2e_helpers import verify_osd_used_capacity_greater_than_expected
-
+from ocs_ci.helpers.cnv_helpers import run_fio
 
 log = logging.getLogger(__name__)
 
@@ -945,7 +945,17 @@ def ceph_pool_factory_fixture(request, replica=3, compression=None):
 
         for instance in instances:
             try:
-                instance.delete()
+                instance.delete(wait=False)
+                radosns_obj = ocp.OCP(
+                    kind=constants.CEPHBLOCKPOOLRADOSNS, namespace=instance.namespace
+                )
+                radosnamespaces = [
+                    OCS(**radosns)
+                    for radosns in radosns_obj.get()["items"]
+                    if radosns["spec"]["blockPoolName"] == instance.name
+                ]
+                for radosnamespace in radosnamespaces:
+                    radosnamespace.delete()
             except CommandFailed as ex:
                 if "NotFound" in str(ex) and skip_resource_not_found_error:
                     log.info(
@@ -1989,6 +1999,18 @@ def cluster(
                     kms.cleanup()
                 except Exception as ex:
                     log.error(f"Failed to cleanup KMS. Exception is: {ex}")
+            if ocsci_config.MULTICLUSTER.get("acm_cluster"):
+                try:
+                    from ocs_ci.utility.aws import AWS
+
+                    thanos_bucket_name = (
+                        f"dr-thanos-bucket-{config.ENV_DATA['cluster_name']}"
+                    )
+                    AWS().delete_bucket(thanos_bucket_name)
+                except Exception as ex:
+                    log.error(
+                        f"Either failed to delete bucket or bucket doesn't exist {ex}"
+                    )
             deployer.destroy_cluster(log_cli_level)
 
         request.addfinalizer(cluster_teardown_finalizer)
@@ -6616,7 +6638,7 @@ def create_pvcs_and_pods(multi_pvc_factory, pod_factory, service_account_factory
                 pods_for_rwx if pvc_obj.access_mode == constants.ACCESS_MODE_RWX else 1
             )
             for _ in range(num_pods):
-                # pod_obj will be a Pod instance if deployment_config=False,
+                # pod_obj will be a Pod instance if deployment=False,
                 # otherwise an OCP instance of kind DC
                 pod_obj = pod_factory(
                     interface=interface,
@@ -7183,39 +7205,43 @@ def discovered_apps_dr_workload(request):
             workload_key = "dr_workload_discovered_apps_cephfs"
         workload_details_list = ocsci_config.ENV_DATA[workload_key]
 
-        for index in range(kubeobject):
-            workload_details = workload_details_list[index]
-            workload = BusyboxDiscoveredApps(
-                workload_dir=workload_details["workload_dir"],
-                workload_pod_count=workload_details["pod_count"],
-                workload_pvc_count=workload_details["pvc_count"],
-                workload_namespace=(
-                    workload_details["workload_namespace"] + "-multi-ns"
-                    if multi_ns
-                    else workload_details["workload_namespace"]
-                ),
-                discovered_apps_pvc_selector_key=workload_details[
-                    "dr_workload_app_pvc_selector_key"
-                ],
-                discovered_apps_pvc_selector_value=workload_details[
-                    "dr_workload_app_pvc_selector_value"
-                ],
-                discovered_apps_pod_selector_key=workload_details[
-                    "dr_workload_app_pod_selector_key"
-                ],
-                discovered_apps_pod_selector_value=workload_details[
-                    "dr_workload_app_pod_selector_value"
-                ],
-                workload_placement_name=workload_details[
-                    "dr_workload_app_placement_name"
-                ],
-                discovered_apps_multi_ns=multi_ns,
-            )
-            if multi_ns:
-                multi_ns_list.append(workload.workload_namespace)
+        if bool(kubeobject):
+            for index in range(kubeobject):
+                workload_details = workload_details_list[index]
+                workload = BusyboxDiscoveredApps(
+                    workload_dir=workload_details["workload_dir"],
+                    workload_pod_count=workload_details["pod_count"],
+                    workload_pvc_count=workload_details["pvc_count"],
+                    workload_namespace=(
+                        workload_details["workload_namespace"] + "-multi-ns"
+                        if multi_ns
+                        else workload_details["workload_namespace"]
+                    ),
+                    discovered_apps_pvc_selector_key=workload_details[
+                        "dr_workload_app_pvc_selector_key"
+                    ],
+                    discovered_apps_pvc_selector_value=workload_details[
+                        "dr_workload_app_pvc_selector_value"
+                    ],
+                    discovered_apps_pod_selector_key=workload_details[
+                        "dr_workload_app_pod_selector_key"
+                    ],
+                    discovered_apps_pod_selector_value=workload_details[
+                        "dr_workload_app_pod_selector_value"
+                    ],
+                    workload_placement_name=workload_details[
+                        "dr_workload_app_placement_name"
+                    ],
+                    discovered_apps_multi_ns=multi_ns,
+                )
+
+                if multi_ns:
+                    multi_ns_list.append(workload.workload_namespace)
+
             instances.append(workload)
             total_pvc_count += workload_details["pvc_count"]
-            workload.deploy_workload()
+            workload.deploy_workload(recipe=False)
+
         if multi_ns:
             if pvc_interface == constants.CEPHBLOCKPOOL:
                 pvc_type = constants.RBD_INTERFACE
@@ -7241,6 +7267,49 @@ def discovered_apps_dr_workload(request):
             )
             for index in range(kubeobject):
                 instances[index].verify_workload_deployment(vrg_name=drpc_name)
+
+        if bool(recipe):
+            for index in range(recipe):
+                workload_details = ocsci_config.ENV_DATA[workload_key][index]
+                workload = BusyboxDiscoveredApps(
+                    workload_dir=workload_details["workload_dir"],
+                    workload_pod_count=workload_details["pod_count"],
+                    workload_pvc_count=workload_details["pvc_count"],
+                    workload_namespace=workload_details["workload_namespace"],
+                    workload_placement_name=workload_details[
+                        "dr_workload_app_placement_name"
+                    ],
+                    discovered_apps_pvc_selector_key=workload_details[
+                        "dr_workload_app_pvc_selector_key"
+                    ],
+                    discovered_apps_pvc_selector_value=workload_details[
+                        "dr_workload_app_pvc_selector_value"
+                    ],
+                    discovered_apps_pod_selector_key=workload_details[
+                        "dr_workload_app_pod_selector_key"
+                    ],
+                    discovered_apps_pod_selector_value=workload_details[
+                        "dr_workload_app_pod_selector_value"
+                    ],
+                    discovered_apps_recipe_name_key=workload_details[
+                        "dr_workload_app_recipe_name_key"
+                    ],
+                    discovered_apps_recipe_name_value=workload_details[
+                        "dr_workload_app_recipe_name_value"
+                    ],
+                    discovered_apps_recipe_namespace_key=workload_details[
+                        "dr_workload_app_recipe_namespace_key"
+                    ],
+                    discovered_apps_recipe_namespace_value=workload_details[
+                        "dr_workload_app_recipe_namespace_value"
+                    ],
+                    discovered_apps_name_selector_value=workload_details[
+                        "dr_workload_app_recipe_name_selector_value"
+                    ],
+                )
+            instances.append(workload)
+            total_pvc_count += workload_details["pvc_count"]
+            workload.deploy_workload(recipe=True)
         return instances
 
     def teardown():
@@ -7514,6 +7583,7 @@ def multi_cnv_workload(request, storageclass_factory, cnv_workload):
                 sc_compression = futures[future]
                 try:
                     vm_obj = future.result()
+                    run_fio(vm_obj)
                     if sc_compression == "aggressive":
                         vm_list_agg_compr.append(vm_obj)
                     else:
@@ -8198,7 +8268,6 @@ def setup_logwriter_cephfs_workload_class(
     logwriter_workload_class,
     logreader_workload_class,
 ):
-
     return setup_logwriter_cephfs_workload(
         request,
         setup_stretch_cluster_project,
@@ -8218,7 +8287,6 @@ def setup_logwriter_cephfs_workload_factory(
     logwriter_workload_factory,
     logreader_workload_factory,
 ):
-
     return setup_logwriter_cephfs_workload(
         request,
         setup_stretch_cluster_project,
@@ -9088,7 +9156,6 @@ def hosted_cluster_remove_config():
 
 
 def hosted_cluster_remove_factory(cluster_name, duty=""):
-
     ocsci_config.switch_to_provider()
     destroy_res = None
 
@@ -9316,7 +9383,6 @@ def role_rank():
 
 @pytest.fixture()
 def nb_assign_user_role_fixture(request, mcg_obj_session):
-
     email = None
 
     def factory(user_email, role_name, principal="*"):
@@ -9492,7 +9558,6 @@ def run_fio_till_cluster_full(
 
 @pytest.fixture()
 def nfs_project(project_factory):
-
     # Create NFS namespace and label with cluster-monitoring=true
     project_factory(project_name=constants.NFS_NAMESPACE_NAME)
     label = "openshift.io/cluster-monitoring=true"

@@ -319,7 +319,7 @@ generic_locators = {
         By.XPATH,
     ),
     "resource_link": (
-        "//td[@id='name']//a[contains(text(),'{}')] | "
+        "//a[@data-test='resource-link-{}'] | "
         "//td[@data-label='Name']//a[contains(text(),'{}')]",
         By.XPATH,
     ),
@@ -357,7 +357,8 @@ generic_locators = {
     ),
     "searchbar-dropdown": (
         "//div[@class='pf-c-toolbar__item']//span[@class='pf-c-dropdown__toggle-text'] | "
-        "//div[@class='pf-v5-c-toolbar__item']//span[@class='pf-v5-c-dropdown__toggle-text']",
+        "//div[@class='pf-v5-c-toolbar__item']//span[@class='pf-v5-c-dropdown__toggle-text'] | "
+        "//div[@class='pf-v6-c-input-group co-filter-group']//button/span",
         By.XPATH,
     ),
     "searchbar_drop_down": ("//button[@data-test-id='dropdown-button']", By.XPATH),
@@ -678,6 +679,18 @@ pvc_4_14 = {
     "create_pvc_dropdown_item": (
         "//button[(@class='pf-c-dropdown__menu-item' or @class='pf-v5-c-dropdown__menu-item') "
         "and contains(text(), 'With Form')]",
+        By.XPATH,
+    ),
+}
+
+pvc_4_19 = {
+    "pvc_create_button": ('a[data-test="item-create"]', By.CSS_SELECTOR),
+    "expected-capacity": (
+        "//dd[@data-test='pvc-requested-capacity']//div[text()='{}']",
+        By.XPATH,
+    ),
+    "new-capacity": (
+        "//dd[@data-test-id='pvc-capacity']//div[text()='{}']",
         By.XPATH,
     ),
 }
@@ -2244,6 +2257,7 @@ locators = {
             **pvc_4_9,
             **pvc_4_12,
             **pvc_4_14,
+            **pvc_4_19,
         },
         "acm_page": {
             **acm_page_nav,

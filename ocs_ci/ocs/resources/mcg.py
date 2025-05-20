@@ -263,7 +263,7 @@ class MCG:
     def cli_list_all_buckets(self) -> list[str]:
         """
         Returns:
-            set: A set of all bucket names
+            list[str]: A list of all bucket names
 
         """
         return self.exec_mcg_cmd("bucket list").stdout.strip().split("\n")[1:]

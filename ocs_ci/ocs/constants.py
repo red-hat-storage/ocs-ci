@@ -114,6 +114,7 @@ MULTIPLE_DEVICECLASSES_DIR = os.path.join(TEMPLATE_DIR, "multiple-deviceclasses"
 STATUS_READY = "Ready"
 STATUS_PROGRESSING = "Progressing"
 PEER_READY = "Peer ready"
+STATUS_PEERED = "Peered"
 STATUS_PENDING = "Pending"
 STATUS_CONTAINER_CREATING = "ContainerCreating"
 STATUS_AVAILABLE = "Available"
@@ -174,6 +175,7 @@ DEPLOYMENT = "Deployment"
 STORAGECLASS = "StorageClass"
 DEVICECLASS = "deviceClass"
 STORAGESYSTEM = "StorageSystem"
+STORAGECLUSTERPEER = "StorageClusterPeer"
 PV = "PersistentVolume"
 PVC = "PersistentVolumeClaim"
 POD = "Pod"
@@ -293,6 +295,7 @@ IGNORE_SC_FLEX = "rook-ceph-block"
 TEST_FILES_BUCKET = "ocsci-test-files"
 ROOK_REPOSITORY = "https://github.com/rook/rook.git"
 OPENSHIFT_STORAGE_NAMESPACE = "openshift-storage"
+VOLSYNC_SYSTEM_NAMESPACE = "volsync-system"
 OPENSHIFT_NAMESPACE = "openshift"
 OPENSHIFT_STORAGE_CLIENT_NAMESPACE = "openshift-storage-client"
 OPENSHIFT_STORAGE_EXTENDED_NAMESPACE = "openshift-storage-extended"
@@ -492,6 +495,11 @@ DEFAULT_STORAGECLASS_RBD = f"{DEFAULT_CLUSTERNAME}-ceph-rbd"
 DEFAULT_STORAGECLASS_RGW = f"{DEFAULT_CLUSTERNAME}-ceph-rgw"
 DEFAULT_STORAGECLASS_RBD_THICK = f"{DEFAULT_CLUSTERNAME}-ceph-rbd-thick"
 DEFAULT_OCS_STORAGECLASS = "default-ocs-storage-class"
+# Default storage class for LSO deployments. While each platform specific
+# subclass can redefine it, there is a well established platform
+# independent default value (based on OCS Installation guide), and it's
+# redefinition is not necessary in normal cases.
+DEFAULT_STORAGECLASS_LSO = "localblock"
 
 THIN_CSI_STORAGECLASS = "thin-csi"
 
@@ -660,6 +668,7 @@ NOOBAA_DEFAULT_BACKINGSTORE_LABEL = "pool=noobaa-default-backing-store"
 NOOBAA_CNPG_POD_LABEL = "app.kubernetes.io/name=cloudnative-pg"
 ROOK_CEPH_DETECT_VERSION_LABEL = "app=rook-ceph-detect-version"
 CEPH_FILE_CONTROLLER_DETECT_VERSION_LABEL = "app=ceph-file-controller-detect-version"
+VOLSYNC_LABEL = "app.kubernetes.io/name=volsync"
 CONTROLLER_DETECT_VERSION_NAME = "controller-detect-version"
 OSD_KEY_ROTATION_POD_NAME = "rook-ceph-osd-key-rotation"
 ROOK_CEPH_DETECT_VERSION_POD_NAME = "rook-ceph-detect-version"
@@ -704,11 +713,16 @@ NOOBAA_CORE_STATEFULSET = "noobaa-core"
 NOOBAA_CORE_POD = "noobaa-core-0"
 
 # Noobaa db secret
-NOOBAA_DB_SECRET = "noobaa-db"
+NOOBAA_DB_SECRET = "noobaa-db-pg-cluster-app"
 NOOBAA_S3_SERVING_CERT = "noobaa-s3-serving-cert"
 
 # NooBaa DB CNPG
 NB_DB_PRIMARY_POD_LABEL = "cnpg.io/instanceRole=primary"
+CNPG_POD_ROLE_INSTANCE_LABEL = "cnpg.io/podRole=instance"
+CNPG_CLUSTER_KIND = "cluster"
+NB_DB_CNPG_CLUSTER_NAME = "noobaa-db-pg-cluster"
+NB_DB_CNPG_HEALTHY_STATUS = "Cluster in healthy state"
+NB_DB_CNPG_APP_SECRET = "noobaa-db-pg-cluster-app"
 
 # Auth Yaml
 OCSCI_DATA_BUCKET = "ocs-ci-data"
@@ -1283,6 +1297,7 @@ OPENSHIFT_DR_SYSTEM_OPERATORGROUP = os.path.join(
     TEMPLATE_MULTICLUSTER_DIR, "openshift_dr_system_operatorgroup.yaml"
 )
 ACM_DPA = os.path.join(TEMPLATE_MULTICLUSTER_DIR, "dpa_acm.yaml")
+DR_SERVICE_EXPORTER = os.path.join(TEMPLATE_MULTICLUSTER_DIR, "service_exporter.yaml")
 DR_POLICY_ACM_HUB = os.path.join(TEMPLATE_MULTICLUSTER_DIR, "dr_policy_acm_hub.yaml")
 ODR_S3_SECRET_YAML = os.path.join(TEMPLATE_MULTICLUSTER_DIR, "odr_s3_secret.yaml")
 OPENSHIFT_DR_SYSTEM_NAMESPACE = "openshift-dr-system"
@@ -3096,6 +3111,8 @@ UI_INPUT_RULES_STORAGE_SYSTEM = {
 
 # DR
 DRPC_PATH = os.path.join(TEMPLATE_DIR, "DR", "drpc.yaml")
+DRPC_RECIPE_PATH = os.path.join(TEMPLATE_DIR, "DR", "drpc_with_recipe.yaml")
+RECIPE_PATH = os.path.join(TEMPLATE_DIR, "DR", "recipe_with_checkhooks.yaml")
 PLACEMENT_PATH = os.path.join(TEMPLATE_DIR, "DR", "placement.yaml")
 CLUSTERROLEBINDING_APPSET_PULLMODEL_PATH = os.path.join(
     TEMPLATE_DIR, "DR", "clusterrolebinding_appset_pullmodel.yaml"

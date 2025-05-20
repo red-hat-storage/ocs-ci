@@ -9,7 +9,6 @@ from ocs_ci.framework.pytest_customization.marks import (
     mcg,
     skipif_ibm_cloud_managed,
     provider_mode,
-    jira,
 )
 from ocs_ci.ocs import constants
 from ocs_ci.helpers.helpers import create_unique_resource_name
@@ -24,6 +23,7 @@ from ocs_ci.framework.testlib import (
     tier2,
     skipif_ui_not_support,
     ui,
+    post_upgrade,
 )
 from ocs_ci.ocs.exceptions import IncorrectUiOptionRequested
 from ocs_ci.ocs.ocp import OCP, get_all_resource_names_of_a_kind
@@ -34,6 +34,7 @@ from ocs_ci.ocs.ui.page_objects.object_bucket_claims_tab import (
 from ocs_ci.ocs.ui.page_objects.buckets_tab import BucketsTab
 from ocs_ci.ocs.ui.page_objects.page_navigator import PageNavigator
 from ocs_ci.ocs.scale_noobaa_lib import fetch_noobaa_storage_class_name
+from ocs_ci.ocs.bucket_utils import wait_for_bucket_count_stability
 
 
 logger = logging.getLogger(__name__)
@@ -340,7 +341,6 @@ class TestObcUserInterface(object):
                 resource_name=obc_name
             )
 
-    @jira("DFBUGS-1147")
     @pytest.mark.parametrize(
         argnames=["storageclass", "bucketclass", "delete_via", "verify_ob_removal"],
         argvalues=generate_test_params(),
@@ -420,6 +420,7 @@ class TestObcUserInterface(object):
 @black_squad
 @tier1
 class TestBucketCreate:
+    @post_upgrade
     @pytest.mark.polarion_id("OCS-6334")
     def test_bucket_create(self, setup_ui_class_factory):
         """
@@ -442,6 +443,7 @@ class TestBucketCreate:
             bucket_ui.create_folder_in_bucket()
         ), "Failed to create and upload folder in bucket"
 
+    @post_upgrade
     @pytest.mark.polarion_id("OCS-6397")
     def test_empty_bucket_delete(self, setup_ui_class_factory):
         """
@@ -565,7 +567,7 @@ class TestBucketCreate:
 
         Steps:
         1. Navigate to the Object Storage Buckets page
-        2. Check initial bucket count via CLI
+        2. Check initial bucket count via CLI and wait for stability
         3. Create additional buckets if needed to exceed 100 total buckets
         4. Verify pagination controls appear with >100 buckets
         5. Collect buckets listed on first page (should be 100)
@@ -579,16 +581,12 @@ class TestBucketCreate:
         bucket_ui.nav_object_storage_page()
         bucket_ui.nav_buckets_page()
 
-        cli_buckets = list(mcg_obj.cli_list_all_buckets())
-        initial_bucket_count = len(cli_buckets)
-        logger.info(f"Initial bucket count (from CLI): {initial_bucket_count}")
-
-        ui_buckets = bucket_ui.get_buckets_list()
-        ui_bucket_count = len(ui_buckets)
-        logger.info(f"UI bucket count (current page): {ui_bucket_count}")
+        # Get initial bucket count and wait for stability
+        initial_count, _ = wait_for_bucket_count_stability(mcg_obj)
+        logger.info(f"Initial stable bucket count: {initial_count}")
 
         # Determine if we need to create more buckets
-        buckets_needed = max(0, 101 - initial_bucket_count)
+        buckets_needed = max(0, 101 - initial_count)
         if buckets_needed > 0:
             logger.info(
                 f"Creating {buckets_needed} additional buckets to test pagination"
@@ -604,13 +602,16 @@ class TestBucketCreate:
             bucket_ui.nav_object_storage_page()
             bucket_ui.nav_buckets_page()
 
-            cli_buckets = list(mcg_obj.cli_list_all_buckets())
-            new_bucket_count = len(cli_buckets)
-            logger.info(f"New bucket count (from CLI): {new_bucket_count}")
+            # Wait for bucket count to stabilize after creation
+            final_count, reached_expected = wait_for_bucket_count_stability(
+                mcg_obj, expected_count=101
+            )
+            logger.info(f"Final bucket count after creation: {final_count}")
 
-            assert (
-                new_bucket_count >= 101
-            ), f"Failed to create enough buckets for pagination. Current count: {new_bucket_count}"
+            assert reached_expected, (
+                f"Failed to create enough buckets for pagination. "
+                f"Current count: {final_count}, Expected: 101"
+            )
 
         assert (
             bucket_ui.has_pagination_controls()

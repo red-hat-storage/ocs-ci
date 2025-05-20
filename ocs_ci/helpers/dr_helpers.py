@@ -16,6 +16,7 @@ from ocs_ci.ocs.exceptions import (
     TimeoutExpiredError,
     UnexpectedBehaviour,
     NotFoundError,
+    UnexpectedDeploymentConfiguration,
 )
 from ocs_ci.ocs.resources.drpc import DRPC
 from ocs_ci.ocs.resources.pod import get_all_pods, get_ceph_tools_pod
@@ -1829,6 +1830,13 @@ def do_discovered_apps_cleanup(
     config.switch_acm_ctx()
     drpc_obj = DRPC(namespace=constants.DR_OPS_NAMESAPCE, resource_name=drpc_name)
     drpc_obj.wait_for_progression_status(status=constants.STATUS_WAITFORUSERTOCLEANUP)
+    time.sleep(90)
+    assert drpc_obj.get_progression_status(
+        status_to_check=constants.STATUS_WAITFORUSERTOCLEANUP
+    )
+    logger.info(
+        f'Progression status after 90 seconds is {drpc_obj.get()["status"]["progression"]}'
+    )
     config.switch_to_cluster_by_name(old_primary)
     workload_path = constants.DR_WORKLOAD_REPO_BASE_DIR + "/" + workload_dir
     run_cmd(
@@ -2068,6 +2076,29 @@ def configure_rdr_hub_recovery():
     return True
 
 
+def get_cluster_set_name():
+    """
+    Get Cluster set name from managedcluster
+
+    Returns:
+        list: List of uniq cluster set name
+    """
+    cluster_set = []
+    managed_clusters = ocp.OCP(kind=constants.ACM_MANAGEDCLUSTER).get().get("items", [])
+    # ignore local-cluster here
+    for i in managed_clusters:
+        if i["metadata"]["name"] != constants.ACM_LOCAL_CLUSTER:
+            cluster_set.append(i["metadata"]["labels"][constants.ACM_CLUSTERSET_LABEL])
+    if all(x == cluster_set[0] for x in cluster_set):
+        logger.info(f"Found the unique clusterset {cluster_set[0]}")
+    else:
+        raise UnexpectedDeploymentConfiguration(
+            "There are more then one clusterset added to multiple managedcluters"
+        )
+
+    return cluster_set
+
+
 def wait_for_vrg_state(
     vrg_state, vrg_namespace, resource_name, timeout=900, sleep_timeout=5
 ):
@@ -2097,3 +2128,91 @@ def wait_for_vrg_state(
         )
         logger.info(error_msg)
         raise TimeoutExpiredError(error_msg)
+
+
+def validate_storage_cluster_peer_state():
+    """
+    Validate Storage cluster peer state
+
+    Raises:
+        TimeoutExpiredError: incase storage cluster peer state is not reached 'Peered' state.
+
+    """
+    restore_index = config.cur_index
+    managed_clusters = get_non_acm_cluster_config()
+    for cluster in managed_clusters:
+        index = cluster.MULTICLUSTER["multicluster_index"]
+        config.switch_ctx(index)
+        logger.info("Validating Storage Cluster Peer status")
+        sample = TimeoutSampler(
+            timeout=300,
+            sleep=5,
+            func=check_storage_cluster_peer_state,
+        )
+        if not sample.wait_for_func_status(result=True):
+            error_msg = (
+                "Storage cluster peer status does not have expected values within the time "
+                f"limit on cluster {cluster.ENV_DATA['cluster_name']}"
+            )
+            logger.error(error_msg)
+            raise TimeoutExpiredError(error_msg)
+    config.switch_ctx(restore_index)
+
+
+def check_storage_cluster_peer_state():
+    """
+    Checks Storage cluster peer state
+
+    Returns:
+        bool: True if storage cluster peer state is 'Peered'. otherwise False
+
+    """
+    storage_cluster_peer = ocp.OCP(
+        kind=constants.STORAGECLUSTERPEER,
+        namespace=config.ENV_DATA["cluster_namespace"],
+    )
+    storage_cluster_peer_data = storage_cluster_peer.get()
+    storage_cluster_peer_status = storage_cluster_peer_data["items"][0]["status"].get(
+        "state"
+    )
+    if storage_cluster_peer_status == constants.STATUS_PEERED:
+        return True
+    else:
+        logger.warning(f"storage cluster peer state is {storage_cluster_peer_status}")
+        return False
+
+
+def create_service_exporter():
+    """
+    Create Service exporter
+    """
+    restore_index = config.cur_index
+    managed_clusters = get_non_acm_cluster_config()
+    for cluster in managed_clusters:
+        index = cluster.MULTICLUSTER["multicluster_index"]
+        config.switch_ctx(index)
+        logger.info("Creating Service exporter")
+        run_cmd(f"oc create -f {constants.DR_SERVICE_EXPORTER}")
+    config.switch_ctx(restore_index)
+
+
+def verify_volsync():
+    """
+    Verify volsync pod is created in volsync-system namespace
+    """
+    restore_index = config.cur_index
+    managed_clusters = get_non_acm_cluster_config()
+    for cluster in managed_clusters:
+        index = cluster.MULTICLUSTER["multicluster_index"]
+        config.switch_ctx(index)
+        logger.info(
+            f"Verifying volsync pod in namespace {constants.VOLSYNC_SYSTEM_NAMESPACE}"
+        )
+        pod = ocp.OCP(kind=constants.POD, namespace=constants.VOLSYNC_SYSTEM_NAMESPACE)
+        assert pod.wait_for_resource(
+            condition="Running",
+            selector=constants.VOLSYNC_LABEL,
+            resource_count=1,
+            timeout=600,
+        )
+    config.switch_ctx(restore_index)

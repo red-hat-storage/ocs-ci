@@ -41,6 +41,7 @@ from ocs_ci.ocs.resources.ocs import OCS
 from ocs_ci.ocs.resources.job import get_job_obj, get_jobs_with_prefix
 from ocs_ci.utility import templating
 from ocs_ci.utility.utils import (
+    get_primary_nb_db_pod,
     run_cmd,
     check_timeout_reached,
     TimeoutSampler,
@@ -839,16 +840,21 @@ def get_ceph_tools_pod(
         and config.ENV_DATA.get("cluster_type", "").lower()
         in [constants.MS_CONSUMER_TYPE, constants.HCI_CLIENT]
     ):
+        provider_cluster_index = config.get_provider_index()
         provider_kubeconfig = os.path.join(
-            config.clusters[config.get_provider_index()].ENV_DATA["cluster_path"],
-            config.clusters[config.get_provider_index()].RUN.get("kubeconfig_location"),
+            config.clusters[provider_cluster_index].ENV_DATA["cluster_path"],
+            config.clusters[provider_cluster_index].RUN.get("kubeconfig_location"),
         )
         cluster_kubeconfig = provider_kubeconfig
+        cluster_namespace = config.clusters[provider_cluster_index].ENV_DATA[
+            "cluster_namespace"
+        ]
     else:
         cluster_kubeconfig = config.ENV_DATA.get("provider_kubeconfig", "")
+        cluster_namespace = ""
 
     if cluster_kubeconfig:
-        namespace = config.ENV_DATA["cluster_namespace"]
+        namespace = cluster_namespace or config.ENV_DATA["cluster_namespace"]
     else:
         namespace = namespace or config.ENV_DATA["cluster_namespace"]
 
@@ -1057,12 +1063,7 @@ def get_noobaa_db_pod():
         Pod object: Noobaa db pod object
 
     """
-    nb_db = get_pods_having_label(
-        label=constants.NOOBAA_DB_LABEL_47_AND_ABOVE,
-        namespace=config.ENV_DATA["cluster_namespace"],
-    )
-    nb_db_pod = Pod(**nb_db[0])
-    return nb_db_pod
+    return get_primary_nb_db_pod()
 
 
 def get_noobaa_core_pod():
@@ -2733,6 +2734,8 @@ def check_toleration_on_pods(toleration_key=constants.TOLERATION_KEY):
     pods_missing_toleration = []
     for pod_obj in pod_objs:
         resource_name = pod_obj.name
+        if "storageclient" in resource_name:
+            continue
         tolerations = pod_obj.get().get("spec").get("tolerations")
 
         # Check if any toleration matches the provided key

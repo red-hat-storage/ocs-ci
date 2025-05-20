@@ -23,6 +23,7 @@ from ocs_ci.ocs.exceptions import (
     UnexpectedBehaviour,
 )
 from ocs_ci.ocs.ocp import OCP
+from ocs_ci.ocs.resources.s3_batch_deleter import S3BatchDeleter
 from ocs_ci.utility import templating
 from ocs_ci.utility.retry import retry
 from ocs_ci.utility.ssl_certs import get_root_ca_cert
@@ -2530,7 +2531,9 @@ def delete_all_noobaa_buckets(mcg_obj, request):
     for bucket in buckets["Buckets"]:
         logger.info(f"Deleting {bucket} and its objects")
         s3_bucket = mcg_obj.s3_resource.Bucket(bucket["Name"])
-        s3_bucket.objects.all().delete()
+        delete_all_objects_in_batches(
+            s3_resource=mcg_obj.s3_resource, bucket_name=s3_bucket
+        )
         s3_bucket.delete()
 
     def finalizer():
@@ -2610,6 +2613,50 @@ def get_object_count_in_bucket(io_pod, bucket_name, prefix="", s3_obj=None):
         out_yaml_format=False,
     )
     return len(output.splitlines())
+
+
+def wait_for_bucket_count_stability(
+    mcg_obj, expected_count=None, max_retries=10, retry_interval=5, stability_count=3
+):
+    """
+    Poll CLI until bucket count is stable or expected count is reached.
+
+    Args:
+        mcg_obj: MCG object instance with cli_list_all_buckets method
+        expected_count (int, optional): Expected number of buckets
+        max_retries (int): Maximum number of retry attempts
+        retry_interval (int): Seconds between retries
+        stability_count (int): Number of consecutive identical counts to consider stable
+
+    Returns:
+        tuple: (final_count, is_expected_reached)
+    """
+    previous_counts = []
+    for attempt in range(max_retries):
+        cli_buckets = mcg_obj.cli_list_all_buckets()
+        current_count = len(cli_buckets)
+
+        logger.info(
+            f"Bucket count from CLI (attempt {attempt+1}/{max_retries}): {current_count}"
+        )
+
+        previous_counts.append(current_count)
+
+        is_stable = False
+        if len(previous_counts) >= stability_count:
+            is_stable = len(set(previous_counts[-stability_count:])) == 1
+
+        meets_expected = expected_count is None or current_count >= expected_count
+
+        if is_stable and meets_expected:
+            logger.info(
+                f"Bucket count stabilized at {current_count} for {stability_count} consecutive checks"
+            )
+            return current_count, True
+
+        time.sleep(retry_interval)
+
+    return previous_counts[-1] if previous_counts else 0, False
 
 
 def wait_for_object_count_in_bucket(
@@ -3280,3 +3327,32 @@ def verify_objs_deleted_from_objmds(bucket_name, timeout=600, sleep=30):
         result=True
     ), "Not all the objects are marked deleted"
     logger.info("All the objects are marked expired")
+
+
+def delete_all_objects_in_batches(
+    s3_resource,
+    bucket_name,
+    parallelize=False,
+):
+    """
+    Delete all objects from an S3 bucket in batches.
+
+    Note that use_parallel should only be used buckets with hundreds of thousands
+    of objects. For smaller buckets, it is recommended to use the simpler sequential
+    deletion method to avoid overwhelming the S3 API and the system's resources.
+
+    Args:
+        s3_resource (S3.Resource): Boto3 S3 resource object
+        bucket_name (str): Name of the S3 bucket
+        parallelize (bool): If True, delete objects in parallel using threads
+    """
+    batch_deleter = S3BatchDeleter(
+        s3_resource=s3_resource,
+        bucket_name=bucket_name,
+    )
+
+    # Delete objects in parallel or sequentially based on the use_parallel flag
+    if parallelize:
+        batch_deleter.delete_in_parallel()
+    else:
+        batch_deleter.delete_sequentially()

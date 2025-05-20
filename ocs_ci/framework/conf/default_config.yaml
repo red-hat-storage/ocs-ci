@@ -167,7 +167,7 @@ ENV_DATA:
   local_storage_namespace: 'openshift-local-storage'
   monitoring_enabled: true
   persistent-monitoring: true
-  platform: 'AWS'
+  platform: 'aws'
   deployment_type: 'ipi'
   region: 'us-east-2'
   base_domain: 'qe.rh-ocs.com'
