@@ -1,7 +1,9 @@
 import logging
 
 from ocs_ci.framework import config
+from ocs_ci.helpers.odf_cli import odf_cli_setup_helper
 
+# from ocs_ci.ocs.constants import
 
 logger = logging.getLogger(__name__)
 
@@ -103,3 +105,92 @@ def switch_to_provider_for_function(func):
                 config.switch_ctx(orig_index)
 
     return inner
+
+
+def safe_exec(func):
+    """
+    Decorator to safely execute a function and suppress any exceptions.
+
+    If an exception is raised during the execution of the wrapped function,
+    it is caught and logged as a warning. The function will return None in such cases.
+
+    Useful for non-critical operations where failure should not interrupt the main flow.
+
+    Returns:
+        The result of the function if successful, or None if an exception occurred.
+    """
+
+    def wrapper(*args, **kwargs):
+        result = None
+        try:
+            result = func(*args, **kwargs)
+        except Exception as ex:
+            logger.warning(ex)
+        return result
+
+    return wrapper
+
+
+def enable_high_recovery(func):
+    """
+    Decorator to temporarily switch the Ceph recovery profile to 'high_recovery_ops'
+    during the execution of the wrapped function, and revert it back afterward.
+
+    This is useful when performing operations like OSD replacement or data rebalancing
+    that benefit from faster Ceph recovery performance.
+
+    If the ODF CLI runner or current profile cannot be determined, the function executes without change.
+
+    The switch is always reverted, even if the function raises an exception.
+
+    Returns:
+        The result of the wrapped function.
+    """
+
+    def wrapper(*args, **kwargs):
+        odf_cli_runner = safe_exec(odf_cli_setup_helper)()
+        if not odf_cli_runner:
+            logger.warning(
+                "ODF CLI runner not available, proceeding without profile switch"
+            )
+            return func(*args, **kwargs)
+
+        original_profile = safe_exec(odf_cli_runner.get_recovery_profile)()
+        if not original_profile:
+            logger.warning(
+                "Failed to get current recovery profile, proceeding without profile switch"
+            )
+            return func(*args, **kwargs)
+
+        logger.info("Setting recovery profile to 'high_recovery_ops'")
+        safe_exec(odf_cli_runner.run_set_recovery_profile_high)()
+
+        try:
+            return func(*args, **kwargs)
+        finally:
+            logger.info(f"Switch to the original recovery profile '{original_profile}'")
+            safe_exec(odf_cli_runner.run_set_recovery_profile)(original_profile)
+
+    return wrapper
+
+
+def enable_high_recovery_if_io_flag(func):
+    """
+    Decorator that applies 'enable_high_recovery' only if the 'io_in_bg' flag
+    is set to True in the test configuration. Otherwise, the function is run as-is.
+
+    Returns:
+        The result of the wrapped function.
+    """
+
+    def wrapper(*args, **kwargs):
+        if not config.RUN.get("io_in_bg"):
+            logger.info(
+                "The 'io_in_bg' param is not set. Proceeding with the original function..."
+            )
+            return func(*args, **kwargs)
+
+        # Apply the real decorator 'enable_high_recovery'
+        return enable_high_recovery(func)(*args, **kwargs)
+
+    return wrapper
