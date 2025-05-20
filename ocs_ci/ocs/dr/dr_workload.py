@@ -1318,7 +1318,7 @@ class BusyboxDiscoveredApps(DRWorkload):
         log.info(f"Creating Placement for workload {self.workload_name}")
         run_cmd(f"oc create -f {placement_yaml.name}")
 
-    def create_dprc(
+    def create_drpc(
         self,
         drpc_name=None,
         placement_name=None,
