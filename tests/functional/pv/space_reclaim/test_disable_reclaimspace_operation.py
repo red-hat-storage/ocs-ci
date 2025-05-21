@@ -3,7 +3,7 @@ import pytest
 import math
 from ocs_ci.framework.pytest_customization.marks import green_squad
 from ocs_ci.ocs import constants
-from ocs_ci.framework.testlib import tier1
+from ocs_ci.framework.testlib import tier1, skipif_external_mode
 from ocs_ci.helpers.helpers import (
     change_reclaimspacecronjob_state_for_pvc,
     get_rbd_image_info,
@@ -100,6 +100,7 @@ class TestDisableReclaimSpaceOperation:
             self.wait_till_expected_image_size(pvc_obj, expected_volume_size)
 
     @pytest.mark.polarion_id("OCS-6279")
+    @skipif_external_mode
     def test_disable_reclaimspace_operation(self, pod_factory):
         """Test to verify disabling and enabling reclaim space operation.
 
