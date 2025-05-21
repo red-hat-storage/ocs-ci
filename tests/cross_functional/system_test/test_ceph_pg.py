@@ -123,3 +123,21 @@ class TestCephPg(ManageTest):
         # change target size ratio back to the default 0.49
         change_pool_target_size_ratio(constants.DEFAULT_CEPHBLOCKPOOL, 0.49)
         change_pool_target_size_ratio(constants.DEFAULT_CEPHFS_POOL, 0.49)
+
+    @skipif_ocs_version("<4.19")
+    @tier1
+    def test_metadata_pools_ratio(self):
+        """
+        Test verifies that metadata pools don't have
+        the default target size ratio of 0.49
+        """
+
+    assert (
+        get_autoscale_status_property(".mgr", "target_ratio") == 0
+    ), "Target ratio of .mgr metadata pool should be 0.0"
+    assert (
+        get_autoscale_status_property(
+            "ocs-storagecluster-cephfilesystem-metadata", "target_ratio"
+        )
+        == 0
+    ), "Target ratio of ocs-storagecluster-cephfilesystem-metadata should be 0.0"
