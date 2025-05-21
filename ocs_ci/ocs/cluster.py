@@ -1548,6 +1548,7 @@ def get_autoscale_status_property(pool_name, prop):
         pools = json.loads(out)[0]
         for pool in pools:
             if pool["pool_name"] == pool_name:
+                logger.info(f"Pool {pool_name} has {prop}: {pool[prop]}")
                 return pool[prop]
         logger.info(f"Pool {pool_name} not found")
         return None
