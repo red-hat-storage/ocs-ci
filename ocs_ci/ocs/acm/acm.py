@@ -574,9 +574,9 @@ def import_clusters_via_cli(clusters):
                     klusterletconfig_name = klusterletconfig.get("metadata").get("name")
                     break
             if klusterletconfig_name:
-                managed_cluster["annotations"][
-                    "agent.open-cluster-management.io/klusterlet-config"
-                ] = klusterletconfig_name
+                managed_cluster["annotations"] = {
+                    "agent.open-cluster-management.io/klusterlet-config": klusterletconfig_name
+                }
             else:
                 raise ResourceNotFoundError(
                     "No KlusterletConfig found to import MCE clusters"
