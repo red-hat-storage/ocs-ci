@@ -20,6 +20,7 @@ DEFAULT_STORAGE_CLASS_MAP = {
     constants.HCI_BAREMETAL: None,
     constants.BAREMETAL_PLATFORM: None,
     constants.FUSIONAAS_PLATFORM: None,
+    constants.IBM_POWER_PLATFORM: None,
 }
 
 
