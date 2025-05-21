@@ -152,6 +152,10 @@ class BenchmarkOperator(object):
         Deploy the benchmark-operator
 
         """
+        _env = kwargs.pop("env", os.environ.copy())
+        kubeconfig_path = config.RUN.get("kubeconfig")
+        if kubeconfig_path:
+            _env["KUBECONFIG"] = kubeconfig_path
         log.info("Deploy the benchmark-operator project")
         try:
             a = cmd(b)
@@ -171,6 +175,7 @@ class BenchmarkOperator(object):
                 shell=True,
                 check=True,
                 cwd=self.dir,
+                env=_env,
             )
         except Exception as ex:
             print(f"First attempt failed with error: {ex}")
