@@ -2805,10 +2805,11 @@ def check_toleration_on_subscriptions(toleration_key=constants.TOLERATION_KEY):
 
 def check_duplicate_tolerations_on_pods():
     """
-    Function to check for duplicate tolerations on pods.
+    Function to check for duplicate tolerations on all pods in openshift-storage namespace.
 
     Raises:
         DuplicateTolerationException: Raised when duplicate tolerations are found on any pod.
+
     """
     pod_objs = get_all_pods(
         namespace=config.ENV_DATA["cluster_namespace"],
