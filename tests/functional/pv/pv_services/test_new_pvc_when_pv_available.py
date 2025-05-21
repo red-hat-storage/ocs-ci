@@ -42,7 +42,7 @@ class TestNewPvcWhenPvAvailable(ManageTest):
 
         old_pv_names = []
         for pvc_obj in self.pvcs:
-            pv_obj = pvc_obj.backed_pv_obj()
+            pv_obj = pvc_obj.backed_pv_obj
             old_pv_names.append(pv_obj.name)
 
             # Change the persistentVolumeReclaimPolicy of the PV to Retain
