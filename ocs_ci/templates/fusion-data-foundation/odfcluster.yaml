@@ -1,0 +1,19 @@
+apiVersion: odf.isf.ibm.com/v1
+kind: OdfCluster
+metadata:
+  name: odfcluster
+  namespace: ibm-spectrum-fusion-ns
+spec:
+  taintNode: false
+  creator: CreatedByFusion
+  deviceSets:
+  - capacity: 1Ti
+    count: 1
+    name: fusion-storage
+    storageClass: null
+  encryption:
+    clusterWide: false
+    keyManagementService:
+      enable: false
+  externalStorage: {}
+  storageNodes: []
