@@ -31,7 +31,7 @@ def fioscale(request):
     """
 
     scale_pvc = 750
-    pvc_per_pod_count = 20
+    pvc_per_pod_count = 1
 
     # Scale FIO pods in the cluster
     fioscale = FioPodScale(
