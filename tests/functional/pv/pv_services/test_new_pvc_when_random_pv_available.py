@@ -24,11 +24,11 @@ class TestNewPvcWhenRandomPvAvailable(ManageTest):
 
         """
         self.pvcs = []
-        self.namespace = None
+        project = None
         for interface in [constants.CEPHBLOCKPOOL, constants.CEPHFILESYSTEM]:
             pvc_obj = pvc_factory(
                 interface=interface,
-                project=self.namespace,
+                project=project,
                 storageclass=None,
                 size=10,
                 access_mode=constants.ACCESS_MODE_RWO,
@@ -37,7 +37,7 @@ class TestNewPvcWhenRandomPvAvailable(ManageTest):
                 size_unit="Gi",
                 wait_for_resource_status_timeout=90,
             )
-            self.namespace = pvc_obj.namespace
+            project = pvc_obj.project
             self.pvcs.append(pvc_obj)
 
     @tier2
