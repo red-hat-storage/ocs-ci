@@ -178,11 +178,19 @@ def verify_image_versions(old_images, upgrade_version, version_before_upgrade):
     if int(noobaa_db_psql_version) == constants.NOOBAA_POSTGRES_12_VERSION:
         ignore_psql_12_verification = False
     try:
+        num_nodes = (
+            config.ENV_DATA["worker_replicas"]
+            + config.ENV_DATA["master_replicas"]
+            + config.ENV_DATA.get("infra_replicas", 0)
+        )
+        upgrade_noobaa_timeout = 1620
+        if num_nodes >= 6:
+            upgrade_noobaa_timeout = 2220
         verify_pods_upgraded(
             old_images,
             selector=constants.NOOBAA_APP_LABEL,
             count=noobaa_pods,
-            timeout=1620,
+            timeout=upgrade_noobaa_timeout,
             ignore_psql_12_verification=ignore_psql_12_verification,
         )
     except TimeoutException as ex:
