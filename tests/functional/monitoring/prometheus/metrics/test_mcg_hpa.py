@@ -4,6 +4,7 @@ from ocs_ci.framework import config
 from ocs_ci.framework.pytest_customization import marks
 from ocs_ci.framework.pytest_customization.marks import (
     blue_squad,
+    runs_on_provider,
     skipif_managed_service,
     tier1,
     mcg,
@@ -19,6 +20,7 @@ logger = logging.getLogger(__name__)
 @mcg
 @blue_squad
 @tier1
+@runs_on_provider
 @skipif_ocs_version("<4.6")
 @skipif_ocp_version("<4.6")
 @marks.polarion_id("OCS-2376")
