@@ -1632,16 +1632,21 @@ class VSPHEREIPI(VSPHEREBASE):
             config.ENV_DATA["vsphere_user"],
             config.ENV_DATA["vsphere_password"],
         )
-        all_vms = vsphere.get_vms_by_string(config.ENV_DATA["cluster_name"])
-        vsphere.stop_vms(all_vms)
+        try:
+            all_vms = vsphere.get_vms_by_string(config.ENV_DATA["cluster_name"])
+            vsphere.stop_vms(all_vms)
 
-        for vm in all_vms:
-            try:
-                vsphere.remove_disks_with_main_disk(vm)
-            except Exception as e:
-                logger.error(
-                    f"Removing disks for {vm.name} in destroy fail with the error {e}"
-                )
+            for vm in all_vms:
+                try:
+                    vsphere.remove_disks_with_main_disk(vm)
+                except Exception as e:
+                    logger.error(
+                        f"Removing disks for {vm.name} in destroy fail with the error {e}"
+                    )
+        except Exception as e:
+            logger.error(
+                f"Failed to fetch VM's. Exception: {e}. Continuing to destroy cluster"
+            )
 
         try:
             run_cmd(
