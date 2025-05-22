@@ -1545,7 +1545,8 @@ def get_autoscale_status_property(pool_name, prop):
     ct_pod = pod.get_ceph_tools_pod()
     try:
         out = ct_pod.exec_ceph_cmd(ceph_cmd)
-        pools = json.loads(out)[0]
+        logger.info(f"Autoscale-status: {out}")
+        pools = json.loads(out)
         for pool in pools:
             if pool["pool_name"] == pool_name:
                 logger.info(f"Pool {pool_name} has {prop}: {pool[prop]}")
