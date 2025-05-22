@@ -1232,6 +1232,8 @@ acm_configuration_4_18 = {
 }
 
 acm_configuration_4_19 = {
+    "click-local-cluster": ("//span[normalize-space()='local-cluster']", By.XPATH),
+    "all-clusters-view": ("//span[contains(text(),'All Clusters')]", By.XPATH),
     "clear-search": ("//button[@aria-label='Reset']", By.XPATH),
     "install-submariner-btn": (
         "//a[@id='install-submariner']",

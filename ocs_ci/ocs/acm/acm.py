@@ -452,8 +452,8 @@ def login_to_acm():
     log.info(f"URL: {url}")
     driver = login_ui(url)
     page_nav = AcmPageNavigator()
-    if not compare_versions(cmp_str):
-        page_nav.navigate_from_ocp_to_acm_cluster_page()
+
+    page_nav.navigate_from_ocp_to_acm_cluster_page()
 
     if compare_versions(cmp_str):
         page_title = ACM_PAGE_TITLE_2_7_ABOVE
