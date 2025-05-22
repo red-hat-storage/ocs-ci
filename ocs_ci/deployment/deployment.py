@@ -260,7 +260,11 @@ class Deployment(object):
             switch_ctx (int): The cluster index by the cluster name
 
         """
-        config.switch_ctx(switch_ctx) if switch_ctx else config.switch_acm_ctx()
+        (
+            config.switch_ctx(switch_ctx)
+            if switch_ctx is not None
+            else config.switch_acm_ctx()
+        )
 
         logger.info("Creating Namespace for GitOps Operator ")
         run_cmd(f"oc create namespace {constants.GITOPS_NAMESPACE}")
