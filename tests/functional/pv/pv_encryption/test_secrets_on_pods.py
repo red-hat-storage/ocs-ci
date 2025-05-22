@@ -4,7 +4,10 @@ import yaml
 from ocs_ci.framework.testlib import ManageTest, tier1, green_squad
 from ocs_ci.utility.utils import run_cmd
 from ocs_ci.framework import config
-from ocs_ci.framework.pytest_customization.marks import skipif_external_mode
+from ocs_ci.framework.pytest_customization.marks import (
+    skipif_external_mode,
+    runs_on_provider,
+)
 
 logger = logging.getLogger(__name__)
 # The below expected keys and names are gathered from pods with safe security.
@@ -28,6 +31,7 @@ EXPECTED_NAMES = {
 class TestSecretsAndSecurityContext(ManageTest):
     @tier1
     @green_squad
+    @runs_on_provider
     def test_secrets_in_env_variables(self):
         """
         Testing if secrets are used in env variables of pods
@@ -60,6 +64,7 @@ class TestSecretsAndSecurityContext(ManageTest):
     @tier1
     @green_squad
     @skipif_external_mode
+    @runs_on_provider
     def test_securityContext_in_Crashcollector(self):
         """
         Testing security context of rook-ceph-crash-collector pods, in a
