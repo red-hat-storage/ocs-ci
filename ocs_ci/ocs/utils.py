@@ -819,70 +819,61 @@ def setup_ceph_toolbox(force_setup=False, storage_cluster=None):
     if ocsci_config.ENV_DATA["mcg_only_deployment"]:
         log.info("Skipping Ceph toolbox setup due to running in MCG only mode")
         return
+    namespace = ocsci_config.ENV_DATA["cluster_namespace"]
+    ceph_toolbox = get_pod_name_by_pattern("rook-ceph-tools", namespace)
+    # setup toolbox for external mode
+    # Refer bz: 1856982 - invalid admin secret
+    if len(ceph_toolbox) == 1:
+        log.info("Ceph toolbox already exists, skipping")
+        if force_setup:
+            log.info("Running force setup for Ceph toolbox!")
+        else:
+            return
+    external_mode = ocsci_config.DEPLOYMENT.get("external_mode")
 
-    with config.RunWithProviderConfigContextIfAvailable():
-        namespace = ocsci_config.ENV_DATA["cluster_namespace"]
-        ceph_toolbox = get_pod_name_by_pattern("rook-ceph-tools", namespace)
-        # setup toolbox for external mode
-        # Refer bz: 1856982 - invalid admin secret
-        if len(ceph_toolbox) == 1:
-            log.info("Ceph toolbox already exists, skipping")
-            if force_setup:
-                log.info("Running force setup for Ceph toolbox!")
-            else:
-                return
-        external_mode = ocsci_config.DEPLOYMENT.get("external_mode")
-
-        if ocs_version == version.VERSION_4_2:
-            tool_box_data = templating.load_yaml(constants.TOOL_POD_YAML)
-            tool_box_data["spec"]["template"]["spec"]["containers"][0][
+    if ocs_version == version.VERSION_4_2:
+        tool_box_data = templating.load_yaml(constants.TOOL_POD_YAML)
+        tool_box_data["spec"]["template"]["spec"]["containers"][0][
+            "image"
+        ] = get_rook_version()
+        rook_toolbox = OCS(**tool_box_data)
+        rook_toolbox.create()
+    else:
+        if external_mode:
+            toolbox = templating.load_yaml(constants.TOOL_POD_YAML)
+            toolbox["spec"]["template"]["spec"]["containers"][0][
                 "image"
             ] = get_rook_version()
-            rook_toolbox = OCS(**tool_box_data)
+            toolbox["metadata"]["name"] += "-external"
+            keyring_dict = ocsci_config.EXTERNAL_MODE.get("admin_keyring")
+            if ocs_version >= version.VERSION_4_10:
+                toolbox["spec"]["template"]["spec"]["containers"][0]["command"] = [
+                    "/bin/bash"
+                ]
+                toolbox["spec"]["template"]["spec"]["containers"][0]["args"][0] = "-m"
+                toolbox["spec"]["template"]["spec"]["containers"][0]["args"][1] = "-c"
+                toolbox["spec"]["template"]["spec"]["containers"][0]["tty"] = True
+            env = toolbox["spec"]["template"]["spec"]["containers"][0]["env"]
+            # replace secret
+            env = [item for item in env if not (item["name"] == "ROOK_CEPH_SECRET")]
+            env.append({"name": "ROOK_CEPH_SECRET", "value": keyring_dict["key"]})
+            toolbox["spec"]["template"]["spec"]["containers"][0]["env"] = env
+            # add ceph volumeMounts
+            ceph_volume_mount_path = {"mountPath": "/etc/ceph", "name": "ceph-config"}
+            ceph_volume = {"name": "ceph-config", "emptyDir": {}}
+            toolbox["spec"]["template"]["spec"]["containers"][0]["volumeMounts"].append(
+                ceph_volume_mount_path
+            )
+            toolbox["spec"]["template"]["spec"]["volumes"].append(ceph_volume)
+            if ocs_version >= version.VERSION_4_16:
+                toolbox["spec"]["template"]["spec"][
+                    "serviceAccount"
+                ] = "rook-ceph-default"
+                toolbox["spec"]["template"]["spec"][
+                    "serviceAccountName"
+                ] = "rook-ceph-default"
+            rook_toolbox = OCS(**toolbox)
             rook_toolbox.create()
-        else:
-            if external_mode:
-                toolbox = templating.load_yaml(constants.TOOL_POD_YAML)
-                toolbox["spec"]["template"]["spec"]["containers"][0][
-                    "image"
-                ] = get_rook_version()
-                toolbox["metadata"]["name"] += "-external"
-                keyring_dict = ocsci_config.EXTERNAL_MODE.get("admin_keyring")
-                if ocs_version >= version.VERSION_4_10:
-                    toolbox["spec"]["template"]["spec"]["containers"][0]["command"] = [
-                        "/bin/bash"
-                    ]
-                    toolbox["spec"]["template"]["spec"]["containers"][0]["args"][
-                        0
-                    ] = "-m"
-                    toolbox["spec"]["template"]["spec"]["containers"][0]["args"][
-                        1
-                    ] = "-c"
-                    toolbox["spec"]["template"]["spec"]["containers"][0]["tty"] = True
-                env = toolbox["spec"]["template"]["spec"]["containers"][0]["env"]
-                # replace secret
-                env = [item for item in env if not (item["name"] == "ROOK_CEPH_SECRET")]
-                env.append({"name": "ROOK_CEPH_SECRET", "value": keyring_dict["key"]})
-                toolbox["spec"]["template"]["spec"]["containers"][0]["env"] = env
-                # add ceph volumeMounts
-                ceph_volume_mount_path = {
-                    "mountPath": "/etc/ceph",
-                    "name": "ceph-config",
-                }
-                ceph_volume = {"name": "ceph-config", "emptyDir": {}}
-                toolbox["spec"]["template"]["spec"]["containers"][0][
-                    "volumeMounts"
-                ].append(ceph_volume_mount_path)
-                toolbox["spec"]["template"]["spec"]["volumes"].append(ceph_volume)
-                if ocs_version >= version.VERSION_4_16:
-                    toolbox["spec"]["template"]["spec"][
-                        "serviceAccount"
-                    ] = "rook-ceph-default"
-                    toolbox["spec"]["template"]["spec"][
-                        "serviceAccountName"
-                    ] = "rook-ceph-default"
-                rook_toolbox = OCS(**toolbox)
-                rook_toolbox.create()
             return
         if (
             ocsci_config.ENV_DATA.get("platform").lower()
@@ -896,25 +887,24 @@ def setup_ceph_toolbox(force_setup=False, storage_cluster=None):
             )
             return
 
-        with config.RunWithProviderConfigContextIfAvailable():
-            # for OCS >= 4.3 there is new toolbox pod deployment done here:
-            # https://github.com/openshift/ocs-operator/pull/207/
-            log.info("starting ceph toolbox pod")
-            cmd = (
-                f"oc patch storagecluster {storage_cluster} -n {config.ENV_DATA['cluster_namespace']} --type "
-                'json --patch  \'[{ "op": "replace", "path": '
-                '"/spec/enableCephTools", "value": true }]\''
-            )
-            run_cmd(cmd)
-            toolbox_pod = OCP(
-                kind=constants.POD, namespace=config.ENV_DATA["cluster_namespace"]
-            )
-            toolbox_pod.wait_for_resource(
-                condition="Running",
-                selector="app=rook-ceph-tools",
-                resource_count=1,
-                timeout=120,
-            )
+        # for OCS >= 4.3 there is new toolbox pod deployment done here:
+        # https://github.com/openshift/ocs-operator/pull/207/
+        log.info("starting ceph toolbox pod")
+        cmd = (
+            f"oc patch storagecluster {storage_cluster} -n {config.ENV_DATA['cluster_namespace']} --type "
+            'json --patch  \'[{ "op": "replace", "path": '
+            '"/spec/enableCephTools", "value": true }]\''
+        )
+        run_cmd(cmd)
+        toolbox_pod = OCP(
+            kind=constants.POD, namespace=config.ENV_DATA["cluster_namespace"]
+        )
+        toolbox_pod.wait_for_resource(
+            condition="Running",
+            selector="app=rook-ceph-tools",
+            resource_count=1,
+            timeout=120,
+        )
 
 
 def apply_oc_resource(
