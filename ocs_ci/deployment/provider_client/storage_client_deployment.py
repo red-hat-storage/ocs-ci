@@ -248,6 +248,14 @@ class ODFAndNativeStorageClientDeploymentOnProvider(object):
                 "cluster_namespace"
             ]
 
+            if config.ENV_DATA.get("osd_maintenance_timeout"):
+                storage_cluster_data.setdefault("spec", {}).setdefault(
+                    "managedResources", {}
+                ).setdefault("cephCluster", {})
+                storage_cluster_data["spec"]["managedResources"]["cephCluster"][
+                    "osdMaintenanceTimeout"
+                ] = config.ENV_DATA.get("osd_maintenance_timeout")
+
             templating.dump_data_to_temp_yaml(
                 storage_cluster_data, storage_cluster_path
             )
