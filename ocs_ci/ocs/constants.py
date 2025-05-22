@@ -2352,27 +2352,30 @@ DISCON_CL_REQUIRED_PACKAGES_PER_ODF_VERSION["4.15"] = (
 )
 
 DISCON_CL_REQUIRED_PACKAGES_PER_ODF_VERSION["4.16"] = [
-    "cluster-logging",
-    "elasticsearch-operator",
-    # we might need to uncomment next line, if we would like to use it in
-    # disconnected deployment:
-    # "lvms-operator",
-    "mcg-operator",
     "ocs-operator",
-    "odf-csi-addons-operator",
-    "odf-multicluster-orchestrator",
     "odf-operator",
-    # "odf-prometheus-operator",
+    "mcg-operator",
+    "odf-csi-addons-operator",
+    "ocs-client-operator",
+    "odf-prometheus-operator",
+    "recipe",
+    "rook-ceph-operator",
+    "odr-cluster-operator",
+    "odr-hub-operator",
 ]
 
-DISCON_CL_REQUIRED_PACKAGES_PER_ODF_VERSION["4.17"] = (
+DISCON_CL_REQUIRED_PACKAGES_PER_ODF_VERSION["4.17"] = [
     DISCON_CL_REQUIRED_PACKAGES_PER_ODF_VERSION["4.16"]
-)
+    + [
+        "cephcsi-operator",
+    ]
+]
 
-DISCON_CL_REQUIRED_PACKAGES_PER_ODF_VERSION[
-    "4.18"
-] = DISCON_CL_REQUIRED_PACKAGES_PER_ODF_VERSION["4.16"] + [
-    "odf-dependencies",
+DISCON_CL_REQUIRED_PACKAGES_PER_ODF_VERSION["4.18"] = [
+    DISCON_CL_REQUIRED_PACKAGES_PER_ODF_VERSION["4.17"]
+    + [
+        "odf-dependencies",
+    ]
 ]
 
 DISCON_CL_REQUIRED_PACKAGES_PER_ODF_VERSION["4.19"] = [

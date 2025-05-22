@@ -349,8 +349,7 @@ def mirror_index_image_via_oc_mirror(index_image, packages, icsp=None, idms=None
         with open(imageset_config_file, "r") as f:
             lines = f.readlines()
             lines[0] = "apiVersion: mirror.openshift.io/v2alpha1\n"
-            lines.index("storageConfig:\n")
-            lines = lines[:14]
+            lines = lines[: lines.index("storageConfig:\n")]
         with open(imageset_config_file, "w") as f:
             f.writelines(lines)
         cmd = (
@@ -386,6 +385,7 @@ def mirror_index_image_via_oc_mirror(index_image, packages, icsp=None, idms=None
             f"{mirroring_manifests_dir}",
             "mapping.txt",
         )
+        mirror_images_from_mapping_file(mapping_file, icsp=icsp)
 
     if idms:
         cmd += " --dry-run"
