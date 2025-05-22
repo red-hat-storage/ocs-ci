@@ -17,7 +17,7 @@ from threading import Thread
 import base64
 from semantic_version import Version
 
-from ocs_ci.ocs.ocp import get_images, OCP, verify_images_upgraded
+from ocs_ci.ocs.ocp import get_images, OCP, verify_images_upgraded, get_sha256_digest
 from ocs_ci.helpers import helpers
 from ocs_ci.helpers.proxy import update_container_with_proxy_env
 from ocs_ci.ocs import constants, defaults, node, workload, ocp
@@ -2259,7 +2259,7 @@ def verify_pods_upgraded(
     namespace = config.ENV_DATA["cluster_namespace"]
     info_message = (
         f"Waiting for {count} pods with selector: {selector} to be running "
-        f"and upgraded."
+        f"and upgraded. Old images: {old_images}"
     )
     logger.info(info_message)
     start_time = time.time()
@@ -2279,18 +2279,31 @@ def verify_pods_upgraded(
                 pod_obj = pod.get()
                 verify_images_upgraded(old_images, pod_obj, ignore_psql_12_verification)
                 current_pod_images = get_images(pod_obj)
+                current_pod_image_ids = get_images(pod_obj, image_key="imageID")
                 for container_name, container_image in current_pod_images.items():
                     if container_name not in pod_images:
                         pod_images[container_name] = container_image
                     else:
                         if pod_images[container_name] != container_image:
-                            raise NotAllPodsHaveSameImagesError(
-                                f"Not all the pods with the selector: {selector} have the same "
-                                f"images! Image for container {container_name} has image {container_image} "
-                                f"which doesn't match with: {pod_images} differ! This means "
-                                "that upgrade hasn't finished to restart all the pods yet! "
-                                "Or it's caused by other discrepancy which needs to be investigated!"
+                            current_pod_image_id = current_pod_image_ids.get(
+                                container_name
                             )
+                            if get_sha256_digest(container_image) == get_sha256_digest(
+                                current_pod_image_id
+                            ):
+                                logger.info(
+                                    f"Container image: {container_image} match with imageID "
+                                    f" digest: {current_pod_image_id}"
+                                )
+                            else:
+                                raise NotAllPodsHaveSameImagesError(
+                                    f"Not all the pods with the selector: {selector} have the same "
+                                    f"images! Image for container {container_name} has image {container_image} "
+                                    f"which doesn't match with: {pod_images} differ! This means "
+                                    "that upgrade hasn't finished to restart all the pods yet! "
+                                    "Or it's caused by other discrepancy which needs to be investigated!"
+                                    f"ImageID is: {current_pod_image_id}"
+                                )
                 pod_count += 1
         except CommandFailed as ex:
             logger.warning(
