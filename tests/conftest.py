@@ -9801,8 +9801,10 @@ def vm_clone_fixture(request):
             admin_client: The admin client instance to perform the operation.
 
         Returns:
-            The cloned VM object.
+            vm_obj: The cloned VM object.
+
         """
+        # The reason to importing here is to avoid issue with importing not fully initialized modules
         from ocs_ci.ocs.cnv import virtual_machine
         from ocp_resources.virtual_machine_clone import VirtualMachineClone
 
@@ -9838,9 +9840,7 @@ def vm_clone_fixture(request):
             )
             if not volumes:
                 raise ValueError(f"No volumes found in cloned VM {cloned_vm.name}")
-
             volume = volumes[0]
-
             if "dataVolume" in volume:
                 cloned_vm.pvc_name = volume["dataVolume"]["name"]
             elif "persistentVolumeClaim" in volume:
@@ -9875,7 +9875,8 @@ def vm_snapshot_restore_fixture(request):
             admin_client: The admin client instance.
 
         Returns:
-            The restored VM object.
+            vm_obj: The restored VM object.
+
         """
         from ocp_resources.virtual_machine_snapshot import VirtualMachineSnapshot
         from ocp_resources.virtual_machine_restore import VirtualMachineRestore
@@ -9892,9 +9893,7 @@ def vm_snapshot_restore_fixture(request):
         vm_snapshot.create()
         vm_snapshot.wait_snapshot_done()
         snapshots.append(vm_snapshot)
-
         vm.stop()
-
         restore_snapshot_name = create_unique_resource_name(snapshot_name, "restore")
         with VirtualMachineRestore(
             name=restore_snapshot_name,
