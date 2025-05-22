@@ -1,5 +1,7 @@
 import json
 import logging
+import time
+
 import pytest
 
 from ocs_ci.framework import config
@@ -426,3 +428,32 @@ class TestPvPool:
             amount=5,
             mcg_obj=mcg_obj,
         )
+
+
+    @tier2
+    @ignore_leftovers
+    @polarion_id("OCS-6552")
+    def test_pv_data_dist(
+        self, setup_nfs, bucket_factory, awscli_pod, test_directory_setup, mcg_obj
+    ):
+
+        bucketclass_dict = {
+            "interface": "OC",
+            "backingstore_dict": {
+                "pv": [
+                    (
+                        3,
+                        MIN_PV_BACKINGSTORE_SIZE_IN_GB,
+                        constants.NFS_SC_NAME,
+                    ),
+                    (
+                        3,
+                        MIN_PV_BACKINGSTORE_SIZE_IN_GB,
+                        constants.NFS_SC_NAME,
+                    )
+                ]
+            },
+        }
+        bucket = bucket_factory(1, "OC", bucketclass=bucketclass_dict)[0]
+        logger.info(f"********** The bucket with name {bucket.name} was created")
+        time.sleep(600)
