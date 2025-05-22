@@ -10,17 +10,17 @@ from ocs_ci.ocs.resources.pod import (
     wait_for_pods_to_be_running,
 )
 from ocs_ci.framework.pytest_customization.marks import (
-    brown_squad,
-    tier1,
+    red_squad,
+    tier4c,
     mcg_only_required,
 )
 
 log = logging.getLogger(__name__)
 
 
-@tier1
+@tier4c
 @mcg_only_required
-@brown_squad
+@red_squad
 class TestNoobaaPodNodeAffinity:
     @pytest.fixture(scope="class", autouse=True)
     def teardown(self, request):
