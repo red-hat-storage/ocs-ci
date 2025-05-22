@@ -17,7 +17,6 @@ from ocs_ci.ocs.cluster import CephCluster
 from ocs_ci.ocs.resources.storage_cluster import osd_encryption_verification
 from tests.functional.z_cluster.nodes.test_node_replacement_proactive import (
     delete_and_create_osd_node,
-    select_osd_node_name,
 )
 from ocs_ci.helpers.helpers import (
     verify_storagecluster_nodetopology,
@@ -73,7 +72,9 @@ class TestCnvNodeReplace(E2ETest):
             source_csums[vm_obj.name] = source_csum
 
         # Choose VMs randomaly
-        vm_for_clone, vm_for_stop, vm_for_snap = random.sample(all_vms, 3)
+        vm_for_clone, vm_for_stop, vm_for_snap, vm_obj_on_replacing_node = (
+            random.sample(all_vms, 4)
+        )
 
         # Uncomment code ones 11199 merged.
         """
@@ -99,9 +100,11 @@ class TestCnvNodeReplace(E2ETest):
         vm_for_stop.stop()
         vm_for_snap.pause()
 
+        # Find node where VM is running
+        node_name = vm_obj_on_replacing_node.get_vmi_instance().node()
+
         # Replace Node
-        osd_node_name = select_osd_node_name()
-        delete_and_create_osd_node(osd_node_name)
+        delete_and_create_osd_node(node_name)
 
         logger.info("Verifying All resources are Running and matches expected result")
         self.sanity_helpers = Sanity()
@@ -124,12 +127,17 @@ class TestCnvNodeReplace(E2ETest):
         assert (
             vm_for_stop.printableStatus() == constants.CNV_VM_STOPPED
         ), "VM did not stop with preserved state after device replacement."
-        logger.info("After device replacement, stopped VM preserved state.")
+        logger.info("After Node replacement, stopped VM preserved state.")
 
         assert (
             vm_for_snap.printableStatus() == constants.VM_PAUSED
         ), "VM did not pause with preserved state after device replacement."
-        logger.info("After device replacement, paused VM preserved state.")
+        logger.info("After Node replacement, paused VM preserved state.")
+
+        assert (
+            vm_obj_on_replacing_node.printableStatus() == constants.VM_RUNNING
+        ), "VM is not in ruuning state after node replacement."
+        logger.info("After Node replacement vm is running.")
 
         logger.info("Starting vms")
         vm_for_stop.start()
