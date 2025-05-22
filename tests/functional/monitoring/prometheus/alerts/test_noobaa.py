@@ -164,6 +164,11 @@ def test_noobaa_ns_bucket(measure_noobaa_ns_target_bucket_deleted, threading_loc
         )
 
 
-def teardown_module():
+def setup_module(module):
     ocs_obj = OCP()
-    ocs_obj.login_as_sa()
+    module.original_user = ocs_obj.get_user_name()
+
+
+def teardown_module(module):
+    ocs_obj = OCP()
+    ocs_obj.login_as_user(module.original_user)
