@@ -13,12 +13,14 @@ from ocs_ci.framework.pytest_customization.marks import (
     red_squad,
     tier4c,
     mcg_only_required,
+    mcg,
 )
 
 log = logging.getLogger(__name__)
 
 
 @tier4c
+@mcg
 @mcg_only_required
 @red_squad
 class TestNoobaaPodNodeAffinity:
