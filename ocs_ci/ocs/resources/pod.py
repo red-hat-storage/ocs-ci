@@ -878,77 +878,74 @@ def get_ceph_tools_pod(
             List: of pod objects
 
         """
-        with config.RunWithProviderConfigContextIfAvailable():
+        ocp_pod_obj = OCP(
+            kind=constants.POD,
+            namespace=namespace,
+            selector=constants.TOOL_APP_LABEL,
+            cluster_kubeconfig=cluster_kubeconfig,
+        )
+        ct_pod_items = ocp_pod_obj.data["items"]
+        logger.info(
+            f"These are the ceph tool box pods: {[pod.get('metadata').get('name') for pod in ct_pod_items]}"
+        )
+        if not (ct_pod_items or skip_creating_pod):
+            # setup ceph_toolbox pod if the cluster has been setup by some other CI
+            setup_ceph_toolbox()
             ocp_pod_obj = OCP(
                 kind=constants.POD,
                 namespace=namespace,
                 selector=constants.TOOL_APP_LABEL,
-                cluster_kubeconfig=cluster_kubeconfig,
             )
             ct_pod_items = ocp_pod_obj.data["items"]
-            logger.info(
-                f"These are the ceph tool box pods: {[pod.get('metadata').get('name') for pod in ct_pod_items]}"
+
+        if not ct_pod_items:
+            raise CephToolBoxNotFoundException
+
+        if not get_running_pods:
+            # Return the ceph tool pod objects even if they are not running
+            return ct_pod_items
+
+        # In the case of node failure, the CT pod will be recreated with the old
+        # one in status Terminated. Therefore, need to filter out the Terminated pod
+
+        # Update the OCP pod object without the selector
+        ocp_pod_obj = OCP(
+            kind=constants.POD,
+            namespace=namespace,
+            cluster_kubeconfig=cluster_kubeconfig,
+        )
+        running_ct_pods = list()
+        for pod in ct_pod_items:
+            pod_status = ocp_pod_obj.get_resource_status(
+                pod.get("metadata").get("name")
             )
-            if not (ct_pod_items or skip_creating_pod):
-                # setup ceph_toolbox pod if the cluster has been setup by some other CI
-                setup_ceph_toolbox()
-                ocp_pod_obj = OCP(
-                    kind=constants.POD,
-                    namespace=namespace,
-                    selector=constants.TOOL_APP_LABEL,
-                )
-                ct_pod_items = ocp_pod_obj.data["items"]
+            logger.info(f"Pod name: {pod.get('metadata').get('name')}")
+            logger.info(f"Pod status: {pod_status}")
+            if pod_status == constants.STATUS_RUNNING:
+                running_ct_pods.append(pod)
 
-            if not ct_pod_items:
-                raise CephToolBoxNotFoundException
-
-            if not get_running_pods:
-                # Return the ceph tool pod objects even if they are not running
-                return ct_pod_items
-
-            # In the case of node failure, the CT pod will be recreated with the old
-            # one in status Terminated. Therefore, need to filter out the Terminated pod
-
-            # Update the OCP pod object without the selector
-            ocp_pod_obj = OCP(
-                kind=constants.POD,
-                namespace=namespace,
-                cluster_kubeconfig=cluster_kubeconfig,
-            )
-            running_ct_pods = list()
-
-            for pod in ct_pod_items:
-                pod_status = ocp_pod_obj.get_resource_status(
-                    pod.get("metadata").get("name")
-                )
-                logger.info(f"Pod name: {pod.get('metadata').get('name')}")
-                logger.info(f"Pod status: {pod_status}")
-                if pod_status == constants.STATUS_RUNNING:
-                    running_ct_pods.append(pod)
-
-            if not running_ct_pods:
-                raise NoRunningCephToolBoxException
+        if not running_ct_pods:
+            raise NoRunningCephToolBoxException
         return running_ct_pods
 
-    with config.RunWithProviderConfigContextIfAvailable():
-        if wait:
-            running_ct_pods = retry(NoRunningCephToolBoxException, tries=10, delay=5)(
-                _get_tools_pod_objs
-            )()
-        else:
-            running_ct_pods = _get_tools_pod_objs()
+    if wait:
+        running_ct_pods = retry(NoRunningCephToolBoxException, tries=10, delay=5)(
+            _get_tools_pod_objs
+        )()
+    else:
+        running_ct_pods = _get_tools_pod_objs()
 
-        ceph_pod = Pod(**running_ct_pods[0])
-        ceph_pod.ocp.cluster_kubeconfig = cluster_kubeconfig
+    ceph_pod = Pod(**running_ct_pods[0])
+    ceph_pod.ocp.cluster_kubeconfig = cluster_kubeconfig
 
-        if (
-            config.ENV_DATA.get("platform", "").lower() == constants.ROSA_PLATFORM
-            and config.ENV_DATA.get("cluster_type", "").lower()
-            == constants.MS_CONSUMER_TYPE
-        ):
-            # If the cluster is an MS consumer cluster, we need to patch the rook-ceph-tool box
-            new_ceph_pod = patch_consumer_toolbox(consumer_tools_pod=ceph_pod)
-            ceph_pod = new_ceph_pod or ceph_pod
+    if (
+        config.ENV_DATA.get("platform", "").lower() == constants.ROSA_PLATFORM
+        and config.ENV_DATA.get("cluster_type", "").lower()
+        == constants.MS_CONSUMER_TYPE
+    ):
+        # If the cluster is an MS consumer cluster, we need to patch the rook-ceph-tool box
+        new_ceph_pod = patch_consumer_toolbox(consumer_tools_pod=ceph_pod)
+        ceph_pod = new_ceph_pod or ceph_pod
 
     return ceph_pod
 
