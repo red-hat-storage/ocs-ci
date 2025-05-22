@@ -1615,8 +1615,14 @@ class VSPHEREIPI(VSPHEREBASE):
             config.ENV_DATA["vsphere_user"],
             config.ENV_DATA["vsphere_password"],
         )
-        all_vms = vsphere.get_vms_by_string(config.ENV_DATA["cluster_name"])
-        vsphere.stop_vms(all_vms)
+        try:
+            all_vms = vsphere.get_vms_by_string(config.ENV_DATA["cluster_name"])
+            vsphere.stop_vms(all_vms)
+        except Exception as e:
+            logger.error(
+                f"Failed to fetch VM's. Exception: {e}. Continuing to destroy cluster"
+            )
+            all_vms = []
 
         for vm in all_vms:
             try:
