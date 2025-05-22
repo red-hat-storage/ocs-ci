@@ -351,6 +351,7 @@ class HyperShiftBase:
         ocp_version=None,
         cp_availability_policy=None,
         disable_default_sources=None,
+        auto_repair=True,
     ):
         """
         Create HyperShift hosted cluster. Default parameters have minimal requirements for the cluster.
@@ -365,6 +366,7 @@ class HyperShiftBase:
             cp_availability_policy (str): Control plane availability policy, default HighlyAvailable, if no value
             provided and argument is not used in the command the single replica mode cluster will be created
             disable_default_sources (bool): Disable default sources on hosted cluster, such as 'redhat-operators'
+            auto_repair (bool): Enables machine autorepair with machine health checks, default True
         Returns:
             str: Name of the hosted cluster
         """
@@ -407,8 +409,11 @@ class HyperShiftBase:
             f"--pull-secret {pull_secret_path} "
             f"--image-content-sources {self.icsp_mirrors_path} "
             "--annotations 'hypershift.openshift.io/skip-release-image-validation=true' "
-            "--olm-catalog-placement Guest"
+            "--olm-catalog-placement Guest "
         )
+
+        if auto_repair:
+            create_hcp_cluster_cmd += " --auto-repair"
 
         if (
             cp_availability_policy
