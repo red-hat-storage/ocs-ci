@@ -405,7 +405,7 @@ class TestPvPool:
             dfbug: https://issues.redhat.com/browse/DFBUGS-1114
 
         """
-        # Create bucket based of pv-pool backingstore
+        # Create bucket based of pv-pool backingstores
         bucketclass_dict = {
             "interface": "OC",
             "backingstore_dict": {
