@@ -22,8 +22,7 @@ from ocs_ci.ocs.bucket_utils import (
     s3_head_object,
     s3_get_object,
 )
-from ocs_ci.ocs.resources.pod import get_pods_having_label, Pod
-from ocs_ci.ocs import constants
+from ocs_ci.utility.utils import exec_nb_db_query
 
 logger = logging.getLogger(__name__)
 
@@ -67,7 +66,7 @@ class TestObjectVersioning:
     ):
         """
         This test will check if there is more than one current version of the objects when multiple
-        s3 put/delete operations are performed parallely.
+        s3 put/delete operations are performed in parallel.
         First test with the object versioning enabled on bucket and later without versioning
         enabled.
         """
@@ -101,21 +100,27 @@ class TestObjectVersioning:
                 "AND ((data -> 'version_past'::text) IS NULL OR (data -> 'version_past'::text) = 'null'::jsonb) "
                 "GROUP BY 1,2 HAVING count(*) > 1;"
             )
-        command = f'psql -h 127.0.0.1 -p 5432 -U postgres -d nbcore -c "{query}"'
 
         # perform PUT and DELETE parallely on loop
         config_index = config.default_cluster_index
-        for i in range(0, 5):
-            ConfigSafeThread(
+        threads = []
+
+        for _ in range(0, 5):
+            delete_thread = ConfigSafeThread(
                 config_index=config_index,
                 target=s3_delete_object,
                 args=(s3_obj, bucket_name, filename),
-            ).start()
-            ConfigSafeThread(
+            )
+            delete_thread.start()
+            threads.append(delete_thread)
+
+            put_thread = ConfigSafeThread(
                 config_index=config_index,
                 target=s3_put_object,
                 args=(s3_obj, bucket_name, filename, filename),
-            ).start()
+            )
+            put_thread.start()
+            threads.append(put_thread)
 
         # head object
         try:
@@ -128,23 +133,18 @@ class TestObjectVersioning:
         except Exception as err:
             logger.info(f"[Head object failed]: {err}")
 
-        # Run query on nooba-db to see if there is more than
+        # Run query on noobaa-db to see if there is more than
         # one current version of the object
-        pod_data = get_pods_having_label(
-            label=constants.NOOBAA_DB_LABEL_47_AND_ABOVE,
-            namespace=config.ENV_DATA["cluster_namespace"],
-        )[0]
-
-        db_pod = Pod(**pod_data)
-        query_out = db_pod.exec_cmd_on_pod(
-            command=command,
-            out_yaml_format=False,
-        )
+        query_out = exec_nb_db_query(query)
         logger.info(f"DB query output: {query_out}")
-        assert "(0 rows)" in str(
-            query_out
+        assert (
+            len(query_out) == 0
         ), "[Test failed] There are more than one versions considered to be latest version !!"
         logger.info("Test succeeded!!")
+
+        # Wait for all threads to finish before proceeding to teardown
+        for thread in threads:
+            thread.join()
 
 
 @mcg

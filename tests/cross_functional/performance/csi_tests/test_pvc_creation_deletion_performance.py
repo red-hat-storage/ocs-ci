@@ -14,6 +14,7 @@ from ocs_ci.framework.pytest_customization.marks import grey_squad
 from ocs_ci.framework.testlib import performance, performance_a
 from ocs_ci.ocs.perftests import PASTest
 from ocs_ci.helpers import helpers, performance_lib
+from ocs_ci.helpers.helpers import set_configmap_log_level_csi_sidecar
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.perfresult import ResultsAnalyse
 from ocs_ci.utility import templating
@@ -52,6 +53,7 @@ class TestPVCCreationDeletionPerformance(PASTest):
         super(TestPVCCreationDeletionPerformance, self).setup()
         self.benchmark_name = "PVC_Creation-Deletion"
         self.create_test_project()
+        set_configmap_log_level_csi_sidecar(value=5)
 
     def teardown(self):
         """
@@ -61,6 +63,7 @@ class TestPVCCreationDeletionPerformance(PASTest):
         log.info("Starting the test environment celanup")
         # Delete the test project (namespace)
         self.delete_test_project()
+        set_configmap_log_level_csi_sidecar(value=1)
         super(TestPVCCreationDeletionPerformance, self).teardown()
 
     def create_fio_pod_yaml(self, pvc_size=1):
