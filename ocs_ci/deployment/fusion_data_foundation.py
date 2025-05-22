@@ -5,12 +5,19 @@ This module contains functions needed to install IBM Fusion Data Foundation.
 import json
 import logging
 import os
+import tempfile
 
 import yaml
 
+from ocs_ci.deployment.helpers.storage_class import get_storageclass
+from ocs_ci.deployment.helpers.storage_cluster import create_storage_cluster
+from ocs_ci.deployment.helpers.storage_system import create_storage_system
 from ocs_ci.ocs import constants, defaults
+from ocs_ci.deployment.helpers.label_and_taint import label_and_taint_nodes
 from ocs_ci.framework import config
+from ocs_ci.ocs.node import get_master_nodes
 from ocs_ci.ocs.resources.ocs import OCP
+from ocs_ci.utility import templating
 from ocs_ci.utility.retry import retry
 from ocs_ci.utility.utils import run_cmd
 
@@ -34,6 +41,7 @@ class FusionDataFoundationDeployment:
             self.setup_fdf_pre_release_deployment()
         self.create_fdf_service_cr()
         self.verify_fdf_installation()
+        self.setup_storage()
 
     def create_image_tag_mirror_set(self):
         """
@@ -131,6 +139,38 @@ class FusionDataFoundationDeployment:
         config.ENV_DATA["fdf_version"] = version
         logger.info(f"Installed FDF version: {version}")
         return version
+
+    def setup_storage(self):
+        """
+        Setup storage
+        """
+        logger.info("Configuring storage.")
+        label_and_taint_nodes()
+        create_storage_system(config.ENV_DATA["cluster_namespace"])
+        storageclass = get_storageclass()
+        create_storage_cluster(storageclass, fdf_deployment=True)
+        self.create_odfcluster()
+
+    @staticmethod
+    def create_odfcluster():
+        """
+        Create OdfCluster CR
+        """
+        logger.info("Creating OdfCluster CR")
+        storageclass = get_storageclass()
+        control_plane_nodes = get_master_nodes()
+        with open(constants.FDF_ODFCLUSTER_CR, "r") as f:
+            odfcluster_data = yaml.safe_load(f.read())
+
+        odfcluster_data["spec"]["deviceSets"][0]["storageClass"] = storageclass
+        odfcluster_data["spec"]["storageNodes"] = control_plane_nodes
+
+        odfcluster_data_yaml = tempfile.NamedTemporaryFile(
+            mode="w+", prefix="odfcluster", delete=False
+        )
+        templating.dump_data_to_temp_yaml(odfcluster_data, odfcluster_data_yaml.name)
+
+        run_cmd(f"oc create -f {odfcluster_data_yaml.name}")
 
 
 @retry((AssertionError, KeyError), 20, 60, backoff=1)
