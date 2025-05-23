@@ -4362,7 +4362,9 @@ def get_system_architecture():
     return node.ocp.exec_oc_debug_cmd(node.data["metadata"]["name"], ["uname -m"])
 
 
-def wait_for_machineconfigpool_status(node_type, timeout=1900, skip_tls_verify=False):
+def wait_for_machineconfigpool_status(
+    node_type, timeout=1900, skip_tls_verify=False, force_delete_pods=False
+):
     """
     Check for Machineconfigpool status
 
@@ -4372,6 +4374,7 @@ def wait_for_machineconfigpool_status(node_type, timeout=1900, skip_tls_verify=F
             e.g: worker, master and all if we want to check for all nodes
         timeout (int): Time in seconds to wait
         skip_tls_verify (bool): True if allow skipping TLS verification
+        force_delete_pods (bool): if True delete pods stuck at terminating forcefully
 
     """
     log.info("Sleeping for 60 sec to start update machineconfigpool status")
@@ -4391,13 +4394,24 @@ def wait_for_machineconfigpool_status(node_type, timeout=1900, skip_tls_verify=F
             skip_tls_verify=skip_tls_verify,
         )
         machine_count = ocp_obj.get()["status"]["machineCount"]
+        if force_delete_pods:
+            try:
+                assert ocp_obj.wait_for_resource(
+                    condition=str(machine_count),
+                    column="READYMACHINECOUNT",
+                    timeout=60,
+                    sleep=15,
+                )
+            except (AssertionError, TimeoutExpiredError):
+                clean_up_pods_for_provider(node_type=role)
 
-        assert ocp_obj.wait_for_resource(
-            condition=str(machine_count),
-            column="READYMACHINECOUNT",
-            timeout=timeout,
-            sleep=5,
-        )
+        else:
+            assert ocp_obj.wait_for_resource(
+                condition=str(machine_count),
+                column="READYMACHINECOUNT",
+                timeout=timeout,
+                sleep=5,
+            )
 
 
 def configure_chrony_and_wait_for_machineconfig_status(
@@ -5593,3 +5607,59 @@ def wait_custom_resource_defenition_available(crd_name, timeout=600):
             dont_raise=True,
         )
     )
+
+
+def clean_up_pods_for_provider(
+    node_type,
+):
+    """
+    Manually clean up pods in the hcpclusters namespace during OCP upgrade.
+
+    The following pods may get stuck during cleanup in the hcpclusters namespace:
+    - openshift-oauth-apiserver
+    - oauth-openshift
+    - openshift-apiserver
+    - kube-apiserver
+    - etcd-0
+
+    Args:
+        node_type (str): Type of nodes for which the pods should be cleaned up.
+    """
+    from ocs_ci.ocs.node import get_nodes
+    from ocs_ci.ocs.ocp import OCP
+
+    from ocs_ci.ocs.resources import pod
+
+    searchstring = "error when evicting pods"
+    while True:
+        nodes = get_nodes(node_type=node_type)
+        for node in nodes:
+            if node.status() != constants.NODE_READY_SCHEDULING_DISABLED:
+                continue
+
+            log.info(
+                f"{node.name} is in {constants.NODE_READY_SCHEDULING_DISABLED} status"
+            )
+
+            logs = pod.get_pod_logs(
+                pod_name=pod.get_machine_config_controller_pod().name,
+                container="machine-config-controller",
+                namespace=constants.OPENSHIFT_MACHINE_CONFIG_OPERATOR_NAMESPACE,
+            )
+            for line in logs.split("\n"):
+                if searchstring in line:
+                    try:
+                        pod_name = line.split('pods/"')[1].split('"')[0]
+                        ns = line.split('-n "')[1].split('"')[0]
+                        print(f"Deleting pod: {pod_name} from namespace: {ns}")
+                        pod_obj = OCP(
+                            kind=constants.POD, namespace=ns, resource_name=pod_name
+                        )
+                        pod_obj.exec_oc_cmd(f"delete pod {pod_name} -n {ns} --force")
+                    except Exception as e:
+                        print(f"Error: {e}")
+
+            # break  # refresh nodes after handling one
+
+        else:
+            break  # exit if no node was in the disabled state

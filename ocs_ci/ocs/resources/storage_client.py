@@ -508,15 +508,7 @@ class StorageClient:
         storageclaims, associated storageclasses and storagerequests are created successfully.
 
         """
-        ocs_csv = get_ocs_csv()
-        client_csv_version = ocs_csv.data["spec"]["version"]
-        ocs_version = version.get_ocs_version_from_csv(only_major_minor=True)
-        log.info(
-            f"Check if OCS version: {ocs_version} matches with CSV: {client_csv_version}"
-        )
-        assert (
-            f"{ocs_version}" in client_csv_version
-        ), f"OCS version: {ocs_version} mismatch with CSV version {client_csv_version}"
+        self.verify_version_of_odf_client_operator()
         if self.ocs_version >= version.VERSION_4_16:
             namespace = config.ENV_DATA["cluster_namespace"]
         else:
@@ -564,3 +556,20 @@ class StorageClient:
                     log.info(f"storageclient data, {storageclient}")
                     return storageclient.get("metadata", {}).get("name")
         return None
+
+    def verify_version_of_odf_client_operator(self, only_major_minor=True):
+        """
+        This method verifies the odf client operator version is as per provider odf version
+
+        """
+        ocs_csv = get_ocs_csv()
+        client_csv_version = ocs_csv.data["spec"]["version"]
+        ocs_version = version.get_ocs_version_from_csv(
+            only_major_minor=only_major_minor
+        )
+        log.info(
+            f"Check if OCS version: {ocs_version} matches with CSV: {client_csv_version}"
+        )
+        assert (
+            f"{ocs_version}" in client_csv_version
+        ), f"OCS version: {ocs_version} mismatch with CSV version {client_csv_version}"
