@@ -227,6 +227,9 @@ class AssistedInstallerCluster(object):
         cl_data = self.api.create_cluster(cluster_configuration)
         self.id = cl_data["id"]
         logger.info(f"Created (defined) new cluster {self.name} (id: {self.id})")
+        if config.ENV_DATA.get("fips"):
+            self.api.update_install_config(self.id, data='{"fips":true}')
+            logger.info(f"Enabled FIPS for cluster {self.name}")
 
     def create_infrastructure_environment(self):
         """
