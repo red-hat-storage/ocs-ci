@@ -46,6 +46,7 @@ from ocs_ci.utility import version
 from ocs_ci.ocs.exceptions import (
     ACMClusterImportException,
     UnexpectedDeploymentConfiguration,
+    ResourceNotFoundError,
 )
 from ocs_ci.utility import templating
 from ocs_ci.ocs.resources.ocs import OCS
@@ -540,6 +541,8 @@ def import_clusters_via_cli(clusters):
     Args:
         clusters (list): list of tuples (cluster name, kubeconfig path)
 
+    Raises:
+        ResourceNotFoundError: If the managed cluster is MCE cluster and applicable KlusterletConfig is not found
     """
     for cluster in clusters:
         log.info("Importing clusters via CLI method")
@@ -552,6 +555,35 @@ def import_clusters_via_cli(clusters):
             "ocs_ci/templates/acm-deployment/managed-cluster.yaml"
         )
         managed_cluster["metadata"]["name"] = cluster[0]
+
+        # TODO: This check is based on current requirements of RDR in provider mode. Change the condition and add
+        #  additional check to verify whether Multicluster Engine (MCE) is installed in the managedcluster
+        if config.ENV_DATA.get("configure_acm_to_import_mce"):
+            # Find the klusterletconfig to import MCE cluster
+            klusterletconfig_obj = OCP(kind=constants.KLUSTERLET_CONFIG)
+            klusterletconfigs = klusterletconfig_obj.get().get("items", [])
+            klusterletconfig_name = ""
+            for klusterletconfig in klusterletconfigs:
+                if (
+                    klusterletconfig.get("spec", {})
+                    .get("installMode", {})
+                    .get("noOperator", {})
+                    .get("postfix")
+                    == "mce-import"
+                ):
+                    klusterletconfig_name = klusterletconfig.get("metadata").get("name")
+                    break
+            if klusterletconfig_name:
+                managed_cluster["annotations"] = {
+                    "agent.open-cluster-management.io/klusterlet-config": klusterletconfig_name
+                }
+            else:
+                raise ResourceNotFoundError(
+                    "No KlusterletConfig found to import MCE clusters"
+                )
+            # Add 'leaseDurationSeconds' obtained from ACM documentation
+            managed_cluster["spec"]["leaseDurationSeconds"] = 60
+
         managed_cluster_obj = OCS(**managed_cluster)
         managed_cluster_obj.apply(**managed_cluster)
 
