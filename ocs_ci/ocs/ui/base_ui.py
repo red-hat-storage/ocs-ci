@@ -1,3 +1,4 @@
+import threading
 from pathlib import Path
 import datetime
 import logging
@@ -819,17 +820,25 @@ def garbage_collector_webdriver():
 
 class SeleniumDriver(WebDriver):
 
-    # noinspection PyUnresolvedReferences
+    # this will help to create one SeleniumDriver object only per thread
+    # calling SeleniumDriver() multiple times will open only one browser instance
+    _thread_local = threading.local()
+
     def __new__(cls):
-        if not hasattr(cls, "instance") or not hasattr(cls.instance, "driver"):
-            logger.debug("Creating instance of Selenium Driver")
-            cls.instance = super(SeleniumDriver, cls).__new__(cls)
-            cls.instance.driver = cls._set_driver()
-        else:
-            logger.debug(
-                "SeleniumDriver instance already exists, driver created earlier"
-            )
-        return cls.instance.driver
+        if not hasattr(cls._thread_local, "driver"):
+            logger.debug("Creating new WebDriver instance for this thread")
+            cls._thread_local.driver = cls._set_driver()
+        return cls._thread_local.driver
+
+    def __del__(self):
+        """Quit browser when SeleniumDriver object is deleted"""
+        try:
+            if hasattr(self._thread_local, "driver"):
+                logger.info("Quitting WebDriver instance during cleanup")
+                self._thread_local.driver.quit()
+                delattr(self._thread_local, "driver")
+        except Exception as e:
+            logger.error(f"Error during WebDriver cleanup: {e}")
 
     @classmethod
     def _set_driver(cls) -> WebDriver:
@@ -917,10 +926,10 @@ class SeleniumDriver(WebDriver):
 
     @classmethod
     def remove_instance(cls):
-        if hasattr(cls, "instance"):
-            delattr(cls, "instance")
+        if hasattr(cls._thread_local, "driver"):
+            delattr(cls._thread_local, "driver")
         else:
-            logger.info("SeleniumDriver instance attr not found")
+            logger.info("SeleniumDriver instance not found for current thread")
 
 
 @retry(
@@ -1056,9 +1065,11 @@ def close_browser():
         take_screenshot("close_browser")
         copy_dom("close_browser")
         SeleniumDriver().quit()
-    except InvalidSessionIdException:
+    except InvalidSessionIdException or AttributeError:
         # when browser session is closed unexpectedly or session timeout occurs take_screenshot or copy_dom will fail
-        logger.error("InvalidSessionIdException occurred")
+        logger.error(
+            "InvalidSessionIdException or AttributeError (due to running from py console)"
+        )
         pass
     SeleniumDriver.remove_instance()
     time.sleep(10)
