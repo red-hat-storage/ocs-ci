@@ -78,8 +78,8 @@ class HostedClients(HyperShiftBase):
         Deploy multiple hosted OCP clusters on Provider platform and setup ODF client on them
         Perform the 7 stages of deployment:
         1. Deploy multiple hosted OCP clusters
-        2. Verify OCP clusters are ready
-        3. Download kubeconfig files
+        2. Download kubeconfig files
+        3. Verify OCP clusters are ready
         4. Deploy ODF on all hosted clusters if version set in ENV_DATA
         5. Verify ODF client is installed on all hosted clusters if deployed
         6. Setup storage client on all hosted clusters if ENV_DATA.clusters.<cluster_name> has setup_storage_client:true
@@ -111,7 +111,11 @@ class HostedClients(HyperShiftBase):
         if cluster_names:
             cluster_names = self.deploy_hosted_ocp_clusters(cluster_names)
 
-        # stage 2 verify OCP clusters are ready
+        # stage 2 download all available kubeconfig files
+        log_step("Download kubeconfig for all clusters")
+        kubeconfig_paths = self.download_hosted_clusters_kubeconfig_files()
+
+        # stage 3 verify OCP clusters are ready
         log_step(
             "Ensure clusters were deployed successfully, wait for them to be ready"
         )
@@ -119,9 +123,24 @@ class HostedClients(HyperShiftBase):
         if not hosted_ocp_verification_passed:
             logger.error("\n\n*** Some of the clusters are not ready ***\n")
 
-        # stage 3 download all available kubeconfig files
-        log_step("Download kubeconfig for all clusters")
-        kubeconfig_paths = self.download_hosted_clusters_kubeconfig_files()
+            logger.warning(
+                "!!! Workaround for OCPBUGS-56015: apply cluster roles to all hosted clusters !!!"
+            )
+            logger.warning("!!! Remove when resolved !!!")
+            template_yaml = os.path.join(
+                constants.TEMPLATE_DIR, "hosted-cluster", "rbac-wa.yaml"
+            )
+            rbac_data = templating.load_yaml(template_yaml)
+            for cluster_name in cluster_names:
+                hosted_odf = HostedODF(cluster_name)
+                hosted_odf.exec_oc_cmd(
+                    f"apply -f {rbac_data}",
+                    timeout=120,
+                )
+            logger.warning("Going through the verification process again")
+            hosted_ocp_verification_passed = (
+                self.verify_hosted_ocp_clusters_from_provider()
+            )
 
         # Need to create networkpolicy as mentioned in bug 2281536,
         # https://bugzilla.redhat.com/show_bug.cgi?id=2281536#c21
