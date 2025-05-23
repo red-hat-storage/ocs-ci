@@ -82,6 +82,9 @@ class BenchmarkOperator(object):
         """
         log.info("Initialize the benchmark-operator object")
         self.args = kwargs
+        self.kubeconfig = os.path.join(
+            self.cluster_path, config.RUN.get("kubeconfig_location")
+        )
         self.repo = self.args.get("repo", BMO_REPO)
         self.branch = self.args.get("branch", "master")
         # the namespace is a constant for the benchmark-operator
@@ -149,6 +152,10 @@ class BenchmarkOperator(object):
         Deploy the benchmark-operator
 
         """
+        _env = kwargs.pop("env", os.environ.copy())
+        kubeconfig_path = config.RUN.get("kubeconfig")
+        if kubeconfig_path:
+            _env["KUBECONFIG"] = kubeconfig_path
         log.info("Deploy the benchmark-operator project")
         try:
             bo_image = "quay.io/ocsci/benchmark-operator:testing"
@@ -159,6 +166,7 @@ class BenchmarkOperator(object):
                 shell=True,
                 check=True,
                 cwd=self.dir,
+                env=_env,
             )
         except Exception as ex:
             log.error(f"Failed to deploy benchmark operator : {ex}")
