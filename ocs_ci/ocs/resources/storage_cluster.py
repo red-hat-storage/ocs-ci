@@ -938,11 +938,19 @@ def ocs_install_verification(
     log.info("Verified the ownerReferences CSI plugin daemonsets")
     log.info("Verifying the providerAPIServerServiceType setting in StorageCluster")
     sc_obj = get_storage_cluster()
-    if sc_obj.get().get("items")[0].get("spec").get("hostNetwork"):
+    sc_ob_spec = sc_obj.get().get("items")[0].get("spec")
+    if sc_ob_spec.get("hostNetwork") is True:
         assert (
-            sc_obj.get().get("items")[0].get("spec").get("providerAPIServerServiceType")
+            sc_ob_spec.get("providerAPIServerServiceType")
             == constants.SERVICE_TYPE_NODEPORT
         ), f"Provider API server service type is not {constants.SERVICE_TYPE_NODEPORT}"
+        # check the rule in bz DFBUGS-2324 is followed:
+        assert (
+            sc_ob_spec.get("managedResources", {})
+            .get("cephObjectStores", {})
+            .get("hostNetwork", True)
+            is False
+        ), "Host network is not set to False for cephObjectStores when spec.hostNetwork is True"
     log.info("Verified the providerAPIServerServiceType setting in StorageCluster")
     log.info("Verifying the csi driver ownership")
     csi_driver_list = [constants.RBD_PROVISIONER, constants.CEPHFS_PROVISIONER]
