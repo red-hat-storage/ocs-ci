@@ -12,8 +12,37 @@ from ocs_ci.ocs.exceptions import (
     CommandFailed,
     ResourceWrongStatusException,
 )
+from ocs_ci.utility import version
 
 log = logging.getLogger(__name__)
+
+
+def get_nodeplugin_labels(interface):
+    """
+    Retrieve the nodeplugin label based on the storage interface type and OCS version.
+
+    Args:
+        interface (str): The storage interface type. Expected values are:
+            - constants.RBD_INTERFACE
+            - constants.CEPHFS_INTERFACE
+
+    Returns:
+        str: The appropriate nodeplugin label for the given interface and OCS version.
+        Returns an empty string if the interface is not recognized.
+    """
+    ocs_version = version.get_semantic_ocs_version_from_config()
+
+    if interface not in (constants.RBD_INTERFACE, constants.CEPHFS_INTERFACE):
+        return ""
+
+    if ocs_version < version.VERSION_4_19:
+        return constants.CSI_RBDPLUGIN_PROVISIONER_LABEL
+
+    return (
+        constants.RBD_NODEPLUGIN_LABEL
+        if interface == constants.RBD_INTERFACE
+        else constants.CEPHFS_NODEPLUGIN_LABEL
+    )
 
 
 def check_setmetadata_availability(pod_obj):
@@ -26,7 +55,10 @@ def check_setmetadata_availability(pod_obj):
     """
     plugin_provisioner_pod_objs = pod.get_all_pods(
         namespace=config.ENV_DATA["cluster_namespace"],
-        selector=["csi-cephfsplugin-provisioner", "csi-rbdplugin-provisioner"],
+        selector=[
+            get_nodeplugin_labels(constants.CEPHFS_INTERFACE).replace("app=", ""),
+            get_nodeplugin_labels(constants.RBD_INTERFACE).replace("app=", ""),
+        ],
     )
     log.info(f"list of provisioner pods---- {plugin_provisioner_pod_objs}")
     response = retry((CommandFailed, ResourceWrongStatusException), tries=3, delay=15)(
@@ -84,14 +116,14 @@ def enable_metadata(
     # Check csi-cephfsplugin provisioner and csi-rbdplugin-provisioner pods are up and running
     assert pod_obj.wait_for_resource(
         condition=constants.STATUS_RUNNING,
-        selector=constants.CSI_CEPHFSPLUGIN_PROVISIONER_LABEL,
+        selector=get_nodeplugin_labels(constants.CEPHFS_INTERFACE),
         dont_allow_other_resources=True,
         timeout=60,
     ), "Pods are not in running status"
 
     assert pod_obj.wait_for_resource(
         condition=constants.STATUS_RUNNING,
-        selector=constants.CSI_RBDPLUGIN_PROVISIONER_LABEL,
+        selector=get_nodeplugin_labels(constants.RBD_INTERFACE),
         dont_allow_other_resources=True,
         timeout=60,
     ), "Pods are not in running status"
@@ -144,14 +176,14 @@ def disable_metadata(
     # Check csi-cephfsplugin provisioner and csi-rbdplugin-provisioner pods are up and running
     assert pod_obj.wait_for_resource(
         condition=constants.STATUS_RUNNING,
-        selector=constants.CSI_CEPHFSPLUGIN_PROVISIONER_LABEL,
+        selector=get_nodeplugin_labels(constants.CEPHFS_INTERFACE),
         dont_allow_other_resources=True,
         timeout=60,
     ), "Pods are not in running status"
 
     assert pod_obj.wait_for_resource(
         condition=constants.STATUS_RUNNING,
-        selector=constants.CSI_RBDPLUGIN_PROVISIONER_LABEL,
+        selector=get_nodeplugin_labels(constants.RBD_INTERFACE),
         dont_allow_other_resources=True,
         timeout=60,
     ), "Pods are not in running status"
