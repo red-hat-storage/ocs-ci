@@ -679,15 +679,19 @@ class OCP(object):
             update_kubeconfig_with_proxy_url_for_client(kubeconfig)
         return status
 
-    def login_as_sa(self):
+    def login_as_user(self, user="system:admin"):
         """
-        Logs in as system:admin
+        Logs in as specified user (by default 'system:admin'). This user should have valid token in kubeconfig file.
+
+        Args:
+            user (str): Name of user to be logged in (by default 'system:admin')
 
         Returns:
             str: output of login command
+
         """
         kubeconfig = config.RUN.get("kubeconfig")
-        command = "oc login -u system:admin "
+        command = f"oc login -u {user} "
         if kubeconfig:
             command += f"--kubeconfig {kubeconfig}"
         status = run_cmd(command, threading_lock=self.threading_lock)
