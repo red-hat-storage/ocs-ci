@@ -39,6 +39,7 @@ from ocs_ci.ocs.utils import (
     query_nb_db_psql_version,
 )
 
+from ocs_ci.ocs.node import get_worker_nodes
 from ocs_ci.ocs import constants, defaults, node, ocp, exceptions
 from ocs_ci.ocs.exceptions import (
     CommandFailed,
@@ -6017,3 +6018,118 @@ def set_configmap_log_level_csi_sidecar(value):
     logger.info(f"Setting CSI_SIDECAR log level to: {value}")
     params = f'{{"data": {{"CSI_SIDECAR_LOG_LEVEL": "{value}"}}}}'
     configmap_obj.patch(params=params, format_type="merge")
+
+
+def get_rbd_daemonset_csi_addons_node_object(node):
+    """
+    Gets rdb daemonset CSI addons node data
+
+    Args:
+        node (str): Name of the node
+
+    Returns:
+       dict: CSI addons node object info
+
+    """
+    namespace = config.ENV_DATA["cluster_namespace"]
+    csi_addons_node = OCP(kind=constants.CSI_ADDONS_NODE_KIND, namespace=namespace)
+    csi_addons_node_data = csi_addons_node.get(
+        resource_name=f"{node}-{namespace}-daemonset-openshift-storage.rbd.csi.ceph.com-nodeplugin"
+    )
+    return csi_addons_node_data
+
+
+def create_network_fence_class():
+    """
+    Create NetworkFenceClass CR and verify Ips are populated
+    in respective CsiAddonsNode objects
+
+    """
+
+    logger.info("Creating NetworkFenceClass")
+    network_fence_class_dict = templating.load_yaml(constants.NETWORK_FENCE_CLASS_CRD)
+    network_fence_class_obj = create_resource(**network_fence_class_dict)
+    if network_fence_class_obj.ocp.get(
+        resource_name=network_fence_class_obj.name, dont_raise=True
+    ):
+        logger.info(
+            f"NetworkFenceClass {network_fence_class_obj.name} created successfully"
+        )
+
+    logger.info("Verifying CsiAddonsNode object for CSI RBD daemonset")
+    all_nodes = get_worker_nodes()
+
+    for node_name in all_nodes:
+        cidrs = get_rbd_daemonset_csi_addons_node_object(node_name)["status"][
+            "networkFenceClientStatus"
+        ][0]["ClientDetails"][0]["cidrs"]
+        assert len(cidrs) == 1, "No cidrs are populated to CSI Addons node object"
+        logger.info(f"Cidr: {cidrs[0]} populated in {node_name} CSI addons node object")
+
+
+def create_network_fence(node_name, cidr):
+    """
+    Create NetworkFence for the node
+
+    Args:
+        node_name (str): Name of the node
+        cidr (str): cidr
+
+    Returns:
+        OCS: NetworkFence object
+
+    """
+    network_fence_obj = OCP(
+        kind=constants.NETWORK_FENCE,
+        namespace=config.ENV_DATA["cluster_namespace"],
+        resource_name=node_name,
+    )
+
+    if not network_fence_obj.get(resource_name=node_name, dont_raise=True):
+        logger.info("Creating NetworkFence")
+        network_fence_dict = templating.load_yaml(constants.NETWORK_FENCE_CRD)
+        network_fence_dict["metadata"]["name"] = node_name
+        network_fence_dict["spec"]["cidrs"][0] = cidr
+        network_fence_obj = create_resource(**network_fence_dict)
+        if network_fence_obj.ocp.get(
+            resource_name=network_fence_obj.name, dont_raise=True
+        ):
+            logger.info(
+                f"NetworkFence {network_fence_obj.name} for node {node_name} created successfully"
+            )
+    else:
+        logger.info(f"Network fence object for {node_name} already exists!")
+    return network_fence_obj
+
+
+def unfence_node(node_name, delete=False):
+    """
+    Un-fence node
+
+    Args:
+        node_name (str): Name of the node
+        delete (bool): If True, delete the network fence object
+
+    """
+
+    network_fence_obj = OCP(
+        kind=constants.NETWORK_FENCE, namespace=config.ENV_DATA["cluster_namespace"]
+    )
+
+    if network_fence_obj.get(resource_name=node_name, dont_raise=True):
+        network_fence_obj.patch(
+            resource_name=node_name,
+            params=f'{{"spec":{{"fenceState": "{constants.ACTION_UNFENCE}" }}}}',
+            format_type="merge",
+        )
+        assert (
+            network_fence_obj.get(resource_name=node_name)["spec"]["fenceState"]
+            != constants.ACTION_FENCE
+        ), f"{node_name} is expected to be unfenced but still its fenced"
+        logger.info(f"Unfenced node {node_name} successfully!")
+
+        if delete:
+            network_fence_obj.delete(resource_name=node_name)
+            logger.info(f"Deleted network fence object for node {node_name}")
+    else:
+        logger.info(f"No networkfence found for node {node_name}")
