@@ -26,7 +26,6 @@ log = logging.getLogger(__name__)
 @tier2
 @post_upgrade
 @skipif_managed_service
-@skipif_external_mode
 @skipif_hci_provider_and_client
 @pytest.mark.usefixtures(
     create_project.__name__,
@@ -46,6 +45,7 @@ class TestCrossScCloneSnapRestore(ManageTest):
     @skipif_mcg_only
     @polarion_id("OCS-5872")
     @polarion_id("OCS-5873")
+    @skipif_external_mode
     def test_cross_class_same_pool_clone_snap_restore(
         self,
         interface_type,
@@ -182,6 +182,7 @@ class TestCrossScCloneSnapRestore(ManageTest):
         ],
     )
     @skipif_mcg_only
+    @skipif_external_mode
     @polarion_id("OCS-5871")
     @polarion_id("OCS-5874")
     @polarion_id("OCS-5875")
