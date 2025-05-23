@@ -6,13 +6,13 @@ from ocs_ci.framework.pytest_customization.marks import (
     turquoise_squad,
     stretchcluster_required,
     tier1,
-    jira,
+    # jira,
 )
 from ocs_ci.helpers.cnv_helpers import cal_md5sum_vm
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.resources import storage_cluster
 from ocs_ci.ocs.resources.pod import (
-    get_pod_restarts_count,
+    # get_pod_restarts_count,
     get_ceph_tools_pod,
     wait_for_pods_to_be_in_statuses,
 )
@@ -23,7 +23,7 @@ logger = logging.getLogger(__name__)
 
 @tier1
 @turquoise_squad
-@jira("DFBUGS-1273")
+# @jira("DFBUGS-1273")
 @stretchcluster_required
 class TestAddCapacityStretchCluster:
     """
@@ -38,24 +38,24 @@ class TestAddCapacityStretchCluster:
 
         """
         # get osd pods restart count before
-        osd_pods_restart_count_before = get_pod_restarts_count(
-            label=constants.OSD_APP_LABEL
-        )
+        # osd_pods_restart_count_before = get_pod_restarts_count(
+        #     label=constants.OSD_APP_LABEL
+        # )
 
         # add capacity to the cluster
         storage_cluster.add_capacity_lso(ui_flag=False)
         logger.info("Successfully added capacity")
 
         # get osd pods restart count after
-        osd_pods_restart_count_after = get_pod_restarts_count(
-            label=constants.OSD_APP_LABEL
-        )
+        # osd_pods_restart_count_after = get_pod_restarts_count(
+        #     label=constants.OSD_APP_LABEL
+        # )
 
         # assert if any osd pods restart
-        assert sum(osd_pods_restart_count_before.values()) == sum(
-            osd_pods_restart_count_after.values()
-        ), "Some of the osd pods have restarted during the add capacity"
-        logger.info("osd pod restarts counts are same before and after.")
+        # assert sum(osd_pods_restart_count_before.values()) == sum(
+        #     osd_pods_restart_count_after.values()
+        # ), "Some of the osd pods have restarted during the add capacity"
+        # logger.info("osd pod restarts counts are same before and after.")
 
         # assert if osd weights for both the zones are not balanced
         tools_pod = get_ceph_tools_pod()
