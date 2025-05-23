@@ -19,6 +19,7 @@ from ocs_ci.helpers.helpers import (
     create_unique_resource_name,
     get_full_test_logs_path,
     get_provision_time,
+    set_configmap_log_level_csi_sidecar,
 )
 from ocs_ci.ocs import constants, scale_lib
 from ocs_ci.ocs.resources import pvc
@@ -68,7 +69,7 @@ class TestBulkCloneCreation(PASTest):
         self.create_fio_pod_yaml(
             pvc_size=self.pvc_size_int, filesize=self.file_size_mb_str
         )
-
+        set_configmap_log_level_csi_sidecar(value=5)
         self.create_test_project()
 
     def teardown(self):
@@ -79,7 +80,7 @@ class TestBulkCloneCreation(PASTest):
 
         # Delete the test project (namespace)
         self.delete_test_project()
-
+        set_configmap_log_level_csi_sidecar(value=1)
         super(TestBulkCloneCreation, self).teardown()
 
     def init_full_results(self, full_results):

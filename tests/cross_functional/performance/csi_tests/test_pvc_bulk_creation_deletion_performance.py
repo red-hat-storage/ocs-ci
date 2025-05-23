@@ -40,6 +40,7 @@ class TestPVCCreationPerformance(PASTest):
         self.benchmark_name = "pvc_creation_performance"
         # Create new project (namespace for the test)
         self.create_test_project()
+        helpers.set_configmap_log_level_csi_sidecar(value=5)
         self.pvc_size = "1Gi"
         self.pvc_objs = []
 
@@ -54,6 +55,7 @@ class TestPVCCreationPerformance(PASTest):
             pvc_obj.delete()
         # Delete the test project (namespace)
         self.delete_test_project()
+        helpers.set_configmap_log_level_csi_sidecar(value=1)
         super(TestPVCCreationPerformance, self).teardown()
 
     def init_full_results(self, full_results):
