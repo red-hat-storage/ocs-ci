@@ -1,0 +1,8 @@
+SCENARIO_NAME: "APPLICATION_FAILURES"
+SCENARIO_DESCRIPTION: "This scenario will test the application failures"
+FAILURES:
+  APPLICATION_POD_FAILURES:
+    FAILURE_DURATION: 30
+    WORKLOAD:
+      - FIO
+      - VDBENCH
