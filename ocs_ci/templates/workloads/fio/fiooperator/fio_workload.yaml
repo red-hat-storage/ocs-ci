@@ -1,0 +1,20 @@
+apiVersion: workloads.com/v1
+kind: FIOWorkload
+metadata:
+  name: fioworkloadstest
+  namespace: default
+spec:
+  replicas: 3
+  action: "scale_up"
+  fioArgs:
+    filesize: "3G"
+    iodepth: 1
+    rw: "randread"
+    runtime: 160
+  pvc:
+    storageClassName: "fast-storage"
+    accessModes:
+      - "ReadWriteOnce"
+    resources:
+      requests:
+        storage: "1Gi"
