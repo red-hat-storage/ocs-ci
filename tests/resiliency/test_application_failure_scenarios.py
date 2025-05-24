@@ -77,7 +77,9 @@ class TestApplicationFailureScenarios:
                 marks=polarion_id("OCS-6823"),
             ),
             pytest.param(
-                "APPLICATION_FAILURES", "MDS_POD_FAILURES", marks=polarion_id("")
+                "APPLICATION_FAILURES",
+                "MDS_POD_FAILURES",
+                marks=polarion_id("OCS-6850"),
             ),
             pytest.param(
                 "APPLICATION_FAILURES",
@@ -85,7 +87,9 @@ class TestApplicationFailureScenarios:
                 marks=polarion_id("OCS-6822"),
             ),
             pytest.param(
-                "APPLICATION_FAILURES", "RGW_POD_FAILURES", marks=polarion_id("")
+                "APPLICATION_FAILURES",
+                "RGW_POD_FAILURES",
+                marks=polarion_id("OCS-6808"),
             ),
         ],
     )
