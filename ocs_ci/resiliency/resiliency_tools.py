@@ -68,3 +68,41 @@ class CephStatusTool:
         self.remove_ceph_crashes(self.toolbox)
         log.info("Ceph crash logs archived successfully.")
         return True
+
+    def ceph_status_details(self):
+        """
+        Get detailed status of the Ceph cluster.
+
+        Returns:
+            str: The detailed status of the Ceph cluster.
+        """
+        ceph_status = {}
+        try:
+            ceph_status = self.toolbox.exec_cmd_on_pod(
+                "ceph -s --format json-pretty", timeout=60
+            )
+        except (
+            CephHealthException,
+            CommandFailed,
+            subprocess.TimeoutExpired,
+            NoRunningCephToolBoxException,
+        ) as ex:
+            log.error(f"Failed to get Ceph status: {ex}")
+
+        return ceph_status
+
+    def is_ceph_health_ok(self):
+        """
+        Get the status of the Ceph cluster.
+
+        Returns:
+            str: The status of the Ceph cluster.
+        """
+        if (
+            self.ceph_status_details().get("health", {}).get("status", "")
+            == "HEALTH_OK"
+        ):
+            log.info("Ceph cluster is healthy.")
+            return True
+        log.error("Ceph cluster is not healthy.")
+        return False

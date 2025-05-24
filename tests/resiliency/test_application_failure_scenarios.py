@@ -2,7 +2,11 @@ import logging
 import pytest
 
 from ocs_ci.ocs import constants
-from ocs_ci.framework.pytest_customization.marks import green_squad, resiliency
+from ocs_ci.framework.pytest_customization.marks import (
+    green_squad,
+    resiliency,
+    polarion_id,
+)
 from ocs_ci.resiliency.resiliency_helper import Resiliency
 
 log = logging.getLogger(__name__)
@@ -60,15 +64,35 @@ class TestApplicationFailureScenarios:
         log.info("All workloads passed after failure injection.")
 
     @pytest.mark.parametrize(
-        "failure_case",
-        [
-            "APPLICATION_POD_FAILURES",
+        argnames=["scenario_name", "failure_case"],
+        argvalues=[
+            pytest.param(
+                "APPLICATION_FAILURES",
+                "OSD_POD_FAILURES",
+                marks=polarion_id("OCS-6821"),
+            ),
+            pytest.param(
+                "APPLICATION_FAILURES",
+                "MGR_POD_FAILURES",
+                marks=polarion_id("OCS-6823"),
+            ),
+            pytest.param(
+                "APPLICATION_FAILURES", "MDS_POD_FAILURES", marks=polarion_id("")
+            ),
+            pytest.param(
+                "APPLICATION_FAILURES",
+                "MON_POD_FAILURES",
+                marks=polarion_id("OCS-6822"),
+            ),
+            pytest.param(
+                "APPLICATION_FAILURES", "RGW_POD_FAILURES", marks=polarion_id("")
+            ),
         ],
     )
     def test_application_failure_scenarios(
         self,
+        scenario_name,
         failure_case,
-        application_failure_scenarios,
         project_factory,
         multi_pvc_factory,
         resiliency_workload,
@@ -80,8 +104,6 @@ class TestApplicationFailureScenarios:
         Args:
             failure_case (str): The failure method to inject.
         """
-        scenario_details = application_failure_scenarios
-        scenario_name = scenario_details.get("SCENARIO_NAME")
         log.info(f"Running Scenario: {scenario_name}, Failure Case: {failure_case}")
 
         workloads = self._prepare_pvcs_and_workloads(
