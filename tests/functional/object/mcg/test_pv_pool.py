@@ -1,5 +1,6 @@
 import json
 import logging
+import statistics
 import time
 
 import pytest
@@ -16,7 +17,7 @@ from ocs_ci.framework.pytest_customization.marks import (
     fips_required,
     ignore_leftovers,
 )
-
+from ocs_ci.ocs.version import if_version
 from ocs_ci.ocs.bucket_utils import (
     wait_for_pv_backingstore,
     check_pv_backingstore_status,
@@ -429,31 +430,114 @@ class TestPvPool:
             mcg_obj=mcg_obj,
         )
 
-
     @tier2
-    @ignore_leftovers
-    @polarion_id("OCS-6552")
+    @if_version(">4.19")
+    @pytest.mark.parametrize(
+        argnames=["pv_in_bs", "block_size", "block_count", "file_count"],
+        argvalues=[
+            pytest.param(
+                *[
+                    1,
+                    "1M",
+                    10,
+                    20,
+                ],
+                marks=pytest.mark.polarion_id("OCS-4587"),
+            ),
+            pytest.param(
+                *[
+                    5,
+                    "1M",
+                    10,
+                    20,
+                ],
+                marks=pytest.mark.polarion_id("OCS-4587"),
+            ),
+            pytest.param(
+                *[
+                    10,
+                    "1M",
+                    10,
+                    20,
+                ],
+                marks=pytest.mark.polarion_id("OCS-4587"),
+            ),
+        ],
+    )
     def test_pv_data_dist(
-        self, setup_nfs, bucket_factory, awscli_pod, test_directory_setup, mcg_obj
+        self,
+        pv_in_bs,
+        block_size,
+        block_count,
+        file_count,
+        bucket_factory,
+        awscli_pod_session,
+        mcg_obj_session,
     ):
+        """
+        The test checks even distribution of the data written on bucket with 2 pv-backed backingstores,several pvs each.
+            1) Create bucket with 2 pv-based backingstores, several pvs on each
+            2) Write data to the bucket
+            3) Verify that the data is distributed evenly among all the pvs.
+
+        Args:
+            pv_in_bs (int): Number of pvs on each backing store
+            block_size (str): Size of each file block
+            block_count (int): Number of blocks in each file. Product of 'block_size' and this parameter gives the
+                size of each file to be written
+            file_count (int): Number of files to write
+
+
+        """
 
         bucketclass_dict = {
             "interface": "OC",
             "backingstore_dict": {
                 "pv": [
+                    (pv_in_bs, MIN_PV_BACKINGSTORE_SIZE_IN_GB, CEPHBLOCKPOOL_SC),
                     (
-                        3,
+                        pv_in_bs,
                         MIN_PV_BACKINGSTORE_SIZE_IN_GB,
-                        constants.NFS_SC_NAME,
+                        CEPHBLOCKPOOL_SC,
                     ),
-                    (
-                        3,
-                        MIN_PV_BACKINGSTORE_SIZE_IN_GB,
-                        constants.NFS_SC_NAME,
-                    )
                 ]
             },
         }
         bucket = bucket_factory(1, "OC", bucketclass=bucketclass_dict)[0]
-        logger.info(f"********** The bucket with name {bucket.name} was created")
-        time.sleep(600)
+        logger.info(
+            f"The bucket with name {bucket.name} was successfully created on {pv_in_bs*2} pvs."
+        )
+
+        for i in range(file_count):
+            logger.info(f"Writing file number {i}")
+            awscli_pod_session.exec_cmd_on_pod(
+                f"dd if=/dev/urandom of=/tmp/testfile bs={block_size} count={block_count}"
+            )
+
+            awscli_pod_session.exec_s3_cmd_on_pod(
+                f"cp /tmp/testfile s3://{bucket.name}/testfile_{i}",
+                mcg_obj_session,
+            )
+
+        pv_pods_usage_list = list()
+        for backing_store in bucket.bucketclass.backingstores:
+            for pod in get_pods_having_label(
+                label=f"pool={backing_store.name}",
+                namespace=config.ENV_DATA["cluster_namespace"],
+            ):
+                pod_obj = Pod(**pod)
+                df_res = pod_obj.exec_cmd_on_pod(command="df -kh /noobaa_storage/")
+                logger.info(df_res)
+                usage_str = df_res.split()[9]
+                usage = int(usage_str[:-1])
+                pv_pods_usage_list.append(usage)
+
+        std_dev_st = statistics.stdev(pv_pods_usage_list)
+        mean_st = statistics.mean(pv_pods_usage_list)
+        st_dev_percent = (std_dev_st / mean_st) * 100
+        logger.info(f"Standard deviation in percents is = {st_dev_percent}%")
+
+        st_dev_percent_limit = 20
+        assert (
+            st_dev_percent < st_dev_percent_limit
+        ), "The data distribution is not even among the pvs"
