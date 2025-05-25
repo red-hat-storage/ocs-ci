@@ -1,7 +1,6 @@
 import json
 import logging
 import statistics
-import time
 
 import pytest
 
