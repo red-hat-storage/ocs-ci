@@ -9,6 +9,7 @@ import yaml
 from gevent.threadpool import ThreadPoolExecutor
 from ocs_ci.framework import config
 from ocs_ci.ocs import ocp, defaults, constants, exceptions
+from ocs_ci.utility.utils import wait_for_detect_version_cleanup
 
 log = logging.getLogger(__name__)
 
@@ -206,8 +207,23 @@ def get_status_after_execution(exclude_labels=None):
 
     Raises:
          ResourceLeftoversException: In case there are leftovers in the
-            environment after the execution
+            environment after the test execution
     """
+    # Ensure config is imported if not already at the top of the file
+    # from ocs_ci.framework import config 
+    # from ocs_ci.utility.utils import wait_for_detect_version_cleanup
+
+    log.info("Waiting for detect-version helper pods and jobs to clean up...")
+    try:
+        wait_for_detect_version_cleanup(namespace=config.ENV_DATA["cluster_namespace"])
+    except TimeoutError as e:
+        log.error(f"Timeout waiting for detect-version cleanup: {e}")
+        # Decide if this should be a fatal error or just a warning.
+        # For now, log an error and continue, as the original leftover check will still run.
+        # Alternatively, could re-raise or raise ResourceLeftoversException here.
+    except Exception as e:
+        log.error(f"An unexpected error occurred during wait_for_detect_version_cleanup: {e}")
+
     get_environment_status(config.RUN["ENV_STATUS_POST"], exclude_labels=exclude_labels)
 
     pod_diff = compare_dicts(

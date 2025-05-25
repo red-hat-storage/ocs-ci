@@ -119,6 +119,60 @@ def get_client_info(ceph_nodes, clients):
     )
 
 
+def wait_for_detect_version_cleanup(namespace="openshift-storage",
+                                    timeout=180, poll=5):
+    """
+    Block until there are no Job/Pod names that contain 'detect-version'
+    in the target namespace (or until timeout).
+
+    Args:
+        namespace (str): The namespace to check for detect-version helpers.
+                         Defaults to "openshift-storage".
+        timeout (int): Maximum time in seconds to wait. Defaults to 180.
+        poll (int): Interval in seconds between checks. Defaults to 5.
+
+    Raises:
+        TimeoutError: if helpers are still present after `timeout` seconds
+    """
+    # Ensure namespace defaults to cluster_namespace if not provided,
+    # or handle cases where config might not be fully populated during import.
+    if namespace == "openshift-storage" and config.ENV_DATA.get("cluster_namespace"):
+        namespace = config.ENV_DATA["cluster_namespace"]
+    
+    job_api  = OCP(kind=constants.JOB, namespace=namespace)
+    pod_api  = OCP(kind=constants.POD, namespace=namespace)
+
+    end = time.time() + timeout
+    while time.time() < end:
+        # Ensure API calls are robust to errors (e.g., if CRDs aren't ready)
+        try:
+            jobs_get = job_api.get()
+            pods_get = pod_api.get()
+        except Exception as e:
+            log.warning(f"API error during detect-version cleanup check: {e}. Retrying...")
+            time.sleep(poll)
+            continue
+
+        jobs = [j["metadata"]["name"]
+                for j in jobs_get.get("items", [])
+                if "detect-version" in j.get("metadata", {}).get("name", "")]
+        pods = [p["metadata"]["name"]
+                for p in pods_get.get("items", [])
+                if "detect-version" in p.get("metadata", {}).get("name", "")]
+
+        if not jobs and not pods:
+            log.info(f"All detect-version helpers have cleaned up in namespace {namespace}")
+            return
+
+        log.info(f"Waiting for detect-version cleanup in {namespace}: jobs={jobs} pods={pods}")
+        time.sleep(poll)
+
+    raise TimeoutError(
+        f"detect-version helper(s) still present in {namespace} after {timeout}s: "
+        f"jobs={jobs} pods={pods}"
+    )
+
+
 # function for providing authorization to the clients from MON ndoe
 def auth_list(clients, mon_node):
     for node in clients:
