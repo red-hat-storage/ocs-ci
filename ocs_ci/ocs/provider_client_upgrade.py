@@ -6,21 +6,11 @@ All provider client operator upgrades implemented here
 import logging
 from ocs_ci.ocs.dr_upgrade import DRUpgrade
 from ocs_ci.framework import config
-
-# from ocs_ci.ocs.exceptions import TimeoutException
-
-# from ocs_ci.ocs.ocp import OCP
 from ocs_ci.ocs import ocs_upgrade
 from ocs_ci.ocs.ocs_upgrade import OCSUpgrade
 from ocs_ci.ocs import constants
-
-# from ocs_ci.ocs.resources.install_plan import wait_for_install_plan_and_approve
-
-# from ocs_ci.utility.utils import TimeoutSampler
 from ocs_ci.deployment.metallb import MetalLBInstaller
 from ocs_ci.deployment.cnv import CNVInstaller
-
-# from ocs_ci.deployment.mce import MCEInstaller
 from ocs_ci.deployment.deployment import Deployment
 from ocs_ci.ocs.acm_upgrade import ACMUpgrade
 from ocs_ci.framework.testlib import (
