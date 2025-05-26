@@ -127,7 +127,7 @@ class ApplicationFailures:
         ceph_tool.wait_till_ceph_status_became_healthy()
         logger.info("Ceph status is healthy after failure injection.")
 
-    def run(self, wait_till_pods_running=True, iteration=20):
+    def run(self, failure_method=None, wait_till_pods_running=True, iteration=20):
         """
         Run random application failure scenarios for a number of iterations.
 
@@ -140,7 +140,18 @@ class ApplicationFailures:
         )
         for i in range(iteration):
             logger.info(f"Running iteration {i + 1} of {iteration}.")
-            action_name, method_name = random.choice(list(self.FAILURE_METHODS.items()))
+            if failure_method:
+                if failure_method not in self.FAILURE_METHODS:
+                    raise ValueError(
+                        f"Invalid failure method: {failure_method}. "
+                        f"Available methods: {list(self.FAILURE_METHODS.keys())}"
+                    )
+                action_name = failure_method
+                method_name = self.FAILURE_METHODS[failure_method]
+            else:
+                action_name, method_name = random.choice(
+                    list(self.FAILURE_METHODS.items())
+                )
             logger.info(f"Selected failure scenario: {action_name}")
             method = getattr(self, method_name)
             self.pre_failure_checks()
