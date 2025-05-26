@@ -30,7 +30,7 @@ from ocs_ci.framework.testlib import (
     runs_on_provider,
     skipif_external_mode,
 )
-
+from ocs_ci.deployment.helpers.lso_helpers import lso_upgrade
 
 log = logging.getLogger(__name__)
 
@@ -130,7 +130,7 @@ class OperatorUpgrade(ProviderUpgrade):
         This method is for upgrade of all operators required for provider clusters,
         ACM, Metallb, Cnv
 
-        To do: LSO, MCE
+        To do: MCE
 
         """
         try:
@@ -152,10 +152,13 @@ class OperatorUpgrade(ProviderUpgrade):
         except Exception as e:
             log.error(f"Failed to upgrade ACM operator: {e}")
 
-        # try:
-        #     self.run_lso_operator_upgrade()
-        # except Exception as e:
-        #     log.error(f"Failed to upgrade LSO operator: {e}")
+        try:
+            if not lso_upgrade():
+                log.error("Failed to upgrade lso operator")
+            else:
+                log.info("Upgrade successful")
+        except Exception as e:
+            log.error(f"Failed to upgrade lso operator: {e}")
 
 
 class ProviderClusterOperatorUpgrade(ProviderUpgrade):

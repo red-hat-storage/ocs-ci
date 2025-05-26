@@ -2153,6 +2153,8 @@ CEPHOBJECTSTORE_TOOL_CMD = "ceph-objectstore-tool"
 CEPHMONSTORE_TOOL_CMD = "ceph-monstore-tool"
 
 # local storage
+LOCAL_STORAGE_NAMESPACE = "openshift-local-storage"
+LOCAL_STORAGE_OPERATOR_NAME = "local-storage-operator"
 LOCAL_STORAGE_OPERATOR = os.path.join(
     TEMPLATE_DEPLOYMENT_DIR, "local-storage-operator.yaml"
 )
