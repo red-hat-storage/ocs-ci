@@ -768,7 +768,7 @@ class MetalLBInstaller:
         logger.info(
             f"Upgarde metallb version to: {parse_version(self.upgrade_version)}"
         )
-        if self.upgrade_version == get_running_ocp_version():
+        if self.upgrade_version == parse_version(self.get_running_metallb_version()):
             logger.info("Metallb operator is not upgradeable")
             return True
 
@@ -804,6 +804,9 @@ class MetalLBInstaller:
 
         else:
             self.create_catalog_source(metallb_version=self.upgrade_version)
+
+        # wait for sometime before checking the latest metallb version
+        time.sleep(60)
         if metallb_subs_obj.get()["spec"]["installPlanApproval"] != "Automatic":
             patch = '{"spec": {"installPlanApproval": "Automatic"}}'
             metallb_subs_obj.patch(params=patch, format_type="merge")

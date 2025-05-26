@@ -871,6 +871,8 @@ class CNVInstaller(object):
         bool: if cnv operator is upgraded successfully
 
         """
+        import time
+
         if not self.check_cnv_is_upgradable():
             logger.info("CNV is not upgradable")
             return
@@ -894,6 +896,15 @@ class CNVInstaller(object):
             # Create CNV catalog source
             if not self.catalog_source_created():
                 self.create_cnv_catalog_source()
+            # Update image details in CNV catalogsource
+            cnv_operators_nightly_catsrc = CatalogSource(
+                resource_name=self.cnv_nightly_catsrc,
+                namespace=constants.MARKETPLACE_NAMESPACE,
+            )
+            patch = f'{{"spec": {{"image": "quay.io/openshift-cnv/nightly-catalog:{self.upgrade_version}"}}}}'
+            cnv_operators_nightly_catsrc.patch(params=patch, format_type="merge")
+            # wait for catalog source is ready
+            cnv_operators_nightly_catsrc.wait_for_state("READY")
             # Update channel and source for CNV subscription
             patch = (
                 f'{{"spec": {{"channel": "nightly-{self.upgrade_version}", '
@@ -911,8 +922,7 @@ class CNVInstaller(object):
             # setting upgrade approval to manual
             patch = '{"spec": {"installPlanApproval": "Manual"}}'
             hyperconverged_subs_obj.patch(params=patch, format_type="merge")
-        # Enable software emulation
-        self.enable_software_emulation()
-        # Download and extract the virtctl binary to bin_dir
-        self.download_and_extract_virtctl_binary()
+
+        # wait for sometime before checking the latest cnv version
+        time.sleep(60)
         return self.upgrade_version in self.get_running_cnv_version()
