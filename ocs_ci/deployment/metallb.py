@@ -112,8 +112,6 @@ class MetalLBInstaller:
         logger.info("Creating catalog source for MetalLB")
         # replace latest version with specific version
         catalog_source_data = templating.load_yaml(QE_APP_REGISTRY_SOURCE)
-
-        # metallb_version = config.default_cluster_ctx.ENV_DATA.get("metallb_version")
         if not metallb_version:
             metallb_version = get_ocp_version()
 

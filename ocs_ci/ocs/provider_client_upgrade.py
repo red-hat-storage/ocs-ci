@@ -74,14 +74,6 @@ class ProviderUpgrade(OCSUpgrade):
         )
         self.upgrade_version = self.get_upgrade_version()
 
-    def ocs_client_operator_upgrade(self):
-        """
-        This method is for running the upgrade ocs-client operator,
-        for hcp client clusters.
-
-        ### To Do ####
-        """
-
 
 class OperatorUpgrade(ProviderUpgrade):
     """
@@ -95,7 +87,6 @@ class OperatorUpgrade(ProviderUpgrade):
         self.metallb_installer_obj = MetalLBInstaller()
         self.cnv_installer_obj = CNVInstaller()
         self.acm_hub_upgrade_obj = ACMUpgrade()
-        # self.mce_installer_obj = MCEInstaller()
 
     def run_acm_operator_upgrade(self):
         """
