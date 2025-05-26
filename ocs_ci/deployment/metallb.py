@@ -33,6 +33,7 @@ from ocs_ci.utility.utils import (
     get_running_ocp_version,
 )
 from pkg_resources import parse_version
+from ocs_ci.ocs.resources.install_plan import wait_for_install_plan_and_approve
 
 logger = logging.getLogger(__name__)
 
@@ -748,10 +749,15 @@ class MetalLBInstaller:
             bool: if metallb operator is upgraded successfully
 
         """
+        metallb_subs_obj = OCP(
+            kind=constants.SUBSCRIPTION_WITH_ACM,
+            namespace=self.namespace_lb,
+            resource_name=constants.METALLB,
+        )
         logger.info("Check if metallb is installed")
         if not self.metallb_instance_created():
             logger.error("metalLb operator unavailable")
-            return
+            return False
 
         logger.info(
             f"Currently installed metallb version: {parse_version(self.get_running_metallb_version())}"
@@ -762,6 +768,9 @@ class MetalLBInstaller:
         logger.info(
             f"Upgarde metallb version to: {parse_version(self.upgrade_version)}"
         )
+        if self.upgrade_version == get_running_ocp_version():
+            logger.info("Metallb operator is not upgradeable")
+            return True
 
         self.catalog_source_name = constants.QE_APP_REGISTRY_CATALOG_SOURCE_NAME
         catalog_source_data = templating.load_yaml(QE_APP_REGISTRY_SOURCE)
@@ -775,7 +784,6 @@ class MetalLBInstaller:
             catalog_source_data.get("spec").update(
                 {"image": image_placeholder.format(self.upgrade_version)}
             )
-
             # install catalog source
             metallb_catalog_file = tempfile.NamedTemporaryFile(
                 mode="w+", prefix="metallb_catalogsource", delete=False
@@ -796,6 +804,10 @@ class MetalLBInstaller:
 
         else:
             self.create_catalog_source(metallb_version=self.upgrade_version)
+        if metallb_subs_obj.get()["spec"]["installPlanApproval"] != "Automatic":
+            patch = '{"spec": {"installPlanApproval": "Automatic"}}'
+            metallb_subs_obj.patch(params=patch, format_type="merge")
+            wait_for_install_plan_and_approve(self.namespace)
 
         metallb_version_post_upgrade = self.get_running_metallb_version()
         logger.info(f"metallb version post upgrade: {metallb_version_post_upgrade}")

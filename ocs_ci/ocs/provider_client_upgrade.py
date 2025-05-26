@@ -4,18 +4,23 @@ All provider client operator upgrades implemented here
 """
 
 import logging
+from ocs_ci.ocs.dr_upgrade import DRUpgrade
 from ocs_ci.framework import config
-from ocs_ci.ocs.exceptions import TimeoutException
-from ocs_ci.ocs.ocp import OCP
+
+# from ocs_ci.ocs.exceptions import TimeoutException
+
+# from ocs_ci.ocs.ocp import OCP
 from ocs_ci.ocs import ocs_upgrade
 from ocs_ci.ocs.ocs_upgrade import OCSUpgrade
 from ocs_ci.ocs import constants
-from ocs_ci.ocs.resources import pod
-from ocs_ci.ocs.resources.csv import CSV, check_all_csvs_are_succeeded
-from ocs_ci.ocs.resources.install_plan import wait_for_install_plan_and_approve
-from ocs_ci.utility.utils import TimeoutSampler
+
+# from ocs_ci.ocs.resources.install_plan import wait_for_install_plan_and_approve
+
+# from ocs_ci.utility.utils import TimeoutSampler
 from ocs_ci.deployment.metallb import MetalLBInstaller
 from ocs_ci.deployment.cnv import CNVInstaller
+
+# from ocs_ci.deployment.mce import MCEInstaller
 from ocs_ci.deployment.deployment import Deployment
 from ocs_ci.ocs.acm_upgrade import ACMUpgrade
 from ocs_ci.framework.testlib import (
@@ -79,103 +84,13 @@ class ProviderUpgrade(OCSUpgrade):
         )
         self.upgrade_version = self.get_upgrade_version()
 
-    def run_upgrade(self):
+    def ocs_client_operator_upgrade(self):
         """
-        This method is for running the upgrade of ocs,
+        This method is for running the upgrade ocs-client operator,
+        for hcp client clusters.
 
-        To Do: upgrade of mce, lso
+        ### To Do ####
         """
-        assert self.get_parsed_versions()[1] >= self.get_parsed_versions()[0], (
-            f"Version you would like to upgrade to: {self.upgrade_version} "
-            f"is not higher or equal to the version you currently running: "
-            f"{self.version_before_upgrade}"
-        )
-
-        self.csv_name_pre_upgrade = self.get_csv_name_pre_upgrade(
-            resource_name=self.resource_name
-        )
-        self.pre_upgrade_images = self.get_pre_upgrade_image(self.csv_name_pre_upgrade)
-        self.load_version_config_file(self.upgrade_version)
-
-        self.channel = self.set_upgrade_channel(resource_name=self.operator_name)
-        self.set_upgrade_images()
-        self.update_subscription(self.channel, self.subscription_name)
-        subscription_plan_approval = config.DEPLOYMENT.get("subscription_plan_approval")
-        if subscription_plan_approval == "Manual":
-            wait_for_install_plan_and_approve(config.ENV_DATA["cluster_namespace"])
-
-        for sample in TimeoutSampler(
-            timeout=725,
-            sleep=20,
-            func=self.check_if_upgrade_completed,
-            channel=self.channel,
-            csv_name_pre_upgrade=self.csv_name_pre_upgrade,
-        ):
-            try:
-                if sample:
-                    log.info("Upgrade success!")
-                    break
-            except TimeoutException:
-                raise TimeoutException("No new CSV found after upgrade!")
-
-    def collect_data(self, pod_name_pattern):
-        """
-        Collect operators installed on provider related pods and csv data
-        """
-        pod_data = pod.get_all_pods(namespace=self.namespace)
-        self.pod_name_pattern = pod_name_pattern
-        for p in pod_data:
-            if self.pod_name_pattern in p.get()["metadata"]["name"]:
-                pod_obj = OCP(
-                    namespace=self.namespace,
-                    resource_name=p.get()["metadata"]["name"],
-                    kind="Pod",
-                )
-                if self.upgrade_phase == "pre_upgrade":
-                    self.pre_upgrade_data["age"] = pod_obj.get_resource(
-                        resource_name=p.get()["metadata"]["name"], column="AGE"
-                    )
-                    self.pre_upgrade_data["pod_status"] = pod_obj.get_resource_status(
-                        resource_name=p.get()["metadata"]["name"]
-                    )
-                if self.upgrade_phase == "post_upgrade":
-                    self.post_upgrade_data["age"] = pod_obj.get_resource(
-                        resource_name=p.get()["metadata"]["name"], column="AGE"
-                    )
-                    self.post_upgrade_data["pod_status"] = pod_obj.get_resource_status(
-                        resource_name=p.get()["metadata"]["name"]
-                    )
-
-        # get pre-upgrade csv
-        csv_objs = CSV(namespace=self.namespace)
-        for csv in csv_objs.get()["items"]:
-            if self.operator_name in csv["metadata"]["name"]:
-                csv_obj = CSV(
-                    namespace=self.namespace, resource_name=csv["metadata"]["name"]
-                )
-                if self.upgrade_phase == "pre_upgrade":
-                    self.pre_upgrade_data["version"] = csv_obj.get_resource(
-                        resource_name=csv_obj.resource_name, column="VERSION"
-                    )
-                    try:
-                        self.pre_upgrade_data["version"]
-                    except KeyError:
-                        log.error(
-                            f"Couldn't capture Pre-upgrade CSV version for {self.operator_name}"
-                        )
-                if self.upgrade_phase == "post_upgrade":
-                    if self.upgrade_version in csv["metadata"]["name"]:
-                        self.post_upgrade_data["version"] = csv_obj.get_resource(
-                            resource_name=csv_obj.resource_name, column="VERSION"
-                        )
-                    try:
-                        self.post_upgrade_data["version"]
-                    except KeyError:
-                        log.error(
-                            f"Couldn't capture Post upgrade CSV version for {self.operator_name}"
-                        )
-        # Make sure all csvs are in succeeded state
-        check_all_csvs_are_succeeded(namespace=self.namespace)
 
 
 class OperatorUpgrade(ProviderUpgrade):
@@ -185,26 +100,30 @@ class OperatorUpgrade(ProviderUpgrade):
     """
 
     def __init__(self):
+        super().__init__()
+        self.drupgrade_obj = DRUpgrade()
         self.metallb_installer_obj = MetalLBInstaller()
         self.cnv_installer_obj = CNVInstaller()
         self.acm_hub_upgrade_obj = ACMUpgrade()
+        # self.mce_installer_obj = MCEInstaller()
 
-    def collect_pre_upgrade_data(self):
-        # Collect some pre-upgrade data for comparision after the upgrade
-        self.metallb_pod_name_pattern = "metallb-operator"
-        self.collect_data(self.metallb_pod_name_pattern)
-        assert (
-            self.pre_upgrade_data.get("pod_status", "") == "Running"
-        ), "metallb operator pod is not in Running status"
-        # Collect some pre-upgrade data for comparision after the upgrade
-        self.cnv_pod_name_pattern = "klusterlet"
-        self.collect_data(self.cnv_pod_name_pattern)
-        assert (
-            self.pre_upgrade_data.get("pod_status", "") == "Running"
-        ), "klusterlet pods are not in Running status"
-        self.upgrade_phase = "post_upgrade"
-        self.provider_pod_name_pattern = "ocs-provider-server"
-        self.collect_data(self.provider_pod_name_pattern)
+    def run_acm_operator_upgrade(self):
+        """
+        This method is for acm operator upgrade
+        """
+        if not Deployment().acm_operator_installed():
+            log.info("ACM operator is unavailable")
+            log.info("Upgrade mce operator")
+        try:
+            self.acm_hub_upgrade_obj.run_upgrade()
+        except Exception as e:
+            log.error(f"ACM Operator upgrade failed: {e}")
+
+    def run_lso_operator_upgrade(self):
+        """
+        This method is for lso operator upgrade
+        ### To Do ###
+        """
 
     def run_operators_upgrade(self):
         """
@@ -214,21 +133,29 @@ class OperatorUpgrade(ProviderUpgrade):
         To do: LSO, MCE
 
         """
-        if Deployment().acm_operator_installed():
-            try:
-                self.acm_hub_upgrade_obj.run_upgrade()
-            except Exception as e:
-                log.error(f"ACM Operator upgrade failed: {e}")
+        try:
+            if not self.metallb_installer_obj.upgrade_metallb():
+                log.error("Failed to upgrade Metallb operator")
+            else:
+                log.info("Upgrade successful")
+        except Exception as e:
+            log.error(f"Failed to upgrade Metallb operator: {e}")
+
         try:
             if not self.cnv_installer_obj.upgrade_cnv():
                 raise Exception("CNV Operator upgrade failed")
         except Exception as e:
-            log.error(f"CNV Operator upgrade failed: {e}")
+            log.error(f"Failed to upgrade CNV operator: {e}")
+
         try:
-            if not self.metallb_installer_obj.upgrade_metallb():
-                raise Exception("MetalLB Operator upgrade failed")
+            self.run_acm_operator_upgrade()
         except Exception as e:
-            log.error(f"metallB Operator upgrade failed: {e}")
+            log.error(f"Failed to upgrade ACM operator: {e}")
+
+        # try:
+        #     self.run_lso_operator_upgrade()
+        # except Exception as e:
+        #     log.error(f"Failed to upgrade LSO operator: {e}")
 
 
 class ProviderClusterOperatorUpgrade(ProviderUpgrade):
@@ -244,9 +171,7 @@ class ProviderClusterOperatorUpgrade(ProviderUpgrade):
         try:
             log.info("Starting the operator upgrade process...")
             operator_upgrade = OperatorUpgrade()
-            self.run_upgrade()
             ocs_upgrade.run_ocs_upgrade()
-            operator_upgrade.collect_pre_upgrade_data()
             operator_upgrade.run_operators_upgrade()
             log.info("Operator upgrade completed successfully.")
         except Exception as e:
