@@ -100,16 +100,10 @@ class OperatorUpgrade(ProviderUpgrade):
         except Exception as e:
             log.error(f"ACM Operator upgrade failed: {e}")
 
-    def run_lso_operator_upgrade(self):
-        """
-        This method is for lso operator upgrade
-        ### To Do ###
-        """
-
     def run_operators_upgrade(self):
         """
         This method is for upgrade of all operators required for provider clusters,
-        ACM, Metallb, Cnv
+        ACM, Metallb, Cnv, lso
 
         To do: MCE
 

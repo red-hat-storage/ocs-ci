@@ -26,7 +26,7 @@ logger = logging.getLogger(__name__)
 class ACMUpgrade(object):
     def __init__(self):
         self.namespace = constants.ACM_HUB_NAMESPACE
-        self.operator_name = constants.ACM_HUB_OPERATOR_NAME
+        self.operator_name = constants.ACM_OPERATOR_SUBSCRIPTION
         # Since ACM upgrade happens followed by OCP upgrade in the sequence
         # the config would have loaded upgrade parameters rather than pre-upgrade params
         # Hence we can't rely on ENV_DATA['acm_version'] for the pre-upgrade version
@@ -102,7 +102,7 @@ class ACMUpgrade(object):
 
     def acm_patch_subscription(self, patch):
         patch_cmd = (
-            f"oc -n {constants.ACM_HUB_NAMESPACE} patch sub advanced-cluster-management "
+            f"oc -n {constants.ACM_HUB_NAMESPACE} patch {constants.SUBSCRIPTION_WITH_ACM} acm-operator-subscription "
             f"-p {patch} --type merge"
         )
         run_cmd(patch_cmd)
