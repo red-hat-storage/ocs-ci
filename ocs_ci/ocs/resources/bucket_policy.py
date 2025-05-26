@@ -206,3 +206,103 @@ def gen_bucket_policy(
 
     logger.info(f"bucket_policy: {bucket_policy}")
     return bucket_policy
+
+
+def gen_bucket_policy_ui_compatible(
+    user_list,
+    actions_list,
+    resources_list,
+    effect=None,
+    sid="statement",
+    principal_property=None,
+    action_property=None,
+    resource_property=None,
+):
+    """
+    Function prepares bucket policy parameters in syntax and format compatible with UI validation.
+    This function handles principal formatting correctly for AWS S3 bucket policy standards.
+
+    Args:
+        user_list (str|list): User account(s) to access bucket policy.
+                             "*" for public access, string for single account, list for multiple accounts
+        actions_list (list): List of actions in bucket policy eg: Get, Put objects etc
+        resources_list (list): List of resources. Eg: Bucket name, specific object in a bucket etc
+        effect (str): Permission given to the bucket policy ie: Allow(default) or Deny
+        sid (str): Statement name. Can be any string. Default: "Statement"
+        principal_property (str): Element to specify the principal to allow/deny access to a resource.
+        action_property (str): Element describes the specific action(s) that will be allowed or denied.
+        resource_property (str):  Element specifies the object(s) that the statement covers
+
+    Returns:
+        dict: Bucket policy in json format compatible with UI validation
+    """
+    actions = list(map(lambda action: "s3:%s" % action, actions_list))
+    resources = list(
+        map(lambda bucket_name: "arn:aws:s3:::%s" % bucket_name, resources_list)
+    )
+    # Use AWS standard version for UI compatibility
+    ver = "2012-10-17"
+
+    principal_key = principal_property if principal_property else "Principal"
+    effect = effect if effect else "Allow"
+    action = action_property if action_property else "Action"
+    resource = resource_property if resource_property else "Resource"
+
+    # Handle principal formatting for UI compatibility
+    if user_list == "*":
+        # Public access: use direct wildcard
+        principals = "*"
+    elif isinstance(user_list, str):
+        # Check if it's a NooBaa account (contains @noobaa.io)
+        if "@noobaa.io" in user_list:
+            # NooBaa accounts should not be wrapped in AWS ARN format
+            principals = {"AWS": user_list}
+        else:
+            # AWS account: wrap in AWS ARN format
+            principals = {"AWS": f"arn:aws:iam::{user_list}:root"}
+    elif isinstance(user_list, list) and len(user_list) == 1:
+        # Single account passed as list
+        account = user_list[0]
+        if "@noobaa.io" in account:
+            # NooBaa account: use directly
+            principals = {"AWS": account}
+        else:
+            # AWS account: wrap in ARN format
+            principals = {"AWS": f"arn:aws:iam::{account}:root"}
+    elif isinstance(user_list, list):
+        # Multiple accounts: handle each appropriately
+        formatted_accounts = []
+        for account in user_list:
+            if "@noobaa.io" in account:
+                # NooBaa account: use directly
+                formatted_accounts.append(account)
+            else:
+                # AWS account: wrap in ARN format
+                formatted_accounts.append(f"arn:aws:iam::{account}:root")
+        principals = {"AWS": formatted_accounts}
+    else:
+        # Fallback to direct assignment
+        principals = {"AWS": user_list}
+
+    logger.info(f"version: {ver}")
+    logger.info(f"{principal_key}: {user_list} -> {principals}")
+    logger.info(f"{action}: {actions_list}")
+    logger.info(f"{resource}: {resources_list}")
+    logger.info(f"effect: {effect}")
+    logger.info(f"sid: {sid}")
+
+    bucket_policy = {
+        "Version": ver,
+        "Statement": [
+            {
+                action: actions,
+                principal_key: principals,
+                resource: resources,
+                "Effect": effect,
+                "Sid": sid,
+            }
+        ],
+    }
+
+    logger.info(f"bucket_policy: {bucket_policy}")
+    return bucket_policy

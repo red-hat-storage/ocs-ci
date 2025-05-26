@@ -2243,6 +2243,68 @@ bucket_tab = {
         "form input[id]",
         By.CSS_SELECTOR,
     ),  # Input field for bucket name confirmation
+    # Bucket policy locators
+    "permissions_tab": (
+        "[data-test='horizontal-link-Permissions']",
+        By.CSS_SELECTOR,
+    ),
+    "policy_editor_start_scratch": (
+        "div.pf-v5-c-code-editor__main span",
+        By.CSS_SELECTOR,
+    ),
+    "edit_policy_button": (
+        "//button[normalize-space()='Edit bucket policy']",
+        By.XPATH,
+    ),
+    "apply_policy_button": (
+        "//button[normalize-space()='Apply policy']",
+        By.XPATH,
+    ),
+    "update_policy_modal_button": (
+        "//button[normalize-space()='Update policy']",
+        By.XPATH,
+    ),
+    "policy_code_editor": (
+        "div.view-lines",
+        By.CSS_SELECTOR,
+    ),
+    # Generic fallback selectors for bucket policy buttons
+    "apply_policy_generic_button": (
+        "//button[contains(text(), 'Apply')]",
+        By.XPATH,
+    ),
+    "update_policy_generic_button": (
+        "//button[contains(text(), 'Update')]",
+        By.XPATH,
+    ),
+    "save_policy_generic_button": (
+        "//button[contains(text(), 'Save')]",
+        By.XPATH,
+    ),
+    "delete_policy_button": (
+        "button.pf-m-danger",
+        By.CSS_SELECTOR,
+    ),
+    "delete_policy_confirmation_modal": (
+        "div.pf-v5-c-modal-box.pf-m-warning.pf-m-md",
+        By.CSS_SELECTOR,
+    ),
+    "delete_policy_confirmation_input": (
+        "#delete-policy",
+        By.CSS_SELECTOR,
+    ),
+    "delete_policy_confirm_button": (
+        "//button[normalize-space()='Confirm delete']",
+        By.XPATH,
+    ),
+    "delete_policy_confirm_button_enabled": (
+        "//button[normalize-space()='Confirm delete' and not(@disabled)]",
+        By.XPATH,
+    ),
+    "primary_button": (
+        ".pf-c-button.pf-m-primary",
+        By.CSS_SELECTOR,
+    ),
 }
 locators = {
     "4.19": {
