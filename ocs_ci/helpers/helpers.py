@@ -1806,7 +1806,7 @@ def measure_pv_deletion_time_bulk(
                     i
                     for i in logs
                     if re.search(
-                        f'{delete_suffix_to_search}.*PV="{re.escape(pv)}"', line
+                        f'{delete_suffix_to_search}.*PV="{re.escape(pv)}"', i
                     )
                 ]
             if not start or not end:
