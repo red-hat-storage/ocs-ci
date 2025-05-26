@@ -2974,6 +2974,7 @@ ACM_MANAGEDCLUSTER_ADDONS = "managedclusteraddons.addon.open-cluster-management.
 ACM_ADDON_DEPLOYMENT_CONFIG_YAML = os.path.join(
     TEMPLATE_DIR, "acm-deployment", "addon_deployment_config.yaml"
 )
+ACM_OPERATOR_SUBSCRIPTION = "acm-operator-subscription"
 
 # GitOps
 GITOPS_NAMESPACE = "openshift-gitops"
