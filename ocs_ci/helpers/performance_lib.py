@@ -298,6 +298,7 @@ def csi_pvc_time_measure(interface, pvc_obj, operation, start_time):
     et = None
     for sublog in logs:
         for line in sublog:
+            logger.info(f"lne{line}")
             if (
                 operation == "delete"
                 and "generated volume id" in line.lower()
@@ -363,6 +364,7 @@ def csi_bulk_pvc_time_measure(interface, pvc_objs, operation, start_time):
 
         for sublog in logs:
             for line in sublog:
+                logger.info(f"lne{line}")
                 if (
                     operation == "delete"
                     and "generated volume id" in line.lower()
