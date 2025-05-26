@@ -1784,6 +1784,8 @@ def measure_pv_deletion_time_bulk(
     while True:
         no_data_list = list()
         for pv in pv_name_list:
+            for i in logs:
+                logger.info(f"iiii{i}")
             # check if PV data present in CSI logs
             start = [i for i in logs if re.search(f'delete "{pv}": started', i)]
             end = [

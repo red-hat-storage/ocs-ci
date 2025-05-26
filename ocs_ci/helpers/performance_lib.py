@@ -358,22 +358,18 @@ def csi_bulk_pvc_time_measure(interface, pvc_objs, operation, start_time):
     logs = read_csi_logs(log_names, cnt_names[interface], start_time)
 
     for pvc in pvc_objs:
-        logger.info(f"pvcc{pvc}")
         pv_name = pvc.backed_pv_obj.name
         single_st = None
         single_et = None
 
         for sublog in logs:
             for line in sublog:
-                logger.info(f"lne{line}")
-                logger.info(f"pvv{pv_name}")
                 if (
                     operation == "delete"
                     and "generated volume id" in line.lower()
                     and pv_name in line
                 ):
                     pv_name = line.split("(")[1].split(")")[0]
-                    logger.info(f"pvvv{pv_name}")
                 if f"Req-ID: {pv_name} GRPC call:" in line:
                     single_st = string_to_time(line.split(" ")[1])
                 if f"Req-ID: {pv_name} GRPC response:" in line:
