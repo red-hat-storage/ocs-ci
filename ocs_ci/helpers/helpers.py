@@ -1776,9 +1776,9 @@ def measure_pv_deletion_time_bulk(
     logs = logs.split("\n")
 
     delete_suffix_to_search = (
-        "succeeded"
-        if version.get_semantic_ocs_version_from_config() <= version.VERSION_4_13
-        else "persistentvolume deleted succeeded"
+        "persistentvolume deleted succeeded"
+        if version.get_semantic_ocs_version_from_config() <= version.VERSION_4_16
+        else "deleted succeeded"
     )
     loop_counter = 0
     while True:
@@ -1786,13 +1786,29 @@ def measure_pv_deletion_time_bulk(
         for pv in pv_name_list:
             for i in logs:
                 logger.info(f"iiii{i}")
-            # check if PV data present in CSI logs
-            start = [i for i in logs if re.search(f'delete "{pv}": started', i)]
-            end = [
-                i
-                for i in logs
-                if re.search(f'delete "{pv}": {delete_suffix_to_search}', i)
-            ]
+            # check if PV data present in CSI logs[
+            if version.get_semantic_ocs_version_from_config() <= version.VERSION_4_16:
+                start = [i for i in logs if re.search(f'delete "{pv}": started', i)]
+            else:
+                start = [
+                    i
+                    for i in logs
+                    if re.search(f'"shouldDelete is true".*PV="{re.escape(pv)}"', i)
+                ]
+            if version.get_semantic_ocs_version_from_config() <= version.VERSION_4_16:
+                end = [
+                    i
+                    for i in logs
+                    if re.search(f'delete "{pv}": {delete_suffix_to_search}', i)
+                ]
+            else:
+                end = [
+                    i
+                    for i in logs
+                    if re.search(
+                        f'{delete_suffix_to_search}.*PV="{re.escape(pv)}"', line
+                    )
+                ]
             if not start or not end:
                 no_data_list.append(pv)
 
