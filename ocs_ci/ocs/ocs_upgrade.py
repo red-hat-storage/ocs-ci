@@ -153,6 +153,7 @@ def verify_image_versions(old_images, upgrade_version, version_before_upgrade):
     if (
         config.ENV_DATA.get("mcg_only_deployment")
         and config.ENV_DATA["platform"].lower() == constants.VSPHERE_PLATFORM
+        and config.ENV_DATA.get("cluster_type").lower() == constants.HCI_PROVIDER
     ):
         default_noobaa_pods = 4
         if upgrade_version >= parse_version("4.19"):
