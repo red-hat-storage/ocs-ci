@@ -1803,9 +1803,7 @@ def measure_pv_deletion_time_bulk(
                 end = [
                     i
                     for i in logs
-                    if re.search(
-                        f'{delete_suffix_to_search}.*PV="{re.escape(pv)}"', i
-                    )
+                    if re.search(f'{delete_suffix_to_search}.*PV="{re.escape(pv)}"', i)
                 ]
             if not start or not end:
                 no_data_list.append(pv)
@@ -1832,16 +1830,30 @@ def measure_pv_deletion_time_bulk(
     this_year = str(datetime.datetime.now().year)
     for pv_name in pv_name_list:
         # Extract the deletion start time for the PV
-        start = [i for i in logs if re.search(f'delete "{pv_name}": started', i)]
+        if version.get_semantic_ocs_version_from_config() <= version.VERSION_4_16:
+            start = [i for i in logs if re.search(f'delete "{pv_name}": started', i)]
+        else:
+            start = [
+                i
+                for i in logs
+                if re.search(f'"shouldDelete is true".*PV="{re.escape(pv)}"', i)
+            ]
         mon_day = " ".join(start[0].split(" ")[0:2])
         start_tm = f"{this_year} {mon_day}"
         start_time = datetime.datetime.strptime(start_tm, DATE_TIME_FORMAT)
         # Extract the deletion end time for the PV
-        end = [
-            i
-            for i in logs
-            if re.search(f'delete "{pv_name}": {delete_suffix_to_search}', i)
-        ]
+        if version.get_semantic_ocs_version_from_config() <= version.VERSION_4_16:
+            end = [
+                i
+                for i in logs
+                if re.search(f'delete "{pv}": {delete_suffix_to_search}', i)
+            ]
+        else:
+            end = [
+                i
+                for i in logs
+                if re.search(f'{delete_suffix_to_search}.*PV="{re.escape(pv)}"', i)
+            ]
         mon_day = " ".join(end[0].split(" ")[0:2])
         end_tm = f"{this_year} {mon_day}"
         end_time = datetime.datetime.strptime(end_tm, DATE_TIME_FORMAT)
