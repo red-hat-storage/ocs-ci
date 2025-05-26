@@ -2195,8 +2195,8 @@ def get_csi_versions():
     from ocs_ci.ocs.ocp import OCP
 
     for provisioner in [
-        constants.CSI_CEPHFSPLUGIN_PROVISIONER_LABEL,
-        constants.CSI_RBDPLUGIN_PROVISIONER_LABEL,
+        constants.CSI_CEPHFSPLUGIN_PROVISIONER_LABEL_419,
+        constants.CSI_CEPHFSPLUGIN_PROVISIONER_LABEL_419,
     ]:
         ocp_pod_obj = OCP(
             kind=constants.POD,
@@ -4384,9 +4384,11 @@ def wait_for_machineconfigpool_status(
 
     node_types = [node_type]
     if node_type == "all":
-        node_types = [f"{constants.WORKER_MACHINE}", f"{constants.MASTER_MACHINE}"]
+        node_types = [constants.WORKER_MACHINE, constants.MASTER_MACHINE]
 
     for role in node_types:
+        if force_delete_pods:
+            clean_up_pods_for_provider(node_type=role)
         log.info(f"Checking machineconfigpool status for {role} nodes")
         ocp_obj = ocp.OCP(
             kind=constants.MACHINECONFIGPOOL,
@@ -4394,24 +4396,12 @@ def wait_for_machineconfigpool_status(
             skip_tls_verify=skip_tls_verify,
         )
         machine_count = ocp_obj.get()["status"]["machineCount"]
-        if force_delete_pods:
-            try:
-                assert ocp_obj.wait_for_resource(
-                    condition=str(machine_count),
-                    column="READYMACHINECOUNT",
-                    timeout=60,
-                    sleep=15,
-                )
-            except (AssertionError, TimeoutExpiredError):
-                clean_up_pods_for_provider(node_type=role)
-
-        else:
-            assert ocp_obj.wait_for_resource(
-                condition=str(machine_count),
-                column="READYMACHINECOUNT",
-                timeout=timeout,
-                sleep=5,
-            )
+        assert ocp_obj.wait_for_resource(
+            condition=str(machine_count),
+            column="READYMACHINECOUNT",
+            timeout=timeout,
+            sleep=5,
+        )
 
 
 def configure_chrony_and_wait_for_machineconfig_status(
@@ -5668,11 +5658,10 @@ def wait_custom_resource_defenition_available(crd_name, timeout=600):
     )
 
 
-def clean_up_pods_for_provider(
-    node_type,
-):
+def clean_up_pods_for_provider(node_type, max_retries=30, retry_delay_seconds=30):
     """
-    Manually clean up pods in the hcpclusters namespace during OCP upgrade.
+    Manually clean up pods if nodes get stuck in Ready,SchedulingDisabled during OCP upgrade.
+    Checks machine-config-controller logs for eviction errors or completion messages.
 
     The following pods may get stuck during cleanup in the hcpclusters namespace:
     - openshift-oauth-apiserver
@@ -5680,45 +5669,166 @@ def clean_up_pods_for_provider(
     - openshift-apiserver
     - kube-apiserver
     - etcd-0
+    - virt-launcher pods
 
     Args:
-        node_type (str): Type of nodes for which the pods should be cleaned up.
+        node_type (str): Type of nodes (e.g., "worker", "master") for which pods should be cleaned up.
+        max_retries (int): Maximum number of times to check nodes before giving up.
+        retry_delay_seconds (int): Seconds to wait between checks if no progress is made.
     """
-    from ocs_ci.ocs.node import get_nodes
+    from ocs_ci.ocs.node import get_nodes, wait_for_nodes_status
     from ocs_ci.ocs.ocp import OCP
-
     from ocs_ci.ocs.resources import pod
 
-    searchstring = "error when evicting pods"
-    while True:
-        nodes = get_nodes(node_type=node_type)
-        for node in nodes:
-            if node.status() != constants.NODE_READY_SCHEDULING_DISABLED:
+    # Regex to capture pod name and namespace from lines like:
+    # "... error when evicting pods ... pods/"<pod_name>" -n "<namespace>" ..."
+    # The (?:.*?-n\s*"([^"]+)") part makes the namespace capture optional and handles potential variations
+    eviction_error_pattern = re.compile(
+        r'error when evicting pods/"([^"]+)"(?:.*?-n\s*"([^"]+)")'
+    )
+    mcc_pod_info = None  # Cache MCC pod info
+
+    for attempt in range(max_retries):
+        log.info(f"Node cleanup check: Attempt {attempt + 1}/{max_retries}")
+        current_nodes = get_nodes()
+        if not current_nodes:
+            log.warning(
+                f"No nodes found for type '{node_type}'. Assuming task is complete or not applicable."
+            )
+            continue
+
+        if not mcc_pod_info:
+            try:
+                mcc_pod_obj = pod.get_machine_config_controller_pod()
+                if not mcc_pod_obj:
+                    log.warning("Machine Config Controller pod not found. Retrying...")
+                    continue
+                mcc_pod_info = {"name": mcc_pod_obj.name}
+            except Exception as e:
+                log.error(
+                    f"Error getting Machine Config Controller pod: {e}. Retrying..."
+                )
+                time.sleep(retry_delay_seconds)
                 continue
 
-            log.info(
-                f"{node.name} is in {constants.NODE_READY_SCHEDULING_DISABLED} status"
-            )
+        all_target_nodes_resolved = (
+            True  # Assume all relevant nodes are resolved initially
+        )
+        action_taken_this_iteration = False
 
-            logs = pod.get_pod_logs(
-                pod_name=pod.get_machine_config_controller_pod().name,
-                container="machine-config-controller",
-                namespace=constants.OPENSHIFT_MACHINE_CONFIG_OPERATOR_NAMESPACE,
-            )
-            for line in logs.split("\n"):
-                if searchstring in line:
-                    try:
-                        pod_name = line.split('pods/"')[1].split('"')[0]
-                        ns = line.split('-n "')[1].split('"')[0]
-                        print(f"Deleting pod: {pod_name} from namespace: {ns}")
-                        pod_obj = OCP(
-                            kind=constants.POD, namespace=ns, resource_name=pod_name
+        for node in current_nodes:
+            if node.status() != constants.NODE_READY_SCHEDULING_DISABLED:
+                log.info(f"Node {node.name} is in {node.status()} status. Skipping.")
+                continue  # Skip this node and go to the next
+            # If we found a node in the target state.
+            all_target_nodes_resolved = False
+            if node.status() == constants.NODE_READY_SCHEDULING_DISABLED:
+                log.info(
+                    f"Node {node.name} is in {constants.NODE_READY_SCHEDULING_DISABLED} status. Checking logs..."
+                )
+
+                # collect machine config log
+                try:
+                    mcc_logs = pod.get_pod_logs(
+                        pod_name=mcc_pod_info["name"],
+                        container="machine-config-controller",
+                        namespace=constants.OPENSHIFT_MACHINE_CONFIG_OPERATOR_NAMESPACE,
+                        tail="50",
+                    )  # Check logs from the last 10 seconds
+                    mcc_log_lines = mcc_logs.split("\n")
+                except Exception as e:
+                    log.error(
+                        f"Failed to get logs from {mcc_pod_info['name']}: {e}. Retrying..."
+                    )
+                    mcc_pod_info = (
+                        None  # Reset to re-fetch MCC pod next time in case it restarted
+                    )
+                    time.sleep(retry_delay_seconds)
+
+            node_completed = False
+            completion_msg_for_node = f"node {node.name}: operation successful; applying completion annotation"
+            # Iterate logs (newest first can be useful if logs are long)
+
+            for line in reversed(mcc_log_lines):
+                if completion_msg_for_node in line:
+                    log.info(f"Node {node.name}: Operation successful message found.")
+                    node_completed = True
+                    action_taken_this_iteration = True  # Seeing completion is progress
+                    wait_for_nodes_status(
+                        node_names=[node.name], timeout=360, sleep=30
+                    )  # After the drain completed, nodes take sometime to move to Ready
+                    break  # Stop checking logs for this node for this iteration
+
+                # Check for eviction error only if node hasn't completed
+                match = eviction_error_pattern.search(line)
+                if match:
+
+                    pod_name_to_delete = match.group(1)
+                    ns_to_delete_from = match.group(2)
+                    if not ns_to_delete_from:
+                        log.warning(
+                            f"Eviction error seen for '{pod_name_to_delete}' but ns not clear in log line: '{line}'. "
+                            f"Skipping deletion of line. Pod should be in specific namespaces like 'hcpclusters'."
                         )
-                        pod_obj.exec_oc_cmd(f"delete pod {pod_name} -n {ns} --force")
-                    except Exception as e:
-                        print(f"Error: {e}")
+                        continue  # Try next log line
 
-            # break  # refresh nodes after handling one
+                    log.warning(
+                        f"Eviction error found '{pod_name_to_delete}' in namespace '{ns_to_delete_from}'"
+                        f"(related {node.name} being stuck)."
+                    )
+                    try:
+                        # Prefer using the ocs_ci resource object for deletion
+                        pod_to_delete_obj = OCP(
+                            kind=constants.POD,
+                            namespace=ns_to_delete_from,
+                            resource_name=pod_name_to_delete,
+                        )
+                        # Force delete with no grace period
+                        output = pod_to_delete_obj.exec_oc_cmd(
+                            f"delete pod {pod_name_to_delete} -n {ns_to_delete_from} --force"
+                        )
+                        log.info(
+                            f"Force deleted pod {pod_name_to_delete} from {ns_to_delete_from}. Output: {output}"
+                        )
+                        action_taken_this_iteration = True
+                        # After deleting a pod, break from log checking for this node;
+                        # The system needs time to react. The next iteration will re-evaluate.
+                    except CommandFailed:
+                        log.info(
+                            f"Pod {pod_name_to_delete} in {ns_to_delete_from} likely already deleted or not found."
+                        )
+                    except Exception as ex:
+                        log.error(
+                            f"Failed to delete pod {pod_name_to_delete} in {ns_to_delete_from}: {ex}"
+                        )
 
+            if not node_completed and not action_taken_this_iteration:
+                log.warning(
+                    f"Node {node.name} is still {constants.NODE_READY_SCHEDULING_DISABLED} "
+                    f"and no actionable logs found in this pass."
+                )
+                # all_target_nodes_resolved remains False due to this node.
+
+        # After checking all nodes in this iteration:
+        if all_target_nodes_resolved:
+            log.info(
+                f"All nodes of type '{node_type}' are either in a healthy state or have completed their operations."
+            )
+            return True  # Success
+
+        if action_taken_this_iteration:
+            log.info("Progress made in this iteration. Re-checking status shortly...")
+            time.sleep(
+                max(5, retry_delay_seconds // 2)
+            )  # Shorter delay if progress was made
         else:
-            break  # exit if no node was in the disabled state
+            log.warning(
+                f"No progress made in attempt {attempt + 1}. Waiting {retry_delay_seconds}s before next check."
+            )
+            time.sleep(retry_delay_seconds)
+
+    log.error(
+        f"Max retries ({max_retries}) reached. "
+        f"Nodes may still be stuck in {constants.NODE_READY_SCHEDULING_DISABLED} state."
+    )
+    return False  # Failure

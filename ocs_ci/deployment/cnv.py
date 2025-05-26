@@ -50,6 +50,7 @@ class CNVInstaller(object):
 
     def __init__(self):
         self.namespace = constants.CNV_NAMESPACE
+        self.cnv_nightly_catsrc = "cnv-nightly-catalog-source"
 
     def create_cnv_catalog_source(self):
         """
@@ -190,6 +191,27 @@ class CNVInstaller(object):
                     logger.info(f"{kind} found: {found_resource_name}")
                     return
                 logger.debug(f"Still waiting for the {kind}: {resource_name}")
+
+    def catalog_source_created(self, catalogsource_name=None):
+        """
+        Check if catalog source is created
+
+        Args:
+            catalogsource_name (str): Name of the catalogsource
+
+        Returns:
+            bool: True if catalog source is created, False otherwise
+        """
+        if not catalogsource_name:
+            catalogsource_name = self.cnv_nightly_catsrc
+        return CatalogSource(
+            resource_name=self.cnv_nightly_catsrc,
+            namespace=constants.MARKETPLACE_NAMESPACE,
+        ).check_resource_existence(
+            timeout=60,
+            should_exist=True,
+            resource_name=catalogsource_name,
+        )
 
     def deploy_hyper_converged(self):
         """
@@ -870,9 +892,13 @@ class CNVInstaller(object):
         # we create catsrc with nightly builds only if config.DEPLOYMENT does not have cnv_latest_stable
         if not config.DEPLOYMENT.get("cnv_latest_stable"):
             # Create CNV catalog source
-            self.create_cnv_catalog_source()
-            # Update CNV subscription
-            patch = f'{{"spec": {{"channel": "nightly-{self.upgrade_version}"}}}}'
+            if not self.catalog_source_created():
+                self.create_cnv_catalog_source()
+            # Update channel and source for CNV subscription
+            patch = (
+                f'{{"spec": {{"channel": "nightly-{self.upgrade_version}", '
+                f'"source": "{self.cnv_nightly_catsrc}"}}}}'
+            )
             hyperconverged_subs_obj.patch(params=patch, format_type="merge")
 
         if hyperconverged_subs_obj.get()["spec"]["installPlanApproval"] != "Automatic":
