@@ -27,7 +27,6 @@ from ocs_ci.ocs.exceptions import (
     UnavailableResourceException,
     MultiClusterEngineNotDeployedException,
 )
-from pkg_resources import parse_version
 
 logger = logging.getLogger(__name__)
 
@@ -338,32 +337,3 @@ class MCEInstaller(object):
                 **depl_ocp_obj.get(retry=60, wait=10, dont_raise=True)
             )
             deployment_obj.wait_for_available_replicas(timeout=600)
-
-    def get_installed_mce_version(self):
-        """
-        ##### TO DO ######
-        """
-
-    def upgrade_mce_operator(self):
-        """
-        Upgrade mce operator
-
-        Returns:
-        bool: if mce operator is upgraded successfully
-
-        ##### TO DO ######
-
-        """
-        if not self.mce_exists():
-            logger.info("mce operator is not available")
-            return
-        # mce_obj = OCP(
-        #     kind=constants.SUBSCRIPTION_WITH_ACM,
-        #     namespace=self.namespace,
-        #     resource_name=constants.MCE_OPERATOR_OPERATOR_NAME_WITH_NS,
-        # )
-
-        logger.info(
-            f" currently installed mce version: {parse_version(self.get_installed_mce_version())}"
-        )
-        self.upgrade_version = config.UPGRADE.get("upgrade_mce_version")
