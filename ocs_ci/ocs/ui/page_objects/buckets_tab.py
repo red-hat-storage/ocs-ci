@@ -4,6 +4,8 @@ import uuid
 import requests
 import os
 import time
+from dataclasses import dataclass
+from typing import Union
 
 from selenium.webdriver.common.by import By
 from selenium.common.exceptions import (
@@ -14,12 +16,48 @@ from selenium.common.exceptions import (
 
 from ocs_ci.ocs.ocp import get_ocp_url
 from ocs_ci.ocs import exceptions
+from ocs_ci.ocs.exceptions import PolicyApplicationError
 from ocs_ci.ocs.ui.page_objects.confirm_dialog import ConfirmDialog
 from ocs_ci.ocs.ui.page_objects.object_storage import ObjectStorage
 from ocs_ci.utility import version
 from ocs_ci.utility.utils import generate_folder_with_files
+from ocs_ci.ocs.resources.bucket_policy import gen_bucket_policy
 
 logger = logging.getLogger(__name__)
+
+
+# Module constants
+DEFAULT_UI_WAIT = 10
+SUCCESS_TOAST_SELECTORS = [
+    "[data-test='success-toast']",
+    ".pf-c-alert--success",
+    ".pf-v5-c-alert--success",
+    ".pf-c-alert.pf-m-success",
+    ".pf-v5-c-alert.pf-m-success",
+    "[role='alert'][class*='success']",
+    ".toast-notifications-list-pf .alert-success",
+    ".co-alert--success",
+]
+
+
+@dataclass
+class LocatorConfig:
+    """Configuration for UI locator-based buttons."""
+
+    locator_key: str
+    description: str
+
+
+@dataclass
+class SelectorConfig:
+    """Configuration for direct CSS selector-based buttons."""
+
+    selector: str
+    by_type: By
+    description: str
+
+
+ButtonConfig = Union[LocatorConfig, SelectorConfig]
 
 
 class BucketsTab(ObjectStorage, ConfirmDialog):
@@ -80,8 +118,8 @@ class BucketsTab(ObjectStorage, ConfirmDialog):
             logger.info("Selecting noobaa storage class option")
             self.do_click(self.bucket_tab["storage_class_noobaa_option"])
 
-        except NoSuchElementException as e:
-            logger.error(f"Failed to select storage class: {str(e)}")
+        except NoSuchElementException:
+            logger.exception("Failed to select storage class")
             raise
 
         logger.info("Clicking submit button to create OBC")
@@ -188,8 +226,8 @@ class BucketsTab(ObjectStorage, ConfirmDialog):
 
             return folder_name
 
-        except NoSuchElementException as e:
-            logger.error(f"Error during file upload: {str(e)}")
+        except NoSuchElementException:
+            logger.exception("Error during file upload")
             raise
 
     def get_buckets_list(self) -> list:
@@ -202,7 +240,7 @@ class BucketsTab(ObjectStorage, ConfirmDialog):
         buckets = self.get_elements(self.bucket_tab["bucket_list_items"])
         # Extract text from elements immediately to avoid stale element references later
         bucket_names = [bucket.text for bucket in buckets]
-        logger.info(f"Found {len(bucket_names)} buckets")
+        logger.debug(f"Found {len(bucket_names)} buckets")
         return bucket_names
 
     def create_multiple_buckets_ui(
@@ -227,12 +265,12 @@ class BucketsTab(ObjectStorage, ConfirmDialog):
         created_buckets = []
 
         self.navigate_buckets_page()
-        self.driver.refresh()
+        self.refresh_page()
         self.page_has_loaded(sleep_time=2)
 
         # Create S3 buckets
         for i in range(s3_buckets):
-            logger.info(f"Creating S3 bucket #{i + 1}")
+            logger.debug(f"Creating S3 bucket #{i + 1}")
             bucket = self.create_bucket_ui(method="s3")
             created_buckets.append(bucket)
 
@@ -243,7 +281,7 @@ class BucketsTab(ObjectStorage, ConfirmDialog):
 
         # Create OBC buckets
         for i in range(obc_buckets):
-            logger.info(f"Creating OBC bucket #{i + 1}")
+            logger.debug(f"Creating OBC bucket #{i + 1}")
             bucket = self.create_bucket_ui(method="obc")
             created_buckets.append(bucket)
 
@@ -270,8 +308,8 @@ class BucketsTab(ObjectStorage, ConfirmDialog):
                 f"Pagination controls {'found' if element_found else 'not found'}"
             )
             return element_found
-        except Exception as e:
-            logger.error(f"Error checking pagination controls: {str(e)}")
+        except (NoSuchElementException, TimeoutException):
+            logger.exception("Error checking pagination controls")
             return False
 
     def navigate_to_next_page(self) -> bool:
@@ -313,8 +351,8 @@ class BucketsTab(ObjectStorage, ConfirmDialog):
             NoSuchElementException,
             TimeoutException,
             StaleElementReferenceException,
-        ) as e:
-            logger.error(f"Error navigating to next page: {str(e)}")
+        ):
+            logger.exception("Error navigating to next page")
             return False
 
     def navigate_to_previous_page(self) -> bool:
@@ -357,8 +395,8 @@ class BucketsTab(ObjectStorage, ConfirmDialog):
             NoSuchElementException,
             TimeoutException,
             StaleElementReferenceException,
-        ) as e:
-            logger.error(f"Error navigating to previous page: {str(e)}")
+        ):
+            logger.exception("Error navigating to previous page")
             return False
 
     def delete_bucket_ui(self, delete_via, expect_fail, resource_name):
@@ -410,8 +448,8 @@ class BucketsTab(ObjectStorage, ConfirmDialog):
                     logger.info(
                         "Successfully entered bucket name in confirmation dialog"
                     )
-                except Exception as e:
-                    logger.warning(f"Failed to enter bucket name: {str(e)}")
+                except (NoSuchElementException, StaleElementReferenceException):
+                    logger.exception("Failed to enter bucket name")
                     self.take_screenshot()
                     self.copy_dom()
 
@@ -424,8 +462,12 @@ class BucketsTab(ObjectStorage, ConfirmDialog):
                 )
                 time.sleep(5)
 
-            except Exception as e:
-                logger.error(f"Error during bucket deletion: {str(e)}")
+            except (
+                NoSuchElementException,
+                TimeoutException,
+                StaleElementReferenceException,
+            ):
+                logger.exception("Error during bucket deletion")
                 self.take_screenshot()
                 self.copy_dom()
 
@@ -433,10 +475,8 @@ class BucketsTab(ObjectStorage, ConfirmDialog):
                     logger.info("Falling back to standard deletion method")
                     try:
                         self.delete_resource(delete_via, resource_name)
-                    except Exception as fallback_e:
-                        logger.error(
-                            f"Fallback deletion also failed: {str(fallback_e)}"
-                        )
+                    except Exception:
+                        logger.exception("Fallback deletion also failed")
                         if not expect_fail:
                             raise
         else:
@@ -496,6 +536,682 @@ class BucketsTab(ObjectStorage, ConfirmDialog):
                     ), f"No expected Popup. See full response: \n {json.dumps(json_resp)}"
 
             _check_three_dots_disabled("check three dots inactive automatically")
-            self.driver.refresh()
+            self.refresh_page()
             self.page_has_loaded(sleep_time=2)
             _check_three_dots_disabled("check three dots inactive after refresh")
+
+    def navigate_to_bucket_permissions(self, bucket_name: str = None) -> None:
+        """
+        Navigate to bucket permissions tab.
+
+        Args:
+            bucket_name (str, optional): Name of the bucket. If None, uses first bucket.
+
+        Raises:
+            NoSuchElementException: If UI elements are not found.
+        """
+        if bucket_name:
+            logger.info(f"Navigating to bucket: {bucket_name}")
+            bucket_elements = self.get_elements(self.bucket_tab["bucket_list_items"])
+
+            for bucket_element in bucket_elements:
+                if bucket_element.text == bucket_name:
+                    bucket_locator = (
+                        f"//a[contains(text(), '{bucket_name}')]",
+                        By.XPATH,
+                    )
+                    self.do_click(bucket_locator)
+                    logger.info(f"Successfully clicked on bucket: {bucket_name}")
+                    break
+            else:
+                available_buckets = [elem.text for elem in bucket_elements]
+                raise NoSuchElementException(
+                    f"Bucket '{bucket_name}' not found in bucket list. "
+                    f"Available buckets: {available_buckets}. "
+                    "Verify bucket name exists and is visible on current page."
+                )
+        else:
+            logger.info("Navigating to first bucket")
+            self.do_click(self.bucket_tab["bucket_list_items"])
+            bucket_elements = self.get_elements(self.bucket_tab["bucket_list_items"])
+            if bucket_elements:
+                logger.info(
+                    f"Successfully clicked on first bucket: {bucket_elements[0].text}"
+                )
+            else:
+                raise NoSuchElementException(
+                    "No buckets found on the current page. "
+                    "Ensure buckets exist or check if pagination is needed."
+                )
+
+        logger.info("Navigating to permissions tab")
+        self.do_click(self.bucket_tab["permissions_tab"])
+
+    def activate_policy_editor(self) -> None:
+        """
+        Activate the policy editor by clicking 'Start from scratch'.
+
+        Raises:
+            NoSuchElementException: If UI elements are not found.
+        """
+        logger.info("Clicking start from scratch to activate policy editor")
+
+        max_retries = 3
+        for attempt in range(max_retries):
+            try:
+                self.do_click(self.bucket_tab["policy_editor_start_scratch"])
+                logger.debug("Successfully clicked start from scratch button")
+                break
+            except StaleElementReferenceException:
+                logger.debug(
+                    f"Stale element on attempt {attempt + 1}/{max_retries}, retrying..."
+                )
+                if attempt == max_retries - 1:
+                    logger.error("Max retries reached for start from scratch button")
+                    raise
+                time.sleep(1)
+
+    def _build_allow_public_read_policy(self, bucket_name: str) -> str:
+        """
+        Build AllowPublicReadAccess bucket policy JSON.
+
+        Args:
+            bucket_name (str): Name of the bucket for the policy.
+
+        Returns:
+            str: JSON string of the generated policy.
+        """
+        logger.debug(f"Building AllowPublicReadAccess policy for bucket: {bucket_name}")
+        bucket_policy_generated = gen_bucket_policy(
+            user_list="*",
+            actions_list=["GetObject"],
+            resources_list=[f"{bucket_name}/*"],
+            effect="Allow",
+        )
+        policy_json = json.dumps(bucket_policy_generated, indent=2)
+        logger.debug("Generated policy JSON")
+        return policy_json
+
+    def _build_allow_access_to_specific_account_policy(
+        self, bucket_name: str, account_list: list[str]
+    ) -> str:
+        """
+        Build AllowAccessToSpecificAccount bucket policy JSON.
+
+        Args:
+            bucket_name (str): Name of the bucket for the policy.
+            account_list (list[str]): List of AWS account IDs to grant access to.
+
+        Returns:
+            str: JSON string of the generated policy.
+        """
+        logger.debug(
+            f"Building AllowAccessToSpecificAccount policy for bucket: {bucket_name}, accounts: {account_list}"
+        )
+        bucket_policy_generated = gen_bucket_policy(
+            user_list=account_list,
+            actions_list=["GetObject", "PutObject", "DeleteObject"],
+            resources_list=[f"{bucket_name}/*"],
+            effect="Allow",
+        )
+        policy_json = json.dumps(bucket_policy_generated, indent=2)
+        logger.debug("Generated policy JSON")
+        return policy_json
+
+    def _build_enforce_secure_transport_https_policy(self, bucket_name: str) -> str:
+        """
+        Build EnforceSecureTransportHTTPS bucket policy JSON.
+        This policy denies all requests that are not made over HTTPS/SSL.
+
+        Args:
+            bucket_name (str): Name of the bucket for the policy.
+
+        Returns:
+            str: JSON string of the generated policy.
+        """
+        logger.debug(
+            f"Building EnforceSecureTransportHTTPS policy for bucket: {bucket_name}"
+        )
+
+        bucket_policy_base = gen_bucket_policy(
+            user_list="*",
+            actions_list=["*"],
+            resources_list=[bucket_name, f"{bucket_name}/*"],
+            effect="Deny",
+        )
+
+        bucket_policy_base["Statement"][0]["Condition"] = {
+            "Bool": {"aws:SecureTransport": "false"}
+        }
+
+        policy_json = json.dumps(bucket_policy_base, indent=2)
+        logger.debug("Generated policy JSON")
+        return policy_json
+
+    def _build_allow_read_write_access_to_folder_policy(
+        self, bucket_name: str, folder_path: str, account_list: list[str]
+    ) -> str:
+        """
+        Build AllowReadWriteAccessToFolder bucket policy JSON.
+
+        Args:
+            bucket_name (str): Name of the bucket for the policy.
+            folder_path (str): Folder path within the bucket (e.g., "documents", "uploads/images").
+            account_list (list[str]): List of AWS account IDs to grant access to.
+
+        Returns:
+            str: JSON string of the generated policy.
+        """
+        logger.debug(
+            f"Building AllowReadWriteAccessToFolder policy for bucket: {bucket_name}, "
+            f"folder: {folder_path}, accounts: {account_list}"
+        )
+
+        clean_folder_path = folder_path.strip("/")
+        if not clean_folder_path.endswith("/*"):
+            clean_folder_path = f"{clean_folder_path}/*"
+
+        bucket_policy_generated = gen_bucket_policy(
+            user_list=account_list,
+            actions_list=["GetObject", "PutObject", "DeleteObject"],
+            resources_list=[f"{bucket_name}/{clean_folder_path}"],
+            effect="Allow",
+        )
+        policy_json = json.dumps(bucket_policy_generated, indent=2)
+        logger.debug("Generated policy JSON")
+        return policy_json
+
+    def set_policy_json_in_editor(self, policy_json: str) -> None:
+        """
+        Set the policy JSON content in the code editor.
+
+        Args:
+            policy_json (str): JSON string to set in the editor.
+
+        Raises:
+            NoSuchElementException: If UI elements are not found.
+        """
+        logger.info("Clicking on policy code editor to focus it")
+        try:
+            self.do_click(
+                self.bucket_tab["policy_code_editor"],
+                enable_screenshot=False,
+                copy_dom=False,
+            )
+        except TimeoutException:
+            logger.debug(
+                "Monaco editor click timeout (expected) - proceeding with JS approach"
+            )
+
+        logger.debug("Setting policy JSON using JavaScript Monaco editor approach")
+
+        # Use JavaScript to set Monaco editor value directly
+        try:
+            logger.debug("Attempting to set Monaco editor value via JavaScript")
+            js_code = """
+            // Find Monaco editor instance
+            if (window.monaco && window.monaco.editor) {
+                const editors = window.monaco.editor.getEditors();
+                if (editors.length > 0) {
+                    const editor = editors[0];
+                    editor.setValue(arguments[0]);
+                    return 'success';
+                }
+            }
+            // Alternative: Try direct DOM manipulation
+            const textArea = document.querySelector('textarea.inputarea');
+            if (textArea) {
+                textArea.value = arguments[0];
+                textArea.dispatchEvent(new Event('input', { bubbles: true }));
+                return 'textarea_success';
+            }
+            return 'not_found';
+            """
+            result = self.driver.execute_script(js_code, policy_json)
+            if result in ["success", "textarea_success"]:
+                logger.debug(f"Successfully set policy JSON via JavaScript: {result}")
+                return
+            else:
+                logger.debug(f"JavaScript approach failed, returned: {result}")
+        except (NoSuchElementException, TimeoutException):
+            logger.debug("JavaScript approach failed", exc_info=True)
+
+        error_msg = (
+            "Failed to set policy JSON in Monaco editor using JavaScript approach. "
+            "Check if Monaco editor is properly loaded and accessible."
+        )
+        logger.error(error_msg)
+        raise TimeoutException(error_msg)
+
+    def _click_first_existing_button(self, button_configs: list[ButtonConfig]) -> bool:
+        """
+        Helper method to click the first existing button from a list of configurations.
+
+        Args:
+            button_configs (list[ButtonConfig]): List of LocatorConfig or SelectorConfig instances
+
+        Returns:
+            bool: True if a button was clicked, False otherwise
+        """
+        for config in button_configs:
+            try:
+                if isinstance(config, LocatorConfig):
+                    logger.debug(f"Trying to {config.description.lower()}")
+                    self.do_click(self.bucket_tab[config.locator_key])
+                    logger.debug(f"Successfully clicked {config.description} button")
+                    return True
+                elif isinstance(config, SelectorConfig):
+                    logger.debug(f"Trying selector: {config.selector}")
+                    elements = self.get_elements((config.selector, config.by_type))
+                    if elements:
+                        element = elements[0]
+                        logger.debug(
+                            f"Found button with text: '{element.text}' using {config.description}"
+                        )
+                        self.do_click((config.selector, config.by_type))
+                        logger.debug(
+                            f"Successfully clicked {config.description} button via selector"
+                        )
+                        return True
+            except (
+                NoSuchElementException,
+                TimeoutException,
+                StaleElementReferenceException,
+            ) as e:
+                logger.debug(
+                    f"Button attempt failed for {config.description}: {type(e).__name__}"
+                )
+                continue
+        return False
+
+    def _check_for_policy_error_dialog(self) -> tuple[bool, str]:
+        """
+        Check if a policy application error dialog is present.
+        Now intelligently distinguishes between actual errors and success messages.
+
+        Returns:
+            tuple[bool, str]: (error_found, error_message)
+                - error_found: True if actual error dialog is found, False otherwise
+                - error_message: The error message text, empty string if no error
+        """
+        error_selector = ".pf-v5-c-modal-box.pf-m-warning"
+
+        try:
+            logger.debug(
+                f"Checking for policy error dialog with selector: {error_selector}"
+            )
+            error_elements = self.get_elements((error_selector, By.CSS_SELECTOR))
+            if error_elements:
+                error_element = error_elements[0]
+                if error_element.is_displayed():
+                    logger.debug("Found dialog with warning style")
+
+                    message = "Unknown message"
+                    try:
+                        desc_elements = self.get_elements(
+                            (".pf-v5-c-alert__description", By.CSS_SELECTOR)
+                        )
+                        if desc_elements and desc_elements[0].text.strip():
+                            message = desc_elements[0].text.strip()
+                        else:
+                            message = error_element.text.strip() or "Unknown message"
+                    except (
+                        NoSuchElementException,
+                        StaleElementReferenceException,
+                    ) as e:
+                        logger.debug(f"Could not extract message: {e}")
+                        message = error_element.text.strip() or "Unknown message"
+
+                    success_keywords = [
+                        "successfully created",
+                        "successfully applied",
+                        "has been successfully",
+                        "policy applied successfully",
+                        "bucket policy has been successfully",
+                        "success",
+                    ]
+
+                    error_keywords = [
+                        "error",
+                        "failed",
+                        "invalid",
+                        "unauthorized",
+                        "forbidden",
+                        "denied",
+                        "cannot",
+                        "unable to",
+                        "malformed",
+                        "syntax error",
+                        "policy validation failed",
+                    ]
+
+                    message_lower = message.lower()
+                    is_success = any(
+                        keyword in message_lower for keyword in success_keywords
+                    )
+                    is_error = any(
+                        keyword in message_lower for keyword in error_keywords
+                    )
+
+                    if is_success and not is_error:
+                        logger.debug(f"Dialog contains success message: {message}")
+                        return (
+                            False,
+                            "",
+                        )
+                    elif is_error:
+                        logger.error(
+                            f"Policy error dialog found with message: {message}"
+                        )
+                        return True, message  # Actual error
+                    else:
+                        logger.warning(
+                            f"Ambiguous dialog message, treating as error: {message}"
+                        )
+                        return True, message
+
+        except (NoSuchElementException, TimeoutException):
+            logger.debug("No error dialog found")
+            pass
+
+        return False, ""
+
+    def apply_bucket_policy(self) -> None:
+        """
+        Apply the selected bucket policy and confirm in modal.
+
+        Raises:
+            NoSuchElementException: If UI elements are not found.
+            TimeoutException: If modal or toast elements are not found within timeout.
+            PolicyApplicationError: If policy application fails with an error.
+        """
+        logger.debug("Applying bucket policy")
+
+        button_configs = [
+            LocatorConfig("apply_policy_button", "Apply policy"),
+            LocatorConfig("save_policy_generic_button", "Save (generic)"),
+        ]
+
+        if not self._click_first_existing_button(button_configs):
+            attempted_buttons = [config.description for config in button_configs]
+            error_msg = (
+                f"Could not find any policy action button. "
+                f"Attempted buttons: {attempted_buttons}. "
+                "Check if policy editor is properly loaded and buttons are visible."
+            )
+            logger.error(error_msg)
+            raise TimeoutException(error_msg)
+
+        try:
+            logger.debug("Waiting for policy update modal")
+            try:
+                self.wait_for_element_to_be_visible(
+                    self.bucket_tab["update_policy_modal_button"],
+                    timeout=DEFAULT_UI_WAIT,
+                )
+            except TimeoutException:
+                logger.debug(
+                    "Modal wait timeout (expected) - proceeding with button click"
+                )
+
+            logger.debug("Confirming policy update in modal")
+            self.do_click(self.bucket_tab["update_policy_modal_button"])
+
+            logger.debug("Checking for policy application errors")
+            error_found, error_message = self._check_for_policy_error_dialog()
+            if error_found:
+                raise PolicyApplicationError(
+                    f"Policy application failed: {error_message}"
+                )
+
+            logger.debug("Waiting for success indication")
+            for selector in SUCCESS_TOAST_SELECTORS:
+                try:
+                    logger.debug(f"Trying success selector: {selector}")
+                    try:
+                        self.wait_for_element_to_be_visible(
+                            (selector, By.CSS_SELECTOR), timeout=DEFAULT_UI_WAIT
+                        )
+                        logger.debug(
+                            f"Success notification found with selector: {selector}"
+                        )
+                        return
+                    except TimeoutException:
+                        logger.debug(f"Toast selector {selector} timeout (expected)")
+                        continue
+                except TimeoutException:
+                    continue
+
+            logger.warning(
+                "No success toast found, but policy may have been applied successfully"
+            )
+
+        except (TimeoutException, PolicyApplicationError):
+            logger.exception("Error during policy application")
+            raise
+
+    def set_bucket_policy_ui(self, bucket_name: str = None) -> None:
+        """
+        Complete workflow to set AllowPublicReadAccess bucket policy via UI.
+
+        Args:
+            bucket_name (str, optional): Name of the bucket. If None, uses first bucket.
+
+        Returns:
+            None
+
+        Raises:
+            TimeoutException: If UI elements are not found within timeout.
+            ValueError: If no buckets are available.
+        """
+        if bucket_name is None:
+            buckets = self.get_buckets_list()
+            if not buckets:
+                raise ValueError(
+                    "No buckets available on the current page and no specific bucket name provided. "
+                    "Ensure buckets exist or specify a bucket name explicitly."
+                )
+            bucket_name = buckets[0]
+            logger.debug(f"Using first available bucket: {bucket_name}")
+
+        logger.debug(f"Setting AllowPublicReadAccess policy for bucket {bucket_name}")
+
+        try:
+            self.navigate_to_bucket_permissions(bucket_name)
+            self.activate_policy_editor()
+
+            policy_json = self._build_allow_public_read_policy(bucket_name)
+            self.set_policy_json_in_editor(policy_json)
+
+            self.apply_bucket_policy()
+
+            logger.debug("Bucket policy successfully applied")
+
+        except (TimeoutException, ValueError):
+            logger.exception("Failed to set bucket policy")
+            raise
+        except (NoSuchElementException, StaleElementReferenceException):
+            logger.exception("Unexpected UI error during bucket policy setting")
+            raise
+
+    def set_bucket_policy_specific_account_ui(
+        self, bucket_name: str = None, account_list: list[str] = None
+    ) -> None:
+        """
+        Complete workflow to set AllowAccessToSpecificAccount bucket policy via UI.
+
+        Args:
+            bucket_name (str, optional): Name of the bucket. If None, uses first bucket.
+            account_list (list[str], optional): List of AWS account IDs. If None, uses default test account.
+
+        Returns:
+            None
+
+        Raises:
+            TimeoutException: If UI elements are not found within timeout.
+            ValueError: If no buckets are available or account_list is empty.
+        """
+        if bucket_name is None:
+            buckets = self.get_buckets_list()
+            if not buckets:
+                raise ValueError(
+                    "No buckets available on the current page and no specific bucket name provided. "
+                    "Ensure buckets exist or specify a bucket name explicitly."
+                )
+            bucket_name = buckets[0]
+            logger.debug(f"Using first available bucket: {bucket_name}")
+
+        if not account_list:
+            account_list = ["123456789012"]
+            logger.debug(f"Using default test account: {account_list}")
+
+        if not account_list or not all(account_list):
+            raise ValueError(
+                "account_list cannot be empty or contain empty account IDs"
+            )
+
+        logger.debug(
+            f"Setting AllowAccessToSpecificAccount policy for bucket {bucket_name}, accounts: {account_list}"
+        )
+
+        try:
+            self.navigate_to_bucket_permissions(bucket_name)
+            self.activate_policy_editor()
+
+            policy_json = self._build_allow_access_to_specific_account_policy(
+                bucket_name, account_list
+            )
+            self.set_policy_json_in_editor(policy_json)
+
+            self.apply_bucket_policy()
+
+            logger.debug("AllowAccessToSpecificAccount policy successfully applied")
+
+        except (TimeoutException, ValueError):
+            logger.exception("Failed to set AllowAccessToSpecificAccount bucket policy")
+            raise
+        except (NoSuchElementException, StaleElementReferenceException):
+            logger.exception(
+                "Unexpected UI error during AllowAccessToSpecificAccount policy setting"
+            )
+            raise
+
+    def set_bucket_policy_enforce_https_ui(self, bucket_name: str = None) -> None:
+        """
+        Complete workflow to set EnforceSecureTransportHTTPS bucket policy via UI.
+
+        Args:
+            bucket_name (str, optional): Name of the bucket. If None, uses first bucket.
+
+        Returns:
+            None
+
+        Raises:
+            TimeoutException: If UI elements are not found within timeout.
+            ValueError: If no buckets are available.
+        """
+        if bucket_name is None:
+            buckets = self.get_buckets_list()
+            if not buckets:
+                raise ValueError(
+                    "No buckets available on the current page and no specific bucket name provided. "
+                    "Ensure buckets exist or specify a bucket name explicitly."
+                )
+            bucket_name = buckets[0]
+            logger.debug(f"Using first available bucket: {bucket_name}")
+
+        logger.debug(
+            f"Setting EnforceSecureTransportHTTPS policy for bucket {bucket_name}"
+        )
+
+        try:
+            self.navigate_to_bucket_permissions(bucket_name)
+            self.activate_policy_editor()
+
+            policy_json = self._build_enforce_secure_transport_https_policy(bucket_name)
+            self.set_policy_json_in_editor(policy_json)
+
+            self.apply_bucket_policy()
+
+            logger.debug("EnforceSecureTransportHTTPS policy successfully applied")
+
+        except (TimeoutException, ValueError):
+            logger.exception("Failed to set EnforceSecureTransportHTTPS bucket policy")
+            raise
+        except (NoSuchElementException, StaleElementReferenceException):
+            logger.exception(
+                "Unexpected UI error during EnforceSecureTransportHTTPS policy setting"
+            )
+            raise
+
+    def set_bucket_policy_folder_access_ui(
+        self,
+        bucket_name: str = None,
+        folder_path: str = None,
+        account_list: list[str] = None,
+    ) -> None:
+        """
+        Complete workflow to set AllowReadWriteAccessToFolder bucket policy via UI.
+
+        Args:
+            bucket_name (str, optional): Name of the bucket. If None, uses first bucket.
+            folder_path (str, optional): Folder path within the bucket. If None, uses "documents".
+            account_list (list[str], optional): List of AWS account IDs. If None, uses default test account.
+
+        Returns:
+            None
+
+        Raises:
+            TimeoutException: If UI elements are not found within timeout.
+            ValueError: If no buckets are available or required parameters are invalid.
+        """
+        if bucket_name is None:
+            buckets = self.get_buckets_list()
+            if not buckets:
+                raise ValueError(
+                    "No buckets available on the current page and no specific bucket name provided. "
+                    "Ensure buckets exist or specify a bucket name explicitly."
+                )
+            bucket_name = buckets[0]
+            logger.debug(f"Using first available bucket: {bucket_name}")
+
+        if not folder_path:
+            folder_path = "documents"
+            logger.debug(f"Using default folder path: {folder_path}")
+
+        if not account_list:
+            # Default test account for demonstration
+            account_list = ["123456789012"]
+            logger.debug(f"Using default test account: {account_list}")
+
+        if not account_list or not all(account_list):
+            raise ValueError(
+                "account_list cannot be empty or contain empty account IDs"
+            )
+
+        logger.debug(
+            f"Setting AllowReadWriteAccessToFolder policy for bucket {bucket_name}, "
+            f"folder: {folder_path}, accounts: {account_list}"
+        )
+
+        try:
+            self.navigate_to_bucket_permissions(bucket_name)
+            self.activate_policy_editor()
+
+            policy_json = self._build_allow_read_write_access_to_folder_policy(
+                bucket_name, folder_path, account_list
+            )
+            self.set_policy_json_in_editor(policy_json)
+
+            self.apply_bucket_policy()
+
+            logger.debug("AllowReadWriteAccessToFolder policy successfully applied")
+
+        except (TimeoutException, ValueError):
+            logger.exception("Failed to set AllowReadWriteAccessToFolder bucket policy")
+            raise
+        except (NoSuchElementException, StaleElementReferenceException):
+            logger.exception(
+                "Unexpected UI error during AllowReadWriteAccessToFolder policy setting"
+            )
+            raise
