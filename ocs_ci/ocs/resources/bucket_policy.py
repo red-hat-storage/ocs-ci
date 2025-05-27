@@ -146,6 +146,21 @@ class NoobaaAccount(object):
             api="account_api", method="delete_account", params=params_dict
         )
 
+    def update_account_email(self, new_email):
+        """
+        Update the noobaa account with new email
+
+        Returns:
+            Response for noobaa 'update_account' api call
+
+        """
+        params_dict = {"email": self.email_id, "new_email": new_email}
+        update_acc = self.mcg.send_rpc_query(
+            api="account_api", method="update_account", params=params_dict
+        )
+        self.email_id = new_email
+        return update_acc
+
 
 def gen_bucket_policy(
     user_list,
