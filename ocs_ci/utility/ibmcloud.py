@@ -27,9 +27,11 @@ from ocs_ci.ocs.exceptions import (
     UnexpectedBehaviour,
     NodeHasNoAttachedVolume,
     TimeoutExpiredError,
+    FloatingIPAssignException,
 )
 from ocs_ci.ocs.node import wait_for_nodes_status
 from ocs_ci.ocs.resources.ocs import OCS
+from ocs_ci.ocs.utils import get_primary_cluster_config
 from ocs_ci.utility import version as util_version
 from ocs_ci.utility.utils import get_infra_id, get_ocp_version, run_cmd, TimeoutSampler
 from ocs_ci.ocs.node import get_nodes
@@ -364,6 +366,17 @@ def add_deployment_dependencies():
     ]
     for cr in wa_crs:
         run_cmd(f"oc apply -f {cr}")
+
+
+def is_ibm_platform():
+    """
+    Check if cluster is IBM or Not
+
+    """
+    return (
+        get_primary_cluster_config().ENV_DATA.get("platform")
+        == constants.IBMCLOUD_PLATFORM
+    )
 
 
 class IBMCloud(object):
@@ -1579,7 +1592,9 @@ def assign_floating_ips_to_workers():
         instances = json.loads(instances_output)
     except Exception as e:
         logger.error(f"Failed to retrieve instances: {e}")
-        return {}
+        raise FloatingIPAssignException(
+            "Failed to retrieve instances from IBM Cloud VPC"
+        ) from e
 
     # Filter for worker nodes
     workers = [
