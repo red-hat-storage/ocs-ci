@@ -397,7 +397,7 @@ class StorageClient:
         self, namespace_to_create_storage_client=None, resource_name=None
     ):
         """
-        This method creates network policy for the namespace where storage-client will be created
+        This method creates network policy for the namespace where Storage Client will be created
 
         Inputs:
         namespace_to_create_storage_client (str): Namespace where the storage client will be created

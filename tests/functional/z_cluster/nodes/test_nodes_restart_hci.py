@@ -301,7 +301,7 @@ class TestNodesRestartHCI(ManageTest):
         1. Get the client "storageProviderEndpoint" param in the storage-client resource
         2. Get the provider endpoint node by the client "storageProviderEndpoint" in the previous step,
         and stop the provider endpoint node.
-        3. Verify the client storage-client is connected to the provider.
+        3. Verify the Storage Client is connected to the provider.
         4. Try to create and delete resources from the client/s.
         5. Start the provider endpoint node
         6. Check the cluster health is ok for the provider and clients.
@@ -354,7 +354,7 @@ class TestNodesRestartHCI(ManageTest):
         The test will implement the following steps:
         1. Pick randomly one of the provider MGR nodes.
         2. Stop the MGR node.
-        3. Verify the client storage-client is connected to the provider.
+        3. Verify the Storage Client is connected to the provider.
         4. Try to create and delete resources from the client/s.
         5. Start the MGR node
         6. Check the cluster health is ok for the provider and clients.

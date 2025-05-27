@@ -795,6 +795,71 @@ def get_onboarding_token_from_secret(secret_name):
     return secret_obj.get("data", {}).get("onboarding-token")
 
 
+def get_autodistributed_storage_classes():
+    """
+    Get the list of StorageClasses that were provisioned by ODF and should be auto-distributed
+
+    Returns:
+        list: List of StorageClass names that were provisioned by ODF
+
+    """
+
+    storage_class = OCP(
+        kind=constants.STORAGECLASS, namespace=config.ENV_DATA["cluster_namespace"]
+    )
+    storage_classes = storage_class.get()
+    # filter only those that were provisioned by ODF
+    storage_classes["items"] = [
+        item
+        for item in storage_classes["items"]
+        if item["provisioner"]
+        in [
+            constants.RBD_PROVISIONER,
+            constants.CEPHFS_PROVISIONER,
+        ]
+    ]
+    # filter out virtualization storage class. We supposed to have it on vSphere and BM, where CRD created
+    storage_classes["items"] = [
+        item
+        for item in storage_classes["items"]
+        if item["metadata"]["name"] != constants.DEFAULT_STORAGECLASS_VIRTUALIZATION
+    ]
+    storage_class_names = [
+        item["metadata"]["name"] for item in storage_classes["items"]
+    ]
+    return storage_class_names
+
+
+def get_autodistributed_volume_snapshot_classes():
+    """
+    Get the list of VolumeSnapshotClasses that were provisioned by ODF and should be auto-distributed
+    upon client connection
+
+    Returns:
+        list: List of VolumeSnapshotClass names that were provisioned by ODF
+
+    """
+    snapshot_class = OCP(
+        kind=constants.VOLUMESNAPSHOTCLASS,
+        namespace=config.ENV_DATA["cluster_namespace"],
+    )
+    snapshot_classes = snapshot_class.get()
+    # filter only those that were provisioned by ODF
+    snapshot_classes["items"] = [
+        item
+        for item in snapshot_classes["items"]
+        if item["driver"]
+        in [
+            constants.RBD_PROVISIONER,
+            constants.CEPHFS_PROVISIONER,
+        ]
+    ]
+    snapshot_class_names = [
+        item["metadata"]["name"] for item in snapshot_classes["items"]
+    ]
+    return snapshot_class_names
+
+
 class HostedODF(HypershiftHostedOCP):
     def __init__(self, name: str):
         HyperShiftBase.__init__(self)
@@ -968,8 +1033,14 @@ class HostedODF(HypershiftHostedOCP):
         """
 
         log_step("Creating storage consumer")
+
+        storage_class_names = get_autodistributed_storage_classes()
+        volumesnapshot_class_names = get_autodistributed_volume_snapshot_classes()
+
         storage_consumer_obj = create_storage_consumer_on_default_cluster(
-            storage_consumer_name
+            storage_consumer_name,
+            storage_classes=storage_class_names,
+            volume_snapshot_classes=volumesnapshot_class_names,
         )
         secret_name = storage_consumer_obj.get_onboarding_ticket_secret()
 
@@ -1146,7 +1217,7 @@ class HostedODF(HypershiftHostedOCP):
         """
         cmd = (
             f"get {constants.STORAGECLIENTS} {constants.DEFAULT_CLUSTERNAME} -n {self.namespace_client} | "
-            "awk '/storage-client/{{print $2}}'"
+            f"awk '/{constants.STORAGE_CLIENT_NAME}/{{print $2}}'"
         )
         return self.exec_oc_cmd(cmd, shell=True).stdout.decode("utf-8").strip()
 

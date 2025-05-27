@@ -389,15 +389,17 @@ class StorageConsumer:
             storage_consumer_data["metadata"]["namespace"] = self.namespace
             if storage_classes:
                 storage_consumer_data["spec"].setdefault(
-                    "storageClasses", storage_classes
+                    "storageClasses", [{"name": sc} for sc in storage_classes]
                 )
             if volume_snapshot_classes:
                 storage_consumer_data["spec"].setdefault(
-                    "volumeSnapshotClasses", volume_snapshot_classes
+                    "volumeSnapshotClasses",
+                    [{"name": vsc} for vsc in volume_snapshot_classes],
                 )
             if volume_group_snapshot_classes:
                 storage_consumer_data["spec"].setdefault(
-                    "volumeGroupSnapshotClasses", volume_group_snapshot_classes
+                    "volumeGroupSnapshotClasses",
+                    [{"name": vgsc} for vgsc in volume_group_snapshot_classes],
                 )
             if storage_quota_in_gib:
                 storage_consumer_data["spec"].setdefault(

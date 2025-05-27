@@ -3046,14 +3046,14 @@ def get_client_storage_provider_endpoint():
 
 def wait_for_storage_client_connected(timeout=180, sleep=10):
     """
-    Wait for the storage-client to be in a connected phase
+    Wait for the Storage client to be in a connected phase
 
     Args:
-        timeout (int): Time to wait for the storage-client to be in a connected phase
+        timeout (int): Time to wait for the Storage Client to be in a connected phase
         sleep (int): Time in seconds to sleep between attempts
 
     Raises:
-        ResourceWrongStatusException: In case the storage-client didn't reach the desired connected phase
+        ResourceWrongStatusException: In case the Storage Client didn't reach the desired connected phase
 
     """
     sc_obj = OCP(
