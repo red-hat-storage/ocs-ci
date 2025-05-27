@@ -158,7 +158,9 @@ class BusyBox(DRWorkload):
         templating.dump_data_to_temp_yaml(drpc_yaml_data, self.drpc_yaml_file)
         if self.is_placement:
             # load placement.yaml
-            clusterset_name = get_cluster_set_name()[0]
+            clusterset_name = (
+                config.ENV_DATA.get("cluster_set") or get_cluster_set_name()[0]
+            )
             placement_yaml_data = templating.load_yaml(self.placement_yaml_file)
             placement_yaml_data["spec"]["predicates"][0]["requiredClusterSelector"][
                 "labelSelector"
@@ -441,7 +443,9 @@ class BusyBox(DRWorkload):
         try:
             config.switch_ctx(switch_ctx) if switch_ctx else config.switch_acm_ctx()
             if self.is_placement:
-                clusterset_name = get_cluster_set_name()[0]
+                clusterset_name = (
+                    config.ENV_DATA.get("cluster_set") or get_cluster_set_name()[0]
+                )
                 managed_clusterset_binding_yaml_data = templating.load_yaml(
                     self.managed_clusterset_binding_file
                 )
@@ -556,7 +560,9 @@ class BusyBox_AppSet(DRWorkload):
                 app_set_yaml_data["spec"]["predicates"][0]["requiredClusterSelector"][
                     "labelSelector"
                 ]["matchExpressions"][0]["values"][0] = self.preferred_primary_cluster
-                app_set_yaml_data["spec"]["clusterSets"][0] = get_cluster_set_name()[0]
+                app_set_yaml_data["spec"]["clusterSets"][0] = (
+                    config.ENV_DATA.get("cluster_set") or get_cluster_set_name()[0]
+                )
 
             elif app_set_yaml_data["kind"] == constants.APPLICATION_SET:
                 if self.appset_model == "pull":

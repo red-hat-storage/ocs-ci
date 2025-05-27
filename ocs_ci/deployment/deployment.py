@@ -311,7 +311,8 @@ class Deployment(object):
             run_cmd(f"oc create -f {constants.GITOPS_PLACEMENT_YAML}")
 
             logger.info("Creating ManagedClusterSetBinding")
-            cluster_set = get_cluster_set_name()
+            cluster_set = config.ENV_DATA.get("cluster_set") or get_cluster_set_name()
+
             managed_clusters = (
                 ocp.OCP(kind=constants.ACM_MANAGEDCLUSTER).get().get("items", [])
             )
