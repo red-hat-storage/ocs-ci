@@ -27,6 +27,7 @@ from ocs_ci.utility.ibmcloud import (
     login,
     assign_floating_ips_to_workers,
     set_resource_group_name,
+    is_ibm_platform,
 )
 from ocs_ci.utility.utils import (
     run_cmd,
@@ -121,8 +122,7 @@ class Submariner(object):
 
         global_net = get_primary_cluster_config().ENV_DATA.get("enable_globalnet", True)
         if (
-            get_primary_cluster_config().ENV_DATA.get("platform")
-            == constants.IBMCLOUD_PLATFORM
+            is_ibm_platform()
             and get_primary_cluster_config().ENV_DATA.get("deployment_type")
             == constants.IPI_DEPL_TYPE
         ):
