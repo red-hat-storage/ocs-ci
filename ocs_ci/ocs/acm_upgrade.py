@@ -55,9 +55,16 @@ class ACMUpgrade(object):
             self.zstream_upgrade = True
         # either this would be GA to Unreleased upgrade of same version OR
         # GA to unreleased upgrade to higher version
-        if self.acm_registry_image and self.version_change:
+
+        # Updated this if condition from,
+        # if self.acm_registry_image and self.version_change:
+        # to if self.version_change:
+        # as it will not create catalogsource when registry image
+        # is not provided but self.version_change is True
+        if self.version_change:
             self.upgrade_with_registry()
-            self.annotate_mch()
+
+            # self.annotate_mch()
             run_cmd(f"oc create -f {constants.ACM_BREW_ICSP_YAML}")
             self.patch_channel()
         else:
@@ -108,6 +115,8 @@ class ACMUpgrade(object):
         run_cmd(patch_cmd)
 
     def create_catalog_source(self):
+        from ocs_ci.ocs.resources.catalog_source import CatalogSource
+
         logger.info("Creating ACM catalog source")
         acm_catsrc = templating.load_yaml(constants.ACM_CATSRC)
         if self.acm_registry_image:
@@ -117,9 +126,18 @@ class ACMUpgrade(object):
             resp = requests.get(constants.ACM_BREW_BUILD_URL, verify=False)
             raw_msg = resp.json()["raw_messages"]
             # TODO: Find way to get ocp version before upgrade
-            version_tag = raw_msg[0]["msg"]["pipeline"]["index_image"][
-                f"v{get_running_ocp_version()}"
-            ].split(":")[1]
+            # Adding try and KeyError exception as the key 'index_image' does not exist,
+            # in the first element of raw_data[0]["msg"]["pipeline"] all the time
+            # which can lead to KeyError: 'index_image'
+            for item in raw_msg:
+                try:
+                    version_tag = item["msg"]["pipeline"]["index_image"][
+                        f"v{get_running_ocp_version()}"
+                    ].split(":")[1]
+                    print("Version tag:", version_tag)
+                    break
+                except KeyError:
+                    continue
             acm_catsrc["spec"]["image"] = ":".join(
                 [constants.ACM_BREW_REPO, version_tag]
             )
@@ -130,8 +148,14 @@ class ACMUpgrade(object):
         )
         templating.dump_data_to_temp_yaml(acm_catsrc, acm_data_yaml.name)
         run_cmd(f"oc create -f {acm_data_yaml.name}", timeout=300)
+        acm_operator_catsrc = CatalogSource(
+            resource_name=constants.ACM_CATSRC_NAME,
+            namespace=constants.MARKETPLACE_NAMESPACE,
+        )
+        acm_operator_catsrc.wait_for_state("READY")
 
     def validate_upgrade(self):
+        # To do: upgrade validation for internal builds of same version
         acm_sub = OCP(
             namespace=self.namespace,
             resource_name=self.operator_name,
