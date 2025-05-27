@@ -1,7 +1,7 @@
 import os
 import logging
 
-from ocs_ci.framework import config
+from ocs_ci.framework import config, merge_dict
 from ocs_ci.ocs import constants, utils
 from ocs_ci.utility import templating
 from ocs_ci.helpers import helpers
@@ -155,6 +155,9 @@ class BaseWorkload(object):
 
 
 class FIOOperatorWorkload(BaseWorkload):
+    # Workload specific to FIOOperator based
+    # In the future this will be replaced by
+    # library calls to fioopeartor sdk
     def __init__(self):
         self.jobs = []
 
@@ -203,11 +206,19 @@ class FIOOperatorWorkload(BaseWorkload):
         log.info("Deploying fiooperator")
         helpers.create_resource(**fiooperator_data)
         # TODO: Validate the operator status
+        # Check if operator pod is running
 
     def run_job(self, job):
         # take care of creating individual CRs
         log.info(f"Running fio job: {job.get('name')}")
         # TODO: Merge fio dictionary with CR and create resource
+        # Extract Fio workload and operator params to create a CR
+        template_fio_workload = templating.load_yaml(
+            os.path.join(constants.TEMPLATE_FIOOPERATOR_DIR, "fio_workload.yaml")
+        )
+        # Merge with job dictionary
+        merge_dict(template_fio_workload, job)
+        helpers.create_resource(template_fio_workload)
 
 
 class WorkloadFactory:
