@@ -6,6 +6,7 @@ import pytest
 from concurrent.futures import ThreadPoolExecutor
 from threading import Event
 
+from ocs_ci.ocs.resources.mcg_lifecycle_policies import LifecyclePolicy, ExpirationRule
 from ocs_ci.utility.retry import retry
 from ocs_ci.framework import config
 from ocs_ci.helpers.e2e_helpers import (
@@ -129,7 +130,7 @@ def noobaa_db_backup_and_recovery_locally(
         awscli_pod_session=awscli_pod_session,
         mcg_obj_session=mcg_obj_session,
     ):
-        global secrets_obj
+        nonlocal secrets_obj
 
         # create bucket and write some objects to it
         test_bucket = bucket_factory()[0]
@@ -315,7 +316,240 @@ def noobaa_db_backup_and_recovery_locally(
 
     def finalizer():
 
-        global secrets_obj
+        nonlocal secrets_obj
+
+        # remove the local copy of ./mcg.bck
+        if os.path.exists("./mcg.bck"):
+            os.remove("mcg.bck")
+            logger.info("Removed the local copy of mcg.bck")
+
+        # create the secrets if they're deleted
+        if secrets_obj:
+            for secret in secrets_obj:
+                if secret.is_deleted:
+                    secret.create()
+                else:
+                    logger.info(f"{secret.name} is not deleted!")
+
+        # restore MCG reconcilation if not restored already
+        if (
+            ocs_storagecluster_obj.get(resource_name=constants.DEFAULT_CLUSTERNAME)[
+                "spec"
+            ]["multiCloudGateway"]["reconcileStrategy"]
+            != "manage"
+        ):
+            restore_mcg_reconcilation(ocs_storagecluster_obj)
+            logger.info("MCG reconcilation restored!")
+
+        # start noobaa services if its down
+        ocp_deployment_obj = OCP(
+            kind=constants.DEPLOYMENT, namespace=config.ENV_DATA["cluster_namespace"]
+        )
+        nb_operator_dc = Deployment(
+            **ocp_deployment_obj.get(resource_name=constants.NOOBAA_OPERATOR_DEPLOYMENT)
+        )
+        nb_endpoint_dc = Deployment(
+            **ocp_deployment_obj.get(resource_name=constants.NOOBAA_ENDPOINT_DEPLOYMENT)
+        )
+        start_noobaa_services(nb_endpoint_dc, nb_operator_dc)
+
+    request.addfinalizer(finalizer)
+    return factory
+
+
+@pytest.fixture()
+def noobaa_db_backup_locally(bucket_factory, awscli_pod_session, mcg_obj_session):
+    """
+    Noobaa db backup locally
+
+    """
+
+    secrets_obj = []
+
+    def factory():
+
+        nonlocal secrets_obj
+
+        # Backup secrets
+        ocp_secret_obj = OCP(
+            kind="secret", namespace=config.ENV_DATA["cluster_namespace"]
+        )
+        secrets = [
+            "noobaa-root-master-key-volume",
+            "noobaa-root-master-key-backend",
+            "noobaa-admin",
+            "noobaa-operator",
+            "noobaa-server",
+            "noobaa-endpoints",
+        ]
+
+        secrets_yaml = [
+            ocp_secret_obj.get(resource_name=f"{secret}") for secret in secrets
+        ]
+        secrets_obj = [OCS(**secret_yaml) for secret_yaml in secrets_yaml]
+        logger.info("Backed up secrets as secret objects!")
+
+        # Backup the PostgreSQL database and save it to a local folder
+        noobaa_db_pod = get_primary_nb_db_pod()
+        noobaa_db_pod.exec_cmd_on_pod(
+            command="pg_dump nbcore -F custom -f /dev/shm/test.db",
+        )
+        OCP(namespace=config.ENV_DATA["cluster_namespace"]).exec_oc_cmd(
+            command=f"cp --retries=-1 {noobaa_db_pod.name}:/dev/shm/test.db ./mcg.bck",
+            out_yaml_format=False,
+        )
+        logger.info("Backed up PostgreSQL and stored it in local folder!")
+
+        # Backup the noobaa-db-pg-cluster resource
+        cnpg_cluster_yaml = OCP(
+            kind=constants.CNPG_CLUSTER_KIND,
+            namespace=config.ENV_DATA["cluster_namespace"],
+        ).get(resource_name=constants.NB_DB_CNPG_CLUSTER_NAME)
+        original_db_replica_count = cnpg_cluster_yaml["spec"]["instances"]
+
+        return cnpg_cluster_yaml, original_db_replica_count, secrets_obj
+
+    return factory
+
+
+@pytest.fixture()
+def noobaa_db_recovery_from_local(request):
+
+    # OCS storagecluster object
+    ocs_storagecluster_obj = OCP(
+        namespace=config.ENV_DATA["cluster_namespace"],
+        kind=constants.STORAGECLUSTER,
+    )
+
+    # OCP object for kind deployment
+    ocp_deployment_obj = OCP(
+        kind=constants.DEPLOYMENT, namespace=config.ENV_DATA["cluster_namespace"]
+    )
+
+    # Noobaa operator & noobaa endpoint deployments objects
+    nb_operator_dc = Deployment(
+        **ocp_deployment_obj.get(resource_name=constants.NOOBAA_OPERATOR_DEPLOYMENT)
+    )
+    nb_endpoint_dc = Deployment(
+        **ocp_deployment_obj.get(resource_name=constants.NOOBAA_ENDPOINT_DEPLOYMENT)
+    )
+
+    secrets_obj = []
+
+    def factory(cnpg_cluster_yaml, original_db_replica_count, secrets):
+
+        nonlocal secrets_obj
+        secrets_obj = secrets
+
+        # Stop MCG reconcilation
+        params = '{"spec": {"multiCloudGateway": {"reconcileStrategy": "ignore"}}}'
+        ocs_storagecluster_obj.patch(
+            resource_name=constants.DEFAULT_CLUSTERNAME,
+            params=params,
+            format_type="merge",
+        )
+        logger.info("Stopped MCG reconcilation!")
+
+        # Stop the NooBaa Service before restoring the NooBaa DB. There will be no object service after this point
+        nb_operator_dc.scale(replicas=0)
+        nb_endpoint_dc.scale(replicas=0)
+        modify_statefulset_replica_count(
+            statefulset_name=constants.NOOBAA_CORE_STATEFULSET, replica_count=0
+        )
+        logger.info(
+            "Stopped the noobaa service: Noobaa endpoint, Noobaa core, Noobaa operator pods!!"
+        )
+
+        # Login to the NooBaa DB pod and cleanup potential database clients to nbcore
+        query = "SELECT pg_terminate_backend (pid) FROM pg_stat_activity WHERE datname = 'nbcore';"
+        try:
+            exec_nb_db_query(query)
+        except CommandFailed as ex:
+            if "terminating connection due to administrator command" not in str(ex):
+                raise ex
+            logger.info("Cleaned up potential database clients to nbcore!")
+
+        # Delete the existing cnpg cluster
+        OCP(kind=constants.CNPG_CLUSTER_KIND).delete(
+            resource_name=constants.NB_DB_CNPG_CLUSTER_NAME
+        )
+
+        # Ensure the the cnpg cluster yaml uses the correct bootstrap object
+        cnpg_cluster_yaml["bootstrap"] = {
+            "initdb": {
+                "database": "nbcore",
+                "encoding": "UTF8",
+                "localeCType": "C",
+                "localeCollate": "C",
+                "owner": "noobaa",
+            }
+        }
+        cnpg_cluster_obj = OCS(**cnpg_cluster_yaml)
+        cnpg_cluster_obj.create()
+
+        # Wait for the cluster status to be in a healthy state
+        selector = (
+            f"{constants.NOOBAA_DB_LABEL_419_AND_ABOVE},"
+            f"{constants.CNPG_POD_ROLE_INSTANCE_LABEL}"
+        )
+        OCP(kind=constants.POD).wait_for_resource(
+            condition=constants.STATUS_RUNNING,
+            selector=selector,
+            resource_count=original_db_replica_count,
+            timeout=600,
+            sleep=5,
+        )
+
+        # Restore DB from a local folder to the primary instance
+        # for pod_info in get_pods_having_label(label=constants.NOOBAA_CNPG_POD_LABEL):
+        #     noobaa_db_pod = Pod(**pod_info)
+        noobaa_db_pod = get_primary_nb_db_pod()
+        OCP(namespace=config.ENV_DATA["cluster_namespace"]).exec_oc_cmd(
+            command=f"cp --retries=-1 ./mcg.bck {noobaa_db_pod.name}:/dev/shm/test.db",
+            out_yaml_format=False,
+        )
+        cmd = (
+            'bash -c "pg_restore --no-owner -n public '
+            "--role=noobaa -d nbcore "
+            '--verbose < /dev/shm/test.db"'
+        )
+        noobaa_db_pod.exec_cmd_on_pod(command=cmd)
+        logger.info(f"Restored {noobaa_db_pod.name} from the local folder!")
+
+        # Delete secrets and restore them from a local folder.
+        # Please note that verify that there are no errors before you proceed to the next steps.
+        for secret in secrets_obj:
+            secret.delete()
+        logger.info(
+            f"Deleted current Noobaa secrets: {[secret.name for secret in secrets_obj]}!"
+        )
+        for secret in secrets_obj:
+            secret.create()
+        logger.info(
+            f"Restored old Noobaa secrets: {[secret.name for secret in secrets_obj]}"
+        )
+
+        # Restore MCG reconciliation
+        restore_mcg_reconcilation(ocs_storagecluster_obj)
+        logger.info("Restored MCG reconcilation!")
+
+        # Start the NooBaa service
+        nb_operator_dc.scale(replicas=1)
+        nb_endpoint_dc.scale(replicas=1)
+        modify_statefulset_replica_count(
+            statefulset_name=constants.NOOBAA_CORE_STATEFULSET, replica_count=1
+        )
+        logger.info(
+            "Started noobaa services: Noobaa endpoint, Noobaa core, Noobaa operator pods!"
+        )
+
+        # Restart the NooBaa DB pod
+        noobaa_db_pod.delete()
+        logger.info("Restarted noobaa-db pod!")
+
+    def finalizer():
+
+        nonlocal secrets_obj
 
         # remove the local copy of ./mcg.bck
         if os.path.exists("./mcg.bck"):
@@ -974,25 +1208,14 @@ def setup_mcg_expiration_feature_buckets(
         reduce_expiration_interval(interval=1)
         logger.info("Changed noobaa lifecycle interval to 1 minute")
 
-        expiration_rule = {
-            "Rules": [
-                {
-                    "Expiration": {
-                        "Days": 1,
-                        "ExpiredObjectDeleteMarker": False,
-                    },
-                    "Filter": {"Prefix": ""},
-                    "ID": "data-expire",
-                    "Status": "Enabled",
-                }
-            ]
-        }
-
+        expiration_rule = LifecyclePolicy(ExpirationRule(days=1))
         all_buckets = create_muliple_types_provider_obcs(
             number_of_buckets, type, cloud_providers, bucket_factory
         )
 
-        bulk_s3_put_bucket_lifecycle_config(mcg_obj, all_buckets, expiration_rule)
+        bulk_s3_put_bucket_lifecycle_config(
+            mcg_obj, all_buckets, expiration_rule.as_dict()
+        )
 
         logger.info(
             f"Buckets created under expiration setup: {[bucket.name for bucket in all_buckets]}"

@@ -476,8 +476,8 @@ class TestMCGReplicationWithVersioningSystemTest:
         bucket_factory,
         reduce_replication_delay,
         nodes,
-        noobaa_db_backup,
-        noobaa_db_recovery_from_backup,
+        noobaa_db_backup_locally,
+        noobaa_db_recovery_from_local,
         aws_log_based_replication_setup,
         test_directory_setup,
         setup_mcg_bg_features,
@@ -684,8 +684,9 @@ class TestMCGReplicationWithVersioningSystemTest:
         # Take the noobaa db backup and then disable the sync versions
         # make sure no version sync happens
         logger.info("Taking backup of noobaa db")
-        noobaa_pvc_obj = get_pvc_objs(pvc_names=[constants.NOOBAA_DB_PVC_NAME])
-        _, snap_obj = noobaa_db_backup(noobaa_pvc_obj)
+        cnpg_cluster_yaml, original_db_replica_count, secrets_obj = (
+            noobaa_db_backup_locally()
+        )
 
         logger.info("Disabling version sync for both the buckets")
         replication_1["rules"][0]["sync_versions"] = False
@@ -732,7 +733,9 @@ class TestMCGReplicationWithVersioningSystemTest:
         # Recover the noobaa db from the backup and perform
         # object deletion and verify deletion sync works
         logger.info("Recovering noobaa db from backup")
-        noobaa_db_recovery_from_backup(snap_obj, noobaa_pvc_obj, noobaa_pods)
+        noobaa_db_recovery_from_local(
+            cnpg_cluster_yaml, original_db_replica_count, secrets_obj
+        )
         wait_for_noobaa_pods_running(timeout=420)
 
         # Update previously uploaded object with new data and new version
