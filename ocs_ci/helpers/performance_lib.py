@@ -358,7 +358,10 @@ def csi_bulk_pvc_time_measure(interface, pvc_objs, operation, start_time):
     logs = read_csi_logs(log_names, cnt_names[interface], start_time)
 
     for pvc in pvc_objs:
-        pv_name = pvc.backed_pv_obj.name
+        try:
+            pv_name = pvc.backed_pv_obj.name
+        except:
+            pv_name = pvc.backed_pv
         single_st = None
         single_et = None
 
