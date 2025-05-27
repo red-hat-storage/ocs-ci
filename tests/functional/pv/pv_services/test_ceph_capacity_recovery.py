@@ -1,5 +1,6 @@
 import logging
 import time
+import pytest
 
 from ocs_ci.ocs.perftests import PASTest
 from ocs_ci.framework.pytest_customization.marks import green_squad
@@ -52,6 +53,7 @@ def check_health_status():
         return False
 
 
+@pytest.mark.skip(reason="Skipping this test temporarily due to ocs-ci 12263")
 @green_squad
 @tier2
 @polarion_id("OCS-5399")
