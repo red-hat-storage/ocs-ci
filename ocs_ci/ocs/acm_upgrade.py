@@ -134,7 +134,6 @@ class ACMUpgrade(object):
                     version_tag = item["msg"]["pipeline"]["index_image"][
                         f"v{get_running_ocp_version()}"
                     ].split(":")[1]
-                    print("Version tag:", version_tag)
                     break
                 except KeyError:
                     continue
