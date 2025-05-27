@@ -1784,27 +1784,9 @@ def measure_pv_deletion_time_bulk(
     while True:
         no_data_list = list()
         for pv in pv_name_list:
-            # check if PV data present in CSI logs[
-            if version.get_semantic_ocs_version_from_config() <= version.VERSION_4_16:
-                start = [i for i in logs if re.search(f'delete "{pv}": started', i)]
-            else:
-                start = [
-                    i
-                    for i in logs
-                    if re.search(f'"shouldDelete is true".*PV="{re.escape(pv)}"', i)
-                ]
-            if version.get_semantic_ocs_version_from_config() <= version.VERSION_4_16:
-                end = [
-                    i
-                    for i in logs
-                    if re.search(f'delete "{pv}": {delete_suffix_to_search}', i)
-                ]
-            else:
-                end = [
-                    i
-                    for i in logs
-                    if re.search(f'{delete_suffix_to_search}.*PV="{re.escape(pv)}"', i)
-                ]
+            start, end = get_start_end_time_for_bulk_pvc_creation(
+                logs, pv, delete_suffix_to_search
+            )
             if not start or not end:
                 no_data_list.append(pv)
 
@@ -1829,31 +1811,15 @@ def measure_pv_deletion_time_bulk(
     pv_dict = dict()
     this_year = str(datetime.datetime.now().year)
     for pv_name in pv_name_list:
+        start, end = get_start_end_time_for_bulk_pvc_creation(
+            logs, pv, delete_suffix_to_search
+        )
         # Extract the deletion start time for the PV
-        if version.get_semantic_ocs_version_from_config() <= version.VERSION_4_16:
-            start = [i for i in logs if re.search(f'delete "{pv_name}": started', i)]
-        else:
-            start = [
-                i
-                for i in logs
-                if re.search(f'"shouldDelete is true".*PV="{re.escape(pv)}"', i)
-            ]
         mon_day = " ".join(start[0].split(" ")[0:2])
         start_tm = f"{this_year} {mon_day}"
         start_time = datetime.datetime.strptime(start_tm, DATE_TIME_FORMAT)
+
         # Extract the deletion end time for the PV
-        if version.get_semantic_ocs_version_from_config() <= version.VERSION_4_16:
-            end = [
-                i
-                for i in logs
-                if re.search(f'delete "{pv}": {delete_suffix_to_search}', i)
-            ]
-        else:
-            end = [
-                i
-                for i in logs
-                if re.search(f'{delete_suffix_to_search}.*PV="{re.escape(pv)}"', i)
-            ]
         mon_day = " ".join(end[0].split(" ")[0:2])
         end_tm = f"{this_year} {mon_day}"
         end_time = datetime.datetime.strptime(end_tm, DATE_TIME_FORMAT)
@@ -6183,3 +6149,26 @@ def unfence_node(node_name, delete=False):
             logger.info(f"Deleted network fence object for node {node_name}")
     else:
         logger.info(f"No networkfence found for node {node_name}")
+
+def get_start_end_time_for_bulk_pvc_creation(logs, pv, delete_suffix_to_search):
+    # check if PV data present in CSI logs[
+    if version.get_semantic_ocs_version_from_config() <= version.VERSION_4_16:
+        start = [i for i in logs if re.search(f'delete "{pv}": started', i)]
+    else:
+        start = [
+            i
+            for i in logs
+            if re.search(f'"shouldDelete is true".*PV="{re.escape(pv)}"', i)
+        ]
+    if version.get_semantic_ocs_version_from_config() <= version.VERSION_4_16:
+        end = [
+            i for i in logs if re.search(f'delete "{pv}": {delete_suffix_to_search}', i)
+        ]
+    else:
+        end = [
+            i
+            for i in logs
+            if re.search(f'{delete_suffix_to_search}.*PV="{re.escape(pv)}"', i)
+        ]
+    return start, end
+
