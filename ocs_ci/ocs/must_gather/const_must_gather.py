@@ -1061,6 +1061,33 @@ GATHER_COMMANDS_VERSION = {
             - set(GATHER_COMMANDS_OTHERS_EXTERNAL_EXCLUDE)
         ),
     },
+    4.19: {
+        "CEPH": GATHER_COMMANDS_CEPH + GATHER_COMMANDS_CEPH_4_7,
+        "JSON": GATHER_COMMANDS_JSON + GATHER_COMMANDS_JSON_4_7,
+        "OTHERS": list(
+            set(
+                GATHER_COMMANDS_OTHERS
+                + GATHER_COMMANDS_OTHERS_4_7
+                + GATHER_COMMANDS_OTHERS_4_10
+            )
+            - set(
+                GATHER_COMMANDS_OTHERS_EXCLUDE_4_11
+                + GATHER_COMMANDS_OTHERS_EXCLUDE_4_13
+            )
+        ),
+        "OTHERS_MANAGED_SERVICES": list(
+            set(
+                GATHER_COMMANDS_OTHERS
+                + GATHER_COMMANDS_OTHERS_4_7
+                + GATHER_COMMANDS_OTHERS_4_10
+            )
+            - set(GATHER_COMMANDS_OTHERS_MANAGED_SERVICES_EXCLUDE)
+        ),
+        "OTHERS_EXTERNAL": list(
+            set(GATHER_COMMANDS_OTHERS_EXTERNAL + GATHER_COMMANDS_OTHERS_EXTERNAL_4_8)
+            - set(GATHER_COMMANDS_OTHERS_EXTERNAL_EXCLUDE)
+        ),
+    },
 }
 
 CEPH_ONLY = [
