@@ -738,6 +738,13 @@ class TestMCGReplicationWithVersioningSystemTest:
         )
         wait_for_noobaa_pods_running(timeout=420)
 
+        logger.info("Enabling version sync for both the buckets")
+        replication_1["rules"][0]["sync_versions"] = True
+        replication_2["rules"][0]["sync_versions"] = True
+
+        update_replication_policy(bucket_2.name, replication_1)
+        update_replication_policy(bucket_1.name, replication_2)
+
         # Update previously uploaded object with new data and new version
         self.upload_objects_with_retry(
             mcg_obj_session,
