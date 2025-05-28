@@ -6218,6 +6218,9 @@ def create_auto_scaler(
         scaling_threshold (int): Percent usage to trigger auto-scaling.
         max_osd_size (str): Size of each OSD added during scaling.
         timeout (int): Timeout in seconds for a scaling operation.
+
+    Returns:
+        OCS: An OCS instance of the StorageAutoScaler
     """
     from ocs_ci.ocs.resources.storage_cluster import (
         get_storage_cluster,
@@ -6227,7 +6230,22 @@ def create_auto_scaler(
     namespace = namespace or config.ENV_DATA["cluster_namespace"]
     if not sc_name:
         sc = get_storage_cluster(namespace)
-        sc_name = sc.data["items"][0]["metadata"]["name"]
+        sc_items = sc.data.get("items")
+        if not sc_items:
+            logger.warning(
+                f"The storagecluster doesn't contain any items. Fall back to the default "
+                f"storagecluster name '{constants.DEFAULT_STORAGE_CLUSTER}'"
+            )
+            sc_name = constants.DEFAULT_STORAGE_CLUSTER
+        else:
+            sc_name = sc_items[0].get("metadata", {}).get("name")
+            if not sc_name:
+                logger.warning(
+                    f"Didn't find the storagecluster name. Fall back to the default "
+                    f"storagecluster name '{constants.DEFAULT_STORAGE_CLUSTER}'"
+                )
+                sc_name = constants.DEFAULT_STORAGE_CLUSTER
+
     device_class = device_class or get_default_deviceclass()
     name = name or f"{sc_name}-{device_class}"
 

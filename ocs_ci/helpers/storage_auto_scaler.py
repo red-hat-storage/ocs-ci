@@ -4,6 +4,7 @@ from ocs_ci.ocs.exceptions import ResourceWrongStatusException
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.ocp import OCP
 from ocs_ci.framework import config
+from ocs_ci.ocs.cluster import get_percent_used_capacity
 
 logger = logging.getLogger(__name__)
 
@@ -42,6 +43,7 @@ def delete_all_storage_autoscalers(namespace=None, wait=True, timeout=120, force
     namespace = namespace or config.ENV_DATA["cluster_namespace"]
     storage_auto_scaler = OCP(kind=constants.STORAGE_AUTO_SCALER, namespace=namespace)
     autoscaler_names = get_all_storage_autoscaler_names(namespace=namespace)
+    logger.info(f"storage-autoscaler objects to delete: {autoscaler_names}")
 
     for name in autoscaler_names:
         storage_auto_scaler.delete(
@@ -75,6 +77,10 @@ def wait_for_auto_scaler_status(
     storage_auto_scaler = OCP(kind=constants.STORAGE_AUTO_SCALER, namespace=namespace)
 
     if not resource_name:
+        logger.info(
+            "Didn't get the storage-autoscaler name. Trying to get the first "
+            "storage-autoscaler name..."
+        )
         autoscaler_names = get_all_storage_autoscaler_names(namespace=namespace)
         if not autoscaler_names:
             raise ResourceWrongStatusException(
@@ -90,3 +96,29 @@ def wait_for_auto_scaler_status(
         timeout=timeout,
         sleep=sleep,
     )
+
+
+def generate_default_scaling_threshold(default_threshold=30, min_diff=7):
+    """
+    Generate a safe default scaling threshold based on current used capacity.
+
+    Ensures the threshold is at least `min_diff` percent higher than the used capacity.
+
+    Args:
+        default_threshold (int): Initial threshold to use.
+        min_diff (int): Minimum gap between used capacity and scaling threshold.
+
+    Returns:
+        int: A safe scaling threshold percentage.
+    """
+    used_capacity = get_percent_used_capacity()
+    scaling_threshold = default_threshold
+
+    if scaling_threshold - min_diff < used_capacity:
+        scaling_threshold = used_capacity + min_diff
+        logger.info(
+            f"The scaling_threshold {scaling_threshold} is too close to the used "
+            f"capacity {used_capacity}. Increasing the scaling_threshold"
+        )
+
+    return scaling_threshold
