@@ -158,6 +158,7 @@ from ocs_ci.utility.ssl_certs import (
 from ocs_ci.utility.utils import (
     ceph_health_check,
     clone_repo,
+    create_unreleased_oadp_catalog,
     enable_huge_pages,
     exec_cmd,
     get_latest_ds_olm_tag,
@@ -488,7 +489,22 @@ class Deployment(object):
                     resource_name=constants.OADP_OPERATOR_NAME,
                     selector="catalog=redhat-operators",
                 )
+                try:
+                    package_manifest.get()
+                except ResourceNotFoundError as ex:
+                    logger.warning(
+                        f"OADP operator not availabe - bringing up unreleased content {ex}!"
+                    )
+                    create_unreleased_oadp_catalog()
+                    package_manifest = PackageManifest(
+                        resource_name=constants.OADP_OPERATOR_NAME,
+                        selector=f"catalog={constants.BREW_CATALOG_NAME}",
+                    )
+                    oadp_subscription_yaml_data["spec"][
+                        "source"
+                    ] = constants.BREW_CATALOG_NAME
                 oadp_default_channel = package_manifest.get_default_channel()
+
                 oadp_subscription_yaml_data["spec"]["channel"] = oadp_default_channel
                 oadp_subscription_manifest = tempfile.NamedTemporaryFile(
                     mode="w+", prefix="oadp_subscription_manifest", delete=False
