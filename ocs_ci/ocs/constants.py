@@ -264,6 +264,7 @@ CLIENT_PROFILE = "ClientProfile"
 OCS_OPERATOR_CONFIG_MAP = "ocs-operator-config"
 SERVICE_TYPE_NODEPORT = "NodePort"
 CLUSTERMANAGEMENTADDON = "ClusterManagementAddOn"
+CEPH_DRIVER_CSI = "drivers.csi.ceph.io"
 
 # Provisioners
 AWS_EFS_PROVISIONER = "openshift.org/aws-efs"
