@@ -752,6 +752,11 @@ class MetalLBInstaller:
             namespace=self.namespace_lb,
             resource_name=constants.METALLB,
         )
+        metallb_catalog_source = CatalogSource(
+            resource_name=constants.QE_APP_REGISTRY_CATALOG_SOURCE_NAME,
+            namespace=MARKETPLACE_NAMESPACE,
+        )
+
         logger.info("Check if metallb is installed")
         if not self.metallb_instance_created():
             logger.error("metalLb operator unavailable")
@@ -793,11 +798,6 @@ class MetalLBInstaller:
             run_cmd(f"oc apply -f {metallb_catalog_file.name}", timeout=2400)
 
             # wait for catalog source is ready
-            metallb_catalog_source = CatalogSource(
-                resource_name=constants.QE_APP_REGISTRY_CATALOG_SOURCE_NAME,
-                namespace=MARKETPLACE_NAMESPACE,
-            )
-
             metallb_catalog_source.wait_for_state("READY")
 
         else:

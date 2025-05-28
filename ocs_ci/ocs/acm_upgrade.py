@@ -117,6 +117,10 @@ class ACMUpgrade(object):
     def create_catalog_source(self):
         from ocs_ci.ocs.resources.catalog_source import CatalogSource
 
+        acm_operator_catsrc = CatalogSource(
+            resource_name=constants.ACM_CATSRC_NAME,
+            namespace=constants.MARKETPLACE_NAMESPACE,
+        )
         logger.info("Creating ACM catalog source")
         acm_catsrc = templating.load_yaml(constants.ACM_CATSRC)
         if self.acm_registry_image:
@@ -147,10 +151,6 @@ class ACMUpgrade(object):
         )
         templating.dump_data_to_temp_yaml(acm_catsrc, acm_data_yaml.name)
         run_cmd(f"oc create -f {acm_data_yaml.name}", timeout=300)
-        acm_operator_catsrc = CatalogSource(
-            resource_name=constants.ACM_CATSRC_NAME,
-            namespace=constants.MARKETPLACE_NAMESPACE,
-        )
         acm_operator_catsrc.wait_for_state("READY")
 
     def validate_upgrade(self):

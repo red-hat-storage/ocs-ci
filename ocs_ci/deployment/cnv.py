@@ -883,6 +883,10 @@ class CNVInstaller(object):
             resource_name=constants.KUBEVIRT_HYPERCONVERGED,
         )
 
+        cnv_operators_nightly_catsrc = CatalogSource(
+            resource_name=self.cnv_nightly_catsrc,
+            namespace=constants.MARKETPLACE_NAMESPACE,
+        )
         logger.info(
             f" currently installed cnv version: {parse_version(self.get_running_cnv_version())}"
         )
@@ -897,10 +901,6 @@ class CNVInstaller(object):
             if not self.catalog_source_created():
                 self.create_cnv_catalog_source()
             # Update image details in CNV catalogsource
-            cnv_operators_nightly_catsrc = CatalogSource(
-                resource_name=self.cnv_nightly_catsrc,
-                namespace=constants.MARKETPLACE_NAMESPACE,
-            )
             patch = f'{{"spec": {{"image": "quay.io/openshift-cnv/nightly-catalog:{self.upgrade_version}"}}}}'
             cnv_operators_nightly_catsrc.patch(params=patch, format_type="merge")
             # wait for catalog source is ready
