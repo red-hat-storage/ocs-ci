@@ -5,7 +5,6 @@ import requests
 import os
 import time
 from dataclasses import dataclass
-from typing import Union
 from enum import Enum
 
 from selenium.webdriver.common.by import By
@@ -63,27 +62,7 @@ class PolicyConfig:
     def __post_init__(self):
         """Set default values after initialization."""
         if self.account_list is None:
-            self.account_list = ["123456789012"]  # Placeholder
-
-
-@dataclass
-class LocatorConfig:
-    """Configuration for UI locator-based buttons."""
-
-    locator_key: str
-    description: str
-
-
-@dataclass
-class SelectorConfig:
-    """Configuration for direct CSS selector-based buttons."""
-
-    selector: str
-    by_type: By
-    description: str
-
-
-ButtonConfig = Union[LocatorConfig, SelectorConfig]
+            self.account_list = []
 
 
 class BucketsTab(ObjectStorage, ConfirmDialog):
@@ -676,12 +655,97 @@ class BucketsTab(ObjectStorage, ConfirmDialog):
                 raise ValueError(f"No OBC found for bucket {bucket_name}")
 
         except Exception as e:
-            logger.warning(
-                f"Could not get real account ID for bucket {bucket_name}: {e}"
+            logger.error(f"Could not get real account ID for bucket {bucket_name}: {e}")
+            raise ValueError(
+                f"Unable to retrieve account ID for bucket '{bucket_name}'. "
+                f"Ensure the bucket exists and has a valid ObjectBucketClaim. Error: {e}"
             )
-            # Fallback to a default test account ID if real account cannot be retrieved
-            logger.warning("Using fallback account ID for testing")
-            return "123456789012"
+
+    def _get_account_id_for_policy(self, config: PolicyConfig) -> str:
+        """
+        Get real account ID for policies that require it.
+
+        Args:
+            config (PolicyConfig): Configuration for the policy.
+
+        Returns:
+            str: Real account ID from the bucket.
+        """
+        real_account_id = self._get_real_account_id_from_bucket(config.bucket_name)
+        logger.info(
+            f"Using real account ID: {real_account_id} instead of provided accounts: {config.account_list}"
+        )
+        return real_account_id
+
+    def _normalize_folder_path(self, folder_path: str = None) -> str:
+        """
+        Normalize folder path for bucket policies.
+
+        Args:
+            folder_path (str, optional): Raw folder path.
+
+        Returns:
+            str: Normalized folder path ending with /*.
+        """
+        if not folder_path:
+            folder_path = "documents"
+            logger.debug(f"Using default folder path: {folder_path}")
+
+        clean_folder_path = folder_path.strip("/")
+        if not clean_folder_path.endswith("/*"):
+            clean_folder_path = f"{clean_folder_path}/*"
+
+        return clean_folder_path
+
+    def _build_public_read_policy(self, config: PolicyConfig) -> dict:
+        """Build AllowPublicReadAccess policy."""
+        return gen_bucket_policy_ui_compatible(
+            user_list="*",
+            actions_list=["GetObject"],
+            resources_list=[f"{config.bucket_name}/*"],
+            effect="Allow",
+        )
+
+    def _build_specific_account_policy(self, config: PolicyConfig) -> dict:
+        """Build AllowAccessToSpecificAccount policy."""
+        real_account_id = self._get_account_id_for_policy(config)
+        return gen_bucket_policy_ui_compatible(
+            user_list=real_account_id,
+            actions_list=["GetObject", "PutObject", "DeleteObject"],
+            resources_list=[f"{config.bucket_name}/*"],
+            effect="Allow",
+        )
+
+    def _build_enforce_https_policy(self, config: PolicyConfig) -> dict:
+        """Build EnforceSecureTransportHTTPS policy."""
+        return {
+            "Version": "2012-10-17",
+            "Statement": [
+                {
+                    "Action": "*",  # Use "*" not "s3:*" for conditional policies
+                    "Principal": "*",
+                    "Resource": [
+                        f"arn:aws:s3:::{config.bucket_name}",
+                        f"arn:aws:s3:::{config.bucket_name}/*",
+                    ],
+                    "Effect": "Deny",
+                    "Sid": "statement",
+                    "Condition": {"Bool": {"aws:SecureTransport": "false"}},
+                }
+            ],
+        }
+
+    def _build_folder_access_policy(self, config: PolicyConfig) -> dict:
+        """Build AllowReadWriteAccessToFolder policy."""
+        clean_folder_path = self._normalize_folder_path(config.folder_path)
+        real_account_id = self._get_account_id_for_policy(config)
+
+        return gen_bucket_policy_ui_compatible(
+            user_list=real_account_id,
+            actions_list=["GetObject", "PutObject", "DeleteObject"],
+            resources_list=[f"{config.bucket_name}/{clean_folder_path}"],
+            effect="Allow",
+        )
 
     def _build_bucket_policy(
         self, policy_type: PolicyType, config: PolicyConfig
@@ -697,80 +761,23 @@ class BucketsTab(ObjectStorage, ConfirmDialog):
             str: JSON string of the generated policy.
 
         Raises:
-            ValueError: If policy type is not supported or configuration is invalid.
+            ValueError: If policy type is not supported.
         """
         logger.debug(
             f"Building {policy_type.value} policy for bucket: {config.bucket_name}"
         )
 
-        if policy_type == PolicyType.ALLOW_PUBLIC_READ:
-            bucket_policy_generated = gen_bucket_policy_ui_compatible(
-                user_list="*",
-                actions_list=["GetObject"],
-                resources_list=[f"{config.bucket_name}/*"],
-                effect="Allow",
-            )
+        policy_builders = {
+            PolicyType.ALLOW_PUBLIC_READ: self._build_public_read_policy,
+            PolicyType.ALLOW_SPECIFIC_ACCOUNT: self._build_specific_account_policy,
+            PolicyType.ENFORCE_HTTPS: self._build_enforce_https_policy,
+            PolicyType.ALLOW_FOLDER_ACCESS: self._build_folder_access_policy,
+        }
 
-        elif policy_type == PolicyType.ALLOW_SPECIFIC_ACCOUNT:
-            # Get real account ID from the bucket instead of using provided fake account IDs
-            real_account_id = self._get_real_account_id_from_bucket(config.bucket_name)
-            logger.info(
-                f"Using real account ID: {real_account_id} instead of provided accounts: {config.account_list}"
-            )
-
-            bucket_policy_generated = gen_bucket_policy_ui_compatible(
-                user_list=real_account_id,
-                actions_list=["GetObject", "PutObject", "DeleteObject"],
-                resources_list=[f"{config.bucket_name}/*"],
-                effect="Allow",
-            )
-
-        elif policy_type == PolicyType.ENFORCE_HTTPS:
-            # For HTTPS enforcement policies with conditions, we need to use "*" action
-            # without the s3: prefix, so we build the policy manually instead of using
-            # gen_bucket_policy_ui_compatible which automatically adds s3: prefix
-            bucket_policy_generated = {
-                "Version": "2012-10-17",
-                "Statement": [
-                    {
-                        "Action": "*",  # Use "*" not "s3:*" for conditional policies
-                        "Principal": "*",
-                        "Resource": [
-                            f"arn:aws:s3:::{config.bucket_name}",
-                            f"arn:aws:s3:::{config.bucket_name}/*",
-                        ],
-                        "Effect": "Deny",
-                        "Sid": "statement",
-                        "Condition": {"Bool": {"aws:SecureTransport": "false"}},
-                    }
-                ],
-            }
-
-        elif policy_type == PolicyType.ALLOW_FOLDER_ACCESS:
-            if not config.folder_path:
-                config.folder_path = "documents"
-                logger.debug(f"Using default folder path: {config.folder_path}")
-
-            clean_folder_path = config.folder_path.strip("/")
-            if not clean_folder_path.endswith("/*"):
-                clean_folder_path = f"{clean_folder_path}/*"
-
-            # Get real account ID from the bucket instead of using provided fake account IDs
-            real_account_id = self._get_real_account_id_from_bucket(config.bucket_name)
-            logger.info(
-                f"Using real account ID: {real_account_id} instead of provided accounts: {config.account_list}"
-            )
-
-            bucket_policy_generated = gen_bucket_policy_ui_compatible(
-                user_list=real_account_id,
-                actions_list=["GetObject", "PutObject", "DeleteObject"],
-                resources_list=[f"{config.bucket_name}/{clean_folder_path}"],
-                effect="Allow",
-            )
-
-        else:
+        if policy_type not in policy_builders:
             raise ValueError(f"Unsupported policy type: {policy_type}")
 
+        bucket_policy_generated = policy_builders[policy_type](config)
         policy_json = json.dumps(bucket_policy_generated, indent=2)
         logger.debug(f"Generated {policy_type.value} policy JSON")
         return policy_json
@@ -836,47 +843,6 @@ class BucketsTab(ObjectStorage, ConfirmDialog):
         )
         logger.error(error_msg)
         raise TimeoutException(error_msg)
-
-    def _click_first_existing_button(self, button_configs: list[ButtonConfig]) -> bool:
-        """
-        Helper method to click the first existing button from a list of configurations.
-
-        Args:
-            button_configs (list[ButtonConfig]): List of LocatorConfig or SelectorConfig instances
-
-        Returns:
-            bool: True if a button was clicked, False otherwise
-        """
-        for config in button_configs:
-            try:
-                if isinstance(config, LocatorConfig):
-                    logger.debug(f"Trying to {config.description.lower()}")
-                    self.do_click(self.bucket_tab[config.locator_key])
-                    logger.debug(f"Successfully clicked {config.description} button")
-                    return True
-                elif isinstance(config, SelectorConfig):
-                    logger.debug(f"Trying selector: {config.selector}")
-                    elements = self.get_elements((config.selector, config.by_type))
-                    if elements:
-                        element = elements[0]
-                        logger.debug(
-                            f"Found button with text: '{element.text}' using {config.description}"
-                        )
-                        self.do_click((config.selector, config.by_type))
-                        logger.debug(
-                            f"Successfully clicked {config.description} button via selector"
-                        )
-                        return True
-            except (
-                NoSuchElementException,
-                TimeoutException,
-                StaleElementReferenceException,
-            ) as e:
-                logger.debug(
-                    f"Button attempt failed for {config.description}: {type(e).__name__}"
-                )
-                continue
-        return False
 
     def _check_for_policy_error_dialog(self) -> tuple[bool, str]:
         """
@@ -970,6 +936,98 @@ class BucketsTab(ObjectStorage, ConfirmDialog):
 
         return False, ""
 
+    def _click_policy_action_button(self) -> None:
+        """
+        Click the policy action button with fallback.
+
+        Raises:
+            TimeoutException: If no policy action button is found.
+        """
+        logger.debug("Attempting to click policy action button")
+
+        # Try primary button first
+        try:
+            self.do_click(self.bucket_tab["apply_policy_button"])
+            logger.debug("Successfully clicked apply policy button")
+            return
+        except (
+            NoSuchElementException,
+            TimeoutException,
+            StaleElementReferenceException,
+        ):
+            logger.debug("Apply policy button not found, trying fallback")
+
+        # Try fallback button
+        try:
+            self.do_click(self.bucket_tab["save_policy_generic_button"])
+            logger.debug("Successfully clicked save policy generic button")
+            return
+        except (
+            NoSuchElementException,
+            TimeoutException,
+            StaleElementReferenceException,
+        ):
+            logger.debug("Save policy generic button also not found")
+
+        # If we reach here, no button was found
+        error_msg = (
+            "Could not find any policy action button. "
+            "Attempted buttons: ['Apply policy', 'Save (generic)']. "
+            "Check if policy editor is properly loaded and buttons are visible."
+        )
+        logger.error(error_msg)
+        raise TimeoutException(error_msg)
+
+    def _handle_policy_confirmation_modal(self) -> None:
+        """
+        Handle the policy confirmation modal.
+
+        Raises:
+            PolicyApplicationError: If policy application fails.
+        """
+        logger.debug("Handling policy confirmation modal")
+
+        # Wait for modal (timeout is expected, continue anyway)
+        try:
+            self.wait_for_element_to_be_visible(
+                self.bucket_tab["update_policy_modal_button"],
+                timeout=DEFAULT_UI_WAIT,
+            )
+        except TimeoutException:
+            logger.debug("Modal wait timeout (expected) - proceeding")
+
+        # Click confirmation button
+        logger.debug("Clicking modal confirmation button")
+        self.do_click(self.bucket_tab["update_policy_modal_button"])
+
+        # Check for application errors
+        error_found, error_message = self._check_for_policy_error_dialog()
+        if error_found:
+            raise PolicyApplicationError(f"Policy application failed: {error_message}")
+
+    def _verify_policy_application_success(self) -> None:
+        """
+        Verify that the policy was successfully applied by checking for success toast.
+
+        Returns without error if success is found or if verification is inconclusive.
+        """
+        logger.debug("Verifying policy application success")
+
+        for selector in SUCCESS_TOAST_SELECTORS:
+            try:
+                self.wait_for_element_to_be_visible(
+                    (selector, By.CSS_SELECTOR), timeout=DEFAULT_UI_WAIT
+                )
+                logger.debug(f"Success notification found with selector: {selector}")
+                return
+            except TimeoutException:
+                logger.debug(f"Toast selector {selector} timeout (expected)")
+                continue
+
+        logger.warning(
+            "No success toast found, but policy may have been applied successfully"
+        )
+
     def apply_bucket_policy(self) -> None:
         """
         Apply the selected bucket policy and confirm in modal.
@@ -981,92 +1039,11 @@ class BucketsTab(ObjectStorage, ConfirmDialog):
         """
         logger.debug("Applying bucket policy")
 
-        button_configs = [
-            LocatorConfig("apply_policy_button", "Apply policy"),
-            LocatorConfig("save_policy_generic_button", "Save (generic)"),
-        ]
+        self._click_policy_action_button()
 
-        if not self._click_first_existing_button(button_configs):
-            attempted_buttons = [config.description for config in button_configs]
-            error_msg = (
-                f"Could not find any policy action button. "
-                f"Attempted buttons: {attempted_buttons}. "
-                "Check if policy editor is properly loaded and buttons are visible."
-            )
-            logger.error(error_msg)
-            raise TimeoutException(error_msg)
+        self._handle_policy_confirmation_modal()
 
-        try:
-            logger.debug("Waiting for policy update modal")
-            try:
-                self.wait_for_element_to_be_visible(
-                    self.bucket_tab["update_policy_modal_button"],
-                    timeout=DEFAULT_UI_WAIT,
-                )
-            except TimeoutException:
-                logger.debug(
-                    "Modal wait timeout (expected) - proceeding with button click"
-                )
-
-            logger.debug("Confirming policy update in modal")
-            self.do_click(self.bucket_tab["update_policy_modal_button"])
-
-            logger.debug("Checking for policy application errors")
-            error_found, error_message = self._check_for_policy_error_dialog()
-            if error_found:
-                raise PolicyApplicationError(
-                    f"Policy application failed: {error_message}"
-                )
-
-            logger.debug("Waiting for success indication")
-            for selector in SUCCESS_TOAST_SELECTORS:
-                try:
-                    logger.debug(f"Trying success selector: {selector}")
-                    try:
-                        self.wait_for_element_to_be_visible(
-                            (selector, By.CSS_SELECTOR), timeout=DEFAULT_UI_WAIT
-                        )
-                        logger.debug(
-                            f"Success notification found with selector: {selector}"
-                        )
-                        return
-                    except TimeoutException:
-                        logger.debug(f"Toast selector {selector} timeout (expected)")
-                        continue
-                except TimeoutException:
-                    continue
-
-            logger.warning(
-                "No success toast found, but policy may have been applied successfully"
-            )
-
-        except (TimeoutException, PolicyApplicationError):
-            logger.exception("Error during policy application")
-            raise
-
-    def _resolve_bucket_name(self, bucket_name: str = None) -> str:
-        """
-        Resolve bucket name, using first available bucket if None provided.
-
-        Args:
-            bucket_name (str, optional): Name of the bucket. If None, uses first bucket.
-
-        Returns:
-            str: Resolved bucket name.
-
-        Raises:
-            ValueError: If no buckets are available.
-        """
-        if bucket_name is None:
-            buckets = self.get_buckets_list()
-            if not buckets:
-                raise ValueError(
-                    "No buckets available on the current page and no specific bucket name provided. "
-                    "Ensure buckets exist or specify a bucket name explicitly."
-                )
-            bucket_name = buckets[0]
-            logger.debug(f"Using first available bucket: {bucket_name}")
-        return bucket_name
+        self._verify_policy_application_success()
 
     def _set_bucket_policy_ui(
         self, policy_type: PolicyType, config: PolicyConfig
@@ -1125,8 +1102,20 @@ class BucketsTab(ObjectStorage, ConfirmDialog):
 
         Args:
             bucket_name (str, optional): Name of the bucket. If None, uses first bucket.
+
+        Raises:
+            ValueError: If no buckets are available.
         """
-        bucket_name = self._resolve_bucket_name(bucket_name)
+        if bucket_name is None:
+            buckets = self.get_buckets_list()
+            if not buckets:
+                raise ValueError(
+                    "No buckets available on the current page and no specific bucket name provided. "
+                    "Ensure buckets exist or specify a bucket name explicitly."
+                )
+            bucket_name = buckets[0]
+            logger.debug(f"Using first available bucket: {bucket_name}")
+
         config = PolicyConfig(bucket_name)
         self._set_bucket_policy_ui(PolicyType.ALLOW_PUBLIC_READ, config)
 
@@ -1139,8 +1128,20 @@ class BucketsTab(ObjectStorage, ConfirmDialog):
         Args:
             bucket_name (str, optional): Name of the bucket. If None, uses first bucket.
             account_list (list[str], optional): List of AWS account IDs (ignored - real account from bucket is used).
+
+        Raises:
+            ValueError: If no buckets are available.
         """
-        bucket_name = self._resolve_bucket_name(bucket_name)
+        if bucket_name is None:
+            buckets = self.get_buckets_list()
+            if not buckets:
+                raise ValueError(
+                    "No buckets available on the current page and no specific bucket name provided. "
+                    "Ensure buckets exist or specify a bucket name explicitly."
+                )
+            bucket_name = buckets[0]
+            logger.debug(f"Using first available bucket: {bucket_name}")
+
         config = PolicyConfig(bucket_name, account_list or ["123456789012"])
         self._set_bucket_policy_ui(PolicyType.ALLOW_SPECIFIC_ACCOUNT, config)
 
@@ -1150,8 +1151,20 @@ class BucketsTab(ObjectStorage, ConfirmDialog):
 
         Args:
             bucket_name (str, optional): Name of the bucket. If None, uses first bucket.
+
+        Raises:
+            ValueError: If no buckets are available.
         """
-        bucket_name = self._resolve_bucket_name(bucket_name)
+        if bucket_name is None:
+            buckets = self.get_buckets_list()
+            if not buckets:
+                raise ValueError(
+                    "No buckets available on the current page and no specific bucket name provided. "
+                    "Ensure buckets exist or specify a bucket name explicitly."
+                )
+            bucket_name = buckets[0]
+            logger.debug(f"Using first available bucket: {bucket_name}")
+
         config = PolicyConfig(bucket_name)
         self._set_bucket_policy_ui(PolicyType.ENFORCE_HTTPS, config)
 
@@ -1168,8 +1181,20 @@ class BucketsTab(ObjectStorage, ConfirmDialog):
             bucket_name (str, optional): Name of the bucket. If None, uses first bucket.
             folder_path (str, optional): Folder path within the bucket. If None, uses "documents".
             account_list (list[str], optional): List of AWS account IDs (ignored - real account from bucket is used).
+
+        Raises:
+            ValueError: If no buckets are available.
         """
-        bucket_name = self._resolve_bucket_name(bucket_name)
+        if bucket_name is None:
+            buckets = self.get_buckets_list()
+            if not buckets:
+                raise ValueError(
+                    "No buckets available on the current page and no specific bucket name provided. "
+                    "Ensure buckets exist or specify a bucket name explicitly."
+                )
+            bucket_name = buckets[0]
+            logger.debug(f"Using first available bucket: {bucket_name}")
+
         config = PolicyConfig(
             bucket_name, account_list or ["123456789012"], folder_path
         )
