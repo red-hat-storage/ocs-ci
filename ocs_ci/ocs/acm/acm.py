@@ -40,6 +40,7 @@ from ocs_ci.ocs.ui.acm_ui import AcmPageNavigator
 from ocs_ci.ocs.ui.base_ui import (
     login_ui,
     SeleniumDriver,
+    BaseUI,
 )
 from ocs_ci.utility.version import compare_versions
 from ocs_ci.utility import version
@@ -452,8 +453,14 @@ def login_to_acm():
     log.info(f"URL: {url}")
     driver = login_ui(url)
     page_nav = AcmPageNavigator()
-
-    page_nav.navigate_from_ocp_to_acm_cluster_page()
+    base_ui_obj = BaseUI()
+    look_for_local_cluster = base_ui_obj.wait_until_expected_text_is_found(
+        locator=base_ui_obj.acm_page_nav["click-local-cluster"],
+        expected_text="local-cluster",
+        timeout=30,
+    )
+    if look_for_local_cluster:
+        page_nav.navigate_from_ocp_to_acm_cluster_page()
 
     if compare_versions(cmp_str):
         page_title = ACM_PAGE_TITLE_2_7_ABOVE
