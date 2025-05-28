@@ -6,6 +6,7 @@ import os
 import time
 from dataclasses import dataclass
 from typing import Union
+from enum import Enum
 
 from selenium.webdriver.common.by import By
 from selenium.common.exceptions import (
@@ -40,6 +41,29 @@ SUCCESS_TOAST_SELECTORS = [
     ".toast-notifications-list-pf .alert-success",
     ".co-alert--success",
 ]
+
+
+class PolicyType(Enum):
+    """Enumeration of supported bucket policy types."""
+
+    ALLOW_PUBLIC_READ = "AllowPublicReadAccess"
+    ALLOW_SPECIFIC_ACCOUNT = "AllowAccessToSpecificAccount"
+    ENFORCE_HTTPS = "EnforceSecureTransportHTTPS"
+    ALLOW_FOLDER_ACCESS = "AllowReadWriteAccessToFolder"
+
+
+@dataclass
+class PolicyConfig:
+    """Configuration for bucket policy creation."""
+
+    bucket_name: str
+    account_list: list[str] = None
+    folder_path: str = None
+
+    def __post_init__(self):
+        """Set default values after initialization."""
+        if self.account_list is None:
+            self.account_list = ["123456789012"]  # Placeholder
 
 
 @dataclass
@@ -659,136 +683,96 @@ class BucketsTab(ObjectStorage, ConfirmDialog):
             logger.warning("Using fallback account ID for testing")
             return "123456789012"
 
-    def _build_allow_public_read_policy(self, bucket_name: str) -> str:
-        """
-        Build AllowPublicReadAccess bucket policy JSON.
-
-        Args:
-            bucket_name (str): Name of the bucket for the policy.
-
-        Returns:
-            str: JSON string of the generated policy.
-        """
-        logger.debug(f"Building AllowPublicReadAccess policy for bucket: {bucket_name}")
-        bucket_policy_generated = gen_bucket_policy_ui_compatible(
-            user_list="*",
-            actions_list=["GetObject"],
-            resources_list=[f"{bucket_name}/*"],
-            effect="Allow",
-        )
-        policy_json = json.dumps(bucket_policy_generated, indent=2)
-        logger.debug("Generated policy JSON")
-        return policy_json
-
-    def _build_allow_access_to_specific_account_policy(
-        self, bucket_name: str, account_list: list[str]
+    def _build_bucket_policy(
+        self, policy_type: PolicyType, config: PolicyConfig
     ) -> str:
         """
-        Build AllowAccessToSpecificAccount bucket policy JSON.
+        Build bucket policy JSON based on policy type and configuration.
 
         Args:
-            bucket_name (str): Name of the bucket for the policy.
-            account_list (list[str]): List of AWS account IDs to grant access to (will be replaced with real account).
+            policy_type (PolicyType): Type of policy to build.
+            config (PolicyConfig): Configuration for the policy.
 
         Returns:
             str: JSON string of the generated policy.
+
+        Raises:
+            ValueError: If policy type is not supported or configuration is invalid.
         """
         logger.debug(
-            f"Building AllowAccessToSpecificAccount policy for bucket: {bucket_name}, accounts: {account_list}"
+            f"Building {policy_type.value} policy for bucket: {config.bucket_name}"
         )
 
-        # Get real account ID from the bucket instead of using provided fake account IDs
-        real_account_id = self._get_real_account_id_from_bucket(bucket_name)
-        logger.info(
-            f"Using real account ID: {real_account_id} instead of provided fake accounts: {account_list}"
-        )
+        if policy_type == PolicyType.ALLOW_PUBLIC_READ:
+            bucket_policy_generated = gen_bucket_policy_ui_compatible(
+                user_list="*",
+                actions_list=["GetObject"],
+                resources_list=[f"{config.bucket_name}/*"],
+                effect="Allow",
+            )
 
-        bucket_policy_generated = gen_bucket_policy_ui_compatible(
-            user_list=real_account_id,
-            actions_list=["GetObject", "PutObject", "DeleteObject"],
-            resources_list=[f"{bucket_name}/*"],
-            effect="Allow",
-        )
+        elif policy_type == PolicyType.ALLOW_SPECIFIC_ACCOUNT:
+            # Get real account ID from the bucket instead of using provided fake account IDs
+            real_account_id = self._get_real_account_id_from_bucket(config.bucket_name)
+            logger.info(
+                f"Using real account ID: {real_account_id} instead of provided accounts: {config.account_list}"
+            )
+
+            bucket_policy_generated = gen_bucket_policy_ui_compatible(
+                user_list=real_account_id,
+                actions_list=["GetObject", "PutObject", "DeleteObject"],
+                resources_list=[f"{config.bucket_name}/*"],
+                effect="Allow",
+            )
+
+        elif policy_type == PolicyType.ENFORCE_HTTPS:
+            # For HTTPS enforcement policies with conditions, we need to use "*" action
+            # without the s3: prefix, so we build the policy manually instead of using
+            # gen_bucket_policy_ui_compatible which automatically adds s3: prefix
+            bucket_policy_generated = {
+                "Version": "2012-10-17",
+                "Statement": [
+                    {
+                        "Action": "*",  # Use "*" not "s3:*" for conditional policies
+                        "Principal": "*",
+                        "Resource": [
+                            f"arn:aws:s3:::{config.bucket_name}",
+                            f"arn:aws:s3:::{config.bucket_name}/*",
+                        ],
+                        "Effect": "Deny",
+                        "Sid": "statement",
+                        "Condition": {"Bool": {"aws:SecureTransport": "false"}},
+                    }
+                ],
+            }
+
+        elif policy_type == PolicyType.ALLOW_FOLDER_ACCESS:
+            if not config.folder_path:
+                config.folder_path = "documents"
+                logger.debug(f"Using default folder path: {config.folder_path}")
+
+            clean_folder_path = config.folder_path.strip("/")
+            if not clean_folder_path.endswith("/*"):
+                clean_folder_path = f"{clean_folder_path}/*"
+
+            # Get real account ID from the bucket instead of using provided fake account IDs
+            real_account_id = self._get_real_account_id_from_bucket(config.bucket_name)
+            logger.info(
+                f"Using real account ID: {real_account_id} instead of provided accounts: {config.account_list}"
+            )
+
+            bucket_policy_generated = gen_bucket_policy_ui_compatible(
+                user_list=real_account_id,
+                actions_list=["GetObject", "PutObject", "DeleteObject"],
+                resources_list=[f"{config.bucket_name}/{clean_folder_path}"],
+                effect="Allow",
+            )
+
+        else:
+            raise ValueError(f"Unsupported policy type: {policy_type}")
+
         policy_json = json.dumps(bucket_policy_generated, indent=2)
-        logger.debug("Generated policy JSON")
-        return policy_json
-
-    def _build_enforce_secure_transport_https_policy(self, bucket_name: str) -> str:
-        """
-        Build EnforceSecureTransportHTTPS bucket policy JSON.
-        This policy denies all requests that are not made over HTTPS/SSL.
-
-        Args:
-            bucket_name (str): Name of the bucket for the policy.
-
-        Returns:
-            str: JSON string of the generated policy.
-        """
-        logger.debug(
-            f"Building EnforceSecureTransportHTTPS policy for bucket: {bucket_name}"
-        )
-
-        # For HTTPS enforcement policies with conditions, we need to use "*" action
-        # without the s3: prefix, so we build the policy manually instead of using
-        # gen_bucket_policy_ui_compatible which automatically adds s3: prefix
-        bucket_policy_base = {
-            "Version": "2012-10-17",
-            "Statement": [
-                {
-                    "Action": "*",  # Use "*" not "s3:*" for conditional policies
-                    "Principal": "*",
-                    "Resource": [
-                        f"arn:aws:s3:::{bucket_name}",
-                        f"arn:aws:s3:::{bucket_name}/*",
-                    ],
-                    "Effect": "Deny",
-                    "Sid": "statement",
-                    "Condition": {"Bool": {"aws:SecureTransport": "false"}},
-                }
-            ],
-        }
-
-        policy_json = json.dumps(bucket_policy_base, indent=2)
-        logger.debug("Generated policy JSON")
-        return policy_json
-
-    def _build_allow_read_write_access_to_folder_policy(
-        self, bucket_name: str, folder_path: str, account_list: list[str]
-    ) -> str:
-        """
-        Build AllowReadWriteAccessToFolder bucket policy JSON.
-
-        Args:
-            bucket_name (str): Name of the bucket for the policy.
-            folder_path (str): Folder path within the bucket (e.g., "documents", "uploads/images").
-            account_list (list[str]): List of AWS account IDs to grant access to (will be replaced with real account).
-
-        Returns:
-            str: JSON string of the generated policy.
-        """
-        logger.debug(
-            f"Building AllowReadWriteAccessToFolder policy for bucket: {bucket_name}, "
-            f"folder: {folder_path}, accounts: {account_list}"
-        )
-
-        clean_folder_path = folder_path.strip("/")
-        if not clean_folder_path.endswith("/*"):
-            clean_folder_path = f"{clean_folder_path}/*"
-
-        # Get real account ID from the bucket instead of using provided fake account IDs
-        real_account_id = self._get_real_account_id_from_bucket(bucket_name)
-        logger.info(
-            f"Using real account ID: {real_account_id} instead of provided fake accounts: {account_list}"
-        )
-
-        bucket_policy_generated = gen_bucket_policy_ui_compatible(
-            user_list=real_account_id,
-            actions_list=["GetObject", "PutObject", "DeleteObject"],
-            resources_list=[f"{bucket_name}/{clean_folder_path}"],
-            effect="Allow",
-        )
-        policy_json = json.dumps(bucket_policy_generated, indent=2)
-        logger.debug("Generated policy JSON")
+        logger.debug(f"Generated {policy_type.value} policy JSON")
         return policy_json
 
     def set_policy_json_in_editor(self, policy_json: str) -> None:
@@ -1060,18 +1044,17 @@ class BucketsTab(ObjectStorage, ConfirmDialog):
             logger.exception("Error during policy application")
             raise
 
-    def set_bucket_policy_ui(self, bucket_name: str = None) -> None:
+    def _resolve_bucket_name(self, bucket_name: str = None) -> str:
         """
-        Complete workflow to set AllowPublicReadAccess bucket policy via UI.
+        Resolve bucket name, using first available bucket if None provided.
 
         Args:
             bucket_name (str, optional): Name of the bucket. If None, uses first bucket.
 
         Returns:
-            None
+            str: Resolved bucket name.
 
         Raises:
-            TimeoutException: If UI elements are not found within timeout.
             ValueError: If no buckets are available.
         """
         if bucket_name is None:
@@ -1083,26 +1066,69 @@ class BucketsTab(ObjectStorage, ConfirmDialog):
                 )
             bucket_name = buckets[0]
             logger.debug(f"Using first available bucket: {bucket_name}")
+        return bucket_name
 
-        logger.debug(f"Setting AllowPublicReadAccess policy for bucket {bucket_name}")
+    def _set_bucket_policy_ui(
+        self, policy_type: PolicyType, config: PolicyConfig
+    ) -> None:
+        """
+        Complete workflow to set any bucket policy via UI.
+
+        Args:
+            policy_type (PolicyType): Type of policy to set.
+            config (PolicyConfig): Configuration for the policy.
+
+        Returns:
+            None
+
+        Raises:
+            TimeoutException: If UI elements are not found within timeout.
+            ValueError: If no buckets are available or configuration is invalid.
+            pytest.skip: If policy type is not supported by the storage backend.
+        """
+        # Handle HTTPS enforcement special case - skip for NooBaa
+        if policy_type == PolicyType.ENFORCE_HTTPS:
+            import pytest
+
+            pytest.skip(
+                "EnforceSecureTransportHTTPS policy with condition-based statements (aws:SecureTransport) "
+                "is not supported by NooBaa. NooBaa only supports basic Allow/Deny policies without conditions."
+            )
+
+        logger.debug(
+            f"Setting {policy_type.value} policy for bucket {config.bucket_name}"
+        )
 
         try:
-            self.navigate_to_bucket_permissions(bucket_name)
+            self.navigate_to_bucket_permissions(config.bucket_name)
             self.activate_policy_editor()
 
-            policy_json = self._build_allow_public_read_policy(bucket_name)
+            policy_json = self._build_bucket_policy(policy_type, config)
             self.set_policy_json_in_editor(policy_json)
 
             self.apply_bucket_policy()
 
-            logger.debug("Bucket policy successfully applied")
+            logger.debug(f"{policy_type.value} policy successfully applied")
 
         except (TimeoutException, ValueError):
-            logger.exception("Failed to set bucket policy")
+            logger.exception(f"Failed to set {policy_type.value} bucket policy")
             raise
         except (NoSuchElementException, StaleElementReferenceException):
-            logger.exception("Unexpected UI error during bucket policy setting")
+            logger.exception(
+                f"Unexpected UI error during {policy_type.value} policy setting"
+            )
             raise
+
+    def set_bucket_policy_ui(self, bucket_name: str = None) -> None:
+        """
+        Complete workflow to set AllowPublicReadAccess bucket policy via UI.
+
+        Args:
+            bucket_name (str, optional): Name of the bucket. If None, uses first bucket.
+        """
+        bucket_name = self._resolve_bucket_name(bucket_name)
+        config = PolicyConfig(bucket_name)
+        self._set_bucket_policy_ui(PolicyType.ALLOW_PUBLIC_READ, config)
 
     def set_bucket_policy_specific_account_ui(
         self, bucket_name: str = None, account_list: list[str] = None
@@ -1113,56 +1139,10 @@ class BucketsTab(ObjectStorage, ConfirmDialog):
         Args:
             bucket_name (str, optional): Name of the bucket. If None, uses first bucket.
             account_list (list[str], optional): List of AWS account IDs (ignored - real account from bucket is used).
-
-        Returns:
-            None
-
-        Raises:
-            TimeoutException: If UI elements are not found within timeout.
-            ValueError: If no buckets are available.
         """
-        if bucket_name is None:
-            buckets = self.get_buckets_list()
-            if not buckets:
-                raise ValueError(
-                    "No buckets available on the current page and no specific bucket name provided. "
-                    "Ensure buckets exist or specify a bucket name explicitly."
-                )
-            bucket_name = buckets[0]
-            logger.debug(f"Using first available bucket: {bucket_name}")
-
-        if not account_list:
-            account_list = ["123456789012"]  # Will be replaced with real account ID
-            logger.debug(
-                f"Using placeholder account list (will be replaced with real account): {account_list}"
-            )
-
-        logger.debug(
-            f"Setting AllowAccessToSpecificAccount policy for bucket {bucket_name} "
-            f"(real account ID will be used instead of provided accounts: {account_list})"
-        )
-
-        try:
-            self.navigate_to_bucket_permissions(bucket_name)
-            self.activate_policy_editor()
-
-            policy_json = self._build_allow_access_to_specific_account_policy(
-                bucket_name, account_list
-            )
-            self.set_policy_json_in_editor(policy_json)
-
-            self.apply_bucket_policy()
-
-            logger.debug("AllowAccessToSpecificAccount policy successfully applied")
-
-        except (TimeoutException, ValueError):
-            logger.exception("Failed to set AllowAccessToSpecificAccount bucket policy")
-            raise
-        except (NoSuchElementException, StaleElementReferenceException):
-            logger.exception(
-                "Unexpected UI error during AllowAccessToSpecificAccount policy setting"
-            )
-            raise
+        bucket_name = self._resolve_bucket_name(bucket_name)
+        config = PolicyConfig(bucket_name, account_list or ["123456789012"])
+        self._set_bucket_policy_ui(PolicyType.ALLOW_SPECIFIC_ACCOUNT, config)
 
     def set_bucket_policy_enforce_https_ui(self, bucket_name: str = None) -> None:
         """
@@ -1170,59 +1150,10 @@ class BucketsTab(ObjectStorage, ConfirmDialog):
 
         Args:
             bucket_name (str, optional): Name of the bucket. If None, uses first bucket.
-
-        Returns:
-            None
-
-        Raises:
-            TimeoutException: If UI elements are not found within timeout.
-            ValueError: If no buckets are available.
-            pytest.skip: If condition-based policies are not supported by the storage backend.
         """
-        # Import pytest here to avoid circular import issues
-        import pytest
-
-        # Check if this is a NooBaa deployment - condition-based policies are not supported
-        # NooBaa buckets typically have the pattern that includes bucket class naming
-        if bucket_name is None:
-            buckets = self.get_buckets_list()
-            if not buckets:
-                raise ValueError(
-                    "No buckets available on the current page and no specific bucket name provided. "
-                    "Ensure buckets exist or specify a bucket name explicitly."
-                )
-            bucket_name = buckets[0]
-            logger.debug(f"Using first available bucket: {bucket_name}")
-
-        # Skip this test for NooBaa as it doesn't support condition-based bucket policies like aws:SecureTransport
-        pytest.skip(
-            "EnforceSecureTransportHTTPS policy with condition-based statements (aws:SecureTransport) "
-            "is not supported by NooBaa. NooBaa only supports basic Allow/Deny policies without conditions."
-        )
-
-        logger.debug(
-            f"Setting EnforceSecureTransportHTTPS policy for bucket {bucket_name}"
-        )
-
-        try:
-            self.navigate_to_bucket_permissions(bucket_name)
-            self.activate_policy_editor()
-
-            policy_json = self._build_enforce_secure_transport_https_policy(bucket_name)
-            self.set_policy_json_in_editor(policy_json)
-
-            self.apply_bucket_policy()
-
-            logger.debug("EnforceSecureTransportHTTPS policy successfully applied")
-
-        except (TimeoutException, ValueError):
-            logger.exception("Failed to set EnforceSecureTransportHTTPS bucket policy")
-            raise
-        except (NoSuchElementException, StaleElementReferenceException):
-            logger.exception(
-                "Unexpected UI error during EnforceSecureTransportHTTPS policy setting"
-            )
-            raise
+        bucket_name = self._resolve_bucket_name(bucket_name)
+        config = PolicyConfig(bucket_name)
+        self._set_bucket_policy_ui(PolicyType.ENFORCE_HTTPS, config)
 
     def set_bucket_policy_folder_access_ui(
         self,
@@ -1237,59 +1168,9 @@ class BucketsTab(ObjectStorage, ConfirmDialog):
             bucket_name (str, optional): Name of the bucket. If None, uses first bucket.
             folder_path (str, optional): Folder path within the bucket. If None, uses "documents".
             account_list (list[str], optional): List of AWS account IDs (ignored - real account from bucket is used).
-
-        Returns:
-            None
-
-        Raises:
-            TimeoutException: If UI elements are not found within timeout.
-            ValueError: If no buckets are available or required parameters are invalid.
         """
-        if bucket_name is None:
-            buckets = self.get_buckets_list()
-            if not buckets:
-                raise ValueError(
-                    "No buckets available on the current page and no specific bucket name provided. "
-                    "Ensure buckets exist or specify a bucket name explicitly."
-                )
-            bucket_name = buckets[0]
-            logger.debug(f"Using first available bucket: {bucket_name}")
-
-        if not folder_path:
-            folder_path = "documents"
-            logger.debug(f"Using default folder path: {folder_path}")
-
-        if not account_list:
-            # Placeholder - will be replaced with real account from bucket
-            account_list = ["123456789012"]
-            logger.debug(
-                f"Using placeholder account list (will be replaced with real account): {account_list}"
-            )
-
-        logger.debug(
-            f"Setting AllowReadWriteAccessToFolder policy for bucket {bucket_name}, "
-            f"folder: {folder_path} "
-            f"(real account ID will be used instead of provided accounts: {account_list})"
+        bucket_name = self._resolve_bucket_name(bucket_name)
+        config = PolicyConfig(
+            bucket_name, account_list or ["123456789012"], folder_path
         )
-
-        try:
-            self.navigate_to_bucket_permissions(bucket_name)
-            self.activate_policy_editor()
-
-            policy_json = self._build_allow_read_write_access_to_folder_policy(
-                bucket_name, folder_path, account_list
-            )
-            self.set_policy_json_in_editor(policy_json)
-
-            self.apply_bucket_policy()
-
-            logger.debug("AllowReadWriteAccessToFolder policy successfully applied")
-
-        except (TimeoutException, ValueError):
-            logger.exception("Failed to set AllowReadWriteAccessToFolder bucket policy")
-            raise
-        except (NoSuchElementException, StaleElementReferenceException):
-            logger.exception(
-                "Unexpected UI error during AllowReadWriteAccessToFolder policy setting"
-            )
-            raise
+        self._set_bucket_policy_ui(PolicyType.ALLOW_FOLDER_ACCESS, config)
