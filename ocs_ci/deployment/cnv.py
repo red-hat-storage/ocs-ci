@@ -912,17 +912,21 @@ class CNVInstaller(object):
             )
             hyperconverged_subs_obj.patch(params=patch, format_type="merge")
 
-        if hyperconverged_subs_obj.get()["spec"]["installPlanApproval"] != "Automatic":
+        install_plan_approval = hyperconverged_subs_obj.get()["spec"][
+            "installPlanApproval"
+        ]
+        if install_plan_approval != "Automatic":
             patch = '{"spec": {"installPlanApproval": "Automatic"}}'
             hyperconverged_subs_obj.patch(params=patch, format_type="merge")
             wait_for_install_plan_and_approve(self.namespace)
 
         # Post CNV upgrade checks
         if self.post_install_verification():
-            # setting upgrade approval to manual
-            patch = '{"spec": {"installPlanApproval": "Manual"}}'
-            hyperconverged_subs_obj.patch(params=patch, format_type="merge")
+            if install_plan_approval == "Manual":
+                # setting upgrade approval back to manual
+                patch = '{"spec": {"installPlanApproval": "Manual"}}'
+                hyperconverged_subs_obj.patch(params=patch, format_type="merge")
 
-        # wait for sometime before checking the latest cnv version
-        time.sleep(60)
-        return self.upgrade_version in self.get_running_cnv_version()
+            # wait for sometime before checking the latest cnv version
+            time.sleep(60)
+            return self.upgrade_version in self.get_running_cnv_version()
