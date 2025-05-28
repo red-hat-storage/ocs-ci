@@ -127,37 +127,3 @@ class TestBucketPolicyUI:
         logger.info("✓ Step 4: Applied bucket policy")
 
         logger.info(f"Successfully completed step-by-step test for {policy_name}")
-
-    def test_unsupported_policy_error(self, setup_ui_class_factory):
-        """
-        Test that unsupported policy names raise appropriate errors.
-
-        This test verifies proper error handling for invalid policy names.
-
-        Raises:
-            pytest.skip: If no buckets are available for testing
-        """
-        setup_ui_class_factory()
-        logger.info("Starting test for unsupported policy error handling")
-
-        # Initialize BucketsTab and navigate to buckets page
-        bucket_ui = BucketsTab()
-        bucket_ui.navigate_buckets_page()
-
-        # Verify buckets exist before proceeding
-        buckets = bucket_ui.get_buckets_list()
-        if not buckets:
-            pytest.skip("No buckets available for testing")
-
-        # Navigate to permissions and activate policy editor
-        bucket_ui.navigate_to_bucket_permissions(bucket_name=None)
-        bucket_ui.activate_policy_editor()
-
-        # Test that unsupported policy raises ValueError
-        # Since we only support AllowPublicReadAccess, this test is no longer relevant
-        # as the function build_allow_public_read_policy only builds that specific policy
-        logger.info(
-            "Policy validation is now built into the function design - only AllowPublicReadAccess is supported"
-        )
-
-        logger.info("Successfully verified error handling for unsupported policy")
