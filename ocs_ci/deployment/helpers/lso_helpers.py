@@ -558,6 +558,7 @@ def lso_upgrade():
     Upgrade lso operator
 
     """
+    import time
     from pkg_resources import parse_version
     from ocs_ci.ocs.resources.install_plan import wait_for_install_plan_and_approve
 
@@ -568,19 +569,25 @@ def lso_upgrade():
         namespace=lso_namespace,
         resource_name=constants.LOCAL_STORAGE_CSV_PREFIX,
     )
+    optional_operators_catsrc = CatalogSource(
+        resource_name=constants.OPTIONAL_OPERATORS,
+        namespace=constants.MARKETPLACE_NAMESPACE,
+    )
+    redhat_operators_catsrc = CatalogSource(
+        resource_name=constants.OPERATOR_CATALOG_SOURCE_NAME,
+        namespace=constants.MARKETPLACE_NAMESPACE,
+    )
     logger.info("Check if lso is installed")
     if not lso_operator_installed():
         logger.error("lso operator unavailable")
         return False
 
-    logger.info(
-        f"Currently installed lso version: {parse_version(running_lso_version())}"
-    )
+    logger.info(f"Currently installed lso version: {running_lso_version()}")
     upgrade_to_version = config.UPGRADE.get("upgrade_lso_version")
     if not upgrade_to_version:
         upgrade_to_version = get_running_ocp_version()
     logger.info(f"Upgarde lso version to: {parse_version(upgrade_to_version)}")
-    if upgrade_to_version == parse_version(running_lso_version()):
+    if parse_version(upgrade_to_version) == parse_version(running_lso_version()):
         logger.info("Lso operator is not upgradeable")
         return True
     ocp_version = version.get_semantic_ocp_version_from_config()
@@ -590,19 +597,25 @@ def lso_upgrade():
             create_optional_operators_catalogsource_non_ga()
         else:
             logger.info(f"Catalog Source {constants.OPTIONAL_OPERATORS} already exists")
+            # update image in catalogsource
             patch = (
-                f'{{"spec": {{"image": "{upgrade_to_version}", '
-                f'"source": "{constants.OPTIONAL_OPERATORS}"}}}}'
+                f'{{"spec": {{'
+                f'"image": "quay.io/openshift-qe-optional-operators/aosqe-index:{upgrade_to_version}"'
+                f"}}}}"
             )
-            lso_subs_obj.patch(params=patch, format_type="merge")
+        disable_specific_source(constants.OPTIONAL_OPERATORS)
+        optional_operators_catsrc.wait_for_state("READY")
+
+        # update subscription
+        patch = (
+            f'{{"spec": {{"channel": "{get_lso_channel()}", '
+            f'"source": "{constants.OPTIONAL_OPERATORS}"}}}}'
+        )
+        lso_subs_obj.patch(params=patch, format_type="merge")
 
     elif ocp_ga_version:
         disable_specific_source(constants.OPERATOR_CATALOG_SOURCE_NAME)
-        redhat_operators_catsrc = CatalogSource(
-            resource_name=constants.OPERATOR_CATALOG_SOURCE_NAME,
-            namespace=constants.MARKETPLACE_NAMESPACE,
-        )
-        patch = f'{{"spec": {{"image": "{upgrade_to_version}"}}}}'
+        patch = f'{{"spec": {{"image": "registry.redhat.io/redhat/redhat-operator-index:{upgrade_to_version}"}}}}'
         redhat_operators_catsrc.patch(params=patch, format_type="merge")
         # wait for catalog source is ready
         redhat_operators_catsrc.wait_for_state("READY")
@@ -612,6 +625,8 @@ def lso_upgrade():
         lso_subs_obj.patch(params=patch, format_type="merge")
         wait_for_install_plan_and_approve(lso_namespace)
 
+    # wait for sometime before checking the latest lso version
+    time.sleep(60)
     lso_version_post_upgrade = running_lso_version()
     logger.info(f"lso version post upgrade: {lso_version_post_upgrade}")
     return upgrade_to_version in lso_version_post_upgrade
