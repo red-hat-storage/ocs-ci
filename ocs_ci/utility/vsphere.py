@@ -14,6 +14,7 @@ from pyVmomi import vim, vmodl
 from pyVim.task import WaitForTask, WaitForTasks
 from pyVim.connect import Disconnect, SmartStubAdapter, VimSessionOrientedStub
 from ocs_ci.ocs.exceptions import (
+    ResourceWrongStatusException,
     ResourcePoolNotFound,
     VMMaxDisksReachedException,
     VSLMNotFoundException,
@@ -30,6 +31,7 @@ from ocs_ci.ocs.constants import (
     VMFS,
     VM_DEFAULT_NETWORK,
     VM_DEFAULT_NETWORK_ADAPTER,
+    NODE_READY,
 )
 from ocs_ci.framework import config
 from ocs_ci.utility.utils import TimeoutSampler
@@ -433,6 +435,20 @@ class VSPHERE(object):
 
         if ssd:
             self.start_vms(vms=[vm])
+        # Importing here to avoid circular dependencies
+        from ocs_ci.ocs.node import get_compute_node_names, wait_for_nodes_status
+
+        compute_nodes = get_compute_node_names()
+        try:
+            wait_for_nodes_status(compute_nodes, NODE_READY)
+        except ResourceWrongStatusException as ex:
+            logger.warning(
+                f"At least one of the compute node is not in  READY state: {ex}"
+            )
+            logger.warning(f"Trying to restart the node vm {vm.name} once again.")
+            self.stop_vms(vms=[vm])
+            self.start_vms(vms=[vm])
+            wait_for_nodes_status(compute_nodes, NODE_READY)
 
     def add_rdm_disk(self, vm, device_name, disk_mode=None, compatibility_mode=None):
         """

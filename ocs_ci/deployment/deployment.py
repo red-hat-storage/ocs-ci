@@ -260,7 +260,11 @@ class Deployment(object):
             switch_ctx (int): The cluster index by the cluster name
 
         """
-        config.switch_ctx(switch_ctx) if switch_ctx else config.switch_acm_ctx()
+        (
+            config.switch_ctx(switch_ctx)
+            if switch_ctx is not None
+            else config.switch_acm_ctx()
+        )
 
         logger.info("Creating Namespace for GitOps Operator ")
         run_cmd(f"oc create namespace {constants.GITOPS_NAMESPACE}")
@@ -1351,7 +1355,7 @@ class Deployment(object):
 
         # create custom storage class for StorageCluster CR if necessary
         if self.custom_storage_class_path is not None:
-            self.storage_class_name = storage_class.create_custom_storageclass(
+            self.storage_class = storage_class.create_custom_storageclass(
                 self.custom_storage_class_path
             )
 

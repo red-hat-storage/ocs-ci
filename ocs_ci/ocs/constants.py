@@ -265,6 +265,8 @@ OCS_OPERATOR_CONFIG_MAP = "ocs-operator-config"
 SERVICE_TYPE_NODEPORT = "NodePort"
 CLUSTERMANAGEMENTADDON = "ClusterManagementAddOn"
 CEPH_DRIVER_CSI = "drivers.csi.ceph.io"
+NETWORK_FENCE_CLASS = "NetworkFenceClass"
+NETWORK_FENCE = "NetworkFence"
 
 # Provisioners
 AWS_EFS_PROVISIONER = "openshift.org/aws-efs"
@@ -326,6 +328,9 @@ END = "END"
 LEAK_LIMIT = 100 * 1024 * 1024  # 100 MB
 RAM = "rss"
 VIRT = "vms"
+
+ODF_NETWORK_FENCE_CLASS = "odf-networkfenceclass"
+CSI_ADDONS_NODE_KIND = "CSIAddonsNode"
 
 # cluster types
 MS_CONSUMER_TYPE = "consumer"
@@ -2560,6 +2565,12 @@ LOGWRITER_CEPHFS_READER = os.path.join(LOGWRITER_DIR, "cephfs.logreader.yaml")
 LOGWRITER_CEPHFS_WRITER = os.path.join(LOGWRITER_DIR, "cephfs.logwriter.yaml")
 LOGWRITER_STS_PATH = os.path.join(LOGWRITER_DIR, "logwriter.rbd.yaml")
 
+# Network Fence CRDs
+NETWORK_FENCE_CLASS_CRD = os.path.join(
+    TEMPLATE_CSI_ADDONS_DIR, "network-fence-class.yaml"
+)
+NETWORK_FENCE_CRD = os.path.join(TEMPLATE_CSI_ADDONS_DIR, "network-fence-rbd.yaml")
+
 # MCG namespace constants
 MCG_NS_AWS_ENDPOINT = "https://s3.amazonaws.com"
 MCG_NS_AZURE_ENDPOINT = "https://blob.core.windows.net"
@@ -3167,6 +3178,8 @@ NETSPLIT_ARBITER_DATA_1_AND_ARBITER_DATA_2 = (
 NETSPLIT_ARBITER_DATA_1_AND_DATA_1_DATA_2 = (
     f"{ARBITER_ZONE}{DATA_ZONE_1}-{DATA_ZONE_1}{DATA_ZONE_2}"
 )
+
+NODE_OUT_OF_SERVICE_TAINT = "node.kubernetes.io/out-of-service=nodeshutdown:NoExecute"
 
 # Logwriter workload labels
 

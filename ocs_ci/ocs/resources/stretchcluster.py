@@ -319,7 +319,7 @@ class StretchCluster(OCS):
             self.logfile_map[label][0] = list(set(self.logfile_map[label][0]))
         logger.info(self.logfile_map[label][0])
 
-    @retry(UnexpectedBehaviour, tries=6, delay=5)
+    @retry(UnexpectedBehaviour, tries=8, delay=5)
     def get_logwriter_reader_pods(
         self,
         label,

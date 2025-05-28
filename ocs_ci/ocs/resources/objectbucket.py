@@ -231,7 +231,7 @@ class ObjectBucket(ABC):
             verify = True
         if verify:
             # Increase the timeout to 15 minutes if the test is tier4
-            timeout = 120
+            timeout = 180
             if any("tier4" in mark for mark in get_current_test_marks()):
                 timeout = 900
             self.verify_deletion(timeout)
