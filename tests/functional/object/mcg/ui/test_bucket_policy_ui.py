@@ -3,6 +3,11 @@ import pytest
 
 from ocs_ci.framework.pytest_customization.marks import black_squad, tier1
 from ocs_ci.ocs.ui.page_objects.buckets_tab import BucketsTab
+from ocs_ci.ocs.ui.page_objects.bucket_tab_permissions import (
+    BucketsTabPermissions,
+    PolicyConfig,
+    PolicyType,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -69,17 +74,16 @@ class TestBucketPolicyUI:
 
         logger.info(f"Starting test to set {policy_name} bucket policy")
 
-        # Initialize BucketsTab and navigate to buckets page
         bucket_ui = BucketsTab()
         bucket_ui.navigate_buckets_page()
 
-        # Verify buckets exist before proceeding
         buckets = bucket_ui.get_buckets_list()
         if not buckets:
             pytest.skip("No buckets available for testing")
 
-        # Execute the complete bucket policy workflow using the specified method
-        policy_method = getattr(bucket_ui, method_name)
+        bucket_permissions_ui = BucketsTabPermissions()
+
+        policy_method = getattr(bucket_permissions_ui, method_name)
         policy_method(bucket_name=None, **params)
 
         logger.info(f"Successfully completed {policy_name} bucket policy test")
@@ -101,30 +105,33 @@ class TestBucketPolicyUI:
         setup_ui_class_factory()
         logger.info(f"Starting step-by-step test for policy: {policy_name}")
 
-        # Initialize BucketsTab and navigate to buckets page
         bucket_ui = BucketsTab()
         bucket_ui.navigate_buckets_page()
 
-        # Verify buckets exist before proceeding
         buckets = bucket_ui.get_buckets_list()
         if not buckets:
             pytest.skip("No buckets available for testing")
 
+        bucket_permissions_ui = BucketsTabPermissions()
+
         # Step 1: Navigate to bucket permissions
-        bucket_ui.navigate_to_bucket_permissions(bucket_name=None)
+        bucket_permissions_ui.navigate_to_bucket_permissions(bucket_name=None)
         logger.info("✓ Step 1: Navigated to bucket permissions")
 
         # Step 2: Activate policy editor
-        bucket_ui.activate_policy_editor()
+        bucket_permissions_ui.activate_policy_editor()
         logger.info("✓ Step 2: Activated policy editor")
 
-        # Step 3: Generate and set policy JSON
-        policy_json = bucket_ui.build_allow_public_read_policy(buckets[0])
-        bucket_ui.set_policy_json_in_editor(policy_json)
+        # Step 3: Generate and set policy JSON manually for step-by-step verification
+        config = PolicyConfig(buckets[0])
+        policy_json = bucket_permissions_ui._build_bucket_policy(
+            PolicyType.ALLOW_PUBLIC_READ, config
+        )
+        bucket_permissions_ui.set_policy_json_in_editor(policy_json)
         logger.info(f"✓ Step 3: Generated and set policy {policy_name}")
 
         # Step 4: Apply bucket policy
-        bucket_ui.apply_bucket_policy()
+        bucket_permissions_ui.apply_bucket_policy()
         logger.info("✓ Step 4: Applied bucket policy")
 
         logger.info(f"Successfully completed step-by-step test for {policy_name}")
