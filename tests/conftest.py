@@ -4641,6 +4641,9 @@ def collect_logs_fixture(request):
     to see the cluster's status after the execution on all execution status options.
     """
     dev_mode = ocsci_config.RUN["cli_params"].get("dev_mode")
+    skip_rpm_go_version_collection = ocsci_config.RUN["cli_params"].get(
+        "skip_rpm_go_version_collection"
+    )
     if dev_mode:
         log.info("Skipping RPM collection for development mode.")
         return
@@ -4687,10 +4690,11 @@ def collect_logs_fixture(request):
                             f"Failure in collecting {mg_target} must gather! Exception: {ex}"
                         )
             try:
-                utils.collect_pod_container_rpm_package("testcases")
+                if not skip_rpm_go_version_collection:
+                    utils.collect_pod_container_rpm_package("testcases")
             except Exception as ex:
                 failure_in_mg.append(("rpm_package_info", ex))
-                log.error(f"Failure in collectin RPM package info! Exception: {ex}")
+                log.error(f"Failure in collecting RPM package info! Exception: {ex}")
             if failure_in_mg:
                 raise failure_in_mg[0][1]
 
