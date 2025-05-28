@@ -1,12 +1,14 @@
 import logging
 import pytest
 
-from ocs_ci.framework.pytest_customization.marks import black_squad
+from ocs_ci.framework.pytest_customization.marks import black_squad, tier1
 from ocs_ci.ocs.ui.page_objects.buckets_tab import BucketsTab
 
 logger = logging.getLogger(__name__)
 
 
+@tier1
+@black_squad
 class TestBucketPolicyUI:
     """
     Test class for bucket policy UI operations
@@ -40,7 +42,6 @@ class TestBucketPolicyUI:
             },
         ],
     )
-    @black_squad
     def test_set_bucket_policy_ui(self, setup_ui_class_factory, policy_config):
         """
         Test setting various bucket policies via UI.
