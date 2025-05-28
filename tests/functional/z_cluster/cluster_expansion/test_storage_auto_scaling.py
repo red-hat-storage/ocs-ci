@@ -30,6 +30,7 @@ from ocs_ci.helpers.osd_resize import (
 from ocs_ci.helpers.storage_auto_scaler import (
     wait_for_auto_scaler_status,
     delete_all_storage_autoscalers,
+    generate_default_scaling_threshold,
 )
 from ocs_ci.ocs.resources.pod import (
     get_osd_pods,
@@ -48,12 +49,12 @@ from ocs_ci.utility.utils import (
     sum_of_two_storage_sizes,
 )
 
+
 logger = logging.getLogger(__name__)
 
 
 @brown_squad
 @ignore_leftovers
-@skipif_managed_service
 @skipif_aws_i3
 @skipif_bm
 @skipif_bmpsi
@@ -69,19 +70,17 @@ class TestStorageAutoscaler(ManageTest):
 
     @pytest.fixture(autouse=True)
     def setup(
-        self, request, create_pvcs_and_pods, benchmark_workload_storageutilization
+        self,
+        request,
+        create_pvcs_and_pods,
+        benchmark_workload_storageutilization,
+        pause_and_resume_cluster_load,
     ):
         """
         Init all the data for the StorageAutoscaler test. We also need the init the data for the
         resize OSD procedure, as the StorageAutoscaler will perform the Resize OSD when it triggers.
 
         """
-        self.io_in_bg_paused = False
-        if config.RUN.get("io_in_bg"):
-            # Pause the IO in Background as we already have IO running in this test
-            config.RUN["load_status"] = "to_be_paused"
-            self.io_in_bg_paused = True
-
         self.benchmark_workload_storageutilization = (
             benchmark_workload_storageutilization
         )
@@ -116,16 +115,11 @@ class TestStorageAutoscaler(ManageTest):
         This method includes the following steps:
           - Check that the new osd size has increased and increase the resize osd count
           - deletes all StorageAutoScaler CRs
-          - If IO-in-background was paused, resumes it before exiting
         """
 
         def finalizer():
             update_resize_osd_count(self.old_storage_size)
             delete_all_storage_autoscalers()
-
-            if self.io_in_bg_paused:
-                # Resume the IO in Background
-                config.RUN["load_status"] = "to_be_resumed"
 
         request.addfinalizer(finalizer)
 
@@ -171,7 +165,7 @@ class TestStorageAutoscaler(ManageTest):
         logger.info("Started IO on all pods")
 
     def prepare_data_before_auto_scaling(
-        self, create_resources_for_integrity=True, run_io_in_bg=False
+        self, create_resources_for_integrity=True, run_io_in_bg=True
     ):
         """
         Prepare the data before the storage-auto-scaling is triggered.
@@ -298,7 +292,7 @@ class TestStorageAutoscaler(ManageTest):
 
         """
         self.prepare_data_before_auto_scaling()
-        scaling_threshold = 30
+        scaling_threshold = generate_default_scaling_threshold()
         # Create the StorageAutoscaler resource
         auto_scaler = create_auto_scaler(scaling_threshold=scaling_threshold)
         # Wait for the StorageAutoscaler to be ready
