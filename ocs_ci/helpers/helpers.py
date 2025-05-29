@@ -2394,7 +2394,7 @@ def verify_pv_mounted_on_node(node_pv_dict):
     """
     existing_pvs = {}
     for node_name, pvs in node_pv_dict.items():
-        cmd = f"oc debug nodes/{node_name} --to-namespace={config.ENV_DATA['cluster_namespace']} -- df"
+        cmd = f"oc debug nodes/{node_name} --to-namespace=default -- df"
         df_on_node = run_cmd(cmd)
         existing_pvs[node_name] = []
         for pv_name in pvs:
@@ -3437,7 +3437,7 @@ def run_cmd_verify_cli_output(
         cmd = f"{cmd_start} {cmd}"
     elif debug_node is not None:
         cmd_start = (
-            f"oc debug nodes/{debug_node} --to-namespace={ns_name} "
+            f"oc debug nodes/{debug_node} --to-namespace=default "
             "-- chroot /host /bin/bash -c "
         )
         cmd = f'{cmd_start} "{cmd}"'

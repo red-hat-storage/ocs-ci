@@ -2572,7 +2572,7 @@ def memory_leak_function(request):
                 filename = f"/tmp/{worker}-top-output.txt"
                 top_cmd = (
                     "debug"
-                    f" nodes/{worker} --to-namespaces={ocsci_config.ENV_DATA['cluster_namespace']} --"
+                    f" nodes/{worker} --to-namespace=default --"
                     " chroot /host top -n 2 b"
                 )
                 with open("/tmp/file.txt", "w+") as temp:

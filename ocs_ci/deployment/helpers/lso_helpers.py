@@ -356,7 +356,7 @@ def _get_disk_by_id(worker):
 
     """
     cmd = (
-        f"oc debug nodes/{worker} --to-namespace={config.ENV_DATA['cluster_namespace']} "
+        f"oc debug nodes/{worker} --to-namespace=default "
         f"-- chroot /host ls -la /dev/disk/by-id/"
     )
     return run_cmd(cmd)
@@ -478,7 +478,10 @@ def cleanup_nodes_for_lso_install():
     nodes = get_all_nodes()
     node_objs = get_node_objs(nodes)
     for node in nodes:
-        cmd = f"oc debug nodes/{node} -- chroot /host rm -rvf /var/lib/rook /mnt/local-storage"
+        cmd = (
+            f"oc debug nodes/{node} --to-namespace=default -- chroot /host "
+            "rm -rvf /var/lib/rook /mnt/local-storage"
+        )
         out = run_cmd(cmd)
         logger.info(out)
         logger.info(f"Mount data cleared from node, {node}")

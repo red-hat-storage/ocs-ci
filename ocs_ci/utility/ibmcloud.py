@@ -381,7 +381,7 @@ class IBMCloud(object):
         if not nodes:
             raise ValueError("No nodes found to stop")
 
-        cmd = "oc debug node/{} -- chroot /host shutdown"
+        cmd = "oc debug node/{} --to-namespace=default -- chroot /host shutdown"
         node_names = [n.name for n in nodes]
         for node in node_names:
             run_cmd(cmd.format(node))
