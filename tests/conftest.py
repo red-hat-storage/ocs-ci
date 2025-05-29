@@ -9830,7 +9830,6 @@ def vm_clone_fixture(request):
         Cleans up cloned VM workloads.
         """
         for cloned_vm in cloned_vms:
-            cloned_vm.delete()
             volumes = (
                 cloned_vm.get()
                 .get("spec", {})
@@ -9849,6 +9848,16 @@ def vm_clone_fixture(request):
                 raise ValueError(
                     f"Neither dataVolume nor persistentVolumeClaim found in cloned VM {cloned_vm.name}"
                 )
+            log.info(f"Deleting VM {cloned_vm.name}")
+            try:
+                cloned_vm.delete()
+                log.info(f"Cloned VM {cloned_vm.name} deleted")
+            except CommandFailed as e:
+                if "NotFound" in str(e):
+                    log.warning(f"Cloned VM {cloned_vm.name} was already deleted.")
+                else:
+                    raise
+
             run_oc_command(
                 cmd=f"delete pvc {cloned_vm.pvc_name}", namespace=cloned_vm.namespace
             )
