@@ -23,8 +23,6 @@ logger = logging.getLogger(__name__)
 
 # Module constants
 DEFAULT_UI_WAIT = 10
-# Policy action button keys to try in order
-_POLICY_ACTION_BUTTONS = ("apply_policy_button", "save_policy_generic_button")
 
 SUCCESS_TOAST_SELECTORS = [
     "[data-test='success-toast']",
@@ -65,6 +63,9 @@ class BucketsTabPermissions(ObjectStorage, ConfirmDialog):
     """
     A class representation for abstraction of Buckets tab permissions related OpenShift UI actions
     """
+
+    # Policy action button keys to try in order
+    _POLICY_ACTION_BUTTONS = ("apply_policy_button", "save_policy_generic_button")
 
     # Methods can directly access locators via self.bucket_tab, self.generic_locators etc.
     # No need to explicitly import or assign them
@@ -470,7 +471,7 @@ class BucketsTabPermissions(ObjectStorage, ConfirmDialog):
         """
         logger.debug("Attempting to click policy action button")
 
-        for button_key in _POLICY_ACTION_BUTTONS:
+        for button_key in self._POLICY_ACTION_BUTTONS:
             try:
                 self.do_click(self.bucket_tab[button_key])
                 logger.debug(f"Successfully clicked {button_key}")
@@ -486,7 +487,7 @@ class BucketsTabPermissions(ObjectStorage, ConfirmDialog):
         # If we reach here, no button was found
         error_msg = (
             f"Could not find any policy action button. "
-            f"Attempted buttons: {_POLICY_ACTION_BUTTONS}. "
+            f"Attempted buttons: {self._POLICY_ACTION_BUTTONS}. "
             "Check if policy editor is properly loaded and buttons are visible."
         )
         logger.error(error_msg)
