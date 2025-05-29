@@ -33,9 +33,6 @@ SUCCESS_TOAST_SELECTORS = [
     ".co-alert--success",
 ]
 
-# Policy action button keys to try in order
-POLICY_ACTION_BUTTONS = ["apply_policy_button", "save_policy_generic_button"]
-
 
 class PolicyType(Enum):
     """Enumeration of supported bucket policy types."""
@@ -64,6 +61,9 @@ class BucketsTabPermissions(ObjectStorage, ConfirmDialog):
     """
     A class representation for abstraction of Buckets tab permissions related OpenShift UI actions
     """
+
+    # Class constants - policy action button keys to try in order
+    POLICY_ACTION_BUTTONS = ("apply_policy_button", "save_policy_generic_button")
 
     # Methods can directly access locators via self.bucket_tab, self.generic_locators etc.
     # No need to explicitly import or assign them
@@ -114,6 +114,68 @@ class BucketsTabPermissions(ObjectStorage, ConfirmDialog):
         )
         self.do_click(self.bucket_tab["policy_editor_start_scratch"])
         logger.debug("Successfully clicked start from scratch button")
+
+    def activate_existing_policy_editor(self) -> None:
+        """
+        Activate the policy editor for existing policies by clicking 'Edit policy'.
+
+        This method is used when a bucket policy already exists and needs to be modified.
+        It opens the existing policy for editing rather than starting from scratch.
+
+        Raises:
+            NoSuchElementException: If UI elements are not found.
+        """
+        logger.debug(
+            "Clicking edit policy to activate policy editor for existing policy"
+        )
+        wait_for_element_to_be_clickable(
+            self.bucket_tab["edit_policy_button"], timeout=DEFAULT_UI_WAIT
+        )
+        self.do_click(self.bucket_tab["edit_policy_button"])
+        logger.debug("Successfully clicked edit policy button")
+
+    def activate_policy_editor_smart(self) -> None:
+        """
+        Smart policy editor activation that chooses between 'Edit policy' and 'Start from scratch'.
+
+        This method checks if a policy already exists on the bucket:
+        - If policy exists: clicks 'Edit policy' button
+        - If no policy exists: clicks 'Start from scratch' button
+
+        Raises:
+            NoSuchElementException: If UI elements are not found.
+        """
+        logger.debug("Smart activation: checking if policy exists")
+
+        # First try to find "Edit policy" button (indicates existing policy)
+        try:
+            self.wait_for_element_to_be_visible(
+                self.bucket_tab["edit_policy_button"], timeout=5
+            )
+            logger.debug("Policy exists - using edit policy button")
+            self.activate_existing_policy_editor()
+            return
+        except (NoSuchElementException, TimeoutException):
+            logger.debug(
+                "Edit policy button not found - checking for start from scratch"
+            )
+
+        # If "Edit policy" button not found, try "Start from scratch"
+        try:
+            self.wait_for_element_to_be_visible(
+                self.bucket_tab["policy_editor_start_scratch"], timeout=5
+            )
+            logger.debug("No existing policy - using start from scratch")
+            self.activate_policy_editor()
+            return
+        except (NoSuchElementException, TimeoutException):
+            logger.debug("Start from scratch button not found")
+
+        # If neither button is found, raise an error
+        raise NoSuchElementException(
+            "Could not find either 'Edit policy' or 'Start from scratch' button. "
+            "Check if bucket permissions page is properly loaded."
+        )
 
     def _get_real_account_id_from_bucket(self, bucket_name: str) -> str:
         """
@@ -393,7 +455,7 @@ class BucketsTabPermissions(ObjectStorage, ConfirmDialog):
         """
         logger.debug("Attempting to click policy action button")
 
-        for button_key in POLICY_ACTION_BUTTONS:
+        for button_key in self.POLICY_ACTION_BUTTONS:
             try:
                 self.do_click(self.bucket_tab[button_key])
                 logger.debug(f"Successfully clicked {button_key}")
@@ -409,7 +471,7 @@ class BucketsTabPermissions(ObjectStorage, ConfirmDialog):
         # If we reach here, no button was found
         error_msg = (
             f"Could not find any policy action button. "
-            f"Attempted buttons: {POLICY_ACTION_BUTTONS}. "
+            f"Attempted buttons: {self.POLICY_ACTION_BUTTONS}. "
             "Check if policy editor is properly loaded and buttons are visible."
         )
         logger.error(error_msg)
@@ -602,3 +664,59 @@ class BucketsTabPermissions(ObjectStorage, ConfirmDialog):
         bucket_name = self._resolve_bucket_name(bucket_name)
         config = PolicyConfig(bucket_name, account_list, folder_path)
         self._set_bucket_policy_ui(PolicyType.ALLOW_FOLDER_ACCESS, config)
+
+    def click_delete_policy_button(self) -> None:
+        """
+        Click the delete policy button in the policy editor.
+
+        Raises:
+            NoSuchElementException: If delete button is not found.
+        """
+        logger.debug("Clicking delete policy button")
+        wait_for_element_to_be_clickable(
+            self.bucket_tab["delete_policy_button"], timeout=DEFAULT_UI_WAIT
+        )
+        self.do_click(self.bucket_tab["delete_policy_button"])
+        logger.info("Successfully clicked delete policy button")
+
+    def handle_delete_policy_confirmation(self) -> None:
+        """
+        Handle the delete policy confirmation dialog.
+
+        This method:
+        1. Waits for the confirmation modal to appear
+        2. Types "delete" in the confirmation input field
+        3. Waits for the "Confirm delete" button to become enabled
+        4. Clicks the "Confirm delete" button
+
+        Raises:
+            TimeoutException: If any of the elements are not found or don't become interactable
+        """
+        logger.debug("Handling delete policy confirmation dialog")
+
+        # Wait for the confirmation modal to appear
+        self.wait_for_element_to_be_visible(
+            self.bucket_tab["delete_policy_confirmation_modal"], timeout=DEFAULT_UI_WAIT
+        )
+        logger.debug("✓ Confirmation modal appeared")
+
+        # Type "delete" in the confirmation input field
+        confirmation_input = self.wait_for_element_to_be_visible(
+            self.bucket_tab["delete_policy_confirmation_input"]
+        )
+        confirmation_input.clear()
+        confirmation_input.send_keys("delete")
+        logger.debug("✓ Typed 'delete' in confirmation input")
+
+        # Wait for confirm delete button to become enabled (not disabled)
+        # The button starts as disabled and becomes enabled after typing "delete"
+        self.wait_for_element_to_be_visible(
+            self.bucket_tab["delete_policy_confirm_button_enabled"],
+            timeout=DEFAULT_UI_WAIT,
+        )
+        logger.debug("✓ Confirm delete button became enabled")
+
+        # Click confirm delete button
+        self.do_click(self.bucket_tab["delete_policy_confirm_button_enabled"])
+
+        logger.info("Successfully handled delete policy confirmation dialog")

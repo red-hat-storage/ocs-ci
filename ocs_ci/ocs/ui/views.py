@@ -2240,6 +2240,10 @@ bucket_tab = {
         "div.pf-v5-c-code-editor__main span",
         By.CSS_SELECTOR,
     ),
+    "edit_policy_button": (
+        "//button[normalize-space()='Edit bucket policy']",
+        By.XPATH,
+    ),
     "apply_policy_button": (
         "//button[normalize-space()='Apply policy']",
         By.XPATH,
@@ -2263,6 +2267,26 @@ bucket_tab = {
     ),
     "save_policy_generic_button": (
         "//button[contains(text(), 'Save')]",
+        By.XPATH,
+    ),
+    "delete_policy_button": (
+        "button.pf-m-danger",
+        By.CSS_SELECTOR,
+    ),
+    "delete_policy_confirmation_modal": (
+        "div.pf-v5-c-modal-box.pf-m-warning.pf-m-md",
+        By.CSS_SELECTOR,
+    ),
+    "delete_policy_confirmation_input": (
+        "#delete-policy",
+        By.CSS_SELECTOR,
+    ),
+    "delete_policy_confirm_button": (
+        "//button[normalize-space()='Confirm delete']",
+        By.XPATH,
+    ),
+    "delete_policy_confirm_button_enabled": (
+        "//button[normalize-space()='Confirm delete' and not(@disabled)]",
         By.XPATH,
     ),
     "primary_button": (
