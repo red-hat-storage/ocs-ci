@@ -8,6 +8,7 @@ from selenium.common.exceptions import (
     NoSuchElementException,
     TimeoutException,
     StaleElementReferenceException,
+    WebDriverException,
 )
 
 from ocs_ci.ocs.exceptions import PolicyApplicationError
@@ -22,6 +23,9 @@ logger = logging.getLogger(__name__)
 
 # Module constants
 DEFAULT_UI_WAIT = 10
+# Policy action button keys to try in order
+_POLICY_ACTION_BUTTONS = ("apply_policy_button", "save_policy_generic_button")
+
 SUCCESS_TOAST_SELECTORS = [
     "[data-test='success-toast']",
     ".pf-c-alert--success",
@@ -62,9 +66,6 @@ class BucketsTabPermissions(ObjectStorage, ConfirmDialog):
     A class representation for abstraction of Buckets tab permissions related OpenShift UI actions
     """
 
-    # Class constants - policy action button keys to try in order
-    POLICY_ACTION_BUTTONS = ("apply_policy_button", "save_policy_generic_button")
-
     # Methods can directly access locators via self.bucket_tab, self.generic_locators etc.
     # No need to explicitly import or assign them
 
@@ -103,40 +104,7 @@ class BucketsTabPermissions(ObjectStorage, ConfirmDialog):
 
     def activate_policy_editor(self) -> None:
         """
-        Activate the policy editor by clicking 'Start from scratch'.
-
-        Raises:
-            NoSuchElementException: If UI elements are not found.
-        """
-        logger.debug("Clicking start from scratch to activate policy editor")
-        wait_for_element_to_be_clickable(
-            self.bucket_tab["policy_editor_start_scratch"], timeout=DEFAULT_UI_WAIT
-        )
-        self.do_click(self.bucket_tab["policy_editor_start_scratch"])
-        logger.debug("Successfully clicked start from scratch button")
-
-    def activate_existing_policy_editor(self) -> None:
-        """
-        Activate the policy editor for existing policies by clicking 'Edit policy'.
-
-        This method is used when a bucket policy already exists and needs to be modified.
-        It opens the existing policy for editing rather than starting from scratch.
-
-        Raises:
-            NoSuchElementException: If UI elements are not found.
-        """
-        logger.debug(
-            "Clicking edit policy to activate policy editor for existing policy"
-        )
-        wait_for_element_to_be_clickable(
-            self.bucket_tab["edit_policy_button"], timeout=DEFAULT_UI_WAIT
-        )
-        self.do_click(self.bucket_tab["edit_policy_button"])
-        logger.debug("Successfully clicked edit policy button")
-
-    def activate_policy_editor_smart(self) -> None:
-        """
-        Smart policy editor activation that chooses between 'Edit policy' and 'Start from scratch'.
+        Activate the policy editor by intelligently choosing between 'Edit policy' and 'Start from scratch'.
 
         This method checks if a policy already exists on the bucket:
         - If policy exists: clicks 'Edit policy' button
@@ -145,7 +113,7 @@ class BucketsTabPermissions(ObjectStorage, ConfirmDialog):
         Raises:
             NoSuchElementException: If UI elements are not found.
         """
-        logger.debug("Smart activation: checking if policy exists")
+        logger.debug("Activating policy editor: checking if policy exists")
 
         # First try to find "Edit policy" button (indicates existing policy)
         try:
@@ -153,7 +121,11 @@ class BucketsTabPermissions(ObjectStorage, ConfirmDialog):
                 self.bucket_tab["edit_policy_button"], timeout=5
             )
             logger.debug("Policy exists - using edit policy button")
-            self.activate_existing_policy_editor()
+            wait_for_element_to_be_clickable(
+                self.bucket_tab["edit_policy_button"], timeout=DEFAULT_UI_WAIT
+            )
+            self.do_click(self.bucket_tab["edit_policy_button"])
+            logger.debug("Successfully clicked edit policy button")
             return
         except (NoSuchElementException, TimeoutException):
             logger.debug(
@@ -166,7 +138,11 @@ class BucketsTabPermissions(ObjectStorage, ConfirmDialog):
                 self.bucket_tab["policy_editor_start_scratch"], timeout=5
             )
             logger.debug("No existing policy - using start from scratch")
-            self.activate_policy_editor()
+            wait_for_element_to_be_clickable(
+                self.bucket_tab["policy_editor_start_scratch"], timeout=DEFAULT_UI_WAIT
+            )
+            self.do_click(self.bucket_tab["policy_editor_start_scratch"])
+            logger.debug("Successfully clicked start from scratch button")
             return
         except (NoSuchElementException, TimeoutException):
             logger.debug("Start from scratch button not found")
@@ -356,44 +332,83 @@ class BucketsTabPermissions(ObjectStorage, ConfirmDialog):
 
     def set_policy_json_in_editor(self, policy_json: str) -> None:
         """
-        Set the policy JSON content in the code editor using Monaco editor.
+        Set the policy JSON content in the code editor.
 
         Args:
             policy_json (str): JSON string to set in the editor.
 
         Raises:
-            TimeoutException: If Monaco editor is not accessible.
+            NoSuchElementException: If UI elements are not found.
         """
-        logger.debug("Setting policy JSON using Monaco editor")
+        logger.info("Clicking on policy code editor to focus it")
+        try:
+            self.do_click(
+                self.bucket_tab["policy_code_editor"],
+                enable_screenshot=False,
+                copy_dom=False,
+            )
+        except TimeoutException:
+            logger.debug(
+                "Monaco editor click timeout (expected) - proceeding with JS approach"
+            )
 
-        # Use JavaScript to set Monaco editor value directly
+        logger.debug("Setting policy JSON using JavaScript Monaco editor approach")
+        self._set_content_via_javascript(policy_json)
+
+    def _set_content_via_javascript(self, content: str) -> None:
+        """
+        Set content using JavaScript with Monaco and textarea fallbacks.
+
+        Args:
+            content (str): Content to set in the editor.
+
+        Raises:
+            TimeoutException: If all fallback strategies fail.
+        """
+        logger.debug("Attempting to set content via JavaScript")
+
         js_code = """
-        // Find Monaco editor instance
+        // Try Monaco editor API first
         if (window.monaco && window.monaco.editor) {
             const editors = window.monaco.editor.getEditors();
             if (editors.length > 0) {
                 const editor = editors[0];
                 editor.setValue(arguments[0]);
-                return 'success';
+                return 'monaco_success';
             }
         }
-        return 'not_found';
+
+        // Fallback to textarea manipulation
+        const textArea = document.querySelector('textarea.inputarea');
+        if (textArea) {
+            textArea.value = arguments[0];
+            textArea.dispatchEvent(new Event('input', { bubbles: true }));
+            return 'textarea_success';
+        }
+
+        return 'failed';
         """
 
         try:
-            result = self.driver.execute_script(js_code, policy_json)
-            if result == "success":
-                logger.debug("Successfully set policy JSON via Monaco editor")
-                return
-        except Exception:
-            logger.exception("JavaScript approach failed")
+            result = self.driver.execute_script(js_code, content)
+            if result == "failed":
+                error_msg = (
+                    "Failed to set policy JSON in Monaco editor using JavaScript approach. "
+                    "Check if Monaco editor is properly loaded and accessible."
+                )
+                logger.error(error_msg)
+                raise TimeoutException(error_msg)
 
-        error_msg = (
-            "Failed to set policy JSON in Monaco editor. "
-            "Check if Monaco editor is properly loaded and accessible."
-        )
-        logger.error(error_msg)
-        raise TimeoutException(error_msg)
+            logger.debug(f"Successfully set policy JSON via: {result}")
+
+        except WebDriverException:
+            logger.debug("JavaScript approach failed", exc_info=True)
+            error_msg = (
+                "Failed to set policy JSON in Monaco editor using JavaScript approach. "
+                "Check if Monaco editor is properly loaded and accessible."
+            )
+            logger.error(error_msg)
+            raise TimeoutException(error_msg)
 
     def _check_for_policy_error_dialog(self) -> tuple[bool, str]:
         """
@@ -455,7 +470,7 @@ class BucketsTabPermissions(ObjectStorage, ConfirmDialog):
         """
         logger.debug("Attempting to click policy action button")
 
-        for button_key in self.POLICY_ACTION_BUTTONS:
+        for button_key in _POLICY_ACTION_BUTTONS:
             try:
                 self.do_click(self.bucket_tab[button_key])
                 logger.debug(f"Successfully clicked {button_key}")
@@ -471,7 +486,7 @@ class BucketsTabPermissions(ObjectStorage, ConfirmDialog):
         # If we reach here, no button was found
         error_msg = (
             f"Could not find any policy action button. "
-            f"Attempted buttons: {self.POLICY_ACTION_BUTTONS}. "
+            f"Attempted buttons: {_POLICY_ACTION_BUTTONS}. "
             "Check if policy editor is properly loaded and buttons are visible."
         )
         logger.error(error_msg)
@@ -665,33 +680,60 @@ class BucketsTabPermissions(ObjectStorage, ConfirmDialog):
         config = PolicyConfig(bucket_name, account_list, folder_path)
         self._set_bucket_policy_ui(PolicyType.ALLOW_FOLDER_ACCESS, config)
 
-    def click_delete_policy_button(self) -> None:
+    def delete_bucket_policy_ui(self, bucket_name: str = None) -> None:
         """
-        Click the delete policy button in the policy editor.
+        Complete workflow to delete bucket policy via UI.
+
+        This method:
+        1. Navigates to bucket permissions (if not already there)
+        2. Checks if a policy exists before attempting to delete
+        3. Activates policy editor for existing policy
+        4. Clicks delete policy button
+        5. Handles confirmation dialog (types "delete" and confirms)
+
+        Args:
+            bucket_name (str, optional): Name of the bucket. If None, uses first bucket.
 
         Raises:
-            NoSuchElementException: If delete button is not found.
+            ValueError: If no bucket policy exists to delete or no buckets are available.
+            NoSuchElementException: If UI elements are not found.
+            TimeoutException: If elements are not found within timeout.
         """
+        logger.info("Starting delete bucket policy workflow")
+
+        bucket_name = self._resolve_bucket_name(bucket_name)
+
+        # Navigate to bucket permissions
+        self.navigate_to_bucket_permissions(bucket_name)
+        logger.debug("✓ Navigated to bucket permissions")
+
+        # Check if a policy exists before attempting to delete
+        try:
+            # Try to wait for the "Edit policy" button which indicates an existing policy
+            self.wait_for_element_to_be_visible(
+                self.bucket_tab["edit_policy_button"], timeout=5
+            )
+            logger.debug("✓ Verified policy exists")
+        except (NoSuchElementException, TimeoutException):
+            raise ValueError(
+                "No bucket policy exists to delete. "
+                "A policy must exist before it can be deleted. "
+                "Please create a policy first using one of the set_bucket_policy_* methods."
+            )
+
+        # Activate policy editor (this opens existing policy for editing)
+        self.activate_policy_editor()
+        logger.debug("✓ Opened policy editor")
+
+        # Click delete policy button
         logger.debug("Clicking delete policy button")
         wait_for_element_to_be_clickable(
             self.bucket_tab["delete_policy_button"], timeout=DEFAULT_UI_WAIT
         )
         self.do_click(self.bucket_tab["delete_policy_button"])
-        logger.info("Successfully clicked delete policy button")
+        logger.debug("✓ Clicked delete policy button")
 
-    def handle_delete_policy_confirmation(self) -> None:
-        """
-        Handle the delete policy confirmation dialog.
-
-        This method:
-        1. Waits for the confirmation modal to appear
-        2. Types "delete" in the confirmation input field
-        3. Waits for the "Confirm delete" button to become enabled
-        4. Clicks the "Confirm delete" button
-
-        Raises:
-            TimeoutException: If any of the elements are not found or don't become interactable
-        """
+        # Handle confirmation dialog
         logger.debug("Handling delete policy confirmation dialog")
 
         # Wait for the confirmation modal to appear
@@ -718,5 +760,6 @@ class BucketsTabPermissions(ObjectStorage, ConfirmDialog):
 
         # Click confirm delete button
         self.do_click(self.bucket_tab["delete_policy_confirm_button_enabled"])
+        logger.debug("✓ Handled delete confirmation dialog")
 
-        logger.info("Successfully handled delete policy confirmation dialog")
+        logger.info("Successfully completed delete bucket policy workflow")

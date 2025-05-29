@@ -1,6 +1,5 @@
 import logging
 import pytest
-from selenium.common.exceptions import NoSuchElementException, TimeoutException
 
 from ocs_ci.framework.pytest_customization.marks import black_squad, tier1, post_upgrade
 from ocs_ci.ocs.ui.page_objects.buckets_tab import BucketsTab
@@ -94,13 +93,11 @@ class TestBucketPolicyUI:
         """
         Test deleting bucket policy via UI.
 
-        This test assumes a bucket policy already exists and follows the workflow:
-        1. Navigate to Object Storage
-        2. Click on first bucket
-        3. Go to Permissions tab
-        4. Click "Edit policy" to open policy editor
-        5. Click Delete button
-        6. Handle confirmation dialog (type "delete" and click confirm)
+        This test uses the unified delete workflow that:
+        1. Navigates to Object Storage and bucket permissions
+        2. Verifies a policy exists before attempting deletion
+        3. Activates policy editor and deletes the policy
+        4. Handles confirmation dialog automatically
 
         Note: This test assumes a policy already exists from previous tests.
 
@@ -119,35 +116,8 @@ class TestBucketPolicyUI:
 
         bucket_permissions_ui = BucketsTabPermissions()
 
-        # Navigate to bucket permissions
-        bucket_permissions_ui.navigate_to_bucket_permissions(bucket_name=None)
-        logger.info("✓ Navigated to bucket permissions")
-
-        # Check if a policy exists before attempting to delete
-        try:
-            # Try to wait for the "Edit policy" button which indicates an existing policy
-            bucket_permissions_ui.wait_for_element_to_be_visible(
-                bucket_permissions_ui.bucket_tab["edit_policy_button"], timeout=5
-            )
-            logger.info("✓ Verified policy exists")
-        except (NoSuchElementException, TimeoutException):
-            raise ValueError(
-                "No bucket policy exists to delete. "
-                "A policy must exist before it can be deleted. "
-                "Please create a policy first using one of the set_bucket_policy_* methods."
-            )
-
-        # Activate policy editor (this opens existing policy for editing, or creates one if none exists)
-        bucket_permissions_ui.activate_policy_editor_smart()
-        logger.info("✓ Opened policy editor")
-
-        # Click delete policy button
-        bucket_permissions_ui.click_delete_policy_button()
-        logger.info("✓ Clicked delete policy button")
-
-        # Handle confirmation dialog
-        bucket_permissions_ui.handle_delete_policy_confirmation()
-        logger.info("✓ Handled delete confirmation dialog")
+        # Use unified delete workflow
+        bucket_permissions_ui.delete_bucket_policy_ui(bucket_name=None)
 
         logger.info("Successfully completed delete bucket policy test")
 
