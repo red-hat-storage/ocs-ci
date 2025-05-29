@@ -3518,6 +3518,13 @@ def set_configmap_log_level_rook_ceph_operator(value):
         namespace=config.ENV_DATA["cluster_namespace"],
         resource_name=constants.ROOK_OPERATOR_CONFIGMAP,
     )
+    try:
+        configmap_obj.get()
+    except CommandFailed:
+        logger.warning(
+            f"Configmap {constants.ROOK_OPERATOR_CONFIGMAP} doesn't exist, creating it."
+        )
+        run_cmd(f"oc create -f {constants.ROOK_OPERATOR_CONFIGMAP_YAML}")
     logger.info(f"Setting ROOK_LOG_LEVEL to: {value}")
     ocs_version = version.get_semantic_ocs_version_from_config()
     if ocs_version >= version.VERSION_4_12:
