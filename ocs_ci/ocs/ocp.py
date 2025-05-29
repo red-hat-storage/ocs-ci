@@ -240,7 +240,7 @@ class OCP(object):
 
     @retry(CommandFailed, tries=3, delay=30, backoff=1)
     def exec_oc_debug_cmd(
-        self, node, cmd_list, timeout=300, namespace=None, use_root=True
+        self, node, cmd_list, timeout=300, namespace="default", use_root=True
     ):
         """
         Function to execute "oc debug" command on OCP node
@@ -250,6 +250,8 @@ class OCP(object):
             cmd_list (list): List of commands eg: ['cmd1', 'cmd2']
             timeout (int): timeout for the exec_oc_cmd, defaults to 600 seconds
             namespace (str): Namespace name which will be used to create debug pods
+                It will use default namespace if not specified. openshift-stroage
+                namespace cannot be used from 4.19 because we are hitting: violates PodSecurity
 
         Returns:
             out (str): Returns output of the executed command/commands
@@ -266,7 +268,6 @@ class OCP(object):
         else:
             root_option = " /bin/bash -c "
         cmd = f" || echo '{err_msg}';".join(create_cmd_list)
-        namespace = namespace or config.ENV_DATA["cluster_namespace"]
         debug_cmd = (
             f"debug nodes/{node} --to-namespace={namespace} "
             f' -- {root_option} "{cmd}"'

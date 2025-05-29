@@ -1478,7 +1478,7 @@ def osd_encryption_verification():
     osd_node_names = get_osds_per_node()
     for worker_node in osd_node_names:
         lsblk_cmd = (
-            f"oc debug node/{worker_node} --to-namespace={config.ENV_DATA['cluster_namespace']} "
+            f"oc debug node/{worker_node} --to-namespace=default "
             "-- chroot /host lsblk"
         )
         # It happens from time to time that we see this error:

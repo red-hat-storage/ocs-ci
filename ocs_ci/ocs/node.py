@@ -2839,7 +2839,7 @@ def check_for_zombie_process_on_node(node_name=None):
     node_obj_list = get_node_objs(node_name) if node_name else get_node_objs()
     for node_obj in node_obj_list:
         debug_cmd = (
-            f"debug nodes/{node_obj.name} --to-namespace={config.ENV_DATA['cluster_namespace']} "
+            f"debug nodes/{node_obj.name} --to-namespace=default "
             '-- chroot /host /bin/bash -c "ps -A -ostat,pid,ppid | grep -e [zZ]"'
         )
         out = node_obj.ocp.exec_oc_cmd(

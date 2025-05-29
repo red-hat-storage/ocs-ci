@@ -39,7 +39,7 @@ from ocs_ci.ocs.utils import (
     query_nb_db_psql_version,
 )
 
-from ocs_ci.ocs.node import get_worker_nodes
+from ocs_ci.ocs.node import get_worker_nodes, wait_for_nodes_status
 from ocs_ci.ocs import constants, defaults, node, ocp, exceptions
 from ocs_ci.ocs.exceptions import (
     CommandFailed,
@@ -2394,7 +2394,7 @@ def verify_pv_mounted_on_node(node_pv_dict):
     """
     existing_pvs = {}
     for node_name, pvs in node_pv_dict.items():
-        cmd = f"oc debug nodes/{node_name} --to-namespace={config.ENV_DATA['cluster_namespace']} -- df"
+        cmd = f"oc debug nodes/{node_name} --to-namespace=default -- df"
         df_on_node = run_cmd(cmd)
         existing_pvs[node_name] = []
         for pv_name in pvs:
@@ -3437,7 +3437,7 @@ def run_cmd_verify_cli_output(
         cmd = f"{cmd_start} {cmd}"
     elif debug_node is not None:
         cmd_start = (
-            f"oc debug nodes/{debug_node} --to-namespace={ns_name} "
+            f"oc debug nodes/{debug_node} --to-namespace=default "
             "-- chroot /host /bin/bash -c "
         )
         cmd = f'{cmd_start} "{cmd}"'
@@ -5043,6 +5043,39 @@ def configure_node_network_configuration_policy_on_all_worker_nodes():
             node_network_configuration_policy, public_net_yaml.name
         )
         run_cmd(f"oc create -f {public_net_yaml.name}")
+        if config.ENV_DATA["platform"] == constants.VSPHERE_PLATFORM:
+            restart_node_if_debug_doesnt_work(worker_node_name)
+
+
+@retry(
+    (exceptions.CommandFailed, exceptions.ResourceWrongStatusException),
+    tries=3,
+    delay=30,
+    backoff=1,
+)
+def restart_node_if_debug_doesnt_work(worker_node_name):
+    """
+    Check if debug command works on node, and if not, restart the node.
+
+    Args:
+        worker_node_name (str): worker node name
+    """
+    oc_cmd = ocp.OCP(namespace="default")
+    cmd = "echo 'testing oc debug is working'"
+    try:
+        oc_cmd.exec_oc_debug_cmd(node=worker_node_name, cmd_list=[cmd])
+    except CommandFailed as ex:
+        logger.error(f"{worker_node_name} hit error: {ex} when running oc debug!")
+        logger.warning(f"{worker_node_name} will be restarted!")
+        node_to_restart = node.get_node_objs([worker_node_name])
+        # Avoiding ciruclar dependencies issue, need to import here
+        from ocs_ci.ocs import platform_nodes
+
+        factory = platform_nodes.PlatformNodesFactory()
+        nodes = factory.get_nodes_platform()
+        nodes.restart_nodes_by_stop_and_start(node_to_restart)
+        wait_for_nodes_status([worker_node_name], constants.NODE_READY)
+        oc_cmd.exec_oc_debug_cmd(node=worker_node_name, cmd_list=[cmd])
 
 
 def get_daemonsets_names(namespace=config.ENV_DATA["cluster_namespace"]):
