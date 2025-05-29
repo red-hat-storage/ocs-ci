@@ -364,7 +364,7 @@ def mirror_index_image_via_oc_mirror(index_image, packages, icsp=None, idms=None
         # even though we use --continue-on-error and --skip-missing arguments
         # (not sure if it is because of a bug in oc mirror plugin or because of some other issue),
         # but we want to continue to try to mirror the images manually with applied the icsp/idms rules
-        if not icsp or not idms:
+        if not (icsp or idms):
             raise
 
     # look for manifests directory with Image mapping, CatalogSource and ICSP
