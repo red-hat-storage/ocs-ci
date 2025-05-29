@@ -40,6 +40,7 @@ from ocs_ci.utility.utils import (
     CommandFailed,
     run_cmd,
     exec_cmd,
+    is_cluster_y_version_upgraded,
 )
 from ocs_ci.helpers.helpers import (
     run_cmd_verify_cli_output,
@@ -1056,6 +1057,8 @@ def verify_backend_volume_deletion(
         NotFoundError: If the configuration is provider mode and the name of the cephblockpoolradosnamespace
             is not obtained
     """
+    ocs_version = version.get_semantic_ocs_version_from_config()
+
     ct_pod = get_ceph_tools_pod()
     rbd_pool_name = (
         (config.ENV_DATA.get("rbd_name") or RBD_NAME)
@@ -1063,7 +1066,13 @@ def verify_backend_volume_deletion(
         else constants.DEFAULT_CEPHBLOCKPOOL
     )
 
-    if is_hci_cluster():
+    # TODO: Condition is valid if both is_hci_cluster() and "upgraded cluster from 4.18"
+    # Condition is not valid if fresh installed 4.19 and then upgraded
+    if is_hci_cluster() and (
+        (ocs_version == version.VERSION_4_18)
+        or (config.ENV_DATA["cluster_type"] == constants.HCI_CLIENT)
+        or is_cluster_y_version_upgraded()
+    ):
         cephbpradosns = (
             cephblockpoolradosns
             or config.ENV_DATA.get("radosnamespace_name", None)
