@@ -15,6 +15,7 @@ from ocs_ci.ocs.cluster import (
 from ocs_ci.ocs.exceptions import TimeoutExpiredError
 from ocs_ci.ocs.ocp import OCP
 from ocs_ci.ocs.resources.pod import verify_data_integrity, cal_md5sum
+from ocs_ci.utility.prometheus import PrometheusAPI
 from ocs_ci.utility.utils import TimeoutSampler
 
 logger = logging.getLogger(__name__)
@@ -61,7 +62,7 @@ class TestRecoverPvcExpandFailure(ManageTest):
     @green_squad
     @polarion_id("")
     def test_recover_from_pvc_expansion_failure(
-        self, pause_and_resume_cluster_load, pvc_factory, pod_factory
+        self, pause_and_resume_cluster_load, pvc_factory, pod_factory, threading_lock
     ):
         """
         Test case to verify recovery from PVC expansion failure. The PVC expansion will not complete due to the cluster
@@ -115,10 +116,15 @@ class TestRecoverPvcExpandFailure(ManageTest):
             storage_type="fs",
             size=f"{size_to_ceph_full + 5}G",
             io_direction="write",
-            runtime=300,
             fio_filename=pod_to_fill.name,
             end_fsync=1,
         )
+
+        prometheus_api = PrometheusAPI(threading_lock=threading_lock)
+        prometheus_api.wait_for_alert(
+            name=constants.ALERT_CLUSTERCRITICALLYFULL, state="firing"
+        )
+
         try:
             pod_to_fill.get_fio_results()
         except Exception as exe:
