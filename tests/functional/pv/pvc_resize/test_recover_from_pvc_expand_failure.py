@@ -61,7 +61,7 @@ class TestRecoverPvcExpandFailure(ManageTest):
     @green_squad
     @polarion_id("")
     def test_recover_from_pvc_expansion_failure(
-        self, pause_and_resume_cluster_load, pod_factory
+        self, pause_and_resume_cluster_load, pvc_factory, pod_factory
     ):
         """
         Test case to verify recovery from PVC expansion failure. The PVC expansion will not complete due to the cluster
@@ -98,8 +98,9 @@ class TestRecoverPvcExpandFailure(ManageTest):
         for pod_obj in self.pods:
             pod_obj.orig_md5_sum = cal_md5sum(pod_obj=pod_obj, file_name=pod_obj.name)
 
-        # Create a pod that can be used to fill up the cluster
-        pod_to_fill = pod_factory(interface=constants.CEPHBLOCKPOOL)
+        # Create a PVC and pod that can be used to fill up the cluster
+        pvc_to_fill = pvc_factory(interface=constants.CEPHBLOCKPOOL, size=total_storage)
+        pod_to_fill = pod_factory(interface=constants.CEPHBLOCKPOOL, pvc=pvc_to_fill)
 
         # The pods used 4G each to write. Calculate the remaining to ceph full ratio
         total_used_by_app_pods = 4 * len(self.pods)
