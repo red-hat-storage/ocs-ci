@@ -802,10 +802,6 @@ acm_page_nav_419 = {
     ),
     "all-clusters-view": ("//span[contains(text(),'All Clusters')]", By.XPATH),
     "Clusters_page": ("(//a[normalize-space()='Clusters'])[1]", By.XPATH),
-    "Infrastructure": (
-        "(//button[text()='Infrastructure']) | (//button[normalize-space()='Infrastructure'])[1]",
-        By.XPATH,
-    ),
 }
 
 acm_configuration = {

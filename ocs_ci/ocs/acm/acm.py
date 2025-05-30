@@ -463,7 +463,7 @@ def login_to_acm():
         log.info("local-cluster dropdown found, navigating from OCP to ACM console")
         page_nav.navigate_from_ocp_to_acm_cluster_page()
     else:
-        log.warning("local-cluster dropdown not found, page is already on ACM console")
+        log.warning("local-cluster dropdown not found, view is already on ACM console")
 
     if compare_versions(cmp_str):
         page_title = ACM_PAGE_TITLE_2_7_ABOVE

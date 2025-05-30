@@ -71,7 +71,7 @@ class AcmPageNavigator(BaseUI):
         Navigate to ACM Clusters Page
 
         """
-        log.info("Navigate into Clusters Page")
+        log.info("Now on Infrastructure page")
         self.check_element_presence(
             (
                 self.acm_page_nav["Infrastructure"][1],
@@ -79,9 +79,11 @@ class AcmPageNavigator(BaseUI):
             ),
             timeout=timeout,
         )
+        log.info("Checking if Infrastructure is collapsed or expanded")
         self.choose_expanded_mode(
             mode=True, locator=self.acm_page_nav["Infrastructure"]
         )
+        log.info("Navigate into Clusters Page")
         self.do_click(
             locator=self.acm_page_nav["Clusters_page"],
             timeout=timeout,
