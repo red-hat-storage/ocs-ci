@@ -1197,6 +1197,10 @@ acm_configuration_4_18 = {
         '//button[@data-test-id="cluster-dropdown-toggle"]//*[text()="local-cluster"]',
         By.XPATH,
     ),
+    "Infrastructure": (
+        "(//button[text()='Infrastructure']) | (//button[normalize-space()='Infrastructure'])[1]",
+        By.XPATH,
+    ),
     "inconsistent-warning-alert": (
         "//h4[@class='pf-v5-c-alert__title']",
         By.XPATH,

@@ -457,10 +457,13 @@ def login_to_acm():
     look_for_local_cluster = base_ui_obj.wait_until_expected_text_is_found(
         locator=base_ui_obj.acm_page_nav["click-local-cluster"],
         expected_text="local-cluster",
-        timeout=30,
+        timeout=15,
     )
     if look_for_local_cluster:
+        log.info("local-cluster dropdown found, navigating from OCP to ACM console")
         page_nav.navigate_from_ocp_to_acm_cluster_page()
+    else:
+        log.warning("local-cluster dropdown not found, page is already on ACM console")
 
     if compare_versions(cmp_str):
         page_title = ACM_PAGE_TITLE_2_7_ABOVE
