@@ -117,6 +117,10 @@ class TestRecoverPvcExpandFailure(ManageTest):
             fio_filename=pod_to_fill.name,
             end_fsync=1,
         )
+        try:
+            pod_to_fill.get_fio_results()
+        except Exception as exe:
+            logger.info(f"Exception occurred while filling up the cluster:\n{str(exe)}")
 
         pvc_size_expanded = 20
         pvc_size_reduced = 10
