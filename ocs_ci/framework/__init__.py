@@ -271,11 +271,18 @@ class MultiClusterConfig:
             ClusterNotFoundException: In case it didn't find the provider cluster
 
         """
-        for i, cluster in enumerate(self.clusters):
-            if cluster.ENV_DATA["cluster_type"] == "provider":
-                return i
-
-        raise ClusterNotFoundException("Didn't find the provider cluster")
+        provider_name = config.ENV_DATA.get("provider_cluster_name")
+        provider_index = None
+        if provider_name:
+            provider_index = self.get_cluster_index_by_name(cluster_name=provider_name)
+        else:
+            for i, cluster in enumerate(self.clusters):
+                if cluster.ENV_DATA["cluster_type"] == "provider":
+                    provider_index = i
+                    break
+        if provider_index is None:
+            raise ClusterNotFoundException("Didn't find the provider cluster")
+        return provider_index
 
     def get_provider_cluster_indexes(self):
         """
