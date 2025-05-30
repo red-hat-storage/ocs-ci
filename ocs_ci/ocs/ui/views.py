@@ -775,7 +775,7 @@ acm_page_nav = {
     "Welcome_page": ("Welcome", By.LINK_TEXT),
     "Overview_page": ("Overview", By.LINK_TEXT),
     "Infrastructure": (
-        "//button[normalize-space()='Infrastructure' and @class='pf-v5-c-nav__link']",
+        "//button[normalize-space()='Infrastructure' and contains(@class, 'pf-v5-c-nav__link')]",
         By.XPATH,
     ),
     "Clusters_page": ("Clusters", By.LINK_TEXT),
