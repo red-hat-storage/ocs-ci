@@ -79,7 +79,9 @@ class AcmPageNavigator(BaseUI):
             ),
             timeout=timeout,
         )
-        log.info("Checking if Infrastructure is collapsed or expanded")
+        log.info(
+            "Checking if options under Infrastructure page are expanded or collapsed "
+        )
         self.choose_expanded_mode(
             mode=True, locator=self.acm_page_nav["Infrastructure"]
         )
