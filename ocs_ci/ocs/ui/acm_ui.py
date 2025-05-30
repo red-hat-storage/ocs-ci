@@ -74,27 +74,24 @@ class AcmPageNavigator(BaseUI):
         Navigate to ACM Clusters Page
 
         """
-        time.sleep(2)
-        WebDriverWait(self.driver, 30).until(
-            EC.presence_of_element_located(
-                (
-                    self.acm_page_nav["Infrastructure"][1],
-                    self.acm_page_nav["Infrastructure"][0],
+        self.page_has_loaded(retries=12, sleep_time=5)
+        log.info("Now on Infrastructure page")
+        try:
+            element = WebDriverWait(self.driver, timeout).until(
+                EC.presence_of_element_located(
+                    (
+                        self.acm_page_nav["Infrastructure"][1],
+                        self.acm_page_nav["Infrastructure"][0],
+                    )
                 )
             )
-        )
-        log.info("Now on Infrastructure page")
-        self.check_element_presence(
-            (
-                self.acm_page_nav["Infrastructure"][1],
-                self.acm_page_nav["Infrastructure"][0],
-            ),
-            timeout=timeout,
-        )
+            self.driver.execute_script("arguments[0].scrollIntoView(true);", element)
+        except TimeoutException:
+            self.take_screenshot()
+            raise TimeoutException("Could not locate 'Infrastructure' element in time.")
         log.info(
             "Checking if options under Infrastructure page are expanded or collapsed "
         )
-        self.take_screenshot()
         self.choose_expanded_mode(
             mode=True, locator=self.acm_page_nav["Infrastructure"]
         )
