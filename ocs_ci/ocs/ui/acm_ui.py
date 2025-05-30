@@ -8,6 +8,9 @@ from selenium.webdriver.common.by import By
 from selenium.common.exceptions import TimeoutException, NoSuchElementException
 from selenium.webdriver.common.keys import Keys
 from selenium.webdriver.common.action_chains import ActionChains
+from selenium.webdriver.support.wait import WebDriverWait
+from selenium.webdriver.support import expected_conditions as EC
+
 from ocs_ci.deployment import vmware
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.exceptions import ACMClusterDeployException
@@ -71,6 +74,15 @@ class AcmPageNavigator(BaseUI):
         Navigate to ACM Clusters Page
 
         """
+        time.sleep(2)
+        WebDriverWait(self.driver, 30).until(
+            EC.presence_of_element_located(
+                (
+                    self.acm_page_nav["Infrastructure"][1],
+                    self.acm_page_nav["Infrastructure"][0],
+                )
+            )
+        )
         log.info("Now on Infrastructure page")
         self.check_element_presence(
             (
@@ -82,9 +94,11 @@ class AcmPageNavigator(BaseUI):
         log.info(
             "Checking if options under Infrastructure page are expanded or collapsed "
         )
+        self.take_screenshot()
         self.choose_expanded_mode(
             mode=True, locator=self.acm_page_nav["Infrastructure"]
         )
+        self.take_screenshot()
         log.info("Navigate into Clusters Page")
         self.do_click(
             locator=self.acm_page_nav["Clusters_page"],
