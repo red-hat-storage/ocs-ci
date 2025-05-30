@@ -1340,10 +1340,10 @@ class IBMCloudObjectStorage:
             for object_info in bucket_objects_info:
                 bucket_objects.append(object_info["Key"])
         except ClientError as ce:
-            logger.error(f"CLIENT ERROR: {ce}")
+            logger.error(f"CLIENT ERROR when fetching objects: {ce}")
         except Exception as e:
             logger.error(f"Unable to retrieve bucket contents: {e}")
-        logger.info(f"bucket objects: {bucket_objects}")
+        logger.debug(f"bucket objects: {bucket_objects}")
         return bucket_objects
 
     def delete_objects(self, bucket_name):
@@ -1354,18 +1354,34 @@ class IBMCloudObjectStorage:
             bucket_name (str): Name of the bucket
 
         """
+        MAX_DELETE_OBJECTS = 1000
         objects = self.get_bucket_objects(bucket_name)
         if objects:
             try:
-                # Form the delete request
-                delete_request = {"Objects": [{"Key": obj} for obj in objects]}
-                response = self.cos_client.delete_objects(
-                    Bucket=bucket_name, Delete=delete_request
+                total_objects = len(objects)
+                logger.info(
+                    f"Attempting to delete {total_objects} objects from {bucket_name}"
                 )
-                logger.info(f"Deleted items for {bucket_name}")
-                logger.debug(json.dumps(response.get("Deleted"), indent=4))
+                for i in range(0, total_objects, MAX_DELETE_OBJECTS):
+                    batch = objects[i : i + MAX_DELETE_OBJECTS]
+                    # Form the delete request
+                    delete_request = {"Objects": [{"Key": obj} for obj in batch]}
+                    response = self.cos_client.delete_objects(
+                        Bucket=bucket_name, Delete=delete_request
+                    )
+                    deleted = response.get("Deleted", [])
+                    errors = response.get("Errors", [])
+                    logger.info(
+                        f"Deleted {len(deleted)} objects in batch {i // MAX_DELETE_OBJECTS + 1}"
+                    )
+                    if errors:
+                        logger.error(
+                            f"Errors occurred during delete: {json.dumps(errors, indent=4)}"
+                        )
+                    logger.debug(json.dumps(deleted, indent=4))
+                logger.info(f"Deleted objects for {bucket_name}")
             except ClientError as ce:
-                logger.error(f"CLIENT ERROR: {ce}")
+                logger.error(f"CLIENT ERROR during deleting objects: {ce}")
             except Exception as e:
                 logger.error(f"Unable to delete objects: {e}")
 
@@ -1383,7 +1399,7 @@ class IBMCloudObjectStorage:
             self.cos_client.delete_bucket(Bucket=bucket_name)
             logger.info(f"Bucket: {bucket_name} deleted!")
         except ClientError as ce:
-            logger.error(f"CLIENT ERROR: {ce}")
+            logger.error(f"CLIENT ERROR during deleting bucket {bucket_name}: {ce}")
         except Exception as e:
             logger.error(f"Unable to delete bucket: {e}")
 
