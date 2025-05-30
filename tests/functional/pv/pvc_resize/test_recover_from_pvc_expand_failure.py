@@ -74,7 +74,9 @@ class TestRecoverPvcExpandFailure(ManageTest):
         # Calculating size to ceph full ratio of 85% here to consider sync delay, if any,
         # after writing I/O from the pods self.pods
         total_storage = cephcluster.get_ceph_capacity()
+        logger.info(f"Total storage is {total_storage}G")
         used_storage_percent = get_percent_used_capacity()
+        logger.info(f"Used storage percent is {used_storage_percent}")
         target_percentage = 85
         storage_percent_for_io = target_percentage - used_storage_percent
         size_to_ceph_full = (storage_percent_for_io * total_storage) / 100
