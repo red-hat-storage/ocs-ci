@@ -111,7 +111,7 @@ class TestRecoverPvcExpandFailure(ManageTest):
         )
         pod_to_fill.run_io(
             storage_type="fs",
-            size=f"{size_to_ceph_full}G",
+            size=f"{size_to_ceph_full + 5}G",
             io_direction="write",
             runtime=300,
             fio_filename=pod_to_fill.name,
