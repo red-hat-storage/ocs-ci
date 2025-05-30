@@ -73,12 +73,15 @@ class AcmPageNavigator(BaseUI):
         """
         log.info("Navigate into Clusters Page")
         self.check_element_presence(
-            (self.acm_page_nav["Infrastructure"]),
+            (
+                self.acm_page_nav["Infrastructure"][1],
+                self.acm_page_nav["Infrastructure"][0],
+            ),
             timeout=timeout,
         )
         self.choose_expanded_mode(
             mode=True, locator=self.acm_page_nav["Infrastructure"]
-        )
+        ),
         self.do_click(
             locator=self.acm_page_nav["Clusters_page"],
             timeout=timeout,
