@@ -2994,6 +2994,7 @@ def nodes():
     detach/attach volume, etc.
 
     """
+    return
     factory = platform_nodes.PlatformNodesFactory()
     nodes = factory.get_nodes_platform()
     return nodes
