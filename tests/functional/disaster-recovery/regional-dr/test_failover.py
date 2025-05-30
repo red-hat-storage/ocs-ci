@@ -36,7 +36,7 @@ class TestFailover:
 
     """
 
-    params = (
+    params = [
         [
             pytest.param(
                 False,  # primary_cluster_down = False
@@ -95,7 +95,7 @@ class TestFailover:
                 id="primary_down-cephfs-ui",
             ),
         ],
-    )
+    ]
 
     @pytest.mark.parametrize(
         argnames=["primary_cluster_down", "pvc_interface", "via_ui"], argvalues=params
