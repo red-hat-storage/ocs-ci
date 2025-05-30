@@ -214,12 +214,20 @@ class TestProfileDefaultValuesCheck(ManageTest):
                 )
 
             log.info("Reverting profile changes")
-            ptch = f'{{"spec": {{"resourceProfile":"{exist_performance_profile}"}}}}'
+            if exist_performance_profile is None:
+                log.info(
+                    "Existing performance profile is None, Hence skipping reverting profile change"
+                )
+                pass
+            else:
+                ptch = (
+                    f'{{"spec": {{"resourceProfile":"{exist_performance_profile}"}}}}'
+                )
 
-            # Reverting the performance profile back to the original
-            ptch_cmd = (
-                f"oc patch storagecluster {storage_cluster.data.get('metadata').get('name')}"
-                f" -n {namespace}  --type merge --patch '{ptch}'"
-            )
-            run_cmd(ptch_cmd)
-            verify_storage_cluster()
+                # Reverting the performance profile back to the original
+                ptch_cmd = (
+                    f"oc patch storagecluster {storage_cluster.data.get('metadata').get('name')}"
+                    f" -n {namespace}  --type merge --patch '{ptch}'"
+                )
+                run_cmd(ptch_cmd)
+                verify_storage_cluster()
