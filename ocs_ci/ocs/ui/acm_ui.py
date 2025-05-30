@@ -74,9 +74,10 @@ class AcmPageNavigator(BaseUI):
         Navigate to ACM Clusters Page
 
         """
+        self.driver.maximize_window()
         self.page_has_loaded(retries=12, sleep_time=5)
         log.info("Now on Infrastructure page")
-        infra_button = WebDriverWait(self.driver, timeout).until(
+        infra_button = WebDriverWait(self.driver, 30).until(
             EC.presence_of_element_located(
                 (
                     self.acm_page_nav["Infrastructure"][1],
