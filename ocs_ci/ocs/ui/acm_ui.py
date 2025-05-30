@@ -76,25 +76,33 @@ class AcmPageNavigator(BaseUI):
         """
         self.page_has_loaded(retries=12, sleep_time=5)
         log.info("Now on Infrastructure page")
-        try:
-            element = WebDriverWait(self.driver, timeout).until(
-                EC.presence_of_element_located(
-                    (
-                        self.acm_page_nav["Infrastructure"][1],
-                        self.acm_page_nav["Infrastructure"][0],
-                    )
+        infra_button = WebDriverWait(self.driver, timeout).until(
+            EC.presence_of_element_located(
+                (
+                    self.acm_page_nav["Infrastructure"][1],
+                    self.acm_page_nav["Infrastructure"][0],
                 )
             )
-            self.driver.execute_script("arguments[0].scrollIntoView(true);", element)
-        except TimeoutException:
-            self.take_screenshot()
-            raise TimeoutException("Could not locate 'Infrastructure' element in time.")
+        )
+        self.driver.execute_script(
+            "arguments[0].scrollIntoView({block: 'center'});", infra_button
+        )
+        infra_button = WebDriverWait(self.driver, 30).until(
+            EC.element_to_be_clickable(
+                (
+                    self.acm_page_nav["Infrastructure"][1],
+                    self.acm_page_nav["Infrastructure"][0],
+                )
+            )
+        )
         log.info(
             "Checking if options under Infrastructure page are expanded or collapsed "
         )
-        self.choose_expanded_mode(
-            mode=True, locator=self.acm_page_nav["Infrastructure"]
-        )
+        if infra_button.get_attribute("aria-expanded") != "true":
+            log.info(
+                "Successfully expanded Infrastructure sidecar to enable all dropdown options"
+            )
+            infra_button.click()
         self.take_screenshot()
         log.info("Navigate into Clusters Page")
         self.do_click(
