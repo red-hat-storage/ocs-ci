@@ -1194,6 +1194,8 @@ acm_configuration_4_18 = {
         '//button[@data-test-id="cluster-dropdown-toggle"]//*[text()="local-cluster"]',
         By.XPATH,
     ),
+    "all-clusters-view": ("//span[contains(text(),'All Clusters')]", By.XPATH),
+    "Clusters_page": ("(//a[normalize-space()='Clusters'])[1]", By.XPATH),
     "inconsistent-warning-alert": (
         "//h4[@class='pf-v5-c-alert__title']",
         By.XPATH,
