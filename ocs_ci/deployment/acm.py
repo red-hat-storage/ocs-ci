@@ -22,12 +22,19 @@ from ocs_ci.ocs.exceptions import (
 )
 from ocs_ci.utility import templating
 from ocs_ci.ocs.utils import get_non_acm_cluster_config, get_primary_cluster_config
+from ocs_ci.utility.ibmcloud import (
+    set_region,
+    login,
+    assign_floating_ips_to_workers,
+    set_resource_group_name,
+    is_ibm_platform,
+)
 from ocs_ci.utility.utils import (
     run_cmd,
     run_cmd_interactive,
     wait_for_machineconfigpool_status,
 )
-from ocs_ci.ocs.node import get_typed_worker_nodes, label_nodes
+from ocs_ci.ocs.node import get_typed_worker_nodes, label_nodes, get_worker_nodes
 
 logger = logging.getLogger(__name__)
 
@@ -112,8 +119,33 @@ class Submariner(object):
                 config.switch_ctx(cluster.MULTICLUSTER["multicluster_index"])
                 self.create_acm_brew_icsp()
             config.switch_ctx(old_ctx)
+
         global_net = get_primary_cluster_config().ENV_DATA.get("enable_globalnet", True)
-        acm_obj.install_submariner_ui(globalnet=global_net)
+        if (
+            is_ibm_platform()
+            and get_primary_cluster_config().ENV_DATA.get("deployment_type")
+            == constants.IPI_DEPL_TYPE
+        ):
+            logger.info("Logging into IBMCLOUD CLI")
+            login()
+
+            for cluster in get_non_acm_cluster_config():
+                config.switch_ctx(cluster.MULTICLUSTER["multicluster_index"])
+
+                set_region()
+                set_resource_group_name()
+                floating_ips_dict = assign_floating_ips_to_workers()
+                for node in get_worker_nodes():
+                    cmd = (
+                        f"oc annotate node {node} "
+                        f"gateway.submariner.io/public-ip=ipv4:{floating_ips_dict.get(node)} --overwrite"
+                    )
+                    run_cmd(cmd=cmd, secrets=[floating_ips_dict.get(node)])
+
+            acm_obj.install_submariner_cli(globalnet=global_net)
+        else:
+            acm_obj.install_submariner_ui(globalnet=global_net)
+
         acm_obj.submariner_validation_ui()
 
     def create_acm_brew_icsp(self):
