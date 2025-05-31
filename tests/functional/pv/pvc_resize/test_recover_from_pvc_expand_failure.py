@@ -78,7 +78,9 @@ class TestRecoverPvcExpandFailure(ManageTest):
         logger.info(f"Total storage is {total_storage}G")
         used_storage_percent = get_percent_used_capacity()
         logger.info(f"Used storage percent is {used_storage_percent}")
-        target_percentage = 85
+
+        # Target 5% more than ceph full ratio
+        target_percentage = 90
         storage_percent_for_io = target_percentage - used_storage_percent
         size_to_ceph_full = (storage_percent_for_io * total_storage) / 100
 
@@ -114,7 +116,7 @@ class TestRecoverPvcExpandFailure(ManageTest):
         )
         pod_to_fill.run_io(
             storage_type="fs",
-            size=f"{size_to_ceph_full + 5}G",
+            size=f"{size_to_ceph_full}G",
             io_direction="write",
             fio_filename=pod_to_fill.name,
             end_fsync=1,
