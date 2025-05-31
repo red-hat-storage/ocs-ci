@@ -1865,6 +1865,7 @@ def get_pod_logs(
     previous=False,
     all_containers=False,
     since=None,
+    tail=None,
 ):
     """
     Get logs from a given pod
@@ -1875,7 +1876,7 @@ def get_pod_logs(
     previous (bool): True, if pod previous log required. False otherwise.
     all_containers (bool): fetch logs from all containers of the resource
     since (str): only return logs newer than a relative duration like 5s, 2m, or 3h.
-
+    tail (str): number of lines to tail
     Returns:
         str: Output from 'oc get logs <pod_name> command
 
@@ -1890,6 +1891,8 @@ def get_pod_logs(
         cmd += " --all-containers=true"
     if since:
         cmd += f" --since={since}"
+    if tail:
+        cmd += f" --tail={tail}"
 
     return pod.exec_oc_cmd(cmd, out_yaml_format=False)
 
@@ -4199,3 +4202,29 @@ def delete_pod_by_phase(
     logger.info(f"All '{pod_phase}' pods deleted successfully.")
 
     return True
+
+
+def get_machine_config_controller_pod(
+    label=constants.MACINE_CONFIG_CONTROLLER_LABEL,
+    namespace=constants.OPENSHIFT_MACHINE_CONFIG_OPERATOR_NAMESPACE,
+    retry=4,
+):
+    """
+    Fetches the Machine Config Controller pod object.
+    Retries until the pod is found or the timeout is reached.
+
+    Args:
+        label (str): Label associated with the machine_config_controller pod.
+                     (default: constants.MACINE_CONFIG_CONTROLLER_LABEL)
+        namespace (str): Namespace where the MCC pod lives.
+                         (default: constants.OPENSHIFT_MACHINE_CONFIG_OPERATOR_NAMESPACE)
+        timeout (int): Total time in seconds to wait for the pod to be found.
+        retry_delay (int): Time in seconds to wait between retry attempts.
+
+    Returns:
+        Pod object: The first Machine Config Controller pod object found, or None if timed out.
+    """
+    namespace = namespace or config.ENV_DATA["cluster_namespace"]
+    mcc_pods = get_pods_having_label(label, namespace, retry=retry)
+    mcc_pod_obj = Pod(**mcc_pods[0])
+    return mcc_pod_obj

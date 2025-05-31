@@ -153,6 +153,7 @@ def verify_image_versions(old_images, upgrade_version, version_before_upgrade):
     if (
         config.ENV_DATA.get("mcg_only_deployment")
         and config.ENV_DATA["platform"].lower() == constants.VSPHERE_PLATFORM
+        and config.ENV_DATA.get("cluster_type").lower() == constants.HCI_PROVIDER
     ):
         default_noobaa_pods = 4
         if upgrade_version >= parse_version("4.19"):
@@ -430,7 +431,6 @@ class OCSUpgrade(object):
         the actual csv
 
         """
-
         csv_name = None
         csv_list = get_csvs_start_with_prefix(resource_name, namespace=self.namespace)
         for csv in csv_list:
@@ -494,11 +494,7 @@ class OCSUpgrade(object):
             subscription_name = constants.ODF_SUBSCRIPTION
         else:
             subscription_name = constants.OCS_SUBSCRIPTION
-        kind_name = (
-            "subscription.operators.coreos.com"
-            if config.multicluster
-            else "subscription"
-        )
+        kind_name = "subscription.operators.coreos.com"
         subscription = OCP(
             resource_name=subscription_name,
             kind=kind_name,
