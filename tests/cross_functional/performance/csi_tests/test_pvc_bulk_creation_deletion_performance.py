@@ -15,6 +15,7 @@ from ocs_ci.framework.pytest_customization.marks import grey_squad
 from ocs_ci.framework.testlib import performance, performance_a, polarion_id
 from ocs_ci.helpers import helpers, performance_lib
 from ocs_ci.ocs import constants
+from ocs_ci.utility import version
 from ocs_ci.ocs.perftests import PASTest
 from ocs_ci.ocs.perfresult import ResultsAnalyse
 
@@ -40,6 +41,8 @@ class TestPVCCreationPerformance(PASTest):
         self.benchmark_name = "pvc_creation_performance"
         # Create new project (namespace for the test)
         self.create_test_project()
+        if version.get_semantic_ocs_version_from_config() > version.VERSION_4_16:
+            helpers.set_configmap_log_level_csi_sidecar(value=5)
         self.pvc_size = "1Gi"
         self.pvc_objs = []
 
@@ -54,6 +57,8 @@ class TestPVCCreationPerformance(PASTest):
             pvc_obj.delete()
         # Delete the test project (namespace)
         self.delete_test_project()
+        if version.get_semantic_ocs_version_from_config() > version.VERSION_4_16:
+            helpers.set_configmap_log_level_csi_sidecar(value=1)
         super(TestPVCCreationPerformance, self).teardown()
 
     def init_full_results(self, full_results):

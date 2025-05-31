@@ -1550,6 +1550,7 @@ def get_provision_time(interface, pvc_name, status="start"):
 
     """
     # Define the status that need to retrieve
+    ocs_version = version.get_semantic_ocs_version_from_config()
     operation = "started"
     if status.lower() == "end":
         operation = "succeeded"
@@ -1564,7 +1565,17 @@ def get_provision_time(interface, pvc_name, status="start"):
     logs = logs.split("\n")
     # Extract the time for the one PVC provisioning
     if isinstance(pvc_name, str):
-        stat = [i for i in logs if re.search(f"provision.*{pvc_name}.*{operation}", i)]
+        if ocs_version >= version.VERSION_4_17:
+            operation = "Started"
+            stat = [
+                i
+                for i in logs
+                if re.search(f'Started.*PVC="[^"]*/{re.escape(pvc_name)}"', i)
+            ]
+        else:
+            stat = [
+                i for i in logs if re.search(f"provision.*{pvc_name}.*{operation}", i)
+            ]
         mon_day = " ".join(stat[0].split(" ")[0:2])
         stat = f"{this_year} {mon_day}"
     # Extract the time for the list of PVCs provisioning
@@ -1572,7 +1583,18 @@ def get_provision_time(interface, pvc_name, status="start"):
         all_stats = []
         for i in range(0, len(pvc_name)):
             name = pvc_name[i].name
-            stat = [i for i in logs if re.search(f"provision.*{name}.*{operation}", i)]
+            if ocs_version >= version.VERSION_4_17:
+                if status.lower() == "end":
+                    operation = "Succeeded"
+                stat = [
+                    i
+                    for i in logs
+                    if re.search(f'Started.*PVC="[^"]*/{re.escape(name)}"', i)
+                ]
+            else:
+                stat = [
+                    i for i in logs if re.search(f"provision.*{name}.*{operation}", i)
+                ]
             mon_day = " ".join(stat[0].split(" ")[0:2])
             stat = f"{this_year} {mon_day}"
             all_stats.append(stat)
@@ -1754,21 +1776,17 @@ def measure_pv_deletion_time_bulk(
     logs = logs.split("\n")
 
     delete_suffix_to_search = (
-        "succeeded"
-        if version.get_semantic_ocs_version_from_config() <= version.VERSION_4_13
-        else "persistentvolume deleted succeeded"
+        "persistentvolume deleted succeeded"
+        if version.get_semantic_ocs_version_from_config() <= version.VERSION_4_16
+        else "deleted succeeded"
     )
     loop_counter = 0
     while True:
         no_data_list = list()
         for pv in pv_name_list:
-            # check if PV data present in CSI logs
-            start = [i for i in logs if re.search(f'delete "{pv}": started', i)]
-            end = [
-                i
-                for i in logs
-                if re.search(f'delete "{pv}": {delete_suffix_to_search}', i)
-            ]
+            start, end = get_start_end_time_for_bulk_pvc_creation(
+                logs, pv, delete_suffix_to_search
+            )
             if not start or not end:
                 no_data_list.append(pv)
 
@@ -1793,17 +1811,15 @@ def measure_pv_deletion_time_bulk(
     pv_dict = dict()
     this_year = str(datetime.datetime.now().year)
     for pv_name in pv_name_list:
+        start, end = get_start_end_time_for_bulk_pvc_creation(
+            logs, pv, delete_suffix_to_search
+        )
         # Extract the deletion start time for the PV
-        start = [i for i in logs if re.search(f'delete "{pv_name}": started', i)]
         mon_day = " ".join(start[0].split(" ")[0:2])
         start_tm = f"{this_year} {mon_day}"
         start_time = datetime.datetime.strptime(start_tm, DATE_TIME_FORMAT)
+
         # Extract the deletion end time for the PV
-        end = [
-            i
-            for i in logs
-            if re.search(f'delete "{pv_name}": {delete_suffix_to_search}', i)
-        ]
         mon_day = " ".join(end[0].split(" ")[0:2])
         end_tm = f"{this_year} {mon_day}"
         end_time = datetime.datetime.strptime(end_tm, DATE_TIME_FORMAT)
@@ -6134,6 +6150,141 @@ def create_network_fence(node_name, cidr):
         logger.info(f"Network fence object for {node_name} already exists!")
     return network_fence_obj
 
+
+def unfence_node(node_name, delete=False):
+    """
+    Un-fence node
+
+    Args:
+        node_name (str): Name of the node
+        delete (bool): If True, delete the network fence object
+
+    """
+
+    network_fence_obj = OCP(
+        kind=constants.NETWORK_FENCE, namespace=config.ENV_DATA["cluster_namespace"]
+    )
+
+    if network_fence_obj.get(resource_name=node_name, dont_raise=True):
+        network_fence_obj.patch(
+            resource_name=node_name,
+            params=f'{{"spec":{{"fenceState": "{constants.ACTION_UNFENCE}" }}}}',
+            format_type="merge",
+        )
+        assert (
+            network_fence_obj.get(resource_name=node_name)["spec"]["fenceState"]
+            != constants.ACTION_FENCE
+        ), f"{node_name} is expected to be unfenced but still its fenced"
+        logger.info(f"Unfenced node {node_name} successfully!")
+
+        if delete:
+            network_fence_obj.delete(resource_name=node_name)
+            logger.info(f"Deleted network fence object for node {node_name}")
+    else:
+        logger.info(f"No networkfence found for node {node_name}")
+
+def get_start_end_time_for_bulk_pvc_creation(logs, pv, delete_suffix_to_search):
+    # check if PV data present in CSI logs[
+    if version.get_semantic_ocs_version_from_config() <= version.VERSION_4_16:
+        start = [i for i in logs if re.search(f'delete "{pv}": started', i)]
+    else:
+        start = [
+            i
+            for i in logs
+            if re.search(f'"shouldDelete is true".*PV="{re.escape(pv)}"', i)
+        ]
+    if version.get_semantic_ocs_version_from_config() <= version.VERSION_4_16:
+        end = [
+            i for i in logs if re.search(f'delete "{pv}": {delete_suffix_to_search}', i)
+        ]
+    else:
+        end = [
+            i
+            for i in logs
+            if re.search(f'{delete_suffix_to_search}.*PV="{re.escape(pv)}"', i)
+        ]
+    return start, end
+
+
+def get_rbd_daemonset_csi_addons_node_object(node):
+    """
+    Gets rdb daemonset CSI addons node data
+
+    Args:
+        node (str): Name of the node
+
+    Returns:
+       dict: CSI addons node object info
+
+    """
+    namespace = config.ENV_DATA["cluster_namespace"]
+    csi_addons_node = OCP(kind=constants.CSI_ADDONS_NODE_KIND, namespace=namespace)
+    csi_addons_node_data = csi_addons_node.get(
+        resource_name=f"{node}-{namespace}-daemonset-openshift-storage.rbd.csi.ceph.com-nodeplugin"
+    )
+    return csi_addons_node_data
+
+
+def create_network_fence_class():
+    """
+    Create NetworkFenceClass CR and verify Ips are populated
+    in respective CsiAddonsNode objects
+
+    """
+
+    logger.info("Creating NetworkFenceClass")
+    network_fence_class_dict = templating.load_yaml(constants.NETWORK_FENCE_CLASS_CRD)
+    network_fence_class_obj = create_resource(**network_fence_class_dict)
+    if network_fence_class_obj.ocp.get(
+        resource_name=network_fence_class_obj.name, dont_raise=True
+    ):
+        logger.info(
+            f"NetworkFenceClass {network_fence_class_obj.name} created successfully"
+        )
+
+    logger.info("Verifying CsiAddonsNode object for CSI RBD daemonset")
+    all_nodes = get_worker_nodes()
+
+    for node_name in all_nodes:
+        cidrs = get_rbd_daemonset_csi_addons_node_object(node_name)["status"][
+            "networkFenceClientStatus"
+        ][0]["ClientDetails"][0]["cidrs"]
+        assert len(cidrs) == 1, "No cidrs are populated to CSI Addons node object"
+        logger.info(f"Cidr: {cidrs[0]} populated in {node_name} CSI addons node object")
+
+def create_network_fence(node_name, cidr):
+    """
+    Create NetworkFence for the node
+
+    Args:
+        node_name (str): Name of the node
+        cidr (str): cidr
+
+    Returns:
+        OCS: NetworkFence object
+
+    """
+    network_fence_obj = OCP(
+        kind=constants.NETWORK_FENCE,
+        namespace=config.ENV_DATA["cluster_namespace"],
+        resource_name=node_name,
+    )
+
+    if not network_fence_obj.get(resource_name=node_name, dont_raise=True):
+        logger.info("Creating NetworkFence")
+        network_fence_dict = templating.load_yaml(constants.NETWORK_FENCE_CRD)
+        network_fence_dict["metadata"]["name"] = node_name
+        network_fence_dict["spec"]["cidrs"][0] = cidr
+        network_fence_obj = create_resource(**network_fence_dict)
+        if network_fence_obj.ocp.get(
+            resource_name=network_fence_obj.name, dont_raise=True
+        ):
+            logger.info(
+                f"NetworkFence {network_fence_obj.name} for node {node_name} created successfully"
+            )
+    else:
+        logger.info(f"Network fence object for {node_name} already exists!")
+    return network_fence_obj
 
 def unfence_node(node_name, delete=False):
     """
