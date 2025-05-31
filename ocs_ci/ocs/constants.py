@@ -2337,26 +2337,27 @@ DISCON_CL_REQUIRED_PACKAGES_PER_ODF_VERSION["4.15"] = (
 )
 
 DISCON_CL_REQUIRED_PACKAGES_PER_ODF_VERSION["4.16"] = [
-    "cluster-logging",
-    "elasticsearch-operator",
-    # we might need to uncomment next line, if we would like to use it in
-    # disconnected deployment:
-    # "lvms-operator",
-    "mcg-operator",
     "ocs-operator",
-    "odf-csi-addons-operator",
-    "odf-multicluster-orchestrator",
     "odf-operator",
-    # "odf-prometheus-operator",
+    "mcg-operator",
+    "odf-csi-addons-operator",
+    "ocs-client-operator",
+    "odf-prometheus-operator",
+    "recipe",
+    "rook-ceph-operator",
+    "odr-cluster-operator",
+    "odr-hub-operator",
 ]
 
-DISCON_CL_REQUIRED_PACKAGES_PER_ODF_VERSION["4.17"] = (
-    DISCON_CL_REQUIRED_PACKAGES_PER_ODF_VERSION["4.16"]
-)
+DISCON_CL_REQUIRED_PACKAGES_PER_ODF_VERSION[
+    "4.17"
+] = DISCON_CL_REQUIRED_PACKAGES_PER_ODF_VERSION["4.16"] + [
+    "cephcsi-operator",
+]
 
 DISCON_CL_REQUIRED_PACKAGES_PER_ODF_VERSION[
     "4.18"
-] = DISCON_CL_REQUIRED_PACKAGES_PER_ODF_VERSION["4.16"] + [
+] = DISCON_CL_REQUIRED_PACKAGES_PER_ODF_VERSION["4.17"] + [
     "odf-dependencies",
 ]
 
@@ -2942,6 +2943,9 @@ ACM_HUB_UNRELEASED_ICSP_YAML = os.path.join(
 )
 SUBMARINER_DOWNSTREAM_BREW_ICSP = os.path.join(
     TEMPLATE_DIR, "acm-deployment", "submariner_downstream_brew_icsp.yaml"
+)
+SUBMARINER_DOWNSTREAM_BREW_IDMS = os.path.join(
+    TEMPLATE_DIR, "acm-deployment", "submariner_downstream_brew_idms.yaml"
 )
 ACM_BREW_ICSP_YAML = os.path.join(TEMPLATE_DIR, "acm-deployment", "acm_brew_icsp.yaml")
 ACM_HUB_UNRELEASED_PULL_SECRET_TEMPLATE = "pull-secret.yaml.j2"
