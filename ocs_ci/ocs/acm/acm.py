@@ -40,6 +40,7 @@ from ocs_ci.ocs.ui.acm_ui import AcmPageNavigator
 from ocs_ci.ocs.ui.base_ui import (
     login_ui,
     SeleniumDriver,
+    wait_for_element_to_be_clickable,
 )
 from ocs_ci.utility.version import compare_versions
 from ocs_ci.utility import version
@@ -470,11 +471,16 @@ def login_to_acm():
         page_title = ACM_PAGE_TITLE
     validate_page_title(title=page_title)
     log.info("Successfully logged into RHACM console")
+    side_navigation_toggle_btn = wait_for_element_to_be_clickable(
+        page_nav.acm_page_nav["side_navigation_toggle"]
+    )
     side_navigation_toggle = page_nav.is_expanded(
         locator=page_nav.acm_page_nav["side_navigation_toggle"]
     )
     if not side_navigation_toggle:
-        page_nav.driver.execute_script("arguments[0].click();", side_navigation_toggle)
+        page_nav.driver.execute_script(
+            "arguments[0].click();", side_navigation_toggle_btn
+        )
         log.info("Successfully expanded side navigation options on the ACM hub console")
     return driver
 
