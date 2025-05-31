@@ -264,6 +264,7 @@ CLIENT_PROFILE = "ClientProfile"
 OCS_OPERATOR_CONFIG_MAP = "ocs-operator-config"
 SERVICE_TYPE_NODEPORT = "NodePort"
 CLUSTERMANAGEMENTADDON = "ClusterManagementAddOn"
+CEPH_DRIVER_CSI = "drivers.csi.ceph.io"
 NETWORK_FENCE_CLASS = "NetworkFenceClass"
 NETWORK_FENCE = "NetworkFence"
 
@@ -708,6 +709,8 @@ RBD_NODEPLUGIN_LABEL = "app=openshift-storage.rbd.csi.ceph.com-nodeplugin"
 CEPHFS_CTRLPLUGIN_LABEL = "app=openshift-storage.cephfs.csi.ceph.com-ctrlplugin"
 RBD_CTRLPLUGIN_LABEL = "app=openshift-storage.rbd.csi.ceph.com-ctrlplugin"
 PROMETHEUS_POD_LABEL = "app.kubernetes.io/name=prometheus"
+CEPHFS_CTRLPLUGIN_NAME = "openshift-storage.cephfs.csi.ceph.com-ctrlplugin"
+RBD_CTRLPLUGIN_NAME = "openshift-storage.rbd.csi.ceph.com-ctrlplugin"
 
 # Noobaa Deployments and Statefulsets
 NOOBAA_OPERATOR_DEPLOYMENT = "noobaa-operator"
