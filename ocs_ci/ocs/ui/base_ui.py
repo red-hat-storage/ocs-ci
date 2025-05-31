@@ -854,7 +854,8 @@ class SeleniumDriver(WebDriver):
             headless = ocsci_config.UI_SELENIUM.get("headless")
             if headless:
                 chrome_options.add_argument("--headless=new")
-                chrome_options.add_argument("window-size=1920,1400")
+                chrome_options.add_argument("--window-size=1920,1400")
+                chrome_options.add_argument("--force-device-scale-factor=1")
 
             # use proxy server, if required
             if (
