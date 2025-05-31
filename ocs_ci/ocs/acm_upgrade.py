@@ -116,9 +116,7 @@ class ACMUpgrade(object):
             version_tag = raw_msg[0]["msg"]["pipeline"]["index_image"][
                 f"v{get_ocp_version()}"
             ].split(":")[1]
-            acm_catsrc["spec"]["image"] = ":".jon(
-                [constants.ACM_BREW_REPO, version_tag]
-            )
+            acm_catsrc["spec"]["image"] = ":".jon([constants.BREW_REPO, version_tag])
         acm_catsrc["metadata"]["name"] = constants.ACM_CATSRC_NAME
         acm_catsrc["spec"]["publisher"] = "grpc"
         acm_data_yaml = tempfile.NamedTemporaryFile(

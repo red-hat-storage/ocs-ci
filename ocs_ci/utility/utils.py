@@ -5138,6 +5138,65 @@ def get_oadp_version(namespace=constants.OADP_NAMESPACE):
             return csv["spec"]["version"]
 
 
+def create_unreleased_oadp_catalog():
+    """
+    Creates catalog for unreleased OADP operator.
+
+    Raises:
+        TagNotFoundException: if no image tag for oadp oprator found in brew
+
+    """
+    resp = requests.get(constants.OADP_BREW_BUILD_URL, verify=False)
+    json_data = resp.json()["raw_messages"]
+    image_tag = None
+    ocp_version = version_module.get_semantic_ocp_version_from_config()
+    nvr = None
+    image = None
+
+    for item in json_data:
+        pipeline = item.get("msg", {}).get("pipeline", {})
+        if pipeline.get("status") != "complete":
+            continue
+        index_image = pipeline.get("index_image", {})
+        index_image_str = index_image.get(f"v{ocp_version}")
+        if not index_image_str:
+            continue
+        try:
+            image_tag = index_image_str.split(":")[1]
+            nvr = item.get("msg", {}).get("artifact", {}).get("nvr")
+            break
+        except IndexError:
+            continue
+
+    if image_tag:
+        # Importing here to avoid circular dependency
+        from ocs_ci.utility.templating import dump_data_to_temp_yaml, load_yaml
+        from ocs_ci.ocs.resources.catalog_source import CatalogSource
+
+        image = f"{constants.BREW_REPO}:{image_tag}"
+        log.info(
+            f"Creating catalog for OADP operator brew image NVR: {nvr} "
+            f"for OCP: v{ocp_version}. Image: {image}"
+        )
+        brew_catalog_data = load_yaml(constants.BREW_CATALOG_YAML)
+        brew_catalog_data["spec"]["image"] = image
+        brew_catalog_data_yaml = NamedTemporaryFile(
+            mode="w+", prefix="brew-catalog", delete=False
+        )
+        dump_data_to_temp_yaml(brew_catalog_data, brew_catalog_data_yaml.name)
+        run_cmd(f"oc create -f {constants.BREW_ICSP}", timeout=300)
+        wait_for_machineconfigpool_status("all")
+        run_cmd(f"oc create -f {brew_catalog_data_yaml.name}", timeout=300)
+        catalog_source = CatalogSource(
+            resource_name=constants.BREW_CATALOG_NAME,
+            namespace=constants.MARKETPLACE_NAMESPACE,
+        )
+        # Wait for catalog source is ready
+        catalog_source.wait_for_state("READY")
+    else:
+        raise TagNotFoundException("No brew image for oadp operator found!")
+
+
 def get_acm_version(namespace=constants.ACM_HUB_NAMESPACE):
     """
     Get ACM version from CSV
