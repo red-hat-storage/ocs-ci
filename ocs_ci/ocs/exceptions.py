@@ -766,3 +766,9 @@ class DistributionStatusError(Exception):
 
 class InvalidPodPresent(Exception):
     pass
+
+
+class PolicyApplicationError(Exception):
+    """Exception raised when bucket policy application fails."""
+
+    pass
