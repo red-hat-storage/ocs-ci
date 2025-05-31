@@ -453,7 +453,7 @@ def login_to_acm():
     log.info(f"URL: {url}")
     driver = login_ui(url)
     page_nav = AcmPageNavigator()
-    page_nav.refresh_page()
+    page_nav.page_has_loaded(retries=10, sleep_time=5)
     base_ui_obj = BaseUI()
     look_for_local_cluster = base_ui_obj.wait_until_expected_text_is_found(
         locator=base_ui_obj.acm_page_nav["click-local-cluster"],
