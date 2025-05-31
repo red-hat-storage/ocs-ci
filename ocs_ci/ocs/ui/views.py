@@ -824,6 +824,7 @@ acm_configuration = {
         "//*[@data-ouia-component-type='PF4/TableRow']//td[2]//*[text()='local-cluster']",
         By.XPATH,
     ),
+    "side_navigation_toggle": ("#nav-toggle", By.CSS_SELECTOR),
     "search-cluster": ("//input[@placeholder='Search']", By.XPATH),
     "select-first-checkbox": ("input[name='checkrow0']", By.CSS_SELECTOR),
     "clear-search": ("//*[name()='path' and contains(@d,'M242.72 25')]", By.XPATH),

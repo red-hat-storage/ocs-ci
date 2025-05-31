@@ -324,7 +324,7 @@ class BaseUI:
             timeout (int): Looks for a web element repeatedly until timeout (sec) happens.
 
         return:
-            bool: True if element expended, False otherwise
+            bool: True if element expanded, False otherwise
 
         """
         wait = WebDriverWait(self.driver, timeout)
