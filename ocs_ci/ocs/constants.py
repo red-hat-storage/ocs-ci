@@ -2878,7 +2878,7 @@ ACM_CATSRC_NAME = "acm-catalogsource"
 SUBMARINER_DOWNSTREAM_UNRELEASED_BUILD_URL = (
     "https://datagrepper.engineering.redhat.com/raw?topic=/topic/"
     "VirtualTopic.eng.ci.redhat-container-image.pipeline.complete"
-    "&rows_per_page=25&delta=1296000&contains=submariner-operator-bundle-container-v"
+    "&rows_per_page=25&delta=12960000&contains=submariner-operator-bundle-container-v"
 )
 ACM_BREW_BUILD_URL = (
     "https://datagrepper.engineering.redhat.com/raw?topic=/topic/"
@@ -2886,6 +2886,8 @@ ACM_BREW_BUILD_URL = (
     "&rows_per_page=25&delta=1296000&contains=acm"
 )
 SUBMARINER_BREW_REPO = "brew.registry.redhat.io/rh-osbs/iib"
+SUBMARINER_BREW = "brew.registry.redhat.io/rh-osbs"
+SUBMARINER_BREW_REPO = "/".join([SUBMARINER_BREW, "iib"])
 SUBCTL_DOWNSTREAM_URL = "registry.redhat.io/rhacm2/"
 ACM_BREW_REPO = SUBMARINER_BREW_REPO
 
