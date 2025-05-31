@@ -76,6 +76,8 @@ class TestRbDPool(ManageTest):
         *. Creates PVCs using new Storage Class
         *. Mount PVC to an app pod
         *. Run IO on an app pod
+
+        Also verifies OCS-1830
         """
         interface_type = constants.CEPHBLOCKPOOL
         sc_obj = storageclass_factory(
