@@ -968,8 +968,31 @@ class HostedODF(HypershiftHostedOCP):
         """
 
         log_step("Creating storage consumer")
+        storage_class = OCP(
+            kind=constants.STORAGECLASS, namespace=config.ENV_DATA["cluster_namespace"]
+        )
+        storage_classes = storage_class.get()
+        # filter only those that were provisioned by ODF
+        storage_classes["items"] = [
+            item
+            for item in storage_classes["items"]
+            if item["provisioner"]
+            in [
+                constants.RBD_PROVISIONER,
+                constants.CEPHFS_PROVISIONER,
+            ]
+        ]
+        # filter out virtualization storage class. We supposed to have it on vSphere and BM, where CRD created
+        storage_classes["items"] = [
+            item
+            for item in storage_classes["items"]
+            if item["metadata"]["name"] != constants.DEFAULT_STORAGECLASS_VIRTUALIZATION
+        ]
+        storage_class_names = [
+            item["metadata"]["name"] for item in storage_classes["items"]
+        ]
         storage_consumer_obj = create_storage_consumer_on_default_cluster(
-            storage_consumer_name
+            storage_consumer_name, storage_classes=storage_class_names
         )
         secret_name = storage_consumer_obj.get_onboarding_ticket_secret()
 

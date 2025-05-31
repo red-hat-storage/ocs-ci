@@ -498,6 +498,7 @@ DEFAULT_CEPHBLOCKPOOL = "ocs-storagecluster-cephblockpool"
 DEFAULT_STORAGECLASS_CEPHFS = f"{DEFAULT_CLUSTERNAME}-cephfs"
 DEFAULT_STORAGECLASS_RBD = f"{DEFAULT_CLUSTERNAME}-ceph-rbd"
 DEFAULT_STORAGECLASS_RGW = f"{DEFAULT_CLUSTERNAME}-ceph-rgw"
+DEFAULT_STORAGECLASS_VIRTUALIZATION = f"{DEFAULT_CLUSTERNAME}-ceph-rbd-virtualization"
 DEFAULT_STORAGECLASS_RBD_THICK = f"{DEFAULT_CLUSTERNAME}-ceph-rbd-thick"
 DEFAULT_OCS_STORAGECLASS = "default-ocs-storage-class"
 # Default storage class for LSO deployments. While each platform specific
