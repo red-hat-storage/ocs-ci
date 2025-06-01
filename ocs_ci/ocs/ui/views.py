@@ -1195,7 +1195,10 @@ acm_configuration_4_18 = {
         By.XPATH,
     ),
     "all-clusters-view": ("//span[contains(text(),'All Clusters')]", By.XPATH),
-    "Clusters_page": ("(//a[normalize-space()='Clusters'])[1]", By.XPATH),
+    "Clusters_page": (
+        "a[data-test='nav'][href='/multicloud/infrastructure/clusters']",
+        By.CSS_SELECTOR,
+    ),
     "inconsistent-warning-alert": (
         "//h4[@class='pf-v5-c-alert__title']",
         By.XPATH,
