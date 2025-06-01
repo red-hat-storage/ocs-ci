@@ -128,7 +128,7 @@ class TestRecoverPvcExpandFailure(ManageTest):
         )
 
         try:
-            pod_to_fill.get_fio_results()
+            pod_to_fill.get_fio_rw_iops()
         except Exception as exe:
             logger.info(f"Exception occurred while filling up the cluster:\n{str(exe)}")
 
