@@ -54,20 +54,18 @@ class ObjectStorage(PageNavigator, ResourceList):
 
         return NameSpaceStoreTab()
 
-    def nav_object_buckets_tab(self):
+    def nav_buckets_tab(self):
         """
         Navigate to Object Buckets tab. Accessible from Object Storage page
 
         Returns:
             ObjectBucketTab: ObjectBucketTab page object
         """
-        self.do_click(
-            locator=self.page_nav["object_buckets_tab"], enable_screenshot=False
-        )
+        self.do_click(locator=self.page_nav["buckets_tab"], enable_screenshot=False)
 
-        from ocs_ci.ocs.ui.page_objects.object_buckets_tab import ObjectBucketsTab
+        from ocs_ci.ocs.ui.page_objects.buckets_tab import BucketsTab
 
-        return ObjectBucketsTab()
+        return BucketsTab()
 
     def nav_object_buckets_claims_tab(self):
         """

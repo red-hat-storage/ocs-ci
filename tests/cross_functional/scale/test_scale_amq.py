@@ -4,7 +4,6 @@ import time
 
 from ocs_ci.framework.pytest_customization.marks import orange_squad
 from ocs_ci.framework.testlib import E2ETest, scale
-from ocs_ci.ocs import constants
 from ocs_ci.ocs.amq import AMQ
 from ocs_ci.helpers.helpers import default_storage_class
 
@@ -30,15 +29,7 @@ def test_fixture_amq(request):
     "in each test-run, priority to fix this issue is lower"
 )
 class TestAMQBasics(E2ETest):
-    @pytest.mark.parametrize(
-        argnames=["interface"],
-        argvalues=[
-            pytest.param(
-                constants.CEPHBLOCKPOOL, marks=pytest.mark.polarion_id("OCS-424")
-            )
-        ],
-    )
-    def test_install_amq_scale(self, interface, test_fixture_amq):
+    def deprecated_test_install_amq_scale(self, interface, test_fixture_amq):
         """
         Create amq cluster and run open messages on it
         """

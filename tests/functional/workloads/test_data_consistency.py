@@ -8,7 +8,7 @@ import pytest
 import yaml
 
 from ocs_ci.framework import config
-from ocs_ci.framework.pytest_customization.marks import bugzilla, magenta_squad
+from ocs_ci.framework.pytest_customization.marks import magenta_squad
 from ocs_ci.framework.testlib import tier1
 from ocs_ci.ocs import constants
 from ocs_ci.ocs import exceptions
@@ -27,7 +27,6 @@ logger = logging.getLogger(__name__)
 
 @magenta_squad
 @tier1
-@bugzilla("1989301")
 @pytest.mark.polarion_id("OCS-2735")
 def test_log_reader_writer_parallel(project, tmp_path):
     """
@@ -128,12 +127,9 @@ def test_log_reader_writer_parallel(project, tmp_path):
         # fetch data from cephfs volume into the local dir
         oc_cmd = [
             "oc",
-            "rsync",
-            "--loglevel=4",
-            "-n",
-            project.namespace,
-            f"pod/{workload_pod_name}:/mnt/target",
-            local_dir,
+            "cp",
+            f"{project.namespace}/{workload_pod_name}:/mnt/target",
+            str(local_dir) + "/target",
         ]
         try:
             run_cmd(cmd=oc_cmd, timeout=300)

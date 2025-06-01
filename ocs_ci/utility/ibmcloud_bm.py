@@ -75,9 +75,10 @@ class IBMCloudBM(object):
             return run_cmd(cmd, secrets, timeout, ignore_error, **kwargs)
         except CommandFailed as ex:
             login_error_messages = [
-                "Error: Failed to get",
+                "Failed to get",
                 "Access Denied",
                 "Please login",
+                "token is expired",
             ]
             # Check if we need to re-login to IBM Cloud account
             if any([error_msg in str(ex) for error_msg in login_error_messages]):
@@ -166,3 +167,23 @@ class IBMCloudBM(object):
         """
         self.stop_machines(machines)
         self.start_machines(machines)
+
+    def get_machines_that_are_not_off_from_sensor_data(self, machines):
+        """
+        Retrieve a server’s hardware state via its internal sensors and check if RPM Sensor data is present.
+        Data from RPM sensors won't be available if the machine is OFF. To be used only as an alternate method.
+        A command resulting in the power status of the machine is not available. This method is not recommended to
+        identify the machines that are ON and functional
+
+        Args:
+            machines (list): List of the IBMCLoud Bare metal machines objects
+
+        Returns:
+            list: List of machines which are not off
+        """
+        machines_not_off = []
+        for m in machines:
+            # Use json output because without json the output will have the title "RPM Sensor"
+            cmd = f"sensor {m['id']} --output json"
+            if "RPM Sensor" in self.run_ibmcloud_bm_cmd(cmd):
+                machines_not_off.append(m)

@@ -1,11 +1,22 @@
 import logging
 import os
 import random
+import shlex
 import string
-from tempfile import NamedTemporaryFile
+import time
 
+from tempfile import NamedTemporaryFile
+from ocs_ci.utility.retry import retry, catch_exceptions
+from ocs_ci.framework import config
 from ocs_ci.ocs import constants, ocp
-from ocs_ci.utility.utils import exec_cmd
+from ocs_ci.ocs.exceptions import CommandFailed
+from ocs_ci.ocs.ocp import OCP
+from ocs_ci.utility.rosa import (
+    rosa_create_htpasswd_idp,
+    rosa_delete_htpasswd_idp,
+    rosa_list_idps,
+)
+from ocs_ci.utility.utils import exec_cmd, TimeoutSampler, get_random_str
 
 log = logging.getLogger(__name__)
 
@@ -38,7 +49,7 @@ def create_htpasswd_secret(htpasswd_path, replace=False):
         replace (bool): If secret already exists then this will replace it
 
     """
-    kubeconfig = os.getenv("KUBECONFIG")
+    kubeconfig = config.RUN["kubeconfig"]
 
     cmd = (
         f"oc create secret generic htpass-secret "
@@ -87,6 +98,13 @@ def user_factory(request, htpasswd_path):
 
     """
     _users = []
+    rosa_depl = config.ENV_DATA["platform"].lower() in [
+        constants.ROSA_HCP_PLATFORM,
+        constants.ROSA_PLATFORM,
+    ]
+    if rosa_depl:
+        idp_name = f"my_htpasswd-{get_random_str(size=3)}"
+        cluster_name = config.ENV_DATA["cluster_name"]
 
     def _factory(
         username=None,
@@ -121,7 +139,21 @@ def user_factory(request, htpasswd_path):
                 for _ in range(random.randint(6, 15))
             )
         add_htpasswd_user(username, password, htpasswd_path)
-        if not _users:
+
+        if rosa_depl:
+            rosa_create_htpasswd_idp(htpasswd_path, cluster_name, idp_name=idp_name)
+            for sample in TimeoutSampler(
+                timeout=300,
+                sleep=10,
+                func=lambda: rosa_list_idps(cluster_name),
+            ):
+                if idp_name in sample.keys():
+                    break
+            log.info(
+                "wait another minute for IDP propagate new credentials to management-console"
+            )
+            time.sleep(60)
+        elif not _users:
             ocp_obj = ocp.OCP(
                 kind=constants.SECRET, namespace=constants.OPENSHIFT_CONFIG_NAMESPACE
             )
@@ -144,6 +176,12 @@ def user_factory(request, htpasswd_path):
         Delete all users created by the factory
 
         """
+        if rosa_depl:
+            rosa_delete_htpasswd_idp(
+                cluster_name=config.ENV_DATA["cluster_name"], idp_name=idp_name
+            )
+            return
+
         with open(htpasswd_path) as f:
             htpasswd = f.readlines()
         new_htpasswd = [line for line in htpasswd if not line.startswith(tuple(_users))]
@@ -154,3 +192,44 @@ def user_factory(request, htpasswd_path):
 
     request.addfinalizer(_finalizer)
     return _factory
+
+
+@retry(CommandFailed, tries=5, delay=5, backoff=1)
+def get_server_url():
+    """
+    Get server URL.
+
+    Returns:
+        str: Server URL
+
+    """
+    kubeconfig = config.RUN["kubeconfig"]
+    cmd = f"oc whoami --show-server --kubeconfig={kubeconfig}"
+    return exec_cmd(cmd, shell=True).stdout.decode().strip()
+
+
+@retry(CommandFailed, tries=5, delay=5, backoff=1)
+def login(server_url, user, password):
+    """
+    Login to the cluster using provided username and password.
+
+    Args:
+        server_url (str): Server URL
+        user (str): Username
+        password (str): Password
+
+    """
+
+    cmd = f"login {shlex.quote(server_url)} -u {shlex.quote(user)} -p {shlex.quote(password)}"
+    OCP().exec_oc_cmd(cmd, skip_tls_verify=True, out_yaml_format=False)
+    log.info(f"Logged in as {user}")
+
+
+@catch_exceptions(CommandFailed)
+def logout():
+    """
+    Logout from the cluster.
+
+    """
+    exec_cmd("oc logout")
+    log.info("Logged out")

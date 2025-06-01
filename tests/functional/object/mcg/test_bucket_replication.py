@@ -1,8 +1,8 @@
 import logging
+import gc
 
 import pytest
 
-from ocs_ci.framework import config
 from ocs_ci.framework.pytest_customization.marks import (
     tier1,
     tier2,
@@ -10,11 +10,13 @@ from ocs_ci.framework.pytest_customization.marks import (
     red_squad,
     mcg,
     sts_deployment_required,
+    skipif_noobaa_external_pgsql,
+    jira,
 )
 from ocs_ci.ocs.exceptions import CommandFailed
 from ocs_ci.framework.testlib import MCGTest
 from ocs_ci.utility.retry import retry
-from ocs_ci.utility.utils import TimeoutSampler
+from ocs_ci.utility.utils import TimeoutSampler, exec_nb_db_query
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.bucket_utils import (
     compare_bucket_object_list,
@@ -26,8 +28,6 @@ from ocs_ci.ocs.bucket_utils import (
 from ocs_ci.ocs.constants import AWSCLI_TEST_OBJ_DIR
 from ocs_ci.ocs.resources.pod import (
     cal_md5sum,
-    Pod,
-    get_pods_having_label,
     get_pod_logs,
     get_noobaa_core_pod,
     get_noobaa_endpoint_pods,
@@ -360,6 +360,8 @@ class TestReplication(MCGTest):
             mcg_obj_session, first_bucket_name, second_bucket_name, timeout=self.TIMEOUT
         ), f"Objects in the buckets {first_bucket_name} and {second_bucket_name} are not same"
 
+    @jira("DFBUGS-2353")
+    @skipif_noobaa_external_pgsql
     @pytest.mark.parametrize(
         argnames=["source_bucketclass", "target_bucketclass"],
         argvalues=[
@@ -372,7 +374,6 @@ class TestReplication(MCGTest):
                 marks=[
                     tier2,
                     pytest.mark.polarion_id("OCS-2680"),
-                    pytest.mark.bugzilla("2168788"),
                 ],
             ),
             pytest.param(
@@ -405,7 +406,6 @@ class TestReplication(MCGTest):
                 None,
                 marks=[
                     tier2,
-                    pytest.mark.bugzilla("2168788"),
                 ],
             ),
         ],
@@ -442,14 +442,6 @@ class TestReplication(MCGTest):
 
         source_bucket_name = source_bucket.name
         full_object_path = f"s3://{source_bucket_name}"
-        nb_db_pod = Pod(
-            **(
-                get_pods_having_label(
-                    label=constants.NOOBAA_DB_LABEL_47_AND_ABOVE,
-                    namespace=config.ENV_DATA["cluster_namespace"],
-                )[0]
-            )
-        )
         standard_test_obj_list = awscli_pod_session.exec_cmd_on_pod(
             f"ls -A1 {AWSCLI_TEST_OBJ_DIR}"
         ).split(" ")
@@ -468,11 +460,9 @@ class TestReplication(MCGTest):
             mcg_obj_session, source_bucket_name, target_bucket_name, self.TIMEOUT
         ), f"Objects in {source_bucket_name} and {target_bucket_name} dont match"
 
-        replication_id = nb_db_pod.exec_cmd_on_pod(
-            command=f"psql -h 127.0.0.1 -p 5432 -U postgres -d nbcore -c "
-            f"\"SELECT data ->> 'replication_policy_id' FROM buckets WHERE data ->> 'name'='{source_bucket_name}';\"",
-            out_yaml_format=False,
-        ).split("\n")[2]
+        replication_id = exec_nb_db_query(
+            f"SELECT data ->> 'replication_policy_id' FROM buckets WHERE data ->> 'name'='{source_bucket_name}';"
+        )[0].strip()
 
         # write random objects to the bucket
         write_random_test_objects_to_bucket(
@@ -490,11 +480,14 @@ class TestReplication(MCGTest):
 
             def check_nb_endpoint_logs():
                 for pod in get_noobaa_endpoint_pods():
+                    pod_logs = get_pod_logs(pod.name)
                     if (
                         "The AWS access key Id you provided does not exist in our records"
-                        in get_pod_logs(pod.name)
+                        in pod_logs
                     ):
                         return True
+                    del pod_logs
+                    gc.collect()
                 return False
 
             sample = TimeoutSampler(timeout=360, sleep=10, func=check_nb_endpoint_logs)
@@ -507,11 +500,9 @@ class TestReplication(MCGTest):
             logger.info(f"Deleted source bucket {source_bucket_name}")
 
             # check in db that the replication config was deleted
-            replication_conf_count = nb_db_pod.exec_cmd_on_pod(
-                command=f"psql -h 127.0.0.1 -p 5432 -U postgres -d nbcore -c "
-                f"\"SELECT COUNT (*) FROM replicationconfigs WHERE _id='{replication_id}'\"",
-                out_yaml_format=False,
-            ).split("\n")[2]
+            replication_conf_count = exec_nb_db_query(
+                f"SELECT COUNT (*) FROM replicationconfigs WHERE _id='{replication_id}'"
+            )[0].strip()
 
             assert (
                 int(replication_conf_count) == 0
@@ -519,12 +510,13 @@ class TestReplication(MCGTest):
 
             # check in noobaa core logs
             def check_noobaa_core_logs():
-                if "find_rules_updated_longest_time_ago:  []" in get_pod_logs(
-                    get_noobaa_core_pod().name
-                ):
-                    return True
-                else:
-                    return False
+                found = False
+                pod_logs = get_pod_logs(get_noobaa_core_pod().name)
+                if "find_rules_updated_longest_time_ago:  []" in pod_logs:
+                    found = True
+                del pod_logs
+                gc.collect()
+                return found
 
             logger.info(
                 f"Checking the noobaa core logs to see if the replication has "

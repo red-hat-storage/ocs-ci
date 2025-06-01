@@ -3,10 +3,7 @@ import pytest
 from uuid import uuid4
 
 from ocs_ci.framework.pytest_customization.marks import grey_squad
-from ocs_ci.framework.testlib import (
-    skipif_ocs_version,
-    performance,
-)
+from ocs_ci.framework.testlib import skipif_ocs_version
 from ocs_ci.ocs.perftests import PASTest
 from ocs_ci.helpers.performance_lib import run_oc_command
 from ocs_ci.helpers import helpers, performance_lib
@@ -18,8 +15,11 @@ logger = logging.getLogger(__name__)
 ERRMSG = "Error in command"
 
 
+# @performance
+# Test case is disabled
+# Creating reclaim space cron job for namespace with prefix openshift-* has been deprecated since 4.16
+# This will be implemented at storageclass level rather than at the namespace level in 4.17
 @grey_squad
-@performance
 @skipif_ocs_version("<4.14")
 class TestReclaimSpaceCronJobMultiClones(PASTest):
     """

@@ -23,7 +23,7 @@ spec:
             name: awscli-service-ca
       containers:
         - name: s3cli
-          image: quay.io/ocsci/s3-cli-with-test-objects-multiarch:4.0
+          image: quay.io/ocsci/s3-cli-with-test-objects-multiarch:6.0
           command: ['/bin/sh']
           stdin: true
           tty: true

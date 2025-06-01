@@ -11,7 +11,12 @@ from ocs_ci.deployment.disconnected import prune_and_mirror_index_image
 from ocs_ci.framework import config
 from ocs_ci.ocs import constants, ocp, defaults
 from ocs_ci.ocs.exceptions import CommandFailed, UnsupportedPlatformError
-from ocs_ci.ocs.node import get_nodes, get_compute_node_names
+from ocs_ci.ocs.node import (
+    get_nodes,
+    get_compute_node_names,
+    get_all_nodes,
+    get_node_objs,
+)
 from ocs_ci.utility import templating, version
 from ocs_ci.utility.deployment import get_ocp_ga_version
 from ocs_ci.utility.localstorage import get_lso_channel
@@ -22,6 +27,14 @@ from ocs_ci.utility.utils import (
     wipe_all_disk_partitions_for_node,
 )
 
+IMAGE_SOURCE_POLICY = ocp.OCP(
+    kind="ImageContentSourcePolicy", namespace=constants.MARKETPLACE_NAMESPACE
+)
+OPTIONAL_OPERATOR_CATALOG_SOURCE = ocp.OCP(
+    kind=constants.CATSRC,
+    namespace=constants.MARKETPLACE_NAMESPACE,
+    resource_name="optional-operators",
+)
 
 logger = logging.getLogger(__name__)
 
@@ -76,11 +89,12 @@ def setup_local_storage(storageclass):
     lso_data_yaml = tempfile.NamedTemporaryFile(
         mode="w+", prefix="local_storage_operator", delete=False
     )
-    templating.dump_data_to_temp_yaml(lso_data, lso_data_yaml.name)
-    with open(lso_data_yaml.name, "r") as f:
-        logger.info(f.read())
-    logger.info("Creating local-storage-operator")
-    run_cmd(f"oc create -f {lso_data_yaml.name}")
+    if not IMAGE_SOURCE_POLICY.is_exist(resource_name=lso_data_yaml.name):
+        templating.dump_data_to_temp_yaml(lso_data, lso_data_yaml.name)
+        with open(lso_data_yaml.name, "r") as f:
+            logger.info(f.read())
+        logger.info("Creating local-storage-operator")
+        run_cmd(f"oc create -f {lso_data_yaml.name}")
 
     local_storage_operator = ocp.OCP(kind=constants.POD, namespace=lso_namespace)
     assert local_storage_operator.wait_for_resource(
@@ -131,9 +145,9 @@ def setup_local_storage(storageclass):
         # Since we don't have datastore with SSD on our current VMware machines, localvolumeset doesn't detect
         # NonRotational disk. As a workaround we are setting Rotational to device MechanicalProperties to detect
         # HDD disk
-        if platform == constants.VSPHERE_PLATFORM or config.ENV_DATA.get(
+        if config.ENV_DATA.get(
             "local_storage_allow_rotational_disks"
-        ):
+        ) or config.ENV_DATA.get("odf_provider_mode_deployment"):
             logger.info(
                 "Adding Rotational for deviceMechanicalProperties spec"
                 " to detect HDD disk"
@@ -212,7 +226,7 @@ def setup_local_storage(storageclass):
         # extra_disks is used in vSphere attach_disk() method
         storage_class_device_count = config.ENV_DATA.get("extra_disks", 1)
     expected_pvs = len(worker_names) * storage_class_device_count
-    if platform == constants.BAREMETAL_PLATFORM:
+    if platform in [constants.BAREMETAL_PLATFORM, constants.HCI_BAREMETAL]:
         verify_pvs_created(expected_pvs, storageclass, False)
     else:
         verify_pvs_created(expected_pvs, storageclass)
@@ -236,6 +250,11 @@ def create_optional_operators_catalogsource_non_ga(force=False):
             constants.LOCAL_STORAGE_OPTIONAL_OPERATORS, multi_document=True
         )
     )
+    for operator in optional_operators_data:
+        if operator.get("metadata", {}).get("name") == constants.OPTIONAL_OPERATORS:
+            image = operator["spec"]["image"].split(":")[0]
+            ocp_version_image = f"{image}:v{ocp_version}"
+            operator["spec"]["image"] = ocp_version_image
     optional_operators_yaml = tempfile.NamedTemporaryFile(
         mode="w+", prefix="optional_operators", delete=False
     )
@@ -268,12 +287,13 @@ def create_optional_operators_catalogsource_non_ga(force=False):
     templating.dump_data_to_temp_yaml(
         optional_operators_data, optional_operators_yaml.name
     )
-    with open(optional_operators_yaml.name, "r") as f:
-        logger.info(f.read())
-    logger.info(
-        "Creating optional operators CatalogSource and ImageContentSourcePolicy"
-    )
-    run_cmd(f"oc create -f {optional_operators_yaml.name}")
+    if not OPTIONAL_OPERATOR_CATALOG_SOURCE.is_exist():
+        with open(optional_operators_yaml.name, "r") as f:
+            logger.info(f.read())
+        logger.info(
+            "Creating optional operators CatalogSource and ImageContentSourcePolicy"
+        )
+        run_cmd(f"oc create -f {optional_operators_yaml.name}")
     wait_for_machineconfigpool_status("all")
 
 
@@ -336,7 +356,7 @@ def _get_disk_by_id(worker):
 
     """
     cmd = (
-        f"oc debug nodes/{worker} --to-namespace={config.ENV_DATA['cluster_namespace']} "
+        f"oc debug nodes/{worker} --to-namespace=default "
         f"-- chroot /host ls -la /dev/disk/by-id/"
     )
     return run_cmd(cmd)
@@ -414,6 +434,7 @@ def add_disk_for_vsphere_platform():
             vsphere_base.attach_disk(
                 config.ENV_DATA.get("device_size", defaults.DEVICE_SIZE),
                 config.DEPLOYMENT.get("provision_type", constants.VM_DISK_TYPE),
+                ssd=True,
             )
 
         if lso_type == constants.DIRECTPATH:
@@ -446,3 +467,24 @@ def add_disk_for_rhv_platform():
             config.ENV_DATA.get("sparse"),
             config.ENV_DATA.get("pass_discard"),
         )
+
+
+def cleanup_nodes_for_lso_install():
+    """
+    Cleanup before installing lso
+    """
+    from ocs_ci.deployment.baremetal import clean_disk
+
+    nodes = get_all_nodes()
+    node_objs = get_node_objs(nodes)
+    for node in nodes:
+        cmd = (
+            f"oc debug nodes/{node} --to-namespace=default -- chroot /host "
+            "rm -rvf /var/lib/rook /mnt/local-storage"
+        )
+        out = run_cmd(cmd)
+        logger.info(out)
+        logger.info(f"Mount data cleared from node, {node}")
+        for node_obj in node_objs:
+            clean_disk(node_obj)
+        logger.info("All nodes are wiped")

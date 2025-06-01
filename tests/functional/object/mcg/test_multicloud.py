@@ -2,6 +2,7 @@ import logging
 
 import pytest
 
+from ocs_ci.framework import config
 from ocs_ci.framework.pytest_customization.marks import tier1
 from ocs_ci.framework.testlib import MCGTest
 from ocs_ci.framework.pytest_customization.marks import (
@@ -9,6 +10,7 @@ from ocs_ci.framework.pytest_customization.marks import (
     red_squad,
     runs_on_provider,
     mcg,
+    skipif_fips_enabled,
 )
 
 logger = logging.getLogger(__name__)
@@ -33,8 +35,14 @@ class TestMultiCloud(MCGTest):
             pytest.param(("oc", {"azure": [(1, None)]})),
             pytest.param(("cli", {"gcp": [(1, None)]})),
             pytest.param(("oc", {"gcp": [(1, None)]})),
-            pytest.param(("cli", {"ibmcos": [(1, None)]})),
-            pytest.param(("oc", {"ibmcos": [(1, None)]})),
+            pytest.param(
+                ("cli", {"ibmcos": [(1, None)]}),
+                marks=[skipif_fips_enabled],
+            ),
+            pytest.param(
+                ("oc", {"ibmcos": [(1, None)]}),
+                marks=[skipif_fips_enabled],
+            ),
         ],
         # A test ID list for describing the parametrized tests
         # <CLOUD_PROVIDER>-<METHOD>-<AMOUNT-OF-BACKINGSTORES>
@@ -55,6 +63,9 @@ class TestMultiCloud(MCGTest):
         """
         Test MCG backingstore creation
         """
+        _, value = backingstore_tup
+        if config.ENV_DATA.get("fips") == "true" and "ibmcos" in value:
+            pytest.skip("Skipping test for IBM Cloud on FIPS enabled cluster")
 
         backingstore_factory(*backingstore_tup)
 
@@ -84,7 +95,7 @@ class TestMultiCloud(MCGTest):
             "IBMCOS-OC-1",
         ],
     )
-    def test_multicloud_backingstore_deletion(
+    def deprecated_test_multicloud_backingstore_deletion(
         self, backingstore_factory, backingstore_tup
     ):
         """

@@ -6,11 +6,11 @@ import pytest
 
 from ocs_ci.framework import config
 from ocs_ci.framework.pytest_customization.marks import (
-    bugzilla,
     skipif_external_mode,
     ignore_resource_not_found_error_label,
     tier1,
     green_squad,
+    skipif_ibm_cloud_managed,
 )
 from ocs_ci.framework.testlib import ManageTest
 from ocs_ci.ocs import constants
@@ -90,7 +90,6 @@ def preconditions_rbd_pool_created_associated_to_sc(
 @ignore_resource_not_found_error_label
 class TestDeleteRbdPool(ManageTest):
     @tier1
-    @bugzilla("2228555")
     @skipif_external_mode
     @pytest.mark.parametrize(
         argnames=["replica", "compression", "volume_binding_mode", "pvc_status"],
@@ -99,7 +98,7 @@ class TestDeleteRbdPool(ManageTest):
                 *[
                     2,
                     "aggressive",
-                    constants.IMMEDIATE_VOLUMEBINDINGMODE,
+                    constants.WFFC_VOLUMEBINDINGMODE,
                     constants.STATUS_PENDING,
                 ],
                 marks=pytest.mark.polarion_id("OCS-5134"),
@@ -143,7 +142,6 @@ class TestDeleteRbdPool(ManageTest):
         pvc_factory,
         pod_factory,
     ):
-
         """
         1. Create storageclass with the pool.
         2. Check that in pool list and page the storageclass is there.
@@ -184,6 +182,7 @@ class TestDeleteRbdPool(ManageTest):
 
     @tier1
     @skipif_external_mode
+    @skipif_ibm_cloud_managed
     @pytest.mark.parametrize(
         argnames=["replica", "compression", "volume_binding_mode", "pvc_status"],
         argvalues=[

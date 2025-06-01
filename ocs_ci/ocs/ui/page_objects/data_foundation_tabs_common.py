@@ -7,7 +7,9 @@ import pytest
 import pandas as pd
 
 from selenium.common.exceptions import TimeoutException, NoSuchElementException
-from selenium.webdriver.common.keys import Keys
+
+from ocs_ci.ocs import constants
+from ocs_ci.ocs.ocp import OCP
 from ocs_ci.ocs.ui.helpers_ui import format_locator
 from ocs_ci.ocs.ui.page_objects.resource_page import ResourcePage
 from ocs_ci.utility.retry import retry
@@ -117,6 +119,8 @@ class CreateResourceForm(PageNavigator):
         self.do_click(self.validation_loc["input_value_validator_icon"])
         rules_elements = self.get_elements(input_loc)
         rules_texts_statuses = [rule.text for rule in rules_elements if rule.text != ""]
+        # skip parent element
+        rules_texts_statuses = rules_texts_statuses[1:]
         rules_texts = [rule.split("\n: ")[0] for rule in rules_texts_statuses]
         if sorted(rules_texts) != sorted(self.rules.keys()):
             self._report_failed(
@@ -160,26 +164,7 @@ class CreateResourceForm(PageNavigator):
         Returns:
             bool: True if the input element is successfully cleared, False otherwise.
         """
-        wait_for_element_to_be_visible(self.name_input_loc, 30)
-        elements = self.get_elements(self.name_input_loc)
-        input_el = elements[0]
-        input_len = len(str(input_el.get_attribute("value")))
-
-        # timeout in seconds will be equal to a number of symbols to be removed, but not less than 30s
-        timeout = input_len if input_len > 30 else 30
-        timeout = time.time() + timeout
-        if len(elements):
-            while len(str(input_el.get_attribute("value"))) != 0:
-                if time.time() < timeout:
-                    # to remove text from the input independently where the caret is use both delete and backspace
-                    input_el.send_keys(Keys.BACKSPACE, Keys.DELETE)
-                    time.sleep(0.05)
-                else:
-                    raise TimeoutException("time to clear input os out")
-        else:
-            logger.error("test input locator not found")
-            return False
-        return True
+        return self.clear_input_gradually(self.name_input_loc)
 
     def _check_input_text_length(
         self, rule_exp: str, text_length: int, status_expected: str
@@ -256,8 +241,8 @@ class CreateResourceForm(PageNavigator):
                 time.sleep(time_sleep)
                 if len(_rules_elements) > 0:
                     break
-            else:
-                logger.error("no rules found after 3 attempts")
+            # skip parent element
+            _rules_elements = _rules_elements[1:]
             return [rule.text for rule in _rules_elements if rule_exp in rule.text]
 
         rule_actual = get_rule_actual()
@@ -384,9 +369,11 @@ class CreateResourceForm(PageNavigator):
             pattern = rf"({re.escape(symbol)}+)"  # Escape the symbol for safe use in the regex
             return re.sub(
                 pattern,
-                lambda match: str(len(match.group(0)))
-                if len(match.group(0)) > 1
-                else match.group(0)[0],
+                lambda match: (
+                    str(len(match.group(0)))
+                    if len(match.group(0)) > 1
+                    else match.group(0)[0]
+                ),
                 text,
             )
 
@@ -482,10 +469,10 @@ class CreateResourceForm(PageNavigator):
         ! Namespace Store with FS option is supported with NamespaceStoreUI().create_namespace_store() !
 
         Args:
-            store_name (str): backing store name
-            provider (str): backing store provider
-            region (str): backing store region
-            secret (str): backing store secret
+            store_name (str): backing store or namespace store name
+            provider (str): backing store or namespace store provider
+            region (str): backing store or namespace store region
+            secret (str): backing store or namespace store secret
             uls_name (str): uls name
 
         Returns:
@@ -519,6 +506,50 @@ class CreateResourceForm(PageNavigator):
         self.do_click(self.mcg_stores["create_store_btn"])
 
         return ResourcePage()
+
+    def create_store_verify_state(
+        self,
+        kind,
+        store_name: str,
+        provider: str,
+        region: str,
+        secret: str,
+        uls_name: str,
+        expected_state=constants.STATUS_READY,
+    ):
+        """
+        Create backing store via UI and verify its state.
+
+        ! Backing Store with PVC option is not supported yet !
+        ! Namespace Store with FS option is supported with NamespaceStoreUI().create_namespace_store() !
+
+        Args:
+            kind (str): backing store or namespace store kind
+            store_name (str): backing store or namespace store name
+            provider (str): backing store or namespace store provider
+            region (str): backing store or namespace store region
+            secret (str): backing store or namespace store secret
+            uls_name (str): uls name
+            expected_state (str): expected state of the store
+
+        Returns:
+            ResourcePage: The page object of the newly created Store (Namespace store or Backing Store)
+            bool: True if the store is ready, False otherwise
+        """
+        resource_page = self.create_store(
+            store_name, provider, region, secret, uls_name
+        )
+
+        logger.info("Verify store status on resource page")
+        store_ready = self.verify_current_page_resource_status(expected_state, 60)
+        if not store_ready:
+            # print store details if store is not ready
+            store_ocp_obj = OCP(kind=kind, resource_name=store_name)
+            logger.error(
+                f"Store details: {store_ocp_obj.describe(resource_name=store_name)}"
+            )
+            self.take_screenshot(f"{store_name}-not-ready")
+        return resource_page, store_ready
 
 
 class DataFoundationTabBar(PageNavigator):

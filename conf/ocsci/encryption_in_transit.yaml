@@ -1,0 +1,4 @@
+---
+# This configuration file is used for enable in transit encryption in the deployment
+ENV_DATA:
+  in_transit_encryption: true

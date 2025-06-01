@@ -5,7 +5,6 @@ from concurrent.futures import ThreadPoolExecutor
 from ocs_ci.framework import config
 from ocs_ci.framework.pytest_customization.marks import red_squad, mcg
 from ocs_ci.framework.testlib import (
-    bugzilla,
     ignore_leftovers,
     ManageTest,
     runs_on_provider,
@@ -35,7 +34,6 @@ log = logging.getLogger(__name__)
 @red_squad
 @tier4b
 @runs_on_provider
-@bugzilla("1853638")
 @ignore_leftovers
 @skipif_vsphere_ipi
 @skipif_ocs_version("<4.9")

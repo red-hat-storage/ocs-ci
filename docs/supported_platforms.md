@@ -45,6 +45,26 @@ own domain name.
 
 #### UPI
 
+#### IPI
+
+##### STS Enabled
+
+In order to enable STS (short-lived token auth) for a cluster deployed to Azure,
+you will need to use a config like `conf/deployment/azure/ipi_3az_rhcos_sts_3m_3w.yaml`.
+
+In addition to the standard Azure IPI config items, the following are important here:
+
+```yaml
+---
+DEPLOYMENT:
+  sts_enabled: true
+  subscription_plan_approval: "Manual"
+ENV_DATA:
+  azure_base_domain_resource_group_name: 'odfqe'
+```
+
+`sts_enabled: true` is also important for teardown in order to clean up resources in Azure.
+
 ## IBM Cloud
 
 This platform supports deployment of OCP cluster + OCS cluster on top of it.
@@ -86,6 +106,13 @@ But an example is pasted also here:
 ENV_DATA:
   vpc_id: VPC ID PLACEHOLDER
   subnet_id: SUBNET ID PLACEHOLDER
+  # Subnet id from dict below will be used if user defines worker_availability_zones
+  # This is for multi zone deployment support. So If you have worker_availability_zones and
+  # subnet_ids_per_zone defined in credential conf it will be used instead of subnet_id.
+  subnet_ids_per_zone:
+    "eu-de-1": "PLACEHOLDER_SUBNET_ID"
+    "eu-de-2": "PLACEHOLDER_SUBNET_ID"
+    "eu-de-3": "PLACEHOLDER_SUBNET_ID"
   cos_instance: COS INSTANCE PLACEHOLDER
 AUTH:
   ibmcloud:

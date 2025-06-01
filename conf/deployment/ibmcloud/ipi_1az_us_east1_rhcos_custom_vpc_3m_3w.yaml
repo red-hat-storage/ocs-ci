@@ -1,0 +1,28 @@
+---
+# This conifg is for IBM Cloud IPI deployment with custom VPC where we create
+# VPC and network stuff on by own in ocs-ci in us-east (Washington DC).
+DEPLOYMENT:
+  openshift_install_timeout: 4800
+  allow_lower_instance_requirements: false
+ENV_DATA:
+  platform: 'ibm_cloud'
+  deployment_type: 'ipi'
+  region: 'us-east'
+  base_domain: 'ibmcloud2.qe.rh-ocs.com'
+  worker_instance_type: 'bx2-16x64'
+  master_instance_type: 'bx2-4x16'
+  worker_availability_zones:
+    - 'us-east-1'
+  master_availability_zones:
+    - 'us-east-1'
+  worker_replicas: 3
+  master_replicas: 3
+  custom_vpc: true
+
+# The following values need to be set in a separate config and passed to ocs-ci in
+# order to deploy OCP/OCS cluster on IBM Cloud using IPI.
+#
+#AUTH:
+#  ibmcloud:
+#    account_id: ACCOUNT ID PLACEHOLDER
+#    api_key: IBM CLOUD API KEY PLACEHOLDER

@@ -1,0 +1,21 @@
+# This config file is used to enable ACM observability.
+# When the Observability service is enabled, the hub cluster is always configured
+# to collect and send metrics to the configured Thanos instance, regardless of whether
+# hub self-management is enabled or not.
+
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: thanos-object-storage
+  namespace: open-cluster-management-observability
+type: Opaque
+stringData:
+  thanos.yaml: |
+    type: s3
+    config:
+      bucket: PLACEHOLDER
+      endpoint: PLACEHOLDER
+      insecure: true
+      access_key: PLACEHOLDER
+      secret_key: PLACEHOLDER

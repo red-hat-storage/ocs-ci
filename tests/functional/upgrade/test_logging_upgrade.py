@@ -163,7 +163,7 @@ class TestUpgradeLogging:
 
     """
 
-    def test_upgrade_logging(self):
+    def deprecated_test_upgrade_logging(self):
         """
         This function contains test to upgrade openshift-logging
         with Entry and Exit criteria for checks

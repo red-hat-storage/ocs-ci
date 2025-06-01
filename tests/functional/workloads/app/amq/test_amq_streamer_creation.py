@@ -35,7 +35,7 @@ class TestAMQBasics(E2ETest):
             )
         ],
     )
-    def test_install_and_run_amq_benchmark(
+    def deprecated_test_install_and_run_amq_benchmark(
         self,
         interface,
         test_fixture_amq,

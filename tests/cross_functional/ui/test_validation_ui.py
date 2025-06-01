@@ -1,5 +1,4 @@
 import logging
-import pytest
 import re
 
 from ocs_ci.ocs.resources.pod import get_pod_logs
@@ -10,7 +9,6 @@ from ocs_ci.framework.testlib import (
     skipif_ocs_version,
     polarion_id,
     ui,
-    bugzilla,
 )
 from ocs_ci.framework.pytest_customization.marks import (
     black_squad,
@@ -39,7 +37,7 @@ class TestUserInterfaceValidation(object):
     @tier1
     @polarion_id("OCS-4925")
     @skipif_ui_not_support("validation")
-    def test_storage_cluster_validation_ui(self, setup_ui_class):
+    def test_storage_cluster_validation_ui(self, setup_ui_class_factory):
         """
         Validate Storage Cluster status on UI
 
@@ -47,16 +45,17 @@ class TestUserInterfaceValidation(object):
             setup_ui_class: login function on conftest file
 
         """
+        setup_ui_class_factory()
+
         validation_ui_obj = ValidationUI()
         validation_ui_obj.validate_storage_cluster_ui()
 
     @ui
     @runs_on_provider
     @tier1
-    @bugzilla("2155743")
     @polarion_id("OCS-2575")
     @skipif_ui_not_support("validation")
-    def test_dashboard_validation_ui(self, setup_ui_class):
+    def test_dashboard_validation_ui(self, setup_ui_class_factory):
         """
         Validate User Interface of OCS/ODF dashboard
         Verify GET requests initiated by kube-probe on odf-console pod [cover bz-2155743]
@@ -66,6 +65,8 @@ class TestUserInterfaceValidation(object):
             setup_ui_class: login function on conftest file
 
         """
+        setup_ui_class_factory()
+
         ocs_version = version.get_semantic_ocs_version_from_config()
         if ocs_version >= version.VERSION_4_13:
             logger.info(
@@ -93,7 +94,7 @@ class TestUserInterfaceValidation(object):
     @polarion_id("OCS-4642")
     @skipif_ocs_version("<4.9")
     @skipif_ui_not_support("validation")
-    def test_odf_storagesystems_ui(self, setup_ui_class):
+    def test_odf_storagesystems_ui(self, setup_ui_class_factory):
         """
         Validate User Interface for ODF Storage Systems Tab for ODF 4.9
 
@@ -101,18 +102,20 @@ class TestUserInterfaceValidation(object):
             setup_ui_class: login function on conftest file
 
         """
+        setup_ui_class_factory()
+
         validation_ui_obj = ValidationUI()
         validation_ui_obj.odf_storagesystems_ui()
 
     @ui
     @tier1
+    @runs_on_provider
     @skipif_ocs_version("<4.9")
     @skipif_external_mode
     @skipif_mcg_only
-    @pytest.mark.bugzilla("2096414")
     @polarion_id("OCS-4685")
     @skipif_hci_provider_or_client
-    def test_odf_cephblockpool_compression_status(self, setup_ui_class):
+    def test_odf_cephblockpool_compression_status(self, setup_ui_class_factory):
         """
         Validate Compression status for cephblockpool at StorageSystem details and ocs-storagecluster-cephblockpool
         are matching
@@ -121,6 +124,7 @@ class TestUserInterfaceValidation(object):
             setup_ui_class: login function on conftest file
 
         """
+        setup_ui_class_factory()
 
         storage_system_details = (
             ValidationUI()
@@ -146,11 +150,11 @@ class TestUserInterfaceValidation(object):
     @ui
     @tier1
     @runs_on_provider
-    @pytest.mark.bugzilla("1994584")
-    def test_ocs_operator_is_not_present(self, setup_ui_class):
+    def test_ocs_operator_is_not_present(self, setup_ui_class_factory):
         """
         Validate odf operator is present in the installed operator tab in ui.
         """
+        setup_ui_class_factory()
 
         validation_ui_obj = ValidationUI()
         (

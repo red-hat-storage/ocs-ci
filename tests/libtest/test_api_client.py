@@ -3,7 +3,6 @@ A test program for instantiating an api-client and
 perform a basic functionality check using api-client
 """
 
-
 import logging
 import yaml
 

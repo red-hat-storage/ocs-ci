@@ -1,6 +1,6 @@
 import logging
 import pytest
-from ocs_ci.framework.pytest_customization.marks import brown_squad
+from ocs_ci.framework.pytest_customization.marks import brown_squad, skipif_compact_mode
 from ocs_ci.framework.testlib import (
     tier4a,
     tier4b,
@@ -89,7 +89,6 @@ class TestAutomatedRecoveryFromFailedNodes(ManageTest):
                 *["rbd", "shutdown"],
                 marks=[
                     pytest.mark.polarion_id("OCS-2102"),
-                    pytest.mark.bugzilla("1845666"),
                 ],
             ),
             pytest.param(
@@ -99,7 +98,6 @@ class TestAutomatedRecoveryFromFailedNodes(ManageTest):
                 *["cephfs", "shutdown"],
                 marks=[
                     pytest.mark.polarion_id("OCS-2104"),
-                    pytest.mark.bugzilla("1845666"),
                 ],
             ),
             pytest.param(
@@ -113,7 +111,7 @@ class TestAutomatedRecoveryFromFailedNodes(ManageTest):
         pvc_factory,
         pod_factory,
         failure,
-        dc_pod_factory,
+        deployment_pod_factory,
         interface,
         bucket_factory,
         rgw_bucket_factory,
@@ -136,7 +134,9 @@ class TestAutomatedRecoveryFromFailedNodes(ManageTest):
             interface = constants.CEPHFILESYSTEM
         dc_pod_obj = []
         for i in range(2):
-            dc_pod = dc_pod_factory(interface=interface, node_selector={"dc": "fedora"})
+            dc_pod = deployment_pod_factory(
+                interface=interface, node_selector={"dc": "fedora"}
+            )
             self.threads.append(pod.run_io_in_bg(dc_pod, fedora_dc=True))
             dc_pod_obj.append(dc_pod)
 
@@ -221,6 +221,7 @@ class TestAutomatedRecoveryFromFailedNodes(ManageTest):
 @tier4a
 @ipi_deployment_required
 @skipif_ibm_cloud
+@skipif_compact_mode
 class TestAutomatedRecoveryFromStoppedNodes(ManageTest):
 
     osd_worker_node = None
@@ -316,14 +317,15 @@ class TestAutomatedRecoveryFromStoppedNodes(ManageTest):
             new_ocs_node_names = add_new_node_and_label_it(self.machineset_name)
             failure_domain = get_failure_domain()
             log.info("Wait for the nodes racks or zones to appear...")
-            wait_for_nodes_racks_or_zones(failure_domain, new_ocs_node_names)
-
+            wait_for_nodes_racks_or_zones(
+                failure_domain, new_ocs_node_names, raise_value_error=False
+            )
             new_ocs_node = get_node_objs(new_ocs_node_names)[0]
             log.info(f"Successfully created a new OCS node '{new_ocs_node.name}'")
             self.extra_node = True
             log.info("Get another OSD node in the same rack or zone...")
             self.osd_worker_node = get_another_osd_node_in_same_rack_or_zone(
-                failure_domain, new_ocs_node
+                failure_domain, new_ocs_node, raise_value_error=False
             )
             assert (
                 self.osd_worker_node

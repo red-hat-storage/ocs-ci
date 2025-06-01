@@ -25,7 +25,7 @@ class RGW(object):
             kind="storageclass", namespace=namespace, resource_name=sc_name
         )
         self.s3_internal_endpoint = (
-            self.storageclass.get().get("parameters").get("endpoint")
+            f"https://{constants.RGW_SERVICE_INTERNAL_MODE}.{self.namespace}.svc:443"
         )
         self.region = self.storageclass.get().get("parameters").get("region")
         # Todo: Implement retrieval in cases where CephObjectStoreUser is available
@@ -58,7 +58,11 @@ class RGW(object):
             cephobjectstore = cos_ocp_obj.get(
                 resource_name=constants.RGW_ROUTE_EXTERNAL_MODE
             )
-            endpoint = cephobjectstore["status"]["endpoints"]["insecure"][0]
+            if config.EXTERNAL_MODE.get("rgw_secure"):
+                endpoint = cephobjectstore["status"]["endpoints"]["secure"][0]
+            else:
+                endpoint = cephobjectstore["status"]["endpoints"]["insecure"][0]
+
         else:
             route_ocp_obj = OCP(
                 kind=constants.ROUTE, namespace=config.ENV_DATA["cluster_namespace"]

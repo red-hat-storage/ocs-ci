@@ -1,15 +1,17 @@
 """
 General PVC object
 """
+
 import logging
 import time
 from concurrent.futures import ThreadPoolExecutor
 from uuid import uuid4
 
 from ocs_ci.ocs import constants
-from ocs_ci.ocs.exceptions import UnavailableResourceException
+from ocs_ci.ocs.exceptions import UnavailableResourceException, TimeoutExpiredError
 from ocs_ci.ocs.ocp import OCP
 from ocs_ci.ocs.resources.ocs import OCS
+from ocs_ci.ocs.resources import pod
 from ocs_ci.framework import config
 from ocs_ci.utility.utils import run_cmd
 from ocs_ci.utility.utils import TimeoutSampler, convert_device_size
@@ -155,6 +157,18 @@ class PVC(OCS):
         return self.backed_pv_obj.get()["spec"]["csi"]["volumeAttributes"]["imageName"]
 
     @property
+    def get_cephfs_subvolume_name(self):
+        """
+        Fetch subvolume name associated with the CephFS PVC
+
+        Returns:
+            str: Subvolume name associated with the CephFS PVC
+        """
+        return self.backed_pv_obj.get()["spec"]["csi"]["volumeAttributes"][
+            "subvolumeName"
+        ]
+
+    @property
     def get_pv_volume_handle_name(self):
         """
         Fetch volume handle name from PV
@@ -180,7 +194,8 @@ class PVC(OCS):
 
         # Modify size of PVC
         assert self.ocp.patch(
-            resource_name=self.name, params=patch_param
+            resource_name=self.name,
+            params=patch_param,
         ), f"Patch command to modify size of PVC {self.name} has failed."
 
         if verify:
@@ -397,10 +412,18 @@ def get_deviceset_pvcs():
         AssertionError: In case the deviceset PVCs are not found
 
     """
+    storage_cluster_obj = OCP(
+        kind=constants.STORAGECLUSTER,
+        resource_name=constants.DEFAULT_CLUSTERNAME,
+        namespace=config.ENV_DATA["cluster_namespace"],
+    )
     ocs_pvc_obj = get_all_pvc_objs(namespace=config.ENV_DATA["cluster_namespace"])
+    deviceset_prefix = (
+        storage_cluster_obj.get().get("spec").get("storageDeviceSets")[0].get("name")
+    )
     deviceset_pvcs = []
     for pvc_obj in ocs_pvc_obj:
-        if pvc_obj.name.startswith(constants.DEFAULT_DEVICESET_PVC_NAME):
+        if pvc_obj.name.startswith(deviceset_prefix):
             deviceset_pvcs.append(pvc_obj)
     assert deviceset_pvcs, "Failed to find the deviceset PVCs"
     return deviceset_pvcs
@@ -637,6 +660,25 @@ def scale_down_pods_and_remove_pvcs(sc_name):
             delete_pvcs([pvc_obj])
 
 
+def flatten_image(clone_obj):
+    """
+    Flatten the image of clone
+
+    Args:
+        clone_obj: Object of clone of which image to be flatten
+    """
+    image_name = clone_obj.get_rbd_image_name
+    pool_name = constants.DEFAULT_CEPHBLOCKPOOL
+
+    tool_pod = pod.get_ceph_tools_pod()
+    out = tool_pod.exec_ceph_cmd(
+        ceph_cmd=f"rbd flatten {pool_name}/{image_name}",
+        format=None,
+    )
+    log.info(f"{out}")
+    log.info(f"Successfully flatten the image of {clone_obj.name}")
+
+
 def get_pvc_size(pvc_obj, convert_size=1024):
     """
     Returns the PVC size in GB
@@ -649,7 +691,77 @@ def get_pvc_size(pvc_obj, convert_size=1024):
         int: PVC size
 
     """
+    valid_units = ("Ti", "Gi", "Mi", "Ki", "Bi")
     unformatted_size = (
         pvc_obj.data.get("spec").get("resources").get("requests").get("storage")
     )
+    # If requested size is missing or does not contain a valid unit, fallback to actual storage size
+    if (
+        not unformatted_size
+        or not isinstance(unformatted_size, str)
+        or not any(unformatted_size.endswith(unit) for unit in valid_units)
+    ):
+        log.warning(
+            f"The requested storage '{unformatted_size}' is missing a unit (Ti, Gi, Mi, Ki, Bi). "
+            "Getting the PVC size from the actual storage value."
+        )
+        unformatted_size = (
+            pvc_obj.data.get("status", {}).get("capacity", {}).get("storage")
+        )
+
+    if not unformatted_size:
+        raise ValueError("PVC size could not be determined from spec or status.")
+
     return convert_device_size(unformatted_size, "GB", convert_size)
+
+
+def wait_for_pvcs_in_lvs_to_reach_status(
+    lvs_name, pvc_count, expected_status, timeout=180, sleep=10
+):
+    """
+    Wait for the Persistent Volume Claims (PVCs) associated with a specific LocalVolumeSet (LVS)
+    to reach the expected status within a given timeout.
+
+    Args:
+        lvs_name (str): The LocalVolumeSet name whose PVCs are being monitored.
+        pvc_count (int): The number of PVCs expected to reach the desired status.
+        expected_status (str): The expected status of the PVCs (e.g., "Bound", "Available").
+        timeout (int): Maximum time to wait for the PVCs to reach the expected status, in seconds.
+        sleep (int): Interval between successive checks, in seconds.
+
+    Returns:
+        bool: True, if the PVCs reach the expected status within the specified timeout. False, otherwise.
+
+    """
+    log.info(
+        f"Waiting for the PVCs in the LocalVolumeSet {lvs_name} to reach the "
+        f"expected status {expected_status}"
+    )
+    try:
+        for lvs_pvcs in TimeoutSampler(
+            func=get_all_pvcs_in_storageclass,
+            storage_class=lvs_name,
+            timeout=timeout,
+            sleep=sleep,
+        ):
+            current_pvc_count = len(lvs_pvcs)
+            if current_pvc_count != pvc_count:
+                log.warning(
+                    f"The current PVC count {current_pvc_count} is not equal to the "
+                    f"expected PVC count {pvc_count}"
+                )
+                continue
+            pvc_statuses = [pvc.status for pvc in lvs_pvcs]
+            log.info(f"PVCs statuses = {pvc_statuses}")
+            if all([status == expected_status for status in pvc_statuses]):
+                log.info(
+                    f"All the PVCs in the LocalVolumeSet {lvs_name} reached the "
+                    f"expected status {expected_status}"
+                )
+                return True
+    except TimeoutExpiredError:
+        log.warning(
+            f"The PVCs in the LocalVolumeSet {lvs_name} failed to reach the "
+            f"expected status {expected_status} after {timeout} seconds"
+        )
+        return False

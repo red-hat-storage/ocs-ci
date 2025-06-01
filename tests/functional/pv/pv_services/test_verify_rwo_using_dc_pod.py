@@ -10,6 +10,7 @@ from ocs_ci.ocs.resources.ocs import OCS
 from ocs_ci.ocs.resources import pod
 from ocs_ci.ocs.ocp import OCP
 from ocs_ci.helpers.helpers import wait_for_resource_state, create_pod
+from ocs_ci.framework import config
 
 from ocs_ci.utility.utils import TimeoutSampler
 
@@ -49,9 +50,8 @@ class TestVerifyRwoUsingReplicatedPod(ManageTest):
                 pvc_name=pvc_obj.name,
                 namespace=pvc_obj.namespace,
                 sa_name=sa_obj.name,
-                dc_deployment=True,
+                deployment=True,
                 replica_count=self.replica_count,
-                deploy_pod_status=constants.STATUS_RUNNING,
             )
         except TimeoutExpiredError:
             # The test cannot be continued if all the pods are created on the same node
@@ -82,9 +82,14 @@ class TestVerifyRwoUsingReplicatedPod(ManageTest):
         """
         Wait for the pods to be created and verify only one pod is running
         """
+        timeout_value = 360
+
+        if config.ENV_DATA.get("worker_replicas") == 0:
+            timeout_value = 600
+
         # Wait for pods
         for pods in TimeoutSampler(
-            360,
+            timeout_value,
             2,
             func=pod.get_all_pods,
             namespace=self.namespace,
@@ -98,7 +103,7 @@ class TestVerifyRwoUsingReplicatedPod(ManageTest):
 
         # Wait for one pod to be in Running state
         curr_pod = next(pods_iter)
-        sampler = TimeoutSampler(360, 2, curr_pod.get)
+        sampler = TimeoutSampler(timeout_value, 2, curr_pod.get)
         for pod_info in sampler:
             if pod_info["status"]["phase"] == constants.STATUS_RUNNING:
                 self.running_pod = curr_pod

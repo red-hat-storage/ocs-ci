@@ -4,7 +4,7 @@ import pytest
 from ocs_ci.framework import config
 from ocs_ci.ocs import constants, managedservice, ocp
 from ocs_ci.ocs.resources import pod, storage_cluster
-from ocs_ci.framework.pytest_customization.marks import yellow_squad
+from ocs_ci.framework.pytest_customization.marks import yellow_squad, provider_mode
 from ocs_ci.framework.testlib import (
     acceptance,
     provider_client_ms_platform_required,
@@ -12,7 +12,6 @@ from ocs_ci.framework.testlib import (
     pc_or_ms_provider_required,
     tier1,
     runs_on_provider,
-    bugzilla,
 )
 from ocs_ci.ocs.exceptions import CommandFailed
 
@@ -57,7 +56,7 @@ class TestPostInstallationState(ManageTest):
     @acceptance
     @pc_or_ms_provider_required
     @pytest.mark.polarion_id("OCS-3910")
-    def test_consumers_capacity(self):
+    def deprecated_test_consumers_capacity(self):
         """
         Test each storageconsumer's capacity and requested capacity.
         Now only 1Ti value is possible. If more options get added, the test
@@ -78,6 +77,7 @@ class TestPostInstallationState(ManageTest):
                 == consumer_yaml["spec"]["capacity"]
             )
 
+    @provider_mode
     @tier1
     @pytest.mark.polarion_id("OCS-3917")
     @runs_on_provider
@@ -106,7 +106,7 @@ class TestPostInstallationState(ManageTest):
     @tier1
     @pytest.mark.polarion_id("OCS-3918")
     @runs_on_provider
-    def test_ceph_clients(self):
+    def deprecated_test_ceph_clients(self):
         """
         Test that for every consumer there are  the following cephclients in
         the provider cluster: rbd provisioner, rbd node, cephfs provisioner,
@@ -160,7 +160,6 @@ class TestPostInstallationState(ManageTest):
         assert len(log_lines) > 100
 
     @tier1
-    @bugzilla("2117312")
     @runs_on_provider
     @pytest.mark.polarion_id("OCS-2695")
     def test_connection_time_out(self):

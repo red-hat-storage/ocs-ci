@@ -16,10 +16,14 @@ RUN:
   log_dir: "/tmp"
   run_id: null  # this will be redefined in the execution
   kubeconfig_location: 'auth/kubeconfig' # relative from cluster_dir
+  # kubeadmin_password: '' # kubeadmin password used as alternative way to
+  # login to the OCP cluster (if kubeconfig is not available)
+  # ocp_url: '' # OCP Cluster URL (api or console) used to login to OCP cluster
+  # if kubeconfig is not available
   cli_params: {}  # this will be filled with CLI parameters data
   # If the client version ends with .nightly, the version will be exposed
   # to the latest accepted OCP nightly build version
-  client_version: '4.16.0-0.nightly'
+  client_version: '4.19.0-0.nightly'
   bin_dir: './bin'
   google_api_secret: '~/.ocs-ci/google_api_secret.json'
   # Following chrome params are for openshift console UI testing
@@ -49,18 +53,18 @@ DEPLOYMENT:
   # if the installer version ends with .nightly, the version will be exposed
   # to the latest accepted OCP nightly build version. You can also use the
   # specific build version like: "4.2.0-0.nightly-2019-08-06-195545"
-  installer_version: "4.16.0-0.nightly"
+  installer_version: "4.19.0-0.nightly"
   force_download_installer: True
   force_download_client: True
   skip_download_client: False
-  default_latest_tag: 'latest-stable-4.16'
+  default_latest_tag: 'latest-stable-4.19'
   # define if ceph is setup as external mode, default is false
   external_mode: False
   # You can overwrite csv channel version by following parameter
-  ocs_csv_channel: "stable-4.16"
+  ocs_csv_channel: "stable-4.19"
   # you can overwrite the image for ocs operator catalog source by following parameter:
   # ocs_registry_image: "quay.io/rhceph-dev/ocs-olm-operator:4.2-32.9b6c93e.master"
-  default_ocs_registry_image: "quay.io/rhceph-dev/ocs-registry:latest-4.16"
+  default_ocs_registry_image: "quay.io/rhceph-dev/ocs-registry:latest-4.19"
   ocs_operator_nodes_to_label: 3
   # This is described as a WA for minimal configuration 3/3 worker/master
   # nodes. See: https://github.com/openshift/ocs-operator
@@ -108,6 +112,8 @@ DEPLOYMENT:
   ingress_ssl_cert: "data/ingress-cert.crt"
   ingress_ssl_key: "data/ingress-cert.key"
   ingress_ssl_ca_cert: "data/ca.crt"
+  custom_ssl_cert_provider: 'ocs-qe-ca'
+  certbot_dns_plugin: 'dns-route53'
   api_ssl_cert: "data/api-cert.crt"
   api_ssl_key: "data/api-cert.key"
   api_ssl_ca_cert: "data/ca.crt"
@@ -117,6 +123,15 @@ DEPLOYMENT:
   aws_cred_path: "~/.aws/credentials"
   # STS in CCO manual mode
   sts_enabled: false
+  ocm_cli_version: '0.1.75'
+  rosa_cli_version: '1.2.51'
+  # Multicluster engine
+  deploy_mce: false
+  # ! Pay attention. stable-2.8 is not available until OCP 4.18 becomes available
+  mce_channel: "stable-2.8"
+  # catalogsource format of image with tag; latest unreleased, that is supported by OCP 4.18
+  mce_image: ""
+  fusion_channel: v2.0
 
 
 
@@ -133,10 +148,11 @@ REPORTING:
   default_ocs_must_gather_image: "quay.io/rhceph-dev/ocs-must-gather"
   odf_live_must_gather_image: "registry.redhat.io/odf4/odf-must-gather-rhel9"
   odf_live_must_gather_image_pre_4_13: "registry.redhat.io/odf4/ocs-must-gather-rhel8"
-  default_ocs_must_gather_latest_tag: 'latest-4.16'
+  default_ocs_must_gather_latest_tag: 'latest-4.19'
   gather_on_deploy_failure: true
   collect_logs_on_success_run: False
   rp_client_log_level: "ERROR"
+  max_mg_fail_attempts: 3
 
 # This is the default information about environment.
 ENV_DATA:
@@ -146,11 +162,12 @@ ENV_DATA:
   storage_device_sets_name: "storageDeviceSets"
   sno: false
   cluster_namespace: 'openshift-storage'
+  client_namespace: 'openshift-storage-client'
   service_namespace: 'openshift-storage'
   local_storage_namespace: 'openshift-local-storage'
   monitoring_enabled: true
   persistent-monitoring: true
-  platform: 'AWS'
+  platform: 'aws'
   deployment_type: 'ipi'
   region: 'us-east-2'
   base_domain: 'qe.rh-ocs.com'
@@ -162,13 +179,13 @@ ENV_DATA:
   worker_replicas: 3
   skip_ocp_deployment: false
   skip_ocs_deployment: false
-  ocs_version: '4.16'
+  ocs_version: '4.19'
   prometheus_version: "4.10.0"
   # uncomment to use custom directory for storing measurement data related to
   # monitoring tests, otherwise generate temporary directory for each test run
   # measurement_dir: '/tmp/ocs_ci_monitoring_measurement/'
   # Default RHCOS image to be used for VmWare deployment
-  vm_template: 'rhcos-416.94.202403071059-0-vmware.x86_64'
+  vm_template: 'rhcos-9.6.20250121-0-vmware.x86_64'
   # minimal write speed of fio as used in workload_fio_storageutilization
   # fixtures, which is used to compute timeout of the write job (so that
   # when actual write speed of the operation is smaller than this value, the
@@ -200,6 +217,8 @@ ENV_DATA:
   opm_owner_repo: "operator-framework/operator-registry"
   # opm tool release tag (particular version or "latest") to be downloaded
   opm_release_tag: "latest"
+  # virtctl tool github owner and repository (used in api url for downloading opm tool)
+  virtctl_owner_repo: "kubevirt/kubevirt"
   # vault environment variables
   vault_deploy_mode: external
   KMS_PROVIDER: vault
@@ -228,12 +247,13 @@ ENV_DATA:
   rhel8_template: 'rhel87_ocs4qe'
   # ACM HUB deployment
   deploy_acm_hub_cluster: false
+  # HyperConverged deployment
+  deploy_hyperconverged: false
 
   # Managed service git stat  default configurations
   # Managed StorageCluster size in TiB
   size: '20'
   ms_env_type: 'staging'
-  rosa_cli_version: '1.2.16'
   rosa_billing_model: 'standard'
   appliance_mode: true
   ms_osd_pod_memory: "6Gi"
@@ -258,6 +278,7 @@ ENV_DATA:
   multus_public_net_namespace: "openshift-storage"
   multus_public_net_interface: "br-ex"
   multus_public_net_range: "192.168.20.0/24"
+  multus_public_ipv6_net_range: "fd01:db8:1:1::/96"
   multus_public_net_type: "macvlan"
   multus_public_net_mode: "bridge"
   multus_create_cluster_net: true
@@ -265,21 +286,34 @@ ENV_DATA:
   multus_cluster_net_namespace: "openshift-storage"
   multus_cluster_net_interface: "br-ex"
   multus_cluster_net_range: "192.168.30.0/24"
+  multus_cluster_ipv6_net_range: "fd01:db8:2:1::/96"
   multus_cluster_net_type: "macvlan"
   multus_cluster_net_mode: "bridge"
+  multus_destination_route: "192.168.252.0/24"
+  multus_delete_csi_holder_pods: False
 
   #RDR Green field
   rdr_osd_deployment_mode: "greenfield"
+
+  # Label nodes with specific labels, used for example fot ODF deployment on ROSA HCP
+  node_labels: ""
 
   # Assisted Installer related settings
 
 # This section is related to upgrade
 UPGRADE:
   upgrade_to_latest: true
-  ocp_channel: "stable-4.16"
+  ocp_channel: "stable-4.19"
   ocp_upgrade_path: "quay.io/openshift-release-dev/ocp-release"
   ocp_arch: "x86_64"
-  upgrade_logging_channel: "4.16"
+  upgrade_logging_channel: "4.19"
+  # None value means that value in Rook operator config is used.
+  # Otherwise it is changed to the provided value before ODF upgrade.
+  csi_rbd_plugin_update_strategy_max_unavailable: null
+  csi_cephfs_plugin_update_strategy_max_unavailable: null
+  # Values to be set after upgrade started - used for resiliancy testing
+  csi_rbd_plugin_update_strategy_max_unavailable_upgrade_middle: null
+  csi_cephfs_plugin_update_strategy_max_unavailable_upgrade_middle: null
 
 # This section stores secret and uploaded from home dir or s3
 # for entry into this section, please email ecosystem team
@@ -299,6 +333,7 @@ FLEXY:
 EXTERNAL_MODE:
   admin_keyring:
     key: PLACE_HOLDER
+  run_as_user: "client.healthchecker"
 
 
 # This section is related to ui testing with selenium
@@ -346,3 +381,7 @@ MULTICLUSTER:
   acm_cluster: False
   primary_cluster: False
   active_acm_cluster: False
+
+PREUPGRADE_CONFIG:
+  AUTH: null
+  MULTICLUSTER: null

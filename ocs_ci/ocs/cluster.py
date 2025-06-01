@@ -10,13 +10,17 @@ import base64
 import json
 import logging
 import random
-import re
 import threading
 import yaml
 import time
 import os
+import pandas as pd
+import re
+import math
 
+from datetime import datetime
 from semantic_version import Version
+
 from ocs_ci.ocs.utils import thread_init_class
 
 import ocs_ci.ocs.resources.pod as pod
@@ -31,6 +35,7 @@ from ocs_ci.ocs.exceptions import (
     TimeoutExpiredError,
     ResourceWrongStatusException,
     CephHealthException,
+    ActiveMdsValueNotMatch,
 )
 from ocs_ci.ocs.resources import ocs, storage_cluster
 import ocs_ci.ocs.constants as constant
@@ -49,7 +54,7 @@ from ocs_ci.utility.utils import (
 from ocs_ci.ocs.node import get_node_ip_addresses, wait_for_nodes_status
 from ocs_ci.ocs.utils import get_pod_name_by_pattern
 from ocs_ci.framework import config
-from ocs_ci.ocs import ocp, constants, exceptions
+from ocs_ci.ocs import ocp, constants, exceptions, defaults
 from ocs_ci.ocs.exceptions import PoolNotFound
 from ocs_ci.ocs.resources.pvc import get_all_pvc_objs
 from ocs_ci.ocs.ocp import OCP, wait_for_cluster_connectivity
@@ -57,10 +62,25 @@ from ocs_ci.ocs.resources.ocs import OCS
 from ocs_ci.ocs.resources.pvc import PVC
 from ocs_ci.utility.connection import Connection
 from ocs_ci.utility.lvmo_utils import get_lvm_cluster_name
-from ocs_ci.ocs.resources.pod import get_mds_pods, wait_for_pods_to_be_running
-from ocs_ci.utility.decorators import switch_to_orig_index_at_last
+from ocs_ci.ocs.resources.pod import (
+    get_mds_pods,
+    wait_for_pods_to_be_in_statuses,
+)
 
 logger = logging.getLogger(__name__)
+
+
+class CephClusterMultiCluster(object):
+    """
+    TODO: Implement this class later
+    This class will be used in case of multicluster scenario
+    and current cluster is ACM hence this cluster should point to
+    the ODF which is not in current context
+
+    """
+
+    def __init__(self, cluster_conf=None):
+        pass
 
 
 class CephCluster(object):
@@ -78,11 +98,17 @@ class CephCluster(object):
         namespace (str): openshift Namespace where this cluster lives
     """
 
-    def __init__(self):
+    def __init__(self, cluster_config=None):
         """
         Cluster object initializer, this object needs to be initialized
         after cluster deployment. However its harmless to do anywhere.
         """
+        if cluster_config:
+            logger.info(
+                "CephClusterMulticluster will be used to handle multicluster case"
+            )
+            return CephClusterMultiCluster()
+
         if config.ENV_DATA["mcg_only_deployment"] or (
             config.ENV_DATA.get("platform") == constants.FUSIONAAS_PLATFORM
             and config.ENV_DATA["cluster_type"].lower() == "consumer"
@@ -190,6 +216,7 @@ class CephCluster(object):
         self._ceph_pods = pod.get_all_pods(self._namespace)
         # TODO: Workaround for BZ1748325:
         mons = pod.get_mon_pods(self.mon_selector, self.namespace)
+        self.mons = []
         for mon in mons:
             if mon.ocp.get_resource_status(mon.name) == constant.STATUS_RUNNING:
                 self.mons.append(mon)
@@ -278,10 +305,10 @@ class CephCluster(object):
         # TODO: add an attribute in CephHealthException, called "reason"
         # which should tell because of which exact cluster entity health
         # is not ok ?
+        self.scan_cluster()
+
         expected_mon_count = self.mon_count
         expected_mds_count = self.mds_count
-
-        self.scan_cluster()
 
         if config.ENV_DATA[
             "platform"
@@ -362,7 +389,10 @@ class CephCluster(object):
 
         """
         if not self.mcg_obj.status:
-            raise exceptions.NoobaaHealthException("Cluster health is NOT OK")
+            raise exceptions.NoobaaHealthException(
+                "Noobaa is not in HEALTHY state. Please check noobaa, noobaa-default-backing-store"
+                " and noobaa-default-bucket-class status"
+            )
 
     def wait_for_noobaa_health_ok(self, tries=60, delay=5):
         """
@@ -632,24 +662,27 @@ class CephCluster(object):
         # module does not exist, return 0 as number of replica.
         return 0
 
-    def get_ceph_capacity(self):
+    def get_ceph_capacity(self, replica_divide=True):
         """
         The function gets the total mount of storage capacity of the ocs cluster.
-        the calculation is <total bytes> / <replica number>
+        the calculation is <total bytes> / <replica number> depends if replia_divide is true
         it will not take into account the current used capacity.
-
+        Args:
+            replica_divide (bool): if true it will divide the capacity in to replica else return the capacity as it.
         Returns:
             int : Total storage capacity in GiB (GiB is for development environment)
 
         """
-        replica = int(self.get_ceph_default_replica())
-        logger.info(f"Number of replica : {replica}")
         ceph_pod = pod.get_ceph_tools_pod()
         ceph_status = ceph_pod.exec_ceph_cmd(ceph_cmd="ceph df")
-        usable_capacity = (
-            int(ceph_status["stats"]["total_bytes"]) / replica / constant.GB
-        )
-
+        if replica_divide:
+            replica = int(self.get_ceph_default_replica())
+            logger.info(f"Number of replica : {replica}")
+            usable_capacity = (
+                int(ceph_status["stats"]["total_bytes"]) / replica / constant.GB
+            )
+        else:
+            usable_capacity = int(ceph_status["stats"]["total_bytes"]) / constant.GB
         return usable_capacity
 
     def get_ceph_free_capacity(self):
@@ -1026,6 +1059,18 @@ class CephCluster(object):
         self.RBD.exec_oc_cmd(f"patch {patch}")
 
 
+class MulticlusterCephHealthMonitor(object):
+    # TODO: This will be a placeholder for now
+    def __init__(self, ceph_cluster=None):
+        pass
+
+    def __enter__(self):
+        pass
+
+    def __exit__(self, exception_type, value, traceback):
+        pass
+
+
 class CephHealthMonitor(threading.Thread):
     """
     Context manager class for monitoring ceph health status of CephCluster.
@@ -1043,6 +1088,8 @@ class CephHealthMonitor(threading.Thread):
             sleep (int): Number of seconds to sleep between health checks.
 
         """
+        if isinstance(ceph_cluster, CephClusterMultiCluster):
+            return MulticlusterCephHealthMonitor()
         self.ceph_cluster = ceph_cluster
         self.sleep = sleep
         self.health_error_status = None
@@ -1238,7 +1285,7 @@ def count_cluster_osd():
     return osd_count
 
 
-@retry(PDBNotCreatedException, tries=9, backoff=2)
+@retry((PDBNotCreatedException, AssertionError), tries=9, backoff=2)
 def validate_pdb_creation():
     """
     Validate creation of PDBs for MON, MDS and OSD pods.
@@ -1251,17 +1298,17 @@ def validate_pdb_creation():
         kind="PodDisruptionBudget", namespace=config.ENV_DATA["cluster_namespace"]
     )
     item_list = pdb_obj.get().get("items")
-    pdb_count = constants.PDB_COUNT
-    pdb_required = [constants.MDS_PDB, constants.MON_PDB, constants.OSD_PDB]
 
-    if version.get_semantic_ocs_version_from_config() >= version.VERSION_4_15:
-        pdb_count = constants.PDB_COUNT_2_MGR
-        pdb_required = [
-            constants.MDS_PDB,
-            constants.MON_PDB,
-            constants.OSD_PDB,
-            constants.MGR_PDB,
-        ]
+    pdb_count = constants.PDB_COUNT_2_MGR
+    pdb_required = [
+        constants.MDS_PDB,
+        constants.MON_PDB,
+        constants.OSD_PDB,
+        constants.MGR_PDB,
+    ]
+
+    # 4.19.0-59 is the stable build which doesn't contain the updated PDB count for Noobaa DB
+    odf_running_version = version.get_ocs_version_from_csv(only_major_minor=True)
 
     if config.DEPLOYMENT.get("arbiter_deployment"):
         pdb_count = constants.PDB_COUNT_ARBITER
@@ -1274,6 +1321,12 @@ def validate_pdb_creation():
         if config.ENV_DATA["platform"].lower() == constants.VSPHERE_PLATFORM:
             pdb_count = constants.PDB_COUNT_ARBITER_VSPHERE
             pdb_required.append(constants.RGW_PDB)
+
+    if odf_running_version >= version.VERSION_4_19:
+        pdb_count += 1
+        pdb_required.append(constants.NOOBAA_DB_PG_PDB)
+    else:
+        logger.info(f"Required PDB count is {pdb_count}")
 
     if len(item_list) != pdb_count:
         raise PDBNotCreatedException(
@@ -1308,7 +1361,7 @@ def get_osd_utilization():
     return osd_filled
 
 
-def get_ceph_df_detail():
+def get_ceph_df_detail(format="json-pretty", out_yaml_format=True):
     """
     Get ceph osd df detail
 
@@ -1318,7 +1371,112 @@ def get_ceph_df_detail():
     """
     ceph_cmd = "ceph df detail"
     ct_pod = pod.get_ceph_tools_pod()
-    return ct_pod.exec_ceph_cmd(ceph_cmd=ceph_cmd, format="json-pretty")
+    return ct_pod.exec_ceph_cmd(
+        ceph_cmd=ceph_cmd, format=format, out_yaml_format=out_yaml_format
+    )
+
+
+def parse_ceph_df_pools(raw_output: str) -> pd.DataFrame:
+    """
+    Parse the 'ceph df detail' command output and extract the POOLS section into a pandas DataFrame.
+
+    Args:
+        raw_output (str): The raw output string from the 'ceph df detail' command.
+
+    Returns:
+        pd.DataFrame: A pandas DataFrame containing the parsed POOLS section data.
+            The DataFrame includes columns for POOL, ID, PGS, STORED, OBJECTS, USED,
+            %USED, MAX AVAIL, QUOTA OBJECTS, QUOTA BYTES, DIRTY, USED COMPR, and UNDER COMPR.
+
+    Note:
+        This function assumes a specific format for the 'ceph df detail' output.
+        It extracts the POOLS section, processes the header and data rows,
+        and returns a structured DataFrame for further analysis.
+
+    """
+    pools_section = (
+        re.search(r"--- POOLS ---\n(.*)", raw_output, re.DOTALL).group(1).strip()
+    )
+    pools_lines = [line.strip() for line in pools_section.split("\n") if line.strip()]
+    header = [
+        "POOL",
+        "ID",
+        "PGS",
+        "STORED",
+        "(DATA)",
+        "(OMAP)",
+        "OBJECTS",
+        "USED",
+        "(DATA)",
+        "(OMAP)",
+        "%USED",
+        "MAX AVAIL",
+        "QUOTA OBJECTS",
+        "QUOTA BYTES",
+        "DIRTY",
+        "USED COMPR",
+        "UNDER COMPR",
+    ]
+    logger.info(f"Number of columns: {len(header)}")
+    data = []
+    for line in pools_lines[1:]:
+        parts = re.split(r"\s{2,}", line.strip())
+        if len(parts) == len(header):
+            data.append(parts)
+        else:
+            logger.warning(f"Mismatch in column count for line: {line}")
+            logger.warning(f"Expected {len(header)} columns, got {len(parts)}")
+    df = pd.DataFrame(data, columns=header)
+
+    return df
+
+
+def ceph_details_df_to_dict(df: pd.DataFrame) -> dict:
+    """
+    Convert the DataFrame to a dictionary where the POOL column is the key
+    and the rest of the columns form a nested dictionary.
+
+    Args:
+        df (pd.DataFrame): A pandas DataFrame containing Ceph pool information.
+
+    Returns:
+        dict: A dictionary where each key is a pool name, and the corresponding value
+              is a nested dictionary containing the rest of the columns' data for that pool.
+
+    """
+    return {row["POOL"]: row.drop("POOL").to_dict() for _, row in df.iterrows()}
+
+
+def validate_num_of_pgs(expected_pgs: dict[str, int]) -> bool:
+    """
+    Validate the number of PGs for each pool against expected values.
+
+    Args:
+        expected_pgs (dict[pool_name(str), expected_pg_num(int)]): A dictionary where keys
+        are pool names and values are expected PG numbers.
+
+    Returns:
+        bool: True if all pools have the expected number of PGs, False otherwise.
+    """
+
+    ceph_df_output = get_ceph_df_detail(format=None, out_yaml_format=False)
+    pools_df = parse_ceph_df_pools(ceph_df_output)
+    pools_dict = ceph_details_df_to_dict(pools_df)
+
+    for pool_name, expected_pg_num in expected_pgs.items():
+        if pool_name not in pools_dict:
+            logger.error(f"Pool {pool_name} not found in the cluster.")
+            return False
+
+        actual_pg_num = int(pools_dict[pool_name]["PGS"])
+        if actual_pg_num != expected_pg_num:
+            logger.error(
+                f"Pool {pool_name} has {actual_pg_num} PGs, expected {expected_pg_num}."
+            )
+            return False
+
+    logger.info("All pools have the expected number of PGs.")
+    return True
 
 
 def get_ceph_pool_property(pool_name, prop):
@@ -1676,7 +1834,7 @@ def get_child_nodes_osd_tree(node_id, osd_tree):
 def get_nodes_osd_tree(osd_tree, node_ids=None):
     """
     This function gets the 'ceph osd tree' nodes, which have the ids 'node_ids', and returns
-    them as a list. If 'node_ids' are not passed, it returns all the 'ceph osd tree' nodes.
+    them as a list. If 'node_ids' are not passed, it returns all the 'ceph osd tree' nodes.
 
     Args:
         osd_tree (dict): Dictionary containing the output of 'ceph osd tree'
@@ -1851,7 +2009,7 @@ def check_osd_tree_1az_vmware_flex(osd_tree, number_of_osds):
     #  0   hdd 0.09769         osd.0          up  1.00000 1.00000
     # -5       0.09769     host compute-2
     #  1   hdd 0.09769         osd.1          up  1.00000 1.00000
-    # There will be no racks, and we will have a failure domain 'host'.
+    # There will be no racks, and we will have a failure domain 'host'.
     # When cluster expansion is successfully done, an osd are added in each host.
     # Each host will have one or multiple osds under it
     hosts = osd_tree["nodes"][0]["children"]
@@ -2099,7 +2257,7 @@ def is_flexible_scaling_enabled():
 
 
 def check_ceph_health_after_add_capacity(
-    ceph_health_tries=80, ceph_rebalance_timeout=1800
+    ceph_health_tries=80, ceph_rebalance_timeout=2400
 ):
     """
     Check Ceph health after adding capacity to the cluster
@@ -2173,18 +2331,19 @@ def validate_existence_of_blocking_pdb():
     pdb_obj_get = pdb_obj.get()
     osd_pdb = []
     for pdb in pdb_obj_get.get("items"):
-        if not any(
-            osd in pdb["metadata"]["name"]
-            for osd in [constants.MDS_PDB, constants.MON_PDB]
-        ):
+        # blocking OSD PDBs are in the format of rook-ceph-osd-zone-data-1
+        if constants.OSD_PDB in pdb["metadata"]["name"]:
             osd_pdb.append(pdb)
     blocking_pdb_exist = False
     for osd in range(len(osd_pdb)):
         allowed_disruptions = osd_pdb[osd].get("status").get("disruptionsAllowed")
         maximum_unavailable = osd_pdb[osd].get("spec").get("maxUnavailable")
-        if allowed_disruptions & maximum_unavailable != 1:
-            logger.info("Blocking PDBs are created")
+        if allowed_disruptions & (maximum_unavailable != 1):
+            logger.info(
+                f"Blocking PDB {osd_pdb[osd].get('metadata').get('name')} are created"
+            )
             blocking_pdb_exist = True
+            return blocking_pdb_exist
         else:
             logger.info(
                 f"No blocking PDBs created, OSD PDB is {osd_pdb[osd].get('metadata').get('name')}"
@@ -3086,6 +3245,7 @@ def get_mds_standby_replay_info():
         - "node_ip": The IP address of the node running the standby-replay MDS daemon.
         - "mds_daemon": The name of the MDS daemon.
         - "standby_replay_pod": The name of the standby replay pod.
+        - "standby_replay_pod_obj": The object of standby replay pod.
     """
     ct_pod = pod.get_ceph_tools_pod()
     ceph_mdsmap = ct_pod.exec_ceph_cmd("ceph fs status")
@@ -3127,11 +3287,18 @@ def get_mds_standby_replay_info():
             f"Unable to determine IP address of node running standby-replay MDS pod '{standby_replay_pod.name}'"
         )
         return None
-
+    node_name = standby_replay_pod.data["spec"].get("nodeName")
+    if not node_name:
+        logger.error(
+            f"Unable to determine Name of the node running standby-replay MDS pod '{standby_replay_pod.name}'"
+        )
+        return None
     return {
         "node_ip": node_ip,
         "mds_daemon": ceph_daemon_name,
         "standby_replay_pod": standby_replay_pod.name,
+        "node_name": node_name,
+        "standby_replay_pod_obj": standby_replay_pod,
     }
 
 
@@ -3215,7 +3382,7 @@ def client_cluster_health_check():
     """
     wait_for_cluster_connectivity(tries=120, delay=5)
     logger.info("Checking the cluster health")
-    wait_for_nodes_status(timeout=300, sleep=10)
+    wait_for_nodes_status(timeout=420, sleep=10)
 
     logger.info("Checking that there are no extra Ceph pods on the cluster")
     mon_pods = pod.get_mon_pods()
@@ -3235,26 +3402,23 @@ def client_cluster_health_check():
         )
 
     logger.info("Wait for the pods to be running")
-    res = wait_for_pods_to_be_running(timeout=300, sleep=20)
+    expected_statuses = [constants.STATUS_RUNNING, constants.STATUS_COMPLETED]
+    exclude_pod_name_prefixes = ["rook-ceph-tools"]
+    res = wait_for_pods_to_be_in_statuses(
+        expected_statuses=expected_statuses,
+        exclude_pod_name_prefixes=exclude_pod_name_prefixes,
+        timeout=480,
+        sleep=20,
+    )
     if not res:
         raise ResourceWrongStatusException("Not all the pods in running state")
 
     logger.info("Checking that the storageclient is connected")
-    sc_obj = OCP(
-        kind=constants.STORAGECLIENT, namespace=config.ENV_DATA["cluster_namespace"]
-    )
-    sc_obj.wait_for_resource(
-        resource_name=config.cluster_ctx.ENV_DATA.get("storage_client_name"),
-        column="PHASE",
-        condition="Connected",
-        timeout=180,
-        sleep=10,
-    )
+    storage_cluster.wait_for_storage_client_connected()
 
     logger.info("The client cluster health check passed successfully")
 
 
-@switch_to_orig_index_at_last
 def client_clusters_health_check():
     """
     Check the client clusters health using the function 'client_cluster_health_check'.
@@ -3266,10 +3430,9 @@ def client_clusters_health_check():
         CephHealthException: In case there are extra Ceph pods on the cluster
 
     """
-    client_indices = config.get_consumer_indexes_list()
-    for client_i in client_indices:
-        config.switch_ctx(client_i)
-        client_cluster_health_check()
+    for client_context in config.get_client_contexts_if_available():
+        with client_context:
+            client_cluster_health_check()
 
     logger.info("The client clusters health check passed successfully")
 
@@ -3314,3 +3477,534 @@ def check_cephcluster_status(
             f' {cc_resource["status"]["ceph"]["health"]}'
         )
         raise CephHealthException()
+
+
+def ceph_config_set_debug(debug_level):
+    """
+    This function will be useful to set default debug level for mds i.e 1/5
+
+    Args:
+        debug_level (str): The debug level to set in ceph config
+        ex: debug_level='1/5'
+
+    """
+    logger.info(f"Setting debug level with user defined value {debug_level}")
+    ceph_tools_pod = pod.get_ceph_tools_pod()
+    ceph_tools_pod.exec_cmd_on_pod("ceph config set mds debug_mds " + debug_level)
+
+
+def ceph_health_detail():
+    """
+    Get ceph health detail
+
+    Returns:
+        str: the output of the cmd
+    """
+    ceph_tools_pod = pod.get_ceph_tools_pod()
+    return ceph_tools_pod.exec_cmd_on_pod("ceph health detail", out_yaml_format=False)
+
+
+def get_active_mds_info():
+    """Return information about the active Ceph MDS.
+
+    Returns:
+        dict: A dictionary containing information about the active MDS daemon,
+        including the following keys in case of success, otherwise None.
+        - "node_ip": The IP address of the node running the active MDS daemon.
+        - "mds_daemon": The name of the MDS daemon.
+        - "active_pod": The name of the active pod.
+        - "node_name": The name of the node where active mds pod is running.
+    """
+
+    ct_pod = pod.get_ceph_tools_pod()
+    ceph_mdsmap = ct_pod.exec_ceph_cmd("ceph fs status")
+    logger.info("Find ceph daemon state as 'active'")
+    ceph_daemon_name = next(
+        (
+            daemon["name"]
+            for daemon in ceph_mdsmap["mdsmap"]
+            if daemon["state"] == "active"
+        ),
+        None,
+    )
+
+    if ceph_daemon_name is None:
+        logger.error("No active MDS daemon found")
+        return None
+
+    logger.info(f"Found active MDS daemon: {ceph_daemon_name}")
+
+    logger.info("Find ceph MDS pod name where the active MDS daemon is running.")
+    mds_pods = get_mds_pods()
+    active_pod = next((pod for pod in mds_pods if ceph_daemon_name in pod.name), None)
+
+    if active_pod is None:
+        logger.error(
+            f"No active MDS Pod found with running daemon '{ceph_daemon_name}'"
+        )
+        return None
+
+    logger.info(f"Found active MDS pod: {active_pod.name}")
+    logger.info("Get the node IP of active mds running pod")
+    node_ip = active_pod.data["status"].get("hostIP")
+    if not node_ip:
+        logger.error(
+            f"Unable to determine IP address of node running active MDS pod '{active_pod.name}'"
+        )
+        return None
+    logger.info("Get the node name of of active mds  running pod")
+    node_name = active_pod.data["spec"].get("nodeName")
+    if not node_name:
+        logger.error(
+            f"Unable to determine Name of the node running active MDS pod '{active_pod.name}'"
+        )
+        return None
+
+    return {
+        "node_ip": node_ip,
+        "mds_daemon": ceph_daemon_name,
+        "active_pod": active_pod.name,
+        "node_name": node_name,
+        "active_pod_obj": active_pod,
+    }
+
+
+def clear_active_mds_load():
+    """
+    This function executes a ceph cmd to fail active mds daemon instantly.
+    So that the existing load on active mds will be cleared off immediately.
+
+    """
+    ct_pod = pod.get_ceph_tools_pod()
+    ct_pod.exec_ceph_cmd("ceph mds fail 0")
+
+
+def get_active_mds_memory_utilisation_in_percentage():
+    """
+    This function gets total and used memory of active mds in Mebibytes and calculates the value in percentage.
+
+    Returns:
+         int: mds used memory in percentage
+
+    """
+    active_mds_pod_obj = get_active_mds_info()["active_pod_obj"]
+    get_total_memory = active_mds_pod_obj.get_memory(container_name="mds")
+    total_memory_in_mebibytes = int(get_total_memory[:-2]) * 1024
+    used_memory = pod.get_pod_used_memory_in_mebibytes(active_mds_pod_obj.name)
+    utilisation_in_percentage = (used_memory / total_memory_in_mebibytes) * 100
+    return utilisation_in_percentage
+
+
+def get_standby_replay_mds_memory_utilisation_in_percentage():
+    """
+    This function gets total and used memory of active mds in Mebibytes and calculates the value in percentage.
+
+    Returns:
+         int: mds used memory in percentage
+
+    """
+    standby_replay_mds_pod_obj = get_mds_standby_replay_info()["standby_replay_pod_obj"]
+    get_total_memory = standby_replay_mds_pod_obj.get_memory(container_name="mds")
+    total_memory_in_mebibytes = int(get_total_memory[:-2]) * 1024
+    used_memory = pod.get_pod_used_memory_in_mebibytes(standby_replay_mds_pod_obj.name)
+    utilisation_in_percentage = (used_memory / total_memory_in_mebibytes) * 100
+    return utilisation_in_percentage
+
+
+def bring_down_mds_memory_usage_gradually():
+    """
+    This function will monitor the mds memory usage for 18 minutes to make sure it is <=10%.
+    Even if the memory usage is still high after 18 mins,
+    it will fail the mds daemon and look for the same <=10% in memory utilisation.
+    This will repeat the process until the time_elapsed reaches 30mins
+    And it breaks if memory utilisation reduced in between.
+
+    """
+    logger.info("Continue monitoring mds memory usage until it get reduced to 10%")
+    time_interval = 180
+    time_elapsed = 0
+    while time_elapsed <= 1800:
+        logger.info("Check memory usage and sleep if usage is higher than 10%")
+        if (
+            get_active_mds_memory_utilisation_in_percentage() >= 10
+            or get_standby_replay_mds_memory_utilisation_in_percentage() >= 10
+        ):
+            if time_elapsed <= 900:
+                logger.info("Memory usage is high. Sleeping for 3 minutes...")
+                time.sleep(time_interval)
+                time_elapsed += time_interval
+            else:
+                clear_active_mds_load()
+                logger.info("clearing the existing load on MDS by failing mds daemon ")
+                logger.info(
+                    "Failed MDS.0 daemon to clear load. Sleeping for 3 minutes..."
+                )
+                time.sleep(time_interval)
+                continue
+        else:
+            logger.info("Memory usage is within the acceptable limits.")
+            break
+
+    assert (
+        time_elapsed <= 1800
+    ), "Memory usage remained high for more than 30 minutes. Failed to bring down the memory usage of MDS"
+
+
+def parse_ceph_table_output(raw_output: str) -> pd.DataFrame:
+    """
+    Parse the Ceph command table output and extract the data into a pandas DataFrame.
+    The function assumes that the first row contains the header, with at least two spaces
+    separating each column value.
+
+    Args:
+        raw_output (str): The raw output string from any Ceph command that provides tabular output.
+
+    Returns:
+        pd.DataFrame: A pandas DataFrame containing the parsed data, where the columns are
+        derived from the header row and the data rows are parsed accordingly.
+
+    """
+    # Known units for sizes (e.g., GiB, TiB, MiB)
+    known_units = ["GiB", "MiB", "KiB", "TiB"]
+
+    # Step 1: Join size values with their units (e.g., '894 GiB' -> '894GiB')
+    for unit in known_units:
+        raw_output = re.sub(rf"(\d+)\s+{unit}", rf"\1{unit}", raw_output)
+
+    # Split the raw output into lines
+    lines = raw_output.strip().split("\n")
+    # Use the first line as the header
+    header_line = lines[0].strip()
+    header = re.split(r"\s{2,}", header_line)
+    logger.info(f"Extracted Header: {header}")
+
+    data_lines = lines[1:]
+    # Now process the collected lines into parts
+    data = []
+    for line in data_lines:
+        # Split by any whitespace
+        parts = re.split(r"\s+", line.strip())
+        if len(parts) >= len(header) - 1:
+            data.append(parts[: len(header)])
+        else:
+            logger.warning(
+                f"Skipping line due to mismatch in number of columns: {line}"
+            )
+
+    # Create DataFrame
+    df = pd.DataFrame(data, columns=header)
+
+    return df
+
+
+def get_ceph_osd_df_tree_weight_and_size():
+    """
+    Extract the 'ID', 'WEIGHT', and 'SIZE' values from the Ceph 'osd df tree' command output.
+
+    Returns:
+        list: A list of dictionaries where each dictionary contains 'ID', 'WEIGHT', and 'SIZE'.
+
+    """
+    ceph_cmd = "ceph osd df tree"
+    ct_pod = storage_cluster.get_ceph_tools_pod()
+    output = ct_pod.exec_ceph_cmd(
+        ceph_cmd=ceph_cmd, format=False, out_yaml_format=False
+    )
+    logger.info(f"ceph osd df tree output = {output}")
+    # Parse the raw output using the modified parse_ceph_osd_df_tree function
+    df = parse_ceph_table_output(output)
+
+    # Initialize the result list
+    result = []
+
+    for _, row in df.iterrows():
+        # Extract WEIGHT and SIZE
+        weight = row["WEIGHT"]
+        if weight == "-":
+            # If the weight value with '-' we need to get the next row value
+            weight = row["CLASS"]
+            size = row["REWEIGHT"]
+        else:
+            weight = row["WEIGHT"]
+            size = row["SIZE"]
+
+        result.append({"ID": row["ID"], "WEIGHT": weight, "SIZE": size})
+
+    return result
+
+
+def check_ceph_osd_df_tree():
+    """
+    Check that the ceph osd df tree output values are correct
+
+    Returns:
+        bool: True, if the ceph osd df tree output values are correct. False, otherwise.
+
+    """
+    logger.info("Verify ceph osd df tree values")
+    storage_size_param = storage_cluster.get_storage_size()
+    logger.info(f"storage size = {storage_size_param}")
+    ceph_output_lines = get_ceph_osd_df_tree_weight_and_size()
+    logger.info(f"ceph output lines = {ceph_output_lines}")
+
+    for line in ceph_output_lines:
+        osd_id = line["ID"]
+        weight = float(line["WEIGHT"])
+        # Regular expression to match the numeric part and the unit
+        match = re.match(r"([0-9.]+)([a-zA-Z]+)", line["SIZE"])
+        size = float(match.group(1))
+        units = match.group(2)
+        if units.startswith("Ti"):
+            storage_size = convert_device_size(storage_size_param, "TB", 1024)
+        elif units.startswith("Gi"):
+            storage_size = convert_device_size(storage_size_param, "GB", 1024)
+            weight = weight * 1024
+        elif units.startswith("Mi"):
+            storage_size = convert_device_size(storage_size_param, "MB", 1024)
+            weight = weight * (1024**2)
+        else:
+            storage_size = float(storage_size_param[0:-2])
+
+        logger.info(f"OSD size = {size}, weight = {weight}")
+        # Check if the weight and size are equal ignoring a small diff
+        diff = size * 0.04
+        if not (size - diff <= weight <= size + diff):
+            logger.warning(
+                f"OSD weight {weight} (converted) does not match the OSD size {size} "
+                f"for OSD ID {osd_id}. Expected OSD weight within [{size - diff}, {size + diff}]"
+            )
+            return False
+        # If it's a regular OSD entry, check if the expected osd size
+        # and the current size are equal ignoring a small diff
+        diff = size * 0.02
+        if not osd_id.startswith("-") and not (
+            size - diff <= storage_size <= size + diff
+        ):
+            logger.warning(
+                f"The storage size {storage_size} does not match the OSD size {size} "
+                f"for OSD ID {osd_id}. Expected storage size within [{size - diff}, {size + diff}]"
+            )
+            return False
+
+    return True
+
+
+def get_used_and_total_capacity_in_gibibytes():
+    """
+    Get used capacity and total capacity of the cluster from the ceph tools pod
+    Convert the storage values from bytes to gibibytes
+
+    Returns:
+        tuple: (total_used_in_gibibytes, total_capacity_in_gibibytes) ex: Used capacity, Total capacity
+
+    """
+    ct_pod = pod.get_ceph_tools_pod()
+    output = ct_pod.exec_ceph_cmd(ceph_cmd="ceph df")
+    total_used = output.get("stats").get("total_used_raw_bytes")
+    total_capacity = output.get("stats").get("total_bytes")
+    total_used_in_gibibytes = total_used / (2**30)
+    total_capacity_in_gibibytes = total_capacity / (2**30)
+    return (total_used_in_gibibytes, total_capacity_in_gibibytes)
+
+
+def get_age_of_cluster_in_days():
+    """
+    Get age of the cluster in days.
+    1. Get creation time by executing oc cmd on cluster
+    2. Get current time from the ceph tools pod
+    3. Calculate time difference between two times
+    4. Convert the time into days
+
+    Returns:
+        int: returns number of days the cluster has been running
+
+    """
+    cmd = "get namespace kube-system -o jsonpath='{.metadata.creationTimestamp}'"
+    creation_time = OCP().exec_oc_cmd(command=cmd, out_yaml_format=False)
+    logger.info(f"The cluster creation time is: {creation_time}")
+    ct_pod = pod.get_ceph_tools_pod()
+    cephcmd = 'date -u +"%Y-%m-%dT%H:%M:%SZ"'
+    current_time = ct_pod.exec_cmd_on_pod(command=cephcmd, out_yaml_format=False)
+    logger.info(f"Current time in the cluster is: {current_time}")
+    d1 = datetime.fromisoformat(creation_time[:-1])
+    d2 = datetime.fromisoformat(current_time.strip()[:-1])
+    time_difference_in_sec = (d2 - d1).total_seconds()
+    seconds_per_day = 24 * 60 * 60
+    time_diff_in_days = time_difference_in_sec / seconds_per_day
+    return math.ceil(time_diff_in_days)
+
+
+def get_active_mds_count_cephfilesystem():
+    """
+    Get the active mds pod count from cephfilesystem yaml.
+
+    Returns:
+         mds_active_count (int): Active mds pod count.
+
+    """
+    cephfs = ocp.OCP(
+        kind=constants.CEPHFILESYSTEM,
+        namespace=config.ENV_DATA["cluster_namespace"],
+    )
+    fs_data = cephfs.get(defaults.CEPHFILESYSTEM_NAME)
+    mds_active_count = fs_data.get("spec").get("metadataServer").get("activeCount")
+    return mds_active_count
+
+
+def adjust_active_mds_count_storagecluster(target_count):
+    """
+    Adjust the activeMetadataServers count in the Storage cluster to the target_count.
+    The function increases or decreases the count to match the target value sequentially.
+
+    Args:
+        target_count (int): The desired count for activeMetadataServers.
+
+    Raises:
+        ActiveMdsValueNotMatch: if activeMetadataServers count does not match.
+
+    """
+    # Retrieve the current activeMetadataServers count
+    current_count_cephfilesystem = get_active_mds_count_cephfilesystem()
+    sc = storage_cluster.get_storage_cluster(
+        namespace=config.ENV_DATA["cluster_namespace"]
+    )
+    resource_name = sc.get()["items"][0]["metadata"]["name"]
+
+    step = 1 if current_count_cephfilesystem < target_count else -1
+    for _ in range(current_count_cephfilesystem, target_count + step, step):
+        if current_count_cephfilesystem == target_count:
+            logger.info("The current count is equal to the target count.")
+        else:
+            # Determine the new count by incrementing or decrementing
+            current_count_cephfilesystem = current_count_cephfilesystem + step
+            param = (
+                f'{{"spec": {{"managedResources": {{"cephFilesystems": '
+                f'{{"activeMetadataServers": {current_count_cephfilesystem}}}}}}}}}'
+            )
+            sc.patch(resource_name=resource_name, params=param, format_type="merge")
+
+    # Retrieve the updated count
+    current_params = sc.get(resource_name=resource_name)
+    current_count_cephfilesystem = current_params["spec"]["managedResources"][
+        "cephFilesystems"
+    ]["activeMetadataServers"]
+    if current_count_cephfilesystem != target_count:
+        raise ActiveMdsValueNotMatch(
+            f"Failed to update activeMetadataServers to {target_count}"
+        )
+
+    logger.info(
+        "Wait until the active mds pod count from cephfilesystem matches the target count"
+    )
+    try:
+        TimeoutSampler(
+            timeout=300,
+            sleep=10,
+            func=get_active_mds_count_cephfilesystem,
+        ).wait_for_func_value(target_count)
+        logger.info(f"Target activeMetadataServers count {target_count} reached.")
+    except TimeoutExpiredError:
+        raise ActiveMdsValueNotMatch(
+            f"Failed to change the active count to {target_count} within timeout."
+        )
+
+
+def get_active_mds_pod_objs():
+    """
+    Gets active mds pods objs.
+
+    Returns:
+        active_mds_pods (list): Active mds pod objs.
+
+    """
+    ct_pod = pod.get_ceph_tools_pod()
+    ceph_mdsmap = ct_pod.exec_ceph_cmd("ceph fs status")
+    # Extract the mdsmap list from the data
+    mdsmap = ceph_mdsmap["mdsmap"]
+
+    # Filter and get the names of active MDS pods
+    ceph_daemon_name = [mds["name"] for mds in mdsmap if mds["state"] == "active"]
+    mds_pods = get_mds_pods()
+    active_mds_pods = [
+        mdspod
+        for mdspod in mds_pods
+        if any(daemon_name in mdspod.name for daemon_name in ceph_daemon_name)
+    ]
+    return active_mds_pods
+
+
+def get_mds_counts():
+    """
+    Fetch active and standby-replay MDS counts.
+
+    Returns:
+        tuple: A tuple containing two integers:
+            - active_pod_count (int): The number of active MDS pods.
+            - standby_replay_count (int): The number of standby-replay MDS pods.
+    """
+    ct_pod = pod.get_ceph_tools_pod()
+    ceph_mdsmap = ct_pod.exec_ceph_cmd("ceph fs status")["mdsmap"]
+    active_pod_count = sum(1 for mds in ceph_mdsmap if mds["state"] == "active")
+    standby_replay_count = sum(
+        1 for mds in ceph_mdsmap if mds["state"] == "standby-replay"
+    )
+    return active_pod_count, standby_replay_count
+
+
+def is_lower_requirements():
+    """
+    Determine if the cluster meets lower hardware requirements.
+
+    The conditions are:
+    1. allow_lower_instance_requirements is set to True in the config.
+    2. Any worker instance type is 'm4.4xlarge' or 'bx2-8x32'.
+
+    Returns:
+        bool: True if lower requirements are satisfied, otherwise False.
+
+    """
+    # Worker instance types considered as lower requirements
+    lower_requirements_worker_types = {"m4.4xlarge", "bx2-8x32"}
+
+    # Check if allow_lower_instance_requirements is explicitly set
+    if config.DEPLOYMENT.get("allow_lower_instance_requirements", False):
+        logger.info(
+            "Lower requirements are allowed by configuration (allow_lower_instance_requirements=True)."
+        )
+        return True
+
+    # Check if the Machine resources exist
+    machine_obj = OCP(kind="Machine", namespace="openshift-machine-api")
+    try:
+        machines_data = machine_obj.get()
+        machines = machines_data.get("items", [])
+    except CommandFailed as ex:
+        logger.warning(f"Could not fetch Machines (falling back to config only): {ex}")
+        machines = []
+
+    if not machines:
+        logger.info(
+            "No Machine resources found. Assuming standard (non-lower) requirements."
+        )
+        return False
+
+    # Check worker instance types
+    for machine in machines:
+        role = machine["metadata"]["labels"].get(
+            "machine.openshift.io/cluster-api-machine-role"
+        )
+        if role == "worker":
+            instance_type = machine["metadata"]["labels"].get(
+                "machine.openshift.io/instance-type"
+            )
+            if instance_type in lower_requirements_worker_types:
+                logger.info(
+                    f"Detected lower requirement worker instance type: {instance_type} "
+                    f"(machine: {machine['metadata']['name']})."
+                )
+                return True
+
+    logger.info(
+        "Cluster worker machines use standard or larger instance types. No lower requirements detected."
+    )
+    return False

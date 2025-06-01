@@ -19,7 +19,6 @@ from ocs_ci.framework.pytest_customization.marks import (
     skipif_vsphere_ipi,
     magenta_squad,
     mcg,
-    bugzilla,
     polarion_id,
 )
 from ocs_ci.ocs.node import get_worker_nodes, get_node_objs
@@ -56,7 +55,6 @@ logger = logging.getLogger(__name__)
 @skipif_external_mode
 @skipif_mcg_only
 class TestMCGReplicationWithDisruptions(E2ETest):
-
     """
     The objectives of this test case are:
     1) To verify that namespace buckets can be replicated across MCG clusters
@@ -105,8 +103,13 @@ class TestMCGReplicationWithDisruptions(E2ETest):
         nodes,
     ):
         # check uni bucket replication from multi (aws+azure) namespace bucket to s3-compatible namespace bucket
+        prefix_site_1 = "site1"
         target_bucket_name = bucket_factory(bucketclass=target_bucketclass)[0].name
-        replication_policy = ("basic-replication-rule", target_bucket_name, None)
+        replication_policy = (
+            "basic-replication-rule",
+            target_bucket_name,
+            prefix_site_1,
+        )
         source_bucket_name = bucket_factory(
             bucketclass=source_bucketclass, replication_policy=replication_policy
         )[0].name
@@ -117,18 +120,23 @@ class TestMCGReplicationWithDisruptions(E2ETest):
             mcg_obj=mcg_obj_session,
             amount=5,
             pattern="first-write-",
+            prefix=prefix_site_1,
         )
         logger.info(f"Written objects: {written_random_objects}")
 
-        compare_bucket_object_list(
+        assert compare_bucket_object_list(
             mcg_obj_session, source_bucket_name, target_bucket_name
         )
         logger.info("Uni-directional bucket replication working as expected")
 
         # change from uni-directional to bi-directional replication policy
         logger.info("Changing the replication policy from uni to bi-directional!")
+        prefix_site_2 = "site2"
         patch_replication_policy_to_bucket(
-            target_bucket_name, "basic-replication-rule-2", source_bucket_name
+            target_bucket_name,
+            "basic-replication-rule-2",
+            source_bucket_name,
+            prefix=prefix_site_2,
         )
         logger.info(
             "Patch ran successfully! Changed the replication policy from uni to bi directional"
@@ -143,9 +151,10 @@ class TestMCGReplicationWithDisruptions(E2ETest):
             mcg_obj=mcg_obj_session,
             amount=3,
             pattern="second-write-",
+            prefix=prefix_site_2,
         )
         logger.info(f"Written objects: {written_random_objects}")
-        compare_bucket_object_list(
+        assert compare_bucket_object_list(
             mcg_obj_session, source_bucket_name, target_bucket_name
         )
         logger.info("Bi directional bucket replication working as expected")
@@ -174,10 +183,11 @@ class TestMCGReplicationWithDisruptions(E2ETest):
             mcg_obj=mcg_obj_session,
             amount=1,
             pattern="third-write-",
+            prefix=prefix_site_2,
         )
         logger.info(f"Written objects: {written_random_objects}")
 
-        compare_bucket_object_list(
+        assert compare_bucket_object_list(
             mcg_obj_session, source_bucket_name, target_bucket_name
         )
         logger.info(
@@ -195,6 +205,7 @@ class TestMCGReplicationWithDisruptions(E2ETest):
             mcg_obj=mcg_obj_session,
             amount=1,
             pattern="fourth-write-",
+            prefix=prefix_site_2,
         )
         logger.info(f"Written objects: {written_random_objects}")
 
@@ -207,7 +218,7 @@ class TestMCGReplicationWithDisruptions(E2ETest):
             pod_names=pod_names, namespace=config.ENV_DATA["cluster_namespace"]
         )
 
-        compare_bucket_object_list(
+        assert compare_bucket_object_list(
             mcg_obj_session, source_bucket_name, target_bucket_name
         )
         logger.info("Object sync works after the RGW pod restarted!!")
@@ -221,6 +232,7 @@ class TestMCGReplicationWithDisruptions(E2ETest):
             mcg_obj=mcg_obj_session,
             amount=1,
             pattern="fifth-write-",
+            prefix=prefix_site_2,
         )
         logger.info(f"Written objects: {written_random_objects}")
 
@@ -229,7 +241,7 @@ class TestMCGReplicationWithDisruptions(E2ETest):
         nodes.restart_nodes(node_objs, timeout=500)
         retry(
             (CommandFailed, TimeoutError, AssertionError, ResourceWrongStatusException),
-            tries=60,
+            tries=28,
             delay=15,
         )(ocp.wait_for_cluster_connectivity(tries=400))
         wait_for_pods_to_be_running(
@@ -237,7 +249,7 @@ class TestMCGReplicationWithDisruptions(E2ETest):
         )
         logger.info("Nodes rebooted successfully!!")
 
-        compare_bucket_object_list(
+        assert compare_bucket_object_list(
             mcg_obj_session, source_bucket_name, target_bucket_name
         )
         logger.info("Objects sync works even when the cluster is rebooted")
@@ -260,7 +272,6 @@ class TestLogBasedReplicationWithDisruptions:
         logger.info(f"Successfully deleted these objects: {objs_to_delete}")
 
     @polarion_id("OCS-5457")
-    @bugzilla("2266805")
     def test_log_based_replication_with_disruptions(
         self,
         mcg_obj_session,

@@ -2,20 +2,24 @@ import logging
 import pytest
 import time
 
+from ocs_ci.ocs import constants
+from ocs_ci.utility.prometheus import PrometheusAPI
 from ocs_ci.ocs.resources.objectbucket import OBC
 from ocs_ci.ocs.ocp import OCP
 from ocs_ci.ocs.bucket_utils import (
     copy_random_individual_objects,
+    write_random_test_objects_to_bucket,
 )
 from ocs_ci.ocs.exceptions import CommandFailed
 from ocs_ci.framework.pytest_customization.marks import (
     tier1,
-    bugzilla,
+    tier2,
     skipif_ocs_version,
     skipif_mcg_only,
     red_squad,
     rgw,
     runs_on_provider,
+    polarion_id,
 )
 
 logger = logging.getLogger(__name__)
@@ -24,7 +28,6 @@ logger = logging.getLogger(__name__)
 @rgw
 @red_squad
 @runs_on_provider
-@bugzilla("1940823")
 @skipif_ocs_version("<4.10")
 @skipif_mcg_only
 class TestOBCQuota:
@@ -117,3 +120,74 @@ class TestOBCQuota:
                 logger.error("Copy objects to bucket failed unexpectedly!!")
         else:
             logger.info(f"New quota {new_quota_str} got applied!!")
+
+    @polarion_id("OCS-6178")
+    @pytest.mark.parametrize(
+        argnames="amount,interface,quota",
+        argvalues=[
+            pytest.param(
+                *[1, "RGW-OC", {"maxObjects": "10"}],
+                marks=[
+                    tier2,
+                ],
+            ),
+        ],
+    )
+    def test_obc_quota_full_alert(
+        self,
+        rgw_bucket_factory,
+        rgw_obj_session,
+        awscli_pod_session,
+        test_directory_setup,
+        threading_lock,
+        amount,
+        interface,
+        quota,
+    ):
+        """
+        This test will verify the prometheus alerts
+        when the OBC quota is reached
+
+        """
+
+        # create the bucket
+        bucket_name = rgw_bucket_factory(amount, interface, quota=quota)[0].name
+        logger.info(f"created rgw bucket {bucket_name} with quota {quota}")
+
+        # fill the bucket with about 90% of maxObjects
+        number_of_objects = int(quota["maxObjects"])
+        write_random_test_objects_to_bucket(
+            awscli_pod_session,
+            bucket_name,
+            test_directory_setup.origin_dir,
+            amount=(number_of_objects * 90) // 100,
+            mcg_obj=OBC(bucket_name),
+        )
+        logger.info(f"Filled bucket {bucket_name} with 90% maxObjects capacity")
+
+        # wait for obc full alert to occur and verify
+        prometheus = PrometheusAPI(threading_lock=threading_lock)
+        alerts = [
+            alert
+            for alert in prometheus.wait_for_alert(
+                name=constants.ALERT_OBC_QUOTA_OBJECTS_ALERT,
+                state="firing",
+                timeout=600,
+            )
+            if alert.get("labels").get("objectbucketclaim") == bucket_name
+        ]
+
+        assert len(alerts) > 0, (
+            f"Alert {constants.ALERT_OBC_QUOTA_OBJECTS_ALERT} doesn't seem to occur "
+            f"despite the bucket being 90% full"
+        )
+
+        alert_desc = (
+            f"ObjectBucketClaim {bucket_name} has crossed 80% "
+            f"of the size limit set by the quota(objects)"
+        )
+        for alert in alerts:
+            assert alert_desc in alert.get("annotations").get(
+                "description"
+            ), f"Alert {constants.ALERT_OBC_QUOTA_OBJECTS_ALERT} doesn't seem have expected format"
+        logger.info(f"Verified the alert {constants.ALERT_OBC_QUOTA_OBJECTS_ALERT}")

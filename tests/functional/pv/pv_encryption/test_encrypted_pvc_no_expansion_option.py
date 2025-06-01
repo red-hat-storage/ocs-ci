@@ -127,6 +127,7 @@ class TestEncryptedPVCNOExpansionOption(ManageTest):
             storageclass=sc_obj,
             size=pvc_size,
             status=constants.STATUS_BOUND,
+            wait_for_resource_status_timeout=120,
         )
 
         pod_obj = pod_factory(pvc=pvc_obj)

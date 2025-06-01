@@ -2,10 +2,10 @@ import logging
 
 import pytest
 
+from ocs_ci.framework import config
 from ocs_ci.framework.pytest_customization.marks import (
     tier1,
     tier4a,
-    bugzilla,
     skipif_ocs_version,
     skipif_aws_creds_are_missing,
     skipif_managed_service,
@@ -13,8 +13,10 @@ from ocs_ci.framework.pytest_customization.marks import (
     red_squad,
     runs_on_provider,
     mcg,
+    tier2,
 )
 from ocs_ci.framework.testlib import MCGTest
+from ocs_ci.ocs import ocp, constants
 from ocs_ci.ocs.bucket_utils import (
     sync_object_directory,
     verify_s3_object_integrity,
@@ -83,7 +85,6 @@ class TestMultiRegion(MCGTest):
         ), "Multiregion bucket did not have two backingstores attached"
 
     @tier4a
-    @bugzilla("1827317")
     @skipif_ocs_version("==4.4")
     @pytest.mark.polarion_id("OCS-1784")
     def test_multiregion_mirror(
@@ -176,3 +177,38 @@ class TestMultiRegion(MCGTest):
         mcg_obj.check_backingstore_state(
             "backing-store-" + backingstore2.name, BS_OPTIMAL
         )
+
+    @tier2
+    @skipif_ocs_version("<4.17")
+    @pytest.mark.polarion_id("OCS-6249")
+    def test_multiregion_spread_to_mirror(
+        self,
+        bucket_factory,
+    ):
+        """
+        Test to update and validate placement policy from spread to mirror of multi-region bucket class
+        """
+
+        bucket_class = {
+            "interface": "OC",
+            "backingstore_dict": {"aws": [(1, "us-west-1"), (1, "us-east-2")]},
+            "placement_policy": "Spread",
+        }
+        # Create backing store, bucket class along with a bucket with "Spread" placement policy
+        bucket = bucket_factory(1, "OC", bucketclass=bucket_class)[0]
+        bucketclass_obj = ocp.OCP(
+            kind=constants.BUCKETCLASS,
+            namespace=config.ENV_DATA["cluster_namespace"],
+            resource_name=bucket.bucketclass.name,
+        )
+        # Patch bucket class to update placement from "Spread" to "Mirror"
+        params = '[{"op": "replace", "path": "/spec/placementPolicy/tiers/0/placement", "value": "Mirror"}]'
+        bucketclass_obj.patch(params=params, format_type="json")
+        bucketclass_obj.reload_data()
+        # Validate "Mirror" placement policy is applied and status of bucket class
+        assert (
+            bucketclass_obj.data["spec"]["placementPolicy"]["tiers"][0]["placement"]
+            == "Mirror"
+        ), f"Failed Mirror policy is not updated in {bucket.bucketclass.name}"
+        bucketclass_obj._has_phase = True
+        bucketclass_obj.wait_for_phase(phase=constants.STATUS_READY, timeout=180)

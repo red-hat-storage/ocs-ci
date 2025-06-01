@@ -51,7 +51,13 @@ class TestScaleOBCStartTime(E2ETest):
         ],
     )
     def test_scale_obc_start_time_noobaa_pod_respin(
-        self, tmp_path, pod_name, sc_name, mcg_job_factory, timeout=5
+        self,
+        tmp_path,
+        pod_name,
+        sc_name,
+        mcg_job_factory,
+        noobaa_storage_class_name,
+        timeout=5,
     ):
         """
         Created OBC without I/O running
@@ -74,6 +80,7 @@ class TestScaleOBCStartTime(E2ETest):
                     no_of_obc=self.num_obc_batch,
                     sc_name=sc_name,
                     namespace=self.namespace,
+                    noobaa_storage_class_name=noobaa_storage_class_name,
                 )
             )
             # Create job profile

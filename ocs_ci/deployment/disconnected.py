@@ -16,6 +16,7 @@ from ocs_ci.ocs.exceptions import CommandFailed, NotFoundError
 from ocs_ci.ocs.resources.catalog_source import CatalogSource, disable_default_sources
 from ocs_ci.utility.deployment import get_and_apply_icsp_from_catalog
 from ocs_ci.utility import templating
+from ocs_ci.utility.retry import retry
 from ocs_ci.utility.utils import (
     create_directory_path,
     exec_cmd,
@@ -27,6 +28,7 @@ from ocs_ci.utility.utils import (
 )
 from ocs_ci.utility.version import (
     get_semantic_ocp_running_version,
+    get_semantic_ocs_version_from_config,
     VERSION_4_10,
 )
 
@@ -215,6 +217,7 @@ def prune_and_mirror_index_image(
     return cs_file
 
 
+@retry((CommandFailed, NotFoundError), tries=3, delay=10, backoff=2)
 def mirror_index_image_via_oc_mirror(index_image, packages, icsp=None):
     """
     Mirror all images required for ODF deployment and testing to mirror
@@ -356,7 +359,7 @@ def prepare_disconnected_ocs_deployment(upgrade=False):
             or None (for live deployment)
 
     """
-
+    ocs_version = get_semantic_ocs_version_from_config()
     if config.DEPLOYMENT.get("stage_rh_osbs"):
         raise NotImplementedError(
             "Disconnected installation from stage is not implemented!"
@@ -431,7 +434,7 @@ def prepare_disconnected_ocs_deployment(upgrade=False):
 
         mirrored_index_image = mirror_index_image_via_oc_mirror(
             index_image,
-            constants.DISCON_CL_REQUIRED_PACKAGES_PER_ODF_VERSION[get_ocp_version()],
+            constants.DISCON_CL_REQUIRED_PACKAGES_PER_ODF_VERSION[f"{ocs_version}"],
             icsp,
         )
     logger.debug(f"mirrored_index_image: {mirrored_index_image}")

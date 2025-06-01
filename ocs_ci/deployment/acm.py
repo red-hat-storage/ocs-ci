@@ -2,22 +2,26 @@
 All ACM related deployment classes and functions should go here.
 
 """
+
 import os
 import logging
 import tempfile
 import shutil
 import requests
+import subprocess
 
 import semantic_version
+import platform
 
 from ocs_ci.framework import config
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.exceptions import (
     CommandFailed,
     DRPrimaryNotFoundException,
+    UnsupportedPlatformError,
 )
 from ocs_ci.utility import templating
-from ocs_ci.ocs.utils import get_non_acm_cluster_config
+from ocs_ci.ocs.utils import get_non_acm_cluster_config, get_primary_cluster_config
 from ocs_ci.utility.utils import (
     run_cmd,
     run_cmd_interactive,
@@ -82,6 +86,8 @@ class Submariner(object):
         self.dr_only_list = []
 
     def deploy(self):
+        # Download subctl binary in any case.
+        self.download_binary()
         if self.source == "upstream":
             self.deploy_upstream()
         elif self.source == "downstream":
@@ -90,7 +96,6 @@ class Submariner(object):
             raise Exception(f"The Submariner source: {self.source} is not recognized")
 
     def deploy_upstream(self):
-        self.download_binary()
         self.submariner_configure_upstream()
 
     def deploy_downstream(self):
@@ -107,7 +112,8 @@ class Submariner(object):
                 config.switch_ctx(cluster.MULTICLUSTER["multicluster_index"])
                 self.create_acm_brew_icsp()
             config.switch_ctx(old_ctx)
-        acm_obj.install_submariner_ui()
+        global_net = get_primary_cluster_config().ENV_DATA.get("enable_globalnet", True)
+        acm_obj.install_submariner_ui(globalnet=global_net)
         acm_obj.submariner_validation_ui()
 
     def create_acm_brew_icsp(self):
@@ -157,6 +163,53 @@ class Submariner(object):
                 os.path.expanduser("~/.local/bin/subctl"),
                 os.path.join(config.RUN["bin_dir"], "subctl"),
             )
+        elif self.source == "downstream":
+            self.download_downstream_binary()
+
+    def download_downstream_binary(self):
+        """
+        Download downstream subctl binary
+
+        Raises:
+            UnsupportedPlatformError : If current platform has no supported subctl binary
+        """
+
+        subctl_ver = config.ENV_DATA["subctl_version"]
+        version_str = subctl_ver.split(":")[1]
+        pull_secret_path = os.path.join(constants.DATA_DIR, "pull-secret")
+        processor = platform.processor()
+        arch = platform.machine()
+        if arch == "x86_64" and processor == "x86_64":
+            binary_pltfrm = "amd64"
+        elif arch == "arm64" and processor == "arm":
+            binary_pltfrm = "arm64"
+        else:
+            raise UnsupportedPlatformError(
+                "Not a supported architecture for subctl binary"
+            )
+        cmd = (
+            f"oc image extract --filter-by-os linux/{binary_pltfrm} --registry-config "
+            f"{pull_secret_path} {constants.SUBCTL_DOWNSTREAM_URL}{subctl_ver} "
+            f'--path="/dist/subctl-{version_str}*-linux-{binary_pltfrm}.tar.xz":/tmp --confirm'
+        )
+        run_cmd(cmd)
+        decompress = (
+            f"tar -C /tmp/ -xf /tmp/subctl-{version_str}*-linux-{binary_pltfrm}.tar.xz"
+        )
+        p = subprocess.run(decompress, stdout=subprocess.PIPE, shell=True)
+        if p.returncode:
+            logger.error("Failed to untar subctl")
+            raise CommandFailed
+        else:
+            logger.info(p.stdout)
+        target_dir = config.RUN["bin_dir"]
+        install_cmd = (
+            f"install -m744 /tmp/subctl-{version_str}*/subctl-{version_str}*-linux-{binary_pltfrm} "
+            f"{target_dir} "
+        )
+        run_cmd(install_cmd, shell=True)
+        run_cmd(f"mv {target_dir}/subctl-* {target_dir}/subctl", shell=True)
+        os.environ["PATH"] = os.environ["PATH"] + ":" + os.path.abspath(f"{target_dir}")
 
     def submariner_configure_upstream(self):
         """

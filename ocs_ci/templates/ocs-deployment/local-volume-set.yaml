@@ -10,7 +10,7 @@ spec:
       deviceTypes:
       - disk
       - part
-      minSize: 100Gi
+      minSize: 10Gi
     nodeSelector:
       nodeSelectorTerms:
       - matchExpressions:

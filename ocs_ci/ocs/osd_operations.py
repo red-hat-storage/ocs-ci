@@ -19,16 +19,20 @@ from ocs_ci.ocs.resources.pod import (
     delete_osd_removal_job,
 )
 from ocs_ci.helpers.sanity_helpers import Sanity
+from ocs_ci.helpers.helpers import retrieve_cli_binary
+from ocs_ci.utility.utils import run_cmd_interactive
 
 
 logger = logging.getLogger(__name__)
 
 
-def osd_device_replacement(nodes):
+def osd_device_replacement(nodes, cli_tool=False):
     """
     Replacing randomly picked osd device
     Args:
-        node (OCS): The OCS object representing the node
+        nodes (OCS): The OCS object representing the node
+        cli_tool (bool): using cli tool to replace the disk if cli_tool is True otherwise use "oc" commands
+
     """
     logger.info("Picking a PV which to be deleted from the platform side")
     osd_pvs = get_deviceset_pvs()
@@ -42,7 +46,13 @@ def osd_device_replacement(nodes):
     logger.info(f"Getting the backing volume name for PV {osd_pv_name}")
     backing_volume = nodes.get_data_volumes(pvs=[osd_pv])[0]
     logger.info(f"backing volume for PV {osd_pv_name} is {backing_volume}")
-    volume_path = nodes.get_volume_path(backing_volume)
+    if config.DEPLOYMENT.get("local_storage"):
+        node_name = (
+            osd_pv.data["metadata"].get("labels", {}).get("kubernetes.io/hostname")
+        )
+        volume_path = nodes.get_volume_path(backing_volume, node_name)
+    else:
+        volume_path = nodes.get_volume_path(backing_volume)
 
     # Get the corresponding PVC
     logger.info(f"Getting the corresponding PVC of PV {osd_pv_name}")
@@ -101,91 +111,105 @@ def osd_device_replacement(nodes):
         == claim_name
     ][0]
     osd_deployment_name = osd_deployment.name
+    osd_pod_name = osd_pod.name
 
     # Delete the volume from the platform side
     logger.info(f"Deleting {volume_path} from the platform side")
     nodes.detach_volume(volume_path, osd_node)
 
-    # Scale down OSD deployment
-    logger.info(f"Scaling down OSD deployment {osd_deployment_name} to 0")
-    ocp_obj = ocp.OCP(namespace=config.ENV_DATA["cluster_namespace"])
-    ocp_obj.exec_oc_cmd(f"scale --replicas=0 deployment/{osd_deployment_name}")
-
-    # Force delete OSD pod if necessary
-    osd_pod_name = osd_pod.name
-    logger.info(f"Waiting for OSD pod {osd_pod.name} to get deleted")
-    try:
-        osd_pod.ocp.wait_for_delete(resource_name=osd_pod_name)
-    except TimeoutError:
-        osd_pod.delete(force=True)
-        osd_pod.ocp.wait_for_delete(resource_name=osd_pod_name)
-
-    # Run ocs-osd-removal job
-    osd_removal_job = run_osd_removal_job([osd_id])
-    assert osd_removal_job, "ocs-osd-removal failed to create"
-    is_completed = verify_osd_removal_job_completed_successfully(osd_id)
-    assert is_completed, "ocs-osd-removal-job is not in status 'completed'"
-    logger.info("ocs-osd-removal-job completed successfully")
-
-    osd_pvc_name = osd_pvc.name
-
-    if ocp_version < version.VERSION_4_6:
-        # Delete the OSD prepare job
-        logger.info(f"Deleting OSD prepare job {osd_prepare_job_name}")
-        osd_prepare_job.delete()
-        osd_prepare_job.ocp.wait_for_delete(
-            resource_name=osd_prepare_job_name, timeout=120
-        )
-
-        # Delete the OSD PVC
-        logger.info(f"Deleting OSD PVC {osd_pvc_name}")
-        osd_pvc.delete()
-        osd_pvc.ocp.wait_for_delete(resource_name=osd_pvc_name)
-
-        # Delete the OSD deployment
-        logger.info(f"Deleting OSD deployment {osd_deployment_name}")
-        osd_deployment.delete()
-        osd_deployment.ocp.wait_for_delete(
-            resource_name=osd_deployment_name, timeout=120
+    if cli_tool:
+        retrieve_cli_binary(cli_type="odf")
+        run_cmd_interactive(
+            cmd=f"odf-cli purge-osd {osd_id}",
+            prompts_answers={
+                "yes-force-destroy-osd": "yes-force-destroy-osd",
+                "completed removal of OSD": "",
+            },
+            string_answer=True,
+            raise_exception=False,
         )
     else:
-        # If ocp version is '4.6' and above the osd removal job should
-        # delete the OSD prepare job, OSD PVC, OSD deployment
-        # We just need to verify the old PV is in the expected status
-        logger.info(f"Verify that the old PV '{osd_pv_name}' is in the expected status")
-        if cluster.is_lso_cluster():
-            expected_old_pv_statuses = [constants.STATUS_RELEASED]
+        # Scale down OSD deployment
+        logger.info(f"Scaling down OSD deployment {osd_deployment_name} to 0")
+        ocp_obj = ocp.OCP(namespace=config.ENV_DATA["cluster_namespace"])
+        ocp_obj.exec_oc_cmd(f"scale --replicas=0 deployment/{osd_deployment_name}")
+
+        # Force delete OSD pod if necessary
+        logger.info(f"Waiting for OSD pod {osd_pod.name} to get deleted")
+        try:
+            osd_pod.ocp.wait_for_delete(resource_name=osd_pod_name)
+        except TimeoutError:
+            osd_pod.delete(force=True)
+            osd_pod.ocp.wait_for_delete(resource_name=osd_pod_name)
+
+        # Run ocs-osd-removal job
+        osd_removal_job = run_osd_removal_job([osd_id])
+        assert osd_removal_job, "ocs-osd-removal failed to create"
+        is_completed = verify_osd_removal_job_completed_successfully(osd_id)
+        assert is_completed, "ocs-osd-removal-job is not in status 'completed'"
+        logger.info("ocs-osd-removal-job completed successfully")
+
+        osd_pvc_name = osd_pvc.name
+
+        if ocp_version < version.VERSION_4_6:
+            # Delete the OSD prepare job
+            logger.info(f"Deleting OSD prepare job {osd_prepare_job_name}")
+            osd_prepare_job.delete()
+            osd_prepare_job.ocp.wait_for_delete(
+                resource_name=osd_prepare_job_name, timeout=120
+            )
+
+            # Delete the OSD PVC
+            logger.info(f"Deleting OSD PVC {osd_pvc_name}")
+            osd_pvc.delete()
+            osd_pvc.ocp.wait_for_delete(resource_name=osd_pvc_name)
+
+            # Delete the OSD deployment
+            logger.info(f"Deleting OSD deployment {osd_deployment_name}")
+            osd_deployment.delete()
+            osd_deployment.ocp.wait_for_delete(
+                resource_name=osd_deployment_name, timeout=120
+            )
         else:
-            expected_old_pv_statuses = [
-                constants.STATUS_RELEASED,
-                constants.STATUS_FAILED,
-            ]
-    try:
-        if osd_pv.ocp.get_resource_status(osd_pv_name) in expected_old_pv_statuses:
-            try:
-                logger.info(f"Verifying deletion of PV {osd_pv_name}")
-                osd_pv.ocp.wait_for_delete(resource_name=osd_pv_name)
-            except TimeoutError:
-                osd_pv.delete()
-                osd_pv.ocp.wait_for_delete(resource_name=osd_pv_name)
-    except Exception as e:
-        logger.error(f"Old PV does not exist {e}")
+            # If ocp version is '4.6' and above the osd removal job should
+            # delete the OSD prepare job, OSD PVC, OSD deployment
+            # We just need to verify the old PV is in the expected status
+            logger.info(
+                f"Verify that the old PV '{osd_pv_name}' is in the expected status"
+            )
+            if cluster.is_lso_cluster():
+                expected_old_pv_statuses = [constants.STATUS_RELEASED]
+            else:
+                expected_old_pv_statuses = [
+                    constants.STATUS_RELEASED,
+                    constants.STATUS_FAILED,
+                ]
+        try:
+            if osd_pv.ocp.get_resource_status(osd_pv_name) in expected_old_pv_statuses:
+                try:
+                    logger.info(f"Verifying deletion of PV {osd_pv_name}")
+                    osd_pv.ocp.wait_for_delete(resource_name=osd_pv_name)
+                except TimeoutError:
+                    osd_pv.delete()
+                    osd_pv.ocp.wait_for_delete(resource_name=osd_pv_name)
+        except Exception as e:
+            logger.error(f"Old PV does not exist {e}")
 
-    # If we use LSO, we need to create and attach a new disk manually
-    if cluster.is_lso_cluster():
-        node.add_disk_to_node(osd_node)
+        # If we use LSO, we need to create and attach a new disk manually
+        if cluster.is_lso_cluster():
+            node.add_disk_to_node(osd_node, ssd=True)
 
-    if ocp_version < version.VERSION_4_6:
-        # Delete the rook ceph operator pod to trigger reconciliation
-        rook_operator_pod = get_operator_pods()[0]
-        logger.info(f"deleting Rook Ceph operator pod {rook_operator_pod.name}")
-        rook_operator_pod.delete()
+        if ocp_version < version.VERSION_4_6:
+            # Delete the rook ceph operator pod to trigger reconciliation
+            rook_operator_pod = get_operator_pods()[0]
+            logger.info(f"deleting Rook Ceph operator pod {rook_operator_pod.name}")
+            rook_operator_pod.delete()
 
-    # Delete the OSD removal job
-    logger.info(f"Deleting OSD removal job ocs-osd-removal-{osd_id}")
-    is_deleted = delete_osd_removal_job(osd_id)
-    assert is_deleted, "Failed to delete ocs-osd-removal-job"
-    logger.info("ocs-osd-removal-job deleted successfully")
+        # Delete the OSD removal job
+        logger.info(f"Deleting OSD removal job ocs-osd-removal-{osd_id}")
+        is_deleted = delete_osd_removal_job(osd_id)
+        assert is_deleted, "Failed to delete ocs-osd-removal-job"
+        logger.info("ocs-osd-removal-job deleted successfully")
 
     timeout = 600
     # Wait for OSD PVC to get created and reach Bound state

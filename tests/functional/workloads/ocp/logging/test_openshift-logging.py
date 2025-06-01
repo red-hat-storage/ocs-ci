@@ -11,7 +11,7 @@ import random
 from ocs_ci.utility import version
 from ocs_ci.helpers import helpers, disruption_helpers
 from ocs_ci.ocs import constants
-from ocs_ci.ocs.resources.pod import get_all_pods, delete_deploymentconfig_pods
+from ocs_ci.ocs.resources.pod import get_all_pods, delete_deployment_pods
 from ocs_ci.utility.retry import retry
 from ocs_ci.framework import config
 from ocs_ci.framework.pytest_customization.marks import skipif_aws_i3, magenta_squad
@@ -25,6 +25,8 @@ from ocs_ci.utility import deployment_openshift_logging as ocp_logging_obj
 from ocs_ci.framework.pytest_customization.marks import (
     skipif_managed_service,
     skipif_ms_provider_and_consumer,
+    skipif_ocs_version,
+    skipif_ocp_version,
 )
 
 logger = logging.getLogger(__name__)
@@ -39,6 +41,8 @@ def setup_fixture(install_logging):
     logger.info("Testcases execution post deployment of openshift-logging")
 
 
+@skipif_ocs_version(">=4.19")
+@skipif_ocp_version(">=4.19")
 @magenta_squad
 @pytest.mark.usefixtures(setup_fixture.__name__)
 @ignore_leftovers
@@ -48,11 +52,11 @@ class Testopenshiftloggingonocs(E2ETest):
     """
 
     @pytest.fixture()
-    def create_pvc_and_deploymentconfig_pod(self, request, pvc_factory):
+    def create_pvc_and_deployment_pod(self, request, pvc_factory):
         """"""
 
         def finalizer():
-            delete_deploymentconfig_pods(pod_obj)
+            delete_deployment_pods(pod_obj)
 
         request.addfinalizer(finalizer)
 
@@ -71,7 +75,7 @@ class Testopenshiftloggingonocs(E2ETest):
             pvc_name=pvc_obj.name,
             namespace=pvc_obj.project.namespace,
             sa_name=sa_name.name,
-            dc_deployment=True,
+            deployment=True,
         )
         helpers.wait_for_resource_state(
             resource=pod_obj, state=constants.STATUS_RUNNING

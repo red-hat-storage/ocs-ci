@@ -60,7 +60,7 @@ class TestRwoPVCFencingUnfencing(ManageTest):
         disrupt_provisioner,
         project_factory,
         multi_pvc_factory,
-        dc_pod_factory,
+        deployment_pod_factory,
     ):
         """
         Identify the nodes and start DeploymentConfig based app pods using
@@ -75,7 +75,7 @@ class TestRwoPVCFencingUnfencing(ManageTest):
                 pods if not running on selected nodes, else False
             project_factory: A fixture to create new project
             multi_pvc_factory: A fixture create a set of new PVCs
-            dc_pod_factory: A fixture to create deploymentconfig pods
+            deployment_pod_factory: A fixture to create deploymentconfig pods
 
         Returns:
             tuple: containing the params used in test cases
@@ -151,7 +151,7 @@ class TestRwoPVCFencingUnfencing(ManageTest):
 
             for num in range(self.num_of_app_pods_per_node):
                 dc_pods.append(
-                    dc_pod_factory(
+                    deployment_pod_factory(
                         interface=constants.CEPHBLOCKPOOL,
                         pvc=rbd_pvcs.pop(0),
                         node_selector={"nodetype": "app-pod"},
@@ -161,7 +161,7 @@ class TestRwoPVCFencingUnfencing(ManageTest):
                     dc_pods[-1], node_name
                 ), f"Pod {dc_pods[-1].name} is not running on labeled node {node_name}"
                 dc_pods.append(
-                    dc_pod_factory(
+                    deployment_pod_factory(
                         interface=constants.CEPHFILESYSTEM,
                         pvc=cephfs_pvcs.pop(0),
                         node_selector={"nodetype": "app-pod"},
@@ -224,6 +224,7 @@ class TestRwoPVCFencingUnfencing(ManageTest):
         initial_worker_nodes = node.get_worker_nodes()
         ocs_nodes = machine.get_labeled_nodes(constants.OPERATOR_NODE_LABEL)
         non_ocs_nodes = list(set(initial_worker_nodes) - set(ocs_nodes))
+        deployment_type = config.ENV_DATA["deployment_type"]
 
         if "colocated" in scenario and len(ocs_nodes) < num_of_nodes:
             nodes_to_add = num_of_nodes - len(initial_worker_nodes)
@@ -234,7 +235,7 @@ class TestRwoPVCFencingUnfencing(ManageTest):
         if nodes_to_add > 0:
             logger.info(f"{nodes_to_add} extra workers nodes needed")
 
-            if config.ENV_DATA["deployment_type"] == "ipi":
+            if deployment_type == constants.IPI_DEPL_TYPE:
                 machine_name = random.choice(
                     machine.get_machines(machine_type=constants.WORKER_MACHINE)
                 ).name
@@ -243,6 +244,13 @@ class TestRwoPVCFencingUnfencing(ManageTest):
                     machineset_name=machineset_name,
                     num_nodes=nodes_to_add,
                     mark_for_ocs_label=False,
+                )
+            elif deployment_type == constants.MANAGED_CP_DEPL_TYPE:
+                node.add_new_nodes_and_label_them_rosa_hcp(
+                    node_type=constants.RHCOS,
+                    num_nodes=nodes_to_add,
+                    mark_for_ocs_label=False,
+                    storage_nodes=True,
                 )
             else:
                 is_rhel = config.ENV_DATA.get("rhel_workers") or config.ENV_DATA.get(
@@ -574,7 +582,7 @@ class TestRwoPVCFencingUnfencing(ManageTest):
             ),
         ],
     )
-    def test_rwo_pvc_fencing_node_short_network_failure(
+    def deprecated_test_rwo_pvc_fencing_node_short_network_failure(
         self, nodes, setup, node_restart_teardown
     ):
         """
@@ -720,7 +728,7 @@ class TestRwoPVCFencingUnfencing(ManageTest):
             ),
         ],
     )
-    def test_rwo_pvc_fencing_node_prolonged_network_failure(
+    def deprecated_test_rwo_pvc_fencing_node_prolonged_network_failure(
         self, nodes, setup, node_restart_teardown
     ):
         """

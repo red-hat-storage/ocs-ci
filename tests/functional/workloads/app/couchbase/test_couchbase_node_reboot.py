@@ -5,7 +5,7 @@ import pytest
 
 from ocs_ci.ocs import ocp
 from ocs_ci.helpers.sanity_helpers import Sanity
-from ocs_ci.framework.pytest_customization.marks import magenta_squad
+from ocs_ci.framework.pytest_customization.marks import magenta_squad, skipif_rosa_hcp
 from ocs_ci.framework.testlib import (
     E2ETest,
     workloads,
@@ -51,7 +51,9 @@ class TestCouchBaseNodeReboot(E2ETest):
         argnames=["pod_name_of_node"],
         argvalues=[
             pytest.param(*["osd"], marks=pytest.mark.polarion_id("OCS-776")),
-            pytest.param(*["master"], marks=pytest.mark.polarion_id("OCS-783")),
+            pytest.param(
+                *["master"], marks=[pytest.mark.polarion_id("OCS-783"), skipif_rosa_hcp]
+            ),
             pytest.param(*["couchbase"], marks=pytest.mark.polarion_id("OCS-776")),
         ],
     )
@@ -86,17 +88,17 @@ class TestCouchBaseNodeReboot(E2ETest):
 
         retry(
             (CommandFailed, TimeoutError, AssertionError, ResourceWrongStatusException),
-            tries=60,
+            tries=28,
             delay=15,
         )(ocp.wait_for_cluster_connectivity(tries=400))
         retry(
             (CommandFailed, TimeoutError, AssertionError, ResourceWrongStatusException),
-            tries=60,
+            tries=28,
             delay=15,
         )(wait_for_nodes_status(timeout=1800))
         bg_handler = flowtest.BackgroundOps()
         bg_ops = [self.cb.result]
-        retry((CommandFailed), tries=60, delay=15)(
+        retry((CommandFailed), tries=28, delay=15)(
             bg_handler.wait_for_bg_operations(bg_ops, timeout=3600)
         )
         self.sanity_helpers.health_check(tries=40)

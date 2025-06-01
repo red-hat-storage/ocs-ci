@@ -6,7 +6,6 @@ import pytest
 from concurrent.futures import ThreadPoolExecutor
 from threading import Event
 
-from ocs_ci.utility import version
 from ocs_ci.utility.retry import retry
 from ocs_ci.framework import config
 from ocs_ci.helpers.e2e_helpers import (
@@ -33,15 +32,18 @@ from ocs_ci.ocs.bucket_utils import (
 )
 
 from ocs_ci.ocs.benchmark_operator_fio import BenchmarkOperatorFIO
-from ocs_ci.ocs.ocp import OCP
+from ocs_ci.ocs.constants import DEFAULT_NOOBAA_BUCKETCLASS, DEFAULT_NOOBAA_BACKINGSTORE
 from ocs_ci.ocs.resources import pod, pvc
 from ocs_ci.ocs.resources.objectbucket import OBC
 from ocs_ci.ocs.resources.ocs import OCS
+from ocs_ci.ocs.resources.deployment import Deployment
 from ocs_ci.ocs.resources.pod import (
     Pod,
+    get_noobaa_pods,
+    get_pod_logs,
     get_pods_having_label,
 )
-from ocs_ci.ocs.resources.deployment import Deployment
+from ocs_ci.ocs.resources.pvc import get_pvc_objs
 from ocs_ci.ocs.exceptions import CommandFailed
 from ocs_ci.helpers.helpers import (
     wait_for_resource_state,
@@ -49,10 +51,10 @@ from ocs_ci.helpers.helpers import (
     validate_pv_delete,
     default_storage_class,
 )
-
+from ocs_ci.ocs.ocp import OCP
 from ocs_ci.utility.kms import is_kms_enabled
+from ocs_ci.utility.utils import clone_notify, exec_nb_db_query, get_primary_nb_db_pod
 
-from ocs_ci.utility.utils import clone_notify
 
 logger = logging.getLogger(__name__)
 
@@ -144,22 +146,13 @@ def noobaa_db_backup_and_recovery_locally(
             kind="secret", namespace=config.ENV_DATA["cluster_namespace"]
         )
         secrets = [
+            "noobaa-root-master-key-volume",
+            "noobaa-root-master-key-backend",
             "noobaa-admin",
             "noobaa-operator",
-            "noobaa-db",
             "noobaa-server",
             "noobaa-endpoints",
         ]
-
-        if (
-            version.get_semantic_ocs_version_from_config() >= version.VERSION_4_14
-            and not is_kms_enabled()
-        ):
-            secrets.extend(
-                ["noobaa-root-master-key-backend", "noobaa-root-master-key-volume"]
-            )
-        elif not is_kms_enabled():
-            secrets.append("noobaa-root-master-key")
 
         secrets_yaml = [
             ocp_secret_obj.get(resource_name=f"{secret}") for secret in secrets
@@ -168,20 +161,22 @@ def noobaa_db_backup_and_recovery_locally(
         logger.info("Backed up secrets as secret objects!")
 
         # Backup the PostgreSQL database and save it to a local folder
-        noobaa_db_pod = Pod(
-            **get_pods_having_label(
-                label=constants.NOOBAA_DB_LABEL_47_AND_ABOVE,
-                namespace=config.ENV_DATA["cluster_namespace"],
-            )[0]
-        )
+        noobaa_db_pod = get_primary_nb_db_pod()
         noobaa_db_pod.exec_cmd_on_pod(
-            command="pg_dump nbcore -f /tmp/test.db -F custom"
+            command="pg_dump nbcore -F custom -f /dev/shm/test.db",
         )
         OCP(namespace=config.ENV_DATA["cluster_namespace"]).exec_oc_cmd(
-            command=f"cp --retries=-1 {noobaa_db_pod.name}:/tmp/test.db ./mcg.bck",
+            command=f"cp --retries=-1 {noobaa_db_pod.name}:/dev/shm/test.db ./mcg.bck",
             out_yaml_format=False,
         )
         logger.info("Backed up PostgreSQL and stored it in local folder!")
+
+        # Backup the noobaa-db-pg-cluster resource
+        cnpg_cluster_yaml = OCP(
+            kind=constants.CNPG_CLUSTER_KIND,
+            namespace=config.ENV_DATA["cluster_namespace"],
+        ).get(resource_name=constants.NB_DB_CNPG_CLUSTER_NAME)
+        original_db_replica_count = cnpg_cluster_yaml["spec"]["instances"]
 
         # For testing, write new data to show a little data loss between backup and restore
         testloss_bucket = bucket_factory()[0]
@@ -214,17 +209,59 @@ def noobaa_db_backup_and_recovery_locally(
 
         # Login to the NooBaa DB pod and cleanup potential database clients to nbcore
         query = "SELECT pg_terminate_backend (pid) FROM pg_stat_activity WHERE datname = 'nbcore';"
-        noobaa_db_pod.exec_cmd_on_pod(
-            command=f'psql -h 127.0.0.1 -p 5432 -U postgres -c "{query}"'
-        )
-        logger.info("Cleaned up potential database clients to nbcore!")
+        try:
+            exec_nb_db_query(query)
+        except CommandFailed as ex:
+            if "terminating connection due to administrator command" not in str(ex):
+                raise ex
+            logger.info("Cleaned up potential database clients to nbcore!")
 
-        # Restore DB from a local folder
-        OCP(namespace=config.ENV_DATA["cluster_namespace"]).exec_oc_cmd(
-            command=f"cp ./mcg.bck {noobaa_db_pod.name}:/tmp/test.db"
+        # Delete the existing cnpg cluster
+        OCP(kind=constants.CNPG_CLUSTER_KIND).delete(
+            resource_name=constants.NB_DB_CNPG_CLUSTER_NAME
         )
-        noobaa_db_pod.exec_cmd_on_pod(command="pg_restore -d nbcore /tmp/test.db -c")
-        logger.info("Restored DB from the local folder!")
+
+        # Ensure the the cnpg cluster yaml uses the correct bootstrap object
+        cnpg_cluster_yaml["bootstrap"] = {
+            "initdb": {
+                "database": "nbcore",
+                "encoding": "UTF8",
+                "localeCType": "C",
+                "localeCollate": "C",
+                "owner": "noobaa",
+            }
+        }
+        cnpg_cluster_obj = OCS(**cnpg_cluster_yaml)
+        cnpg_cluster_obj.create()
+
+        # Wait for the cluster status to be in a healthy state
+        selector = (
+            f"{constants.NOOBAA_DB_LABEL_419_AND_ABOVE},"
+            f"{constants.CNPG_POD_ROLE_INSTANCE_LABEL}"
+        )
+        OCP(kind=constants.POD).wait_for_resource(
+            condition=constants.STATUS_RUNNING,
+            selector=selector,
+            resource_count=original_db_replica_count,
+            timeout=600,
+            sleep=5,
+        )
+
+        # Restore DB from a local folder to the primary instance
+        for pod_info in get_pods_having_label(label=constants.NOOBAA_CNPG_POD_LABEL):
+            noobaa_db_pod = Pod(**pod_info)
+            noobaa_db_pod = get_primary_nb_db_pod()
+            OCP(namespace=config.ENV_DATA["cluster_namespace"]).exec_oc_cmd(
+                command=f"cp --retries=-1 ./mcg.bck {noobaa_db_pod.name}:/dev/shm/test.db",
+                out_yaml_format=False,
+            )
+            cmd = (
+                'bash -c "pg_restore --no-owner -n public '
+                "--role=noobaa -d nbcore "
+                '--verbose < /dev/shm/test.db"'
+            )
+            noobaa_db_pod.exec_cmd_on_pod(command=cmd)
+            logger.info(f"Restored {noobaa_db_pod.name} from the local folder!")
 
         # Delete secrets and restore them from a local folder.
         # Please note that verify that there are no errors before you proceed to the next steps.
@@ -286,11 +323,12 @@ def noobaa_db_backup_and_recovery_locally(
             logger.info("Removed the local copy of mcg.bck")
 
         # create the secrets if they're deleted
-        for secret in secrets_obj:
-            if secret.is_deleted:
-                secret.create()
-            else:
-                logger.info(f"{secret.name} is not deleted!")
+        if secrets_obj:
+            for secret in secrets_obj:
+                if secret.is_deleted:
+                    secret.create()
+                else:
+                    logger.info(f"{secret.name} is not deleted!")
 
         # restore MCG reconcilation if not restored already
         if (
@@ -487,7 +525,7 @@ def noobaa_db_backup_and_recovery(
     restore_pvc_objs = []
 
     def factory(snapshot_factory=snapshot_factory):
-        global restore_pvc_objs
+        nonlocal restore_pvc_objs
         # Get noobaa pods before execution
         noobaa_pods = pod.get_noobaa_pods()
 
@@ -510,7 +548,8 @@ def noobaa_db_backup_and_recovery(
             ), f"Failed to scale up the statefulset {constants.NOOBAA_DB_STATEFULSET}"
 
         try:
-            restore_pvc_objs[0].delete()
+            for pvc_obj in restore_pvc_objs:
+                pvc_obj.delete()
         except CommandFailed as ex:
             if f'"{restore_pvc_objs[0].name}" not found' not in str(ex):
                 raise ex
@@ -922,8 +961,8 @@ def setup_mcg_expiration_feature_buckets(
         """
         type = dict()
         type["data"] = bucket_types["data"]
-        reduce_expiration_interval(interval=2)
-        logger.info("Changed noobaa lifecycle interval to 2 minutes")
+        reduce_expiration_interval(interval=1)
+        logger.info("Changed noobaa lifecycle interval to 1 minute")
 
         expiration_rule = {
             "Rules": [
@@ -989,7 +1028,6 @@ def setup_rgw_kafka_notification(request, rgw_bucket_factory, rgw_obj):
     ) = amq.create_kafkadrop()
 
     def factory():
-
         """
         Factory function implementing the fixture
 
@@ -1070,7 +1108,10 @@ def validate_mcg_bg_features(
     """
 
     def factory(
-        feature_setup_map, run_in_bg=False, skip_any_features=None, object_amount=5
+        feature_setup_map,
+        run_in_bg=False,
+        skip_any_features=None,
+        object_amount=5,
     ):
         """
         factory functon implementing the fixture
@@ -1103,9 +1144,9 @@ def validate_mcg_bg_features(
 
         event = Event()
         executor = ThreadPoolExecutor(
-            max_workers=5 - len(skip_any_features)
-            if skip_any_features is not None
-            else 5
+            max_workers=(
+                5 - len(skip_any_features) if skip_any_features is not None else 5
+            )
         )
         skip_any_features = list() if skip_any_features is None else skip_any_features
 
@@ -1145,7 +1186,6 @@ def validate_mcg_bg_features(
                 event,
                 run_in_bg=run_in_bg,
                 object_amount=object_amount,
-                prefix="",
             )
             futures_obj.append(validate_expiration)
 
@@ -1279,7 +1319,7 @@ def setup_mcg_bg_features(
                         f"and valid are {list(cloud_providers.keys())}"
                     )
                 else:
-                    bucket_types.pop(provider)
+                    cloud_providers.pop(provider)
 
         all_buckets = list()
         feature_setup_map = dict()
@@ -1346,6 +1386,244 @@ def setup_mcg_bg_features(
         )
         feature_setup_map["executor"]["event"] = event
         feature_setup_map["executor"]["threads"] = threads
+        feature_setup_map["all_buckets"] = all_buckets
         return feature_setup_map
+
+    return factory
+
+
+@pytest.fixture()
+def validate_noobaa_rebuild_system(request, bucket_factory_session, mcg_obj_session):
+    """
+    This function is to verify noobaa rebuild. Verifies KCS: https://access.redhat.com/solutions/5948631
+
+    1. Stop the noobaa-operator by setting the replicas of noobaa-operator deployment to 0.
+    2. Delete the noobaa deployments/statefulsets.
+    3. Delete the PVC db-noobaa-db-0.
+    4. Patch existing backingstores and bucketclasses to remove finalizer
+    5. Delete the backingstores/bucketclass.
+    6. Delete the noobaa secrets.
+    7. Restart noobaa-operator by setting the replicas back to 1.
+    8. Monitor the pods in openshift-storage for noobaa pods to be Running.
+
+    """
+
+    def factory(bucket_factory_session, mcg_obj_session):
+        dep_ocp = OCP(
+            kind=constants.DEPLOYMENT, namespace=config.ENV_DATA["cluster_namespace"]
+        )
+        state_ocp = OCP(
+            kind=constants.STATEFULSET, namespace=config.ENV_DATA["cluster_namespace"]
+        )
+        noobaa_pvc_obj = get_pvc_objs(pvc_names=["db-noobaa-db-pg-0"])
+
+        # Scale down noobaa operator
+        logger.info(
+            f"Scaling down {constants.NOOBAA_OPERATOR_DEPLOYMENT} deployment to replica: 0"
+        )
+        dep_ocp.exec_oc_cmd(
+            f"scale deployment {constants.NOOBAA_OPERATOR_DEPLOYMENT} --replicas=0"
+        )
+
+        # Delete noobaa deployments and statefulsets
+        logger.info("Deleting noobaa deployments and statefulsets")
+        dep_ocp.delete(resource_name=constants.NOOBAA_ENDPOINT_DEPLOYMENT)
+        state_ocp.delete(resource_name=constants.NOOBAA_DB_STATEFULSET)
+        state_ocp.delete(resource_name=constants.NOOBAA_CORE_STATEFULSET)
+
+        # Delete noobaa-db pvc
+        pvc_obj = OCP(
+            kind=constants.PVC, namespace=config.ENV_DATA["cluster_namespace"]
+        )
+        logger.info("Deleting noobaa-db pvc")
+        pvc_obj.delete(resource_name=noobaa_pvc_obj[0].name, wait=True)
+        pvc_obj.wait_for_delete(resource_name=noobaa_pvc_obj[0].name, timeout=300)
+
+        # Patch and delete existing backingstores
+        params = '{"metadata": {"finalizers":null}}'
+        bs_obj = OCP(
+            kind=constants.BACKINGSTORE, namespace=config.ENV_DATA["cluster_namespace"]
+        )
+        for bs in bs_obj.get()["items"]:
+            assert bs_obj.patch(
+                resource_name=bs["metadata"]["name"],
+                params=params,
+                format_type="merge",
+            ), "Failed to change the parameter in backingstore"
+            logger.info(f"Deleting backingstore: {bs['metadata']['name']}")
+            bs_obj.delete(resource_name=bs["metadata"]["name"])
+
+        # Patch and delete existing bucketclass
+        bc_obj = OCP(
+            kind=constants.BUCKETCLASS, namespace=config.ENV_DATA["cluster_namespace"]
+        )
+        for bc in bc_obj.get()["items"]:
+            assert bc_obj.patch(
+                resource_name=bc["metadata"]["name"],
+                params=params,
+                format_type="merge",
+            ), "Failed to change the parameter in bucketclass"
+            logger.info(f"Deleting bucketclass: {bc['metadata']['name']}")
+            bc_obj.delete(resource_name=bc["metadata"]["name"])
+
+        # Delete noobaa secrets
+        logger.info("Deleting noobaa related secrets")
+        if is_kms_enabled():
+            dep_ocp.exec_oc_cmd(
+                "delete secrets noobaa-admin noobaa-endpoints noobaa-operator noobaa-server"
+            )
+        else:
+            dep_ocp.exec_oc_cmd(
+                "delete secrets noobaa-admin noobaa-endpoints noobaa-operator "
+                "noobaa-server noobaa-root-master-key-backend noobaa-root-master-key-volume"
+            )
+
+        # Scale back noobaa-operator deployment
+        logger.info(
+            f"Scaling back {constants.NOOBAA_OPERATOR_DEPLOYMENT} deployment to replica: 1"
+        )
+        dep_ocp.exec_oc_cmd(
+            f"scale deployment {constants.NOOBAA_OPERATOR_DEPLOYMENT} --replicas=1"
+        )
+
+        # Wait and validate noobaa PVC is in bound state
+        pvc_obj.wait_for_resource(
+            condition=constants.STATUS_BOUND,
+            resource_name=noobaa_pvc_obj[0].name,
+            timeout=600,
+            sleep=120,
+        )
+
+        # Validate noobaa pods are up and running
+        pod_obj = OCP(
+            kind=constants.POD, namespace=config.ENV_DATA["cluster_namespace"]
+        )
+        noobaa_pods = get_noobaa_pods()
+        pod_obj.wait_for_resource(
+            condition=constants.STATUS_RUNNING,
+            resource_count=len(noobaa_pods),
+            selector=constants.NOOBAA_APP_LABEL,
+            timeout=900,
+        )
+
+        # Since the rebuild changed the noobaa-admin secret, update
+        # the s3 credentials in mcg_object_session
+        mcg_obj_session.update_s3_creds()
+
+        # Verify default backingstore/bucketclass
+        default_bs = OCP(
+            kind=constants.BACKINGSTORE, namespace=config.ENV_DATA["cluster_namespace"]
+        ).get(resource_name=DEFAULT_NOOBAA_BACKINGSTORE)
+        default_bc = OCP(
+            kind=constants.BUCKETCLASS, namespace=config.ENV_DATA["cluster_namespace"]
+        ).get(resource_name=DEFAULT_NOOBAA_BUCKETCLASS)
+        assert (
+            default_bs["status"]["phase"]
+            == default_bc["status"]["phase"]
+            == constants.STATUS_READY
+        ), "Failed: Default bs/bc are not in ready state"
+
+        # Create OBCs
+        logger.info("Creating OBCs after noobaa rebuild")
+        bucket_factory_session(amount=3, interface="OC", verify_health=True)
+
+    def finalizer():
+        """
+        Cleanup function which clears all the noobaa rebuild entries.
+
+        """
+        # Get the deployment replica count
+        deploy_obj = OCP(
+            kind=constants.DEPLOYMENT,
+            namespace=config.ENV_DATA["cluster_namespace"],
+        )
+        noobaa_deploy_obj = deploy_obj.get(
+            resource_name=constants.NOOBAA_OPERATOR_DEPLOYMENT
+        )
+        if noobaa_deploy_obj["spec"]["replicas"] != 1:
+            logger.info(
+                f"Scaling back {constants.NOOBAA_OPERATOR_DEPLOYMENT} deployment to replica: 1"
+            )
+            deploy_obj.exec_oc_cmd(
+                f"scale deployment {constants.NOOBAA_OPERATOR_DEPLOYMENT} --replicas=1"
+            )
+
+    request.addfinalizer(finalizer)
+    return factory
+
+
+@pytest.fixture()
+def validate_noobaa_db_backup_recovery_locally_system(
+    request,
+    bucket_factory_session,
+    noobaa_db_backup_and_recovery_locally,
+    warps3,
+    mcg_obj_session,
+):
+    """
+    Test to verify Backup and Restore for Multicloud Object Gateway database locally
+    Backup procedure:
+    1. Create a test bucket and write some data
+    2. Backup noobaa secrets to local folder OR store it in secret objects
+    3. Backup the PostgreSQL database and save it to a local folder
+    4. For testing, write new data to show a little data loss between backup and restore
+    Restore procedure:
+    1. Stop MCG reconciliation
+    2. Stop the NooBaa Service before restoring the NooBaa DB. There will be no object service after this point
+    3. Verify that all NooBaa components (except NooBaa DB) have 0 replicas
+    4. Login to the NooBaa DB pod and cleanup potential database clients to nbcore
+    5. Restore DB from a local folder
+    6. Delete current noobaa secrets and restore them from a local folder OR secrets objects.
+    7. Restore MCG reconciliation
+    8. Start the NooBaa service
+    9. Restart the NooBaa DB pod
+    10. Check that the old data exists, but not s3://testloss/
+    Run multi client warp benchmarking to verify bug https://bugzilla.redhat.com/show_bug.cgi?id=2141035
+
+    """
+
+    def factory(
+        bucket_factory_session,
+        noobaa_db_backup_and_recovery_locally,
+        warps3,
+        mcg_obj_session,
+    ):
+
+        # create a bucket for warp benchmarking
+        bucket_name = bucket_factory_session()[0].name
+
+        # Backup and restore noobaa db using fixture
+        noobaa_db_backup_and_recovery_locally(bucket_factory_session)
+
+        # Run multi client warp benchmarking
+        warps3.run_benchmark(
+            bucket_name=bucket_name,
+            access_key=mcg_obj_session.access_key_id,
+            secret_key=mcg_obj_session.access_key,
+            duration="10m",
+            concurrent=10,
+            objects=100,
+            obj_size="1MiB",
+            validate=True,
+            timeout=4000,
+            multi_client=True,
+            tls=True,
+            debug=True,
+            insecure=True,
+        )
+
+        # make sure no errors in the noobaa pod logs
+        search_string = (
+            "AssertionError [ERR_ASSERTION]: _id must be unique. "
+            "found 2 rows with _id=undefined in table bucketstats"
+        )
+        nb_pods = get_noobaa_pods()
+        for pd in nb_pods:
+            pod_logs = get_pod_logs(pod_name=pd.name)
+            for line in pod_logs:
+                assert (
+                    search_string not in line
+                ), f"[Error] {search_string} found in the noobaa pod logs"
+        logger.info(f"No {search_string} errors are found in the noobaa pod logs")
 
     return factory

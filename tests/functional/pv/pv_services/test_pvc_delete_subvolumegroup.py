@@ -9,7 +9,6 @@ from ocs_ci.framework.testlib import (
     ManageTest,
     skipif_ocs_version,
     polarion_id,
-    bugzilla,
     tier2,
 )
 from ocs_ci.ocs.uninstall import remove_ocp_registry_from_ocs
@@ -22,7 +21,6 @@ logger = logging.getLogger(__name__)
 @green_squad
 @skipif_ocs_version(["<4.12", ">4.14"])
 @polarion_id("OCS-4664")
-@bugzilla("2124469")
 @tier2
 class TestPvcDeleteSubVolumeGroup(ManageTest):
     """

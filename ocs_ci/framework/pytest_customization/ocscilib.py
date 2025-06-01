@@ -6,6 +6,7 @@ The basic configuration is done in run_ocsci.py module casue we need to load
 all the config before pytest run. This run_ocsci.py is just a wrapper for
 pytest which proccess config and passes all params to pytest.
 """
+
 import logging
 import os
 import pandas as pd
@@ -19,6 +20,7 @@ from ocs_ci.framework.exceptions import (
     ClusterNameNotProvidedError,
     ClusterPathNotProvidedError,
 )
+from ocs_ci.ocs import defaults
 from ocs_ci.ocs.constants import (
     CLUSTER_NAME_MAX_CHARACTERS,
     CLUSTER_NAME_MIN_CHARACTERS,
@@ -26,13 +28,15 @@ from ocs_ci.ocs.constants import (
 )
 from ocs_ci.ocs.exceptions import (
     CommandFailed,
+    ConfigurationError,
     ResourceNotFoundError,
 )
 from ocs_ci.ocs.cluster import check_clusters
 from ocs_ci.ocs.resources.ocs import get_version_info
-from ocs_ci.ocs.utils import collect_ocs_logs, collect_prometheus_metrics
+from ocs_ci.ocs import utils
 from ocs_ci.utility.utils import (
     dump_config_to_file,
+    exec_cmd,
     get_ceph_version,
     get_cluster_name,
     get_cluster_version,
@@ -263,6 +267,16 @@ def pytest_addoption(parser):
         ),
     )
     parser.addoption(
+        "--acm-version",
+        dest="acm_version",
+        help="acm version(e.g. 2.8) to be used for the current run",
+    )
+    parser.addoption(
+        "--upgrade-acm-version",
+        dest="upgrade_acm_version",
+        help="acm version to upgrade(e.g. 2.8), use only with DR upgrade scenario",
+    )
+    parser.addoption(
         "--flexy-env-file", dest="flexy_env_file", help="Path to flexy environment file"
     )
     parser.addoption(
@@ -334,6 +348,34 @@ def pytest_addoption(parser):
             set for installing lvmo operator and lvmo cluster
             """,
     )
+    parser.addoption(
+        "--disable-environment-checker",
+        dest="disable_environment_checker",
+        action="store_true",
+        default=False,
+        help="Disable environment checks for test cases.",
+    )
+    parser.addoption(
+        "--resource-checker",
+        dest="resource_checker",
+        action="store_true",
+        default=False,
+        help=(
+            "Resource checker checks for the left over resources which are added while running the test cases."
+        ),
+    )
+    parser.addoption(
+        "--kubeconfig",
+        dest="kubeconfig",
+        help=("Kubeconfig location which will be loaded as environmental variable"),
+    )
+    parser.addoption(
+        "--skip-rpm-go-version-collection",
+        dest="skip_rpm_go_version_collection",
+        action="store_true",
+        default=False,
+        help=("Skips the RPM and go version collection for every pod for session"),
+    )
 
 
 def pytest_configure(config):
@@ -364,6 +406,11 @@ def pytest_configure(config):
                     f"run-{ocsci_config.RUN['run_id']}-cl{i}-config.yaml",
                 )
             )
+            if ocsci_config.DEPLOYMENT.get("multi_storagecluster"):
+                ocsci_config.DEPLOYMENT["external_mode"] = False
+                ocsci_config.ENV_DATA["storage_cluster_name"] = (
+                    constants.DEFAULT_STORAGE_CLUSTER
+                )
             dump_config_to_file(config_file)
             log.info(
                 f"Dump of the consolidated config file is located here: "
@@ -501,21 +548,60 @@ def process_cluster_cli_params(config):
     cluster_path = os.path.expanduser(cluster_path)
     if not os.path.exists(cluster_path):
         os.makedirs(cluster_path)
+
+    # create kubeconfig if doesn't exists and OCP url and kubeadmin password is provided
+    kubeconfig_path = os.path.join(
+        cluster_path, ocsci_config.RUN["kubeconfig_location"]
+    )
+    if not os.path.isfile(kubeconfig_path) and not (
+        get_cli_param(config, "deploy", default=False)
+        or get_cli_param(config, "teardown", default=False)
+        or get_cli_param(config, "kubeconfig")
+    ):
+        if ocsci_config.RUN.get("kubeadmin_password") and ocsci_config.RUN.get(
+            "ocp_url"
+        ):
+            log.info(
+                "Generating kubeconfig file from provided kubeadmin password and OCP URL"
+            )
+            # check and correct OCP URL (change it to API url if console url provided and add port if needed
+            ocp_api_url = ocsci_config.RUN.get("ocp_url").replace(
+                "console-openshift-console.apps", "api"
+            )
+            if ":6443" not in ocp_api_url:
+                ocp_api_url = ocp_api_url.rstrip("/") + ":6443"
+
+            cmd = (
+                f"oc login --username {ocsci_config.RUN['username']} "
+                f"--password {ocsci_config.RUN['kubeadmin_password']} "
+                f"{ocp_api_url} "
+                f"--kubeconfig {kubeconfig_path} "
+                "--insecure-skip-tls-verify=true"
+            )
+            result = exec_cmd(cmd, secrets=(ocsci_config.RUN["kubeadmin_password"],))
+            if result.returncode:
+                log.warning(f"executed command: {cmd}")
+                log.warning(f"returncode: {result.returncode}")
+                log.warning(f"stdout: {result.stdout}")
+                log.warning(f"stderr: {result.stderr}")
+            else:
+                log.warning(f"Kubeconfig file were created: {kubeconfig_path}.")
+        else:
+            raise ConfigurationError(
+                "Kubeconfig doesn't exists and RUN['kubeadmin_password'] and RUN['ocp_url'] "
+                "environment variables were not provided."
+            )
+
     # Importing here cause once the function is invoked we have already config
     # loaded, so this is OK to import once you sure that config is loaded.
+    kubeconfig_location = ocsci_config.RUN["kubeconfig_location"]
+    custom_kubeconfig_location = get_cli_param(config, "kubeconfig")
+    ocsci_config.RUN["custom_kubeconfig_location"] = custom_kubeconfig_location
+    if custom_kubeconfig_location:
+        kubeconfig_location = custom_kubeconfig_location
     from ocs_ci.ocs.openshift_ops import OCP
 
-    OCP.set_kubeconfig(
-        os.path.join(cluster_path, ocsci_config.RUN["kubeconfig_location"])
-    )
-    ocsci_config.RUN.update(
-        {
-            "kubeconfig": os.path.join(
-                cluster_path, ocsci_config.RUN["kubeconfig_location"]
-            )
-        }
-    )
-
+    OCP.set_kubeconfig(os.path.join(cluster_path, kubeconfig_location))
     cluster_name = get_cli_param(config, f"cluster_name{suffix}")
     ocsci_config.RUN["cli_params"]["teardown"] = get_cli_param(
         config, "teardown", default=False
@@ -540,6 +626,11 @@ def process_cluster_cli_params(config):
     upgrade_ocs_version = get_cli_param(config, "upgrade_ocs_version")
     if upgrade_ocs_version:
         ocsci_config.UPGRADE["upgrade_ocs_version"] = upgrade_ocs_version
+        # Storing previous version explicitly
+        # Useful in DR upgrade scenarios
+        ocsci_config.UPGRADE["pre_upgrade_ocs_version"] = ocsci_config.ENV_DATA[
+            "ocs_version"
+        ]
     ocs_registry_image = get_cli_param(config, f"ocs_registry_image{suffix}")
     if ocs_registry_image:
         ocsci_config.DEPLOYMENT["ocs_registry_image"] = ocs_registry_image
@@ -579,7 +670,7 @@ def process_cluster_cli_params(config):
         pytest.exit("--html option must be provided to send email reports")
     get_cli_param(config, "squad_analysis")
     get_cli_param(config, "-m")
-    osd_size = get_cli_param(config, "--osd-size")
+    osd_size = get_cli_param(config, f"--osd-size{suffix}")
     if osd_size:
         ocsci_config.ENV_DATA["device_size"] = osd_size
     ocp_version = get_cli_param(config, "--ocp-version")
@@ -625,6 +716,20 @@ def process_cluster_cli_params(config):
         ocsci_config.RUN["re_trigger_failed_tests"] = os.path.expanduser(
             re_trigger_failed_tests
         )
+    disable_environment_checker = get_cli_param(config, "disable_environment_checker")
+    ocsci_config.RUN["disable_environment_checker"] = disable_environment_checker
+    resource_checker = get_cli_param(config, "resource_checker")
+    ocsci_config.RUN["resource_checker"] = resource_checker
+    acm_version = get_cli_param(config, "--acm-version")
+    if acm_version:
+        ocsci_config.ENV_DATA["acm_version"] = acm_version
+    upgrade_acm_version = get_cli_param(config, "--upgrade-acm-version")
+    if upgrade_acm_version:
+        ocsci_config.UPGRADE["upgrade_acm_version"] = upgrade_acm_version
+    skip_rpm_go_version_collection = get_cli_param(
+        config, "skip_rpm_go_version_collection"
+    )
+    ocsci_config.RUN["skip_rpm_go_version_collection"] = skip_rpm_go_version_collection
 
 
 def pytest_collection_modifyitems(session, config, items):
@@ -672,34 +777,54 @@ def pytest_runtest_makereport(item, call):
         and ocsci_config.RUN.get("cli_params").get("collect-logs")
         and not ocsci_config.RUN.get("cli_params").get("deploy")
     ):
+        item_markers = {marker.name for marker in item.iter_markers()}
         test_case_name = item.name
+        # TODO: We should avoid paths and rely on markers issue:
+        # https://github.com/red-hat-storage/ocs-ci/issues/10526
         ocp_logs_collection = (
             True
             if any(
                 x in item.location[0]
                 for x in [
-                    "ecosystem",
-                    "e2e/performance",
                     "tests/functional/z_cluster",
                 ]
             )
             else False
         )
+        ocp_markers_to_collect = {
+            "performance",
+            "purple_squad",
+            "rdr",
+        }
+        if ocp_markers_to_collect & item_markers:
+            ocp_logs_collection = True
         ocs_logs_collection = (
             False
             if any(x in item.location[0] for x in ["_ui", "must_gather"])
             else True
         )
-        mcg_logs_collection = (
-            True if any(x in item.location[0] for x in ["mcg", "ecosystem"]) else False
+        mcg_markers_to_collect = {
+            "mcg",
+            "purple_squad",
+        }
+        # For every failure in MG we are trying to extend next attempt by 20 minutes
+        adjusted_timeout = utils.mg_fail_count * 1200
+        timeout = ocsci_config.REPORTING.get(
+            "must_gather_timeout", defaults.MUST_GATHER_TIMEOUT + adjusted_timeout
         )
+        log.info(f"Adjusted timeout for MG is {timeout} seconds")
+        mcg_logs_collection = bool(mcg_markers_to_collect & item_markers)
         try:
             if not ocsci_config.RUN.get("is_ocp_deployment_failed"):
-                collect_ocs_logs(
+                utils.collect_ocs_logs(
                     dir_name=test_case_name,
                     ocp=ocp_logs_collection,
                     ocs=ocs_logs_collection,
                     mcg=mcg_logs_collection,
+                    silent=True,
+                    output_file=True,
+                    skip_after_max_fail=True,
+                    timeout=timeout,
                 )
         except Exception:
             log.exception("Failed to collect OCS logs")
@@ -713,7 +838,7 @@ def pytest_runtest_makereport(item, call):
         metrics = item.get_closest_marker("gather_metrics_on_fail").args
         try:
             threading_lock = call.getfixturevalue("threading_lock")
-            collect_prometheus_metrics(
+            utils.collect_prometheus_metrics(
                 metrics,
                 f"{item.name}-{call.when}",
                 call.start,
@@ -736,6 +861,30 @@ def pytest_runtest_makereport(item, call):
             collect_performance_stats(test_case_name)
         except Exception:
             log.exception("Failed to collect performance stats")
+
+    if rep.failed:
+        test_name = item.nodeid
+        # Write the failure information to a file
+        with open(
+            f'{ocsci_config.ENV_DATA.get("cluster_path")}/failed_testcases.txt', "a"
+        ) as file:
+            file.write(f"{test_name}\n")
+
+    if rep.passed and rep.when == "call":
+        test_name = item.nodeid
+        # Write the passed information to a file
+        with open(
+            f'{ocsci_config.ENV_DATA.get("cluster_path")}/passed_testcases.txt', "a"
+        ) as file:
+            file.write(f"{test_name}\n")
+
+    if rep.skipped:
+        test_name = item.nodeid
+        # Write the skipped information to a file
+        with open(
+            f'{ocsci_config.ENV_DATA.get("cluster_path")}/skipped_testcases.txt', "a"
+        ) as file:
+            file.write(f"{test_name}\n")
 
 
 def set_log_level(config):

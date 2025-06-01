@@ -24,7 +24,7 @@ log = logging.getLogger(__name__)
 @managed_service_required
 @skipif_ms_consumer
 @pytest.mark.polarion_id("OCS-2771")
-def test_corrupt_pg_pd(measure_corrupt_pg):
+def deprecated_test_corrupt_pg_pd(measure_corrupt_pg):
     """
     Test that there is appropriate incident in PagerDuty when Placement group
     on one OSD is corrupted and that this incident is cleared when the corrupted

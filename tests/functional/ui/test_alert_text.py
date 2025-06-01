@@ -3,12 +3,14 @@ import logging
 import pytest
 
 from ocs_ci.framework.pytest_customization.marks import (
-    tier1,
     skipif_hci_client,
     skipif_mcg_only,
     skipif_disconnected_cluster,
     polarion_id,
     black_squad,
+    tier2,
+    ui,
+    skipif_ibm_cloud_managed,
 )
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.cluster import is_hci_provider_cluster
@@ -21,20 +23,20 @@ logger = logging.getLogger(__name__)
 
 internal_mode_OCP_ODF_alerts = {
     constants.ALERT_CLUSTERERRORSTATE: "c27c66813b585dd5d091f0305a7e0c34",
-    constants.ALERT_CLUSTERWARNINGSTATE: "4830ac3cb48c51bf1cee3bd732722cd8",
+    constants.ALERT_CLUSTERWARNINGSTATE: "109d0e4a8a2ca356f00093552ca26f67",
     constants.ALERT_CEPH_OSD_VERSION_MISMATCH: "7b43a3eeb6ffc1fd3d4e5f0cc1614f32",
-    constants.ALERT_PERSISTENT_VOLUME_USAGE_CRITICAL: "f4f676cf77e4b7fe9db23c2c04cc371d",
+    constants.ALERT_PERSISTENT_VOLUME_USAGE_CRITICAL: "375ffa877b36a083f84aae62b254a163",
     constants.ALERT_CLUSTERCRITICALLYFULL: "2ce640cb5ebfe32bb92cfb3fb0fdad3d",
     constants.ALERT_CLUSTERNEARFULL: "4cc6fa4d12cb1f918c4b26ef09ea86c4",
     constants.ALERT_CEPH_CLUSTER_READ_ONLY: "fe05cce0d04692e7c18024399e8eb665",
     constants.ALERT_CEPH_MON_VERSION_MISMATCH: "60ea71a6bf58e140da9eacf06c10f821",
-    constants.ALERT_CEPH_POOL_QUOTA_BYTES_CRITICALLY_EXHAUSTED: "6cb986f616cf6a53d38234b5454c1962",
-    constants.ALERT_CEPH_POOL_QUOTA_BYTES_NEAR_EXHAUSTION: "1d9ae8f28739bacb546e75c85ddc2c1b",
+    constants.ALERT_CEPH_POOL_QUOTA_BYTES_CRITICALLY_EXHAUSTED: "c891af3cfc8bc4cbc26f1300bf6920d3",
+    constants.ALERT_CEPH_POOL_QUOTA_BYTES_NEAR_EXHAUSTION: "3695319b318fd9167af7ccaaa66cb802",
     constants.ALERT_MGRISABSENT: "6f60fe15ad5ac9b1dde9e933fd1c59aa",
     constants.ALERT_MGRISMISSINGREPLICAS: "b3757ad3e40a6865772759a3652b1f54",
     constants.ALERT_CEPH_MDS_MISSING_REPLICAS: "003d21ab882afa98663887ed5695d12f",
-    constants.ALERT_MONQUORUMATRISK: "eada4bb2495d3ffe38f56c60c36ad7e4",
-    constants.ALERT_MONQUORUMLOST: "eb63d7f1c11f161c325ff532703cd7f3",
+    constants.ALERT_MONQUORUMATRISK: "2e77dc226b8026833854cd9ad66653e3",
+    constants.ALERT_MONQUORUMLOST: "b1cc0824d91dd3408c8277923ff60501",
     constants.ALERT_CEPH_MON_HIGH_NUMBER_OF_LEADER_CHANGES: "445b3522779a9bfd96467758bf610149",
     constants.ALERT_NODEDOWN: "294fdea46b4af6e60621d728b034b4c0",
     constants.ALERT_CEPH_OSD_CRITICALLY_FULL: "08ffb8cc96bd8e063d156725aee8009c",
@@ -51,7 +53,7 @@ internal_mode_OCP_ODF_alerts = {
     constants.ALERT_CEPHOSDSLOWOPS: "85c3a867cefd54685e8ee2da4026d7ae",
     constants.ALERT_DATARECOVERYTAKINGTOOLONG: "4ec366536bbd75310d9cce1ab11174a6",
     constants.ALERT_PGREPAIRTAKINGTOOLONG: "a1d659aaf4823c1cd3836cd29bd966dc",
-    constants.ALERT_PERSISTENT_VOLUME_USAGE_NEAR_FULL: "1d8ed9640cd83d7e6e1335449046a990",
+    constants.ALERT_PERSISTENT_VOLUME_USAGE_NEAR_FULL: "441dabf582bf8c22e456d1e83677a6eb",
     constants.ALERT_ODF_PERSISTENT_VOLUME_MIRROR_STATUS: "3c0c7404d9421b0ebf8015b449f82d87",
     constants.ALERT_OBC_QUOTA_BYTES_ALERT: "0086e448dea6c1ac13fcfcb0185ed061",
 }
@@ -73,12 +75,14 @@ def alerts_expected():
         return internal_mode_OCP_ODF_alerts
 
 
-@tier1
+@tier2
 @black_squad
+@skipif_ibm_cloud_managed
 @skipif_mcg_only
 @skipif_hci_client
 @polarion_id("OCS-5509")
 @skipif_disconnected_cluster
+@ui
 def test_runbooks(setup_ui, alerts_expected):
     """
     Test runbooks for alerts. Texts are validated manually and hash values are created based on the texts.
@@ -117,12 +121,14 @@ def test_runbooks(setup_ui, alerts_expected):
 
         test_res[alert_name] = text_as_expected and text_valid
 
-    test_res_df = pd.DataFrame.from_dict(
-        test_res, orient="index", columns=["Runbook Hash Match"]
-    )
-    alerts_failed_check = test_res_df[
-        not test_res_df["Runbook Hash Match"]
-    ].to_markdown(headers="keys", index=True, tablefmt="grid")
-    assert all(
-        test_res.values()
-    ), f"Failed to match runbook hash for alerts: \n{alerts_failed_check}"
+    assert_msg = "Failed to match runbook hash for alerts: \n"
+    if test_res:
+        test_res_df = pd.DataFrame.from_dict(
+            test_res, orient="index", columns=["Runbook Hash Match"]
+        )
+        alerts_failed_check = test_res_df[
+            ~test_res_df["Runbook Hash Match"]
+        ].to_markdown(headers="keys", index=True, tablefmt="grid")
+        assert_msg = f"{assert_msg}{alerts_failed_check}"
+
+    assert all(test_res.values()), assert_msg

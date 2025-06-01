@@ -2,7 +2,7 @@ import logging
 import time
 
 
-from ocs_ci.ocs.ui.views import osd_sizes, OCS_OPERATOR, ODF_OPERATOR
+from ocs_ci.ocs.ui.views import osd_sizes, OCS_OPERATOR, ODF_OPERATOR, LOCAL_STORAGE
 from ocs_ci.ocs.ui.page_objects.page_navigator import PageNavigator
 from ocs_ci.utility.utils import TimeoutSampler
 from ocs_ci.utility import version
@@ -45,11 +45,13 @@ class DeploymentUI(PageNavigator):
             capacity_str = str(capacity / 1024).rstrip("0").rstrip(".") + " TiB"
         else:
             capacity_str = str(capacity) + " GiB"
+        logger.info(f"Waiting for {capacity_str}")
         sample = TimeoutSampler(
             timeout=timeout,
             sleep=sleep,
             func=self.check_element_text,
             expected_text=capacity_str,
+            take_screenshot=True,
         )
         if not sample.wait_for_func_status(result=True):
             raise TimeoutExpiredError(f"Disks are not attached after {timeout} seconds")
@@ -115,7 +117,7 @@ class DeploymentUI(PageNavigator):
             self.do_click(
                 self.dep_loc["click_install_lso_page"], enable_screenshot=True
             )
-            self.verify_operator_succeeded(operator="Local Storage")
+            self.verify_operator_succeeded(operator=LOCAL_STORAGE, timeout_install=300)
 
     def install_storage_cluster(self):
         """
@@ -226,6 +228,7 @@ class DeploymentUI(PageNavigator):
             text=constants.LOCAL_BLOCK_RESOURCE,
             timeout=300,
         )
+        self.take_screenshot()
         self.do_send_keys(
             locator=self.dep_loc["sc_name"], text=constants.LOCAL_BLOCK_RESOURCE
         )
@@ -234,7 +237,11 @@ class DeploymentUI(PageNavigator):
             self.do_click(
                 locator=self.dep_loc["all_nodes_create_sc"], enable_screenshot=True
             )
-        if config.ENV_DATA.get("platform") != constants.BAREMETAL_PLATFORM:
+        if config.ENV_DATA.get("platform") not in [
+            constants.BAREMETAL_PLATFORM,
+            constants.HCI_BAREMETAL,
+        ]:
+            self.take_screenshot()
             self.verify_disks_lso_attached()
             timeout_next = 60
         else:
@@ -261,24 +268,30 @@ class DeploymentUI(PageNavigator):
 
         self.configure_performance()
 
-        if self.operator_name == OCS_OPERATOR:
-            logger.info(f"Select {constants.LOCAL_BLOCK_RESOURCE} storage class")
-            self.choose_expanded_mode(
-                mode=True, locator=self.dep_loc["storage_class_dropdown_lso"]
-            )
-            self.do_click(locator=self.dep_loc["localblock_sc"], enable_screenshot=True)
-            timeout_next = 30
-        else:
-            timeout_next = 600
-        self.do_click(
-            self.dep_loc["next"], enable_screenshot=True, timeout=timeout_next
+        sample = TimeoutSampler(
+            timeout=700,
+            sleep=40,
+            func=self.wait_next_button_lso,
         )
+        if not sample.wait_for_func_status(result=True):
+            self.take_screenshot()
+            raise TimeoutExpiredError(
+                "Next button on LSO is not clickable after 700 seconds"
+            )
 
         self.configure_encryption()
 
         self.configure_data_protection()
 
         self.create_storage_cluster()
+
+    def wait_next_button_lso(self):
+        try:
+            self.do_click(self.dep_loc["next"], enable_screenshot=True, timeout=20)
+        except Exception as e:
+            logger.error(f"Next button on LSO error: {e}")
+            return False
+        return True
 
     def install_internal_cluster(self):
         """
@@ -387,7 +400,10 @@ class DeploymentUI(PageNavigator):
         Configure Data Protection
 
         """
-        if self.ocs_version_semantic >= version.VERSION_4_14:
+        if (
+            self.ocs_version_semantic >= version.VERSION_4_14
+            and self.ocs_version_semantic <= version.VERSION_4_17
+        ):
             self.do_click(self.dep_loc["next"], enable_screenshot=True)
 
     def enable_taint_nodes(self):
@@ -420,7 +436,7 @@ class DeploymentUI(PageNavigator):
         self.do_click(locator=self.dep_loc[osd_size], enable_screenshot=True)
 
     def verify_operator_succeeded(
-        self, operator=OCS_OPERATOR, timeout_install=300, sleep=20
+        self, operator=OCS_OPERATOR, timeout_install=600, sleep=20
     ):
         """
         Verify Operator Installation
@@ -433,7 +449,14 @@ class DeploymentUI(PageNavigator):
         """
         self.search_operator_installed_operators_page(operator=operator)
         time.sleep(5)
-        if self.ocs_version_semantic > version.VERSION_4_15:
+        if operator == LOCAL_STORAGE:
+            sample = TimeoutSampler(
+                timeout=timeout_install,
+                sleep=sleep,
+                func=self.check_element_text,
+                expected_text="Succeeded",
+            )
+        elif self.ocs_version_semantic > version.VERSION_4_15:
             sample = TimeoutSampler(
                 timeout=timeout_install,
                 sleep=sleep,
@@ -457,6 +480,7 @@ class DeploymentUI(PageNavigator):
                 f"{operator} Installation status is not Succeeded after {timeout_install} seconds"
             )
         self.take_screenshot()
+        logger.info(f"{operator} operator installed Successfully.")
 
     def search_operator_installed_operators_page(self, operator=OCS_OPERATOR):
         """

@@ -1,6 +1,7 @@
 """
 Virtctl class
 """
+
 import json
 
 from ocs_ci.utility.utils import run_cmd

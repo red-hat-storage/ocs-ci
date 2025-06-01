@@ -1,6 +1,7 @@
 """
 This module contains local-storage related methods
 """
+
 import json
 import logging
 import os
@@ -152,7 +153,7 @@ def check_local_volume_local_volume_set():
         return lv_or_lvs_dict
 
 
-@retry(AssertionError, 12, 10, 1)
+@retry(AssertionError, 8, 15, 2)
 def check_pvs_created(num_pvs_required):
     """
     Verify that exact number of PVs were created and are in the Available state

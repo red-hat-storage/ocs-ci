@@ -38,7 +38,7 @@ obc_scaled_data_file = f"{log_path}/obc_scale_data_file.yaml"
 @skipif_bm
 @skipif_managed_service
 @pytest.mark.polarion_id("OCS-3987")
-def test_scale_obc_pre_upgrade(tmp_path, timeout=60):
+def test_scale_obc_pre_upgrade(tmp_path, noobaa_storage_class_name, timeout=60):
     """
     Create scaled MCG OBC using Noobaa storage class before upgrade
     Save scaled obc data in a file for post upgrade validation
@@ -51,6 +51,7 @@ def test_scale_obc_pre_upgrade(tmp_path, timeout=60):
             no_of_obc=num_obc_batch,
             sc_name=sc_name,
             namespace=namespace,
+            noobaa_storage_class_name=noobaa_storage_class_name,
         )
         # Create job profile
         job_file = ObjectConfFile(

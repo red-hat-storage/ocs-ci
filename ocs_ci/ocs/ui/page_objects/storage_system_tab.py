@@ -88,7 +88,7 @@ class StorageSystemTab(DataFoundationTabBar, CreateResourceForm):
         """
         existing_storage_systems_names = str(
             OCP().exec_oc_cmd(
-                "get storageclass --all-namespaces -o custom-columns=':metadata.name'"
+                f"get storageclass -n {config.ENV_DATA['cluster_namespace']} -o custom-columns=':metadata.name'"
             )
         )
         return self._check_resource_name_not_exists_rule(

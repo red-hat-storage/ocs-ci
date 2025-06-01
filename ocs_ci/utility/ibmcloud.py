@@ -4,23 +4,34 @@ Module for interactions with IBM Cloud Cluster.
 
 """
 
-
 import json
 import logging
 import os
+import re
+import requests
 import time
+import ibm_boto3
+import ipaddress
 
+from copy import copy
+from ibm_botocore.client import Config as IBMBotocoreConfig, ClientError
+from json import JSONDecodeError
 from ocs_ci.framework import config
 from ocs_ci.ocs import constants
+from ocs_ci.ocs.defaults import IBM_CLOUD_REGIONS
+from ocs_ci.ocs.ocp import OCP
 from ocs_ci.ocs.exceptions import (
+    APIRequestError,
     CommandFailed,
     UnsupportedPlatformVersionError,
     UnexpectedBehaviour,
     NodeHasNoAttachedVolume,
     TimeoutExpiredError,
 )
+from ocs_ci.ocs.node import wait_for_nodes_status
+from ocs_ci.ocs.resources.ocs import OCS
 from ocs_ci.utility import version as util_version
-from ocs_ci.utility.utils import get_ocp_version, run_cmd, TimeoutSampler
+from ocs_ci.utility.utils import get_infra_id, get_ocp_version, run_cmd, TimeoutSampler
 from ocs_ci.ocs.node import get_nodes
 
 
@@ -28,9 +39,12 @@ logger = logging.getLogger(name=__file__)
 ibm_config = config.AUTH.get("ibmcloud", {})
 
 
-def login():
+def login(region=None):
     """
     Login to IBM Cloud cluster
+
+    Args:
+        region (str): region to log in, if not specified it will use one from config
     """
     api_key = ibm_config["api_key"]
     login_cmd = f"ibmcloud login --apikey {api_key}"
@@ -40,7 +54,8 @@ def login():
     api_endpoint = ibm_config.get("api_endpoint")
     if api_endpoint:
         login_cmd += f" -a {api_endpoint}"
-    region = config.ENV_DATA.get("region")
+    if not region:
+        region = config.ENV_DATA.get("region")
     if region:
         login_cmd += f" -r {region}"
     logger.info("Logging to IBM cloud")
@@ -49,14 +64,32 @@ def login():
     config.RUN["ibmcloud_last_login"] = time.time()
 
 
-def set_region():
+def set_region(region=None):
     """
-    Sets the cluster region to ENV_DATA
+    Sets the cluster region to ENV_DATA when enable_region_dynamic_switching is
+    enabled.
+
+    Args:
+        region (str): region to set, if not defined it will try to get from metadata.json
+
     """
-    region = get_region(config.ENV_DATA["cluster_path"])
+    if not config.ENV_DATA.get("enable_region_dynamic_switching"):
+        return
+    if not region:
+        region = get_region(config.ENV_DATA["cluster_path"])
     logger.info(f"cluster region is {region}")
     logger.info(f"updating region {region} to ENV_DATA ")
     config.ENV_DATA["region"] = region
+    other_region = list(IBM_CLOUD_REGIONS - {region})[0]
+    for node_type in ["master", "worker"]:
+        for idx, zone in enumerate(
+            copy(config.ENV_DATA.get(f"{node_type}_availability_zones", []))
+        ):
+            config.ENV_DATA[f"{node_type}_availability_zones"][idx] = zone.replace(
+                other_region, region
+            )
+    # Make sure we are logged in proper region from config, once region changed!
+    login()
 
 
 def get_region(cluster_path):
@@ -99,9 +132,12 @@ def run_ibmcloud_cmd(cmd, secrets=None, timeout=600, ignore_error=False, **kwarg
     try:
         return run_cmd(cmd, secrets, timeout, ignore_error, **kwargs)
     except CommandFailed as ex:
-        if "Please login" in ex.message:
+        if "Please login" in str(ex):
             login()
             return run_cmd(cmd, secrets, timeout, ignore_error, **kwargs)
+        else:
+            if not ignore_error:
+                raise
 
 
 def get_cluster_details(cluster):
@@ -159,17 +195,26 @@ def create_cluster(cluster_name):
 
     """
     provider = config.ENV_DATA["provider"]
+    worker_availability_zones = config.ENV_DATA.get("worker_availability_zones", [])
+    worker_zones_number = len(worker_availability_zones)
     zone = config.ENV_DATA["zone"]
     flavor = config.ENV_DATA["worker_instance_type"]
     worker_replicas = config.ENV_DATA["worker_replicas"]
+    if worker_zones_number > 1:
+        worker_replicas = 2
     ocp_version = get_ibmcloud_ocp_version()
-
     cmd = (
         f"ibmcloud ks cluster create {provider} --name {cluster_name}"
         f" --flavor {flavor}  --workers {worker_replicas}"
         f" --kube-version {ocp_version}"
     )
+    # Reloading correct number of worker replica for later usage.
+    if worker_zones_number > 1:
+        worker_replicas = int(config.ENV_DATA["worker_replicas"] / worker_zones_number)
     if provider == "vpc-gen2":
+        semantic_ocp_version = util_version.get_semantic_ocp_version_from_config()
+        if semantic_ocp_version >= util_version.VERSION_4_15:
+            cmd += " --disable-outbound-traffic-protection"
         vpc_id = config.ENV_DATA["vpc_id"]
         subnet_id = config.ENV_DATA["subnet_id"]
         cmd += f" --vpc-id {vpc_id} --subnet-id  {subnet_id} --zone {zone}"
@@ -182,11 +227,27 @@ def create_cluster(cluster_name):
     cluster_info = get_cluster_details(cluster_name)
     # Create metadata file to store the cluster name
     cluster_info["clusterName"] = cluster_name
-    cluster_info["clusterID"] = cluster_info["id"]
+    cluster_id = cluster_info["id"]
+    cluster_info["clusterID"] = cluster_id
     cluster_path = config.ENV_DATA["cluster_path"]
     metadata_file = os.path.join(cluster_path, "metadata.json")
     with open(metadata_file, "w+") as f:
         json.dump(cluster_info, f)
+    for worker_zone in worker_availability_zones:
+        if worker_zone == zone:
+            continue
+        subnet = config.ENV_DATA["subnet_ids_per_zone"][worker_zone]
+        cmd = (
+            f"ibmcloud oc zone add {provider} --subnet-id {subnet}  "
+            f"--cluster {cluster_id} --zone {worker_zone} --worker-pool default"
+        )
+        run_ibmcloud_cmd(cmd)
+    if worker_zones_number > 1:
+        cmd = (
+            f"ibmcloud ks worker-pool resize --cluster {cluster_name} --worker-pool "
+            f"default --size-per-zone {worker_replicas}"
+        )
+        run_ibmcloud_cmd(cmd)
     # Temporary increased timeout to 10 hours cause of issue with deployment on
     # IBM cloud
     timeout = 36000
@@ -279,6 +340,58 @@ class IBMCloud(object):
     """
     Wrapper for Ibm Cloud
     """
+
+    def start_nodes(self, nodes, wait=True):
+        """
+        Start nodes on IBM Cloud.
+
+        Args:
+            nodes (list): The OCS objects of the nodes
+            wait (bool): True for waiting the instances to start, False otherwise
+
+        Raises:
+            ValueError: if the list of nodes is empty
+
+        """
+        if not nodes:
+            raise ValueError("No nodes found to start")
+
+        node_names = [n.name for n in nodes]
+        self.restart_nodes(nodes)
+
+        if wait:
+            # When the node is reachable then the node reaches status Ready.
+            logger.info(f"Waiting for nodes: {node_names} to reach ready state")
+            wait_for_nodes_status(
+                node_names=node_names, status=constants.NODE_READY, timeout=180, sleep=5
+            )
+
+    def stop_nodes(self, nodes, wait=True):
+        """
+        Stop nodes on IBM Cloud
+
+        Args:
+            nodes (list): The OCS objects of the nodes
+            wait (bool): True for waiting the instances to stop, False otherwise
+
+        Raises:
+            ValueError: if the list of nodes is empty
+
+        """
+        if not nodes:
+            raise ValueError("No nodes found to stop")
+
+        cmd = "oc debug node/{} --to-namespace=default -- chroot /host shutdown"
+        node_names = [n.name for n in nodes]
+        for node in node_names:
+            run_cmd(cmd.format(node))
+
+        if wait:
+            # When the node is reachable then the node reaches status Ready.
+            logger.info(f"Waiting for nodes: {node_names} to reach not ready state")
+            wait_for_nodes_status(
+                node_names, constants.NODE_NOT_READY, timeout=180, sleep=5
+            )
 
     def restart_nodes(self, nodes, timeout=900, wait=True):
         """
@@ -547,6 +660,285 @@ class IBMCloud(object):
             logger.info("volume is not deleted")
 
 
+class IBMCloudIPI(object):
+    """
+    Wrapper for Ibm Cloud IPI
+
+    """
+
+    def restart_nodes(self, nodes, wait=True, timeout=900):
+        """
+        Reboot the nodes on IBM Cloud.
+        Args:
+            nodes (list): The worker node instance
+            wait (bool): Wait for the VMs to stop
+            timeout (int): Timeout for the command, defaults to 900 seconds.
+        """
+        logger.info("restarting nodes")
+
+        for node in nodes:
+            cmd = f"ibmcloud is instance-reboot {node.name} -f"
+            out = run_ibmcloud_cmd(cmd)
+            logger.info(f"Node restart command output: {out}")
+
+        if wait:
+            for node in nodes:
+                sample = TimeoutSampler(
+                    timeout=timeout,
+                    sleep=10,
+                    func=self.check_node_status,
+                    node_name=node.name,
+                    node_status=constants.STATUS_RUNNING.lower(),
+                )
+                sample.wait_for_func_status(result=True)
+
+    def start_nodes(self, nodes):
+        """
+        Start the nodes on IBM Cloud
+        Args:
+            nodes (list): The OCS objects of the nodes
+        """
+        # logger.info(nodes)
+        for node in nodes:
+            # logger.info(node.get())
+            cmd = f"ibmcloud is instance-start {node.name}"
+            out = run_ibmcloud_cmd(cmd)
+            logger.info(f"Node start command output: {out}")
+
+    def stop_nodes(self, nodes, force=True, wait=True):
+        """
+        Stop the nodes on IBM Cloud
+        Args:
+            nodes (list): The OCS objects of the nodes
+            force (bool): True for VM ungraceful power off, False for graceful VM shutdown
+            wait (bool): Wait for the VMs to stop
+        """
+        for node in nodes:
+            cmd = f"ibmcloud is instance-stop {node.name} --force={force}"
+            out = run_ibmcloud_cmd(cmd)
+            logger.info(f"Node Stop command output: {out}")
+
+        if wait:
+            for node in nodes:
+                sample = TimeoutSampler(
+                    timeout=300,
+                    sleep=10,
+                    func=self.check_node_status,
+                    node_name=node.name,
+                    node_status=constants.STATUS_STOPPED,
+                )
+                sample.wait_for_func_status(result=True)
+
+    def restart_nodes_by_stop_and_start(
+        self, nodes, wait=True, force=True, timeout=300
+    ):
+        """
+        Restart nodes by stopping and starting VM in IBM Cloud
+        Args:
+            nodes (list): The OCS objects of the nodes
+            wait (bool): True in case wait for status is needed, False otherwise
+            force (bool): True for force instance stop, False otherwise
+            timeout (int): Timeout for the command, defaults to 300 seconds.
+        """
+        logger.info(f"Stopping instances {list(node.name for node in nodes )}")
+        self.stop_nodes(nodes=nodes, force=force)
+        if wait:
+            for node in nodes:
+                sample = TimeoutSampler(
+                    timeout=timeout,
+                    sleep=10,
+                    func=self.check_node_status,
+                    node_name=node.name,
+                    node_status=constants.STATUS_STOPPED,
+                )
+                sample.wait_for_func_status(result=True)
+        logger.info(f"Starting instances {list(node.name for node in nodes )}")
+
+        self.start_nodes(nodes=nodes)
+        if wait:
+            for node in nodes:
+                sample = TimeoutSampler(
+                    timeout=timeout,
+                    sleep=10,
+                    func=self.check_node_status,
+                    node_name=node.name,
+                    node_status=constants.STATUS_RUNNING.lower(),
+                )
+                sample.wait_for_func_status(result=True)
+
+    def check_node_status(self, node_name, node_status):
+        """
+        Check the node status in IBM cloud
+
+        Args:
+            node_name (str): Node name
+            node_status (str): Status of Node Running or Stopped
+
+        Returns:
+            bool: True if status matches else False
+        """
+        try:
+            cmd = f"ibmcloud is instance {node_name} --output json"
+
+            out = run_ibmcloud_cmd(cmd)
+            out = json.loads(out)
+            if out["status"] == node_status:
+                return True
+            else:
+                return False
+        except CommandFailed as cf:
+            if "Instance not found" in str(cf):
+                return True
+        return False
+
+    def restart_nodes_by_stop_and_start_force(self):
+        """
+        Make sure all nodes are up by the end of the test on IBM Cloud.
+        """
+        resource_name = None
+        stop_node_list = []
+        cmd = "ibmcloud is ins --all-resource-groups --output json"
+        out = run_ibmcloud_cmd(cmd)
+        all_resource_grp = json.loads(out)
+        cluster_name = config.ENV_DATA["cluster_name"]
+        for resource_name in all_resource_grp:
+            if cluster_name in resource_name["resource_group"]["name"]:
+                resource_name = resource_name["resource_group"]["name"]
+                break
+        assert resource_name, "Resource Not found"
+        cmd = f"ibmcloud is ins --resource-group-name {resource_name} --output json"
+        out = run_ibmcloud_cmd(cmd)
+        all_instance_output = json.loads(out)
+        for instance_name in all_instance_output:
+            if instance_name["status"] == constants.STATUS_STOPPED:
+                node_obj = OCP(kind="Node", resource_name=instance_name["name"]).get()
+                node_obj_ocs = OCS(**node_obj)
+                stop_node_list.append(node_obj_ocs)
+            if instance_name["status"] == constants.STATUS_STOPPED:
+                node_obj = OCP(kind="Node", resource_name=instance_name["name"]).get()
+                node_obj_ocs = OCS(**node_obj)
+                stop_node_list.append(node_obj_ocs)
+        logger.info("Force stopping node which are in stopping state")
+        self.stop_nodes(nodes=stop_node_list, force=True, wait=True)
+        logger.info("Starting Stopped Node")
+        self.start_nodes(nodes=stop_node_list)
+
+    def terminate_nodes(self, nodes, wait=True):
+        """
+        Terminate the Node in IBMCloud
+        Args:
+            nodes (list): The OCS objects of the nodes
+            wait (bool): True in case wait for status is needed, False otherwise
+        """
+        for node in nodes:
+            cmd = f"ibmcloud is instance-delete {node.name} -f"
+            out = run_ibmcloud_cmd(cmd)
+            logger.info(f"Node deletion command output: {out}")
+            break
+
+        if wait:
+            for node in nodes:
+                sample = TimeoutSampler(
+                    timeout=300,
+                    sleep=10,
+                    func=self.check_node_status,
+                    node_name=node.name,
+                )
+                sample.wait_for_func_status(result=True)
+                break
+
+    def detach_volume(self, volume, node=None):
+        """
+        Detach volume from node on IBM Cloud.
+        Args:
+            volume (str): volume id.
+            node (OCS): worker node object to detach.
+        """
+
+        logger.info(f"volume is : {volume}")
+
+        cmd = f"ibmcloud is volume {volume} --output json"
+        out = run_ibmcloud_cmd(cmd)
+        out = json.loads(out)
+
+        if out["status"] == "available":
+            attachment_id = out["volume_attachments"][0]["id"]
+            cmd = (
+                f"ibmcloud is instance-volume-attachment-update {node.name} {attachment_id} "
+                f"--output json --auto-delete=false"
+            )
+            out = run_ibmcloud_cmd(cmd)
+            out = json.loads(out)
+            logger.info(f"Update command output: {out}")
+            cmd = (
+                f"ibmcloud is instance-volume-attachment-detach {node.name} {attachment_id} "
+                f"--output=json --force"
+            )
+            out = run_ibmcloud_cmd(cmd)
+            logger.info(f"detachment command output: {out}")
+
+    def attach_volume(self, volume, node):
+        """
+        Attach volume to node on IBM Cloud.
+        Args:
+            volume (str): volume id.
+            node (OCS): worker node object to attach.
+        """
+        logger.info(
+            f"attach_volumes:{node.get()['metadata']['labels']['failure-domain.beta.kubernetes.io/zone']}"
+        )
+
+        logger.info(f"volume is : {volume}")
+
+        cmd = f"ibmcloud is volume {volume} --output json"
+        out = run_ibmcloud_cmd(cmd)
+        out = json.loads(out)
+
+        if len(out["volume_attachments"]) == 0:
+
+            logger.info(f"attachment command output: {out}")
+            cmd = f"ibmcloud is instance-volume-attachment-add data-vol-name {node.name} {volume} --output json"
+            out = run_ibmcloud_cmd(cmd)
+            out = json.loads(out)
+            logger.info(f"attachment command output: {out}")
+        else:
+            logger.info(f"volume is already attached to node: {out}")
+
+    def is_volume_attached(self, volume):
+        """
+        Check if volume is attached to node or not.
+
+        Args:
+            volume (str): The volume to check for to attached
+
+        Returns:
+            bool: 'True' if volume is attached otherwise 'False'
+        """
+        logger.info("Checking volume attachment status")
+        cmd = f"ibmcloud is volume {volume} --output json"
+        out = run_ibmcloud_cmd(cmd)
+        out = json.loads(out)
+        return True if len(out["volume_attachments"]) > 0 else False
+
+    def wait_for_volume_attach(self, volume):
+        """
+        Checks volume is attached to node or not
+        Args:
+            volume (str): The volume to wait for to be attached
+        Returns:
+            bool: True if the volume has been attached to the instance, False otherwise
+        """
+        try:
+            for sample in TimeoutSampler(300, 3, self.is_volume_attached, volume):
+                if sample:
+                    return True
+                else:
+                    return False
+        except TimeoutExpiredError:
+            logger.info("Volume is not attached to node")
+            return False
+
+
 def label_nodes_region():
     """
     Apply the region label to the worker nodes.
@@ -558,3 +950,531 @@ def label_nodes_region():
     worker_nodes = get_nodes(node_type=constants.WORKER_MACHINE)
     for node in worker_nodes:
         node.add_label(rf"ibm-cloud\.kubernetes\.io/region={region}")
+
+
+def get_cluster_service_ids(cluster_name, get_infra_id_from_metadata=True):
+    """
+    Get cluster service IDs
+
+    Args:
+        cluster_name (str): cluster name
+        get_infra_id_from_metadata (bool): if set to true it will try to get
+            infra ID from metadata.json file (Default: True)
+
+    Returns:
+        list: service IDs for cluster
+
+    """
+    cmd = "ibmcloud iam service-ids --output json"
+    out = run_ibmcloud_cmd(cmd)
+    infra_id = ""
+    pattern = rf"{cluster_name}-[a-z0-9]{{5}}-.*"
+    service_ids = []
+    if get_infra_id_from_metadata:
+        try:
+            cluster_path = config.ENV_DATA["cluster_path"]
+            infra_id = get_infra_id(cluster_path)
+            pattern = rf"{infra_id}-.*"
+
+        except (FileNotFoundError, JSONDecodeError, KeyError):
+            logger.warning("Could not get infra ID")
+    for service_id in json.loads(out):
+        if re.match(pattern, service_id["name"]):
+            service_ids.append(service_id)
+    return service_ids
+
+
+def get_cluster_account_policies(cluster_name, cluster_service_ids):
+    """
+    Get cluster account policies.
+
+    Args:
+        cluster_name (str): cluster name
+        cluster_service_ids (list): list of service IDs, e.g. output from get_cluster_service_ids.
+
+    Returns:
+        list: Account policies for cluster
+
+    """
+    cmd = "ibmcloud iam access-policies --output json"
+    out = run_ibmcloud_cmd(cmd)
+    account_policies = json.loads(out)
+    matched_account_policies = []
+    if not cluster_service_ids:
+        logger.warning(
+            "No service ID provided, we cannot match any account policy without it!"
+        )
+        return matched_account_policies
+        cluster_service_ids = get_cluster_service_ids(cluster_name)
+    for account_policy in account_policies:
+        for subject in account_policy.get("subjects", []):
+            for attr in subject.get("attributes", []):
+                for service_id in cluster_service_ids:
+                    if attr.get("name") == "iam_id" and (
+                        attr.get("value") == service_id.get("iam_id")
+                    ):
+                        matched_account_policies.append(account_policy)
+    return matched_account_policies
+
+
+def delete_service_id(service_id):
+    """
+    Delete service ID
+
+    Args:
+        service_id (str): ID of service ID to delete
+    """
+    logger.info(f"Deleting service ID: {service_id}")
+    cmd = f"ibmcloud iam service-id-delete -f {service_id}"
+    run_ibmcloud_cmd(cmd)
+
+
+def get_api_token():
+    """
+    Get IBM Cloud API Token for API Calls authentication
+
+    Returns:
+        str: IBM Cloud API Token
+
+    """
+    token_cmd = "ibmcloud iam oauth-tokens --output json"
+    out = run_ibmcloud_cmd(token_cmd)
+    token = json.loads(out)
+    return token["iam_token"].split()[1]
+
+
+def delete_account_policy(policy_id, token=None):
+    """
+    Delete account policy
+
+    Args:
+        policy_id (str): policy ID
+        token (str): IBM Cloud token to be used for API calls - if not provided it will
+            create new one.
+
+    Returns:
+        bool: True in case it successfully deleted
+
+    Raises:
+        APIRequestError: in case API call didn't went well
+
+    """
+    if not token:
+        token = get_api_token()
+    url = f"https://iam.cloud.ibm.com/v1/policies/{policy_id}"
+    headers = {"Authorization": f"Bearer {token}"}
+    response = requests.delete(url.format("YOUR_POLICY_ID_HERE"), headers=headers)
+    if response.status_code == 204:  # 204 means success (No Content)
+        logger.info(f"Policy id: {policy_id} deleted successfully.")
+    else:
+        raise APIRequestError(
+            f"Failed to delete policy id: {policy_id}. Status code: {response.status_code}\n"
+            f"Response content: {response.text}"
+        )
+
+
+def cleanup_policies_and_service_ids(cluster_name, get_infra_id_from_metadata=True):
+    """
+    Cleanup Account Policies and Service IDs for cluster.
+
+    Args:
+        cluster_name (str): cluster name
+        get_infra_id_from_metadata (bool): if set to true it will try to get
+            infra ID from metadata.json file (Default: True)
+
+    """
+    service_ids = get_cluster_service_ids(cluster_name, get_infra_id_from_metadata)
+    if not service_ids:
+        logger.info(f"No service ID found for cluster {cluster_name}")
+        return
+    account_policies = get_cluster_account_policies(cluster_name, service_ids)
+    api_token = get_api_token()
+    for policy in account_policies:
+        delete_account_policy(policy["id"], api_token)
+    for service_id in service_ids:
+        delete_service_id(service_id["id"])
+
+
+def create_resource_group(resource_group):
+    """
+    Create resource group.
+
+    Args:
+        resource_group (str): resource group name
+
+    """
+    run_ibmcloud_cmd(f"ibmcloud resource group-create {resource_group}")
+
+
+def create_vpc(cluster_name, resource_group):
+    """
+    Create VPC.
+
+    Args:
+        cluster_name (str): cluster name
+        resource_group (str): resource group name
+
+    """
+    run_ibmcloud_cmd(
+        f"ibmcloud is vpc-create {cluster_name} --address-prefix-management manual"
+        f" --resource-group-name {resource_group}"
+    )
+
+
+def get_used_subnets():
+    """
+    Get currently used subnets in IBM Cloud
+
+    Returns:
+        list: subnets
+
+    """
+    subnets_data = json.loads(run_ibmcloud_cmd("ibmcloud is subnets --output json"))
+    return [subnet["ipv4_cidr_block"] for subnet in subnets_data]
+
+
+def create_address_prefix(prefix_name, vpc, zone, cidr):
+    """
+    Create address prefix in VPC.
+
+    Args:
+        prefix_name (str): address prefix name to create
+        vpc (str): VPC name
+        zone (str): zone name
+        cidr (str): CIDR for address prefix
+
+    """
+    run_ibmcloud_cmd(
+        f"ibmcloud is vpc-address-prefix-create {prefix_name} {vpc} {zone} {cidr}"
+    )
+
+
+def create_subnet(subnet_name, vpc, zone, cidr, resource_group):
+    """
+    Create subnet in VPC.
+
+    Args:
+        subnet_name (str): address prefix name to create
+        vpc (str): VPC name
+        zone (str): zone name
+        cidr (str): CIDR for address prefix
+        resource_group (str): resource group name
+
+    """
+    run_ibmcloud_cmd(
+        f"ibmcloud is subnet-create {subnet_name} {vpc} --zone {zone} --ipv4-cidr-block {cidr}"
+        f" --resource-group-name {resource_group}"
+    )
+
+
+def create_public_gateway(gateway_name, vpc, zone, resource_group):
+    """
+    Create public gateway in VPC.
+
+    Args:
+        gateway_name (str): public gateway name
+        vpc (str): VPC name
+        zone (str): zone name
+        resource_group (str): resource group name
+
+    """
+    run_ibmcloud_cmd(
+        f"ibmcloud is public-gateway-create {gateway_name} {vpc} {zone} --resource-group-name {resource_group}"
+    )
+
+
+def attach_subnet_to_public_gateway(subnet_name, gateway_name, vpc):
+    """
+    Attach subnet to public gateway.
+
+    Args:
+        subnet_name (str): subnet name to attach to public gateway
+        gateway_name (str): public gateway name
+        vpc (str): VPC name
+
+    """
+    run_ibmcloud_cmd(
+        f"ibmcloud is subnet-update {subnet_name} --pgw {gateway_name} --vpc {vpc}"
+    )
+
+
+def find_free_network_subnets(subnet_cidr, network_prefix=27):
+    """
+    This function will look for currently used subnet, and will try to find one which
+    is not occupied by any other VPC.
+
+    Args:
+        subnet_cidr (str): subnet CIDR in which range to look for free subnet (e.g. 10.240.0.0/18)
+        network_prefix (int): subnet prefix to look for
+
+    Returns:
+        tuple: (network_with_prefix, network_split1, network_split2), where
+            network_with_prefix - is network CIDR which we are looking for.
+            network_split1 - is first CIDR split of network_with_prefix
+            network_split2 - is second CIDR split of network_with_prefix
+
+    """
+    network = ipaddress.ip_network(subnet_cidr)
+
+    # Get all possible /network_prefix+1 networks within the /network_prefix network
+    main_subnets = list(network.subnets(new_prefix=network_prefix))
+    split_subnets = list(network.subnets(new_prefix=network_prefix + 1))
+    zipped_subnets = [
+        (main_subnets[i], split_subnets[2 * i], split_subnets[2 * i + 1])
+        for i in range(len(main_subnets))
+    ]
+
+    for possible_subnets in zipped_subnets:
+        is_free = True
+        list_of_subnets = get_used_subnets()
+        for subnet in list_of_subnets:
+            for possible_subnet in possible_subnets:
+                tested_network = ipaddress.ip_network(subnet)
+                is_subnet = possible_subnet.subnet_of(tested_network)
+                if is_subnet:
+                    logger.debug(
+                        f"Subnet {possible_subnet} is subnet of {tested_network} skipping it!"
+                    )
+                    is_free = False
+                    break
+        if is_free:
+            logger.info(f"Free set of subnets found: {possible_subnets}")
+            return possible_subnets
+
+
+def delete_dns_records(cluster_name):
+    """
+    Delete DNS records leftover from cluster destroy.
+
+    Args:
+        cluster_name (str): Name of the cluster, used to filter DNS records
+
+    """
+    dns_domain_id = config.ENV_DATA["base_domain_id"]
+    cis_instance_name = config.ENV_DATA["cis_instance_name"]
+    ids_to_delete = []
+    page = 1
+
+    logger.info(f"Setting cis instance to {cis_instance_name}")
+    run_ibmcloud_cmd(f"ibmcloud cis instance-set {cis_instance_name}")
+
+    while True:
+        out = run_ibmcloud_cmd(
+            f"ibmcloud cis dns-records {dns_domain_id} --per-page 1000 --page {page} --output json"
+        )
+        records = json.loads(out)
+        if not records:
+            logger.info("Reached end of pagination")
+            break
+
+        filter_string = f".{cluster_name}."
+        logger.info(f"Searching for records with string: {filter_string}")
+        for record in records:
+            if filter_string in record["name"]:
+                logger.info(f"Found {record['name']}, marking for deletion")
+                ids_to_delete.append(record["id"])
+        page += 1
+
+    logger.info(f"Records to delete: {ids_to_delete}")
+    for record_id in ids_to_delete:
+        logger.info(f"Deleting DNS record: {record_id}")
+        try:
+            run_ibmcloud_cmd(
+                f"ibmcloud cis dns-record-delete {dns_domain_id} {record_id}"
+            )
+        except CommandFailed:
+            logger.exception("Failed to delete CIS leftovers")
+
+
+class IBMCloudObjectStorage:
+    """
+    IBM Cloud Object Storage (COS) class
+    """
+
+    def __init__(self, api_key, service_instance_id, endpoint_url):
+        """
+        Initialize all necessary parameters
+
+        Args:
+            api_key (str): API key for IBM Cloud Object Storage (COS)
+            service_instance_id (str): Service instance ID for COS
+            endpoint_url (str): COS endpoint URL
+
+        """
+        self.cos_api_key_id = api_key
+        self.cos_instance_crn = service_instance_id
+        self.cos_endpoint = endpoint_url
+        # create client
+        self.cos_client = ibm_boto3.client(
+            "s3",
+            ibm_api_key_id=self.cos_api_key_id,
+            ibm_service_instance_id=self.cos_instance_crn,
+            config=IBMBotocoreConfig(signature_version="oauth"),
+            endpoint_url=self.cos_endpoint,
+        )
+
+    def get_bucket_objects(self, bucket_name, prefix=None):
+        """
+        Fetches the objects in a bucket
+
+        Args:
+            bucket_name (str): Name of the bucket
+            prefix (str): Prefix for the objects to fetch
+
+        Returns:
+            list: List of objects in a bucket
+
+        """
+        bucket_objects = []
+        logger.info(f"Retrieving bucket contents from {bucket_name}")
+        try:
+            bucket_objects_info = []
+            paginator = self.cos_client.get_paginator("list_objects_v2")
+            operation_parameters = {"Bucket": bucket_name}
+            if prefix:
+                operation_parameters["Prefix"] = prefix
+            page_iterator = paginator.paginate(**operation_parameters)
+            for page in page_iterator:
+                if "Contents" in page:
+                    bucket_objects_info.extend(page["Contents"])
+            for object_info in bucket_objects_info:
+                bucket_objects.append(object_info["Key"])
+        except ClientError as ce:
+            logger.error(f"CLIENT ERROR when fetching objects: {ce}")
+        except Exception as e:
+            logger.error(f"Unable to retrieve bucket contents: {e}")
+        logger.debug(f"bucket objects: {bucket_objects}")
+        return bucket_objects
+
+    def delete_objects(self, bucket_name):
+        """
+        Delete objects in a bucket
+
+        Args:
+            bucket_name (str): Name of the bucket
+
+        """
+        MAX_DELETE_OBJECTS = 1000
+        objects = self.get_bucket_objects(bucket_name)
+        if objects:
+            try:
+                total_objects = len(objects)
+                logger.info(
+                    f"Attempting to delete {total_objects} objects from {bucket_name}"
+                )
+                for i in range(0, total_objects, MAX_DELETE_OBJECTS):
+                    batch = objects[i : i + MAX_DELETE_OBJECTS]
+                    # Form the delete request
+                    delete_request = {"Objects": [{"Key": obj} for obj in batch]}
+                    response = self.cos_client.delete_objects(
+                        Bucket=bucket_name, Delete=delete_request
+                    )
+                    deleted = response.get("Deleted", [])
+                    errors = response.get("Errors", [])
+                    logger.info(
+                        f"Deleted {len(deleted)} objects in batch {i // MAX_DELETE_OBJECTS + 1}"
+                    )
+                    if errors:
+                        logger.error(
+                            f"Errors occurred during delete: {json.dumps(errors, indent=4)}"
+                        )
+                    logger.debug(json.dumps(deleted, indent=4))
+                logger.info(f"Deleted objects for {bucket_name}")
+            except ClientError as ce:
+                logger.error(f"CLIENT ERROR during deleting objects: {ce}")
+            except Exception as e:
+                logger.error(f"Unable to delete objects: {e}")
+
+    def delete_bucket(self, bucket_name):
+        """
+        Delete the bucket
+
+        Args:
+            bucket_name (str): Name of the bucket
+
+        """
+        logger.info(f"Deleting bucket: {bucket_name}")
+        try:
+            self.delete_objects(bucket_name=bucket_name)
+            self.cos_client.delete_bucket(Bucket=bucket_name)
+            logger.info(f"Bucket: {bucket_name} deleted!")
+        except ClientError as ce:
+            logger.error(f"CLIENT ERROR during deleting bucket {bucket_name}: {ce}")
+        except Exception as e:
+            logger.error(f"Unable to delete bucket: {e}")
+
+    def get_buckets(self):
+        """
+        Fetches the buckets
+
+        Returns:
+            list: List of buckets
+
+        """
+        bucket_list = []
+        logger.info("Retrieving list of buckets")
+        try:
+            buckets = self.cos_client.list_buckets()
+            for bucket in buckets["Buckets"]:
+                bucket_list.append(bucket["Name"])
+        except ClientError as ce:
+            logger.error(f"CLIENT ERROR: {ce}")
+        except Exception as e:
+            logger.error(f"Unable to retrieve list buckets: {e}")
+        return bucket_list
+
+
+def get_bucket_regions_map():
+    """
+    Fetches the buckets and their regions
+
+    Returns:
+        dict: Dictionary with bucket name as Key and region as value
+
+    """
+    bucket_region_map = {}
+    api_key = config.AUTH["ibmcloud"]["api_key"]
+    service_instance_id = config.AUTH["ibmcloud"]["cos_instance_crn"]
+    endpoint_url = constants.IBM_COS_GEO_ENDPOINT_TEMPLATE.format("us-east")
+    cos_client = IBMCloudObjectStorage(
+        api_key=api_key,
+        service_instance_id=service_instance_id,
+        endpoint_url=endpoint_url,
+    )
+
+    # Fetch the buckets. It will list from all the regions
+    buckets = cos_client.get_buckets()
+    for region in constants.IBM_REGIONS:
+        if not buckets:
+            break
+        logger.info(f"Initializing COS client for region {region}")
+        endpoint_url = constants.IBM_COS_GEO_ENDPOINT_TEMPLATE.format(region)
+        cos_client_region = ibm_boto3.client(
+            "s3",
+            ibm_api_key_id=api_key,
+            ibm_service_instance_id=service_instance_id,
+            config=IBMBotocoreConfig(signature_version="oauth"),
+            endpoint_url=endpoint_url,
+        )
+        processed_buckets = []
+        for each_bucket in buckets:
+            logger.debug(f"Fetching bucket location for {each_bucket}")
+            try:
+                bucket_location = cos_client_region.get_bucket_location(
+                    Bucket=each_bucket
+                )
+                bucket_region = bucket_location.get("LocationConstraint").split(
+                    "-standard"
+                )[0]
+                bucket_region_map[each_bucket] = bucket_region
+                processed_buckets.append(each_bucket)
+            except Exception as e:
+                logger.warning(
+                    f"[Expected] Failed to get region for {each_bucket} in {region}: {e}"
+                )
+
+        # remove processed buckets from buckets list
+        for bucket_name in processed_buckets:
+            buckets.remove(bucket_name)
+
+    return bucket_region_map

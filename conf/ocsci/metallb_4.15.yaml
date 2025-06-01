@@ -1,0 +1,5 @@
+---
+DEPLOYMENT:
+  metallb_operator: true
+ENV_DATA:
+  metallb_version: "4.15"

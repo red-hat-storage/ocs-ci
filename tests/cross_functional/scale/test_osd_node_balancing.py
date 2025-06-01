@@ -1,6 +1,7 @@
 """
 Test osd node balancing by adding nodes and osds and checking their distribution
 """
+
 import logging
 import pytest
 from uuid import uuid4

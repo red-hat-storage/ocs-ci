@@ -6,6 +6,7 @@ import string
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.ocp import OCP
 from ocs_ci.ocs.ui.base_ui import logger
+from ocs_ci.framework import config
 from ocs_ci.ocs.ui.page_objects.data_foundation_tabs_common import (
     CreateResourceForm,
 )
@@ -103,7 +104,7 @@ class BucketClassTab(ObjectStorage, CreateResourceForm):
         """
         existing_backingstore_names = str(
             OCP().exec_oc_cmd(
-                "get bucketclass --all-namespaces -o custom-columns=':metadata.name'"
+                f"get bucketclass -n {config.ENV_DATA['cluster_namespace']} -o custom-columns=':metadata.name'"
             )
         )
         return self._check_resource_name_not_exists_rule(

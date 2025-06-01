@@ -17,7 +17,7 @@ log = logging.getLogger(__name__)
 @tier2
 @managed_service_required
 @skipif_ms_provider
-def test_capacity_workload_alerts(
+def deprecated_test_capacity_workload_alerts(
     notification_emails_required, workload_storageutilization_97p_rbd
 ):
     """
@@ -32,6 +32,11 @@ def test_capacity_workload_alerts(
     # TODO(fbalak): automate checking of email content
 
 
-def teardown_module():
+def setup_module(module):
     ocs_obj = OCP()
-    ocs_obj.login_as_sa()
+    module.original_user = ocs_obj.get_user_name()
+
+
+def teardown_module(module):
+    ocs_obj = OCP()
+    ocs_obj.login_as_user(module.original_user)

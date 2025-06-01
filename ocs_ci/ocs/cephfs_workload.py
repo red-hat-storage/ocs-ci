@@ -21,7 +21,6 @@ logger = logging.getLogger(__name__)
 
 
 class LogReaderWriterParallel(object):
-
     """
     Write and read logfile stored on cephfs volume, from all worker nodes of a
     cluster via k8s Deployment, while fetching content of the stored data via

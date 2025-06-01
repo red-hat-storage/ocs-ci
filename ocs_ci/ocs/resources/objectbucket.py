@@ -15,7 +15,10 @@ from ocs_ci.helpers.helpers import (
     storagecluster_independent_check,
 )
 from ocs_ci.ocs import constants
-from ocs_ci.ocs.bucket_utils import retrieve_verification_mode
+from ocs_ci.ocs.bucket_utils import (
+    delete_all_objects_in_batches,
+    retrieve_verification_mode,
+)
 from ocs_ci.ocs.exceptions import (
     CommandFailed,
     NotFoundError,
@@ -28,6 +31,7 @@ from ocs_ci.ocs.resources.rgw import RGW
 from ocs_ci.ocs.utils import oc_get_all_obc_names
 from ocs_ci.utility import templating, version
 from ocs_ci.utility.utils import TimeoutSampler, mask_secrets
+from time import sleep
 
 logger = logging.getLogger(name=__file__)
 
@@ -227,9 +231,9 @@ class ObjectBucket(ABC):
             verify = True
         if verify:
             # Increase the timeout to 15 minutes if the test is tier4
-            timeout = 60
+            timeout = 180
             if any("tier4" in mark for mark in get_current_test_marks()):
-                timeout *= 15
+                timeout = 900
             self.verify_deletion(timeout)
         if original_context:
             config.switch_ctx(original_context)
@@ -266,7 +270,7 @@ class ObjectBucket(ABC):
             logger.error(f"{self.name} was not deleted within {timeout} seconds.")
             assert False, f"{self.name} was not deleted within {timeout} seconds."
 
-    def verify_health(self, timeout=60, interval=5, **kwargs):
+    def verify_health(self, timeout=800, interval=5, **kwargs):
         """
         Health verification function that tries to verify
         the a bucket's health by using its appropriate internal_verify_health
@@ -382,9 +386,19 @@ class MCGCLIBucket(ObjectBucket):
             NotFoundError: In case the OBC was not found
 
         """
-        result = self.mcg.exec_mcg_cmd(f"obc delete {self.name}")
-        if "deleting" and self.name not in result.stderr.lower():
-            raise NotFoundError(result)
+        try:
+            result = self.mcg.exec_mcg_cmd(f"obc delete {self.name}")
+            if (
+                "deleting" not in result.stderr.lower()
+                and self.name not in result.stderr.lower()
+            ):
+                raise NotFoundError(result)
+        except CommandFailed as e:
+            result = self.mcg.exec_mcg_cmd(f"obc delete {self.name}", ignore_error=True)
+            if f'Not Found: ObjectBucketClaim "{self.name}"' in str(
+                result.stderr
+            ) and "does not exist" in str(result.stderr):
+                raise NotFoundError(e)
 
     @property
     def internal_status(self):
@@ -474,7 +488,11 @@ class MCGS3Bucket(ObjectBucket):
                 ).object_versions.all():
                     obj_version.delete()
             else:
-                self.s3resource.Bucket(self.name).objects.all().delete()
+                delete_all_objects_in_batches(
+                    s3_resource=self.s3resource, bucket_name=self.name
+                )
+            if any("scale" in mark for mark in get_current_test_marks()):
+                sleep(1800)
             self.s3resource.Bucket(self.name).delete()
         except botocore.exceptions.ClientError as e:
             if e.response["Error"]["Code"] == "NoSuchBucket":

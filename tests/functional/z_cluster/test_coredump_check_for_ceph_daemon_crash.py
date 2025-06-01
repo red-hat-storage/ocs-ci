@@ -1,7 +1,6 @@
 import logging
 import pytest
 
-from ocs_ci.framework import config
 from ocs_ci.utility.utils import run_cmd
 from ocs_ci.utility.utils import TimeoutSampler
 from ocs_ci.helpers.disruption_helpers import Disruptions
@@ -11,7 +10,6 @@ from ocs_ci.framework.pytest_customization.marks import skipif_rhel_os, brown_sq
 from ocs_ci.framework.testlib import (
     ManageTest,
     tier2,
-    bugzilla,
     skipif_ocs_version,
     skipif_external_mode,
     runs_on_provider,
@@ -32,7 +30,6 @@ log = logging.getLogger(__name__)
 @tier2
 @skipif_external_mode
 @skipif_ocs_version("<4.7")
-@bugzilla("1904917")
 @pytest.mark.polarion_id("OCS-2491")
 @pytest.mark.polarion_id("OCS-2492")
 @pytest.mark.polarion_id("OCS-2493")
@@ -105,7 +102,7 @@ class TestKillCephDaemon(ManageTest):
             "`/var/lib/rook/openshift-storage/crash/posted/`"
         )
         cmd_bash = (
-            f"oc debug nodes/{node_name} --to-namespace={config.ENV_DATA['cluster_namespace']} "
+            f"oc debug nodes/{node_name} --to-namespace=default "
             "-- chroot /host /bin/bash -c "
         )
         cmd_delete_files = '"rm -rf /var/lib/rook/openshift-storage/crash/posted/*"'
@@ -116,9 +113,7 @@ class TestKillCephDaemon(ManageTest):
             log.info(f"find ceph-{daemon_type} process-id")
             cmd_pid = f"pidof ceph-{daemon_type}"
             cmd_gen = (
-                "oc debug node/"
-                + node_name
-                + f" --to-namespace={config.ENV_DATA['cluster_namespace']} -- chroot /host "
+                f"oc debug node/{node_name} --to-namespace=default -- chroot /host "
             )
             cmd = cmd_gen + cmd_pid
             out = run_cmd(cmd=cmd)

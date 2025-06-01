@@ -42,9 +42,6 @@ class PvcUI(PageNavigator):
         logger.info("Click on 'Create Persistent Volume Claim'")
         self.do_click(self.pvc_loc["pvc_create_button"])
 
-        logger.info("Click on Create PVC from dropdown options 'With Form'")
-        self.do_click(self.pvc_loc["create_pvc_dropdown_item"])
-
         logger.info("Click on Storage Class selection")
         self.do_click(self.pvc_loc["pvc_storage_class_selector"])
 
@@ -54,13 +51,21 @@ class PvcUI(PageNavigator):
         logger.info(f"Enter PVC name: '{pvc_name}'")
         self.do_send_keys(self.pvc_loc["pvc_name"], pvc_name)
 
+        ocs_version = version.get_semantic_ocs_version_from_config()
         logger.info("Select Access Mode")
-        self.do_click(self.pvc_loc[access_mode])
+        if ocs_version >= version.VERSION_4_16:
+            if access_mode == "ReadWriteMany":
+                self.do_click(
+                    self.pvc_loc["access_mode_button"], enable_screenshot=True
+                )
+                logger.info("Access mode button clicked. Choosing RWX")
+                self.do_click(self.pvc_loc["access_rwx"], enable_screenshot=True)
+        else:
+            self.do_click(self.pvc_loc[access_mode])
 
         logger.info("Select PVC size")
         self.do_send_keys(self.pvc_loc["pvc_size"], text=pvc_size)
 
-        ocs_version = version.get_semantic_ocs_version_from_config()
         if (
             not self.ocp_version_full == version.VERSION_4_6
             and not ocs_version == version.VERSION_4_6

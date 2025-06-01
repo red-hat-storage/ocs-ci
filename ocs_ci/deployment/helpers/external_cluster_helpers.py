@@ -7,17 +7,20 @@ import json
 import logging
 import re
 import tempfile
+import uuid
 
 from ocs_ci.framework import config
-from ocs_ci.ocs import defaults
+from ocs_ci.ocs import defaults, constants
+from ocs_ci.ocs.ocp import OCP
 from ocs_ci.ocs.exceptions import (
+    ExternalClusterCephfsMissing,
+    ExternalClusterCephSSHAuthDetailsMissing,
     ExternalClusterExporterRunFailed,
+    ExternalClusterRBDNamespaceCreationFailed,
     ExternalClusterRGWEndPointMissing,
     ExternalClusterRGWEndPointPortMissing,
-    ExternalClusterCephSSHAuthDetailsMissing,
-    ExternalClusterObjectStoreUserCreationFailed,
-    ExternalClusterCephfsMissing,
     ExternalClusterNodeRoleNotFound,
+    ExternalClusterObjectStoreUserCreationFailed,
 )
 from ocs_ci.ocs.resources import pod
 from ocs_ci.ocs.resources.csv import get_csv_name_start_with_prefix
@@ -33,6 +36,7 @@ from ocs_ci.utility.utils import (
     decode,
     download_file,
     wait_for_machineconfigpool_status,
+    create_config_ini_file,
 )
 
 logger = logging.getLogger(__name__)
@@ -124,6 +128,27 @@ class ExternalCluster(object):
                 f"--rgw-zone-name {rgw_zone}"
             )
 
+        # remove user 'rgw-admin-ops-user' if it exists since user creation is handled by
+        # external python script with necessary caps
+        self.remove_rgw_user()
+
+        if config.EXTERNAL_MODE.get("run_as_user"):
+            ceph_user = config.EXTERNAL_MODE["run_as_user"]
+            params = f"{params} --run-as-user {ceph_user}"
+
+        if config.EXTERNAL_MODE.get("use_rbd_namespace"):
+            rbd_namespace = config.EXTERNAL_MODE.get("rbd_namespace")
+            if not rbd_namespace:
+                rbd_namespace = self.create_rbd_namespace(rbd=rbd_name)
+                config.EXTERNAL_MODE["rbd_namespace"] = rbd_namespace
+
+            params = f"{params} --rados-namespace {rbd_namespace}"
+            if "restricted-auth-permission" not in params:
+                params += " --restricted-auth-permission true"
+                config.ENV_DATA["restricted-auth-permission"] = True
+            if "cluster-name" not in params:
+                params += f" --k8s-cluster-name {cluster_name}"
+
         out = self.run_exporter_script(params=params)
 
         # encode the exporter script output to base64
@@ -141,7 +166,11 @@ class ExternalCluster(object):
             str: absolute path to exporter script
 
         """
-        script_path = generate_exporter_script()
+        ocs_version = version.get_semantic_ocs_version_from_config()
+        use_configmap = True
+        if ocs_version <= version.VERSION_4_18:
+            use_configmap = False
+        script_path = generate_exporter_script(use_configmap=use_configmap)
         upload_file(
             self.host, script_path, script_path, self.user, self.password, self.ssh_key
         )
@@ -163,6 +192,7 @@ class ExternalCluster(object):
             remote_rgw_cert_ca_path,
             self.user,
             self.password,
+            self.ssh_key,
         )
         return remote_rgw_cert_ca_path
 
@@ -278,6 +308,24 @@ class ExternalCluster(object):
         out = self.run_exporter_script(params=params)
         logger.info(f"updated permissions for the user are set as {out}")
 
+    def upload_config_ini_file(self, params):
+        """
+        Upload config.ini file that is used for external cluster
+        exporter script --config-file param
+
+        Args:
+            params (str): Parameter to pass to exporter script
+
+        Returns:
+            str: absolute path to config.ini file
+
+        """
+        script_path = create_config_ini_file(params=params)
+        upload_file(
+            self.host, script_path, script_path, self.user, self.password, self.ssh_key
+        )
+        return script_path
+
     def run_exporter_script(self, params):
         """
         Runs the exporter script on RHCS cluster
@@ -306,7 +354,20 @@ class ExternalCluster(object):
             python_version = "python"
 
         # run the exporter script on external RHCS cluster
-        cmd = f"{python_version} {script_path} {params}"
+        ocs_version = version.get_semantic_ocs_version_from_config()
+        # if condition is for the new feature introduced in
+        # 4.17 in OCSQE-2249 where this covers the test case
+        # with polarian id OCS-6196
+        if (
+            "--upgrade" not in params
+            and ocs_version >= version.VERSION_4_17
+            and config.ENV_DATA.get("rhcs_external_use_config_file")
+        ):
+            # upload config.ini file to external RHCS cluster
+            config_ini_path = self.upload_config_ini_file(params)
+            cmd = f"{python_version} {script_path} --config-file {config_ini_path}"
+        else:
+            cmd = f"{python_version} {script_path} {params}"
         retcode, out, err = self.rhcs_conn.exec_cmd(cmd)
         if retcode != 0 or err != "":
             logger.error(
@@ -428,17 +489,98 @@ class ExternalCluster(object):
         )
         self.rhcs_conn.exec_cmd(cmds)
 
+    def remove_rgw_user(self, user=None):
+        """
+        Remove RGW user if it exists
 
-def generate_exporter_script():
+        Args:
+            user (str): RGW user name
+
+        """
+        user = user if user else defaults.EXTERNAL_CLUSTER_OBJECT_STORE_USER
+        if self.is_rgw_user_exists(user):
+            logger.info(
+                f"Deleting {user} since rgw user {user} will be created by "
+                f"external python script with all necessary caps"
+            )
+            cmd = f"radosgw-admin user rm --uid={user}"
+            self.rhcs_conn.exec_cmd(cmd)
+        else:
+            logger.debug(
+                f"rgw user {user} doesn't exists and it will be created by external python script"
+            )
+
+    def is_rgw_user_exists(self, user):
+        """
+        Checks whether RGW user exists or not
+
+        Args:
+            user (str): RGW user name
+
+        Returns:
+            bool: True incase user exists, otherwise False
+
+        """
+        cmd = "radosgw-admin user list"
+        _, out, _ = self.rhcs_conn.exec_cmd(cmd)
+        rgw_user_list = json.loads(out)
+        logger.debug(f"RGW users: {rgw_user_list}")
+        return True if user in rgw_user_list else False
+
+    def create_rbd_namespace(self, rbd, namespace=None):
+        """
+        Create RBD namespace
+
+        Args:
+            rbd (str): RBD pool name where namespace has to create
+            namespace (str): Name of RBD namespace
+
+        Returns:
+            str: RBD Namepsace name
+
+        Raises:
+            ExternalClusterRBDNamespaceCreationFailed: In case fails to create RBD namespace
+
+        """
+        namespace = namespace or f"rbd-namespace-{uuid.uuid4().hex[:8]}"
+        logger.info(f"creating RBD namespace {namespace}")
+        cmd = f"rbd namespace create {rbd}/{namespace}"
+        retcode, out, err = self.rhcs_conn.exec_cmd(cmd)
+        if retcode != 0:
+            logger.error(f"Failed to create RBD namespace in {rbd}. Error: {err}")
+            raise ExternalClusterRBDNamespaceCreationFailed
+        return namespace
+
+
+def get_exporter_script_from_configmap():
     """
-    Generates exporter script for RHCS cluster
+    Get the external exporter script from the configmap.
+    From 4.18 we can get the external exporter script from the configmap
 
     Returns:
-        str: path to the exporter script
+        str: The exporter script from the configmap
 
     """
-    logger.info("generating external exporter script")
-    # generate exporter script through packagemanifest
+    logger.info(
+        f"Get the exporter script from configmap: {constants.EXTERNAL_CLUSTER_SCRIPT_CONFIG}"
+    )
+    config_map = OCP(
+        kind="configmap",
+        namespace=config.ENV_DATA["cluster_namespace"],
+        resource_name=constants.EXTERNAL_CLUSTER_SCRIPT_CONFIG,
+    )
+    exporter_script = config_map.data.get("data", {}).get("script")
+    return exporter_script
+
+
+def get_exporter_script_from_csv():
+    """
+    Get the external exporter script from the csv.
+
+    Returns:
+        str: The exporter script from the csv
+
+    """
     ocs_version = version.get_semantic_ocs_version_from_config()
     operator_name = defaults.ROOK_CEPH_OPERATOR
 
@@ -453,19 +595,59 @@ def generate_exporter_script():
     csv_name = get_csv_name_start_with_prefix(
         csv_prefix=operator_name, namespace=config.ENV_DATA["cluster_namespace"]
     )
+    exporter_script = ""
     for each_csv in ocs_operator_data["status"]["channels"]:
         if each_csv["currentCSV"] == csv_name:
             logger.info(f"exporter script for csv: {each_csv['currentCSV']}")
             if ocs_version >= version.VERSION_4_16:
-                encoded_script = each_csv["currentCSVDesc"]["annotations"][
+                exporter_script = each_csv["currentCSVDesc"]["annotations"][
                     "externalClusterScript"
                 ]
             else:
-                encoded_script = each_csv["currentCSVDesc"]["annotations"][
+                exporter_script = each_csv["currentCSVDesc"]["annotations"][
                     "external.features.ocs.openshift.io/export-script"
                 ]
             break
 
+    return exporter_script
+
+
+def get_exporter_script(use_configmap=False):
+    """
+    Get the external exporter script encoded
+
+    Args:
+        use_configmap (bool): If True, we will use the configmap to get the external
+            exporter script. Otherwise, if False, we will get it from the CSV.
+
+    Returns:
+        str: The external exporter script
+
+    """
+    logger.info("Get the external exporter script")
+    if use_configmap:
+        # From 4.18 we can get the external exporter script from the configmap
+        exporter_script = get_exporter_script_from_configmap()
+    else:
+        exporter_script = get_exporter_script_from_csv()
+
+    return exporter_script
+
+
+def generate_exporter_script(use_configmap=False):
+    """
+    Generates exporter script for RHCS cluster
+
+    Args:
+        use_configmap (bool): If True, we will use the configmap to get the external
+            exporter script. Otherwise, if False, we will get it from the CSV.
+
+    Returns:
+        str: path to the exporter script
+
+    """
+    logger.info("Generating external exporter script")
+    encoded_script = get_exporter_script(use_configmap)
     # decode the exporter script and write to file
     external_script = decode(encoded_script)
     external_cluster_details_exporter = tempfile.NamedTemporaryFile(

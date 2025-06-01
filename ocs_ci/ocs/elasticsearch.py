@@ -5,6 +5,7 @@ Deploying an Elasticsearch server for collecting logs from benchmark-operator
 Interface for the Performance ElasticSearch server
 
 """
+
 # Internal modules
 import base64
 import json

@@ -5,6 +5,7 @@ In order to create a new spreadsheet, share the spreadsheet with the
 
 
 """
+
 import os
 from ocs_ci.framework import config
 import gspread

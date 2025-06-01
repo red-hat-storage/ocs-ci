@@ -6,7 +6,6 @@ APIClientBase is an abstract base class which imposes a contract on
 methods to be implemented in derived classes which are specific to api client
 """
 
-
 import logging
 from abc import ABCMeta, abstractmethod
 

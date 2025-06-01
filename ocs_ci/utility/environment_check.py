@@ -2,6 +2,7 @@
 Util for environment check before and after test to compare and find stale
 leftovers
 """
+
 import copy
 import logging
 import yaml
@@ -73,14 +74,21 @@ def assign_get_values(env_status_dict, key, kind=None, exclude_labels=None):
     for item in items:
         ns = item.get("metadata", {}).get("namespace")
         if item.get("kind") == constants.PV:
-            ns = item.get("spec").get("claimRef").get("namespace")
+            ns = item.get("spec").get("claimRef", {}).get("namespace")
 
         item_labels = item.get("metadata", {}).get("labels", {})
-        excluded_item_labels = [
-            f"{key}={value}"
-            for key, value in item_labels.items()
-            if f"{key}={value}" in exclude_labels
-        ]
+        if exclude_labels:
+            excluded_item_labels = [
+                f"{key}={value}"
+                for key, value in item_labels.items()
+                if f"{key}={value}" in exclude_labels
+            ]
+
+            if excluded_item_labels:
+                log.debug(
+                    "ignoring item with app label %s: %s", excluded_item_labels[0], item
+                )
+                continue
 
         if (
             ns is not None
@@ -88,11 +96,6 @@ def assign_get_values(env_status_dict, key, kind=None, exclude_labels=None):
             and ns != config.ENV_DATA["cluster_namespace"]
         ):
             log.debug("ignoring item in %s namespace: %s", ns, item)
-            continue
-        if excluded_item_labels:
-            log.debug(
-                "ignoring item with app label %s: %s", excluded_item_labels[0], item
-            )
             continue
         if item.get("kind") == constants.POD:
             name = item.get("metadata", {}).get("name", "")
@@ -102,7 +105,16 @@ def assign_get_values(env_status_dict, key, kind=None, exclude_labels=None):
             if name.startswith("session-awscli"):
                 log.debug(f"ignoring item: {name}")
                 continue
+            if constants.CONTROLLER_DETECT_VERSION_NAME in name:
+                log.debug(f"ignoring item: {name}")
+                continue
+            if constants.OSD_KEY_ROTATION_POD_NAME in name:
+                log.debug(f"ignoring item: {name}")
+                continue
             if name.startswith(constants.REPORT_STATUS_TO_PROVIDER_POD):
+                log.debug(f"ignoring item: {name}")
+                continue
+            if name.startswith("storageclient") and constants.STATUS_REPORTER in name:
                 log.debug(f"ignoring item: {name}")
                 continue
         if item.get("kind") == constants.NAMESPACE:

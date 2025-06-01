@@ -17,7 +17,7 @@ class TestLongevityStage2(E2ETest):
         self,
         project_factory,
         multi_pvc_pod_lifecycle_factory,
-        multi_obc_lifecycle_factory,
+        setup_mcg_bg_features,
     ):
         """
         Tests Longevity Testing - Stage 2
@@ -40,7 +40,9 @@ class TestLongevityStage2(E2ETest):
         long.stage_2(
             project_factory,
             multi_pvc_pod_lifecycle_factory,
-            multi_obc_lifecycle_factory,
-            num_of_obcs=0,
+            setup_mcg_bg_features,
+            run_pvc_pod_only=True,
+            run_mcg_only=True,
+            collect_cluster_sanity_checks=True,
             run_time=180,
         )

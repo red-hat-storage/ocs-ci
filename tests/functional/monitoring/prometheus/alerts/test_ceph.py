@@ -10,6 +10,7 @@ from ocs_ci.framework.testlib import (
     skipif_managed_service,
     runs_on_provider,
     blue_squad,
+    provider_mode,
 )
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.cluster import (
@@ -73,13 +74,16 @@ def test_corrupt_pg_alerts(measure_corrupt_pg, threading_lock):
         )
 
 
+@provider_mode
 @blue_squad
 @tier4
 @tier4a
 @pytest.mark.polarion_id("OCS-898")
 @skipif_managed_service
 @runs_on_provider
-def test_ceph_health(measure_stop_ceph_osd, measure_corrupt_pg, threading_lock):
+def deprecated_test_ceph_health(
+    measure_stop_ceph_osd, measure_corrupt_pg, threading_lock
+):
     """
     Test that there are appropriate alerts for Ceph health triggered.
     For this check of Ceph Warning state is used measure_stop_ceph_osd
@@ -136,7 +140,7 @@ class TestCephOSDSlowOps(object):
         Set preconditions to trigger CephOSDSlowOps
         """
         self.test_pass = None
-        reduced_osd_complaint_time = 0.1
+        reduced_osd_complaint_time = 0.02
 
         set_osd_op_complaint_time(reduced_osd_complaint_time)
 
@@ -214,7 +218,7 @@ class TestCephOSDSlowOps(object):
         the I/O operations per second (IOPS) in the queue within the time defined by the osd_op_complaint_time
         parameter. By default, this parameter is set to 30 seconds.
 
-        1. As precondition test setup is to reduce osd_op_complaint_time to 0.1 to prepare condition
+        1. As precondition test setup is to reduce osd_op_complaint_time to 0.02 (200 ms) to prepare condition
         to get CephOSDSlowOps
         2. Run workload_fio_storageutilization gradually filling up the storage up to full_ratio % in a background
         2.1 Validate the CephOSDSlowOps fired, if so check an alert message and finish the test
@@ -275,6 +279,11 @@ class TestCephOSDSlowOps(object):
             )
 
 
-def teardown_module():
+def setup_module(module):
     ocs_obj = OCP()
-    ocs_obj.login_as_sa()
+    module.original_user = ocs_obj.get_user_name()
+
+
+def teardown_module(module):
+    ocs_obj = OCP()
+    ocs_obj.login_as_user(module.original_user)

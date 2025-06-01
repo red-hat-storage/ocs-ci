@@ -1,0 +1,19 @@
+apiVersion: oadp.openshift.io/v1alpha1
+kind: DataProtectionApplication
+metadata:
+  labels:
+    app.kubernetes.io/component: velero
+  name: velero
+  namespace: openshift-adp
+spec:
+  backupImages: false
+  configuration:
+    nodeAgent:
+      enable: false
+      uploaderType: restic
+    velero:
+      defaultPlugins:
+        - openshift
+        - aws
+        - kubevirt
+      noDefaultBackupLocation: true

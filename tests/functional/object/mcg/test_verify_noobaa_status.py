@@ -8,11 +8,12 @@ from ocs_ci.framework.pytest_customization.marks import (
     red_squad,
     runs_on_provider,
     mcg,
+    skipif_noobaa_external_pgsql,
 )
-from ocs_ci.ocs import constants
 from ocs_ci.ocs.resources.pod import get_pod_logs
-from ocs_ci.framework.testlib import polarion_id, bugzilla
+from ocs_ci.framework.testlib import polarion_id
 from ocs_ci.framework.pytest_customization.marks import skipif_managed_service
+from ocs_ci.utility.utils import get_primary_nb_db_pod
 
 log = logging.getLogger(__name__)
 
@@ -22,7 +23,6 @@ log = logging.getLogger(__name__)
 @runs_on_provider
 @tier1
 @polarion_id("OCS-2084")
-@bugzilla("1799077")
 @skipif_openshift_dedicated
 @skipif_managed_service
 def test_verify_noobaa_status_cli(mcg_obj_session):
@@ -43,9 +43,9 @@ def test_verify_noobaa_status_cli(mcg_obj_session):
 @tier1
 @skipif_ocs_version("<4.8")
 @polarion_id("OCS-2748")
-@bugzilla("2004130")
 @skipif_openshift_dedicated
 @skipif_managed_service
+@skipif_noobaa_external_pgsql
 def test_verify_noobaa_db_service(mcg_obj_session):
     """
     Validates whether MCG cli and noobaa db logs does not check 'noobaa-db'
@@ -61,7 +61,8 @@ def test_verify_noobaa_db_service(mcg_obj_session):
 
     # verify noobaa db logs
     pattern = "Not found: Service noobaa-db"
-    noobaa_db_log = get_pod_logs(pod_name=constants.NB_DB_NAME_47_AND_ABOVE)
+    primary_nb_db_pod = get_primary_nb_db_pod()
+    noobaa_db_log = get_pod_logs(pod_name=primary_nb_db_pod.name)
     assert (
         re.search(pattern=pattern, string=noobaa_db_log) is None
     ), f"Error: {pattern} msg found in the noobaa db logs."

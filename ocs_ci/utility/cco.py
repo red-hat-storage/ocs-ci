@@ -1,8 +1,10 @@
 """
 Cloud Credential Operator utility functions
 """
+
 import logging
 import os
+import re
 import shutil
 import yaml
 
@@ -12,6 +14,7 @@ from ocs_ci.utility import version
 from ocs_ci.utility.deployment import get_ocp_release_image_from_installer
 from ocs_ci.utility.utils import (
     exec_cmd,
+    get_glibc_version,
 )
 
 logger = logging.getLogger(__name__)
@@ -28,13 +31,8 @@ def configure_cloud_credential_operator():
     ccoctl_path = os.path.join(bin_dir, "ccoctl")
     if not os.path.isfile(ccoctl_path):
         pull_secret_path = os.path.join(constants.DATA_DIR, "pull-secret")
-        # W/A of the issue https://github.com/red-hat-storage/ocs-ci/issues/9674
-        if version.get_semantic_ocp_version_from_config() == version.VERSION_4_16:
-            # use direct cco image till issue https://github.com/red-hat-storage/ocs-ci/issues/9674 is fixed
-            cco_image = constants.CCO_IMAGE
-        else:
-            release_image = get_ocp_release_image_from_installer()
-            cco_image = get_cco_container_image(release_image, pull_secret_path)
+        release_image = get_ocp_release_image_from_installer()
+        cco_image = get_cco_container_image(release_image, pull_secret_path)
 
         extract_ccoctl_binary(cco_image, pull_secret_path)
 
@@ -73,11 +71,11 @@ def extract_credentials_requests_ibmcloud(
     exec_cmd(cmd)
 
 
-def extract_credentials_requests_aws(
+def extract_credentials_requests(
     release_image, install_config, pull_secret, credentials_requests_dir
 ):
     """
-    Extract the CredentialsRequests (AWS STS variant).
+    Extract the CredentialsRequests (AWS and Azure STS variant).
 
     Args:
         release_image (str): Release image from the openshift installer
@@ -107,7 +105,11 @@ def create_service_id(cluster_name, cluster_path, credentials_requests_dir):
         f"ccoctl ibmcloud create-service-id --credentials-requests-dir {credentials_requests_dir} "
         f"--name {cluster_name} --output-dir {cluster_path}"
     )
-    exec_cmd(cmd)
+    completed_process = exec_cmd(cmd)
+    stderr = completed_process.stderr
+    if stderr:
+        with open(os.path.join(cluster_path, constants.CCOCTL_LOG_FILE), "+w") as fd:
+            fd.write(stderr.decode())
 
 
 def delete_service_id(cluster_name, credentials_requests_dir):
@@ -157,8 +159,25 @@ def extract_ccoctl_binary(cco_image, pull_secret_path):
     bin_dir = config.RUN["bin_dir"]
     ccoctl_path = os.path.join(bin_dir, "ccoctl")
     if not os.path.isfile(ccoctl_path):
-        extract_cmd = f"oc image extract {cco_image} --file='/usr/bin/ccoctl' -a {pull_secret_path}"
-        exec_cmd(extract_cmd)
+        try:
+            glibc_version = get_glibc_version()
+            if version.get_semantic_version(
+                glibc_version
+            ) < version.get_semantic_version("2.34"):
+                ccoctl_version = "ccoctl.rhel8"
+            else:
+                ccoctl_version = "ccoctl.rhel9"
+            extract_cmd = f"oc image extract {cco_image} --file='/usr/bin/{ccoctl_version}' -a {pull_secret_path}"
+            exec_cmd(extract_cmd)
+            os.rename(f"{ccoctl_version}", "ccoctl")
+        except Exception as e:
+            logger.warning(
+                f"Failed to get ccoctl version. Fetching the default version "
+                f"of ccoctl. Exception: {e}"
+            )
+            extract_cmd = f"oc image extract {cco_image} --file='/usr/bin/ccoctl' -a {pull_secret_path}"
+            exec_cmd(extract_cmd)
+
         chmod_cmd = "chmod 775 ccoctl"
         exec_cmd(chmod_cmd)
         shutil.move("ccoctl", ccoctl_path)
@@ -186,6 +205,40 @@ def process_credentials_requests_aws(
     exec_cmd(cmd)
 
 
+def process_credentials_requests_azure(
+    name,
+    azure_region,
+    credentials_requests_dir,
+    output_dir,
+    subscription_id,
+    dns_zone_group_name,
+    tenant_id,
+):
+    """
+    Process all CredentialsRequest objects.
+
+    Args:
+        name (str): Name used to tag any created cloud resources
+        azure_region (str): Region to create cloud resources
+        credentials_requests_dir (str): Path to the CredentialsRequest directory
+        output_dir (str): Path to the output directory
+        subscription_id (str): Service Principal Subscription ID
+        dns_zone_group_name (str): Name of the DNS Zone
+        tenant_id (str): Service Principal Tenant ID
+
+    """
+    logger.info("Processing all CredentialsRequest objects")
+    storage_account_name = re.sub(r"\W+", "", name)  # Strip non-alphanumeric characters
+    cmd = (
+        f"ccoctl azure create-all --name={name} --output-dir={output_dir} "
+        f"--region={azure_region} --subscription-id={subscription_id} "
+        f"--credentials-requests-dir={credentials_requests_dir} "
+        f"--dnszone-resource-group-name={dns_zone_group_name} --tenant-id={tenant_id} "
+        f"--storage-account-name={storage_account_name}"
+    )
+    exec_cmd(cmd)
+
+
 def set_credentials_mode_manual(install_config):
     """
     Set credentialsMode to Manual in the install-config.yaml
@@ -196,3 +249,40 @@ def set_credentials_mode_manual(install_config):
         install_config_data["credentialsMode"] = "Manual"
     with open(install_config, "w") as f:
         yaml.dump(install_config_data, f)
+
+
+def set_resource_group_name(install_config, name):
+    """
+    Set resourceGroupName to Manual in the install-config.yaml for Azure deployments.
+
+    Args:
+        install_config (str): Path to the install-config.yaml
+        name (str): Name of the Resource Group
+
+    """
+    logger.info("Set resourceGroupName")
+    with open(install_config, "r") as f:
+        install_config_data = yaml.safe_load(f)
+        install_config_data["platform"]["azure"]["resourceGroupName"] = name
+    with open(install_config, "w") as f:
+        yaml.dump(install_config_data, f)
+
+
+def delete_oidc_resource_group(name, region, subscription_id):
+    """
+    Delete the Azure resources that ccoctl created.
+
+    Args:
+        name (str): Name used to tag any created cloud resources
+        region (str): Region to create cloud resources
+        subscription_id (str): Service Principal Subscription ID
+
+    """
+    logger.info("Deleting OIDC resource group")
+    storage_account_name = re.sub(r"\W+", "", name)  # Strip non-alphanumeric characters
+    cmd = (
+        f"ccoctl azure delete --name={name} --region={region} "
+        f"--subscription-id={subscription_id} --delete-oidc-resource-group "
+        f"--storage-account-name={storage_account_name}"
+    )
+    exec_cmd(cmd)

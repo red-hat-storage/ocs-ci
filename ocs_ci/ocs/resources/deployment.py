@@ -1,6 +1,7 @@
 """
 General Deployment object
 """
+
 import logging
 
 from ocs_ci.framework import config
@@ -104,7 +105,7 @@ class Deployment(OCS):
         cmd = f"rollout undo {self.kind}/{resource_name} --to-revision={revision}"
         self.ocp.exec_oc_cmd(cmd)
 
-    def wait_for_available_replicas(self, timeout=15, sleep=3):
+    def wait_for_available_replicas(self, timeout=360, sleep=3):
         """
         Wait for number of available replicas reach number of desired replicas.
 
@@ -132,7 +133,9 @@ class Deployment(OCS):
             )
             return available_replicas
 
-        for available_replicas in TimeoutSampler(360, 2, func=_get_available_replicas):
+        for available_replicas in TimeoutSampler(
+            timeout, sleep, func=_get_available_replicas
+        ):
             if available_replicas == desired_replicas:
                 logger.info(
                     f"Deployment {self.name} reached "

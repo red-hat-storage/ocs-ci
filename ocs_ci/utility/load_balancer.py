@@ -37,7 +37,11 @@ class LoadBalancer(object):
         )
         jump_host = (
             config.DEPLOYMENT.get("ssh_jump_host")
-            if (config.DEPLOYMENT.get("disconnected") or config.DEPLOYMENT.get("proxy"))
+            if (
+                config.DEPLOYMENT.get("disconnected")
+                or config.DEPLOYMENT.get("proxy")
+                or config.DEPLOYMENT.get("ipv6")
+            )
             else None
         )
         if jump_host:
@@ -136,6 +140,20 @@ class LoadBalancer(object):
                 cmd = (
                     f"sudo sed -i '0,/.*:{port} check$/s/.*:{port} check$/        server "
                     f"{node} {node}:{port} check\\n&/' {constants.HAPROXY_LOCATION}"
+                )
+                self.lb.exec_cmd(cmd)
+
+    def compact_mode_route_ingress_trafic_to_control_plane_nodes(self):
+        """
+        This is applicable only for compact mode deployment.
+        Configure haproxy to route ingress traffic to control plane nodes.
+        """
+        master_ips = get_module_ip(self.terraform_state_file, constants.CONTROL_PLANE)
+        for node in master_ips:
+            for section, port in (("router-http", 80), ("router-https", 443)):
+                cmd = (
+                    f"sudo sed -i '/^backend {section}$/a \\    server {node} {node}:{port} check' "
+                    f"{constants.HAPROXY_LOCATION}"
                 )
                 self.lb.exec_cmd(cmd)
 

@@ -27,7 +27,11 @@ from ocs_ci.ocs.node import (
 )
 from ocs_ci.ocs.cluster import validate_existence_of_blocking_pdb
 from ocs_ci.framework import config
-from ocs_ci.framework.pytest_customization.marks import brown_squad
+from ocs_ci.framework.pytest_customization.marks import (
+    brown_squad,
+    skipif_rosa_hcp,
+    skipif_compact_mode,
+)
 from ocs_ci.framework.testlib import (
     tier1,
     tier2,
@@ -38,7 +42,6 @@ from ocs_ci.framework.testlib import (
     ignore_leftovers,
     ipi_deployment_required,
     skipif_bm,
-    bugzilla,
     skipif_managed_service,
     skipif_hci_provider_and_client,
     skipif_more_than_three_workers,
@@ -99,7 +102,14 @@ class TestNodesMaintenance(ManageTest):
     @pytest.fixture(autouse=True)
     def init_sanity(self):
         """
-        Initialize Sanity instance
+        Fixture to initialize Sanity instance based on the cluster type
+
+        """
+        self.init_sanity_method()
+
+    def init_sanity_method(self):
+        """
+        Method to initialize Sanity instance based on the cluster type
 
         """
         if storagecluster_independent_check():
@@ -128,7 +138,10 @@ class TestNodesMaintenance(ManageTest):
         argnames=["node_type"],
         argvalues=[
             pytest.param(*["worker"], marks=pytest.mark.polarion_id("OCS-1269")),
-            pytest.param(*["master"], marks=pytest.mark.polarion_id("OCS-1272")),
+            pytest.param(
+                *["master"],
+                marks=[pytest.mark.polarion_id("OCS-1272"), skipif_rosa_hcp],
+            ),
         ],
     )
     def test_node_maintenance(
@@ -186,6 +199,14 @@ class TestNodesMaintenance(ManageTest):
         schedule_nodes([typed_node_name])
 
         # Perform cluster and Ceph health checks
+        if (
+            node_type == "worker"
+            and config.ENV_DATA.get("platform") == constants.ROSA_HCP_PLATFORM
+        ):
+            # in ROSA HCP, the mon pod remains in a Terminating state for an extended period,
+            # resulting in one additional mon pod being epexcted during the health check
+            self.init_sanity_method()
+
         self.sanity_helpers.health_check(tries=90)
 
     @tier4a
@@ -255,6 +276,8 @@ class TestNodesMaintenance(ManageTest):
         wait_for_nodes_status(
             node_names=[typed_node_name],
             status=constants.NODE_READY_SCHEDULING_DISABLED,
+            timeout=600,
+            sleep=20,
         )
 
         # Mark the node back to schedulable
@@ -274,7 +297,10 @@ class TestNodesMaintenance(ManageTest):
         argnames=["nodes_type"],
         argvalues=[
             pytest.param(*["worker"], marks=pytest.mark.polarion_id("OCS-1273")),
-            pytest.param(*["master"], marks=pytest.mark.polarion_id("OCS-1271")),
+            pytest.param(
+                *["master"],
+                marks=[pytest.mark.polarion_id("OCS-1271"), skipif_rosa_hcp],
+            ),
         ],
     )
     def test_2_nodes_maintenance_same_type(self, nodes_type):
@@ -303,6 +329,7 @@ class TestNodesMaintenance(ManageTest):
 
     @tier2
     @pytest.mark.polarion_id("OCS-1274")
+    @skipif_compact_mode
     def test_2_nodes_different_types(
         self, pvc_factory, pod_factory, bucket_factory, rgw_bucket_factory
     ):
@@ -356,7 +383,7 @@ class TestNodesMaintenance(ManageTest):
         self,
         pvc_factory,
         pod_factory,
-        dc_pod_factory,
+        deployment_pod_factory,
         interface,
         bucket_factory,
         rgw_bucket_factory,
@@ -392,7 +419,9 @@ class TestNodesMaintenance(ManageTest):
         )
         dc_pod_obj = []
         for i in range(2):
-            dc_pod = dc_pod_factory(interface=interface, node_selector={"dc": "fedora"})
+            dc_pod = deployment_pod_factory(
+                interface=interface, node_selector={"dc": "fedora"}
+            )
             pod.run_io_in_bg(dc_pod, fedora_dc=True)
             dc_pod_obj.append(dc_pod)
 
@@ -461,8 +490,6 @@ class TestNodesMaintenance(ManageTest):
         # Perform cluster and Ceph health checks
         self.sanity_helpers.health_check()
 
-    @bugzilla("1861104")
-    @bugzilla("1946573")
     @skipif_managed_service
     @skipif_hci_provider_and_client
     @skipif_more_than_three_workers

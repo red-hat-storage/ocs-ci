@@ -1,6 +1,7 @@
 """
 Helper function for workloads to use
 """
+
 import logging
 from ocs_ci.ocs import exceptions
 from ocs_ci.ocs import constants

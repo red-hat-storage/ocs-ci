@@ -7,7 +7,6 @@ from ocs_ci.ocs.exceptions import (
 )
 from ocs_ci.framework.pytest_customization.marks import (
     tier2,
-    bugzilla,
     polarion_id,
     red_squad,
     runs_on_provider,
@@ -29,7 +28,7 @@ def get_bucket_used_bytes_metric(bucket_name, threading_lock):
     )
     if len(response.get("data").get("result")) == 0:
         raise ReturnedEmptyResponseException
-    elif response.get("data").get("result")[0].get("value")[1] == 0:
+    elif response.get("data").get("result")[0].get("value")[1] == "0":
         raise ReturnedEmptyResponseException
     else:
         value = response.get("data").get("result")[0].get("value")
@@ -41,7 +40,6 @@ def get_bucket_used_bytes_metric(bucket_name, threading_lock):
 @runs_on_provider
 class TestNoobaaaPrometheus:
     @tier2
-    @bugzilla("2168010")
     @polarion_id("OCS-4928")
     def test_bucket_used_bytes_metric(
         self,

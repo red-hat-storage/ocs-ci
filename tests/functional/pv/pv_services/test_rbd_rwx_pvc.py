@@ -75,6 +75,7 @@ class TestRbdBlockPvc(ManageTest):
                 io_direction="write",
                 runtime=5,
                 end_fsync=1,
+                direct=1,
             )
             log.info(f"IO started on pod {io_pod.name}")
 

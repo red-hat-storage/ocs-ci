@@ -1,6 +1,7 @@
 """
 All the flexy related classes and functionality lives here
 """
+
 import base64
 import binascii
 import json
@@ -463,6 +464,9 @@ class FlexyBase(object):
             f"sudo chown -R {constants.FLEXY_USER_LOCAL_UID} {self.flexy_host_dir}"
         )
         exec_cmd(chown_cmd)
+        # make sure that flexy_host_dir is writable by group
+        chmod_cmd = f"sudo chmod g+w {self.flexy_host_dir}"
+        exec_cmd(chmod_cmd)
 
     def flexy_backup_work_dir(self):
         """

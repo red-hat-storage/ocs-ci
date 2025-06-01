@@ -1,10 +1,11 @@
 import logging
 import pytest
 
+from ocs_ci.framework.logger_helper import log_step
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.exceptions import CommandFailed
 from ocs_ci.ocs.resources.pod import get_used_space_on_mount_point
-from ocs_ci.framework.pytest_customization.marks import green_squad
+from ocs_ci.framework.pytest_customization.marks import green_squad, post_upgrade
 from ocs_ci.framework.testlib import (
     skipif_ocs_version,
     ManageTest,
@@ -27,14 +28,12 @@ class TestPvcExpansionWhenFull(ManageTest):
     """
     Tests to verify PVC expansion when the PVC is 100% utilized.
     Verify utilization alert will stop firing after volume expansion.
-
     """
 
     @pytest.fixture(autouse=True)
     def setup(self, create_pvcs_and_pods):
         """
         Create PVCs and pods
-
         """
         self.pvc_size = 4
         self.pvcs, self.pods = create_pvcs_and_pods(
@@ -42,140 +41,174 @@ class TestPvcExpansionWhenFull(ManageTest):
             access_modes_rbd=[constants.ACCESS_MODE_RWO],
             access_modes_cephfs=[constants.ACCESS_MODE_RWO],
         )
+        self.near_full_threshold_violated = 0.91
+        self.critical_full_threshold_violated = 0.96
 
+    @post_upgrade
     def test_pvc_expansion_when_full(self, threading_lock):
         """
         Verify PVC expansion when the PVC is 100% utilized.
         Verify utilization alert will stop firing after volume expansion.
 
+        The test based on TimeoutSampler mechanism. It will fire TimeoutExpiredError if the alerts not present when
+        conditions met or still firing after the timeout.
+        The test has assertions on the fio job results.
+
+        Test Steps:
+            1. Run IO on PVCs to utilize 91% of available storage. Check PersistentVolumeUsageNearFull alert.
+            2. Run IO on PVCs to utilize 96% of available storage. Check PersistentVolumeUsageCritical alert.
+            3. Run IO on all to utilize 100% of PVCs storage capacity.
+            4. Expand PVCs.
+            5. Verify no PVC full alerts after PVC expansion.
+            6. Run IO after PVC expansion.
+            7. Verify no PVC full alerts after PVC expansion and additional IO.
+
         """
         pvc_size_expanded = 10
-
-        # Run IO to utilise 100% of volume
-        log.info("Run IO on all to utilise 100% of PVCs")
-        for pod_obj in self.pods:
-            pod_obj.run_io(
-                "fs",
-                size=f"{self.pvc_size}G",
-                io_direction="write",
-                runtime=30,
-                rate="100M",
-                fio_filename=f"{pod_obj.name}_f1",
-            )
-        log.info("Started IO on all to utilise 100% of PVCs")
-        # Wait for IO to finish
-        log.info("Wait for IO to finish on pods")
-        for pod_obj in self.pods:
-            try:
-                pod_obj.get_fio_results()
-            except CommandFailed as cfe:
-                if "No space left on device" not in str(cfe):
-                    raise
-            log.info(f"IO finished on pod {pod_obj.name}")
-            # Verify used space on pod is 100%
-            used_space = get_used_space_on_mount_point(pod_obj)
-            assert used_space == "100%", (
-                f"The used space on pod {pod_obj.name} is not 100% " f"but {used_space}"
-            )
-            log.info(f"Verified: Used space on pod {pod_obj.name} is 100%")
+        pvc_fill_up_after_resize = 3
+        timeout_alerts = 300
+        fill_up_near_full_mb = round(
+            self.pvc_size * self.near_full_threshold_violated * 1024
+        )
+        fill_up_critical_full_mb = (
+            round(self.pvc_size * self.critical_full_threshold_violated * 1024)
+            - fill_up_near_full_mb
+        )
+        fill_up_full_mb = self.pvc_size * 1024 - (
+            fill_up_critical_full_mb + fill_up_near_full_mb
+        )
 
         prometheus_api = PrometheusAPI(threading_lock=threading_lock)
 
-        # Wait till utilization alerts starts
-        for response in TimeoutSampler(140, 5, prometheus_api.get, "alerts"):
-            alerts = response.json()["data"]["alerts"]
-            for pvc_obj in self.pvcs:
-                alerts_pvc = [
-                    alert
-                    for alert in alerts
-                    if alert.get("labels", {}).get("persistentvolumeclaim")
-                    == pvc_obj.name
-                ]
-                # At least 2 alerts should be present
-                if len(alerts_pvc) < 2:
-                    break
+        log_step(
+            "Run IO on PVCs to utilize 91% of available storage. Check PersistentVolumeUsageNearFull alert."
+        )
+        self._run_io_and_check_alerts(
+            fill_up_near_full_mb,
+            prometheus_api,
+            alert_type="PersistentVolumeUsageNearFull",
+            alert_msg="is nearing full. Data deletion or PVC expansion is required.",
+            threshold_attr="near_full_alert",
+        )
 
-                # Verify 'PersistentVolumeUsageNearFull' alert is firing
-                if not getattr(pvc_obj, "near_full_alert", False):
-                    try:
-                        log.info(
-                            f"Checking 'PersistentVolumeUsageNearFull' alert "
-                            f"for PVC {pvc_obj.name}"
-                        )
-                        near_full_msg = (
-                            f"PVC {pvc_obj.name} is nearing full. Data "
-                            f"deletion or PVC expansion is required."
-                        )
-                        check_alert_list(
-                            label="PersistentVolumeUsageNearFull",
-                            msg=near_full_msg,
-                            alerts=alerts_pvc,
-                            states=["firing"],
-                            severity="warning",
-                        )
-                        pvc_obj.near_full_alert = True
-                    except AssertionError:
-                        log.info(
-                            f"'PersistentVolumeUsageNearFull' alert not "
-                            f"started firing for PVC {pvc_obj.name}"
-                        )
+        log_step(
+            "Run IO on PVCs to utilize 96% of available storage. Check PersistentVolumeUsageCritical alert."
+        )
+        self._run_io_and_check_alerts(
+            fill_up_critical_full_mb,
+            prometheus_api,
+            alert_type="PersistentVolumeUsageCritical",
+            alert_msg="is critically full. Data deletion or PVC expansion is required.",
+            threshold_attr="critical_alert",
+        )
 
-                # Verify 'PersistentVolumeUsageCritical' alert is firing
-                if not getattr(pvc_obj, "critical_alert", False):
-                    try:
-                        log.info(
-                            f"Checking 'PersistentVolumeUsageCritical' alert "
-                            f"for PVC {pvc_obj.name}"
-                        )
-                        critical_msg = (
-                            f"PVC {pvc_obj.name} is critically full. Data "
-                            f"deletion or PVC expansion is required."
-                        )
-                        check_alert_list(
-                            label="PersistentVolumeUsageCritical",
-                            msg=critical_msg,
-                            alerts=alerts_pvc,
-                            states=["firing"],
-                            severity="error",
-                        )
-                        pvc_obj.critical_alert = True
-                    except AssertionError:
-                        log.info(
-                            f"'PersistentVolumeUsageCritical' alert not "
-                            f"started firing for PVC {pvc_obj.name}"
-                        )
+        log_step("Run IO on all to utilize 100% of PVCs storage capacity.")
+        self.fill_up_pvcs(fill_up_full_mb, pvc_full_error_expected=True)
 
-            # Collect list of PVCs for which alerts are not firing
-            not_near_full_pvc = [
-                pvc_ob.name
-                for pvc_ob in self.pvcs
-                if not getattr(pvc_ob, "near_full_alert", False)
-            ]
-            not_critical_pvc = [
-                pvc_ob.name
-                for pvc_ob in self.pvcs
-                if not getattr(pvc_ob, "critical_alert", False)
-            ]
+        log_step("Verify used space on pods is 100%.")
+        self._verify_used_space_on_pods("100%")
 
-            if (not not_near_full_pvc) and (not not_critical_pvc):
-                log.info(
-                    "'PersistentVolumeUsageNearFull' and "
-                    "'PersistentVolumeUsageCritical' alerts are firing "
-                    "for all PVCs."
-                )
-                break
-
-        log.info("Expanding PVCs.")
+        log_step("Expanding PVCs.")
         for pvc_obj in self.pvcs:
-            log.info(
-                f"Expanding size of PVC {pvc_obj.name} to " f"{pvc_size_expanded}Gi"
-            )
-            pvc_obj.resize_pvc(pvc_size_expanded, True)
+            log.info(f"Expanding size of PVC {pvc_obj.name} to {pvc_size_expanded}Gi")
+            assert pvc_obj.resize_pvc(
+                pvc_size_expanded, True
+            ), f"Failed to resize PVC '{pvc_obj.name}'"
         log.info(f"All PVCs are expanded to {pvc_size_expanded}Gi")
 
-        # Verify utilization alerts are stopped
-        for response in TimeoutSampler(140, 5, prometheus_api.get, "alerts"):
+        log_step("Verify no PVC full alerts after PVC expansion.")
+        self.verify_no_pvc_alerts(prometheus_api, round(timeout_alerts / 2))
+
+        log_step("Run IO after PVC expansion.")
+        self.fill_up_pvcs(pvc_fill_up_after_resize * 1024)
+
+        log_step("Verify no PVC full alerts after PVC expansion and additional IO.")
+        self.verify_no_pvc_alerts(prometheus_api, round(timeout_alerts / 2))
+
+    def _run_io_and_check_alerts(
+        self, fill_up_mb, prometheus_api, alert_type, alert_msg, threshold_attr
+    ):
+        """
+        Run IO on pods to utilize the PVCs until near_full or critical_full threshold is reached.
+
+        Args:
+            fill_up_mb (int): The amount of data to write to the PVCs
+            prometheus_api (PrometheusAPI): Prometheus API object
+            alert_type (str): The type of alert to check
+            alert_msg (str): The message to check in the alert
+            threshold_attr (str): The attribute to set when the alert is fired
+        """
+        log.info(f"Run IO to utilize PVCs until {alert_type} threshold is reached.")
+        self.fill_up_pvcs(fill_up_mb)
+
+        log.info(f"Wait for {alert_type} alerts to start firing for PVCs.")
+        for response in TimeoutSampler(300, 5, prometheus_api.get, "alerts"):
             alerts = response.json()["data"]["alerts"]
+            if self._check_pvc_alerts(alerts, alert_type, alert_msg, threshold_attr):
+                log.info(f"{alert_type} alerts fired for all PVCs")
+                break
+
+    def _check_pvc_alerts(self, alerts, alert_type, alert_msg, threshold_attr):
+        """
+        Check if the alerts are firing for all PVCs
+        Args:
+            alerts (list): List of alerts
+            alert_type (str): The type of alert to check
+            alert_msg (str): The message to check in the alert
+            threshold_attr (str): The attribute to set when the alert is fired
+        """
+        for pvc_obj in self.pvcs:
+            alerts_pvc = [
+                alert
+                for alert in alerts
+                if alert.get("labels", {}).get("persistentvolumeclaim") == pvc_obj.name
+            ]
+            if not getattr(pvc_obj, threshold_attr, False):
+                try:
+                    log.info(f"Checking '{alert_type}' alert for PVC {pvc_obj.name}")
+                    check_alert_list(
+                        label=alert_type,
+                        msg=f"PVC {pvc_obj.name} {alert_msg}",
+                        alerts=alerts_pvc,
+                        states=["firing"],
+                        severity="warning" if "NearFull" in alert_type else "error",
+                    )
+                    setattr(pvc_obj, threshold_attr, True)
+                except AssertionError:
+                    log.info(
+                        f"'{alert_type}' alert not started firing for PVC {pvc_obj.name}"
+                    )
+
+        return all([getattr(pvc_obj, threshold_attr, False) for pvc_obj in self.pvcs])
+
+    def _verify_used_space_on_pods(self, expected_used_space):
+        """
+        Verify used space on pods
+
+        Args:
+            expected_used_space (str): The expected used space on the pods
+        """
+        for pod_obj in self.pods:
+            used_space = get_used_space_on_mount_point(pod_obj)
+            assert (
+                used_space == expected_used_space
+            ), f"The used space on pod {pod_obj.name} is not {expected_used_space} but {used_space}"
+            log.info(
+                f"Verified: Used space on pod {pod_obj.name} is {expected_used_space}"
+            )
+
+    def verify_no_pvc_alerts(self, prometheus_api, timeout_alerts):
+        """
+        Verify utilization alerts are stopped
+        TimeOutSampler will raise an exception if the alerts are still firing after the timeout
+
+        Args:
+            prometheus_api (PrometheusAPI): Prometheus API object
+            timeout_alerts (int): Timeout to wait for alerts to stop firing
+        """
+        for response in TimeoutSampler(timeout_alerts, 5, prometheus_api.get, "alerts"):
+            alerts = response.json()["data"]["alerts"]
+            near_full_pvcs, critical_pvcs = [], []
             for pvc_obj in self.pvcs:
                 alerts_pvc = [
                     alert
@@ -188,99 +221,87 @@ class TestPvcExpansionWhenFull(ManageTest):
                     pvc_obj.critical_alert = False
                     continue
 
-                # Verify 'PersistentVolumeUsageNearFull' alert stopped firing
-                if getattr(pvc_obj, "near_full_alert"):
+                if getattr(pvc_obj, "near_full_alert", False):
                     try:
-                        log.info(
-                            f"Checking 'PrsistentVolumeUsageNearFull' alert "
-                            f"is cleared for PVC {pvc_obj.name}"
-                        )
-                        near_full_msg = (
-                            f"PVC {pvc_obj.name} is nearing full. Data "
-                            f"deletion or PVC expansion is required."
-                        )
-                        check_alert_list(
-                            label="PersistentVolumeUsageNearFull",
-                            msg=near_full_msg,
-                            alerts=alerts_pvc,
-                            states=["firing"],
-                            severity="warning",
-                        )
-                        log.info(
-                            f"'PersistentVolumeUsageNearFull' alert is not "
-                            f"stopped for PVC {pvc_obj.name}"
+                        self._verify_alert_stopped(
+                            alerts_pvc,
+                            pvc_obj,
+                            "PersistentVolumeUsageNearFull",
+                            "warning",
                         )
                     except AssertionError:
-                        pvc_obj.near_full_alert = False
-                        log.info(
-                            f"'PersistentVolumeUsageNearFull' alert stopped "
-                            f"firing for PVC {pvc_obj.name}"
-                        )
+                        near_full_pvcs.append(pvc_obj.name)
 
-                # Verify 'PersistentVolumeUsageCritical' alert stopped firing
-                if getattr(pvc_obj, "critical_alert"):
+                if getattr(pvc_obj, "critical_alert", False):
                     try:
-                        log.info(
-                            f"Checking 'PersistentVolumeUsageCritical' alert "
-                            f"is cleared for PVC {pvc_obj.name}"
-                        )
-                        critical_msg = (
-                            f"PVC {pvc_obj.name} is critically full. Data "
-                            f"deletion or PVC expansion is required."
-                        )
-                        check_alert_list(
-                            label="PersistentVolumeUsageCritical",
-                            msg=critical_msg,
-                            alerts=alerts_pvc,
-                            states=["firing"],
-                            severity="error",
-                        )
-                        log.info(
-                            f"'PersistentVolumeUsageCritical' alert is not "
-                            f"stopped for PVC {pvc_obj.name}"
+                        self._verify_alert_stopped(
+                            alerts_pvc,
+                            pvc_obj,
+                            "PersistentVolumeUsageCritical",
+                            "error",
                         )
                     except AssertionError:
-                        pvc_obj.critical_alert = False
-                        log.info(
-                            f"'PersistentVolumeUsageCritical' alert stopped "
-                            f"firing for PVC {pvc_obj.name}"
-                        )
+                        critical_pvcs.append(pvc_obj.name)
 
-            # Collect list of PVCs for which alerts are still firing
-            near_full_pvcs = [
-                pvc_ob.name
-                for pvc_ob in self.pvcs
-                if getattr(pvc_ob, "near_full_alert")
-            ]
-            critical_pvcs = [
-                pvc_ob.name for pvc_ob in self.pvcs if getattr(pvc_ob, "critical_alert")
-            ]
-
-            if (not near_full_pvcs) and (not critical_pvcs):
+            if not near_full_pvcs and not critical_pvcs:
                 log.info(
-                    "'PersistentVolumeUsageNearFull' and "
-                    "'PersistentVolumeUsageCritical' alerts are cleared for "
-                    "all PVCs."
+                    "'PersistentVolumeUsageNearFull' and 'PersistentVolumeUsageCritical' alerts "
+                    "are not present for all PVCs."
                 )
                 break
 
-        # Run IO to verify the expanded capacity can be utilized
-        log.info("Run IO after PVC expansion.")
+    def _verify_alert_stopped(self, alerts_pvc, pvc_obj, alert_label, severity):
+        """
+        Verify the alert is not present for the PVC
+
+        Args:
+            alerts_pvc (list): List of alerts for the PVC
+            pvc_obj (PVC): PVC object
+            alert_label (str): The alert label to check
+            severity (str): The severity of the alert
+        """
+        log.info(
+            f"Checking '{alert_label}' alert is not present for PVC {pvc_obj.name}"
+        )
+        check_alert_list(
+            label=alert_label,
+            msg=f"PVC {pvc_obj.name} is {alert_label.split('PersistentVolumeUsage')[-1].lower()}.",
+            alerts=alerts_pvc,
+            states=["firing"],
+            severity=severity,
+        )
+        log.info(f"'{alert_label}' alert is present for PVC {pvc_obj.name}")
+
+    def fill_up_pvcs(self, fill_up_mb, pvc_full_error_expected=False):
+        """
+        Run IO on pods to utilize the PVCs
+
+        Args:
+            fill_up_mb (int): The amount of data to write to the PVCs
+            pvc_full_error_expected (bool): PVC full error is expected
+        """
         for pod_obj in self.pods:
             pod_obj.run_io(
                 "fs",
-                size="3G",
+                size=f"{fill_up_mb}M",
                 io_direction="write",
-                runtime=60,
-                fio_filename=f"{pod_obj.name}_f2",
+                runtime=30,
+                rate="100M",
+                fio_filename=f"file_{fill_up_mb}mb",
+                end_fsync=1,
             )
-
-        # Wait for IO to complete
-        log.info("Waiting for IO to complete on pods.")
         for pod_obj in self.pods:
-            fio_result = pod_obj.get_fio_results()
-            err_count = fio_result.get("jobs")[0].get("error")
-            assert (
-                err_count == 0
-            ), f"IO error on pod {pod_obj.name}. FIO result: {fio_result}"
-            log.info(f"Verified IO on pod {pod_obj.name} after expanding PVC.")
+            try:
+                fio_result = pod_obj.get_fio_results()
+                err_count = fio_result.get("jobs")[0].get("error")
+
+                assert (
+                    err_count == 0
+                ), f"IO error on pod {pod_obj.name}. FIO result: {fio_result}"
+            except CommandFailed as cfe:
+                if "No space left on device" in str(cfe) and pvc_full_error_expected:
+                    continue
+                else:
+                    raise
+
+        log.info(f"Verified IO on pods to utilize {fill_up_mb}MB")

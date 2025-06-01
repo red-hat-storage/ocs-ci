@@ -1,17 +1,23 @@
 import pytest
 import logging
 
-from ocs_ci.helpers.helpers import odf_cli_set_log_level, get_ceph_log_level
+from ocs_ci.helpers.helpers import get_ceph_log_level
 from ocs_ci.framework.pytest_customization.marks import brown_squad
 from ocs_ci.ocs.exceptions import CommandFailed
-from ocs_ci.framework.testlib import tier1
+from ocs_ci.framework.testlib import tier1, skipif_kms_deployment, skipif_external_mode
 
 log = logging.getLogger(__name__)
 
 
 @brown_squad
 @tier1
+@skipif_kms_deployment
+@skipif_external_mode
 class TestDebugVerbosityOfCephComponents:
+    @pytest.fixture(autouse=True)
+    def setup(self, odf_cli_setup):
+        self.odf_cli_runner = odf_cli_setup
+
     @pytest.mark.polarion_id("OCS-5417")
     @pytest.mark.parametrize(
         argnames=["service", "subsystem"],
@@ -39,10 +45,14 @@ class TestDebugVerbosityOfCephComponents:
 
             if log_level > 99:
                 with pytest.raises(CommandFailed):
-                    odf_cli_set_log_level(service, log_level, subsystem)
+                    self.odf_cli_runner.run_set_ceph_log_level(
+                        service, log_level, subsystem
+                    )
                     log.info("Log level beyond the limit was not set as expected.")
             else:
-                assert odf_cli_set_log_level(service, log_level, subsystem)
+                assert self.odf_cli_runner.run_set_ceph_log_level(
+                    service, log_level, subsystem
+                )
                 assert log_level == get_ceph_log_level(
                     service, subsystem
                 ), f"Log level set by ODF CLI ({log_level}) does not match with the value reported by Ceph"

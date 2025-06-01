@@ -1,4 +1,5 @@
 import logging
+
 import pytest
 
 from ocs_ci.ocs import node, constants
@@ -10,28 +11,30 @@ from ocs_ci.framework.testlib import (
     ManageTest,
     cloud_platform_required,
     vsphere_platform_required,
-    bugzilla,
     skipif_ibm_cloud,
     skipif_external_mode,
     skipif_managed_service,
     skipif_hci_provider_and_client,
+    skipif_ocs_version,
 )
 from ocs_ci.helpers.sanity_helpers import Sanity
 from ocs_ci.helpers.helpers import (
     wait_for_ct_pod_recovery,
     clear_crash_warning_and_osd_removal_leftovers,
+    run_cmd_verify_cli_output,
 )
 from ocs_ci.ocs.resources.pod import (
     get_osd_pods,
     get_pod_node,
     delete_pods,
     get_pod_objs,
+    wait_for_pods_to_be_running,
 )
 from ocs_ci.utility.aws import AWSTimeoutException
 from ocs_ci.ocs.resources.storage_cluster import osd_encryption_verification
 from ocs_ci.ocs import osd_operations
 from ocs_ci.ocs.utils import get_pod_name_by_pattern
-
+from ocs_ci.utility.utils import TimeoutSampler, ceph_health_check
 
 logger = logging.getLogger(__name__)
 
@@ -62,20 +65,26 @@ class TestDiskFailures(ManageTest):
         except AWSTimeoutException as e:
             if "Volume state: in-use" in e:
                 logger.info(
-                    f"Volume {data_volume} re-attached successfully to worker"
+                    f"Volume {data_volume} is still attached to worker, detach did not complete"
                     f" node {worker_node}"
                 )
-            else:
                 raise
         else:
             """
             Wait for worker volume to be re-attached automatically
             to the node
             """
-            assert nodes.wait_for_volume_attach(data_volume), (
-                f"Volume {data_volume} failed to be re-attached to worker "
-                f"node {worker_node}"
-            )
+            logger.info(f"Volume {data_volume} is deattached successfully")
+            if config.ENV_DATA.get("platform", "").lower() == constants.AWS_PLATFORM:
+                logger.info(
+                    f"For {constants.AWS_PLATFORM} platform, attaching volume manually"
+                )
+                nodes.attach_volume(volume=data_volume, node=worker_node)
+            else:
+                assert nodes.wait_for_volume_attach(data_volume), (
+                    f"Volume {data_volume} failed to be re-attached to worker "
+                    f"node {worker_node.name}"
+                )
 
     @pytest.fixture(autouse=True)
     def teardown(self, request, nodes):
@@ -120,6 +129,9 @@ class TestDiskFailures(ManageTest):
             pod_names = get_pod_name_by_pattern("ocs-osd-removal-job-")
             delete_pods(get_pod_objs(pod_names))
 
+            assert ceph_health_check(), "Ceph cluster health is not OK"
+            logger.info("Ceph cluster health is OK during teardown")
+
         request.addfinalizer(finalizer)
 
     @pytest.fixture(autouse=True)
@@ -131,10 +143,10 @@ class TestDiskFailures(ManageTest):
         self.sanity_helpers = Sanity()
 
     @skipif_managed_service
+    @skipif_ibm_cloud
     @skipif_hci_provider_and_client
     @cloud_platform_required
     @pytest.mark.polarion_id("OCS-1085")
-    @bugzilla("1825675")
     def test_detach_attach_worker_volume(
         self, nodes, pvc_factory, pod_factory, bucket_factory, rgw_bucket_factory
     ):
@@ -151,6 +163,7 @@ class TestDiskFailures(ManageTest):
         """
         # Get a data volume
         data_volume = nodes.get_data_volumes()[0]
+
         # Get the worker node according to the volume attachment
         worker = nodes.get_node_by_attached_volume(data_volume)
 
@@ -177,6 +190,30 @@ class TestDiskFailures(ManageTest):
         # W/A: For the investigation of BZ 1825675, timeout is increased to see if cluster
         # becomes healthy eventually
         # TODO: Remove 'tries=100'
+
+        logger.info("Wait for all the pods in openshift-storage to be in running state")
+        assert wait_for_pods_to_be_running(
+            timeout=720
+        ), "Not all the pods reached running state"
+
+        logger.info("Archive OSD crash if occurred due to detach and attach of volume")
+        crash = TimeoutSampler(
+            timeout=300,
+            sleep=30,
+            func=run_cmd_verify_cli_output,
+            cmd="ceph health detail",
+            expected_output_lst={"HEALTH_WARN", "daemons have recently crashed"},
+            cephtool_cmd=True,
+        )
+        if crash.wait_for_func_status(True):
+            logger.info("Clear all ceph crash warnings")
+            # Importing here to avoid shadow by loop variable
+            from ocs_ci.ocs.resources import pod
+
+            ct_pod = pod.get_ceph_tools_pod()
+            ct_pod.exec_ceph_cmd(ceph_cmd="ceph crash archive-all")
+        else:
+            logger.info("There are no daemon crash warnings")
         self.sanity_helpers.health_check(tries=100)
 
     @skipif_managed_service
@@ -213,13 +250,36 @@ class TestDiskFailures(ManageTest):
             [worker_and_volume["worker"] for worker_and_volume in workers_and_volumes]
         )
 
+        logger.info("Wait for all the pods in openshift-storage to be in running state")
+        assert wait_for_pods_to_be_running(
+            timeout=720
+        ), "Not all the pods reached running state"
+
+        logger.info("Archive OSD crash if occurred due to detach and attach of volume")
+        crash = TimeoutSampler(
+            timeout=300,
+            sleep=30,
+            func=run_cmd_verify_cli_output,
+            cmd="ceph health detail",
+            expected_output_lst={"HEALTH_WARN", "daemons have recently crashed"},
+            cephtool_cmd=True,
+        )
+        if crash.wait_for_func_status(True):
+            logger.info("Clear all ceph crash warnings")
+            # Importing here to avoid shadow by loop variable
+            from ocs_ci.ocs.resources import pod
+
+            ct_pod = pod.get_ceph_tools_pod()
+            ct_pod.exec_ceph_cmd(ceph_cmd="ceph crash archive-all")
+        else:
+            logger.info("There are no daemon crash warnings")
+
         # Validate cluster is still functional
         self.sanity_helpers.health_check()
         self.sanity_helpers.create_resources(
             pvc_factory, pod_factory, bucket_factory, rgw_bucket_factory
         )
 
-    @bugzilla("1830702")
     @vsphere_platform_required
     @pytest.mark.polarion_id("OCS-2172")
     @skipif_external_mode
@@ -233,6 +293,28 @@ class TestDiskFailures(ManageTest):
 
         """
         osd_operations.osd_device_replacement(nodes)
+        self.sanity_helpers.create_resources(
+            pvc_factory,
+            pod_factory,
+            bucket_factory,
+            rgw_bucket_factory,
+            bucket_creation_timeout=800,
+        )
+
+    @vsphere_platform_required
+    @skipif_ocs_version("<4.15")
+    @pytest.mark.polarion_id("OCS-5502")
+    @skipif_external_mode
+    def test_recovery_from_volume_deletion_cli_tool(
+        self, nodes, pvc_factory, pod_factory, bucket_factory, rgw_bucket_factory
+    ):
+        """
+        Test cluster recovery from disk deletion from the platform side.
+        Based on documented procedure detailed in
+        https://bugzilla.redhat.com/show_bug.cgi?id=1823183
+
+        """
+        osd_operations.osd_device_replacement(nodes, cli_tool=True)
         self.sanity_helpers.create_resources(
             pvc_factory, pod_factory, bucket_factory, rgw_bucket_factory
         )

@@ -1,6 +1,7 @@
 """
 Couchbase workload class
 """
+
 import json
 import logging
 import random

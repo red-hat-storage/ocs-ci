@@ -42,7 +42,6 @@ class TestNoobaaBackupAndRecovery(E2ETest):
         self.sanity_helpers = Sanity()
 
     @pytest.mark.polarion_id("OCS-2605")
-    @pytest.mark.bugzilla("1924047")
     @skipif_ocs_version("<4.6")
     def test_noobaa_db_backup_and_recovery(
         self,
@@ -91,13 +90,12 @@ class TestNoobaaBackupAndRecovery(E2ETest):
         warps3.create_resource_warp(replicas=4, multi_client=True)
 
         def teardown():
-            warps3.cleanup()
+            warps3.cleanup(multi_client=True)
 
         request.addfinalizer(teardown)
         return warps3
 
     @pytest.mark.polarion_id("OCS-4842")
-    @pytest.mark.bugzilla("214035")
     @skipif_ocs_version("<4.8")
     def test_noobaa_db_backup_recovery_locally(
         self,
@@ -112,7 +110,8 @@ class TestNoobaaBackupAndRecovery(E2ETest):
             * Create a test bucket and write some data
             * Backup noobaa secrets to local folder OR store it in secret objects
             * Backup the PostgreSQL database and save it to a local folder
-            * For testing, write new data to show a little data loss between backup and restore
+            * For testing, write new data to show a little data loss between backup and restore.
+
         Restore procedure:
             * Stop MCG reconciliation
             * Stop the NooBaa Service before restoring the NooBaa DB.
@@ -145,7 +144,7 @@ class TestNoobaaBackupAndRecovery(E2ETest):
             objects=100,
             obj_size="1MiB",
             validate=True,
-            timeout=4000,
+            timeout=6000,
             multi_client=True,
             tls=True,
             debug=True,

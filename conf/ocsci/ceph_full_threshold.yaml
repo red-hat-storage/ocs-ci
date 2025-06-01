@@ -1,0 +1,6 @@
+# For testing EPIC: https://issues.redhat.com/browse/RHSTOR-5929
+# Ceph full threshold is configurable via storageCluster
+ENV_DATA:
+  ceph_threshold_backfill_full_ratio: 0.925
+  ceph_threshold_full_ratio: 0.975
+  ceph_threshold_near_full_ratio: 0.875

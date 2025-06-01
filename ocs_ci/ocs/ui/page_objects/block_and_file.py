@@ -1,8 +1,11 @@
+import re
 import time
 
+from ocs_ci.framework import config
 from ocs_ci.ocs.ui.helpers_ui import format_locator, logger
 from ocs_ci.ocs.ui.page_objects.storage_system_details import StorageSystemDetails
 from ocs_ci.ocs.ui.workload_ui import PvcCapacityDeploymentList, compare_mem_usage
+from ocs_ci.utility.utils import TimeoutSampler
 
 
 class BlockAndFile(StorageSystemDetails):
@@ -162,3 +165,97 @@ class BlockAndFile(StorageSystemDetails):
                 }
             else:
                 logger.info(f"pvc {data_struct.pvc_obj.name} capacity is as expected.")
+
+    def get_raw_capacity_card_values(self):
+        """
+        Initial page - Data Foundation / Storage Systems tab / StorageSystem details / Block and File
+        Get the raw capacity card values
+
+        Returns:
+            tuple: Used and available capacity values in format similar to "1.23 TiB"
+        """
+        logger.info("Get the raw capacity card values")
+
+        used = self.get_element_text(
+            format_locator(self.validation_loc["storage_capacity"], "Used")
+        )
+        available = self.get_element_text(
+            format_locator(self.validation_loc["storage_capacity"], "Available")
+        )
+
+        return used, available
+
+    def get_estimated_days_from_consumption_trend(self):
+        """
+        This will fetch information from DataFoundation>>Storage>>Block and File page>>Consumption trend card
+
+        Returns:
+            tuple: (get_est_days_from_element, get_avg_from_element)
+
+        """
+
+        get_est_days_from_element = self.get_element_text(
+            self.validation_loc["locate_estimated_days_along_with_value"]
+        )
+        get_avg_from_element = self.get_element_text(
+            self.validation_loc["locate_average_of_storage_consumption"]
+        )
+        return (get_est_days_from_element, get_avg_from_element)
+
+    def odf_storagesystems_consumption_trend(self):
+        """
+        Function to verify changes and validate elements on ODF storage consumption trend for ODF 4.17
+        This will navigate through below order
+        DataFoundation>>Storage>>storagecluster_storagesystem_details>>Block and File page
+        Further it looks for the Consumption trend card
+
+        Returns:
+            tuple: tpl_of_days_and_avg  ex: (Estimated days, Average)
+
+        """
+
+        if not config.ENV_DATA["mcg_only_deployment"]:
+            for tpl_of_days_and_avg in TimeoutSampler(
+                timeout=300,
+                sleep=30,
+                func=self.get_estimated_days_from_consumption_trend,
+            ):
+
+                if re.search(
+                    r"(?=.*\d)(?=.*[a-zA-Z])", tpl_of_days_and_avg[0]
+                ) and re.search(r"(?=.*\d)(?=.*[a-zA-Z])", tpl_of_days_and_avg[1]):
+                    return tpl_of_days_and_avg
+                else:
+                    logger.warning("Dashboard is not yet ready yet after osd resize")
+        else:
+            logger.error("No data available for MCG-only deployments.")
+            return None
+
+    def get_est_days_from_ui(self):
+        """
+        Get the value of 'Estimated days until full' from the UI
+
+        Returns:
+            int: Estimated days until full from UI
+
+        """
+
+        collected_tpl_of_days_and_avg = self.odf_storagesystems_consumption_trend()
+        est_days = re.search(r"\d+", collected_tpl_of_days_and_avg[0]).group()
+        logger.info(f"'Estimated days until full' from the UI : {est_days}")
+        return int(est_days)
+
+    def get_avg_consumption_from_ui(self):
+        """
+        Get the value of 'Average storage consumption' from the UI
+
+        Returns:
+            float: Average of storage consumption per day
+
+        """
+        collected_tpl_of_days_and_avg = self.odf_storagesystems_consumption_trend()
+        average = float(
+            re.search(r"-?\d+\.*\d*", collected_tpl_of_days_and_avg[1]).group()
+        )
+        logger.info(f"'Average of storage consumption per day' from the UI : {average}")
+        return average

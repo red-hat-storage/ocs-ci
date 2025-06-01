@@ -56,7 +56,7 @@ class TestNodeRestartDuringPvcExpansion(ManageTest):
             pvc_size=4,
             num_of_rbd_pvc=12,
             num_of_cephfs_pvc=8,
-            deployment_config=True,
+            deployment=True,
         )
 
     @pytest.fixture(autouse=True)

@@ -48,22 +48,6 @@ class TestBucketCreationAndDeletion(MCGTest):
                 ],
             ),
             pytest.param(
-                *[100, "S3", None],
-                marks=[
-                    pytest.mark.skip(ERRATIC_TIMEOUTS_SKIP_REASON),
-                    performance,
-                    pytest.mark.polarion_id("OCS-1823"),
-                ],
-            ),
-            pytest.param(
-                *[1000, "S3", None],
-                marks=[
-                    pytest.mark.skip(ERRATIC_TIMEOUTS_SKIP_REASON),
-                    performance,
-                    pytest.mark.polarion_id("OCS-1824"),
-                ],
-            ),
-            pytest.param(
                 *[3, "OC", None],
                 marks=[
                     tier1,
@@ -76,7 +60,6 @@ class TestBucketCreationAndDeletion(MCGTest):
                 marks=[
                     tier1,
                     pytest.mark.polarion_id("OCS-4930"),
-                    pytest.mark.bugzilla("2179271"),
                 ],
             ),
             pytest.param(
@@ -101,22 +84,6 @@ class TestBucketCreationAndDeletion(MCGTest):
                     tier1,
                     acceptance,
                     pytest.mark.polarion_id("OCS-1298"),
-                ],
-            ),
-            pytest.param(
-                *[100, "CLI", None],
-                marks=[
-                    pytest.mark.skip(ERRATIC_TIMEOUTS_SKIP_REASON),
-                    performance,
-                    pytest.mark.polarion_id("OCS-1825"),
-                ],
-            ),
-            pytest.param(
-                *[1000, "CLI", None],
-                marks=[
-                    pytest.mark.skip(ERRATIC_TIMEOUTS_SKIP_REASON),
-                    performance,
-                    pytest.mark.polarion_id("OCS-1828"),
                 ],
             ),
             pytest.param(
@@ -148,15 +115,11 @@ class TestBucketCreationAndDeletion(MCGTest):
         ],
         ids=[
             "3-S3-DEFAULT-BACKINGSTORE",
-            "100-S3-DEFAULT-BACKINGSTORE",
-            "1000-S3-DEFAULT-BACKINGSTORE",
             "3-OC-DEFAULT-BACKINGSTORE",
             "10-OC-DEFAULT-BACKINGSTORE",
             "100-OC-DEFAULT-BACKINGSTORE",
             "1000-OC-DEFAULT-BACKINGSTORE",
             "3-CLI-DEFAULT-BACKINGSTORE",
-            "100-CLI-DEFAULT-BACKINGSTORE",
-            "1000-CLI-DEFAULT-BACKINGSTORE",
             "1-OC-PVPOOL",
             "1-CLI-PVPOOL",
         ],

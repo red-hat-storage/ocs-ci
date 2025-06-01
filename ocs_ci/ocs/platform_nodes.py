@@ -10,6 +10,7 @@ import boto3
 from botocore.exceptions import WaiterError
 import yaml
 import ovirtsdk4.types as types
+from string_utils import random_string
 
 from ocs_ci.deployment.terraform import Terraform
 from ocs_ci.deployment.vmware import (
@@ -24,8 +25,17 @@ from ocs_ci.ocs.exceptions import (
     NotAllNodesCreated,
     RebootEventNotFoundException,
     ResourceWrongStatusException,
+    VMIndexNotFoundException,
+    VolumePathNotFoundException,
+    UnsupportedOSType,
+    UnavailableResourceException,
+    CommandFailed,
 )
 from ocs_ci.framework import config, merge_dict
+from ocs_ci.ocs.machinepool import (
+    MachinePools,
+    NodeConf,
+)
 from ocs_ci.utility import templating
 from ocs_ci.utility.csr import approve_pending_csr
 from ocs_ci.utility.load_balancer import LoadBalancer
@@ -36,6 +46,7 @@ from ocs_ci.ocs.node import (
     get_node_objs,
     get_typed_worker_nodes,
     get_nodes,
+    get_worker_nodes,
 )
 from ocs_ci.ocs.resources.pvc import get_deviceset_pvs
 from ocs_ci.ocs.resources import pod
@@ -59,6 +70,7 @@ from ocs_ci.utility.utils import (
     run_cmd,
     get_module_ip,
     get_terraform_ignition_provider,
+    get_client_type_by_name,
 )
 from ocs_ci.ocs.node import (
     wait_for_nodes_status,
@@ -93,12 +105,16 @@ class PlatformNodesFactory:
             "ibm_cloud": IBMCloud,
             "vsphere_ipi": VMWareIPINodes,
             "rosa": AWSNodes,
+            "rosa_hcp": ROSAHCPNode,
             "vsphere_upi": VMWareUPINodes,
             "fusion_aas": AWSNodes,
             "hci_baremetal": IBMCloudBMNodes,
+            "kubevirt_vm": KubevirtVMNodes,
+            "ibm_cloud_ipi": IBMCloudIPI,
         }
 
     def get_nodes_platform(self):
+        cluster_name = config.ENV_DATA.get("cluster_name")
         platform = config.ENV_DATA["platform"]
         if platform == constants.VSPHERE_PLATFORM:
             deployment_type = config.ENV_DATA["deployment_type"]
@@ -106,7 +122,20 @@ class PlatformNodesFactory:
                 platform += "_lso"
             elif deployment_type in ("ipi", "upi"):
                 platform += f"_{deployment_type}"
+        elif (
+            config.hci_client_exist()
+            and get_client_type_by_name(cluster_name)
+            == constants.HOSTED_CLUSTER_KUBEVIRT
+        ):
+            platform = "kubevirt_vm"
 
+        if config.ENV_DATA["platform"] == constants.ROSA_HCP_PLATFORM:
+            if config.ENV_DATA["deployment_type"] == "managed_cp":
+                platform = "rosa_hcp"
+
+        if config.ENV_DATA["platform"] == constants.IBMCLOUD_PLATFORM:
+            if config.ENV_DATA["deployment_type"] == "ipi":
+                platform += "_ipi"
         return self.cls_map[platform]()
 
 
@@ -151,6 +180,16 @@ class NodesBase(object):
 
     def attach_volume(self, volume, node):
         raise NotImplementedError("Attach volume functionality is not implemented")
+
+    def create_and_attach_volume(self, node, size, ssd=False):
+        raise NotImplementedError(
+            "Create and attach volume functionality is not implemented"
+        )
+
+    def create_and_attach_volumes(self, node, volume_sizes, ssd=False):
+        raise NotImplementedError(
+            "Create and attach volumes functionality is not implemented"
+        )
 
     def wait_for_volume_attach(self, volume):
         raise NotImplementedError(
@@ -220,6 +259,11 @@ class NodesBase(object):
     def wait_for_nodes_to_stop_or_terminate(self, nodes):
         raise NotImplementedError(
             "wait for nodes to stop or terminate functionality is not implemented"
+        )
+
+    def disable_nodes_network_temporarily(self, nodes, duration=20):
+        raise NotImplementedError(
+            "disable enable node network temporarily functionality is not implemented"
         )
 
 
@@ -434,17 +478,31 @@ class VMWareNodes(NodesBase):
             vm=vm, identifier=volume, key="volume_path", datastore=delete_from_backend
         )
 
-    def create_and_attach_volume(self, node, size):
+    def create_and_attach_volume(self, node, size, ssd=False):
         """
         Create a new volume and attach it to the given VM
 
         Args:
             node (OCS): The OCS object representing the node
             size (int): The size in GB for the new volume
+            ssd (bool): if True, mark disk as SSD
 
         """
         vm = self.get_vms([node])[0]
-        self.vsphere.add_disk(vm, size)
+        self.vsphere.add_disk(vm=vm, size=size, ssd=ssd)
+
+    def create_and_attach_volumes(self, node, volume_sizes, ssd=False):
+        """
+        Create new volumes and attach them to the given VM
+
+        Args:
+            node (OCS): The OCS object representing the node
+            volume_sizes (list): List of the volume sizes in GB to create and attach to the node
+            ssd (bool): if True, mark disk as SSD
+
+        """
+        vm = self.get_vms([node])[0]
+        self.vsphere.add_disks(vm=vm, disk_sizes=volume_sizes, ssd=ssd)
 
     def attach_volume(self, node, volume):
         raise NotImplementedError(
@@ -526,22 +584,51 @@ class VMWareNodes(NodesBase):
         """
         return [self.vsphere.get_vm_by_ip(ip, dc) for ip in node_ips]
 
-    def get_volume_path(self, volume_handle):
+    def get_volume_path(self, volume_handle, node_name=None):
         """
         Fetches the volume path for the volumeHandle
 
         Args:
             volume_handle (str): volumeHandle which exists in PV
+            node_name (str): Node name where PV exists.
 
         Returns:
             str: volume path of PV
 
         """
-        return self.vsphere.get_volume_path(
-            volume_id=volume_handle,
-            datastore_name=self.datastore,
-            datacenter_name=self.datacenter,
-        )
+        if not node_name:
+            return self.vsphere.get_volume_path(
+                volume_id=volume_handle,
+                datastore_name=self.datastore,
+                datacenter_name=self.datacenter,
+            )
+
+    def disable_nodes_network_temporarily(self, nodes, duration=20):
+        """
+        Temporarily disables and re-enables the network interface of a given node.
+
+        Args:
+            node (OCS): The OCS object representing the node.
+            duration (int): Time in seconds to keep the interface disabled. Default is 10.
+        """
+        vms = self.get_vms(nodes)
+        for vm in vms:
+            ip = vm.summary.guest.ipAddress
+
+            if not ip:
+                logger.warning(f"Could not retrieve IP address for node {vm.name}")
+                return
+
+            logger.info(f"Disabling network interface for node: {vm.name} (IP: {ip})")
+            self.vsphere.change_vm_network_state(ip, self.datacenter, connect=False)
+
+            logger.debug(
+                f"Sleeping for {duration} seconds with network disabled on {vm.name}"
+            )
+            time.sleep(duration)
+
+            logger.info(f"Enabling network interface for node: {vm.name} (IP: {ip})")
+            self.vsphere.change_vm_network_state(ip, self.datacenter, connect=True)
 
 
 class AWSNodes(NodesBase):
@@ -784,6 +871,7 @@ class AWSNodes(NodesBase):
             return ebs_volume.attachments
 
         try:
+
             for sample in TimeoutSampler(300, 3, get_volume_attachments, volume):
                 logger.info(f"EBS volume {volume.id} attachments are: {sample}")
                 if sample:
@@ -1991,21 +2079,39 @@ class VSPHEREUPINode(VMWareNodes):
             vm_name (str): The VM name
 
         """
-        if vm_name.startswith("compute-"):
-            module = "compute_vm"
-        else:
-            module = "control_plane_vm"
-        instance = f"{vm_name}.{config.ENV_DATA.get('cluster_name')}.{config.ENV_DATA.get('base_domain')}"
+        module, vm_index = self.get_vm_module_and_index(vm_name)
 
         os.chdir(self.terraform_data_dir)
         logger.info(f"Modifying terraform state file of the removed vm {vm_name}")
-        self.terraform.change_statefile(
-            module=module,
-            resource_type="vsphere_virtual_machine",
-            resource_name="vm",
-            instance=instance,
-        )
+        self.terraform.change_statefile(module=module, vm_index=vm_index)
         os.chdir(self.previous_dir)
+
+    def get_vm_module_and_index(self, vm_name):
+        """
+        Gets the VM module and index for the node
+
+        Args:
+            vm_name (str): VM name
+
+        Returns:
+            tuple: which contains module and vm_index
+
+        """
+        if vm_name.startswith("compute-"):
+            module = "compute_vm"
+            search_str = "compute-"
+        else:
+            module = "control_plane_vm"
+            search_str = "control-plane-"
+
+        # get the VM index
+        pattern = rf"{search_str}(\d+)"
+        match = re.search(pattern, vm_name)
+        if match:
+            vm_index = match.group(1)
+        else:
+            raise VMIndexNotFoundException
+        return module, vm_index
 
     def change_terraform_tfvars_after_remove_vm(self, num_nodes_removed=1):
         """
@@ -2517,8 +2623,41 @@ class VMWareLSONodes(VMWareNodes):
         """
         vm = self.get_vms([node])[0]
         self.vsphere.remove_disk(
-            vm=vm, identifier=volume, key="disk_name", datastore=delete_from_backend
+            vm=vm, identifier=volume, key="volume_path", datastore=delete_from_backend
         )
+
+    def get_volume_path(self, volume_handle, node_name=None):
+        """
+        Fetches the volume path for the volumeHandle
+
+        Args:
+            volume_handle (str): volumeHandle which exists in PV
+            node_name (str): Node name where PV exists
+
+        Returns:
+            str: volume path of PV
+
+        """
+        volume_path = None
+        vm = self.vsphere.get_vm_in_pool_by_name(
+            name=node_name,
+            dc=config.ENV_DATA["vsphere_datacenter"],
+            cluster=config.ENV_DATA["vsphere_cluster"],
+            pool=config.ENV_DATA["cluster_name"],
+        )
+        disks = self.vsphere.get_disks(vm)
+        for each_disk in disks:
+            disk_wwn = each_disk["wwn"].replace("-", "")
+            if disk_wwn.lower() in volume_handle:
+                volume_path = each_disk["fileName"]
+                logger.info(
+                    f"Volume path for {volume_handle} is `{volume_path}` on node {node_name}"
+                )
+                break
+        if volume_path:
+            return volume_path
+        else:
+            raise VolumePathNotFoundException
 
 
 class RHVNodes(NodesBase):
@@ -2691,6 +2830,28 @@ class IBMCloud(NodesBase):
 
         super(IBMCloud, self).__init__()
         self.ibmcloud = ibmcloud.IBMCloud()
+
+    def stop_nodes(self, nodes, wait=True):
+        """
+        Stop nodes on IBM Cloud
+
+        Args:
+            nodes (list): The OCS objects of the nodes
+            wait (bool): True for waiting the instances to stop, False otherwise
+
+        """
+        self.ibmcloud.stop_nodes(nodes, wait=wait)
+
+    def start_nodes(self, nodes, wait=True):
+        """
+        Start nodes on IBM Cloud
+
+        Args:
+            nodes (list): The OCS objects of the nodes
+            wait (bool): True for waiting the instances to start, False otherwise
+
+        """
+        self.ibmcloud.start_nodes(nodes, wait=wait)
 
     def restart_nodes(self, nodes, timeout=900, wait=True):
         """
@@ -3115,9 +3276,28 @@ class IBMCloudBMNodes(NodesBase):
         self.ibmcloud_bm.stop_machines(machines)
         if wait:
             node_names = [n.name for n in nodes]
-            wait_for_nodes_status(
-                node_names, constants.NODE_NOT_READY, timeout=180, sleep=5
-            )
+            try:
+                wait_for_nodes_status(
+                    node_names, constants.NODE_NOT_READY, timeout=180, sleep=5
+                )
+            except CommandFailed as err:
+                # Consider the situation where the cluster is not accessible after nodes are down,
+                # example: when all the nodes are off
+                if "Unable to connect to the server" in str(err):
+                    logger.info(
+                        f"Unable to connect to the server to check the nodes NotReady status. "
+                        f"Trying alternate method to verify nodes {node_names} has stopped"
+                    )
+                    machines_not_off = (
+                        self.ibmcloud_bm.get_machines_that_are_not_off_from_sensor_data(
+                            machines
+                        )
+                    )
+                    assert not (
+                        machines_not_off
+                    ), f"Nodes corresponding to the machines {machines_not_off} are not off."
+                else:
+                    raise
 
     def start_nodes(self, nodes, wait=True):
         """
@@ -3198,3 +3378,321 @@ class IBMCloudBMNodes(NodesBase):
 
         """
         raise NotImplementedError("terminate nodes functionality is not implemented")
+
+
+class KubevirtVMNodes(NodesBase):
+    """
+    KubeVirt VM Nodes class
+
+    """
+
+    def __init__(self, cluster_name=None):
+        super(KubevirtVMNodes, self).__init__()
+        from ocs_ci.utility import kubevirt_vm
+
+        cluster_name = cluster_name or config.ENV_DATA["cluster_name"]
+        self.kubevirt_vm = kubevirt_vm.KubevirtVM(cluster_name)
+
+    def get_kubevirt_vms(self, nodes):
+        """
+        Get the kubevirt VMs associated with the given nodes
+
+        Args:
+            nodes (list): The OCS objects of the nodes
+
+        Returns:
+            list: List of dictionaries. List of the kubevirt VMs associated with the given nodes
+
+        """
+        node_names = [n.name for n in nodes]
+        return self.kubevirt_vm.get_kubevirt_vms_by_names(node_names)
+
+    def stop_nodes(self, nodes, wait=True):
+        """
+        Stop nodes
+
+        Args:
+            nodes (list): The OCS objects of the nodes
+            wait (bool): If True, wait for the nodes to be in a NotReady state. False, otherwise
+
+        """
+        vms = self.get_kubevirt_vms(nodes)
+        self.kubevirt_vm.stop_kubevirt_vms(vms, wait=wait)
+
+    def start_nodes(self, nodes, wait=True):
+        """
+        Start nodes
+
+        Args:
+            nodes (list): The OCS objects of the nodes
+            wait (bool): If True, wait for the nodes to be ready. False, otherwise
+
+        """
+        vms = self.get_kubevirt_vms(nodes)
+        self.kubevirt_vm.start_kubevirt_vms(vms, wait=wait)
+
+    def restart_nodes(self, nodes, wait=True):
+        """
+        Restart nodes
+
+        Args:
+            nodes (list): The OCS objects of the nodes
+            wait (bool): If True, wait for the nodes to be ready. False, otherwise
+
+        """
+        vms = self.get_kubevirt_vms(nodes)
+        self.kubevirt_vm.restart_kubevirt_vms(vms, wait=wait)
+
+    def restart_nodes_by_stop_and_start(self, nodes, wait=True, force=True):
+        """
+        Restart the nodes by stop and start
+
+        Args:
+            nodes (list): The OCS objects of the nodes
+            wait (bool): If True, wait for the nodes to be ready. False, otherwise.
+            force (bool): If True, it will force restarting the nodes. False, otherwise.
+                Default value is True.
+
+        """
+        vms = self.get_kubevirt_vms(nodes)
+        self.kubevirt_vm.restart_kubevirt_vms_by_stop_and_start(
+            vms, wait=wait, force=force
+        )
+
+    def restart_nodes_by_stop_and_start_teardown(self):
+        """
+        Start the nodes in a NotReady state
+
+        """
+        self.kubevirt_vm.restart_kubevirt_vms_by_stop_and_start_teardown()
+
+    def create_nodes(self, node_conf, node_type, num_nodes):
+        """
+        Create nodes
+
+        """
+        raise NotImplementedError("Create nodes functionality not implemented")
+
+    def terminate_nodes(self, nodes, wait=True):
+        """
+        Terminate nodes
+
+        """
+        raise NotImplementedError("Terminate nodes functionality not implemented")
+
+
+class IBMCloudIPI(object):
+    """
+    An IBM Cloud IPI class for node related operations
+    Should be inherited by specific platform classes
+    """
+
+    def __init__(self):
+        from ocs_ci.utility import ibmcloud
+
+        super(IBMCloudIPI, self).__init__()
+        self.ibmcloud_ipi = ibmcloud.IBMCloudIPI()
+
+    def get_data_volumes(self):
+        pvs = get_deviceset_pvs()
+        s = [
+            pv.get().get("spec").get("csi").get("volumeAttributes").get("volumeId")
+            for pv in pvs
+        ]
+        logger.info(s)
+        return s
+
+    def get_node_by_attached_volume(self, volume):
+        volume_kube_path = f"kubernetes.io/csi/vpc.block.csi.ibm.io^{volume}"
+        all_nodes = get_node_objs(get_worker_nodes())
+        for node in all_nodes:
+            for volume in node.data["status"]["volumesAttached"]:
+                if volume_kube_path in volume.values():
+                    return node
+
+    def stop_nodes(self, nodes, force=True):
+        self.ibmcloud_ipi.stop_nodes(nodes=nodes, force=force)
+
+    def start_nodes(self, nodes):
+        self.ibmcloud_ipi.start_nodes(nodes=nodes)
+
+    def restart_nodes(self, nodes, wait=True):
+        self.ibmcloud_ipi.restart_nodes(nodes=nodes, wait=wait)
+
+    def restart_nodes_by_stop_and_start(self, nodes, force=True):
+        self.ibmcloud_ipi.restart_nodes_by_stop_and_start(nodes=nodes, force=force)
+
+    def detach_volume(self, volume, node=None, delete_from_backend=True):
+        self.ibmcloud_ipi.detach_volume(volume=volume, node=node)
+
+    def attach_volume(self, volume, node):
+        self.ibmcloud_ipi.attach_volume(volume=volume, node=node)
+
+    def wait_for_volume_attach(self, volume):
+        self.ibmcloud_ipi.wait_for_volume_attach(volume=volume)
+
+    def restart_nodes_by_stop_and_start_teardown(self):
+        self.ibmcloud_ipi.restart_nodes_by_stop_and_start_force()
+
+    def create_and_attach_nodes_to_cluster(self, node_conf, node_type, num_nodes):
+        """
+        Create nodes and attach them to cluster
+        Use this function if you want to do both creation/attachment in
+        a single call
+        Args:
+            node_conf (dict): of node configuration
+            node_type (str): type of node to be created RHCOS/RHEL
+            num_nodes (int): Number of node instances to be created
+        """
+        node_list = self.create_nodes(node_conf, node_type, num_nodes)
+        self.attach_nodes_to_cluster(node_list)
+
+    def create_nodes(self, node_conf, node_type, num_nodes):
+        raise NotImplementedError("Create nodes functionality not implemented")
+
+    def attach_nodes_to_cluster(self, node_list):
+        raise NotImplementedError(
+            "attach nodes to cluster functionality is not implemented"
+        )
+
+    def read_default_config(self, default_config_path):
+        """
+        Commonly used function to read default config
+        Args:
+            default_config_path (str): Path to default config file
+        Returns:
+            dict: of default config loaded
+        """
+        assert os.path.exists(default_config_path), "Config file doesnt exists"
+
+        with open(default_config_path) as f:
+            default_config_dict = yaml.safe_load(f)
+
+        return default_config_dict
+
+    def terminate_nodes(self, nodes, wait=True):
+        self.ibmcloud_ipi.terminate_nodes(nodes=nodes, wait=wait)
+
+    def wait_for_nodes_to_stop(self, nodes):
+        raise NotImplementedError(
+            "wait for nodes to stop functionality is not implemented"
+        )
+
+    def wait_for_nodes_to_terminate(self, nodes):
+        raise NotImplementedError(
+            "wait for nodes to terminate functionality is not implemented"
+        )
+
+    def wait_for_nodes_to_stop_or_terminate(self, nodes):
+        raise NotImplementedError(
+            "wait for nodes to stop or terminate functionality is not implemented"
+        )
+
+
+class ROSAHCPNode(AWSNodes):
+    """
+    ROSA HCP Nodes class
+
+    """
+
+    def __init__(self, node_conf=None, node_type=None):
+        self.node_conf = node_conf
+        self.node_type = node_type
+        super(ROSAHCPNode, self).__init__()
+
+    def create_and_attach_nodes_to_cluster(
+        self, node_conf, node_type=constants.RHCOS, num_nodes=None
+    ):
+        """
+        Create nodes and attach them to cluster
+        Use this function if you want to do both creation/attachment in a single call
+        (attachment is skipped due to AWSNodes logic for non-"upi" deployment)
+
+        Args:
+            node_conf (dict): node configuration - custom dict that we use in rosa create/edit machinepool
+            e.g.
+            {'machinepool_id': '<mp_name>',
+            'instance_type': '<m5.xlarge>',
+            'subnet': '<subnet_id>',
+            'availability_zone': '<az>',
+            'disk_size': <300Gb def for m5.xlarge>,
+            'enable_autoscaling': <False by default>,
+            'labels': '<coma separated string of key=value>',
+            'multi-availability-zone': <False by default>,
+            'tags': '<coma separated string of key=value:ScheduleType>',
+            }
+            node_type (str): type of node to be created
+            num_nodes (int): Number of node instances to be created
+
+        """
+        if node_type != constants.RHCOS:
+            raise UnsupportedOSType(
+                "Only RHCOS is supported for ROSA HCP. Check up "
+                "https://docs.redhat.com/en/documentation/red_hat_openshift_service_on_aws/4/html/"
+                "tutorials/getting-started-with-rosa#underlying-node-operating-system"
+            )
+
+        node_conf = node_conf or {}
+
+        node_list = self.create_nodes(node_conf, node_type, num_nodes)
+        # attach nodes will be skipped due to AWSNodes logic for non-"upi" deployment
+        self.attach_nodes_to_cluster(node_list)
+
+    def create_nodes(self, node_conf, node_type, num_nodes):
+        """
+        Create nodes by creating or updating a machine pool.
+
+        Args:
+            node_conf (dict): Node configuration for machine pool.
+            node_type (str): Type of node to be created.
+            num_nodes (int): Number of node instances to create.
+
+        Returns:
+            list: List of (ROSAHCPNode) objects created by this method.
+        """
+        node_list = []
+        cluster_name = config.ENV_DATA.get("cluster_name")
+        node_conf = NodeConf(**node_conf)
+        machinepool_id = node_conf.get("machinepool_id")
+        machine_pools = MachinePools(cluster_name=cluster_name)
+        machine_pool = machine_pools.filter(
+            machinepool_id=machinepool_id,
+            instance_type=node_conf.get("instance_type"),
+            pick_first=True,
+        )
+
+        if (
+            machine_pool.exist
+            and node_conf.get("instance_type")
+            and machine_pool.instance_type != node_conf.get("instance_type")
+        ):
+            raise UnavailableResourceException(
+                f"MachinePool '{machinepool_id}' "
+                "found with different instance type. "
+                "The test brakes logic, aborting test."
+            )
+        elif machine_pool.exist and machine_pool.instance_type == node_conf.get(
+            "instance_type"
+        ):
+            logger.info(f"MachinePool '{machinepool_id}' found. Updating MachinePool")
+            node_conf["replicas"] = machine_pool.replicas + num_nodes
+            machine_pools.edit_machine_pool(node_conf, wait_ready=True)
+        elif not machine_pool.exist:
+            logger.info(
+                f"MachinePool '{machinepool_id}' not found. Creating new MachinePool"
+            )
+            # create random machinepool name if not provided
+            node_conf["machinepool_id"] = machinepool_id or "mp_" + random_string(3)
+            node_conf["instance_type"] = (
+                node_conf.get("instance_type")
+                or config.ENV_DATA["worker_instance_type"]
+            )
+            node_conf["replicas"] = num_nodes
+            machine_pools.create_machine_pool(node_conf)
+
+        node_conf["zone"] = self.az.get_zone_number()
+        for _ in range(num_nodes):
+            # adding created nodes to the list of a nodes returned by this method
+            node_list.append(ROSAHCPNode(node_conf, constants.RHCOS))
+
+        return node_list

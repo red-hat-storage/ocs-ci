@@ -1,6 +1,7 @@
 """
 This module contains functionality required for CNV installation.
 """
+
 import io
 import os
 import logging
@@ -12,7 +13,7 @@ import tarfile
 
 from ocs_ci.framework import config
 from ocs_ci.ocs.resources.ocs import OCS
-from ocs_ci.ocs.ocp import OCP
+from ocs_ci.ocs.ocp import OCP, switch_to_default_rook_cluster_project
 from ocs_ci.ocs.resources.packagemanifest import PackageManifest
 from ocs_ci.ocs.constants import (
     CNV_NAMESPACE_YAML,
@@ -23,11 +24,15 @@ from ocs_ci.ocs.constants import (
 )
 from ocs_ci.utility import templating
 from ocs_ci.ocs import constants
-from ocs_ci.utility.utils import run_cmd
+from ocs_ci.utility.utils import (
+    run_cmd,
+    exec_cmd,
+)
 from ocs_ci.ocs import exceptions
 from ocs_ci.ocs.resources.catalog_source import CatalogSource
 from ocs_ci.ocs.resources.install_plan import wait_for_install_plan_and_approve
 from ocs_ci.ocs.resources.csv import CSV, get_csvs_start_with_prefix
+from ocs_ci.utility.retry import retry
 from ocs_ci.utility.utils import TimeoutSampler
 from ocs_ci.ocs import ocp
 from ocs_ci.ocs.resources.pod import wait_for_pods_to_be_running
@@ -77,7 +82,6 @@ class CNVInstaller(object):
 
         Raises:
             CommandFailed: If the 'oc create' command fails.
-
         """
         try:
             logger.info(f"Creating namespace {self.namespace} for CNV resources")
@@ -116,8 +120,16 @@ class CNVInstaller(object):
         logger.info("Creating OperatorGroup for CNV")
         self.create_cnv_operatorgroup()
         cnv_subscription_yaml_data = templating.load_yaml(CNV_SUBSCRIPTION_YAML)
-        cnv_channel_version = config.DEPLOYMENT.get("ocs_csv_channel")[-4:]
-        cnv_sub_channel = f"nightly-{cnv_channel_version}"
+
+        if config.DEPLOYMENT.get("cnv_latest_stable"):
+            cnv_subscription_yaml_data["spec"][
+                "source"
+            ] = constants.OPERATOR_CATALOG_SOURCE_NAME
+            cnv_sub_channel = "stable"
+        else:
+            cnv_channel_version = config.DEPLOYMENT.get("ocs_csv_channel")[-4:]
+            cnv_sub_channel = f"nightly-{cnv_channel_version}"
+
         cnv_subscription_yaml_data["spec"]["channel"] = f"{cnv_sub_channel}"
         cnv_subscription_manifest = tempfile.NamedTemporaryFile(
             mode="w+", prefix="cnv_subscription_manifest", delete=False
@@ -126,13 +138,15 @@ class CNVInstaller(object):
             cnv_subscription_yaml_data, cnv_subscription_manifest.name
         )
         logger.info("Creating subscription for CNV operator")
-        run_cmd(f"oc create -f {cnv_subscription_manifest.name}")
+        retry(exceptions.CommandFailed, tries=25, delay=60, backoff=1)(run_cmd)(
+            f"oc apply -f {cnv_subscription_manifest.name}"
+        )
         self.wait_for_the_resource_to_discover(
-            kind=constants.SUBSCRIPTION,
+            kind=constants.SUBSCRIPTION_WITH_ACM,
             namespace=self.namespace,
             resource_name=constants.KUBEVIRT_HYPERCONVERGED,
         )
-        wait_for_install_plan_and_approve(self.namespace)
+        wait_for_install_plan_and_approve(self.namespace, timeout=1500)
         cnv_package_manifest = PackageManifest(
             resource_name=constants.KUBEVIRT_HYPERCONVERGED,
             subscription_plan_approval="Manual",
@@ -140,7 +154,7 @@ class CNVInstaller(object):
         )
         # Wait for package manifest is ready
         cnv_package_manifest.wait_for_resource(
-            resource_name=constants.KUBEVIRT_HYPERCONVERGED, timeout=300
+            resource_name=constants.KUBEVIRT_HYPERCONVERGED, timeout=600
         )
         # csv sometimes takes more time to discover
         for csv in TimeoutSampler(
@@ -154,7 +168,7 @@ class CNVInstaller(object):
                 break
         csv_name = csv[0]["metadata"]["name"]
         csv_obj = CSV(resource_name=csv_name, namespace=self.namespace)
-        csv_obj.wait_for_phase(phase="Succeeded", timeout=720)
+        csv_obj.wait_for_phase(phase="Succeeded", timeout=900)
 
     def wait_for_the_resource_to_discover(self, kind, namespace, resource_name):
         """
@@ -164,7 +178,6 @@ class CNVInstaller(object):
             kind (str): The type of the resource to wait for.
             namespace (str): The namespace in which to wait for the resource.
             resource_name (str): The name of the resource to wait for.
-
         """
         logger.info(f"Waiting for resource {kind} to be discovered")
         for sample in TimeoutSampler(300, 10, ocp.OCP, kind=kind, namespace=namespace):
@@ -182,7 +195,6 @@ class CNVInstaller(object):
 
         Raises:
             TimeoutExpiredError: If the HyperConverged resource does not become available within the specified time.
-
         """
         logger.info("Deploying the HyperConverged CR")
         hyperconverged_yaml_file = templating.load_yaml(CNV_HYPERCONVERGED_YAML)
@@ -217,7 +229,9 @@ class CNVInstaller(object):
         useEmulation.
 
         """
-        if config.ENV_DATA["platform"].lower() == "baremetal" and config.DEPLOYMENT.get(
+        if config.ENV_DATA[
+            "platform"
+        ].lower() in constants.BAREMETAL_PLATFORMS and config.DEPLOYMENT.get(
             "local_storage"
         ):
             logger.info("Skipping enabling software emulation")
@@ -233,47 +247,138 @@ class CNVInstaller(object):
             )
             logger.info("successfully enabled software emulation on the cluster")
 
-    def post_install_verification(self):
+    def cnv_hyperconverged_installed(self):
         """
-        Performs CNV post-installation verification.
+        Check if CNV HyperConverged is already installed.
+        Returns:
+             bool: True if CNV HyperConverged is installed, False otherwise
+        """
+        ocp = OCP(kind=constants.ROOK_OPERATOR, namespace=self.namespace)
+        return ocp.check_resource_existence(
+            timeout=12, should_exist=True, resource_name=constants.CNV_OPERATORNAME
+        )
 
+    def post_install_verification(self, raise_exception=False):
+        """
+        Performs CNV post-installation verification, with raise_exception = False may be used safely to run on
+        clusters with CNV installed or not installed.
+
+        Args:
+            raise_exception: If True, allow function to fail the job and raise an exception. If false, return False
+        instead of raising an exception.
+
+        Returns:
+            bool: True if the verification conditions are met, False otherwise
         Raises:
-            TimeoutExpiredError: If the verification conditions are not met within the timeout.
-            HyperConvergedHealthException: If the HyperConverged cluster health is not healthy.
-
+            TimeoutExpiredError: If the verification conditions are not met within the timeout
+            and raise_exception is True.
+            HyperConvergedHealthException: If the HyperConverged cluster health is not health
+            and raise_exception is True.
+            ResourceNotFoundError if the namespace does not exist and raise_exception is True.
+            ResourceWrongStatusException if the nodes are not ready, verification fails and raise_exception
+            is True.
         """
         # Validate that all the nodes are ready and CNV pods are running
         logger.info("Validate that all the nodes are ready and CNV pods are running")
-        wait_for_nodes_status()
-        wait_for_pods_to_be_running(namespace=self.namespace)
+
+        try:
+            OCP(kind="namespace").get(self.namespace)
+        except exceptions.CommandFailed:
+            if raise_exception:
+                raise exceptions.ResourceNotFoundError(
+                    f"Namespace {self.namespace} does not exist"
+                )
+            else:
+                logger.warning(f"Namespace {self.namespace} does not exist")
+                return False
+
+        try:
+            wait_for_nodes_status()
+            logger.info("All the nodes are in 'Ready' state")
+        except exceptions.ResourceWrongStatusException:
+            if raise_exception:
+                raise
+            else:
+                logger.warning("Not all nodes are in 'Ready' state")
+                return False
+
+        if wait_for_pods_to_be_running(namespace=self.namespace, timeout=600):
+            logger.info("All CNV pods are running")
+        else:
+            if raise_exception:
+                raise exceptions.ResourceWrongStatusException(
+                    "Not all CNV pods are running"
+                )
+            else:
+                logger.warning("Not all CNV pods are running")
+                return False
 
         # Verify that all the deployments in the openshift-cnv namespace to be in the 'Available' condition
         logger.info(f"Verify all the deployments status in {self.namespace}")
         ocp = OCP(kind="deployments", namespace=self.namespace)
-        result = ocp.wait(
-            condition="Available", timeout=600, selector=constants.CNV_SELECTOR
-        )
-        if not result:
-            err_str = "Timeout occurred, or one or more deployments did not meet condition: Available."
-            raise exceptions.TimeoutExpiredError(err_str)
+
+        try:
+            ocp.wait(
+                condition="Available", timeout=600, selector=constants.CNV_SELECTOR
+            )
+        except exceptions.TimeoutExpiredError:
+            if raise_exception:
+                raise exceptions.TimeoutExpiredError(
+                    "Timeout occurred, one or more deployments did not meet condition: Available"
+                )
+            else:
+                logger.warning(
+                    "Timeout occurred, or one or more deployments did not meet condition: Available"
+                )
+                return False
+
         logger.info(
             f"All the deployments in the {self.namespace} namespace met condition: Available"
         )
 
         # validate that HyperConverged systemHealthStatus is healthy
+        return self.check_hyperconverged_healthy(raise_exception=raise_exception)
+
+    def check_hyperconverged_healthy(self, raise_exception=True):
+        """
+        Validate that HyperConverged systemHealthStatus is healthy.
+        Method throws an exception if the status is not healthy.
+
+        Args:
+            raise_exception: If True, allow the verification to fail the job and raise an exception if the
+            verification fails, otherwise return False.
+        Returns:
+            bool: True if the status is healthy, False otherwise.
+        """
         logger.info("Validate that HyperConverged systemHealthStatus is healthy")
         ocp = OCP(kind=constants.HYPERCONVERGED, namespace=self.namespace)
-        health = (
-            ocp.get(resource_name=constants.KUBEVIRT_HYPERCONVERGED)
-            .get("status")
-            .get("systemHealthStatus")
-        )
-        if health == "healthy":
-            logger.info("HyperConverged cluster health is healthy.")
-        else:
-            raise exceptions.HyperConvergedHealthException(
-                f"HyperConverged cluster is not healthy. Health: {health}"
+
+        try:
+            health = (
+                ocp.get(resource_name=constants.KUBEVIRT_HYPERCONVERGED)
+                .get("status")
+                .get("systemHealthStatus")
             )
+            if health == "healthy":
+                logger.info("HyperConverged cluster health is healthy.")
+                return True
+            elif health != "healthy" and raise_exception:
+                raise exceptions.HyperConvergedHealthException(
+                    f"HyperConverged cluster is not healthy. Health: {health}"
+                )
+            else:
+                logger.warning(
+                    f"HyperConverged cluster is not healthy. Health: {health}"
+                )
+                return False
+        except Exception as ef:
+            if raise_exception:
+                raise exceptions.HyperConvergedHealthException(
+                    f"Failed to get the HyperConverged systemHealthStatus. Error: {ef}"
+                )
+            else:
+                logger.warning("Failed to get the HyperConverged systemHealthStatus")
+                return False
 
     def get_virtctl_console_spec_links(self):
         """
@@ -370,10 +475,18 @@ class CNVInstaller(object):
         logger.info("Performing virtctl binary compatibility check...")
         os_type = platform.system()
         os_machine_type = platform.machine()
+        if os_type == "Darwin":
+            os_type = "mac"
+        if os_machine_type == "arm64":
+            os_machine_type = "arm 64"
         virtctl_download_url = self.get_virtctl_download_url(
             os_type=os_type, os_machine_type=os_machine_type
         )
-        os_machine_type = "amd64" if os_machine_type == "x86_64" else os_machine_type
+        os_machine_type = (
+            "amd64"
+            if os_machine_type == "x86_64"
+            else "arm64" if os_machine_type == "arm 64" else os_machine_type
+        )
         if (
             not virtctl_download_url
             or (os_type.lower() not in virtctl_download_url)
@@ -397,6 +510,10 @@ class CNVInstaller(object):
         """
         os_type = platform.system()
         os_machine_type = platform.machine()
+        if os_type == "Darwin":
+            os_type = "mac"
+        if os_machine_type == "arm64":
+            os_machine_type = "arm 64"
         self.check_virtctl_compatibility()
 
         # Prepare bin directory for virtctl
@@ -437,7 +554,9 @@ class CNVInstaller(object):
         )
         try:
             # Download the archive
-            response = requests.get(virtctl_download_url, verify=False)
+            response = retry(requests.exceptions.RequestException, tries=10, delay=30)(
+                requests.get
+            )(virtctl_download_url, verify=False)
             response.raise_for_status()
         except requests.exceptions.RequestException as e:
             logger.error(
@@ -492,14 +611,29 @@ class CNVInstaller(object):
         archive_file_binary_object.extractall(path=bin_dir)
         logger.info(f"virtctl binary extracted successfully to path:{bin_dir}")
 
-    def deploy_cnv(self):
+    def deploy_cnv(self, check_cnv_deployed=False, check_cnv_ready=False):
         """
         Installs CNV enabling software emulation.
 
+        Args:
+            check_cnv_deployed (bool): If True, check if CNV is already deployed. If so, skip the deployment.
+            check_cnv_ready (bool): If True, check if CNV is ready. If so, skip the deployment.
         """
+        if check_cnv_deployed:
+            if self.cnv_hyperconverged_installed():
+                logger.info("CNV operator is already deployed, skipping the deployment")
+                return
+
+        if check_cnv_ready:
+            if self.post_install_verification(raise_exception=False):
+                logger.info("CNV operator ready, skipping the deployment")
+                return
+
         logger.info("Installing CNV")
-        # Create CNV catalog source
-        self.create_cnv_catalog_source()
+        # we create catsrc with nightly builds only if config.DEPLOYMENT does not have cnv_latest_stable
+        if not config.DEPLOYMENT.get("cnv_latest_stable"):
+            # Create CNV catalog source
+            self.create_cnv_catalog_source()
         # Create openshift-cnv namespace
         self.create_cnv_namespace()
         # create CNV subscription
@@ -512,3 +646,154 @@ class CNVInstaller(object):
         self.enable_software_emulation()
         # Download and extract the virtctl binary to bin_dir
         self.download_and_extract_virtctl_binary()
+
+    def disable_multicluster_engine(self):
+        """
+        Disable multicluster engine on cluster
+        """
+        logger.info("Disabling multicluster engine")
+        cmd = (
+            "oc patch mce multiclusterengine "
+            '-p \'{"spec":{"overrides":{"components":['
+            '{"enabled":false, "name":"hypershift"},'
+            '{"enabled":false, "name":"hypershift-local-hosting"}, '
+            '{"enabled":false, "name":"local-cluster"}'
+            "]}}}' --type=merge"
+        )
+        cmd_res = exec_cmd(cmd, shell=True)
+        if cmd_res.returncode != 0:
+            logger.error(f"Failed to disable multicluster engine\n{cmd_res.stderr}")
+            return
+        logger.info(cmd_res.stdout.decode("utf-8").splitlines())
+
+    def check_if_any_vm_and_vmi(self, namespace=None):
+        """
+        Checks if any VMs and VM instances are running
+
+        Args:
+            namespace (str): namespace to check
+
+        Returns:
+            True if any VMs or VMi else False
+
+        """
+
+        vm_obj = OCP(kind=constants.VIRTUAL_MACHINE, namespace=namespace)
+        vmi_obj = OCP(kind=constants.VIRTUAL_MACHINE_INSTANCE, namespace=namespace)
+
+        return vm_obj.get(
+            out_yaml_format=False, all_namespaces=not namespace, dont_raise=True
+        ) or vmi_obj.get(
+            out_yaml_format=False, all_namespaces=not namespace, dont_raise=True
+        )
+
+    def remove_hyperconverged(self):
+        """
+        Remove HyperConverged CR
+
+        """
+        hyperconverged_obj = OCP(
+            kind=constants.HYPERCONVERGED,
+            resource_name=constants.KUBEVIRT_HYPERCONVERGED,
+            namespace=self.namespace,
+        )
+        hyperconverged_obj.delete(resource_name=constants.KUBEVIRT_HYPERCONVERGED)
+        logger.info(
+            f"Deleted {constants.HYPERCONVERGED} {constants.KUBEVIRT_HYPERCONVERGED}"
+        )
+
+    def remove_cnv_subscription(self):
+        """
+        Remove CNV subscription
+
+        """
+        cnv_sub = OCP(
+            kind=constants.SUBSCRIPTION,
+            resource_name=constants.KUBEVIRT_HYPERCONVERGED,
+            namespace=self.namespace,
+        )
+        cnv_sub.delete(resource_name=constants.KUBEVIRT_HYPERCONVERGED)
+        logger.info(f"Deleted subscription {constants.KUBEVIRT_HYPERCONVERGED}")
+
+    def remove_cnv_csv(self):
+        """
+        Remove CNV ClusterServiceVersion
+
+        """
+        cnv_csv = OCP(
+            kind=constants.CLUSTER_SERVICE_VERSION,
+            selector=constants.CNV_SELECTOR,
+            namespace=self.namespace,
+        )
+        cnv_csv.delete(resource_name=cnv_csv.get()["items"][0]["metadata"]["name"])
+        logger.info(f"Deleted ClusterServiceVersion {constants.CNV_OPERATORNAME}")
+
+    def remove_cnv_operator(self):
+        """
+        Remove CNV operator
+
+        """
+        cnv_operator = OCP(
+            kind=constants.OPERATOR_KIND, resource_name=constants.CNV_OPERATORNAME
+        )
+        cnv_operator.delete(resource_name=constants.CNV_OPERATORNAME)
+        logger.info(f"Deleted operator {constants.CNV_OPERATORNAME}")
+
+    def remove_crds(self):
+        """
+        Remove openshift virtualization CRDs
+
+        """
+        OCP().exec_oc_cmd(
+            command=f"delete crd -n {self.namespace} -l {constants.CNV_SELECTOR}"
+        )
+        logger.info("Deleted all the openshift virtualization CRDs")
+
+    def remove_namespace(self):
+        """
+        Remove openshift virtualization namespace
+
+        """
+        cnv_namespace = OCP()
+        switch_to_default_rook_cluster_project()
+        cnv_namespace.delete_project(constants.CNV_NAMESPACE)
+        logger.info(f"Deleted the namespace {constants.CNV_NAMESPACE}")
+
+    def uninstall_cnv(self, check_cnv_installed=True):
+        """
+        Uninstall CNV deployment
+
+        Args:
+            check_cnv_installed (bool): True if want to check if CNV installed
+
+        """
+        if check_cnv_installed:
+            if not self.cnv_hyperconverged_installed():
+                logger.info("CNV is not installed, skipping the cleanup...")
+                return
+
+        assert not self.check_if_any_vm_and_vmi(), (
+            "Vm or Vmi instances are found in the cluster,"
+            "Please make sure all VMs and VM instances are removed"
+        )
+        logger.info(
+            "No VM or VM instances are found in the cluster, proceeding with the uninstallation"
+        )
+
+        logger.info("Removing the virtualization hyperconverged")
+        self.remove_hyperconverged()
+
+        logger.info("Removing the virtualization subscription")
+        self.remove_cnv_subscription()
+
+        logger.info("Removing the virtualization CSV")
+        self.remove_cnv_csv()
+
+        logger.info("Removing the virtualization Operator")
+        self.remove_cnv_operator()
+
+        logger.info("Removing the namespace")
+        self.remove_namespace()
+
+        logger.info("Removing the openshift virtualization CRDs")
+        self.remove_crds()

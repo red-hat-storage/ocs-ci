@@ -6,6 +6,7 @@ import re
 
 import tempfile
 from time import sleep
+import time
 
 import boto3
 from botocore.client import ClientError
@@ -26,7 +27,12 @@ from ocs_ci.ocs.exceptions import (
     UnsupportedPlatformError,
 )
 from ocs_ci.ocs.ocp import OCP
-from ocs_ci.ocs.resources.pod import get_pods_having_label, Pod
+from ocs_ci.ocs.resources.pod import (
+    get_noobaa_pods,
+    get_pods_having_label,
+    Pod,
+    wait_for_pods_to_be_running,
+)
 from ocs_ci.utility import templating, version
 from ocs_ci.utility.retry import retry
 from ocs_ci.utility.utils import (
@@ -72,82 +78,101 @@ class MCG:
         """
         Constructor for the MCG class
         """
-        self.namespace = config.ENV_DATA["cluster_namespace"]
-        self.operator_pod = Pod(
-            **get_pods_having_label(
-                constants.NOOBAA_OPERATOR_POD_LABEL, self.namespace
-            )[0]
-        )
-        self.core_pod = Pod(
-            **get_pods_having_label(constants.NOOBAA_CORE_POD_LABEL, self.namespace)[0]
-        )
-        wait_for_resource_state(
-            resource=self.operator_pod, state=constants.STATUS_RUNNING, timeout=300
-        )
-
-        if (
-            not os.path.isfile(constants.NOOBAA_OPERATOR_LOCAL_CLI_PATH)
-            or self.get_mcg_cli_version().minor
-            != version.get_semantic_ocs_version_from_config().minor
-        ):
-            logger.info(
-                "The expected MCG CLI binary could not be found,"
-                " downloading the expected version"
+        with config.RunWithProviderConfigContextIfAvailable():
+            self.namespace = config.ENV_DATA["cluster_namespace"]
+            self.operator_pod = Pod(
+                **get_pods_having_label(
+                    constants.NOOBAA_OPERATOR_POD_LABEL, self.namespace
+                )[0]
             )
-            retrieve_cli_binary(cli_type="mcg")
-
-        """
-        The certificate will be copied on each mcg_obj instantiation since
-        the process is so light and quick, that the time required for the redundant
-        copy is neglible in comparison to the time a hash comparison will take.
-        """
-        retrieve_default_ingress_crt()
-
-        get_noobaa = OCP(kind="noobaa", namespace=self.namespace).get()
-
-        self.s3_endpoint = (
-            get_noobaa.get("items")[0]
-            .get("status")
-            .get("services")
-            .get("serviceS3")
-            .get("externalDNS")[0]
-        )
-        self.s3_internal_endpoint = (
-            get_noobaa.get("items")[0]
-            .get("status")
-            .get("services")
-            .get("serviceS3")
-            .get("internalDNS")[0]
-        )
-        self.mgmt_endpoint = (
-            get_noobaa.get("items")[0]
-            .get("status")
-            .get("services")
-            .get("serviceMgmt")
-            .get("externalDNS")[0]
-        ) + "/rpc"
-        self.region = config.ENV_DATA["region"]
-
-        noobaa_cr_services = get_noobaa.get("items")[0].get("status").get("services")
-        self.data_to_mask = flatten_multilevel_dict(noobaa_cr_services)
-
-        self.update_s3_creds()
-
-        if config.ENV_DATA["platform"].lower() == "aws" and kwargs.get(
-            "create_aws_creds"
-        ):
-            (
-                self.cred_req_obj,
-                self.aws_access_key_id,
-                self.aws_access_key,
-            ) = self.request_aws_credentials()
-
-            self.aws_s3_resource = boto3.resource(
-                "s3",
-                endpoint_url="https://s3.amazonaws.com",
-                aws_access_key_id=self.aws_access_key_id,
-                aws_secret_access_key=self.aws_access_key,
+            self.core_pod = Pod(
+                **get_pods_having_label(
+                    constants.NOOBAA_CORE_POD_LABEL, self.namespace
+                )[0]
             )
+            wait_for_resource_state(
+                resource=self.operator_pod, state=constants.STATUS_RUNNING, timeout=300
+            )
+
+            if (
+                not os.path.isfile(constants.NOOBAA_OPERATOR_LOCAL_CLI_PATH)
+                or self.get_mcg_cli_version().minor
+                != version.get_semantic_ocs_version_from_config().minor
+            ):
+                logger.info(
+                    "The expected MCG CLI binary could not be found,"
+                    " downloading the expected version"
+                )
+                retrieve_cli_binary(cli_type="mcg")
+
+            """
+            The certificate will be copied on each mcg_obj instantiation since
+            the process is so light and quick, that the time required for the redundant
+            copy is neglible in comparison to the time a hash comparison will take.
+            """
+            retrieve_default_ingress_crt()
+
+            get_noobaa = OCP(kind="noobaa", namespace=self.namespace).get()
+
+            self.s3_endpoint = (
+                get_noobaa.get("items")[0]
+                .get("status")
+                .get("services")
+                .get("serviceS3")
+                .get("externalDNS")[0]
+            )
+            self.s3_internal_endpoint = (
+                get_noobaa.get("items")[0]
+                .get("status")
+                .get("services")
+                .get("serviceS3")
+                .get("internalDNS")[0]
+            )
+            self.sts_endpoint = (
+                get_noobaa.get("items")[0]
+                .get("status")
+                .get("services")
+                .get("serviceSts")
+                .get("externalDNS")[0]
+            )
+            self.sts_internal_endpoint = (
+                get_noobaa.get("items")[0]
+                .get("status")
+                .get("services")
+                .get("serviceSts")
+                .get("internalDNS")[0]
+            )
+            self.mgmt_endpoint = (
+                get_noobaa.get("items")[0]
+                .get("status")
+                .get("services")
+                .get("serviceMgmt")
+                .get("externalDNS")[0]
+            ) + "/rpc"
+            self.region = config.ENV_DATA["region"]
+
+            noobaa_cr_services = (
+                get_noobaa.get("items")[0].get("status").get("services")
+            )
+            self.data_to_mask = flatten_multilevel_dict(noobaa_cr_services)
+
+            self.update_s3_creds()
+
+            if config.ENV_DATA["platform"].lower() == "aws" and kwargs.get(
+                "create_aws_creds"
+            ):
+                (
+                    self.cred_req_obj,
+                    self.aws_access_key_id,
+                    self.aws_access_key,
+                ) = self.request_aws_credentials()
+
+                self.aws_s3_resource = boto3.resource(
+                    "s3",
+                    endpoint_url="https://s3.amazonaws.com",
+                    aws_access_key_id=self.aws_access_key_id,
+                    aws_secret_access_key=self.aws_access_key,
+                )
 
     def retrieve_nb_token(self, timeout=300, sleep=30):
         """
@@ -234,6 +259,14 @@ class MCG:
         obc_lst = self.exec_mcg_cmd("obc list").stdout.split("\n")[1:-1]
         # TODO assert the bucket passed the Pending state
         return {row.split()[1] for row in obc_lst}
+
+    def cli_list_all_buckets(self) -> list[str]:
+        """
+        Returns:
+            list[str]: A list of all bucket names
+
+        """
+        return self.exec_mcg_cmd("bucket list").stdout.strip().split("\n")[1:]
 
     def s3_list_all_objects_in_bucket(self, bucketname):
         """
@@ -672,28 +705,25 @@ class MCG:
 
         return create_resource(**bc_data)
 
-    def cli_create_bucketclass(
+    def cli_create_bucketclass_over_backingstores(
         self,
         name,
         backingstores,
         placement_policy,
-        namespace_policy=None,
         replication_policy=None,
     ):
         """
-        Creates a new NooBaa bucket class using the noobaa cli
+        Creates a new NooBaa bucket class using the noobaa cli over backingstores
         Args:
             name (str): The name to be given to the bucket class
-            backingstores (list): The backing stores to use as part of the policy
+            backingstores (list): The backing stores to use as part of the policy.
             placement_policy (str): The placement policy to be used - Mirror | Spread
-            namespace_policy (dict): The namespace policy to be used
             replication_policy (dict): The replication policy dictionary
 
         Returns:
             OCS: The bucket class resource
 
         """
-        # TODO: Implement CLI namespace bucketclass support
         backingstore_name_list = [backingstore.name for backingstore in backingstores]
         backingstores = f" --backingstores {','.join(backingstore_name_list)}"
         placement_policy = f" --placement {placement_policy}"
@@ -720,6 +750,52 @@ class MCG:
             )
             self.exec_mcg_cmd(
                 f"bucketclass create {placement_type}{name}{backingstores}{placement_policy}{replication_policy}"
+            )
+
+    def cli_create_bucketclass_over_namespacestores(
+        self,
+        name,
+        namespacestores,
+        namespace_policy,
+    ):
+        """
+        Creates a new NooBaa bucket class using the noobaa cli over namespace stores
+        Args:
+            name (str): The name to be given to the bucket class
+            namespacestores (list): The namespaces stores to use as part of the policy
+            namespace_policy (dict): The namespace policy to be used. The supported namespace policy types are
+            Single, Cache and Multi. For Cache NSS, default backing store is used as the cache.
+            In the case of Multi namespace policy type, first namespace store is used as the write resource.
+
+        Returns:
+            OCS: The bucket class resource
+
+        """
+        namestores_name_list = [
+            namespacestore.name for namespacestore in namespacestores
+        ]
+        namestores_name_str = f"{','.join(namestores_name_list)}"
+
+        namespace_policy_type = namespace_policy["type"].lower()
+        cmd = f"bucketclass create namespace-bucketclass {namespace_policy_type} {name}"
+
+        if namespace_policy_type == constants.NAMESPACE_POLICY_TYPE_SINGLE.lower():
+            cmd += f" --resource={namestores_name_str}"
+            self.exec_mcg_cmd(cmd)
+        elif namespace_policy_type == constants.NAMESPACE_POLICY_TYPE_CACHE.lower():
+            cmd += f" --hub-resource={namestores_name_str}"
+            cmd += f" --backingstores={constants.DEFAULT_NOOBAA_BACKINGSTORE}"
+            if "ttl" in namespace_policy:
+                cmd += f" --ttl=={namespace_policy['ttl']}"
+            self.exec_mcg_cmd(cmd)
+        elif namespace_policy_type == constants.NAMESPACE_POLICY_TYPE_MULTI.lower():
+            cmd += f" --read-resources='{namestores_name_str}'"
+            cmd += f" --write-resource='{namespacestores[0].name}'"
+            self.exec_mcg_cmd(cmd)
+        else:
+            raise NotImplementedError(
+                f"Cli creating of bucketclass on namespacestore "
+                f"with policy {namespace_policy_type} is not supported"
             )
 
     def check_if_mirroring_is_done(self, bucket_name, timeout=300):
@@ -844,7 +920,9 @@ class MCG:
             )
             assert False
 
-    def exec_mcg_cmd(self, cmd, namespace=None, use_yes=False, **kwargs):
+    def exec_mcg_cmd(
+        self, cmd, namespace=None, use_yes=False, ignore_error=False, **kwargs
+    ):
         """
         Executes an MCG CLI command through the noobaa-operator pod's CLI binary
 
@@ -857,7 +935,7 @@ class MCG:
 
         """
 
-        kubeconfig = os.getenv("KUBECONFIG")
+        kubeconfig = config.RUN.get("kubeconfig")
         if kubeconfig:
             kubeconfig = f"--kubeconfig {kubeconfig} "
 
@@ -870,27 +948,35 @@ class MCG:
         if use_yes:
             result = exec_cmd(
                 [f"yes | {constants.NOOBAA_OPERATOR_LOCAL_CLI_PATH} {cmd} {namespace}"],
+                ignore_error=ignore_error,
                 shell=True,
                 **kwargs,
             )
         else:
             result = exec_cmd(
                 f"{constants.NOOBAA_OPERATOR_LOCAL_CLI_PATH} {cmd} {namespace}",
+                ignore_error=ignore_error,
                 **kwargs,
             )
         result.stdout = result.stdout.decode()
         result.stderr = result.stderr.decode()
         return result
 
+    @property
+    def status(self):
+        """
+        Expose the status check of NooBaa as a property
+        """
+        return self._status()
+
+    @staticmethod
     @retry(
-        (CommandFailed, subprocess.TimeoutExpired),
-        tries=5,
-        delay=15,
+        exception_to_check=(CommandFailed, KeyError, subprocess.TimeoutExpired),
+        tries=10,
+        delay=6,
         backoff=1,
     )
-    @property
-    @retry(exception_to_check=(CommandFailed, KeyError), tries=10, delay=6, backoff=1)
-    def status(self):
+    def _status():
         """
         Verify the status of NooBaa, and its default backing store and bucket class
 
@@ -899,13 +985,14 @@ class MCG:
 
         """
         # Get noobaa status
-        get_noobaa = OCP(kind="noobaa", namespace=self.namespace).get(
+        namespace = config.ENV_DATA["cluster_namespace"]
+        get_noobaa = OCP(kind="noobaa", namespace=namespace).get(
             resource_name=NOOBAA_RESOURCE_NAME
         )
-        get_default_bs = OCP(kind="backingstore", namespace=self.namespace).get(
+        get_default_bs = OCP(kind="backingstore", namespace=namespace).get(
             resource_name=DEFAULT_NOOBAA_BACKINGSTORE
         )
-        get_default_bc = OCP(kind="bucketclass", namespace=self.namespace).get(
+        get_default_bc = OCP(kind="bucketclass", namespace=namespace).get(
             resource_name=DEFAULT_NOOBAA_BUCKETCLASS
         )
         return (
@@ -914,6 +1001,37 @@ class MCG:
             == get_default_bc["status"]["phase"]
             == STATUS_READY
         )
+
+    @staticmethod
+    def wait_for_ready_status(timeout=600):
+        """
+        Wait for NooBaa's resources to reach the 'Ready' status
+
+        Args:
+            timeout (int): Number of seconds to wait for the status
+
+        Raises:
+            TimeoutExpiredError: If the status is not reached within the timeout
+        """
+        starttime = time.time()
+        nb_pods = [pod.name for pod in get_noobaa_pods()]
+        wait_for_pods_to_be_running(
+            namespace=config.ENV_DATA["cluster_namespace"],
+            pod_names=nb_pods,
+            timeout=timeout,
+            sleep=10,
+        )
+        timeout = int(timeout - (time.time() - starttime))
+        try:
+            for mcg_status_ready in TimeoutSampler(
+                timeout=timeout, sleep=30, func=MCG._status
+            ):
+                if mcg_status_ready:
+                    return
+        except TimeoutExpiredError as e:
+            raise TimeoutExpiredError(
+                e, f"NooBaa health is not OK after {timeout} seconds"
+            )
 
     def get_mcg_cli_version(self):
         """
@@ -953,12 +1071,51 @@ class MCG:
 
         self.core_pod.delete(wait=True)
         wait_for_pods_by_label_count(
-            label=constants.NOOBAA_CORE_POD_LABEL, exptected_count=1
+            label=constants.NOOBAA_CORE_POD_LABEL, expected_count=1
         )
         self.core_pod = Pod(
             **get_pods_having_label(constants.NOOBAA_CORE_POD_LABEL, self.namespace)[0]
         )
         wait_for_resource_state(self.core_pod, constants.STATUS_RUNNING)
+
+    def reset_endpoint_pods(self):
+        """
+        Delete the noobaa endpoint pod and wait for it to come up again
+
+        """
+
+        from ocs_ci.ocs.resources.pod import wait_for_pods_by_label_count
+
+        nb_ep_dep_obj = OCP(
+            kind="deployment",
+            namespace=self.namespace,
+            resource_name=constants.NOOBAA_ENDPOINT_DEPLOYMENT,
+        )
+        nb_ep_dep_obj.exec_oc_cmd(
+            f"rollout restart deployment/{constants.NOOBAA_ENDPOINT_DEPLOYMENT}"
+        )
+        # Wait for the rollout to complete
+        nb_ep_dep_obj.exec_oc_cmd(
+            (
+                f"rollout status deployment/{constants.NOOBAA_ENDPOINT_DEPLOYMENT}"
+                " --timeout=120s"
+            ),
+            out_yaml_format=False,
+        )
+        expected_pod_count = nb_ep_dep_obj.get().get("spec").get("replicas")
+        wait_for_pods_by_label_count(
+            label=constants.NOOBAA_ENDPOINT_POD_LABEL,
+            expected_count=expected_pod_count,
+        )
+
+        endpoint_pods = [
+            Pod(**pod_data)
+            for pod_data in get_pods_having_label(
+                constants.NOOBAA_ENDPOINT_POD_LABEL, self.namespace
+            )
+        ]
+        for pod in endpoint_pods:
+            wait_for_resource_state(pod, constants.STATUS_RUNNING)
 
     def get_noobaa_admin_credentials_from_secret(self):
         """
@@ -1094,4 +1251,32 @@ class MCG:
             .get("placementPolicy")
             .get("tiers")[0]
             .get("backingStores")[0]
+        )
+
+    def assign_sts_role(self, account_id, role_config):
+        """
+        Assign STS role to a Noobaa account
+
+        Args:
+            account_id (str): Name/email/id of the noobaa account
+            role_config (dict): Role config consisting of role name, role policy etc
+
+        """
+
+        cmd = f"sts assign-role --email {account_id} --role_config '{str(role_config)}'"
+        self.exec_mcg_cmd(
+            cmd=cmd,
+        )
+
+    def remove_sts_role(self, account_id):
+        """
+        Remove STS role from a Noobaa account
+
+        Args:
+            account_id (str): Name/email/id of the noobaa account
+
+        """
+        cmd = f"sts remove-role --email {account_id}"
+        self.exec_mcg_cmd(
+            cmd=cmd,
         )

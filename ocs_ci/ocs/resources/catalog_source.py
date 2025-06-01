@@ -1,6 +1,7 @@
 """
 CatalogSource related functionalities
 """
+
 import logging
 from time import sleep
 
@@ -180,3 +181,21 @@ def enable_specific_source(source_name):
     )
     logger.info(f"Waiting 20 seconds after enabling source: {source_name}")
     sleep(20)
+
+
+def get_odf_tag_from_redhat_catsrc():
+    """
+    Get the ODF tag from the default redhat-operators Catalog Source
+
+    Returns:
+        str: ODF tag from redhat-operators Catalog Source
+    """
+    from ocs_ci.ocs.ocp import OCP
+
+    catsrc_data = OCP(
+        kind=constants.CATSRC,
+        namespace=constants.MARKETPLACE_NAMESPACE,
+        resource_name="redhat-operators",
+    ).get()
+    registry_image = catsrc_data.get("spec").get("image")
+    return registry_image.split(":")[-1]

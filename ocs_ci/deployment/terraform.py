@@ -2,6 +2,7 @@
 This module contains terraform specific methods and classes needed
 for deployment on vSphere platform
 """
+
 import os
 import logging
 
@@ -188,7 +189,7 @@ class Terraform(object):
         )
         run_cmd(cmd, timeout=1200)
 
-    def change_statefile(self, module, resource_type, resource_name, instance):
+    def change_statefile(self, module, vm_index):
         """
         Remove the records from the state file so that terraform will no longer be
         tracking the corresponding remote objects.
@@ -199,25 +200,20 @@ class Terraform(object):
         Args:
             module (str): Name of the module
                 e.g: compute_vm, module.control_plane_vm etc.
-            resource_type (str): Resource type
-                e.g: vsphere_virtual_machine, vsphere_compute_cluster etc.
-            resource_name (str): Name of the resource
-                e.g: vm
-            instance (str): Name of the instance
-                e.g: compute-0.j-056vu1cs33l-a.qe.rh-ocs.com
+            vm_index (int): VM index. If the VM is compute-1, index is 1 and if the VM is
+                compute-2, then index is 2
 
         Examples::
 
             terraform = Terraform(os.path.join(upi_repo_path, "upi/vsphere/"))
             terraform.change_statefile(
-                module="compute_vm", resource_type="vsphere_virtual_machine",
-                resource_name="vm", instance="compute-0.j-056vu1cs33l-a.qe.rh-ocs.com"
+                module="compute_vm", vm_index=2
             )
 
         """
         logger.info("Modifying terraform state file")
         cmd = (
             f"{self.terraform_installer} state rm {self.state_file_param} "
-            f"'module.{module}.{resource_type}.{resource_name}[\"{instance}\"]'"
+            f"'module.{module}[{vm_index}]'"
         )
         run_cmd(cmd)

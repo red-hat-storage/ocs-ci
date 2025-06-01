@@ -36,15 +36,11 @@ class Warp(object):
         self.ocp_obj = OCP(namespace=self.namespace)
         self.bucket_name = None
         self.warp_cr = templating.load_yaml(constants.WARP_OBJ_YAML)
-        self.host = self.warp_cr["host"]
+        # avoid failing DNS server to resolve hostname, when running on cluster with custom storage namespace
+        self.host = f"s3.{config.ENV_DATA['cluster_namespace']}.svc"
         self.duration = self.warp_cr["duration"]
         self.concurrent = self.warp_cr["concurrent"]
-        self.objects = self.warp_cr["objects"]
         self.obj_size = self.warp_cr["obj.size"]
-        self.get_distrib = self.warp_cr["get-distrib"]
-        self.put_distrib = self.warp_cr["put-distrib"]
-        self.delete_distrib = self.warp_cr["delete-distrib"]
-        self.stat_distrib = self.warp_cr["stat-distrib"]
         self.warp_bin_dir = self.warp_cr["warp_bin_dir"]
         self.output_file = "output.csv"
         self.warp_dir = mkdtemp(prefix="warp-")
@@ -90,8 +86,7 @@ class Warp(object):
             pvc_name=self.pvc_obj.name,
             sa_name=self.sa_name,
             pod_dict_path=self.pod_dic_path,
-            dc_deployment=True,
-            deploy_pod_status=constants.STATUS_COMPLETED,
+            deployment=True,
             replica_count=replicas,
             ports=self.ports,
         )
@@ -154,7 +149,6 @@ class Warp(object):
         self.bucket_name = bucket_name if bucket_name else self.bucket_name
         self.duration = duration if duration else self.duration["duration"]
         self.concurrent = concurrent if concurrent else self.concurrent["concurrent"]
-        self.objects = objects if objects else self.objects["objects"]
         self.obj_size = obj_size if obj_size else self.obj_size["obj.size"]
         base_options = "".join(
             f"--duration={self.duration} "
@@ -165,12 +159,7 @@ class Warp(object):
             f"--access-key={self.access_key} "
             f"--secret-key={self.secret_key} "
             f"--noclear --noprefix --concurrent={self.concurrent} "
-            f"--objects={self.objects} "
             f"--obj.size={self.obj_size} "
-            f"--get-distrib={self.get_distrib} "
-            f"--put-distrib={self.put_distrib} "
-            f"--delete-distrib={self.delete_distrib} "
-            f"--stat-distrib={self.stat_distrib} "
             f"--bucket={self.bucket_name} "
             f"--analyze.out={self.output_file} "
         )
@@ -192,7 +181,7 @@ class Warp(object):
             self.client_str = self.client_str.rstrip(",")
             multi_client_options = "".join(f"--warp-client={self.client_str} ")
 
-        cmd = f"{self.warp_bin_dir} mixed " + base_options + multi_client_options
+        cmd = f"{self.warp_bin_dir} put " + base_options + multi_client_options
         self.pod_obj.exec_cmd_on_pod(cmd, out_yaml_format=False, timeout=timeout)
 
         if validate:
@@ -233,5 +222,5 @@ class Warp(object):
                 log.info(f"Deleting the service {self.service_obj.name}")
                 self.service_obj.delete()
         log.info("Deleting pods and deployment config")
-        pod.delete_deploymentconfig_pods(self.pod_obj)
+        pod.delete_deployment_pods(self.pod_obj)
         self.pvc_obj.delete()

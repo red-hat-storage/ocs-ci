@@ -6,6 +6,7 @@ from prettytable import PrettyTable
 from collections import defaultdict
 from operator import itemgetter
 import random
+import json
 
 from subprocess import TimeoutExpired
 from semantic_version import Version
@@ -14,26 +15,30 @@ from ocs_ci.ocs.machine import get_machine_objs
 
 from ocs_ci.framework import config
 from ocs_ci.ocs.exceptions import (
+    HostNameNotFoundInOSDStatus,
     TimeoutExpiredError,
     NotAllNodesCreated,
     CommandFailed,
     ResourceNotFoundError,
     NotFoundError,
 )
+from ocs_ci.ocs.machinepool import MachinePools
 from ocs_ci.ocs.ocp import OCP
 from ocs_ci.ocs.resources.ocs import OCS
 from ocs_ci.ocs import constants, exceptions, ocp, defaults
+from ocs_ci.ocs.resources.pvc import get_pvc_size
 from ocs_ci.utility import version
+from ocs_ci.utility.retry import retry
 from ocs_ci.utility.utils import TimeoutSampler, convert_device_size, get_az_count
 from ocs_ci.ocs import machine
 from ocs_ci.ocs.resources import pod
 from ocs_ci.utility.utils import set_selinux_permissions, get_ocp_version
 from ocs_ci.ocs.resources.pv import (
     get_pv_objs_in_sc,
-    verify_new_pvs_available_in_sc,
-    delete_released_pvs_in_sc,
     get_pv_size,
     get_node_pv_objs,
+    wait_for_pvs_in_lvs_to_reach_status,
+    delete_released_pvs_in_sc,
 )
 from ocs_ci.utility.version import get_semantic_version
 from ocs_ci.utility.rosa import (
@@ -42,6 +47,7 @@ from ocs_ci.utility.rosa import (
     wait_for_addon_to_be_ready,
 )
 from ocs_ci.utility.decorators import switch_to_orig_index_at_last
+from ocs_ci.utility.vsphere import VSPHERE
 
 log = logging.getLogger(__name__)
 
@@ -331,7 +337,7 @@ def get_node_ips(node_type="worker"):
     ocp = OCP(kind=constants.NODE)
     if node_type == "worker":
         nodes = ocp.get(selector=constants.WORKER_LABEL).get("items")
-    if node_type == "master:":
+    if node_type == "master":
         nodes = ocp.get(selector=constants.MASTER_LABEL).get("items")
 
     if config.ENV_DATA["platform"].lower() == constants.AWS_PLATFORM:
@@ -467,6 +473,51 @@ def add_new_node_and_label_upi(
     if node_type == constants.RHEL_OS:
         set_selinux_permissions(workers=new_spun_nodes)
 
+    if mark_for_ocs_label:
+        node_obj = ocp.OCP(kind="node")
+        for new_spun_node in new_spun_nodes:
+            node_obj.add_label(
+                resource_name=new_spun_node, label=constants.OPERATOR_NODE_LABEL
+            )
+            log.info(f"Successfully labeled {new_spun_node} with OCS storage label")
+    return new_spun_nodes
+
+
+def add_new_nodes_and_label_them_rosa_hcp(
+    node_type, num_nodes, mark_for_ocs_label=True, node_conf=None, **kwargs
+):
+    """
+    Add a new nodes on ROSA HCP platform and label them
+    Function does not modify node_conf
+
+    Args:
+        node_type (str): Type of node, RHEL or RHCOS
+        num_nodes (int): number of nodes to add
+        mark_for_ocs_label (bool): True if label the new node
+        node_conf (dict): The node configurations. Should follow the structure of machinepools.py:NodeConf class
+
+    """
+    # node_conf is not set in this function, relying on default node_conf values,
+    # creating additional node(s) in the same machinepool, in case we need to create a node in a new machinepool,
+    # we need to set the node_conf with all requested params
+    node_conf = node_conf or {}
+    if kwargs.get("storage_nodes") and not node_conf:
+        node_conf = {
+            "machinepool_id": config.ENV_DATA.get("machine_pool"),
+            "instance_type": config.ENV_DATA.get("worker_instance_type"),
+        }
+
+    initial_nodes = get_worker_nodes()
+    from ocs_ci.ocs.platform_nodes import PlatformNodesFactory
+
+    plt = PlatformNodesFactory()
+    node_util = plt.get_nodes_platform()
+
+    node_util.create_and_attach_nodes_to_cluster(node_conf, node_type, num_nodes)
+    nodes_after_exp = get_worker_nodes()
+    wait_for_nodes_status(node_names=get_worker_nodes(), status=constants.NODE_READY)
+
+    new_spun_nodes = list(set(nodes_after_exp) - set(initial_nodes))
     if mark_for_ocs_label:
         node_obj = ocp.OCP(kind="node")
         for new_spun_node in new_spun_nodes:
@@ -795,6 +846,7 @@ def get_compute_node_names(no_replace=False):
         constants.BAREMETAL_PLATFORM,
         constants.BAREMETALPSI_PLATFORM,
         constants.IBM_POWER_PLATFORM,
+        constants.HCI_BAREMETAL,
     ]:
         if no_replace:
             return [
@@ -928,10 +980,18 @@ def delete_and_create_osd_node_ipi(osd_node_name):
     new_machine_name = machine.delete_machine_and_check_state_of_new_spinned_machine(
         machine_name
     )
-    machineset_name = machine.get_machineset_from_machine_name(new_machine_name)
-    log.info("Waiting for new worker node to be in ready state")
-    machine.wait_for_new_node_to_be_ready(machineset_name)
-    new_node_name = get_node_from_machine_name(new_machine_name)
+    if config.ENV_DATA.get("worker_replicas") == 0:
+        new_node_name = get_node_from_machine_name(new_machine_name)
+        log.info("Waiting for new worker node to be in ready state")
+        wait_for_nodes_status(
+            [new_node_name], constants.STATUS_READY, timeout=600, sleep=20
+        )
+    else:
+        machineset_name = machine.get_machineset_from_machine_name(new_machine_name)
+        log.info("Waiting for new worker node to be in ready state")
+        machine.wait_for_new_node_to_be_ready(machineset_name)
+        new_node_name = get_node_from_machine_name(new_machine_name)
+
     if not is_node_labeled(new_node_name):
         log.info("Adding ocs label to newly created worker node")
         node_obj = ocp.OCP(kind="node")
@@ -939,6 +999,82 @@ def delete_and_create_osd_node_ipi(osd_node_name):
             resource_name=new_node_name, label=constants.OPERATOR_NODE_LABEL
         )
         log.info(f"Successfully labeled {new_node_name} with OCS storage label")
+
+    log.info(f"Wait for the old machine {machine_name} to be deleted")
+    if config.ENV_DATA.get("worker_replicas") == 0:
+        timeout = 1200
+    else:
+        timeout = 420
+    ocp_obj = OCP(kind="machine", namespace=constants.OPENSHIFT_MACHINE_API_NAMESPACE)
+    ocp_obj.wait_for_delete(
+        resource_name=machine_name,
+        timeout=timeout,
+        sleep=30,
+        ignore_command_failed_exception=True,
+    )
+    return new_node_name
+
+
+def delete_and_create_osd_node_managed_cp(osd_node_name):
+    """
+    Function developed to delete and create OSD node in Control Plane managed cluster (e.g. ROSA HCP).
+    Once the node is deleted, the new node will automatically be created by the machinepool managed cluster.
+
+    Args:
+        osd_node_name (str): the name of the osd node
+
+    Returns:
+        str: The new node name
+    """
+    log.info("Going to unschedule, drain and delete %s node", osd_node_name)
+    node_names_before_delete = get_node_names()
+    node_num_before_delete = len(node_names_before_delete)
+    machine_start_timeout = 60 * 20
+    node_start_timeout = 60 * 10
+
+    unschedule_nodes([osd_node_name])
+    drain_nodes([osd_node_name])
+
+    from ocs_ci.ocs.platform_nodes import PlatformNodesFactory
+
+    plt = PlatformNodesFactory()
+    node_util = plt.get_nodes_platform()
+
+    # in ROSA HCP there is no Machine API Operator (MAO), instead it has logic close to AWS IPI, implemented via
+    # rosa machinepool:
+    # 1. Stopped node will trigger MachinePool to create a new instance
+    # 2. After EC2 instance has stopped we need to terminate it
+    # 2.1. EC2 instance will terminate itself after 1 hour if not terminated manually
+    osd_node_objs = get_node_objs([osd_node_name])
+    node_util.stop_nodes(osd_node_objs)
+    node_util.terminate_nodes(osd_node_objs)
+    machne_pools = MachinePools(config.ENV_DATA["cluster_name"])
+    mp_filtered = machne_pools.filter(machinepool_id=config.ENV_DATA["machine_pool"])
+    mp_filtered.wait_replicas_ready(
+        target_replicas=node_num_before_delete, timeout=machine_start_timeout
+    )
+
+    new_node_names = None
+    new_node_name = None
+    for sample in TimeoutSampler(
+        timeout=node_start_timeout, sleep=30, func=get_node_names
+    ):
+        if new_node_names := list(set(sample) - set(node_names_before_delete)):
+            new_node_name = new_node_names[0]
+            break
+
+    wait_for_nodes_status(
+        node_names=new_node_names,
+        status=constants.NODE_READY,
+        timeout=node_start_timeout,
+    )
+    if not is_node_labeled(new_node_name):
+        log.info("Adding ocs label to newly created worker node")
+        node_obj = ocp.OCP(kind=constants.NODE)
+        node_obj.add_label(
+            resource_name=new_node_name, label=constants.OPERATOR_NODE_LABEL
+        )
+        log.info(f"Successfully labeled {new_node_names} with OCS storage label")
 
     return new_node_name
 
@@ -1076,12 +1212,19 @@ def delete_and_create_osd_node_vsphere_upi_lso(osd_node_name, use_existing_node=
         str: The new node name
 
     """
-    sc_name = constants.LOCAL_BLOCK_RESOURCE
-    old_pv_objs = get_pv_objs_in_sc(sc_name)
+    from ocs_ci.ocs.platform_nodes import PlatformNodesFactory
+    from ocs_ci.ocs.resources.storage_cluster import get_deviceset_sc_name_per_count
+
+    plt = PlatformNodesFactory()
+    node_util = plt.get_nodes_platform()
 
     osd_node = get_node_objs(node_names=[osd_node_name])[0]
     osd_ids = get_node_osd_ids(osd_node_name)
     assert osd_ids, f"The node {osd_node_name} does not have osd pods"
+    node_osd_pods = pod.get_osd_pods_having_ids(osd_ids)
+    old_pvc_objs = pod.get_pods_pvcs(node_osd_pods)
+    old_pvc_sizes = [get_pvc_size(pvc) for pvc in old_pvc_objs]
+    log.info(f"old pvc sizes = {old_pvc_sizes}")
 
     ocs_version = config.ENV_DATA["ocs_version"]
     assert not (
@@ -1091,11 +1234,9 @@ def delete_and_create_osd_node_vsphere_upi_lso(osd_node_name, use_existing_node=
         f"The ocs-osd-removal job works with multiple ids only from ocs version 4.7"
     )
 
-    osd_id = osd_ids[0]
     log.info(f"osd ids to remove = {osd_ids}")
     # Save the node hostname before deleting the node
     osd_node_hostname_label = get_node_hostname_label(osd_node)
-
     log.info("Scale down node deployments...")
     scale_down_deployments(osd_node_name)
     log.info("Scale down deployments finished successfully")
@@ -1106,12 +1247,9 @@ def delete_and_create_osd_node_vsphere_upi_lso(osd_node_name, use_existing_node=
     assert new_node_name, "Failed to create a new node"
     log.info(f"New node created successfully. Node name: {new_node_name}")
 
-    num_of_new_pvs = len(osd_ids)
-    log.info(f"Number of the expected new pvs = {num_of_new_pvs}")
     # If we use LSO, we need to create and attach a new disk manually
-    new_node = get_node_objs(node_names=[new_node_name])[0]
-    for i in range(num_of_new_pvs):
-        add_disk_to_node(new_node)
+    new_node = get_node_objs([new_node_name])[0]
+    node_util.create_and_attach_volumes(new_node, volume_sizes=old_pvc_sizes, ssd=True)
 
     new_node_hostname_label = get_node_hostname_label(new_node)
     log.info(
@@ -1123,30 +1261,29 @@ def delete_and_create_osd_node_vsphere_upi_lso(osd_node_name, use_existing_node=
     )
     assert res, "Failed to add the new node to LVD and LVS"
 
-    log.info("Verify new pvs are available...")
-    is_new_pvs_available = verify_new_pvs_available_in_sc(
-        old_pv_objs, sc_name, num_of_new_pvs=num_of_new_pvs
-    )
-    assert is_new_pvs_available, "New pvs are not available"
-    log.info("Finished verifying that the new pv is available")
-
     osd_removal_job = pod.run_osd_removal_job(osd_ids)
     assert osd_removal_job, "ocs-osd-removal failed to create"
-    is_completed = (pod.verify_osd_removal_job_completed_successfully(osd_id),)
-    assert is_completed, "ocs-osd-removal-job is not in status 'completed'"
+    for osd_id in osd_ids:
+        is_completed = pod.verify_osd_removal_job_completed_successfully(osd_id)
+        assert is_completed, "ocs-osd-removal-job is not in status 'completed'"
     log.info("ocs-osd-removal-job completed successfully")
 
-    expected_num_of_deleted_pvs = [0, num_of_new_pvs]
-    num_of_deleted_pvs = delete_released_pvs_in_sc(sc_name)
-    assert num_of_deleted_pvs in expected_num_of_deleted_pvs, (
-        f"num of deleted PVs is {num_of_deleted_pvs} "
-        f"instead of the expected values {expected_num_of_deleted_pvs}"
+    deviceset_sc_name_per_count = get_deviceset_sc_name_per_count()
+    log.info("Verify that the new PVs have been created...")
+    for sc_name, pv_count in deviceset_sc_name_per_count.items():
+        wait_for_pvs_in_lvs_to_reach_status(
+            sc_name, pv_count, constants.STATUS_BOUND, timeout=420
+        )
+    log.info(
+        "Finished verifying that the new PVs have been created."
+        "Delete the PVs that are in a Released state..."
     )
-    log.info(f"num of deleted PVs is {num_of_deleted_pvs}")
-    log.info("Successfully deleted old pvs")
+    for sc_name in deviceset_sc_name_per_count.keys():
+        delete_released_pvs_in_sc(sc_name)
 
-    is_deleted = pod.delete_osd_removal_job(osd_id)
-    assert is_deleted, "Failed to delete ocs-osd-removal-job"
+    for osd_id in osd_ids:
+        is_deleted = pod.delete_osd_removal_job(osd_id)
+        assert is_deleted, "Failed to delete ocs-osd-removal-job"
     log.info("ocs-osd-removal-job deleted successfully")
 
     return new_node_name
@@ -1269,7 +1406,7 @@ def node_replacement_verification_steps_user_side(
 
     # It can take some time until all the ocs pods are up and running
     # after the process of node replacement
-    if not pod.wait_for_pods_to_be_running():
+    if not pod.check_pods_after_node_replacement():
         log.warning("Not all the pods in running state")
         return False
 
@@ -1337,16 +1474,14 @@ def node_replacement_verification_steps_ceph_side(
     if not pod.check_pods_after_node_replacement():
         return False
 
-    ct_pod = pod.get_ceph_tools_pod()
-    ceph_osd_status = ct_pod.exec_ceph_cmd(ceph_cmd="ceph osd status")
-    log.info(f"Ceph osd status: {ceph_osd_status}")
+    node_names_from_ceph_osd_status = get_node_names_from_osd_status()
     osd_node_names = get_osd_running_nodes()
     log.info(f"osd node names: {osd_node_names}")
 
     if new_osd_node_name:
-        wait_for_nodes_status([new_osd_node_name])
         log.info(f"New osd node name is: {new_osd_node_name}")
-        if new_osd_node_name not in ceph_osd_status:
+        log.info(f"Node names from ceph osd status: {node_names_from_ceph_osd_status}")
+        if new_osd_node_name not in node_names_from_ceph_osd_status:
             log.warning("new osd node name not found in 'ceph osd status' output")
             return False
         if new_osd_node_name not in osd_node_names:
@@ -1358,14 +1493,14 @@ def node_replacement_verification_steps_ceph_side(
         )
 
     if (
-        old_node_name in ceph_osd_status
+        old_node_name in node_names_from_ceph_osd_status
         and config.ENV_DATA["platform"].lower() != constants.VSPHERE_PLATFORM
     ):
         log.warning("old node name found in 'ceph osd status' output")
         return False
 
     if (
-        old_node_name in osd_node_names
+        old_node_name in node_names_from_ceph_osd_status
         and config.ENV_DATA["platform"].lower() != constants.VSPHERE_PLATFORM
     ):
         log.warning("the old hostname found in osd node names")
@@ -1378,6 +1513,34 @@ def node_replacement_verification_steps_ceph_side(
 
     log.info("Verification steps from the ceph side finish successfully")
     return True
+
+
+@retry(
+    HostNameNotFoundInOSDStatus,
+    tries=60,
+    delay=10,
+    backoff=1,
+)
+def get_node_names_from_osd_status():
+    """
+    Fetch the Host/Node names from ceph osd status
+
+    Returns:
+        list: List of host names from ceph osd status
+
+    """
+    host_names = []
+    ct_pod = pod.get_ceph_tools_pod()
+    ceph_osd_status = ct_pod.exec_ceph_cmd(ceph_cmd="ceph osd status")
+    log.info(f"Ceph osd status: {ceph_osd_status}")
+    for osd in ceph_osd_status["OSDs"]:
+        if (osd["host name"]) == "":
+            raise HostNameNotFoundInOSDStatus(
+                "Hostnames are not reflected in ceph osd status"
+            )
+        else:
+            host_names.append(osd["host name"])
+    return host_names
 
 
 def is_node_labeled(node_name, label=constants.OPERATOR_NODE_LABEL):
@@ -1417,53 +1580,72 @@ def taint_nodes(nodes, taint_label=None):
             log.info(f"{node} was not tainted - {e}")
 
 
-def check_taint_on_nodes(taint=None):
+def has_taint(node_obj, taint):
     """
-    Function to check for particular taint on nodes
+    Check if a specific node has a given taint.
 
     Args:
-        taint (str): The taint to check on nodes
+        node_obj (ocs_ci.ocs.resources.ocs.OCS): The node object
+        taint (str): The taint key to check.
 
-    Return:
-        bool: True if taint is present on node. False otherwise
+    Returns:
+        bool: True if the node has the taint, False otherwise.
+
+    """
+    taints = node_obj.get().get("spec", {}).get("taints", [])
+    return any(t.get("key") in taint for t in taints)
+
+
+def check_taint_on_nodes(taint=None):
+    """
+    Check if any node in the cluster has a specific taint.
+
+    Args:
+        taint (str): The taint key to check on nodes.
+
+    Returns:
+        bool: True if the taint is present on any node, False otherwise.
 
     """
     taint = taint if taint else constants.OPERATOR_NODE_TAINT
     nodes = get_nodes()
-    flag = -1
+
     for node_obj in nodes:
-        if node_obj.get().get("spec").get("taints"):
-            if taint in node_obj.get().get("spec").get("taints")[0].get("key"):
-                log.info(f"Node {node_obj.name} has taint {taint}")
-                flag = 1
-        else:
-            flag = 0
-        return bool(flag)
+        if has_taint(node_obj, taint):
+            log.info(f"Node {node_obj.name} has taint {taint}")
+            return True
+
+    return False
 
 
 def untaint_nodes(taint_label=None, nodes_to_untaint=None):
     """
-    Function to remove taints from nodes
+    Function to remove taints from specific nodes.
 
     Args:
-        taint_label (str): taint to use
-        nodes_to_untaint (list): list of node objs to untaint
+        taint_label (str): The taint key to remove.
+        nodes_to_untaint (list): List of node objects to untaint.
 
-    Return:
-        bool: True if untainted, false otherwise
+    Returns:
+        bool: True if untainted successfully, False otherwise.
 
     """
-    if check_taint_on_nodes():
-        ocp = OCP()
-        ocs_nodes = get_ocs_nodes()
-        nodes_to_untaint = nodes_to_untaint if nodes_to_untaint else ocs_nodes
-        taint = taint_label if taint_label else constants.OPERATOR_NODE_TAINT
-        for node in nodes_to_untaint:
+    ocp = OCP()
+    ocs_nodes = get_ocs_nodes()
+    nodes_to_untaint = nodes_to_untaint if nodes_to_untaint else ocs_nodes
+    taint = taint_label if taint_label else constants.OPERATOR_NODE_TAINT
+
+    result = False
+    for node in nodes_to_untaint:
+        if has_taint(node, taint):
             taint_cmd = f"adm taint nodes {node.name} {taint}-"
             ocp.exec_oc_cmd(command=taint_cmd)
-            log.info(f"Untainted {node.name}")
-        return True
-    return False
+            log.info(f"Successfully untainted {node.name}")
+            result = True
+        else:
+            log.info(f"Node {node.name} does not have the taint {taint}")
+
+    return result
 
 
 def get_node_pods(node_name, pods_to_search=None, raise_pod_not_found_error=False):
@@ -1594,16 +1776,23 @@ def replace_old_node_in_lvd_and_lvs(old_node_name, new_node_name):
         namespace=defaults.LOCAL_STORAGE_NAMESPACE,
     )
 
-    ocp_lvs_obj = OCP(
-        kind=constants.LOCAL_VOLUME_SET,
-        namespace=defaults.LOCAL_STORAGE_NAMESPACE,
-        resource_name=constants.LOCAL_BLOCK_RESOURCE,
+    lvs_obj = OCP(
+        kind=constants.LOCAL_VOLUME_SET, namespace=defaults.LOCAL_STORAGE_NAMESPACE
     )
+    lvs_items = lvs_obj.data["items"]
+    lvs_names = [lvs_data["metadata"]["name"] for lvs_data in lvs_items]
 
-    lvd_result = ocp_lvd_obj.patch(params=params, format_type="json")
-    lvs_result = ocp_lvs_obj.patch(params=params, format_type="json")
+    patch_results = []
+    for lvs_name in lvs_names:
+        ocp_lvs_obj = OCP(
+            kind=constants.LOCAL_VOLUME_SET,
+            namespace=defaults.LOCAL_STORAGE_NAMESPACE,
+            resource_name=lvs_name,
+        )
+        patch_results.append(ocp_lvd_obj.patch(params=params, format_type="json"))
+        patch_results.append(ocp_lvs_obj.patch(params=params, format_type="json"))
 
-    return lvd_result and lvs_result
+    return all(patch_results)
 
 
 def get_node_hostname_label(node_obj):
@@ -1654,7 +1843,7 @@ def wait_for_new_osd_node(old_osd_node_names, timeout=600):
         return None
 
 
-def add_disk_to_node(node_obj, disk_size=None):
+def add_disk_to_node(node_obj, disk_size=None, ssd=False):
     """
     Add a new disk to a node
 
@@ -1662,6 +1851,7 @@ def add_disk_to_node(node_obj, disk_size=None):
         node_obj (ocs_ci.ocs.resources.ocs.OCS): The node object
         disk_size (int): The size of the new disk to attach. If not specified,
             the disk size will be equal to the size of the previous disk.
+        ssd (bool): if True, mark disk as SSD
 
     """
     from ocs_ci.ocs.platform_nodes import PlatformNodesFactory
@@ -1673,7 +1863,7 @@ def add_disk_to_node(node_obj, disk_size=None):
         pv_objs = get_pv_objs_in_sc(sc_name=constants.LOCAL_BLOCK_RESOURCE)
         disk_size = get_pv_size(pv_objs[-1])
 
-    node_util.create_and_attach_volume(node=node_obj, size=disk_size)
+    node_util.create_and_attach_volume(node=node_obj, size=disk_size, ssd=ssd)
 
 
 def verify_all_nodes_created():
@@ -1690,9 +1880,10 @@ def verify_all_nodes_created():
     raise_exception = False
     if config.ENV_DATA["platform"].lower() in constants.MANAGED_SERVICE_PLATFORMS:
         expected_num_nodes += 3
+    elif config.ENV_DATA["platform"].lower() == constants.ROSA_HCP_PLATFORM:
+        pass
     else:
         expected_num_nodes += config.ENV_DATA.get("infra_replicas", 0)
-
     existing_num_nodes = len(get_all_nodes())
 
     # Some nodes will take time to create due to the issue https://issues.redhat.com/browse/SDA-6346
@@ -1704,10 +1895,17 @@ def verify_all_nodes_created():
         wait_time = 1200
 
     if expected_num_nodes != existing_num_nodes:
+        if (
+            config.ENV_DATA["platform"].lower() == constants.VSPHERE_PLATFORM
+            and config.ENV_DATA["deployment_type"] == "ipi"
+        ):
+            power_on_ocp_node_vms()
+
         platforms_to_wait = [
             constants.VSPHERE_PLATFORM,
             constants.IBMCLOUD_PLATFORM,
             constants.AZURE_PLATFORM,
+            constants.ROSA_HCP_PLATFORM,
         ]
         platforms_to_wait.extend(constants.MANAGED_SERVICE_PLATFORMS)
         if config.ENV_DATA[
@@ -1749,6 +1947,30 @@ def verify_all_nodes_created():
             f"Expected number of nodes is {expected_num_nodes} but "
             f"created during deployment is {existing_num_nodes}"
         )
+
+
+def power_on_ocp_node_vms():
+    """
+    Power on OCP node VM's, this function will directly interact with vCenter.
+    This function will make sure all cluster node VM's are powered on.
+    """
+    vsp = VSPHERE(
+        config.ENV_DATA["vsphere_server"],
+        config.ENV_DATA["vsphere_user"],
+        config.ENV_DATA["vsphere_password"],
+    )
+    vms_dc = vsp.get_all_vms_in_dc(config.ENV_DATA["vsphere_datacenter"])
+    cluster_name = config.ENV_DATA["cluster_name"]
+    vms_ipi = []
+    for vm in vms_dc:
+        if cluster_name in vm.name and "rhcos-generated" not in vm.name:
+            vms_ipi.append(vm)
+            log.debug(vm.name)
+
+    for vm in vms_ipi:
+        power_status = vsp.get_vm_power_status(vm)
+        if power_status == constants.VM_POWERED_OFF:
+            vsp.start_vms(vms=[vm])
 
 
 def add_node_to_lvd_and_lvs(node_name):
@@ -1982,9 +2204,10 @@ def get_node_zone_dict():
     return node_zone_dict
 
 
-def get_node_rack_or_zone(failure_domain, node_obj):
+@retry(ValueError, tries=5, delay=10)
+def base_get_node_rack_or_zone(failure_domain, node_obj):
     """
-    Get the worker node rack or zone name based on the failure domain value
+    Get the worker node rack or zone name based on the failure domain value.
 
     Args:
         failure_domain (str): The failure domain
@@ -1993,10 +2216,38 @@ def get_node_rack_or_zone(failure_domain, node_obj):
     Returns:
         str: The worker node rack/zone name
 
+    Raises:
+        ValueError: If the zone/rack is not found after retries.
     """
-    return (
+    node_obj.reload()
+    node_rack_or_zone = (
         get_node_zone(node_obj) if failure_domain == "zone" else get_node_rack(node_obj)
     )
+    if node_rack_or_zone:
+        return node_rack_or_zone
+    else:
+        raise ValueError(f"{failure_domain} was not found for the node {node_obj.name}")
+
+
+def get_node_rack_or_zone(failure_domain, node_obj, raise_value_error=True):
+    """
+    Wrapper for base_get_node_rack_or_zone that allows optional suppression of ValueError.
+
+    Args:
+        failure_domain (str): The failure domain
+        node_obj (ocs_ci.ocs.resources.ocs.OCS): The node object
+        raise_value_error (bool): Whether to raise ValueError or return None on failure
+    Returns:
+        str or None: Rack/zone name or None if not found and raise_value_error is False
+
+    """
+    try:
+        return base_get_node_rack_or_zone(failure_domain, node_obj)
+    except ValueError as ex:
+        if raise_value_error:
+            raise ex
+        else:
+            return None
 
 
 def get_node_rack_or_zone_dict(failure_domain):
@@ -2045,12 +2296,13 @@ def get_crashcollector_nodes():
     return set(crashcollector_ls)
 
 
-def add_new_disk_for_vsphere(sc_name):
+def add_new_disk_for_vsphere(sc_name, ssd=False):
     """
     Check the PVS in use per node, and add a new disk to the worker node with the minimum PVS.
 
     Args:
         sc_name (str): The storage class name
+        ssd (bool): if True, mark disk as SSD
 
     """
     ocs_nodes = get_ocs_nodes()
@@ -2058,7 +2310,28 @@ def add_new_disk_for_vsphere(sc_name):
         (len(get_node_pv_objs(sc_name, n.name)), n) for n in ocs_nodes
     ]
     node_with_min_pvs = min(num_of_pv_per_node_tuples, key=itemgetter(0))[1]
-    add_disk_to_node(node_with_min_pvs)
+    add_disk_to_node(node_with_min_pvs, ssd=ssd)
+
+
+def add_disk_stretch_arbiter(ssd=False):
+    """
+    Adds disk to storage nodes in a stretch cluster with arbiter
+    configuration evenly spread across two zones. Stretch cluster has
+    replica 4, hence 2 disks to each of the zones
+
+    Args:
+        ssd (bool): if True, mark disk as SSD
+
+    """
+
+    from ocs_ci.ocs.resources.stretchcluster import StretchCluster
+
+    data_zones = constants.DATA_ZONE_LABELS
+    sc_obj = StretchCluster()
+
+    for zone in data_zones:
+        for node in sc_obj.get_ocs_nodes_in_zone(zone)[:2]:
+            add_disk_to_node(node, ssd=ssd)
 
 
 def get_odf_zone_count():
@@ -2367,7 +2640,7 @@ def wait_for_all_osd_ids_come_up_on_nodes(
 
 
 def get_other_worker_nodes_in_same_rack_or_zone(
-    failure_domain, node_obj, node_names_to_search=None
+    failure_domain, node_obj, node_names_to_search=None, raise_value_error=True
 ):
     """
     Get other worker nodes in the same rack or zone of a given node.
@@ -2383,7 +2656,9 @@ def get_other_worker_nodes_in_same_rack_or_zone(
         list: The list of the other worker nodes in the same rack or zone of the given node.
 
     """
-    node_rack_or_zone = get_node_rack_or_zone(failure_domain, node_obj)
+    node_rack_or_zone = get_node_rack_or_zone(
+        failure_domain, node_obj, raise_value_error
+    )
     log.info(f"The node {node_obj.name} rack or zone is {node_rack_or_zone}")
     wnode_names = node_names_to_search or get_worker_nodes()
     other_wnode_names = [name for name in wnode_names if name != node_obj.name]
@@ -2392,7 +2667,8 @@ def get_other_worker_nodes_in_same_rack_or_zone(
     other_wnodes_in_same_rack_or_zone = [
         wnode
         for wnode in other_wnodes
-        if get_node_rack_or_zone(failure_domain, wnode) == node_rack_or_zone
+        if get_node_rack_or_zone(failure_domain, wnode, raise_value_error)
+        == node_rack_or_zone
     ]
 
     wnode_names = [n.name for n in other_wnodes_in_same_rack_or_zone]
@@ -2401,7 +2677,7 @@ def get_other_worker_nodes_in_same_rack_or_zone(
 
 
 def get_another_osd_node_in_same_rack_or_zone(
-    failure_domain, node_obj, node_names_to_search=None
+    failure_domain, node_obj, node_names_to_search=None, raise_value_error=True
 ):
     """
     Get another osd node in the same rack or zone of a given node.
@@ -2420,7 +2696,7 @@ def get_another_osd_node_in_same_rack_or_zone(
     """
     osd_node_names = get_osd_running_nodes()
     other_wnodes_in_same_rack_or_zone = get_other_worker_nodes_in_same_rack_or_zone(
-        failure_domain, node_obj, node_names_to_search
+        failure_domain, node_obj, node_names_to_search, raise_value_error
     )
 
     osd_node_in_same_rack_or_zone = None
@@ -2432,7 +2708,7 @@ def get_another_osd_node_in_same_rack_or_zone(
     return osd_node_in_same_rack_or_zone
 
 
-def get_nodes_racks_or_zones(failure_domain, node_names):
+def get_nodes_racks_or_zones(failure_domain, node_names, raise_value_error=True):
     """
     Get the nodes racks or zones
 
@@ -2444,10 +2720,15 @@ def get_nodes_racks_or_zones(failure_domain, node_names):
 
     """
     node_objects = get_node_objs(node_names)
-    return [get_node_rack_or_zone(failure_domain, n) for n in node_objects]
+    return [
+        get_node_rack_or_zone(failure_domain, n, raise_value_error)
+        for n in node_objects
+    ]
 
 
-def wait_for_nodes_racks_or_zones(failure_domain, node_names, timeout=120):
+def wait_for_nodes_racks_or_zones(
+    failure_domain, node_names, timeout=120, raise_value_error=True
+):
     """
     Wait for the nodes racks or zones to appear
 
@@ -2466,6 +2747,7 @@ def wait_for_nodes_racks_or_zones(failure_domain, node_names, timeout=120):
         func=get_nodes_racks_or_zones,
         failure_domain=failure_domain,
         node_names=node_names,
+        raise_value_error=raise_value_error,
     ):
         log.info(f"The nodes {node_names} racks or zones are: {nodes_racks_or_zones}")
         if all(nodes_racks_or_zones):
@@ -2557,10 +2839,12 @@ def check_for_zombie_process_on_node(node_name=None):
     node_obj_list = get_node_objs(node_name) if node_name else get_node_objs()
     for node_obj in node_obj_list:
         debug_cmd = (
-            f"debug nodes/{node_obj.name} --to-namespace={config.ENV_DATA['cluster_namespace']} "
-            '-- chroot /host /bin/bash -c "ps -A -ostat,pid,ppid | grep -e "[zZ]""'
+            f"debug nodes/{node_obj.name} --to-namespace=default "
+            '-- chroot /host /bin/bash -c "ps -A -ostat,pid,ppid | grep -e [zZ]"'
         )
-        out = node_obj.ocp.exec_oc_cmd(command=debug_cmd, out_yaml_format=False)
+        out = node_obj.ocp.exec_oc_cmd(
+            command=debug_cmd, ignore_error=True, out_yaml_format=False
+        )
         if not out:
             log.info(f"No Zombie process found on the node: {node_obj.name}")
         else:
@@ -2926,3 +3210,168 @@ def verify_crypt_device_present_onnode(node, vol_handle):
 
     log.info(f"Crypt device for volume handle {vol_handle} present on the node: {node}")
     return True
+
+
+def get_node_by_internal_ip(internal_ip):
+    """
+    Get the node object by the node internal ip.
+
+    Args:
+        internal_ip (str): The node internal ip to search for
+
+    Returns:
+        ocs_ci.ocs.resources.ocs.OCS: The node object with the given internal ip.
+            If not found, it returns None.
+
+    """
+    node_objs = get_node_objs()
+    for n in node_objs:
+        if get_node_internal_ip(n) == internal_ip:
+            return n
+
+    return None
+
+
+def get_worker_node_where_ceph_toolbox_not_running():
+    """
+    This function get a list of all worker nodes
+    and compare each worker node name with the node name of ceph tool box running.
+
+    Returns:
+        List of worker nodes other than the node where ceph tool box is already running.
+
+    """
+    ct_pod_running_node_name = get_ceph_tools_running_node()
+    worker_nodes = get_worker_nodes()
+    log.info(
+        f"List of all worker nodes available in the cluster currently {worker_nodes}"
+    )
+    other_nodes = [node for node in worker_nodes if node != ct_pod_running_node_name]
+    log.info(f"List of worker nodes where ceph tools pod is not running: {other_nodes}")
+    return other_nodes
+
+
+def apply_node_affinity_for_ceph_toolbox(node_name):
+    """
+    Apply node affinity for ceph toolbox pod.
+
+    Args:
+        node_name = node name which need to be added in the node affinity
+
+    Returns:
+        bool: True if node affinity applied successfully
+
+    """
+    resource_name = constants.DEFAULT_CLUSTERNAME
+    if config.DEPLOYMENT["external_mode"]:
+        resource_name = constants.DEFAULT_CLUSTERNAME_EXTERNAL_MODE
+
+    storagecluster_obj = ocp.OCP(
+        resource_name=resource_name,
+        namespace=config.ENV_DATA["cluster_namespace"],
+        kind=constants.STORAGECLUSTER,
+    )
+    nodeaffinity = (
+        f'{{"toolbox": {{"nodeAffinity": {{"requiredDuringSchedulingIgnoredDuringExecution": '
+        f'{{"nodeSelectorTerms": [{{"matchExpressions": [{{"key": "kubernetes.io/hostname",'
+        f'"operator": "In",'
+        f'"values": ["{node_name}"]}}]}}]}}}}}}}}'
+    )
+    param = f'{{"spec": {{"placement": {nodeaffinity}}}}}'
+    ct_pod = pod.get_ceph_tools_pod(skip_creating_pod=True)
+    ct_pod_name = ct_pod.name
+    storagecluster_obj.patch(params=param, format_type="merge")
+    log.info(
+        f"Successfully applied node affinity for ceph toolbox pod with {node_name}"
+    )
+    ct_pod.ocp.wait_for_delete(ct_pod_name)
+    log.info(
+        "Identify on which node the ceph toolbox is running after failover due to node affinity"
+    )
+    ct_new_pod_running_node_name = get_ceph_tools_running_node()
+    if node_name == ct_new_pod_running_node_name:
+        log.info(
+            f"ceph toolbox pod failovered to the new node {ct_new_pod_running_node_name}"
+            f" given in node affinity successfully "
+        )
+        return True
+
+
+def get_ceph_tools_running_node():
+    """
+    Get node name where the ceph tools pod is currently running
+
+    Returns:
+         str: name of the node where ceph tools is running
+
+    """
+    ct_pod = pod.get_ceph_tools_pod(wait=True, skip_creating_pod=True)
+    ct_pod_running_node = ct_pod.data["spec"].get("nodeName")
+    return ct_pod_running_node
+
+
+def apply_node_affinity_for_noobaa_pod():
+    """
+    Apply node affinity for noobaa operator pod.
+
+    Returns:
+        bool: True if node affinity applied successfully
+
+    """
+    resource_name = constants.DEFAULT_CLUSTERNAME
+    storagecluster_obj = ocp.OCP(
+        resource_name=resource_name,
+        namespace=config.ENV_DATA["cluster_namespace"],
+        kind=constants.STORAGECLUSTER,
+    )
+
+    nodeaffinity_toleration = {
+        "noobaa-standalone": {
+            "nodeAffinity": {
+                "requiredDuringSchedulingIgnoredDuringExecution": {
+                    "nodeSelectorTerms": [
+                        {
+                            "matchExpressions": [
+                                {"key": "kubernetes.io/hostname", "operator": "Exists"}
+                            ]
+                        }
+                    ]
+                }
+            },
+            "tolerations": [
+                {
+                    "effect": "NoExecute",
+                    "key": "node-role.kubernetes.io/infra",
+                    "value": "reserved",
+                },
+                {
+                    "effect": "NoSchedule",
+                    "key": "node-role.kubernetes.io/infra",
+                    "value": "reserved",
+                },
+            ],
+        }
+    }
+
+    param = {"spec": {"placement": nodeaffinity_toleration}}
+
+    param_str = json.dumps(param)
+    try:
+        storagecluster_obj.patch(params=param_str, format_type="merge")
+        log.info("Successfully applied node affinity")
+    except Exception as e:
+        log.error(f"Failed to apply patch: {e}")
+        return False
+
+    # check node affinity is added in storagecluster or not.
+    sc_dict = storagecluster_obj.get()
+
+    node_affinity = (
+        sc_dict.get("spec", {}).get("placement", {}).get("noobaa-standalone")
+    )
+    if node_affinity:
+        log.info("nodeAffinity is present in 'noobaa-standalone' placement.")
+        return True
+    else:
+        log.error("'noobaa-standalone' placement is missing or empty.")
+        return False

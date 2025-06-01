@@ -3,7 +3,6 @@ from ocs_ci.framework import config
 
 import pytest
 
-from ocs_ci.framework.pytest_customization import marks
 from ocs_ci.framework.testlib import (
     MCGTest,
     ignore_leftovers,
@@ -183,7 +182,9 @@ class TestMCGResourcesDisruptions(MCGTest):
         # Teardown function to revert back the scc changes made
         def finalizer():
             scc_name = constants.NOOBAA_DB_SERVICE_ACCOUNT_NAME
-            service_account = constants.NOOBAA_DB_SERVICE_ACCOUNT
+            service_account = constants.NOOBAA_DB_SERVICE_ACCOUNT.replace(
+                "openshift-storage", config.ENV_DATA["cluster_namespace"]
+            )
             pod_obj = pod.Pod(
                 **pod.get_pods_having_label(
                     label=self.labels_map["noobaa_db"],
@@ -229,7 +230,6 @@ class TestMCGResourcesDisruptions(MCGTest):
 
     @tier3
     @pytest.mark.polarion_id("OCS-2513")
-    @marks.bugzilla("1903573")
     @skipif_managed_service
     @skipif_ocs_version("<4.7")
     def test_db_scc(self, teardown):
@@ -238,7 +238,9 @@ class TestMCGResourcesDisruptions(MCGTest):
 
         """
         scc_name = constants.NOOBAA_DB_SERVICE_ACCOUNT_NAME
-        service_account = constants.NOOBAA_DB_SERVICE_ACCOUNT
+        service_account = constants.NOOBAA_DB_SERVICE_ACCOUNT.replace(
+            "openshift-storage", config.ENV_DATA["cluster_namespace"]
+        )
         pod_obj = pod.Pod(
             **pod.get_pods_having_label(
                 label=self.labels_map["noobaa_db"],

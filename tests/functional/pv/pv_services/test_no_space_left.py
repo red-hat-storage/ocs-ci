@@ -1,11 +1,12 @@
 """
 Test to verify PVC behavior when full of data with I/O
 """
+
 import logging
 import pytest
 import ocs_ci.ocs.exceptions as ex
 
-from ocs_ci.framework.pytest_customization.marks import green_squad
+from ocs_ci.framework.pytest_customization.marks import green_squad, provider_mode
 from ocs_ci.framework.testlib import tier2, ManageTest
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.resources.pod import get_used_space_on_mount_point
@@ -13,6 +14,7 @@ from ocs_ci.ocs.resources.pod import get_used_space_on_mount_point
 log = logging.getLogger(__name__)
 
 
+@provider_mode
 @green_squad
 @pytest.mark.parametrize(
     argnames=["interface"],
@@ -22,7 +24,7 @@ log = logging.getLogger(__name__)
         ),
         pytest.param(
             *[constants.CEPHFILESYSTEM],
-            marks=[pytest.mark.polarion_id("OCS-853"), pytest.mark.bugzilla("1745344")],
+            marks=[pytest.mark.polarion_id("OCS-853")],
         ),
     ],
 )
@@ -80,7 +82,6 @@ class TestPVCFullWithIORWO(ManageTest):
 
 @green_squad
 @pytest.mark.polarion_id("OCS-854")
-@pytest.mark.bugzilla("1745344")
 @tier2
 class TestPVCFullWithIORWX(ManageTest):
     """

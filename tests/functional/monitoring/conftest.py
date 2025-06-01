@@ -50,7 +50,6 @@ def measure_stop_ceph_mgr(measurement_dir, threading_lock):
         threading_lock=threading_lock,
     )
     mgr_deployments = oc.get(selector=constants.MGR_APP_LABEL)["items"]
-    mgr = mgr_deployments[0]["metadata"]["name"]
 
     def stop_mgr():
         """
@@ -67,12 +66,14 @@ def measure_stop_ceph_mgr(measurement_dir, threading_lock):
         # run_time of operation
         run_time = 60 * 7
         nonlocal oc
-        nonlocal mgr
-        logger.info(f"Downscaling deployment {mgr} to 0")
-        oc.exec_oc_cmd(f"scale --replicas=0 deployment/{mgr}")
+        nonlocal mgr_deployments
+        for mgr_deployment in mgr_deployments:
+            mgr = mgr_deployment["metadata"]["name"]
+            logger.info(f"Downscaling deployment {mgr} to 0")
+            oc.exec_oc_cmd(f"scale --replicas=0 deployment/{mgr}")
         logger.info(f"Waiting for {run_time} seconds")
         time.sleep(run_time)
-        return oc.get(mgr)
+        return mgr_deployments
 
     test_file = os.path.join(measurement_dir, "measure_stop_ceph_mgr.json")
     if config.ENV_DATA["platform"].lower() in constants.MANAGED_SERVICE_PLATFORMS:
@@ -89,9 +90,10 @@ def measure_stop_ceph_mgr(measurement_dir, threading_lock):
         measured_op = measure_operation(
             stop_mgr, test_file, threading_lock=threading_lock
         )
-    logger.info(f"Upscaling deployment {mgr} back to 1")
-    oc.exec_oc_cmd(f"scale --replicas=1 deployment/{mgr}")
-
+    for mgr_deployment in mgr_deployments:
+        mgr = mgr_deployment["metadata"]["name"]
+        logger.info(f"Upscaling deployment {mgr} back to 1")
+        oc.exec_oc_cmd(f"scale --replicas=1 deployment/{mgr}")
     # wait for ceph to return into HEALTH_OK state after mgr deployment
     # is returned back to normal
     ceph_health_check(tries=20, delay=15)
@@ -905,8 +907,17 @@ def measure_stop_rgw(measurement_dir, request, rgw_deployments, threading_lock):
         nonlocal rgw_deployments
         for rgw_deployment in rgw_deployments:
             rgw = rgw_deployment["metadata"]["name"]
-            logger.info(f"Downscaling deployment {rgw} to 0")
-            oc.exec_oc_cmd(f"scale --replicas=0 deployment/{rgw}")
+            logger.info(
+                f"Updating readiness probe of deployment {rgw} to make rgw pod down"
+            )
+            cmd = (
+                '[{"op": "replace", "path": "/spec/template/spec/containers/0/readinessProbe", '
+                '"value": {"exec": {"command": ["bash", "-c", "#!/usr/bin/env bash\n\nexit 100"]}}}]'
+            )
+            if not oc.patch(resource_name=rgw, params=cmd, format_type="json"):
+                logger.error(f"Patch command failed to run on deployment {rgw}")
+                raise CommandFailed
+            logger.info(f"Succeeded: {cmd} patched on deployment {rgw}")
         logger.info(f"Waiting for {run_time} seconds")
         time.sleep(run_time)
         return rgw_deployments
@@ -930,8 +941,8 @@ def measure_stop_rgw(measurement_dir, request, rgw_deployments, threading_lock):
     logger.info("Return RGW pods")
     for rgw_deployment in rgw_deployments:
         rgw = rgw_deployment["metadata"]["name"]
-        logger.info(f"Upscaling deployment {rgw} to 1")
-        oc.exec_oc_cmd(f"scale --replicas=1 deployment/{rgw}")
+        logger.info("To bring the pod running delete the deployment")
+        oc.delete(resource_name=rgw)
 
     return measured_op
 
@@ -1079,7 +1090,14 @@ def measure_stop_worker_nodes(request, measurement_dir, nodes, threading_lock):
             "Nodes were not found: they were probably recreated. Check ceph health below"
         )
     # Validate all nodes are in READY state and up
-    retry((CommandFailed, ResourceWrongStatusException,), tries=60, delay=15,)(
+    retry(
+        (
+            CommandFailed,
+            ResourceWrongStatusException,
+        ),
+        tries=28,
+        delay=15,
+    )(
         wait_for_nodes_status
     )(timeout=900)
 
@@ -1150,18 +1168,14 @@ def measure_change_client_ocs_version_and_stop_heartbeat(
             the client version
 
     """
-    original_cluster = config.cluster_ctx.MULTICLUSTER["multicluster_index"]
-    logger.info(f"Provider cluster key: {original_cluster}")
     logger.info("Switch to client cluster")
-    config.switch_to_consumer()
-    client_cluster = config.cluster_ctx.MULTICLUSTER["multicluster_index"]
-    logger.info(f"Client cluster key: {client_cluster}")
-    cluster_id = exec_cmd(
-        "oc get clusterversion version -o jsonpath='{.spec.clusterID}'"
-    ).stdout.decode("utf-8")
-    client_name = f"storageconsumer-{cluster_id}"
-    logger.info(f"Switch to original cluster ({original_cluster})")
-    config.switch_ctx(original_cluster)
+    with config.RunWithFirstConsumerConfigContextIfAvailable():
+        client_cluster = config.cluster_ctx.MULTICLUSTER["multicluster_index"]
+        logger.info(f"Client cluster key: {client_cluster}")
+        cluster_id = exec_cmd(
+            "oc get clusterversion version -o jsonpath='{.spec.clusterID}'"
+        ).stdout.decode("utf-8")
+        client_name = f"storageconsumer-{cluster_id}"
     client = storageconsumer.StorageConsumer(
         client_name, consumer_context=client_cluster
     )
@@ -1175,26 +1189,19 @@ def measure_change_client_ocs_version_and_stop_heartbeat(
 
         """
         nonlocal client
-        nonlocal original_cluster
         # run_time of operation
-        run_time = 60 * 3
+        run_time = 60 * 7
         client.stop_heartbeat()
         client.set_ocs_version("4.13.0")
         logger.info(f"Waiting for {run_time} seconds")
         time.sleep(run_time)
-        logger.info(f"Switch to original cluster ({original_cluster})")
-        config.switch_ctx(original_cluster)
         return
 
     def teardown():
         nonlocal client
-        nonlocal original_cluster
         nonlocal client_cluster
         logger.info(f"Switch to client cluster ({client_cluster})")
-        config.switch_ctx(client_cluster)
         client.resume_heartbeat()
-        logger.info(f"Switch to original cluster ({original_cluster})")
-        config.switch_ctx(original_cluster)
 
     request.addfinalizer(teardown)
 

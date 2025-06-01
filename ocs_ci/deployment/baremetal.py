@@ -21,10 +21,11 @@ from ocs_ci.framework import config
 from ocs_ci.deployment.ocp import OCPDeployment as BaseOCPDeployment
 from ocs_ci.deployment import assisted_installer
 from ocs_ci.ocs import constants, ocp, exceptions
-from ocs_ci.ocs.exceptions import CommandFailed, RhcosImageNotFound
+from ocs_ci.ocs.exceptions import CommandFailed, RhcosImageNotFound, TimeoutExpiredError
 from ocs_ci.ocs.node import get_nodes
 from ocs_ci.ocs.openshift_ops import OCP
 from ocs_ci.utility import ibmcloud_bm
+from ocs_ci.utility.baremetal import update_uefi_boot_order
 from ocs_ci.utility.bootstrap import gather_bootstrap
 from ocs_ci.utility.connection import Connection
 from ocs_ci.utility.csr import wait_for_all_nodes_csr_and_approve, approve_pending_csr
@@ -1023,12 +1024,13 @@ class BAREMETALAI(BAREMETALBASE):
             )
 
             # upload ipxe config to httpd server (helper_node)
+            discovery_ipxe_file_dest = (
+                f"{self.bm_config['bm_httpd_document_root']}/ipxe/"
+                f"{self.bm_config['env_name']}/discovery.ipxe"
+            )
             self.helper_node_handler.upload_file(
                 ipxe_config_file,
-                (
-                    f"{self.bm_config['bm_httpd_document_root']}/ipxe/"
-                    f"{self.bm_config['env_name']}/discovery.ipxe"
-                ),
+                discovery_ipxe_file_dest,
             )
             ipxe_file_url = (
                 f"http://{self.bm_config['bm_httpd_provision_server']}/ipxe/"
@@ -1054,7 +1056,17 @@ class BAREMETALAI(BAREMETALBASE):
             expected_node_num = (
                 config.ENV_DATA["master_replicas"] + config.ENV_DATA["worker_replicas"]
             )
-            self.ai_cluster.wait_for_discovered_nodes(expected_node_num)
+            try:
+                self.ai_cluster.wait_for_discovered_nodes(expected_node_num)
+            except TimeoutExpiredError:
+                discovered_hosts = [
+                    host["requested_hostname"]
+                    for host in self.ai_cluster.get_infra_env_hosts()
+                ]
+                for machine in master_nodes + worker_nodes:
+                    if machine not in discovered_hosts:
+                        self.set_pxe_boot_and_reboot(machine)
+                self.ai_cluster.wait_for_discovered_nodes(expected_node_num)
 
             # verify validations info
             self.ai_cluster.verify_validations_info_for_discovered_nodes()
@@ -1072,6 +1084,11 @@ class BAREMETALAI(BAREMETALBASE):
                     pxelinux_cfg_file,
                     f"{self.bm_config['bm_tftp_base_dir']}/pxelinux.cfg/{dest_cfg_file_name}",
                 )
+            # rename the discovery.ipxe file to continue boot from disk on UEFI boot mode systems
+            cmd = f"mv {discovery_ipxe_file_dest} {discovery_ipxe_file_dest}.backup"
+            assert (
+                self.helper_node_handler.exec_cmd(cmd=cmd)[0] == 0
+            ), "Failed to rename discovery.ipxe file"
 
             # update discovered hosts (configure hostname and role)
             self.ai_cluster.update_hosts_config(
@@ -1080,6 +1097,17 @@ class BAREMETALAI(BAREMETALBASE):
 
             # install the OCP cluster
             self.ai_cluster.install_cluster()
+
+            # workaround for UEFI boot order issue (make sure that PXE boot is on first place)
+            for machine in master_nodes + worker_nodes:
+                if self.srv_details[machine].get("fix_uefi_boot_order_first_option"):
+                    update_uefi_boot_order(
+                        first_option_string=self.srv_details[machine].get(
+                            "fix_uefi_boot_order_first_option"
+                        ),
+                        ocp_node=machine,
+                        ignore_error=True,
+                    )
 
         def create_dns_records(self):
             """
@@ -1153,6 +1181,21 @@ class BAREMETALAI(BAREMETALBASE):
                 machine (str): Machine Name
 
             """
+            # workaround for UEFI boot order issue (make sure that PXE boot is on first place)
+            if self.srv_details[machine].get("fix_uefi_boot_order_first_option"):
+                update_uefi_boot_order(
+                    first_option_string=self.srv_details[machine].get(
+                        "fix_uefi_boot_order_first_option"
+                    ),
+                    host={
+                        "host": self.srv_details[machine]["public_ip"],
+                        "user": "core",
+                        "private_key": os.path.expanduser(
+                            config.DEPLOYMENT["ssh_key_private"]
+                        ),
+                    },
+                    ignore_error=True,
+                )
             if self.srv_details[machine].get("mgmt_provider", "ipmitool") == "ipmitool":
                 secrets = [
                     self.srv_details[machine]["mgmt_username"],
@@ -1164,7 +1207,12 @@ class BAREMETALAI(BAREMETALBASE):
                     f"-P {self.srv_details[machine]['mgmt_password']} "
                     f"-H {self.srv_details[machine]['mgmt_console']} chassis bootdev pxe"
                 )
-                self.helper_node_handler.exec_cmd(cmd=cmd, secrets=secrets)
+                rc, stdout, stderr = self.helper_node_handler.exec_cmd(
+                    cmd=cmd, secrets=secrets
+                )
+                assert (
+                    rc == 0
+                ), f"Command execution failed - rc: {rc}, stdout: '{stdout}', stderr: '{stderr}'"
                 logger.info(
                     "Sleeping for 2 Sec to make sure bootdev pxe is set properly using ipmitool cmd"
                 )
@@ -1178,7 +1226,12 @@ class BAREMETALAI(BAREMETALBASE):
                     f"-P {self.srv_details[machine]['mgmt_password']} "
                     f"-H {self.srv_details[machine]['mgmt_console']} chassis power on"
                 )
-                self.helper_node_handler.exec_cmdrun_cmd(cmd=cmd, secrets=secrets)
+                rc, stdout, stderr = self.helper_node_handler.exec_cmd(
+                    cmd=cmd, secrets=secrets
+                )
+                assert (
+                    rc == 0
+                ), f"Command execution failed - rc: {rc}, stdout: '{stdout}', stderr: '{stderr}'"
 
             elif (
                 self.srv_details[machine].get("mgmt_provider", "ipmitool") == "ibmcloud"
@@ -1251,54 +1304,116 @@ class BAREMETALAI(BAREMETALBASE):
 
 
 @retry(exceptions.CommandFailed, tries=10, delay=30, backoff=1)
-def clean_disk(worker):
+def disks_available_to_cleanup(worker, namespace=constants.DEFAULT_NAMESPACE):
     """
-    Perform disk cleanup
+    disks available for cleanup
 
     Args:
         worker (object): worker node object
+        namespace (str): namespace where the oc_debug command will be executed
+
+    Returns:
+        disk_names_available_for_cleanup (list): The disk names available for cleanup on a node
 
     """
     ocp_obj = ocp.OCP()
     cmd = """lsblk --all --noheadings --output "KNAME,PKNAME,TYPE,MOUNTPOINT" --json"""
     out = ocp_obj.exec_oc_debug_cmd(
-        node=worker.name, cmd_list=[cmd], namespace=constants.BM_DEBUG_NODE_NS
+        node=worker.name, cmd_list=[cmd], namespace=namespace
     )
     disk_to_ignore_cleanup_raw = json.loads(str(out))
-    disk_to_ignore_cleanup_json = disk_to_ignore_cleanup_raw["blockdevices"]
-    for disk_to_ignore_cleanup in disk_to_ignore_cleanup_json:
-        if disk_to_ignore_cleanup["mountpoint"] == "/boot":
-            logger.info(
-                f"Ignorning disk {disk_to_ignore_cleanup['pkname']} for cleanup because it's a root disk "
-            )
-            selected_disk_to_ignore_cleanup = disk_to_ignore_cleanup["pkname"]
-            # Adding break when root disk is found
-            break
+    disks_available = disk_to_ignore_cleanup_raw["blockdevices"]
+    boot_disks = set()
+    disks_available_for_cleanup = []
+    for disk in disks_available:
+        # First pass: identify boot disks and filter out ROM disks
+        if disk["type"] == "rom":
+            continue
+        if "nbd" in disk["kname"]:
+            continue
+        if disk["type"] == "part" and disk["mountpoint"] == "/boot":
+            boot_disks.add(disk["pkname"])
+        if disk["type"] == "disk":
+            disks_available_for_cleanup.append(disk)
+
+    # Second pass: filter out boot disks
+    disks_available_for_cleanup = [
+        disk for disk in disks_available_for_cleanup if disk["kname"] not in boot_disks
+    ]
+    disks_names_available_for_cleanup = [
+        disk["kname"] for disk in disks_available_for_cleanup
+    ]
+
+    return disks_names_available_for_cleanup
+
+
+@retry(exceptions.CommandFailed, tries=10, delay=30, backoff=1)
+def clean_disk(worker, namespace=constants.DEFAULT_NAMESPACE):
+    """
+    Perform disk cleanup
+
+    Args:
+        worker (object): worker node object
+        namespace (str): namespace where the oc_debug command will be executed
+
+    """
+    ocp_obj = ocp.OCP()
+    disks_available_on_worker_nodes_for_cleanup = disks_available_to_cleanup(worker)
+
+    # Get the name and size in bytes of the disks
     out = ocp_obj.exec_oc_debug_cmd(
         node=worker.name,
-        cmd_list=["lsblk -nd -e252,7 --output NAME --json"],
-        namespace=constants.BM_DEBUG_NODE_NS,
+        cmd_list=["lsblk -nd -e252,7 --output NAME,SIZE -b --json"],
+        namespace=namespace,
     )
     lsblk_output = json.loads(str(out))
     lsblk_devices = lsblk_output["blockdevices"]
 
     for lsblk_device in lsblk_devices:
-        if lsblk_device["name"] == str(selected_disk_to_ignore_cleanup):
+        if lsblk_device["name"] not in disks_available_on_worker_nodes_for_cleanup:
+            logger.info(f'the disk cleanup is ignored for, {lsblk_device["name"]}')
             pass
         else:
             logger.info(f"Cleaning up {lsblk_device['name']}")
             out = ocp_obj.exec_oc_debug_cmd(
                 node=worker.name,
                 cmd_list=[f"wipefs -a -f /dev/{lsblk_device['name']}"],
-                namespace=constants.BM_DEBUG_NODE_NS,
+                namespace=namespace,
             )
+
             logger.info(out)
             out = ocp_obj.exec_oc_debug_cmd(
                 node=worker.name,
                 cmd_list=[f"sgdisk --zap-all /dev/{lsblk_device['name']}"],
-                namespace=constants.BM_DEBUG_NODE_NS,
+                namespace=namespace,
             )
             logger.info(out)
+
+            # Write different portion because bluestore replicates its metadata at multiple places on the device
+            # (at 0 / 1Gb / 10Gb / 100Gb / 1000Gb etc.)
+
+            # Get the size of disk in bytes
+            disk_size_bytes = int(lsblk_device["size"])
+
+            # Start offset as 1GiB
+            dd_seek_bytes = 1073741824
+            dd_seek_offsets = []
+
+            # Get byte values in 1Gb / 10Gb / 100Gb etc. Applicable when 'bs' in dd command is 1
+            while dd_seek_bytes < disk_size_bytes:
+                dd_seek_offsets.append(dd_seek_bytes)
+                dd_seek_bytes = dd_seek_bytes * 10
+
+            for dd_seek in dd_seek_offsets:
+                dd_cmd = [
+                    f"dd if=/dev/zero of=\"/dev/{lsblk_device['name']}\" bs=1 count=204800 seek={dd_seek}"
+                ]
+                out = ocp_obj.exec_oc_debug_cmd(
+                    node=worker.name,
+                    cmd_list=dd_cmd,
+                    namespace=namespace,
+                )
+                logger.info(out)
 
 
 class BaremetalPSIUPI(Deployment):

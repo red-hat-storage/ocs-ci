@@ -4,7 +4,10 @@ import pytest
 
 from ocs_ci.ocs import constants
 from ocs_ci.framework import config
-from ocs_ci.framework.pytest_customization.marks import green_squad
+from ocs_ci.framework.pytest_customization.marks import (
+    green_squad,
+    provider_mode,
+)
 from ocs_ci.framework.testlib import (
     ManageTest,
     tier1,
@@ -30,7 +33,7 @@ log = logging.getLogger(__name__)
     argvalues=[
         pytest.param(
             *[constants.CEPHBLOCKPOOL, RECLAIM_POLICY_DELETE],
-            marks=pytest.mark.polarion_id("OCS-939"),
+            marks=[pytest.mark.polarion_id("OCS-939"), provider_mode],
         ),
         pytest.param(
             *[constants.CEPHBLOCKPOOL, RECLAIM_POLICY_RETAIN],
@@ -42,7 +45,7 @@ log = logging.getLogger(__name__)
         ),
         pytest.param(
             *[constants.CEPHFILESYSTEM, RECLAIM_POLICY_DELETE],
-            marks=pytest.mark.polarion_id("OCS-963"),
+            marks=[pytest.mark.polarion_id("OCS-963"), provider_mode],
         ),
         pytest.param(
             *[constants.CEPHFILESYSTEM, RECLAIM_POLICY_RETAIN],
@@ -206,8 +209,10 @@ class TestChangeReclaimPolicyOfPv(ManageTest):
         # Verify reclaim policy of all PVs
         for pv_obj in pvs:
             policy = pv_obj.get().get("spec").get("persistentVolumeReclaimPolicy")
-            retain_pvs.append(pv_obj) if policy == "Retain" else (
-                delete_pvs.append(pv_obj)
+            (
+                retain_pvs.append(pv_obj)
+                if policy == "Retain"
+                else (delete_pvs.append(pv_obj))
             )
             if pv_obj in changed_pvs:
                 assert policy == reclaim_policy_to, (
@@ -314,8 +319,9 @@ class TestChangeReclaimPolicyOfPv(ManageTest):
         pool_name = (
             default_ceph_block_pool() if interface == constants.CEPHBLOCKPOOL else None
         )
-        for pvc_name, uuid in pvc_uuid_map.items():
-            assert verify_volume_deleted_in_backend(
-                interface=interface, image_uuid=uuid, pool_name=pool_name
-            ), f"Volume associated with PVC {pvc_name} still exists in backend"
+        with config.RunWithProviderConfigContextIfAvailable():
+            for pvc_name, uuid in pvc_uuid_map.items():
+                assert verify_volume_deleted_in_backend(
+                    interface=interface, image_uuid=uuid, pool_name=pool_name
+                ), f"Volume associated with PVC {pvc_name} still exists in backend"
         log.info("Verified: Image/Subvolume removed from backend.")

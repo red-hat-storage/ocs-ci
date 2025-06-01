@@ -8,7 +8,6 @@ from ocs_ci.ocs.resources.pod import get_ceph_tools_pod
 from ocs_ci.framework.pytest_customization.marks import (
     tier2,
     polarion_id,
-    bugzilla,
     green_squad,
 )
 
@@ -20,7 +19,6 @@ class TestRbdImageMetadata:
     @tier2
     @polarion_id("OCS-4465")
     @polarion_id("OCS-4675")
-    @bugzilla("2099965")
     def test_rbd_image_metadata(
         self, pvc_factory, pvc_clone_factory, snapshot_restore_factory
     ):
@@ -55,7 +53,9 @@ class TestRbdImageMetadata:
         rbd_images.append(snap_image_name)
 
         # restore the snapshot
-        restored_pvc = snapshot_restore_factory(snapshot_obj=snap_obj, timeout=600)
+        restored_pvc = snapshot_restore_factory(
+            snapshot_obj=snap_obj, volume_mode=pvc_obj.get_pvc_vol_mode, timeout=600
+        )
         log.info(f"restored the snapshot {restored_pvc.name} created!")
 
         # create a clone of the PVC

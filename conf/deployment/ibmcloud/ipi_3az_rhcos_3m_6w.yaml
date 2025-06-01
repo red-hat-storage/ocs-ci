@@ -13,6 +13,7 @@ ENV_DATA:
     - 'us-south-1'
     - 'us-south-2'
     - 'us-south-3'
+  master_instance_type: 'bx2-4x16'
   master_availability_zones:
     - 'us-south-1'
     - 'us-south-2'

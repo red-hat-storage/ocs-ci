@@ -4,7 +4,7 @@ from time import sleep
 import pytest
 
 from ocs_ci.framework import config
-from ocs_ci.framework.testlib import tier4b, turquoise_squad
+from ocs_ci.framework.testlib import rdr, tier4b, turquoise_squad
 from ocs_ci.helpers import dr_helpers
 from ocs_ci.ocs import constants, defaults
 from ocs_ci.ocs.node import (
@@ -20,6 +20,7 @@ from ocs_ci.utility.utils import ceph_health_check
 logger = logging.getLogger(__name__)
 
 
+@rdr
 @tier4b
 @turquoise_squad
 class TestNodeDrainDuringFailoverRelocate:
@@ -121,9 +122,11 @@ class TestNodeDrainDuringFailoverRelocate:
             secondary_cluster_name,
             rdr_workload.workload_namespace,
             workload_type,
-            rdr_workload.appset_placement_name
-            if workload_type != constants.SUBSCRIPTION
-            else None,
+            (
+                rdr_workload.appset_placement_name
+                if workload_type != constants.SUBSCRIPTION
+                else None
+            ),
         )
 
         # Verify resources creation on secondary cluster
@@ -198,9 +201,11 @@ class TestNodeDrainDuringFailoverRelocate:
             primary_cluster_name,
             rdr_workload.workload_namespace,
             workload_type,
-            rdr_workload.appset_placement_name
-            if workload_type != constants.SUBSCRIPTION
-            else None,
+            (
+                rdr_workload.appset_placement_name
+                if workload_type != constants.SUBSCRIPTION
+                else None
+            ),
         )
 
         # Verify resources deletion from secondary cluster

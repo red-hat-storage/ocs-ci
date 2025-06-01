@@ -1,6 +1,7 @@
 """
 ScalePodPGSQL workload class for scale
 """
+
 import logging
 
 from ocs_ci.framework import config

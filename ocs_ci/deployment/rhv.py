@@ -2,6 +2,7 @@
 This module contains platform specific methods and classes for deployment
 on Red Hat Virtualization (RHV) platform
 """
+
 import logging
 
 from ocs_ci.deployment.on_prem import OnPremDeploymentBase, IPIOCPDeployment
@@ -19,9 +20,6 @@ class RHVBASE(OnPremDeploymentBase):
     """
     RHV deployment base class, with code common to both IPI and UPI.
     """
-
-    # default storage class for StorageCluster CRD on RHV platform
-    DEFAULT_STORAGECLASS = "ovirt-csi-sc"
 
     def __init__(self):
         super(RHVBASE, self).__init__()

@@ -67,7 +67,7 @@ class TestTaintAndTolerations(E2ETest):
         # Respin all pods and check it if is still running
         pod_list = get_all_pods(namespace=config.ENV_DATA["cluster_namespace"])
         for pod in pod_list:
-            if "s3cli" in pod.name:
+            if "s3cli" or "storageclient" in pod.name:
                 continue
             else:
                 pod.delete(wait=False)

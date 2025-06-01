@@ -1,0 +1,11 @@
+---
+# This configuration file is for defining update strategy for RBD Plugin
+# Part of Epic RHSTOR-5280- Reduce the time required to upgrade ODF
+# This is supported from 4.18 and above version.
+# Config Specifically for test scenario OCS-6708
+
+REPORTING:
+  polarion:
+    upgrade_id: 'OCS-6708'
+UPGRADE:
+  csi_rbd_plugin_update_strategy_max_unavailable: 50%

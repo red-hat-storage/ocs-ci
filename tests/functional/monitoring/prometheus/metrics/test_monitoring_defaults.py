@@ -5,6 +5,7 @@ check that OCS Monitoring is configured and available as expected.
 """
 
 import logging
+import ipaddress
 
 import pytest
 
@@ -13,14 +14,16 @@ from ocs_ci.framework.pytest_customization.marks import (
     metrics_for_external_mode_required,
     blue_squad,
     skipif_mcg_only,
-    bugzilla,
     runs_on_provider,
-    hci_provider_and_client_required,
+    provider_client_platform_required,
+    provider_mode,
+    skipif_external_mode,
 )
 from ocs_ci.framework.testlib import skipif_ocs_version, tier1
-from ocs_ci.ocs import constants, ocp
+from ocs_ci.ocs import constants, ocp, defaults
 from ocs_ci.ocs import metrics
 from ocs_ci.ocs.resources import pod
+from ocs_ci.utility.utils import run_cmd
 from ocs_ci.utility.prometheus import PrometheusAPI, check_query_range_result_enum
 from ocs_ci.helpers.helpers import storagecluster_independent_check
 from ocs_ci.framework.pytest_customization.marks import skipif_managed_service
@@ -81,6 +84,7 @@ def test_monitoring_enabled(threading_lock):
         assert int(value) >= 0, "bucket status isn't a positive integer or zero"
 
 
+@provider_mode
 @blue_squad
 @tier1
 @pytest.mark.polarion_id("OCS-1265")
@@ -117,6 +121,7 @@ def test_ceph_mgr_dashboard_not_deployed():
         assert "ceph-mgr-dashboard" not in route_name, msg
 
 
+@skipif_external_mode
 @skipif_mcg_only
 @blue_squad
 @skipif_ocs_version("<4.6")
@@ -141,10 +146,11 @@ def test_ceph_rbd_metrics_available(threading_lock):
     assert list_of_metrics_without_results == [], msg
 
 
+@skipif_external_mode
+@provider_mode
 @skipif_mcg_only
 @blue_squad
 @tier1
-@pytest.mark.bugzilla("2203795")
 @metrics_for_external_mode_required
 @pytest.mark.polarion_id("OCS-1268")
 @skipif_managed_service
@@ -174,7 +180,7 @@ def test_ceph_metrics_available(threading_lock):
     assert list_of_metrics_without_results == [], msg
 
 
-@bugzilla("2238400")
+@skipif_external_mode
 @skipif_mcg_only
 @blue_squad
 @tier1
@@ -260,21 +266,64 @@ def test_monitoring_reporting_ok_when_idle(workload_idle, threading_lock):
     assert all(osd_validations), osds_msg
 
 
+@provider_mode
 @blue_squad
 @tier1
 @runs_on_provider
-@hci_provider_and_client_required
+@provider_client_platform_required
 @pytest.mark.polarion_id("OCS-5204")
-def test_hci_metrics_available(threading_lock):
+def test_provider_metrics_available(threading_lock):
     """
-    HCI metrics should be provided via OCP Prometheus.
+    Metrics added in provider-client mode should be provided via OCP Prometheus on provider.
     """
     prometheus = PrometheusAPI(threading_lock=threading_lock)
     list_of_metrics_without_results = metrics.get_missing_metrics(
-        prometheus, metrics.hci_metrics
+        prometheus, metrics.provider_metrics
     )
     msg = (
-        "OCS Monitoring should provide some value(s) for tested hci metrics, "
+        "OCS Monitoring should provide some value(s) for tested provider metrics, "
         "so that the list of metrics without results is empty."
     )
     assert list_of_metrics_without_results == [], msg
+
+
+@blue_squad
+@tier1
+@skipif_external_mode
+@pytest.mark.polarion_id("OCS-6796")
+def test_monitoring_ip_connectivity(threading_lock):
+    """
+    Procedure:
+    1. Retrieves the IPv4/6 addresses of rook-ceph-exporter pods.
+    2. Logs into the prometheus-k8s pod in the openshift-monitoring namespace.
+    3. Checks connectivity using curl to fetch metrics from each exporter's /metrics endpoint.
+    4. Asserts that the expected Ceph metric is present in the response.
+
+    """
+    exporter_pods = pod.get_pods_having_label(constants.EXPORTER_APP_LABEL)
+    ip_addresses = [pod_obj["status"]["podIP"] for pod_obj in exporter_pods]
+    pod_obj_list = pod.get_all_pods(
+        namespace=defaults.OCS_MONITORING_NAMESPACE, selector_label=["prometheus"]
+    )
+    prometheus_pod_obj = None
+    for pod_obj in pod_obj_list:
+        if "prometheus-k8s" in pod_obj.name:
+            prometheus_pod_obj = pod_obj
+            break
+    assert (
+        prometheus_pod_obj is not None
+    ), "Prometheus pod not found in the monitoring namespace"
+    for ip_address in ip_addresses:
+        formatted_ip = (
+            f"[{ip_address}]"
+            if ipaddress.ip_address(ip_address).version == 6
+            else ip_address
+        )
+        cmd = (
+            f"oc rsh -n {defaults.OCS_MONITORING_NAMESPACE} {prometheus_pod_obj.name} "
+            f"curl -vv http://{formatted_ip}:9926/metrics"
+        )
+        out = run_cmd(cmd=cmd)
+        assert (
+            "ceph_AsyncMessenger_Worker_msgr_connection" in out
+        ), f"Expected Ceph metric not found in output for IP {ip_address}"

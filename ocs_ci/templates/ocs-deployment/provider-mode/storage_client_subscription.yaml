@@ -1,0 +1,26 @@
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+    name: ocs-storagecluster
+---
+apiVersion: operators.coreos.com/v1
+kind: OperatorGroup
+metadata:
+    name: openshift-storage-client-operator-group
+    namespace: openshift-storage-client
+spec:
+    targetNamespaces:
+    - openshift-storage-client
+---
+apiVersion: operators.coreos.com/v1alpha1
+kind: Subscription
+metadata:
+    name: ocs-client-operator
+    namespace: openshift-storage-client
+spec:
+    channel: PLACEHOLDER
+    installPlanApproval: Automatic
+    name: ocs-client-operator
+    source: redhat-operators
+    sourceNamespace: openshift-marketplace

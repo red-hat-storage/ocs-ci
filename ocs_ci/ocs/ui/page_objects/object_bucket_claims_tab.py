@@ -2,6 +2,9 @@ import random
 import string
 import time
 
+from retry import retry
+from selenium.common.exceptions import TimeoutException
+
 from ocs_ci.framework import config
 from ocs_ci.helpers.helpers import create_unique_resource_name
 from ocs_ci.ocs import constants
@@ -153,15 +156,22 @@ class ObjectBucketClaimsTab(ObjectStorage, CreateResourceForm):
         )
 
         if bucketclass:
-            logger.info("Select BucketClass")
-            self.do_click(self.obc_loc["bucketclass_dropdown"])
-            self.do_send_keys(self.obc_loc["bucketclass_text_field"], bucketclass)
-            self.do_click(self.generic_locators["first_dropdown_option"])
+            self.select_bucket_class(bucketclass)
 
         logger.info("Create OBC")
         self.do_click(self.generic_locators["submit_form"])
 
         return ResourcePage()
+
+    @retry(TimeoutException, tries=3, delay=5, backoff=1)
+    def select_bucket_class(self, bucketclass):
+        """
+        Select a bucket class from the dropdown
+        """
+        logger.info("Select BucketClass")
+        self.do_click(self.obc_loc["bucketclass_dropdown"])
+        self.do_send_keys(self.obc_loc["bucketclass_text_field"], bucketclass)
+        self.do_click(self.generic_locators["first_dropdown_option"])
 
     def select_openshift_storage_default_project(self):
         """

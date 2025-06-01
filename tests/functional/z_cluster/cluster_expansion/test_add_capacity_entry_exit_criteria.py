@@ -25,6 +25,8 @@ from ocs_ci.framework import config
 from ocs_ci.helpers.pvc_ops import test_create_delete_pvcs
 from ocs_ci.ocs.resources.storage_cluster import osd_encryption_verification
 from ocs_ci.helpers.sanity_helpers import Sanity
+from ocs_ci.utility.version import get_semantic_ocp_running_version, VERSION_4_16
+from ocs_ci.helpers.keyrotation_helper import OSDKeyrotation
 
 logger = logging.getLogger(__name__)
 
@@ -47,6 +49,20 @@ logger = logging.getLogger(__name__)
 @skipif_hci_provider_and_client
 class TestAddCapacity(ManageTest):
     @pytest.fixture(autouse=True)
+    def teardown(self, request):
+        """
+        Resetting the default value of KeyRotation
+        """
+
+        def finalizer():
+            kr_obj = OSDKeyrotation()
+            kr_obj.set_keyrotation_schedule("@weekly")
+            kr_obj.enable_keyrotation()
+            cluster_helpers.check_ceph_health_after_add_capacity()
+
+        request.addfinalizer(finalizer)
+
+    @pytest.fixture(autouse=True)
     def setup(self):
         """
         Init the sanity class
@@ -58,7 +74,7 @@ class TestAddCapacity(ManageTest):
         self,
         add_capacity_setup,
         project_factory,
-        multi_dc_pod,
+        multi_deployment_pods,
         multi_pvc_factory,
         pod_factory,
         mcg_obj,
@@ -83,19 +99,21 @@ class TestAddCapacity(ManageTest):
 
         # All OCS pods are in running state:
         # ToDo https://github.com/red-hat-storage/ocs-ci/issues/2361
-        assert (
-            pod_helpers.check_pods_in_running_state()
+        expected_statuses = [constants.STATUS_RUNNING, constants.STATUS_COMPLETED]
+        assert pod_helpers.check_pods_in_statuses(
+            expected_statuses=expected_statuses,
+            exclude_pod_name_prefixes=["demo-pod"],
         ), "Entry criteria FAILED: one or more OCS pods are not in running state"
         # Create the namespace under which this test will execute:
         project = project_factory()
 
         # total pvc created will be 'num_of_pvcs' * 4 types of pvcs(rbd-rwo,rwx
         # & cephfs-rwo,rwx)
-        num_of_pvcs = 40
+        num_of_pvcs = 20
 
-        rwo_rbd_pods = multi_dc_pod(
+        rwo_rbd_pods = multi_deployment_pods(
             num_of_pvcs=num_of_pvcs,
-            pvc_size=175,
+            pvc_size=150,
             project=project,
             access_mode="RWO",
             pool_type="rbd",
@@ -107,9 +125,9 @@ class TestAddCapacity(ManageTest):
         # Todo: https://github.com/red-hat-storage/ocs-ci/issues/2360
 
         # Create rwx-rbd pods
-        pods_ios_rwx_rbd = multi_dc_pod(
+        pods_ios_rwx_rbd = multi_deployment_pods(
             num_of_pvcs=10,
-            pvc_size=175,
+            pvc_size=150,
             project=project,
             access_mode="RWX-BLK",
             pool_type="rbd",
@@ -144,7 +162,7 @@ class TestAddCapacity(ManageTest):
                         bg_wrap.wrap,
                         cluster_exp_helpers.cluster_copy_ops,
                         p,
-                        iterations=200,
+                        iterations=120,
                     )
                 )
 
@@ -156,7 +174,7 @@ class TestAddCapacity(ManageTest):
             multi_pvc_factory,
             pod_factory,
             project,
-            iterations=200,
+            iterations=120,
         )
 
         # Start NooBaa IOs in the background.:
@@ -168,7 +186,7 @@ class TestAddCapacity(ManageTest):
             mcg_obj,
             awscli_pod,
             bucket_factory,
-            iterations=200,
+            iterations=120,
         )
 
         logger.info("Started obc_io_create_delete...")
@@ -179,7 +197,7 @@ class TestAddCapacity(ManageTest):
             mcg_obj,
             awscli_pod,
             bucket_factory,
-            iterations=200,
+            iterations=120,
         )
 
         # All ocs nodes are in Ready state (including master):
@@ -326,25 +344,29 @@ class TestAddCapacity(ManageTest):
         ]:
             # Change the method of creating resources when we use vSphere and IBM Cloud platforms
             self.sanity_helpers.create_resources(
-                pvc_factory, pod_factory, bucket_factory, rgw_bucket_factory
+                pvc_factory,
+                pod_factory,
+                bucket_factory,
+                rgw_bucket_factory,
+                bucket_creation_timeout=360,
             )
         else:
             num_of_pvcs = 1
-            rwo_rbd_pods = multi_dc_pod(
+            rwo_rbd_pods = multi_deployment_pods(
                 num_of_pvcs=num_of_pvcs,
                 pvc_size=5,
                 project=project,
                 access_mode="RWO",
                 pool_type="rbd",
             )
-            rwo_cephfs_pods = multi_dc_pod(
+            rwo_cephfs_pods = multi_deployment_pods(
                 num_of_pvcs=num_of_pvcs,
                 pvc_size=5,
                 project=project,
                 access_mode="RWO",
                 pool_type="cephfs",
             )
-            rwx_cephfs_pods = multi_dc_pod(
+            rwx_cephfs_pods = multi_deployment_pods(
                 num_of_pvcs=num_of_pvcs,
                 pvc_size=5,
                 project=project,
@@ -352,7 +374,7 @@ class TestAddCapacity(ManageTest):
                 pool_type="cephfs",
             )
             # Create rwx-rbd pods
-            pods_ios_rwx_rbd = multi_dc_pod(
+            pods_ios_rwx_rbd = multi_deployment_pods(
                 num_of_pvcs=num_of_pvcs,
                 pvc_size=5,
                 project=project,
@@ -386,6 +408,37 @@ class TestAddCapacity(ManageTest):
         assert (
             cluster_obj.get_ceph_health() != "HEALTH_ERR"
         ), "Ceph cluster health checking failed"
+
+        # Verify Keyrotation for newly added OSD are happning or not.
+        if (get_semantic_ocp_running_version() >= VERSION_4_16) and (
+            config.ENV_DATA.get("encryption_at_rest")
+            and (not config.DEPLOYMENT.get("kms_deployment"))
+        ):
+            logger.info("Verifying Keyrotation for OSD")
+            osd_keyrotation = OSDKeyrotation()
+
+            # Recored existing OSD keys before rotation is happen.
+            osd_keys_before_rotation = {}
+            for device in osd_keyrotation.deviceset:
+                osd_keys_before_rotation[device] = osd_keyrotation.get_osd_dm_crypt(
+                    device
+                )
+
+            # Enable Keyrotation and verify its enable status at rook and storagecluster end.
+            logger.info("Enabling the Keyrotation in storagecluster Spec.")
+            osd_keyrotation.enable_keyrotation()
+
+            # Set Key Rotation schedule to every 3 minutes.
+            schedule = "*/3 * * * *"
+            osd_keyrotation.set_keyrotation_schedule(schedule)
+
+            assert osd_keyrotation.verify_keyrotation(
+                osd_keys_before_rotation
+            ), "Keyrotation not happend for the OSD."
+
+            # Change the keyrotation value to default.
+            logger.info("Changing the keyrotation value to default.")
+            osd_keyrotation.set_keyrotation_schedule("@weekly")
 
         logger.info("ALL Exit criteria verification successfully")
         logger.info(

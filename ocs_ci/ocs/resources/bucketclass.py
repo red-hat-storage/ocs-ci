@@ -58,10 +58,7 @@ def bucket_class_factory(
         backingstore_factory: Factory for backing store creation
 
     """
-    interfaces = {
-        "oc": mcg_obj.oc_create_bucketclass,
-        "cli": mcg_obj.cli_create_bucketclass,
-    }
+    interfaces = ["oc", "cli"]
     created_bucket_classes = []
 
     def _create_bucket_class(bucket_class_dict):
@@ -108,13 +105,18 @@ def bucket_class_factory(
         """
         if "interface" in bucket_class_dict:
             interface = bucket_class_dict["interface"]
-            if interface.lower() not in interfaces.keys():
+            if interface.lower() not in interfaces:
                 raise RuntimeError(
                     f"Invalid interface type received: {interface}. "
                     f'available types: {", ".join(interfaces)}'
                 )
         else:
             interface = "OC"
+
+        if "timeout" in bucket_class_dict:
+            timeout = bucket_class_dict["timeout"]
+        else:
+            timeout = 600
 
         namespace_policy = {}
         backingstores = None
@@ -138,7 +140,6 @@ def bucket_class_factory(
                         },
                     }
                 else:
-                    # TODO: Implement support for Single-tiered NS bucketclass
                     namespace_policy["read_resources"] = [
                         nss.name for nss in namespacestores
                     ]
@@ -167,7 +168,7 @@ def bucket_class_factory(
             backingstores = [
                 backingstore
                 for backingstore in backingstore_factory(
-                    interface, bucket_class_dict["backingstore_dict"]
+                    interface, bucket_class_dict["backingstore_dict"], timeout=timeout
                 )
             ]
         else:
@@ -187,9 +188,11 @@ def bucket_class_factory(
                     "rule_id": replication_policy_tuple[0],
                     "destination_bucket": replication_policy_tuple[1],
                     "filter": {
-                        "prefix": replication_policy_tuple[2]
-                        if replication_policy_tuple[2] is not None
-                        else ""
+                        "prefix": (
+                            replication_policy_tuple[2]
+                            if replication_policy_tuple[2] is not None
+                            else ""
+                        )
                     },
                 }
             ]
@@ -199,13 +202,23 @@ def bucket_class_factory(
         bucket_class_name = create_unique_resource_name(
             resource_description="bucketclass", resource_type=interface.lower()
         )
-        interfaces[interface.lower()](
-            name=bucket_class_name,
-            backingstores=backingstores,
-            placement_policy=placement_policy,
-            namespace_policy=namespace_policy,
-            replication_policy=replication_policy,
-        )
+        if interface.lower() == "oc":
+            mcg_obj.oc_create_bucketclass(
+                bucket_class_name,
+                backingstores,
+                placement_policy,
+                namespace_policy,
+                replication_policy,
+            )
+        elif interface.lower() == "cli" and backingstores:
+            mcg_obj.cli_create_bucketclass_over_backingstores(
+                bucket_class_name, backingstores, placement_policy, replication_policy
+            )
+        else:
+            mcg_obj.cli_create_bucketclass_over_namespacestores(
+                bucket_class_name, namespacestores, namespace_policy
+            )
+
         bucket_class_object = BucketClass(
             bucket_class_name,
             backingstores,

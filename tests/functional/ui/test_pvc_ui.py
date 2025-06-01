@@ -12,8 +12,7 @@ from ocs_ci.ocs.resources.pvc import get_all_pvc_objs, get_pvc_objs
 from ocs_ci.ocs import constants
 from ocs_ci.helpers import helpers
 from ocs_ci.helpers.helpers import wait_for_resource_state, create_unique_resource_name
-from ocs_ci.utility.utils import get_ocp_version
-from ocs_ci.ocs.ui.views import locators
+from ocs_ci.ocs.ui.views import locators_for_current_ocp_version
 from ocs_ci.ocs.resources.pod import get_fio_rw_iops
 from ocs_ci.framework import config
 
@@ -73,7 +72,7 @@ class TestPvcUserInterface(object):
         self,
         project_factory,
         teardown_factory,
-        setup_ui_class,
+        setup_ui_class_factory,
         sc_name,
         access_mode,
         pvc_size,
@@ -83,6 +82,9 @@ class TestPvcUserInterface(object):
         Test create, resize and delete pvc via UI
 
         """
+
+        setup_ui_class_factory()
+
         # Creating a test project via CLI
         pro_obj = project_factory()
         project_name = pro_obj.namespace
@@ -172,8 +174,7 @@ class TestPvcUserInterface(object):
             pvc_size
         ), f"New size of the PVC cannot be less than existing size: new size is {new_size})"
 
-        ocp_version = get_ocp_version()
-        self.pvc_loc = locators[ocp_version]["pvc"]
+        self.pvc_loc = locators_for_current_ocp_version()["pvc"]
 
         # Verifying PVC expansion
         logger.info("Verifying PVC resize")
@@ -197,7 +198,12 @@ class TestPvcUserInterface(object):
         else:
             storage_type = constants.WORKLOAD_STORAGE_TYPE_FS
 
-        new_pod.run_io(storage_type, size=(new_size - 1), invalidate=0, rate="1000m")
+        new_pod.run_io(
+            storage_type,
+            size=(new_size - 1),
+            invalidate=0,
+            direct=int(storage_type == "block"),
+        )
 
         get_fio_rw_iops(new_pod)
         logger.info("FIO execution on Pod successfully completed..!!")
@@ -239,7 +245,7 @@ class TestPvcUserInterface(object):
         self,
         project_factory,
         teardown_factory,
-        setup_ui_class,
+        setup_ui_class_factory,
         sc_name,
         access_mode,
         clone_access_mode,
@@ -248,6 +254,9 @@ class TestPvcUserInterface(object):
         Test to verify PVC clone from UI
 
         """
+
+        setup_ui_class_factory()
+
         pvc_size = "1"
         vol_mode = constants.VOLUME_MODE_FILESYSTEM
 

@@ -1,6 +1,7 @@
 """
 PGSQL performance workload class
 """
+
 import logging
 
 from prettytable import PrettyTable

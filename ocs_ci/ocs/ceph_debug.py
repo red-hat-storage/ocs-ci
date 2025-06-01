@@ -11,11 +11,11 @@ logger = logging.getLogger(__name__)
 
 class RookCephPlugin(object):
     """
-    This helps you put the Mon/OSD deployments in debug mode without scaling down the rook-operator
+    This helps you put the Mon/OSD deployments in maintenance mode without scaling down the rook-operator
     or other steps involved using krew plugin. This will also take care of the plugin installation
-    if not already installed. Generally debug pods are used to perform debug ops, but they can also
+    if not already installed. Generally maintenance pods are used to perform maintenance ops, but they can also
     be used for maintenance purpose. One can use offline tools like ceph-objectstore-tool, ceph-monstore-tool
-    using debug pods.
+    using maintenance pods.
     e.g: List all PGs: $ceph-objectstore-tool --data-path /var/lib/ceph/osd/ceph-0 --op --list-pgs
     """
 
@@ -34,7 +34,7 @@ class RookCephPlugin(object):
         self.operator_namespace = operator_namespace
         self.alternate_image = alternate_image
         self.cmd = f"rook-ceph -n {namespace} --operator-namespace {operator_namespace}"
-        self.deployment_in_debug = dict()
+        self.deployment_in_maintenance = dict()
 
         if not self.check_krew_installed():
             try:
@@ -102,55 +102,55 @@ class RookCephPlugin(object):
         exec_cmd(cmd=self.rookceph_install_cmd)
         return True
 
-    def debug_start(self, deployment_name, alternate_image=None, timeout=800):
+    def maintenance_start(self, deployment_name, alternate_image=None, timeout=800):
         """
-        This starts the debug mode for the deployment
+        This starts the maintenance mode for the deployment
 
         Args:
             deployment_name (str): Name of the deployment that you want
-            it to be in debug mode i.e, either Mon or OSD deployments
+            it to be in maintenance mode i.e, either Mon or OSD deployments
 
             alternate_image (str): Alternate image that you want to pass
 
         Returns:
-              True: if debug start is successful
+              True: if maintenance start is successful
 
         """
 
-        if deployment_name in self.deployment_in_debug.keys():
+        if deployment_name in self.deployment_in_maintenance.keys():
             raise Exception(
-                f"[Error] Deployment {deployment_name} seems to be already in debug mode!"
+                f"[Error] Deployment {deployment_name} seems to be already in maintenance mode!"
             )
 
         command = self.cmd
-        command += f" debug start {deployment_name}"
+        command += f" maintenance start {deployment_name}"
         if alternate_image:
             self.alternate_image = alternate_image
             command += f" --alternate-image {self.alternate_image}"
         OCP().exec_oc_cmd(command=command, timeout=timeout, out_yaml_format=False)
         logger.info(f"{deployment_name} is successfully in mainetenance mode now!")
 
-        self.deployment_in_debug[deployment_name] = True
+        self.deployment_in_maintenance[deployment_name] = True
         return True
 
-    def debug_stop(self, deployment_name, alternate_image=None, timeout=800):
+    def maintenance_stop(self, deployment_name, alternate_image=None, timeout=800):
         """
-        This stops the debug mode for the deployment
+        This stops the maintenance mode for the deployment
 
         Args:
             alternate_image (str): Alternate image that you want to pass
 
         Returns:
-            True: if debug stop is successful
+            True: if maintenance stop is successful
 
         """
-        if deployment_name not in self.deployment_in_debug.keys():
-            raise Exception("[Error] Deployment not in debug mode")
+        if deployment_name not in self.deployment_in_maintenance.keys():
+            raise Exception("[Error] Deployment not in maintenance mode")
 
         # TODO: Make sure deployment is either mon or osd
 
         command = self.cmd
-        command += f" debug stop {deployment_name}"
+        command += f" maintenance stop {deployment_name}"
         if alternate_image:
             self.alternate_image = alternate_image
             command += f" --alternate-image {self.alternate_image}"
@@ -159,13 +159,13 @@ class RookCephPlugin(object):
             f"{deployment_name} is successfully removed from mainetenance mode now!"
         )
 
-        self.deployment_in_debug.pop(deployment_name)
+        self.deployment_in_maintenance.pop(deployment_name)
         return True
 
 
 class CephObjectStoreTool(RookCephPlugin):
     """
-    This is to perform COT related operations on OSD debug pod
+    This is to perform COT related operations on OSD maintenance pod
     We can extend this class in future to perform various other ceph-objectstore-tool operations
     """
 
@@ -179,7 +179,7 @@ class CephObjectStoreTool(RookCephPlugin):
 
     def __validate_deployment(self, deployment_name):
         """
-        Validate if the deployment is debug mode
+        Validate if the deployment is maintenance mode
         before performing COT operations
 
         Args:
@@ -192,8 +192,8 @@ class CephObjectStoreTool(RookCephPlugin):
                     "Need to pass the deployment_name either when initialising "
                     "the CephObjectStoreTool or while running the COT!!"
                 )
-        if deployment_name not in self.deployment_in_debug.keys():
-            raise Exception("Please put the osd deployment in debug mode first!")
+        if deployment_name not in self.deployment_in_maintenance.keys():
+            raise Exception("Please put the osd deployment in maintenance mode first!")
         else:
             self.deployment_name = deployment_name
 
@@ -205,27 +205,27 @@ class CephObjectStoreTool(RookCephPlugin):
         """
         data_path = self.data_path
         for deployment in get_osd_deployments():
-            if deployment.name == f"{self.deployment_name}-debug":
+            if deployment.name == f"{self.deployment_name}-maintenance":
                 osd_id = deployment.pods[0].labels["ceph-osd-id"]
                 data_path += f"ceph-{osd_id}"
         return data_path
 
-    def __get_osd_debug_pod(self):
+    def __get_osd_maintenance_pod(self):
         """
         Get osd pod corresponding to the osd deployment
         """
-        debug_pod = " "
+        maintenance_pod = " "
         for deployment in get_osd_deployments():
-            if deployment.name == f"{self.deployment_name}-debug":
-                debug_pod = deployment.pods[0]
-        return debug_pod
+            if deployment.name == f"{self.deployment_name}-maintenance":
+                maintenance_pod = deployment.pods[0]
+        return maintenance_pod
 
     def run_cot_list_pgs(self, deployment_name):
         """
         Run COT list PG operation
 
         Args:
-            deployment_name: Name of the original deployment thats in debug
+            deployment_name: Name of the original deployment thats in maintenance
 
         Returns:
             pgs: List of PGS
@@ -234,13 +234,15 @@ class CephObjectStoreTool(RookCephPlugin):
         self.__validate_deployment(deployment_name)
         data_path = self.__get_data_path()
         command = self.cot_cmd + f" --data-path {data_path} --op list-pgs"
-        pgs = self.__get_osd_debug_pod().exec_cmd_on_pod(command=command).split(" ")
+        pgs = (
+            self.__get_osd_maintenance_pod().exec_cmd_on_pod(command=command).split(" ")
+        )
         return pgs
 
 
 class MonStoreTool(RookCephPlugin):
     """
-    This is to perform MonStoreTool related operations on Mon debug pod
+    This is to perform MonStoreTool related operations on Mon maintenance pod
     We can extend this class in future to perform various other ceph-monstore-tool operations
     """
 
@@ -254,7 +256,7 @@ class MonStoreTool(RookCephPlugin):
 
     def __validate_deployment(self, deployment_name):
         """
-        Validate if the deployment is debug mode
+        Validate if the deployment is maintenance mode
         before performing MonStoreTool operations
 
         Args:
@@ -267,8 +269,8 @@ class MonStoreTool(RookCephPlugin):
                     "Need to pass the deployment_name either when initialising "
                     "the CephObjectStoreTool or while running the COT!!"
                 )
-        if deployment_name not in self.deployment_in_debug.keys():
-            raise Exception("Please put the osd deployment in debug mode first!")
+        if deployment_name not in self.deployment_in_maintenance.keys():
+            raise Exception("Please put the osd deployment in maintenance mode first!")
         else:
             self.deployment_name = deployment_name
 
@@ -281,21 +283,21 @@ class MonStoreTool(RookCephPlugin):
         """
         store_path = self.store_path
         for deployment in get_mon_deployments():
-            if deployment.name == f"{self.deployment_name}-debug":
+            if deployment.name == f"{self.deployment_name}-maintenance":
                 mon_id = deployment.pods[0].labels["ceph_daemon_id"]
                 store_path += f"ceph-{mon_id}"
         return store_path
 
-    def __get_mon_debug_pod(self):
+    def __get_mon_maintenance_pod(self):
         """
-        This returns the Mon debug pod for the corresponding
-        debug deployment
+        This returns the Mon maintenance pod for the corresponding
+        maintenance deployment
         """
-        debug_pod = " "
+        maintenance_pod = " "
         for deployment in get_mon_deployments():
-            if deployment.name == f"{self.deployment_name}-debug":
-                debug_pod = deployment.pods[0]
-        return debug_pod
+            if deployment.name == f"{self.deployment_name}-maintenance":
+                maintenance_pod = deployment.pods[0]
+        return maintenance_pod
 
     def run_mot_get_monmap(self, deployment_name):
         """
@@ -310,7 +312,7 @@ class MonStoreTool(RookCephPlugin):
         self.__validate_deployment(deployment_name)
         store_path = self.__get_store_path()
         command = self.mot_cmd + f" {store_path} get monmap -- --out /tmp/monmap"
-        out = self.__get_mon_debug_pod().exec_cmd_on_pod(
+        out = self.__get_mon_maintenance_pod().exec_cmd_on_pod(
             command=str(command), ignore_error=True
         )
         return out

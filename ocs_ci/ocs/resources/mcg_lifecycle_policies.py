@@ -27,6 +27,13 @@ class LifecyclePolicy:
                 raise TypeError(f"Rule {rule} is not of type LifecycleRule")
 
     def as_dict(self):
+        """
+        Returns the lifecycle policy as a dictionary that matches
+        the expected S3 lifecycle policy JSON format.
+
+        Note that the objects in self.rules are expected to have their own
+        as_dict() implementation.
+        """
         return {"Rules": [rule.as_dict() for rule in self.rules]}
 
     def __str__(self):
@@ -62,6 +69,10 @@ class LifecycleFilter:
         self.maxBytes = maxBytes
 
     def as_dict(self):
+        """
+        Returns the rule as a dictionary that matches
+        the expected S3 lifecycle policy JSON format
+        """
         list_of_tag_dicts = []
 
         # Initially add any criteria under the "And" key
@@ -123,6 +134,10 @@ class LifecycleRule(ABC):
         self._id = f"rule-{uuid.uuid4().hex[:8]}"
 
     def as_dict(self):
+        """
+        Returns the rule as a dictionary that matches
+        the expected S3 lifecycle policy JSON format
+        """
         rule_dict = {
             "Filter": self.filter.as_dict(),
             "ID": self._id,
@@ -150,11 +165,11 @@ class ExpirationRule(LifecycleRule):
 
     def __init__(
         self,
-        days,
+        days=None,
         filter=LifecycleFilter(),
         use_date=False,
         is_enabled=True,
-        expire_solo_delete_markers=False,
+        expired_object_delete_marker=False,
     ):
         """
         Constructor method for the class
@@ -164,7 +179,7 @@ class ExpirationRule(LifecycleRule):
             filter (LifecycleFilter): Optional object filter
             use_date (bool): Whether to set a a date instead of the number of days
             is_enabled (bool): Whether the rule is enabled or not
-            expire_solo_delete_markers (bool): Only relevant for versioned buckets.
+            expired_object_delete_marker (bool): Only relevant for versioned buckets.
                                                If set to True, a delete marker of an object
                                                will expire if no other versions of the object
                                                exist. This also means that an expired object
@@ -179,22 +194,111 @@ class ExpirationRule(LifecycleRule):
         super().__init__(filter=filter, is_enabled=is_enabled)
         self.days = days
         self.use_date = use_date
-        self.expire_solo_delete_markers = expire_solo_delete_markers
+        self.expired_object_delete_marker = expired_object_delete_marker
 
     def as_dict(self):
+        """
+        Returns the rule as a dictionary that matches
+        the expected S3 lifecycle policy JSON format
+        """
         rule_dict = super().as_dict()
-        if self.use_date:
-            expiration_time_key = "Date"
-            expiration_time_value = (
-                datetime.datetime.now() + datetime.timedelta(days=self.days)
-            ).strftime("%Y-%m-%d")
-        else:
-            expiration_time_key = "Days"
-            expiration_time_value = self.days
 
-        rule_dict["Expiration"] = {expiration_time_key: expiration_time_value}
-        if self.expire_solo_delete_markers:
-            rule_dict["Expiration"][
-                "ExpiredObjectDeleteMarker"
-            ] = self.expire_solo_delete_markers
+        d = {}
+
+        if self.days:
+            key = "Date" if self.use_date else "Days"
+            value = (
+                (datetime.datetime.now() + datetime.timedelta(days=self.days)).strftime(
+                    "%Y-%m-%d"
+                )
+                if self.use_date
+                else self.days
+            )
+            d[key] = value
+
+        # Add delete marker expiration (even if time-based expiration exists — for negative testing)
+        if self.expired_object_delete_marker:
+            d["ExpiredObjectDeleteMarker"] = True
+
+        rule_dict["Expiration"] = d
+        return rule_dict
+
+
+class AbortIncompleteMultipartUploadRule(LifecycleRule):
+    """
+    A class for handling the parsing of an MCG object expiration rule
+    """
+
+    def __init__(
+        self,
+        days_after_initiation,
+        filter=LifecycleFilter(),
+        is_enabled=True,
+    ):
+        """
+        Constructor method for the class
+
+        Args:
+            days_after_initiation (int): Number of days after which the multipart upload will be aborted
+            filter (LifecycleFilter): Optional object filter
+            is_enabled (bool): Whether the rule is enabled or not
+        """
+        super().__init__(filter=filter, is_enabled=is_enabled)
+        self.days_after_initiation = days_after_initiation
+
+    def as_dict(self):
+        """
+        Returns the rule as a dictionary that matches
+        the expected S3 lifecycle policy JSON format
+        """
+        rule_dict = super().as_dict()
+        rule_dict["AbortIncompleteMultipartUpload"] = {
+            "DaysAfterInitiation": self.days_after_initiation
+        }
+        return rule_dict
+
+
+class NoncurrentVersionExpirationRule(LifecycleRule):
+    """
+    A class for handling the parsing of an MCG non-current version expiration rule
+    """
+
+    def __init__(
+        self,
+        non_current_days=None,
+        newer_non_current_versions=None,
+        filter=LifecycleFilter(),
+        is_enabled=True,
+    ):
+        """
+        Constructor method for the class
+
+        Args:
+            non_current_days (int): Number of days after which the non-current version will expire
+            newer_non_current_versions (int): Number of newer non-current versions to retain
+            filter (LifecycleFilter): Optional object filter
+            is_enabled (bool): Whether the rule is enabled or not
+        """
+        super().__init__(filter=filter, is_enabled=is_enabled)
+        self.non_current_days = non_current_days
+        self.newer_non_current_versions = newer_non_current_versions
+        if not self.non_current_days and not self.newer_non_current_versions:
+            raise ValueError(
+                "Either non_current_days or newer_non_current_versions must be set"
+            )
+
+    def as_dict(self):
+        """
+        Returns the rule as a dictionary that matches
+        the expected S3 lifecycle policy JSON format
+        """
+        rule_dict = super().as_dict()
+
+        d = {}
+        if self.non_current_days is not None:
+            d["NoncurrentDays"] = self.non_current_days
+        if self.newer_non_current_versions is not None:
+            d["NewerNoncurrentVersions"] = self.newer_non_current_versions
+        rule_dict["NoncurrentVersionExpiration"] = d
+
         return rule_dict

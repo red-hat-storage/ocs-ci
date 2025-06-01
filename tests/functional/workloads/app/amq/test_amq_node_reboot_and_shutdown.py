@@ -6,6 +6,7 @@ from ocs_ci.framework.pytest_customization.marks import (
     skipif_vsphere_ipi,
     skipif_ibm_cloud,
     magenta_squad,
+    skipif_rosa_hcp,
 )
 from ocs_ci.framework.testlib import E2ETest, workloads, ignore_leftovers
 from ocs_ci.helpers.sanity_helpers import Sanity
@@ -80,7 +81,10 @@ class TestAMQNodeReboot(E2ETest):
         argnames=["node_type"],
         argvalues=[
             pytest.param(*["worker"], marks=pytest.mark.polarion_id("OCS-1282")),
-            pytest.param(*["master"], marks=pytest.mark.polarion_id("OCS-1281")),
+            pytest.param(
+                *["master"],
+                marks=[pytest.mark.polarion_id("OCS-1281"), skipif_rosa_hcp],
+            ),
         ],
     )
     def test_amq_after_rebooting_node(self, node_type, nodes, amq_setup):
@@ -106,12 +110,12 @@ class TestAMQNodeReboot(E2ETest):
         # Validate all nodes and services are in READY state and up
         retry(
             (CommandFailed, TimeoutError, AssertionError, ResourceWrongStatusException),
-            tries=60,
+            tries=28,
             delay=15,
         )(ocp.wait_for_cluster_connectivity(tries=400))
         retry(
             (CommandFailed, TimeoutError, AssertionError, ResourceWrongStatusException),
-            tries=60,
+            tries=28,
             delay=15,
         )(wait_for_nodes_status(timeout=1800))
 
@@ -154,7 +158,7 @@ class TestAMQNodeReboot(E2ETest):
         # Validate all nodes are in READY state and up
         retry(
             (CommandFailed, TimeoutError, AssertionError, ResourceWrongStatusException),
-            tries=30,
+            tries=28,
             delay=15,
         )(wait_for_nodes_status(timeout=1800))
 

@@ -1,0 +1,8 @@
+[
+    {
+      "image-name": "rhtap-hypershift-operator",
+      "image-tag": "latest",
+      "image-remote": "quay.io/acm-d",
+      "image-key": "hypershift_operator"
+    }
+  ]

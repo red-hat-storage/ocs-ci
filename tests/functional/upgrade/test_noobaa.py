@@ -6,7 +6,6 @@ from ocs_ci.framework.pytest_customization.marks import (
     pre_upgrade,
     post_upgrade,
     aws_platform_required,
-    bugzilla,
     red_squad,
     skipif_aws_creds_are_missing,
     skipif_managed_service,
@@ -134,7 +133,6 @@ def test_noobaa_postupgrade(
 
 @aws_platform_required
 @skipif_managed_service
-@bugzilla("1820974")
 @pre_upgrade
 @mcg
 @red_squad
@@ -148,7 +146,6 @@ def test_buckets_before_upgrade(upgrade_buckets, mcg_obj_session):
 
 @aws_platform_required
 @skipif_managed_service
-@bugzilla("1820974")
 @post_upgrade
 @pytest.mark.polarion_id("OCS-2181")
 @mcg
@@ -180,10 +177,9 @@ def test_start_upgrade_mcg_io(mcg_workload_job):
 @post_upgrade
 @skipif_managed_service
 @pytest.mark.polarion_id("OCS-2207")
-@bugzilla("1874243")
 @mcg
 @red_squad
-def test_upgrade_mcg_io(mcg_workload_job):
+def deprecated_test_upgrade_mcg_io(mcg_workload_job):
     """
     Confirm that there is MCG workload job running after upgrade.
     """

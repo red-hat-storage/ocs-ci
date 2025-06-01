@@ -8,7 +8,6 @@ from ocs_ci.framework import config
 from ocs_ci.framework.pytest_customization.marks import (
     red_squad,
     polarion_id,
-    bugzilla,
     tier1,
     tier2,
     pre_upgrade,
@@ -16,6 +15,9 @@ from ocs_ci.framework.pytest_customization.marks import (
     skipif_aws_creds_are_missing,
     ignore_leftovers,
     mcg,
+    skipif_disconnected_cluster,
+    skipif_proxy_cluster,
+    skipif_external_mode,
 )
 from ocs_ci.framework.testlib import MCGTest
 from ocs_ci.ocs import constants
@@ -33,6 +35,9 @@ logger = logging.getLogger(__name__)
 @mcg
 @red_squad
 @ignore_leftovers  # needed for the upgrade TCs
+@skipif_disconnected_cluster
+@skipif_proxy_cluster
+@skipif_external_mode
 class TestDefaultBackingstoreOverride(MCGTest):
     """
     Test overriding the default noobaa backingstore
@@ -142,7 +147,6 @@ class TestDefaultBackingstoreOverride(MCGTest):
     @tier2
     @skipif_aws_creds_are_missing
     @polarion_id("OCS-5195")
-    @bugzilla("2237427")
     def test_bucketclass_replication_after_default_backingstore_override(
         self,
         mcg_obj_session,

@@ -12,8 +12,8 @@ from ocs_ci.framework.testlib import (
     E2ETest,
     tier1,
     on_prem_platform_required,
-    bugzilla,
     skipif_external_mode,
+    skipif_disconnected_cluster,
     rgw,
 )
 from ocs_ci.helpers.helpers import default_storage_class
@@ -24,20 +24,34 @@ from ocs_ci.ocs.resources.objectbucket import OBC
 from ocs_ci.ocs.resources.rgw import RGW
 from ocs_ci.ocs.resources.pod import get_pod_logs, get_rgw_pods, get_pod_obj
 from ocs_ci.ocs.utils import get_pod_name_by_pattern
+from ocs_ci.utility.retry import retry
 from ocs_ci.utility.utils import exec_cmd, run_cmd, clone_notify
 
-
 log = logging.getLogger(__name__)
+
+
+@retry(AssertionError, tries=5, delay=10)
+def check_kafka_messages(kafkadrop_host, kafka_topic_name):
+    curl_command = (
+        f"curl -X GET {kafkadrop_host}/topic/{kafka_topic_name} "
+        "-H 'content-type: application/vnd.kafka.json.v2+json'"
+    )
+    json_output = run_cmd(cmd=curl_command)
+    new_string = json_output.split()
+    messages = new_string[new_string.index("messages</td>") + 1]
+    if messages.find("1") == -1:
+        raise AssertionError(
+            "Error: Messages are not received from Kafka side."
+            "RGW bucket notification is not working as expected."
+        )
 
 
 @rgw
 @magenta_squad
 @tier1
-@bugzilla("2209616")
-@bugzilla("1937187")
-@bugzilla("1958818")
 @on_prem_platform_required
 @skipif_external_mode
+@skipif_disconnected_cluster
 @pytest.mark.polarion_id("OCS-2514")
 class TestRGWAndKafkaNotifications(E2ETest):
     """
@@ -49,9 +63,9 @@ class TestRGWAndKafkaNotifications(E2ETest):
     def test_fixture_amq(self, request):
         self.amq = AMQ()
 
-        self.kafka_topic = (
-            self.kafkadrop_pod
-        ) = self.kafkadrop_svc = self.kafkadrop_route = None
+        self.kafka_topic = self.kafkadrop_pod = self.kafkadrop_svc = (
+            self.kafkadrop_route
+        ) = None
 
         def teardown():
             if self.kafka_topic:
@@ -144,18 +158,9 @@ class TestRGWAndKafkaNotifications(E2ETest):
 
         # Validate message are received Kafka side using curl command
         # A temporary way to check from Kafka side, need to check from UI
-        curl_command = (
-            f"curl -X GET {kafkadrop_host}/topic/{self.kafka_topic.name} "
-            "-H 'content-type: application/vnd.kafka.json.v2+json'"
+        check_kafka_messages(
+            kafkadrop_host=kafkadrop_host, kafka_topic_name=self.kafka_topic.name
         )
-        json_output = run_cmd(cmd=curl_command)
-        new_string = json_output.split()
-        messages = new_string[new_string.index("messages</td>") + 1]
-        if messages.find("1") == -1:
-            raise Exception(
-                "Error: Messages are not recieved from Kafka side."
-                "RGW bucket notification is not working as expected."
-            )
 
         # Validate the timestamp events
         ocs_version = config.ENV_DATA["ocs_version"]

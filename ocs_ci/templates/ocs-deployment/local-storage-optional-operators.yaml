@@ -27,6 +27,6 @@ spec:
   icon:
     base64data: ""
     mediatype: ""
-  image: quay.io/openshift-qe-optional-operators/ocp4-index:latest
+  image: quay.io/openshift-qe-optional-operators/aosqe-index:v{}
   publisher: Red Hat
   sourceType: grpc

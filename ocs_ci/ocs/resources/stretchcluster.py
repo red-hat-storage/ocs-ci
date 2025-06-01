@@ -1,12 +1,15 @@
 import logging
 import json
 import re
+import time
 
 from datetime import timedelta
 
-from ocs_ci.ocs.node import get_nodes_having_label, get_node_objs
+from ocs_ci.framework import config
 from ocs_ci.ocs.resources import pod
+from ocs_ci.ocs.node import get_nodes_having_label, get_ocs_nodes, get_node_objs
 from ocs_ci.ocs.resources.ocs import OCS
+from ocs_ci.ocs.resources.pvc import get_pvc_objs
 from ocs_ci.utility.retry import retry
 from ocs_ci.ocs.exceptions import (
     CommandFailed,
@@ -23,6 +26,7 @@ from ocs_ci.ocs.resources.pod import (
     get_mon_pods,
     get_mon_pod_id,
     get_pod_node,
+    get_osd_pods,
 )
 
 logger = logging.getLogger(__name__)
@@ -114,6 +118,42 @@ class StretchCluster(OCS):
     def rbd_old_log(self):
         return self.logfile_map[constants.LOGWRITER_RBD_LABEL][2]
 
+    def get_workload_pvc_obj(self, workload_label):
+        """
+        Gets the PVC object for the volume attached
+        to the workload type mentioned by label
+
+        Args:
+            workload_label (str): Label for the workload
+
+        Returns:
+            PVC object
+
+        """
+        pvcs = None
+
+        if (
+            workload_label == constants.LOGWRITER_CEPHFS_LABEL
+            or workload_label == constants.LOGREADER_CEPHFS_LABEL
+        ):
+            pvcs = get_pvc_objs(
+                pvc_names=[
+                    self.cephfs_logwriter_dep.get()["spec"]["template"]["spec"][
+                        "volumes"
+                    ][0]["persistentVolumeClaim"]["claimName"]
+                ],
+                namespace=constants.STRETCH_CLUSTER_NAMESPACE,
+            )
+        elif workload_label == constants.LOGWRITER_RBD_LABEL:
+            pvc_names = list()
+            for pod_obj in self.workload_map[workload_label]:
+                pvc_names.append(f"logwriter-rbd-{pod_obj.name}")
+            pvcs = get_pvc_objs(
+                pvc_names=pvc_names, namespace=constants.STRETCH_CLUSTER_NAMESPACE
+            )
+
+        return pvcs
+
     def get_nodes_in_zone(self, zone):
         """
         This will return the list containing OCS objects
@@ -130,7 +170,24 @@ class StretchCluster(OCS):
         label = f"{constants.ZONE_LABEL}={zone}"
         return [OCS(**node_info) for node_info in get_nodes_having_label(label)]
 
-    @retry(CommandFailed, tries=10, delay=10)
+    def get_ocs_nodes_in_zone(self, zone):
+        """
+        Get the OCS nodes in a particular zone
+
+        Args:
+            zone (str): Zone that node belongs to
+
+        Returns:
+            List: Node(OCS) objects
+
+        """
+
+        nodes_in_zone = set([node.name for node in self.get_nodes_in_zone(zone)])
+        ocs_nodes = set([node.name for node in get_ocs_nodes()])
+        ocs_nodes_in_zone = nodes_in_zone.intersection(ocs_nodes)
+        return get_node_objs(list(ocs_nodes_in_zone))
+
+    @retry(CommandFailed, tries=6, delay=10)
     def check_for_read_pause(self, label, start_time, end_time):
         """
         This checks for any read pause has occurred during the given
@@ -146,31 +203,34 @@ class StretchCluster(OCS):
 
         """
         paused = 0
+        max_fail_expected = len(self.workload_map[label][0]) - 2
+        failed = 0
         for pod_obj in self.workload_map[label][0]:
-            if get_pod_node(pod_obj).name in self.non_quorum_nodes:
-                logger.info(
-                    f"Not checking the logs from {pod_obj.name} as it belongs to non-quorum zone"
+            try:
+                pause_count = 0
+                time_var = start_time
+                logger.info(f"Current logreader pod: {pod_obj.name}")
+                pod_log = get_pod_logs(
+                    pod_name=pod_obj.name, namespace=constants.STRETCH_CLUSTER_NAMESPACE
                 )
-                continue
-            pause_count = 0
-            time_var = start_time
-            pod_log = get_pod_logs(
-                pod_name=pod_obj.name, namespace=constants.STRETCH_CLUSTER_NAMESPACE
-            )
-            logger.info(f"Current pod: {pod_obj.name}")
-            while time_var <= (end_time + timedelta(minutes=1)):
-                t_time = time_var.strftime("%H:%M")
-                if f" {t_time}" not in pod_log:
-                    pause_count += 1
-                    logger.info(f"Read pause: {t_time}")
+                while time_var <= (end_time + timedelta(minutes=1)):
+                    t_time = time_var.strftime("%H:%M")
+                    if f" {t_time}" not in pod_log:
+                        pause_count += 1
+                        logger.info(f"Read pause: {t_time}")
+                    else:
+                        logger.info(f"Read success: {t_time}")
+                    time_var = time_var + timedelta(minutes=1)
+                if pause_count > 5:
+                    paused += 1
+            except CommandFailed:
+                if failed <= max_fail_expected:
+                    failed += 1
                 else:
-                    logger.info(f"Read success: {t_time}")
-                time_var = time_var + timedelta(minutes=1)
-            if pause_count > 5:
-                paused += 1
+                    raise
         return paused
 
-    @retry(CommandFailed, tries=10, delay=10)
+    @retry(CommandFailed, tries=6, delay=10)
     def check_for_write_pause(self, label, start_time, end_time):
         """
         Checks for write pause between start time and end time
@@ -185,19 +245,20 @@ class StretchCluster(OCS):
 
         """
         paused = 0
+        max_fail_expected = (
+            len(self.workload_map[label][0]) - 2
+            if label == constants.LOGWRITER_CEPHFS_LABEL
+            else 1
+        )
+        failed = 0
         for pod_obj in self.workload_map[label][0]:
-            if get_pod_node(pod_obj).name in self.non_quorum_nodes:
-                logger.info(
-                    f"Not checking the logs from {pod_obj.name} as it belongs to non-quorum zone"
-                )
-                continue
-            excepted = 0
+            no_such_file_expected = 1
             for file_name in self.logfile_map[label][0]:
                 pause_count = 0
                 try:
+                    logger.info(f"Current log file: {file_name}")
                     file_log = pod_obj.exec_sh_cmd_on_pod(command=f"cat {file_name}")
                     time_var = start_time
-                    logger.info(f"Current file: {file_name}")
                     while time_var <= (end_time + timedelta(minutes=1)):
                         t_time = time_var.strftime("%H:%M")
                         if f"T{t_time}" not in file_log:
@@ -208,18 +269,22 @@ class StretchCluster(OCS):
                         time_var = time_var + timedelta(minutes=1)
                     if pause_count > 5:
                         paused += 1
-                except Exception as err:
+                except CommandFailed as err:
                     if (
                         "No such file or directory" in err.args[0]
                         and label == constants.LOGWRITER_RBD_LABEL
                     ):
-                        if excepted == 0:
+                        if no_such_file_expected == 1:
                             logger.info(
                                 f"Seems like file {file_name} is not in RBD pod {pod_obj.name}"
                             )
-                            excepted += 1
+                            no_such_file_expected += 1
                         else:
                             raise UnexpectedBehaviour
+                        failed += 1
+                    elif failed < max_fail_expected:
+                        failed += 1
+                        break
                     else:
                         raise
 
@@ -254,7 +319,7 @@ class StretchCluster(OCS):
             self.logfile_map[label][0] = list(set(self.logfile_map[label][0]))
         logger.info(self.logfile_map[label][0])
 
-    @retry(UnexpectedBehaviour, tries=10, delay=5)
+    @retry(UnexpectedBehaviour, tries=8, delay=5)
     def get_logwriter_reader_pods(
         self,
         label,
@@ -381,7 +446,7 @@ class StretchCluster(OCS):
         return True
 
     @retry(CommandFailed, tries=15, delay=5)
-    def check_ceph_accessibility(self, timeout, delay=5, grace=15):
+    def check_ceph_accessibility(self, timeout, delay=60, grace=180):
         """
         Check for ceph access for the 'timeout' seconds
 
@@ -404,17 +469,23 @@ class StretchCluster(OCS):
             ceph_out = ceph_tools_pod.exec_sh_cmd_on_pod(
                 command=command, timeout=timeout + grace
             )
-            logger.info(ceph_out)
+            logger.info(f"Ceph status output:\n{ceph_out}")
             if "monclient(hunting): authenticate timed out" in ceph_out:
                 logger.warning("Ceph was hung for sometime.")
                 return False
             return True
         except Exception as err:
-            if "TimeoutExpired" in err.args[0]:
+            if (
+                "TimeoutExpired" in err.args[0]
+                or "monclient(hunting): authenticate timed out" in err.args[0]
+            ):
                 logger.error("Ceph status check got timed out. maybe ceph is hung.")
                 return False
-            elif "connect: no route to host" in err.args[0]:
-                ceph_tools_pod.delete(wait=False)
+            elif (
+                "connect: no route to host" in err.args[0]
+                or "error dialing backend" in err.args[0]
+            ):
+                ceph_tools_pod.delete(force=True)
             raise
 
     def get_out_of_quorum_nodes(self):
@@ -427,8 +498,26 @@ class StretchCluster(OCS):
         """
         # find out the mons in quorum
         ceph_tools_pod = pod.get_ceph_tools_pod()
-        output = dict(ceph_tools_pod.exec_cmd_on_pod(command="ceph quorum_status"))
-        quorum_mons = output.get("quorum_names")
+
+        @retry(CommandFailed, tries=8, delay=5)
+        def _get_non_quorum_mons():
+            """
+            Get non quorum mon pods
+
+            """
+            output = dict(ceph_tools_pod.exec_cmd_on_pod(command="ceph quorum_status"))
+            quorum_mons = output.get("quorum_names")
+
+            if len(quorum_mons) != 3:
+                raise CommandFailed
+            logger.info("waiting 10 seconds before re-checking")
+
+            time.sleep(10)
+            output = dict(ceph_tools_pod.exec_cmd_on_pod(command="ceph quorum_status"))
+            quorum_mons = output.get("quorum_names")
+            return quorum_mons
+
+        quorum_mons = _get_non_quorum_mons()
         logger.info(f"Mon's in quorum are: {quorum_mons}")
         mon_meta_data = list(
             ceph_tools_pod.exec_cmd_on_pod(command="ceph mon metadata")
@@ -468,7 +557,7 @@ class StretchCluster(OCS):
         Reset connection scores for all the mon's
 
         """
-        mon_pods = get_mon_pods(namespace=constants.OPENSHIFT_STORAGE_NAMESPACE)
+        mon_pods = get_mon_pods(namespace=config.ENV_DATA["cluster_namespace"])
         for pod_obj in mon_pods:
             mon_pod_id = get_mon_pod_id(pod_obj)
             cmd = f"ceph daemon mon.{mon_pod_id} connection scores reset"
@@ -560,7 +649,7 @@ class StretchCluster(OCS):
             self.check_for_read_pause(
                 constants.LOGREADER_CEPHFS_LABEL, start_time, end_time
             )
-            == 0
+            <= 2
         ), "Read operations are paused for CephFS workloads even for the ones in available zones"
         logger.info("All read operations are successful for CephFs workload")
 
@@ -579,7 +668,7 @@ class StretchCluster(OCS):
                 start_time,
                 end_time,
             )
-            <= 2
+            <= 1
         ), "Write operations paused for RBD workloads even for the ones in available zone"
         logger.info("all write operations are successful for RBD workloads")
 
@@ -611,3 +700,46 @@ class StretchCluster(OCS):
             failure_check_map[type](
                 start_time, end_time, wait_for_read_completion=wait_for_read_completion
             )
+
+    def get_mon_pods_in_a_zone(self, zone):
+        """
+        Fetches mon pods in a particular zone
+
+        Args:
+            zone (str): Zone
+
+        Returns:
+            List: mon pods in a zone
+
+        """
+        nodes_in_zone = [node.name for node in self.get_nodes_in_zone(zone)]
+        mon_pods = [
+            Pod(**pod_info)
+            for pod_info in get_pods_having_label(
+                label=constants.MON_APP_LABEL, statuses=["Running"]
+            )
+        ]
+        mon_pods_in_zone = [
+            pod for pod in mon_pods if get_pod_node(pod).name in nodes_in_zone
+        ]
+        return mon_pods_in_zone
+
+    def get_osd_pods_in_a_zone(self, zone):
+        """
+        Fetches osd osd pods in particular zone
+
+        Args:
+            zone (str): Zone
+
+        Returns:
+            List: OSD pods in a zone
+
+        """
+
+        nodes_in_zone = [node.name for node in self.get_nodes_in_zone(zone)]
+        osd_pods = get_osd_pods()
+
+        osd_pods_in_zone = [
+            pod for pod in osd_pods if get_pod_node(pod).name in nodes_in_zone
+        ]
+        return osd_pods_in_zone

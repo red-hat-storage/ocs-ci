@@ -1,9 +1,9 @@
-FROM registry.access.redhat.com/ubi8/ubi:latest as BUILDER
+FROM registry.access.redhat.com/ubi9/ubi:latest as BUILDER
 
 ENV OCS_CI_DIR=/opt/ocs-ci
 WORKDIR "${OCS_CI_DIR}"
 
-RUN dnf install --nodocs -y python38 python38-devel git libcurl-devel gcc openssl-devel libxml2-devel
+RUN dnf install --nodocs -y python39 python3.9-devel git libcurl-devel gcc openssl-devel libxml2-devel skopeo
 
 # Copy the entire source tree to the image
 # TODO: Check to see if there are any more files we can drop from the image
@@ -16,13 +16,12 @@ RUN pushd "${OCS_CI_DIR}" \
     && python3 -m venv venv \
     && source venv/bin/activate \
     && pip3 install --upgrade pip \
-    && pip3 install setuptools==65.5.0 \
     && pip3 install -r requirements.txt \
     && rm -rf .git
 
 ### Runner stage
 
-FROM registry.access.redhat.com/ubi8/ubi:latest as RUNNER
+FROM registry.access.redhat.com/ubi9/ubi:latest as RUNNER
 
 ENV OCS_CI_DIR="/opt/ocs-ci" \
     VIRTUAL_ENV="/opt/ocs-ci/venv" \
@@ -35,13 +34,18 @@ RUN curl -LO "https://dl.k8s.io/release/$(curl -L -s https://dl.k8s.io/release/s
     && chmod +x kubectl \
     && mv kubectl /usr/local/bin/
 
-RUN curl https://mirror.openshift.com/pub/openshift-v4/clients/ocp/latest/openshift-client-linux.tar.gz | tar -C /usr/local/bin -zxvf - oc
+RUN curl -sL https://mirror.openshift.com/pub/openshift-v4/clients/ocp/latest/openshift-client-linux.tar.gz | tar -C /usr/local/bin -zxvf - oc
 
-RUN dnf install -y --nodocs python38 git jq rsync make \
+RUN dnf install -y --nodocs python39 git jq rsync make \
     && dnf clean all \
     && rm -rf /var/cache/yum /var/cache/dnf /var/lib/dnf/repos /var/log/dnf.librepo.log /var/log/dnf.log /var/log/dnf.rpm.log /var/log/hawkey.log /var/cache/ldconfig \
     && curl -sL https://github.com/mikefarah/yq/releases/download/v4.32.2/yq_linux_amd64.tar.gz | tar -C /usr/local/bin -zxvf - ./yq_linux_amd64 \
-    && mv -v /usr/local/bin/yq_linux_amd64 /usr/local/bin/yq
+    && mv -v /usr/local/bin/yq_linux_amd64 /usr/local/bin/yq \
+    && curl -fsSL https://clis.cloud.ibm.com/install/linux | bash \
+    && ibmcloud plugin install infrastructure-service -f -r 'IBM Cloud' \
+    && ibmcloud plugin install kubernetes-service -f -r 'IBM Cloud' \
+    && ibmcloud plugin install sl -f -r 'IBM Cloud' \
+    && ibmcloud plugin install cloud-internet-services -f -r 'IBM Cloud'
 
 COPY --from=BUILDER "${OCS_CI_DIR}" "${OCS_CI_DIR}"
 

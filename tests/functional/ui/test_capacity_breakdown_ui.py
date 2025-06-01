@@ -8,7 +8,6 @@ from ocs_ci.framework.testlib import (
     ManageTest,
     tier2,
     skipif_ui_not_support,
-    bugzilla,
     skipif_ocs_version,
     ui,
 )
@@ -18,6 +17,7 @@ from ocs_ci.framework.pytest_customization.marks import (
     tier3,
     black_squad,
     runs_on_provider,
+    skipif_ibm_cloud_managed,
 )
 from ocs_ci.helpers import helpers
 from ocs_ci.ocs import constants
@@ -68,7 +68,6 @@ class TestCapacityBreakdownUI(ManageTest):
     @ui
     @runs_on_provider
     @tier2
-    @bugzilla("1832297")
     @skipif_ocs_version("!=4.8")
     @skipif_ui_not_support("validation")
     @green_squad
@@ -130,7 +129,7 @@ class TestCapacityBreakdownUI(ManageTest):
     @ui
     @black_squad
     @tier3
-    @bugzilla("2225223")
+    @skipif_ibm_cloud_managed
     @polarion_id("OCS-5122")
     def test_requested_capacity_breakdown(
         self, setup_ui_class, teardown_project_factory
@@ -190,12 +189,12 @@ class TestCapacityBreakdownUI(ManageTest):
                     capacity,
                 )
 
-        # deploy busybox and attach different pvcs to it
+        # deploy test app and attach different pvcs to it
         for data_struct in PvcCapacityDeploymentList():
-            _, data_struct.deployment = WorkloadUi().deploy_busybox(
+            _, data_struct.deployment = WorkloadUi().deploy_app(
                 namespace=namespace,
                 pvc_name=data_struct.pvc_obj.name,
-                depl_name=f"busybox-{data_struct.capacity_size}gi-{time.time_ns() // 1_000_000}",
+                depl_name=f"ubi8-{data_struct.capacity_size}gi-{time.time_ns() // 1_000_000}",
             )
 
         # fill attached PVC's with data
@@ -226,7 +225,7 @@ class TestCapacityBreakdownUI(ManageTest):
         # update of the ui comes by portions. For example, the large PVC will be updated by parts, first it's filled
         # with 1Gi, then 2.5Gi, etc. This process is random, so we give a time to update the UI
         logger.info(
-            "finished deploying busybox, wait 180 sec to update the UI of the management-console"
+            "finished deploying testing apps, wait 180 sec to update the UI of the management-console"
         )
         time.sleep(180)
 

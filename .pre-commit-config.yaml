@@ -1,10 +1,10 @@
 repos:
 
 - repo: https://github.com/psf/black
-  rev: 22.3.0
+  rev: 24.3.0
   hooks:
     - id: black
-      language_version: python3.8
+      language_version: python3.9
 
 - repo: https://github.com/pre-commit/pre-commit-hooks
   rev: v4.0.1
@@ -25,4 +25,13 @@ repos:
   rev: v1.0.5
   hooks:
     - id: check-signoff
-      language_version: python3.8
+      language_version: python3.9
+
+- repo: local
+  hooks:
+    - id: validate-retry-usage
+      name: Validate Retry Usage
+      entry: python scripts/python/checks/validate_retry_usage.py
+      language: system
+      types: [python]
+      files: \.py$

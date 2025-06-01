@@ -12,13 +12,14 @@ from ocs_ci.deployment.cloud import CloudDeploymentBase, IPIOCPDeployment
 from ocs_ci.deployment.ocp import OCPDeployment as BaseOCPDeployment
 from ocs_ci.framework import config
 from ocs_ci.ocs import constants
-from ocs_ci.ocs.defaults import IBM_CLOUD_LOAD_BALANCER_QUOTA
+from ocs_ci.ocs.defaults import IBM_CLOUD_REGIONS
 from ocs_ci.ocs.exceptions import (
     CommandFailed,
     UnsupportedPlatformVersionError,
     LeftoversExistError,
     VolumesExistError,
 )
+from ocs_ci.ocs.resources.backingstore import get_backingstore
 from ocs_ci.ocs.resources.pvc import (
     scale_down_pods_and_remove_pvcs,
 )
@@ -27,6 +28,7 @@ from ocs_ci.utility import cco
 from ocs_ci.utility.deployment import get_ocp_release_image_from_installer
 from ocs_ci.utility.retry import retry
 from ocs_ci.utility.utils import (
+    get_random_str,
     exec_cmd,
     get_infra_id_from_openshift_install_state,
 )
@@ -87,8 +89,6 @@ class IBMCloud(CloudDeploymentBase):
     Deployment class for IBM Cloud
     """
 
-    DEFAULT_STORAGECLASS = "ibmc-vpc-block-10iops-tier"
-
     OCPDeployment = IBMCloudOCPDeployment
 
     def __init__(self):
@@ -137,7 +137,6 @@ class IBMCloudIPI(CloudDeploymentBase):
     A class to handle IBM Cloud IPI specific deployment
     """
 
-    DEFAULT_STORAGECLASS = "ibmc-vpc-block-10iops-tier"
     OCPDeployment = IPIOCPDeployment
 
     def __init__(self):
@@ -162,14 +161,21 @@ class IBMCloudIPI(CloudDeploymentBase):
         # switch to us-south, if current load balancers are more than 45.
         # https://cloud.ibm.com/docs/vpc?topic=vpc-quotas
         ibmcloud.login()
+        current_region = config.ENV_DATA["region"]
+        other_region = list(IBM_CLOUD_REGIONS - {current_region})[0]
         if config.ENV_DATA.get("enable_region_dynamic_switching"):
-            lb_count = self.get_load_balancers_count()
-            if lb_count > (IBM_CLOUD_LOAD_BALANCER_QUOTA - 5):
+            current_region_lb_count = self.get_load_balancers_count()
+            ibmcloud.login(region=other_region)
+            other_region_lb_count = self.get_load_balancers_count(other_region)
+            if current_region_lb_count > other_region_lb_count:
                 logger.info(
-                    "Switching region to us-south due to lack of load balancers"
+                    f"Switching region to {other_region} due to lack of load balancers"
                 )
-                config.ENV_DATA["region"] = "us-south"
+                ibmcloud.set_region(other_region)
+            else:
                 ibmcloud.login()
+        if config.ENV_DATA.get("custom_vpc"):
+            self.prepare_custom_vpc_and_network()
         self.ocp_deployment = self.OCPDeployment()
         self.ocp_deployment.deploy_prereq()
 
@@ -197,7 +203,8 @@ class IBMCloudIPI(CloudDeploymentBase):
         resource_group = self.get_resource_group()
         if resource_group:
             try:
-                scale_down_pods_and_remove_pvcs(self.DEFAULT_STORAGECLASS)
+                self.delete_bucket()
+                scale_down_pods_and_remove_pvcs(self.storage_class)
             except Exception as err:
                 logger.warning(
                     f"Failed to scale down mon/osd pods or failed to remove PVC's. Error: {err}"
@@ -209,18 +216,45 @@ class IBMCloudIPI(CloudDeploymentBase):
             logger.warning(
                 "Resource group for the cluster doesn't exist! Will not run installer to destroy the cluster!"
             )
-        # Make sure ccoctl is downloaded before using it in destroy job.
-        cco.configure_cloud_credential_operator()
-        cco.delete_service_id(self.cluster_name, self.credentials_requests_dir)
-        if resource_group:
-            resource_group = self.get_resource_group()
-        # Based on docs:
-        # https://docs.openshift.com/container-platform/4.13/installing/installing_ibm_cloud_public/uninstalling-cluster-ibm-cloud.html
-        # The volumes should be removed before running openshift-installer for destroy, but it's not
-        # working and failing, hence moving this step back after openshift-installer.
-        self.delete_volumes(resource_group)
-        self.delete_leftover_resources(resource_group)
-        self.delete_resource_group(resource_group)
+        try:
+            # Make sure ccoctl is downloaded before using it in destroy job.
+            cco.configure_cloud_credential_operator()
+            cco.delete_service_id(self.cluster_name, self.credentials_requests_dir)
+            if resource_group:
+                resource_group = self.get_resource_group()
+            # Based on docs:
+            # https://docs.openshift.com/container-platform/4.13/installing/installing_ibm_cloud_public/uninstalling-cluster-ibm-cloud.html
+            # The volumes should be removed before running openshift-installer for destroy, but it's not
+            # working and failing, hence moving this step back after openshift-installer.
+            self.delete_volumes(resource_group)
+            self.delete_leftover_resources(resource_group)
+            self.delete_resource_group(resource_group)
+            ibmcloud.delete_dns_records(self.cluster_name)
+        except Exception as ex:
+            logger.error(f"During IBM Cloud cleanup some exception occurred {ex}")
+            raise
+        finally:
+            logger.info("Force cleaning up Service IDs and Account Policies leftovers")
+            ibmcloud.cleanup_policies_and_service_ids(self.cluster_name)
+
+    def delete_bucket(self):
+        """
+        Deletes the COS bucket
+        """
+        api_key = config.AUTH["ibmcloud"]["api_key"]
+        service_instance_id = config.AUTH["ibmcloud"]["cos_instance_crn"]
+        endpoint_url = constants.IBM_COS_GEO_ENDPOINT_TEMPLATE.format(
+            config.ENV_DATA.get("region", "us-east").lower()
+        )
+        backingstore = get_backingstore()
+        bucket_name = backingstore["spec"]["ibmCos"]["targetBucket"]
+        logger.debug(f"bucket name from backingstore: {bucket_name}")
+        cos = ibmcloud.IBMCloudObjectStorage(
+            api_key=api_key,
+            service_instance_id=service_instance_id,
+            endpoint_url=endpoint_url,
+        )
+        cos.delete_bucket(bucket_name=bucket_name)
 
     def manually_create_iam_for_vpc(self):
         """
@@ -279,7 +313,12 @@ class IBMCloudIPI(CloudDeploymentBase):
             cmd = (
                 f"ibmcloud is vols --resource-group-name {resource_group} --output json"
             )
-            proc = exec_cmd(cmd)
+            try:
+                proc = exec_cmd(cmd)
+            except CommandFailed as ex:
+                if "No resource group found" in str(ex):
+                    logger.info(f"No resource group: {resource_group} found!")
+                    return []
 
             volume_data = json.loads(proc.stdout)
             return [volume["id"] for volume in volume_data]
@@ -472,17 +511,68 @@ class IBMCloudIPI(CloudDeploymentBase):
         logger.debug(f"load balancers: {load_balancers}")
         return load_balancers
 
-    def get_load_balancers_count(self):
+    def get_load_balancers_count(self, region=None):
         """
         Gets the number of load balancers
 
+        Args:
+            region (str): region (e.g. us-south), if not defined it will take from config.
         Return:
             int: number of load balancers
 
         """
         load_balancers_count = len(self.get_load_balancers())
-        region = config.ENV_DATA.get("region")
+        if not region:
+            region = config.ENV_DATA.get("region")
         logger.info(
             f"Current load balancers count in region {region} is {load_balancers_count}"
         )
         return load_balancers_count
+
+    def prepare_custom_vpc_and_network(self):
+        """
+        Prepare resource group, VPC, address prefixes, subnets, public gateways
+        and attach subnets to public gateways. All for using custom VPC for
+        IBM Cloud IPI deployment described here:
+        https://docs.openshift.com/container-platform/4.15/installing/installing_ibm_cloud_public/installing-ibm-cloud-vpc.html
+        """
+        cluster_id = get_random_str(size=5)
+        config.ENV_DATA["cluster_id"] = cluster_id
+        cluster_name = f"{config.ENV_DATA['cluster_name']}-{cluster_id}"
+        resource_group = cluster_name
+        vpc_name = f"{cluster_name}-vpc"
+        worker_zones = config.ENV_DATA["worker_availability_zones"]
+        master_zones = config.ENV_DATA["master_availability_zones"]
+        ip_prefix = config.ENV_DATA.get("ip_prefix", 27)
+        region = config.ENV_DATA["region"]
+        zones = set(worker_zones + master_zones)
+        ip_prefixes_and_subnets = {}
+        ibmcloud.create_resource_group(resource_group)
+        ibmcloud.create_vpc(vpc_name, resource_group)
+        ibm_cloud_subnets = constants.IBM_CLOUD_SUBNETS[region]
+        for zone in zones:
+            ip_prefixes_and_subnets[zone] = ibmcloud.find_free_network_subnets(
+                ibm_cloud_subnets[zone], ip_prefix
+            )
+        for zone, ip_prefix_and_subnets in ip_prefixes_and_subnets.items():
+            gateway_name = f"{cluster_name}-public-gateway-{zone}"
+            address_prefix, subnet_split1, subnet_split2 = ip_prefix_and_subnets
+            ibmcloud.create_address_prefix(
+                f"{cluster_name}-{zone}", vpc_name, zone, address_prefix
+            )
+            ibmcloud.create_public_gateway(gateway_name, vpc_name, zone, resource_group)
+            for subnet_type, subnet in (
+                ("control-plane", subnet_split1),
+                ("compute", subnet_split2),
+            ):
+                subnet_type_key = f"{subnet_type.replace('-', '_')}_subnets"
+                if not config.ENV_DATA.get(subnet_type_key):
+                    config.ENV_DATA[subnet_type_key] = []
+                subnet_name = f"{cluster_name}-subnet-{subnet_type}-{zone}"
+                config.ENV_DATA[subnet_type_key].append(subnet_name)
+                ibmcloud.create_subnet(
+                    subnet_name, vpc_name, zone, subnet, resource_group
+                )
+                ibmcloud.attach_subnet_to_public_gateway(
+                    subnet_name, gateway_name, vpc_name
+                )

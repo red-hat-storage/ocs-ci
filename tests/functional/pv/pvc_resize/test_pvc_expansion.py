@@ -4,7 +4,7 @@ from concurrent.futures import ThreadPoolExecutor
 
 from ocs_ci.ocs import constants
 from ocs_ci.utility.utils import TimeoutSampler
-from ocs_ci.framework.pytest_customization.marks import green_squad
+from ocs_ci.framework.pytest_customization.marks import green_squad, provider_mode
 from ocs_ci.framework.testlib import (
     skipif_ocs_version,
     ManageTest,
@@ -175,6 +175,7 @@ class TestPvcExpand(ManageTest):
             )
             log.info(f"Verified {io_phase} IO on pod {pod_obj.name}.")
 
+    @provider_mode
     @acceptance
     @pytest.mark.polarion_id("OCS-2219")
     def test_pvc_expansion(self):

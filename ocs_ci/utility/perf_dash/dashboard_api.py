@@ -44,6 +44,7 @@ from it to compare between results.
         but in the dashboard all those tests (4 in the FIO example) are displayed as single test
 
 """
+
 # Builtin modules
 import logging
 
@@ -311,7 +312,7 @@ class PerfDash(object):
         results = {}
         query = f"SELECT id, name FROM builds WHERE version = {ver_id} ;"
         if self._run_query(query=query):
-            for (build_id, name) in self.cursor:
+            for build_id, name in self.cursor:
                 results[name] = build_id
 
         return None if results == {} else results
@@ -412,7 +413,7 @@ class PerfDash(object):
             f"az_topology = {topology_id} AND test_name = {test_id} ;"
         )
         if self._run_query(query=query):
-            for (sample, eslink, logfile) in self.cursor:
+            for sample, eslink, logfile in self.cursor:
                 log.debug(f"{sample}, {eslink}, {logfile}")
                 results[sample] = {
                     "eslink": eslink.rstrip("\r\n"),

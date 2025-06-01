@@ -1,10 +1,7 @@
 import json
 import logging
-import random
-import tempfile
 import time
 import datetime
-import yaml
 import pandas as pd
 
 from ocs_ci.framework import config
@@ -15,7 +12,6 @@ from ocs_ci.ocs.constants import (
     ZONE_LABEL,
     RACK_LABEL,
 )
-from ocs_ci.ocs.node import get_worker_nodes
 from ocs_ci.ocs.ocp import OCP, get_all_resource_names_of_a_kind
 from ocs_ci.ocs.resources.pod import Pod
 from ocs_ci.ocs.utils import get_pod_name_by_pattern
@@ -24,7 +20,6 @@ logger = logging.getLogger(__name__)
 
 
 class TopologyUiStr:
-
     """
     Class-helper to visualize Topology configuration saved in dataframe gathered with Selenium driver.
     """
@@ -40,10 +35,10 @@ class TopologyUiStr:
             ].copy()
             nodes_len = len(self.__topology)
             for i in range(nodes_len):
-                selected_columns_nodes_and_nested.at[
-                    i, "nested_deployments"
-                ] = selected_columns_nodes_and_nested.at[i, "nested_deployments"].drop(
-                    ["status_xpath", "select_node_xpath"], axis=1
+                selected_columns_nodes_and_nested.at[i, "nested_deployments"] = (
+                    selected_columns_nodes_and_nested.at[i, "nested_deployments"].drop(
+                        ["status_xpath", "select_node_xpath"], axis=1
+                    )
                 )
         else:
             selected_columns_nodes_and_nested = self.__topology[
@@ -138,16 +133,23 @@ def get_node_details_cli(node_name) -> dict:
     node_details["architecture"] = node_status.get("nodeInfo").get("architecture")
     _addresses = node_status.get("addresses")
     _address_dict = {item["type"]: item["address"] for item in _addresses}
-    node_details["addresses"] = (
+    # example of addresses for the vSphere:
+    # External IP: 10.1.112.86; Hostname: compute-2; Internal IP: 10.1.112.86
+    external_ip_str = (
         f"External IP: {_address_dict.get('ExternalIP')}; "
+        if _address_dict.get("ExternalIP")
+        else ""
+    )
+    node_details["addresses"] = (
+        f"{external_ip_str}"
         f"Hostname: {_address_dict.get('Hostname')}; "
         f"Internal IP: {_address_dict.get('InternalIP')}"
     )
     node_details["kubelet_version"] = node_status.get("nodeInfo").get("kubeletVersion")
     node_details["provider_ID"] = node.get().get("spec")["providerID"]
-    node_details[
-        "annotations_number"
-    ] = f"{len(node_metadata.get('annotations'))} annotation"
+    node_details["annotations_number"] = (
+        f"{len(node_metadata.get('annotations'))} annotation"
+    )
     node_details["external_id"] = "-"
     node_details["created"] = get_creation_ts_with_offset(node_metadata)
     if config.ENV_DATA["platform"].lower() in ON_PREM_PLATFORMS:
@@ -192,9 +194,9 @@ def get_deployment_details_cli(deployment_name) -> dict:
         deployment_details["labels"] = ""
     else:
         deployment_details["labels"] = node_metadata.get("labels")
-    deployment_details[
-        "annotation"
-    ] = f"{len(node_metadata.get('annotations'))} annotation"
+    deployment_details["annotation"] = (
+        f"{len(node_metadata.get('annotations'))} annotation"
+    )
     deployment_details["owner"] = node_metadata.get("ownerReferences")[0].get("name")
     deployment_details["created_at"] = get_creation_ts_with_offset(node_metadata)
 
@@ -248,8 +250,6 @@ class OdfTopologyHelper:
         return cls.instance
 
     topology_cli_df = pd.DataFrame()
-    with open(constants.BUSYBOX_TEMPLATE) as file_stream:
-        busy_box_depl = yaml.safe_load(file_stream)
 
     def read_topology_cli_all(self):
         """
@@ -285,11 +285,7 @@ class OdfTopologyHelper:
 
             # for the depl such as rook-ceph-crashcollector-a7.a1.7434.ip4.static.sl-reverse.com there is an exclusion -
             # deployment name will be trimmed by '.com' and it will become the prefix of the pod name
-            if (
-                not pods_names
-                and "rook-ceph-crashcollector" in depl_name
-                and ".com" in depl_name
-            ):
+            if "rook-ceph-crashcollector" in depl_name and ".com" in depl_name:
                 ocp = OCP(namespace=config.ENV_DATA["cluster_namespace"])
                 pods_names_all = str(
                     ocp.exec_oc_cmd(
@@ -500,94 +496,3 @@ class OdfTopologyHelper:
         return self.get_pod_obj_from_node_and_depl_df_cli(
             node_name, deployment_name, pod_name
         ).status()
-
-    def get_busybox_depl_name(self):
-        """
-        Retrieves the name of the BusyBox deployment.
-
-        Returns:
-            str: Name of the BusyBox deployment.
-        """
-        return self.busy_box_depl["metadata"]["name"]
-
-    def set_busybox_depl_name(self, name):
-        """
-        Sets the name of the BusyBox deployment.
-
-        Args:
-            name (str): New name for the BusyBox deployment.
-        """
-        self.busy_box_depl["metadata"]["name"] = name
-
-    def deploy_busybox(self) -> str:
-        """
-        Deploys a busybox container to a randomly selected worker node.
-
-        Returns:
-            str: The name of the node where the busybox container is deployed, if deployed, otherwise None.
-        """
-        random_node = random.choice(get_worker_nodes())
-        with tempfile.NamedTemporaryFile(
-            mode="w", suffix=".yaml", delete=True
-        ) as temp_file:
-            self.busy_box_depl["spec"]["template"]["spec"]["nodeName"] = random_node
-            self.busy_box_depl["metadata"]["namespace"] = config.ENV_DATA[
-                "cluster_namespace"
-            ]
-            yaml.dump(self.busy_box_depl, temp_file, default_flow_style=False)
-            temp_file.flush()
-            occli = OCP()
-            occli.apply(temp_file.name)
-
-        busy_box_scaled_up = self.wait_busy_box_scaled_up(60)
-        return random_node if busy_box_scaled_up else None
-
-    def wait_busy_box_scaled_up(self, timeout) -> bool:
-        """
-        Waits for the 'busybox' deployment to be scaled up within the specified timeout.
-
-        Args:
-            timeout (int): The maximum time to wait for the deployment to be scaled up, in seconds.
-
-        Returns:
-            bool: True if the deployment is successfully scaled up within the timeout, False otherwise.
-        """
-        busy_box_ocp_inst = OCP(
-            kind="deployment",
-            namespace=config.ENV_DATA["cluster_namespace"],
-            resource_name=self.get_busybox_depl_name(),
-        )
-        start_time = time.perf_counter()
-        while time.perf_counter() - start_time < timeout:
-            time.sleep(1)
-            if busy_box_ocp_inst.get().get("spec").get("replicas") > 0:
-                logger.info(
-                    f"deployment '{self.get_busybox_depl_name()}' "
-                    f"successfully deployed"
-                )
-                return True
-        else:
-            logger.error(
-                f"failed to deploy and scale up '{self.get_busybox_depl_name()}' deployment"
-            )
-            return False
-
-    def delete_busybox(self, force: bool = False):
-        """
-        Deletes the BusyBox deployment from cluster.
-
-        Args:
-            force (bool, optional): If True, force deletion even if the deployment is not found. Defaults to False.
-
-        Returns:
-            dict: The deletion result if the BusyBox deployment exists and is successfully deleted.
-                  Returns None otherwise.
-        """
-        deployment_name = self.get_busybox_depl_name()
-        bb_depl = OCP(
-            kind="deployment",
-            namespace=config.ENV_DATA["cluster_namespace"],
-            resource_name=deployment_name,
-        )
-        if bb_depl.is_exist():
-            return bb_depl.delete(resource_name=deployment_name, force=force)

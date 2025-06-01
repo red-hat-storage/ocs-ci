@@ -1,10 +1,13 @@
 import logging
-import pytest
 
 from ocs_ci.ocs.ocp import OCP
 from ocs_ci.ocs import constants
 from ocs_ci.framework import config
-from ocs_ci.framework.pytest_customization.marks import black_squad, runs_on_provider
+from ocs_ci.framework.pytest_customization.marks import (
+    black_squad,
+    runs_on_provider,
+    skipif_ibm_cloud_managed,
+)
 from ocs_ci.framework.testlib import tier1, ui, polarion_id
 from ocs_ci.ocs.ui.mcg_ui import NamespaceStoreUI
 from ocs_ci.ocs.resources.namespacestore import NamespaceStore
@@ -31,9 +34,10 @@ class TestNamespaceStoreUI(object):
 
     @ui
     @tier1
-    @pytest.mark.bugzilla("2158922")
+    @runs_on_provider
+    @skipif_ibm_cloud_managed
     @polarion_id("OCS-5125")
-    def test_create_namespace_store_ui(self, setup_ui_class, pvc_factory):
+    def test_create_namespace_store_ui(self, setup_ui_class_factory, pvc_factory):
         """
         1. Create a new PVC on openshift-storage namespce.
         2. Create namespacestore via ui based on filesystem and mount to new pvc
@@ -42,6 +46,8 @@ class TestNamespaceStoreUI(object):
         5. Delete PVC
 
         """
+        setup_ui_class_factory()
+
         self.namespace_store_obj = None
         openshift_storage_ns_obj = OCP(namespace=config.ENV_DATA["cluster_namespace"])
         pvc_obj = pvc_factory(

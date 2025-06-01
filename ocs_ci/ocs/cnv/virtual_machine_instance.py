@@ -1,6 +1,7 @@
 """
 Virtual machine instance class
 """
+
 import logging
 
 from ocs_ci.ocs.ocp import OCP

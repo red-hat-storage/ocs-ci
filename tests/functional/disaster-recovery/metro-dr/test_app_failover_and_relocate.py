@@ -3,7 +3,7 @@ import pytest
 import time
 
 
-from ocs_ci.framework.pytest_customization.marks import tier1
+from ocs_ci.framework.pytest_customization.marks import tier1, mdr
 from ocs_ci.framework import config
 from ocs_ci.ocs.acm.acm import AcmAddClusters
 from ocs_ci.ocs.dr.dr_workload import validate_data_integrity
@@ -38,6 +38,7 @@ polarion_id_primary_up = "OCS-4914"
 polarion_id_primary_down = "OCS-4346"
 
 
+@mdr
 @tier1
 @turquoise_squad
 class TestApplicationFailoverAndRelocate:
@@ -57,7 +58,9 @@ class TestApplicationFailoverAndRelocate:
                 and get_fence_state(self.primary_cluster_name) == "Fenced"
             ):
                 enable_unfence(self.primary_cluster_name)
-                gracefully_reboot_ocp_nodes(self.namespace, self.primary_cluster_name)
+                gracefully_reboot_ocp_nodes(
+                    self.primary_cluster_name, disable_eviction=True
+                )
 
         request.addfinalizer(finalizer)
 
@@ -180,9 +183,11 @@ class TestApplicationFailoverAndRelocate:
                 failover_cluster=secondary_cluster_name,
                 namespace=workload.workload_namespace,
                 workload_type=workload_type,
-                workload_placement_name=workload.appset_placement_name
-                if workload_type != constants.SUBSCRIPTION
-                else None,
+                workload_placement_name=(
+                    workload.appset_placement_name
+                    if workload_type != constants.SUBSCRIPTION
+                    else None
+                ),
             )
 
         # Verify application are running in other managedcluster
@@ -233,9 +238,7 @@ class TestApplicationFailoverAndRelocate:
         enable_unfence(drcluster_name=self.primary_cluster_name)
 
         # Reboot the nodes which unfenced
-        gracefully_reboot_ocp_nodes(
-            workload.workload_namespace, self.primary_cluster_name, workload_type
-        )
+        gracefully_reboot_ocp_nodes(self.primary_cluster_name, disable_eviction=True)
 
         # Application Relocate to Primary managed cluster
         secondary_cluster_name = get_current_secondary_cluster_name(
@@ -261,9 +264,11 @@ class TestApplicationFailoverAndRelocate:
                 preferred_cluster=secondary_cluster_name,
                 namespace=workload.workload_namespace,
                 workload_type=workload_type,
-                workload_placement_name=workload.appset_placement_name
-                if workload_type != constants.SUBSCRIPTION
-                else None,
+                workload_placement_name=(
+                    workload.appset_placement_name
+                    if workload_type != constants.SUBSCRIPTION
+                    else None
+                ),
             )
 
         # Verify resources deletion from previous primary or current secondary cluster

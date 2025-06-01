@@ -6,6 +6,7 @@ import argparse
 import logging
 import os
 import requests
+import tempfile
 
 from OpenSSL import crypto
 
@@ -40,26 +41,22 @@ class CSR(crypto.X509Req):
         return crypto.dump_certificate_request(crypto.FILETYPE_PEM, self).decode()
 
 
-class OCSCertificate:
+class Certificate:
     """
-    Generate custom certificate signed by the automatic siging certification
-    authority
+    Common certificate class.
 
     Args:
-        signing_service (str): URL of the automatic signing CA service
         cn (str): Certificate Common Name
         sans (list): list of Subject Alternative Names (prefixed by the type
             like 'DNS:' or 'IP:')
 
     """
 
-    def __init__(self, signing_service, cn, sans=None):
+    def __init__(self, cn, sans=None):
         self._key = None
         self._csr = None
         self._crt = None
 
-        # url pointing to automatic signing service
-        self.signing_service = signing_service
         self.cn = cn
         self.sans = sans or []
 
@@ -104,6 +101,58 @@ class OCSCertificate:
     def crt(self, crt):
         self._crt = crt
 
+    def save_key(self, path):
+        """
+        Save certificate key to file
+
+        Args:
+            path (str): path where to save certificate key
+
+        """
+        with open(path, "w") as f:
+            f.write(str(self.key))
+
+    def save_csr(self, path):
+        """
+        Save certificate signing request to file
+
+        Args:
+            path (str): path where to save certificate signing request
+
+        """
+        with open(path, "w") as f:
+            f.write(str(self.csr))
+
+    def save_crt(self, path):
+        """
+        Save certificate to file
+
+        Args:
+            path (str): path where to save certificate
+
+        """
+        with open(path, "w") as f:
+            f.write(str(self.crt))
+
+
+class OCSCertificate(Certificate):
+    """
+    Generate custom certificate signed by the automatic signing certification
+    authority
+
+    Args:
+        signing_service (str): URL of the automatic signing CA service
+        cn (str): Certificate Common Name
+        sans (list): list of Subject Alternative Names (prefixed by the type
+            like 'DNS:' or 'IP:')
+
+    """
+
+    def __init__(self, signing_service, cn, sans=None):
+        super().__init__(cn=cn, sans=sans)
+        # url pointing to automatic signing service
+        self.signing_service = signing_service
+
     def generate_key(self):
         """
         Generate private key for the certificate
@@ -143,38 +192,95 @@ class OCSCertificate:
         )
         self.crt = r.content.decode()
 
-    def save_key(self, path):
+
+class LetsEncryptCertificate(Certificate):
+    """
+    Generate custom certificate signed by Let's Encrypt authority
+
+    Args:
+        dns_plugin (str): Certbot DNS Plugin name (default: 'dns-route53')
+        cn (str): Certificate Common Name
+        sans (list): list of Subject Alternative Names (prefixed by the type
+            like 'DNS:' or 'IP:')
+
+    """
+
+    def __init__(self, dns_plugin, cn, sans=None):
+        super().__init__(cn=cn, sans=sans)
+        # url pointing to automatic signing service
+        self.dns_plugin = dns_plugin
+
+    def generate_key(self):
         """
-        Save certificate key to file
-
-        Args:
-            path (str): path where to save certificate key
-
+        Generate private key for the certificate
         """
-        with open(path, "w") as f:
-            f.write(str(self.key))
+        self.key = Key()
+        self.key.generate_key(crypto.TYPE_RSA, constants.OPENSSL_KEY_SIZE)
 
-    def save_csr(self, path):
+    def generate_csr(self):
         """
-        Save certificate signing request to file
-
-        Args:
-            path (str): path where to save certificate signing request
-
+        Generate Certificate Signing Request for the certificate
         """
-        with open(path, "w") as f:
-            f.write(str(self.csr))
+        self.csr = CSR()
+        subj = self.csr.get_subject()
+        subj.CN = self.cn
+        subj.countryName = constants.OPENSSL_CERT_COUNTRY_NAME
+        subj.stateOrProvinceName = constants.OPENSSL_CERT_STATE_OR_PROVINCE_NAME
+        subj.localityName = constants.OPENSSL_CERT_LOCALITY_NAME
+        subj.organizationName = constants.OPENSSL_CERT_ORGANIZATION_NAME
+        subj.organizationalUnitName = constants.OPENSSL_CERT_ORGANIZATIONAL_UNIT_NAME
+        subj.emailAddress = constants.OPENSSL_CERT_EMAIL_ADDRESS
 
-    def save_crt(self, path):
+        sans = ", ".join(self.sans)
+        self.csr.add_extensions(
+            [crypto.X509Extension(b"subjectAltName", False, sans.encode())]
+        )
+
+        self.csr.set_pubkey(self.key)
+        self.csr.sign(self.key, "sha256")
+
+    def get_crt(self):
         """
-        Save certificate to file
-
-        Args:
-            path (str): path where to save certificate
-
+        Get certificate from Let's Encrypt
         """
-        with open(path, "w") as f:
-            f.write(str(self.crt))
+        cert_file = self.run_certbot()
+        if cert_file:
+            with open(cert_file, "r") as f:
+                self.crt = f.read()
+
+    def run_certbot(self):
+        if config.RUN.get("run_id"):
+            certbot_dir = os.path.join(
+                os.path.expanduser(config.RUN["log_dir"]),
+                f"certbot-letsencrypt-{config.RUN['run_id']}",
+            )
+            os.mkdir(certbot_dir)
+        else:
+            certbot_dir = tempfile.mkdtemp(prefix="certbot-letsencrypt_")
+        logger.info(f"certbot directory: {certbot_dir}")
+        key_file = os.path.join(certbot_dir, "key.pem")
+        csr_file = os.path.join(certbot_dir, "csr.pem")
+        cert_file = os.path.join(certbot_dir, "crt.pem")
+        fullchain_file = os.path.join(certbot_dir, "fullchain-crt.pem")
+        chain_file = os.path.join(certbot_dir, "chain.pem")
+        conf_dir = os.path.join(certbot_dir, "config")
+        work_dir = os.path.join(certbot_dir, "work")
+        logs_dir = os.path.join(certbot_dir, "logs")
+        self.save_key(key_file)
+        self.save_csr(csr_file)
+        cmd = (
+            "certbot certonly --register-unsafely-without-email --agree-tos "
+            f"-n --no-autorenew --key-path {key_file} --csr {csr_file} --cert-path {cert_file} "
+            f"--fullchain-path {fullchain_file} --chain-path {chain_file} "
+            f"--config-dir {conf_dir} --work-dir {work_dir} --logs-dir {logs_dir} "
+            f"--{self.dns_plugin} "
+        )
+        result = exec_cmd(cmd)
+        if result.returncode != 0:
+            logger.info(f"certbot return code: {result.returncode}")
+            logger.info(f"certbot stdout: {result.stdout}")
+            logger.info(f"certbot stderr: {result.stderr}")
+        return fullchain_file
 
 
 def get_root_ca_cert():
@@ -189,16 +295,20 @@ def get_root_ca_cert():
     signing_service_url = config.DEPLOYMENT.get("cert_signing_service_url")
     ssl_ca_cert = config.DEPLOYMENT.get("ingress_ssl_ca_cert", "")
     if ssl_ca_cert and not os.path.exists(ssl_ca_cert):
-        if not signing_service_url:
-            msg = (
-                f"CA Certificate file {ssl_ca_cert} doesn't exists and "
-                "`DEPLOYMENT['cert_signing_service_url']` is not defined. "
-                "Unable to download CA Certificate!"
-            )
-            logger.error(msg)
-            raise exceptions.ConfigurationError(msg)
-        download_file(f"{signing_service_url}/root-ca.crt", ssl_ca_cert)
-        logger.info(f"CA Certificate downloaded and saved to '{ssl_ca_cert}'")
+        cert_provider = config.DEPLOYMENT.get("custom_ssl_cert_provider")
+        if cert_provider == constants.SSL_CERT_PROVIDER_OCS_QE_CA:
+            if not signing_service_url:
+                msg = (
+                    f"CA Certificate file {ssl_ca_cert} doesn't exists and "
+                    "`DEPLOYMENT['cert_signing_service_url']` is not defined. "
+                    "Unable to download CA Certificate!"
+                )
+                logger.error(msg)
+                raise exceptions.ConfigurationError(msg)
+            download_file(f"{signing_service_url}/root-ca.crt", ssl_ca_cert)
+            logger.info(f"CA Certificate downloaded and saved to '{ssl_ca_cert}'")
+        elif cert_provider == constants.SSL_CERT_PROVIDER_LETS_ENCRYPT:
+            return ""
     return ssl_ca_cert
 
 
@@ -231,7 +341,11 @@ def configure_custom_ingress_cert(
     signing_service_url = config.DEPLOYMENT.get("cert_signing_service_url")
 
     if not (os.path.exists(ssl_key) and os.path.exists(ssl_cert)):
-        if not signing_service_url:
+        cert_provider = config.DEPLOYMENT.get("custom_ssl_cert_provider")
+        if (
+            cert_provider == constants.SSL_CERT_PROVIDER_OCS_QE_CA
+            and not signing_service_url
+        ):
             msg = (
                 "Custom certificate files for ingress doesn't exists and "
                 "`DEPLOYMENT['cert_signing_service_url']` is not defined. "
@@ -243,11 +357,26 @@ def configure_custom_ingress_cert(
         logger.debug(
             f"Files '{ssl_key}' and '{ssl_cert}' doesn't exist, generate certificate"
         )
-        cert = OCSCertificate(
-            signing_service=signing_service_url,
-            cn=apps_domain,
-            sans=[f"DNS:{apps_domain}"],
-        )
+        if cert_provider == constants.SSL_CERT_PROVIDER_OCS_QE_CA:
+            cert = OCSCertificate(
+                signing_service=signing_service_url,
+                cn=apps_domain,
+                sans=[f"DNS:{apps_domain}"],
+            )
+        elif cert_provider == constants.SSL_CERT_PROVIDER_LETS_ENCRYPT:
+            cert = LetsEncryptCertificate(
+                dns_plugin=config.DEPLOYMENT["certbot_dns_plugin"],
+                cn=apps_domain,
+                sans=[f"DNS:{apps_domain}"],
+            )
+        else:
+            msg = (
+                f"Certbot DNS plugin {config.DEPLOYMENT['certbot_dns_plugin']} not supported. "
+                "Supported `DEPLOYMENT['certbot_dns_plugin']` options are: 'dns-route53'. "
+                "Unable to generate custom Ingress certificate!"
+            )
+            logger.error(msg)
+            raise exceptions.ConfigurationError(msg)
         logger.debug(f"Certificate key: {cert.key}")
         logger.debug(f"Certificate: {cert.crt}")
         cert.save_key(ssl_key)
@@ -304,11 +433,15 @@ def configure_custom_api_cert(skip_tls_verify=False, wait_for_machineconfigpool=
     signing_service_url = config.DEPLOYMENT.get("cert_signing_service_url")
 
     if not (os.path.exists(ssl_key) and os.path.exists(ssl_cert)):
-        if not signing_service_url:
+        cert_provider = config.DEPLOYMENT.get("custom_ssl_cert_provider")
+        if (
+            cert_provider == constants.SSL_CERT_PROVIDER_OCS_QE_CA
+            and not signing_service_url
+        ):
             msg = (
                 "Custom certificate files for ingress doesn't exists and "
                 "`DEPLOYMENT['cert_signing_service_url']` is not defined. "
-                "Unable to generate custom Ingress certificate!"
+                "Unable to generate custom API certificate!"
             )
             logger.error(msg)
             raise exceptions.ConfigurationError(msg)
@@ -316,11 +449,26 @@ def configure_custom_api_cert(skip_tls_verify=False, wait_for_machineconfigpool=
         logger.debug(
             f"Files '{ssl_key}' and '{ssl_cert}' doesn't exist, generate certificate"
         )
-        cert = OCSCertificate(
-            signing_service=signing_service_url,
-            cn=api_domain,
-            sans=[f"DNS:{api_domain}"],
-        )
+        if cert_provider == constants.SSL_CERT_PROVIDER_OCS_QE_CA:
+            cert = OCSCertificate(
+                signing_service=signing_service_url,
+                cn=api_domain,
+                sans=[f"DNS:{api_domain}"],
+            )
+        elif cert_provider == constants.SSL_CERT_PROVIDER_LETS_ENCRYPT:
+            cert = LetsEncryptCertificate(
+                dns_plugin=config.DEPLOYMENT["certbot_dns_plugin"],
+                cn=api_domain,
+                sans=[f"DNS:{api_domain}"],
+            )
+        else:
+            msg = (
+                f"Certbot DNS plugin {config.DEPLOYMENT['certbot_dns_plugin']} not supported. "
+                "Supported `DEPLOYMENT['certbot_dns_plugin']` options are: 'dns-route53'. "
+                "Unable to generate custom API certificate!"
+            )
+            logger.error(msg)
+            raise exceptions.ConfigurationError(msg)
         logger.debug(f"Certificate key: {cert.key}")
         logger.debug(f"Certificate: {cert.crt}")
         cert.save_key(ssl_key)
@@ -429,12 +577,21 @@ def init_arg_parser():
     parser = argparse.ArgumentParser(
         description="OCS Automatic Certification Authority client",
     )
-    parser.add_argument(
+    group = parser.add_mutually_exclusive_group(required=True)
+    group.add_argument(
         "-s",
         "--cert-signing-service",
         action="store",
-        required=True,
+        required=False,
         help="automatic certification signing service URL",
+    )
+    group.add_argument(
+        "-p",
+        "--dns-plugin",
+        action="store",
+        required=False,
+        default="dns-route53",
+        help="Certbot DNS plugin to use (options: route53, ). NOTE: more to come later",
     )
     parser.add_argument(
         "-f",
@@ -466,12 +623,20 @@ def main():
     """
     args = init_arg_parser()
 
-    # initialize OCSCertificate object
-    cert = OCSCertificate(
-        signing_service=args.cert_signing_service,
-        cn=args.cn,
-        sans=args.san,
-    )
+    if args.cert_signing_service:
+        # initialize OCSCertificate object
+        cert = OCSCertificate(
+            signing_service=args.cert_signing_service,
+            cn=args.cn,
+            sans=args.san,
+        )
+    elif args.dns_plugin:
+        # initialize LetsEncryptCertificate object
+        cert = LetsEncryptCertificate(
+            dns_plugin=args.dns_plugin,
+            cn=args.cn,
+            sans=args.san,
+        )
 
     # print everything to console or save key and crt to respective files
     if not args.file or args.file == "-":

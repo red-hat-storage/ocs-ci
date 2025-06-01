@@ -1,0 +1,8 @@
+apiVersion: operators.coreos.com/v1alpha1
+kind: CatalogSource
+metadata:
+  name: hyperconverged-catalogsource
+  namespace: openshift-marketplace
+spec:
+  image: 'quay.io/kubevirt/hyperconverged-cluster-index:{hyperconverged_version}.0-unstable'
+  sourceType: grpc

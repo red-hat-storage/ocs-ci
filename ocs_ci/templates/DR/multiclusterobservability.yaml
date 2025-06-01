@@ -1,0 +1,22 @@
+# This config file is used to enable ACM observability
+
+---
+apiVersion: observability.open-cluster-management.io/v1beta2
+kind: MultiClusterObservability
+metadata:
+ name: observability
+spec:
+ enableDownsampling: true
+ observabilityAddonSpec:
+   enableMetrics: true
+   interval: 300
+ storageConfig:
+   alertmanagerStorageSize: 1Gi
+   compactStorageSize: 100Gi
+   metricObjectStorage:
+     key: thanos.yaml
+     name: thanos-object-storage
+   receiveStorageSize: 100Gi
+   ruleStorageSize: 1Gi
+   storageClass:  PLACEHOLDER
+   storeStorageSize: 10Gi

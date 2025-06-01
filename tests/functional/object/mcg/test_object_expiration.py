@@ -8,10 +8,10 @@ import pytest
 from ocs_ci.framework.pytest_customization.marks import (
     tier1,
     tier2,
-    bugzilla,
     red_squad,
     runs_on_provider,
     mcg,
+    skipif_noobaa_external_pgsql,
 )
 from ocs_ci.framework.testlib import MCGTest
 from ocs_ci.framework.testlib import skipif_ocs_version
@@ -35,10 +35,13 @@ from ocs_ci.utility.utils import TimeoutSampler
 
 logger = logging.getLogger(__name__)
 
+PROP_SLEEP_TIME = 10
+
 
 @mcg
 @red_squad
 @runs_on_provider
+@skipif_noobaa_external_pgsql
 class TestObjectExpiration(MCGTest):
     """
     Tests suite for object expiration
@@ -89,6 +92,10 @@ class TestObjectExpiration(MCGTest):
         mcg_obj.s3_client.put_bucket_lifecycle_configuration(
             Bucket=bucket, LifecycleConfiguration=lifecycle_policy.as_dict()
         )
+        logger.info(
+            f"Sleeping for {PROP_SLEEP_TIME} seconds to let the policy propagate"
+        )
+        sleep(PROP_SLEEP_TIME)
 
         # 2. Upload random objects under a prefix that is set to expire
         logger.info("Uploading random objects to the bucket for expiration")
@@ -223,6 +230,10 @@ class TestObjectExpiration(MCGTest):
         mcg_obj.s3_client.put_bucket_lifecycle_configuration(
             Bucket=bucket, LifecycleConfiguration=lifecycle_policy_dict
         )
+        logger.info(
+            f"Sleeping for {PROP_SLEEP_TIME} seconds to let the policy propagate"
+        )
+        sleep(PROP_SLEEP_TIME)
 
         # 2. Upload objects in the target prefix of the first rule
         logger.info("Uploading objects to match the prefix filter")
@@ -328,13 +339,13 @@ class TestObjectExpiration(MCGTest):
         logger.info("Waiting for the expiration of the objects that should expire:")
 
         timeout = 600
-        sleep = 30
+        sleep_duration = 30
 
         try:
             last_objs_seen_in_bucket = []
             list_objs_timeout_sampler_generator = TimeoutSampler(
                 timeout,
-                sleep,
+                sleep_duration,
                 lambda: list_objects_from_bucket(
                     pod_obj=awscli_pod_session,
                     target=bucket,
@@ -385,6 +396,10 @@ class TestObjectExpiration(MCGTest):
         mcg_obj.s3_client.put_bucket_lifecycle_configuration(
             Bucket=bucket, LifecycleConfiguration=lifecycle_policy.as_dict()
         )
+        logger.info(
+            f"Sleeping for {PROP_SLEEP_TIME} seconds to let the policy propagate"
+        )
+        sleep(PROP_SLEEP_TIME)
 
         # 2. Edit the expiration policy to disable it
         logger.info("Disabling the expiration policy")
@@ -392,6 +407,10 @@ class TestObjectExpiration(MCGTest):
         mcg_obj.s3_client.put_bucket_lifecycle_configuration(
             Bucket=bucket, LifecycleConfiguration=lifecycle_policy.as_dict()
         )
+        logger.info(
+            f"Sleeping for {PROP_SLEEP_TIME} seconds to let the policy propagate"
+        )
+        sleep(PROP_SLEEP_TIME)
 
         # 3. Upload random objects
         logger.info("Uploading random objects to the bucket for expiration")
@@ -421,8 +440,6 @@ class TestObjectExpiration(MCGTest):
         ), "Objects were expired when they shouldn't have been!"
 
     @skipif_ocs_version("<4.10")
-    @bugzilla("2034661")
-    @bugzilla("2029298")
     @pytest.mark.polarion_id("OCS-3929")
     @tier1
     def test_object_expiration_in_minutes(self, mcg_obj, bucket_factory):
@@ -434,21 +451,16 @@ class TestObjectExpiration(MCGTest):
         bucket = bucket_factory()[0].name
         object_key = "ObjKey-" + str(uuid.uuid4().hex)
         obj_data = "Random data" + str(uuid.uuid4().hex)
-        expire_rule = {
-            "Rules": [
-                {
-                    "Expiration": {"Days": 1, "ExpiredObjectDeleteMarker": False},
-                    "Filter": {"Prefix": ""},
-                    "ID": "data-expire",
-                    "Status": "Enabled",
-                }
-            ]
-        }
 
         logger.info(f"Setting object expiration on bucket: {bucket}")
+        lifecycle_policy = LifecyclePolicy(ExpirationRule(days=1))
         mcg_obj.s3_client.put_bucket_lifecycle_configuration(
-            Bucket=bucket, LifecycleConfiguration=expire_rule
+            Bucket=bucket, LifecycleConfiguration=lifecycle_policy.as_dict()
         )
+        logger.info(
+            f"Sleeping for {PROP_SLEEP_TIME} seconds to let the policy propagate"
+        )
+        sleep(PROP_SLEEP_TIME)
 
         logger.info(f"Getting object expiration configuration from bucket: {bucket}")
         logger.info(

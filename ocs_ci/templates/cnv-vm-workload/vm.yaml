@@ -1,0 +1,53 @@
+apiVersion: kubevirt.io/v1
+kind: VirtualMachine
+metadata:
+  name: vm-template
+  namespace: default
+spec:
+  running: true
+  template:
+    metadata:
+      annotations:
+        vm.kubevirt.io/workload: server
+      creationTimestamp: null
+      labels:
+        kubevirt.io/domain: vm
+        kubevirt.io/size: small
+    spec:
+      architecture: amd64
+      domain:
+        cpu:
+          cores: 1
+          sockets: 1
+          threads: 1
+        devices:
+          disks:
+            - bootOrder: 1
+              disk:
+                bus: virtio
+              name: rootdisk
+            - bootOrder: 2
+              disk:
+                bus: virtio
+              name: cloudinitdisk
+          interfaces:
+            - name: default
+              masquerade: {}
+              model: virtio
+          networkInterfaceMultiqueue: true
+          rng: {}
+        memory:
+          guest: 4Gi
+        resources: {}
+      evictionStrategy: LiveMigrate
+      networks:
+        - name: default
+          pod: {}
+      terminationGracePeriodSeconds: 180
+      volumes:
+        - name: rootdisk
+        - cloudInitNoCloud:
+            userData: |-
+              #cloud-config
+              user: admin
+          name: cloudinitdisk

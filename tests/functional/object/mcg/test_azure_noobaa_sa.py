@@ -6,7 +6,6 @@ import requests
 from ocs_ci.deployment.azure import AZUREIPI
 from ocs_ci.framework import config
 from ocs_ci.framework.pytest_customization.marks import (
-    bugzilla,
     tier1,
     skipif_ocs_version,
     azure_platform_required,
@@ -25,11 +24,9 @@ logger = logging.getLogger(__name__)
 @tier1
 @azure_platform_required
 @runs_on_provider
-@bugzilla("1970123")
 @pytest.mark.polarion_id("OCS-3963")
 @skipif_ocs_version("<4.10")
 class TestNoobaaStorageAccount:
-
     """
     Test azure Noobaa SA
     """

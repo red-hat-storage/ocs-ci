@@ -4,6 +4,7 @@ import subprocess
 import os
 import time
 
+from ocs_ci.framework import config
 from ocs_ci.framework.pytest_customization.marks import magenta_squad
 from ocs_ci.framework.testlib import ignore_leftovers
 from ocs_ci.utility.utils import clone_repo, run_cmd, ceph_health_check
@@ -14,7 +15,7 @@ log = logging.getLogger(__name__)
 
 @magenta_squad
 @ignore_leftovers
-def test_ocs_monkey():
+def deprecated_test_ocs_monkey():
     ocs_monkety_dir = "/tmp/ocs-monkey"
     # ocs-monkey run time in seconds
     run_time = 3600
@@ -25,12 +26,15 @@ def test_ocs_monkey():
 
     start_time = time.time()
     log.info("Starting workload runner")
+    env = os.environ.copy()
+    env["KUBECONFIG"] = config.RUN.get("kubeconfig")
     popen_workload = subprocess.Popen(
         shlex.split(workload_run_cmd),
         stderr=subprocess.STDOUT,
         stdout=subprocess.PIPE,
         encoding="utf-8",
         cwd=ocs_monkety_dir,
+        env=env,
     )
 
     log.info("Starting chaos runner")
@@ -40,6 +44,7 @@ def test_ocs_monkey():
         stdout=subprocess.PIPE,
         encoding="utf-8",
         cwd=ocs_monkety_dir,
+        env=env,
     )
 
     while True:

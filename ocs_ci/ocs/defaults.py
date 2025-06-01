@@ -3,6 +3,7 @@ Defaults module. All the defaults used by OSCCI framework should
 reside in this module.
 PYTEST_DONT_REWRITE - avoid pytest to rewrite, keep this msg here please!
 """
+
 import os
 
 from ocs_ci.ocs import constants
@@ -37,12 +38,14 @@ PROMETHEUS_ROUTE = "prometheus-k8s"
 
 # Default device size in Gigs
 DEVICE_SIZE = 100
+DEVICE_SIZE_IBM_CLOUD_MANAGED = 512
 
 OCS_OPERATOR_NAME = "ocs-operator"
 ODF_OPERATOR_NAME = "odf-operator"
 ROOK_CEPH_OPERATOR = "rook-ceph-operator"
 ODF_PROMETHEUS_OPERATOR = "odf-prometheus-operator"
 ODF_CLIENT_OPERATOR = "ocs-client-operator"
+RECIPE_OPERATOR = "recipe"
 HCI_CLIENT_ODF_OPERATOR_NAME = "ocs-client-operator"
 NOOBAA_OPERATOR = "noobaa-operator"
 MCG_OPERATOR = "mcg-operator"
@@ -53,6 +56,11 @@ FUSION_OPERATOR_NAME = "isf-operator"
 FUSION_CATALOG_NAME = "isf-data-foundation-catalog"
 LIVE_CONTENT_SOURCE = "redhat-operators"
 OCS_CLIENT_OPERATOR_NAME = "ocs-client-operator"
+CEPHCSI_OPERATOR = "cephcsi-operator"
+ODF_DEPENDENCIES = "odf-dependencies"
+MCO_OPERATOR_NAME = "odf-multicluster-orchestrator"
+DR_HUB_OPERATOR_NAME = "odr-hub-operator"
+DR_CLUSTER_OPERATOR_NAME = "odr-cluster-operator"
 
 # Noobaa S3 bucket website configurations
 website_config = {
@@ -160,6 +168,7 @@ KMIP_CSI_CONNECTION_CONF = {
 # Must-gather:
 MUST_GATHER_UPSTREAM_IMAGE = "quay.io/ocs-dev/ocs-must-gather"
 MUST_GATHER_UPSTREAM_TAG = "latest"
+MUST_GATHER_TIMEOUT = 3600
 
 # CrushDeviceClass
 CRUSH_DEVICE_CLASS = "ssd"
@@ -167,3 +176,10 @@ CRUSH_DEVICE_CLASS = "ssd"
 
 # IBM Cloud
 IBM_CLOUD_LOAD_BALANCER_QUOTA = 50
+IBM_CLOUD_REGIONS = {"us-south", "us-east"}
+
+# HyperShift defaults
+HYPERSHIFT_NODEPOOL_REPLICAS_DEFAULT = 2
+HYPERSHIFT_MEMORY_DEFAULT = "12Gi"
+HYPERSHIFT_CPU_CORES_DEFAULT = 6
+HOSTED_ODF_REGISTRY_DEFAULT = "quay.io/rhceph-dev/ocs-registry"

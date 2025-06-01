@@ -2,6 +2,7 @@
 This module contains platform specific methods and classes for deployment
 on AWS platform
 """
+
 import logging
 import os
 import shutil
@@ -15,10 +16,11 @@ from ocs_ci.framework import config
 from ocs_ci.ocs import constants, exceptions, ocp, machine
 from ocs_ci.ocs.resources import pod
 from ocs_ci.ocs.node import drain_nodes
-from ocs_ci.utility import cco, templating, version
+from ocs_ci.utility import cco, templating
 from ocs_ci.utility.aws import (
     AWS as AWSUtil,
     create_and_attach_volume_for_all_workers,
+    delete_cloudfront_origin_access_identities,
     delete_cluster_buckets,
     destroy_volumes,
     delete_sts_iam_roles,
@@ -54,9 +56,6 @@ __all__ = ["AWSIPI", "AWSUPI"]
 
 class AWSBase(CloudDeploymentBase):
 
-    # default storage class for StorageCluster CRD on AWS platform
-    DEFAULT_STORAGECLASS = "gp2"
-
     def __init__(self):
         """
         This would be base for both IPI and UPI deployment
@@ -66,20 +65,9 @@ class AWSBase(CloudDeploymentBase):
         # dict of cluster prefixes with special handling rules (for existence
         # check or during a cluster cleanup)
         self.cluster_prefixes_special_rules = CLUSTER_PREFIXES_SPECIAL_RULES
-        ocp_version = version.get_semantic_ocp_version_from_config()
-        if ocp_version >= version.VERSION_4_12:
-            self.DEFAULT_STORAGECLASS = "gp2-csi"
 
     def deploy_ocp(self, log_cli_level="DEBUG"):
         super(AWSBase, self).deploy_ocp(log_cli_level)
-        ocp_version = version.get_semantic_ocp_version_from_config()
-        ocs_version = version.get_semantic_ocs_version_from_config()
-
-        if ocs_version >= version.VERSION_4_10 and ocp_version >= version.VERSION_4_9:
-            # If we don't customize the storage class, we will use the default one
-            self.DEFAULT_STORAGECLASS = config.DEPLOYMENT.get(
-                "customized_deployment_storage_class", self.DEFAULT_STORAGECLASS
-            )
 
     def host_network_update(self):
         """
@@ -212,7 +200,7 @@ class AWSIPI(AWSBase):
             release_image = get_ocp_release_image_from_installer()
             cco_image = cco.get_cco_container_image(release_image, pull_secret_path)
             cco.extract_ccoctl_binary(cco_image, pull_secret_path)
-            cco.extract_credentials_requests_aws(
+            cco.extract_credentials_requests(
                 release_image,
                 install_config,
                 pull_secret_path,
@@ -273,6 +261,7 @@ class AWSIPI(AWSBase):
         delete_cluster_buckets(self.cluster_name)
         if config.DEPLOYMENT.get("sts_enabled"):
             delete_sts_iam_roles()
+            delete_cloudfront_origin_access_identities()
         super(AWSIPI, self).destroy_cluster(log_level)
 
 
@@ -343,7 +332,7 @@ class AWSUPI(AWSBase):
                 "OCP_INSTALL_DIR": os.path.join(self.upi_script_path, "install-dir"),
                 "DISABLE_MASTER_MACHINESET": "yes",
                 "DISABLE_WORKER_MACHINESET": "yes",
-                "INSTALLER_BIN": "openshift-install",
+                "INSTALLER_BIN": f"{self.installer_filename}",
                 "num_workers_additional": str(
                     config.ENV_DATA["num_workers_additional"]
                 ),
@@ -377,16 +366,22 @@ class AWSUPI(AWSBase):
             # script dir
             bindir = os.path.abspath(os.path.expanduser(config.RUN["bin_dir"]))
             shutil.copy2(
-                os.path.join(bindir, "openshift-install"),
-                self.upi_script_path,
+                os.path.join(bindir, f"{self.installer_filename}"),
+                f"{self.upi_script_path}/openshift-install",
+            )
+            shutil.copy2(
+                os.path.join(bindir, f"{self.installer_filename}"),
+                f"{self.upi_script_path}/{self.installer_filename}",
             )
             shutil.copy2(os.path.join(bindir, "oc"), self.upi_script_path)
             # and another UGLY WORKAROUND: copy openshift-install also to the
             # absolute_cluster_path (for more details, see
             # https://github.com/red-hat-storage/ocs-ci/pull/4650)
             shutil.copy2(
-                os.path.join(bindir, "openshift-install"),
-                os.path.abspath(os.path.join(self.cluster_path, "..")),
+                os.path.join(bindir, f"{self.installer_filename}"),
+                os.path.abspath(
+                    os.path.join(self.cluster_path, f"../{self.installer_filename}")
+                ),
             )
 
         def deploy(self, log_cli_level="DEBUG"):
@@ -453,7 +448,9 @@ class AWSUPI(AWSBase):
             # Delete openshift-install copied to cluster_dir (see WORKAROUND at
             # the end of deploy_prereq method of this class)
             delete_file(
-                os.path.abspath(os.path.join(self.cluster_path, "../openshift-install"))
+                os.path.abspath(
+                    os.path.join(self.cluster_path, f"../{self.installer_filename}")
+                )
             )
 
     def deploy_ocp(self, log_cli_level="DEBUG"):

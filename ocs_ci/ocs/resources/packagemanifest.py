@@ -1,6 +1,7 @@
 """
 Package manifest related functionalities
 """
+
 import logging
 
 from ocs_ci.framework import config
@@ -165,10 +166,15 @@ class PackageManifest(OCP):
         self.check_name_is_specified()
         channel = channel if channel else self.get_default_channel()
         channels = self.get_channels()
-        if self.subscription_plan_approval == "Manual":
+        managed_ibmcloud = (
+            config.ENV_DATA["platform"] == constants.IBMCLOUD_PLATFORM
+            and config.ENV_DATA["deployment_type"] == "managed"
+        )
+        if self.subscription_plan_approval == "Manual" or managed_ibmcloud:
             try:
                 return self.get_installed_csv_from_install_plans(
                     pattern=csv_pattern,
+                    approved_only=managed_ibmcloud,
                 )
             except NoInstallPlanForApproveFoundException:
                 log.debug(
@@ -188,12 +194,13 @@ class PackageManifest(OCP):
             f"Channel: {channel} not found in available channels: " f"{channel_names}"
         )
 
-    def get_installed_csv_from_install_plans(self, pattern):
+    def get_installed_csv_from_install_plans(self, pattern, approved_only=False):
         """
         Get currently installed CSV out latest approved install plans.
 
         Args:
             patter (str): pattern of CSV name to look for.
+            approved_only (bool): it will ignore if there is no non approved install plan
 
         Raises:
             CSVNotFound: In case no CSV found from approved install plans.
@@ -203,13 +210,14 @@ class PackageManifest(OCP):
         """
         install_plan = InstallPlan(namespace=self.install_plan_namespace)
         install_plans = install_plan.get()["items"]
-        not_approved_install_plans = [
-            ip for ip in install_plans if not ip["spec"]["approved"]
-        ]
-        if not not_approved_install_plans:
-            raise NoInstallPlanForApproveFoundException(
-                "No insall plan for approve found!"
-            )
+        if not approved_only:
+            not_approved_install_plans = [
+                ip for ip in install_plans if not ip["spec"]["approved"]
+            ]
+            if not not_approved_install_plans:
+                raise NoInstallPlanForApproveFoundException(
+                    "No insall plan for approve found!"
+                )
         sorted_install_plans = sorted(
             install_plans,
             key=lambda ip: ip["metadata"]["creationTimestamp"],

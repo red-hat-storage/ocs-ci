@@ -17,7 +17,6 @@ log = logging.getLogger(__name__)
 @blue_squad
 @tier4c
 @pytest.mark.polarion_id("OCS-2323")
-@pytest.mark.bugzilla("1953615")
 @skipif_managed_service
 def test_rgw_unavailable(measure_stop_rgw, threading_lock):
     """
@@ -25,6 +24,7 @@ def test_rgw_unavailable(measure_stop_rgw, threading_lock):
     this alert is cleared when the RGW interface is back online.
 
     """
+
     api = prometheus.PrometheusAPI(threading_lock=threading_lock)
 
     # get alerts from time when manager deployment was scaled down
@@ -38,7 +38,11 @@ def test_rgw_unavailable(measure_stop_rgw, threading_lock):
             "Please check Ceph cluster health or RGW connection."
         )
     else:
-        target_msg = "Cluster Object Store is in unhealthy state. Please check Ceph cluster health."
+        target_msg = (
+            "Cluster Object Store is in unhealthy state or number of ready replicas for "
+            "Rook Ceph RGW deployments is less than the desired replicas in "
+            f"namespace:cluster {config.ENV_DATA['cluster_namespace']}:."
+        )
     states = ["pending", "firing"]
 
     prometheus.check_alert_list(
@@ -53,6 +57,11 @@ def test_rgw_unavailable(measure_stop_rgw, threading_lock):
     )
 
 
-def teardown_module():
+def setup_module(module):
     ocs_obj = OCP()
-    ocs_obj.login_as_sa()
+    module.original_user = ocs_obj.get_user_name()
+
+
+def teardown_module(module):
+    ocs_obj = OCP()
+    ocs_obj.login_as_user(module.original_user)

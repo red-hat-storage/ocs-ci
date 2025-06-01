@@ -72,7 +72,7 @@ class TestHCIProviderClientMarkers(ManageTest):
         )
 
     @runs_on_provider
-    @pytest.mark.second_to_last
+    @pytest.mark.order("second_to_last")
     def test_runs_on_provider_marker(self):
         """
         Test that the 'runs_on_provider' marker work as expected
@@ -82,7 +82,7 @@ class TestHCIProviderClientMarkers(ManageTest):
         ), "The cluster is not a HCI provider cluster, even though we have the marker 'runs_on_provider'"
         logger.info("The cluster is a provider cluster as expected")
 
-    @pytest.mark.last
+    @pytest.mark.order("last")
     def test_current_index_not_change_after_using_runs_on_provider(self):
         """
         Test that the current cluster index didn't change after using the 'runs_on_provider'

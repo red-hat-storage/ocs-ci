@@ -1,0 +1,36 @@
+---
+apiVersion: agent-install.openshift.io/v1beta1
+kind: InfraEnv
+metadata:
+  name: bm-agents
+  namespace: bm-agents
+  labels:
+    agentclusterinstalls.extensions.hive.openshift.io/location: localagents
+    networkType: dhcp
+spec:
+  agentLabels:
+    'agentclusterinstalls.extensions.hive.openshift.io/location': localagents
+  pullSecretRef:
+    name: pull-secret
+  sshAuthorizedKey: ssh-public-key-value
+  nmStateConfigLabelSelector:
+      matchLabels:
+        infraenvs.agent-install.openshift.io: bm-agents
+  cpuArchitecture: x86_64
+status:
+  agentLabelSelector:
+    matchLabels:
+      'agentclusterinstalls.extensions.hive.openshift.io/location': localagents
+---
+kind: Role
+apiVersion: rbac.authorization.k8s.io/v1
+metadata:
+  name: capi-provider-role
+  namespace: bm-agents
+rules:
+  - verbs:
+      - '*'
+    apiGroups:
+      - agent-install.openshift.io
+    resources:
+      - agents

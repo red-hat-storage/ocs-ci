@@ -10,6 +10,8 @@ ENV_DATA:
   worker_instance_type: "bx2.16x64"
   master_replicas: 0
   worker_replicas: 3
+  worker_availability_zones:
+    - 'eu-de-3'
   rhel_workers: true
   # Following values needs to be set in separate config and passed to ocs-ci in
   # order to deploy OCP/OCS cluster on IBM Cloud

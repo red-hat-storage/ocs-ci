@@ -2,6 +2,7 @@
 Testing the Elasticsearch server deployment
 
 """
+
 # Internal modules
 import logging
 import time

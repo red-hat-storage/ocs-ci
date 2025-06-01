@@ -124,8 +124,14 @@ class FioPodScale(object):
             raise UnexpectedBehaviour("Kube_job batch count should be lesser than 1200")
 
         logger.info(f"Start creating {pvc_count} PVC of 2 types RBD-RWO & FS-RWX")
-        cephfs_sc_obj = constants.DEFAULT_STORAGECLASS_CEPHFS
-        rbd_sc_obj = constants.DEFAULT_STORAGECLASS_RBD
+        if is_hci_cluster():
+            # Since sometimes the client storageclass names are different for different client types,
+            # get the current client storageclass names
+            cephfs_sc_obj = helpers.get_cephfs_sc_name()
+            rbd_sc_obj = helpers.get_rbd_sc_name()
+        else:
+            cephfs_sc_obj = constants.DEFAULT_STORAGECLASS_CEPHFS
+            rbd_sc_obj = constants.DEFAULT_STORAGECLASS_RBD
 
         # Get pvc_dict_list, append all the pvc.yaml dict to pvc_dict_list
         rbd_pvc_dict_list, cephfs_pvc_dict_list = ([], [])
@@ -333,7 +339,7 @@ class FioPodScale(object):
             if actual_itr_counter == expected_itr_counter:
                 logger.info(
                     f"Scaled {scale_pvc_count} PVCs and created "
-                    f"{scale_pvc_count/pvc_per_pod_count} PODs"
+                    f"{scale_pvc_count / pvc_per_pod_count} PODs"
                 )
                 # TODO: Removing PG balancer validation, due to PG auto_scale enabled
                 # TODO: sometime PG's can't be equally distributed across OSDs
@@ -352,13 +358,13 @@ class FioPodScale(object):
                     max_pvc_size=max_pvc_size,
                 )
                 logger.info(
-                    f"Scaled {len(rbd_pvc)+len(fs_pvc)} PVCs and Created "
+                    f"Scaled {len(rbd_pvc) + len(fs_pvc)} PVCs and Created "
                     f"{len(pod_running)} PODs in interation {actual_itr_counter}"
                 )
 
         logger.info(
             f"Scaled {actual_itr_counter * min_pvc_count} PVC's and Created "
-            f"{int(actual_itr_counter * (min_pvc_count/pvc_per_pod_count))} PODs"
+            f"{int(actual_itr_counter * (min_pvc_count / pvc_per_pod_count))} PODs"
         )
 
         return self.kube_job_pod_list, self.kube_job_pvc_list
@@ -1095,10 +1101,9 @@ def check_and_add_enough_worker(worker_count):
             and config.ENV_DATA["platform"].lower() == constants.VSPHERE_PLATFORM
         ):
             raise UnsupportedPlatformError("Unsupported Platform to add worker")
-        elif (
-            config.ENV_DATA["deployment_type"] == "upi"
-            and config.ENV_DATA["platform"].lower() == constants.BAREMETAL_PLATFORM
-        ):
+        elif config.ENV_DATA["deployment_type"] == "upi" and config.ENV_DATA[
+            "platform"
+        ].lower() in [constants.BAREMETAL_PLATFORM, constants.HCI_BAREMETAL]:
             raise UnsupportedPlatformError("Unsupported Platform to add worker")
         else:
             raise UnavailableResourceException(
@@ -1299,7 +1304,7 @@ def check_all_pvc_reached_bound_state_in_kube_job(
             # And if PVCs still not in bound state then there will be assert.
             if while_iteration_count >= 10:
                 assert logger.error(
-                    f" Listed PVCs took more than {timeout*10} secs to bound {pvc_not_bound_list}"
+                    f" Listed PVCs took more than {timeout * 10} secs to bound {pvc_not_bound_list}"
                 )
                 break
             pvc_not_bound_list.clear()
@@ -1872,7 +1877,7 @@ def validate_all_expanded_pvc_size_in_kube_job(
             # And if PVCs size still not extended then there will be assert.
             if while_iteration_count >= 10:
                 assert logger.error(
-                    f" Listed PVC size not expanded in {timeout*10} secs, PVCs {pvc_not_extended_list}"
+                    f" Listed PVC size not expanded in {timeout * 10} secs, PVCs {pvc_not_extended_list}"
                 )
                 break
             pvc_not_extended_list.clear()

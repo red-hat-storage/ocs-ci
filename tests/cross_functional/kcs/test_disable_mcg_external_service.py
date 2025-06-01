@@ -7,7 +7,6 @@ from ocs_ci.framework import config
 from ocs_ci.framework.pytest_customization.marks import (
     tier2,
     polarion_id,
-    bugzilla,
     skipif_external_mode,
     magenta_squad,
 )
@@ -57,7 +56,6 @@ class TestDisableMCGExternalService:
         return noobaa_ocp_obj
 
     @tier2
-    @bugzilla("2186171")
     @polarion_id("OCS-4932")
     @skipif_external_mode
     def test_disable_mcg_external_service(self, patch_noobaa_object):

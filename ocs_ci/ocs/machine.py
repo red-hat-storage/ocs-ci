@@ -4,6 +4,7 @@ from ocs_ci.ocs.resources.ocs import OCS
 from ocs_ci.utility import templating
 from ocs_ci.framework import config
 from ocs_ci.ocs import constants
+from ocs_ci.utility import version
 from ocs_ci.utility.utils import TimeoutSampler
 from ocs_ci.ocs.exceptions import (
     TimeoutExpiredError,
@@ -92,12 +93,14 @@ def get_machines(machine_type=constants.WORKER_MACHINE):
     return machines
 
 
-def delete_machine(machine_name):
+def delete_machine(machine_name, wait=True, timeout=600):
     """
     Deletes a machine
 
     Args:
         machine_name (str): Name of the machine you want to delete
+        wait (bool): Wait for the machine to be deleted
+        timeout (int): Time to wait for the machine to be deleted
 
     Raises:
         CommandFailed: In case yaml_file and resource_name wasn't provided
@@ -106,7 +109,7 @@ def delete_machine(machine_name):
         kind="machine", namespace=constants.OPENSHIFT_MACHINE_API_NAMESPACE
     )
     log.info(f"Deleting machine {machine_name}")
-    machine_obj.delete(resource_name=machine_name)
+    machine_obj.delete(resource_name=machine_name, wait=wait, timeout=timeout)
 
 
 def get_machine_type(machine_name):
@@ -166,7 +169,7 @@ def delete_machine_and_check_state_of_new_spinned_machine(machine_name):
     machine_type = get_machine_type(machine_name)
     machine_list = get_machines(machine_type=machine_type)
     initial_machine_names = [machine.name for machine in machine_list]
-    delete_machine(machine_name)
+    delete_machine(machine_name, wait=False)
     new_machine_list = get_machines(machine_type=machine_type)
     new_machine = [
         machine
@@ -180,7 +183,7 @@ def delete_machine_and_check_state_of_new_spinned_machine(machine_name):
             condition=constants.STATUS_RUNNING,
             resource_name=new_machine_name,
             column="PHASE",
-            timeout=600,
+            timeout=900,
             sleep=30,
         )
         log.info(f"{new_machine_name} is in {constants.STATUS_RUNNING} state")
@@ -260,6 +263,12 @@ def create_custom_machineset(
                 .get("id")
             )
             if aws_zone == f"{region}{zone}":
+                ocp_version = version.get_semantic_ocp_version_from_config()
+                sg_name = f"{cls_id}-node"
+                subnet_name = f"{cls_id}-subnet-private-{aws_zone}"
+                if ocp_version < version.VERSION_4_16:
+                    sg_name = f"{cls_id}-worker-sg"
+                    subnet_name = f"{cls_id}-private-{aws_zone}"
                 machineset_yaml = templating.load_yaml(constants.MACHINESET_YAML)
 
                 # Update machineset_yaml with required values.
@@ -302,10 +311,10 @@ def create_custom_machineset(
                 ]["region"] = region
                 machineset_yaml["spec"]["template"]["spec"]["providerSpec"]["value"][
                     "securityGroups"
-                ][0]["filters"][0]["values"][0] = f"{cls_id}-worker-sg"
+                ][0]["filters"][0]["values"][0] = sg_name
                 machineset_yaml["spec"]["template"]["spec"]["providerSpec"]["value"][
                     "subnet"
-                ]["filters"][0]["values"][0] = f"{cls_id}-private-{aws_zone}"
+                ]["filters"][0]["values"][0] = subnet_name
                 machineset_yaml["spec"]["template"]["spec"]["providerSpec"]["value"][
                     "tags"
                 ][0]["name"] = f"kubernetes.io/cluster/{cls_id}"

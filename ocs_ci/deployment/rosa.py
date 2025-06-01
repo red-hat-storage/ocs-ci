@@ -9,13 +9,25 @@ import os
 
 from botocore.exceptions import ClientError
 
+from ocs_ci.ocs.machinepool import MachinePool
 from ocs_ci.deployment.cloud import CloudDeploymentBase
-from ocs_ci.deployment.helpers.rosa_prod_cluster_helpers import ROSAProdEnvCluster
+from ocs_ci.deployment.helpers.rosa_cluster_helpers import (
+    ROSAProdEnvCluster,
+    ROSAStageEnvCluster,
+)
 from ocs_ci.deployment.ocp import OCPDeployment as BaseOCPDeployment
 from ocs_ci.framework import config
+from ocs_ci.framework.logger_helper import log_step
 from ocs_ci.ocs.resources.pod import get_operator_pods
 from ocs_ci.utility import openshift_dedicated as ocm, rosa
-from ocs_ci.utility.aws import AWS as AWSUtil
+from ocs_ci.utility.aws import AWS as AWSUtil, delete_sts_iam_roles, delete_subnet_tags
+from ocs_ci.utility.deployment import create_openshift_install_log_file
+from ocs_ci.utility.rosa import (
+    get_associated_oidc_config_id,
+    delete_account_roles,
+    wait_console_url,
+    destroy_rosa_cluster,
+)
 from ocs_ci.utility.utils import (
     ceph_health_check,
     get_ocp_version,
@@ -72,7 +84,7 @@ class ROSAOCP(BaseOCPDeployment):
         Deployment specific to OCP cluster on a ROSA Managed Service platform.
 
         Args:
-            log_cli_level (str): openshift installer's log level
+            log_level (str): openshift installer's log level
 
         """
         if (
@@ -81,19 +93,34 @@ class ROSAOCP(BaseOCPDeployment):
         ):
             rosa.appliance_mode_cluster(self.cluster_name)
         else:
+            rosa.login()
             rosa.create_cluster(self.cluster_name, self.ocp_version, self.region)
+            machinepool_details = MachinePool.get_machinepool_details(
+                self.cluster_name, config.ENV_DATA["machine_pool"]
+            )
+            machinepool_details.wait_replicas_ready(
+                target_replicas=config.ENV_DATA["worker_replicas"], timeout=2400
+            )
+            if node_labels := config.ENV_DATA.get("node_labels"):
+                if machinepool_id := config.ENV_DATA.get("machine_pool"):
+                    rosa.label_nodes(
+                        self.cluster_name, machinepool_id, node_labels, rewrite=False
+                    )
 
-        kubeconfig_path = os.path.join(
-            config.ENV_DATA["cluster_path"], config.RUN["kubeconfig_location"]
-        )
-        password_path = os.path.join(
-            config.ENV_DATA["cluster_path"], config.RUN["password_location"]
-        )
-
-        # generate kubeconfig and kubeadmin-password files
+        logger.info("generate kubeconfig and kubeadmin-password files")
         if config.ENV_DATA["ms_env_type"] == "staging":
+            cluster_path = config.ENV_DATA["cluster_path"]
+            kubeconfig_path = os.path.join(
+                cluster_path, config.RUN["kubeconfig_location"]
+            )
             ocm.get_kubeconfig(self.cluster_name, kubeconfig_path)
-            ocm.get_kubeadmin_password(self.cluster_name, password_path)
+            # this default admin password from secret doesn't work for ROSA HCP staging in the management-console
+            # but kubeconfig works for CLI operations, creating kubeadmin-password file for CLI operations via rosa cli
+            rosa_stage_cluster = ROSAStageEnvCluster(self.cluster_name)
+            rosa_stage_cluster.create_admin_and_login()
+            rosa_stage_cluster.generate_kubeadmin_password_file()
+            console_url = wait_console_url(self.cluster_name)
+            create_openshift_install_log_file(cluster_path, console_url)
         if config.ENV_DATA["ms_env_type"] == "production":
             if config.ENV_DATA.get("appliance_mode"):
                 logger.info(
@@ -118,24 +145,49 @@ class ROSAOCP(BaseOCPDeployment):
 
         """
         try:
-            cluster_details = ocm.get_cluster_details(self.cluster_name)
-            cluster_id = cluster_details.get("id")
+            aws = AWSUtil()
+            rosa_hcp = config.ENV_DATA.get("platform") == constants.ROSA_HCP_PLATFORM
+            oidc_config_id = (
+                get_associated_oidc_config_id(self.cluster_name) if rosa_hcp else None
+            )
+            cluster_id = ocm.get_cluster_details(self.cluster_name).get("id")
+            subnet_ids = aws.get_cluster_subnet_ids(cluster_name=self.cluster_name)
+            log_step(f"Destroying ROSA cluster. Hosted CP: {rosa_hcp}")
             delete_status = rosa.destroy_appliance_mode_cluster(self.cluster_name)
             if not delete_status:
-                ocm.destroy_cluster(self.cluster_name)
-            logger.info("Waiting for ROSA cluster to be uninstalled")
+                if rosa_hcp:
+                    destroy_rosa_cluster(self.cluster_name)
+                else:
+                    ocm.destroy_cluster(self.cluster_name)
+            log_step("Waiting for ROSA cluster to be uninstalled")
             sample = TimeoutSampler(
                 timeout=14400,
                 sleep=300,
                 func=self.cluster_present,
-                cluster_name=self.cluster_name,
             )
             if not sample.wait_for_func_status(result=False):
                 err_msg = f"Failed to delete {self.cluster_name}"
                 logger.error(err_msg)
                 raise TimeoutExpiredError(err_msg)
-            rosa.delete_operator_roles(cluster_id)
-            rosa.delete_oidc_provider(cluster_id)
+            log_step("Deleting ROSA/aws associated resources")
+            oproles_prefix = (
+                f"{constants.OPERATOR_ROLE_PREFIX_ROSA_HCP}-{self.cluster_name}"
+            )
+            rosa.delete_operator_roles(prefix=oproles_prefix)
+            if rosa_hcp:
+                if oidc_config_id:
+                    rosa.delete_oidc_config(oidc_config_id)
+                # use sts IAM roles for ROSA HCP is mandatory
+                delete_sts_iam_roles()
+                delete_subnet_tags(f"kubernetes.io/cluster/{cluster_id}", subnet_ids)
+            rosa.delete_oidc_provider(self.cluster_name)
+            account_roles_prefix = (
+                f"{constants.ACCOUNT_ROLE_PREFIX_ROSA_HCP}-{self.cluster_name}"
+            )
+            delete_account_roles(account_roles_prefix)
+            logger.info(
+                f"Cluster {self.cluster_name} and associated resources deleted successfully"
+            )
         except CommandFailed as err:
             if "There are no subscriptions or clusters with identifier or name" in str(
                 err
@@ -146,22 +198,17 @@ class ROSAOCP(BaseOCPDeployment):
             else:
                 raise
 
-    def cluster_present(self, cluster_name):
+    def cluster_present(self):
         """
-        Check if the cluster is present in the cluster list, regardless of its
-        state.
-
-        Args:
-            cluster_name (str): name which identifies the cluster
+        Check if the cluster is present in the cluster list, regardless of its state.
 
         Returns:
-            bool: True if a cluster with the given name exists,
-                False otherwise
+            bool: True if a cluster with the given name exists, False otherwise
 
         """
         cluster_list = ocm.list_cluster()
         for cluster in cluster_list:
-            if cluster[0] == cluster_name:
+            if cluster[0] == self.cluster_name:
                 logger.info(f"Cluster found: {cluster[0]}")
                 return True
         return False
@@ -169,7 +216,7 @@ class ROSAOCP(BaseOCPDeployment):
 
 class ROSA(CloudDeploymentBase):
     """
-    Deployment class for ROSA.
+    Deployment class for ROSA and ROSA HCP.
     """
 
     OCPDeployment = ROSAOCP
@@ -217,16 +264,25 @@ class ROSA(CloudDeploymentBase):
 
     def deploy_ocs(self):
         """
-        Deployment of ODF Managed Service addon on ROSA.
+        Deployment of ODF Managed Service addon on ROSA or ODF operator on ROSA HCP.
         """
+        rosa_hcp = config.ENV_DATA.get("platform") == constants.ROSA_HCP_PLATFORM
         ceph_cluster = ocp.OCP(kind="CephCluster", namespace=self.namespace)
         try:
             ceph_cluster.get().get("items")[0]
             logger.warning("OCS cluster already exists")
             return
         except (IndexError, CommandFailed):
-            logger.info("Running OCS basic installation")
-        rosa.install_odf_addon(self.cluster_name)
+            msg = "Running OCS basic installation"
+            msg += " with ODF addon" if not rosa_hcp else " with ODF operator"
+            logger.info(msg)
+
+        # rosa hcp is self-managed and doesn't support ODF addon
+        if rosa_hcp:
+            super(ROSA, self).deploy_ocs()
+        else:
+            rosa.install_odf_addon(self.cluster_name)
+
         pod = ocp.OCP(kind=constants.POD, namespace=self.namespace)
 
         if config.ENV_DATA.get("cluster_type") != "consumer":

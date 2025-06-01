@@ -1,12 +1,14 @@
 import logging
 
 from ocs_ci.framework.testlib import (
-    tier1,
+    tier4a,
     skipif_ocs_version,
     BaseTest,
     post_upgrade,
     post_ocs_upgrade,
     polarion_id,
+    skipif_external_mode,
+    skipif_mcg_only,
 )
 from ocs_ci.ocs import exceptions
 from ocs_ci.ocs.resources import pod
@@ -15,8 +17,9 @@ from ocs_ci.framework.pytest_customization.marks import green_squad
 log = logging.getLogger(__name__)
 
 
-@tier1
+@tier4a
 @skipif_ocs_version("<4.15")
+@skipif_external_mode
 @post_upgrade
 @post_ocs_upgrade
 class TestMgrPods(BaseTest):
@@ -80,6 +83,7 @@ class TestMgrPods(BaseTest):
         log.info(f"Name entries in mgr metadata: {mgr_metadata_names}")
 
     @green_squad
+    @skipif_mcg_only
     @polarion_id("OCS-5438")
     def test_two_mgr_daemons_and_failure(self):
         """
@@ -138,6 +142,7 @@ class TestMgrPods(BaseTest):
 
     @polarion_id("OCS-5439")
     @green_squad
+    @skipif_mcg_only
     def test_mgr_pod_reboot(self):
         """
         - Deoloy OCP and ODF

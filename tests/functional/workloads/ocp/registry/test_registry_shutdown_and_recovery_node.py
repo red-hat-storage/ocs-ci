@@ -86,7 +86,7 @@ class TestRegistryShutdownAndRecoveryNode(E2ETest):
                     AssertionError,
                     ResourceWrongStatusException,
                 ),
-                tries=60,
+                tries=28,
                 delay=15,
             )(wait_for_nodes_status)(timeout=900)
 

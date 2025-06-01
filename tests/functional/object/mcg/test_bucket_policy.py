@@ -6,6 +6,8 @@ import botocore.exceptions as boto3exception
 import json
 import uuid
 
+from ocs_ci.ocs import constants
+from ocs_ci.ocs.cluster import CephCluster
 from ocs_ci.ocs.exceptions import (
     NoBucketPolicyResponse,
     InvalidStatusCode,
@@ -37,6 +39,7 @@ from ocs_ci.ocs.bucket_utils import (
     s3_delete_bucket_website,
     s3_get_bucket_versioning,
     s3_put_bucket_versioning,
+    s3_list_objects_v2,
     list_multipart_upload,
     list_uploaded_parts,
     complete_multipart_upload,
@@ -48,17 +51,50 @@ from ocs_ci.ocs.constants import (
 )
 from ocs_ci.framework.pytest_customization.marks import (
     skipif_managed_service,
-    bugzilla,
     red_squad,
     runs_on_provider,
     mcg,
+    provider_mode,
+    post_upgrade,
+    pre_upgrade,
+    polarion_id,
 )
+from ocs_ci.ocs.resources.storage_cluster import verify_backing_store
 from ocs_ci.utility import version
 from ocs_ci.utility.retry import retry
 
 logger = logging.getLogger(__name__)
 
 
+def delete_bucket_policy_verify(s3_obj, bucket_name):
+    """
+    Delete bucket policy and confirm it got deleted successfully, if not throwing
+    UnexpectedBehaviour with an invalid error code.
+    Args:
+        s3_obj (obj): MCG or OBC object
+        bucket_name (str): Name of the bucket
+    """
+
+    # Delete bucket policy
+    logger.info(f"Delete bucket policy by admin on bucket: {bucket_name}")
+    delete_policy = delete_bucket_policy(s3_obj, bucket_name)
+    logger.info(f"Delete policy response: {delete_policy}")
+
+    # Confirming again by calling get_bucket_policy
+    try:
+        get_bucket_policy(s3_obj, bucket_name)
+    except boto3exception.ClientError as e:
+        logger.info(e.response)
+        response = HttpResponseParser(e.response)
+        if response.error["Code"] == "NoSuchBucketPolicy":
+            logger.info("Bucket policy has been deleted successfully")
+        else:
+            raise UnexpectedBehaviour(
+                f"{e.response} received invalid error code {response.error['Code']}"
+            )
+
+
+@provider_mode
 @mcg
 @red_squad
 @runs_on_provider
@@ -173,6 +209,7 @@ class TestS3BucketPolicy(MCGTest):
                     f"{e.response} received invalid error code {response.error['Code']}"
                 )
 
+    @provider_mode
     @pytest.mark.polarion_id("OCS-2146")
     @tier1
     def test_bucket_policy_actions(self, mcg_obj, bucket_factory):
@@ -275,8 +312,8 @@ class TestS3BucketPolicy(MCGTest):
         # Hardcoded sleep is needed because we lack a confirmation mechanism
         # we could wait for - even the get-policy result has been observed to be
         # unreliable in confirming whether they policy is actually taking effect
-        logger.info("Waiting for 60 seconds for the policy to take effect")
-        time.sleep(60)
+        logger.info("Waiting for 120 seconds for the policy to take effect")
+        time.sleep(120)
 
         # Get Policy
         logger.info(f"Getting Bucket policy on bucket: {obc_obj.bucket_name}")
@@ -363,7 +400,7 @@ class TestS3BucketPolicy(MCGTest):
         email = user_name + "@mail.com"
 
         # Creating a s3 bucket
-        s3_bucket = bucket_factory(amount=1, interface="S3")[0]
+        s3_bucket = bucket_factory(amount=1, interface="OC")[0]
 
         # Creating a random user account
         if version.get_semantic_ocs_version_from_config() < version.VERSION_4_12:
@@ -850,8 +887,203 @@ class TestS3BucketPolicy(MCGTest):
                     f"{e.response} received invalid error code {response.error['Code']}"
                 )
 
+    @pytest.mark.polarion_id("OCS-5767")
+    @tier1
+    def test_bucket_policy_elements_NotPrincipal(self, mcg_obj, bucket_factory):
+        """
+        Test bucket policy element of NotPrincipal and Effect: Deny
+        """
+
+        # Creating obc and obc object
+        obc_bucket = bucket_factory(amount=1, interface="OC")
+        obc_obj = OBC(obc_bucket[0].name)
+
+        # Create data and object key
+        data = "Sample string content to write to a new S3 object"
+        object_key = "ObjKey-" + str(uuid.uuid4().hex)
+
+        # Set bucket policy for obc_bucket
+        bucket_policy_generated = gen_bucket_policy(
+            principal_property="NotPrincipal",
+            user_list=[obc_obj.obc_account],
+            actions_list=["PutObject"],
+            resources_list=[f'{obc_obj.bucket_name}/{"*"}'],
+            effect="Deny",
+        )
+        bucket_policy = json.dumps(bucket_policy_generated)
+
+        # Add Bucket Policy
+        logger.info(f"Creating bucket policy on bucket: {obc_obj.bucket_name}")
+        put_bucket_policy(mcg_obj, obc_obj.bucket_name, bucket_policy)
+
+        # Get bucket policy
+        logger.info(f"Getting Bucket policy on bucket: {obc_obj.bucket_name}")
+        get_policy = get_bucket_policy(mcg_obj, obc_obj.bucket_name)
+        logger.info(f"Got bucket policy: {get_policy['Policy']}")
+
+        # Verify put Object is allowed.
+        logger.info(f"Put Object to the bucket: {obc_obj.bucket_name} ")
+        assert s3_put_object(
+            mcg_obj,
+            obc_obj.bucket_name,
+            object_key,
+            data,
+        ), f"Failed to put object to bucket {obc_obj.bucket_name}"
+
+        # Delete policy and confirm policy got deleted.
+        delete_bucket_policy_verify(obc_obj, obc_obj.bucket_name)
+
+    @pytest.mark.parametrize(
+        argnames="effect",
+        argvalues=[
+            pytest.param(
+                *["Allow"], marks=[tier1, pytest.mark.polarion_id("OCS-5768")]
+            ),
+            pytest.param(*["Deny"], marks=[tier1, pytest.mark.polarion_id("OCS-5769")]),
+        ],
+    )
+    def test_bucket_policy_elements_NotAction(self, mcg_obj, bucket_factory, effect):
+        """
+        Test bucket policy element of NotAction with Effect: Allow/Deny
+        """
+
+        # Creating obc and obc object to get account details, keys etc
+        obc_bucket = bucket_factory(amount=2, interface="OC")
+        obc_obj = OBC(obc_bucket[0].name)
+        obc_obj1 = OBC(obc_bucket[1].name)
+
+        # Set bucket policy for user
+        bucket_policy_generated = gen_bucket_policy(
+            user_list=obc_obj1.obc_account,
+            action_property="NotAction",
+            actions_list=["DeleteBucket"],
+            resources_list=[f'{obc_obj.bucket_name}/{"*"}'],
+            effect=effect,
+        )
+        if effect == "Allow":
+            bucket_policy_generated["Statement"][0]["NotAction"][0] = "s3:ListBucket"
+        bucket_policy = json.dumps(bucket_policy_generated)
+
+        # Add Bucket Policy
+        logger.info(f"Creating bucket policy on bucket: {obc_obj.bucket_name}")
+        put_policy = put_bucket_policy(mcg_obj, obc_obj.bucket_name, bucket_policy)
+        logger.info(f"Put bucket policy response from admin: {put_policy}")
+
+        # Get bucket policy on the bucket
+        logger.info(f"Getting Bucket policy on bucket: {obc_obj.bucket_name}")
+        get_policy = get_bucket_policy(mcg_obj, obc_obj.bucket_name)
+        logger.info(f"Got bucket policy: {get_policy['Policy']}")
+
+        # Verify DeleteBucket and putObject operation
+        # in both scenarios: Effect=Allow/Deny
+        if effect == "Allow":
+            # Put Object is allowed
+            logger.info("Writing index data to the bucket")
+            assert s3_put_object(
+                s3_obj=obc_obj1,
+                bucketname=obc_obj.bucket_name,
+                object_key="index.html",
+                data=index,
+                content_type="text/html",
+            ), "Failed to put object."
+
+            # List bucket get access denied.
+            logger.info(f"Listing bucket objects {obc_obj.bucket_name}")
+            try:
+                s3_list_objects_v2(s3_obj=obc_obj1, bucketname=obc_obj.bucket_name)
+                raise UnexpectedBehaviour(
+                    "Failed: Object got listed, expect to get AccessDenied."
+                )
+            except boto3exception.ClientError as e:
+                logger.info(e.response)
+                response = HttpResponseParser(e.response)
+                if response.error["Code"] == "AccessDenied":
+                    logger.info(f"Bucket deleting got {response.error['Code']}")
+                else:
+                    raise UnexpectedBehaviour(
+                        f"{e.response} received invalid error code "
+                        f"{response.error['Code']}"
+                    )
+        if effect == "Deny":
+            # Put Object get access denied.
+            logger.info("Writing index data to the bucket")
+            try:
+                s3_put_object(
+                    s3_obj=obc_obj1,
+                    bucketname=obc_obj.bucket_name,
+                    object_key="index.html",
+                    data=index,
+                    content_type="text/html",
+                )
+                raise UnexpectedBehaviour(
+                    "Failed: Completed put object to bucket, expect to get AccessDenied."
+                )
+            except boto3exception.ClientError as e:
+                logger.info(e.response)
+                response = HttpResponseParser(e.response)
+                if response.error["Code"] == "AccessDenied":
+                    logger.info(f"PutObject got {response.error['Code']}")
+                else:
+                    raise UnexpectedBehaviour(
+                        f"{e.response} received invalid error code "
+                        f"{response.error['Code']}"
+                    )
+
+            # Delete bucket is allowed.
+            logger.info(f"Deleting bucket {obc_obj.bucket_name}")
+            assert s3_delete_bucket_website(
+                s3_obj=obc_obj, bucketname=obc_obj.bucket_name
+            ), "Failed to delete bucket."
+
+        # Delete policy and confirm policy got deleted.
+        delete_bucket_policy_verify(obc_obj, obc_obj.bucket_name)
+
+    @pytest.mark.polarion_id("OCS-5770")
+    @tier1
+    def test_bucket_policy_elements_NotResource(self, mcg_obj, bucket_factory):
+        """
+        Test bucket policy element of NotResource with Effect: Deny
+        """
+
+        # Creating obc and obc object to get account details, keys etc
+        obc_bucket = bucket_factory(amount=1, interface="OC")
+        obc_obj = OBC(obc_bucket[0].name)
+
+        # Create data and object key
+        data = "Sample string content to write to a new S3 object"
+        object_key = "ObjKey-" + str(uuid.uuid4().hex)
+
+        # Set bucket policy for user
+        bucket_policy_generated = gen_bucket_policy(
+            user_list=obc_obj.obc_account,
+            actions_list=["*"],
+            resources_list=[obc_obj.bucket_name, f'{obc_obj.bucket_name}/{"*"}'],
+            resource_property="NotResource",
+            effect="Deny",
+        )
+        bucket_policy = json.dumps(bucket_policy_generated)
+
+        # Add Bucket Policy
+        logger.info(f"Creating bucket policy on bucket: {obc_obj.bucket_name}")
+        put_bucket_policy(mcg_obj, obc_obj.bucket_name, bucket_policy)
+
+        # Get bucket policy
+        logger.info(f"Getting Bucket policy on bucket: {obc_obj.bucket_name}")
+        get_policy = get_bucket_policy(mcg_obj, obc_obj.bucket_name)
+        logger.info(f"Got bucket policy: {get_policy['Policy']}")
+
+        # Verify S3 action (putObject) is allowed.
+        logger.info(
+            f"Adding object on the bucket: {obc_obj.bucket_name} using user: {obc_obj.obc_account}"
+        )
+        assert s3_put_object(
+            obc_obj, obc_obj.bucket_name, object_key, data
+        ), "Failed to put Object"
+
+        # Delete policy and confirm policy got deleted.
+        delete_bucket_policy_verify(obc_obj, obc_obj.bucket_name)
+
     @pytest.mark.polarion_id("OCS-2451")
-    @pytest.mark.bugzilla("1893163")
     @skipif_ocs_version("<4.6")
     @tier1
     def test_public_website(self, mcg_obj, bucket_factory):
@@ -859,7 +1091,7 @@ class TestS3BucketPolicy(MCGTest):
         Tests public bucket website access
         """
         # Creating a S3 bucket to host website
-        s3_bucket = bucket_factory(amount=1, interface="S3")
+        s3_bucket = bucket_factory(amount=1, interface="OC")
 
         # Creating random S3 users
         users = []
@@ -948,7 +1180,6 @@ class TestS3BucketPolicy(MCGTest):
     @tier2
     @pytest.mark.polarion_id("OCS-3920")
     @skipif_ocs_version("<4.10")
-    @bugzilla("2054540")
     def test_multipart_with_policy(self, mcg_obj, bucket_factory):
         """
         Test Multipart upload with bucket policy set on the bucket
@@ -1005,7 +1236,6 @@ class TestS3BucketPolicy(MCGTest):
         complete_multipart_upload(obc_obj, bucket, object_key, upload_id, uploaded_part)
 
     @tier1
-    @pytest.mark.bugzilla("2210289")
     @pytest.mark.polarion_id("OCS-5183")
     def test_supported_bucket_policy_operations(self, mcg_obj, bucket_factory):
         """
@@ -1062,3 +1292,71 @@ class TestS3BucketPolicy(MCGTest):
         assert (
             not missing_policies
         ), f"Some bucket_policies are not created : {missing_policies}"
+
+
+@mcg
+@red_squad
+@polarion_id("OCS-6540")
+class TestNoobaaUpgradeWithBucketPolicy:
+    """
+    Test noobaa status post upgrade when there is bucket
+    with some bucket policy.
+
+    Bug: https://bugzilla.redhat.com/show_bug.cgi?id=2302507
+
+    """
+
+    @pre_upgrade
+    def test_create_bucket_policy_before_upgrade(
+        self,
+        request,
+        bucket_factory_session,
+        mcg_obj_session,
+    ):
+        """
+        Create bucket with some bucket policy before the upgrade
+
+        """
+        # Create a bucket and create obc object
+        obc = bucket_factory_session(amount=1, interface="CLI")[0]
+        obc_obj = OBC(obc.name)
+
+        # Generate bucket policy
+        bucket_policy_generated = gen_bucket_policy(
+            user_list=obc_obj.obc_account,
+            actions_list=["PutBucketPolicy", "GetBucketPolicy", "DeleteBucketPolicy"],
+            resources_list=[obc_obj.bucket_name],
+        )
+        bucket_policy = json.dumps(bucket_policy_generated)
+
+        logger.info(
+            "Caching the bucket and bucket policy info for post upgrade verification"
+        )
+
+        request.config.cache.set("bucket_policy_bucket", obc.name)
+        request.config.cache.set("bucket_policy", bucket_policy)
+
+    @post_upgrade
+    def test_verify_noobaa_after_upgrade(self, request, mcg_obj_session):
+        """
+        Verify the noobaa health and verify the bucket policy post upgrade
+
+        """
+        logger.info("Extracting the bucket and bucket policy info from the cache")
+        obc_name = request.config.cache.get("bucket_policy_bucket", None)
+        bucket_policy = request.config.cache.get("bucket_policy", None)
+
+        assert (
+            obc_name and bucket_policy
+        ), "Seem like either pre-upgrade test for this failed or unable to cache the bucket/bucket policy info"
+
+        # Check noobaa health
+        logger.info("Verifying noobaa health")
+        CephCluster().noobaa_health_check()
+
+        # Check backing-store health
+        verify_backing_store(constants.DEFAULT_NOOBAA_BACKINGSTORE)
+
+        logger.info(f"Creating policy by admin on bucket: {obc_name}")
+        put_policy = put_bucket_policy(mcg_obj_session, obc_name, bucket_policy)
+        logger.info(f"Put bucket policy response from admin: {put_policy}")

@@ -96,7 +96,10 @@ class PASTest(BaseTest):
 
         self.get_osd_info()
 
-        self.get_node_info(node_type="master")
+        if config.ENV_DATA.get("deployment_type") != constants.MANAGED_CP_DEPL_TYPE:
+            self.get_node_info(node_type="master")
+        else:
+            log.info("No master nodes in a managed control plane clusters")
         self.get_node_info(node_type="worker")
 
     def teardown(self):

@@ -2,6 +2,7 @@
 This module contains helpers functions needed for deployment
 of clusters on vsphere platform.
 """
+
 import json
 import logging
 import os

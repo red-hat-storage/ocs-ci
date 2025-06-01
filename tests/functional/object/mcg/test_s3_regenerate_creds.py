@@ -1,15 +1,14 @@
 import logging
 
+from ocs_ci.framework import config
 from ocs_ci.framework.pytest_customization.marks import (
     tier2,
-    bugzilla,
     polarion_id,
     red_squad,
     runs_on_provider,
     mcg,
 )
 from ocs_ci.ocs.ocp import OCP
-from ocs_ci.ocs import constants
 
 logger = logging.getLogger(__name__)
 
@@ -18,7 +17,6 @@ logger = logging.getLogger(__name__)
 @mcg
 @red_squad
 @runs_on_provider
-@bugzilla("2246328")
 @polarion_id("OCS-5216")
 def test_s3_regenerate_creds(mcg_obj, project_factory):
     """
@@ -37,14 +35,14 @@ def test_s3_regenerate_creds(mcg_obj, project_factory):
     logger.info(f"Creating OBC {obc_name}")
     mcg_obj.exec_mcg_cmd(
         cmd=f"obc create {obc_name} --app-namespace {proj_name}",
-        namespace=constants.OPENSHIFT_STORAGE_NAMESPACE,
+        namespace=config.ENV_DATA["cluster_namespace"],
     )
     ocp_obj.get(resource_name=obc_name)
 
     # regenerate credential
     mcg_obj.exec_mcg_cmd(
         cmd=f"obc regenerate {obc_name} --app-namespace {proj_name}",
-        namespace=constants.OPENSHIFT_STORAGE_NAMESPACE,
+        namespace=config.ENV_DATA["cluster_namespace"],
         use_yes=True,
     )
     logger.info("Successfully regenerated s3 credentials")

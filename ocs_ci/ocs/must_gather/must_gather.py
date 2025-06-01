@@ -35,6 +35,7 @@ class MustGather(object):
         self.files_not_exist = list()
         self.files_content_issue = list()
         self.ocs_version = version.get_semantic_ocs_version_from_config()
+        self.full_paths = list()
 
     @property
     def log_type(self):
@@ -46,13 +47,19 @@ class MustGather(object):
             raise ValueError("log type arg must be a string")
         self.type_log = type_log
 
-    def collect_must_gather(self):
+    def collect_must_gather(self, ocs_flags=None, mg_options=None):
         """
         Collect ocs_must_gather and copy the logs to a temporary folder.
 
+        Args:
+            ocs_flags (str): ocs flags to must gather command for example ["-- /usr/bin/gather -cs"]
+            mg_options (str): Options of must gather command For example "--host_network=True"
+
         """
         temp_folder = tempfile.mkdtemp()
-        collect_ocs_logs(dir_name=temp_folder, ocp=False)
+        collect_ocs_logs(
+            dir_name=temp_folder, ocp=False, ocs_flags=ocs_flags, mg_options=mg_options
+        )
         self.root = temp_folder + "_ocs_logs"
 
     def search_file_path(self):
@@ -244,6 +251,60 @@ class MustGather(object):
             if not flag:
                 logger.error("noobaa_diagnostics.tar.gz does not exist")
                 self.files_not_exist.append("noobaa_diagnostics.tar.gz")
+
+    def get_all_paths(self):
+        """
+        Get all paths in must gather dir
+
+        """
+        for root, dirs, files in os.walk(self.root):
+            for name in files + dirs:
+                full_path = os.path.join(root, name)
+                self.full_paths.append(full_path)
+
+    def verify_paths_in_dir(self, paths):
+        """
+        Verify paths exist in must gather directory
+
+        Args:
+            paths (list): list of paths in mg directory
+                for example ``/ceph_logs/journal_`` exist in ``/mg_dir/a/b/ceph/ceph_logs/journal_compute-1/log.log``
+
+        Returns:
+            list: the paths do not exist in mg dir
+
+        """
+        paths_exist = []
+        for path in paths:
+            status = False
+            for full_path in self.full_paths:
+                if path in full_path:
+                    status = True
+            if not status:
+                paths_exist.append(path)
+        return paths_exist
+
+    def verify_paths_not_in_dir(self, paths):
+        """
+        Verify paths do not exist in must gather directory
+
+        Args:
+            paths (list): list of paths in mg directory
+              for example ``/ceph_logs/journal_`` exist in ``/mg_dir/a/b/ceph/ceph_logs/journal_compute-1/log.log``
+
+        Returns:
+            list: the paths exist in mg dir
+
+        """
+        paths_not_exist = []
+        for path in paths:
+            status = True
+            for full_path in self.full_paths:
+                if path in full_path:
+                    status = False
+            if not status:
+                paths_not_exist.append(path)
+        return paths_not_exist
 
     def validate_must_gather(self):
         """

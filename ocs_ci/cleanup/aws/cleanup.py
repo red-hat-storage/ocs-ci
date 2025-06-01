@@ -5,11 +5,13 @@ import datetime
 import threading
 import os
 import re
+import boto3
 
 from botocore.exceptions import ClientError
 from ocs_ci.framework import config
 
 
+from ocs_ci.ocs.bucket_utils import delete_all_objects_in_batches
 from ocs_ci.ocs.constants import (
     CLEANUP_YAML,
     TEMPLATE_CLEANUP_DIR,
@@ -324,9 +326,22 @@ def delete_buckets(bucket_prefix, hours):
     aws = AWS()
     buckets_to_delete = aws.get_buckets_to_delete(bucket_prefix, hours)
     logger.info(f"buckets to delete: {buckets_to_delete}")
-    for bucket in buckets_to_delete:
-        logger.info(f"Delete bucket {bucket}")
-        aws.delete_bucket(bucket)
+    buckets_deletion_failed = []
+    for bucket_name in buckets_to_delete:
+        try:
+            bucket = boto3.resource("s3").Bucket(bucket_name)
+            try:
+                delete_all_objects_in_batches(
+                    s3_resource=boto3.resource("s3"), bucket_name=bucket_name
+                )
+                bucket.object_versions.all().delete()
+            except Exception as e:
+                logger.error(f"failed to list object in bucket {bucket_name} err:{e}")
+            bucket.delete()
+        except Exception as e:
+            logger.error(e)
+            buckets_deletion_failed.append(bucket_name)
+    return buckets_deletion_failed
 
 
 def aws_cleanup():
@@ -397,7 +412,12 @@ def aws_cleanup():
             if args.hours is not None
             else defaults.DEFAULT_BUCKET_RUNNING_TIME
         )
-        delete_buckets(defaults.BUCKET_PREFIXES_SPECIAL_RULES, bucket_hours)
+        buckets_deletion_failed = delete_buckets(
+            defaults.BUCKET_PREFIXES_SPECIAL_RULES, bucket_hours
+        )
+        assert (
+            len(buckets_deletion_failed) == 0
+        ), f"No all buckets deleted\n buckets_deletion_failed={buckets_deletion_failed}"
         return
 
     if not args.force:

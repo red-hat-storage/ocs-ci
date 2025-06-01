@@ -29,6 +29,7 @@ from ocs_ci.ocs.node import (
 )
 from ocs_ci.ocs.resources.pod import (
     check_pods_after_node_replacement,
+    wait_for_ceph_cmd_execute_successfully,
 )
 from ocs_ci.helpers.sanity_helpers import SanityManagedService, Sanity
 from ocs_ci.ocs.cluster import (
@@ -154,6 +155,8 @@ class TestRollingWorkerNodeTerminateAndRecovery(ManageTest):
                 label_nodes([new_ocs_node])
 
             log.info(f"The new ocs node is: {new_ocs_node.name}")
+            log.info("Wait for the Ceph health command to execute successfully")
+            wait_for_ceph_cmd_execute_successfully(timeout=420, num_of_retries=2)
             log.info("Waiting for all the pods to be running")
             assert check_pods_after_node_replacement(), "Not all the pods are running"
 

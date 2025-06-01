@@ -12,7 +12,6 @@ from ocs_ci.framework.pytest_customization.marks import green_squad
 from ocs_ci.framework.testlib import (
     ManageTest,
     tier1,
-    bugzilla,
     skipif_ocs_version,
     skipif_managed_service,
     skipif_hci_provider_and_client,
@@ -40,7 +39,6 @@ def setup_sc(storageclass_factory_class):
 
 @green_squad
 @tier1
-@bugzilla("2024545")
 @skipif_external_mode
 @skipif_managed_service
 @skipif_hci_provider_and_client

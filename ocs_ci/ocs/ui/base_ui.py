@@ -13,6 +13,7 @@ from selenium.common.exceptions import (
     NoSuchElementException,
     StaleElementReferenceException,
     ElementClickInterceptedException,
+    InvalidSessionIdException,
 )
 from selenium.webdriver.remote.webdriver import WebDriver
 from selenium.webdriver.chrome.options import Options
@@ -32,7 +33,7 @@ from ocs_ci.ocs.exceptions import (
     NotSupportedProxyConfiguration,
 )
 from ocs_ci.ocs.ocp import get_ocp_url
-from ocs_ci.ocs.ui.views import locators
+from ocs_ci.ocs.ui.views import locators_for_current_ocp_version
 from ocs_ci.utility.templating import Templating
 from ocs_ci.utility.retry import retry
 from ocs_ci.utility import version
@@ -124,29 +125,48 @@ class BaseUI:
             Path(self.dom_folder).mkdir(parents=True, exist_ok=True)
         logger.debug(f"dom files folder:{self.dom_folder}")
 
-        self.ocp_version = get_ocp_version()
         self.running_ocp_semantic_version = version.get_semantic_ocp_running_version()
         self.ocp_version_full = version.get_semantic_ocp_version_from_config()
         self.ocs_version_semantic = version.get_semantic_ocs_version_from_config()
         self.ocp_version_semantic = version.get_semantic_ocp_version_from_config()
 
-        self.page_nav = self.deep_get(locators, self.ocp_version, "page")
-        self.generic_locators = self.deep_get(locators, self.ocp_version, "generic")
-        self.validation_loc = self.deep_get(locators, self.ocp_version, "validation")
-        self.dep_loc = self.deep_get(locators, self.ocp_version, "deployment")
-        self.pvc_loc = self.deep_get(locators, self.ocp_version, "pvc")
-        self.bp_loc = self.deep_get(locators, self.ocp_version, "block_pool")
-        self.sc_loc = self.deep_get(locators, self.ocp_version, "storageclass")
-        self.ocs_loc = self.deep_get(locators, self.ocp_version, "ocs_operator")
-        self.bucketclass = self.deep_get(locators, self.ocp_version, "bucketclass")
-        self.mcg_stores = self.deep_get(locators, self.ocp_version, "mcg_stores")
-        self.acm_page_nav = self.deep_get(locators, self.ocp_version, "acm_page")
-        self.obc_loc = self.deep_get(locators, self.ocp_version, "obc")
-        self.add_capacity_ui_loc = self.deep_get(
-            locators, self.ocp_version, "add_capacity"
+        self.page_nav = self.deep_get(locators_for_current_ocp_version(), "page")
+        self.generic_locators = self.deep_get(
+            locators_for_current_ocp_version(), "generic"
         )
-        self.topology_loc = self.deep_get(locators, self.ocp_version, "topology")
-        self.alerting_loc = self.deep_get(locators, self.ocp_version, "alerting")
+        self.validation_loc = self.deep_get(
+            locators_for_current_ocp_version(), "validation"
+        )
+        self.dep_loc = self.deep_get(locators_for_current_ocp_version(), "deployment")
+        self.pvc_loc = self.deep_get(locators_for_current_ocp_version(), "pvc")
+        self.bp_loc = self.deep_get(locators_for_current_ocp_version(), "block_pool")
+        self.sc_loc = self.deep_get(locators_for_current_ocp_version(), "storageclass")
+        self.ocs_loc = self.deep_get(locators_for_current_ocp_version(), "ocs_operator")
+        self.bucketclass = self.deep_get(
+            locators_for_current_ocp_version(), "bucketclass"
+        )
+        self.mcg_stores = self.deep_get(
+            locators_for_current_ocp_version(), "mcg_stores"
+        )
+        self.acm_page_nav = self.deep_get(
+            locators_for_current_ocp_version(), "acm_page"
+        )
+        self.obc_loc = self.deep_get(locators_for_current_ocp_version(), "obc")
+        self.add_capacity_ui_loc = self.deep_get(
+            locators_for_current_ocp_version(), "add_capacity"
+        )
+        self.topology_loc = self.deep_get(
+            locators_for_current_ocp_version(), "topology"
+        )
+        self.storage_clients_loc = self.deep_get(
+            locators_for_current_ocp_version(), "storage"
+        )
+        self.alerting_loc = self.deep_get(
+            locators_for_current_ocp_version(), "alerting"
+        )
+        self.bucket_tab = self.deep_get(
+            locators_for_current_ocp_version(), "bucket_tab"
+        )
 
     def __repr__(self):
         return f"{self.__class__.__name__} Web Page"
@@ -358,17 +378,21 @@ class BaseUI:
         if status != current_status:
             self.do_click(locator=locator)
 
-    def check_element_text(self, expected_text, element="*"):
+    def check_element_text(self, expected_text, element="*", take_screenshot=False):
         """
         Check if the text matches the expected text.
 
         Args:
             expected_text (string): The expected text.
+            element (str): element
+            take_screenshot (bool): if screenshot should be taken
 
         return:
             bool: True if the text matches the expected text, False otherwise
 
         """
+        if take_screenshot:
+            self.take_screenshot()
         element_list = self.driver.find_elements_by_xpath(
             f"//{element}[contains(text(), '{expected_text}')]"
         )
@@ -494,7 +518,8 @@ class BaseUI:
             module_loc (tuple): locator of the module of the page awaited to be loaded
         """
 
-        @retry(TimeoutException)
+        # IndexError when dom is empty due to page not loaded yet
+        @retry((TimeoutException, IndexError))
         def get_page_hash():
             """
             Get dom html hash
@@ -667,6 +692,35 @@ class BaseUI:
         wait = WebDriverWait(self.driver, timeout=timeout)
         wait.until(ec.url_matches(endswith))
 
+    def clear_input_gradually(self, locator):
+        """
+        Clean input field by gradually deleting characters one by one.
+        This way we avoid common automation issue when input field is not cleared.
+
+        Returns:
+            bool: True if the input element is successfully cleared, False otherwise.
+        """
+        wait_for_element_to_be_visible(locator, 30)
+        elements = self.get_elements(locator)
+        input_el = elements[0]
+        input_len = len(str(input_el.get_attribute("value")))
+
+        # timeout in seconds will be equal to a number of symbols to be removed, but not less than 30s
+        timeout = input_len if input_len > 30 else 30
+        timeout = time.time() + timeout
+        if len(elements):
+            while len(str(input_el.get_attribute("value"))) != 0:
+                if time.time() < timeout:
+                    # to remove text from the input independently where the caret is use both delete and backspace
+                    input_el.send_keys(Keys.BACKSPACE, Keys.DELETE)
+                    time.sleep(0.05)
+                else:
+                    raise TimeoutException("time to clear input os out")
+        else:
+            logger.error("test input locator not found")
+            return False
+        return True
+
 
 def screenshot_dom_location(type_loc="screenshot"):
     """
@@ -799,7 +853,7 @@ class SeleniumDriver(WebDriver):
             # headless browsers are web browsers without a GUI
             headless = ocsci_config.UI_SELENIUM.get("headless")
             if headless:
-                chrome_options.add_argument("--headless")
+                chrome_options.add_argument("--headless=new")
                 chrome_options.add_argument("window-size=1920,1400")
 
             # use proxy server, if required
@@ -876,7 +930,7 @@ class SeleniumDriver(WebDriver):
     backoff=2,
     func=garbage_collector_webdriver,
 )
-def login_ui(console_url=None, username=None, password=None, **kwargs):
+def login_ui(console_url=None, username=None, password=None):
     """
     Login to OpenShift Console
 
@@ -897,9 +951,8 @@ def login_ui(console_url=None, username=None, password=None, **kwargs):
     if password is None:
         password = get_kubeadmin_password()
         password = password.rstrip()
-    ocp_version = get_ocp_version()
-    login_loc = locators[ocp_version]["login"]
-    page_nav_loc = locators[ocp_version]["page"]
+    login_loc = locators_for_current_ocp_version()["login"]
+    page_nav_loc = locators_for_current_ocp_version()["page"]
     driver = SeleniumDriver()
     driver.maximize_window()
     driver.implicitly_wait(10)
@@ -910,6 +963,7 @@ def login_ui(console_url=None, username=None, password=None, **kwargs):
     try:
         wait = WebDriverWait(driver, 15)
         if username is not None:
+            logger.info(f"Trying to log in as {username}")
             element = wait.until(
                 ec.element_to_be_clickable(
                     (
@@ -917,9 +971,10 @@ def login_ui(console_url=None, username=None, password=None, **kwargs):
                         login_loc["username_my_htpasswd"][0],
                     )
                 ),
-                message="'Log in with my_htpasswd_provider' text is not present",
+                message="Title element containing text 'Log in with my_htpasswd' is not present",
             )
         else:
+            logger.info("Trying to log in as kubeadmin")
             element = wait.until(
                 ec.element_to_be_clickable(
                     (
@@ -934,35 +989,36 @@ def login_ui(console_url=None, username=None, password=None, **kwargs):
         take_screenshot("login")
         copy_dom("login")
         logger.warning(
-            "Login with my_htpasswd_provider or kube:admin text not found, trying to login"
+            "Login with my_htpasswd or kube:admin text not found, trying to login"
         )
 
     username_el = wait_for_element_to_be_clickable(login_loc["username"], 60)
     if username is None:
-        username = constants.KUBEADMIN
+        username = config.RUN["username"]
     username_el.send_keys(username)
 
     password_el = wait_for_element_to_be_clickable(login_loc["password"], 60)
     password_el.send_keys(password)
 
+    logger.info("Username and password filled in, clicking Log in")
     confirm_login_el = wait_for_element_to_be_clickable(login_loc["click_login"], 60)
     confirm_login_el.click()
 
-    hci_platform_conf_confirmed = (
+    hci_platform_conf = (
         config.ENV_DATA["platform"].lower() in HCI_PROVIDER_CLIENT_PLATFORMS
     )
 
-    if hci_platform_conf_confirmed:
+    if hci_platform_conf:
         dashboard_url = console_url + "/dashboards"
-        # automatically proceed to load-cluster if test marked with provider decorator
-        if (
-            "request" in kwargs
-            and kwargs["request"].node.get_closest_marker("runs_on_provider")
-            and driver.current_url != dashboard_url
-        ):
+        # proceed to local-cluster page if not already there. The rule is always to start from the local-cluster page
+        # when the hci platform is confirmed and proceed to the client if needed from within the test
+        current_url = driver.current_url
+        logger.info(f"Current url: {current_url}")
+        if current_url != dashboard_url:
             # timeout is unusually high for different scenarios when default page is not loaded immediately
+            logger.info("Navigate to 'Local Cluster' page")
             navigate_to_local_cluster(
-                acm_page=locators[ocp_version]["acm_page"], timeout=180
+                acm_page=locators_for_current_ocp_version()["acm_page"], timeout=180
             )
             logger.info(
                 f"'Local Cluster' page is loaded, current url: {driver.current_url}"
@@ -972,13 +1028,21 @@ def login_ui(console_url=None, username=None, password=None, **kwargs):
                 f"Platform {config.ENV_DATA['platform']} is not supported"
             )
 
-    if default_console is True and username is constants.KUBEADMIN:
+    # Log in process needs to be retried if navigator sidebar is not visible
+    if default_console is True:
         wait_for_element_to_be_visible(page_nav_loc["page_navigator_sidebar"], 180)
 
-    if username is not constants.KUBEADMIN and not hci_platform_conf_confirmed:
-        # OCP 4.14 and OCP 4.15 observed default user role is an admin
+    # Skip tour if it appears, if not found, continue without clicking
+    # we don't want to wait for Tour Guide more than 15 sec, because in most cases it will not be present
+    if any(
+        (driver.find_elements(*login_loc["skip_tour"][::-1]) or time.sleep(5))
+        for _ in range(3)
+    ):
         skip_tour_el = wait_for_element_to_be_clickable(login_loc["skip_tour"], 180)
         skip_tour_el.click()
+    else:
+        logger.info("Skip tour element not found. Continuing without clicking.")
+
     return driver
 
 
@@ -988,9 +1052,14 @@ def close_browser():
 
     """
     logger.info("Close browser")
-    take_screenshot("close_browser")
-    copy_dom("close_browser")
-    SeleniumDriver().quit()
+    try:
+        take_screenshot("close_browser")
+        copy_dom("close_browser")
+        SeleniumDriver().quit()
+    except InvalidSessionIdException:
+        # when browser session is closed unexpectedly or session timeout occurs take_screenshot or copy_dom will fail
+        logger.error("InvalidSessionIdException occurred")
+        pass
     SeleniumDriver.remove_instance()
     time.sleep(10)
     garbage_collector_webdriver()
@@ -1007,8 +1076,8 @@ def proceed_to_login_console():
 
     """
     driver = SeleniumDriver()
-    login_loc = locators[get_ocp_version()]["login"]
-    if driver.title == login_loc["pre_login_page_title"]:
+    login_loc = locators_for_current_ocp_version()["login"]
+    if login_loc["pre_login_page_title"].lower() in driver.title.lower():
         proceed_btn = driver.find_element(
             by=login_loc["proceed_to_login_btn"][1],
             value=login_loc["proceed_to_login_btn"][0],
@@ -1032,7 +1101,7 @@ def navigate_to_local_cluster(**kwargs):
     if "acm_page" in kwargs:
         acm_page_loc = kwargs["acm_page"]
     else:
-        acm_page_loc = locators[get_ocp_version()]["acm_page"]
+        acm_page_loc = locators_for_current_ocp_version()["acm_page"]
     if "timeout" in kwargs:
         timeout = kwargs["timeout"]
     else:
@@ -1040,11 +1109,13 @@ def navigate_to_local_cluster(**kwargs):
 
     all_clusters_dropdown = acm_page_loc["all-clusters_dropdown"]
     try:
+        logger.info("Navigate to Local Cluster page. Click all clusters dropdown")
         acm_dropdown = wait_for_element_to_be_visible(all_clusters_dropdown, timeout)
         acm_dropdown.click()
         local_cluster_item = wait_for_element_to_be_visible(
             acm_page_loc["local-cluster_dropdown_item"]
         )
+        logger.info("Navigate to Local Cluster page. Click local cluster item")
         local_cluster_item.click()
     except TimeoutException:
         wait_for_element_to_be_visible(acm_page_loc["local-cluster_dropdown"])
@@ -1060,7 +1131,7 @@ def navigate_to_all_clusters(**kwargs):
     if "acm_page" in kwargs:
         acm_page = kwargs["acm_page"]
     else:
-        acm_page = locators[get_ocp_version()]["acm_page"]
+        acm_page = locators_for_current_ocp_version()["acm_page"]
     if "timeout" in kwargs:
         timeout = kwargs["timeout"]
     else:

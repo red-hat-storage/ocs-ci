@@ -15,7 +15,6 @@ from ocs_ci.framework.pytest_customization.marks import (
     skipif_external_mode,
     ipi_deployment_required,
     skipif_vsphere_ipi,
-    bugzilla,
 )
 
 log = logging.getLogger(__name__)
@@ -63,21 +62,12 @@ def fioscale(request):
 @ignore_leftovers
 @skipif_external_mode
 @ipi_deployment_required
-@pytest.mark.parametrize(
-    argnames="resource_to_delete",
-    argvalues=[
-        pytest.param(*["mgr"], marks=[pytest.mark.polarion_id("OCS-766")]),
-        pytest.param(*["mon"], marks=[pytest.mark.polarion_id("OCS-764")]),
-        pytest.param(*["osd"], marks=[pytest.mark.polarion_id("OCS-765")]),
-        pytest.param(*["mds"], marks=[pytest.mark.polarion_id("OCS-613")]),
-    ],
-)
 class TestScaleRespinCephPods(E2ETest):
     """
     Scale the OCS cluster to reach 1500 PVC+POD
     """
 
-    def test_pv_scale_out_create_pvcs_and_respin_ceph_pods(
+    def deprecated_test_pv_scale_out_create_pvcs_and_respin_ceph_pods(
         self,
         fioscale,
         resource_to_delete,
@@ -117,7 +107,6 @@ class TestScaleRespinCephPods(E2ETest):
 @orange_squad
 @scale
 @ignore_leftovers
-@bugzilla("2092737")
 @skipif_external_mode
 @ipi_deployment_required
 @pytest.mark.parametrize(
@@ -186,23 +175,12 @@ class TestScaleRespinOperatorPods(E2ETest):
 @skipif_external_mode
 @skipif_vsphere_ipi
 @ipi_deployment_required
-@pytest.mark.parametrize(
-    argnames=["node_type"],
-    argvalues=[
-        pytest.param(
-            *[constants.MASTER_MACHINE], marks=pytest.mark.polarion_id("OCS-761")
-        ),
-        pytest.param(
-            *[constants.WORKER_MACHINE], marks=pytest.mark.polarion_id("OCS-762")
-        ),
-    ],
-)
 class TestRebootNodes(E2ETest):
     """
     Reboot nodes in scaled up cluster
     """
 
-    def test_rolling_reboot_node(self, node_type):
+    def deprecated_test_rolling_reboot_node(self, node_type):
         """
         Test to rolling reboot of nodes
         """

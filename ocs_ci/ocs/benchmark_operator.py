@@ -6,6 +6,7 @@ Benchmark Operator Class to run various workloads, performance  and scale tests
 This operator can be used as an object or as a fixture
 
 """
+
 # Internal modules
 import logging
 import tempfile

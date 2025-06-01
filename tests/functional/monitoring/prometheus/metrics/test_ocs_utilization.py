@@ -16,6 +16,7 @@ from ocs_ci.utility.workloadfixture import ignore_next_measurement_file
 from ocs_ci.framework.pytest_customization.marks import (
     skipif_managed_service,
     blue_squad,
+    provider_mode,
     mcg,
 )
 
@@ -30,12 +31,12 @@ CPU_USAGE_POD = (
 )
 
 
+@provider_mode
 @mcg
 @blue_squad
 @tier1
 @flaky(rerun_filter=ignore_next_measurement_file)
 @marks.polarion_id("OCS-2364")
-@marks.bugzilla("1849309")
 @skipif_managed_service
 def test_mcg_cpu_usage(workload_idle, threading_lock):
     """

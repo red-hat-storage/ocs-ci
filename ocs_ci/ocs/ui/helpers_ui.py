@@ -1,13 +1,14 @@
 import logging
 
 from selenium.webdriver.common.by import By
-from ocs_ci.ocs.ui.views import locators
+from ocs_ci.ocs.ui.views import locators, locators_for_current_ocp_version
 from ocs_ci.utility.utils import get_ocp_version
 from ocs_ci.framework import config
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.ui.base_ui import login_ui, close_browser
 from ocs_ci.ocs.ui.add_replace_device_ui import AddReplaceDeviceUI
 from ocs_ci.ocs.resources.storage_cluster import get_deviceset_count, get_osd_size
+from ocs_ci.ocs.exceptions import ResourceNotFoundError
 
 logger = logging.getLogger(__name__)
 
@@ -30,14 +31,11 @@ def ui_deployment_conditions():
     is_proxy = config.DEPLOYMENT.get("proxy")
     is_infra_nodes = config.DEPLOYMENT.get("infra_nodes")
 
-    try:
-        locators[ocp_version]["deployment"]
-    except KeyError as e:
-        logger.info(
-            f"OCS deployment via UI is not supported on ocp version {ocp_version}"
+    if ocp_version not in locators:
+        logger.warning(
+            f"OCS deployment via UI might not be supported on ocp version {ocp_version}"
+            "But we will try to deploy with locators from previous OCP version!"
         )
-        logger.error(e)
-        return False
 
     if platform.lower() not in (
         constants.AWS_PLATFORM,
@@ -106,7 +104,7 @@ def ui_add_capacity_conditions():
     is_proxy = config.DEPLOYMENT.get("proxy")
 
     try:
-        locators[ocp_version]["add_capacity"]
+        locators_for_current_ocp_version()["add_capacity"]
     except KeyError as e:
         logger.info(
             f"Add capacity via UI is not supported on ocp version {ocp_version}"
@@ -122,6 +120,7 @@ def ui_add_capacity_conditions():
     ):
         logger.info(f"Add capacity via UI is not supported on platform {platform}")
         return False
+    # TODO: check if the same approach can work from locators_for_current_ocp_version to rely on previous locators?
     elif ocp_version not in (
         "4.7",
         "4.8",
@@ -133,6 +132,7 @@ def ui_add_capacity_conditions():
         "4.14",
         "4.15",
         "4.16",
+        "4.17",
     ):
         logger.info(
             f"Add capacity via UI is not supported when the OCP version [{ocp_version}]"
@@ -200,3 +200,43 @@ def get_element_by_text(text):
 
     """
     return (f"//*[text()= '{text}']", By.XPATH)
+
+
+def is_ui_deployment():
+    """
+    This function checks if the current deployment is UI deployment or not.
+
+    """
+
+    if (
+        (config.RUN["kubeconfig"] is not None)
+        and (config.DEPLOYMENT["ui_deployment"])
+        and (ui_deployment_conditions())
+    ):
+        return True
+
+    return False
+
+
+def extract_encryption_status(root_element, svg_path):
+    """Function to extract encryption status from an SVG element
+
+    Args:
+        root_element (str): Dom root element
+        svg_element (str): svg element path
+
+    Returns:
+        bool: if encryption status is enable for given element return True otherwise False.
+
+    Raises:
+        ResourceNotFoundError: If given resource is not found.
+    """
+    try:
+        svg_element = root_element.find_element(By.CSS_SELECTOR, svg_path)
+        if svg_element and svg_element.tag_name == "svg":
+            if svg_element.get_attribute("data-test") == "success-icon":
+                return True
+            else:
+                return False
+    except Exception as e:
+        raise ResourceNotFoundError(f"Given SVG element is not Found: {e}")

@@ -6,4 +6,5 @@ provisioner: kubernetes.io/gce-pd
 parameters:
  type: pd-ssd
 volumeBindingMode: WaitForFirstConsumer
+allowVolumeExpansion: true
 reclaimPolicy: Delete

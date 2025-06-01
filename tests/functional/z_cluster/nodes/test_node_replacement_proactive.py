@@ -18,13 +18,16 @@ from ocs_ci.framework.pytest_customization.marks import (
     skipif_managed_service,
     skipif_hci_provider_and_client,
     skipif_bmpsi,
-    bugzilla,
     skipif_external_mode,
     skipif_ms_consumer,
     skipif_hci_client,
     brown_squad,
+    skipif_ibm_cloud_managed,
 )
-from ocs_ci.helpers.helpers import verify_storagecluster_nodetopology
+from ocs_ci.helpers.helpers import (
+    verify_storagecluster_nodetopology,
+    clear_crash_warning_and_osd_removal_leftovers,
+)
 from ocs_ci.helpers.sanity_helpers import Sanity
 
 log = logging.getLogger(__name__)
@@ -78,6 +81,9 @@ def check_node_replacement_verification_steps(
             and config.ENV_DATA["deployment_type"] == "upi"
         ):
             new_osd_node_name = old_node_name
+            # This is a workaround due to the issue https://github.com/red-hat-storage/ocs-ci/issues/11553
+            if config.RUN.get("use_existing_node"):
+                new_osd_node_name = new_node_name
         else:
             new_osd_node_name = node.wait_for_new_osd_node(old_osd_node_names, timeout)
         log.info(f"Newly created OSD name: {new_osd_node_name}")
@@ -128,7 +134,7 @@ def delete_and_create_osd_node(osd_node_name):
     old_osd_ids = node.get_node_osd_ids(osd_node_name)
 
     old_osd_node_names = node.get_osd_running_nodes()
-
+    dt = config.ENV_DATA["deployment_type"]
     # If the cluster is an MS provider cluster, and we also have MS consumer clusters in the run
     if is_ms_provider_cluster() and config.is_consumer_exist():
         pytest.skip(
@@ -144,7 +150,7 @@ def delete_and_create_osd_node(osd_node_name):
         f"results of this test run are all invalid."
     )
 
-    if config.ENV_DATA["deployment_type"] in ["ipi", "managed"]:
+    if dt in [constants.IPI_DEPL_TYPE, constants.MANAGED_DEPL_TYPE]:
         if is_lso_cluster():
             # TODO: Implement functionality for Internal-Attached devices mode
             # once ocs-ci issue #4545 is resolved
@@ -153,18 +159,22 @@ def delete_and_create_osd_node(osd_node_name):
         else:
             new_node_name = node.delete_and_create_osd_node_ipi(osd_node_name)
 
-    elif config.ENV_DATA["deployment_type"] == "upi":
+    elif dt == constants.UPI_DEPL_TYPE:
         if config.ENV_DATA["platform"].lower() == constants.AWS_PLATFORM:
             new_node_name = node.delete_and_create_osd_node_aws_upi(osd_node_name)
         elif config.ENV_DATA["platform"].lower() == constants.VSPHERE_PLATFORM:
+            # This is a workaround due to the issue https://github.com/red-hat-storage/ocs-ci/issues/11553
+            use_existing_node = config.RUN.get("use_existing_node", False)
             if is_lso_cluster():
                 new_node_name = node.delete_and_create_osd_node_vsphere_upi_lso(
-                    osd_node_name, use_existing_node=False
+                    osd_node_name, use_existing_node=use_existing_node
                 )
             else:
                 new_node_name = node.delete_and_create_osd_node_vsphere_upi(
-                    osd_node_name, use_existing_node=False
+                    osd_node_name, use_existing_node=use_existing_node
                 )
+    elif dt == constants.MANAGED_CP_DEPL_TYPE:
+        new_node_name = node.delete_and_create_osd_node_managed_cp(osd_node_name)
     else:
         log.error(msg_invalid)
         pytest.fail(msg_invalid)
@@ -173,6 +183,9 @@ def delete_and_create_osd_node(osd_node_name):
     check_node_replacement_verification_steps(
         osd_node_name, new_node_name, old_osd_node_names, old_osd_ids
     )
+
+    log.info("Clear crash warnings and osd removal leftovers")
+    clear_crash_warning_and_osd_removal_leftovers()
 
 
 @brown_squad
@@ -190,6 +203,11 @@ class TestNodeReplacementWithIO(ManageTest):
     """
 
     @pytest.fixture(autouse=True)
+    def teardown(self):
+        log.info("Clear crash warnings and osd removal leftovers")
+        clear_crash_warning_and_osd_removal_leftovers()
+
+    @pytest.fixture(autouse=True)
     def init_sanity(self):
         """
         Initialize Sanity instance
@@ -201,7 +219,7 @@ class TestNodeReplacementWithIO(ManageTest):
         self,
         pvc_factory,
         pod_factory,
-        dc_pod_factory,
+        deployment_pod_factory,
         bucket_factory,
         rgw_bucket_factory,
     ):
@@ -219,7 +237,7 @@ class TestNodeReplacementWithIO(ManageTest):
         log.info("Creating dc pod backed with rbd pvc and running io in bg")
         for worker_node in worker_node_list:
             if worker_node != osd_node_name:
-                rbd_dc_pod = dc_pod_factory(
+                rbd_dc_pod = deployment_pod_factory(
                     interface=constants.CEPHBLOCKPOOL, node_name=worker_node, size=20
                 )
                 pod.run_io_in_bg(rbd_dc_pod, expect_to_fail=False, fedora_dc=True)
@@ -227,7 +245,7 @@ class TestNodeReplacementWithIO(ManageTest):
         log.info("Creating dc pod backed with cephfs pvc and running io in bg")
         for worker_node in worker_node_list:
             if worker_node != osd_node_name:
-                cephfs_dc_pod = dc_pod_factory(
+                cephfs_dc_pod = deployment_pod_factory(
                     interface=constants.CEPHFILESYSTEM, node_name=worker_node, size=20
                 )
                 pod.run_io_in_bg(cephfs_dc_pod, expect_to_fail=False, fedora_dc=True)
@@ -269,6 +287,14 @@ class TestNodeReplacement(ManageTest):
     """
 
     @pytest.fixture(autouse=True)
+    def teardown(self, request):
+        def finalizer():
+            log.info("Clear crash warnings and osd removal leftovers")
+            clear_crash_warning_and_osd_removal_leftovers()
+
+        request.addfinalizer(finalizer)
+
+    @pytest.fixture(autouse=True)
     def init_sanity(self):
         """
         Initialize Sanity instance
@@ -276,6 +302,7 @@ class TestNodeReplacement(ManageTest):
         """
         self.sanity_helpers = Sanity()
 
+    @skipif_ibm_cloud_managed
     def test_nodereplacement_proactive(self):
         """
         Knip-894 Node Replacement proactive(without IO running)
@@ -305,7 +332,6 @@ class TestNodeReplacement(ManageTest):
 @tier4a
 @brown_squad
 @ignore_leftovers
-@bugzilla("1840539")
 @pytest.mark.polarion_id("OCS-2535")
 @skipif_external_mode
 @skipif_managed_service
@@ -323,6 +349,12 @@ class TestNodeReplacementTwice(ManageTest):
       2. ceph side host still on the old rack
     """
 
+    @pytest.fixture(autouse=True)
+    def teardown(self, request):
+        log.info("Clear crash warnings and osd removal leftovers")
+        clear_crash_warning_and_osd_removal_leftovers()
+
+    @skipif_ibm_cloud_managed
     def test_nodereplacement_twice(self):
         for i in range(2):
             # Get random node name for replacement

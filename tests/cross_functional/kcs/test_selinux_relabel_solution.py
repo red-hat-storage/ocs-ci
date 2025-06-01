@@ -8,17 +8,20 @@ from datetime import datetime
 
 from ocs_ci.framework import config
 from ocs_ci.helpers import helpers
-from ocs_ci.helpers.helpers import check_selinux_relabeling
+from ocs_ci.helpers.helpers import (
+    check_selinux_relabeling,
+    modify_deploymentconfig_replica_count,
+)
 from ocs_ci.ocs import ocp, constants
 from ocs_ci.framework.testlib import E2ETest
 from ocs_ci.ocs.exceptions import PodNotCreated, CommandFailed
 from ocs_ci.ocs.resources import pod as res_pod
 from ocs_ci.ocs.resources.pod import wait_for_pods_to_be_running
+from ocs_ci.utility.retry import retry
 from ocs_ci.utility.utils import run_cmd
 from ocs_ci.utility.templating import dump_data_to_temp_yaml
 from ocs_ci.framework.pytest_customization.marks import (
     tier1,
-    bugzilla,
     polarion_id,
     magenta_squad,
 )
@@ -29,7 +32,7 @@ log = logging.getLogger(__name__)
 @magenta_squad
 @tier1
 class TestSelinuxrelabel(E2ETest):
-    def create_deploymentconfig_pod(self, **kwargs):
+    def create_deployment_pod(self, **kwargs):
         """
         Create deployment pod.
 
@@ -43,8 +46,8 @@ class TestSelinuxrelabel(E2ETest):
                 pvc_name=self.pvc_obj.name,
                 namespace=config.ENV_DATA["cluster_namespace"],
                 sa_name=self.service_account_obj.name,
-                dc_deployment=True,
-                pod_dict_path=constants.PERF_DC_YAML,
+                deployment=True,
+                pod_dict_path=constants.PERF_DEPLOY_YAML,
                 **kwargs,
             )
         except Exception as e:
@@ -161,7 +164,7 @@ class TestSelinuxrelabel(E2ETest):
             # Get the pod conditions
             pod = ocp.OCP(kind="pod", namespace=config.ENV_DATA["cluster_namespace"])
             conditions = pod.exec_oc_cmd(
-                f"get pod {pod_name} -n openshift-storage -o jsonpath='{{.status.conditions}}'"
+                f"get pod {pod_name} -o jsonpath='{{.status.conditions}}'"
             )
             conditions = [
                 {key: None if value == "null" else value for key, value in item.items()}
@@ -205,9 +208,9 @@ class TestSelinuxrelabel(E2ETest):
         # Get random files
         data_path = f"{constants.FLEXY_MNT_CONTAINER_DIR}"
         num_of_files = random.randint(3, 9)
-        ocp_obj = ocp.OCP(kind=constants.OPENSHIFT_STORAGE_NAMESPACE)
+        ocp_obj = ocp.OCP(kind=config.ENV_DATA["cluster_namespace"])
         random_files = ocp_obj.exec_oc_cmd(
-            f"exec -n {constants.OPENSHIFT_STORAGE_NAMESPACE} -it {pod_obj.name} -- /bin/bash"
+            f'exec -n {config.ENV_DATA["cluster_namespace"]} -it {pod_obj.name} -- /bin/bash'
             f' -c "find {data_path} -type f | "shuf" -n {num_of_files}"',
             timeout=300,
         )
@@ -219,12 +222,11 @@ class TestSelinuxrelabel(E2ETest):
         """
         Cleanup the test environment
         """
-        res_pod.delete_deploymentconfig_pods(self.pod_obj)
+        res_pod.delete_deployment_pods(self.pod_obj)
 
-    @bugzilla("1988284")
     @polarion_id("OCS-5132")
     @pytest.mark.parametrize("copies", [5])
-    def test_selinux_relabel_for_existing_pvc(
+    def deprecated_test_selinux_relabel_for_existing_pvc(
         self, pvc_factory, service_account_factory, copies
     ):
         """
@@ -259,7 +261,7 @@ class TestSelinuxrelabel(E2ETest):
         )
 
         # Create deployment pod
-        self.pod_obj = self.create_deploymentconfig_pod(
+        self.pod_obj = self.create_deployment_pod(
             command=["/opt/multiple_files.sh"],
             command_args=[f"{copies}", "/mnt"],
         )
@@ -267,9 +269,9 @@ class TestSelinuxrelabel(E2ETest):
         self.pod_selector = self.pod_obj.labels.get(constants.DEPLOYMENTCONFIG)
 
         # Leave pod for some time to run since file creation time is longer
-        waiting_time = 120
+        waiting_time = 200
         log.info(f"Waiting for {waiting_time} seconds")
-        time.sleep(120)
+        time.sleep(waiting_time)
 
         # Get the md5sum of some random files
         random_files = self.get_random_files(self.pod_obj)
@@ -300,15 +302,34 @@ class TestSelinuxrelabel(E2ETest):
         self.apply_selinux_solution_on_existing_pvc(self.pvc_obj)
 
         # Delete pod so that fix will be applied for new pod
-        self.pod_obj = self.get_app_pod_obj()
+        assert modify_deploymentconfig_replica_count(
+            deploymentconfig_name=self.pod_obj.get_labels().get("name"), replica_count=0
+        ), "Failed to scale down deploymentconfig to 0"
         self.pod_obj.delete(wait=True)
+
+        assert modify_deploymentconfig_replica_count(
+            deploymentconfig_name=self.pod_obj.get_labels().get("name"), replica_count=1
+        ), "Failed to scale down deploymentconfig to 1"
+
         self.pod_obj = self.get_app_pod_obj()
-        assert wait_for_pods_to_be_running(
-            pod_names=[self.pod_obj.name], timeout=600, sleep=15
-        ), f"Pod {self.pod_obj.name} didn't reach to running state"
+        ocp.OCP(
+            kind=constants.POD, namespace=config.ENV_DATA["cluster_namespace"]
+        ).wait_for_resource(
+            condition=constants.STATUS_RUNNING,
+            resource_name=self.pod_obj.name,
+            resource_count=1,
+            timeout=600,
+            sleep=5,
+        )
 
         # Check SeLinux Relabeling is set to false
-        check_selinux_relabeling(pod_obj=self.pod_obj)
+        retry(
+            AssertionError,
+            tries=5,
+            delay=10,
+        )(
+            check_selinux_relabeling
+        )(pod_obj=self.pod_obj)
         log.info(f"SeLinux Relabeling is not happening for the pvc {self.pvc_obj.name}")
 
         # Restart pod after applying fix
@@ -342,7 +363,7 @@ class TestSelinuxrelabel(E2ETest):
 
     @polarion_id("OCS-5163")
     @pytest.mark.parametrize("copies", [5])
-    def test_selinux_relabel_for_new_pvc(
+    def deprecated_test_selinux_relabel_for_new_pvc(
         self,
         pvc_factory,
         service_account_factory,

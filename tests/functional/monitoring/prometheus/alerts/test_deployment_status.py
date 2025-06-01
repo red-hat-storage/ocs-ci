@@ -1,10 +1,9 @@
 import logging
 import pytest
 
-from ocs_ci.framework.pytest_customization.marks import blue_squad
+from ocs_ci.framework.pytest_customization.marks import blue_squad, provider_mode
 from ocs_ci.framework.testlib import (
     tier4c,
-    bugzilla,
     skipif_managed_service,
     runs_on_provider,
     skipif_ocs_version,
@@ -17,6 +16,7 @@ from ocs_ci.ocs.ocp import OCP
 log = logging.getLogger(__name__)
 
 
+@provider_mode
 @blue_squad
 @tier4c
 @pytest.mark.polarion_id("OCS-1052")
@@ -48,6 +48,7 @@ def test_ceph_manager_stopped(measure_stop_ceph_mgr, threading_lock):
     )
 
 
+@provider_mode
 @blue_squad
 @tier4c
 @pytest.mark.polarion_id("OCS-904")
@@ -89,9 +90,9 @@ def test_ceph_monitor_stopped(measure_stop_ceph_mon, threading_lock):
         )
 
 
+@provider_mode
 @blue_squad
 @tier4c
-@bugzilla("1944513")
 @pytest.mark.polarion_id("OCS-2724")
 @pytest.mark.parametrize("create_mon_quorum_loss", [True])
 @skipif_managed_service
@@ -177,6 +178,11 @@ def test_ceph_osd_stopped(measure_stop_ceph_osd, threading_lock):
         )
 
 
-def teardown_module():
+def setup_module(module):
     ocs_obj = OCP()
-    ocs_obj.login_as_sa()
+    module.original_user = ocs_obj.get_user_name()
+
+
+def teardown_module(module):
+    ocs_obj = OCP()
+    ocs_obj.login_as_user(module.original_user)
