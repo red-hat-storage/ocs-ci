@@ -35,7 +35,7 @@ class TestMCGRecovery(E2ETest):
         bucket_amount,
         object_amount,
         snapshot_factory,
-        noobaa_db_backup_and_recovery,
+        noobaa_db_backup_and_recovery_locally,
         validate_mcg_bg_features,
     ):
 
@@ -46,7 +46,7 @@ class TestMCGRecovery(E2ETest):
             skip_any_features=["nsfs", "rgw kafka", "caching"],
         )
 
-        noobaa_db_backup_and_recovery(snapshot_factory=snapshot_factory)
+        noobaa_db_backup_and_recovery_locally(snapshot_factory=snapshot_factory)
 
         # wait 1 min for complete stabilization
         time.sleep(60)

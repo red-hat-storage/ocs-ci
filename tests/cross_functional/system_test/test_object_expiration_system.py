@@ -179,7 +179,7 @@ class TestObjectExpirationSystemTest:
         nodes,
         snapshot_factory,
         bucket_factory,
-        noobaa_db_backup_and_recovery,
+        noobaa_db_backup_and_recovery_locally,
         node_drain_teardown,
         node_restart_teardown,
     ):
@@ -406,8 +406,8 @@ class TestObjectExpirationSystemTest:
         # upload objects again and expire
         upload_objects_and_expire()
 
-        # Perform noobaa db backup and recovery
-        noobaa_db_backup_and_recovery(snapshot_factory=snapshot_factory)
+        # Perform noobaa db backup and recovery locally
+        noobaa_db_backup_and_recovery_locally(snapshot_factory=snapshot_factory)
         wait_for_noobaa_pods_running(timeout=1200)
 
         sample_if_objects_expired()
