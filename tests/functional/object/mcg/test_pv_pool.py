@@ -437,29 +437,65 @@ class TestPvPool:
             pytest.param(
                 *[
                     1,
+                    "5K",
+                    1,
+                    50000,  # dataset contains 50000 small files of 5K each, 1 pv per backingstore
+                ],
+                marks=pytest.mark.polarion_id("OCS-6852"),
+            ),
+            pytest.param(
+                *[
+                    1,
+                    "5K",
+                    1,
+                    5000,  # dataset contains 5000 small files of 5K each, 1 pv per backingstore
+                ],
+                marks=pytest.mark.polarion_id("OCS-6853"),
+            ),
+            pytest.param(
+                *[
+                    1,
                     "1M",
                     10,
-                    20,
+                    20,  # dataset contains 20 medium files of 10MB each, 1 pv per backingstore
                 ],
-                marks=pytest.mark.polarion_id("OCS-4587"),
+                marks=pytest.mark.polarion_id("OCS-6854"),
             ),
             pytest.param(
                 *[
                     5,
                     "1M",
                     10,
-                    20,
+                    20,  # dataset contains 20 medium files of 10MB each, 5 pvs per backingstore
                 ],
-                marks=pytest.mark.polarion_id("OCS-4587"),
+                marks=pytest.mark.polarion_id("OCS-6855"),
             ),
             pytest.param(
                 *[
                     10,
                     "1M",
                     10,
-                    20,
+                    20,  # dataset contains 20 medium files of 10MB each, 10 pvs per backingstore
                 ],
-                marks=pytest.mark.polarion_id("OCS-4587"),
+                marks=pytest.mark.polarion_id("OCS-6856"),
+            ),
+            pytest.param(
+                *[
+                    1,
+                    "10M",
+                    20,
+                    10,  # dataset contains 10 big files of 200MB each, 1 pv per backingstore
+                ],
+                marks=pytest.mark.polarion_id("OCS-6857"),
+            ),
+            pytest.param(
+                *[
+                    1,
+                    "10M",
+                    10,
+                    255,  # 255 files of 100 MB each are 25.5 GB which is 75% of 17GB*2=34GB
+                ],
+                marks=pytest.mark.polarion_id("OCS-6858"),
             ),
         ],
     )
