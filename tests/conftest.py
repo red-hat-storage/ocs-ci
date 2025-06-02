@@ -7851,17 +7851,20 @@ def add_env_vars_to_noobaa_endpoint_fixture(request, mcg_obj_session):
     """
     Add env vars to the noobaa endpoint
     """
-    dep_obj = OCP(
-        kind=constants.DEPLOYMENT, namespace=ocsci_config.ENV_DATA["cluster_namespace"]
-    )
-    yaml_path_to_env_variables = "/spec/template/spec/containers/0/env"
-    op_template_dict = {"op": "", "path": "", "value": {"name": "", "value": ""}}
+    with ocsci_config.RunWithProviderConfigContextIfAvailable():
+        dep_obj = OCP(
+            kind=constants.DEPLOYMENT,
+            namespace=ocsci_config.ENV_DATA["cluster_namespace"],
+        )
+        yaml_path_to_env_variables = "/spec/template/spec/containers/0/env"
+        op_template_dict = {"op": "", "path": "", "value": {"name": "", "value": ""}}
 
-    added_env_vars = []
+        added_env_vars = []
 
     def add_env_vars_to_noobaa_endpoint_implementation(new_env_vars_touples):
         """
-        Implementation of add_env_vars_to_noobaa_core_fixture()
+        Implementation of add_env_vars_to_noobaa_core_fixture(). It is executed
+        on provider if available.
 
         Args:
             new_env_vars_touples (list): A list of touples, each containing the env var name and
@@ -7869,40 +7872,42 @@ def add_env_vars_to_noobaa_endpoint_fixture(request, mcg_obj_session):
                 i.e. [("env_var_name_1", "env_var_value_1"), ("env_var_name_2", "env_var_value_2")]
 
         """
+        with ocsci_config.RunWithProviderConfigContextIfAvailable():
+            nb_endpoint_dep = dep_obj.get(
+                resource_name=constants.NOOBAA_ENDPOINT_DEPLOYMENT
+            )
+            dep_env_vars = nb_endpoint_dep["spec"]["template"]["spec"]["containers"][0][
+                "env"
+            ]
+            dep_env_vars = [env_var_in_dep["name"] for env_var_in_dep in dep_env_vars]
 
-        nb_endpoint_dep = dep_obj.get(
-            resource_name=constants.NOOBAA_ENDPOINT_DEPLOYMENT
-        )
-        dep_env_vars = nb_endpoint_dep["spec"]["template"]["spec"]["containers"][0][
-            "env"
-        ]
-        dep_env_vars = [env_var_in_dep["name"] for env_var_in_dep in dep_env_vars]
+            patch_ops = []
 
-        patch_ops = []
+            for env_var, value in new_env_vars_touples:
+                if env_var in dep_env_vars:
+                    log.warning(
+                        f"Env var {env_var} already exists in the noobaa-core sts"
+                    )
+                    continue
 
-        for env_var, value in new_env_vars_touples:
-            if env_var in dep_env_vars:
-                log.warning(f"Env var {env_var} already exists in the noobaa-core sts")
-                continue
+                # Copy and modify the template to create the required dict for the first addition
+                add_env_var_op = copy.deepcopy(op_template_dict)
+                add_env_var_op["op"] = "add"
+                add_env_var_op["path"] = f"{yaml_path_to_env_variables}/-"
+                add_env_var_op["value"] = {"name": env_var, "value": str(value)}
 
-            # Copy and modify the template to create the required dict for the first addition
-            add_env_var_op = copy.deepcopy(op_template_dict)
-            add_env_var_op["op"] = "add"
-            add_env_var_op["path"] = f"{yaml_path_to_env_variables}/-"
-            add_env_var_op["value"] = {"name": env_var, "value": str(value)}
+                patch_ops.append(copy.deepcopy(add_env_var_op))
+                added_env_vars.append(env_var)
 
-            patch_ops.append(copy.deepcopy(add_env_var_op))
-            added_env_vars.append(env_var)
-
-        log.info(
-            f"Adding following new env vars to the noobaa-core sts: {added_env_vars}"
-        )
-        dep_obj.patch(
-            resource_name=constants.NOOBAA_ENDPOINT_DEPLOYMENT,
-            params=json.dumps(patch_ops),
-            format_type="json",
-        )
-        mcg_obj_session.wait_for_ready_status()
+            log.info(
+                f"Adding following new env vars to the noobaa-core sts: {added_env_vars}"
+            )
+            dep_obj.patch(
+                resource_name=constants.NOOBAA_ENDPOINT_DEPLOYMENT,
+                params=json.dumps(patch_ops),
+                format_type="json",
+            )
+            mcg_obj_session.wait_for_ready_status()
 
     def finalizer():
         """
@@ -7911,33 +7916,36 @@ def add_env_vars_to_noobaa_endpoint_fixture(request, mcg_obj_session):
         """
         log.info("Removing the added env vars from the noobaa-core statefulset:")
 
-        # Adjust the template for removal ops
-        remove_env_var_op = copy.deepcopy(op_template_dict)
-        remove_env_var_op["op"] = "remove"
-        remove_env_var_op["path"] = ""
-        del remove_env_var_op["value"]
+        with ocsci_config.RunWithProviderConfigContextIfAvailable():
+            # Adjust the template for removal ops
+            remove_env_var_op = copy.deepcopy(op_template_dict)
+            remove_env_var_op["op"] = "remove"
+            remove_env_var_op["path"] = ""
+            del remove_env_var_op["value"]
 
-        for target_env_var in added_env_vars:
-            # Fetch the target's index from the noobaa-endpoint deployment
-            nb_endpoint_dep = dep_obj.get(
-                resource_name=constants.NOOBAA_ENDPOINT_DEPLOYMENT
-            )
-            env_vars_in_dep = nb_endpoint_dep["spec"]["template"]["spec"]["containers"][
-                0
-            ]["env"]
-            env_vars_names_in_dep = [
-                env_var_in_dep["name"] for env_var_in_dep in env_vars_in_dep
-            ]
-            target_index = env_vars_names_in_dep.index(target_env_var)
-            remove_env_var_op["path"] = f"{yaml_path_to_env_variables}/{target_index}"
+            for target_env_var in added_env_vars:
+                # Fetch the target's index from the noobaa-endpoint deployment
+                nb_endpoint_dep = dep_obj.get(
+                    resource_name=constants.NOOBAA_ENDPOINT_DEPLOYMENT
+                )
+                env_vars_in_dep = nb_endpoint_dep["spec"]["template"]["spec"][
+                    "containers"
+                ][0]["env"]
+                env_vars_names_in_dep = [
+                    env_var_in_dep["name"] for env_var_in_dep in env_vars_in_dep
+                ]
+                target_index = env_vars_names_in_dep.index(target_env_var)
+                remove_env_var_op["path"] = (
+                    f"{yaml_path_to_env_variables}/{target_index}"
+                )
 
-            # Patch the noobaa-endpoint deployment to remove the env var
-            dep_obj.patch(
-                resource_name=constants.NOOBAA_ENDPOINT_DEPLOYMENT,
-                params=json.dumps([remove_env_var_op]),
-                format_type="json",
-            )
-        mcg_obj_session.wait_for_ready_status()
+                # Patch the noobaa-endpoint deployment to remove the env var
+                dep_obj.patch(
+                    resource_name=constants.NOOBAA_ENDPOINT_DEPLOYMENT,
+                    params=json.dumps([remove_env_var_op]),
+                    format_type="json",
+                )
+            mcg_obj_session.wait_for_ready_status()
 
     request.addfinalizer(finalizer)
     return add_env_vars_to_noobaa_endpoint_implementation
