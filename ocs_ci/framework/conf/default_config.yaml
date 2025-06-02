@@ -340,6 +340,8 @@ EXTERNAL_MODE:
 UI_SELENIUM:
   browser_type: "chrome"
   chrome_type: "google-chrome"
+  # W/A for issue: https://github.com/red-hat-storage/ocs-ci/issues/12290
+  driver_version: "136.0.7103.113"
   headless: True
   screenshot: True
   ignore_ssl: True

@@ -907,8 +907,11 @@ class SeleniumDriver(WebDriver):
                     )
 
             chrome_browser_type = ocsci_config.UI_SELENIUM.get("chrome_type")
+            driver_version = ocsci_config.UI_SELENIUM.get("driver_version")
             driver = webdriver.Chrome(
-                ChromeDriverManager(chrome_type=chrome_browser_type).install(),
+                ChromeDriverManager(
+                    driver_version=driver_version, chrome_type=chrome_browser_type
+                ).install(),
                 options=chrome_options,
             )
         else:
