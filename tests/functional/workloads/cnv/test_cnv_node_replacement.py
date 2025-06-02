@@ -59,6 +59,9 @@ class TestCnvNodeReplace(E2ETest):
         self,
         setup_cnv,
         setup,
+        vm_clone_fixture,
+        vm_snapshot_restore_fixture,
+        admin_client,
     ):
         """
         Node Replacement proactive
@@ -76,25 +79,17 @@ class TestCnvNodeReplace(E2ETest):
             random.sample(all_vms, 4)
         )
 
-        # Uncomment code ones 11199 merged.
-        """
         # Create Clone of VM
-        cloned_vm = clone_or_snapshot_vm(
-            "clone",
-            vm_for_clone,
-            admin_client=admin_client,
-            all_vms=all_vms,
-            file_path=file_paths[0],
-        )
+        logger.info(f"Cloning VM {vm_for_clone.name}...")
+        cloned_vm = vm_clone_fixture(vm_for_clone, admin_client)
         csum = cal_md5sum_vm(vm_obj=cloned_vm, file_path=file_paths[0])
         source_csums[cloned_vm.name] = csum
+
         # Create a snapshot
-        vm_for_snap = clone_or_snapshot_vm(
-            "snapshot", vm_for_snap, admin_client=admin_client, file_path=file_paths[0]
-        )
-        csum = cal_md5sum_vm(vm_obj=vm_for_snap, file_path=file_paths[0])
+        logger.info(f"Snapshot and restore VM {vm_for_snap.name}...")
+        restored_vm = vm_snapshot_restore_fixture(vm_for_snap, admin_client)
+        csum = cal_md5sum_vm(vm_obj=restored_vm, file_path=file_paths[0])
         source_csums[vm_for_snap.name] = csum
-        """
 
         # Keep vms in different states (power on, paused, stoped)
         vm_for_stop.stop()
