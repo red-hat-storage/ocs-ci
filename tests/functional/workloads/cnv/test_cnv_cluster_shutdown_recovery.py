@@ -5,7 +5,7 @@ import random
 
 from ocs_ci.framework.pytest_customization.marks import magenta_squad, workloads
 from ocs_ci.framework.testlib import E2ETest
-from ocs_ci.helpers.cnv_helpers import cal_md5sum_vm, run_dd_io, clone_or_snapshot_vm
+from ocs_ci.helpers.cnv_helpers import cal_md5sum_vm, run_dd_io
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.node import unschedule_nodes, drain_nodes, schedule_nodes
 from ocs_ci.utility.retry import retry
@@ -44,6 +44,8 @@ class TestVmShutdownStart(E2ETest):
         multi_cnv_workload,
         admin_client,
         nodes,
+        vm_clone_fixture,
+        vm_snapshot_restore_fixture,
     ):
         """
         This test performs the behaviour of VMs and data integrity after abrupt or Graceful shutdown of cluster
@@ -86,21 +88,14 @@ class TestVmShutdownStart(E2ETest):
         vm_for_clone, vm_for_stop, vm_for_snap = random.sample(all_vms, 3)
 
         # Create Clone of VM
-        cloned_vm = clone_or_snapshot_vm(
-            "clone",
-            vm_for_clone,
-            admin_client=admin_client,
-            all_vms=all_vms,
-            file_path=file_paths[0],
-        )
+        cloned_vm = vm_clone_fixture(vm_for_clone, admin_client)
         csum = cal_md5sum_vm(vm_obj=cloned_vm, file_path=file_paths[0])
         source_csums[cloned_vm.name] = csum
+        all_vms.append(cloned_vm)
 
         # Create a snapshot
-        vm_for_snap = clone_or_snapshot_vm(
-            "snapshot", vm_for_snap, admin_client=admin_client, file_path=file_paths[0]
-        )
-        csum = cal_md5sum_vm(vm_obj=vm_for_snap, file_path=file_paths[0])
+        restored_vm = vm_snapshot_restore_fixture(vm_for_snap, admin_client)
+        csum = cal_md5sum_vm(vm_obj=restored_vm, file_path=file_paths[0])
         source_csums[vm_for_snap.name] = csum
 
         # Initiate abrupt shutdown the cluster nodes as per OCP official documentation
@@ -195,7 +190,7 @@ class TestVmShutdownStart(E2ETest):
         # Verifies vm status after start and ssh connectivity
         vm_for_clone.verify_vm(verify_ssh=True)
         vm_for_stop.verify_vm(verify_ssh=True)
-        vm_for_snap.verify_vm(verify_ssh=True)
+        restored_vm.verify_vm(verify_ssh=True)
 
         # Perform post restart data integrity check
         for vm_obj in all_vms:
