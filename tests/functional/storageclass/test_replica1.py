@@ -244,7 +244,7 @@ class TestReplicaOne:
         log.info(testing_pod)
         pgs_before_workload = get_osd_pgs_used()
         kb_before_workload = get_osd_kb_used_data()
-        testing_pod.run_io(storage_type="fs", size="50g")
+        testing_pod.run_io(storage_type="fs", size="50g", direct=1)
         testing_pod.get_fio_results()
         pgs_after_workload = get_osd_pgs_used()
         log.info(
