@@ -6150,6 +6150,7 @@ def unfence_node(node_name, delete=False):
     else:
         logger.info(f"No networkfence found for node {node_name}")
 
+
 def get_start_end_time_for_bulk_pvc_creation(logs, pv, delete_suffix_to_search):
     # check if PV data present in CSI logs[
     if version.get_semantic_ocs_version_from_config() <= version.VERSION_4_16:
@@ -6219,6 +6220,7 @@ def create_network_fence_class():
         assert len(cidrs) == 1, "No cidrs are populated to CSI Addons node object"
         logger.info(f"Cidr: {cidrs[0]} populated in {node_name} CSI addons node object")
 
+
 def create_network_fence(node_name, cidr):
     """
     Create NetworkFence for the node
@@ -6252,6 +6254,7 @@ def create_network_fence(node_name, cidr):
     else:
         logger.info(f"Network fence object for {node_name} already exists!")
     return network_fence_obj
+
 
 def unfence_node(node_name, delete=False):
     """
