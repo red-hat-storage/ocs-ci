@@ -4728,7 +4728,8 @@ def nb_ensure_endpoint_count(request):
     max_ep_count = cls.MAX_ENDPOINT_COUNT
 
     assert min_ep_count <= max_ep_count
-    namespace = ocsci_config.ENV_DATA["cluster_namespace"]
+    with ocsci_config.RunWithProviderConfigContextIfAvailable():
+        namespace = ocsci_config.ENV_DATA["cluster_namespace"]
     should_wait = False
 
     # prior to 4.6 we configured the ep count directly on the noobaa cr.
