@@ -468,6 +468,18 @@ class TestMCGReplicationWithVersioningSystemTest:
             timeout=600,
         )
 
+    @pytest.fixture(autouse=True)
+    def teardown(self, request, nodes):
+        """
+        Make sure all nodes are up again
+
+        """
+
+        def finalizer():
+            nodes.restart_nodes_by_stop_and_start_teardown()
+
+        request.addfinalizer(finalizer)
+
     @polarion_id("OCS-6407")
     def test_bucket_replication_with_versioning_system_test(
         self,
