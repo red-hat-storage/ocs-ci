@@ -4757,15 +4757,16 @@ def get_ready_noobaa_endpoint_count(namespace):
     """
     Get the number of ready nooobaa endpoints
     """
-    pods_info = get_pods_having_label(
-        label=constants.NOOBAA_ENDPOINT_POD_LABEL, namespace=namespace
-    )
-    ready_count = 0
-    for ep_info in pods_info:
-        container_statuses = ep_info.get("status", {}).get("containerStatuses")
-        if container_statuses is not None and len(container_statuses) > 0:
-            if container_statuses[0].get("ready"):
-                ready_count += 1
+    with ocsci_config.RunWithProviderConfigContextIfAvailable():
+        pods_info = get_pods_having_label(
+            label=constants.NOOBAA_ENDPOINT_POD_LABEL, namespace=namespace
+        )
+        ready_count = 0
+        for ep_info in pods_info:
+            container_statuses = ep_info.get("status", {}).get("containerStatuses")
+            if container_statuses is not None and len(container_statuses) > 0:
+                if container_statuses[0].get("ready"):
+                    ready_count += 1
     return ready_count
 
 
@@ -4783,46 +4784,49 @@ def nb_ensure_endpoint_count(request):
     should_wait = False
 
     # prior to 4.6 we configured the ep count directly on the noobaa cr.
-    if version.get_semantic_ocs_version_from_config() < version.VERSION_4_6:
-        noobaa = OCP(kind="noobaa", namespace=namespace)
-        resource = noobaa.get()["items"][0]
-        endpoints = resource.get("spec", {}).get("endpoints", {})
+    with ocsci_config.RunWithProviderConfigContextIfAvailable():
+        if version.get_semantic_ocs_version_from_config() < version.VERSION_4_6:
+            noobaa = OCP(kind="noobaa", namespace=namespace)
+            resource = noobaa.get()["items"][0]
+            endpoints = resource.get("spec", {}).get("endpoints", {})
 
-        if endpoints.get("minCount", -1) != min_ep_count:
-            log.info(f"Changing minimum Noobaa endpoints to {min_ep_count}")
-            params = f'{{"spec":{{"endpoints":{{"minCount":{min_ep_count}}}}}}}'
-            noobaa.patch(resource_name="noobaa", params=params, format_type="merge")
-            should_wait = True
+            if endpoints.get("minCount", -1) != min_ep_count:
+                log.info(f"Changing minimum Noobaa endpoints to {min_ep_count}")
+                params = f'{{"spec":{{"endpoints":{{"minCount":{min_ep_count}}}}}}}'
+                noobaa.patch(resource_name="noobaa", params=params, format_type="merge")
+                should_wait = True
 
-        if endpoints.get("maxCount", -1) != max_ep_count:
-            log.info(f"Changing maximum Noobaa endpoints to {max_ep_count}")
-            params = f'{{"spec":{{"endpoints":{{"maxCount":{max_ep_count}}}}}}}'
-            noobaa.patch(resource_name="noobaa", params=params, format_type="merge")
-            should_wait = True
+            if endpoints.get("maxCount", -1) != max_ep_count:
+                log.info(f"Changing maximum Noobaa endpoints to {max_ep_count}")
+                params = f'{{"spec":{{"endpoints":{{"maxCount":{max_ep_count}}}}}}}'
+                noobaa.patch(resource_name="noobaa", params=params, format_type="merge")
+                should_wait = True
 
-    else:
-        storage_cluster = OCP(kind=constants.STORAGECLUSTER, namespace=namespace)
-        resource = storage_cluster.get()["items"][0]
-        resource_name = resource["metadata"]["name"]
-        endpoints = (
-            resource.get("spec", {}).get("multiCloudGateway", {}).get("endpoints", {})
-        )
-
-        if endpoints.get("minCount", -1) != min_ep_count:
-            log.info(f"Changing minimum Noobaa endpoints to {min_ep_count}")
-            params = f'{{"spec":{{"multiCloudGateway":{{"endpoints":{{"minCount":{min_ep_count}}}}}}}}}'
-            storage_cluster.patch(
-                resource_name=resource_name, params=params, format_type="merge"
+        else:
+            storage_cluster = OCP(kind=constants.STORAGECLUSTER, namespace=namespace)
+            resource = storage_cluster.get()["items"][0]
+            resource_name = resource["metadata"]["name"]
+            endpoints = (
+                resource.get("spec", {})
+                .get("multiCloudGateway", {})
+                .get("endpoints", {})
             )
-            should_wait = True
 
-        if endpoints.get("maxCount", -1) != max_ep_count:
-            log.info(f"Changing maximum Noobaa endpoints to {max_ep_count}")
-            params = f'{{"spec":{{"multiCloudGateway":{{"endpoints":{{"maxCount":{max_ep_count}}}}}}}}}'
-            storage_cluster.patch(
-                resource_name=resource_name, params=params, format_type="merge"
-            )
-            should_wait = True
+            if endpoints.get("minCount", -1) != min_ep_count:
+                log.info(f"Changing minimum Noobaa endpoints to {min_ep_count}")
+                params = f'{{"spec":{{"multiCloudGateway":{{"endpoints":{{"minCount":{min_ep_count}}}}}}}}}'
+                storage_cluster.patch(
+                    resource_name=resource_name, params=params, format_type="merge"
+                )
+                should_wait = True
+
+            if endpoints.get("maxCount", -1) != max_ep_count:
+                log.info(f"Changing maximum Noobaa endpoints to {max_ep_count}")
+                params = f'{{"spec":{{"multiCloudGateway":{{"endpoints":{{"maxCount":{max_ep_count}}}}}}}}}'
+                storage_cluster.patch(
+                    resource_name=resource_name, params=params, format_type="merge"
+                )
+                should_wait = True
 
     if should_wait:
         # Wait for the NooBaa endpoint pods to stabilize
