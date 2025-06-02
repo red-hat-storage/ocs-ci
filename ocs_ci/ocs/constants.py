@@ -2885,9 +2885,20 @@ ACM_BREW_BUILD_URL = (
     "VirtualTopic.eng.ci.redhat-container-image.pipeline.complete"
     "&rows_per_page=25&delta=1296000&contains=acm"
 )
-SUBMARINER_BREW_REPO = "brew.registry.redhat.io/rh-osbs/iib"
 SUBCTL_DOWNSTREAM_URL = "registry.redhat.io/rhacm2/"
-ACM_BREW_REPO = SUBMARINER_BREW_REPO
+
+# OADP
+OADP_BREW_BUILD_URL = (
+    "https://datagrepper.engineering.redhat.com/raw?topic=/"
+    "topic/VirtualTopic.eng.ci.redhat-container-image.pipeline.complete"
+    "&rows_per_page=25&delta=15552000&contains=oadp-operator-bundle-container"
+)
+
+# BREW
+BREW_REPO = "brew.registry.redhat.io/rh-osbs/iib"
+BREW_CATALOG_NAME = "brew-catalog"
+BREW_CATALOG_YAML = os.path.join(TEMPLATE_DEPLOYMENT_DIR, "brew-catalog.yaml")
+BREW_ICSP = os.path.join(TEMPLATE_DEPLOYMENT_DIR, "brew_registry_idms.yaml")
 
 # Multicluster related
 MCE_NAMESPACE = "multicluster-engine"

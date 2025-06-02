@@ -190,7 +190,7 @@ class AcmAddClusters(AcmPageNavigator):
                     f"v{get_ocp_version()}"
                 ].split(":")[1]
             submariner_downstream_unreleased["spec"]["image"] = ":".join(
-                [constants.SUBMARINER_BREW_REPO, version_tag]
+                [constants.BREW_REPO, version_tag]
             )
             submariner_data_yaml = tempfile.NamedTemporaryFile(
                 mode="w+", prefix="submariner_downstream_unreleased", delete=False
