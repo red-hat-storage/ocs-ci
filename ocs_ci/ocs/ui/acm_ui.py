@@ -8,6 +8,9 @@ from selenium.webdriver.common.by import By
 from selenium.common.exceptions import TimeoutException, NoSuchElementException
 from selenium.webdriver.common.keys import Keys
 from selenium.webdriver.common.action_chains import ActionChains
+from selenium.webdriver.support.wait import WebDriverWait
+from selenium.webdriver.support import expected_conditions as EC
+
 from ocs_ci.deployment import vmware
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.exceptions import ACMClusterDeployException
@@ -71,17 +74,38 @@ class AcmPageNavigator(BaseUI):
         Navigate to ACM Clusters Page
 
         """
-        log.info("Navigate into Clusters Page")
-        self.check_element_presence(
+        self.page_has_loaded(retries=12, sleep_time=5)
+        log.info("Now on Infrastructure page")
+        assert self.check_element_presence(
             (
                 self.acm_page_nav["Infrastructure"][1],
                 self.acm_page_nav["Infrastructure"][0],
             ),
             timeout=timeout,
         )
-        self.choose_expanded_mode(
-            mode=True, locator=self.acm_page_nav["Infrastructure"]
+
+        infra_button = WebDriverWait(self.driver, 30).until(
+            EC.element_to_be_clickable(
+                (
+                    self.acm_page_nav["Infrastructure"][1],
+                    self.acm_page_nav["Infrastructure"][0],
+                )
+            )
         )
+        self.driver.execute_script(
+            "arguments[0].scrollIntoView({block: 'center'});", infra_button
+        )
+        log.info(
+            "Checking if options under Infrastructure page are expanded or collapsed "
+        )
+
+        if infra_button.get_attribute("aria-expanded") != "true":
+            self.driver.execute_script("arguments[0].click();", infra_button)
+            log.info(
+                "Successfully expanded Infrastructure sidecar to enable all dropdown options"
+            )
+        self.take_screenshot()
+        log.info("Navigate into Clusters Page")
         self.do_click(
             locator=self.acm_page_nav["Clusters_page"],
             timeout=timeout,
