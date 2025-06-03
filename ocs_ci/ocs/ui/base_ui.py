@@ -307,7 +307,7 @@ class BaseUI:
             timeout (int): Looks for a web element repeatedly until timeout (sec) happens.
 
         return:
-            bool: True if element expended, False otherwise
+            bool: True if element expanded, False otherwise
 
         """
         wait = WebDriverWait(self.driver, timeout)
@@ -325,7 +325,7 @@ class BaseUI:
         """
         Select the element mode (expanded or collapsed)
 
-        mode (bool): True if element expended, False otherwise
+        mode (bool): True if element expanded, False otherwise
         locator (tuple): (GUI element needs to operate on (str), type (By))
 
         """
@@ -837,7 +837,8 @@ class SeleniumDriver(WebDriver):
             headless = ocsci_config.UI_SELENIUM.get("headless")
             if headless:
                 chrome_options.add_argument("--headless=new")
-                chrome_options.add_argument("window-size=1920,1400")
+                chrome_options.add_argument("--window-size=1920,1400")
+                chrome_options.add_argument("--force-device-scale-factor=1")
 
             # use proxy server, if required
             if (
