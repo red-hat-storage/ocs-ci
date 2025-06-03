@@ -32,11 +32,11 @@ logger = logging.getLogger(__name__)
 @turquoise_squad
 class TestFailover:
     """
-    Test Failover action
+    Test Failover action via CLI and UI
 
     """
 
-    params = [
+    params = (
         [
             pytest.param(
                 False,  # primary_cluster_down = False
@@ -44,6 +44,27 @@ class TestFailover:
                 False,  # via_ui = False
                 id="primary_up-rbd-cli",
                 marks=pytest.mark.polarion_id("OCS-4429"),
+            ),
+            pytest.param(
+                True,  # primary_cluster_down = True
+                constants.CEPHBLOCKPOOL,
+                False,  # via_ui = False
+                marks=pytest.mark.polarion_id("OCS-4426"),
+                id="primary_down-rbd-cli",
+            ),
+            pytest.param(
+                False,  # primary_cluster_down = False
+                constants.CEPHFILESYSTEM,
+                False,  # via_ui = False
+                marks=pytest.mark.polarion_id("OCS-4726"),
+                id="primary_up-cephfs-cli",
+            ),
+            pytest.param(
+                True,  # primary_cluster_down = True
+                constants.CEPHFILESYSTEM,
+                False,  # via_ui = False
+                marks=pytest.mark.polarion_id("OCS-4729"),
+                id="primary_up-cephfs-cli",
             ),
             pytest.param(
                 False,  # primary_cluster_down = False
@@ -55,23 +76,9 @@ class TestFailover:
             pytest.param(
                 True,  # primary_cluster_down = True
                 constants.CEPHBLOCKPOOL,
-                False,  # via_ui = False
-                marks=pytest.mark.polarion_id("OCS-4426"),
-                id="primary_down-rbd-cli",
-            ),
-            pytest.param(
-                True,  # primary_cluster_down = True
-                constants.CEPHBLOCKPOOL,
                 True,  # via_ui = True
                 marks=pytest.mark.polarion_id("OCS-4742"),
                 id="primary_down-rbd-ui",
-            ),
-            pytest.param(
-                False,  # primary_cluster_down = False
-                constants.CEPHFILESYSTEM,
-                False,  # via_ui = False
-                marks=pytest.mark.polarion_id("OCS-4726"),
-                id="primary_up-cephfs-cli",
             ),
             pytest.param(
                 False,  # primary_cluster_down = False
@@ -83,19 +90,12 @@ class TestFailover:
             pytest.param(
                 True,  # primary_cluster_down = True
                 constants.CEPHFILESYSTEM,
-                False,  # via_ui = False
-                marks=pytest.mark.polarion_id("OCS-4729"),
-                id="primary_up-cephfs-cli",
-            ),
-            pytest.param(
-                True,  # primary_cluster_down = True
-                constants.CEPHFILESYSTEM,
                 True,  # via_ui = True
                 marks=pytest.mark.polarion_id("OCS-6847"),
                 id="primary_down-cephfs-ui",
             ),
         ],
-    ]
+    )
 
     @pytest.mark.parametrize(
         argnames=["primary_cluster_down", "pvc_interface", "via_ui"], argvalues=params
