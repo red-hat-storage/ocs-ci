@@ -141,9 +141,7 @@ class ACMUpgrade(object):
                     break
                 except KeyError:
                     continue
-            acm_catsrc["spec"]["image"] = ":".join(
-                [constants.BREW_REPO, version_tag]
-            )
+            acm_catsrc["spec"]["image"] = ":".join([constants.BREW_REPO, version_tag])
         acm_catsrc["metadata"]["name"] = constants.ACM_CATSRC_NAME
         acm_catsrc["spec"]["publisher"] = "grpc"
         acm_data_yaml = tempfile.NamedTemporaryFile(
