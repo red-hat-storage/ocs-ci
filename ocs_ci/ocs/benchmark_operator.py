@@ -96,9 +96,9 @@ class BenchmarkOperator(object):
         self._clone_operator()
         self.dir += f"/{BMO_NAME}"
         self._env = self.args.get("env", os.environ.copy())
-        kubeconfig_path = config.RUN.get("kubeconfig")
-        if kubeconfig_path:
-            self._env["KUBECONFIG"] = kubeconfig_path
+        self.kubeconfig_path = config.RUN.get("kubeconfig")
+        if self.kubeconfig_path:
+            self._env["KUBECONFIG"] = self.kubeconfig_path
 
         # to use the cache dropping pod, worker nodes need to be labeled.
         log.info("Labeling the worker nodes for cache-dropping enable.")
@@ -160,7 +160,7 @@ class BenchmarkOperator(object):
             if config.DEPLOYMENT.get("disconnected"):
                 bo_image = mirror_image(bo_image)
             run(
-                f"make deploy IMG={bo_image} --kubeconfig={self._env["KUBECONFIG"]}",
+                f"make deploy IMG={bo_image} --kubeconfig={self.kubeconfig_path}",
                 shell=True,
                 check=True,
                 cwd=self.dir,
