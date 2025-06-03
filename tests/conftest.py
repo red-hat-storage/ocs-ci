@@ -420,8 +420,8 @@ def pytest_collection_modifyitems(session, config, items):
             skipif_lvm_not_installed_marker = item.get_closest_marker(
                 "skipif_lvm_not_installed"
             )
-            if skipif_lvm_not_installed_marker and "lvm" in ocsci_config.RUN:
-                if not ocsci_config.RUN["lvm"]:
+            if skipif_lvm_not_installed_marker:
+                if not ocsci_config.RUN.get("lvm", False):
                     log.info(f"Test {item} will be removed due to lvm not installed")
                     items.remove(item)
                     continue
