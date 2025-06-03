@@ -10,6 +10,7 @@ import platform
 import requests
 import zipfile
 import tarfile
+import time
 
 from ocs_ci.framework import config
 from ocs_ci.ocs.resources.ocs import OCS
@@ -846,6 +847,7 @@ class CNVInstaller(object):
             cnv_upgradeable (bool)): Returns True if Upgradable else False
 
         """
+        cnv_upgradable = False
         if self.cnv_hyperconverged_installed() and self.post_install_verification(
             raise_exception=False
         ):
@@ -871,7 +873,6 @@ class CNVInstaller(object):
         bool: if cnv operator is upgraded successfully
 
         """
-        import time
 
         if not self.check_cnv_is_upgradable():
             logger.info("CNV is not upgradable")
