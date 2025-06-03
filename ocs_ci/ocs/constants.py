@@ -1006,6 +1006,9 @@ PRIORITY_CLASS_YAML = os.path.join(TEMPLATE_CSI_ADDONS_DIR, "priorityclass.yaml"
 OC_MIRROR_IMAGESET_CONFIG = os.path.join(
     TEMPLATE_DIR, "ocp-deployment", "oc-mirror-imageset-config.yaml"
 )
+OC_MIRROR_IMAGESET_CONFIG_V2 = os.path.join(
+    TEMPLATE_DIR, "ocp-deployment", "oc-mirror-imageset-config-v2.yaml"
+)
 
 CSI_CEPHFS_ROX_POD_YAML = os.path.join(TEMPLATE_APP_POD_DIR, "csi-cephfs-rox.yaml")
 

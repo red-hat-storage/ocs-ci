@@ -6,7 +6,6 @@ import tempfile
 import time
 from datetime import datetime
 
-# from ocs_ci.deployment.helpers._parser import parse_ICSP_json_to_mirrors_file
 from ocs_ci.deployment.helpers.idms_parser import parse_IDMS_json_to_mirrors_file
 from ocs_ci.deployment.ocp import download_pull_secret
 from ocs_ci.framework import config
@@ -225,9 +224,6 @@ class HyperShiftBase:
         self.hypershift_binary_path = os.path.join(self.bin_dir, "hypershift")
         # ocp instance for running oc commands
         self.ocp = OCP()
-        self.icsp_mirrors_path = tempfile.NamedTemporaryFile(
-            mode="w+", prefix="icsp_mirrors-", delete=False
-        ).name
         self.idms_mirrors_path = tempfile.NamedTemporaryFile(
             mode="w+", prefix="idms_mirrors-", delete=False
         ).name
@@ -450,7 +446,6 @@ class HyperShiftBase:
             f"--cores {cpu_cores} "
             f"--root-volume-size {root_volume_size} "
             f"--pull-secret {pull_secret_path} "
-            # f"--image-content-sources {self.icsp_mirrors_path} "
             f"--image-content-sources {self.idms_mirrors_path} "
             "--annotations 'hypershift.openshift.io/skip-release-image-validation=true' "
             "--olm-catalog-placement Guest "
