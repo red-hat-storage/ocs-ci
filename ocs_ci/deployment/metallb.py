@@ -511,8 +511,6 @@ class MetalLBInstaller:
 
         if self.apply_idms():
             logger.info("IDMS brew-registry applied successfully")
-        elif self.apply_icsp():
-            logger.info("ICSP brew-registry applied successfully")
         if self.create_metallb_namespace():
             logger.info(f"Namespace {self.namespace_lb} created successfully")
         if self.create_catalog_source():
@@ -678,19 +676,6 @@ class MetalLBInstaller:
                 logger.info("MetalLB CSV installed successfully")
                 break
         return True
-
-    def icsp_brew_registry_exists(self):
-        """
-        Check if the ICSP Brew registry exists
-
-        Returns:
-            bool: True if the ICSP Brew registry exists, False otherwise
-        """
-        return OCP(
-            kind="ImageContentSourcePolicy", resource_name="brew-registry"
-        ).check_resource_existence(
-            timeout=self.timeout_check_resources_existence, should_exist=True
-        )
 
     def idms_brew_registry_exists(self):
         """

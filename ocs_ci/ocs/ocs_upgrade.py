@@ -635,7 +635,6 @@ class OCSUpgrade(object):
                 ocs_catalog.apply(cs_yaml.name)
                 if not config.DEPLOYMENT.get("disconnected"):
                     # on Disconnected cluster, ICSP from the ocs-registry image is not needed/valid
-                    # get_and_apply_icsp_from_catalog(f"{image_url}:{new_image_tag}")
                     get_and_apply_idms_from_catalog(f"{image_url}:{new_image_tag}")
 
 
