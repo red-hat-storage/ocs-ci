@@ -46,18 +46,25 @@ def check_setmetadata_availability(pod_obj):
         pod.validate_pods_are_respinned_and_running_state
     )(plugin_pods)
 
-    args_with_setmetadata = [
-        entry["args"]
-        for p in plugin_pods
-        for entry in pod_obj.exec_oc_cmd(
+    all_containers_have_flag = True
+
+    for p in plugin_pods:
+        containers = pod_obj.exec_oc_cmd(
             f"get pod {p.name} --output jsonpath='{{.spec.containers}}'"
         )
-        if "--setmetadata=true" in entry["args"]
-    ]
+        found_flag = False
+        for container in containers:
+            args = container.get("args", [])
+            if "--setmetadata=true" in args:
+                found_flag = True
+                break
+        if not found_flag:
+            log.warning(
+                f"Pod {p.name} does not have '--setmetadata=true' in any container args."
+            )
+            all_containers_have_flag = False
 
-    return bool(args_with_setmetadata) and all(
-        "--setmetadata=true" in args for args in args_with_setmetadata
-    )
+    return all_containers_have_flag
 
 
 def patch_metadata(enable=True):
@@ -67,12 +74,7 @@ def patch_metadata(enable=True):
     Args:
         enable (bool): Whether to enable or disable metadata.
     """
-    op = "add" if enable else "remove"
-    patch_data = (
-        [{"op": op, "path": "/spec/enableMetadata", "value": True}]
-        if enable
-        else [{"op": op, "path": "/spec/enableMetadata"}]
-    )
+    patch_data = [{"op": "add", "path": "/spec/enableMetadata", "value": enable}]
     patch_json = json.dumps(patch_data)
 
     rbd_cmd = (
@@ -83,6 +85,7 @@ def patch_metadata(enable=True):
         f"oc patch {constants.CEPH_DRIVER_CSI} {constants.CEPHFS_PROVISIONER} --type json "
         f"-p '{patch_json}' -n {config.ENV_DATA['cluster_namespace']}"
     )
+
     for cmd, name in [(rbd_cmd, "RBD"), (cephfs_cmd, "CephFS")]:
         try:
             run_cmd(cmd)
@@ -132,7 +135,7 @@ def enable_metadata(config_map_obj, pod_obj):
         )
     )
     args = pod_obj.exec_oc_cmd(
-        f"get pod {cephfs_pods[0].name} --output jsonpath='{{.spec.containers[4].args}}'"
+        f"get pod {cephfs_pods[0].name} --output jsonpath='{{.spec.containers[].args}}'"
     )
     for arg in args:
         if "--clustername" in arg:
