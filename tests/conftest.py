@@ -8933,6 +8933,9 @@ def benchmark_workload_storageutilization(request):
         bs="4096KiB",
         storageclass=constants.DEFAULT_STORAGECLASS_RBD,
         timeout_completed=2400,
+        benchmark_name=None,
+        use_kustomize_build=True,
+        is_completed=True,
     ):
         """
         Setup of benchmark fio
@@ -8944,6 +8947,9 @@ def benchmark_workload_storageutilization(request):
             bs (str): the Block size that need to used for the prefill
             storageclass (str): StorageClass to use for PVC per server pod
             timeout_completed (int): timeout client pod move to completed state
+            benchmark_name (str): Optional. Name for the Benchmark resource.
+            use_kustomize_build (bool): True, if use kustomize build. False, otherwise.
+            is_completed (bool): if True, verify the benchmark operator moved to completed state.
 
         """
         nonlocal benchmark_obj
@@ -8957,8 +8963,10 @@ def benchmark_workload_storageutilization(request):
             bs=bs,
             storageclass=storageclass,
             timeout_completed=timeout_completed,
+            benchmark_name=benchmark_name,
+            use_kustomize_build=use_kustomize_build,
         )
-        benchmark_obj.run_fio_benchmark_operator(is_completed=True)
+        benchmark_obj.run_fio_benchmark_operator(is_completed=is_completed)
 
     def finalizer():
         if benchmark_obj is not None:
