@@ -10142,9 +10142,10 @@ def vm_clone_fixture(request):
         from ocs_ci.ocs.cnv import virtual_machine
         from ocp_resources.virtual_machine_clone import VirtualMachineClone
 
+        name = create_unique_resource_name("api", "clone")
         target_name = f"clone-{vm.name}"
         with VirtualMachineClone(
-            name="clone-vm-test",
+            name=name,
             namespace=vm.namespace,
             source_name=vm.name,
             target_name=target_name,
