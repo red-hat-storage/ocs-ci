@@ -6,7 +6,6 @@ from time import sleep
 from ocs_ci.framework import config
 from ocs_ci.framework.pytest_customization.marks import (
     rdr,
-    rdr_ui,
     turquoise_squad,
 )
 from ocs_ci.framework.testlib import tier3, skipif_ocs_version
@@ -26,7 +25,6 @@ logger = logging.getLogger(__name__)
 @tier3
 @turquoise_squad
 @skipif_ocs_version("<4.13")
-@rdr_ui
 class TestNegativeFailoverRelocate:
     """
     Test Failover/Relocate action to same cluster where workloads are already  running
