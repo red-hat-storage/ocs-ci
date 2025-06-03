@@ -105,6 +105,9 @@ class TestAddCapacityStretchCluster:
             sc_obj.cephfs_logwriter_dep,
             sc_obj.cephfs_logreader_job,
         ) = setup_logwriter_cephfs_workload_factory(read_duration=0)
+        sc_obj.rbd_logwriter_sts = setup_logwriter_rbd_workload_factory(
+            zone_aware=False
+        )
 
         sc_obj.get_logwriter_reader_pods(label=constants.LOGWRITER_CEPHFS_LABEL)
         sc_obj.get_logwriter_reader_pods(label=constants.LOGREADER_CEPHFS_LABEL)
