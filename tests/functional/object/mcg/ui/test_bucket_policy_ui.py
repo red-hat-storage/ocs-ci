@@ -1,7 +1,12 @@
 import logging
 import pytest
 
-from ocs_ci.framework.pytest_customization.marks import black_squad, tier1, post_upgrade
+from ocs_ci.framework.pytest_customization.marks import (
+    black_squad,
+    tier1,
+    post_upgrade,
+    polarion_id,
+)
 from ocs_ci.ocs.ui.page_objects.buckets_tab import BucketsTab
 from ocs_ci.ocs.ui.page_objects.bucket_tab_permissions import (
     BucketsTabPermissions,
@@ -13,6 +18,7 @@ logger = logging.getLogger(__name__)
 
 
 @tier1
+@polarion_id("OCS-6863")
 @black_squad
 @post_upgrade
 class TestBucketPolicyUI:
