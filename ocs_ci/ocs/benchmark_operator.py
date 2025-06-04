@@ -160,7 +160,7 @@ class BenchmarkOperator(object):
             if config.DEPLOYMENT.get("disconnected"):
                 bo_image = mirror_image(bo_image)
             run(
-                f"make deploy IMG={bo_image} --kubeconfig={self.kubeconfig_path}",
+                f"make deploy IMG={bo_image}",
                 shell=True,
                 check=True,
                 cwd=self.dir,
