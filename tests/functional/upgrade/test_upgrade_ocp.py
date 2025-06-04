@@ -136,6 +136,10 @@ class TestUpgradeOCP(ManageTest):
             ocp_upgrade_version = config.UPGRADE.get("ocp_upgrade_version")
             logger.info(f"OCP upgrade version: {ocp_upgrade_version}")
 
+            provider_cluster = (
+                config.ENV_DATA.get("cluster_type").lower() == constants.HCI_PROVIDER
+            )
+
             rosa_platform = (
                 config.ENV_DATA["platform"].lower() in constants.ROSA_PLATFORMS
             )
@@ -241,7 +245,12 @@ class TestUpgradeOCP(ManageTest):
 
             # resume a MachineHealthCheck resource
             if get_semantic_ocp_running_version() > VERSION_4_8 and not rosa_platform:
-                resume_machinehealthcheck()
+                if provider_cluster:
+                    resume_machinehealthcheck(
+                        wait_for_mcp_complete=True, force_delete_pods=True
+                    )
+                else:
+                    resume_machinehealthcheck()
 
             # post upgrade validation: check cluster operator status
             operator_ready_timeout = 2700 if not rosa_platform else 5400

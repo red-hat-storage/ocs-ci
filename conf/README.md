@@ -107,7 +107,9 @@ anywhere else.
 * `mirror_registry` - Hostname of the mirror registry
 * `mirror_registry_user` - Username for disconnected cluster mirror registry
 * `mirror_registry_password` - Password for disconnected cluster mirror registry
-* `opm_index_prune_binary_image` - Required only for IBM Power Systems and IBM Z images: Operator Registry base image with the tag that matches the target OpenShift Container Platform cluster major and minor
+* `opm_index_prune_binary_image` - Required only for IBM Power Systems and IBM Z images: Operator Registry base image with the tag that matches the target OpenShift Container Platform cluster major and
+*`cnv_latest_stable` - Deploy stable cnv build if provided else nightly cnv build will be installed
+minor
 * `deploy_mce`- Boolean, Deploy mce if True
 version.
   (for example: `registry.redhat.io/openshift4/ose-operator-registry:v4.9`)
@@ -390,6 +392,9 @@ Upgrade related configuration data.
 * `upgrade_acm_version` - ACM version to which we have to upgrade
 * `upgrade_acm_registry_image` - ACM Image tag from brew which should be used to upgrade
 example: <brew_registry_url>/rh-osbs/iib:565330
+* `upgrade_cnv_version` - cnv version to which we have to upgrade
+* `upgrade_metallb_version` - metallb version to which we have to upgrade
+* `upgrade_lso_version` - lso version to which want to upgrade
 
 #### AUTH
 

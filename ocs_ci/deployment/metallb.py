@@ -19,17 +19,21 @@ from ocs_ci.ocs.constants import (
 from ocs_ci.ocs.exceptions import CommandFailed
 from ocs_ci.ocs.ocp import OCP
 from ocs_ci.utility.retry import retry
-from ocs_ci.ocs.resources.catalog_source import CatalogSource
+from ocs_ci.ocs.resources.catalog_source import CatalogSource, disable_specific_source
 from ocs_ci.ocs.resources.csv import check_all_csvs_are_succeeded
 from ocs_ci.ocs.resources.pod import wait_for_pods_to_be_running
 from ocs_ci.ocs.utils import get_pod_name_by_pattern
 from ocs_ci.utility import templating
 from ocs_ci.utility.utils import (
     exec_cmd,
+    run_cmd,
     get_ocp_version,
     TimeoutSampler,
     wait_for_machineconfigpool_status,
+    get_running_ocp_version,
 )
+from pkg_resources import parse_version
+from ocs_ci.ocs.resources.install_plan import wait_for_install_plan_and_approve
 
 logger = logging.getLogger(__name__)
 
@@ -92,18 +96,22 @@ class MetalLBInstaller:
         )
 
     @retry(CommandFailed, tries=3, delay=15)
-    def create_catalog_source(self):
+    def create_catalog_source(
+        self, metallb_version=config.default_cluster_ctx.ENV_DATA.get("metallb_version")
+    ):
         """
         Create catalog source for MetalLB
 
+        Arg:
+            metallb_version (str): MetalLB version
+
         Returns:
             bool: True if catalog source is created, False otherwise, error if not get Ready state
+
         """
         logger.info("Creating catalog source for MetalLB")
         # replace latest version with specific version
         catalog_source_data = templating.load_yaml(QE_APP_REGISTRY_SOURCE)
-
-        metallb_version = config.default_cluster_ctx.ENV_DATA.get("metallb_version")
         if not metallb_version:
             metallb_version = get_ocp_version()
 
@@ -698,3 +706,110 @@ class MetalLBInstaller:
         wait_for_machineconfigpool_status(node_type="all")
         logger.info("ICSP applied successfully")
         return self.icsp_brew_registry_exists()
+
+    def metallb_patch_subscription(self, patch):
+        """
+        Update the subscription with patch information
+
+        Args:
+            patch (dict): patch information
+
+        """
+        metallb_subs_obj = OCP(
+            kind=constants.SUBSCRIPTION_WITH_ACM,
+            namespace=self.namespace_lb,
+            resource_name=constants.METALLB,
+        )
+        metallb_subs_obj.patch(params=patch, format_type="merge")
+
+    def get_running_metallb_version(self):
+        """
+        Get the currently deployed cnv version
+
+        Returns:
+            string: metalLB version
+
+        """
+        metallb_subs_obj = OCP(
+            kind=constants.SUBSCRIPTION_WITH_ACM,
+            namespace=self.namespace_lb,
+            resource_name=constants.METALLB,
+        )
+        metallb_version = metallb_subs_obj.get()["status"]["installedCSV"]
+        metallb_version = metallb_version.split(".v")[1].split("-")[0]
+        return metallb_version
+
+    def upgrade_metallb(self):
+        """
+        Upgrade metalLB operator
+
+        Returns:
+            bool: if metallb operator is upgraded successfully
+
+        """
+        metallb_subs_obj = OCP(
+            kind=constants.SUBSCRIPTION_WITH_ACM,
+            namespace=self.namespace_lb,
+            resource_name=constants.METALLB,
+        )
+        metallb_catalog_source = CatalogSource(
+            resource_name=constants.QE_APP_REGISTRY_CATALOG_SOURCE_NAME,
+            namespace=MARKETPLACE_NAMESPACE,
+        )
+
+        logger.info("Check if metallb is installed")
+        if not self.metallb_instance_created():
+            logger.error("metalLb operator unavailable")
+            return False
+
+        logger.info(
+            f"Currently installed metallb version: {parse_version(self.get_running_metallb_version())}"
+        )
+        self.upgrade_version = config.UPGRADE.get("upgrade_metallb_version")
+        if not self.upgrade_version:
+            self.upgrade_version = get_running_ocp_version()
+        logger.info(
+            f"Upgarde metallb version to: {parse_version(self.upgrade_version)}"
+        )
+        if self.upgrade_version == parse_version(self.get_running_metallb_version()):
+            logger.info("Metallb operator is not upgradeable")
+            return True
+
+        self.catalog_source_name = constants.QE_APP_REGISTRY_CATALOG_SOURCE_NAME
+        catalog_source_data = templating.load_yaml(QE_APP_REGISTRY_SOURCE)
+        # create catsrc
+        if self.catalog_source_created():
+            logger.info(
+                f"Catalog Source {constants.QE_APP_REGISTRY_CATALOG_SOURCE_NAME} already exists"
+            )
+            # Upgrade image details in the catalogsource
+            image_placeholder = catalog_source_data.get("spec").get("image")
+            catalog_source_data.get("spec").update(
+                {"image": image_placeholder.format(self.upgrade_version)}
+            )
+            # install catalog source
+            metallb_catalog_file = tempfile.NamedTemporaryFile(
+                mode="w+", prefix="metallb_catalogsource", delete=False
+            )
+            templating.dump_data_to_temp_yaml(
+                catalog_source_data, metallb_catalog_file.name
+            )
+            disable_specific_source(constants.QE_APP_REGISTRY_CATALOG_SOURCE_NAME)
+            run_cmd(f"oc apply -f {metallb_catalog_file.name}", timeout=2400)
+
+            # wait for catalog source is ready
+            metallb_catalog_source.wait_for_state("READY")
+
+        else:
+            self.create_catalog_source(metallb_version=self.upgrade_version)
+
+        # wait for sometime before checking the latest metallb version
+        time.sleep(60)
+        if metallb_subs_obj.get()["spec"]["installPlanApproval"] != "Automatic":
+            patch = '{"spec": {"installPlanApproval": "Automatic"}}'
+            metallb_subs_obj.patch(params=patch, format_type="merge")
+            wait_for_install_plan_and_approve(self.namespace)
+
+        metallb_version_post_upgrade = self.get_running_metallb_version()
+        logger.info(f"metallb version post upgrade: {metallb_version_post_upgrade}")
+        return self.upgrade_version in metallb_version_post_upgrade
