@@ -20,11 +20,11 @@ DATE_TIME_FORMAT = "%Y I%m%d %H:%M:%S.%f"
 
 interface_data = {
     constants.CEPHBLOCKPOOL: {
-        "prov": "csi-rbdplugin-provisioner",
+        "prov": "openshift-storage.rbd.csi.ceph.com-ctrlplugin",
         "csi_cnt": "csi-rbdplugin",
     },
     constants.CEPHFILESYSTEM: {
-        "prov": "csi-cephfsplugin-provisioner",
+        "prov": "openshift-storage.cephfs.csi.ceph.com-ctrlplugin",
         "csi_cnt": "csi-cephfsplugin",
     },
 }
