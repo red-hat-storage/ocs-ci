@@ -262,10 +262,6 @@ def mirror_index_image_via_oc_mirror(index_image, packages, idms=None):
             constants.OC_MIRROR_IMAGESET_CONFIG_V2
         )
 
-    imageset_config_data["storageConfig"]["registry"][
-        "imageURL"
-    ] = f"{config.DEPLOYMENT['mirror_registry']}/odf-qe-metadata:latest"
-
     _packages = [{"name": package} for package in packages]
     imageset_config_data["mirror"]["operators"].append(
         {
