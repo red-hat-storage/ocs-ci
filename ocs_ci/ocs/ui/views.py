@@ -2247,6 +2247,30 @@ bucket_tab = {
         "form input[id]",
         By.CSS_SELECTOR,
     ),  # Input field for bucket name confirmation
+    "properties_tab": (
+        "button[id='pf-tab-2-s3-overview'] span[class='pf-v5-c-tabs__item-text']",
+        By.CSS_SELECTOR,
+    ),
+    "versioning_toggle": (
+        ".pf-v5-c-switch__toggle",
+        By.CSS_SELECTOR,
+    ),
+    "versioning_checkbox_input": (
+        ".pf-v5-c-switch__input",
+        By.CSS_SELECTOR,
+    ),
+    "versioning_status": (
+        "//div[contains(text(), 'Versioning')]/following-sibling::div//span[contains(@class, 'switch__label')]",
+        By.XPATH,
+    ),
+    "versioning_enable_confirm_button": (
+        "//div[contains(@class, 'pf-v5-c-modal-box')]//button[contains(@class, 'pf-m-primary') and text()='Enable']",
+        By.XPATH,
+    ),
+    "versioning_cancel_confirm_button": (
+        "//div[contains(@class, 'pf-v5-c-modal-box')]//button[contains(@class, 'pf-m-link') and text()='Cancel']",
+        By.XPATH,
+    ),
 }
 locators = {
     "4.19": {
