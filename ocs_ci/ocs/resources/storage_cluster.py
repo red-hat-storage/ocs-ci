@@ -181,6 +181,7 @@ def ocs_install_verification(
     from ocs_ci.ocs.resources.pod import get_ceph_tools_pod, get_all_pods
     from ocs_ci.ocs.cluster import validate_cluster_on_pvc
     from ocs_ci.ocs.resources.fips import check_fips_enabled
+    from ocs_ci.ocs.resources.storageconsumer import verify_storage_consumer_resources
 
     number_of_worker_nodes = len(get_nodes())
     namespace = config.ENV_DATA["cluster_namespace"]
@@ -969,6 +970,19 @@ def ocs_install_verification(
                 owner_references[0].get("name") == constants.CLIENT_OPERATOR_CONFIGMAP
             ), f"Owner reference of {driver} driver is not {constants.CLIENT_OPERATOR_CONFIGMAP}"
     log.info("Verified the ownerReferences for CSI drivers")
+
+    no_ceph = (
+        config.DEPLOYMENT["external_mode"] or config.ENV_DATA["mcg_only_deployment"]
+    )
+
+    if not no_ceph:
+        log.info(
+            f"Verifying '{constants.INTERNAL_STORAGE_CONSUMER_NAME}' storage consumer resources"
+        )
+        verify_storage_consumer_resources(constants.INTERNAL_STORAGE_CONSUMER_NAME)
+        log.info(
+            f"Verified '{constants.INTERNAL_STORAGE_CONSUMER_NAME}' storage consumer resources"
+        )
 
 
 def mcg_only_install_verification(ocs_registry_image=None):

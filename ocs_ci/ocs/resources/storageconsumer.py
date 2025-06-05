@@ -540,13 +540,6 @@ def verify_storage_consumer_resources(
             "Distributed volume snapshot classes arguments are not expected for internal storage consumer."
         )
 
-    """
-    storage_cluster = StorageCluster(
-                                resource_name=storage_cluster_name,
-                                namespace=config.ENV_DATA["cluster_namespace"],
-                            )
-    """
-
     # as of ODF 4.19 timeline, StorageConsumer cr must exist on the provider cluster only
     consumer_context = config.cluster_ctx.ENV_DATA.get(
         "default_cluster_context_index", 0
@@ -689,7 +682,9 @@ def verify_storage_consumer_resources(
     ceph_data = config_map_obj.get("data", {})
 
     ceph_data_on_consumer_match = {}
-    if internal_consumer:
+    disable_blockpools = config.COMPONENTS["disable_blockpools"]
+    disable_cephfs = config.COMPONENTS["disable_cephfs"]
+    if internal_consumer and not (disable_blockpools or disable_cephfs):
         """
         check by example:
         cephfs-subvolumegroup-rados-ns: csi
