@@ -86,6 +86,25 @@ class TestLifecycleConfiguration(MCGTest):
         6. Wait for the multipart-upload to expire
         7. Verify that the parts were deleted at the noobaa-db
         """
+
+        def _nb_query(bucket):
+            """
+            Executes PSQL QUERY and returns True if Object delete info is updated in DB
+            """
+            bucket_id = exec_nb_db_query(
+                f"SELECT _id FROM buckets WHERE data->>'name' = '{bucket}'",
+            )[0].strip()
+            multiparts_md_list = exec_nb_db_query(
+                f"SELECT data FROM objectmultiparts WHERE data->>'bucket' = '{bucket_id}'"
+            )
+            for md_string in multiparts_md_list:
+                md = json.loads(md_string)
+                if "deleted" in md:
+                    break
+            else:
+                return False
+            return True
+
         parts_amount = 5
         key = "test_obj_123"
         origin_dir = test_directory_setup.origin_dir
@@ -141,17 +160,15 @@ class TestLifecycleConfiguration(MCGTest):
             logger.warning(f"Upload has not expired yet: \n{http_response}")
 
         # 7. Verify that the parts were deleted at the noobaa-db
-        bucket_id = exec_nb_db_query(
-            f"SELECT _id FROM buckets WHERE data->>'name' = '{bucket}'",
-        )[0].strip()
-        multiparts_md_list = exec_nb_db_query(
-            f"SELECT data FROM objectmultiparts WHERE data->>'bucket' = '{bucket_id}'"
+        sample = TimeoutSampler(
+            timeout=1800,
+            sleep=TIMEOUT_SLEEP_DURATION,
+            func=_nb_query,
+            bucket=bucket,
         )
-        for md_string in multiparts_md_list:
-            md = json.loads(md_string)
-            assert (
-                "deleted" in md
-            ), f"Multipart upload was not expired as expected: {md}"
+        assert sample.wait_for_func_status(
+            result=True
+        ), "Incomplete Multipart objects are still present in system"
 
     @tier1
     @pytest.mark.polarion_id("OCS-6559")
