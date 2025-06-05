@@ -1220,11 +1220,26 @@ class Deployment(object):
             if all(
                 key in config.DEPLOYMENT for key in ("csv_change_from", "csv_change_to")
             ):
-                modify_csv(
-                    csv=csv_name,
-                    replace_from=config.DEPLOYMENT["csv_change_from"],
-                    replace_to=config.DEPLOYMENT["csv_change_to"],
-                )
+                # In case someone uses old approach passed via string for one image only
+                # directly via config.
+                if isinstance(config.DEPLOYMENT["csv_change_from"], str):
+                    zipped_csv_changes = [
+                        (
+                            config.DEPLOYMENT["csv_change_from"],
+                            config.DEPLOYMENT["csv_change_to"],
+                        ),
+                    ]
+                else:
+                    zipped_csv_changes = zip(
+                        config.DEPLOYMENT["csv_change_from"],
+                        config.DEPLOYMENT["csv_change_to"],
+                    )
+                for csv_change_from, csv_change_to in zipped_csv_changes:
+                    modify_csv(
+                        csv=csv_name,
+                        replace_from=csv_change_from,
+                        replace_to=csv_change_to,
+                    )
 
         # create storage system
         if ocs_version >= version.VERSION_4_9:

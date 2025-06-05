@@ -267,10 +267,12 @@ def pytest_addoption(parser):
     )
     parser.addoption(
         "--csv-change",
-        dest="csv_change",
+        dest="csv_changes",
+        action="append",
         help=(
             "Pattern or string to change in the CSV. Should contain the value to replace "
-            "from and the value to replace to, separated by '::'"
+            "from and the value to replace to, separated by '::', you can repeat this argument "
+            "multiple times if multiple images needs to be changed"
         ),
     )
     parser.addoption(
@@ -631,11 +633,15 @@ def process_cluster_cli_params(config):
     if ocp_installer_version:
         ocsci_config.DEPLOYMENT["installer_version"] = ocp_installer_version
         ocsci_config.RUN["client_version"] = ocp_installer_version
-    csv_change = get_cli_param(config, "--csv-change")
-    if csv_change:
-        csv_change = csv_change.split("::")
-        ocsci_config.DEPLOYMENT["csv_change_from"] = csv_change[0]
-        ocsci_config.DEPLOYMENT["csv_change_to"] = csv_change[1]
+    csv_changes = get_cli_param(config, "--csv-change")
+    if csv_changes:
+        csv_change_from = ocsci_config.DEPLOYMENT.get("csv_change_from", [])
+        csv_change_to = ocsci_config.DEPLOYMENT.get("csv_change_to", [])
+        for csv_change in csv_changes:
+            csv_change = csv_change.split("::")
+            csv_change_from.append(csv_change[0])
+            csv_change_to.append(csv_change[1])
+
     collect_logs_on_success_run = get_cli_param(config, "collect_logs_on_success_run")
     if collect_logs_on_success_run:
         ocsci_config.REPORTING["collect_logs_on_success_run"] = True
