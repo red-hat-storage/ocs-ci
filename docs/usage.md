@@ -146,7 +146,8 @@ to the pytest.
    printed every 20 seconds
 * `--csv-change` - Allows changes in the OCS CSV. For example, usage of custom image,
    like MCG or RHCS. The format should be:
-   <pattern_to_replace_from::pattern_to_replace_to>, while '::' is the delimiter
+   <pattern_to_replace_from::pattern_to_replace_to>, while '::' is the delimiter.
+   This argument is repeatable and you can use it multiple times to change multiple images.
 * `--dev-mode` - Runs in development mode. Skip the checks like collecting
    cluster versions, collection ocs versions, health checks etc.
 * `--ceph-debug` - Deploy with Ceph in debug log level. This option is available starting OCS 4.7
