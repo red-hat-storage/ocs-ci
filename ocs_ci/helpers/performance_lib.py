@@ -184,13 +184,17 @@ def get_logfile_names(interface, provisioning=True):
 
     provisioning_name = interface_data[interface]["prov"]
     csi_name = interface_data[interface]["csi_cnt"]
-
+    logger.info(f"ppp{provisioning_name}")
+    logger.info(f"ccc{csi_name}")
     for line in pods:
+        logger.info(f"poddd{line}")
         if provisioning:
             if provisioning_name in line:
+                logger.info(f"pd{provisioning_name}")
                 log_names.append(line.split()[0])
         else:
             if csi_name in line and provisioning_name not in line:
+                logger.info(f"zd{csi_name}")
                 log_names.append(line.split()[0])
 
     logger.info(f"The logs pods are : {log_names}")
@@ -958,7 +962,7 @@ def pod_bulk_attach_csi_time(interface, pvc_objs, csi_start_time, namespace):
         )
 
     log_names = get_logfile_names(interface, provisioning=False)
-    a=interface_data[interface]["csi_cnt"]
+    a = interface_data[interface]["csi_cnt"]
     logger.info(f"innn{a}")
     logs = read_csi_logs(
         log_names, interface_data[interface]["csi_cnt"], csi_start_time
