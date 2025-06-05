@@ -25,7 +25,10 @@ from ocs_ci.utility.utils import (
     run_cmd,
     wait_for_machineconfigpool_status,
     wipe_all_disk_partitions_for_node,
+    get_running_ocp_version,
 )
+from ocs_ci.ocs.ocp import OCP
+from ocs_ci.ocs.resources.catalog_source import CatalogSource, disable_specific_source
 
 IMAGE_SOURCE_POLICY = ocp.OCP(
     kind="ImageContentSourcePolicy", namespace=constants.MARKETPLACE_NAMESPACE
@@ -356,7 +359,7 @@ def _get_disk_by_id(worker):
 
     """
     cmd = (
-        f"oc debug nodes/{worker} --to-namespace={config.ENV_DATA['cluster_namespace']} "
+        f"oc debug nodes/{worker} --to-namespace=default "
         f"-- chroot /host ls -la /dev/disk/by-id/"
     )
     return run_cmd(cmd)
@@ -478,10 +481,152 @@ def cleanup_nodes_for_lso_install():
     nodes = get_all_nodes()
     node_objs = get_node_objs(nodes)
     for node in nodes:
-        cmd = f"oc debug nodes/{node} -- chroot /host rm -rvf /var/lib/rook /mnt/local-storage"
+        cmd = (
+            f"oc debug nodes/{node} --to-namespace=default -- chroot /host "
+            "rm -rvf /var/lib/rook /mnt/local-storage"
+        )
         out = run_cmd(cmd)
         logger.info(out)
         logger.info(f"Mount data cleared from node, {node}")
         for node_obj in node_objs:
             clean_disk(node_obj)
         logger.info("All nodes are wiped")
+
+
+def catalog_source_created(catalogsource_name, namespace=None):
+    """
+    Check if catalog source is created
+
+    Returns:
+        bool: True if catalog source is created, False otherwise
+    """
+    if not namespace:
+        namespace = constants.MARKETPLACE_NAMESPACE
+    return CatalogSource(
+        resource_name=catalogsource_name,
+        namespace=namespace,
+    ).check_resource_existence(
+        timeout=60,
+        should_exist=True,
+        resource_name=catalogsource_name,
+    )
+
+
+def lso_operator_installed(namespace=None):
+    """ "
+    Check lso operator is installed or not
+
+    Returns:
+            bool: True if Local Storage instance is created, False otherwise
+    """
+    namespace = config.ENV_DATA["local_storage_namespace"]
+    if not namespace:
+        namespace = constants.LOCAL_STORAGE_NAMESPACE
+    return OCP(
+        kind=constants.SUBSCRIPTION_WITH_ACM,
+        namespace=namespace,
+        resource_name=constants.LOCAL_STORAGE_OPERATOR_NAME,
+    ).check_resource_existence(
+        timeout=60,
+        should_exist=True,
+        resource_name=constants.LOCAL_STORAGE_OPERATOR_NAME,
+    )
+
+
+def running_lso_version(namespace=None):
+    """
+    This method is to fetch the running lso version
+
+    Returns:
+            string: metalLB version
+    """
+    namespace = config.ENV_DATA["local_storage_namespace"]
+    if not namespace:
+        namespace = constants.LOCAL_STORAGE_NAMESPACE
+    lso_subs_obj = OCP(
+        kind=constants.SUBSCRIPTION_WITH_ACM,
+        namespace=namespace,
+        resource_name=constants.LOCAL_STORAGE_CSV_PREFIX,
+    )
+    lso_version = lso_subs_obj.get()["status"]["installedCSV"]
+    lso_version = lso_version.split(".v")[1].split("-")[0]
+    return lso_version
+
+
+def lso_upgrade():
+    """
+    Upgrade lso operator
+
+    """
+    import time
+    from pkg_resources import parse_version
+    from ocs_ci.ocs.resources.install_plan import wait_for_install_plan_and_approve
+
+    lso_namespace = config.ENV_DATA["local_storage_namespace"]
+    # check lso operator is available or not
+    lso_subs_obj = OCP(
+        kind=constants.SUBSCRIPTION_WITH_ACM,
+        namespace=lso_namespace,
+        resource_name=constants.LOCAL_STORAGE_CSV_PREFIX,
+    )
+    optional_operators_catsrc = CatalogSource(
+        resource_name=constants.OPTIONAL_OPERATORS,
+        namespace=constants.MARKETPLACE_NAMESPACE,
+    )
+    redhat_operators_catsrc = CatalogSource(
+        resource_name=constants.OPERATOR_CATALOG_SOURCE_NAME,
+        namespace=constants.MARKETPLACE_NAMESPACE,
+    )
+    logger.info("Check if lso is installed")
+    if not lso_operator_installed():
+        logger.error("lso operator unavailable")
+        return False
+
+    logger.info(f"Currently installed lso version: {running_lso_version()}")
+    upgrade_to_version = config.UPGRADE.get("upgrade_lso_version")
+    if not upgrade_to_version:
+        upgrade_to_version = get_running_ocp_version()
+    logger.info(f"Upgarde lso version to: {parse_version(upgrade_to_version)}")
+    if parse_version(upgrade_to_version) == parse_version(running_lso_version()):
+        logger.info("Lso operator is not upgradeable")
+        return True
+    ocp_version = version.get_semantic_ocp_version_from_config()
+    ocp_ga_version = get_ocp_ga_version(ocp_version)
+    if not ocp_ga_version:
+        if not catalog_source_created(catalogsource_name=constants.OPTIONAL_OPERATORS):
+            create_optional_operators_catalogsource_non_ga()
+        else:
+            logger.info(f"Catalog Source {constants.OPTIONAL_OPERATORS} already exists")
+            # update image in catalogsource
+            patch = (
+                f'{{"spec": {{'
+                f'"image": "quay.io/openshift-qe-optional-operators/aosqe-index:{upgrade_to_version}"'
+                f"}}}}"
+            )
+        disable_specific_source(constants.OPTIONAL_OPERATORS)
+        optional_operators_catsrc.wait_for_state("READY")
+
+        # update subscription
+        patch = (
+            f'{{"spec": {{"channel": "{get_lso_channel()}", '
+            f'"source": "{constants.OPTIONAL_OPERATORS}"}}}}'
+        )
+        lso_subs_obj.patch(params=patch, format_type="merge")
+
+    elif ocp_ga_version:
+        disable_specific_source(constants.OPERATOR_CATALOG_SOURCE_NAME)
+        patch = f'{{"spec": {{"image": "registry.redhat.io/redhat/redhat-operator-index:{upgrade_to_version}"}}}}'
+        redhat_operators_catsrc.patch(params=patch, format_type="merge")
+        # wait for catalog source is ready
+        redhat_operators_catsrc.wait_for_state("READY")
+
+    if lso_subs_obj.get()["spec"]["installPlanApproval"] != "Automatic":
+        patch = '{"spec": {"installPlanApproval": "Automatic"}}'
+        lso_subs_obj.patch(params=patch, format_type="merge")
+        wait_for_install_plan_and_approve(lso_namespace)
+
+    # wait for sometime before checking the latest lso version
+    time.sleep(60)
+    lso_version_post_upgrade = running_lso_version()
+    logger.info(f"lso version post upgrade: {lso_version_post_upgrade}")
+    return upgrade_to_version in lso_version_post_upgrade

@@ -40,6 +40,7 @@ from ocs_ci.utility.utils import (
     CommandFailed,
     run_cmd,
     exec_cmd,
+    is_cluster_y_version_upgraded,
 )
 from ocs_ci.helpers.helpers import (
     run_cmd_verify_cli_output,
@@ -353,6 +354,7 @@ def check_mirroring_status_ok(
         NotFoundError: If the configuration is provider mode and the name of the cephblockpoolradosnamespace
             is not obtained
     """
+    ocs_version = version.get_semantic_ocs_version_from_config()
     if is_hci_cluster():
         logger.info("Get the cephblockpoolradosnamespace associated with storageclient")
         cephbpradosns = (
@@ -370,11 +372,20 @@ def check_mirroring_status_ok(
             resource_name=cephbpradosns,
         )
     else:
-        cbp_obj = ocp.OCP(
-            kind=constants.CEPHBLOCKPOOL,
-            resource_name=constants.DEFAULT_CEPHBLOCKPOOL,
-            namespace=config.ENV_DATA["cluster_namespace"],
-        )
+        if ocs_version >= version.VERSION_4_19:
+            cephbpradosns = "ocs-storagecluster-cephblockpool-builtin-implicit"
+            cbp_obj = ocp.OCP(
+                kind=constants.CEPHBLOCKPOOLRADOSNS,
+                namespace=config.ENV_DATA["cluster_namespace"],
+                resource_name=cephbpradosns,
+            )
+        else:
+            cbp_obj = ocp.OCP(
+                kind=constants.CEPHBLOCKPOOL,
+                resource_name=constants.DEFAULT_CEPHBLOCKPOOL,
+                namespace=config.ENV_DATA["cluster_namespace"],
+            )
+
     mirroring_status = cbp_obj.get().get("status").get("mirroringStatus").get("summary")
     logger.info(f"Mirroring status: {mirroring_status}")
     health_keys = ["daemon_health", "health", "image_health"]
@@ -391,7 +402,6 @@ def check_mirroring_status_ok(
         # Replaying images count can be higher due to presence of dummy images
         # This does not apply for clusters with ODF 4.12 and above.
         # See https://bugzilla.redhat.com/show_bug.cgi?id=2132359
-        ocs_version = version.get_semantic_ocs_version_from_config()
         if ocs_version >= version.VERSION_4_12:
             expected_value = [replaying_images]
         else:
@@ -1056,6 +1066,8 @@ def verify_backend_volume_deletion(
         NotFoundError: If the configuration is provider mode and the name of the cephblockpoolradosnamespace
             is not obtained
     """
+    ocs_version = version.get_semantic_ocs_version_from_config()
+
     ct_pod = get_ceph_tools_pod()
     rbd_pool_name = (
         (config.ENV_DATA.get("rbd_name") or RBD_NAME)
@@ -1063,7 +1075,13 @@ def verify_backend_volume_deletion(
         else constants.DEFAULT_CEPHBLOCKPOOL
     )
 
-    if is_hci_cluster():
+    # TODO: Condition is valid if both is_hci_cluster() and "upgraded cluster from 4.18"
+    # Condition is not valid if fresh installed 4.19 and then upgraded
+    if is_hci_cluster() and (
+        (ocs_version == version.VERSION_4_18)
+        or (config.ENV_DATA["cluster_type"] == constants.HCI_CLIENT)
+        or is_cluster_y_version_upgraded()
+    ):
         cephbpradosns = (
             cephblockpoolradosns
             or config.ENV_DATA.get("radosnamespace_name", None)

@@ -11,6 +11,7 @@ resource "vsphere_virtual_machine" "vm" {
   wait_for_guest_net_timeout  = "0"
   wait_for_guest_net_routable = "false"
   storage_policy_id           = var.storage_policy_id
+  firmware                    = "efi"
 
   network_interface {
     network_id = var.network_id

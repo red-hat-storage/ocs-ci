@@ -89,6 +89,11 @@ def test_change_client_ocs_version_and_stop_heartbeat(
         )
 
 
-def teardown_module():
+def setup_module(module):
     ocs_obj = OCP()
-    ocs_obj.login_as_sa()
+    module.original_user = ocs_obj.get_user_name()
+
+
+def teardown_module(module):
+    ocs_obj = OCP()
+    ocs_obj.login_as_user(module.original_user)

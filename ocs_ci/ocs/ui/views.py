@@ -796,10 +796,12 @@ acm_page_nav = {
     "Policies": ("a[data-test-id='horizontal-link-Policies']", By.CSS_SELECTOR),
 }
 acm_page_nav_419 = {
-    "Infrastructure": (
-        "(//button[text()='Infrastructure']) | (//button[normalize-space()='Infrastructure'])[1]",
+    "click-local-cluster": (
+        '//button[@data-test-id="cluster-dropdown-toggle"]//*[text()="local-cluster"]',
         By.XPATH,
     ),
+    "all-clusters-view": ("//span[contains(text(),'All Clusters')]", By.XPATH),
+    "Clusters_page": ("(//a[normalize-space()='Clusters'])[1]", By.XPATH),
 }
 
 acm_configuration = {
@@ -822,6 +824,7 @@ acm_configuration = {
         "//*[@data-ouia-component-type='PF4/TableRow']//td[2]//*[text()='local-cluster']",
         By.XPATH,
     ),
+    "side_navigation_toggle": ("#nav-toggle", By.CSS_SELECTOR),
     "search-cluster": ("//input[@placeholder='Search']", By.XPATH),
     "select-first-checkbox": ("input[name='checkrow0']", By.CSS_SELECTOR),
     "clear-search": ("//*[name()='path' and contains(@d,'M242.72 25')]", By.XPATH),
@@ -1187,6 +1190,15 @@ acm_configuration_4_16 = {
 }
 
 acm_configuration_4_18 = {
+    "click-local-cluster": (
+        '//button[@data-test-id="cluster-dropdown-toggle"]//*[text()="local-cluster"]',
+        By.XPATH,
+    ),
+    "all-clusters-view": ("//span[contains(text(),'All Clusters')]", By.XPATH),
+    "Clusters_page": (
+        "a[data-test='nav'][href='/multicloud/infrastructure/clusters']",
+        By.CSS_SELECTOR,
+    ),
     "inconsistent-warning-alert": (
         "//h4[@class='pf-v5-c-alert__title']",
         By.XPATH,

@@ -158,6 +158,7 @@ from ocs_ci.utility.ssl_certs import (
 from ocs_ci.utility.utils import (
     ceph_health_check,
     clone_repo,
+    create_unreleased_oadp_catalog,
     enable_huge_pages,
     exec_cmd,
     get_latest_ds_olm_tag,
@@ -260,7 +261,11 @@ class Deployment(object):
             switch_ctx (int): The cluster index by the cluster name
 
         """
-        config.switch_ctx(switch_ctx) if switch_ctx else config.switch_acm_ctx()
+        (
+            config.switch_ctx(switch_ctx)
+            if switch_ctx is not None
+            else config.switch_acm_ctx()
+        )
 
         logger.info("Creating Namespace for GitOps Operator ")
         run_cmd(f"oc create namespace {constants.GITOPS_NAMESPACE}")
@@ -311,7 +316,8 @@ class Deployment(object):
             run_cmd(f"oc create -f {constants.GITOPS_PLACEMENT_YAML}")
 
             logger.info("Creating ManagedClusterSetBinding")
-            cluster_set = get_cluster_set_name()
+            cluster_set = config.ENV_DATA.get("cluster_set") or get_cluster_set_name()
+
             managed_clusters = (
                 ocp.OCP(kind=constants.ACM_MANAGEDCLUSTER).get().get("items", [])
             )
@@ -483,7 +489,22 @@ class Deployment(object):
                     resource_name=constants.OADP_OPERATOR_NAME,
                     selector="catalog=redhat-operators",
                 )
+                try:
+                    package_manifest.get()
+                except ResourceNotFoundError as ex:
+                    logger.warning(
+                        f"OADP operator not availabe - bringing up unreleased content {ex}!"
+                    )
+                    create_unreleased_oadp_catalog()
+                    package_manifest = PackageManifest(
+                        resource_name=constants.OADP_OPERATOR_NAME,
+                        selector=f"catalog={constants.BREW_CATALOG_NAME}",
+                    )
+                    oadp_subscription_yaml_data["spec"][
+                        "source"
+                    ] = constants.BREW_CATALOG_NAME
                 oadp_default_channel = package_manifest.get_default_channel()
+
                 oadp_subscription_yaml_data["spec"]["channel"] = oadp_default_channel
                 oadp_subscription_manifest = tempfile.NamedTemporaryFile(
                     mode="w+", prefix="oadp_subscription_manifest", delete=False
@@ -1351,7 +1372,7 @@ class Deployment(object):
 
         # create custom storage class for StorageCluster CR if necessary
         if self.custom_storage_class_path is not None:
-            self.storage_class_name = storage_class.create_custom_storageclass(
+            self.storage_class = storage_class.create_custom_storageclass(
                 self.custom_storage_class_path
             )
 

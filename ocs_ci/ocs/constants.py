@@ -264,6 +264,8 @@ CLIENT_PROFILE = "ClientProfile"
 OCS_OPERATOR_CONFIG_MAP = "ocs-operator-config"
 SERVICE_TYPE_NODEPORT = "NodePort"
 CLUSTERMANAGEMENTADDON = "ClusterManagementAddOn"
+NETWORK_FENCE_CLASS = "NetworkFenceClass"
+NETWORK_FENCE = "NetworkFence"
 
 # Provisioners
 AWS_EFS_PROVISIONER = "openshift.org/aws-efs"
@@ -312,6 +314,7 @@ OPENSHIFT_IMAGE_SELECTOR = "docker-registry=default"
 OPENSHIFT_INGRESS_NAMESPACE = "openshift-ingress"
 OPENSHIFT_MONITORING_NAMESPACE = "openshift-monitoring"
 CLUSTERS_NAMESPACE = "clusters"
+OPENSHIFT_MACHINE_CONFIG_OPERATOR_NAMESPACE = "openshift-machine-config-operator"
 MASTER_MACHINE = "master"
 WORKER_MACHINE = "worker"
 BOOTSTRAP_MACHINE = "bootstrap"
@@ -325,6 +328,9 @@ END = "END"
 LEAK_LIMIT = 100 * 1024 * 1024  # 100 MB
 RAM = "rss"
 VIRT = "vms"
+
+ODF_NETWORK_FENCE_CLASS = "odf-networkfenceclass"
+CSI_ADDONS_NODE_KIND = "CSIAddonsNode"
 
 # cluster types
 MS_CONSUMER_TYPE = "consumer"
@@ -657,6 +663,7 @@ ODF_OPERATOR_CONTROL_MANAGER_LABEL = "app.kubernetes.io/name=odf-operator"
 ROOK_CEPH_DRAIN_CANARY = "rook-ceph-drain-canary"
 LOCAL_STORAGE_OPERATOR_LABEL = "name=local-storage-operator"
 UX_BACKEND_APP_LABEL = "app=ux-backend-server"
+MACINE_CONFIG_CONTROLLER_LABEL = "k8s-app=machine-config-controller"
 NOOBAA_APP_LABEL = "app=noobaa"
 NOOBAA_CORE_POD_LABEL = "noobaa-core=noobaa"
 NOOBAA_OPERATOR_POD_LABEL = "noobaa-operator=deployment"
@@ -1544,7 +1551,7 @@ PERFORMANCE_PROFILE_REQUEST_CPU_VALUES = {
 }
 PERFORMANCE_PROFILE_REQUEST_MEMORY_VALUES = {
     "mgr": "2Gi",
-    "mon": "3Gi",
+    "mon": "2Gi",
     "osd": "8Gi",
     "mds": "8Gi",
     "rgw": "4Gi",
@@ -1591,7 +1598,7 @@ PERFORMANCE_PROFILE_CPU_LIMIT_VALUES = {
 }
 PERFORMANCE_PROFILE_MEMORY_LIMIT_VALUES = {
     "mgr": "4Gi",
-    "mon": "3Gi",
+    "mon": "2Gi",
     "osd": "8Gi",
     "mds": "8Gi",
     "rgw": "4Gi",
@@ -1821,6 +1828,9 @@ EC2_USER = "ec2-user"
 OCS_SUBSCRIPTION = "ocs-operator"
 ODF_SUBSCRIPTION = "odf-operator"
 ROOK_OPERATOR_CONFIGMAP = "rook-ceph-operator-config"
+ROOK_OPERATOR_CONFIGMAP_YAML = os.path.join(
+    TEMPLATE_DEPLOYMENT_DIR, "rook-ceph-operator-configmap.yaml"
+)
 ROOK_CONFIG_OVERRIDE_CONFIGMAP = "rook-config-override"
 ROOK_CEPH_MON_ENDPOINTS = "rook-ceph-mon-endpoints"
 MIRROR_OPENSHIFT_USER_FILE = "mirror_openshift_user"
@@ -2143,6 +2153,8 @@ CEPHOBJECTSTORE_TOOL_CMD = "ceph-objectstore-tool"
 CEPHMONSTORE_TOOL_CMD = "ceph-monstore-tool"
 
 # local storage
+LOCAL_STORAGE_NAMESPACE = "openshift-local-storage"
+LOCAL_STORAGE_OPERATOR_NAME = "local-storage-operator"
 LOCAL_STORAGE_OPERATOR = os.path.join(
     TEMPLATE_DEPLOYMENT_DIR, "local-storage-operator.yaml"
 )
@@ -2559,6 +2571,12 @@ LOGWRITER_CEPHFS_READER = os.path.join(LOGWRITER_DIR, "cephfs.logreader.yaml")
 LOGWRITER_CEPHFS_WRITER = os.path.join(LOGWRITER_DIR, "cephfs.logwriter.yaml")
 LOGWRITER_STS_PATH = os.path.join(LOGWRITER_DIR, "logwriter.rbd.yaml")
 
+# Network Fence CRDs
+NETWORK_FENCE_CLASS_CRD = os.path.join(
+    TEMPLATE_CSI_ADDONS_DIR, "network-fence-class.yaml"
+)
+NETWORK_FENCE_CRD = os.path.join(TEMPLATE_CSI_ADDONS_DIR, "network-fence-rbd.yaml")
+
 # MCG namespace constants
 MCG_NS_AWS_ENDPOINT = "https://s3.amazonaws.com"
 MCG_NS_AZURE_ENDPOINT = "https://blob.core.windows.net"
@@ -2874,9 +2892,20 @@ ACM_BREW_BUILD_URL = (
     "VirtualTopic.eng.ci.redhat-container-image.pipeline.complete"
     "&rows_per_page=25&delta=1296000&contains=acm"
 )
-SUBMARINER_BREW_REPO = "brew.registry.redhat.io/rh-osbs/iib"
 SUBCTL_DOWNSTREAM_URL = "registry.redhat.io/rhacm2/"
-ACM_BREW_REPO = SUBMARINER_BREW_REPO
+
+# OADP
+OADP_BREW_BUILD_URL = (
+    "https://datagrepper.engineering.redhat.com/raw?topic=/"
+    "topic/VirtualTopic.eng.ci.redhat-container-image.pipeline.complete"
+    "&rows_per_page=25&delta=15552000&contains=oadp-operator-bundle-container"
+)
+
+# BREW
+BREW_REPO = "brew.registry.redhat.io/rh-osbs/iib"
+BREW_CATALOG_NAME = "brew-catalog"
+BREW_CATALOG_YAML = os.path.join(TEMPLATE_DEPLOYMENT_DIR, "brew-catalog.yaml")
+BREW_ICSP = os.path.join(TEMPLATE_DEPLOYMENT_DIR, "brew_registry_idms.yaml")
 
 # Multicluster related
 MCE_NAMESPACE = "multicluster-engine"
@@ -2945,6 +2974,7 @@ ACM_MANAGEDCLUSTER_ADDONS = "managedclusteraddons.addon.open-cluster-management.
 ACM_ADDON_DEPLOYMENT_CONFIG_YAML = os.path.join(
     TEMPLATE_DIR, "acm-deployment", "addon_deployment_config.yaml"
 )
+ACM_OPERATOR_SUBSCRIPTION = "acm-operator-subscription"
 
 # GitOps
 GITOPS_NAMESPACE = "openshift-gitops"
@@ -3166,6 +3196,8 @@ NETSPLIT_ARBITER_DATA_1_AND_ARBITER_DATA_2 = (
 NETSPLIT_ARBITER_DATA_1_AND_DATA_1_DATA_2 = (
     f"{ARBITER_ZONE}{DATA_ZONE_1}-{DATA_ZONE_1}{DATA_ZONE_2}"
 )
+
+NODE_OUT_OF_SERVICE_TAINT = "node.kubernetes.io/out-of-service=nodeshutdown:NoExecute"
 
 # Logwriter workload labels
 

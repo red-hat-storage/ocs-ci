@@ -10,6 +10,7 @@ import platform
 import requests
 import zipfile
 import tarfile
+import time
 
 from ocs_ci.framework import config
 from ocs_ci.ocs.resources.ocs import OCS
@@ -27,6 +28,7 @@ from ocs_ci.ocs import constants
 from ocs_ci.utility.utils import (
     run_cmd,
     exec_cmd,
+    get_running_ocp_version,
 )
 from ocs_ci.ocs import exceptions
 from ocs_ci.ocs.resources.catalog_source import CatalogSource
@@ -37,6 +39,7 @@ from ocs_ci.utility.utils import TimeoutSampler
 from ocs_ci.ocs import ocp
 from ocs_ci.ocs.resources.pod import wait_for_pods_to_be_running
 from ocs_ci.ocs.node import wait_for_nodes_status
+from pkg_resources import parse_version
 
 logger = logging.getLogger(__name__)
 
@@ -48,6 +51,7 @@ class CNVInstaller(object):
 
     def __init__(self):
         self.namespace = constants.CNV_NAMESPACE
+        self.cnv_nightly_catsrc = "cnv-nightly-catalog-source"
 
     def create_cnv_catalog_source(self):
         """
@@ -188,6 +192,27 @@ class CNVInstaller(object):
                     logger.info(f"{kind} found: {found_resource_name}")
                     return
                 logger.debug(f"Still waiting for the {kind}: {resource_name}")
+
+    def catalog_source_created(self, catalogsource_name=None):
+        """
+        Check if catalog source is created
+
+        Args:
+            catalogsource_name (str): Name of the catalogsource
+
+        Returns:
+            bool: True if catalog source is created, False otherwise
+        """
+        if not catalogsource_name:
+            catalogsource_name = self.cnv_nightly_catsrc
+        return CatalogSource(
+            resource_name=self.cnv_nightly_catsrc,
+            namespace=constants.MARKETPLACE_NAMESPACE,
+        ).check_resource_existence(
+            timeout=60,
+            should_exist=True,
+            resource_name=catalogsource_name,
+        )
 
     def deploy_hyper_converged(self):
         """
@@ -797,3 +822,112 @@ class CNVInstaller(object):
 
         logger.info("Removing the openshift virtualization CRDs")
         self.remove_crds()
+
+    def get_running_cnv_version(self):
+        """
+        Get the currently deployed cnv version
+
+        Returns:
+            string: cnv version
+
+        """
+        hyperconverged_obj = OCP(
+            kind=constants.HYPERCONVERGED,
+            namespace=self.namespace,
+            resource_name=constants.KUBEVIRT_HYPERCONVERGED,
+        )
+        cnv_version = hyperconverged_obj.get()["status"]["versions"][0]["version"]
+        return cnv_version
+
+    def check_cnv_is_upgradable(self):
+        """
+        This method checks if the cnv operator is upgradable or not
+
+        Return:
+            cnv_upgradeable (bool)): Returns True if Upgradable else False
+
+        """
+        cnv_upgradable = False
+        if self.cnv_hyperconverged_installed() and self.post_install_verification(
+            raise_exception=False
+        ):
+            kubevirt_hyperconverged = OCP(
+                kind=constants.HYPERCONVERGED,
+                namespace=self.namespace,
+                resource_name=constants.KUBEVIRT_HYPERCONVERGED,
+            )
+            hyperconverged_conditions = kubevirt_hyperconverged.get()["status"][
+                "conditions"
+            ]
+            for condition in hyperconverged_conditions:
+                if condition["type"] == "Upgradeable":
+                    cnv_upgradable = True if condition["status"] == "True" else False
+                    break
+        return cnv_upgradable
+
+    def upgrade_cnv(self):
+        """
+        Upgrade cnv operator
+
+        Returns:
+        bool: if cnv operator is upgraded successfully
+
+        """
+
+        if not self.check_cnv_is_upgradable():
+            logger.info("CNV is not upgradable")
+            return
+
+        hyperconverged_subs_obj = OCP(
+            kind=constants.SUBSCRIPTION_WITH_ACM,
+            namespace=self.namespace,
+            resource_name=constants.KUBEVIRT_HYPERCONVERGED,
+        )
+
+        cnv_operators_nightly_catsrc = CatalogSource(
+            resource_name=self.cnv_nightly_catsrc,
+            namespace=constants.MARKETPLACE_NAMESPACE,
+        )
+        logger.info(
+            f" currently installed cnv version: {parse_version(self.get_running_cnv_version())}"
+        )
+        self.upgrade_version = config.UPGRADE.get("upgrade_cnv_version")
+        if not self.upgrade_version:
+            self.upgrade_version = get_running_ocp_version()
+        logger.info(f"Upgarde cnv to: {parse_version(self.upgrade_version)}")
+
+        # we create catsrc with nightly builds only if config.DEPLOYMENT does not have cnv_latest_stable
+        if not config.DEPLOYMENT.get("cnv_latest_stable"):
+            # Create CNV catalog source
+            if not self.catalog_source_created():
+                self.create_cnv_catalog_source()
+            # Update image details in CNV catalogsource
+            patch = f'{{"spec": {{"image": "quay.io/openshift-cnv/nightly-catalog:{self.upgrade_version}"}}}}'
+            cnv_operators_nightly_catsrc.patch(params=patch, format_type="merge")
+            # wait for catalog source is ready
+            cnv_operators_nightly_catsrc.wait_for_state("READY")
+            # Update channel and source for CNV subscription
+            patch = (
+                f'{{"spec": {{"channel": "nightly-{self.upgrade_version}", '
+                f'"source": "{self.cnv_nightly_catsrc}"}}}}'
+            )
+            hyperconverged_subs_obj.patch(params=patch, format_type="merge")
+
+        install_plan_approval = hyperconverged_subs_obj.get()["spec"][
+            "installPlanApproval"
+        ]
+        if install_plan_approval != "Automatic":
+            patch = '{"spec": {"installPlanApproval": "Automatic"}}'
+            hyperconverged_subs_obj.patch(params=patch, format_type="merge")
+            wait_for_install_plan_and_approve(self.namespace)
+
+        # Post CNV upgrade checks
+        if self.post_install_verification():
+            if install_plan_approval == "Manual":
+                # setting upgrade approval back to manual
+                patch = '{"spec": {"installPlanApproval": "Manual"}}'
+                hyperconverged_subs_obj.patch(params=patch, format_type="merge")
+
+            # wait for sometime before checking the latest cnv version
+            time.sleep(60)
+            return self.upgrade_version in self.get_running_cnv_version()
