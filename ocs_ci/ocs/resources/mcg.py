@@ -61,7 +61,6 @@ class MCG:
     (
         s3_resource,
         s3_endpoint,
-        s3_external_endpoint,
         s3_internal_endpoint,
         ocp_resource,
         mgmt_endpoint,
@@ -73,7 +72,7 @@ class MCG:
         noobaa_password,
         noobaa_token,
         data_to_mask,
-    ) = (None,) * 14
+    ) = (None,) * 13
 
     def __init__(self, *args, **kwargs):
         """
@@ -115,21 +114,14 @@ class MCG:
 
             get_noobaa = OCP(kind="noobaa", namespace=self.namespace).get()
 
-            self.s3_external_endpoint = (
+            self.s3_endpoint = (
                 get_noobaa.get("items")[0]
                 .get("status")
                 .get("services")
                 .get("serviceS3")
                 .get("externalDNS")[0]
             )
-            self.s3_internal_endpoint = (
-                get_noobaa.get("items")[0]
-                .get("status")
-                .get("services")
-                .get("serviceS3")
-                .get("internalDNS")[0]
-            )
-            self.s3_endpoint = self.determine_s3_endpoint()
+            self.s3_internal_endpoint = self.determine_s3_endpoint()
             self.sts_endpoint = (
                 get_noobaa.get("items")[0]
                 .get("status")
@@ -226,11 +218,19 @@ class MCG:
             string: S3 endpoint URI
 
         """
-        return (
-            self.s3_external_endpoint
-            if config.multicluster
-            else self.s3_internal_endpoint
-        )
+        if config.multicluster:
+            logger.warning(
+                "Multicluster test run is executed. External S3 enpoint is used instead of internal."
+            )
+            return self.s3_external_endpoint
+        else:
+            return (
+                get_noobaa.get("items")[0]
+                .get("status")
+                .get("services")
+                .get("serviceS3")
+                .get("internalDNS")[0]
+            )
 
     def s3_get_all_bucket_names(self):
         """
