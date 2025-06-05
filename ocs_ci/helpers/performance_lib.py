@@ -22,10 +22,12 @@ interface_data = {
     constants.CEPHBLOCKPOOL: {
         "prov": "openshift-storage.rbd.csi.ceph.com-ctrlplugin",
         "csi_cnt": "csi-rbdplugin",
+        "csi_name_pod": "openshift-storage.rbd.csi.ceph.com-nodeplugin",
     },
     constants.CEPHFILESYSTEM: {
         "prov": "openshift-storage.cephfs.csi.ceph.com-ctrlplugin",
         "csi_cnt": "csi-cephfsplugin",
+        "csi_name_pod": "openshift-storage.cephfs.csi.ceph.com-nodeplugin",
     },
 }
 
@@ -183,7 +185,7 @@ def get_logfile_names(interface, provisioning=True):
         break  # if we are here, no errors in command, exit the loop
 
     provisioning_name = interface_data[interface]["prov"]
-    csi_name = interface_data[interface]["csi_cnt"]
+    csi_name = interface_data[interface]["csi_name_pod"]
     logger.info(f"ppp{provisioning_name}")
     logger.info(f"ccc{csi_name}")
     logger.info(f"ghh{provisioning}")
@@ -964,7 +966,7 @@ def pod_bulk_attach_csi_time(interface, pvc_objs, csi_start_time, namespace):
             }
         )
 
-    log_names = get_logfile_names(interface, provisioning=True)
+    log_names = get_logfile_names(interface, provisioning=False)
     a = interface_data[interface]["csi_cnt"]
     logger.info(f"innn{a}")
     logs = read_csi_logs(
