@@ -964,7 +964,7 @@ def pod_bulk_attach_csi_time(interface, pvc_objs, csi_start_time, namespace):
             }
         )
 
-    log_names = get_logfile_names(interface, provisioning=False)
+    log_names = get_logfile_names(interface, provisioning=True)
     a = interface_data[interface]["csi_cnt"]
     logger.info(f"innn{a}")
     logs = read_csi_logs(
