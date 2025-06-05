@@ -123,11 +123,10 @@ class TestFailoverAndRelocateWithDiscoveredApps:
             2) Relocate back to primary
 
         """
+        rdr_workload = discovered_apps_dr_workload(
+            pvc_interface=pvc_interface, kubeobject=kubeobject, recipe=recipe
+        )[0]
         for iteration in range(iterations):
-            rdr_workload = discovered_apps_dr_workload(
-                pvc_interface=pvc_interface, kubeobject=kubeobject, recipe=recipe
-            )[0]
-
             primary_cluster_name_before_failover = (
                 dr_helpers.get_current_primary_cluster_name(
                     rdr_workload.workload_namespace,
