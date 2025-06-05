@@ -963,6 +963,7 @@ def pod_bulk_attach_csi_time(interface, pvc_objs, csi_start_time, namespace):
 
     for sublog in logs:
         for line in sublog:
+            logger.info(f"llogg{line}")
             for pod_info in pods_info:
                 if (
                     f"{pod_info['volume_handle']} GRPC call: /csi.v1.Node/NodeStageVolume"
