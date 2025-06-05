@@ -224,6 +224,7 @@ class MCG:
             )
             return self.s3_external_endpoint
         else:
+            get_noobaa = OCP(kind="noobaa", namespace=self.namespace).get()
             return (
                 get_noobaa.get("items")[0]
                 .get("status")
