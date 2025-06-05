@@ -118,10 +118,14 @@ class TestAddCapacityStretchCluster:
 
         # setup vm and write some data to the VM instance
         vm_obj = cnv_workload(volume_interface=constants.VM_VOLUME_PVC)
+        vm_obj.run_ssh_cmd(command="mkdir /test && sudo chmod -R 777 /test")
         vm_obj.run_ssh_cmd(
-            command="dd if=/dev/zero of=/file_1.txt bs=1024 count=102400"
+            command="< /dev/urandom tr -dc 'A-Za-z0-9' | head -c 10485760 > /test/file_1.txt"
         )
-        md5sum_before = cal_md5sum_vm(vm_obj, file_path="/file_1.txt")
+        md5sum_before = cal_md5sum_vm(vm_obj, file_path="/test/file_1.txt")
+        logger.debug(
+            f"This is the file_1.txt content:\n{vm_obj.run_ssh_cmd(command='cat /test/file_1.txt')}"
+        )
 
         start_time = datetime.now(timezone.utc)
 
@@ -140,7 +144,7 @@ class TestAddCapacityStretchCluster:
         logger.info("Successfully verified with post failure checks for the workloads")
 
         # check vm data written after the failure for integrity
-        md5sum_after = cal_md5sum_vm(vm_obj, file_path="/file_1.txt")
+        md5sum_after = cal_md5sum_vm(vm_obj, file_path="/test/file_1.txt")
         assert (
             md5sum_before == md5sum_after
         ), "Data integrity of the file inside VM is not maintained during the add capacity"
@@ -150,12 +154,12 @@ class TestAddCapacityStretchCluster:
 
         # check if new data can be created
         vm_obj.run_ssh_cmd(
-            command="dd if=/dev/zero of=/file_2.txt bs=1024 count=103600"
+            command="< /dev/urandom tr -dc 'A-Za-z0-9' | head -c 10485760 > /test/file_2.txt"
         )
         logger.info("Successfully created new data inside VM")
 
         # check if the data can be copied back to local machine
-        vm_obj.scp_from_vm(local_path="/tmp", vm_src_path="/file_1.txt")
+        vm_obj.scp_from_vm(local_path="/tmp", vm_src_path="/test/file_1.txt")
         logger.info("VM data is successfully copied back to local machine")
 
         # stop the VM
