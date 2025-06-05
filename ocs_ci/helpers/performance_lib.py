@@ -186,11 +186,14 @@ def get_logfile_names(interface, provisioning=True):
     csi_name = interface_data[interface]["csi_cnt"]
     logger.info(f"ppp{provisioning_name}")
     logger.info(f"ccc{csi_name}")
+    logger.info(f"ghh{provisioning}")
     for line in pods:
         logger.info(f"poddd{line}")
+        if provisioning_name in line:
+            logger.info(f"qpd{provisioning_name}")
         if provisioning:
             if provisioning_name in line:
-                logger.info(f"pd{provisioning_name}")
+                logger.info(f"ppd{provisioning_name}")
                 log_names.append(line.split()[0])
         else:
             if csi_name in line and provisioning_name not in line:
