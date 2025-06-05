@@ -195,7 +195,19 @@ class TestNfsEnable(ManageTest):
         """
         Check if any nfs idle mount is available out of cluster
         and remove those.
+        Delete nfs retain storage class if left.
         """
+        nfs_retain_sc_obj = ocs.OCS(
+            kind=constants.STORAGECLASS, metadata={"name": self.retain_nfs_sc_name}
+        )
+        if nfs_retain_sc_obj.check_resource_existence(
+            timeout=self.timeout_check_resources_existence,
+            should_exist=True,
+            resource_name=self.catalog_source_name,
+        ):
+            # Delete the nfs retain StorageClass
+            nfs_retain_sc_obj.delete()
+
         if self.con:
             retcode, stdout, _ = self.con.exec_cmd(
                 "findmnt -t nfs4 " + self.test_folder
