@@ -687,7 +687,9 @@ def verify_storage_consumer_resources(
     ceph_data = config_map_obj.get("data", {})
 
     ceph_data_on_consumer_match = {}
-    if internal_consumer:
+    disable_blockpools = config.COMPONENTS["disable_blockpools"]
+    disable_cephfs = config.COMPONENTS["disable_cephfs"]
+    if internal_consumer and not (disable_blockpools or disable_cephfs):
         """
         check by example:
         cephfs-subvolumegroup-rados-ns: csi
