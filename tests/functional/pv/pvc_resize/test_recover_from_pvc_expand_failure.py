@@ -1,17 +1,12 @@
 import logging
 import time
-from math import ceil
 import pytest
 
 from ocs_ci.framework import config
 from ocs_ci.framework.pytest_customization.marks import polarion_id
 from ocs_ci.framework.testlib import ManageTest, tier4b, green_squad, ignore_leftovers
 from ocs_ci.ocs import constants
-from ocs_ci.ocs.cluster import (
-    change_ceph_full_ratio,
-    get_percent_used_capacity,
-    CephCluster,
-)
+from ocs_ci.ocs.cluster import change_ceph_full_ratio
 from ocs_ci.ocs.exceptions import TimeoutExpiredError
 from ocs_ci.ocs.ocp import OCP
 from ocs_ci.ocs.resources.pod import verify_data_integrity, cal_md5sum
@@ -62,7 +57,10 @@ class TestRecoverPvcExpandFailure(ManageTest):
     @green_squad
     @polarion_id("")
     def test_recover_from_pvc_expansion_failure(
-        self, pause_and_resume_cluster_load, pvc_factory, pod_factory, threading_lock
+        self,
+        pause_and_resume_cluster_load,
+        benchmark_workload_storageutilization,
+        threading_lock,
     ):
         """
         Test case to verify recovery from PVC expansion failure. The PVC expansion will not complete due to the cluster
@@ -70,19 +68,19 @@ class TestRecoverPvcExpandFailure(ManageTest):
 
 
         """
-        cephcluster = CephCluster()
-
-        # Calculating size to ceph full ratio of 85% here to consider sync delay, if any,
-        # after writing I/O from the pods self.pods
-        total_storage = cephcluster.get_ceph_capacity()
-        logger.info(f"Total storage is {total_storage}G")
-        used_storage_percent = get_percent_used_capacity()
-        logger.info(f"Used storage percent is {used_storage_percent}")
-
-        # Target 5% more than ceph full ratio
-        target_percentage = 90
-        storage_percent_for_io = target_percentage - used_storage_percent
-        size_to_ceph_full = (storage_percent_for_io * total_storage) / 100
+        # cephcluster = CephCluster()
+        #
+        # # Calculating size to ceph full ratio of 85% here to consider sync delay, if any,
+        # # after writing I/O from the pods self.pods
+        # total_storage = cephcluster.get_ceph_capacity()
+        # logger.info(f"Total storage is {total_storage}G")
+        # used_storage_percent = get_percent_used_capacity()
+        # logger.info(f"Used storage percent is {used_storage_percent}")
+        #
+        # # Target 5% more than ceph full ratio
+        target_percentage = 85
+        # storage_percent_for_io = target_percentage - used_storage_percent
+        # size_to_ceph_full = (storage_percent_for_io * total_storage) / 100
 
         # Create files on the pods
         for pod_obj in self.pods:
@@ -103,34 +101,28 @@ class TestRecoverPvcExpandFailure(ManageTest):
         for pod_obj in self.pods:
             pod_obj.orig_md5_sum = cal_md5sum(pod_obj=pod_obj, file_name=pod_obj.name)
 
-        # Create a PVC and pod that can be used to fill up the cluster
-        pvc_to_fill = pvc_factory(interface=constants.CEPHBLOCKPOOL, size=total_storage)
-        pod_to_fill = pod_factory(interface=constants.CEPHBLOCKPOOL, pvc=pvc_to_fill)
+        # # Create a PVC and pod that can be used to fill up the cluster
+        # pvc_to_fill = pvc_factory(interface=constants.CEPHBLOCKPOOL, size=total_storage)
+        # pod_to_fill = pod_factory(interface=constants.CEPHBLOCKPOOL, pvc=pvc_to_fill)
 
-        # The pods used 4G each to write. Calculate the remaining to ceph full ratio
-        total_used_by_app_pods = 4 * len(self.pods)
-        size_to_ceph_full = ceil(size_to_ceph_full - total_used_by_app_pods)
+        # # The pods used 4G each to write. Calculate the remaining to ceph full ratio
+        # total_used_by_app_pods = 4 * len(self.pods)
+        # size_to_ceph_full = ceil(size_to_ceph_full - total_used_by_app_pods)
 
         logger.info(
             f"Fill up the cluster to {target_percentage}% of it's storage capacity"
         )
-        pod_to_fill.run_io(
-            storage_type="fs",
-            size=f"{size_to_ceph_full}G",
-            io_direction="write",
-            fio_filename=pod_to_fill.name,
-            end_fsync=1,
-        )
+        benchmark_workload_storageutilization(target_percentage)
 
         prometheus_api = PrometheusAPI(threading_lock=threading_lock)
         prometheus_api.wait_for_alert(
             name=constants.ALERT_CLUSTERCRITICALLYFULL, state="firing"
         )
 
-        try:
-            pod_to_fill.get_fio_rw_iops()
-        except Exception as exe:
-            logger.info(f"Exception occurred while filling up the cluster:\n{str(exe)}")
+        # try:
+        #     pod_to_fill.get_fio_rw_iops()
+        # except Exception as exe:
+        #     logger.info(f"Exception occurred while filling up the cluster:\n{str(exe)}")
 
         pvc_size_expanded = 20
         pvc_size_reduced = 10
