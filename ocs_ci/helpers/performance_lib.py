@@ -20,12 +20,14 @@ DATE_TIME_FORMAT = "%Y I%m%d %H:%M:%S.%f"
 
 interface_data = {
     constants.CEPHBLOCKPOOL: {
-        "prov": "csi-rbdplugin-provisioner",
+        "prov": "openshift-storage.rbd.csi.ceph.com-ctrlplugin",
         "csi_cnt": "csi-rbdplugin",
+        "csi_name_pod": "openshift-storage.rbd.csi.ceph.com-nodeplugin",
     },
     constants.CEPHFILESYSTEM: {
-        "prov": "csi-cephfsplugin-provisioner",
+        "prov": "openshift-storage.cephfs.csi.ceph.com-ctrlplugin",
         "csi_cnt": "csi-cephfsplugin",
+        "csi_name_pod": "openshift-storage.cephfs.csi.ceph.com-nodeplugin",
     },
 }
 
@@ -183,14 +185,21 @@ def get_logfile_names(interface, provisioning=True):
         break  # if we are here, no errors in command, exit the loop
 
     provisioning_name = interface_data[interface]["prov"]
-    csi_name = interface_data[interface]["csi_cnt"]
-
+    csi_name = interface_data[interface]["csi_name_pod"]
+    logger.info(f"ppp{provisioning_name}")
+    logger.info(f"ccc{csi_name}")
+    logger.info(f"ghh{provisioning}")
     for line in pods:
+        logger.info(f"poddd{line}")
+        if provisioning_name in line:
+            logger.info(f"qpd{provisioning_name}")
         if provisioning:
             if provisioning_name in line:
+                logger.info(f"ppd{provisioning_name}")
                 log_names.append(line.split()[0])
         else:
             if csi_name in line and provisioning_name not in line:
+                logger.info(f"zd{csi_name}")
                 log_names.append(line.split()[0])
 
     logger.info(f"The logs pods are : {log_names}")
@@ -213,6 +222,7 @@ def read_csi_logs(log_names, container_name, start_time):
     ns_name = config.ENV_DATA["cluster_namespace"]
     logs = []
     for l in log_names:
+        logger.info(f"lllll{l}")
         logs.append(
             run_oc_command(
                 f"logs {l} -c {container_name} --since-time={start_time}",
@@ -957,12 +967,15 @@ def pod_bulk_attach_csi_time(interface, pvc_objs, csi_start_time, namespace):
         )
 
     log_names = get_logfile_names(interface, provisioning=False)
+    a = interface_data[interface]["csi_cnt"]
+    logger.info(f"innn{a}")
     logs = read_csi_logs(
         log_names, interface_data[interface]["csi_cnt"], csi_start_time
     )
 
     for sublog in logs:
         for line in sublog:
+            logger.info(f"llogg{line}")
             for pod_info in pods_info:
                 if (
                     f"{pod_info['volume_handle']} GRPC call: /csi.v1.Node/NodeStageVolume"
