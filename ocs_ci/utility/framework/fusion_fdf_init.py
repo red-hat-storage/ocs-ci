@@ -276,6 +276,7 @@ def create_junit_report(
             try:
                 func(*args, **kwargs)
             except Exception as e:
+                logger.exception(e)
                 test_case.result = [Failure(e)]
 
             add_post_deployment_props(test_suite)

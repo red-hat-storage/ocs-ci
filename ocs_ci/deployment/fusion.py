@@ -167,6 +167,7 @@ class FusionDeployment:
             f"oc --kubeconfig {self.kubeconfig} create -f {constants.SPECTRUM_FUSION_CR}"
         )
         spectrum_fusion_status_check()
+        logger.info("SpectrumFusion created successfully")
 
 
 def wait_for_subscription(subscription_name, namespace):

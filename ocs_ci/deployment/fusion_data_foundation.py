@@ -5,15 +5,19 @@ This module contains functions needed to install IBM Fusion Data Foundation.
 import json
 import logging
 import os
+import tempfile
 
 import yaml
 
-from ocs_ci.ocs import constants, defaults
+from ocs_ci.deployment.helpers.storage_class import get_storageclass
 from ocs_ci.framework import config
-from ocs_ci.ocs.resources.ocs import OCP
+from ocs_ci.ocs import constants, defaults
+from ocs_ci.helpers.helpers import get_worker_nodes
+from ocs_ci.ocs.exceptions import CommandFailed
+from ocs_ci.ocs.ocp import OCP
+from ocs_ci.utility import templating
 from ocs_ci.utility.retry import retry
 from ocs_ci.utility.utils import run_cmd
-
 
 logger = logging.getLogger(__name__)
 
@@ -34,6 +38,7 @@ class FusionDataFoundationDeployment:
             self.setup_fdf_pre_release_deployment()
         self.create_fdf_service_cr()
         self.verify_fdf_installation()
+        self.setup_storage()
 
     def create_image_tag_mirror_set(self):
         """
@@ -102,8 +107,7 @@ class FusionDataFoundationDeployment:
             f"oc --kubeconfig {self.kubeconfig} -n {constants.FDF_NAMESPACE} patch FusionServiceDefinition "
             f"data-foundation-service -p '{params}' --type merge"
         )
-        out = run_cmd(cmd)
-        assert "patched" in out
+        run_patch_cmd(cmd)
 
     def verify_fdf_installation(self):
         """
@@ -132,6 +136,51 @@ class FusionDataFoundationDeployment:
         logger.info(f"Installed FDF version: {version}")
         return version
 
+    def setup_storage(self):
+        """
+        Setup storage
+        """
+        logger.info("Configuring storage.")
+        self.patch_catalogsource()
+        self.create_odfcluster()
+        odfcluster_status_check()
+
+    def patch_catalogsource(self):
+        """
+        Patch the isf-data-foundation-catalog in order to ensure it is prioritized over redhat-operators.
+        """
+        logger.info(f"Patching catalogsource {defaults.FUSION_CATALOG_NAME}")
+        # TODO: change label for GA versions to not cause issues with future upgrades
+        params_dict = {"metadata": {"labels": {"ocs-operator-internal": "true"}}}
+        params = json.dumps(params_dict)
+        cmd = (
+            f"oc --kubeconfig {self.kubeconfig} -n {constants.MARKETPLACE_NAMESPACE} patch CatalogSource "
+            f"{defaults.FUSION_CATALOG_NAME} -p '{params}' --type merge"
+        )
+        run_patch_cmd(cmd)
+
+    @staticmethod
+    def create_odfcluster():
+        """
+        Create OdfCluster CR
+        """
+
+        logger.info("Creating OdfCluster CR")
+        storageclass = get_storageclass()
+        worker_nodes = get_worker_nodes()
+        with open(constants.FDF_ODFCLUSTER_CR, "r") as f:
+            odfcluster_data = yaml.safe_load(f.read())
+
+        odfcluster_data["spec"]["deviceSets"][0]["storageClass"] = storageclass
+        odfcluster_data["spec"]["storageNodes"] = worker_nodes
+
+        odfcluster_data_yaml = tempfile.NamedTemporaryFile(
+            mode="w+", prefix="odfcluster", delete=False
+        )
+        templating.dump_data_to_temp_yaml(odfcluster_data, odfcluster_data_yaml.name)
+
+        run_cmd(f"oc create -f {odfcluster_data_yaml.name}")
+
 
 @retry((AssertionError, KeyError), 20, 60, backoff=1)
 def fusion_service_instance_health_check():
@@ -143,9 +192,8 @@ def fusion_service_instance_health_check():
         KeyError: If the health status isn't present in the FusionServiceInstance data.
 
     """
-    instance = OCP(
+    instance = FusionServiceInstance(
         resource_name=constants.FDF_SERVICE_NAME,
-        kind="FusionServiceInstance",
         namespace=constants.FDF_NAMESPACE,
     )
     instance_status = instance.data["status"]
@@ -153,6 +201,27 @@ def fusion_service_instance_health_check():
     install_percent = instance_status["installStatus"]["progressPercentage"]
     assert service_health == "Healthy"
     assert install_percent == 100
+
+
+@retry((AssertionError, KeyError), 20, 60, backoff=1)
+def odfcluster_status_check():
+    """
+    Ensure the OdfCluster is in a Ready state.
+
+    Raises:
+        AssertionError: If the OdfCluster is not in a completed state.
+        KeyError: If the status phase isn't present in the OdfCluster data.
+
+    """
+    odfcluster = OdfCluster(
+        resource_name="odfcluster", namespace="ibm-spectrum-fusion-ns"
+    )
+    odfcluster_status = odfcluster.data["status"]
+    odfcluster_phase = odfcluster_status["phase"]
+    assert odfcluster_phase == "Ready"
+    ceph_cluster_health = odfcluster_status["cephClusterHealth"]
+    assert ceph_cluster_health == "HEALTH_OK"
+    logger.info("OdfCluster created successfully")
 
 
 def extract_image_digest_mirror_set():
@@ -175,3 +244,26 @@ def extract_image_digest_mirror_set():
     )
     run_cmd(cmd)
     return filename
+
+
+@retry(CommandFailed, 12, 5, backoff=1)
+def run_patch_cmd(cmd):
+    """
+    Wrapper for run_cmd so we can retry if an CommandFailed is encountered
+    """
+    out = run_cmd(cmd)
+    assert "patched" in out
+
+
+class FusionServiceInstance(OCP):
+    def __init__(self, resource_name="", *args, **kwargs):
+        super(FusionServiceInstance, self).__init__(
+            resource_name=resource_name, kind="FusionServiceInstance", *args, **kwargs
+        )
+
+
+class OdfCluster(OCP):
+    def __init__(self, resource_name="", *args, **kwargs):
+        super(OdfCluster, self).__init__(
+            resource_name=resource_name, kind="OdfCluster", *args, **kwargs
+        )
