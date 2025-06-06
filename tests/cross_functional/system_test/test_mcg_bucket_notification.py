@@ -79,10 +79,12 @@ class TestBucketNotificationSystemTest:
             func=notify_manager.get_events,
             topic=topic,
         ):
+
             for event in events:
+                logger.info(f"Event: {event}")
                 if (
-                    event["eventName"] == event_name
-                    and event["s3"]["bucket"]["name"] in bucket_names
+                    event.get("eventName") == event_name
+                    and event.get("s3").get("bucket").get("name") in bucket_names
                 ):
                     logger.info(
                         f'{event_name} event found for the bucket {event["s3"]["bucket"]["name"]}'

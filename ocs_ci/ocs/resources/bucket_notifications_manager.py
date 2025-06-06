@@ -395,6 +395,7 @@ class BucketNotificationsManager:
                 if isinstance(parsed_event, dict) and "Records" in parsed_event:
                     event_dict = parsed_event["Records"][0]
                     events.append(event_dict)
+        logger.info(events)
         return events
 
     def cleanup(self):
