@@ -4,7 +4,7 @@
 
 ## Prerequisites
 
-1. Python version >= 3.9.18 < 3.12
+1. Python version >= 3.10.18 < 3.12
 2. Following dependency packages for fedora/centos for successfully installing modules in virtualenv
    - gcc, git, openssl-devel, python3-devel or python specific version packages
    depends on Python version installed e.g. python39-devel (or similar packages for ubuntu).
