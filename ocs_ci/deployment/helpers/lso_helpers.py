@@ -6,6 +6,8 @@ LSO ( local storage operator ) deployment.
 import json
 import logging
 import tempfile
+import time
+from packaging.version import parse as parse_version
 
 from ocs_ci.deployment.disconnected import prune_and_mirror_index_image
 from ocs_ci.framework import config
@@ -566,8 +568,6 @@ def lso_upgrade():
     Upgrade lso operator
 
     """
-    import time
-    from pkg_resources import parse_version
     from ocs_ci.ocs.resources.install_plan import wait_for_install_plan_and_approve
 
     lso_namespace = config.ENV_DATA["local_storage_namespace"]
