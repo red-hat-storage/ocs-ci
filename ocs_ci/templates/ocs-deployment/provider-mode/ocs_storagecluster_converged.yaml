@@ -18,6 +18,7 @@ spec:
     cephFilesystems: {}
     cephNonResilientPools: {}
     cephObjectStoreUsers: {}
+    # cephObjectStores.hostNetwork setting follows the bz DFBUGS-2324
     cephObjectStores:
       hostNetwork: false
     cephRBDMirror: {}
