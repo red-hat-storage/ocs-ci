@@ -60,13 +60,13 @@ setup(
         "azure-mgmt-resource==10.0.0",
         "azure-storage-blob==12.19.0",
         "msrestazure==0.6.3",
-        "python-novaclient==17.1.0",
-        "python-cinderclient==7.1.0",
-        "oslo.utils==8.2.0",  # Dependency of python-novaclient and python-cinderclient
+        "python-novaclient==18.9.0",
+        "python-cinderclient==9.7.0",
+        "oslo.utils==9.0.0",  # Dependency of python-novaclient and python-cinderclient
         "oslo.i18n==6.5.1",  # Dependency of python-novaclient and python-cinderclient
         "oslo.serialization==5.7.0",  # Dependency of python-novaclient and python-cinderclient
         "oslo.serialization==5.7.0",  # Dependency of python-novaclient and python-cinderclient
-        "keystoneauth1==4.2.0",
+        "keystoneauth1==5.11.0",  # Dependency of python-novaclient and python-cinderclient
         "range-key-dict==1.1.0",
         "GitPython==3.1.41",
         "selenium==4.36.0",
