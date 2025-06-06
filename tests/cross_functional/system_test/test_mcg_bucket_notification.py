@@ -93,6 +93,18 @@ class TestBucketNotificationSystemTest:
                 logger.info(f"Verified {event_name} for all the buckets.")
                 break
 
+    @pytest.fixture(autouse=True)
+    def teardown(self, request, nodes):
+        """
+        Make sure all nodes are up again
+
+        """
+
+        def finalizer():
+            nodes.restart_nodes_by_stop_and_start_teardown()
+
+        request.addfinalizer(finalizer)
+
     @polarion_id("OCS-6406")
     def test_bucket_notification_system_test(
         self,
@@ -103,8 +115,7 @@ class TestBucketNotificationSystemTest:
         awscli_pod,
         test_directory_setup,
         mcg_obj,
-        noobaa_db_backup_and_recovery,
-        snapshot_factory,
+        noobaa_db_backup_and_recovery_locally,
         setup_mcg_bg_features,
         validate_mcg_bg_features,
     ):
@@ -289,7 +300,7 @@ class TestBucketNotificationSystemTest:
         logger.info("Reduced the object expiration interval to 5 minutes")
 
         # Backup noobaa db and recovery
-        noobaa_db_backup_and_recovery(snapshot_factory=snapshot_factory)
+        noobaa_db_backup_and_recovery_locally()
         logger.info("Noobaa db backup and recovery is completed")
 
         logger.info(
