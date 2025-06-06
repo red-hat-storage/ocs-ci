@@ -766,3 +766,15 @@ class DistributionStatusError(Exception):
 
 class InvalidPodPresent(Exception):
     pass
+
+
+class PolicyApplicationError(Exception):
+    """Exception raised when bucket policy application fails."""
+
+    pass
+
+
+class PolicyEditorError(RuntimeError):
+    """Exception raised when policy editor manipulation fails."""
+
+    pass
