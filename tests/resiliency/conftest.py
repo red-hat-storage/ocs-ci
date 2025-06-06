@@ -21,6 +21,16 @@ def platfrom_failure_scenarios():
 
 
 @pytest.fixture
+def application_failure_scenarios():
+    """List Platform Failures scanarios"""
+    APPLICATION_FAILURES_CONFIG_FILE = os.path.join(
+        constants.RESILIENCY_DIR, "conf", "application_failures.yaml"
+    )
+    data = ResiliencyConfig.load_yaml(APPLICATION_FAILURES_CONFIG_FILE)
+    return data
+
+
+@pytest.fixture
 def resiliency_workload(request):
     """
     Pytest fixture to create and manage a workload object for resiliency testing.
