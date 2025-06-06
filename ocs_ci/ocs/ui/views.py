@@ -796,6 +796,10 @@ acm_page_nav = {
     "Policies": ("a[data-test-id='horizontal-link-Policies']", By.CSS_SELECTOR),
 }
 acm_page_nav_419 = {
+    "Infrastructure": (
+        "//button[normalize-space()='Infrastructure' and @class='pf-v6-c-nav__link']",
+        By.XPATH,
+    ),
     "click-local-cluster": (
         '//button[@data-test-id="cluster-dropdown-toggle"]//*[text()="local-cluster"]',
         By.XPATH,
