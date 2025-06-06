@@ -18,6 +18,7 @@ import inspect
 import stat
 import platform
 import ipaddress
+
 from concurrent.futures import ThreadPoolExecutor
 from itertools import cycle
 from subprocess import PIPE, run
@@ -6099,12 +6100,18 @@ def create_network_fence_class():
     logger.info("Verifying CsiAddonsNode object for CSI RBD daemonset")
     all_nodes = get_worker_nodes()
 
-    for node_name in all_nodes:
-        cidrs = get_rbd_daemonset_csi_addons_node_object(node_name)["status"][
-            "networkFenceClientStatus"
-        ][0]["ClientDetails"][0]["cidrs"]
-        assert len(cidrs) == 1, "No cidrs are populated to CSI Addons node object"
-        logger.info(f"Cidr: {cidrs[0]} populated in {node_name} CSI addons node object")
+    @retry(KeyError, tries=3, delay=5)
+    def _verify_csi_addons_objects():
+        for node_name in all_nodes:
+            cidrs = get_rbd_daemonset_csi_addons_node_object(node_name)["status"][
+                "networkFenceClientStatus"
+            ][0]["ClientDetails"][0]["cidrs"]
+            assert len(cidrs) == 1, "No cidrs are populated to CSI Addons node object"
+            logger.info(
+                f"Cidr: {cidrs[0]} populated in {node_name} CSI addons node object"
+            )
+
+    _verify_csi_addons_objects()
 
 
 def create_network_fence(node_name, cidr):
