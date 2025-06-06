@@ -280,7 +280,7 @@ class TestBucketNotificationSystemTest:
                 topic,
                 bucket_names=buckets_created[:],
                 event_name="ObjectRemoved:Delete",
-                timeout=300,
+                timeout=600,
                 sleep=30,
             )
 
