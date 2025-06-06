@@ -139,11 +139,16 @@ class TestNetSplit:
         kubeconfig = config.RUN.get("kubeconfig")
         sc_obj = StretchCluster()
 
-        # run cephfs workload for both logwriter and logreader
+        # run cephfs and rbd workload for both logwriter and logreader
         (
             sc_obj.cephfs_logwriter_dep,
             sc_obj.cephfs_logreader_job,
         ) = setup_logwriter_cephfs_workload_factory(read_duration=(duration + 10))
+
+        sc_obj.rbd_logwriter_sts = setup_logwriter_rbd_workload_factory(
+            zone_aware=False
+        )
+
         logger.info("Workloads are running")
 
         # setup vm and write some data to the VM instance

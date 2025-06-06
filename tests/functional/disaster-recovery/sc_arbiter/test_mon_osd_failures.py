@@ -41,11 +41,12 @@ def setup_logwriter_workloads(
     logreader_workload_class,
 ):
     sc_obj = StretchCluster()
-    # Run the logwriter cephFs workloads
+    # Run the logwriter cephFs and RBD workloads
     (
         sc_obj.cephfs_logwriter_dep,
         sc_obj.cephfs_logreader_job,
     ) = setup_logwriter_cephfs_workload_class(read_duration=0)
+    sc_obj.rbd_logwriter_sts = setup_logwriter_rbd_workload_class(zone_aware=False)
 
     # Generate 5 minutes worth of logs before inducing the netsplit
     logger.info("Generating 2 mins worth of log")
