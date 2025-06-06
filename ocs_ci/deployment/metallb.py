@@ -32,7 +32,7 @@ from ocs_ci.utility.utils import (
     wait_for_machineconfigpool_status,
     get_running_ocp_version,
 )
-from pkg_resources import parse_version
+from packaging.version import parse as parse_version
 from ocs_ci.ocs.resources.install_plan import wait_for_install_plan_and_approve
 
 logger = logging.getLogger(__name__)
