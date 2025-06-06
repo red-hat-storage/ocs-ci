@@ -2460,7 +2460,7 @@ def expire_objects_in_bucket(bucket_name, object_keys=[], prefix=""):
 
 def expire_multipart_upload_in_noobaa_db(upload_id):
     """
-    Expire a multipart upload by changing its creation date to one year back.
+    Expire a multipart upload and its parts by changing their creation date to one year back.
 
     Args:
         upload_id (str): The ID of the multipart upload to expire (unique across all buckets)
@@ -2471,8 +2471,11 @@ def expire_multipart_upload_in_noobaa_db(upload_id):
     # and that ID's first 8 characters are the initial timestamp
     # in hex
 
-    # first two characters of the hex are 0x
-    new_upload_started = hex(int(one_year_ago))[2:] + upload_id[8:]
+    # The first two characters in the python hex representation are "0x"
+    one_year_ago_hex_str = hex(int(one_year_ago))[2:]
+
+    # Concatenate the new timestamp with the rest of the ID
+    new_upload_started = one_year_ago_hex_str + upload_id[8:]
 
     psql_query = (
         "UPDATE objectmds "
@@ -2481,6 +2484,15 @@ def expire_multipart_upload_in_noobaa_db(upload_id):
         f"WHERE _id = '{upload_id}'"
     )
     psql_query += ";"
+    exec_nb_db_query(psql_query)
+
+    # Expire the parts as well
+    psql_query = (
+        "UPDATE objectmultiparts "
+        "SET data = jsonb_set(data, '{create_time}', "
+        f"to_jsonb(to_timestamp({one_year_ago}))) "
+        f"WHERE data->>'obj' = '{upload_id}';"
+    )
     exec_nb_db_query(psql_query)
 
 
