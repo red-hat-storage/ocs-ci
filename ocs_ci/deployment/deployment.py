@@ -1346,11 +1346,14 @@ class Deployment(object):
                         config.DEPLOYMENT["csv_change_to"],
                     )
                 for csv_change_from, csv_change_to in zipped_csv_changes:
-                    modify_csv(
-                        csv=csv_name,
-                        replace_from=csv_change_from,
-                        replace_to=csv_change_to,
-                    )
+                    csvs = CSV(namespace=self.namespace)
+                    csv_list = csvs.get()["items"]
+                    for _csv in csv_list:
+                        modify_csv(
+                            csv=_csv["metadata"]["name"],
+                            replace_from=csv_change_from,
+                            replace_to=csv_change_to,
+                        )
 
         if is_storage_system_needed():
             logger.info("Creating StorageSystem")
