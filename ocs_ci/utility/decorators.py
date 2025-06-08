@@ -1,4 +1,5 @@
 import logging
+import functools
 
 from ocs_ci.framework import config
 from ocs_ci.helpers.odf_cli import odf_cli_setup_helper
@@ -107,28 +108,59 @@ def switch_to_provider_for_function(func):
     return inner
 
 
-def safe_exec(func):
+def safe_exec(exception_type=Exception):
     """
-    Decorator to safely execute a function and suppress any exceptions.
+    A decorator factory that wraps a function in a try-except block to catch and suppress
+    specified exceptions, logging a warning instead of raising.
 
-    If an exception is raised during the execution of the wrapped function,
-    it is caught and logged as a warning. The function will return None in such cases.
+    This is useful for non-critical operations where failure should not interrupt
+    the main flow of the program.
 
-    Useful for non-critical operations where failure should not interrupt the main flow.
+    Args:
+        exception_type (Exception or tuple of Exceptions): The type(s) of exceptions to catch.
+            Defaults to the base Exception class.
 
     Returns:
-        The result of the function if successful, or None if an exception occurred.
+        A decorator that wraps a function, returning None if an exception is caught.
+
+    Examples::
+
+        @safe_exec()
+        def risky_division(x, y):
+            return x / y
+
+        risky_division(1, 0)
+        # WARNING - Exception in risky_division: division by zero
+        # None
+
+        @safe_exec(KeyError)
+        def get_item(d, key):
+            return d[key]
+
+        get_item({'a': 1}, 'b')
+        # WARNING - Exception in get_item: 'b'
+        # None
+
+        # Manual usage without decorator syntax:
+        def get_item(d, key):
+            return d[key]
+
+        safe_exec(KeyError)(get_item)({'a': 1}, 'b')
+        # WARNING - Exception in get_item: 'b'
+        # None
     """
 
-    def wrapper(*args, **kwargs):
-        result = None
-        try:
-            result = func(*args, **kwargs)
-        except Exception as ex:
-            logger.warning(ex)
-        return result
+    def decorator(func):
+        def wrapper(*args, **kwargs):
+            try:
+                return func(*args, **kwargs)
+            except exception_type as ex:
+                logger.warning(ex)
+                return None
 
-    return wrapper
+        return wrapper
+
+    return decorator
 
 
 def enable_high_recovery(func):
@@ -147,15 +179,16 @@ def enable_high_recovery(func):
         The result of the wrapped function.
     """
 
+    @functools.wraps(func)
     def wrapper(*args, **kwargs):
-        odf_cli_runner = safe_exec(odf_cli_setup_helper)()
+        odf_cli_runner = safe_exec()(odf_cli_setup_helper)()
         if not odf_cli_runner:
             logger.warning(
                 "ODF CLI runner not available, proceeding without profile switch"
             )
             return func(*args, **kwargs)
 
-        original_profile = safe_exec(odf_cli_runner.get_recovery_profile)()
+        original_profile = safe_exec()(odf_cli_runner.get_recovery_profile)()
         if not original_profile:
             logger.warning(
                 "Failed to get current recovery profile, proceeding without profile switch"
@@ -163,13 +196,13 @@ def enable_high_recovery(func):
             return func(*args, **kwargs)
 
         logger.info("Setting recovery profile to 'high_recovery_ops'")
-        safe_exec(odf_cli_runner.run_set_recovery_profile_high)()
+        safe_exec()(odf_cli_runner.run_set_recovery_profile_high)()
 
         try:
             return func(*args, **kwargs)
         finally:
             logger.info(f"Switch to the original recovery profile '{original_profile}'")
-            safe_exec(odf_cli_runner.run_set_recovery_profile)(original_profile)
+            safe_exec()(odf_cli_runner.run_set_recovery_profile)(original_profile)
 
     return wrapper
 
@@ -183,8 +216,9 @@ def enable_high_recovery_if_io_flag(func):
         The result of the wrapped function.
     """
 
+    @functools.wraps(func)
     def wrapper(*args, **kwargs):
-        if not config.RUN.get("io_in_bg"):
+        if config.RUN.get("io_in_bg") is not True:
             logger.info(
                 "The 'io_in_bg' param is not set. Proceeding with the original function..."
             )

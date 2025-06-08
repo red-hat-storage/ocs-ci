@@ -19,12 +19,12 @@ log = logging.getLogger(__name__)
 @ignore_leftovers
 class TestWaitForCephRebalance(ManageTest):
     """
-    Test Wait for Ceph rebalance
+    Test Wait for Ceph rebalance without having the IO in the background
     """
 
     @pytest.fixture(autouse=True)
     def setup(self):
-        # Simulate the run when we have IO in the background
+        # Simulate the run when we don't have IO in the background
         self.original_io_in_bg = config.RUN.get("io_in_bg", False)
         config.RUN["io_in_bg"] = False
 
