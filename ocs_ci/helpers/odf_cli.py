@@ -211,18 +211,13 @@ def odf_cli_setup_helper():
             return None
 
     # Check and initialize ODFCliRunner
-    try:
-        odf_cli_runner = ODFCliRunner()
-        assert odf_cli_runner
-    except AssertionError:
+    odf_cli_runner = ODFCliRunner()
+    if not odf_cli_runner:
         log.warning("ODFCliRunner not initialized. Attempting to initialize again...")
         odf_cli_runner = ODFCliRunner()
         if not odf_cli_runner:
             log.warning("Failed to initialize ODFCliRunner after retry")
             return None
-    except Exception as e:
-        log.warning(f"Exception during ODFCliRunner initialization: {e}")
-        return None
 
     log.info("ODF CLI binary downloaded and ODFCliRunner initialized successfully")
     return odf_cli_runner
