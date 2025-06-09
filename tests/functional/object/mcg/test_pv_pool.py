@@ -430,7 +430,6 @@ class TestPvPool:
         )
 
     @tier2
-    @if_version(">4.19")
     @pytest.mark.parametrize(
         argnames=["pv_in_bs", "block_size", "block_count", "file_count"],
         argvalues=[
