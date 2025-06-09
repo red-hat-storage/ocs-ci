@@ -4,12 +4,13 @@ import re
 import git
 import tempfile
 from subprocess import run
+import os
 
 from ocs_ci.framework import config
 from ocs_ci.ocs.ocp import OCP, switch_to_default_rook_cluster_project
 from ocs_ci.ocs.cluster import get_percent_used_capacity, CephCluster
 from ocs_ci.ocs.resources.ocs import OCS
-from ocs_ci.ocs.resources.pod import check_pods_in_statuses
+from ocs_ci.ocs.resources.pod import check_pods_in_statuses, get_all_pods
 from ocs_ci.ocs.utils import get_pod_name_by_pattern
 from ocs_ci.ocs.exceptions import TimeoutExpiredError, CommandFailed
 from ocs_ci.ocs.node import get_worker_nodes
@@ -41,6 +42,8 @@ class BenchmarkOperatorFIO(object):
         bs="4096KiB",
         storageclass=constants.DEFAULT_STORAGECLASS_RBD,
         timeout_completed=2400,
+        benchmark_name=None,
+        use_kustomize_build=False,
     ):
         """
         Setup of benchmark fio
@@ -52,8 +55,13 @@ class BenchmarkOperatorFIO(object):
             bs (str): the Block size that need to used for the prefill
             storageclass (str): StorageClass to use for PVC per server pod
             timeout_completed (int): timeout client pod move to completed state
+            benchmark_name (str): Optional. Name for the Benchmark resource.
+            use_kustomize_build (bool): True, if use kustomize build. False, otherwise.
 
         """
+        old_pods = get_all_pods(namespace=BMO_NS)
+        self.old_pod_names = {pod.name for pod in old_pods}
+
         self.timeout_completed = timeout_completed
         self.total_size = total_size
         self.local_repo = tempfile.mkdtemp()
@@ -65,10 +73,23 @@ class BenchmarkOperatorFIO(object):
         self.crd_data["spec"]["workload"]["args"]["read_runtime"] = read_runtime
         self.crd_data["spec"]["workload"]["args"]["bs"] = bs
         self.crd_data["spec"]["workload"]["args"]["storageclass"] = storageclass
+        if benchmark_name:
+            self.crd_data["metadata"]["name"] = benchmark_name
         self.calc_number_servers_file_size()
         self.worker_nodes = get_worker_nodes()
         self.pod_obj = OCP(namespace=BMO_NS, kind="pod")
         self.ns_obj = OCP(kind="namespace")
+
+        self.use_kustomize_build = use_kustomize_build
+        if self.use_kustomize_build:
+            # Get the kubeconfig path from config.RUN and resolve to absolute
+            kubeconfig_path = config.RUN.get("kubeconfig")
+            kubeconfig_path = os.path.abspath(kubeconfig_path)
+            self.kubeconfig = kubeconfig_path
+            self.env = os.environ.copy()
+        else:
+            self.kubeconfig = None
+            self.env = None
 
     def calc_number_servers_file_size(self):
         """
@@ -119,20 +140,50 @@ class BenchmarkOperatorFIO(object):
     def deploy(self):
         """
         Deploy the benchmark-operator
-
         """
         log.info("Run make deploy command")
+
         bo_image = "quay.io/ocsci/benchmark-operator:testing"
         pattern_pod_name = "benchmark-controller-manager"
         if config.DEPLOYMENT.get("disconnected"):
             bo_image = mirror_image(bo_image)
+
+        if self.use_kustomize_build:
+            # Step 1: Set image in kustomize
+            run(
+                f"kustomize edit set image controller={bo_image}",
+                shell=True,
+                check=True,
+                cwd=os.path.join(self.local_repo, "config/manager"),
+                env=self.env,
+            )
+
+            # Step 2: Apply CRDs
+            run(
+                f"kustomize build config/crd | oc --kubeconfig={self.kubeconfig} apply --validate=false -f -",
+                shell=True,
+                check=True,
+                cwd=self.local_repo,
+                env=self.env,
+            )
+
+        # Step 3: Apply controller manifests
+        if self.use_kustomize_build:
+            cmd = (
+                f"kustomize build config/default | oc --kubeconfig={self.kubeconfig} "
+                f"apply --validate=false -f -"
+            )
+        else:
+            cmd = f"make deploy IMG={bo_image}"
         run(
-            f"make deploy IMG={bo_image}",
+            cmd,
             shell=True,
             check=True,
             cwd=self.local_repo,
+            env=self.env,
         )
 
+        # Step 4: Wait for controller pod to be running
         sample = TimeoutSampler(
             timeout=100,
             sleep=5,
@@ -226,7 +277,18 @@ class BenchmarkOperatorFIO(object):
         switch_to_default_rook_cluster_project()
 
         log.info("Delete the benchmark-operator project")
-        run("make undeploy", shell=True, check=True, cwd=self.local_repo)
+        if self.use_kustomize_build:
+            cmd = f"kustomize build config/default | oc --kubeconfig={self.kubeconfig} delete -f -"
+        else:
+            cmd = "make undeploy"
+        run(
+            cmd,
+            shell=True,
+            check=True,
+            cwd=self.local_repo,
+            env=self.env,
+        )
+
         # Wait until the benchmark-operator project deleted
         self.ns_obj.wait_for_delete(resource_name=BMO_NS, timeout=180)
 
@@ -238,10 +300,19 @@ class BenchmarkOperatorFIO(object):
         time.sleep(10)
 
     def pods_expected_status(self, pattern, expected_num_pods, expected_status):
-        """ """
+        """
+        Check if expected number of new pods (excluding old ones) are in the desired status.
+        """
         pod_names = get_pod_name_by_pattern(pattern=pattern, namespace=BMO_NS)
+        # Filter out old pod names
+        pod_names = [p for p in pod_names if p not in self.old_pod_names]
+
         if len(pod_names) != expected_num_pods:
+            log.warning(
+                f"Expected {expected_num_pods} new pods, found {len(pod_names)}."
+            )
             return False
+
         return check_pods_in_statuses(
             expected_statuses=expected_status,
             pod_names=pod_names,
