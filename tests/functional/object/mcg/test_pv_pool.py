@@ -498,6 +498,15 @@ class TestPvPool:
                 marks=pytest.mark.polarion_id("OCS-6858"),
             ),
         ],
+        ids=[
+            "OnePV_ManySmall_Files",
+            "OnePV_Small_Files",
+            "OnePV_MediumFiles",
+            "FivePV_Medium_Files",
+            "TenPV_Medium_Files",
+            "OnePV_Big_Files",
+            "OnePV_Medium_Files_High_Usage",
+        ],
     )
     def test_pv_data_dist(
         self,
