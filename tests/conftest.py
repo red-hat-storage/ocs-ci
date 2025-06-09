@@ -9786,10 +9786,10 @@ def setup_nfs(request, setup_rbac):
         nfs_client_dep_obj = OCS(**nfs_client_prov_dep_data)
 
         log.info("Waiting for NFS client provisioner pods to be running")
-        wait_for_pods_to_be_in_statuses(
+        assert wait_for_pods_to_be_in_statuses(
             expected_statuses=constants.STATUS_RUNNING,
             namespace=constants.NFS_NAMESPACE_NAME,
-        )
+        ), "NFS provisioner pods didn't start up successfully"
 
     finally:
 
