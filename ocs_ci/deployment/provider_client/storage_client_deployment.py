@@ -288,7 +288,7 @@ class ODFAndNativeStorageClientDeploymentOnProvider(object):
                 ), "Storage classes ae not created as expected"
 
         else:
-            # Create ODF subscription for storage-client and native client
+            # Create ODF subscription for storage client operator and native client
             self.storage_clients.create_native_storage_client()
 
             # Verify native storageclient is created successfully

@@ -301,7 +301,6 @@ VOLSYNC_SYSTEM_NAMESPACE = "volsync-system"
 OPENSHIFT_NAMESPACE = "openshift"
 OPENSHIFT_STORAGE_CLIENT_NAMESPACE = "openshift-storage-client"
 OPENSHIFT_STORAGE_EXTENDED_NAMESPACE = "openshift-storage-extended"
-OPENSHIFT_STORAGE_CLIENT_NAMESPACE = "openshift-storage-client"
 OPENSHIFT_INGRESS_OPERATOR_NAMESPACE = "openshift-ingress-operator"
 MANAGED_FUSION_NAMESPACE = "managed-fusion"
 OPENSHIFT_MACHINE_API_NAMESPACE = "openshift-machine-api"
@@ -443,7 +442,7 @@ PROVIDER_SUBSCRIPTION = "subs"
 
 OCS_CLIENT_OPERATOR_CONTROLLER_MANAGER_PREFIX = "ocs-client-operator-controller-manager"
 OCS_CLIENT_OPERATOR_CONSOLE = "ocs-client-operator-console"
-STORAGE_CLIENT_NAME = "storage-client"
+STORAGE_CLIENT_NAME = "ocs-storagecluster"
 
 OCP_QE_MISC_REPO = "https://gitlab.cee.redhat.com/aosqe/flexy-templates.git"
 CRITICAL_ERRORS = ["core dumped", "oom_reaper"]
@@ -470,7 +469,6 @@ UPI_INSTALL_SCRIPT = "upi_on_aws-install.sh"
 
 DEFAULT_CLUSTERNAME = DEFAULT_STORAGE_CLUSTER = "ocs-storagecluster"
 DEFAULT_CLUSTERNAME_EXTERNAL_MODE = "ocs-external-storagecluster"
-DEFAULT_CLUSTERNAME_CLIENT = "storage-client"
 DEFAULT_BLOCKPOOL = f"{DEFAULT_CLUSTERNAME}-cephblockpool"
 METADATA_POOL = f"{DEFAULT_CLUSTERNAME}-cephfilesystem-metadata"
 DATA_POOL = f"{DEFAULT_CLUSTERNAME}-cephfilesystem-data0"
@@ -499,6 +497,7 @@ DEFAULT_CEPHBLOCKPOOL = "ocs-storagecluster-cephblockpool"
 DEFAULT_STORAGECLASS_CEPHFS = f"{DEFAULT_CLUSTERNAME}-cephfs"
 DEFAULT_STORAGECLASS_RBD = f"{DEFAULT_CLUSTERNAME}-ceph-rbd"
 DEFAULT_STORAGECLASS_RGW = f"{DEFAULT_CLUSTERNAME}-ceph-rgw"
+DEFAULT_STORAGECLASS_VIRTUALIZATION = f"{DEFAULT_CLUSTERNAME}-ceph-rbd-virtualization"
 DEFAULT_STORAGECLASS_RBD_THICK = f"{DEFAULT_CLUSTERNAME}-ceph-rbd-thick"
 DEFAULT_OCS_STORAGECLASS = "default-ocs-storage-class"
 # Default storage class for LSO deployments. While each platform specific
@@ -525,8 +524,8 @@ DEFAULT_EXTERNAL_MODE_STORAGECLASS_RBD_NAMESPACE_PREFIX = (
 )
 
 # Default StorageClass for Provider-mode
-DEFAULT_STORAGECLASS_CLIENT_CEPHFS = f"{DEFAULT_CLUSTERNAME_CLIENT}-cephfs"
-DEFAULT_STORAGECLASS_CLIENT_RBD = f"{DEFAULT_CLUSTERNAME_CLIENT}-ceph-rbd"
+DEFAULT_STORAGECLASS_CLIENT_CEPHFS = f"{STORAGE_CLIENT_NAME}-cephfs"
+DEFAULT_STORAGECLASS_CLIENT_RBD = f"{STORAGE_CLIENT_NAME}-ceph-rbd"
 
 # Default VolumeSnapshotClass
 DEFAULT_VOLUMESNAPSHOTCLASS_CEPHFS = f"{DEFAULT_CLUSTERNAME}-cephfsplugin-snapclass"
