@@ -1311,11 +1311,29 @@ class Deployment(object):
             if all(
                 key in config.DEPLOYMENT for key in ("csv_change_from", "csv_change_to")
             ):
-                modify_csv(
-                    csv=csv_name,
-                    replace_from=config.DEPLOYMENT["csv_change_from"],
-                    replace_to=config.DEPLOYMENT["csv_change_to"],
-                )
+                # In case someone uses old approach passed via string for one image only
+                # directly via config.
+                if isinstance(config.DEPLOYMENT["csv_change_from"], str):
+                    zipped_csv_changes = [
+                        (
+                            config.DEPLOYMENT["csv_change_from"],
+                            config.DEPLOYMENT["csv_change_to"],
+                        ),
+                    ]
+                else:
+                    zipped_csv_changes = zip(
+                        config.DEPLOYMENT["csv_change_from"],
+                        config.DEPLOYMENT["csv_change_to"],
+                    )
+                for csv_change_from, csv_change_to in zipped_csv_changes:
+                    csvs = CSV(namespace=self.namespace)
+                    csv_list = csvs.get()["items"]
+                    for _csv in csv_list:
+                        modify_csv(
+                            csv=_csv["metadata"]["name"],
+                            replace_from=csv_change_from,
+                            replace_to=csv_change_to,
+                        )
 
         # change namespace of storage system if needed
         storage_system_data = templating.load_yaml(constants.STORAGE_SYSTEM_ODF_YAML)
