@@ -2578,7 +2578,7 @@ NETWORK_FENCE_CLASS_CRD = os.path.join(
 NETWORK_FENCE_CRD = os.path.join(TEMPLATE_CSI_ADDONS_DIR, "network-fence-rbd.yaml")
 
 # MCG namespace constants
-MCG_NS_AWS_ENDPOINT = "https://s3.amazonaws.com"
+MCG_NS_AWS_ENDPOINT = f"https://s3.{DEFAULT_AWS_REGION}.amazonaws.com"
 MCG_NS_AZURE_ENDPOINT = "https://blob.core.windows.net"
 MCG_NS_RESOURCE = "ns_resource"
 MCG_NSS = "ns-store"
