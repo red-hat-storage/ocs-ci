@@ -18,7 +18,7 @@ import inspect
 import stat
 import platform
 import ipaddress
-
+from urllib.parse import urlparse, urlunparse
 from concurrent.futures import ThreadPoolExecutor
 from itertools import cycle
 from subprocess import PIPE, run
@@ -6043,6 +6043,20 @@ def find_cephfilesystemsubvolumegroup(storageclient_uid=None):
         cephbfssubvolumegroup = storage_consumer.get_cephfs_subvolumegroup()
 
     return cephbfssubvolumegroup
+
+
+def remove_port_from_url(url):
+    """
+    Remove the port from a URL while preserving the scheme, hostname, and path.
+    Args:
+        url (str): The URL to sanitize.
+    Returns:
+        str: The URL without any port information.
+    """
+    parsed = urlparse(url)
+    # hostname is netloc without the port suffix
+    # i.e parsed.netloc='example.com:80'; parsed.hostname='example.com'
+    return urlunparse(parsed._replace(netloc=parsed.hostname))
 
 
 def set_configmap_log_level_csi_sidecar(value):
