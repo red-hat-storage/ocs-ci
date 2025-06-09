@@ -111,7 +111,7 @@ def switch_to_provider_for_function(func):
 def safe_exec(exception_type=Exception):
     """
     A decorator factory that wraps a function in a try-except block to catch and suppress
-    specified exceptions, logging a warning instead of raising.
+    specified exceptions, logging the full traceback.
 
     This is useful for non-critical operations where failure should not interrupt
     the main flow of the program.
@@ -155,7 +155,8 @@ def safe_exec(exception_type=Exception):
             try:
                 return func(*args, **kwargs)
             except exception_type as ex:
-                logger.warning(ex)
+                func_name = getattr(func, "__name__", "unknown")
+                logger.exception(f"Exception in {func_name}: {ex}")
                 return None
 
         return wrapper
@@ -218,7 +219,7 @@ def enable_high_recovery_if_io_flag(func):
 
     @functools.wraps(func)
     def wrapper(*args, **kwargs):
-        if config.RUN.get("io_in_bg") is not True:
+        if not config.RUN.get("io_in_bg"):
             logger.info(
                 "The 'io_in_bg' param is not set. Proceeding with the original function..."
             )
