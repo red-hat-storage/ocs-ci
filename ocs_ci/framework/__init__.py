@@ -45,6 +45,7 @@ class Config:
     # to the upgrade context. Applicable only in the multicluster upgrade
     # scenario
     PREUPGRADE_CONFIG: dict = field(default_factory=dict)
+    WORKLOAD: dict = field(default_factory=dict)
 
     def __post_init__(self):
         self.reset()
