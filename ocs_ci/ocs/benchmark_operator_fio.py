@@ -2,6 +2,7 @@ import logging
 import time
 import re
 import git
+import os
 import tempfile
 from subprocess import run
 
@@ -69,6 +70,10 @@ class BenchmarkOperatorFIO(object):
         self.worker_nodes = get_worker_nodes()
         self.pod_obj = OCP(namespace=BMO_NS, kind="pod")
         self.ns_obj = OCP(kind="namespace")
+        self._env = self.args.get("env", os.environ.copy())
+        self.kubeconfig_path = config.RUN.get("kubeconfig")
+        if self.kubeconfig_path:
+            self._env["KUBECONFIG"] = self.kubeconfig_path
 
     def calc_number_servers_file_size(self):
         """
@@ -131,6 +136,7 @@ class BenchmarkOperatorFIO(object):
             shell=True,
             check=True,
             cwd=self.local_repo,
+            env=self._env,
         )
 
         sample = TimeoutSampler(
