@@ -388,4 +388,4 @@ PREUPGRADE_CONFIG:
 
 # Workload config
 WORKLOAD:
-  - name: "fio"
+  name: null
