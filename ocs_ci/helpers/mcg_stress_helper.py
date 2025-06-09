@@ -70,6 +70,7 @@ def upload_objs_to_buckets(
 
     src_path = "/complex_directory/"
     total_num_buckets = len(buckets.keys())
+    base_timeout = 20000
     logger.info(
         f"Uploading objects to all the buckets under prefix {current_iteration}"
     )
@@ -91,7 +92,7 @@ def upload_objs_to_buckets(
                         src_path,
                         f"s3://{bucket.name}/{current_iteration}/{i+1}/",
                         s3_obj,
-                        timeout=20000,
+                        timeout=base_timeout * multiplier,
                     )
                     futures.append(future)
 
