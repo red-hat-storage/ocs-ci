@@ -27,6 +27,7 @@ from ocs_ci.ocs import constants, defaults, ocp, managedservice
 from ocs_ci.ocs.exceptions import (
     CephHealthRecoveredException,
     CommandFailed,
+    InvalidPodPresent,
     ResourceNotFoundError,
     UnsupportedFeatureError,
     PVNotSufficientException,
@@ -36,6 +37,7 @@ from ocs_ci.ocs.ocp import get_images, OCP
 from ocs_ci.ocs.resources import csv, deployment
 from ocs_ci.ocs.resources.ocs import get_ocs_csv
 from ocs_ci.ocs.resources.pod import (
+    get_all_pods,
     get_pods_having_label,
     get_osd_pods,
     get_mon_pods,
@@ -1107,7 +1109,7 @@ def verify_storage_cluster():
         )
         if config.ENV_DATA.get("platform") == constants.FUSIONAAS_PLATFORM:
             timeout = 1000
-        elif storage_cluster.data["spec"].get(
+        elif "status" in storage_cluster.data and storage_cluster.data["spec"].get(
             "resourceProfile"
         ) != storage_cluster.data["status"].get("lastAppliedResourceProfile"):
             timeout = 1800
@@ -1476,7 +1478,7 @@ def osd_encryption_verification():
     osd_node_names = get_osds_per_node()
     for worker_node in osd_node_names:
         lsblk_cmd = (
-            f"oc debug node/{worker_node} --to-namespace={config.ENV_DATA['cluster_namespace']} "
+            f"oc debug node/{worker_node} --to-namespace=default "
             "-- chroot /host lsblk"
         )
         # It happens from time to time that we see this error:
@@ -3309,3 +3311,50 @@ def get_deviceset_sc_name_per_deviceclass():
     """
     device_sets = get_all_device_sets()
     return {get_deviceset_sc_name(d): get_deviceclass_name(d) for d in device_sets}
+
+
+def check_unnecessary_pods_present():
+    """
+    Based on configuration, check that pods that are not necessary are not
+    present.
+    """
+    no_noobaa = config.COMPONENTS["disable_noobaa"]
+    no_ceph = (
+        config.DEPLOYMENT["external_mode"] or config.ENV_DATA["mcg_only_deployment"]
+    )
+    pod_names = [
+        pod.name for pod in get_all_pods(namespace=config.ENV_DATA["cluster_namespace"])
+    ]
+    log.info(f"Checking if only required operator pods are available in : {pod_names}")
+    invalid_pods_found = []
+    if no_noobaa:
+        for invalid_pod_name in [
+            constants.NOOBAA_OPERATOR_DEPLOYMENT,
+            constants.NOOBAA_ENDPOINT_DEPLOYMENT,
+            constants.NOOBAA_DB_STATEFULSET,
+            constants.NOOBAA_CORE_STATEFULSET,
+        ]:
+            invalid_pods_found.extend(
+                [
+                    pod_name
+                    for pod_name in pod_names
+                    if pod_name.startswith(invalid_pod_name)
+                ]
+            )
+        if invalid_pods_found:
+            raise InvalidPodPresent(
+                f"Pods {invalid_pods_found} should not be present because NooBaa is not available"
+            )
+    if no_ceph:
+        for invalid_pod_name in [constants.ROOK_CEPH_OPERATOR]:
+            invalid_pods_found.extend(
+                [
+                    pod_name
+                    for pod_name in pod_names
+                    if pod_name.startswith(invalid_pod_name)
+                ]
+            )
+        if invalid_pods_found:
+            raise InvalidPodPresent(
+                f"Pods {invalid_pods_found} should not be present because Ceph is not available"
+            )

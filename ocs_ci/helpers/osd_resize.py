@@ -456,14 +456,13 @@ def check_storage_size_is_reflected_in_ui():
     logger.info(f"Total size = {total_size_gb}Gi")
 
     ceph_cluster = CephCluster()
-    ceph_capacity = int(ceph_cluster.get_ceph_capacity())
-    ceph_total_size = ceph_capacity * len(get_osd_pods())
+    ceph_capacity = int(ceph_cluster.get_ceph_capacity(replica_divide=False))
 
     # There could be a small gap between the total size in the UI and the actual Ceph total size.
     # So, instead of checking the accurate size, we check that the total size is within the expected range.
-    max_gap = 6 if ceph_total_size < 1500 else 12
+    max_gap = 6 if ceph_capacity < 1500 else 12
     expected_total_size_range_gb = range(
-        ceph_total_size - max_gap, ceph_total_size + max_gap
+        ceph_capacity - max_gap, ceph_capacity + max_gap
     )
     logger.info(
         f"Check that the total UI size {total_size_gb}Gi is in the "

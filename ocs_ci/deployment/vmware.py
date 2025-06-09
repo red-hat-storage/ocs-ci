@@ -98,17 +98,6 @@ __all__ = ["VSPHEREUPI", "VSPHEREIPI", "VSPHEREAI"]
 
 class VSPHEREBASE(Deployment):
 
-    # default storage class for StorageCluster CRD on VmWare platform
-    if version.get_semantic_ocp_version_from_config() >= version.VERSION_4_13:
-        if config.ENV_DATA.get("use_custom_sc_in_deployment"):
-            CUSTOM_STORAGE_CLASS_PATH = os.path.join(
-                constants.TEMPLATE_DEPLOYMENT_DIR, "storageclass_thin-csi-odf.yaml"
-            )
-        else:
-            DEFAULT_STORAGECLASS = "thin-csi"
-    else:
-        DEFAULT_STORAGECLASS = "thin"
-
     def __init__(self):
         """
         This would be base for both IPI and UPI deployment
@@ -129,6 +118,10 @@ class VSPHEREBASE(Deployment):
         self.cluster_launcer_repo_path = os.path.join(
             constants.EXTERNAL_DIR, "v4-scaleup"
         )
+        if config.ENV_DATA.get("use_custom_sc_in_deployment"):
+            self.custom_storage_class_path = os.path.join(
+                constants.TEMPLATE_DEPLOYMENT_DIR, "storageclass_thin-csi-odf.yaml"
+            )
         os.environ["TF_LOG"] = config.ENV_DATA.get("TF_LOG_LEVEL", "TRACE")
         os.environ["TF_LOG_PATH"] = os.path.join(
             config.ENV_DATA.get("cluster_path"), config.ENV_DATA.get("TF_LOG_FILE")
@@ -1248,7 +1241,7 @@ class VSPHEREUPI(VSPHEREBASE):
                 sc_data["parameters"]["diskformat"] = "zeroedthick"
             templating.dump_data_to_temp_yaml(sc_data, sc_data_yaml.name)
             run_cmd(f"oc create -f {sc_data_yaml.name}")
-            self.DEFAULT_STORAGECLASS = "thick"
+            self.storage_class = "thick"
 
     def destroy_cluster(self, log_level="DEBUG"):
         """
@@ -1639,8 +1632,14 @@ class VSPHEREIPI(VSPHEREBASE):
             config.ENV_DATA["vsphere_user"],
             config.ENV_DATA["vsphere_password"],
         )
-        all_vms = vsphere.get_vms_by_string(config.ENV_DATA["cluster_name"])
-        vsphere.stop_vms(all_vms)
+        try:
+            all_vms = vsphere.get_vms_by_string(config.ENV_DATA["cluster_name"])
+            vsphere.stop_vms(all_vms)
+        except Exception as e:
+            logger.error(
+                f"Failed to fetch VM's. Exception: {e}. Continuing to destroy cluster"
+            )
+            all_vms = []
 
         for vm in all_vms:
             try:

@@ -136,6 +136,10 @@ class TestUpgradeOCP(ManageTest):
             ocp_upgrade_version = config.UPGRADE.get("ocp_upgrade_version")
             logger.info(f"OCP upgrade version: {ocp_upgrade_version}")
 
+            provider_cluster = (
+                config.ENV_DATA.get("cluster_type").lower() == constants.HCI_PROVIDER
+            )
+
             rosa_platform = (
                 config.ENV_DATA["platform"].lower() in constants.ROSA_PLATFORMS
             )
@@ -211,7 +215,14 @@ class TestUpgradeOCP(ManageTest):
             # ROSA Upgrades Are Controlled by the Hive Operator
             # HCP Clusters use a Control Plane Queue to manage the upgrade process
             # upgrades on ROSA clusters does not start immediately after the upgrade command but scheduled
-            operator_upgrade_timeout = 4000 if not rosa_platform else 8000
+            num_nodes = (
+                config.ENV_DATA["worker_replicas"]
+                + config.ENV_DATA["master_replicas"]
+                + config.ENV_DATA.get("infra_replicas", 0)
+            )
+            operator_upgrade_timeout = 4000
+            if rosa_platform or num_nodes >= 6:
+                operator_upgrade_timeout = 8000
             for ocp_operator in cluster_operators:
                 logger.info(f"Checking upgrade status of {ocp_operator}:")
                 # ############ Workaround for issue 2624 #######
@@ -234,7 +245,12 @@ class TestUpgradeOCP(ManageTest):
 
             # resume a MachineHealthCheck resource
             if get_semantic_ocp_running_version() > VERSION_4_8 and not rosa_platform:
-                resume_machinehealthcheck()
+                if provider_cluster:
+                    resume_machinehealthcheck(
+                        wait_for_mcp_complete=True, force_delete_pods=True
+                    )
+                else:
+                    resume_machinehealthcheck()
 
             # post upgrade validation: check cluster operator status
             operator_ready_timeout = 2700 if not rosa_platform else 5400

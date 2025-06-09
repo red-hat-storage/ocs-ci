@@ -17,7 +17,7 @@ from threading import Thread
 import base64
 from semantic_version import Version
 
-from ocs_ci.ocs.ocp import get_images, OCP, verify_images_upgraded
+from ocs_ci.ocs.ocp import get_images, OCP, verify_images_upgraded, get_sha256_digest
 from ocs_ci.helpers import helpers
 from ocs_ci.helpers.proxy import update_container_with_proxy_env
 from ocs_ci.ocs import constants, defaults, node, workload, ocp
@@ -41,6 +41,7 @@ from ocs_ci.ocs.resources.ocs import OCS
 from ocs_ci.ocs.resources.job import get_job_obj, get_jobs_with_prefix
 from ocs_ci.utility import templating
 from ocs_ci.utility.utils import (
+    get_primary_nb_db_pod,
     run_cmd,
     check_timeout_reached,
     TimeoutSampler,
@@ -839,16 +840,21 @@ def get_ceph_tools_pod(
         and config.ENV_DATA.get("cluster_type", "").lower()
         in [constants.MS_CONSUMER_TYPE, constants.HCI_CLIENT]
     ):
+        provider_cluster_index = config.get_provider_index()
         provider_kubeconfig = os.path.join(
-            config.clusters[config.get_provider_index()].ENV_DATA["cluster_path"],
-            config.clusters[config.get_provider_index()].RUN.get("kubeconfig_location"),
+            config.clusters[provider_cluster_index].ENV_DATA["cluster_path"],
+            config.clusters[provider_cluster_index].RUN.get("kubeconfig_location"),
         )
         cluster_kubeconfig = provider_kubeconfig
+        cluster_namespace = config.clusters[provider_cluster_index].ENV_DATA[
+            "cluster_namespace"
+        ]
     else:
         cluster_kubeconfig = config.ENV_DATA.get("provider_kubeconfig", "")
+        cluster_namespace = ""
 
     if cluster_kubeconfig:
-        namespace = config.ENV_DATA["cluster_namespace"]
+        namespace = cluster_namespace or config.ENV_DATA["cluster_namespace"]
     else:
         namespace = namespace or config.ENV_DATA["cluster_namespace"]
 
@@ -1057,12 +1063,7 @@ def get_noobaa_db_pod():
         Pod object: Noobaa db pod object
 
     """
-    nb_db = get_pods_having_label(
-        label=constants.NOOBAA_DB_LABEL_47_AND_ABOVE,
-        namespace=config.ENV_DATA["cluster_namespace"],
-    )
-    nb_db_pod = Pod(**nb_db[0])
-    return nb_db_pod
+    return get_primary_nb_db_pod()
 
 
 def get_noobaa_core_pod():
@@ -1864,6 +1865,7 @@ def get_pod_logs(
     previous=False,
     all_containers=False,
     since=None,
+    tail=None,
 ):
     """
     Get logs from a given pod
@@ -1874,7 +1876,7 @@ def get_pod_logs(
     previous (bool): True, if pod previous log required. False otherwise.
     all_containers (bool): fetch logs from all containers of the resource
     since (str): only return logs newer than a relative duration like 5s, 2m, or 3h.
-
+    tail (str): number of lines to tail
     Returns:
         str: Output from 'oc get logs <pod_name> command
 
@@ -1889,6 +1891,8 @@ def get_pod_logs(
         cmd += " --all-containers=true"
     if since:
         cmd += f" --since={since}"
+    if tail:
+        cmd += f" --tail={tail}"
 
     return pod.exec_oc_cmd(cmd, out_yaml_format=False)
 
@@ -2258,7 +2262,7 @@ def verify_pods_upgraded(
     namespace = config.ENV_DATA["cluster_namespace"]
     info_message = (
         f"Waiting for {count} pods with selector: {selector} to be running "
-        f"and upgraded."
+        f"and upgraded. Old images: {old_images}"
     )
     logger.info(info_message)
     start_time = time.time()
@@ -2278,18 +2282,31 @@ def verify_pods_upgraded(
                 pod_obj = pod.get()
                 verify_images_upgraded(old_images, pod_obj, ignore_psql_12_verification)
                 current_pod_images = get_images(pod_obj)
+                current_pod_image_ids = get_images(pod_obj, image_key="imageID")
                 for container_name, container_image in current_pod_images.items():
                     if container_name not in pod_images:
                         pod_images[container_name] = container_image
                     else:
                         if pod_images[container_name] != container_image:
-                            raise NotAllPodsHaveSameImagesError(
-                                f"Not all the pods with the selector: {selector} have the same "
-                                f"images! Image for container {container_name} has image {container_image} "
-                                f"which doesn't match with: {pod_images} differ! This means "
-                                "that upgrade hasn't finished to restart all the pods yet! "
-                                "Or it's caused by other discrepancy which needs to be investigated!"
+                            current_pod_image_id = current_pod_image_ids.get(
+                                container_name
                             )
+                            if get_sha256_digest(container_image) == get_sha256_digest(
+                                current_pod_image_id
+                            ):
+                                logger.info(
+                                    f"Container image: {container_image} match with imageID "
+                                    f" digest: {current_pod_image_id}"
+                                )
+                            else:
+                                raise NotAllPodsHaveSameImagesError(
+                                    f"Not all the pods with the selector: {selector} have the same "
+                                    f"images! Image for container {container_name} has image {container_image} "
+                                    f"which doesn't match with: {pod_images} differ! This means "
+                                    "that upgrade hasn't finished to restart all the pods yet! "
+                                    "Or it's caused by other discrepancy which needs to be investigated!"
+                                    f"ImageID is: {current_pod_image_id}"
+                                )
                 pod_count += 1
         except CommandFailed as ex:
             logger.warning(
@@ -2733,6 +2750,8 @@ def check_toleration_on_pods(toleration_key=constants.TOLERATION_KEY):
     pods_missing_toleration = []
     for pod_obj in pod_objs:
         resource_name = pod_obj.name
+        if "storageclient" in resource_name:
+            continue
         tolerations = pod_obj.get().get("spec").get("tolerations")
 
         # Check if any toleration matches the provided key
@@ -4183,3 +4202,29 @@ def delete_pod_by_phase(
     logger.info(f"All '{pod_phase}' pods deleted successfully.")
 
     return True
+
+
+def get_machine_config_controller_pod(
+    label=constants.MACINE_CONFIG_CONTROLLER_LABEL,
+    namespace=constants.OPENSHIFT_MACHINE_CONFIG_OPERATOR_NAMESPACE,
+    retry=4,
+):
+    """
+    Fetches the Machine Config Controller pod object.
+    Retries until the pod is found or the timeout is reached.
+
+    Args:
+        label (str): Label associated with the machine_config_controller pod.
+                     (default: constants.MACINE_CONFIG_CONTROLLER_LABEL)
+        namespace (str): Namespace where the MCC pod lives.
+                         (default: constants.OPENSHIFT_MACHINE_CONFIG_OPERATOR_NAMESPACE)
+        timeout (int): Total time in seconds to wait for the pod to be found.
+        retry_delay (int): Time in seconds to wait between retry attempts.
+
+    Returns:
+        Pod object: The first Machine Config Controller pod object found, or None if timed out.
+    """
+    namespace = namespace or config.ENV_DATA["cluster_namespace"]
+    mcc_pods = get_pods_having_label(label, namespace, retry=retry)
+    mcc_pod_obj = Pod(**mcc_pods[0])
+    return mcc_pod_obj

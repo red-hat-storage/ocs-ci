@@ -133,6 +133,7 @@ order_post_upgrade = pytest.mark.order(ORDER_AFTER_UPGRADE)
 order_post_ocp_upgrade = pytest.mark.order(ORDER_AFTER_OCP_UPGRADE)
 order_post_ocs_upgrade = pytest.mark.order(ORDER_AFTER_OCS_UPGRADE)
 ocp_upgrade = compose(order_ocp_upgrade, pytest.mark.ocp_upgrade)
+
 # multicluster orchestrator
 mco_upgrade = compose(order_mco_upgrade, pytest.mark.mco_upgrade)
 # dr hub operator
@@ -143,6 +144,12 @@ dr_cluster_operator_upgrade = compose(
 # acm operator
 acm_upgrade = compose(order_acm_upgrade, pytest.mark.acm_upgrade)
 ocs_upgrade = compose(order_ocs_upgrade, pytest.mark.ocs_upgrade)
+
+# provider operator upgrade
+provider_operator_upgrade = compose(
+    order_ocs_upgrade, pytest.mark.provider_operator_upgrade
+)
+
 # pre_*_upgrade markers
 pre_upgrade = compose(order_pre_upgrade, pytest.mark.pre_upgrade)
 pre_ocp_upgrade = compose(
@@ -216,6 +223,11 @@ skipif_aws_creds_are_missing = pytest.mark.skipif(
 skipif_mcg_only = pytest.mark.skipif(
     config.ENV_DATA["mcg_only_deployment"],
     reason="This test cannot run on MCG-Only deployments",
+)
+
+mcg_only_required = pytest.mark.skipif(
+    config.ENV_DATA.get("mcg_only_deployment", "") is not True,
+    reason="This test runs only on MCG-only deployments",
 )
 
 skipif_fips_enabled = pytest.mark.skipif(

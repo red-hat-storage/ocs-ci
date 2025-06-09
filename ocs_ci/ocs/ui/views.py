@@ -319,7 +319,7 @@ generic_locators = {
         By.XPATH,
     ),
     "resource_link": (
-        "//td[@id='name']//a[contains(text(),'{}')] | "
+        "//a[@data-test='resource-link-{}'] | "
         "//td[@data-label='Name']//a[contains(text(),'{}')]",
         By.XPATH,
     ),
@@ -357,7 +357,8 @@ generic_locators = {
     ),
     "searchbar-dropdown": (
         "//div[@class='pf-c-toolbar__item']//span[@class='pf-c-dropdown__toggle-text'] | "
-        "//div[@class='pf-v5-c-toolbar__item']//span[@class='pf-v5-c-dropdown__toggle-text']",
+        "//div[@class='pf-v5-c-toolbar__item']//span[@class='pf-v5-c-dropdown__toggle-text'] | "
+        "//div[@class='pf-v6-c-input-group co-filter-group']//button/span",
         By.XPATH,
     ),
     "searchbar_drop_down": ("//button[@data-test-id='dropdown-button']", By.XPATH),
@@ -682,6 +683,18 @@ pvc_4_14 = {
     ),
 }
 
+pvc_4_19 = {
+    "pvc_create_button": ('a[data-test="item-create"]', By.CSS_SELECTOR),
+    "expected-capacity": (
+        "//dd[@data-test='pvc-requested-capacity']//div[text()='{}']",
+        By.XPATH,
+    ),
+    "new-capacity": (
+        "//dd[@data-test-id='pvc-capacity']//div[text()='{}']",
+        By.XPATH,
+    ),
+}
+
 storage_clients = {
     "generate_client_onboarding_ticket": (
         "//button[normalize-space()='Generate client onboarding token']",
@@ -784,9 +797,15 @@ acm_page_nav = {
 }
 acm_page_nav_419 = {
     "Infrastructure": (
-        "(//button[text()='Infrastructure']) | (//button[normalize-space()='Infrastructure'])[1]",
+        "//button[normalize-space()='Infrastructure' and @class='pf-v6-c-nav__link']",
         By.XPATH,
     ),
+    "click-local-cluster": (
+        '//button[@data-test-id="cluster-dropdown-toggle"]//*[text()="local-cluster"]',
+        By.XPATH,
+    ),
+    "all-clusters-view": ("//span[contains(text(),'All Clusters')]", By.XPATH),
+    "Clusters_page": ("(//a[normalize-space()='Clusters'])[1]", By.XPATH),
 }
 
 acm_configuration = {
@@ -809,6 +828,7 @@ acm_configuration = {
         "//*[@data-ouia-component-type='PF4/TableRow']//td[2]//*[text()='local-cluster']",
         By.XPATH,
     ),
+    "side_navigation_toggle": ("#nav-toggle", By.CSS_SELECTOR),
     "search-cluster": ("//input[@placeholder='Search']", By.XPATH),
     "select-first-checkbox": ("input[name='checkrow0']", By.CSS_SELECTOR),
     "clear-search": ("//*[name()='path' and contains(@d,'M242.72 25')]", By.XPATH),
@@ -1174,6 +1194,15 @@ acm_configuration_4_16 = {
 }
 
 acm_configuration_4_18 = {
+    "click-local-cluster": (
+        '//button[@data-test-id="cluster-dropdown-toggle"]//*[text()="local-cluster"]',
+        By.XPATH,
+    ),
+    "all-clusters-view": ("//span[contains(text(),'All Clusters')]", By.XPATH),
+    "Clusters_page": (
+        "a[data-test='nav'][href='/multicloud/infrastructure/clusters']",
+        By.CSS_SELECTOR,
+    ),
     "inconsistent-warning-alert": (
         "//h4[@class='pf-v5-c-alert__title']",
         By.XPATH,
@@ -2244,6 +2273,7 @@ locators = {
             **pvc_4_9,
             **pvc_4_12,
             **pvc_4_14,
+            **pvc_4_19,
         },
         "acm_page": {
             **acm_page_nav,

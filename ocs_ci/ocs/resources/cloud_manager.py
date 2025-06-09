@@ -16,6 +16,7 @@ from google.oauth2 import service_account
 from ocs_ci.framework import config
 from ocs_ci.helpers.helpers import create_resource, create_unique_resource_name
 from ocs_ci.ocs import constants
+from ocs_ci.ocs.bucket_utils import delete_all_objects_in_batches
 from ocs_ci.ocs.exceptions import (
     CommandFailed,
     TimeoutExpiredError,
@@ -295,7 +296,7 @@ class S3Client(CloudClient):
             # when bucket have no policy set
             if "aws" in name:
                 self.client.meta.client.delete_bucket_policy(Bucket=name)
-            self.client.Bucket(name).objects.all().delete()
+            delete_all_objects_in_batches(s3_resource=self.client, bucket_name=name)
             self.client.Bucket(name).delete()
             deletion_result = True
 

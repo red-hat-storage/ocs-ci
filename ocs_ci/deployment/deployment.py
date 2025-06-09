@@ -18,6 +18,7 @@ import yaml
 
 from botocore.exceptions import EndpointConnectionError, BotoCoreError
 
+from ocs_ci.deployment.helpers import storage_class
 from ocs_ci.deployment.ocp import OCPDeployment as BaseOCPDeployment
 from ocs_ci.deployment.helpers.external_cluster_helpers import (
     ExternalCluster,
@@ -46,6 +47,10 @@ from ocs_ci.framework import config, merge_dict
 from ocs_ci.framework.logger_helper import log_step
 from ocs_ci.helpers.dr_helpers import (
     configure_drcluster_for_fencing,
+    get_cluster_set_name,
+    create_service_exporter,
+    validate_storage_cluster_peer_state,
+    verify_volsync,
 )
 from ocs_ci.ocs import constants, ocp, defaults, registry
 from ocs_ci.ocs.cluster import (
@@ -153,6 +158,7 @@ from ocs_ci.utility.ssl_certs import (
 from ocs_ci.utility.utils import (
     ceph_health_check,
     clone_repo,
+    create_unreleased_oadp_catalog,
     enable_huge_pages,
     exec_cmd,
     get_latest_ds_olm_tag,
@@ -191,32 +197,14 @@ class Deployment(object):
     Base for all deployment platforms
     """
 
-    # Default storage class for StorageCluster CRD,
-    # every platform specific class which extending this base class should
-    # define it
-    DEFAULT_STORAGECLASS = None
-
-    # Default storage class for LSO deployments. While each platform specific
-    # subclass can redefine it, there is a well established platform
-    # independent default value (based on OCS Installation guide), and it's
-    # redefinition is not necessary in normal cases.
-    DEFAULT_STORAGECLASS_LSO = "localblock"
-
-    CUSTOM_STORAGE_CLASS_PATH = None
-    """str: filepath of yaml file with custom storage class if necessary
-
-    For some platforms, one have to create custom storage class for OCS to make
-    sure ceph uses disks of expected type and parameters (eg. OCS requires
-    ssd). This variable is either None (meaning that such custom storage class
-    is not needed), or point to a yaml file with custom storage class.
-    """
-
     def __init__(self):
         self.platform = config.ENV_DATA["platform"]
         self.ocp_deployment_type = config.ENV_DATA["deployment_type"]
         self.cluster_path = config.ENV_DATA["cluster_path"]
         self.namespace = config.ENV_DATA["cluster_namespace"]
         self.sts_role_arn = None
+        self.storage_class = storage_class.get_storageclass()
+        self.custom_storage_class_path = None
 
     class OCPDeployment(BaseOCPDeployment):
         """
@@ -273,7 +261,11 @@ class Deployment(object):
             switch_ctx (int): The cluster index by the cluster name
 
         """
-        config.switch_ctx(switch_ctx) if switch_ctx else config.switch_acm_ctx()
+        (
+            config.switch_ctx(switch_ctx)
+            if switch_ctx is not None
+            else config.switch_acm_ctx()
+        )
 
         logger.info("Creating Namespace for GitOps Operator ")
         run_cmd(f"oc create namespace {constants.GITOPS_NAMESPACE}")
@@ -324,23 +316,11 @@ class Deployment(object):
             run_cmd(f"oc create -f {constants.GITOPS_PLACEMENT_YAML}")
 
             logger.info("Creating ManagedClusterSetBinding")
-            cluster_set = []
+            cluster_set = config.ENV_DATA.get("cluster_set") or get_cluster_set_name()
+
             managed_clusters = (
                 ocp.OCP(kind=constants.ACM_MANAGEDCLUSTER).get().get("items", [])
             )
-            # ignore local-cluster here
-            for i in managed_clusters:
-                if i["metadata"]["name"] != constants.ACM_LOCAL_CLUSTER:
-                    cluster_set.append(
-                        i["metadata"]["labels"][constants.ACM_CLUSTERSET_LABEL]
-                    )
-            if all(x == cluster_set[0] for x in cluster_set):
-                logger.info(f"Found the uniq clusterset {cluster_set[0]}")
-            else:
-                raise UnexpectedDeploymentConfiguration(
-                    "There are more then one clusterset added to multiple managedcluters"
-                )
-
             managedclustersetbinding_obj = templating.load_yaml(
                 constants.GITOPS_MANAGEDCLUSTER_SETBINDING_YAML
             )
@@ -383,90 +363,96 @@ class Deployment(object):
                 "Skipping normal ODF deployment because ODF deployment in Provider mode will be performed"
             )
             return
-        if not config.ENV_DATA["skip_ocs_deployment"]:
-            for i in range(config.nclusters):
-                if config.multicluster and (i in get_all_acm_indexes()):
-                    continue
-                config.switch_ctx(i)
-                try:
+        try:
+            if not config.ENV_DATA["skip_ocs_deployment"]:
+                for i in range(config.nclusters):
+                    if config.multicluster and (i in get_all_acm_indexes()):
+                        continue
+                    config.switch_ctx(i)
                     self.deploy_ocs()
 
-                    if config.REPORTING["collect_logs_on_success_run"]:
-                        collect_ocs_logs("deployment", ocp=False, status_failure=False)
-                except Exception as e:
-                    logger.error(e)
-                    if config.REPORTING["gather_on_deploy_failure"]:
-                        # Let's do the collections separately to guard against one
-                        # of them failing
-                        collect_ocs_logs(
-                            "deployment",
-                            ocs=False,
-                            timeout=defaults.MUST_GATHER_TIMEOUT,
-                        )
-                        collect_ocs_logs(
-                            "deployment",
-                            ocp=False,
-                            timeout=defaults.MUST_GATHER_TIMEOUT,
-                        )
-                    raise
-            config.reset_ctx()
-            # Run ocs_install_verification here only in case of multicluster.
-            # For single cluster, test_deployment will take care.
-            if config.multicluster:
-                for i in range(config.multicluster):
-                    if i in get_all_acm_indexes():
-                        continue
-                    else:
-                        config.switch_ctx(i)
-                        ocs_registry_image = config.DEPLOYMENT.get(
-                            "ocs_registry_image", None
-                        )
-                        ocs_install_verification(ocs_registry_image=ocs_registry_image)
-                # if we have Globalnet enabled in case of submariner with RDR
-                # we need to add a flag to storagecluster
-                if config.MULTICLUSTER[
-                    "multicluster_mode"
-                ] == "regional-dr" and get_primary_cluster_config().ENV_DATA.get(
-                    "enable_globalnet", True
-                ):
-                    for cluster in get_non_acm_cluster_config():
-                        config.switch_ctx(cluster.MULTICLUSTER["multicluster_index"])
-                        storage_cluster_name = config.ENV_DATA["storage_cluster_name"]
-                        logger.info(
-                            "Updating the StorageCluster resource for globalnet"
-                        )
-                        storage_cluster = StorageCluster(
-                            resource_name=storage_cluster_name,
-                            namespace=config.ENV_DATA["cluster_namespace"],
-                        )
-                        storage_cluster.reload_data()
-                        storage_cluster.wait_for_phase(phase="Ready", timeout=1000)
-                        ptch = (
-                            f'\'{{"spec": {{"network": {{"multiClusterService": '
-                            f"{{\"clusterID\": \"{config.ENV_DATA['cluster_name']}\", \"enabled\": true}}}}}}}}'"
-                        )
-                        ptch_cmd = (
-                            f"oc patch storagecluster/{storage_cluster.data.get('metadata').get('name')} "
-                            f"-n openshift-storage  --type merge --patch {ptch}"
-                        )
-                        run_cmd(ptch_cmd)
-                        ocs_registry_image = config.DEPLOYMENT.get(
-                            "ocs_registry_image", None
-                        )
-                        storage_cluster.reload_data()
-                        assert (
-                            storage_cluster.data.get("spec")
-                            .get("network")
-                            .get("multiClusterService")
-                            .get("enabled")
-                        ), "Failed to update StorageCluster globalnet"
-                        validate_serviceexport()
-                        ocs_install_verification(
-                            timeout=2000, ocs_registry_image=ocs_registry_image
-                        )
                 config.reset_ctx()
-        else:
-            logger.warning("OCS deployment will be skipped")
+                # Run ocs_install_verification here only in case of multicluster.
+                # For single cluster, test_deployment will take care.
+                if config.multicluster:
+                    for i in range(config.multicluster):
+                        if i in get_all_acm_indexes():
+                            continue
+                        else:
+                            config.switch_ctx(i)
+                            ocs_registry_image = config.DEPLOYMENT.get(
+                                "ocs_registry_image", None
+                            )
+                            ocs_install_verification(
+                                ocs_registry_image=ocs_registry_image
+                            )
+                    # if we have Globalnet enabled in case of submariner with RDR
+                    # we need to add a flag to storagecluster
+                    if config.MULTICLUSTER[
+                        "multicluster_mode"
+                    ] == "regional-dr" and get_primary_cluster_config().ENV_DATA.get(
+                        "enable_globalnet", True
+                    ):
+                        for cluster in get_non_acm_cluster_config():
+                            config.switch_ctx(
+                                cluster.MULTICLUSTER["multicluster_index"]
+                            )
+                            storage_cluster_name = config.ENV_DATA[
+                                "storage_cluster_name"
+                            ]
+                            logger.info(
+                                "Updating the StorageCluster resource for globalnet"
+                            )
+                            storage_cluster = StorageCluster(
+                                resource_name=storage_cluster_name,
+                                namespace=config.ENV_DATA["cluster_namespace"],
+                            )
+                            storage_cluster.reload_data()
+                            storage_cluster.wait_for_phase(phase="Ready", timeout=1000)
+                            ptch = (
+                                f'\'{{"spec": {{"network": {{"multiClusterService": '
+                                f"{{\"clusterID\": \"{config.ENV_DATA['cluster_name']}\", \"enabled\": true}}}}}}}}'"
+                            )
+                            ptch_cmd = (
+                                f"oc patch storagecluster/{storage_cluster.data.get('metadata').get('name')} "
+                                f"-n openshift-storage  --type merge --patch {ptch}"
+                            )
+                            run_cmd(ptch_cmd)
+                            ocs_registry_image = config.DEPLOYMENT.get(
+                                "ocs_registry_image", None
+                            )
+                            storage_cluster.reload_data()
+                            assert (
+                                storage_cluster.data.get("spec")
+                                .get("network")
+                                .get("multiClusterService")
+                                .get("enabled")
+                            ), "Failed to update StorageCluster globalnet"
+                            validate_serviceexport()
+                            ocs_install_verification(
+                                timeout=2000, ocs_registry_image=ocs_registry_image
+                            )
+                    config.reset_ctx()
+                if config.REPORTING["collect_logs_on_success_run"]:
+                    collect_ocs_logs("deployment", ocp=False, status_failure=False)
+            else:
+                logger.warning("OCS deployment will be skipped")
+        except Exception as e:
+            logger.error(e)
+            if config.REPORTING["gather_on_deploy_failure"]:
+                # Let's do the collections separately to guard against one
+                # of them failing
+                collect_ocs_logs(
+                    "deployment",
+                    ocs=False,
+                    timeout=defaults.MUST_GATHER_TIMEOUT,
+                )
+                collect_ocs_logs(
+                    "deployment",
+                    ocp=False,
+                    timeout=defaults.MUST_GATHER_TIMEOUT,
+                )
+            raise
 
     def do_deploy_mce(self):
         """
@@ -475,7 +461,6 @@ class Deployment(object):
 
         """
         if config.ENV_DATA["skip_ocs_deployment"]:
-
             if config.ENV_DATA.get("deploy_mce"):
                 mce_installer = MCEInstaller()
                 mce_installer.deploy_mce()
@@ -502,8 +487,24 @@ class Deployment(object):
                 )
                 package_manifest = PackageManifest(
                     resource_name=constants.OADP_OPERATOR_NAME,
+                    selector="catalog=redhat-operators",
                 )
+                try:
+                    package_manifest.get()
+                except ResourceNotFoundError as ex:
+                    logger.warning(
+                        f"OADP operator not availabe - bringing up unreleased content {ex}!"
+                    )
+                    create_unreleased_oadp_catalog()
+                    package_manifest = PackageManifest(
+                        resource_name=constants.OADP_OPERATOR_NAME,
+                        selector=f"catalog={constants.BREW_CATALOG_NAME}",
+                    )
+                    oadp_subscription_yaml_data["spec"][
+                        "source"
+                    ] = constants.BREW_CATALOG_NAME
                 oadp_default_channel = package_manifest.get_default_channel()
+
                 oadp_subscription_yaml_data["spec"]["channel"] = oadp_default_channel
                 oadp_subscription_manifest = tempfile.NamedTemporaryFile(
                     mode="w+", prefix="oadp_subscription_manifest", delete=False
@@ -621,7 +622,6 @@ class Deployment(object):
         Should run on OCP deployment phase
         """
         if config.ENV_DATA["skip_ocs_deployment"]:
-
             if config.ENV_DATA.get(
                 "deploy_hyperconverged"
             ) and not config.DEPLOYMENT.get("cnv_deployment"):
@@ -712,11 +712,11 @@ class Deployment(object):
         perform_lso_standalone_deployment = config.DEPLOYMENT.get(
             "lso_standalone_deployment", False
         ) and not ocp.OCP(kind=constants.STORAGECLASS).is_exist(
-            resource_name=self.DEFAULT_STORAGECLASS_LSO
+            resource_name=constants.DEFAULT_STORAGECLASS_LSO
         )
         if perform_lso_standalone_deployment:
             cleanup_nodes_for_lso_install()
-            setup_local_storage(storageclass=self.DEFAULT_STORAGECLASS_LSO)
+            setup_local_storage(storageclass=constants.DEFAULT_STORAGECLASS_LSO)
         self.do_deploy_lvmo()
         self.do_deploy_submariner()
         self.do_gitops_deploy()
@@ -1130,14 +1130,13 @@ class Deployment(object):
 
         if local_storage:
             log_step("Deploy and setup Local Storage Operator")
-            setup_local_storage(storageclass=self.DEFAULT_STORAGECLASS_LSO)
+            setup_local_storage(storageclass=constants.DEFAULT_STORAGECLASS_LSO)
 
         log_step("Creating namespace and operator group")
         # patch OLM YAML with the namespace
         olm_ns_op_group_data = list(templating.load_yaml(constants.OLM_YAML, True))
 
         if self.namespace != constants.OPENSHIFT_STORAGE_NAMESPACE:
-
             for cr in olm_ns_op_group_data:
                 if cr["kind"] == "Namespace":
                     cr["metadata"]["name"] = self.namespace
@@ -1372,13 +1371,10 @@ class Deployment(object):
             )
 
         # create custom storage class for StorageCluster CR if necessary
-        if self.CUSTOM_STORAGE_CLASS_PATH is not None:
-            with open(self.CUSTOM_STORAGE_CLASS_PATH, "r") as custom_sc_fo:
-                custom_sc = yaml.load(custom_sc_fo, Loader=yaml.SafeLoader)
-            # set value of DEFAULT_STORAGECLASS to mach the custom storage cls
-            self.DEFAULT_STORAGECLASS = custom_sc["metadata"]["name"]
-            log_step(f"Creating custom storage class {self.DEFAULT_STORAGECLASS}")
-            run_cmd(f"oc create -f {self.CUSTOM_STORAGE_CLASS_PATH}")
+        if self.custom_storage_class_path is not None:
+            self.storage_class = storage_class.create_custom_storageclass(
+                self.custom_storage_class_path
+            )
 
         # Set rook log level
         self.set_rook_log_level()
@@ -1466,7 +1462,7 @@ class Deployment(object):
             constants.HCI_BAREMETAL,
         ]:
             pv_size_list = helpers.get_pv_size(
-                storageclass=self.DEFAULT_STORAGECLASS_LSO
+                storageclass=constants.DEFAULT_STORAGECLASS_LSO
             )
             pv_size_list.sort()
             deviceset_data["dataPVCTemplate"]["spec"]["resources"]["requests"][
@@ -1477,16 +1473,11 @@ class Deployment(object):
                 "storage"
             ] = f"{device_size}Gi"
 
-        if self.platform.lower() == constants.ROSA_HCP_PLATFORM:
-            self.DEFAULT_STORAGECLASS = config.DEPLOYMENT.get(
-                "customized_deployment_storage_class", self.DEFAULT_STORAGECLASS
-            )
-
         # set storage class to OCS default on current platform
-        if self.DEFAULT_STORAGECLASS:
+        if self.storage_class:
             deviceset_data["dataPVCTemplate"]["spec"][
                 "storageClassName"
-            ] = self.DEFAULT_STORAGECLASS
+            ] = self.storage_class
 
         # StorageCluster tweaks for LSO
         if local_storage:
@@ -1496,7 +1487,7 @@ class Deployment(object):
             deviceset_data["portable"] = False
             deviceset_data["dataPVCTemplate"]["spec"][
                 "storageClassName"
-            ] = self.DEFAULT_STORAGECLASS_LSO
+            ] = constants.DEFAULT_STORAGECLASS_LSO
             lso_type = config.DEPLOYMENT.get("type")
             if (
                 self.platform.lower() == constants.AWS_PLATFORM
@@ -1581,7 +1572,7 @@ class Deployment(object):
                 "spec": {
                     "accessModes": ["ReadWriteOnce"],
                     "resources": {"requests": {"storage": "20Gi"}},
-                    "storageClassName": self.DEFAULT_STORAGECLASS,
+                    "storageClassName": self.storage_class,
                     "volumeMode": "Filesystem",
                 }
             }
@@ -1690,6 +1681,20 @@ class Deployment(object):
             }
             merge_dict(
                 cluster_data, {"metadata": {"annotations": rdr_bluestore_annotation}}
+            )
+        if (
+            version.get_semantic_ocs_version_from_config() >= version.VERSION_4_19
+            and config.MULTICLUSTER.get("multicluster_mode") == "regional-dr"
+        ):
+            api_server_exported_address_annotation = {
+                "ocs.openshift.io/api-server-exported-address": (
+                    f'{config.ENV_DATA["cluster_name"]}.'
+                    f"ocs-provider-server.openshift-storage.svc.clusterset.local:50051"
+                )
+            }
+            merge_dict(
+                cluster_data,
+                {"metadata": {"annotations": api_server_exported_address_annotation}},
             )
         if config.ENV_DATA.get("noobaa_external_pgsql"):
             log_step(
@@ -2410,14 +2415,13 @@ class Deployment(object):
         """
         Patch storage class which comes as default with installation to non-default
         """
-        if not self.DEFAULT_STORAGECLASS:
+        if not self.storage_class:
             logger.info(
-                "Default StorageClass is not set for this class: "
-                f"{self.__class__.__name__}"
+                f"Default StorageClass is not set for this class: {self.__class__.__name__}"
             )
             return
 
-        sc_to_patch = self.DEFAULT_STORAGECLASS
+        sc_to_patch = self.storage_class
         if (
             config.ENV_DATA.get("use_custom_sc_in_deployment")
             and self.platform.lower() == constants.VSPHERE_PLATFORM
@@ -2953,25 +2957,39 @@ class RBDDRDeployOps(object):
 
     @retry(ResourceWrongStatusException, tries=10, delay=5)
     def configure_rbd(self):
-        st_string = '{.items[?(@.metadata.ownerReferences[*].kind=="StorageCluster")].spec.mirroring.enabled}'
-        query_mirroring = (
-            f"oc get CephBlockPool -n {config.ENV_DATA['cluster_namespace']}"
-            f" -o=jsonpath='{st_string}'"
-        )
+        odf_running_version = version.get_semantic_ocs_version_from_config()
+        if odf_running_version >= version.VERSION_4_19:
+            cmd = (
+                f"oc get cephblockpoolradosnamespaces -n {config.ENV_DATA['cluster_namespace']}"
+                " -o=jsonpath='{.items[*].status.phase}'"
+            )
+            resource_name = constants.CEPHBLOCKPOOLRADOSNS
+            expected_state = constants.STATUS_READY
+        else:
+            st_string = '{.items[?(@.metadata.ownerReferences[*].kind=="StorageCluster")].spec.mirroring.enabled}'
+            cmd = (
+                f"oc get CephBlockPool -n {config.ENV_DATA['cluster_namespace']}"
+                f" -o=jsonpath='{st_string}'"
+            )
+            resource_name = constants.CEPHBLOCKPOOL
+            expected_state = "true"
+
         out_list = run_cmd_multicluster(
-            query_mirroring, skip_index=get_all_acm_and_recovery_indexes()
+            cmd, skip_index=get_all_acm_and_recovery_indexes()
         )
         index = 0
         for out in out_list:
             if not out:
                 continue
             logger.info(out.stdout.decode())
-            if out.stdout.decode() != "true":
+            if out.stdout.decode() != expected_state:
                 logger.error(
                     f"On cluster {config.clusters[index].ENV_DATA['cluster_name']}"
                 )
                 raise ResourceWrongStatusException(
-                    "CephBlockPool", expected="true", got=out.stdout.decode()
+                    resource_or_name=resource_name,
+                    expected=expected_state,
+                    got=out.stdout.decode(),
                 )
             index = +1
 
@@ -3798,14 +3816,23 @@ class RDRMultiClusterDROperatorsDeploy(MultiClusterDROperatorsDeploy):
             # Enable MCO console plugin
             enable_mco_console_plugin()
         config.switch_acm_ctx()
+        odf_running_version = version.get_semantic_ocs_version_from_config()
+        if odf_running_version >= version.VERSION_4_19:
+            # create service exporter
+            create_service_exporter()
+
         # RBD specific dr deployment
         if self.rbd:
             rbddops = RBDDRDeployOps()
             self.configure_mirror_peer()
             rbddops.deploy()
         self.enable_acm_observability()
+
         self.deploy_dr_policy()
-        update_volsync_channel()
+        if odf_running_version >= version.VERSION_4_19:
+            # validate storage cluster peer state
+            validate_storage_cluster_peer_state()
+            verify_volsync()
 
         # Enable cluster backup on both ACMs
         for i in acm_indexes:

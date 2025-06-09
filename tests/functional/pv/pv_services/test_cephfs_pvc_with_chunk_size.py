@@ -37,7 +37,7 @@ class TestCephfsWithChunkIo(E2ETest):
         cluster.ceph_config_set_debug("1/5")
         log.info("Ceph mds debug level has been set to default 1/5")
 
-    def test_cephfs_with_large_chunk_io(self, dc_pod_factory):
+    def test_cephfs_with_large_chunk_io(self, deployment_pod_factory):
         """
         This function facilitates
         1. Create PVC with Cephfs
@@ -55,7 +55,7 @@ class TestCephfsWithChunkIo(E2ETest):
         file = constants.CHUNK
         interface = constants.CEPHFILESYSTEM
         log.info("Creating fedora dc pod")
-        pod_obj = dc_pod_factory(size="50", interface=interface)
+        pod_obj = deployment_pod_factory(size="50", interface=interface)
         log.info("Copying chunk.py to fedora pod ")
         cmd = f"oc cp {file} {pod_obj.namespace}/{pod_obj.name}:/"
         helpers.run_cmd(cmd=cmd)

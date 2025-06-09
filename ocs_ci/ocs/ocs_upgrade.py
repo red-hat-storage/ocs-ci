@@ -153,6 +153,7 @@ def verify_image_versions(old_images, upgrade_version, version_before_upgrade):
     if (
         config.ENV_DATA.get("mcg_only_deployment")
         and config.ENV_DATA["platform"].lower() == constants.VSPHERE_PLATFORM
+        and config.ENV_DATA.get("cluster_type").lower() == constants.HCI_PROVIDER
     ):
         default_noobaa_pods = 4
         if upgrade_version >= parse_version("4.19"):
@@ -178,11 +179,19 @@ def verify_image_versions(old_images, upgrade_version, version_before_upgrade):
     if int(noobaa_db_psql_version) == constants.NOOBAA_POSTGRES_12_VERSION:
         ignore_psql_12_verification = False
     try:
+        num_nodes = (
+            config.ENV_DATA["worker_replicas"]
+            + config.ENV_DATA["master_replicas"]
+            + config.ENV_DATA.get("infra_replicas", 0)
+        )
+        upgrade_noobaa_timeout = 1620
+        if num_nodes >= 6:
+            upgrade_noobaa_timeout = 2220
         verify_pods_upgraded(
             old_images,
             selector=constants.NOOBAA_APP_LABEL,
             count=noobaa_pods,
-            timeout=1620,
+            timeout=upgrade_noobaa_timeout,
             ignore_psql_12_verification=ignore_psql_12_verification,
         )
     except TimeoutException as ex:
@@ -422,7 +431,6 @@ class OCSUpgrade(object):
         the actual csv
 
         """
-
         csv_name = None
         csv_list = get_csvs_start_with_prefix(resource_name, namespace=self.namespace)
         for csv in csv_list:
@@ -467,7 +475,7 @@ class OCSUpgrade(object):
             resource_name=resource_name,
             selector=operator_selector,
         )
-        package_manifest.wait_for_resource()
+        package_manifest.wait_for_resource(timeout=120)
         channel = config.DEPLOYMENT.get("ocs_csv_channel")
         if not channel:
             channel = package_manifest.get_default_channel()
@@ -486,11 +494,7 @@ class OCSUpgrade(object):
             subscription_name = constants.ODF_SUBSCRIPTION
         else:
             subscription_name = constants.OCS_SUBSCRIPTION
-        kind_name = (
-            "subscription.operators.coreos.com"
-            if config.multicluster
-            else "subscription"
-        )
+        kind_name = "subscription.operators.coreos.com"
         subscription = OCP(
             resource_name=subscription_name,
             kind=kind_name,

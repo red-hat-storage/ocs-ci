@@ -23,6 +23,11 @@ log = getLogger(__name__)
 @brown_squad
 @polarion_id("OCS-5792")
 class TestEphemeralPod:
+    # This a workaround for any cluster other than multiclent provider mode
+    @pytest.fixture()
+    def cluster_index(self):
+        return 0
+
     @pytest.mark.parametrize(
         argnames=["interface"], argvalues=[[CEPHFS_INTERFACE], [RBD_INTERFACE]]
     )

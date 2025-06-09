@@ -1,3 +1,4 @@
+import json
 import logging
 
 import pytest
@@ -20,6 +21,8 @@ from ocs_ci.framework.pytest_customization.marks import (
     magenta_squad,
     mcg,
     polarion_id,
+    skipif_aws_creds_are_missing,
+    skipif_disconnected_cluster,
 )
 from ocs_ci.ocs.node import get_worker_nodes, get_node_objs
 from ocs_ci.ocs.bucket_utils import (
@@ -28,6 +31,10 @@ from ocs_ci.ocs.bucket_utils import (
     write_random_test_objects_to_bucket,
     upload_test_objects_to_source_and_wait_for_replication,
     update_replication_policy,
+    upload_random_objects_to_source_and_wait_for_replication,
+    get_replication_policy,
+    s3_put_bucket_versioning,
+    wait_for_object_versions_match,
 )
 from ocs_ci.ocs import ocp
 from ocs_ci.ocs.resources.pvc import get_pvc_objs
@@ -40,9 +47,17 @@ from ocs_ci.ocs.resources.pod import (
     get_noobaa_core_pod,
     get_noobaa_pods,
     wait_for_noobaa_pods_running,
+    get_pod_node,
+    get_noobaa_endpoint_pods,
 )
+
 from ocs_ci.utility.retry import retry
-from ocs_ci.ocs.exceptions import CommandFailed, ResourceWrongStatusException
+from ocs_ci.ocs.exceptions import (
+    CommandFailed,
+    ResourceWrongStatusException,
+    TimeoutExpiredError,
+)
+
 
 logger = logging.getLogger(__name__)
 
@@ -310,7 +325,9 @@ class TestLogBasedReplicationWithDisruptions:
             skip_any_features=["nsfs", "rgw kafka", "caching"],
         )
 
-        mockup_logger, source_bucket, target_bucket = aws_log_based_replication_setup()
+        mockup_logger, _, source_bucket, target_bucket = (
+            aws_log_based_replication_setup()
+        )
 
         # upload test objects to the bucket and verify replication
         upload_test_objects_to_source_and_wait_for_replication(
@@ -394,6 +411,378 @@ class TestLogBasedReplicationWithDisruptions:
             target_bucket.name,
             timeout=300,
         ), "Standard replication completed even though replication policy is removed"
+
+        validate_mcg_bg_features(
+            feature_setup_map,
+            run_in_bg=False,
+            skip_any_features=["nsfs", "rgw kafka", "caching"],
+            object_amount=5,
+        )
+        logger.info("No issues seen with the MCG bg feature validation")
+
+
+@mcg
+@magenta_squad
+@system_test
+@skipif_aws_creds_are_missing
+@skipif_disconnected_cluster
+class TestMCGReplicationWithVersioningSystemTest:
+
+    @retry(CommandFailed, tries=7, delay=30)
+    def upload_objects_with_retry(
+        self,
+        mcg_obj_session,
+        source_bucket,
+        target_bucket,
+        mockup_logger,
+        file_dir,
+        pattern,
+        prefix,
+        num_versions=1,
+    ):
+        """
+        Upload random objects to the bucket and retry if fails with
+        CommandFailed exception.
+
+        Args:
+            mcg_obj_session (MCG): MCG object
+            source_bucket (OBC): Bucket object
+            target_bucket (OBC): Bucket object
+            mockup_logger (MockupLogger): Mockup logger object
+            file_dir (str): Source for generating objects
+            pattern (str): File object pattern
+            prefix (str): Prefix under which objects need to be uploaded
+            num_versions (int): Number of object versions
+
+        """
+        upload_random_objects_to_source_and_wait_for_replication(
+            mcg_obj_session,
+            source_bucket,
+            target_bucket,
+            mockup_logger,
+            file_dir,
+            pattern=pattern,
+            amount=1,
+            num_versions=num_versions,
+            prefix=prefix,
+            timeout=600,
+        )
+
+    @pytest.fixture(autouse=True)
+    def teardown(self, request, nodes):
+        """
+        Make sure all nodes are up again
+
+        """
+
+        def finalizer():
+            nodes.restart_nodes_by_stop_and_start_teardown()
+
+        request.addfinalizer(finalizer)
+
+    @polarion_id("OCS-6407")
+    def test_bucket_replication_with_versioning_system_test(
+        self,
+        awscli_pod_session,
+        mcg_obj_session,
+        bucket_factory,
+        reduce_replication_delay,
+        nodes,
+        noobaa_db_backup_locally,
+        noobaa_db_recovery_from_local,
+        aws_log_based_replication_setup,
+        test_directory_setup,
+        setup_mcg_bg_features,
+        validate_mcg_bg_features,
+    ):
+        """
+        System test to verify the bucket replication with versioning when there
+        are some disruptive and backup operations are performed.
+
+        Steps:
+
+        1. Run MCG background feature setup and validation
+        2. Setup two buckets with bi-directional replication enabled
+        3. Upload object and verify replication works between the buckets
+        4. Enable versioning on the buckets and also enable sync_versions=True on
+           replication policy as well
+        5. Upload objects to second bucket and verify replication, version sync works
+        6. Upload objects to first bucket and shutdown noobaa core pod node. Verify
+           replication and version sync works
+        7. Upload objects to the second bucket and restart all noobaa pods. Verify
+           replication and version sync works
+        8. Take the backup of Noobaa DB.
+        9. Upload objects to the first bucket and verify replication works but not the
+           version sync
+        10. Recover Noobaa DB from the backup
+        11. Upload objects to the second bucket. Verify replication and version sync works
+
+        """
+
+        feature_setup_map = setup_mcg_bg_features(
+            num_of_buckets=5,
+            object_amount=5,
+            is_disruptive=True,
+            skip_any_features=["nsfs", "rgw kafka", "caching"],
+        )
+
+        prefix_1 = "site_1"
+        prefix_2 = "site_2"
+        object_key = "ObjectKey-"
+
+        # Reduce the replication delay to 1 minute
+        logger.info("Reduce the bucket replication delay cycle to 1 minute")
+        reduce_replication_delay()
+
+        # Setup two buckets with bi-directional replication enabled
+        # deletion sync disabled
+        bucketclass_dict = {
+            "interface": "OC",
+            "backingstore_dict": {"aws": [(1, "eu-central-1")]},
+        }
+        mockup_logger_source, mockup_logger_target, bucket_1, bucket_2 = (
+            aws_log_based_replication_setup(
+                bucketclass_dict=bucketclass_dict,
+                bidirectional=True,
+                prefix_source=prefix_1,
+                prefix_target=prefix_2,
+                deletion_sync=False,
+            )
+        )
+
+        # Upload object and verify that bucket replication works
+        logger.info(f"Uploading object {object_key} to the bucket {bucket_1.name}")
+        self.upload_objects_with_retry(
+            mcg_obj_session,
+            bucket_1,
+            bucket_2,
+            mockup_logger_source,
+            test_directory_setup.origin_dir,
+            pattern=object_key,
+            prefix=prefix_1,
+        )
+
+        # Enable object versioning on both the buckets
+        s3_put_bucket_versioning(mcg_obj_session, bucket_1.name)
+        s3_put_bucket_versioning(mcg_obj_session, bucket_2.name)
+        logger.info("Enabled object versioning for both the buckets")
+
+        # Enable sync versions in both buckets replication policy
+        replication_1 = json.loads(get_replication_policy(bucket_name=bucket_2.name))
+        replication_2 = json.loads(get_replication_policy(bucket_name=bucket_1.name))
+        replication_1["rules"][0]["sync_versions"] = True
+        replication_2["rules"][0]["sync_versions"] = True
+
+        update_replication_policy(bucket_2.name, replication_1)
+        update_replication_policy(bucket_1.name, replication_2)
+        logger.info(
+            "Enabled sync versions in the replication policy for both the buckets"
+        )
+
+        # Update previously uploaded object with new data and new version
+        self.upload_objects_with_retry(
+            mcg_obj_session,
+            bucket_2,
+            bucket_1,
+            mockup_logger_target,
+            test_directory_setup.origin_dir,
+            pattern=object_key,
+            prefix=prefix_2,
+        )
+        logger.info(
+            f"Updated object {object_key} with new version data in bucket {bucket_2.name}"
+        )
+
+        wait_for_object_versions_match(
+            mcg_obj_session,
+            awscli_pod_session,
+            bucket_1.name,
+            bucket_2.name,
+            obj_key=f"{prefix_2}/{object_key}",
+        )
+        logger.info(
+            f"Replication works from {bucket_2.name} to {bucket_1.name} and has all the versions of object {object_key}"
+        )
+
+        # Will perform disruptive operations and object uploads, version verifications
+        # parallely.
+        with ThreadPoolExecutor(max_workers=1) as executor:
+
+            # Update object uploaded previously from the second bucket and
+            # then shutdown the noobaa core and db pod nodes
+            noobaa_pods = [
+                get_noobaa_core_pod(),
+                get_noobaa_db_pod(),
+            ] + get_noobaa_endpoint_pods()
+            noobaa_pod_nodes = [get_pod_node(pod_obj) for pod_obj in noobaa_pods]
+            aws_cli_pod_node = get_pod_node(awscli_pod_session).name
+            for node_obj in noobaa_pod_nodes:
+                if node_obj.name != aws_cli_pod_node:
+                    node_to_shutdown = [node_obj]
+                    break
+
+            logger.info(
+                f"Updating object {object_key} with new version data in bucket {bucket_1.name}"
+            )
+            future = executor.submit(
+                self.upload_objects_with_retry,
+                mcg_obj_session,
+                bucket_1,
+                bucket_2,
+                mockup_logger_source,
+                test_directory_setup.origin_dir,
+                pattern=object_key,
+                prefix=prefix_1,
+            )
+
+            nodes.stop_nodes(node_to_shutdown)
+            logger.info(f"Stopped these noobaa pod nodes {node_to_shutdown}")
+
+            # Wait for the upload to finish
+            future.result()
+
+            wait_for_object_versions_match(
+                mcg_obj_session,
+                awscli_pod_session,
+                bucket_1.name,
+                bucket_2.name,
+                obj_key=f"{prefix_1}/{object_key}",
+            )
+            logger.info(
+                f"Replication works from {bucket_1.name} to {bucket_2.name} and"
+                f" has all the versions of object {object_key}"
+            )
+
+            logger.info("Starting nodes now...")
+            nodes.start_nodes(nodes=node_to_shutdown)
+            wait_for_noobaa_pods_running()
+
+            # Update object uploaded previously from the first bucket and then restart the noobaa pods
+            noobaa_pods = get_noobaa_pods()
+            logger.info(
+                f"Updating object {object_key} with new version data in bucket {bucket_2.name}"
+            )
+            future = executor.submit(
+                self.upload_objects_with_retry,
+                mcg_obj_session,
+                bucket_2,
+                bucket_1,
+                mockup_logger_target,
+                test_directory_setup.origin_dir,
+                pattern=object_key,
+                prefix=prefix_2,
+            )
+            for pod_obj in noobaa_pods:
+                pod_obj.delete(force=True)
+                logger.info(f"Deleted noobaa pod {pod_obj.name}")
+            logger.info("Restarted all Noobaa pods")
+
+            # Wait for the upload to finish
+            future.result()
+
+            wait_for_object_versions_match(
+                mcg_obj_session,
+                awscli_pod_session,
+                bucket_1.name,
+                bucket_2.name,
+                obj_key=f"{prefix_2}/{object_key}",
+            )
+            logger.info(
+                f"Replication works from {bucket_2.name} to {bucket_1.name} "
+                f"and has all the versions of object {object_key}"
+            )
+            future.result()
+
+        # Take the noobaa db backup and then disable the sync versions
+        # make sure no version sync happens
+        logger.info("Taking backup of noobaa db")
+        cnpg_cluster_yaml, original_db_replica_count, secrets_obj = (
+            noobaa_db_backup_locally()
+        )
+
+        logger.info("Disabling version sync for both the buckets")
+        replication_1["rules"][0]["sync_versions"] = False
+        replication_2["rules"][0]["sync_versions"] = False
+
+        update_replication_policy(bucket_2.name, replication_1)
+        update_replication_policy(bucket_1.name, replication_2)
+
+        # Change the replication cycle delay to 3 minutes
+        logger.info("Reduce the bucket replication delay cycle to 5 minutes")
+        reduce_replication_delay(interval=5)
+
+        # Update previously uploaded object with new data and new version
+        self.upload_objects_with_retry(
+            mcg_obj_session,
+            bucket_1,
+            bucket_2,
+            mockup_logger_source,
+            test_directory_setup.origin_dir,
+            pattern=object_key,
+            prefix=prefix_1,
+            num_versions=4,
+        )
+        logger.info(
+            f"Updated object {object_key} with new version data in bucket {bucket_1.name}"
+        )
+
+        try:
+            wait_for_object_versions_match(
+                mcg_obj_session,
+                awscli_pod_session,
+                bucket_1.name,
+                bucket_2.name,
+                obj_key=f"{prefix_1}/{object_key}",
+            )
+        except TimeoutExpiredError:
+            logger.info(
+                f"Sync versions didnt work as expected, both {bucket_1.name} "
+                f"and {bucket_2.name} have different versions"
+            )
+        else:
+            assert False, "Sync version worked even when sync_versions was disabled!!"
+
+        # Recover the noobaa db from the backup and perform
+        # object deletion and verify deletion sync works
+        logger.info("Recovering noobaa db from backup")
+        noobaa_db_recovery_from_local(
+            cnpg_cluster_yaml, original_db_replica_count, secrets_obj
+        )
+        wait_for_noobaa_pods_running(timeout=420)
+
+        logger.info("Enabling version sync for both the buckets")
+        replication_1["rules"][0]["sync_versions"] = True
+        replication_2["rules"][0]["sync_versions"] = True
+
+        update_replication_policy(bucket_2.name, replication_1)
+        update_replication_policy(bucket_1.name, replication_2)
+
+        # Update previously uploaded object with new data and new version
+        self.upload_objects_with_retry(
+            mcg_obj_session,
+            bucket_1,
+            bucket_2,
+            mockup_logger_source,
+            test_directory_setup.origin_dir,
+            pattern=object_key,
+            prefix=prefix_1,
+            num_versions=4,
+        )
+        logger.info(
+            f"Updated object {object_key} with new version data in bucket {bucket_1.name}"
+        )
+
+        wait_for_object_versions_match(
+            mcg_obj_session,
+            awscli_pod_session,
+            bucket_1.name,
+            bucket_2.name,
+            obj_key=f"{prefix_1}/{object_key}",
+        )
+        logger.info(
+            f"Replication works from {bucket_1.name} to {bucket_2.name} and"
+            f" has all the versions of object {object_key}"
+        )
 
         validate_mcg_bg_features(
             feature_setup_map,

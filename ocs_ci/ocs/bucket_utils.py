@@ -23,6 +23,7 @@ from ocs_ci.ocs.exceptions import (
     UnexpectedBehaviour,
 )
 from ocs_ci.ocs.ocp import OCP
+from ocs_ci.ocs.resources.s3_batch_deleter import S3BatchDeleter
 from ocs_ci.utility import templating
 from ocs_ci.utility.retry import retry
 from ocs_ci.utility.ssl_certs import get_root_ca_cert
@@ -2144,6 +2145,24 @@ def update_replication_policy(bucket_name, replication_policy_dict):
     ).patch(params=json.dumps(replication_policy_patch_dict), format_type="merge")
 
 
+def get_replication_policy(bucket_name):
+    """
+    Get the replication policy on a bucket
+
+    Args:
+        bucket_name (str): Name of the bucket
+
+    Returns:
+        Dict: replication policy
+
+    """
+    return OCP(
+        kind="obc",
+        namespace=config.ENV_DATA["cluster_namespace"],
+        resource_name=bucket_name,
+    ).get()["spec"]["additionalConfig"]["replicationPolicy"]
+
+
 def patch_replication_policy_to_bucketclass(
     bucketclass_name, rule_id, destination_bucket_name
 ):
@@ -2443,7 +2462,7 @@ def expire_objects_in_bucket(bucket_name, object_keys=[], prefix=""):
 
 def expire_multipart_upload_in_noobaa_db(upload_id):
     """
-    Expire a multipart upload by changing its creation date to one year back.
+    Expire a multipart upload and its parts by changing their creation date to one year back.
 
     Args:
         upload_id (str): The ID of the multipart upload to expire (unique across all buckets)
@@ -2454,8 +2473,11 @@ def expire_multipart_upload_in_noobaa_db(upload_id):
     # and that ID's first 8 characters are the initial timestamp
     # in hex
 
-    # first two characters of the hex are 0x
-    new_upload_started = hex(int(one_year_ago))[2:] + upload_id[8:]
+    # The first two characters in the python hex representation are "0x"
+    one_year_ago_hex_str = hex(int(one_year_ago))[2:]
+
+    # Concatenate the new timestamp with the rest of the ID
+    new_upload_started = one_year_ago_hex_str + upload_id[8:]
 
     psql_query = (
         "UPDATE objectmds "
@@ -2464,6 +2486,15 @@ def expire_multipart_upload_in_noobaa_db(upload_id):
         f"WHERE _id = '{upload_id}'"
     )
     psql_query += ";"
+    exec_nb_db_query(psql_query)
+
+    # Expire the parts as well
+    psql_query = (
+        "UPDATE objectmultiparts "
+        "SET data = jsonb_set(data, '{create_time}', "
+        f"to_jsonb(to_timestamp({one_year_ago}))) "
+        f"WHERE data->>'obj' = '{upload_id}';"
+    )
     exec_nb_db_query(psql_query)
 
 
@@ -2532,7 +2563,9 @@ def delete_all_noobaa_buckets(mcg_obj, request):
     for bucket in buckets["Buckets"]:
         logger.info(f"Deleting {bucket} and its objects")
         s3_bucket = mcg_obj.s3_resource.Bucket(bucket["Name"])
-        s3_bucket.objects.all().delete()
+        delete_all_objects_in_batches(
+            s3_resource=mcg_obj.s3_resource, bucket_name=s3_bucket
+        )
         s3_bucket.delete()
 
     def finalizer():
@@ -2612,6 +2645,50 @@ def get_object_count_in_bucket(io_pod, bucket_name, prefix="", s3_obj=None):
         out_yaml_format=False,
     )
     return len(output.splitlines())
+
+
+def wait_for_bucket_count_stability(
+    mcg_obj, expected_count=None, max_retries=10, retry_interval=5, stability_count=3
+):
+    """
+    Poll CLI until bucket count is stable or expected count is reached.
+
+    Args:
+        mcg_obj: MCG object instance with cli_list_all_buckets method
+        expected_count (int, optional): Expected number of buckets
+        max_retries (int): Maximum number of retry attempts
+        retry_interval (int): Seconds between retries
+        stability_count (int): Number of consecutive identical counts to consider stable
+
+    Returns:
+        tuple: (final_count, is_expected_reached)
+    """
+    previous_counts = []
+    for attempt in range(max_retries):
+        cli_buckets = mcg_obj.cli_list_all_buckets()
+        current_count = len(cli_buckets)
+
+        logger.info(
+            f"Bucket count from CLI (attempt {attempt+1}/{max_retries}): {current_count}"
+        )
+
+        previous_counts.append(current_count)
+
+        is_stable = False
+        if len(previous_counts) >= stability_count:
+            is_stable = len(set(previous_counts[-stability_count:])) == 1
+
+        meets_expected = expected_count is None or current_count >= expected_count
+
+        if is_stable and meets_expected:
+            logger.info(
+                f"Bucket count stabilized at {current_count} for {stability_count} consecutive checks"
+            )
+            return current_count, True
+
+        time.sleep(retry_interval)
+
+    return previous_counts[-1] if previous_counts else 0, False
 
 
 def wait_for_object_count_in_bucket(
@@ -2808,6 +2885,56 @@ def bulk_s3_put_bucket_lifecycle_config(mcg_obj, buckets, lifecycle_config):
             Bucket=bucket.name, LifecycleConfiguration=lifecycle_config
         )
     logger.info("Applied lifecyle rule on all the buckets")
+
+
+def upload_random_objects_to_source_and_wait_for_replication(
+    mcg_obj,
+    source_bucket,
+    target_bucket,
+    mockup_logger,
+    file_dir,
+    pattern="ObjKey-",
+    amount=1,
+    num_versions=1,
+    prefix=None,
+    timeout=600,
+):
+    """
+    Upload randomly generated objects to the source bucket and wait until the
+    replication happens
+
+    Args:
+        mcg_obj (MCG): MCG object
+        source_bucket (OBC): OBC object
+        target_bucket (OBC): OBC object
+        mockup_logger (MockupLogger): MockupLogger object
+        file_dir (str): File directory where to generate objects
+        pattern (str): Prefix for object name
+        amount (int): Number of objects
+        num_verions (int): Number of versions of each object
+        prefix (str): Prefix under bucket where objects need to be uploaded
+        timeout (int): Timeout to wait until the replication
+
+    """
+
+    logger.info(f"Randomly generating {amount} object/s")
+    for _ in range(num_versions):
+        obj_list = write_random_objects_in_pod(
+            io_pod=mockup_logger.awscli_pod,
+            file_dir=file_dir,
+            amount=amount,
+            pattern=pattern,
+        )
+
+        mockup_logger.upload_random_objects_and_log(
+            source_bucket.name, file_dir=file_dir, obj_list=obj_list, prefix=prefix
+        )
+    assert compare_bucket_object_list(
+        mcg_obj,
+        source_bucket.name,
+        target_bucket.name,
+        timeout=timeout,
+    ), f"Standard replication failed to complete in {timeout} seconds"
 
 
 def upload_test_objects_to_source_and_wait_for_replication(
@@ -3102,7 +3229,6 @@ def get_obj_versions(mcg_obj, awscli_pod, bucket_name, obj_key):
         # Remove quotes from the ETag values for easier usage
         for d in versions_dicts:
             d["ETag"] = d["ETag"].strip('"')
-
     return versions_dicts
 
 
@@ -3282,3 +3408,63 @@ def verify_objs_deleted_from_objmds(bucket_name, timeout=600, sleep=30):
         result=True
     ), "Not all the objects are marked deleted"
     logger.info("All the objects are marked expired")
+
+
+def delete_all_objects_in_batches(
+    s3_resource,
+    bucket_name,
+    parallelize=False,
+):
+    """
+    Delete all objects from an S3 bucket in batches.
+
+    Note that use_parallel should only be used buckets with hundreds of thousands
+    of objects. For smaller buckets, it is recommended to use the simpler sequential
+    deletion method to avoid overwhelming the S3 API and the system's resources.
+
+    Args:
+        s3_resource (S3.Resource): Boto3 S3 resource object
+        bucket_name (str): Name of the S3 bucket
+        parallelize (bool): If True, delete objects in parallel using threads
+    """
+    batch_deleter = S3BatchDeleter(
+        s3_resource=s3_resource,
+        bucket_name=bucket_name,
+    )
+
+    # Delete objects in parallel or sequentially based on the use_parallel flag
+    if parallelize:
+        batch_deleter.delete_in_parallel()
+    else:
+        batch_deleter.delete_sequentially()
+
+
+def verify_soft_deletion(mcg_obj, awscli_pod, bucket_name, object_key):
+    """
+    Verify if deletion marker exists and IsLatest for the given object key
+
+    Args:
+        mcg_obj (MCG): MCG object
+        awscli_pod (Pod): Pod object where AWS CLI is installed
+        bucket_name (str): Name of the bucket
+        object_key (str): Object key
+
+    Returns:
+        True if DeletionMarkers exists else False
+
+    """
+    resp = awscli_pod.exec_cmd_on_pod(
+        command=craft_s3_command(
+            f"list-object-versions --bucket {bucket_name} --prefix {object_key}",
+            mcg_obj=mcg_obj,
+            api=True,
+        ),
+        out_yaml_format=False,
+    )
+
+    if resp and "DeleteMarkers" in resp:
+        delete_markers = json.loads(resp).get("DeleteMarkers")[0]
+        logger.info(f"{bucket_name}:\n{delete_markers}")
+        if delete_markers.get("IsLatest"):
+            return True
+    return False

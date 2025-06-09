@@ -16,7 +16,7 @@ from ocs_ci.framework import config
 from ocs_ci.ocs import constants, exceptions, ocp, machine
 from ocs_ci.ocs.resources import pod
 from ocs_ci.ocs.node import drain_nodes
-from ocs_ci.utility import cco, templating, version
+from ocs_ci.utility import cco, templating
 from ocs_ci.utility.aws import (
     AWS as AWSUtil,
     create_and_attach_volume_for_all_workers,
@@ -56,9 +56,6 @@ __all__ = ["AWSIPI", "AWSUPI"]
 
 class AWSBase(CloudDeploymentBase):
 
-    # default storage class for StorageCluster CRD on AWS platform
-    DEFAULT_STORAGECLASS = "gp2"
-
     def __init__(self):
         """
         This would be base for both IPI and UPI deployment
@@ -68,20 +65,9 @@ class AWSBase(CloudDeploymentBase):
         # dict of cluster prefixes with special handling rules (for existence
         # check or during a cluster cleanup)
         self.cluster_prefixes_special_rules = CLUSTER_PREFIXES_SPECIAL_RULES
-        ocp_version = version.get_semantic_ocp_version_from_config()
-        if ocp_version >= version.VERSION_4_12:
-            self.DEFAULT_STORAGECLASS = "gp2-csi"
 
     def deploy_ocp(self, log_cli_level="DEBUG"):
         super(AWSBase, self).deploy_ocp(log_cli_level)
-        ocp_version = version.get_semantic_ocp_version_from_config()
-        ocs_version = version.get_semantic_ocs_version_from_config()
-
-        if ocs_version >= version.VERSION_4_10 and ocp_version >= version.VERSION_4_9:
-            # If we don't customize the storage class, we will use the default one
-            self.DEFAULT_STORAGECLASS = config.DEPLOYMENT.get(
-                "customized_deployment_storage_class", self.DEFAULT_STORAGECLASS
-            )
 
     def host_network_update(self):
         """

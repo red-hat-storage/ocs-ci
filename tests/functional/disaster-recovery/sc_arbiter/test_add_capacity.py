@@ -6,7 +6,7 @@ from ocs_ci.framework.pytest_customization.marks import (
     turquoise_squad,
     stretchcluster_required,
     tier1,
-    jira,
+    # jira,
 )
 from ocs_ci.helpers.cnv_helpers import cal_md5sum_vm
 from ocs_ci.ocs import constants
@@ -23,7 +23,7 @@ logger = logging.getLogger(__name__)
 
 @tier1
 @turquoise_squad
-@jira("DFBUGS-1273")
+# @jira("DFBUGS-1273")
 @stretchcluster_required
 class TestAddCapacityStretchCluster:
     """
@@ -105,6 +105,9 @@ class TestAddCapacityStretchCluster:
             sc_obj.cephfs_logwriter_dep,
             sc_obj.cephfs_logreader_job,
         ) = setup_logwriter_cephfs_workload_factory(read_duration=0)
+        sc_obj.rbd_logwriter_sts = setup_logwriter_rbd_workload_factory(
+            zone_aware=False
+        )
 
         sc_obj.get_logwriter_reader_pods(label=constants.LOGWRITER_CEPHFS_LABEL)
         sc_obj.get_logwriter_reader_pods(label=constants.LOGREADER_CEPHFS_LABEL)

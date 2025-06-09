@@ -13,7 +13,11 @@ from ocs_ci.ocs import constants
 from ocs_ci.framework import config
 from ocs_ci.ocs.ocp import OCP
 from ocs_ci.utility import templating
-from ocs_ci.utility.utils import get_ocp_version, get_running_acm_version, run_cmd
+from ocs_ci.utility.utils import (
+    get_running_ocp_version,
+    get_running_acm_version,
+    run_cmd,
+)
 
 
 logger = logging.getLogger(__name__)
@@ -22,7 +26,7 @@ logger = logging.getLogger(__name__)
 class ACMUpgrade(object):
     def __init__(self):
         self.namespace = constants.ACM_HUB_NAMESPACE
-        self.operator_name = constants.ACM_HUB_OPERATOR_NAME
+        self.operator_name = constants.ACM_OPERATOR_SUBSCRIPTION
         # Since ACM upgrade happens followed by OCP upgrade in the sequence
         # the config would have loaded upgrade parameters rather than pre-upgrade params
         # Hence we can't rely on ENV_DATA['acm_version'] for the pre-upgrade version
@@ -51,9 +55,16 @@ class ACMUpgrade(object):
             self.zstream_upgrade = True
         # either this would be GA to Unreleased upgrade of same version OR
         # GA to unreleased upgrade to higher version
-        if self.acm_registry_image and self.version_change:
+
+        # Updated this if condition from,
+        # if self.acm_registry_image and self.version_change:
+        # to if self.version_change:
+        # as it will not create catalogsource when registry image
+        # is not provided but self.version_change is True
+        if self.version_change:
             self.upgrade_with_registry()
-            self.annotate_mch()
+
+            # self.annotate_mch()
             run_cmd(f"oc create -f {constants.ACM_BREW_ICSP_YAML}")
             self.patch_channel()
         else:
@@ -98,12 +109,18 @@ class ACMUpgrade(object):
 
     def acm_patch_subscription(self, patch):
         patch_cmd = (
-            f"oc -n {constants.ACM_HUB_NAMESPACE} patch sub advanced-cluster-management "
+            f"oc -n {constants.ACM_HUB_NAMESPACE} patch {constants.SUBSCRIPTION_WITH_ACM} acm-operator-subscription "
             f"-p {patch} --type merge"
         )
         run_cmd(patch_cmd)
 
     def create_catalog_source(self):
+        from ocs_ci.ocs.resources.catalog_source import CatalogSource
+
+        acm_operator_catsrc = CatalogSource(
+            resource_name=constants.ACM_CATSRC_NAME,
+            namespace=constants.MARKETPLACE_NAMESPACE,
+        )
         logger.info("Creating ACM catalog source")
         acm_catsrc = templating.load_yaml(constants.ACM_CATSRC)
         if self.acm_registry_image:
@@ -113,12 +130,18 @@ class ACMUpgrade(object):
             resp = requests.get(constants.ACM_BREW_BUILD_URL, verify=False)
             raw_msg = resp.json()["raw_messages"]
             # TODO: Find way to get ocp version before upgrade
-            version_tag = raw_msg[0]["msg"]["pipeline"]["index_image"][
-                f"v{get_ocp_version()}"
-            ].split(":")[1]
-            acm_catsrc["spec"]["image"] = ":".jon(
-                [constants.ACM_BREW_REPO, version_tag]
-            )
+            # Adding try and KeyError exception as the key 'index_image' does not exist,
+            # in the first element of raw_data[0]["msg"]["pipeline"] all the time
+            # which can lead to KeyError: 'index_image'
+            for item in raw_msg:
+                try:
+                    version_tag = item["msg"]["pipeline"]["index_image"][
+                        f"v{get_running_ocp_version()}"
+                    ].split(":")[1]
+                    break
+                except KeyError:
+                    continue
+            acm_catsrc["spec"]["image"] = ":".join([constants.BREW_REPO, version_tag])
         acm_catsrc["metadata"]["name"] = constants.ACM_CATSRC_NAME
         acm_catsrc["spec"]["publisher"] = "grpc"
         acm_data_yaml = tempfile.NamedTemporaryFile(
@@ -126,8 +149,10 @@ class ACMUpgrade(object):
         )
         templating.dump_data_to_temp_yaml(acm_catsrc, acm_data_yaml.name)
         run_cmd(f"oc create -f {acm_data_yaml.name}", timeout=300)
+        acm_operator_catsrc.wait_for_state("READY")
 
     def validate_upgrade(self):
+        # To do: upgrade validation for internal builds of same version
         acm_sub = OCP(
             namespace=self.namespace,
             resource_name=self.operator_name,

@@ -15,7 +15,7 @@ import string
 import subprocess
 import time
 import traceback
-from typing import Match
+from typing import Match, Iterator
 import stat
 import shutil
 from copy import deepcopy
@@ -2195,8 +2195,8 @@ def get_csi_versions():
     from ocs_ci.ocs.ocp import OCP
 
     for provisioner in [
-        constants.CSI_CEPHFSPLUGIN_PROVISIONER_LABEL,
-        constants.CSI_RBDPLUGIN_PROVISIONER_LABEL,
+        constants.CSI_CEPHFSPLUGIN_PROVISIONER_LABEL_419,
+        constants.CSI_CEPHFSPLUGIN_PROVISIONER_LABEL_419,
     ]:
         ocp_pod_obj = OCP(
             kind=constants.POD,
@@ -2573,7 +2573,7 @@ def ceph_health_resolve_mon_slow_ops(health_status):
         from ocs_ci.ocs import ocp
 
         ocp.OCP().exec_oc_cmd(
-            f"oc delete pod -n {config.ENV_DATA['cluster_namespace']} -l ceph_daemon_id={mon_id}"
+            f"delete pod -n {config.ENV_DATA['cluster_namespace']} -l ceph_daemon_id={mon_id}"
         )
 
 
@@ -2623,6 +2623,16 @@ def ceph_health_recover(health_status, namespace=None):
             log.info(
                 "Trying to fix Ceph Health because we found in Health status the matching pattern"
                 f": '{pattern}'!"
+            )
+            # Avoid circular dependencies, importing here
+            from ocs_ci.ocs.utils import collect_ocs_logs
+
+            # Collecting logs here before trying to fix issue
+            timestamp = int(time.time())
+            collect_ocs_logs(
+                f"ceph_health_recover_{timestamp}",
+                ocp=False,
+                timeout=defaults.MUST_GATHER_TIMEOUT,
             )
             fix_dict["func"](
                 *fix_dict.get("func_args", []), **fix_dict.get("func_kwargs", {})
@@ -4352,7 +4362,9 @@ def get_system_architecture():
     return node.ocp.exec_oc_debug_cmd(node.data["metadata"]["name"], ["uname -m"])
 
 
-def wait_for_machineconfigpool_status(node_type, timeout=1900, skip_tls_verify=False):
+def wait_for_machineconfigpool_status(
+    node_type, timeout=1900, skip_tls_verify=False, force_delete_pods=False
+):
     """
     Check for Machineconfigpool status
 
@@ -4362,6 +4374,7 @@ def wait_for_machineconfigpool_status(node_type, timeout=1900, skip_tls_verify=F
             e.g: worker, master and all if we want to check for all nodes
         timeout (int): Time in seconds to wait
         skip_tls_verify (bool): True if allow skipping TLS verification
+        force_delete_pods (bool): if True delete pods stuck at terminating forcefully
 
     """
     log.info("Sleeping for 60 sec to start update machineconfigpool status")
@@ -4371,9 +4384,11 @@ def wait_for_machineconfigpool_status(node_type, timeout=1900, skip_tls_verify=F
 
     node_types = [node_type]
     if node_type == "all":
-        node_types = [f"{constants.WORKER_MACHINE}", f"{constants.MASTER_MACHINE}"]
+        node_types = [constants.WORKER_MACHINE, constants.MASTER_MACHINE]
 
     for role in node_types:
+        if force_delete_pods:
+            clean_up_pods_for_provider(node_type=role)
         log.info(f"Checking machineconfigpool status for {role} nodes")
         ocp_obj = ocp.OCP(
             kind=constants.MACHINECONFIGPOOL,
@@ -4381,7 +4396,6 @@ def wait_for_machineconfigpool_status(node_type, timeout=1900, skip_tls_verify=F
             skip_tls_verify=skip_tls_verify,
         )
         machine_count = ocp_obj.get()["status"]["machineCount"]
-
         assert ocp_obj.wait_for_resource(
             condition=str(machine_count),
             column="READYMACHINECOUNT",
@@ -5128,6 +5142,65 @@ def get_oadp_version(namespace=constants.OADP_NAMESPACE):
             return csv["spec"]["version"]
 
 
+def create_unreleased_oadp_catalog():
+    """
+    Creates catalog for unreleased OADP operator.
+
+    Raises:
+        TagNotFoundException: if no image tag for oadp oprator found in brew
+
+    """
+    resp = requests.get(constants.OADP_BREW_BUILD_URL, verify=False)
+    json_data = resp.json()["raw_messages"]
+    image_tag = None
+    ocp_version = version_module.get_semantic_ocp_version_from_config()
+    nvr = None
+    image = None
+
+    for item in json_data:
+        pipeline = item.get("msg", {}).get("pipeline", {})
+        if pipeline.get("status") != "complete":
+            continue
+        index_image = pipeline.get("index_image", {})
+        index_image_str = index_image.get(f"v{ocp_version}")
+        if not index_image_str:
+            continue
+        try:
+            image_tag = index_image_str.split(":")[1]
+            nvr = item.get("msg", {}).get("artifact", {}).get("nvr")
+            break
+        except IndexError:
+            continue
+
+    if image_tag:
+        # Importing here to avoid circular dependency
+        from ocs_ci.utility.templating import dump_data_to_temp_yaml, load_yaml
+        from ocs_ci.ocs.resources.catalog_source import CatalogSource
+
+        image = f"{constants.BREW_REPO}:{image_tag}"
+        log.info(
+            f"Creating catalog for OADP operator brew image NVR: {nvr} "
+            f"for OCP: v{ocp_version}. Image: {image}"
+        )
+        brew_catalog_data = load_yaml(constants.BREW_CATALOG_YAML)
+        brew_catalog_data["spec"]["image"] = image
+        brew_catalog_data_yaml = NamedTemporaryFile(
+            mode="w+", prefix="brew-catalog", delete=False
+        )
+        dump_data_to_temp_yaml(brew_catalog_data, brew_catalog_data_yaml.name)
+        run_cmd(f"oc create -f {constants.BREW_ICSP}", timeout=300)
+        wait_for_machineconfigpool_status("all")
+        run_cmd(f"oc create -f {brew_catalog_data_yaml.name}", timeout=300)
+        catalog_source = CatalogSource(
+            resource_name=constants.BREW_CATALOG_NAME,
+            namespace=constants.MARKETPLACE_NAMESPACE,
+        )
+        # Wait for catalog source is ready
+        catalog_source.wait_for_state("READY")
+    else:
+        raise TagNotFoundException("No brew image for oadp operator found!")
+
+
 def get_acm_version(namespace=constants.ACM_HUB_NAMESPACE):
     """
     Get ACM version from CSV
@@ -5478,23 +5551,41 @@ def create_config_ini_file(params):
     return config_ini_file.name
 
 
-def generate_folder_with_files(num_files: int = 300) -> str:
+def generate_folder_with_files(
+    num_files: int = 300, max_workers: int = 4
+) -> tuple[str, Iterator[str]]:
     """
-    Generates a random folder with specified number of random text files inside it in /tmp folder.
+    Generates a random folder and returns a generator that creates random text files on demand.
+    Uses ThreadPoolExecutor for improved performance.
 
     Args:
-        num_files (int): Number of files to generate. Defaults to 300.
+        num_files (int): Maximum number of files to generate. Defaults to 300.
+        max_workers (int): Maximum number of threads to use. Defaults to 4.
 
     Returns:
-        str: Full path to the generated folder.
+        tuple[str, Iterator[str]]: Tuple containing:
+            - Full path to the generated folder
+            - Generator yielding file paths as they are created
 
     Raises:
         OSError: If folder creation or file write fails.
-        RuntimeError: If file count validation fails.
     """
+    # Create folder
+    folder_name = "".join(random.choices(string.ascii_lowercase + string.digits, k=8))
+    folder_path = os.path.join("/tmp", folder_name)
+    os.makedirs(folder_path, exist_ok=True)
 
-    def _generate_files():
-        for _ in range(num_files):
+    from concurrent.futures import ThreadPoolExecutor
+    from queue import Queue, Empty
+    import threading
+
+    # Use a queue to maintain order and provide a generator-like interface
+    file_queue = Queue()
+    stop_event = threading.Event()
+
+    def create_file(i):
+        """Creates a single file and adds its path to the queue"""
+        try:
             filename = (
                 "".join(random.choices(string.ascii_lowercase + string.digits, k=8))
                 + ".txt"
@@ -5510,24 +5601,34 @@ def generate_folder_with_files(num_files: int = 300) -> str:
                 f.flush()
                 os.fsync(f.fileno())  # Ensure data is written to disk
 
-            yield filepath
+            file_queue.put(filepath)
+        except Exception as e:
+            log.error(f"Error creating file: {e}")
 
-    # Create folder
-    folder_name = "".join(random.choices(string.ascii_lowercase + string.digits, k=8))
-    folder_path = os.path.join("/tmp", folder_name)
-    os.makedirs(folder_path, exist_ok=True)
+    def file_generator():
+        """Generator that yields file paths from the queue as they are created"""
+        files_received = 0
 
-    # Generate files using generator
-    created_files = set(_generate_files())
+        # Start the executor in a background thread to avoid blocking
+        executor = ThreadPoolExecutor(max_workers=max_workers)
+        futures = [executor.submit(create_file, i) for i in range(num_files)]
 
-    # Validate file count
-    actual_files = set(os.path.join(folder_path, f) for f in os.listdir(folder_path))
-    if len(actual_files) != num_files or actual_files != created_files:
-        raise RuntimeError(
-            f"File count validation failed. Expected {num_files}, got {len(actual_files)}"
-        )
+        # Yield files as they become available
+        while files_received < num_files and not stop_event.is_set():
+            try:
+                # Wait for a file to be available with a timeout to check the stop event
+                filepath = file_queue.get(timeout=0.1)
+                files_received += 1
+                yield filepath
+            except Empty:
+                # Check if all futures are done
+                if all(future.done() for future in futures):
+                    break
 
-    return folder_path
+        # Clean up
+        executor.shutdown(wait=False)
+
+    return folder_path, file_generator()
 
 
 def wait_custom_resource_defenition_available(crd_name, timeout=600):
@@ -5555,3 +5656,179 @@ def wait_custom_resource_defenition_available(crd_name, timeout=600):
             dont_raise=True,
         )
     )
+
+
+def clean_up_pods_for_provider(node_type, max_retries=30, retry_delay_seconds=30):
+    """
+    Manually clean up pods if nodes get stuck in Ready,SchedulingDisabled during OCP upgrade.
+    Checks machine-config-controller logs for eviction errors or completion messages.
+
+    The following pods may get stuck during cleanup in the hcpclusters namespace:
+    - openshift-oauth-apiserver
+    - oauth-openshift
+    - openshift-apiserver
+    - kube-apiserver
+    - etcd-0
+    - virt-launcher pods
+
+    Args:
+        node_type (str): Type of nodes (e.g., "worker", "master") for which pods should be cleaned up.
+        max_retries (int): Maximum number of times to check nodes before giving up.
+        retry_delay_seconds (int): Seconds to wait between checks if no progress is made.
+    """
+    from ocs_ci.ocs.node import get_nodes, wait_for_nodes_status
+    from ocs_ci.ocs.ocp import OCP
+    from ocs_ci.ocs.resources import pod
+
+    # Regex to capture pod name and namespace from lines like:
+    # "... error when evicting pods ... pods/"<pod_name>" -n "<namespace>" ..."
+    # The (?:.*?-n\s*"([^"]+)") part makes the namespace capture optional and handles potential variations
+    eviction_error_pattern = re.compile(
+        r'error when evicting pods/"([^"]+)"(?:.*?-n\s*"([^"]+)")'
+    )
+    mcc_pod_info = None  # Cache MCC pod info
+
+    for attempt in range(max_retries):
+        log.info(f"Node cleanup check: Attempt {attempt + 1}/{max_retries}")
+        current_nodes = get_nodes()
+        if not current_nodes:
+            log.warning(
+                f"No nodes found for type '{node_type}'. Assuming task is complete or not applicable."
+            )
+            continue
+
+        if not mcc_pod_info:
+            try:
+                mcc_pod_obj = pod.get_machine_config_controller_pod()
+                if not mcc_pod_obj:
+                    log.warning("Machine Config Controller pod not found. Retrying...")
+                    continue
+                mcc_pod_info = {"name": mcc_pod_obj.name}
+            except Exception as e:
+                log.error(
+                    f"Error getting Machine Config Controller pod: {e}. Retrying..."
+                )
+                time.sleep(retry_delay_seconds)
+                continue
+
+        all_target_nodes_resolved = (
+            True  # Assume all relevant nodes are resolved initially
+        )
+        action_taken_this_iteration = False
+
+        for node in current_nodes:
+            if node.status() != constants.NODE_READY_SCHEDULING_DISABLED:
+                log.info(f"Node {node.name} is in {node.status()} status. Skipping.")
+                continue  # Skip this node and go to the next
+            # If we found a node in the target state.
+            all_target_nodes_resolved = False
+            if node.status() == constants.NODE_READY_SCHEDULING_DISABLED:
+                log.info(
+                    f"Node {node.name} is in {constants.NODE_READY_SCHEDULING_DISABLED} status. Checking logs..."
+                )
+
+                # collect machine config log
+                try:
+                    mcc_logs = pod.get_pod_logs(
+                        pod_name=mcc_pod_info["name"],
+                        container="machine-config-controller",
+                        namespace=constants.OPENSHIFT_MACHINE_CONFIG_OPERATOR_NAMESPACE,
+                        tail="50",
+                    )  # Check logs from the last 10 seconds
+                    mcc_log_lines = mcc_logs.split("\n")
+                except Exception as e:
+                    log.error(
+                        f"Failed to get logs from {mcc_pod_info['name']}: {e}. Retrying..."
+                    )
+                    mcc_pod_info = (
+                        None  # Reset to re-fetch MCC pod next time in case it restarted
+                    )
+                    time.sleep(retry_delay_seconds)
+
+            node_completed = False
+            completion_msg_for_node = f"node {node.name}: operation successful; applying completion annotation"
+            # Iterate logs (newest first can be useful if logs are long)
+
+            for line in reversed(mcc_log_lines):
+                if completion_msg_for_node in line:
+                    log.info(f"Node {node.name}: Operation successful message found.")
+                    node_completed = True
+                    action_taken_this_iteration = True  # Seeing completion is progress
+                    wait_for_nodes_status(
+                        node_names=[node.name], timeout=360, sleep=30
+                    )  # After the drain completed, nodes take sometime to move to Ready
+                    break  # Stop checking logs for this node for this iteration
+
+                # Check for eviction error only if node hasn't completed
+                match = eviction_error_pattern.search(line)
+                if match:
+
+                    pod_name_to_delete = match.group(1)
+                    ns_to_delete_from = match.group(2)
+                    if not ns_to_delete_from:
+                        log.warning(
+                            f"Eviction error seen for '{pod_name_to_delete}' but ns not clear in log line: '{line}'. "
+                            f"Skipping deletion of line. Pod should be in specific namespaces like 'hcpclusters'."
+                        )
+                        continue  # Try next log line
+
+                    log.warning(
+                        f"Eviction error found '{pod_name_to_delete}' in namespace '{ns_to_delete_from}'"
+                        f"(related {node.name} being stuck)."
+                    )
+                    try:
+                        # Prefer using the ocs_ci resource object for deletion
+                        pod_to_delete_obj = OCP(
+                            kind=constants.POD,
+                            namespace=ns_to_delete_from,
+                            resource_name=pod_name_to_delete,
+                        )
+                        # Force delete with no grace period
+                        output = pod_to_delete_obj.exec_oc_cmd(
+                            f"delete pod {pod_name_to_delete} -n {ns_to_delete_from} --force"
+                        )
+                        log.info(
+                            f"Force deleted pod {pod_name_to_delete} from {ns_to_delete_from}. Output: {output}"
+                        )
+                        action_taken_this_iteration = True
+                        # After deleting a pod, break from log checking for this node;
+                        # The system needs time to react. The next iteration will re-evaluate.
+                    except CommandFailed:
+                        log.info(
+                            f"Pod {pod_name_to_delete} in {ns_to_delete_from} likely already deleted or not found."
+                        )
+                    except Exception as ex:
+                        log.error(
+                            f"Failed to delete pod {pod_name_to_delete} in {ns_to_delete_from}: {ex}"
+                        )
+
+            if not node_completed and not action_taken_this_iteration:
+                log.warning(
+                    f"Node {node.name} is still {constants.NODE_READY_SCHEDULING_DISABLED} "
+                    f"and no actionable logs found in this pass."
+                )
+                # all_target_nodes_resolved remains False due to this node.
+
+        # After checking all nodes in this iteration:
+        if all_target_nodes_resolved:
+            log.info(
+                f"All nodes of type '{node_type}' are either in a healthy state or have completed their operations."
+            )
+            return True  # Success
+
+        if action_taken_this_iteration:
+            log.info("Progress made in this iteration. Re-checking status shortly...")
+            time.sleep(
+                max(5, retry_delay_seconds // 2)
+            )  # Shorter delay if progress was made
+        else:
+            log.warning(
+                f"No progress made in attempt {attempt + 1}. Waiting {retry_delay_seconds}s before next check."
+            )
+            time.sleep(retry_delay_seconds)
+
+    log.error(
+        f"Max retries ({max_retries}) reached. "
+        f"Nodes may still be stuck in {constants.NODE_READY_SCHEDULING_DISABLED} state."
+    )
+    return False  # Failure

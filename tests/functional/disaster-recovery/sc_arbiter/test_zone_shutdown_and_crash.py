@@ -175,11 +175,15 @@ class TestZoneShutdownsAndCrashes:
         if immediate:
             sc_obj.default_shutdown_duration = 180
 
-        # Run the logwriter cephFs workloads
+        # Run the logwriter cephFs and RBD workloads
         (
             sc_obj.cephfs_logwriter_dep,
             sc_obj.cephfs_logreader_job,
         ) = setup_logwriter_cephfs_workload_factory(read_duration=0)
+
+        sc_obj.rbd_logwriter_sts = setup_logwriter_rbd_workload_factory(
+            zone_aware=False
+        )
 
         # setup vm and write some data to the VM instance
         vm_obj = cnv_workload(volume_interface=constants.VM_VOLUME_PVC)
@@ -405,12 +409,15 @@ class TestZoneShutdownsAndCrashes:
 
         sc_obj = StretchCluster()
 
-        # Run the logwriter cephFs workloads
+        # Run the logwriter cephFs and RBD workloads
         log.info("Running logwriter cephFS and RBD workloads")
         (
             sc_obj.cephfs_logwriter_dep,
             sc_obj.cephfs_logreader_job,
         ) = setup_logwriter_cephfs_workload_factory(read_duration=0)
+        sc_obj.rbd_logwriter_sts = setup_logwriter_rbd_workload_factory(
+            zone_aware=False
+        )
 
         # setup vm and write some data to the VM instance
         vm_obj = cnv_workload(volume_interface=constants.VM_VOLUME_PVC)

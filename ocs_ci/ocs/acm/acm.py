@@ -40,16 +40,19 @@ from ocs_ci.ocs.ui.acm_ui import AcmPageNavigator
 from ocs_ci.ocs.ui.base_ui import (
     login_ui,
     SeleniumDriver,
+    wait_for_element_to_be_clickable,
 )
 from ocs_ci.utility.version import compare_versions
 from ocs_ci.utility import version
 from ocs_ci.ocs.exceptions import (
     ACMClusterImportException,
     UnexpectedDeploymentConfiguration,
+    ResourceNotFoundError,
 )
 from ocs_ci.utility import templating
 from ocs_ci.ocs.resources.ocs import OCS
 from ocs_ci.helpers.helpers import create_project
+from ocs_ci.utility.decorators import switch_to_orig_index_at_last
 
 log = logging.getLogger(__name__)
 
@@ -188,7 +191,7 @@ class AcmAddClusters(AcmPageNavigator):
                     f"v{get_ocp_version()}"
                 ].split(":")[1]
             submariner_downstream_unreleased["spec"]["image"] = ":".join(
-                [constants.SUBMARINER_BREW_REPO, version_tag]
+                [constants.BREW_REPO, version_tag]
             )
             submariner_data_yaml = tempfile.NamedTemporaryFile(
                 mode="w+", prefix="submariner_downstream_unreleased", delete=False
@@ -451,8 +454,17 @@ def login_to_acm():
     log.info(f"URL: {url}")
     driver = login_ui(url)
     page_nav = AcmPageNavigator()
-    if not compare_versions(cmp_str):
+    page_nav.page_has_loaded(retries=10, sleep_time=5)
+    look_for_local_cluster = page_nav.wait_until_expected_text_is_found(
+        locator=page_nav.acm_page_nav["click-local-cluster"],
+        expected_text="local-cluster",
+        timeout=15,
+    )
+    if look_for_local_cluster:
+        log.info("local-cluster dropdown found, navigating from OCP to ACM console")
         page_nav.navigate_from_ocp_to_acm_cluster_page()
+    else:
+        log.warning("local-cluster dropdown not found, view is already on ACM console")
 
     if compare_versions(cmp_str):
         page_title = ACM_PAGE_TITLE_2_7_ABOVE
@@ -460,6 +472,17 @@ def login_to_acm():
         page_title = ACM_PAGE_TITLE
     validate_page_title(title=page_title)
     log.info("Successfully logged into RHACM console")
+    side_navigation_toggle_btn = wait_for_element_to_be_clickable(
+        page_nav.acm_page_nav["side_navigation_toggle"]
+    )
+    side_navigation_toggle = page_nav.is_expanded(
+        locator=page_nav.acm_page_nav["side_navigation_toggle"]
+    )
+    if not side_navigation_toggle:
+        page_nav.driver.execute_script(
+            "arguments[0].click();", side_navigation_toggle_btn
+        )
+        log.info("Successfully expanded side navigation options on the ACM hub console")
     return driver
 
 
@@ -511,10 +534,11 @@ def validate_cluster_import(cluster_name, switch_ctx=None):
     return True
 
 
+@switch_to_orig_index_at_last
 def get_clusters_env():
     """
     Stores cluster's kubeconfig location and clusters name, in case of multi-cluster setup.
-    Function will switch to context index zero before returning
+
     Returns:
         dict: with clusters names, clusters kubeconfig locations
 
@@ -528,8 +552,6 @@ def get_clusters_env():
         )
         clusters_env[f"cluster_name_{index}"] = config.ENV_DATA["cluster_name"]
 
-    config.switch_ctx(index=0)
-
     return clusters_env
 
 
@@ -540,6 +562,8 @@ def import_clusters_via_cli(clusters):
     Args:
         clusters (list): list of tuples (cluster name, kubeconfig path)
 
+    Raises:
+        ResourceNotFoundError: If the managed cluster is MCE cluster and applicable KlusterletConfig is not found
     """
     for cluster in clusters:
         log.info("Importing clusters via CLI method")
@@ -552,6 +576,35 @@ def import_clusters_via_cli(clusters):
             "ocs_ci/templates/acm-deployment/managed-cluster.yaml"
         )
         managed_cluster["metadata"]["name"] = cluster[0]
+
+        # TODO: This check is based on current requirements of RDR in provider mode. Change the condition and add
+        #  additional check to verify whether Multicluster Engine (MCE) is installed in the managedcluster
+        if config.ENV_DATA.get("configure_acm_to_import_mce"):
+            # Find the klusterletconfig to import MCE cluster
+            klusterletconfig_obj = OCP(kind=constants.KLUSTERLET_CONFIG)
+            klusterletconfigs = klusterletconfig_obj.get().get("items", [])
+            klusterletconfig_name = ""
+            for klusterletconfig in klusterletconfigs:
+                if (
+                    klusterletconfig.get("spec", {})
+                    .get("installMode", {})
+                    .get("noOperator", {})
+                    .get("postfix")
+                    == "mce-import"
+                ):
+                    klusterletconfig_name = klusterletconfig.get("metadata").get("name")
+                    break
+            if klusterletconfig_name:
+                managed_cluster["annotations"] = {
+                    "agent.open-cluster-management.io/klusterlet-config": klusterletconfig_name
+                }
+            else:
+                raise ResourceNotFoundError(
+                    "No KlusterletConfig found to import MCE clusters"
+                )
+            # Add 'leaseDurationSeconds' obtained from ACM documentation
+            managed_cluster["spec"]["leaseDurationSeconds"] = 60
+
         managed_cluster_obj = OCS(**managed_cluster)
         managed_cluster_obj.apply(**managed_cluster)
 

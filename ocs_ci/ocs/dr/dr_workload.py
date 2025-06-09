@@ -13,7 +13,10 @@ from subprocess import TimeoutExpired
 from ocs_ci.framework import config
 from ocs_ci.helpers import dr_helpers, helpers
 from ocs_ci.helpers.cnv_helpers import create_vm_secret, cal_md5sum_vm
-from ocs_ci.helpers.dr_helpers import generate_kubeobject_capture_interval
+from ocs_ci.helpers.dr_helpers import (
+    generate_kubeobject_capture_interval,
+    get_cluster_set_name,
+)
 from ocs_ci.helpers.helpers import (
     create_project,
     create_unique_resource_name,
@@ -109,6 +112,11 @@ class BusyBox(DRWorkload):
             self.workload_pvc_selector = workload_details.get(
                 "dr_workload_app_pvc_selector"
             )
+            self.managed_clusterset_binding_file = os.path.join(
+                self.workload_subscription_dir,
+                self.workload_name,
+                "managedclustersetbinding.yaml",
+            )
         self.channel_yaml_file = os.path.join(
             self.workload_subscription_dir, "channel.yaml"
         )
@@ -150,15 +158,28 @@ class BusyBox(DRWorkload):
         templating.dump_data_to_temp_yaml(drpc_yaml_data, self.drpc_yaml_file)
         if self.is_placement:
             # load placement.yaml
+            clusterset_name = (
+                config.ENV_DATA.get("cluster_set") or get_cluster_set_name()[0]
+            )
             placement_yaml_data = templating.load_yaml(self.placement_yaml_file)
             placement_yaml_data["spec"]["predicates"][0]["requiredClusterSelector"][
                 "labelSelector"
             ]["matchExpressions"][0]["values"][0] = self.preferred_primary_cluster
+            placement_yaml_data["spec"]["clusterSets"][0] = clusterset_name
+
             self.sub_placement_name = placement_yaml_data["metadata"]["name"]
             templating.dump_data_to_temp_yaml(
                 placement_yaml_data, self.placement_yaml_file
             )
-
+            managed_clusterset_binding_yaml_data = templating.load_yaml(
+                self.managed_clusterset_binding_file
+            )
+            managed_clusterset_binding_yaml_data["metadata"]["name"] = clusterset_name
+            managed_clusterset_binding_yaml_data["spec"]["clusterSet"] = clusterset_name
+            templating.dump_data_to_temp_yaml(
+                managed_clusterset_binding_yaml_data,
+                self.managed_clusterset_binding_file,
+            )
             if placement_yaml_data["kind"] == "Placement":
                 drpc_yaml_data = templating.load_yaml(self.drpc_yaml_file_placement)
                 drpc_yaml_data["metadata"]["name"] = f"{self.sub_placement_name}-drpc"
@@ -421,6 +442,23 @@ class BusyBox(DRWorkload):
 
         try:
             config.switch_ctx(switch_ctx) if switch_ctx else config.switch_acm_ctx()
+            if self.is_placement:
+                clusterset_name = (
+                    config.ENV_DATA.get("cluster_set") or get_cluster_set_name()[0]
+                )
+                managed_clusterset_binding_yaml_data = templating.load_yaml(
+                    self.managed_clusterset_binding_file
+                )
+                managed_clusterset_binding_yaml_data["metadata"][
+                    "name"
+                ] = clusterset_name
+                managed_clusterset_binding_yaml_data["spec"][
+                    "clusterSet"
+                ] = clusterset_name
+                templating.dump_data_to_temp_yaml(
+                    managed_clusterset_binding_yaml_data,
+                    self.managed_clusterset_binding_file,
+                )
             run_cmd(
                 f"oc delete -k {self.workload_subscription_dir}/{self.workload_name}"
             )
@@ -522,6 +560,10 @@ class BusyBox_AppSet(DRWorkload):
                 app_set_yaml_data["spec"]["predicates"][0]["requiredClusterSelector"][
                     "labelSelector"
                 ]["matchExpressions"][0]["values"][0] = self.preferred_primary_cluster
+                app_set_yaml_data["spec"]["clusterSets"][0] = (
+                    config.ENV_DATA.get("cluster_set") or get_cluster_set_name()[0]
+                )
+
             elif app_set_yaml_data["kind"] == constants.APPLICATION_SET:
                 if self.appset_model == "pull":
                     # load appset_yaml_file, add "annotations" key and add values to it
@@ -1101,7 +1143,9 @@ class BusyboxDiscoveredApps(DRWorkload):
         self.workload_dir = kwargs.get("workload_dir")
         self.discovered_apps_placement_name = kwargs.get("workload_placement_name")
         self.drpc_yaml_file = os.path.join(constants.DRPC_PATH)
+        self.drpc_recipe_yaml_file = os.path.join(constants.DRPC_RECIPE_PATH)
         self.placement_yaml_file = os.path.join(constants.PLACEMENT_PATH)
+        self.recipe_yaml_file = os.path.join(constants.RECIPE_PATH)
         self.kubeobject_capture_interval_int = generate_kubeobject_capture_interval()
         self.kubeobject_capture_interval = f"{self.kubeobject_capture_interval_int}m"
         self.protection_type = kwargs.get("protection_type")
@@ -1121,11 +1165,29 @@ class BusyboxDiscoveredApps(DRWorkload):
             "discovered_apps_pod_selector_value"
         )
         self.discovered_apps_multi_ns = kwargs.get("discovered_apps_multi_ns")
+        self.discovered_apps_recipe_name_key = kwargs.get(
+            "discovered_apps_recipe_name_key"
+        )
+        self.discovered_apps_recipe_name_value = kwargs.get(
+            "discovered_apps_recipe_name_value"
+        )
+        self.discovered_apps_recipe_namespace_key = kwargs.get(
+            "discovered_apps_recipe_namespace_key"
+        )
+        self.discovered_apps_recipe_namespace_value = kwargs.get(
+            "discovered_apps_recipe_namespace_value"
+        )
+        self.discovered_apps_name_selector_value = kwargs.get(
+            "discovered_apps_name_selector_value"
+        )
 
-    def deploy_workload(self):
+    def deploy_workload(self, recipe=None):
         """
 
         Deployment specific to busybox workload for Discovered/Imperative Apps
+
+        Args:
+            recipe (bool): true if deploying workload with recipe, false otherwise
 
         """
         self._deploy_prereqs()
@@ -1137,10 +1199,18 @@ class BusyboxDiscoveredApps(DRWorkload):
         run_cmd(f"oc create -k {self.workload_path} -n {self.workload_namespace} ")
         self.check_pod_pvc_status(skip_replication_resources=True)
         config.switch_acm_ctx()
-        if not self.discovered_apps_multi_ns:
-            self.create_placement()
-            self.create_dprc()
-            self.verify_workload_deployment()
+        self.create_placement()
+        if recipe:
+            log.info("Creating workload with recipe")
+            config.switch_to_cluster_by_name(self.preferred_primary_cluster)
+            for cluster in get_non_acm_cluster_config():
+                config.switch_ctx(cluster.MULTICLUSTER["multicluster_index"])
+                self.create_recipe_with_checkhooks()
+            config.switch_acm_ctx()
+            self.create_drpc_for_apps_with_recipe()
+        else:
+            self.create_drpc()
+        self.verify_workload_deployment()
 
     def _deploy_prereqs(self):
         """
@@ -1170,6 +1240,58 @@ class BusyboxDiscoveredApps(DRWorkload):
             discovered_apps=True,
             vrg_name=vrg_name or self.discovered_apps_placement_name,
         )
+
+    def create_recipe_with_checkhooks(self):
+        """
+        Create recipe with checkhooks for discovered apps
+
+        """
+
+        recipe_yaml_data = templating.load_yaml(self.recipe_yaml_file)
+        recipe_yaml_data["metadata"]["name"] = self.workload_namespace
+        if "spec" in recipe_yaml_data:
+            if "groups" in recipe_yaml_data["spec"]:
+                recipe_yaml_data["spec"]["groups"][0][
+                    "backupRef"
+                ] = self.workload_namespace
+                recipe_yaml_data["spec"]["groups"][0]["includedNamespaces"] = [
+                    self.workload_namespace
+                ]
+                recipe_yaml_data["spec"]["groups"][0]["name"] = self.workload_namespace
+                recipe_yaml_data["spec"]["groups"][0]["labelSelector"][
+                    "matchExpressions"
+                ][0]["values"] = [self.discovered_apps_pod_selector_value]
+
+            if "workflows" in recipe_yaml_data["spec"]:
+                recipe_yaml_data["spec"]["workflows"][0]["sequence"][1][
+                    "group"
+                ] = self.workload_namespace
+                recipe_yaml_data["spec"]["workflows"][1]["sequence"][0][
+                    "group"
+                ] = self.workload_namespace
+
+            if "hooks" in recipe_yaml_data["spec"]:
+                recipe_yaml_data["spec"]["hooks"][0][
+                    "namespace"
+                ] = self.workload_namespace
+                recipe_yaml_data["spec"]["hooks"][0][
+                    "nameSelector"
+                ] = self.discovered_apps_name_selector_value
+
+            if "volumes" in recipe_yaml_data["spec"]:
+                recipe_yaml_data["spec"]["volumes"]["includedNamespaces"] = [
+                    self.workload_namespace
+                ]
+                recipe_yaml_data["spec"]["volumes"]["labelSelector"][
+                    "matchExpressions"
+                ][0]["values"] = [self.discovered_apps_pvc_selector_value]
+
+        recipe_yaml = tempfile.NamedTemporaryFile(
+            mode="w+", prefix="recipe", delete=False
+        )
+        templating.dump_data_to_temp_yaml(recipe_yaml_data, recipe_yaml.name)
+        log.info(f"Creating recipe for workload {self.workload_name}")
+        run_cmd(f"oc create -f {recipe_yaml.name} -n {self.workload_namespace}")
 
     def create_placement(self, placement_name=None):
         """
@@ -1269,6 +1391,44 @@ class BusyboxDiscoveredApps(DRWorkload):
         log.info("Creating DRPC")
         run_cmd(f"oc create -f {drcp_data_yaml.name}")
 
+    def create_drpc_for_apps_with_recipe(self):
+        """
+        Create drpc for discovered apps with recipe
+        """
+
+        drpc_yaml_data = templating.load_yaml(self.drpc_recipe_yaml_file)
+        drpc_yaml_data["spec"].setdefault("kubeObjectProtection", {})
+        drpc_yaml_data["spec"]["kubeObjectProtection"].setdefault("kubeObjectSelector")
+        drpc_yaml_data["spec"].setdefault("protectedNamespaces", []).append(
+            self.workload_namespace
+        )
+        drpc_yaml_data["metadata"]["name"] = self.discovered_apps_placement_name
+        drpc_yaml_data["metadata"]["namespace"] = constants.DR_OPS_NAMESAPCE
+        drpc_yaml_data["spec"]["preferredCluster"] = self.preferred_primary_cluster
+        drpc_yaml_data["spec"]["drPolicyRef"]["name"] = self.dr_policy_name
+        drpc_yaml_data["spec"]["placementRef"]["name"] = (
+            self.discovered_apps_placement_name + "-placement-1"
+        )
+        drpc_yaml_data["spec"]["placementRef"]["namespace"] = constants.DR_OPS_NAMESAPCE
+        drpc_data_yaml = tempfile.NamedTemporaryFile(
+            mode="w+", prefix="drpc", delete=False
+        )
+        templating.dump_data_to_temp_yaml(drpc_yaml_data, drpc_data_yaml.name)
+        log.info(drpc_data_yaml.name)
+        log.info("Deploying workload with recipe")
+        drpc_yaml_data["spec"]["kubeObjectProtection"][
+            "captureInterval"
+        ] = self.kubeobject_capture_interval
+        drpc_yaml_data["spec"]["kubeObjectProtection"]["recipeRef"][
+            "name"
+        ] = self.workload_namespace
+        drpc_yaml_data["spec"]["kubeObjectProtection"]["recipeRef"][
+            "namespace"
+        ] = self.workload_namespace
+        templating.dump_data_to_temp_yaml(drpc_yaml_data, drpc_data_yaml.name)
+        log.info("Creating DRPC")
+        run_cmd(f"oc create -f {drpc_data_yaml.name}")
+
     def check_pod_pvc_status(self, skip_replication_resources=False):
         """
         Check for Pod and PVC status
@@ -1285,7 +1445,7 @@ class BusyboxDiscoveredApps(DRWorkload):
             skip_replication_resources=skip_replication_resources,
         )
 
-    def create_namespace(self):
+    def create_namespace(self, recipe=None):
         """
         Create Namespace for Workload's to run
         """
@@ -1322,6 +1482,17 @@ class BusyboxDiscoveredApps(DRWorkload):
             log.info(f"Deleting workload from {cluster.ENV_DATA['cluster_name']}")
             run_cmd(
                 f"oc delete -k {self.workload_path} -n {self.workload_namespace}",
+                ignore_error=True,
+            )
+            log.info(f"Deleting recipe from {cluster.ENV_DATA['cluster_name']}")
+            run_cmd(
+                cmd=f"oc delete recipe {self.discovered_apps_recipe_name_value} -n {self.workload_namespace}",
+                ignore_error=True,
+            )
+            log.info(f"Deleting secret from {cluster.ENV_DATA['cluster_name']}")
+            secret_name = self.workload_namespace + "-secret"
+            run_cmd(
+                cmd=f"oc delete secret {secret_name} -n {self.workload_namespace}",
                 ignore_error=True,
             )
             dr_helpers.wait_for_all_resources_deletion(

@@ -173,7 +173,7 @@ class Disruptions:
         )
         pid_cmd = (
             f"oc {self.kubeconfig_parameter()}debug node/{node_name}"
-            f" --to-namespace={config.ENV_DATA['cluster_namespace']} -- chroot /host pidof ceph-{self.resource}"
+            f" --to-namespace=default -- chroot /host pidof ceph-{self.resource}"
         )
         pid_proc = run_async(pid_cmd)
         ret, pid, err = pid_proc.async_communicate()
@@ -214,7 +214,7 @@ class Disruptions:
         # Command to kill the daemon
         kill_cmd = (
             f"oc {self.kubeconfig_parameter()}debug node/{node_name} "
-            f"--to-namespace={config.ENV_DATA['cluster_namespace']} -- chroot /host  "
+            f"--to-namespace=default -- chroot /host  "
             f"kill -{kill_signal} {self.daemon_pid}"
         )
         daemon_kill = run_cmd(kill_cmd)
@@ -242,7 +242,7 @@ class Disruptions:
         )
         pid_cmd = (
             f"oc {self.kubeconfig_parameter()}debug node/{node_name} "
-            f"--to-namespace={config.ENV_DATA['cluster_namespace']} -- chroot /host pidof ceph-{self.resource}"
+            f"--to-namespace=default -- chroot /host pidof ceph-{self.resource}"
         )
         try:
             for pid_proc in TimeoutSampler(60, 2, run_async, command=pid_cmd):

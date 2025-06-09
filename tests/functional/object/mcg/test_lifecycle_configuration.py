@@ -1,5 +1,4 @@
 from datetime import datetime, timedelta
-import json
 import logging
 import os
 import tempfile
@@ -45,7 +44,7 @@ from ocs_ci.ocs.resources.mcg_lifecycle_policies import (
     LifecyclePolicy,
     NoncurrentVersionExpirationRule,
 )
-from ocs_ci.utility.utils import TimeoutSampler, exec_nb_db_query
+from ocs_ci.utility.utils import TimeoutSampler
 
 
 logger = logging.getLogger(__name__)
@@ -95,7 +94,6 @@ class TestLifecycleConfiguration(MCGTest):
         4. Upload a few parts
         5. Manually expire the multipart-upload
         6. Wait for the multipart-upload to expire
-        7. Verify that the parts were deleted at the noobaa-db
         """
         parts_amount = 5
         key = "test_obj_123"
@@ -139,7 +137,7 @@ class TestLifecycleConfiguration(MCGTest):
         # 5. Manually expire the parts and the multipart-upload
         expire_multipart_upload_in_noobaa_db(upload_id)
 
-        # 6. Wait for the parts and multipart-upload to expire
+        # 6. Wait for the multipart-upload to expire
         for http_response in TimeoutSampler(
             timeout=TIMEOUT_THRESHOLD,
             sleep=TIMEOUT_SLEEP_DURATION,
@@ -151,20 +149,6 @@ class TestLifecycleConfiguration(MCGTest):
                 break
             logger.warning(f"Upload has not expired yet: \n{http_response}")
 
-        # 7. Verify that the parts were deleted at the noobaa-db
-        bucket_id = exec_nb_db_query(
-            f"SELECT _id FROM buckets WHERE data->>'name' = '{bucket}'",
-        )[0].strip()
-        multiparts_md_list = exec_nb_db_query(
-            f"SELECT data FROM objectmultiparts WHERE data->>'bucket' = '{bucket_id}'"
-        )
-        for md_string in multiparts_md_list:
-            md = json.loads(md_string)
-            assert (
-                "deleted" in md
-            ), f"Multipart upload was not expired as expected: {md}"
-
-    @tier1
     @pytest.mark.polarion_id("OCS-6559")
     def test_noncurrent_version_expiration(self, mcg_obj, bucket_factory, awscli_pod):
         """

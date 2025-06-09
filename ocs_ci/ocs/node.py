@@ -6,6 +6,7 @@ from prettytable import PrettyTable
 from collections import defaultdict
 from operator import itemgetter
 import random
+import json
 
 from subprocess import TimeoutExpired
 from semantic_version import Version
@@ -2838,7 +2839,7 @@ def check_for_zombie_process_on_node(node_name=None):
     node_obj_list = get_node_objs(node_name) if node_name else get_node_objs()
     for node_obj in node_obj_list:
         debug_cmd = (
-            f"debug nodes/{node_obj.name} --to-namespace={config.ENV_DATA['cluster_namespace']} "
+            f"debug nodes/{node_obj.name} --to-namespace=default "
             '-- chroot /host /bin/bash -c "ps -A -ostat,pid,ppid | grep -e [zZ]"'
         )
         out = node_obj.ocp.exec_oc_cmd(
@@ -3307,3 +3308,70 @@ def get_ceph_tools_running_node():
     ct_pod = pod.get_ceph_tools_pod(wait=True, skip_creating_pod=True)
     ct_pod_running_node = ct_pod.data["spec"].get("nodeName")
     return ct_pod_running_node
+
+
+def apply_node_affinity_for_noobaa_pod():
+    """
+    Apply node affinity for noobaa operator pod.
+
+    Returns:
+        bool: True if node affinity applied successfully
+
+    """
+    resource_name = constants.DEFAULT_CLUSTERNAME
+    storagecluster_obj = ocp.OCP(
+        resource_name=resource_name,
+        namespace=config.ENV_DATA["cluster_namespace"],
+        kind=constants.STORAGECLUSTER,
+    )
+
+    nodeaffinity_toleration = {
+        "noobaa-standalone": {
+            "nodeAffinity": {
+                "requiredDuringSchedulingIgnoredDuringExecution": {
+                    "nodeSelectorTerms": [
+                        {
+                            "matchExpressions": [
+                                {"key": "kubernetes.io/hostname", "operator": "Exists"}
+                            ]
+                        }
+                    ]
+                }
+            },
+            "tolerations": [
+                {
+                    "effect": "NoExecute",
+                    "key": "node-role.kubernetes.io/infra",
+                    "value": "reserved",
+                },
+                {
+                    "effect": "NoSchedule",
+                    "key": "node-role.kubernetes.io/infra",
+                    "value": "reserved",
+                },
+            ],
+        }
+    }
+
+    param = {"spec": {"placement": nodeaffinity_toleration}}
+
+    param_str = json.dumps(param)
+    try:
+        storagecluster_obj.patch(params=param_str, format_type="merge")
+        log.info("Successfully applied node affinity")
+    except Exception as e:
+        log.error(f"Failed to apply patch: {e}")
+        return False
+
+    # check node affinity is added in storagecluster or not.
+    sc_dict = storagecluster_obj.get()
+
+    node_affinity = (
+        sc_dict.get("spec", {}).get("placement", {}).get("noobaa-standalone")
+    )
+    if node_affinity:
+        log.info("nodeAffinity is present in 'noobaa-standalone' placement.")
+        return True
+    else:
+        log.error("'noobaa-standalone' placement is missing or empty.")
+        return False

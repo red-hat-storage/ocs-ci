@@ -240,7 +240,7 @@ class OCP(object):
 
     @retry(CommandFailed, tries=3, delay=30, backoff=1)
     def exec_oc_debug_cmd(
-        self, node, cmd_list, timeout=300, namespace=None, use_root=True
+        self, node, cmd_list, timeout=300, namespace="default", use_root=True
     ):
         """
         Function to execute "oc debug" command on OCP node
@@ -250,6 +250,8 @@ class OCP(object):
             cmd_list (list): List of commands eg: ['cmd1', 'cmd2']
             timeout (int): timeout for the exec_oc_cmd, defaults to 600 seconds
             namespace (str): Namespace name which will be used to create debug pods
+                It will use default namespace if not specified. openshift-stroage
+                namespace cannot be used from 4.19 because we are hitting: violates PodSecurity
 
         Returns:
             out (str): Returns output of the executed command/commands
@@ -266,7 +268,6 @@ class OCP(object):
         else:
             root_option = " /bin/bash -c "
         cmd = f" || echo '{err_msg}';".join(create_cmd_list)
-        namespace = namespace or config.ENV_DATA["cluster_namespace"]
         debug_cmd = (
             f"debug nodes/{node} --to-namespace={namespace} "
             f' -- {root_option} "{cmd}"'
@@ -679,15 +680,19 @@ class OCP(object):
             update_kubeconfig_with_proxy_url_for_client(kubeconfig)
         return status
 
-    def login_as_sa(self):
+    def login_as_user(self, user="system:admin"):
         """
-        Logs in as system:admin
+        Logs in as specified user (by default 'system:admin'). This user should have valid token in kubeconfig file.
+
+        Args:
+            user (str): Name of user to be logged in (by default 'system:admin')
 
         Returns:
             str: output of login command
+
         """
         kubeconfig = config.RUN.get("kubeconfig")
-        command = "oc login -u system:admin "
+        command = f"oc login -u {user} "
         if kubeconfig:
             command += f"--kubeconfig {kubeconfig}"
         status = run_cmd(command, threading_lock=self.threading_lock)
@@ -1477,13 +1482,15 @@ def rsync(src, dst, node, dst_node=True, extra_params=""):
             raise
 
 
-def get_images(data, images=None):
+def get_images(data, images=None, image_key="image"):
     """
     Get the images from the ocp object like pod, CSV and so on.
 
     Args:
         data (dict): Yaml data from the object.
         images (dict): Dict where to put the images (doesn't have to be set!).
+        images_key (str): Image key to get from container (Default: image), but you
+            might use imageID for example.
 
     Returns:
         dict: Images dict like: {'image_name': 'image.url.to:tag', ...}
@@ -1505,7 +1512,7 @@ def get_images(data, images=None):
                 value_type = type(value)
                 if value_type in (dict, list):
                     get_images(value, images)
-                elif value_type == str and key == "image":
+                elif value_type == str and key == image_key:
                     image_name = data.get("name")
                     if image_name:
                         images[image_name] = value
@@ -1513,6 +1520,13 @@ def get_images(data, images=None):
         for item in data:
             get_images(item, images)
     return images
+
+
+def get_sha256_digest(image):
+    """
+    Extract sha256 digest from image string.
+    """
+    return image.split("@")[-1] if "@" in image else image
 
 
 def verify_images_upgraded(old_images, object_data, ignore_psql_12_verification=False):
@@ -1526,31 +1540,33 @@ def verify_images_upgraded(old_images, object_data, ignore_psql_12_verification=
 
     Raises:
         NonUpgradedImagesFoundError: In case the images weren't upgraded.
-
     """
+    name = object_data.get("metadata").get("name")
     current_images = get_images(object_data)
+    log.info(
+        f"Current object {name} images: {current_images}, old images: {old_images}"
+    )
     # from 4.15, noobaa-operator pod has NOOBAA_PSQL_12_IMAGE along with NOOBAA_DB_IMAGE
     if (
         ignore_psql_12_verification
         and "noobaa_psql_12" in current_images
-        and constants.NOOBAA_OPERATOR_DEPLOYMENT
-        in object_data.get("metadata").get("name")
+        and constants.NOOBAA_OPERATOR_DEPLOYMENT in name
     ):
-        log.info(
-            f'deleting noobaa_psql_12 image from current images for {object_data.get("metadata").get("name")}'
-        )
+        log.info(f"deleting noobaa_psql_12 image from current images for {name}")
         del current_images["noobaa_psql_12"]
-    not_upgraded_images = set(
-        [image for image in current_images.values() if image in old_images]
-    )
-    name = object_data["metadata"]["name"]
+
+    old_digests = {get_sha256_digest(img) for img in old_images}
+    not_upgraded_images = set()
+    for img in current_images.values():
+        digest = get_sha256_digest(img)
+        if digest in old_digests:
+            not_upgraded_images.add(img)
+
     if not_upgraded_images:
         raise NonUpgradedImagesFoundError(
             f"Images: {not_upgraded_images} weren't upgraded in: {name}!"
         )
-    log.info(
-        f"All the images: {current_images} were successfully upgraded in: " f"{name}!"
-    )
+    log.info(f"All the images: {current_images} were successfully upgraded in: {name}!")
 
 
 def confirm_cluster_operator_version(target_version, cluster_operator):

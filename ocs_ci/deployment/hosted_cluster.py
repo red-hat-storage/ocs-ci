@@ -5,6 +5,7 @@ import os
 import tempfile
 import time
 import yaml
+import copy
 from concurrent.futures import ThreadPoolExecutor
 
 from ocs_ci.deployment.cnv import CNVInstaller
@@ -62,6 +63,48 @@ from ocs_ci.utility.version import get_running_odf_version
 logger = logging.getLogger(__name__)
 
 
+def apply_cluster_roles_wa(cluster_names):
+    logger.warning(
+        "!!! Workaround for OCPBUGS-56015: apply cluster roles to all hosted clusters !!!"
+    )
+    logger.warning("!!! Remove when resolved !!!")
+    rbac_wa_file = os.path.join(
+        constants.TEMPLATE_DIR, "hosted-cluster", "rbac-wa.yaml"
+    )
+    rbac_wa_data = templating.load_yaml(rbac_wa_file, multi_document=True)
+    for cluster_name in cluster_names:
+        # Deep copy the original data to avoid modifying it for subsequent clusters
+        cluster_rbac_data = [copy.deepcopy(doc) for doc in rbac_wa_data]
+
+        # Modify each document as needed
+        for doc in cluster_rbac_data:
+            if "namespace" in doc.get("metadata", {}):
+                doc["metadata"]["namespace"] = doc["metadata"]["namespace"].format(
+                    cluster_name
+                )
+
+            if doc.get("kind") == "RoleBinding":
+                for subject in doc.get("subjects", []):
+                    if "namespace" in subject:
+                        subject["namespace"] = subject["namespace"].format(cluster_name)
+
+        # Create a temporary file for the modified YAML
+        rbac_wa_file_modified_file = tempfile.NamedTemporaryFile(
+            mode="w+", prefix="rbac_wa_modified", delete=False
+        )
+        templating.dump_data_to_temp_yaml(
+            cluster_rbac_data, rbac_wa_file_modified_file.name
+        )
+        try:
+            exec_cmd(
+                f"oc create -f {format(rbac_wa_file_modified_file.name)}",
+                shell=True,
+                silent=True,
+            )
+        except CommandFailed:
+            logger.warning("rbac w/a already exist")
+
+
 class HostedClients(HyperShiftBase):
     """
     The class is intended to deploy multiple hosted OCP clusters on Provider platform and setup ODF client on them.
@@ -78,8 +121,8 @@ class HostedClients(HyperShiftBase):
         Deploy multiple hosted OCP clusters on Provider platform and setup ODF client on them
         Perform the 7 stages of deployment:
         1. Deploy multiple hosted OCP clusters
-        2. Verify OCP clusters are ready
-        3. Download kubeconfig files
+        2. Download kubeconfig files
+        3. Verify OCP clusters are ready
         4. Deploy ODF on all hosted clusters if version set in ENV_DATA
         5. Verify ODF client is installed on all hosted clusters if deployed
         6. Setup storage client on all hosted clusters if ENV_DATA.clusters.<cluster_name> has setup_storage_client:true
@@ -111,7 +154,11 @@ class HostedClients(HyperShiftBase):
         if cluster_names:
             cluster_names = self.deploy_hosted_ocp_clusters(cluster_names)
 
-        # stage 2 verify OCP clusters are ready
+        # stage 2 download all available kubeconfig files
+        log_step("Download kubeconfig for all clusters")
+        kubeconfig_paths = self.download_hosted_clusters_kubeconfig_files()
+
+        # stage 3 verify OCP clusters are ready
         log_step(
             "Ensure clusters were deployed successfully, wait for them to be ready"
         )
@@ -119,9 +166,12 @@ class HostedClients(HyperShiftBase):
         if not hosted_ocp_verification_passed:
             logger.error("\n\n*** Some of the clusters are not ready ***\n")
 
-        # stage 3 download all available kubeconfig files
-        log_step("Download kubeconfig for all clusters")
-        kubeconfig_paths = self.download_hosted_clusters_kubeconfig_files()
+            apply_cluster_roles_wa(cluster_names)
+
+            logger.warning("Going through the verification process again")
+            hosted_ocp_verification_passed = (
+                self.verify_hosted_ocp_clusters_from_provider()
+            )
 
         # Need to create networkpolicy as mentioned in bug 2281536,
         # https://bugzilla.redhat.com/show_bug.cgi?id=2281536#c21
@@ -1145,7 +1195,7 @@ class HostedODF(HypershiftHostedOCP):
             str: status of the storage client
         """
         cmd = (
-            f"get {constants.STORAGECLIENTS} storage-client -n {self.namespace_client} | "
+            f"get {constants.STORAGECLIENTS} {constants.DEFAULT_CLUSTERNAME} -n {self.namespace_client} | "
             "awk '/storage-client/{{print $2}}'"
         )
         return self.exec_oc_cmd(cmd, shell=True).stdout.decode("utf-8").strip()
