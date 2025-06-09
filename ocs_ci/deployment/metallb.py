@@ -813,7 +813,7 @@ class MetalLBInstaller:
         metallb_version_post_upgrade = self.get_running_metallb_version()
         logger.info(f"metallb version post upgrade: {metallb_version_post_upgrade}")
         return self.upgrade_version in metallb_version_post_upgrade
-    
+
     def apply_idms(self):
         """
         Apply the IDMS to the cluster
