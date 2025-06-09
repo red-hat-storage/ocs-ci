@@ -16,7 +16,6 @@ from ocs_ci.framework.pytest_customization.marks import (
     fips_required,
     ignore_leftovers,
 )
-from ocs_ci.ocs.version import if_version
 from ocs_ci.ocs.bucket_utils import (
     wait_for_pv_backingstore,
     check_pv_backingstore_status,
