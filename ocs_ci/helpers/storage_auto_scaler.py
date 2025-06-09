@@ -115,10 +115,10 @@ def generate_default_scaling_threshold(default_threshold=30, min_diff=7):
     scaling_threshold = default_threshold
 
     if scaling_threshold - min_diff < used_capacity:
-        scaling_threshold = used_capacity + min_diff
         logger.info(
             f"The scaling_threshold {scaling_threshold} is too close to the used "
             f"capacity {used_capacity}. Increasing the scaling_threshold"
         )
+        scaling_threshold = int(used_capacity) + min_diff
 
     return scaling_threshold
