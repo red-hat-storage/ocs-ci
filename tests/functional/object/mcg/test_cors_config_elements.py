@@ -3,14 +3,17 @@ import logging
 import pytest
 import json
 import string
+from time import sleep
 from random import choice, choices, randint
 from ocs_ci.framework.pytest_customization.marks import (
     tier1,
-    tier2,
+    tier4a,
     red_squad,
     mcg,
     skipif_fips_enabled,
     on_prem_platform_required,
+    pre_upgrade,
+    post_upgrade,
 )
 from ocs_ci.utility.utils import exec_cmd
 from ocs_ci.ocs.bucket_utils import craft_s3_command
@@ -165,7 +168,7 @@ class TestCorsConfig:
         """
         extra_header = ""
         for key, value in kwargs.items():
-            extra_header = "-H '" + extra_header + key + ": " + value + "' "
+            extra_header = extra_header + " -H '" + key + ": " + value + "' "
         curl_command = (
             f"curl -k {endpoint}/{bucket_name} -X OPTIONS "
             f"-H 'Access-Control-Request-Method: {method}' "
@@ -639,7 +642,150 @@ class TestCorsConfig:
             )
             sample.wait_for_func_value(self.POSITIVE_RESPONSE)
 
-    @tier2
+    @tier1
+    def test_allowed_header_cors_element(
+        self, mcg_obj_session, awscli_pod_session, bucket_factory
+    ):
+        """
+        Test AllowedHeaders element from CORS operation on bucket
+            step #1: Create bucket and apply CORS config with one allowed HTTP header(x-custom-header)
+            step #2: Perform allowed header request from allowed origin mentioned in CORS
+            step #3: Perform non supported request from allowed origin mentioned in CORS
+            step #4: Modify the existing CORS config and add multiple HTTP hraders in it
+                    (x-custom-header, x-other-header)
+            step #5: Perform allowed header request from allowed origin
+        """
+        # 1: Create bucket and apply CORS config with one allowed HTTP header(Content-Type)
+        bucket_name = bucket_factory(interface="OC")[0].name
+        cors_config = self.create_custom_cors_config(
+            method_num=1, exp_header=1, origin_num=1
+        )
+        cors_config["CORSRules"][0]["AllowedHeaders"] = ["x-custom-header"]
+        self.apply_cors_on_bucket(
+            cors_config, awscli_pod_session, bucket_name, mcg_obj_session
+        )
+
+        # 2: Perform allowed header request from allowed origin mentioned in CORS
+        allowed_origin = choice(cors_config["CORSRules"][0]["AllowedOrigins"])
+        http_method = choice(cors_config["CORSRules"][0]["AllowedMethods"])
+        extra_header = {"Access-Control-Request-Headers": "X-Custom-Header"}
+        sample = TimeoutSampler(
+            timeout=120,
+            sleep=10,
+            func=self.exec_curl_command,
+            endpoint=mcg_obj_session.s3_endpoint,
+            bucket_name=bucket_name,
+            origin=allowed_origin,
+            method=http_method,
+            **extra_header,
+        )
+        sample.wait_for_func_value(self.POSITIVE_RESPONSE)
+
+        # 3: Perform non supported request from allowed origin mentioned in CORS
+        extra_header = {"Access-Control-Request-Headers": "x-other-header"}
+        sample = TimeoutSampler(
+            timeout=120,
+            sleep=10,
+            func=self.exec_curl_command,
+            endpoint=mcg_obj_session.s3_endpoint,
+            bucket_name=bucket_name,
+            origin=allowed_origin,
+            method=http_method,
+            **extra_header,
+        )
+        sample.wait_for_func_value(self.NEGATIVE_RESPONSE)
+
+        # 4: Modify the existing CORS config and add multiple HTTP hraders in it(Content-Type, Content-MD5)
+        cors_config["CORSRules"][0]["AllowedHeaders"].append("x-other-header")
+        self.apply_cors_on_bucket(
+            cors_config, awscli_pod_session, bucket_name, mcg_obj_session
+        )
+
+        # 5: Perform allowed header request from allowed origin
+        sample = TimeoutSampler(
+            timeout=120,
+            sleep=10,
+            func=self.exec_curl_command,
+            endpoint=mcg_obj_session.s3_endpoint,
+            bucket_name=bucket_name,
+            origin=allowed_origin,
+            method=http_method,
+            **extra_header,
+        )
+        sample.wait_for_func_value(self.POSITIVE_RESPONSE)
+
+    @tier1
+    def test_expose_header_cors_element(
+        self, mcg_obj_session, awscli_pod_session, bucket_factory
+    ):
+        """
+        Test ExposeHeader element from CORS operation on bucket
+            step #1: Create bucket and apply CORS config with only one ExposeHeader(x-amz-meta-custom-header)
+            step #2: Perform GET request from allowed origin mentioned in CORS and validate exposed header is present
+            step #3: Modify the existing CORS config and add multiple ExposeHeaders in it
+                    (x-amz-meta-custom-header, x-amz-request-id)
+            step #4: Perform GET request from allowed origin mentioned in CORS and validate exposed header is present
+        """
+        # 1: Create bucket and apply CORS config with only one ExposeHeader(x-amz-meta-custom-header)
+        bucket_name = bucket_factory(interface="OC")[0].name
+        cors_config = self.create_custom_cors_config(
+            method_num=1, exp_header=1, origin_num=1
+        )
+        cors_config["CORSRules"][0]["ExposeHeaders"] = ["x-amz-meta-custom-header"]
+        self.apply_cors_on_bucket(
+            cors_config, awscli_pod_session, bucket_name, mcg_obj_session
+        )
+
+        # 2: Perform GET request from allowed origin mentioned in CORS and validate exposed header is present
+        allowed_origin = choice(cors_config["CORSRules"][0]["AllowedOrigins"])
+        http_method = choice(cors_config["CORSRules"][0]["AllowedMethods"])
+        sleep(60)
+        curl_command = (
+            f"curl -k {mcg_obj_session.s3_endpoint}/{bucket_name} -X OPTIONS "
+            f"-H 'Access-Control-Request-Method: {http_method}' "
+            f"-H 'Origin: {allowed_origin}' "
+            f"-D -"
+        )
+        curl_output = exec_cmd(cmd=curl_command).stdout.decode()
+        logger.info(curl_output)
+        for line in curl_output.strip().split("\n"):
+            if "access-control-expose-headers" in line:
+                op = line.split(":", 1)[1].strip()
+                assert (
+                    "x-amz-meta-custom-header" in op
+                ), "Missing expected Expose Header element from the curl response"
+                break
+        else:
+            assert False, "Missing Access-Control-Expose-Headers in the curl response"
+
+        # 3: Modify the existing CORS config and add multiple ExposeHeaders in it
+        cors_config["CORSRules"][0]["ExposeHeaders"].append("x-amz-request-id")
+        provided_expose_header = cors_config["CORSRules"][0]["ExposeHeaders"]
+        self.apply_cors_on_bucket(
+            cors_config, awscli_pod_session, bucket_name, mcg_obj_session
+        )
+        # 4: Perform GET request from allowed origin mentioned in CORS and validate exposed headers are present
+        sleep(60)
+        curl_command = (
+            f"curl -k {mcg_obj_session.s3_endpoint}/{bucket_name} -X OPTIONS "
+            f"-H 'Access-Control-Request-Method: {http_method}' "
+            f"-H 'Origin: {allowed_origin}' "
+            f"-D -"
+        )
+        curl_output = exec_cmd(cmd=curl_command).stdout.decode()
+        logger.info(curl_output)
+        for line in curl_output.strip().split("\n"):
+            if "access-control-expose-headers" in line:
+                op = line.split(":", 1)[1].strip()
+                expose_headers_list = [val.strip() for val in op.split(",")]
+                assert sorted(expose_headers_list) == sorted(
+                    provided_expose_header
+                ), "Missing expected Expose Header element from the curl response"
+                break
+        else:
+            assert False, "Missing Access-Control-Expose-Headers in the curl response"
+
+    @tier4a
     def test_MaxAgeSeconds_and_AllowCredentials_element(
         self, mcg_obj_session, awscli_pod_session, bucket_factory
     ):
@@ -700,3 +846,144 @@ class TestCorsConfig:
                 )
             else:
                 raise
+
+    @pytest.mark.parametrize(
+        argnames="bucketclass_dict",
+        argvalues=[
+            pytest.param(*[None], marks=[tier1, pytest.mark.polarion_id("OCS-1868")]),
+            pytest.param(
+                *[
+                    {
+                        "interface": "OC",
+                        "backingstore_dict": {"aws": [(1, "eu-central-1")]},
+                    },
+                ],
+            ),
+            pytest.param(
+                *[
+                    {"interface": "OC", "backingstore_dict": {"azure": [(1, None)]}},
+                ],
+            ),
+            pytest.param(
+                *[{"interface": "OC", "backingstore_dict": {"gcp": [(1, None)]}}],
+            ),
+            pytest.param(
+                *[
+                    {"interface": "OC", "backingstore_dict": {"ibmcos": [(1, None)]}},
+                ],
+                marks=[skipif_fips_enabled],
+            ),
+            pytest.param(
+                {
+                    "interface": "OC",
+                    "namespace_policy_dict": {
+                        "type": "Single",
+                        "namespacestore_dict": {"aws": [(1, None)]},
+                    },
+                },
+            ),
+            pytest.param(
+                {
+                    "interface": "OC",
+                    "namespace_policy_dict": {
+                        "type": "Single",
+                        "namespacestore_dict": {"azure": [(1, None)]},
+                    },
+                },
+            ),
+            pytest.param(
+                {
+                    "interface": "OC",
+                    "namespace_policy_dict": {
+                        "type": "Single",
+                        "namespacestore_dict": {"rgw": [(1, None)]},
+                    },
+                },
+                marks=[on_prem_platform_required],
+            ),
+            pytest.param(
+                {
+                    "interface": "CLI",
+                    "namespace_policy_dict": {
+                        "type": "Single",
+                        "namespacestore_dict": {"gcp": [(1, None)]},
+                    },
+                },
+            ),
+            pytest.param(
+                {
+                    "interface": "OC",
+                    "namespace_policy_dict": {
+                        "type": "Single",
+                        "namespacestore_dict": {"ibmcos": [(1, None)]},
+                    },
+                },
+                marks=[skipif_fips_enabled],
+            ),
+        ],
+        ids=[
+            "OBC-DEFAULT",
+            "OBC-AWS",
+            "OBC-AZURE",
+            "OBC-GCP",
+            "OBC-IBMCOS",
+            "OBC-AWS-NSS",
+            "OBC-Azure-NSS",
+            "OBC-RGW-NSS",
+            "OBC-GCP-NSS",
+            "OBC-IBM-NSS",
+        ],
+    )
+    @pre_upgrade
+    @tier1
+    def test_default_cors_pre_upgrade(
+        self,
+        request,
+        bucket_factory_session,
+        bucketclass_dict,
+    ):
+        """
+        Create backingstore and namespacestore to validate CORS after upgrade
+        """
+        # 1: Create a bucket
+        bucket_name = bucket_factory_session(
+            interface="OC", bucketclass=bucketclass_dict
+        )[0].name
+        # Cache the bucket name for the post-upgrade test
+        request.config.cache.set(request.node.callspec.id, bucket_name)
+
+    @tier1
+    @post_upgrade
+    def test_default_cors_post_upgrade(
+        self,
+        request,
+        mcg_obj_session,
+        awscli_pod_session,
+    ):
+        """
+        Verify CORS config is set to existing bucket post-upgrade
+        """
+        ids = [
+            "OBC-DEFAULT",
+            "OBC-AWS",
+            "OBC-AZURE",
+            "OBC-GCP",
+            "OBC-IBMCOS",
+            "OBC-AWS-NSS",
+            "OBC-Azure-NSS",
+            "OBC-RGW-NSS",
+            "OBC-GCP-NSS",
+            "OBC-IBM-NSS",
+        ]
+        for i in ids:
+            # Retrieve the bucket name from the pre-upgrade test
+            bucket_name = request.config.cache.get(i, None)
+            # Verify the default CORS is set to buckets post-upgrade
+            get_bucket_cors_op = self.exec_cors_command(
+                operation="get-bucket-cors",
+                bucket_name=bucket_name,
+                awscli_pod_session=awscli_pod_session,
+                mcg_obj_session=mcg_obj_session,
+                response=True,
+            )
+            logger.info(get_bucket_cors_op)
