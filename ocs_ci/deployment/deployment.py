@@ -3451,7 +3451,16 @@ class MultiClusterDROperatorsDeploy(object):
     @retry((TimeoutExpiredError, ACMClusterConfigurationException), tries=20, delay=10)
     def backup_pod_status_check(self):
         pods_list = get_all_pods(namespace=constants.ACM_HUB_BACKUP_NAMESPACE)
-        if len(pods_list) != 3:
+        backup_pod_count = 3
+        ocp_version = version.get_semantic_ocp_version_from_config()
+        ocp_version >= version.VERSION_4_19
+        acm_version = get_acm_version()
+        if (
+            version.compare_versions(f"{acm_version} >= 2.13")
+            and ocp_version >= version.VERSION_4_19
+        ):
+            backup_pod_count = 2
+        if len(pods_list) != backup_pod_count:
             raise ACMClusterConfigurationException("backup pod count mismatch ")
         for pod in pods_list:
             # check pod status Running
