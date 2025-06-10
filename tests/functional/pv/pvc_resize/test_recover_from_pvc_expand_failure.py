@@ -68,7 +68,8 @@ class TestRecoverPvcExpandFailure(ManageTest):
 
 
         """
-        target_percentage = 85
+        # Set the target percentage for cluster fill just above the ceph osd full ratio
+        target_percentage = 87
 
         # Create files on the pods
         for pod_obj in self.pods:
