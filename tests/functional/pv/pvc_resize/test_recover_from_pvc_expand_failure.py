@@ -95,6 +95,7 @@ class TestRecoverPvcExpandFailure(ManageTest):
         )
 
         logger.info(f"Wait for {300} seconds to fill up the cluster")
+        time.sleep(300)
         with config.RunWithProviderConfigContextIfAvailable():
             benchmark_workload_storageutilization(
                 target_percentage=target_percentage, is_completed=False
