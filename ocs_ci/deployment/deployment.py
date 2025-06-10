@@ -3566,6 +3566,16 @@ class MultiClusterDROperatorsDeploy(object):
         oadp_data["spec"]["backupLocations"][0]["velero"]["objectStorage"][
             "bucket"
         ] = bucket_name
+        oadp_version = get_oadp_version(namespace=constants.ACM_HUB_BACKUP_NAMESPACE)
+        if version.compare_versions(f"{oadp_version} >= 1.5"):
+            # Remove 'restic' under 'configuration' if it exists
+            oadp_data["spec"]["configuration"].pop("restic", None)
+
+            # Add 'nodeAgent' under 'configuration'
+            oadp_data["spec"]["configuration"]["nodeAgent"] = {
+                "enable": True,
+                "uploaderType": "restic",
+            }
         oadp_yaml = tempfile.NamedTemporaryFile(mode="w+", prefix="oadp", delete=False)
         templating.dump_data_to_temp_yaml(oadp_data, oadp_yaml.name)
         run_cmd(f"oc create -f {oadp_yaml.name}")
