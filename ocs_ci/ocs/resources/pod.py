@@ -1797,7 +1797,9 @@ def get_pod_count(label, namespace=None):
 
 
 def get_cephfsplugin_provisioner_pods(
-    cephfsplugin_provisioner_label=helpers.get_provisioner_label(constants.CEPHFILESYSTEM),
+    cephfsplugin_provisioner_label=helpers.get_provisioner_label(
+        constants.CEPHFILESYSTEM
+    ),
     namespace=None,
 ):
     """
