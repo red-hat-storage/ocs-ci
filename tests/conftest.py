@@ -7484,6 +7484,43 @@ def cnv_workload_factory(request):
 
 
 @pytest.fixture()
+def operator_pods():
+    """
+    Returns list of operator pods of the cluster based on current configuration.
+    """
+    namespace = ocsci_config.ENV_DATA["cluster_namespace"]
+    no_noobaa = ocsci_config.COMPONENTS["disable_noobaa"]
+    pod_list = []
+    no_ceph = (
+        ocsci_config.DEPLOYMENT["external_mode"]
+        or ocsci_config.ENV_DATA["mcg_only_deployment"]
+    )
+    pod_names = [
+        pod.name for pod in get_all_pods(namespace=config.ENV_DATA["cluster_namespace"])
+    ]
+    operator_pods = []
+    if not no_noobaa:
+        for expected_pod_name in constants.NOOBAA_POD_NAMES:
+            operator_pods.extend(
+                [
+                    pod_name
+                    for pod_name in pod_names
+                    if pod_name.startswith(expected_pod_name)
+                ]
+            )
+    if not no_ceph:
+        for expected_pod_name in constants.CEPH_PODS_NAMES:
+            operator_pods.extend(
+                [
+                    pod_name
+                    for pod_name in pod_names
+                    if pod_name.startswith(expected_pod_name)
+                ]
+            )
+    return operator_pods
+
+
+@pytest.fixture()
 def multi_cnv_workload(request, storageclass_factory, cnv_workload):
     """
     Fixture to create virtual machines (VMs) with specific configurations.
