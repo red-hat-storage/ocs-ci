@@ -93,9 +93,6 @@ class TestRecoverPvcExpandFailure(ManageTest):
         logger.info(
             f"Fill up the cluster to {target_percentage}% of it's storage capacity"
         )
-
-        logger.info(f"Wait for {300} seconds to fill up the cluster")
-        time.sleep(300)
         with config.RunWithProviderConfigContextIfAvailable():
             benchmark_workload_storageutilization(
                 target_percentage=target_percentage, is_completed=False
@@ -104,6 +101,9 @@ class TestRecoverPvcExpandFailure(ManageTest):
             cluster_full_alert = prometheus_api.wait_for_alert(
                 name=constants.ALERT_CLUSTERCRITICALLYFULL, state="firing"
             )
+
+        logger.info(f"Wait for {300} seconds to fill up the cluster")
+        time.sleep(300)
 
         if len(cluster_full_alert) == 0:
             logger.error(
