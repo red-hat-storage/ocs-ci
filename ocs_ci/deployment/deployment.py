@@ -43,6 +43,7 @@ from ocs_ci.framework import config, merge_dict
 from ocs_ci.framework.logger_helper import log_step
 from ocs_ci.helpers.dr_helpers import (
     configure_drcluster_for_fencing,
+    get_cluster_set_name,
 )
 from ocs_ci.ocs import constants, ocp, defaults, registry
 from ocs_ci.ocs.cluster import (
@@ -302,22 +303,10 @@ class Deployment(object):
             run_cmd(f"oc create -f {constants.GITOPS_PLACEMENT_YAML}")
 
             logger.info("Creating ManagedClusterSetBinding")
-            cluster_set = []
+            cluster_set = get_cluster_set_name()
             managed_clusters = (
                 ocp.OCP(kind=constants.ACM_MANAGEDCLUSTER).get().get("items", [])
             )
-            # ignore local-cluster here
-            for i in managed_clusters:
-                if i["metadata"]["name"] != constants.ACM_LOCAL_CLUSTER:
-                    cluster_set.append(
-                        i["metadata"]["labels"][constants.ACM_CLUSTERSET_LABEL]
-                    )
-            if all(x == cluster_set[0] for x in cluster_set):
-                logger.info(f"Found the uniq clusterset {cluster_set[0]}")
-            else:
-                raise UnexpectedDeploymentConfiguration(
-                    "There are more then one clusterset added to multiple managedcluters"
-                )
 
             managedclustersetbinding_obj = templating.load_yaml(
                 constants.GITOPS_MANAGEDCLUSTER_SETBINDING_YAML
