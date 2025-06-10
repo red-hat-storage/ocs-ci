@@ -473,64 +473,71 @@ class Deployment(object):
         if config.ENV_DATA.get("skip_dr_deployment", False):
             return
         if config.multicluster:
-            managed_clusters = get_non_acm_cluster_config()
-            for cluster in managed_clusters:
+            for cluster in config.clusters:
                 index = cluster.MULTICLUSTER["multicluster_index"]
-                config.switch_ctx(index)
-                logger.info("Creating Namespace")
-                # creating Namespace and operator group for cert-manager
-                logger.info("Creating namespace and operator group for Openshift-oadp")
-                run_cmd(f"oc create -f {constants.OADP_NS_YAML}")
-                logger.info("Creating OADP Operator Subscription")
-                oadp_subscription_yaml_data = templating.load_yaml(
-                    constants.OADP_SUBSCRIPTION_YAML
-                )
-                package_manifest = PackageManifest(
-                    resource_name=constants.OADP_OPERATOR_NAME,
-                    selector="catalog=redhat-operators",
-                )
-                try:
-                    package_manifest.get()
-                except ResourceNotFoundError as ex:
-                    logger.warning(
-                        f"OADP operator not availabe - bringing up unreleased content {ex}!"
+                with config.RunWithConfigContext(index):
+                    config.switch_ctx(index)
+                    logger.info("Creating Namespace")
+                    # creating Namespace and operator group for cert-manager
+                    logger.info(
+                        "Creating namespace and operator group for Openshift-oadp"
                     )
-                    create_unreleased_oadp_catalog()
+                    run_cmd(f"oc create -f {constants.OADP_NS_YAML}")
+                    logger.info("Creating OADP Operator Subscription")
+                    oadp_subscription_yaml_data = templating.load_yaml(
+                        constants.OADP_SUBSCRIPTION_YAML
+                    )
                     package_manifest = PackageManifest(
                         resource_name=constants.OADP_OPERATOR_NAME,
-                        selector=f"catalog={constants.BREW_CATALOG_NAME}",
+                        selector="catalog=redhat-operators",
                     )
-                    oadp_subscription_yaml_data["spec"][
-                        "source"
-                    ] = constants.BREW_CATALOG_NAME
-                oadp_default_channel = package_manifest.get_default_channel()
+                    try:
+                        package_manifest.get()
+                    except ResourceNotFoundError as ex:
+                        logger.warning(
+                            f"OADP operator not availabe - bringing up unreleased content {ex}!"
+                        )
+                        create_unreleased_oadp_catalog()
+                        package_manifest = PackageManifest(
+                            resource_name=constants.OADP_OPERATOR_NAME,
+                            selector=f"catalog={constants.OADP_CATALOG_NAME}",
+                        )
+                        oadp_subscription_yaml_data["spec"][
+                            "source"
+                        ] = constants.OADP_CATALOG_NAME
+                    oadp_default_channel = package_manifest.get_default_channel()
+                    if config.MULTICLUSTER["acm_cluster"]:
+                        logger.info("Skipping oadp subscription for ACM hub")
+                        continue
 
-                oadp_subscription_yaml_data["spec"]["channel"] = oadp_default_channel
-                oadp_subscription_manifest = tempfile.NamedTemporaryFile(
-                    mode="w+", prefix="oadp_subscription_manifest", delete=False
-                )
-                templating.dump_data_to_temp_yaml(
-                    oadp_subscription_yaml_data, oadp_subscription_manifest.name
-                )
-                run_cmd(f"oc create -f {oadp_subscription_manifest.name}")
-                self.wait_for_subscription(
-                    constants.OADP_OPERATOR_NAME, namespace=constants.OADP_NAMESPACE
-                )
-                logger.info(
-                    "Sleeping for 120 seconds after subscribing to OADP Operator"
-                )
-                time.sleep(120)
-                oadp_subscriptions = ocp.OCP(
-                    kind=constants.SUBSCRIPTION_WITH_ACM,
-                    resource_name=constants.OADP_OPERATOR_NAME,
-                    namespace=constants.OADP_NAMESPACE,
-                ).get()
-                oadp_csv_name = oadp_subscriptions["status"]["currentCSV"]
-                csv = CSV(
-                    resource_name=oadp_csv_name, namespace=constants.OADP_NAMESPACE
-                )
-                csv.wait_for_phase("Succeeded", timeout=720)
-                logger.info("OADP Operator Deployment Succeeded")
+                    oadp_subscription_yaml_data["spec"][
+                        "channel"
+                    ] = oadp_default_channel
+                    oadp_subscription_manifest = tempfile.NamedTemporaryFile(
+                        mode="w+", prefix="oadp_subscription_manifest", delete=False
+                    )
+                    templating.dump_data_to_temp_yaml(
+                        oadp_subscription_yaml_data, oadp_subscription_manifest.name
+                    )
+                    run_cmd(f"oc create -f {oadp_subscription_manifest.name}")
+                    self.wait_for_subscription(
+                        constants.OADP_OPERATOR_NAME, namespace=constants.OADP_NAMESPACE
+                    )
+                    logger.info(
+                        "Sleeping for 120 seconds after subscribing to OADP Operator"
+                    )
+                    time.sleep(120)
+                    oadp_subscriptions = ocp.OCP(
+                        kind=constants.SUBSCRIPTION_WITH_ACM,
+                        resource_name=constants.OADP_OPERATOR_NAME,
+                        namespace=constants.OADP_NAMESPACE,
+                    ).get()
+                    oadp_csv_name = oadp_subscriptions["status"]["currentCSV"]
+                    csv = CSV(
+                        resource_name=oadp_csv_name, namespace=constants.OADP_NAMESPACE
+                    )
+                    csv.wait_for_phase("Succeeded", timeout=720)
+                    logger.info("OADP Operator Deployment Succeeded")
 
     def do_deploy_rdr(self):
         """
