@@ -61,7 +61,6 @@ class TestRecoverPvcExpandFailure(ManageTest):
         pause_and_resume_cluster_load,
         benchmark_workload_storageutilization,
         threading_lock,
-        teardown,
     ):
         """
         Test case to verify recovery from PVC expansion failure. The PVC expansion will not complete due to the cluster
@@ -257,3 +256,5 @@ class TestRecoverPvcExpandFailure(ManageTest):
                 file_name=pod_obj.name,
                 original_md5sum=pod_obj.orig_md5_sum,
             )
+
+        change_ceph_full_ratio(85)
