@@ -39,8 +39,6 @@ from ocs_ci.ocs.utils import (
     get_nb_db_psql_version_from_image,
     query_nb_db_psql_version,
 )
-
-from ocs_ci.ocs.node import get_worker_nodes, wait_for_nodes_status
 from ocs_ci.ocs import constants, defaults, node, ocp, exceptions
 from ocs_ci.ocs.exceptions import (
     CommandFailed,
@@ -4975,11 +4973,10 @@ def configure_node_network_configuration_policy_on_all_worker_nodes():
     Configure NodeNetworkConfigurationPolicy CR on each worker node in cluster
 
     """
-    from ocs_ci.ocs.node import get_worker_nodes
 
     # This function require changes for compact mode
     logger.info("Configure NodeNetworkConfigurationPolicy on all worker nodes")
-    worker_node_names = get_worker_nodes()
+    worker_node_names = node.get_worker_nodes()
     ip_version = "ipv4"
     if (
         config.DEPLOYMENT.get("ipv6")
@@ -5082,7 +5079,7 @@ def restart_node_if_debug_doesnt_work(worker_node_name):
         factory = platform_nodes.PlatformNodesFactory()
         nodes = factory.get_nodes_platform()
         nodes.restart_nodes_by_stop_and_start(node_to_restart)
-        wait_for_nodes_status([worker_node_name], constants.NODE_READY)
+        node.wait_for_nodes_status([worker_node_name], constants.NODE_READY)
         oc_cmd.exec_oc_debug_cmd(node=worker_node_name, cmd_list=[cmd])
 
 
@@ -6112,7 +6109,7 @@ def create_network_fence_class():
         )
 
     logger.info("Verifying CsiAddonsNode object for CSI RBD daemonset")
-    all_nodes = get_worker_nodes()
+    all_nodes = node.get_worker_nodes()
 
     @retry(KeyError, tries=3, delay=5)
     def _verify_csi_addons_objects():
