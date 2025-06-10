@@ -112,7 +112,9 @@ class TestRecoverPvcExpandFailure(ManageTest):
         logger.info(
             f"Fill up the cluster to {target_percentage}% of it's storage capacity"
         )
-        benchmark_workload_storageutilization(target_percentage)
+        benchmark_workload_storageutilization(
+            target_percentage=target_percentage, is_completed=False
+        )
 
         prometheus_api = PrometheusAPI(threading_lock=threading_lock)
         prometheus_api.wait_for_alert(
