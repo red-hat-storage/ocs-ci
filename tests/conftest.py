@@ -7488,9 +7488,7 @@ def operator_pods():
     """
     Returns list of operator pods of the cluster based on current configuration.
     """
-    namespace = ocsci_config.ENV_DATA["cluster_namespace"]
     no_noobaa = ocsci_config.COMPONENTS["disable_noobaa"]
-    pod_list = []
     no_ceph = (
         ocsci_config.DEPLOYMENT["external_mode"]
         or ocsci_config.ENV_DATA["mcg_only_deployment"]
