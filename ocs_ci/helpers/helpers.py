@@ -6194,3 +6194,74 @@ def unfence_node(node_name, delete=False):
             logger.info(f"Deleted network fence object for node {node_name}")
     else:
         logger.info(f"No networkfence found for node {node_name}")
+
+
+def create_auto_scaler(
+    name=None,
+    namespace=None,
+    sc_name=None,
+    device_class=None,
+    capacity_limit="4Ti",
+    scaling_threshold=70,
+    max_osd_size="8Ti",
+    timeout=1800,
+):
+    """
+    Create a StorageAutoScaler custom resource in OpenShift.
+
+    Args:
+        name (str): Name of the StorageAutoScaler resource.
+        namespace (str): Namespace where the resource is created.
+        sc_name (str): Name of the StorageCluster to attach to.
+        device_class (str): Device class for OSDs.
+        capacity_limit (str): Maximum total capacity before scaling stops.
+        scaling_threshold (int): Percent usage to trigger auto-scaling.
+        max_osd_size (str): Size of each OSD added during scaling.
+        timeout (int): Timeout in seconds for a scaling operation.
+
+    Returns:
+        OCS: An OCS instance of the StorageAutoScaler
+    """
+    from ocs_ci.ocs.resources.storage_cluster import (
+        get_storage_cluster,
+        get_default_deviceclass,
+    )
+
+    namespace = namespace or config.ENV_DATA["cluster_namespace"]
+    if not sc_name:
+        sc = get_storage_cluster(namespace)
+        sc_items = sc.data.get("items")
+        if not sc_items:
+            logger.warning(
+                f"The storagecluster doesn't contain any items. Fall back to the default "
+                f"storagecluster name '{constants.DEFAULT_STORAGE_CLUSTER}'"
+            )
+            sc_name = constants.DEFAULT_STORAGE_CLUSTER
+        else:
+            sc_name = sc_items[0].get("metadata", {}).get("name")
+            if not sc_name:
+                logger.warning(
+                    f"Didn't find the storagecluster name. Fall back to the default "
+                    f"storagecluster name '{constants.DEFAULT_STORAGE_CLUSTER}'"
+                )
+                sc_name = constants.DEFAULT_STORAGE_CLUSTER
+
+    device_class = device_class or get_default_deviceclass()
+    name = name or f"{sc_name}-{device_class}"
+
+    resource_dict = {
+        "apiVersion": "ocs.openshift.io/v1",
+        "kind": "StorageAutoScaler",
+        "metadata": {"name": name, "namespace": namespace},
+        "spec": {
+            "storageCluster": {"name": sc_name},
+            "deviceClass": device_class,
+            "storageCapacityLimit": capacity_limit,
+            "storageScalingThresholdPercent": scaling_threshold,
+            "maxOsdSize": max_osd_size,
+            "timeoutSeconds": timeout,
+        },
+    }
+
+    auto_scaler_obj = create_resource(**resource_dict)
+    return auto_scaler_obj
