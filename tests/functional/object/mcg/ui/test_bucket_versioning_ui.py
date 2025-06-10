@@ -1,4 +1,5 @@
 import logging
+import os
 import time
 import uuid
 
@@ -48,6 +49,13 @@ class TestBucketVersioningUI:
         logger.info("Step 1: Creating local folder with 1 file")
         folder_path, file_generator = generate_folder_with_files(num_files=1)
         files = list(file_generator)
+
+        # Set initial content for first version
+        file_path = files[0]  # Get the first (and only) file path
+        logger.info(f"Setting initial content for first version: {file_path}")
+        with open(file_path, "w") as f:
+            f.write("content-v1")
+
         logger.info(f"Created folder at: {folder_path} with {len(files)} file(s)")
 
         # Step 2: Upload the folder to bucket (using BucketsTab for this operation)
@@ -88,6 +96,20 @@ class TestBucketVersioningUI:
         # Step 4: Upload the same folder again to create second version
         logger.info("Step 4: Uploading same folder again to create second version")
 
+        # Modify file content for second version
+        file_path = files[0]  # Get the first (and only) file path
+        logger.info(f"Modifying file content for second version: {file_path}")
+
+        # Option C: Delete and recreate file to force browser refresh
+        os.remove(file_path)
+        with open(file_path, "w") as f:
+            f.write("content-v2")
+
+        # Option D: Verify content was written correctly
+        with open(file_path, "r") as f:
+            actual_content = f.read()
+            logger.info(f"Verified file content before upload: '{actual_content}'")
+
         # Navigate back to the bucket details page since versioning navigation took us away
         # First go back to object storage buckets list page, then navigate to bucket
         bucket_versioning.nav_object_storage_page()
@@ -106,6 +128,32 @@ class TestBucketVersioningUI:
 
         logger.info(
             f"Successfully uploaded folder again: {folder_name} - second version created"
+        )
+
+        # Modify file content for third version
+        logger.info(f"Modifying file content for third version: {file_path}")
+
+        os.remove(file_path)
+        with open(file_path, "w") as f:
+            f.write("content-v3")
+
+        with open(file_path, "r") as f:
+            actual_content = f.read()
+            logger.info(f"Verified file content before upload: '{actual_content}'")
+
+        file_input = buckets_tab.driver.find_element(
+            buckets_tab.bucket_tab["file_input_directory"][1],
+            buckets_tab.bucket_tab["file_input_directory"][0],
+        )
+        buckets_tab.driver.execute_script(
+            "arguments[0].style.display = 'block'; arguments[0].style.visibility = 'visible';",
+            file_input,
+        )
+        file_input.send_keys(folder_path)
+        time.sleep(5)  # Wait for upload
+
+        logger.info(
+            f"Successfully uploaded folder third time: {folder_name} - third version created"
         )
 
         # Step 5: Navigate to folder and show versioning
