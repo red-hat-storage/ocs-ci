@@ -2899,6 +2899,7 @@ OADP_BREW_BUILD_URL = (
     "topic/VirtualTopic.eng.ci.redhat-container-image.pipeline.complete"
     "&rows_per_page=25&delta=15552000&contains=oadp-operator-bundle-container"
 )
+OADP_CATALOG_NAME = "oadp-catalog"
 
 # BREW
 BREW_REPO = "brew.registry.redhat.io/rh-osbs/iib"

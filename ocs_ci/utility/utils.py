@@ -5184,6 +5184,8 @@ def create_unreleased_oadp_catalog():
         )
         brew_catalog_data = load_yaml(constants.BREW_CATALOG_YAML)
         brew_catalog_data["spec"]["image"] = image
+        brew_catalog_data["spec"]["displayName"] = constants.OADP_CATALOG_NAME
+        brew_catalog_data["metadata"]["name"] = constants.OADP_CATALOG_NAME
         brew_catalog_data_yaml = NamedTemporaryFile(
             mode="w+", prefix="brew-catalog", delete=False
         )
@@ -5192,11 +5194,16 @@ def create_unreleased_oadp_catalog():
         wait_for_machineconfigpool_status("all")
         run_cmd(f"oc create -f {brew_catalog_data_yaml.name}", timeout=300)
         catalog_source = CatalogSource(
-            resource_name=constants.BREW_CATALOG_NAME,
+            resource_name=constants.OADP_CATALOG_NAME,
             namespace=constants.MARKETPLACE_NAMESPACE,
         )
         # Wait for catalog source is ready
         catalog_source.wait_for_state("READY")
+        if config.MULTICLUSTER["acm_cluster"]:
+            run_cmd(
+                f"oc -n {constants.ACM_HUB_NAMESPACE} annotate mch multiclusterhub installer.open-cluster-management.io"
+                f'/oadp-subscription-spec=\'{{"source": "{constants.OADP_CATALOG_NAME}"}}\' --overwrite'
+            )
     else:
         raise TagNotFoundException("No brew image for oadp operator found!")
 
