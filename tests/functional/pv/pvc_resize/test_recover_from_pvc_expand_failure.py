@@ -102,7 +102,7 @@ class TestRecoverPvcExpandFailure(ManageTest):
                 name=constants.ALERT_CLUSTERCRITICALLYFULL, state="firing"
             )
 
-        logger.info(f"Wait for {300} seconds to fill up the cluster")
+        logger.info("Wait for 300 seconds to fill up the cluster")
         time.sleep(300)
 
         if len(cluster_full_alert) == 0:
@@ -114,6 +114,8 @@ class TestRecoverPvcExpandFailure(ManageTest):
         pvc_size_expanded = 20
         pvc_size_reduced = 10
 
+        logger.info("Wait for 30 seconds before expanding the PVC")
+        time.sleep(30)
         logger.info(f"Expanding PVCs to {pvc_size_expanded} GiB")
         for pvc_obj in self.pvcs:
             logger.info(
