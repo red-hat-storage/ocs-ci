@@ -2271,6 +2271,18 @@ bucket_tab = {
         "//div[contains(@class, 'pf-v5-c-modal-box')]//button[contains(@class, 'pf-m-link') and text()='Cancel']",
         By.XPATH,
     ),
+    "file_input_directory": (
+        "//input[@type='file'][@webkitdirectory]",
+        By.XPATH,
+    ),
+    "first_folder_link": (
+        "tbody tr:nth-child(1) td:nth-child(2) a:nth-child(1)",
+        By.CSS_SELECTOR,
+    ),
+    "list_all_versions_toggle": (
+        ".pf-v5-c-switch__toggle",
+        By.CSS_SELECTOR,
+    ),
 }
 locators = {
     "4.19": {

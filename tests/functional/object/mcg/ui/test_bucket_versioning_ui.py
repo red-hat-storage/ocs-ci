@@ -2,7 +2,6 @@ import logging
 import time
 import uuid
 
-from selenium.webdriver.common.by import By
 from ocs_ci.ocs.ui.page_objects.bucket_versioning import BucketVersioning
 from ocs_ci.ocs.ui.page_objects.buckets_tab import BucketsTab
 from ocs_ci.framework.pytest_customization.marks import (
@@ -33,6 +32,8 @@ class TestBucketVersioningUI:
         1. Create local folder with 1 file (due to product limitation)
         2. Upload the folder to bucket
         3. Enable versioning and confirm (if not already enabled)
+        4. Upload the same folder again to create second version
+        5. Navigate to folder and show versioning
 
         Args:
             setup_ui_class_factory: Pytest fixture for UI setup
@@ -64,7 +65,8 @@ class TestBucketVersioningUI:
 
         # Upload our 1-file folder instead of creating 400 files
         file_input = buckets_tab.driver.find_element(
-            By.XPATH, "//input[@type='file'][@webkitdirectory]"
+            buckets_tab.bucket_tab["file_input_directory"][1],
+            buckets_tab.bucket_tab["file_input_directory"][0],
         )
         buckets_tab.driver.execute_script(
             "arguments[0].style.display = 'block'; arguments[0].style.visibility = 'visible';",
@@ -82,6 +84,47 @@ class TestBucketVersioningUI:
             logger.info("Versioning enabled successfully")
         else:
             logger.info("Versioning was already enabled")
+
+        # Step 4: Upload the same folder again to create second version
+        logger.info("Step 4: Uploading same folder again to create second version")
+
+        # Navigate back to the bucket details page since versioning navigation took us away
+        # First go back to object storage buckets list page, then navigate to bucket
+        bucket_versioning.nav_object_storage_page()
+        buckets_tab.do_click(buckets_tab.bucket_tab["first_bucket"])
+
+        file_input = buckets_tab.driver.find_element(
+            buckets_tab.bucket_tab["file_input_directory"][1],
+            buckets_tab.bucket_tab["file_input_directory"][0],
+        )
+        buckets_tab.driver.execute_script(
+            "arguments[0].style.display = 'block'; arguments[0].style.visibility = 'visible';",
+            file_input,
+        )
+        file_input.send_keys(folder_path)
+        time.sleep(5)  # Wait for upload
+
+        logger.info(
+            f"Successfully uploaded folder again: {folder_name} - second version created"
+        )
+
+        # Step 5: Navigate to folder and show versioning
+        logger.info("Step 5: Navigating to folder and showing versions")
+
+        # Navigate to bucket and then into the specific folder we created
+        bucket_versioning.nav_object_storage_page()
+        buckets_tab.do_click(buckets_tab.bucket_tab["first_bucket"])
+
+        # Click on the folder name to navigate into it
+        # Use CSS selector for first folder row (most reliable approach)
+        buckets_tab.do_click(buckets_tab.bucket_tab["first_folder_link"])
+
+        # Toggle "List all versions" to show file versions
+        buckets_tab.do_click(buckets_tab.bucket_tab["list_all_versions_toggle"])
+
+        logger.info(
+            f"Successfully navigated to folder '{folder_name}' and enabled version listing"
+        )
 
         # Verify the test completed successfully
         assert folder_name, "Failed to create and upload folder"
