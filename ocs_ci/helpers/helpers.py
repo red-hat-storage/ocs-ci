@@ -6280,7 +6280,7 @@ def get_provisioner_label(interface):
 
     if (
         config.ENV_DATA["platform"].lower() in constants.HCI_PROVIDER_CLIENT_PLATFORMS
-        and version.get_semantic_ocs_version_from_config() >= version.VERSION_4_17
+        or version.get_semantic_ocs_version_from_config() >= version.VERSION_4_19
     ):
         if interface == constants.CEPHFILESYSTEM:
             label = constants.CEPHFS_CTRLPLUGIN_LABEL
@@ -6307,7 +6307,7 @@ def get_node_plugin_label(interface):
 
     if (
         config.ENV_DATA["platform"].lower() in constants.HCI_PROVIDER_CLIENT_PLATFORMS
-        and version.get_semantic_ocs_version_from_config() >= version.VERSION_4_17
+        or version.get_semantic_ocs_version_from_config() >= version.VERSION_4_19
     ):
         if interface == constants.CEPHFILESYSTEM:
             label = constants.CEPHFS_NODEPLUGIN_LABEL
