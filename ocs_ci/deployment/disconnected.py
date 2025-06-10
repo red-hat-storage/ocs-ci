@@ -224,6 +224,7 @@ def prune_and_mirror_index_image(
     return cs_file
 
 
+@retry((CommandFailed, NotFoundError), tries=3, delay=10, backoff=2)
 def mirror_index_image_via_oc_mirror(index_image, packages, idms=None):
     """
     Mirror all images required for ODF deployment and testing to mirror
@@ -257,7 +258,9 @@ def mirror_index_image_via_oc_mirror(index_image, packages, idms=None):
 
     # prepare imageset-config.yaml file
     imageset_config_data = templating.load_yaml(constants.OC_MIRROR_IMAGESET_CONFIG)
-    if idms:
+
+    # if the ocs version is greater than 4.18 we are using v2 config
+    if get_semantic_ocs_version_from_config() >= 4.18:
         imageset_config_data = templating.load_yaml(
             constants.OC_MIRROR_IMAGESET_CONFIG_V2
         )
