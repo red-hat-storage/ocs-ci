@@ -61,6 +61,7 @@ class TestRecoverPvcExpandFailure(ManageTest):
         pause_and_resume_cluster_load,
         benchmark_workload_storageutilization,
         threading_lock,
+        teardown,
     ):
         """
         Test case to verify recovery from PVC expansion failure. The PVC expansion will not complete due to the cluster
@@ -68,19 +69,7 @@ class TestRecoverPvcExpandFailure(ManageTest):
 
 
         """
-        # cephcluster = CephCluster()
-        #
-        # # Calculating size to ceph full ratio of 85% here to consider sync delay, if any,
-        # # after writing I/O from the pods self.pods
-        # total_storage = cephcluster.get_ceph_capacity()
-        # logger.info(f"Total storage is {total_storage}G")
-        # used_storage_percent = get_percent_used_capacity()
-        # logger.info(f"Used storage percent is {used_storage_percent}")
-        #
-        # # Target 5% more than ceph full ratio
         target_percentage = 85
-        # storage_percent_for_io = target_percentage - used_storage_percent
-        # size_to_ceph_full = (storage_percent_for_io * total_storage) / 100
 
         # Create files on the pods
         for pod_obj in self.pods:
@@ -101,30 +90,25 @@ class TestRecoverPvcExpandFailure(ManageTest):
         for pod_obj in self.pods:
             pod_obj.orig_md5_sum = cal_md5sum(pod_obj=pod_obj, file_name=pod_obj.name)
 
-        # # Create a PVC and pod that can be used to fill up the cluster
-        # pvc_to_fill = pvc_factory(interface=constants.CEPHBLOCKPOOL, size=total_storage)
-        # pod_to_fill = pod_factory(interface=constants.CEPHBLOCKPOOL, pvc=pvc_to_fill)
-
-        # # The pods used 4G each to write. Calculate the remaining to ceph full ratio
-        # total_used_by_app_pods = 4 * len(self.pods)
-        # size_to_ceph_full = ceil(size_to_ceph_full - total_used_by_app_pods)
-
         logger.info(
             f"Fill up the cluster to {target_percentage}% of it's storage capacity"
         )
-        benchmark_workload_storageutilization(
-            target_percentage=target_percentage, is_completed=False
-        )
 
-        prometheus_api = PrometheusAPI(threading_lock=threading_lock)
-        prometheus_api.wait_for_alert(
-            name=constants.ALERT_CLUSTERCRITICALLYFULL, state="firing"
-        )
+        logger.info(f"Wait for {300} seconds to fill up the cluster")
+        with config.RunWithProviderConfigContextIfAvailable():
+            benchmark_workload_storageutilization(
+                target_percentage=target_percentage, is_completed=False
+            )
+            prometheus_api = PrometheusAPI(threading_lock=threading_lock)
+            cluster_full_alert = prometheus_api.wait_for_alert(
+                name=constants.ALERT_CLUSTERCRITICALLYFULL, state="firing"
+            )
 
-        # try:
-        #     pod_to_fill.get_fio_rw_iops()
-        # except Exception as exe:
-        #     logger.info(f"Exception occurred while filling up the cluster:\n{str(exe)}")
+        if len(cluster_full_alert) == 0:
+            logger.error(
+                f"Alert {constants.ALERT_CLUSTERCRITICALLYFULL} is not firing. "
+                f"Continue test to check the PVC expansion behaviour"
+            )
 
         pvc_size_expanded = 20
         pvc_size_reduced = 10
@@ -195,9 +179,9 @@ class TestRecoverPvcExpandFailure(ManageTest):
                 end_fsync=1,
             )
 
-        # Scale down rbd and cephfs provisioner pod. To do this scale down operator deployments first
+        # Scale down rbd and cephfs ctrlplugin pod. To do this scale down operator deployments first
         logger.info(
-            "Scale down operator deployments to avoid reconciling ctrlplugin deployments after scaled down"
+            "Scale down operator deployments first to avoid reconciling ctrlplugin deployments after scaled down"
         )
         dep_ocp = OCP(
             kind=constants.DEPLOYMENT, namespace=config.ENV_DATA["cluster_namespace"]
