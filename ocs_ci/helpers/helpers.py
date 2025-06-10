@@ -1551,6 +1551,7 @@ def get_provision_time(interface, pvc_name, status="start"):
 
     """
     # Define the status that need to retrieve
+    ocs_version = version.get_semantic_ocs_version_from_config()
     operation = "started"
     if status.lower() == "end":
         operation = "succeeded"
@@ -1565,7 +1566,17 @@ def get_provision_time(interface, pvc_name, status="start"):
     logs = logs.split("\n")
     # Extract the time for the one PVC provisioning
     if isinstance(pvc_name, str):
-        stat = [i for i in logs if re.search(f"provision.*{pvc_name}.*{operation}", i)]
+        if ocs_version >= version.VERSION_4_17:
+            operation = "Started"
+            stat = [
+                i
+                for i in logs
+                if re.search(f'Started.*PVC="[^"]*/{re.escape(pvc_name)}"', i)
+            ]
+        else:
+            stat = [
+                i for i in logs if re.search(f"provision.*{pvc_name}.*{operation}", i)
+            ]
         mon_day = " ".join(stat[0].split(" ")[0:2])
         stat = f"{this_year} {mon_day}"
     # Extract the time for the list of PVCs provisioning
@@ -1573,7 +1584,18 @@ def get_provision_time(interface, pvc_name, status="start"):
         all_stats = []
         for i in range(0, len(pvc_name)):
             name = pvc_name[i].name
-            stat = [i for i in logs if re.search(f"provision.*{name}.*{operation}", i)]
+            if ocs_version >= version.VERSION_4_17:
+                if status.lower() == "end":
+                    operation = "Succeeded"
+                stat = [
+                    i
+                    for i in logs
+                    if re.search(f'Started.*PVC="[^"]*/{re.escape(name)}"', i)
+                ]
+            else:
+                stat = [
+                    i for i in logs if re.search(f"provision.*{name}.*{operation}", i)
+                ]
             mon_day = " ".join(stat[0].split(" ")[0:2])
             stat = f"{this_year} {mon_day}"
             all_stats.append(stat)
@@ -1755,21 +1777,17 @@ def measure_pv_deletion_time_bulk(
     logs = logs.split("\n")
 
     delete_suffix_to_search = (
-        "succeeded"
-        if version.get_semantic_ocs_version_from_config() <= version.VERSION_4_13
-        else "persistentvolume deleted succeeded"
+        "persistentvolume deleted succeeded"
+        if version.get_semantic_ocs_version_from_config() <= version.VERSION_4_16
+        else "deleted succeeded"
     )
     loop_counter = 0
     while True:
         no_data_list = list()
         for pv in pv_name_list:
-            # check if PV data present in CSI logs
-            start = [i for i in logs if re.search(f'delete "{pv}": started', i)]
-            end = [
-                i
-                for i in logs
-                if re.search(f'delete "{pv}": {delete_suffix_to_search}', i)
-            ]
+            start, end = get_start_end_time_for_bulk_pvc_creation(
+                logs, pv, delete_suffix_to_search
+            )
             if not start or not end:
                 no_data_list.append(pv)
 
@@ -1794,17 +1812,15 @@ def measure_pv_deletion_time_bulk(
     pv_dict = dict()
     this_year = str(datetime.datetime.now().year)
     for pv_name in pv_name_list:
+        start, end = get_start_end_time_for_bulk_pvc_creation(
+            logs, pv, delete_suffix_to_search
+        )
         # Extract the deletion start time for the PV
-        start = [i for i in logs if re.search(f'delete "{pv_name}": started', i)]
         mon_day = " ".join(start[0].split(" ")[0:2])
         start_tm = f"{this_year} {mon_day}"
         start_time = datetime.datetime.strptime(start_tm, DATE_TIME_FORMAT)
+
         # Extract the deletion end time for the PV
-        end = [
-            i
-            for i in logs
-            if re.search(f'delete "{pv_name}": {delete_suffix_to_search}', i)
-        ]
         mon_day = " ".join(end[0].split(" ")[0:2])
         end_tm = f"{this_year} {mon_day}"
         end_time = datetime.datetime.strptime(end_tm, DATE_TIME_FORMAT)
@@ -6194,3 +6210,26 @@ def unfence_node(node_name, delete=False):
             logger.info(f"Deleted network fence object for node {node_name}")
     else:
         logger.info(f"No networkfence found for node {node_name}")
+
+
+def get_start_end_time_for_bulk_pvc_creation(logs, pv, delete_suffix_to_search):
+    # check if PV data present in CSI logs[
+    if version.get_semantic_ocs_version_from_config() <= version.VERSION_4_16:
+        start = [i for i in logs if re.search(f'delete "{pv}": started', i)]
+    else:
+        start = [
+            i
+            for i in logs
+            if re.search(f'"shouldDelete is true".*PV="{re.escape(pv)}"', i)
+        ]
+    if version.get_semantic_ocs_version_from_config() <= version.VERSION_4_16:
+        end = [
+            i for i in logs if re.search(f'delete "{pv}": {delete_suffix_to_search}', i)
+        ]
+    else:
+        end = [
+            i
+            for i in logs
+            if re.search(f'{delete_suffix_to_search}.*PV="{re.escape(pv)}"', i)
+        ]
+    return start, end
