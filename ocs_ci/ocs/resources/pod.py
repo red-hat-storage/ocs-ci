@@ -1798,7 +1798,7 @@ def get_pod_count(label, namespace=None):
 
 
 def get_cephfsplugin_provisioner_pods(
-    cephfsplugin_provisioner_label=get_provisioner_label(constants.CEPHFILESYSTEM),
+    cephfsplugin_provisioner_label=constants.CSI_CEPHFSPLUGIN_PROVISIONER_LABEL,
     namespace=None,
 ):
     """
@@ -1814,6 +1814,7 @@ def get_cephfsplugin_provisioner_pods(
     Returns:
         list : csi-cephfsplugin-provisioner Pod objects
     """
+    cephfsplugin_provisioner_label = get_provisioner_label(constants.CEPHFILESYSTEM)
     namespace = namespace or config.ENV_DATA["cluster_namespace"]
     pods = get_pods_having_label(cephfsplugin_provisioner_label, namespace)
     fs_plugin_pods = [Pod(**pod) for pod in pods]
@@ -1821,7 +1822,7 @@ def get_cephfsplugin_provisioner_pods(
 
 
 def get_rbdfsplugin_provisioner_pods(
-    rbdplugin_provisioner_label=get_provisioner_label(constants.CEPHBLOCKPOOL),
+    rbdplugin_provisioner_label=constants.CSI_RBDPLUGIN_PROVISIONER_LABEL,
     namespace=None,
 ):
     """
@@ -1837,6 +1838,7 @@ def get_rbdfsplugin_provisioner_pods(
     Returns:
         list : csi-rbdplugin-provisioner Pod objects
     """
+    rbdplugin_provisioner_label = get_provisioner_label(constants.CEPHBLOCKPOOL)
     namespace = namespace or config.ENV_DATA["cluster_namespace"]
     pods = get_pods_having_label(rbdplugin_provisioner_label, namespace)
     ebd_plugin_pods = [Pod(**pod) for pod in pods]
