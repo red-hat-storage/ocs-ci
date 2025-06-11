@@ -63,8 +63,9 @@ class TestRecoverPvcExpandFailure(ManageTest):
         threading_lock,
     ):
         """
-        Test case to verify recovery from PVC expansion failure. The PVC expansion will not complete due to the cluster
-        being full. Even after changing the size, the initial requested size for expansion will be applied.
+        Test case to verify recovery from PVC expansion failure. The PVC expansion for RBD PVC will not complete due to
+        the cluster being full. Even after changing the size, the initial requested size for expansion will be applied.
+        For CephFs PVC the expansion will complete and the size cannot be reduced later.
 
 
         """
@@ -112,26 +113,54 @@ class TestRecoverPvcExpandFailure(ManageTest):
         pvc_size_expanded = 20
         pvc_size_reduced = 10
 
-        logger.info("Wait for 30 seconds before expanding the PVC")
-        time.sleep(30)
         logger.info(f"Expanding PVCs to {pvc_size_expanded} GiB")
         for pvc_obj in self.pvcs:
             logger.info(
                 f"Expanding size of PVC {pvc_obj.name} to {pvc_size_expanded}Gi"
             )
-            assert not pvc_obj.resize_pvc(
-                pvc_size_expanded, True, timeout=60
-            ), f"Unexpected: Expansion of PVC '{pvc_obj.name}' completed"
-            logger.info(pvc_obj.describe())
-        logger.info(f"All PVCs failed to expanded to the size {pvc_size_expanded}Gi")
+            capacity_changed = pvc_obj.resize_pvc(pvc_size_expanded, True, timeout=60)
+            if pvc_obj.interface == constants.CEPHBLOCKPOOL:
+                assert (
+                    not capacity_changed
+                ), f"Unexpected: Expansion of PVC '{pvc_obj.name}' completed"
+                logger.info(
+                    f"RBD PVC failed to expanded to the size {pvc_size_expanded}Gi"
+                )
+            elif pvc_obj.interface == constants.CEPHFILESYSTEM:
+                assert (
+                    capacity_changed
+                ), f"Unexpected: Expansion of PVC '{pvc_obj.name}' did not complete"
+                logger.info(f"CephFS PVC expanded to the size {pvc_size_expanded}Gi")
+            logger.debug(pvc_obj.describe())
 
         for pvc_obj in self.pvcs:
             logger.info(
                 f"Reducing the size of expansion failed PVC {pvc_obj.name} to {pvc_size_reduced}Gi"
             )
-            assert pvc_obj.resize_pvc(
-                pvc_size_reduced, False
-            ), f"Failed to reduce the size of the PVC '{pvc_obj.name}'"
+            try:
+                pvc_size_patched = pvc_obj.resize_pvc(
+                    new_size=pvc_size_reduced, verify=False
+                )
+                # AssertionError will be thrown from resize_pvc if CephFS PVC. For RBD PVC the return value will be True
+                assert (
+                    pvc_size_patched
+                ), f"Failed to reduce the size of the PVC '{pvc_obj.name}'"
+                logger.info(
+                    f"Patched the size of the PVC {pvc_obj.nam} to a lower value {pvc_size_reduced}Gi"
+                )
+            except AssertionError as err:
+                expected_error = (
+                    f"Patch command to modify size of PVC {pvc_obj.name} has failed."
+                )
+                if (
+                    pvc_obj.interface == constants.CEPHFILESYSTEM
+                    and expected_error in str(err)
+                ):
+                    logger.info(
+                        f"Verified: The size of the CephFS PVC {pvc_obj.name} cannot be reduced to {pvc_size_reduced}Gi"
+                    )
+                else:
+                    raise
 
         # Increase the ceph full ratio
         change_ceph_full_ratio(95)
