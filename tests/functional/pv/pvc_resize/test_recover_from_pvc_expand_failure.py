@@ -68,9 +68,6 @@ class TestRecoverPvcExpandFailure(ManageTest):
 
 
         """
-        # Set the target percentage for cluster fill just above the ceph osd full ratio
-        target_percentage = 87
-
         # Create files on the pods
         for pod_obj in self.pods:
             pod_obj.run_io(
@@ -90,6 +87,8 @@ class TestRecoverPvcExpandFailure(ManageTest):
         for pod_obj in self.pods:
             pod_obj.orig_md5_sum = cal_md5sum(pod_obj=pod_obj, file_name=pod_obj.name)
 
+        # Set the target percentage for cluster fill just above the ceph osd full ratio
+        target_percentage = 88
         logger.info(
             f"Fill up the cluster to {target_percentage}% of it's storage capacity"
         )
