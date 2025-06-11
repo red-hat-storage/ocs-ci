@@ -43,9 +43,9 @@ class TestOperator(ManageTest):
                 all_containers=True,
             )
             pods_logs[operator_pod] = pod_logs
-        logger.warning(pods_logs)
         for operator_pod in operator_pods:
             for line in pods_logs[operator_pod]:
+                logger.warning(line)
                 assert (
                     "error" not in line.lower()
-                ), f"error in {operator_pod} logs, opeartor pod logs: {pods_logs}"
+                ), f"error in {operator_pod} logs, opeartor pod logs: {pods_logs[operator_pod]}"
