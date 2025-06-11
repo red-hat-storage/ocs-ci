@@ -1,4 +1,3 @@
-import logging
 import pytest
 
 from ocs_ci.framework import config
@@ -9,8 +8,6 @@ from ocs_ci.framework.testlib import (
 )
 from ocs_ci.ocs.resources.pod import get_pod_logs
 from ocs_ci.ocs.resources.storage_cluster import check_unnecessary_pods_present
-
-logger = logging.getLogger(__name__)
 
 
 @brown_squad
@@ -46,8 +43,7 @@ class TestOperator(ManageTest):
         for operator_pod in operator_pods:
             test_string = pods_logs[operator_pod].lower()
             # remove false positives
-            test_string.replace("error: <nil>,", "")
-            logger.warning(test_string)
+            test_string = test_string.replace("error: <nil>,", "")
             assert (
                 "error" not in test_string
-            ), f"error in {operator_pod} logs, operator pod logs: {pods_logs[operator_pod]}"
+            ), f"error in {operator_pod} logs, operator pod logs: {test_string}"
