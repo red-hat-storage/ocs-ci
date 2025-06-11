@@ -204,14 +204,14 @@ class StorageConsumer:
 
         """
         with config.RunWithConfigContext(self.consumer_context):
-            resourceNameMappingConfigMap = (
+            resource_name_mapping_config_map = (
                 self.ocp.get(resource_name=self.name)
                 .get("spec")
-                .get("resourceNameMappingConfigMap")
+                .get("resource_name_mapping_config_map")
             )
         return (
-            resourceNameMappingConfigMap["name"]
-            if resourceNameMappingConfigMap
+            resource_name_mapping_config_map["name"]
+            if resource_name_mapping_config_map
             else None
         )
 
