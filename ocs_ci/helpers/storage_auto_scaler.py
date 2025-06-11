@@ -1,10 +1,11 @@
 import logging
+import time
 
 from ocs_ci.ocs.exceptions import ResourceWrongStatusException
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.ocp import OCP
 from ocs_ci.framework import config
-from ocs_ci.ocs.cluster import get_percent_used_capacity
+from ocs_ci.ocs.cluster import get_percent_used_capacity, get_osd_utilization
 
 logger = logging.getLogger(__name__)
 
@@ -53,6 +54,9 @@ def delete_all_storage_autoscalers(namespace=None, wait=True, timeout=120, force
             force=force,
         )
 
+    if autoscaler_names:
+        config.RUN["last_deleted_autoscaler_time"] = time.time()
+
 
 def wait_for_auto_scaler_status(
     expected_status, namespace=None, resource_name=None, timeout=600, sleep=10
@@ -100,25 +104,65 @@ def wait_for_auto_scaler_status(
 
 def generate_default_scaling_threshold(default_threshold=30, min_diff=7):
     """
-    Generate a safe default scaling threshold based on current used capacity.
+    Generate a safe scaling threshold based on current Ceph usage.
 
-    Ensures the threshold is at least `min_diff` percent higher than the used capacity.
+    This function calculates a default scaling threshold that avoids triggering
+    scaling too soon. It compares:
+    - Ceph's overall used capacity percentage
+    - The highest OSD's individual usage percentage
+
+    It selects the larger of these two and ensures the scaling threshold is at least
+    'min_diff' percent higher than that usage value. If the provided default threshold
+    is too close to the current usage, it is increased accordingly.
 
     Args:
-        default_threshold (int): Initial threshold to use.
-        min_diff (int): Minimum gap between used capacity and scaling threshold.
+        default_threshold (int): The initial threshold to start with (default: 30).
+        min_diff (int): Minimum gap (in percentage points) between current usage
+                        and scaling threshold to avoid premature scaling (default: 7).
 
     Returns:
-        int: A safe scaling threshold percentage.
+        int: A safe and adjusted scaling threshold percentage.
     """
-    used_capacity = get_percent_used_capacity()
+    ceph_used_capacity = get_percent_used_capacity()
+    osds_per_used_capacity = get_osd_utilization()
+    logger.info(
+        f"Ceph percent used capacity = {ceph_used_capacity}, "
+        f"OSDs used capacity = {osds_per_used_capacity}"
+    )
+
+    max_osd_used_capacity = max(osds_per_used_capacity.values())
+    max_used_capacity = max(max_osd_used_capacity, ceph_used_capacity)
     scaling_threshold = default_threshold
 
-    if scaling_threshold - min_diff < used_capacity:
+    if scaling_threshold - min_diff < max_used_capacity:
         logger.info(
             f"The scaling_threshold {scaling_threshold} is too close to the used "
-            f"capacity {used_capacity}. Increasing the scaling_threshold"
+            f"capacity {max_used_capacity}. Increasing the scaling_threshold."
         )
-        scaling_threshold = int(used_capacity) + min_diff
+        scaling_threshold = int(max_used_capacity) + min_diff
 
     return scaling_threshold
+
+
+def check_autoscaler_pre_conditions():
+    """
+    Wait for the Prometheus reconcile timeout to pass since the last autoscaler was deleted.
+
+    This ensures Prometheus has fully reconciled before the test creates a new
+    StorageAutoScaler. If 'last_deleted_autoscaler_time' is not set in config.RUN,
+    the function logs a message and skips waiting.
+    """
+    last_deleted_time = config.RUN.get("last_deleted_autoscaler_time")
+    if not last_deleted_time:
+        logger.info("No last deleted autoscaler time recorded — skipping wait.")
+        return
+
+    prometheus_reconcile_timeout = 720
+    time_remaining = last_deleted_time + prometheus_reconcile_timeout - time.time()
+
+    if time_remaining > 0:
+        logger.info(
+            f"Waiting {int(time_remaining)} seconds from the last deleted autoscaler time "
+            f"to ensure Prometheus reconciliation completes before starting the test."
+        )
+        time.sleep(time_remaining)
