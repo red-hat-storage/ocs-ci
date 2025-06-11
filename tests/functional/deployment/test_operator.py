@@ -1,4 +1,6 @@
+import logging
 import pytest
+
 from ocs_ci.framework import config
 from ocs_ci.framework.testlib import (
     brown_squad,
@@ -7,6 +9,8 @@ from ocs_ci.framework.testlib import (
 )
 from ocs_ci.ocs.resources.pod import get_pod_logs
 from ocs_ci.ocs.resources.storage_cluster import check_unnecessary_pods_present
+
+logger = logging.getLogger(__name__)
 
 
 @brown_squad
@@ -34,9 +38,12 @@ class TestOperator(ManageTest):
         pods_logs = {}
         for operator_pod in operator_pods:
             pod_logs = get_pod_logs(
-                pod_name=operator_pod, namespace=config.ENV_DATA["cluster_namespace"]
+                pod_name=operator_pod,
+                namespace=config.ENV_DATA["cluster_namespace"],
+                all_containers=True,
             )
             pods_logs[operator_pod] = pod_logs
+        logger.warning(pod_logs)
         for operator_pod in operator_pods:
             for line in pods_logs[operator_pod]:
                 assert (
