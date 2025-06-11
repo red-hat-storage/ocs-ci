@@ -207,7 +207,7 @@ class StorageConsumer:
             resource_name_mapping_config_map = (
                 self.ocp.get(resource_name=self.name)
                 .get("spec")
-                .get("resource_name_mapping_config_map")
+                .get("resourceNameMappingConfigMap")
             )
         return (
             resource_name_mapping_config_map["name"]
@@ -529,6 +529,7 @@ def verify_storage_consumer_resources(
 
     Raises:
         AssertionError: If any of the checks fail
+
     """
     internal_consumer = consumer_name == constants.INTERNAL_STORAGE_CONSUMER_NAME
     if internal_consumer and distributed_storage_classes:
