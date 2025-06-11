@@ -472,6 +472,30 @@ class Deployment(object):
         """
         if config.ENV_DATA.get("skip_dr_deployment", False):
             return
+
+        def version_exist(pm, required_version):
+            """
+            Check if the given PackageManifest includes the specified OADP version.
+
+            Args:
+                pm (dict): The PackageManifest data as a dictionary.
+                required_version (str): The OADP version to look for (e.g., "1.5").
+
+            Returns:
+                bool: True if the version exists in any channel's entries, False otherwise.
+
+            """
+            for channel in pm.get("status", {}).get("channels", []):
+                for entry in channel.get("entries", []):
+                    entry_version = entry.get("version")
+                    if entry_version and version.get_semantic_version(
+                        entry_version, only_major_minor=True
+                    ) == version.get_semantic_version(
+                        required_version, only_major_minor=True
+                    ):
+                        return True
+            return False
+
         if config.multicluster:
             for cluster in config.clusters:
                 index = cluster.MULTICLUSTER["multicluster_index"]
@@ -492,7 +516,20 @@ class Deployment(object):
                         selector="catalog=redhat-operators",
                     )
                     try:
-                        package_manifest.get()
+                        pm_data = package_manifest.get()
+                        pm_list = pm_data if isinstance(pm_data, list) else [pm_data]
+                        required_oadp_version = config.ENV_DATA["oadp_version"]
+
+                        if not any(
+                            version_exist(pm, required_oadp_version)
+                            and pm.get("status", {}).get("catalogSource")
+                            == constants.OPERATOR_CATALOG_SOURCE_NAME
+                            for pm in pm_list
+                        ):
+                            raise ResourceNotFoundError(
+                                f"Didn't find OADP {required_oadp_version}"
+                            )
+
                     except ResourceNotFoundError as ex:
                         logger.warning(
                             f"OADP operator not availabe - bringing up unreleased content {ex}!"
