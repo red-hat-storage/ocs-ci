@@ -175,6 +175,7 @@ version.
 * `fdf_image_tag`: FDF image tag, used to retrieve fdf_pre_release_image_digest.
 * `fdf_pre_release_registry`: Registry where the pre-release image of FDF is hosted.
 * `fdf_pre_release_image_digest`: sha256 of the pre-release image of FDF to deploy.
+* `cnv_deployment` - Deploy CNV or not (Default: false) necessary for Converged clusters with hosted clients
 
 #### REPORTING
 
@@ -345,7 +346,6 @@ higher priority).
 * `hcp_version` - version of HCP client to be deployed on machine running the tests
 * `metallb_version` - MetalLB operator version to install
 * `deploy_acm_hub_cluster` - Deploy ACM hub cluster or not (Default: false)
-* `cnv_deployment` - Deploy CNV or not (Default: false) necessary for Converged clusters with hosted clients
 * `deploy_hyperconverged` - Deploy hyperconverged operator or not (Default: false).  Necessary for Converged clusters with hosted clients with unreleased OCP version
 * `clusters` - section for hosted clusters
     * `<cluster name>` - name of the cluster
