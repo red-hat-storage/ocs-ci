@@ -118,7 +118,12 @@ class TestRecoverPvcExpandFailure(ManageTest):
             logger.info(
                 f"Expanding size of PVC {pvc_obj.name} to {pvc_size_expanded}Gi"
             )
-            capacity_changed = pvc_obj.resize_pvc(pvc_size_expanded, True, timeout=60)
+            try:
+                capacity_changed = pvc_obj.resize_pvc(
+                    pvc_size_expanded, True, timeout=60
+                )
+            except TimeoutExpiredError:
+                capacity_changed = False
             if pvc_obj.interface == constants.CEPHBLOCKPOOL:
                 assert (
                     not capacity_changed
