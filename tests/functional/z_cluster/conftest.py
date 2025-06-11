@@ -98,3 +98,14 @@ def workload_storageutilization_cephfs(
         threading_lock=threading_lock,
     )
     return measured_op
+
+
+@pytest.fixture
+def skip_resize_pre_conditions(request) -> bool:
+    """
+    Fixture that returns True if the test is marked with @pytest.mark.skip_resize_pre_conditions.
+
+    Returns:
+        bool: True if the marker is present, False otherwise.
+    """
+    return request.node.get_closest_marker("skip_resize_pre_conditions") is not None

@@ -3402,3 +3402,18 @@ def verify_nodes_in_ceph_osd_status(old_node_name, new_osd_node_name):
         return False
 
     return True
+
+
+def select_osd_node():
+    """
+    Select randomly one of the osd nodes
+
+    Returns:
+        ocs_ci.ocs.resources.ocs.OCS: The selected osd node object
+
+    """
+    osd_node_names = get_osd_running_nodes()
+    osd_node_name = random.choice(osd_node_names)
+    log.info(f"Selected OSD node is {osd_node_name}")
+    node_obj = get_node_objs([osd_node_name])[0]
+    return node_obj
