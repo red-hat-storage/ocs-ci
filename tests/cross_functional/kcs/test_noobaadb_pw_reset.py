@@ -21,6 +21,7 @@ from ocs_ci.ocs import constants, ocp
 from ocs_ci.ocs.exceptions import CommandFailed
 from ocs_ci.ocs.resources.pod import get_noobaa_pods
 from ocs_ci.utility.retry import retry
+from ocs_ci.utility.utils import get_primary_nb_db_pod
 
 logger = logging.getLogger(__name__)
 
@@ -63,7 +64,7 @@ class TestNoobaaDbPw(E2ETest):
         nb_db_secret_obj = ocp.OCP(
             kind=constants.SECRET,
             namespace=config.ENV_DATA["cluster_namespace"],
-            resource_name="noobaa-db",
+            resource_name="noobaa-db-pg-cluster-app",
         )
         db_secret_patch = '[{"op": "add", "path": "/stringData", "value": {"password": "myNewPassword"}}]'
         nb_db_secret_obj.patch(params=db_secret_patch, format_type="json")
@@ -84,7 +85,8 @@ def run_db_reset_cmd():
 
     """
     alter_cmd = "ALTER USER noobaa WITH PASSWORD 'myNewPassword';"
+    primary_nb_db_pod = get_primary_nb_db_pod()
     ocp.OCP().exec_oc_cmd(
-        f"exec -n {config.ENV_DATA['cluster_namespace']} {constants.NB_DB_NAME_47_AND_ABOVE} "
+        f"exec -n {config.ENV_DATA['cluster_namespace']} {primary_nb_db_pod.name} "
         f'-- psql -d nbcore -c "{alter_cmd}"'
     )
