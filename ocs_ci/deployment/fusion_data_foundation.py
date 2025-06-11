@@ -11,8 +11,7 @@ import yaml
 
 from ocs_ci.deployment.helpers.storage_class import get_storageclass
 from ocs_ci.framework import config
-from ocs_ci.ocs import constants, defaults
-from ocs_ci.helpers.helpers import get_worker_nodes
+from ocs_ci.ocs import constants, defaults, node
 from ocs_ci.ocs.exceptions import CommandFailed
 from ocs_ci.ocs.ocp import OCP
 from ocs_ci.utility import templating
@@ -167,7 +166,7 @@ class FusionDataFoundationDeployment:
 
         logger.info("Creating OdfCluster CR")
         storageclass = get_storageclass()
-        worker_nodes = get_worker_nodes()
+        worker_nodes = node.get_worker_nodes()
         with open(constants.FDF_ODFCLUSTER_CR, "r") as f:
             odfcluster_data = yaml.safe_load(f.read())
 
