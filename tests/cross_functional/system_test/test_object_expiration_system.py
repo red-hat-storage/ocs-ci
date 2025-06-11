@@ -407,7 +407,7 @@ class TestObjectExpirationSystemTest:
         upload_objects_and_expire()
 
         # Perform noobaa db backup and recovery locally
-        noobaa_db_backup_and_recovery_locally(snapshot_factory=snapshot_factory)
+        noobaa_db_backup_and_recovery_locally()
         wait_for_noobaa_pods_running(timeout=1200)
 
         sample_if_objects_expired()
