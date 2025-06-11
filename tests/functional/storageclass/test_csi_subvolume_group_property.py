@@ -1,8 +1,8 @@
 import logging
 import yaml
 
-from ocs_ci.framework.testlib import ManageTest, tier3, skipif_external_mode
-from ocs_ci.framework.pytest_customization.marks import green_squad
+from ocs_ci.framework.testlib import ManageTest, tier2, skipif_external_mode
+from ocs_ci.framework.pytest_customization.marks import green_squad, jira, polarion_id
 from ocs_ci.helpers.performance_lib import run_oc_command
 
 logger = logging.getLogger(__name__)
@@ -10,8 +10,10 @@ logger = logging.getLogger(__name__)
 
 @green_squad
 @skipif_external_mode
-@tier3
+@tier2
 class TestCSISubvolumeGroup(ManageTest):
+    @jira("DFBUGS-2759")
+    @polarion_id("OCS-5740")
     def test_subvolume_group_pinning(self):
         """
         Test that verifies that the pinning value of CephFilesystemSubVolumeGroup is 1
