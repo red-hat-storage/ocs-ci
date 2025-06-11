@@ -309,9 +309,9 @@ class AcmAddClusters(AcmPageNavigator):
             self.page_nav["submariner-custom-source"], "submariner-catalogsource"
         )
         submariner_unreleased_channel = (
-            config.ENV_DATA["submariner_unreleased_channel"]
-            if config.ENV_DATA["submariner_unreleased_channel"]
-            else config.ENV_DATA["submariner_version"].rpartition(".")[0]
+            config.ENV_DATA.get("submariner_unreleased_channel")
+            if config.ENV_DATA.get("submariner_unreleased_channel")
+            else config.ENV_DATA.get("submariner_version").rpartition(".")[0]
         )
         channel_name = "stable-" + submariner_unreleased_channel
         self.do_send_keys(
