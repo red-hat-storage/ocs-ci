@@ -44,8 +44,10 @@ class TestOperator(ManageTest):
             )
             pods_logs[operator_pod] = pod_logs
         for operator_pod in operator_pods:
-            for line in pods_logs[operator_pod]:
-                logger.warning(line)
-                assert (
-                    "error" not in line.lower()
-                ), f"error in {operator_pod} logs, opeartor pod logs: {pods_logs[operator_pod]}"
+            test_string = pods_logs[operator_pod].lower()
+            # remove false positives
+            test_string.replace("error: <nil>,", "")
+            logger.warning(test_string)
+            assert (
+                "error" not in test_string
+            ), f"error in {operator_pod} logs, operator pod logs: {pods_logs[operator_pod]}"
