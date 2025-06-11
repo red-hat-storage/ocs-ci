@@ -26,7 +26,7 @@ class TestOperator(ManageTest):
 
     @tier1
     @pytest.mark.polarion_id("OCS-6866")
-    def test_no_errors_in_operator_pod_logs(operator_pods):
+    def test_no_errors_in_operator_pod_logs(self, operator_pods):
         """
         1. Get list of all operator pods.
         2. Check that there is no error in any of the logs.
