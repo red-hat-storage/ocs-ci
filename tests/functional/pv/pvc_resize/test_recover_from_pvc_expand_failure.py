@@ -289,5 +289,3 @@ class TestRecoverPvcExpandFailure(ManageTest):
                 file_name=pod_obj.name,
                 original_md5sum=pod_obj.orig_md5_sum,
             )
-
-        change_ceph_full_ratio(85)
