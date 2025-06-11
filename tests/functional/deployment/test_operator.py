@@ -43,7 +43,7 @@ class TestOperator(ManageTest):
                 all_containers=True,
             )
             pods_logs[operator_pod] = pod_logs
-        logger.warning(pod_logs)
+        logger.warning(pods_logs)
         for operator_pod in operator_pods:
             for line in pods_logs[operator_pod]:
                 assert (
