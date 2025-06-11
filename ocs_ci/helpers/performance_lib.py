@@ -258,9 +258,9 @@ def measure_pvc_creation_time(interface, pvc_name, start_time):
     # time), the earliest start time and the latest end time are taken
     for sublog in logs:
         for line in sublog:
-            if st is None and "Started" in line and pvc_name in line:
+            if st is None and "started" in line.lower() and pvc_name in line:
                 st = string_to_time(line.split(" ")[1])
-            elif pvc_name in line and "Succeeded" in line:
+            elif pvc_name in line and "succeeded" in line.lower():
                 et = string_to_time(line.split(" ")[1])
     del logs
     if st is None:

@@ -956,14 +956,25 @@ def get_csi_provisioner_pod(interface):
     Returns:
         Pod object: The provisioner pod object based on iterface
     """
-    selector = (
-        "app=csi-rbdplugin-provisioner"
-        if (
-            interface == constants.CEPHBLOCKPOOL
-            or interface == constants.CEPHBLOCKPOOL_THICK
+    ocs_version = config.ENV_DATA["ocs_version"]
+    if Version.coerce(ocs_version) <= Version.coerce("4.18"):
+        selector = (
+            "app=csi-rbdplugin-provisioner"
+            if (
+                interface == constants.CEPHBLOCKPOOL
+                or interface == constants.CEPHBLOCKPOOL_THICK
+            )
+            else "app=csi-cephfsplugin-provisioner"
         )
-        else "app=csi-cephfsplugin-provisioner"
-    )
+    else:
+        selector = (
+            "app=openshift-storage.rbd.csi.ceph.com-ctrlplugin"
+            if (
+                interface == constants.CEPHBLOCKPOOL
+                or interface == constants.CEPHBLOCKPOOL_THICK
+            )
+            else "app=openshift-storage.cephfs.csi.ceph.com-ctrlplugin"
+        )
     ocp_pod_obj = OCP(
         kind=constants.POD,
         namespace=config.ENV_DATA["cluster_namespace"],
