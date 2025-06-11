@@ -380,6 +380,80 @@ class AcmAddClusters(AcmPageNavigator):
         self.take_screenshot()
         log.info("Submariner is healthy, check passed")
 
+    def install_submariner_cli(self, globalnet=True):
+        """
+        Installs the Submariner Via CLI on the ACM Hub cluster and expects 2 OCP clusters to be already imported
+        on the Hub Cluster to create a link between them
+
+        Args:
+            globalnet (bool): Globalnet is set to True by default for ODF versions greater than or equal to 4.13
+
+        """
+        submariner_broker_yaml = templating.load_yaml(constants.SUBMARINER_BROKER_YAML)
+        all_documents = []
+        log.info("Creating ManagedClusterSet")
+        global cluster_set_name
+        cluster_set_name = create_unique_resource_name("submariner", "clusterset")
+        log.info(f"Clusterset created with name: {cluster_set_name}")
+        cluster_set_yaml = templating.load_yaml(constants.CLUSTERSET_YAML)
+        cluster_set_yaml["metadata"]["name"] = cluster_set_name
+        clusterset_file = tempfile.NamedTemporaryFile(
+            mode="w+", prefix="clusterset", delete=False
+        )
+        templating.dump_data_to_temp_yaml(cluster_set_yaml, clusterset_file.name)
+        old_ctx = config.cur_index
+        config.switch_acm_ctx()
+        run_cmd(cmd=f"oc create -f {clusterset_file.name}")
+        managed_clusters = OCP(kind=constants.ACM_MANAGEDCLUSTER).get().get("items", [])
+        # ignore local-cluster here
+        for i in managed_clusters:
+            managed_cluster_name = i["metadata"]["name"]
+            if managed_cluster_name != constants.ACM_LOCAL_CLUSTER:
+                run_cmd(
+                    cmd=f"oc label {constants.ACM_MANAGEDCLUSTER} {managed_cluster_name} "
+                    f"cluster.open-cluster-management.io/clusterset={cluster_set_name} --overwrite"
+                )
+
+        config.switch_ctx(old_ctx)
+
+        for cluster in get_non_acm_cluster_config():
+            submariner_addon_yaml = templating.load_yaml(
+                constants.SUBMARINER_ADDON_YAML
+            )
+            submariner_config_yaml = templating.load_yaml(
+                constants.SUBMARINER_CONFIG_YAML
+            )
+
+            config.switch_ctx(cluster.MULTICLUSTER["multicluster_index"])
+
+            submariner_addon_yaml["metadata"]["namespace"] = cluster.ENV_DATA[
+                "cluster_name"
+            ]
+            submariner_config_yaml["metadata"]["namespace"] = cluster.ENV_DATA[
+                "cluster_name"
+            ]
+
+            all_documents.append(submariner_addon_yaml)
+            all_documents.append(submariner_config_yaml)
+        if not globalnet:
+            submariner_broker_yaml["spec"]["globalnetEnabled"] = "false"
+        submariner_broker_yaml["metadata"]["namespace"] = cluster_set_name + "-broker"
+        all_documents.append(submariner_broker_yaml)
+
+        # Create the temp file
+        submariner_data_file = tempfile.NamedTemporaryFile(
+            mode="w+", prefix="submariner_install_data", delete=False
+        )
+
+        # Dump all docs at once to preserve them
+        templating.dump_data_to_temp_yaml(all_documents, submariner_data_file.name)
+
+        log.info(f"YAML written to: {submariner_data_file.name}")
+
+        old_ctx = config.cur_index
+        config.switch_acm_ctx()
+        run_cmd(cmd=f"oc create -f {submariner_data_file.name}")
+
 
 def copy_kubeconfig(file=None, return_str=False):
     """
