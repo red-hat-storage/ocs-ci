@@ -27,9 +27,11 @@ from ocs_ci.ocs.exceptions import (
     UnexpectedBehaviour,
     NodeHasNoAttachedVolume,
     TimeoutExpiredError,
+    FloatingIPAssignException,
 )
 from ocs_ci.ocs.node import wait_for_nodes_status
 from ocs_ci.ocs.resources.ocs import OCS
+from ocs_ci.ocs.utils import get_primary_cluster_config
 from ocs_ci.utility import version as util_version
 from ocs_ci.utility.utils import get_infra_id, get_ocp_version, run_cmd, TimeoutSampler
 from ocs_ci.ocs.node import get_nodes
@@ -107,6 +109,36 @@ def get_region(cluster_path):
     with open(metadata_file) as f:
         metadata = json.load(f)
     return metadata["ibmcloud"]["region"]
+
+
+def get_resource_group_name(cluster_path):
+    """
+    Get resource group from metadata.json in given cluster_path
+
+    Args:
+        cluster_path: path to cluster install directory
+
+    Returns:
+        str: resource group name
+
+    """
+    metadata_file = os.path.join(cluster_path, "metadata.json")
+    with open(metadata_file) as f:
+        metadata = json.load(f)
+    return metadata["ibmcloud"]["resourceGroupName"]
+
+
+def set_resource_group_name(resource_group_name=None):
+    """
+    Sets the resource group to ibmcloud cli
+
+    Args:
+        resource_group_name (str): Resource Group Name
+
+    """
+    if not resource_group_name:
+        resource_group_name = get_resource_group_name(config.ENV_DATA["cluster_path"])
+    run_ibmcloud_cmd(f"ibmcloud target -g {resource_group_name}")
 
 
 def run_ibmcloud_cmd(cmd, secrets=None, timeout=600, ignore_error=False, **kwargs):
@@ -334,6 +366,17 @@ def add_deployment_dependencies():
     ]
     for cr in wa_crs:
         run_cmd(f"oc apply -f {cr}")
+
+
+def is_ibm_platform():
+    """
+    Check if cluster is IBM or Not
+
+    """
+    return (
+        get_primary_cluster_config().ENV_DATA.get("platform")
+        == constants.IBMCLOUD_PLATFORM
+    )
 
 
 class IBMCloud(object):
@@ -1453,3 +1496,136 @@ def get_bucket_regions_map():
             buckets.remove(bucket_name)
 
     return bucket_region_map
+
+
+def get_worker_floating_ips():
+    """
+    Retrieve a mapping of worker node names to their associated floating IPs.
+
+    Returns:
+        dict: A dictionary mapping worker node names to their floating IP addresses.
+    """
+    logger.info("Fetching all VSIs...")
+    try:
+        instances_output = run_ibmcloud_cmd("ibmcloud is instances --output json")
+        instances = json.loads(instances_output)
+    except Exception as e:
+        logger.error(f"Failed to retrieve instances: {e}")
+        return {}
+
+    logger.info("Fetching all floating IPs...")
+    try:
+        fips_output = run_ibmcloud_cmd("ibmcloud is floating-ips --output json")
+        floating_ips = json.loads(fips_output)
+    except Exception as e:
+        logger.error(f"Failed to retrieve floating IPs: {e}")
+        return {}
+
+    # Filter instances with 'worker' in their name
+    worker_instances = [
+        inst for inst in instances if re.search("worker", inst["name"], re.IGNORECASE)
+    ]
+    if not worker_instances:
+        logger.warning("No worker instances found.")
+        return {}
+
+    # Map instance IDs to names for quick lookup
+    instance_id_to_name = {inst["id"]: inst["name"] for inst in worker_instances}
+
+    # Build mapping of instance ID to floating IP address
+    instance_id_to_fip = {}
+    for fip in floating_ips:
+        target = fip.get("target")
+        if target and target.get("resource_id") in instance_id_to_name:
+            instance_id = target["resource_id"]
+            instance_id_to_fip[instance_id] = fip["address"]
+
+    # Build final mapping of instance name to floating IP address
+    fip_mapping = {}
+    for instance_id, name in instance_id_to_name.items():
+        fip_address = instance_id_to_fip.get(instance_id)
+        if fip_address:
+            fip_mapping[name] = fip_address
+            logger.info(f"Worker '{name}' has floating IP: {fip_address}")
+        else:
+            logger.warning(f"No floating IP found for worker '{name}'.")
+
+    return fip_mapping
+
+
+def assign_floating_ips_to_workers():
+    """
+    Assigns floating IPs to all worker instances that do not already have one.
+
+    Returns:
+        dict: Mapping of worker VSI names to their assigned floating IPs.
+    """
+    logger.info("Assigning floating IPs to worker instances...")
+
+    try:
+        instances_output = run_ibmcloud_cmd("ibmcloud is instances --output json")
+        instances = json.loads(instances_output)
+    except Exception as e:
+        logger.error(f"Failed to retrieve instances: {e}")
+        raise FloatingIPAssignException(
+            "Failed to retrieve instances from IBM Cloud VPC"
+        ) from e
+
+    # Filter for worker nodes
+    workers = [
+        inst for inst in instances if re.search("worker", inst["name"], re.IGNORECASE)
+    ]
+    if not workers:
+        logger.warning("No worker instances found.")
+        return {}
+
+    fip_mapping = {}
+
+    for inst in workers:
+        name = inst["name"]
+        instance_id = inst["id"]
+        logger.info(f"Processing worker: {name} ({instance_id})")
+
+        try:
+            # Get NICs
+            nics_output = run_ibmcloud_cmd(
+                f"ibmcloud is instance-network-interfaces {instance_id} --output json"
+            )
+            nics = json.loads(nics_output)
+            if not nics:
+                logger.warning(f"No NICs found for instance: {name}")
+                continue
+            nic = nics[0]
+            nic_name = nic["name"]
+        except Exception as e:
+            logger.error(f"Failed to retrieve NICs for {name}: {e}")
+            continue
+
+        # Construct Floating IP name
+        fip_name = f"{name}-fip"
+        try:
+            logger.info(f"Reserving Floating IP '{fip_name}' on NIC '{nic_name}'...")
+            run_ibmcloud_cmd(
+                f"ibmcloud is floating-ip-reserve {fip_name} --nic {nic_name} --in {instance_id}"
+            )
+        except Exception as e:
+            logger.warning(
+                f"Failed to reserve floating IP for {name}, might already exist: {e}"
+            )
+
+        # Fetch the floating IP
+        try:
+            fips_output = run_ibmcloud_cmd("ibmcloud is floating-ips --output json")
+            fips = json.loads(fips_output)
+            fip = next((f for f in fips if f["name"] == fip_name), None)
+            if fip:
+                fip_mapping[name] = fip["address"]
+                logger.debug(f"Floating IP assigned to {name}: {fip['address']}")
+            else:
+                logger.warning(f"Floating IP object not found for {fip_name}")
+        except Exception as e:
+            logger.error(
+                f"Failed to fetch floating IPs after assignment for {name}: {e}"
+            )
+
+    return fip_mapping
