@@ -188,9 +188,11 @@ class MCEInstaller(object):
             namespace=constants.HYPERSHIFT_NAMESPACE,
         )
 
+        # configMap is created during hypershift installation in around 5 min.
+        # Increasing this timeout to 10 min for safer deployment.
         if not configmaps_obj.check_resource_existence(
             should_exist=True,
-            timeout=300,
+            timeout=600,
             resource_name=constants.SUPPORTED_VERSIONS_CONFIGMAP,
         ):
             raise UnavailableResourceException(
