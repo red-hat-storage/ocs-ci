@@ -4766,16 +4766,15 @@ def get_ready_noobaa_endpoint_count(namespace):
     """
     Get the number of ready nooobaa endpoints
     """
-    with ocsci_config.RunWithProviderConfigContextIfAvailable():
-        pods_info = get_pods_having_label(
-            label=constants.NOOBAA_ENDPOINT_POD_LABEL, namespace=namespace
-        )
-        ready_count = 0
-        for ep_info in pods_info:
-            container_statuses = ep_info.get("status", {}).get("containerStatuses")
-            if container_statuses is not None and len(container_statuses) > 0:
-                if container_statuses[0].get("ready"):
-                    ready_count += 1
+    pods_info = get_pods_having_label(
+        label=constants.NOOBAA_ENDPOINT_POD_LABEL, namespace=namespace
+    )
+    ready_count = 0
+    for ep_info in pods_info:
+        container_statuses = ep_info.get("status", {}).get("containerStatuses")
+        if container_statuses is not None and len(container_statuses) > 0:
+            if container_statuses[0].get("ready"):
+                ready_count += 1
     return ready_count
 
 
@@ -4789,54 +4788,50 @@ def nb_ensure_endpoint_count(request):
     max_ep_count = cls.MAX_ENDPOINT_COUNT
 
     assert min_ep_count <= max_ep_count
-    with ocsci_config.RunWithProviderConfigContextIfAvailable():
-        namespace = ocsci_config.ENV_DATA["cluster_namespace"]
+    namespace = ocsci_config.ENV_DATA["cluster_namespace"]
     should_wait = False
 
     # prior to 4.6 we configured the ep count directly on the noobaa cr.
-    with ocsci_config.RunWithProviderConfigContextIfAvailable():
-        if version.get_semantic_ocs_version_from_config() < version.VERSION_4_6:
-            noobaa = OCP(kind="noobaa", namespace=namespace)
-            resource = noobaa.get()["items"][0]
-            endpoints = resource.get("spec", {}).get("endpoints", {})
+    if version.get_semantic_ocs_version_from_config() < version.VERSION_4_6:
+        noobaa = OCP(kind="noobaa", namespace=namespace)
+        resource = noobaa.get()["items"][0]
+        endpoints = resource.get("spec", {}).get("endpoints", {})
 
-            if endpoints.get("minCount", -1) != min_ep_count:
-                log.info(f"Changing minimum Noobaa endpoints to {min_ep_count}")
-                params = f'{{"spec":{{"endpoints":{{"minCount":{min_ep_count}}}}}}}'
-                noobaa.patch(resource_name="noobaa", params=params, format_type="merge")
-                should_wait = True
+        if endpoints.get("minCount", -1) != min_ep_count:
+            log.info(f"Changing minimum Noobaa endpoints to {min_ep_count}")
+            params = f'{{"spec":{{"endpoints":{{"minCount":{min_ep_count}}}}}}}'
+            noobaa.patch(resource_name="noobaa", params=params, format_type="merge")
+            should_wait = True
 
-            if endpoints.get("maxCount", -1) != max_ep_count:
-                log.info(f"Changing maximum Noobaa endpoints to {max_ep_count}")
-                params = f'{{"spec":{{"endpoints":{{"maxCount":{max_ep_count}}}}}}}'
-                noobaa.patch(resource_name="noobaa", params=params, format_type="merge")
-                should_wait = True
+        if endpoints.get("maxCount", -1) != max_ep_count:
+            log.info(f"Changing maximum Noobaa endpoints to {max_ep_count}")
+            params = f'{{"spec":{{"endpoints":{{"maxCount":{max_ep_count}}}}}}}'
+            noobaa.patch(resource_name="noobaa", params=params, format_type="merge")
+            should_wait = True
 
-        else:
-            storage_cluster = OCP(kind=constants.STORAGECLUSTER, namespace=namespace)
-            resource = storage_cluster.get()["items"][0]
-            resource_name = resource["metadata"]["name"]
-            endpoints = (
-                resource.get("spec", {})
-                .get("multiCloudGateway", {})
-                .get("endpoints", {})
+    else:
+        storage_cluster = OCP(kind=constants.STORAGECLUSTER, namespace=namespace)
+        resource = storage_cluster.get()["items"][0]
+        resource_name = resource["metadata"]["name"]
+        endpoints = (
+            resource.get("spec", {}).get("multiCloudGateway", {}).get("endpoints", {})
+        )
+
+        if endpoints.get("minCount", -1) != min_ep_count:
+            log.info(f"Changing minimum Noobaa endpoints to {min_ep_count}")
+            params = f'{{"spec":{{"multiCloudGateway":{{"endpoints":{{"minCount":{min_ep_count}}}}}}}}}'
+            storage_cluster.patch(
+                resource_name=resource_name, params=params, format_type="merge"
             )
+            should_wait = True
 
-            if endpoints.get("minCount", -1) != min_ep_count:
-                log.info(f"Changing minimum Noobaa endpoints to {min_ep_count}")
-                params = f'{{"spec":{{"multiCloudGateway":{{"endpoints":{{"minCount":{min_ep_count}}}}}}}}}'
-                storage_cluster.patch(
-                    resource_name=resource_name, params=params, format_type="merge"
-                )
-                should_wait = True
-
-            if endpoints.get("maxCount", -1) != max_ep_count:
-                log.info(f"Changing maximum Noobaa endpoints to {max_ep_count}")
-                params = f'{{"spec":{{"multiCloudGateway":{{"endpoints":{{"maxCount":{max_ep_count}}}}}}}}}'
-                storage_cluster.patch(
-                    resource_name=resource_name, params=params, format_type="merge"
-                )
-                should_wait = True
+        if endpoints.get("maxCount", -1) != max_ep_count:
+            log.info(f"Changing maximum Noobaa endpoints to {max_ep_count}")
+            params = f'{{"spec":{{"multiCloudGateway":{{"endpoints":{{"maxCount":{max_ep_count}}}}}}}}}'
+            storage_cluster.patch(
+                resource_name=resource_name, params=params, format_type="merge"
+            )
+            should_wait = True
 
     if should_wait:
         # Wait for the NooBaa endpoint pods to stabilize
@@ -7931,14 +7926,13 @@ def add_env_vars_to_noobaa_core_fixture(request, mcg_obj_session):
     Add env vars to the noobaa-core sts
 
     """
-    with ocsci_config.RunWithProviderConfigContextIfAvailable():
-        sts_obj = OCP(
-            kind="StatefulSet", namespace=ocsci_config.ENV_DATA["cluster_namespace"]
-        )
-        yaml_path_to_env_variables = "/spec/template/spec/containers/0/env"
-        op_template_dict = {"op": "", "path": "", "value": {"name": "", "value": ""}}
+    sts_obj = OCP(
+        kind="StatefulSet", namespace=ocsci_config.ENV_DATA["cluster_namespace"]
+    )
+    yaml_path_to_env_variables = "/spec/template/spec/containers/0/env"
+    op_template_dict = {"op": "", "path": "", "value": {"name": "", "value": ""}}
 
-        added_env_vars = []
+    added_env_vars = []
 
     def add_env_vars_to_noobaa_core_implementation(new_env_vars_touples):
         """
@@ -7950,40 +7944,36 @@ def add_env_vars_to_noobaa_core_fixture(request, mcg_obj_session):
                 i.e. [("env_var_name_1", "env_var_value_1"), ("env_var_name_2", "env_var_value_2")]
 
         """
-        with ocsci_config.RunWithProviderConfigContextIfAvailable():
-            nb_core_sts = sts_obj.get(resource_name=constants.NOOBAA_CORE_STATEFULSET)
-            sts_env_vars = nb_core_sts["spec"]["template"]["spec"]["containers"][0][
-                "env"
-            ]
-            sts_env_vars = [env_var_in_sts["name"] for env_var_in_sts in sts_env_vars]
 
-            patch_ops = []
+        nb_core_sts = sts_obj.get(resource_name=constants.NOOBAA_CORE_STATEFULSET)
+        sts_env_vars = nb_core_sts["spec"]["template"]["spec"]["containers"][0]["env"]
+        sts_env_vars = [env_var_in_sts["name"] for env_var_in_sts in sts_env_vars]
 
-            for env_var, value in new_env_vars_touples:
-                if env_var in sts_env_vars:
-                    log.warning(
-                        f"Env var {env_var} already exists in the noobaa-core sts"
-                    )
-                    continue
+        patch_ops = []
 
-                # Copy and modify the template to create the required dict for the first addition
-                add_env_var_op = copy.deepcopy(op_template_dict)
-                add_env_var_op["op"] = "add"
-                add_env_var_op["path"] = f"{yaml_path_to_env_variables}/-"
-                add_env_var_op["value"] = {"name": env_var, "value": str(value)}
+        for env_var, value in new_env_vars_touples:
+            if env_var in sts_env_vars:
+                log.warning(f"Env var {env_var} already exists in the noobaa-core sts")
+                continue
 
-                patch_ops.append(copy.deepcopy(add_env_var_op))
-                added_env_vars.append(env_var)
+            # Copy and modify the template to create the required dict for the first addition
+            add_env_var_op = copy.deepcopy(op_template_dict)
+            add_env_var_op["op"] = "add"
+            add_env_var_op["path"] = f"{yaml_path_to_env_variables}/-"
+            add_env_var_op["value"] = {"name": env_var, "value": str(value)}
 
-            log.info(
-                f"Adding following new env vars to the noobaa-core sts: {added_env_vars}"
-            )
-            sts_obj.patch(
-                resource_name=constants.NOOBAA_CORE_STATEFULSET,
-                params=json.dumps(patch_ops),
-                format_type="json",
-            )
-            mcg_obj_session.wait_for_ready_status()
+            patch_ops.append(copy.deepcopy(add_env_var_op))
+            added_env_vars.append(env_var)
+
+        log.info(
+            f"Adding following new env vars to the noobaa-core sts: {added_env_vars}"
+        )
+        sts_obj.patch(
+            resource_name=constants.NOOBAA_CORE_STATEFULSET,
+            params=json.dumps(patch_ops),
+            format_type="json",
+        )
+        mcg_obj_session.wait_for_ready_status()
 
     def finalizer():
         """
@@ -7992,36 +7982,31 @@ def add_env_vars_to_noobaa_core_fixture(request, mcg_obj_session):
         """
         log.info("Removing the added env vars from the noobaa-core statefulset:")
 
-        with ocsci_config.RunWithProviderConfigContextIfAvailable():
-            # Adjust the template for removal ops
-            remove_env_var_op = copy.deepcopy(op_template_dict)
-            remove_env_var_op["op"] = "remove"
-            remove_env_var_op["path"] = ""
-            del remove_env_var_op["value"]
+        # Adjust the template for removal ops
+        remove_env_var_op = copy.deepcopy(op_template_dict)
+        remove_env_var_op["op"] = "remove"
+        remove_env_var_op["path"] = ""
+        del remove_env_var_op["value"]
 
-            for target_env_var in added_env_vars:
-                # Fetch the target's index from the noobaa-core statefulset
-                nb_core_sts = sts_obj.get(
-                    resource_name=constants.NOOBAA_CORE_STATEFULSET
-                )
-                env_vars_in_sts = nb_core_sts["spec"]["template"]["spec"]["containers"][
-                    0
-                ]["env"]
-                env_vars_names_in_sts = [
-                    env_var_in_sts["name"] for env_var_in_sts in env_vars_in_sts
-                ]
-                target_index = env_vars_names_in_sts.index(target_env_var)
-                remove_env_var_op["path"] = (
-                    f"{yaml_path_to_env_variables}/{target_index}"
-                )
+        for target_env_var in added_env_vars:
+            # Fetch the target's index from the noobaa-core statefulset
+            nb_core_sts = sts_obj.get(resource_name=constants.NOOBAA_CORE_STATEFULSET)
+            env_vars_in_sts = nb_core_sts["spec"]["template"]["spec"]["containers"][0][
+                "env"
+            ]
+            env_vars_names_in_sts = [
+                env_var_in_sts["name"] for env_var_in_sts in env_vars_in_sts
+            ]
+            target_index = env_vars_names_in_sts.index(target_env_var)
+            remove_env_var_op["path"] = f"{yaml_path_to_env_variables}/{target_index}"
 
-                # Patch the noobaa-core sts to remove the env var
-                sts_obj.patch(
-                    resource_name=constants.NOOBAA_CORE_STATEFULSET,
-                    params=json.dumps([remove_env_var_op]),
-                    format_type="json",
-                )
-            mcg_obj_session.wait_for_ready_status()
+            # Patch the noobaa-core sts to remove the env var
+            sts_obj.patch(
+                resource_name=constants.NOOBAA_CORE_STATEFULSET,
+                params=json.dumps([remove_env_var_op]),
+                format_type="json",
+            )
+        mcg_obj_session.wait_for_ready_status()
 
     request.addfinalizer(finalizer)
     return add_env_vars_to_noobaa_core_implementation
@@ -8040,20 +8025,17 @@ def add_env_vars_to_noobaa_endpoint_fixture(request, mcg_obj_session):
     """
     Add env vars to the noobaa endpoint
     """
-    with ocsci_config.RunWithProviderConfigContextIfAvailable():
-        dep_obj = OCP(
-            kind=constants.DEPLOYMENT,
-            namespace=ocsci_config.ENV_DATA["cluster_namespace"],
-        )
-        yaml_path_to_env_variables = "/spec/template/spec/containers/0/env"
-        op_template_dict = {"op": "", "path": "", "value": {"name": "", "value": ""}}
+    dep_obj = OCP(
+        kind=constants.DEPLOYMENT, namespace=ocsci_config.ENV_DATA["cluster_namespace"]
+    )
+    yaml_path_to_env_variables = "/spec/template/spec/containers/0/env"
+    op_template_dict = {"op": "", "path": "", "value": {"name": "", "value": ""}}
 
-        added_env_vars = []
+    added_env_vars = []
 
     def add_env_vars_to_noobaa_endpoint_implementation(new_env_vars_touples):
         """
-        Implementation of add_env_vars_to_noobaa_endpoint_fixture(). It is executed
-        on provider if available.
+        Implementation of add_env_vars_to_noobaa_core_fixture()
 
         Args:
             new_env_vars_touples (list): A list of touples, each containing the env var name and
@@ -8061,42 +8043,40 @@ def add_env_vars_to_noobaa_endpoint_fixture(request, mcg_obj_session):
                 i.e. [("env_var_name_1", "env_var_value_1"), ("env_var_name_2", "env_var_value_2")]
 
         """
-        with ocsci_config.RunWithProviderConfigContextIfAvailable():
-            nb_endpoint_dep = dep_obj.get(
-                resource_name=constants.NOOBAA_ENDPOINT_DEPLOYMENT
-            )
-            dep_env_vars = nb_endpoint_dep["spec"]["template"]["spec"]["containers"][0][
-                "env"
-            ]
-            dep_env_vars = [env_var_in_dep["name"] for env_var_in_dep in dep_env_vars]
 
-            patch_ops = []
+        nb_endpoint_dep = dep_obj.get(
+            resource_name=constants.NOOBAA_ENDPOINT_DEPLOYMENT
+        )
+        dep_env_vars = nb_endpoint_dep["spec"]["template"]["spec"]["containers"][0][
+            "env"
+        ]
+        dep_env_vars = [env_var_in_dep["name"] for env_var_in_dep in dep_env_vars]
 
-            for env_var, value in new_env_vars_touples:
-                if env_var in dep_env_vars:
-                    log.warning(
-                        f"Env var {env_var} already exists in the noobaa-core sts"
-                    )
-                    continue
+        patch_ops = []
 
-                # Copy and modify the template to create the required dict for the first addition
-                add_env_var_op = copy.deepcopy(op_template_dict)
-                add_env_var_op["op"] = "add"
-                add_env_var_op["path"] = f"{yaml_path_to_env_variables}/-"
-                add_env_var_op["value"] = {"name": env_var, "value": str(value)}
+        for env_var, value in new_env_vars_touples:
+            if env_var in dep_env_vars:
+                log.warning(f"Env var {env_var} already exists in the noobaa-core sts")
+                continue
 
-                patch_ops.append(copy.deepcopy(add_env_var_op))
-                added_env_vars.append(env_var)
+            # Copy and modify the template to create the required dict for the first addition
+            add_env_var_op = copy.deepcopy(op_template_dict)
+            add_env_var_op["op"] = "add"
+            add_env_var_op["path"] = f"{yaml_path_to_env_variables}/-"
+            add_env_var_op["value"] = {"name": env_var, "value": str(value)}
 
-            log.info(
-                f"Adding following new env vars to the noobaa-core sts: {added_env_vars}"
-            )
-            dep_obj.patch(
-                resource_name=constants.NOOBAA_ENDPOINT_DEPLOYMENT,
-                params=json.dumps(patch_ops),
-                format_type="json",
-            )
-            mcg_obj_session.wait_for_ready_status()
+            patch_ops.append(copy.deepcopy(add_env_var_op))
+            added_env_vars.append(env_var)
+
+        log.info(
+            f"Adding following new env vars to the noobaa-core sts: {added_env_vars}"
+        )
+        dep_obj.patch(
+            resource_name=constants.NOOBAA_ENDPOINT_DEPLOYMENT,
+            params=json.dumps(patch_ops),
+            format_type="json",
+        )
+        mcg_obj_session.wait_for_ready_status()
 
     def finalizer():
         """
@@ -8105,36 +8085,33 @@ def add_env_vars_to_noobaa_endpoint_fixture(request, mcg_obj_session):
         """
         log.info("Removing the added env vars from the noobaa-core statefulset:")
 
-        with ocsci_config.RunWithProviderConfigContextIfAvailable():
-            # Adjust the template for removal ops
-            remove_env_var_op = copy.deepcopy(op_template_dict)
-            remove_env_var_op["op"] = "remove"
-            remove_env_var_op["path"] = ""
-            del remove_env_var_op["value"]
+        # Adjust the template for removal ops
+        remove_env_var_op = copy.deepcopy(op_template_dict)
+        remove_env_var_op["op"] = "remove"
+        remove_env_var_op["path"] = ""
+        del remove_env_var_op["value"]
 
-            for target_env_var in added_env_vars:
-                # Fetch the target's index from the noobaa-endpoint deployment
-                nb_endpoint_dep = dep_obj.get(
-                    resource_name=constants.NOOBAA_ENDPOINT_DEPLOYMENT
-                )
-                env_vars_in_dep = nb_endpoint_dep["spec"]["template"]["spec"][
-                    "containers"
-                ][0]["env"]
-                env_vars_names_in_dep = [
-                    env_var_in_dep["name"] for env_var_in_dep in env_vars_in_dep
-                ]
-                target_index = env_vars_names_in_dep.index(target_env_var)
-                remove_env_var_op["path"] = (
-                    f"{yaml_path_to_env_variables}/{target_index}"
-                )
+        for target_env_var in added_env_vars:
+            # Fetch the target's index from the noobaa-endpoint deployment
+            nb_endpoint_dep = dep_obj.get(
+                resource_name=constants.NOOBAA_ENDPOINT_DEPLOYMENT
+            )
+            env_vars_in_dep = nb_endpoint_dep["spec"]["template"]["spec"]["containers"][
+                0
+            ]["env"]
+            env_vars_names_in_dep = [
+                env_var_in_dep["name"] for env_var_in_dep in env_vars_in_dep
+            ]
+            target_index = env_vars_names_in_dep.index(target_env_var)
+            remove_env_var_op["path"] = f"{yaml_path_to_env_variables}/{target_index}"
 
-                # Patch the noobaa-endpoint deployment to remove the env var
-                dep_obj.patch(
-                    resource_name=constants.NOOBAA_ENDPOINT_DEPLOYMENT,
-                    params=json.dumps([remove_env_var_op]),
-                    format_type="json",
-                )
-            mcg_obj_session.wait_for_ready_status()
+            # Patch the noobaa-endpoint deployment to remove the env var
+            dep_obj.patch(
+                resource_name=constants.NOOBAA_ENDPOINT_DEPLOYMENT,
+                params=json.dumps([remove_env_var_op]),
+                format_type="json",
+            )
+        mcg_obj_session.wait_for_ready_status()
 
     request.addfinalizer(finalizer)
     return add_env_vars_to_noobaa_endpoint_implementation

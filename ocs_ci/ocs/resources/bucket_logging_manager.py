@@ -42,13 +42,11 @@ class BucketLoggingManager:
         Returns:
             ocs_ci.ocs.ocp.OCP: OCP instance of the NooBaa configuration resource
         """
-        with config.RunWithProviderConfigContextIfAvailable():
-            resource_obj = ocp.OCP(
-                kind="noobaa",
-                namespace=config.ENV_DATA["cluster_namespace"],
-                resource_name="noobaa",
-            )
-        return resource_obj
+        return ocp.OCP(
+            kind="noobaa",
+            namespace=config.ENV_DATA["cluster_namespace"],
+            resource_name="noobaa",
+        )
 
     def enable_bucket_logging_on_cr(self, logs_pvc=None):
         """

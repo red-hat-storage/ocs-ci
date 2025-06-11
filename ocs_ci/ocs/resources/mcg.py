@@ -121,7 +121,13 @@ class MCG:
                 .get("serviceS3")
                 .get("externalDNS")[0]
             )
-            self.s3_internal_endpoint = self.determine_s3_endpoint()
+            self.s3_internal_endpoint = (
+                get_noobaa.get("items")[0]
+                .get("status")
+                .get("services")
+                .get("serviceS3")
+                .get("internalDNS")[0]
+            )
             self.sts_endpoint = (
                 get_noobaa.get("items")[0]
                 .get("status")
@@ -207,30 +213,6 @@ class MCG:
             )
             assert False, (
                 "NB RPC token was not retrieved successfully " "within the time limit."
-            )
-
-    def determine_s3_endpoint(self):
-        """
-        Get external mcg S3 endpoint if the cluster is in multicluster environment.
-        Get internal endpoint otherwise.
-
-        Returns:
-            string: S3 endpoint URI
-
-        """
-        if config.multicluster:
-            logger.warning(
-                "Multicluster test run is executed. External S3 enpoint is used instead of internal."
-            )
-            return self.s3_external_endpoint
-        else:
-            get_noobaa = OCP(kind="noobaa", namespace=self.namespace).get()
-            return (
-                get_noobaa.get("items")[0]
-                .get("status")
-                .get("services")
-                .get("serviceS3")
-                .get("internalDNS")[0]
             )
 
     def s3_get_all_bucket_names(self):

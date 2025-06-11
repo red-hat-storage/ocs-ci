@@ -1910,8 +1910,7 @@ def set_deviceset_count(count):
 
 def get_storage_cluster(namespace=None):
     """
-    Get storage cluster object
-    (from provider cluster if run on multicluster environment)
+    Get storage cluster name
 
     Args:
         namespace (str): Namespace of the resource
@@ -1920,10 +1919,9 @@ def get_storage_cluster(namespace=None):
         storage cluster (obj) : Storage cluster object handler
 
     """
-    with config.RunWithProviderConfigContextIfAvailable():
-        if namespace is None:
-            namespace = config.ENV_DATA["cluster_namespace"]
-        sc_obj = OCP(kind=constants.STORAGECLUSTER, namespace=namespace)
+    if namespace is None:
+        namespace = config.ENV_DATA["cluster_namespace"]
+    sc_obj = OCP(kind=constants.STORAGECLUSTER, namespace=namespace)
     return sc_obj
 
 
