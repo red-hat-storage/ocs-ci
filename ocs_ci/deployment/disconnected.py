@@ -346,20 +346,12 @@ def mirror_index_image_via_oc_mirror(index_image, packages, idms=None):
         wait_for_machineconfigpool_status("all")
 
     # get mirrored index image url from prepared catalogSource file
-    if idms:
-        cs_file = glob.glob(
-            os.path.join(
-                f"{mirroring_manifests_dir}",
-                "working-dir/cluster-resources/cs*.yaml",
-            )
+    cs_file = glob.glob(
+        os.path.join(
+            f"{mirroring_manifests_dir}",
+            "working-dir/cluster-resources/cs*.yaml",
         )
-    else:
-        cs_file = glob.glob(
-            os.path.join(
-                f"{mirroring_manifests_dir}",
-                "cs-*.yaml",
-            )
-        )
+    )
     if not cs_file:
         raise NotFoundError(
             f"CatalogSource file not found in the '{mirroring_manifests_dir}'."
