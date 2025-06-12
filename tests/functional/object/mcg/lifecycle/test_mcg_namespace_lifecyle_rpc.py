@@ -90,7 +90,7 @@ class TestMcgNamespaceLifecycleRpc(E2ETest):
         aws_s3_creds = {
             "access_key_id": cld_mgr.aws_client.access_key,
             "access_key": cld_mgr.aws_client.secret_key,
-            "endpoint": constants.MCG_NS_AWS_ENDPOINT,
+            "endpoint": constants.MCG_NS_AWS_ENDPOINT.format(config.ENV_DATA["region"]),
             "region": config.ENV_DATA["region"],
         }
 
