@@ -164,7 +164,7 @@ class TestRecoverPvcExpandFailure(ManageTest):
                     pvc_size_patched
                 ), f"Failed to reduce the size of the PVC '{pvc_obj.name}'"
                 logger.info(
-                    f"Patched the size of the PVC {pvc_obj.nam} to a lower value {pvc_size_reduced}Gi"
+                    f"Patched the size of the PVC {pvc_obj.name} to a lower value {pvc_size_reduced}Gi"
                 )
             except CommandFailed as err:
                 expected_error = "field can not be less than status.capacity"
