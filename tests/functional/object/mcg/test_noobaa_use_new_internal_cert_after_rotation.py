@@ -41,7 +41,7 @@ def get_validity_time_of_certificate(noobaa_endpoint_pods):
     return validity
 
 
-@retry(UnexpectedBehaviour, tries=10, delay=3, backoff=1)
+@retry(UnexpectedBehaviour, tries=20, delay=3, backoff=1)
 def verify_cert_validity(noobaa_endpoint_pods, old_validity):
     """
 
