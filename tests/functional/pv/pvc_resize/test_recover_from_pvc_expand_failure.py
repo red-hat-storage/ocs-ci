@@ -128,7 +128,9 @@ class TestRecoverPvcExpandFailure(ManageTest):
         pvc_size_expanded = 20
         pvc_size_reduced = 10
 
-        logger.info(f"Expanding PVCs to {pvc_size_expanded} GiB")
+        logger.info("Wait for 30 seconds before expanding the PVCs")
+        time.sleep(30)
+        logger.info(f"Trying to expand the PVCs to {pvc_size_expanded} GiB")
         for pvc_obj in self.pvcs:
             logger.info(
                 f"Expanding size of PVC {pvc_obj.name} to {pvc_size_expanded}Gi"
