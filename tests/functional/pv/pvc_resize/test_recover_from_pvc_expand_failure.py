@@ -108,7 +108,9 @@ class TestRecoverPvcExpandFailure(ManageTest):
         with config.RunWithProviderConfigContextIfAvailable():
             size = get_file_size(target_percentage)
             self.benchmark_obj = BenchmarkOperatorFIO()
-            self.benchmark_obj.setup_benchmark_fio(total_size=size)
+            self.benchmark_obj.setup_benchmark_fio(
+                total_size=size, use_kustomize_build=True
+            )
             self.benchmark_obj.run_fio_benchmark_operator(is_completed=False)
             logger.info("Wait for 300 seconds to fill up the cluster")
             time.sleep(300)
