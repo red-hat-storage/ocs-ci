@@ -6,6 +6,11 @@ from ocs_ci.framework import config
 from ocs_ci.framework.pytest_customization.marks import polarion_id
 from ocs_ci.framework.testlib import ManageTest, tier4b, green_squad, ignore_leftovers
 from ocs_ci.ocs import constants
+from ocs_ci.ocs.benchmark_operator_fio import (
+    get_file_size,
+    BenchmarkOperatorFIO,
+    BMO_NS,
+)
 from ocs_ci.ocs.cluster import change_ceph_full_ratio
 from ocs_ci.ocs.exceptions import TimeoutExpiredError, CommandFailed
 from ocs_ci.ocs.ocp import OCP
@@ -42,14 +47,23 @@ class TestRecoverPvcExpandFailure(ManageTest):
         """
 
         def finalizer():
-            change_ceph_full_ratio(85)
-            dep_ocp = OCP(
-                kind=constants.DEPLOYMENT,
-                namespace=config.ENV_DATA["cluster_namespace"],
-            )
-            dep_ocp.exec_oc_cmd(
-                "scale deployment ceph-csi-controller-manager --replicas=1"
-            )
+            try:
+                # Delete benchmark if not deleted
+                with config.RunWithProviderConfigContextIfAvailable():
+                    namespace_obj = OCP(kind=constants.NAMESPACE, resource_name=BMO_NS)
+                    namespace_obj.is_exist()
+                    # Pods cannot be deleted when the cluster is full
+                    change_ceph_full_ratio(95)
+                    self.benchmark_obj.cleanup()
+            finally:
+                change_ceph_full_ratio(85)
+                dep_ocp = OCP(
+                    kind=constants.DEPLOYMENT,
+                    namespace=config.ENV_DATA["cluster_namespace"],
+                )
+                dep_ocp.exec_oc_cmd(
+                    "scale deployment ceph-csi-controller-manager --replicas=1"
+                )
 
         request.addfinalizer(finalizer)
 
@@ -57,14 +71,12 @@ class TestRecoverPvcExpandFailure(ManageTest):
     @green_squad
     @polarion_id("")
     def test_recover_from_pvc_expansion_failure(
-        self,
-        pause_and_resume_cluster_load,
-        benchmark_workload_storageutilization,
-        threading_lock,
+        self, pause_and_resume_cluster_load, threading_lock
     ):
         """
         Test case to verify recovery from PVC expansion failure. The PVC expansion for RBD PVC will not complete due to
-        the cluster being full. Even after changing the size, the initial requested size for expansion will be applied.
+        the cluster being full so that filesystem expansion cannot be completed. Even after changing the size to lower
+        value, the initial requested size for expansion will be applied.
         For CephFs PVC the expansion will complete and the size cannot be reduced later.
 
 
@@ -94,9 +106,10 @@ class TestRecoverPvcExpandFailure(ManageTest):
             f"Fill up the cluster to {target_percentage}% of it's storage capacity"
         )
         with config.RunWithProviderConfigContextIfAvailable():
-            benchmark_workload_storageutilization(
-                target_percentage=target_percentage, is_completed=False
-            )
+            size = get_file_size(target_percentage)
+            self.benchmark_obj = BenchmarkOperatorFIO()
+            self.benchmark_obj.setup_benchmark_fio(total_size=size)
+            self.benchmark_obj.run_fio_benchmark_operator(is_completed=False)
             logger.info("Wait for 300 seconds to fill up the cluster")
             time.sleep(300)
             prometheus_api = PrometheusAPI(threading_lock=threading_lock)
@@ -167,6 +180,7 @@ class TestRecoverPvcExpandFailure(ManageTest):
 
         # Increase the ceph full ratio
         change_ceph_full_ratio(95)
+        self.benchmark_obj.cleanup()
 
         for pvc_obj in self.pvcs:
             for pvc_data in TimeoutSampler(240, 2, pvc_obj.get):
