@@ -32,7 +32,6 @@ from ocs_ci.utility.version import (
     get_semantic_ocp_running_version,
     get_semantic_ocs_version_from_config,
     VERSION_4_10,
-    VERSION_4_18,
 )
 
 logger = logging.getLogger(__name__)
@@ -258,13 +257,7 @@ def mirror_index_image_via_oc_mirror(index_image, packages, idms=None):
         os.symlink(pull_secret_path, os.path.expanduser(docker_config_file))
 
     # prepare imageset-config.yaml file
-    imageset_config_data = templating.load_yaml(constants.OC_MIRROR_IMAGESET_CONFIG)
-
-    # if the ocs version is greater than 4.18 we are using v2 config
-    if get_semantic_ocs_version_from_config() >= VERSION_4_18:
-        imageset_config_data = templating.load_yaml(
-            constants.OC_MIRROR_IMAGESET_CONFIG_V2
-        )
+    imageset_config_data = templating.load_yaml(constants.OC_MIRROR_IMAGESET_CONFIG_V2)
 
     _packages = [{"name": package} for package in packages]
     imageset_config_data["mirror"]["operators"].append(
