@@ -4,18 +4,13 @@ import pytest
 
 from ocs_ci.framework import config
 from ocs_ci.framework.pytest_customization.marks import polarion_id
-from ocs_ci.framework.testlib import ManageTest, tier4b, green_squad, ignore_leftovers
+from ocs_ci.framework.testlib import ManageTest, tier4c, green_squad, ignore_leftovers
+from ocs_ci.helpers.helpers import wait_for_resource_state
 from ocs_ci.ocs import constants
-from ocs_ci.ocs.benchmark_operator_fio import (
-    get_file_size,
-    BenchmarkOperatorFIO,
-    BMO_NS,
-)
-from ocs_ci.ocs.cluster import change_ceph_full_ratio
-from ocs_ci.ocs.exceptions import TimeoutExpiredError, CommandFailed
+
+from ocs_ci.ocs.exceptions import TimeoutExpiredError
 from ocs_ci.ocs.ocp import OCP
 from ocs_ci.ocs.resources.pod import verify_data_integrity, cal_md5sum
-from ocs_ci.utility.prometheus import PrometheusAPI
 from ocs_ci.utility.utils import TimeoutSampler
 
 logger = logging.getLogger(__name__)
@@ -35,6 +30,7 @@ class TestRecoverPvcExpandFailure(ManageTest):
         self.pvc_size = 5
         self.pvcs, self.pods = create_pvcs_and_pods(
             pvc_size=self.pvc_size,
+            pods_for_rwx=1,
             access_modes_rbd=[constants.ACCESS_MODE_RWO],
             access_modes_cephfs=[constants.ACCESS_MODE_RWO],
         )
@@ -42,43 +38,31 @@ class TestRecoverPvcExpandFailure(ManageTest):
     @pytest.fixture(autouse=True)
     def teardown(self, request):
         """
-        Restore ceph full ratio
+        Revert the deployment replica value
 
         """
 
         def finalizer():
-            try:
-                # Delete benchmark if not deleted
-                with config.RunWithProviderConfigContextIfAvailable():
-                    namespace_obj = OCP(kind=constants.NAMESPACE, resource_name=BMO_NS)
-                    namespace_obj.is_exist()
-                    # Pods cannot be deleted when the cluster is full
-                    change_ceph_full_ratio(95)
-                    self.benchmark_obj.cleanup()
-            finally:
-                change_ceph_full_ratio(85)
-                dep_ocp = OCP(
-                    kind=constants.DEPLOYMENT,
-                    namespace=config.ENV_DATA["cluster_namespace"],
-                )
-                dep_ocp.exec_oc_cmd(
-                    "scale deployment ceph-csi-controller-manager --replicas=1"
-                )
+            dep_ocp = OCP(
+                kind=constants.DEPLOYMENT,
+                namespace=config.ENV_DATA["cluster_namespace"],
+            )
+            dep_ocp.exec_oc_cmd(
+                "scale deployment ceph-csi-controller-manager --replicas=1"
+            )
 
         request.addfinalizer(finalizer)
 
-    @tier4b
+    @tier4c
+    @ignore_leftovers
     @green_squad
     @polarion_id("")
-    def test_recover_from_pvc_expansion_failure(
-        self, pause_and_resume_cluster_load, threading_lock
+    def test_recover_from_pending_pvc_expansion(
+        self, snapshot_factory, snapshot_restore_factory, pod_factory
     ):
         """
-        Test case to verify recovery from PVC expansion failure. The PVC expansion for RBD PVC will not complete due to
-        the cluster being full so that filesystem expansion cannot be completed. Even after changing the size to lower
-        value, the initial requested size for expansion will be applied.
-        For CephFs PVC the expansion will complete and the size cannot be reduced later.
-
+        Test case to verify recovery from pending PVC expansion. The PVC will expand to the size given after the initial
+        expand request
 
         """
         # Create files on the pods
@@ -88,139 +72,71 @@ class TestRecoverPvcExpandFailure(ManageTest):
                 size="4G",
                 io_direction="write",
                 runtime=60,
-                fio_filename=pod_obj.name,
+                fio_filename=f"{pod_obj.name}",
                 end_fsync=1,
             )
-        for pod_obj in self.pods:
-            pod_obj.get_fio_results()
 
-        # Find initial md5sum of file from pods
-        # Add some wait time for proper sync of data before getting md5sum. This is to avoid false failure
-        time.sleep(60)
-        for pod_obj in self.pods:
-            pod_obj.orig_md5_sum = cal_md5sum(pod_obj=pod_obj, file_name=pod_obj.name)
-
-        # Set the target percentage for benchmark took just above the ceph osd full ratio
-        target_percentage = 86
-        logger.info(
-            f"Fill up the cluster to {target_percentage}% of it's storage capacity"
-        )
-        with config.RunWithProviderConfigContextIfAvailable():
-            size = get_file_size(target_percentage)
-            self.benchmark_obj = BenchmarkOperatorFIO()
-            self.benchmark_obj.setup_benchmark_fio(
-                total_size=size, use_kustomize_build=True
-            )
-            self.benchmark_obj.run_fio_benchmark_operator(is_completed=False)
-            logger.info("Wait for 300 seconds to fill up the cluster")
-            time.sleep(300)
-            prometheus_api = PrometheusAPI(threading_lock=threading_lock)
-            cluster_full_alert = prometheus_api.wait_for_alert(
-                name=constants.ALERT_CLUSTERCRITICALLYFULL, state="firing"
-            )
-
-        if len(cluster_full_alert) == 0:
-            logger.error(
-                f"Alert {constants.ALERT_CLUSTERCRITICALLYFULL} is not firing. "
-                f"Continue test to check the PVC expansion behaviour"
-            )
-
-        pvc_size_expanded = 20
-        pvc_size_reduced = 10
-
-        logger.info("Wait for 30 seconds before expanding the PVCs")
-        time.sleep(30)
-        logger.info(f"Trying to expand the PVCs to {pvc_size_expanded} GiB")
+        # Create snapshots
+        logger.info("Creating snapshot of all the PVCs")
+        snap_objs = []
         for pvc_obj in self.pvcs:
+            logger.info(f"Creating snapshot of the PVC {pvc_obj.name}")
+            snap_obj = snapshot_factory(pvc_obj, wait=False)
+            snap_obj.interface = pvc_obj.interface
+            snap_objs.append(snap_obj)
+            logger.info(f"Created snapshot of PVC {pvc_obj.name}")
+
+        logger.info("Wait for the snapshots to be in Ready")
+        for snap_obj in snap_objs:
+            snap_obj.ocp.wait_for_resource(
+                condition="true",
+                resource_name=snap_obj.name,
+                column=constants.STATUS_READYTOUSE,
+                timeout=180,
+            )
+            snap_obj.reload()
+        logger.info("Snapshots are in Ready state")
+
+        logger.info("Restoring the snapshots to create new PVCs")
+        restore_pvcs = []
+        for snap_obj in snap_objs:
+            restore_obj = snapshot_restore_factory(
+                snapshot_obj=snap_obj,
+                volume_mode=snap_obj.parent_volume_mode,
+                access_mode=snap_obj.parent_access_mode,
+                status="",
+            )
             logger.info(
-                f"Expanding size of PVC {pvc_obj.name} to {pvc_size_expanded}Gi"
+                f"Created PVC {restore_obj.name} from snapshot {snap_obj.name}."
             )
-            try:
-                capacity_changed = pvc_obj.resize_pvc(
-                    pvc_size_expanded, True, timeout=60
-                )
-            except TimeoutExpiredError:
-                capacity_changed = False
-            if pvc_obj.interface == constants.CEPHBLOCKPOOL:
-                assert (
-                    not capacity_changed
-                ), f"Unexpected: Expansion of PVC '{pvc_obj.name}' completed"
-                logger.info(
-                    f"RBD PVC failed to expanded to the size {pvc_size_expanded}Gi"
-                )
-            elif pvc_obj.interface == constants.CEPHFILESYSTEM:
-                assert (
-                    capacity_changed
-                ), f"Unexpected: Expansion of PVC '{pvc_obj.name}' did not complete"
-                logger.info(f"CephFS PVC expanded to the size {pvc_size_expanded}Gi")
-            logger.debug(pvc_obj.describe())
+            restore_obj.interface = snap_obj.interface
+            restore_pvcs.append(restore_obj)
+        logger.info("Restored all the snapshots to create new PVCs")
 
-        for pvc_obj in self.pvcs:
+        logger.info("Verifying that the restored PVCs are Bound")
+        for pvc_obj in restore_pvcs:
+            wait_for_resource_state(
+                resource=pvc_obj, state=constants.STATUS_BOUND, timeout=500
+            )
+            pvc_obj.reload()
+        logger.info("Verified that the PVCs created from the snapshots are Bound")
+
+        # Attach the restored PVCs to pods
+        logger.info("Attach the restored PVCs to pods")
+        restore_pod_objs = []
+        for restore_pvc_obj in restore_pvcs:
+            restore_pod_obj = pod_factory(
+                interface=restore_pvc_obj.interface,
+                pvc=restore_pvc_obj,
+                status="",
+            )
             logger.info(
-                f"Trying to reduce the size of PVCs {pvc_obj.name} from {pvc_size_expanded}Gi to {pvc_size_reduced}Gi"
+                f"Attached the PVC {restore_pvc_obj.name} to pod {restore_pod_obj.name}"
             )
-            try:
-                pvc_size_patched = pvc_obj.resize_pvc(
-                    new_size=pvc_size_reduced, verify=False
-                )
-                # CommandFailed will be thrown from resize_pvc if CephFS PVC. For RBD PVC the return value will be True
-                assert (
-                    pvc_size_patched
-                ), f"Failed to reduce the size of the PVC '{pvc_obj.name}'"
-                logger.info(
-                    f"Patched the size of the PVC {pvc_obj.name} to a lower value {pvc_size_reduced}Gi"
-                )
-            except CommandFailed as err:
-                expected_error = "field can not be less than status.capacity"
-                if (
-                    pvc_obj.interface == constants.CEPHFILESYSTEM
-                    and expected_error in str(err)
-                ):
-                    logger.info(
-                        f"Verified: The size of the CephFS PVC {pvc_obj.name} cannot be reduced to {pvc_size_reduced}Gi"
-                    )
-                else:
-                    raise
+            restore_pod_objs.append(restore_pod_obj)
 
-        # Increase the ceph full ratio
-        change_ceph_full_ratio(95)
-        self.benchmark_obj.cleanup()
-
-        for pvc_obj in self.pvcs:
-            for pvc_data in TimeoutSampler(240, 2, pvc_obj.get):
-                capacity = pvc_data.get("status").get("capacity").get("storage")
-                if capacity == f"{pvc_size_expanded}Gi":
-                    break
-                logger.info(
-                    f"Capacity of PVC {pvc_obj.name} is not {pvc_size_expanded}Gi as "
-                    f"expected, but {capacity}. Retrying."
-                )
-            logger.info(
-                f"Verified that the capacity of PVC {pvc_obj.name} is changed to "
-                f"{pvc_size_expanded}Gi. The capacity has not changed to reduced size {pvc_size_reduced}."
-                f"Make sure there is no data corruption by checking md5sum"
-            )
-
-        # Verify md5sum
-        for pod_obj in self.pods:
-            verify_data_integrity(
-                pod_obj=pod_obj,
-                file_name=pod_obj.name,
-                original_md5sum=pod_obj.orig_md5_sum,
-            )
-
-    @tier4b
-    @ignore_leftovers
-    @green_squad
-    @polarion_id("")
-    def test_recover_from_pending_pvc_expansion(self):
-        """
-        Test case to verify recovery from pending PVC expansion. The PVC will expand to the size given after the initial
-        expand request
-
-        """
         # Create files on the pods
-        for pod_obj in self.pods:
+        for pod_obj in restore_pod_objs:
             pod_obj.run_io(
                 storage_type="fs",
                 size="4G",
@@ -247,59 +163,66 @@ class TestRecoverPvcExpandFailure(ManageTest):
             dep_ocp.exec_oc_cmd(f"scale deployment {dep} --replicas=0")
             time.sleep(10)
 
-        pvc_size_expanded = 20
-        pvc_size_reduced = 10
+        pvc_size_expanded_initial = 30
+        pvc_size_reduced_final = 10
+        reduce_size_step = -10
 
         # Find initial md5sum of file from pods
         # Add some wait time for proper sync of data before getting md5sum. This is to avoid false failure
         time.sleep(60)
-        for pod_obj in self.pods:
+        all_pods = self.pods + restore_pod_objs
+        for pod_obj in all_pods:
             pod_obj.orig_md5_sum = cal_md5sum(pod_obj=pod_obj, file_name=pod_obj.name)
 
-        logger.info(f"Expanding PVCs to {pvc_size_expanded} GiB")
-        for pvc_obj in self.pvcs:
-            logger.info(
-                f"Expanding size of PVC {pvc_obj.name} to {pvc_size_expanded}Gi"
-            )
-            try:
-                assert not pvc_obj.resize_pvc(
-                    pvc_size_expanded, True, timeout=60
-                ), f"Unexpected: Expansion of PVC '{pvc_obj.name}' completed"
-                logger.info(pvc_obj.describe())
-            except TimeoutExpiredError:
-                logger.info(
-                    f"Expected: Expansion of PVC {pvc_obj.name} did not complete"
-                )
-        logger.info(f"Expected: PVCs did not expand to the size {pvc_size_expanded}Gi")
+        all_pvcs = self.pvcs + restore_pvcs
+        logger.info(
+            f"Trying to expand the PVCs to {pvc_size_expanded_initial}Gi and when that is pending, reduce the size in "
+            f"steps of {reduce_size_step}Gi"
+        )
 
-        for pvc_obj in self.pvcs:
-            logger.info(
-                f"Reducing the size of expansion pending PVC {pvc_obj.name} to {pvc_size_reduced}Gi"
-            )
-            assert pvc_obj.resize_pvc(
-                pvc_size_reduced, False
-            ), f"Failed to reduce the size of the PVC '{pvc_obj.name}'"
+        # Size in each stage will be 30, 20 and 10
+        for size in range(
+            pvc_size_expanded_initial,
+            pvc_size_reduced_final + reduce_size_step,
+            reduce_size_step,
+        ):
+            for pvc_obj in all_pvcs:
+                logger.info(f"Change the size of the PVC {pvc_obj.name} to {size}Gi")
+                try:
+                    assert not pvc_obj.resize_pvc(
+                        size, True, timeout=60
+                    ), f"Unexpected: Expansion of PVC '{pvc_obj.name}' completed"
+                    logger.debug(pvc_obj.describe())
+                except TimeoutExpiredError:
+                    logger.info(
+                        f"Expected: Expansion of PVC {pvc_obj.name} to {size}Gi did not complete"
+                    )
+            logger.info(f"Expected: PVCs did not change capacity to the size {size}Gi")
+        logger.info(
+            f"Expected: PVCs did not change capacity to the different size in stages. Last applied size in the spec of "
+            f"all PVCs is {pvc_size_reduced_final}Gi"
+        )
 
         # Scale back the ceph-csi-controller-manager. This will scale up all other deployments that was scaled down
         dep_ocp.exec_oc_cmd("scale deployment ceph-csi-controller-manager --replicas=1")
 
         # Now PVCs are expected to expand to the reduced size
-        for pvc_obj in self.pvcs:
+        for pvc_obj in all_pvcs:
             for pvc_data in TimeoutSampler(240, 2, pvc_obj.get):
                 capacity = pvc_data.get("status").get("capacity").get("storage")
-                if capacity == f"{pvc_size_reduced}Gi":
+                if capacity == f"{pvc_size_reduced_final}Gi":
                     break
                 logger.info(
-                    f"Capacity of PVC {pvc_obj.name} is not {pvc_size_reduced}Gi as "
+                    f"Capacity of PVC {pvc_obj.name} is not {pvc_size_reduced_final}Gi as "
                     f"expected, but {capacity}. Retrying."
                 )
             logger.info(
                 f"Verified that the capacity of PVC {pvc_obj.name} is changed to "
-                f"{pvc_size_reduced}Gi."
+                f"{pvc_size_reduced_final}Gi."
             )
 
         # Verify md5sum
-        for pod_obj in self.pods:
+        for pod_obj in all_pods:
             verify_data_integrity(
                 pod_obj=pod_obj,
                 file_name=pod_obj.name,
