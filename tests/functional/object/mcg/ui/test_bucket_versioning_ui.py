@@ -3,6 +3,12 @@ import os
 import time
 import uuid
 
+from selenium.webdriver.common.by import By
+from selenium.common.exceptions import (
+    TimeoutException,
+    NoSuchElementException,
+)
+
 from ocs_ci.ocs.ui.page_objects.bucket_versioning import BucketVersioning
 from ocs_ci.ocs.ui.page_objects.buckets_tab import BucketsTab
 from ocs_ci.framework.pytest_customization.marks import (
@@ -33,8 +39,9 @@ class TestBucketVersioningUI:
         1. Create local folder with 1 file (due to product limitation)
         2. Upload the folder to bucket
         3. Enable versioning and confirm (if not already enabled)
-        4. Upload the same folder again to create second version
+        4. Upload the same folder multiple times to create versions
         5. Navigate to folder and show versioning
+        6. Validate "Latest" label appears on newest version
 
         Args:
             setup_ui_class_factory: Pytest fixture for UI setup
@@ -80,8 +87,9 @@ class TestBucketVersioningUI:
             "arguments[0].style.display = 'block'; arguments[0].style.visibility = 'visible';",
             file_input,
         )
+        file_input.clear()
         file_input.send_keys(folder_path)
-        time.sleep(5)  # Wait for upload
+        time.sleep(2)  # Wait for upload to complete
 
         logger.info(f"Successfully uploaded folder: {folder_name} with 1 file")
 
@@ -97,21 +105,13 @@ class TestBucketVersioningUI:
         logger.info("Step 4: Uploading same folder again to create second version")
 
         # Modify file content for second version
-        file_path = files[0]  # Get the first (and only) file path
         logger.info(f"Modifying file content for second version: {file_path}")
 
-        # Option C: Delete and recreate file to force browser refresh
         os.remove(file_path)
         with open(file_path, "w") as f:
             f.write("content-v2")
 
-        # Option D: Verify content was written correctly
-        with open(file_path, "r") as f:
-            actual_content = f.read()
-            logger.info(f"Verified file content before upload: '{actual_content}'")
-
         # Navigate back to the bucket details page since versioning navigation took us away
-        # First go back to object storage buckets list page, then navigate to bucket
         bucket_versioning.nav_object_storage_page()
         buckets_tab.do_click(buckets_tab.bucket_tab["first_bucket"])
 
@@ -123,6 +123,7 @@ class TestBucketVersioningUI:
             "arguments[0].style.display = 'block'; arguments[0].style.visibility = 'visible';",
             file_input,
         )
+        file_input.clear()
         file_input.send_keys(folder_path)
         time.sleep(5)  # Wait for upload
 
@@ -137,10 +138,6 @@ class TestBucketVersioningUI:
         with open(file_path, "w") as f:
             f.write("content-v3")
 
-        with open(file_path, "r") as f:
-            actual_content = f.read()
-            logger.info(f"Verified file content before upload: '{actual_content}'")
-
         file_input = buckets_tab.driver.find_element(
             buckets_tab.bucket_tab["file_input_directory"][1],
             buckets_tab.bucket_tab["file_input_directory"][0],
@@ -149,6 +146,7 @@ class TestBucketVersioningUI:
             "arguments[0].style.display = 'block'; arguments[0].style.visibility = 'visible';",
             file_input,
         )
+        file_input.clear()
         file_input.send_keys(folder_path)
         time.sleep(5)  # Wait for upload
 
@@ -174,6 +172,73 @@ class TestBucketVersioningUI:
             f"Successfully navigated to folder '{folder_name}' and enabled version listing"
         )
 
+        # Step 6: Validate "Latest" label appears on newest version
+        logger.info("Step 6: Validating 'Latest' label on newest version")
+
+        # Extract the actual file name for counting versions
+        file_name = os.path.basename(file_path)
+        logger.info(f"Using file name for version counting: {file_name}")
+
+        try:
+            # Wait for versions to load and find the "Latest" label elements
+            buckets_tab.wait_for_element_to_be_present(
+                buckets_tab.bucket_tab["version_latest_label"], timeout=10
+            )
+
+            # Method 1: Count file name occurrences (most reliable)
+            expected_versions = 3
+            actual_versions_by_name = buckets_tab.check_number_occurrences_text(
+                file_name, expected_versions
+            )
+            logger.info(
+                f"File name '{file_name}' appears expected {expected_versions} times: {actual_versions_by_name}"
+            )
+
+            # Method 2: Count table rows (with fixed locator format)
+            try:
+                file_rows = buckets_tab.get_elements(("tbody tr", By.CSS_SELECTOR))
+                actual_row_count = len(file_rows)
+                logger.info(f"Total table rows found: {actual_row_count}")
+            except NoSuchElementException as e:
+                logger.debug(f"Could not count table rows: {e}")
+                actual_row_count = 0
+
+            # Validate version count
+            if not actual_versions_by_name:
+                raise AssertionError(
+                    f"Expected {expected_versions} versions of file '{file_name}', but count doesn't match. "
+                    f"Table rows found: {actual_row_count}. This might be a product bug!"
+                )
+
+            # Find all label elements
+            latest_labels = buckets_tab.get_elements(
+                buckets_tab.bucket_tab["version_latest_label"]
+            )
+
+            # Verify at least one "Latest" label exists
+            if not latest_labels:
+                raise AssertionError("No 'Latest' label found on any file version")
+
+            # Check that the label text is "Latest"
+            latest_label_texts = [
+                label.text for label in latest_labels if label.text == "Latest"
+            ]
+
+            if not latest_label_texts:
+                raise AssertionError(
+                    "Found label elements but none contain 'Latest' text"
+                )
+
+            logger.info(
+                f"Successfully found {len(latest_label_texts)} 'Latest' label(s)"
+            )
+
+        except (TimeoutException, AssertionError) as e:
+            logger.debug(f"Failed to validate 'Latest' label: {e}")
+            raise
+
         # Verify the test completed successfully
         assert folder_name, "Failed to create and upload folder"
-        logger.info("Bucket versioning test completed successfully")
+        logger.info(
+            "Bucket versioning test with label validation completed successfully"
+        )

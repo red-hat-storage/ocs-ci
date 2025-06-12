@@ -2283,6 +2283,14 @@ bucket_tab = {
         ".pf-v5-c-switch__toggle",
         By.CSS_SELECTOR,
     ),
+    "version_latest_label": (
+        ".pf-v5-c-label__text",
+        By.CSS_SELECTOR,
+    ),
+    "upload_success_dismiss_button": (
+        "button.pf-v5-c-button.pf-m-link.pf-m-inline[data-ouia-component-type='PF5/Button']",
+        By.CSS_SELECTOR,
+    ),
 }
 locators = {
     "4.19": {

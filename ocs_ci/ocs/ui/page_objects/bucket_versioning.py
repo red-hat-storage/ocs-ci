@@ -25,17 +25,14 @@ class BucketVersioning(ObjectStorage, ConfirmDialog):
         Raises:
             NoSuchElementException: If UI elements are not found.
         """
-        # First ensure we're on the buckets list page
         logger.info("Navigating to object storage buckets page")
         self.nav_object_storage_page()
 
-        # Navigate to the bucket if bucket_name is provided
         if bucket_name:
             self.do_click(f"//tr//a[contains(text(), '{bucket_name}')]", By.XPATH)
         else:
             self.do_click(self.bucket_tab["first_bucket"])
 
-        # Click on Properties tab
         self.do_click(self.bucket_tab["properties_tab"])
         logger.info("Navigated to Properties tab")
 
@@ -149,7 +146,6 @@ class BucketVersioning(ObjectStorage, ConfirmDialog):
         try:
             changed = self.set_versioning_state(enabled=True, bucket_name=bucket_name)
             if changed:
-                # Verify the change was successful
                 if self.is_versioning_enabled():
                     logger.info("Versioning enabled successfully")
                     return True
@@ -157,7 +153,7 @@ class BucketVersioning(ObjectStorage, ConfirmDialog):
                     logger.error("Failed to enable versioning")
                     return False
             else:
-                return False  # Already enabled
+                return False
         except NoSuchElementException:
             logger.error("Could not find versioning toggle element")
             return False
