@@ -7,7 +7,7 @@ from ocs_ci.framework.pytest_customization.marks import polarion_id
 from ocs_ci.framework.testlib import ManageTest, tier4b, green_squad, ignore_leftovers
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.cluster import change_ceph_full_ratio
-from ocs_ci.ocs.exceptions import TimeoutExpiredError
+from ocs_ci.ocs.exceptions import TimeoutExpiredError, CommandFailed
 from ocs_ci.ocs.ocp import OCP
 from ocs_ci.ocs.resources.pod import verify_data_integrity, cal_md5sum
 from ocs_ci.utility.prometheus import PrometheusAPI
@@ -140,23 +140,21 @@ class TestRecoverPvcExpandFailure(ManageTest):
 
         for pvc_obj in self.pvcs:
             logger.info(
-                f"Reducing the size of expansion failed PVC {pvc_obj.name} to {pvc_size_reduced}Gi"
+                f"Trying to reduce the size of PVCs {pvc_obj.name} from {pvc_size_expanded}Gi to {pvc_size_reduced}Gi"
             )
             try:
                 pvc_size_patched = pvc_obj.resize_pvc(
                     new_size=pvc_size_reduced, verify=False
                 )
-                # AssertionError will be thrown from resize_pvc if CephFS PVC. For RBD PVC the return value will be True
+                # CommandFailed will be thrown from resize_pvc if CephFS PVC. For RBD PVC the return value will be True
                 assert (
                     pvc_size_patched
                 ), f"Failed to reduce the size of the PVC '{pvc_obj.name}'"
                 logger.info(
                     f"Patched the size of the PVC {pvc_obj.nam} to a lower value {pvc_size_reduced}Gi"
                 )
-            except AssertionError as err:
-                expected_error = (
-                    f"Patch command to modify size of PVC {pvc_obj.name} has failed."
-                )
+            except CommandFailed as err:
+                expected_error = "field can not be less than status.capacity"
                 if (
                     pvc_obj.interface == constants.CEPHFILESYSTEM
                     and expected_error in str(err)
@@ -258,7 +256,7 @@ class TestRecoverPvcExpandFailure(ManageTest):
 
         for pvc_obj in self.pvcs:
             logger.info(
-                f"Reducing the size of expansion failed PVC {pvc_obj.name} to {pvc_size_reduced}Gi"
+                f"Reducing the size of expansion pending PVC {pvc_obj.name} to {pvc_size_reduced}Gi"
             )
             assert pvc_obj.resize_pvc(
                 pvc_size_reduced, False
