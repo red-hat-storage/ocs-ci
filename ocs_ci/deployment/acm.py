@@ -9,15 +9,18 @@ import tempfile
 import shutil
 import requests
 import subprocess
+import time
 
 import semantic_version
 import platform
+import tarfile
 
 from ocs_ci.framework import config
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.exceptions import (
     CommandFailed,
     DRPrimaryNotFoundException,
+    SubctlDownloadFailed,
     UnsupportedPlatformError,
 )
 from ocs_ci.utility import templating
@@ -29,6 +32,7 @@ from ocs_ci.utility.ibmcloud import (
     set_resource_group_name,
     is_ibm_platform,
 )
+from ocs_ci.utility.retry import retry
 from ocs_ci.utility.utils import (
     run_cmd,
     run_cmd_interactive,
@@ -198,6 +202,7 @@ class Submariner(object):
         elif self.source == "downstream":
             self.download_downstream_binary()
 
+    @retry((tarfile.TarError, EOFError, SubctlDownloadFailed, CommandFailed))
     def download_downstream_binary(self):
         """
         Download downstream subctl binary
@@ -225,12 +230,48 @@ class Submariner(object):
             f'--path="/dist/subctl-{version_str}*-linux-{binary_pltfrm}.tar.xz":/tmp --confirm'
         )
         run_cmd(cmd)
-        decompress = (
-            f"tar -C /tmp/ -xf /tmp/subctl-{version_str}*-linux-{binary_pltfrm}.tar.xz"
+        # After oc image extract wait for some time
+        # so that tar won't fail
+        time.sleep(10)
+        # Check if file exists before calling tar
+        subctl_download_file = (
+            f"/tmp/subctl-{version_str}*-linux-{binary_pltfrm}.tar.xz"
         )
-        p = subprocess.run(decompress, stdout=subprocess.PIPE, shell=True)
+        try:
+            if os.path.isfile(f"{subctl_download_file}") and os.access(
+                f"{subctl_download_file}", os.R_OK
+            ):
+                logger.info(f"File {subctl_download_file} successfully downloaded")
+
+                # Check if tar is readable without any errors
+                with tarfile.open(subctl_download_file) as tar:
+                    tar.getmembers()
+                logger.info("the tar.xz is intact and readable")
+            else:
+                logger.warning(
+                    f"File {subctl_download_file} is not accessible or corrupted"
+                )
+        except (tarfile.TarError, EOFError) as tar_error:
+            logger.error("The tar.xz is corrupted or not readable")
+            raise tar_error
+        except Exception as e:
+            logger.error(
+                f"Unexpected error during subctl tar file download/extract: {e}"
+            )
+            raise SubctlDownloadFailed
+
+        decompress = f"tar -C /tmp/ -xf {subctl_download_file}"
+        p = subprocess.run(
+            decompress,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            shell=True,
+            text=True,
+        )
         if p.returncode:
             logger.error("Failed to untar subctl")
+            if p.stderr:
+                logger.error(f"{p.stderr}")
             raise CommandFailed
         else:
             logger.info(p.stdout)
