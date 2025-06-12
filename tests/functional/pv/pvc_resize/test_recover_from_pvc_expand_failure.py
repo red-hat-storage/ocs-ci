@@ -72,7 +72,7 @@ class TestRecoverPvcExpandFailure(ManageTest):
                 size="4G",
                 io_direction="write",
                 runtime=60,
-                fio_filename=f"{pod_obj.name}",
+                fio_filename="test_pvc_expand_recover",
                 end_fsync=1,
             )
         for pod_obj in self.pods:
@@ -137,23 +137,12 @@ class TestRecoverPvcExpandFailure(ManageTest):
             )
             restore_pod_objs.append(restore_pod_obj)
 
-        # Create file on the pods
-        for pod_obj in restore_pod_objs:
-            pod_obj.run_io(
-                storage_type="fs",
-                size="4G",
-                io_direction="write",
-                runtime=60,
-                fio_filename=f"{pod_obj.name}",
-                end_fsync=1,
-            )
-        for pod_obj in restore_pod_objs:
-            pod_obj.get_fio_results()
-
         # Find initial md5sum of file from pods
         all_pods = self.pods + restore_pod_objs
         for pod_obj in all_pods:
-            pod_obj.orig_md5_sum = cal_md5sum(pod_obj=pod_obj, file_name=pod_obj.name)
+            pod_obj.orig_md5_sum = cal_md5sum(
+                pod_obj=pod_obj, file_name="test_pvc_expand_recover"
+            )
 
         all_pvcs = self.pvcs + restore_pvcs
         pvc_size_expanded_initial = 30
@@ -265,6 +254,6 @@ class TestRecoverPvcExpandFailure(ManageTest):
         for pod_obj in all_pods:
             verify_data_integrity(
                 pod_obj=pod_obj,
-                file_name=pod_obj.name,
+                file_name="test_pvc_expand_recover",
                 original_md5sum=pod_obj.orig_md5_sum,
             )
