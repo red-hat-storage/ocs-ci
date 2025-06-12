@@ -138,8 +138,14 @@ class TestMcgNamespaceLifecycleCrd(E2ETest):
             s3_creds = {
                 "access_key_id": cld_mgr.aws_client.access_key,
                 "access_key": cld_mgr.aws_client.secret_key,
-                "endpoint": constants.MCG_NS_AWS_ENDPOINT,
-                "region": config.ENV_DATA["region"],
+                "endpoint": constants.MCG_NS_AWS_ENDPOINT.format(
+                    bucketclass_dict["namespace_policy_dict"]["namespacestore_dict"][
+                        "aws"
+                    ][0][1]
+                ),
+                "region": bucketclass_dict["namespace_policy_dict"][
+                    "namespacestore_dict"
+                ]["aws"][0][1],
             }
 
         # Noobaa s3 account details
@@ -390,7 +396,11 @@ class TestMcgNamespaceLifecycleCrd(E2ETest):
             s3_creds = {
                 "access_key_id": cld_mgr.aws_client.access_key,
                 "access_key": cld_mgr.aws_client.secret_key,
-                "endpoint": constants.MCG_NS_AWS_ENDPOINT,
+                "endpoint": constants.MCG_NS_AWS_ENDPOINT.format(
+                    bucketclass_dict["namespace_policy_dict"]["namespacestore_dict"][
+                        "aws"
+                    ][0][1]
+                ),
                 "region": config.ENV_DATA["region"],
             }
             logger.info("Noobaa obc will be created as cache bucket")

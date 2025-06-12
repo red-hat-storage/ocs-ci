@@ -369,7 +369,7 @@ class TestNamespace(MCGTest):
         s3_creds = {
             "access_key_id": cld_mgr.aws_client.access_key,
             "access_key": cld_mgr.aws_client.secret_key,
-            "endpoint": constants.MCG_NS_AWS_ENDPOINT,
+            "endpoint": constants.MCG_NS_AWS_ENDPOINT.format(self.DEFAULT_REGION),
             "region": self.DEFAULT_REGION,
         }
         aws_target_bucket = ns_bucket.bucketclass.namespacestores[0].uls_name
@@ -440,7 +440,7 @@ class TestNamespace(MCGTest):
         s3_creds = {
             "access_key_id": cld_mgr.aws_client.access_key,
             "access_key": cld_mgr.aws_client.secret_key,
-            "endpoint": constants.MCG_NS_AWS_ENDPOINT,
+            "endpoint": constants.MCG_NS_AWS_ENDPOINT.format(self.DEFAULT_REGION),
             "region": self.DEFAULT_REGION,
         }
         aws_target_bucket = ns_bucket.bucketclass.namespacestores[0].uls_name
@@ -530,7 +530,7 @@ class TestNamespace(MCGTest):
         aws_creds = {
             "access_key_id": cld_mgr.aws_client.access_key,
             "access_key": cld_mgr.aws_client.secret_key,
-            "endpoint": constants.MCG_NS_AWS_ENDPOINT,
+            "endpoint": constants.MCG_NS_AWS_ENDPOINT.format(self.DEFAULT_REGION),
             "region": self.DEFAULT_REGION,
         }
         self.write_files_to_pod_and_upload(
@@ -602,7 +602,7 @@ class TestNamespace(MCGTest):
         s3_creds = {
             "access_key_id": cld_mgr.aws_client.access_key,
             "access_key": cld_mgr.aws_client.secret_key,
-            "endpoint": constants.MCG_NS_AWS_ENDPOINT,
+            "endpoint": constants.MCG_NS_AWS_ENDPOINT.format(self.DEFAULT_REGION),
             "region": self.DEFAULT_REGION,
         }
 
@@ -677,7 +677,7 @@ class TestNamespace(MCGTest):
         s3_creds = {
             "access_key_id": cld_mgr.aws_client.access_key,
             "access_key": cld_mgr.aws_client.secret_key,
-            "endpoint": constants.MCG_NS_AWS_ENDPOINT,
+            "endpoint": constants.MCG_NS_AWS_ENDPOINT.format(self.DEFAULT_REGION),
             "region": self.DEFAULT_REGION,
         }
 
@@ -765,7 +765,7 @@ class TestNamespace(MCGTest):
         s3_creds = {
             "access_key_id": cld_mgr.aws_client.access_key,
             "access_key": cld_mgr.aws_client.secret_key,
-            "endpoint": constants.MCG_NS_AWS_ENDPOINT,
+            "endpoint": constants.MCG_NS_AWS_ENDPOINT.format(self.DEFAULT_REGION),
             "region": self.DEFAULT_REGION,
         }
         aws_target_bucket = bucket_obj.bucketclass.namespacestores[0].uls_name
@@ -1014,7 +1014,7 @@ class TestNamespace(MCGTest):
         aws_creds = {
             "access_key_id": cld_mgr.aws_client.access_key,
             "access_key": cld_mgr.aws_client.secret_key,
-            "endpoint": constants.MCG_NS_AWS_ENDPOINT,
+            "endpoint": constants.MCG_NS_AWS_ENDPOINT.format(self.DEFAULT_REGION),
             "region": self.DEFAULT_REGION,
         }
 
@@ -1115,7 +1115,7 @@ class TestNamespace(MCGTest):
         s3_creds = {
             "access_key_id": cld_mgr.aws_client.access_key,
             "access_key": cld_mgr.aws_client.secret_key,
-            "endpoint": constants.MCG_NS_AWS_ENDPOINT,
+            "endpoint": constants.MCG_NS_AWS_ENDPOINT.format(self.DEFAULT_REGION),
             "region": self.DEFAULT_REGION,
         }
         original_folder = test_directory_setup.origin_dir
@@ -1214,7 +1214,7 @@ class TestNamespace(MCGTest):
         s3_creds = {
             "access_key_id": cld_mgr.aws_client.access_key,
             "access_key": cld_mgr.aws_client.secret_key,
-            "endpoint": constants.MCG_NS_AWS_ENDPOINT,
+            "endpoint": constants.MCG_NS_AWS_ENDPOINT.format(self.DEFAULT_REGION),
             "region": self.DEFAULT_REGION,
         }
 

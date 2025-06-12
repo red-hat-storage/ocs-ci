@@ -245,6 +245,7 @@ class S3Client(CloudClient):
             "s3",
             verify=verify,
             endpoint_url=self.endpoint,
+            region_name=config.ENV_DATA["region"],
             aws_access_key_id=self.access_key,
             aws_secret_access_key=self.secret_key,
         )

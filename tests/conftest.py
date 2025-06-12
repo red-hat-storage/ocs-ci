@@ -4306,7 +4306,9 @@ def ns_resource_factory(
 
         log.info(f"Check validity of NS resource {rand_ns_resource}")
         if platform == constants.AWS_PLATFORM:
-            endpoint = constants.MCG_NS_AWS_ENDPOINT
+            endpoint = constants.MCG_NS_AWS_ENDPOINT.format(
+                constants.DEFAULT_AWS_REGION
+            )
         elif platform == constants.AZURE_PLATFORM:
             endpoint = constants.MCG_NS_AZURE_ENDPOINT
         elif platform == constants.RGW_PLATFORM:

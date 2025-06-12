@@ -90,7 +90,7 @@ def craft_s3_command(cmd, mcg_obj=None, api=False, signed_request_creds=None):
         base_command = (
             f'sh -c "AWS_ACCESS_KEY_ID={signed_request_creds.get("access_key_id")} '
             f'AWS_SECRET_ACCESS_KEY={signed_request_creds.get("access_key")} '
-            f"{region}"
+            f'region={signed_request_creds.get("region")} '
             f"aws s3{api} "
             f'--endpoint={signed_request_creds.get("endpoint")} '
             f"{no_ssl} "
