@@ -23,7 +23,7 @@ class TestRecoverPvcExpandFailure(ManageTest):
     """
 
     @pytest.fixture(autouse=True)
-    def setup(self, create_pvcs_and_pods):
+    def setup(self, snapshot_restore_factory, create_pvcs_and_pods):
         """
         Create PVCs and pods
         """
