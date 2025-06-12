@@ -990,14 +990,14 @@ class TestMetadata(ManageTest):
         # Check csi-cephfsplugin provisioner and csi-rbdplugin-provisioner pods are up and running
         assert self.pod_obj.wait_for_resource(
             condition=constants.STATUS_RUNNING,
-            selector="app=csi-cephfsplugin-provisioner",
+            selector=helpers.get_provisioner_label(constants.CEPHFILESYSTEM),
             dont_allow_other_resources=True,
             timeout=60,
         )
 
         assert self.pod_obj.wait_for_resource(
             condition=constants.STATUS_RUNNING,
-            selector="app=csi-rbdplugin-provisioner",
+            selector=helpers.get_provisioner_label(constants.CEPHBLOCKPOOL),
             dont_allow_other_resources=True,
             timeout=60,
         )

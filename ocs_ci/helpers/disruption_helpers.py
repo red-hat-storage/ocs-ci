@@ -2,6 +2,7 @@ import logging
 import os
 import random
 
+from ocs_ci.helpers.helpers import get_provisioner_label, get_node_plugin_label
 from ocs_ci.ocs.resources import pod
 from ocs_ci.ocs import constants, ocp
 from ocs_ci.framework import config
@@ -49,6 +50,7 @@ class Disruptions:
             # If the platform is Managed Services, then the ceph pods will be present in the provider cluster.
             # Consumer cluster will be the primary cluster context in a multicluster run. Setting 'cluster_kubeconfig'
             # attribute to use as the value of the parameter '--kubeconfig' in the 'oc' commands to get ceph pods.
+            log.info(f"Setting provider kubeconfig for the resource {self.resource}")
             provider_kubeconfig = os.path.join(
                 config.clusters[config.get_provider_index()].ENV_DATA["cluster_path"],
                 config.clusters[config.get_provider_index()].RUN.get(
@@ -81,17 +83,17 @@ class Disruptions:
             self.selector = constants.MDS_APP_LABEL
         if self.resource == "cephfsplugin":
             self.resource_obj = pod.get_plugin_pods(interface=constants.CEPHFILESYSTEM)
-            self.selector = constants.CSI_CEPHFSPLUGIN_LABEL
+            self.selector = get_node_plugin_label(constants.CEPHFILESYSTEM)
         if self.resource == "rbdplugin":
             self.resource_obj = pod.get_plugin_pods(interface=constants.CEPHBLOCKPOOL)
-            self.selector = constants.CSI_RBDPLUGIN_LABEL
+            self.selector = get_node_plugin_label(constants.CEPHBLOCKPOOL)
         if self.resource == "cephfsplugin_provisioner":
             self.resource_obj = [
                 pod.get_plugin_provisioner_leader(
                     interface=constants.CEPHFILESYSTEM, leader_type=leader_type
                 )
             ]
-            self.selector = constants.CSI_CEPHFSPLUGIN_PROVISIONER_LABEL
+            self.selector = get_provisioner_label(constants.CEPHFILESYSTEM)
             resource_count = len(pod.get_cephfsplugin_provisioner_pods())
         if self.resource == "rbdplugin_provisioner":
             self.resource_obj = [
@@ -99,7 +101,7 @@ class Disruptions:
                     interface=constants.CEPHBLOCKPOOL, leader_type=leader_type
                 )
             ]
-            self.selector = constants.CSI_RBDPLUGIN_PROVISIONER_LABEL
+            self.selector = get_provisioner_label(constants.CEPHBLOCKPOOL)
             resource_count = len(pod.get_rbdfsplugin_provisioner_pods())
         if self.resource == "operator":
             self.resource_obj = pod.get_operator_pods()
@@ -135,6 +137,12 @@ class Disruptions:
         if self.resource == "ocs_provider_server":
             self.resource_obj = [pod.get_ocs_provider_server_pod()]
             self.selector = constants.PROVIDER_SERVER_LABEL
+        if self.resource == "ceph_csi_controller_manager":
+            self.resource_obj = [pod.get_ceph_csi_controller_manager()]
+            self.selector = constants.CEPH_CSI_CONTROLLER_MANAGER_LABEL
+        if self.resource == "ocs_client_operator_controller_manager":
+            self.resource_obj = [pod.get_ocs_client_operator_controller_manager()]
+            self.selector = constants.OCS_CLIENT_OPERATOR_LABEL
 
         self.resource_count = resource_count or len(self.resource_obj)
 

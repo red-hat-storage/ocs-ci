@@ -956,13 +956,15 @@ def get_csi_provisioner_pod(interface):
     Returns:
         Pod object: The provisioner pod object based on iterface
     """
+    from ocs_ci.helpers.helpers import get_provisioner_label
+
     selector = (
-        "app=csi-rbdplugin-provisioner"
+        get_provisioner_label(constants.CEPHBLOCKPOOL)
         if (
             interface == constants.CEPHBLOCKPOOL
             or interface == constants.CEPHBLOCKPOOL_THICK
         )
-        else "app=csi-cephfsplugin-provisioner"
+        else get_provisioner_label(constants.CEPHFILESYSTEM)
     )
     ocp_pod_obj = OCP(
         kind=constants.POD,
@@ -1813,6 +1815,9 @@ def get_cephfsplugin_provisioner_pods(
     Returns:
         list : csi-cephfsplugin-provisioner Pod objects
     """
+    from ocs_ci.helpers.helpers import get_provisioner_label
+
+    cephfsplugin_provisioner_label = get_provisioner_label(constants.CEPHFILESYSTEM)
     namespace = namespace or config.ENV_DATA["cluster_namespace"]
     pods = get_pods_having_label(cephfsplugin_provisioner_label, namespace)
     fs_plugin_pods = [Pod(**pod) for pod in pods]
@@ -1836,6 +1841,9 @@ def get_rbdfsplugin_provisioner_pods(
     Returns:
         list : csi-rbdplugin-provisioner Pod objects
     """
+    from ocs_ci.helpers.helpers import get_provisioner_label
+
+    rbdplugin_provisioner_label = get_provisioner_label(constants.CEPHBLOCKPOOL)
     namespace = namespace or config.ENV_DATA["cluster_namespace"]
     pods = get_pods_having_label(rbdplugin_provisioner_label, namespace)
     ebd_plugin_pods = [Pod(**pod) for pod in pods]
@@ -2054,10 +2062,12 @@ def get_plugin_pods(interface, namespace=None):
     Returns:
         list : csi-cephfsplugin pod objects or csi-rbdplugin pod objects
     """
+    from ocs_ci.helpers.helpers import get_node_plugin_label
+
     if interface == constants.CEPHFILESYSTEM:
-        plugin_label = constants.CSI_CEPHFSPLUGIN_LABEL
+        plugin_label = get_node_plugin_label(constants.CEPHFILESYSTEM)
     if interface == constants.CEPHBLOCKPOOL:
-        plugin_label = constants.CSI_RBDPLUGIN_LABEL
+        plugin_label = get_node_plugin_label(constants.CEPHBLOCKPOOL)
     namespace = namespace or config.ENV_DATA["cluster_namespace"]
     plugins_info = get_pods_having_label(plugin_label, namespace)
     plugin_pods = [Pod(**plugin) for plugin in plugins_info]
@@ -4228,3 +4238,41 @@ def get_machine_config_controller_pod(
     mcc_pods = get_pods_having_label(label, namespace, retry=retry)
     mcc_pod_obj = Pod(**mcc_pods[0])
     return mcc_pod_obj
+
+
+def get_ceph_csi_controller_manager(
+    label=constants.CEPH_CSI_CONTROLLER_MANAGER_LABEL, namespace=None
+):
+    """
+    Get ceph-csi-controller-manager pod from the cluster
+
+    Args:
+        label (str): Label associated with ceph-csi-controller-manager pod
+        namespace (str): Namespace in which ceph-csi-controller-manager pod is residing
+
+    Returns:
+        Pod: Pod object of ceph-csi-controller-manager pod
+
+    """
+    namespace = namespace or config.ENV_DATA["cluster_namespace"]
+    ceph_csi_controller_manager = get_pods_having_label(label, namespace)
+    return [Pod(**pod) for pod in ceph_csi_controller_manager]
+
+
+def get_ocs_client_operator_controller_manager(
+    label=constants.OCS_CLIENT_OPERATOR_LABEL, namespace=None
+):
+    """
+    Get ocs-client-operator-controller-manager pod from the cluster
+
+    Args:
+        label (str): Label associated with ocs-client-operator-controller-manager pod
+        namespace (str): Namespace in which ocs-client-operator-controller-manager pod is residing
+
+    Returns:
+        Pod: Pod object of ocs-client-operator-controller-manager pod
+
+    """
+    namespace = namespace or config.ENV_DATA["cluster_namespace"]
+    ocs_client_operator_controller_manager = get_pods_having_label(label, namespace)
+    return [Pod(**pod) for pod in ocs_client_operator_controller_manager]
