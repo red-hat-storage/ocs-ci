@@ -710,6 +710,17 @@ def process_cluster_cli_params(config):
     collect_logs_on_success_run = get_cli_param(config, "collect_logs_on_success_run")
     if collect_logs_on_success_run:
         ocsci_config.REPORTING["collect_logs_on_success_run"] = True
+    markers_arg = config.getoption("-m")
+    if any(
+        mark in markers_arg
+        for mark in [
+            "deployment",
+            "acm_import",
+            "ocs_upgrade",
+            "ocp_upgrade",
+        ]
+    ) or ocsci_config.RUN.get("cli_params").get("deploy"):
+        ocsci_config.REPORTING["dont_fail_on_collect_logs"] = True
     get_cli_param(config, "dev_mode")
     ceph_debug = get_cli_param(config, "ceph_debug")
     if ceph_debug:
