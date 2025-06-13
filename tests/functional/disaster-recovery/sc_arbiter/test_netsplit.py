@@ -16,16 +16,14 @@ from ocs_ci.helpers.stretchcluster_helper import (
 )
 
 from ocs_ci.ocs.resources.stretchcluster import StretchCluster
-from ocs_ci.ocs.exceptions import CephHealthException, CommandFailed
+from ocs_ci.ocs.exceptions import CommandFailed
 
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.node import get_all_nodes
-from ocs_ci.helpers.sanity_helpers import Sanity
 from datetime import datetime, timedelta, timezone
 from ocs_ci.ocs.resources.pvc import get_pvc_objs
 from ocs_ci.ocs.resources.pod import (
     wait_for_pods_to_be_in_statuses,
-    get_ceph_tools_pod,
 )
 from ocs_ci.utility.retry import retry
 
@@ -36,28 +34,6 @@ logger = logging.getLogger(__name__)
 @stretchcluster_required
 @turquoise_squad
 class TestNetSplit:
-    @pytest.fixture()
-    def init_sanity(self, request):
-        """
-        Initial Cluster sanity
-        """
-        self.sanity_helpers = Sanity()
-
-        def finalizer():
-            """
-            Make sure the ceph is not ERR state at the end of the test
-            """
-            try:
-                logger.info("Making sure ceph health is OK")
-                self.sanity_helpers.health_check(tries=50, cluster_check=False)
-            except CephHealthException as e:
-                assert (
-                    "HEALTH_WARN" in e.args[0]
-                ), f"Ceph seems to be in HEALTH_ERR state: {e.args[0]}"
-                get_ceph_tools_pod().exec_ceph_cmd(ceph_cmd="ceph crash archive-all")
-                logger.info("Archived ceph crash!")
-
-        request.addfinalizer(finalizer)
 
     @pytest.mark.parametrize(
         argnames="zones, duration",

@@ -8466,7 +8466,7 @@ def setup_logwriter_workload(request, teardown_factory):
                 label="app=logwriter-cephfs", namespace=pvc.namespace
             )
         ]
-        wait_for_pods_to_be_running(
+        retry(CommandFailed, tries=6, delay=10)(wait_for_pods_to_be_running)(
             namespace=pvc.namespace, pod_names=logwriter_dc_pods
         )
 
@@ -8519,7 +8519,7 @@ def setup_logreader_workload(request, teardown_factory):
         logreader_job = helpers.create_resource(**job_data)
         teardown_factory(logreader_job)
 
-        logreader_job_obj = get_job_obj(
+        logreader_job_obj = retry(CommandFailed, tries=6, delay=10)(get_job_obj)(
             name="logreader-cephfs", namespace=pvc.namespace
         )
         logreader_job_pods = [
@@ -8528,7 +8528,7 @@ def setup_logreader_workload(request, teardown_factory):
                 label="app=logreader-cephfs", namespace=pvc.namespace
             )
         ]
-        wait_for_pods_to_be_running(
+        retry(CommandFailed, tries=6, delay=10)(wait_for_pods_to_be_running)(
             namespace=pvc.namespace, pod_names=logreader_job_pods
         )
 
@@ -8666,7 +8666,7 @@ def setup_logwriter_rbd_workload(
                 namespace=setup_stretch_cluster_project.namespace,
             )
         ]
-        wait_for_pods_to_be_running(
+        retry(CommandFailed, tries=6, delay=10)(wait_for_pods_to_be_running)(
             namespace=setup_stretch_cluster_project.namespace,
             pod_names=logwriter_sts_pods,
         )

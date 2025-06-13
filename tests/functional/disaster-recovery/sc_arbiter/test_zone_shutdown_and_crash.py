@@ -15,21 +15,16 @@ from ocs_ci.ocs.ocp import OCP
 from ocs_ci.ocs.resources.pvc import get_pvc_objs
 from ocs_ci.ocs.node import (
     wait_for_nodes_status,
-    get_nodes,
-    get_worker_nodes,
-    get_master_nodes,
-    get_node_objs,
+    gracefully_reboot_nodes,
 )
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.resources.pod import (
-    get_ceph_tools_pod,
     wait_for_pods_to_be_in_statuses,
     get_debug_pods,
+    wait_for_pods_to_be_running,
 )
-from ocs_ci.helpers.sanity_helpers import Sanity
 from ocs_ci.ocs.exceptions import (
     CommandFailed,
-    CephHealthException,
 )
 from ocs_ci.framework.pytest_customization.marks import (
     tier1,
@@ -40,60 +35,6 @@ from ocs_ci.framework.pytest_customization.marks import (
 
 
 log = logging.getLogger(__name__)
-
-
-@pytest.fixture()
-def init_sanity(request, nodes):
-    """
-    Initial Cluster sanity
-    """
-    sanity_helpers = Sanity()
-
-    def finalizer():
-        """
-        Make sure all the nodes are Running and
-        the ceph health is OK at the end of the test
-        """
-
-        # check if all the nodes are Running
-        log.info("Checking if all the nodes are READY")
-        master_nodes = get_nodes(node_type=constants.MASTER_MACHINE)
-        worker_nodes = get_nodes(node_type=constants.WORKER_MACHINE)
-        nodes_not_ready = list()
-        nodes_not_ready.extend(
-            [node for node in worker_nodes if node.status() != "Ready"]
-        )
-        nodes_not_ready.extend(
-            [node for node in master_nodes if node.status() != "Ready"]
-        )
-
-        if len(nodes_not_ready) != 0:
-            try:
-                nodes.start_nodes(nodes=nodes_not_ready)
-            except Exception:
-                log.error(
-                    f"Something went wrong while starting the nodes {nodes_not_ready}!"
-                )
-                raise
-            wait_for_nodes_status(timeout=600)
-            log.info(
-                f"Following nodes {nodes_not_ready} were NOT READY, are now in READY state"
-            )
-        else:
-            log.info("All nodes are READY")
-
-        # check cluster health
-        try:
-            log.info("Making sure ceph health is OK")
-            sanity_helpers.health_check(tries=50, cluster_check=False)
-        except CephHealthException as e:
-            assert (
-                "HEALTH_WARN" in e.args[0]
-            ), f"Ignoring Ceph health warnings: {e.args[0]}"
-            get_ceph_tools_pod().exec_ceph_cmd(ceph_cmd="ceph crash archive-all")
-            log.info("Archived ceph crash!")
-
-    request.addfinalizer(finalizer)
 
 
 @tier1
@@ -588,20 +529,12 @@ class TestZoneShutdownsAndCrashes:
         log.info("No data corruption is seen in RBD workloads")
 
 
-class TestGracefulShutdowns:
+class TestGracefulRestart:
 
-    @pytest.mark.parametrize(
-        argnames="node_types",
-        argvalues=[
-            pytest.param(
-                "worker",
-            ),
-            pytest.param("master"),
-        ],
-    )
-    def test_gracefull_shutdown(
+    def test_gracefull_restart(
         self,
         init_sanity,
+        node_drain_teardown,
         reset_conn_score,
         setup_logwriter_cephfs_workload_factory,
         setup_logwriter_rbd_workload_factory,
@@ -609,7 +542,7 @@ class TestGracefulShutdowns:
         nodes,
         cnv_workload,
         setup_cnv,
-        node_types,
+        # node_types,
     ):
         """
         Test node grace full shutdown while the workloads are Running
@@ -639,41 +572,17 @@ class TestGracefulShutdowns:
         check_for_logwriter_workload_pods(sc_obj, nodes=nodes)
         log.info("All logwriter workload pods are running successfully")
 
-        # fetch all the node objects for the nodes to be shutdown
-        if node_types == "worker":
-            nodes_to_shutdown = get_node_objs(get_worker_nodes())
-        else:
-            nodes_to_shutdown = get_node_objs(get_master_nodes())
-
-        # stop the nodes
-        nodes.stop_nodes(nodes=nodes_to_shutdown)
-        if node_types == "worker":
-            wait_for_nodes_status(
-                node_names=[node.name for node in nodes_to_shutdown],
-                status=constants.NODE_NOT_READY,
-                timeout=300,
-            )
-        log.info(f"{node_types} nodes shutdown successfully!")
+        gracefully_reboot_nodes()
+        log.info("Gracefully restarted all the cluster nodes")
 
         time.sleep(60)
         log.info("a moment to breathe!")
 
-        # start the nodes
-        try:
-            nodes.start_nodes(nodes=nodes_to_shutdown)
-        except Exception:
-            log.error("something went wrong while starting the nodes!")
-
-        # validate all nodes are in READY state and up
-        wait_for_nodes_status(timeout=600)
-        log.info("all the nodes are up and running!")
-
         # wait for all storage pods to be running or completed
-        # wait_for_pods_to_be_running()
-        time.sleep(600)
-        log.info("all the storage pods are running!")
+        wait_for_pods_to_be_running(timeout=600)
 
         # check vm data written before the failure for integrity
+        vm_obj.wait_for_ssh_connectivity()
         md5sum_after = cal_md5sum_vm(vm_obj, file_path="/file_1.txt")
         assert (
             md5sum_before == md5sum_after
