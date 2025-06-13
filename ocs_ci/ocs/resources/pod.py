@@ -2212,6 +2212,7 @@ def wait_for_storage_pods(timeout=200):
         and all(
             label[4:] not in pod.get_labels().values() for label in labels_to_ignore
         )
+        and "storageclient" not in pod.name
     ]
 
     for pod_obj in all_pod_obj:
