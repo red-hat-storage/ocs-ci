@@ -56,7 +56,7 @@ class TestRecoverPvcExpandFailure(ManageTest):
     @tier4c
     @ignore_leftovers
     @green_squad
-    @polarion_id("")
+    @polarion_id("OCS-6867")
     def test_recover_from_pending_pvc_expansion(
         self, snapshot_factory, snapshot_restore_factory, pod_factory
     ):
