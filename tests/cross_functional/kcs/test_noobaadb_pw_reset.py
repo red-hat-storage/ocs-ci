@@ -21,7 +21,7 @@ from ocs_ci.ocs import constants, ocp
 from ocs_ci.ocs.exceptions import CommandFailed
 from ocs_ci.ocs.resources.pod import get_noobaa_pods
 from ocs_ci.utility.retry import retry
-from ocs_ci.utility.utils import get_primary_nb_db_pod
+from ocs_ci.utility.utils import exec_nb_db_query
 
 logger = logging.getLogger(__name__)
 
@@ -85,8 +85,4 @@ def run_db_reset_cmd():
 
     """
     alter_cmd = "ALTER USER noobaa WITH PASSWORD 'myNewPassword';"
-    primary_nb_db_pod = get_primary_nb_db_pod()
-    ocp.OCP().exec_oc_cmd(
-        f"exec -n {config.ENV_DATA['cluster_namespace']} {primary_nb_db_pod.name} "
-        f'-- psql -d nbcore -c "{alter_cmd}"'
-    )
+    exec_nb_db_query(alter_cmd)
