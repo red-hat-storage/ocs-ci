@@ -150,15 +150,21 @@ def setup_cnv_workload(request, cnv_workload_class, setup_cnv):
     vm_obj = cnv_workload_class(
         volume_interface=constants.VM_VOLUME_PVC, namespace=CNV_WORKLOAD_NAMESPACE
     )
-    vm_obj.run_ssh_cmd(command="dd if=/dev/zero of=/file_1.txt bs=1024 count=102400")
-    md5sum_before = cal_md5sum_vm(vm_obj, file_path="/file_1.txt")
+    vm_obj.run_ssh_cmd(command="mkdir /test && sudo chmod -R 777 /test")
+    vm_obj.run_ssh_cmd(
+        command="< /dev/urandom tr -dc 'A-Za-z0-9' | head -c 10485760 > /test/file_1.txt"
+    )
+    md5sum_before = cal_md5sum_vm(vm_obj, file_path="/test/file_1.txt")
+    logger.debug(
+        f"This is the file_1.txt content:\n{vm_obj.run_ssh_cmd(command='cat /test/file_1.txt')}"
+    )
 
     def finalizer():
 
         # check vm data written before the failure for integrity
         logger.info("Waiting for VM SSH connectivity!")
         vm_obj.wait_for_ssh_connectivity()
-        md5sum_after = cal_md5sum_vm(vm_obj, file_path="/file_1.txt")
+        md5sum_after = cal_md5sum_vm(vm_obj, file_path="/test/file_1.txt")
         assert (
             md5sum_before == md5sum_after
         ), "Data integrity of the file inside VM is not maintained during the failure"
@@ -168,12 +174,12 @@ def setup_cnv_workload(request, cnv_workload_class, setup_cnv):
 
         # check if new data can be created
         vm_obj.run_ssh_cmd(
-            command="dd if=/dev/zero of=/file_2.txt bs=1024 count=103600"
+            command="< /dev/urandom tr -dc 'A-Za-z0-9' | head -c 10485760 > /test/file_2.txt"
         )
         logger.info("Successfully created new data inside VM")
 
         # check if the data can be copied back to local machine
-        vm_obj.scp_from_vm(local_path="/tmp", vm_src_path="/file_1.txt")
+        vm_obj.scp_from_vm(local_path="/tmp", vm_src_path="/test/file_1.txt")
         logger.info("VM data is successfully copied back to local machine")
 
         # stop the VM
