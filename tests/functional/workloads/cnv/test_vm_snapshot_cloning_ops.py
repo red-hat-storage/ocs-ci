@@ -3,12 +3,12 @@ import pytest
 
 from ocs_ci.framework.pytest_customization.marks import magenta_squad, workloads
 from ocs_ci.framework.testlib import E2ETest
-
 from ocs_ci.helpers.cnv_helpers import (
     cal_md5sum_vm,
     run_dd_io,
     expand_pvc_and_verify,
 )
+from concurrent.futures import ThreadPoolExecutor, as_completed
 
 
 log = logging.getLogger(__name__)
@@ -290,3 +290,106 @@ class TestVmSnapshotClone(E2ETest):
 
         if failed_vms:
             assert False, f"Test case failed for VMs: {', '.join(failed_vms)}"
+
+    def process_vm(
+        self,
+        vm_obj,
+        file_paths,
+        admin_client,
+        vm_clone_fixture,
+        vm_snapshot_restore_fixture,
+    ):
+        try:
+            source_csum = run_dd_io(vm_obj=vm_obj, file_path=file_paths[0], verify=True)
+            log.info(f"[{vm_obj.name}] Source checksum: {source_csum}")
+
+            log.info(f"[{vm_obj.name}] Creating clone of VM")
+            cloned_vm = vm_clone_fixture(vm_obj, admin_client)
+            run_dd_io(vm_obj=cloned_vm, file_path=file_paths[1])
+
+            log.info(f"[{vm_obj.name}] Creating snapshot of cloned VM")
+            restored_vm = vm_snapshot_restore_fixture(cloned_vm, admin_client)
+            restore_csum = cal_md5sum_vm(vm_obj=restored_vm, file_path=file_paths[0])
+
+            assert source_csum == restore_csum, (
+                f"[{vm_obj.name}] Failed: MD5 mismatch between source {vm_obj.name} "
+                f"and restored {restored_vm.name} cloned from '{vm_obj.name}'"
+            )
+
+            run_dd_io(vm_obj=restored_vm, file_path=file_paths[1])
+            log.info(f"[{vm_obj.name}] VM processing completed successfully.")
+        except Exception as e:
+            log.error(f"[{vm_obj.name}] Error during VM processing: {e}", exc_info=True)
+            raise
+
+    def process_all_vms_in_parallel(
+        self,
+        vm_list,
+        file_paths,
+        admin_client,
+        vm_clone_fixture,
+        vm_snapshot_restore_fixture,
+    ):
+        MAX_WORKERS = 10
+        with ThreadPoolExecutor(max_workers=MAX_WORKERS) as executor:
+            futures = {
+                executor.submit(
+                    self.process_vm,
+                    vm_obj,
+                    file_paths,
+                    admin_client,
+                    vm_clone_fixture,
+                    vm_snapshot_restore_fixture,
+                ): vm_obj.name
+                for vm_obj in vm_list
+            }
+            for future in as_completed(futures):
+                vm_name = futures[future]
+                try:
+                    future.result()
+                except Exception as e:
+                    log.error(
+                        f"[{vm_name}] Exception occurred during test execution: {e}"
+                    )
+                    raise
+
+    @workloads
+    @pytest.mark.polarion_id("OCS-6325")
+    def test_vm_snap_of_clone(
+        self,
+        setup_cnv,
+        project_factory,
+        multi_cnv_workload,
+        vm_clone_fixture,
+        vm_snapshot_restore_fixture,
+        admin_client,
+    ):
+        """
+        This test performs the VM cloning and IOs created using different volume interfaces(PVC/DV/DVT)
+
+        Test steps:
+        1. Create a clone of a VM by following the documented procedure from ODF official docs.
+        2. Add additional data to the cloned VM.
+        3. Create snapshot of cloned VM
+        4. Vertify snapshot of cloned VM created successfully.
+        5. Check data conisistency on the Restored VM
+        6. Delete the clone and restored VM by following the documented procedure from ODF official docs
+        7. Repeat the above procedure for all the VMs in the system
+        8. Delete all the clones and restored VM created as part of this test
+        """
+
+        proj_obj = project_factory()
+        file_paths = ["/source_file.txt", "/new_file.txt"]
+        vm_objs_def, vm_objs_aggr, _, _ = multi_cnv_workload(
+            namespace=proj_obj.namespace
+        )
+
+        vm_list = vm_objs_def + vm_objs_aggr
+
+        self.process_all_vms_in_parallel(
+            vm_list,
+            file_paths,
+            admin_client,
+            vm_clone_fixture,
+            vm_snapshot_restore_fixture,
+        )
