@@ -23,12 +23,11 @@ spec:
           claimName: nfs-pvc
       containers:
       - name: fedora
-        image: fedora
+        image: quay.io/ocsci/fedora:fio
         command: ['/bin/bash', '-ce', 'tail -f /dev/null']
         imagePullPolicy: IfNotPresent
         securityContext:
           capabilities: {}
-          privileged: true
         volumeMounts:
         - mountPath: /mnt
           name: vol
@@ -41,4 +40,3 @@ spec:
           initialDelaySeconds: 3
           periodSeconds: 3
   paused: false
-
