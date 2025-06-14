@@ -5,7 +5,7 @@ ACM operator upgrade classes and utilities
 
 import logging
 import tempfile
-from pkg_resources import parse_version
+from packaging.version import parse as parse_version
 
 import requests
 
