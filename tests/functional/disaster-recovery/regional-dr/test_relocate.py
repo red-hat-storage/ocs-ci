@@ -18,10 +18,6 @@ from ocs_ci.ocs.acm.acm import AcmAddClusters
 
 logger = logging.getLogger(__name__)
 
-polarion_id_relocate = "OCS-4425"
-if config.RUN.get("rdr_relocate_via_ui"):
-    polarion_id_relocate = "OCS-4744"
-
 
 @rdr
 @acceptance
@@ -29,32 +25,43 @@ if config.RUN.get("rdr_relocate_via_ui"):
 @turquoise_squad
 class TestRelocate:
     """
-    Test Relocate action
+    Test Relocate action via CLI and UI
 
     """
 
     @pytest.mark.parametrize(
-        argnames=["pvc_interface"],
+        argnames=["pvc_interface", "via_ui"],
         argvalues=[
             pytest.param(
                 *[constants.CEPHBLOCKPOOL],
-                marks=pytest.mark.polarion_id(polarion_id_relocate),
+                False,
+                marks=pytest.mark.polarion_id("OCS-4425"),
             ),
             pytest.param(
                 *[constants.CEPHFILESYSTEM],
+                False,
                 marks=pytest.mark.polarion_id("OCS-4725"),
+            ),
+            pytest.param(
+                *[constants.CEPHBLOCKPOOL],
+                True,
+                marks=pytest.mark.polarion_id("OCS-4744"),
+            ),
+            pytest.param(
+                *[constants.CEPHFILESYSTEM],
+                True,
+                marks=pytest.mark.polarion_id("OCS-6862"),
             ),
         ],
     )
-    def test_relocate(self, pvc_interface, setup_acm_ui, dr_workload):
+    def test_relocate(self, pvc_interface, via_ui, setup_acm_ui, dr_workload):
         """
         Tests to verify application relocate between managed clusters.
 
-        This test is also compatible to be run from ACM UI,
-        pass the yaml conf/ocsci/dr_ui.yaml to trigger it.
+        This test will run twice both via CLI and UI
 
         """
-        if config.RUN.get("rdr_relocate_via_ui"):
+        if via_ui:
             acm_obj = AcmAddClusters()
 
         workloads = dr_workload(
@@ -84,7 +91,7 @@ class TestRelocate:
         sleep(wait_time * 60)
 
         for wl in workloads:
-            if config.RUN.get("rdr_relocate_via_ui"):
+            if via_ui:
                 logger.info("Start the process of Relocate from ACM UI")
                 config.switch_acm_ctx()
                 dr_submariner_validation_from_ui(acm_obj)
@@ -143,7 +150,7 @@ class TestRelocate:
                 replaying_images=sum([wl.workload_pvc_count for wl in workloads])
             )
 
-        if config.RUN.get("rdr_relocate_via_ui"):
+        if via_ui:
             verify_failover_relocate_status_ui(
                 acm_obj, action=constants.ACTION_RELOCATE
             )
