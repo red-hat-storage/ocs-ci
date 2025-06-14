@@ -1,0 +1,10 @@
+apiVersion: groupsnapshot.storage.k8s.io/v1beta1
+kind: VolumeGroupSnapshot
+metadata:
+  name: rbd-volume-group-snapshot
+spec:
+  volumeGroupSnapshotClassName: ocs-storagecluster-ceph-rbd-groupsnapclass
+  source:
+    selector:
+      matchLabels:
+        group: myGroup
