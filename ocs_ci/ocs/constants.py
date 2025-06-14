@@ -273,6 +273,7 @@ CLUSTERMANAGEMENTADDON = "ClusterManagementAddOn"
 NETWORK_FENCE_CLASS = "NetworkFenceClass"
 NETWORK_FENCE = "NetworkFence"
 STORAGE_AUTO_SCALER = "StorageAutoScaler"
+INTERNAL_STORAGE_CONSUMER_NAME = "internal"
 
 # Provisioners
 AWS_EFS_PROVISIONER = "openshift.org/aws-efs"
