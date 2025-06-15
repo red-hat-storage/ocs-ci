@@ -175,12 +175,14 @@ class BenchmarkOperatorFIO(object):
             )
         else:
             cmd = f"make deploy IMG={bo_image}"
+            env = os.environ.copy()
+            env["KUBECONFIG"] = config.RUN.get("kubeconfig")
         run(
             cmd,
             shell=True,
             check=True,
             cwd=self.local_repo,
-            env=self.env,
+            env=env,
         )
 
         # Step 4: Wait for controller pod to be running
@@ -281,12 +283,14 @@ class BenchmarkOperatorFIO(object):
             cmd = f"kustomize build config/default | oc --kubeconfig={self.kubeconfig} delete -f -"
         else:
             cmd = "make undeploy"
+            env = os.environ.copy()
+            env["KUBECONFIG"] = config.RUN.get("kubeconfig")
         run(
             cmd,
             shell=True,
             check=True,
             cwd=self.local_repo,
-            env=self.env,
+            env=env,
         )
 
         # Wait until the benchmark-operator project deleted
