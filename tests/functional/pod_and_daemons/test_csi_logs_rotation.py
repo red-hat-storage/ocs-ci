@@ -5,13 +5,14 @@ import pytest
 
 from ocs_ci.framework import config
 from ocs_ci.framework.testlib import BaseTest
-from ocs_ci.ocs.resources import pod
+from ocs_ci.ocs import constants
 from ocs_ci.framework.pytest_customization.marks import (
     brown_squad,
     tier2,
     post_upgrade,
     skipif_ocs_version,
 )
+from ocs_ci.ocs.resources.pod import get_pods_having_label, Pod
 from ocs_ci.utility.utils import TimeoutSampler
 from ocs_ci.ocs.exceptions import TimeoutExpiredError
 
@@ -115,28 +116,28 @@ class TestPodsCsiLogRotation(BaseTest):
         argvalues=[
             pytest.param(
                 *[
-                    "csi-cephfsplugin",
+                    constants.CSI_CEPHFSPLUGIN_LABEL_419,
                     "csi-cephfsplugin.log",
                     "",
                 ],
             ),
             pytest.param(
                 *[
-                    "csi-rbdplugin",
+                    constants.CSI_RBDPLUGIN_LABEL_419,
                     "csi-rbdplugin.log",
                     "",
                 ],
             ),
             pytest.param(
                 *[
-                    "csi-cephfsplugin-provisioner",
+                    constants.CSI_CEPHFSPLUGIN_PROVISIONER_LABEL_419,
                     "csi-cephfsplugin.log",
                     "csi-addons.log",
                 ],
             ),
             pytest.param(
                 *[
-                    "csi-rbdplugin-provisioner",
+                    constants.CSI_RBDPLUGIN_PROVISIONER_LABEL_419,
                     "csi-rbdplugin.log",
                     "csi-addons.log",
                 ],
@@ -151,7 +152,6 @@ class TestPodsCsiLogRotation(BaseTest):
 
         Args:
             pod_selector (str): Pod selector according to the interface
-            logs_dir (str): Logs directory on this pod
             log_file_name (str) Current log file name
             additional_log_file_name (str) Additional log file name; empty string if is not relevant
 
@@ -169,9 +169,11 @@ class TestPodsCsiLogRotation(BaseTest):
 
         logs_dir = os.path.join(base_dir, suffix_dir)
         log.debug(f"logs dir: {logs_dir}")
-        csi_interface_plugin_pod_objs = pod.get_all_pods(
-            namespace=config.ENV_DATA["cluster_namespace"], selector=[pod_selector]
+
+        pod_list = get_pods_having_label(
+            namespace=config.ENV_DATA["cluster_namespace"], label=pod_selector
         )
+        csi_interface_plugin_pod_objs = [Pod(**pod) for pod in pod_list]
 
         # check on the first pod
         pod_obj = csi_interface_plugin_pod_objs[0]
