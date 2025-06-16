@@ -391,15 +391,20 @@ class AssistedInstallerCluster(object):
                 # them is used to the name and role mapping
                 pass
 
-    def install_cluster(self):
+    def install_cluster(self, pending_user_action_handler=None):
         """
         Trigger cluster installation
+
+        Args:
+            pending_user_action_handler (function): function handling pending user action for particular host (host
+                details as dict provided as first parameter)
+
         """
         self.api.install_cluster(self.id)
         logger.info("Started cluster installation")
         # wait for cluster installation success
         for sample in TimeoutSampler(
-            timeout=7200, sleep=300, func=self.api.get_cluster, cluster_id=self.id
+            timeout=10800, sleep=300, func=self.api.get_cluster, cluster_id=self.id
         ):
             status_per_hosts = [
                 h.get("progress", {}).get("installation_percentage", 0)
@@ -422,6 +427,19 @@ class AssistedInstallerCluster(object):
                     )
                 except KeyError:
                     pass
+
+            if sample["status"] == "installing-pending-user-action":
+                for host in sample["hosts"]:
+                    try:
+                        if host["status"] == "installing-pending-user-action":
+                            msg = f"{host['requested_hostname']}: {host['status']} ({host['status_info']})"
+                            if pending_user_action_handler:
+                                logger.info(msg)
+                                pending_user_action_handler(host)
+                            else:
+                                logger.error(msg)
+                    except KeyError:
+                        pass
 
             if sample["status"] == "installed":
                 logger.info(
