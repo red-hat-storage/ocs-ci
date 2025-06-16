@@ -323,20 +323,20 @@ def mirror_index_image_via_oc_mirror(index_image, packages, idms=None):
 
         mirror_images_from_mapping_file(mapping_file, idms=idms)
 
-        # create ImageDigestMirrorSet
-        idms_file = os.path.join(
-            f"{mirroring_manifests_dir}",
-            "working-dir/cluster-resources/idms-oc-mirror.yaml",
-        )
+    # create ImageDigestMirrorSet
+    idms_file = os.path.join(
+        f"{mirroring_manifests_dir}",
+        "working-dir/cluster-resources/idms-oc-mirror.yaml",
+    )
 
-        # make idms name unique - append run_id
-        with open(idms_file) as f:
-            idms_content = yaml.safe_load(f)
-        idms_content["metadata"]["name"] = f"odf-{config.RUN['run_id']}"
-        with open(idms_file, "w") as f:
-            yaml.dump(idms_content, f)
-        exec_cmd(f"oc apply -f {idms_file}")
-        wait_for_machineconfigpool_status("all")
+    # make idms name unique - append run_id
+    with open(idms_file) as f:
+        idms_content = yaml.safe_load(f)
+    idms_content["metadata"]["name"] = f"odf-{config.RUN['run_id']}"
+    with open(idms_file, "w") as f:
+        yaml.dump(idms_content, f)
+    exec_cmd(f"oc apply -f {idms_file}")
+    wait_for_machineconfigpool_status("all")
 
     # get mirrored index image url from prepared catalogSource file
     cs_file = glob.glob(

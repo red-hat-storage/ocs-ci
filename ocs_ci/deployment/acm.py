@@ -148,7 +148,6 @@ class Submariner(object):
 
         acm_obj.submariner_validation_ui()
 
-
     def create_acm_brew_idms(self):
         """
         This is a prereq for downstream unreleased submariner
