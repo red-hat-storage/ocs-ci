@@ -303,8 +303,11 @@ class AcmAddClusters(AcmPageNavigator):
         self.do_click(self.page_nav["install-btn"])
 
     def submariner_unreleased_downstream_info(self):
+        log.info("Use custom Submariner subscription ")
         self.do_click(self.page_nav["submariner-custom-subscription"])
+        log.info("Clear existing Source")
         self.do_clear(self.page_nav["submariner-custom-source"])
+        log.info("Send submariner-catalogsource as Source")
         self.do_send_keys(
             self.page_nav["submariner-custom-source"], "submariner-catalogsource"
         )
@@ -314,6 +317,7 @@ class AcmAddClusters(AcmPageNavigator):
             else config.ENV_DATA.get("submariner_version").rpartition(".")[0]
         )
         channel_name = "stable-" + submariner_unreleased_channel
+        log.info("Send Channel")
         self.do_send_keys(
             self.page_nav["submariner-custom-channel"],
             channel_name,
