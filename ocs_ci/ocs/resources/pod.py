@@ -701,8 +701,8 @@ class Pod(OCS):
 
         all_logs = (
             self.exec_cmd_on_pod(
-                command=f"-- ls -l {logs_dir}",
-                container_name="log-collector",
+                command=f"ls -l {logs_dir}",
+                container_name="log-rotator",
                 out_yaml_format=False,
                 shell=True,
             )

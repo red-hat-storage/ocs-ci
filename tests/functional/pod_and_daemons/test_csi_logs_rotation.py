@@ -78,8 +78,8 @@ class TestPodsCsiLogRotation(BaseTest):
 
         # pump current log file size
         pod_obj.exec_cmd_on_pod(
-            command=f"-- truncate -s 560M {logs_dir + log_file_name}",
-            container_name="log-collector",
+            command=f" truncate -s 560M {logs_dir + log_file_name}",
+            container_name="log-rotator",
             out_yaml_format=False,
             shell=True,
         )
@@ -156,7 +156,7 @@ class TestPodsCsiLogRotation(BaseTest):
             additional_log_file_name (str) Additional log file name; empty string if is not relevant
 
         """
-        base_dir = "/var/lib/rook/"
+        base_dir = "/csi-logs/"
         suffix_dir = ""
         if pod_selector == "csi-cephfsplugin":
             suffix_dir = "openshift-storage.cephfs.csi.ceph.com/log/node-plugin/"
