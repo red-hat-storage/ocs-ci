@@ -174,6 +174,7 @@ class AssistedInstallerCluster(object):
 
         Args:
             original_pull_secret (str or dict): content of pull secret
+
         """
         if isinstance(original_pull_secret, dict):
             # prepare copy of the original pull-secret (to not modify it)
@@ -291,6 +292,7 @@ class AssistedInstallerCluster(object):
 
         Args:
             expected_nodes (int): number of expected nodes
+
         """
 
         # wait for discovered nodes in cluster definition
@@ -324,6 +326,7 @@ class AssistedInstallerCluster(object):
         """
         Return:
             list: list of discovered hosts in the Infrastructure Environment
+
         """
         return self.api.get_infra_env_hosts(infra_env_id=self.infra_id)
 
@@ -331,7 +334,6 @@ class AssistedInstallerCluster(object):
     def verify_validations_info_for_discovered_nodes(self):
         """
         Check and verify validations info for the discovered nodes.
-
         """
         failed_validations = []
         for host in self.api.get_cluster_hosts(self.id):
@@ -357,6 +359,7 @@ class AssistedInstallerCluster(object):
 
         Return:
             list of lists: host id to mac mapping ([[host1_id, mac1], [host1_id, mac2], [host2_id, mac3],...])
+
         """
         hosts = self.api.get_infra_env_hosts(self.infra_id)
         mapping = []
@@ -373,6 +376,7 @@ class AssistedInstallerCluster(object):
         Args:
             mac_name_mapping (dict): host mac address to host name mapping
             mac_role_mapping (dict): host mac address to host role mapping
+
         """
         host_id_mac_mapping = self.get_host_id_mac_mapping()
         for host_id, mac in host_id_mac_mapping:
