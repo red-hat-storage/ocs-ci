@@ -21,6 +21,16 @@ def platfrom_failure_scenarios():
 
 
 @pytest.fixture
+def storage_component_failure_scenarios():
+    """List Platform Failures scanarios"""
+    STORAGECLUSTER_COMPONENT_FAILURES_CONFIG_FILE = os.path.join(
+        constants.RESILIENCY_DIR, "conf", "storagecluster_component_failures.yaml"
+    )
+    data = ResiliencyConfig.load_yaml(STORAGECLUSTER_COMPONENT_FAILURES_CONFIG_FILE)
+    return data
+
+
+@pytest.fixture
 def resiliency_workload(request):
     """
     Pytest fixture to create and manage a workload object for resiliency testing.
