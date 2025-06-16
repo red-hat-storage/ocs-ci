@@ -466,6 +466,7 @@ RGW_KAFKA_NOTIFY = "https://github.com/shonpaz123/notify/"
 OCS_WORKLOADS = "https://github.com/red-hat-storage/ocs-workloads"
 CODESPEED_URL = "http://10.0.78.167:8000/"
 KAFKA_PODS_LABEL = "strimzi.io/pool-name=kafka"
+KAFKA_KIND_LABEL = "strimzi.io/kind=Kafka"
 
 # ODF monitoring tool
 ODF_MONITORING_TOOL_REPO = "https://github.com/red-hat-storage/odf-monitoring-tools.git"
@@ -691,7 +692,7 @@ CEPH_OBJECT_CONTROLLER_DETECT_VERSION_LABEL = (
 )
 CSI_ADDONS_CONTROLLER_MANAGER_LABEL = "app.kubernetes.io/name=csi-addons"
 CEPH_CSI_CONTROLLER_MANAGER_LABEL = "control-plane=ceph-csi-op-controller-manager"
-
+OCS_CLIENT_OPERATOR_LABEL = "app=ocs-client-operator"
 DEFAULT_DEVICESET_PVC_NAME = "ocs-deviceset"
 DEFAULT_DEVICESET_LSO_PVC_NAME = "ocs-deviceset-localblock"
 DEFAULT_MON_PVC_NAME = "rook-ceph-mon"
@@ -2986,6 +2987,16 @@ ACM_ADDON_DEPLOYMENT_CONFIG_YAML = os.path.join(
 )
 ACM_OPERATOR_SUBSCRIPTION = "acm-operator-subscription"
 
+SUBMARINER_ADDON_YAML = os.path.join(
+    TEMPLATE_DIR, "acm-deployment", "submariner_addon.yaml"
+)
+SUBMARINER_CONFIG_YAML = os.path.join(
+    TEMPLATE_DIR, "acm-deployment", "submariner_config.yaml"
+)
+SUBMARINER_BROKER_YAML = os.path.join(
+    TEMPLATE_DIR, "acm-deployment", "submariner_broker.yaml"
+)
+CLUSTERSET_YAML = os.path.join(TEMPLATE_DIR, "acm-deployment", "clusterset.yaml")
 # GitOps
 GITOPS_NAMESPACE = "openshift-gitops"
 GITOPS_OPERATOR_NAME = "openshift-gitops-operator"

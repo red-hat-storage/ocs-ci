@@ -6,6 +6,7 @@ Module that contains all operations related to add metadata feature in a cluster
 import logging
 import json
 from ocs_ci.framework import config
+from ocs_ci.helpers.helpers import get_provisioner_label
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.resources import pod
 from ocs_ci.utility.retry import retry
@@ -29,12 +30,9 @@ def check_setmetadata_availability(pod_obj):
     Returns:
         bool: True if --setmetadata=true is set on all CSI plugin pods, else False.
     """
-    ocs_version = version.get_semantic_ocs_version_from_config()
-    selectors = (
-        ["csi-cephfsplugin-provisioner", "csi-rbdplugin-provisioner"]
-        if ocs_version < version.VERSION_4_19
-        else [constants.CEPHFS_CTRLPLUGIN_NAME, constants.RBD_CTRLPLUGIN_NAME]
-    )
+    selectors = [get_provisioner_label(constants.CEPHFILESYSTEM)] + [
+        get_provisioner_label(constants.CEPHBLOCKPOOL)
+    ]
 
     @retry((CommandFailed, ResourceWrongStatusException), tries=3, delay=15)
     def get_and_validate_plugin_pods():
@@ -113,8 +111,8 @@ def enable_metadata(config_map_obj, pod_obj):
         ), "Failed to patch rook-ceph-operator-config"
 
         for selector in [
-            constants.CSI_CEPHFSPLUGIN_PROVISIONER_LABEL,
-            constants.CSI_RBDPLUGIN_PROVISIONER_LABEL,
+            get_provisioner_label(constants.CEPHFILESYSTEM),
+            get_provisioner_label(constants.CEPHBLOCKPOOL),
         ]:
             assert pod_obj.wait_for_resource(
                 condition=constants.STATUS_RUNNING,
@@ -131,11 +129,7 @@ def enable_metadata(config_map_obj, pod_obj):
     ), "Error: Metadata not enabled for CephFS and RBD provisioner pods"
 
     cephfs_pods = pod.get_cephfsplugin_provisioner_pods(
-        cephfsplugin_provisioner_label=(
-            constants.CEPHFS_CTRLPLUGIN_LABEL
-            if ocs_version >= version.VERSION_4_19
-            else None
-        )
+        cephfsplugin_provisioner_label=(get_provisioner_label(constants.CEPHFILESYSTEM))
     )
     args = pod_obj.exec_oc_cmd(
         f"get pod {cephfs_pods[0].name} --output jsonpath='{{.spec.containers[].args}}'"
@@ -160,8 +154,8 @@ def disable_metadata(config_map_obj, pod_obj):
         ), "Failed to patch rook-ceph-operator-config"
 
         for selector in [
-            constants.CSI_CEPHFSPLUGIN_PROVISIONER_LABEL,
-            constants.CSI_RBDPLUGIN_PROVISIONER_LABEL,
+            get_provisioner_label(constants.CEPHFILESYSTEM),
+            get_provisioner_label(constants.CEPHBLOCKPOOL),
         ]:
             assert pod_obj.wait_for_resource(
                 condition=constants.STATUS_RUNNING,

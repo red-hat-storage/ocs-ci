@@ -65,8 +65,8 @@ class TestSCC:
         # Delete csi-provisioner and noobaa db pods
         labels = [
             constants.NOOBAA_DB_LABEL_47_AND_ABOVE,
-            constants.CSI_RBDPLUGIN_PROVISIONER_LABEL,
-            constants.CSI_CEPHFSPLUGIN_PROVISIONER_LABEL,
+            helpers.get_provisioner_label(constants.CEPHBLOCKPOOL),
+            helpers.get_provisioner_label(constants.CEPHFILESYSTEM),
         ]
         pods = list()
         for label in labels:

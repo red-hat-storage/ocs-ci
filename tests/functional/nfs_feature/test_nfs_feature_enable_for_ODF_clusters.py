@@ -4,7 +4,6 @@ import time
 import os
 import socket
 
-
 from ocs_ci.utility import nfs_utils
 from ocs_ci.utility.utils import exec_cmd
 from ocs_ci.framework import config
@@ -1351,7 +1350,7 @@ class TestNfsEnable(ManageTest):
         # Wait untill cephfsplugin provisioner pods recovery
         self.pod_obj.wait_for_resource(
             condition=constants.STATUS_RUNNING,
-            selector="app=csi-cephfsplugin-provisioner",
+            selector=helpers.get_provisioner_label(constants.CEPHFILESYSTEM),
             resource_count=len(cephfsplugin_provisioner_pod_objs),
             timeout=3600,
             sleep=5,

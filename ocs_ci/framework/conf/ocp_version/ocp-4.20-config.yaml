@@ -1,9 +1,9 @@
 ---
-# Config file for nightly OCP 4.19
+# Config file for nightly OCP 4.20
 RUN:
-  client_version: "4.19.0-0.nightly"
+  client_version: "4.20.0-0.nightly"
 DEPLOYMENT:
-  installer_version: "4.19.0-0.nightly"
+  installer_version: "4.20.0-0.nightly"
   terraform_version: "1.0.11"
   # ignition_version can be found here
   # https://docs.openshift.com/container-platform/4.7/post_installation_configuration/machine-configuration-tasks.html#machine-config-overview-post-install-machine-configuration-tasks
@@ -16,6 +16,5 @@ ENV_DATA:
   # Below values needs to be changed when acm and submariner are GAed
   submariner_source: "downstream"
   submariner_release_type: "unreleased"
-  subctl_version: "subctl-rhel9:v0.20"
   acm_hub_unreleased: true
   oadp_version: "1.5"

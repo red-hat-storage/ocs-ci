@@ -193,6 +193,7 @@ Reporting related config. (Do not store secret data in the repository!).
 * `ocs_must_gather_latest_tag` - Latest tag to use for OCS must-gather
 * `gather_on_deploy_failure` - Run must-gather on deployment failure or not (Default: true)
 * `collect_logs_on_success_run` - Run must-gather on successful run or not (Default: false)
+* `dont_fail_on_collect_logs` - Don't fail in teardown when collection of logs on success run failed.
 * `must_gather_timeout` - Time (in seconds) to wait before timing out during must-gather
 * `post_upgrade` - If True, post-upgrade will be reported in the test suite
   name in the mail subject.

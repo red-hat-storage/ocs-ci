@@ -22,6 +22,7 @@ from ocs_ci.helpers.helpers import (
     wait_for_ct_pod_recovery,
     get_pv_names,
     storagecluster_independent_check,
+    get_provisioner_label,
 )
 from ocs_ci.ocs.ocp import OCP
 from ocs_ci.ocs.exceptions import ServiceUnavailable
@@ -228,9 +229,9 @@ class TestNodesRestart(ManageTest):
 
         # Wait for the provisioner pod to get to running status
         selector = (
-            constants.CSI_RBDPLUGIN_PROVISIONER_LABEL
+            get_provisioner_label(constants.CEPHBLOCKPOOL)
             if (interface == "rbd")
-            else constants.CSI_CEPHFSPLUGIN_PROVISIONER_LABEL
+            else get_provisioner_label(constants.CEPHFILESYSTEM)
         )
 
         # Wait for the provisioner pod to reach Terminating status

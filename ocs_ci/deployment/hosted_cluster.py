@@ -1747,7 +1747,7 @@ class HostedODF(HypershiftHostedOCP):
         )
         return ocp.check_resource_existence(
             timeout=self.timeout_check_resources_exist_sec,
-            selector="app=csi-cephfsplugin",
+            selector=helpers.get_node_plugin_label(constants.CEPHFILESYSTEM),
             should_exist=True,
         )
 

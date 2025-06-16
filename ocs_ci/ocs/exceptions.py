@@ -766,3 +766,7 @@ class DistributionStatusError(Exception):
 
 class InvalidPodPresent(Exception):
     pass
+
+
+class FloatingIPAssignException(Exception):
+    pass

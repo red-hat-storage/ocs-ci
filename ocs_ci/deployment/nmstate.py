@@ -7,9 +7,10 @@ from ocs_ci.utility import templating
 from ocs_ci.ocs import exceptions
 from ocs_ci.ocs.resources.ocs import OCS
 from ocs_ci.utility.utils import TimeoutSampler
+from ocs_ci.ocs.resources.packagemanifest import PackageManifest
 from ocs_ci.ocs.resources.csv import CSV, get_csvs_start_with_prefix
 from ocs_ci.ocs.ocp import OCP
-from ocs_ci.ocs.exceptions import TimeoutExpiredError
+from ocs_ci.ocs.exceptions import TimeoutExpiredError, ResourceNotFoundError
 
 
 class NMStateInstaller(object):
@@ -62,9 +63,23 @@ class NMStateInstaller(object):
 
         """
         logger.info("Creating Subscription for NMState")
+        catalog_name = constants.OPERATOR_CATALOG_SOURCE_NAME
+        package_manifest = PackageManifest(
+            resource_name=constants.NMSTATE_CSV_NAME,
+            selector=f"catalog={catalog_name}",
+        )
+        try:
+            package_manifest.get()
+        except ResourceNotFoundError:
+            catalog_name = constants.OPTIONAL_OPERATORS
+            package_manifest = PackageManifest(
+                resource_name=constants.NMSTATE_CSV_NAME,
+                selector=f"catalog={catalog_name}",
+            )
         subscription_yaml_file = templating.load_yaml(
             constants.NMSTATE_SUBSCRIPTION_YAML
         )
+        subscription_yaml_file["spec"]["source"] = catalog_name
         subscription_yaml = OCS(**subscription_yaml_file)
         subscription_yaml.create(do_reload=False)
         logger.info("NMState Subscription created successfully")

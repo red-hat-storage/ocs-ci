@@ -12,3 +12,4 @@ ENV_DATA:
   acm_hub_channel: release-2.13
   acm_version: "2.13"
   submariner_version: "0.20.0"
+  oadp_version: "1.4"

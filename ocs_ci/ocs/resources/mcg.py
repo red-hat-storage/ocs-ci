@@ -222,7 +222,7 @@ class MCG:
             logger.warning(
                 "Multicluster test run is executed. External S3 enpoint is used instead of internal."
             )
-            return self.s3_external_endpoint
+            return self.s3_endpoint
         else:
             get_noobaa = OCP(kind="noobaa", namespace=self.namespace).get()
             return (

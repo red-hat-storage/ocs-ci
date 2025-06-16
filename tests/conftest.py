@@ -4757,7 +4757,11 @@ def collect_logs_fixture(request):
                 failure_in_mg.append(("rpm_package_info", ex))
                 log.error(f"Failure in collecting RPM package info! Exception: {ex}")
             if failure_in_mg:
-                raise failure_in_mg[0][1]
+                if config.REPORTING.get("dont_fail_on_collect_logs"):
+                    exception_errors = [str(ex) for ex in failure_in_mg]
+                    log.error(f"At least one log collection failed: {exception_errors}")
+                else:
+                    raise failure_in_mg[0][1]
 
     request.addfinalizer(finalizer)
 

@@ -68,7 +68,7 @@ class TestCloneWhenFull(ManageTest):
             available_size = int(df_avail_size.strip().split()[1][0:-1])
             pod_obj.run_io(
                 "fs",
-                size=f"{available_size-2}M",
+                size=f"{available_size - 2}M",
                 runtime=20,
                 rate="100M",
                 fio_filename=file_name,
@@ -113,7 +113,9 @@ class TestCloneWhenFull(ManageTest):
                 error_msg = f"{pv} failed to create clone from subvolume"
                 csi_cephfsplugin_pod_objs = res_pod.get_all_pods(
                     namespace=config.ENV_DATA["cluster_namespace"],
-                    selector=["csi-cephfsplugin-provisioner"],
+                    selector=[
+                        f"{config.ENV_DATA['cluster_namespace']}.cephfs.csi.ceph.com-ctrlplugin"
+                    ],
                 )
             relevant_pod_logs = None
             for pod_obj in csi_cephfsplugin_pod_objs:

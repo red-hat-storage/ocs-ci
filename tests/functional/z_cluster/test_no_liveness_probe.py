@@ -1,12 +1,12 @@
 # BZ2142901 Automated Test
 
 from logging import getLogger
+
+from ocs_ci.helpers.helpers import get_provisioner_label, get_node_plugin_label
 from ocs_ci.ocs.constants import (
-    CSI_CEPHFSPLUGIN_LABEL,
     POD,
-    CSI_CEPHFSPLUGIN_PROVISIONER_LABEL,
-    CSI_RBDPLUGIN_LABEL,
-    CSI_RBDPLUGIN_PROVISIONER_LABEL,
+    CEPHFILESYSTEM,
+    CEPHBLOCKPOOL,
 )
 from ocs_ci.framework import config
 from ocs_ci.framework.pytest_customization.marks import (
@@ -34,22 +34,22 @@ def test_no_liveness_container():
     csi_plugin_pod = OCP(
         kind=POD,
         namespace=config.ENV_DATA["cluster_namespace"],
-        selector=CSI_CEPHFSPLUGIN_LABEL,
+        selector=get_node_plugin_label(CEPHFILESYSTEM),
     )
     csi_prov_pod = OCP(
         kind=POD,
         namespace=config.ENV_DATA["cluster_namespace"],
-        selector=CSI_CEPHFSPLUGIN_PROVISIONER_LABEL,
+        selector=get_provisioner_label(CEPHFILESYSTEM),
     )
     rbd_plugin_pod = OCP(
         kind=POD,
         namespace=config.ENV_DATA["cluster_namespace"],
-        selector=CSI_RBDPLUGIN_LABEL,
+        selector=get_node_plugin_label(CEPHBLOCKPOOL),
     )
     rbd_prov_pod = OCP(
         kind=POD,
         namespace=config.ENV_DATA["cluster_namespace"],
-        selector=CSI_RBDPLUGIN_PROVISIONER_LABEL,
+        selector=get_provisioner_label(CEPHBLOCKPOOL),
     )
     for pods in (csi_plugin_pod, rbd_plugin_pod, rbd_prov_pod, csi_prov_pod):
         assert LIVENESS_CONTAINER not in get_containers_names_by_pod(
