@@ -9,6 +9,7 @@ from ocs_ci.helpers.cnv_helpers import (
     expand_pvc_and_verify,
 )
 from concurrent.futures import ThreadPoolExecutor, as_completed
+from ocs_ci.framework import config, config_safe_thread_pool_task
 
 
 log = logging.getLogger(__name__)
@@ -299,6 +300,20 @@ class TestVmSnapshotClone(E2ETest):
         vm_clone_fixture,
         vm_snapshot_restore_fixture,
     ):
+        """
+        Process operations on a given VM including cloning, snapshot restore of cloned VM, and data checksum.
+
+        Args:
+            vm_obj (object): The virtual machine object to operate on.
+            file_paths (list): List of file paths to be handled or verified during the operation.
+            admin_client (object): The admin client instance.
+            vm_clone_fixture (fixture): Pytest fixture used to clone the VM.
+            vm_snapshot_restore_fixture (fixture): Pytest fixture used to create and restore VM snapshots.
+
+        Returns:
+            None
+        """
+
         try:
             source_csum = run_dd_io(vm_obj=vm_obj, file_path=file_paths[0], verify=True)
             log.info(f"[{vm_obj.name}] Source checksum: {source_csum}")
@@ -330,10 +345,26 @@ class TestVmSnapshotClone(E2ETest):
         vm_clone_fixture,
         vm_snapshot_restore_fixture,
     ):
+        """
+        Process operations on VMs in parallel including cloning, snapshot restore of cloned VM, and data checksum.
+
+        Args:
+            vm_obj (object): The virtual machine object to operate on.
+            file_paths (list): List of file paths to be handled or verified during the operation.
+            admin_client (object): The admin client instance.
+            vm_clone_fixture (fixture): Pytest fixture used to clone the VM.
+            vm_snapshot_restore_fixture (fixture): Pytest fixture used to create and restore VM snapshots.
+
+        Returns:
+            None
+        """
+
         MAX_WORKERS = 10
         with ThreadPoolExecutor(max_workers=MAX_WORKERS) as executor:
             futures = {
                 executor.submit(
+                    config_safe_thread_pool_task,
+                    config.default_cluster_index,
                     self.process_vm,
                     vm_obj,
                     file_paths,
@@ -368,12 +399,12 @@ class TestVmSnapshotClone(E2ETest):
         This test performs the VM cloning and IOs created using different volume interfaces(PVC/DV/DVT)
 
         Test steps:
-        1. Create a clone of a VM by following the documented procedure from ODF official docs.
+        1. Create a clone of a VM by following the documented procedure from CNV official docs.
         2. Add additional data to the cloned VM.
         3. Create snapshot of cloned VM
         4. Vertify snapshot of cloned VM created successfully.
         5. Check data conisistency on the Restored VM
-        6. Delete the clone and restored VM by following the documented procedure from ODF official docs
+        6. Delete the clone and restored VM by following the documented procedure from CNV official docs
         7. Repeat the above procedure for all the VMs in the system
         8. Delete all the clones and restored VM created as part of this test
         """
