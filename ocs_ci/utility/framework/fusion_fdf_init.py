@@ -112,7 +112,7 @@ class Initializer(object):
         """
         Initialize the logging config.
         """
-        log_dir = config.RUN["log_dir"]
+        log_dir = os.path.expanduser(config.RUN.get("log_dir"))
         log_level = config.RUN.get("log_level", "INFO")
         log_name = f"{self.log_basename}_{self.run_id}"
         log_formatter = logging.Formatter(constants.LOG_FORMAT)
@@ -285,7 +285,7 @@ def create_junit_report(
             xml = JUnitXml()
             xml.add_testsuite(test_suite)
 
-            log_dir = config.RUN["log_dir"]
+            log_dir = os.path.expanduser(config.RUN["log_dir"])
             run_id = config.RUN["run_id"]
             filepath = os.path.join(log_dir, f"{case_name}_{run_id}.xml")
 
