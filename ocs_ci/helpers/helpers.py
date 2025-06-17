@@ -4681,10 +4681,13 @@ def retrieve_cli_binary(cli_type="mcg"):
 
     remote_path = get_architecture_path(cli_type)
     remote_cli_basename = os.path.basename(remote_path)
-    if cli_type == "mcg":
+    if cli_type == "mcg" and semantic_version < version.VERSION_4_20:
         local_cli_path = constants.NOOBAA_OPERATOR_LOCAL_CLI_PATH
     elif cli_type == "odf":
         local_cli_path = os.path.join(config.RUN["bin_dir"], "odf-cli")
+    elif cli_type == "mcg" and semantic_version >= version.VERSION_4_20:
+        local_cli_path = os.path.join(config.RUN["bin_dir"], "odf-cli noobaa")
+
     local_cli_dir = os.path.dirname(local_cli_path)
     live_deployment = config.DEPLOYMENT["live_deployment"]
     if live_deployment and semantic_version >= version.VERSION_4_13:
