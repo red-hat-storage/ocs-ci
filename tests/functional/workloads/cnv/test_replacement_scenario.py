@@ -44,7 +44,7 @@ class TestCnvDeviceReplace(E2ETest):
         ) = multi_cnv_workload(namespace=proj_obj.namespace)
         logger.info("All vms created successfully")
 
-    def test_vms_with_device_and_node_replacement(
+    def test_vms_with_device_replacement(
         self,
         setup_cnv,
         setup,
