@@ -7,11 +7,13 @@ import logging
 import yaml
 import time
 import pytest
-from ocs_ci.ocs import constants
+from ocs_ci.ocs import constants, resources
 from ocs_ci.helpers import helpers
 from ocs_ci.ocs.resources import pod
 from ocs_ci.utility.retry import retry
 from ocs_ci.ocs.exceptions import CommandFailed
+from ocs_ci.framework import config
+from ocs_ci.utility import version as version_module
 
 
 log = logging.getLogger(__name__)
@@ -67,20 +69,17 @@ def nfs_enable(
         timeout=60,
     )
 
-    # Check csi-nfsplugin and csi-nfsplugin-provisioner pods are up and running
-    assert pod_obj.wait_for_resource(
-        condition=constants.STATUS_RUNNING,
-        selector="app=csi-nfsplugin",
-        dont_allow_other_resources=True,
-        timeout=60,
-    )
+    provisioner_list = provisioner_selectors()
 
-    assert pod_obj.wait_for_resource(
-        condition=constants.STATUS_RUNNING,
-        selector="app=csi-nfsplugin-provisioner",
-        dont_allow_other_resources=True,
-        timeout=60,
-    )
+    # Check csi-nfsplugin and csi-nfsplugin-provisioner pods are up and running
+
+    for provisioner in provisioner_list:
+        assert pod_obj.wait_for_resource(
+            condition=constants.STATUS_RUNNING,
+            selector=provisioner,
+            dont_allow_other_resources=True,
+            timeout=60,
+        )
 
     # Fetch the nfs-ganesha pod name
     pod_objs = pod.get_all_pods(namespace=namespace, selector=["rook-ceph-nfs"])
@@ -229,8 +228,64 @@ def unmount(con, test_folder):
         (CommandFailed),
         tries=600,
         delay=10,
+        backoff=1,
     )(con.exec_cmd(cmd="umount -f " + test_folder))
 
     # Check mount point unmounted successfully
     retcode, _, _ = con.exec_cmd("findmnt -M " + test_folder)
     assert retcode == 1
+
+
+def provisioner_selectors():
+    """
+    This method returns the provisioner pod selectors
+
+    Returns:
+        provisioner_list(list): list of provisioner selectors
+
+    """
+    hci_platform_conf = (
+        config.ENV_DATA["platform"].lower() in constants.HCI_PROVIDER_CLIENT_PLATFORMS
+    )
+    # csi provisioner pods were renamed starting from 4.18 for Provider mode and 4.19 for every mode (Converged mode)
+    if (
+        version_module.get_semantic_ocs_version_from_config()
+        >= version_module.VERSION_4_18
+        and hci_platform_conf
+        or version_module.get_semantic_ocs_version_from_config()
+        >= version_module.VERSION_4_19
+    ):
+        provisioner_list = [
+            constants.NFS_CSI_CTRLPLUGIN_LABEL_419,
+            constants.NFS_CSI_NODEPLUGIN_LABEL_419,
+        ]
+    else:
+        provisioner_list = [
+            constants.NFS_CSI_PLUGIN_PROVISIONER_LABEL,
+            constants.NFS_CSI_PLUGIN_LABEL,
+        ]
+    return provisioner_list
+
+
+def create_nfs_sc_retain(sc_name):
+    """
+    This method is to create nfs retain storageclass.
+
+    Args:
+        sc_name (str): name of the storageclass to create
+
+    Returns:
+        retain_nfs_sc(obj): returns storageclass obj created
+
+    """
+    # Create storage class
+    retain_nfs_sc = resources.ocs.OCS(
+        kind=constants.STORAGECLASS, metadata={"name": "ocs-storagecluster-cephfs"}
+    )
+    retain_nfs_sc.reload()
+    retain_nfs_sc.data["reclaimPolicy"] = constants.RECLAIM_POLICY_RETAIN
+    retain_nfs_sc.data["metadata"]["name"] = sc_name
+    retain_nfs_sc.data["metadata"]["ownerReferences"] = None
+    retain_nfs_sc._name = retain_nfs_sc.data["metadata"]["name"]
+    retain_nfs_sc.create()
+    return retain_nfs_sc
