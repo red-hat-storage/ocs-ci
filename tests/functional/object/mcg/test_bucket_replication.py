@@ -128,7 +128,7 @@ class TestReplication(MCGTest):
                     "interface": "CLI",
                     "backingstore_dict": {"gcp": [(1, None)]},
                 },
-                marks=[tier1],
+                marks=[tier2],
             ),
         ],
         ids=[
@@ -396,7 +396,7 @@ class TestReplication(MCGTest):
                     "interface": "OC",
                     "backingstore_dict": {"gcp": [(1, None)]},
                 },
-                marks=[tier1],
+                marks=[tier2],
             ),
             pytest.param(
                 {

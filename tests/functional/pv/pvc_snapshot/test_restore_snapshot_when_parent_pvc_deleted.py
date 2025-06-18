@@ -6,7 +6,7 @@ from ocs_ci.framework.pytest_customization.marks import green_squad
 from ocs_ci.framework.testlib import (
     skipif_ocs_version,
     ManageTest,
-    tier1,
+    tier2,
     polarion_id,
     skipif_ocp_version,
 )
@@ -17,7 +17,6 @@ log = logging.getLogger(__name__)
 
 
 @green_squad
-@tier1
 @skipif_ocs_version("<4.16")
 @skipif_ocp_version("<4.16")
 @polarion_id("OCS-6176")
@@ -42,6 +41,7 @@ class TestRestoreSnapshotWhenParentPVCDeleted(ManageTest):
         """
         self.pvcs, self.pods = create_pvcs_and_pods(pvc_size=3, pods_for_rwx=1)
 
+    @tier2
     def test_restore_snapshot_when_parent_pvc_deleted(
         self, snapshot_factory, snapshot_restore_factory, pvc_clone_factory
     ):

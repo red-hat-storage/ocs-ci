@@ -7,12 +7,12 @@ from ocs_ci.ocs.bucket_utils import sync_object_directory
 
 from ocs_ci.framework import config
 from ocs_ci.framework.pytest_customization.marks import (
-    acceptance,
     red_squad,
     rgw,
     runs_on_provider,
     skipif_mcg_only,
     tier1,
+    acceptance,
     tier3,
 )
 from ocs_ci.ocs.exceptions import CommandFailed
@@ -37,7 +37,7 @@ class TestBucketDeletion:
         argvalues=[
             pytest.param(
                 *[3, "RGW-OC"],
-                marks=[tier1, acceptance, pytest.mark.polarion_id("2248")],
+                marks=[acceptance, pytest.mark.polarion_id("2248")],
             ),
         ],
     )

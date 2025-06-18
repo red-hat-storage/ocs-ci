@@ -5,7 +5,7 @@ import pytest
 from time import sleep
 from ocs_ci.ocs import constants, node
 from ocs_ci.framework.pytest_customization.marks import brown_squad
-from ocs_ci.framework.testlib import E2ETest, tier1
+from ocs_ci.framework.testlib import E2ETest, tier4, tier4b
 from ocs_ci.ocs.exceptions import ResourceWrongStatusException
 from ocs_ci.ocs.node import get_worker_nodes
 from concurrent.futures import ThreadPoolExecutor
@@ -15,7 +15,6 @@ log = logging.getLogger(__name__)
 
 
 @brown_squad
-@tier1
 class TestKernelCrash(E2ETest):
     """
     Tests to verify kernel crash
@@ -62,6 +61,8 @@ class TestKernelCrash(E2ETest):
             ),
         ],
     )
+    @tier4
+    @tier4b
     def test_node_kernel_crash_ceph_fsync(
         self, pvc_factory, teardown_factory, deployment_pod_factory, interface_type
     ):
