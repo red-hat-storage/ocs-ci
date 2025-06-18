@@ -8,7 +8,7 @@ from ocs_ci.utility import nfs_utils
 from ocs_ci.utility.utils import exec_cmd
 from ocs_ci.framework import config
 from ocs_ci.utility.connection import Connection
-from ocs_ci.ocs import constants, ocp, resources
+from ocs_ci.ocs import constants, ocp
 from ocs_ci.utility import templating
 from ocs_ci.helpers import helpers
 from ocs_ci.framework.pytest_customization.marks import brown_squad, skipif_rosa_hcp
@@ -31,7 +31,6 @@ from ocs_ci.framework.testlib import (
 from ocs_ci.ocs.resources import pod, ocs
 from ocs_ci.utility.retry import retry
 from ocs_ci.ocs.exceptions import CommandFailed, ConfigurationError
-
 from ocs_ci.utility.utils import run_cmd
 
 
@@ -127,24 +126,19 @@ class TestNfsEnable(ManageTest):
         log.info("-----Setup-----")
         self.namespace = config.ENV_DATA["cluster_namespace"]
         self.storage_cluster_obj = ocp.OCP(
-            kind="Storagecluster", namespace=self.namespace
+            kind=constants.STORAGECLUSTER, namespace=self.namespace
         )
-        self.config_map_obj = ocp.OCP(kind="Configmap", namespace=self.namespace)
-        self.pod_obj = ocp.OCP(kind="Pod", namespace=self.namespace)
-        self.service_obj = ocp.OCP(kind="Service", namespace=self.namespace)
+        self.sc_obj = ocp.OCP(kind=constants.STORAGECLASS)
+        self.config_map_obj = ocp.OCP(
+            kind=constants.CONFIGMAP, namespace=self.namespace
+        )
+        self.pod_obj = ocp.OCP(kind=constants.POD, namespace=self.namespace)
+        self.service_obj = ocp.OCP(kind=constants.SERVICE, namespace=self.namespace)
         self.pvc_obj = ocp.OCP(kind=constants.PVC, namespace=self.namespace)
         self.pv_obj = ocp.OCP(kind=constants.PV, namespace=self.namespace)
         self.nfs_sc = "ocs-storagecluster-ceph-nfs"
         self.sc = ocs.OCS(kind=constants.STORAGECLASS, metadata={"name": self.nfs_sc})
         self.retain_nfs_sc_name = "ocs-storagecluster-ceph-nfs-retain"
-        self.retain_nfs_sc = resources.ocs.OCS(
-            kind=constants.STORAGECLASS, metadata={"name": "ocs-storagecluster-cephfs"}
-        )
-        self.retain_nfs_sc.reload()
-        self.retain_nfs_sc.data["reclaimPolicy"] = constants.RECLAIM_POLICY_RETAIN
-        self.retain_nfs_sc.data["metadata"]["name"] = self.retain_nfs_sc_name
-        self.retain_nfs_sc._name = self.retain_nfs_sc.data["metadata"]["name"]
-        self.retain_nfs_sc.create()
         platform = config.ENV_DATA.get("platform", "").lower()
         self.run_id = config.RUN.get("run_id")
         self.test_folder = f"mnt/test_nfs_{self.run_id}"
@@ -197,16 +191,11 @@ class TestNfsEnable(ManageTest):
         and remove those.
         Delete nfs retain storage class if left.
         """
-        nfs_retain_sc_obj = ocs.OCS(
-            kind=constants.STORAGECLASS, metadata={"name": self.retain_nfs_sc_name}
-        )
-        if nfs_retain_sc_obj.check_resource_existence(
-            timeout=self.timeout_check_resources_existence,
-            should_exist=True,
-            resource_name=self.catalog_source_name,
-        ):
+        if self.sc_obj.is_exist(resource_name=self.retain_nfs_sc_name):
             # Delete the nfs retain StorageClass
-            nfs_retain_sc_obj.delete()
+            self.sc_obj.delete(resource_name=self.retain_nfs_sc_name)
+            log.info(f"Wait until the SC, {self.retain_nfs_sc_name} is deleted.")
+            self.sc_obj.wait_for_delete(resource_name=self.retain_nfs_sc_name)
 
         if self.con:
             retcode, stdout, _ = self.con.exec_cmd(
@@ -452,7 +441,6 @@ class TestNfsEnable(ManageTest):
             pod_obj, file_path
         ), f"File {file_name} doesn't exist"
         log.info(f"File {file_name} exists in {pod_obj.name}")
-
         # Create /var/lib/www/html/index.html file inside the pod
         command = (
             "bash -c "
@@ -464,7 +452,6 @@ class TestNfsEnable(ManageTest):
             command=command,
             out_yaml_format=False,
         )
-
         retcode, _, _ = self.con.exec_cmd("mkdir -p " + self.test_folder)
         assert retcode == 0
         export_nfs_external_cmd = (
@@ -488,7 +475,6 @@ class TestNfsEnable(ManageTest):
         stdout = stdout.rstrip()
         log.info(stdout)
         assert stdout == "hello world"
-
         command = f"chmod 666 {self.test_folder}/index.html"
         retcode, _, _ = self.con.exec_cmd(command)
         assert retcode == 0
@@ -1429,6 +1415,7 @@ class TestNfsEnable(ManageTest):
         # checking subvolume before retain nfs pvc creation
         from pathlib import Path
 
+        self.retain_nfs_sc = nfs_utils.create_nfs_sc_retain(self.retain_nfs_sc_name)
         if not Path(constants.CLI_TOOL_LOCAL_PATH).exists():
             helpers.retrieve_cli_binary(cli_type="odf")
         output = run_cmd(cmd="odf-cli subvolume ls")
@@ -1514,6 +1501,11 @@ class TestNfsEnable(ManageTest):
         output = run_cmd(cmd="odf-cli subvolume ls --stale")
         stale_volumes = self.parse_subvolume_ls_output(output)
         assert len(stale_volumes) == 0  # No stale volumes available
+
+        # Delete ocs-storagecluster-ceph-nfs-retain storageclass
+        self.sc_obj.delete(resource_name=self.retain_nfs_sc_name)
+        log.info(f"Wait until the SC, {self.retain_nfs_sc_name} is deleted.")
+        self.sc_obj.wait_for_delete(resource_name=self.retain_nfs_sc_name)
 
     def parse_subvolume_ls_output(self, output):
         subvolumes = []
