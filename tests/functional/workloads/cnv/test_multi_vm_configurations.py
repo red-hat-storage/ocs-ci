@@ -33,7 +33,7 @@ class TestCNVVM(E2ETest):
             self.vm_objs_aggr,
             self.sc_obj_def_compr,
             self.sc_obj_aggressive,
-        ) = multi_cnv_workload(namespace=proj_obj.namespace)
+        ) = multi_cnv_workload(namespace=proj_obj.namespace, encrypted=True)
 
         logger.info("All vms created successfully")
 
