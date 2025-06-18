@@ -96,7 +96,7 @@ setup(
         "google-crc32c==1.7.0",
         "google-resumable-media==2.7.2",
         "googleapis-common-protos==1.69.2",
-        "urllib3==1.26.19",
+        "urllib3==2.5.0",
         "psycopg2-binary==2.9.9",
         "azure-keyvault-secrets==4.8.0",
         "pytest-jira==0.3.22",
