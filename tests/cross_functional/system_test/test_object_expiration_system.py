@@ -1,12 +1,14 @@
 import logging
 import uuid
 from copy import deepcopy
+from time import sleep
 
 import pytest
 
 from ocs_ci.helpers.e2e_helpers import create_muliple_types_provider_obcs
 from botocore.exceptions import ClientError
 
+from ocs_ci.ocs.resources.mcg_lifecycle_policies import LifecyclePolicy, ExpirationRule
 from ocs_ci.utility.retry import retry
 from ocs_ci.helpers.sanity_helpers import Sanity
 from ocs_ci.ocs import constants
@@ -85,19 +87,8 @@ class TestObjectExpirationSystemTest:
                 }
             ]
         }
-        expire_rule = {
-            "Rules": [
-                {
-                    "Expiration": {
-                        "Days": expiration_days,
-                        "ExpiredObjectDeleteMarker": False,
-                    },
-                    "Filter": {"Prefix": ""},
-                    "ID": "data-expire",
-                    "Status": "Enabled",
-                }
-            ]
-        }
+
+        lifecycle_policy = LifecyclePolicy(ExpirationRule(days=1))
 
         logger.info(f"Setting object expiration on bucket: {bucket}")
         if version.get_semantic_ocs_version_from_config() < version.VERSION_4_11:
@@ -106,8 +97,14 @@ class TestObjectExpirationSystemTest:
             )
         else:
             mcg_obj.s3_client.put_bucket_lifecycle_configuration(
-                Bucket=bucket, LifecycleConfiguration=expire_rule
+                Bucket=bucket, LifecycleConfiguration=lifecycle_policy.as_dict()
             )
+
+        PROP_SLEEP_TIME = 10
+        logger.info(
+            f"Sleeping for {PROP_SLEEP_TIME} seconds to let the policy propagate"
+        )
+        sleep(PROP_SLEEP_TIME)
 
         logger.info(f"Getting object expiration configuration from bucket: {bucket}")
         logger.info(
@@ -177,9 +174,8 @@ class TestObjectExpirationSystemTest:
         validate_mcg_bg_features,
         awscli_pod_session,
         nodes,
-        snapshot_factory,
         bucket_factory,
-        noobaa_db_backup_and_recovery,
+        noobaa_db_backup_and_recovery_locally,
         node_drain_teardown,
         node_restart_teardown,
     ):
@@ -195,20 +191,7 @@ class TestObjectExpirationSystemTest:
             skip_any_features=["nsfs", "rgw kafka", "caching"],
         )
 
-        expiration_days = 1
-        expire_rule = {
-            "Rules": [
-                {
-                    "Expiration": {
-                        "Days": expiration_days,
-                        "ExpiredObjectDeleteMarker": False,
-                    },
-                    "Filter": {"Prefix": ""},
-                    "ID": "data-expire",
-                    "Status": "Enabled",
-                }
-            ]
-        }
+        lifecycle_policy = LifecyclePolicy(ExpirationRule(days=1))
 
         cloud_providers = {
             "aws": (1, "eu-central-1"),
@@ -227,7 +210,7 @@ class TestObjectExpirationSystemTest:
             }
         }
 
-        expire_rule_prefix = deepcopy(expire_rule)
+        expire_rule_prefix = deepcopy(lifecycle_policy.as_dict())
         number_of_buckets = 50
 
         # Create bulk buckets with expiry rule and no prefix set
@@ -239,7 +222,7 @@ class TestObjectExpirationSystemTest:
             number_of_buckets=number_of_buckets,
             cloud_providers=cloud_providers,
             bucket_types=bucket_types,
-            expiration_rule=expire_rule,
+            expiration_rule=lifecycle_policy.as_dict(),
             mcg_obj=mcg_obj,
             bucket_factory=bucket_factory,
         )
@@ -407,7 +390,7 @@ class TestObjectExpirationSystemTest:
         upload_objects_and_expire()
 
         # Perform noobaa db backup and recovery
-        noobaa_db_backup_and_recovery(snapshot_factory=snapshot_factory)
+        noobaa_db_backup_and_recovery_locally()
         wait_for_noobaa_pods_running(timeout=1200)
 
         sample_if_objects_expired()
