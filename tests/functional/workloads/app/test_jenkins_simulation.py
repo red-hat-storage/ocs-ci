@@ -51,7 +51,7 @@ class TestJenkinsSimulation(ManageTest):
         if interface_iterate == constants.CEPHFILESYSTEM:
             csi_cephfsplugin_pod_objs = res_pod.get_all_pods(
                 namespace=config.ENV_DATA["cluster_namespace"],
-                selector=["csi-cephfsplugin"],
+                selector=["openshift-storage.cephfs.csi.ceph.com-nodeplugin"],
             )
 
             relevant_pod_logs = None
