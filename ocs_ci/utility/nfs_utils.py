@@ -69,7 +69,7 @@ def nfs_enable(
         timeout=60,
     )
 
-    provisioner_list = provisioner_selectors()
+    provisioner_list = provisioner_selectors(nfs_plugins=True)
 
     # Check csi-nfsplugin and csi-nfsplugin-provisioner pods are up and running
 
@@ -236,12 +236,17 @@ def unmount(con, test_folder):
     assert retcode == 1
 
 
-def provisioner_selectors():
+def provisioner_selectors(nfs_plugins, cephfs_plugin):
     """
     This method returns the provisioner pod selectors
 
+    Args:
+        nfs_plugins (bool): if True returns nfs_plugin provisooner list
+        cephfs_plugin (bool): if True returns cephfs_plugin provisooner list
+
     Returns:
-        provisioner_list(list): list of provisioner selectors
+        nfs_provisioner_list(list): list of nfs provisioner selectors
+        cephfs_provisioner_list(list): list of cephfs provisioner selectors
 
     """
     hci_platform_conf = (
@@ -255,16 +260,27 @@ def provisioner_selectors():
         or version_module.get_semantic_ocs_version_from_config()
         >= version_module.VERSION_4_19
     ):
-        provisioner_list = [
+        nfs_provisioner_list = [
             constants.NFS_CSI_CTRLPLUGIN_LABEL_419,
             constants.NFS_CSI_NODEPLUGIN_LABEL_419,
         ]
+        cephfs_provisioner_list = [
+            constants.CSI_CEPHFSPLUGIN_PROVISIONER_LABEL_419,
+            constants.CSI_RBDPLUGIN_PROVISIONER_LABEL_419,
+        ]
     else:
-        provisioner_list = [
+        nfs_provisioner_list = [
             constants.NFS_CSI_PLUGIN_PROVISIONER_LABEL,
             constants.NFS_CSI_PLUGIN_LABEL,
         ]
-    return provisioner_list
+        cephfs_provisioner_list = [
+            constants.CSI_CEPHFSPLUGIN_PROVISIONER_LABEL,
+            constants.CSI_RBDPLUGIN_PROVISIONER_LABEL,
+        ]
+    if nfs_plugins:
+        return nfs_provisioner_list
+    elif cephfs_plugin:
+        return cephfs_provisioner_list
 
 
 def create_nfs_sc_retain(sc_name):
