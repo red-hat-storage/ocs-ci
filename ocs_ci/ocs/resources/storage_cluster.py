@@ -44,7 +44,6 @@ from ocs_ci.ocs.resources.pod import (
     get_mds_pods,
     get_mgr_pods,
     get_rgw_pods,
-    get_plugin_pods,
     get_cephfsplugin_provisioner_pods,
     get_rbdfsplugin_provisioner_pods,
     get_ceph_tools_pod,
@@ -2170,24 +2169,28 @@ def verify_multus_network():
 
         log.info("Verifying multus public network exists on CSI pods")
         csi_pods = []
-        interfaces = [constants.CEPHBLOCKPOOL, constants.CEPHFILESYSTEM]
-        for interface in interfaces:
-            plugin_pods = get_plugin_pods(interface)
-            csi_pods += plugin_pods
-
+        # Nodeplugin pods were deleted from validation based on input from BZ: DFBUGS-2794
         cephfs_provisioner_pods = get_cephfsplugin_provisioner_pods()
         rbd_provisioner_pods = get_rbdfsplugin_provisioner_pods()
 
         csi_pods += cephfs_provisioner_pods
         csi_pods += rbd_provisioner_pods
-
+        pod_validation_failures = {}
         for _pod in csi_pods:
-            pod_networks = _pod.data["metadata"]["annotations"][
-                "k8s.v1.cni.cncf.io/networks"
-            ]
-            assert verify_networks_in_ceph_pod(
-                pod_networks, public_net_name, public_net_namespace
-            ), f"{public_net_name} not in {pod_networks}"
+            pod_name = _pod.data["metadata"]["name"]
+            try:
+                pod_networks = _pod.data["metadata"]["annotations"][
+                    "k8s.v1.cni.cncf.io/networks"
+                ]
+                assert verify_networks_in_ceph_pod(
+                    pod_networks, public_net_name, public_net_namespace
+                ), f"{public_net_name} not in {pod_networks}"
+            except (KeyError, AssertionError, CommandFailed) as ex:
+                pod_validation_failures[pod_name] = ex
+        # In this case we will be able to see all the pods which have an issue
+        assert (
+            not pod_validation_failures
+        ), f"There were several failues in multus annotation validations: {pod_validation_failures}"
 
         log.info("Verifying MDS Map IPs are in the multus public network range")
         ceph_fs_dump_data = get_ceph_tools_pod().exec_ceph_cmd(
