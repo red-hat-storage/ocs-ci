@@ -2581,7 +2581,7 @@ class CephClusterExternal(CephCluster):
         cluster_cr = self.CEPHCLUSTER.get()
         self.cluster_resource = cluster_cr.get("items")[0]
 
-    @retry((IndexError, AttributeError, TypeError), 100, 3, 1)
+    @retry((IndexError, AttributeError, TypeError), 60, 20, 1)
     def wait_for_nooba_cr(self):
         self._mcg_obj = MCG()
 
