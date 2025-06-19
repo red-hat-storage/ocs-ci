@@ -48,5 +48,5 @@ class TestPvcUserInterface(object):
         quickstart_ui_obj.take_screenshot()
         logger.info(f"Expected quickstart title: {title}")
         assert quickstart_ui_obj.check_element_text(
-            element="p", expected_text=title
+            element="span", expected_text=title
         ), f"Expected title '{title}' was not found"
