@@ -128,12 +128,9 @@ def test_log_reader_writer_parallel(project, tmp_path):
         # fetch data from cephfs volume into the local dir
         oc_cmd = [
             "oc",
-            "rsync",
-            "--loglevel=4",
-            "-n",
-            project.namespace,
-            f"pod/{workload_pod_name}:/mnt/target",
-            local_dir,
+            "cp",
+            f"{project.namespace}/{workload_pod_name}:/mnt/target",
+            str(local_dir) + "/target",
         ]
         try:
             run_cmd(cmd=oc_cmd, timeout=300)
