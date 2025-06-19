@@ -822,7 +822,10 @@ class Deployment(object):
         verify_all_nodes_created()
         set_selinux_permissions()
         set_registry_to_managed_state()
-        if config.ENV_DATA.get("platform") != constants.ROSA_HCP_PLATFORM:
+        if config.ENV_DATA["deployment_type"] not in (
+            constants.MANAGED_DEPL_TYPE,
+            constants.MANAGED_CP_DEPL_TYPE,
+        ):
             add_stage_cert()
         if config.ENV_DATA.get("huge_pages"):
             enable_huge_pages()
