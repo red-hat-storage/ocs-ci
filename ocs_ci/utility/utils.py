@@ -2019,7 +2019,7 @@ def email_reports(session):
     move_summary_to_top(soup)
     add_info_about_mg_skips(soup)
     add_time_report_to_email(session, soup)
-    part1 = MIMEText(soup, "html")
+    part1 = MIMEText(soup.decode(formatter="minimal"), "html")
     add_mem_stats(soup)
     msg.attach(part1)
     try:
