@@ -1969,7 +1969,7 @@ def email_reports(session):
         add_squad_analysis_to_email(session, soup)
     move_summary_to_top(soup)
     add_time_report_to_email(session, soup)
-    part1 = MIMEText(soup, "html")
+    part1 = MIMEText(soup.decode(formatter="minimal"), "html")
     add_mem_stats(soup)
     msg.attach(part1)
     try:
