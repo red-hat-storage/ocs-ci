@@ -1084,8 +1084,10 @@ class TestNfsEnable(ManageTest):
         log.info("IO started on all pods")
 
         # Respin nfsplugin pods while active I/O on in-cluster consumer
+        nfs_provisioner_selectors = nfs_utils.provisioner_selectors(nfs_plugins=True)
         nfsplugin_pod_objs = pod.get_all_pods(
-            namespace=config.ENV_DATA["cluster_namespace"], selector=["csi-nfsplugin"]
+            namespace=config.ENV_DATA["cluster_namespace"],
+            selector=nfs_provisioner_selectors[0],
         )
         log.info(f"nfs plugin pods-----{nfsplugin_pod_objs}")
         pod.delete_pods(pod_objs=nfsplugin_pod_objs)
@@ -1337,9 +1339,13 @@ class TestNfsEnable(ManageTest):
         log.info("IO started on all pods")
 
         # Respin cephfsplugin provisioner pods while active I/O on in-cluster consumer
+        cephfs_provisioner_selectors = nfs_utils.provisioner_selectors(
+            cephfs_plugin=True
+        )
+        constants.CSI_CEPHFSPLUGIN_PROVISIONER_LABEL
         cephfsplugin_provisioner_pod_objs = pod.get_all_pods(
             namespace=config.ENV_DATA["cluster_namespace"],
-            selector=["csi-cephfsplugin-provisioner"],
+            selector=cephfs_provisioner_selectors[0],
         )
         log.info(
             f"cephfs plugin provisioner pods-----{cephfsplugin_provisioner_pod_objs}"
