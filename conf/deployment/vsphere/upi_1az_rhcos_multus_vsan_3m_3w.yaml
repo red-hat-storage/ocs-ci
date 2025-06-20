@@ -18,6 +18,7 @@ ENV_DATA:
   multus_create_public_net: true
   multus_create_cluster_net: true
   multus_public_net_namespace: "default"
+  multus_cluster_net_namespace: "default"
 
 REPORTING:
   polarion:
