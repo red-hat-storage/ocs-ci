@@ -1264,7 +1264,7 @@ acm_configuration_4_18 = {
 acm_configuration_4_19 = {
     "clear-search": ("//button[@aria-label='Reset']", By.XPATH),
     "install-submariner-btn": (
-        "//a[@id='install-submariner']",
+        "//a[@id='install-submariner'] | //button[@id='install-submariner']",
         By.XPATH,
     ),
     "nat-t-checkbox": ("//input[@id='natt-enable']", By.XPATH),
