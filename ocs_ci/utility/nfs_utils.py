@@ -236,7 +236,7 @@ def unmount(con, test_folder):
     assert retcode == 1
 
 
-def provisioner_selectors(nfs_plugins, cephfs_plugin):
+def provisioner_selectors(nfs_plugins=False, cephfs_plugin=False):
     """
     This method returns the provisioner pod selectors
 
