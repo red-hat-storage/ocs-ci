@@ -404,6 +404,13 @@ generic_locators = {
     ),
 }
 
+generic_locators_4_19 = {
+    "resource_from_list_by_name": (
+        "//td[@data-label='name']//a[contains(text(), '{}')]",
+        By.XPATH,
+    ),
+}
+
 ocs_operator_locators = {
     "backingstore_page": (
         'a[data-test-id="horizontal-link-Backing Store"], button[data-test="horizontal-link-Backing Store"]',
@@ -685,6 +692,13 @@ pvc_4_14 = {
 
 pvc_4_19 = {
     "pvc_create_button": ('a[data-test="item-create"]', By.CSS_SELECTOR),
+    "pvc_actions": ('button[data-test-id="actions-menu-button"]', By.CSS_SELECTOR),
+    "pvc_delete": (
+        'li[data-test-action="Delete PersistentVolumeClaim"]',
+        By.CSS_SELECTOR,
+    ),
+    "clone_pvc": ("li[data-test-action='Clone PVC']", By.CSS_SELECTOR),
+    "expand_pvc": ("li[data-test-action='Expand PVC']", By.CSS_SELECTOR),
     "expected-capacity": (
         "//dd[@data-test='pvc-requested-capacity']//div[text()='{}']",
         By.XPATH,
@@ -2252,7 +2266,7 @@ locators = {
     "4.19": {
         "login": {**login, **login_4_11, **login_4_14, **login_4_19},
         "page": {**page_nav, **page_nav_4_10, **page_nav_4_14},
-        "generic": generic_locators,
+        "generic": {**generic_locators, **generic_locators_4_19},
         "add_capacity": {**add_capacity, **add_capacity_4_11, **add_capacity_4_12},
         "deployment": {
             **deployment,
