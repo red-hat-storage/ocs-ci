@@ -202,7 +202,7 @@ class AcmAddClusters(AcmPageNavigator):
             old_ctx = config.cur_index
             for cluster in get_non_acm_cluster_config():
                 config.switch_ctx(cluster.MULTICLUSTER["multicluster_index"])
-                run_cmd(f"oc create -f {submariner_data_yaml.name}", timeout=300)
+                run_cmd(f"oc apply -f {submariner_data_yaml.name}", timeout=300)
             config.switch_ctx(old_ctx)
 
         cluster_name_a = cluster_env.get(f"cluster_name_{primary_index}")
