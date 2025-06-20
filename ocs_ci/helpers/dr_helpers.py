@@ -2103,9 +2103,15 @@ def get_cluster_set_name():
     """
     cluster_set = []
     managed_clusters = ocp.OCP(kind=constants.ACM_MANAGEDCLUSTER).get().get("items", [])
+    current_managed_clusters_list = [
+        cluster_name.ENV_DATA.get("cluster_name") for cluster_name in config.clusters
+    ]
     # ignore local-cluster here
     for i in managed_clusters:
-        if i["metadata"]["name"] != constants.ACM_LOCAL_CLUSTER:
+        if (
+            i["metadata"]["name"] != constants.ACM_LOCAL_CLUSTER
+            and i["metadata"]["name"] in current_managed_clusters_list
+        ):
             cluster_set.append(i["metadata"]["labels"][constants.ACM_CLUSTERSET_LABEL])
     if all(x == cluster_set[0] for x in cluster_set):
         logger.info(f"Found the unique clusterset {cluster_set[0]}")
