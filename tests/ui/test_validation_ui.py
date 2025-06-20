@@ -17,7 +17,6 @@ from ocs_ci.framework.pytest_customization.marks import (
     skipif_external_mode,
     skipif_mcg_only,
     skipif_ibm_cloud_managed,
-    acceptance,
 )
 from ocs_ci.ocs.ui.validation_ui import ValidationUI
 from ocs_ci.utility import version
@@ -50,7 +49,6 @@ class TestUserInterfaceValidation(object):
 
     @ui
     @tier1
-    @acceptance
     @bugzilla("2155743")
     @polarion_id("OCS-2575")
     @skipif_ui_not_support("validation")
