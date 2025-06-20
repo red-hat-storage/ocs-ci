@@ -61,6 +61,13 @@ def setup_local_storage(storageclass):
     ocp_ga_version = get_ocp_ga_version(ocp_version)
     if not ocp_ga_version:
         create_optional_operators_catalogsource_non_ga()
+    try:
+        get_lso_channel()
+    except CommandFailed as ex:
+        if "not found" in str(ex):
+            create_optional_operators_catalogsource_non_ga(force=True)
+        else:
+            raise
 
     logger.info("Retrieving local-storage-operator data from yaml")
     lso_data = list(
