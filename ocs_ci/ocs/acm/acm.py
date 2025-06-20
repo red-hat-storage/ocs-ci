@@ -11,6 +11,7 @@ from selenium.common.exceptions import (
     NoSuchElementException,
 )
 
+from ocs_ci.helpers.dr_helpers import get_cluster_set_name
 from ocs_ci.helpers.helpers import create_unique_resource_name
 from ocs_ci.ocs import constants
 from ocs_ci.ocs.acm.acm_constants import (
@@ -301,6 +302,7 @@ class AcmAddClusters(AcmPageNavigator):
         self.take_screenshot()
         log.info("Click on 'Install'")
         self.do_click(self.page_nav["install-btn"])
+        return cluster_set_name
 
     def submariner_unreleased_downstream_info(self):
         log.info("Use custom Submariner subscription ")
@@ -342,6 +344,11 @@ class AcmAddClusters(AcmPageNavigator):
         else:
             log.error("Couldn't navigate to Cluster sets page")
             raise NoSuchElementException
+        cluster_set_name = (
+            self.install_submariner_ui()
+            if self.install_submariner_ui() is not None
+            else get_cluster_set_name()
+        )
         log.info("Click on the cluster set created")
         self.do_click(
             format_locator(self.page_nav["cluster-set-selection"], cluster_set_name)
