@@ -47,11 +47,12 @@ class StorageConsumer:
         self.consumer_context = consumer_context
         self.name = consumer_name
         self.namespace = namespace or config.ENV_DATA["cluster_namespace"]
-        self.ocp = ocp.OCP(
-            resource_name=self.name,
-            kind=constants.STORAGECONSUMER,
-            namespace=self.namespace,
-        )
+        with config.RunWithProviderConfigContextIfAvailable():
+            self.ocp = ocp.OCP(
+                resource_name=self.name,
+                kind=constants.STORAGECONSUMER,
+                namespace=self.namespace,
+            )
         if self.consumer_context:
             self.provider_context = config.cluster_ctx.MULTICLUSTER[
                 "multicluster_index"
@@ -387,7 +388,7 @@ class StorageConsumer:
             string: OnboardingTicketSecret
 
         """
-        with config.RunWithConfigContext(self.consumer_context):
+        with config.RunWithProviderConfigContextIfAvailable():
             return (
                 self.ocp.get(resource_name=self.name)
                 .get("status")
