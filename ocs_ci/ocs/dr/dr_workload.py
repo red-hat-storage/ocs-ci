@@ -1257,7 +1257,7 @@ class BusyboxDiscoveredApps(DRWorkload):
             config.switch_acm_ctx()
             self.create_drpc_for_apps_with_recipe()
             self.verify_workload_deployment()
-        if not self.discovered_apps_multi_ns:
+        if not self.discovered_apps_multi_ns and not recipe:
             self.create_placement()
             self.create_drpc()
             self.verify_workload_deployment()
