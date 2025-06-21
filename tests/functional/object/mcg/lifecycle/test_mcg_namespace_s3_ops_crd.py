@@ -463,7 +463,11 @@ class TestMcgNamespaceS3OperationsCrd(E2ETest):
         total_versions = 10
         aws_s3_resource = boto3.resource(
             "s3",
-            endpoint_url=constants.MCG_NS_AWS_ENDPOINT,
+            endpoint_url=constants.MCG_NS_AWS_ENDPOINT.format(
+                bucketclass_dict["namespace_policy_dict"]["namespacestore_dict"]["aws"][
+                    0
+                ][1]
+            ),
             aws_access_key_id=cld_mgr.aws_client.access_key,
             aws_secret_access_key=cld_mgr.aws_client.secret_key,
         )
