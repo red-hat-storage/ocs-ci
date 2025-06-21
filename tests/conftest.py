@@ -6982,6 +6982,11 @@ def dr_workload(request):
             workload_key = "dr_workload_appset"
             if ocsci_config.MULTICLUSTER["multicluster_mode"] == constants.RDR_MODE:
                 workload_key += f"_{interface}"
+            elif (
+                ocsci_config.MULTICLUSTER["multicluster_mode"]
+                == constants.MDR_PROVIDER_MODE
+            ):
+                workload_key += "_provider"
             workload_details = ocsci_config.ENV_DATA[workload_key][index]
             workload = BusyBox_AppSet(
                 workload_dir=workload_details["workload_dir"],

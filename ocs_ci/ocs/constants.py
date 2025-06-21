@@ -1325,6 +1325,7 @@ ODF_MULTICLUSTER_ORCHESTRATOR_CONTROLLER_MANAGER = "odfmo-controller-manager"
 DR_RESTORE_YAML = os.path.join(TEMPLATE_MULTICLUSTER_DIR, "restore.yaml")
 RDR_MODE = "regional-dr"
 MDR_MODE = "metro-dr"
+MDR_PROVIDER_MODE = "metro-dr-provider"
 MDR_DR_POLICY = "odr-policy-mdr"
 RESTIC_OR_NODE_AGENT_POD_COUNT = 3
 VELERO_POD_COUNT = 1
