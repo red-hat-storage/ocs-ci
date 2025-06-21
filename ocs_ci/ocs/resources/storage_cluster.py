@@ -3355,12 +3355,7 @@ def check_unnecessary_pods_present():
     log.info(f"Checking if only required operator pods are available in : {pod_names}")
     invalid_pods_found = []
     if no_noobaa:
-        for invalid_pod_name in [
-            constants.NOOBAA_OPERATOR_DEPLOYMENT,
-            constants.NOOBAA_ENDPOINT_DEPLOYMENT,
-            constants.NOOBAA_DB_STATEFULSET,
-            constants.NOOBAA_CORE_STATEFULSET,
-        ]:
+        for invalid_pod_name in constants.NOOBAA_POD_NAMES:
             invalid_pods_found.extend(
                 [
                     pod_name
@@ -3373,7 +3368,7 @@ def check_unnecessary_pods_present():
                 f"Pods {invalid_pods_found} should not be present because NooBaa is not available"
             )
     if no_ceph:
-        for invalid_pod_name in [constants.ROOK_CEPH_OPERATOR]:
+        for invalid_pod_name in constants.CEPH_PODS_NAMES:
             invalid_pods_found.extend(
                 [
                     pod_name
