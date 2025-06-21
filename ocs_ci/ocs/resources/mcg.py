@@ -959,20 +959,24 @@ class MCG:
 
         namespace = f"-n {namespace}" if namespace else f"-n {self.namespace}"
 
+        local_cli_path = constants.NOOBAA_OPERATOR_LOCAL_CLI_PATH
+        if version.get_semantic_ocs_version_from_config() >= version.VERSION_4_20:
+            local_cli_path = os.path.join(config.RUN["bin_dir"], "odf-cli noobaa")
+
         # Mask sensitive data
         if self.data_to_mask:
             kwargs.setdefault("secrets", []).extend(self.data_to_mask)
 
         if use_yes:
             result = exec_cmd(
-                [f"yes | {constants.NOOBAA_OPERATOR_LOCAL_CLI_PATH} {cmd} {namespace}"],
+                [f"yes | {local_cli_path} {cmd} {namespace}"],
                 ignore_error=ignore_error,
                 shell=True,
                 **kwargs,
             )
         else:
             result = exec_cmd(
-                f"{constants.NOOBAA_OPERATOR_LOCAL_CLI_PATH} {cmd} {namespace}",
+                f"{local_cli_path} {cmd} {namespace}",
                 ignore_error=ignore_error,
                 **kwargs,
             )
