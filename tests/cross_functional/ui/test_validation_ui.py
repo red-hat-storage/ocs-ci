@@ -1,6 +1,8 @@
 import logging
 import re
+from concurrent.futures import ThreadPoolExecutor
 
+from ocs_ci.framework import config_safe_thread_pool_task, config
 from ocs_ci.ocs.resources.pod import get_pod_logs
 from ocs_ci.ocs.utils import get_pod_name_by_pattern
 from ocs_ci.framework.testlib import (
@@ -87,6 +89,23 @@ class TestUserInterfaceValidation(object):
             validation_ui_obj.odf_overview_ui()
         else:
             validation_ui_obj.verification_ui()
+
+    def test_dashboard_validation_ui_multi(self, setup_ui_class_factory):
+        """
+        Validate User Interface of OCS/ODF dashboard
+        Verify GET requests initiated by kube-probe on odf-console pod [cover bz-2155743]
+
+
+        Args:
+            setup_ui_class_factory: login function on conftest file
+
+        """
+        with ThreadPoolExecutor() as p:
+            p.submit(
+                config_safe_thread_pool_task,
+                config.default_cluster_index,
+                setup_ui_class_factory,
+            )
 
     @ui
     @runs_on_provider
